@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;0,7..72,600;1,7..72,400&amp;display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #14110e; }
+  a { color: #c8a35a; text-decoration: none; }
+  a:hover { color: #dcb96e; }
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #14110e; display: flex; align-items: flex-start; justify-content: center; gap: 56px; padding: 56px 40px; flex-wrap: wrap; font-family: system-ui, -apple-system, sans-serif;" data-screen-label="Grimoire Mobil">
+
+  <div style="display: flex; flex-direction: column; gap: 16px; align-items: center;">
+    <div style="color: #7a6f61; font-size: 13px;">Startfläche — suchen und einwerfen</div>
+    <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" hint-size="390px,844px">
+      <div style="height: 100%; background: #1d1a16; color: #e7dfd2; display: flex; flex-direction: column; padding: 62px 20px 0;">
+        <div style="display: flex; align-items: center; gap: 10px; margin: 8px 0 22px;">
+          {{ icoLogo }}
+          <div style="font-family: Literata, serif; font-size: 22px; font-weight: 600;">Grimoire</div>
+          <div style="color: #7a6f61; font-size: 13px;">Kampagne: Beispiel</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; background: #23201b; border: 1px solid #38322a; border-radius: 12px; padding: 14px 16px; color: #7a6f61; font-size: 15px; margin-bottom: 14px; min-height: 48px;">
+          {{ icoSearch }}
+          Szenen, NPCs, Orte suchen …
+        </div>
+        <div style="background: #23201b; border: 1px solid #38322a; border-radius: 12px; padding: 14px 16px; margin-bottom: 32px;">
+          <div style="color: #7a6f61; font-size: 15px; min-height: 44px; line-height: 1.5;">Inbox — Idee einwerfen … #thread #npc</div>
+          <div style="display: flex; justify-content: flex-end;">
+            <div style="background: #c8a35a; color: #241d10; border-radius: 8px; padding: 9px 16px; font-size: 14px; font-weight: 600;">Einwerfen</div>
+          </div>
+        </div>
+        <div style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #7a6f61; font-weight: 600; margin-bottom: 10px;">Zuletzt angesehen</div>
+        <div style="display: flex; flex-direction: column;">
+          <sc-for list="{{ recent }}" as="r" hint-placeholder-count="3">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 14px 4px; border-bottom: 1px solid #262220; min-height: 44px;">
+              {{ r.icon }}
+              <div style="flex: 1;">
+                <div style="font-size: 15px;">{{ r.title }}</div>
+                <div style="font-size: 12.5px; color: #7a6f61; margin-top: 2px;">{{ r.meta }}</div>
+              </div>
+              {{ icoChev }}
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </x-import>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 16px; align-items: center;">
+    <div style="color: #7a6f61; font-size: 13px;">Leseansicht — Szene</div>
+    <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" hint-size="390px,844px">
+      <div style="height: 100%; background: #1d1a16; color: #e7dfd2; display: flex; flex-direction: column;">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 62px 16px 10px; border-bottom: 1px solid #2e2925;">
+          <div style="display: flex; align-items: center; gap: 4px; color: #c8a35a; font-size: 15px;">{{ icoBack }} Pool</div>
+        </div>
+        <div style="flex: 1; overflow-y: auto; padding: 20px 20px 40px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            {{ icoBookmark }}
+            <span style="font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #93a888;">Geplante Szene</span>
+          </div>
+          <h1 style="font-family: Literata, serif; font-size: 24px; font-weight: 600; margin: 0 0 12px; line-height: 1.25;">Ankunft am Leuchtturm</h1>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 16px; border-bottom: 1px solid #2e2925; margin-bottom: 20px;">
+            <span style="font-size: 12px; color: #a2968a; background: #23201b; border: 1px solid #2e2925; border-radius: 999px; padding: 4px 11px;">Der Leuchtturm von Salzhafen</span>
+            <span style="font-size: 12px; color: #7a6f61; background: #23201b; border: 1px solid #2e2925; border-radius: 999px; padding: 4px 11px;">#social</span>
+            <span style="font-size: 12px; color: #7a6f61; background: #23201b; border: 1px solid #2e2925; border-radius: 999px; padding: 4px 11px;">#travel</span>
+          </div>
+          <h2 style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #7a6f61; font-weight: 600; margin: 0 0 10px;">Flow</h2>
+          <p style="margin: 0 0 14px; line-height: 1.6; color: #d6ccbc; font-size: 15px;">Die Gruppe erreicht den Leuchtturm bei Einbruch der Dunkelheit. Hafenmeisterin Jorna wartet am Fuß der Treppe — sie hat die Gruppe angeheuert und will Ergebnisse sehen.</p>
+          <div style="background: #29241d; border-left: 3px solid #c8a35a; border-radius: 4px; padding: 16px 18px; margin: 0 0 16px;">
+            <div style="font-family: Literata, serif; font-size: 17px; line-height: 1.7; color: #ece2cf;">Der Turm ragt schwarz gegen den Abendhimmel auf. Kein Licht brennt in der Laterne, und die Gischt schlägt hart gegen die Felsen. Irgendwo über euch schlägt eine Tür im Wind — wieder und wieder, als hätte niemand mehr die Kraft, sie zu schließen.</div>
+          </div>
+          <div style="display: flex; gap: 11px; align-items: flex-start; background: rgba(200,163,90,.07); border: 1px solid rgba(200,163,90,.45); border-radius: 6px; padding: 12px 13px; margin-bottom: 12px;">
+            <span style="flex: none; margin-top: 1px;">{{ icoDice }}</span>
+            <div>
+              <div style="font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: #dcb96e; margin-bottom: 4px;">Check</div>
+              <div style="line-height: 1.55; font-size: 14px; color: #e7dfd2;">Wisdom (Perception) DC 13: frische Stiefelspuren im Sand, die NICHT vom Dorf kommen, sondern von der Bucht im Norden.</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 11px; align-items: flex-start; background: #171410; border: 1px solid #2a251f; border-radius: 6px; padding: 12px 13px;">
+            <span style="flex: none; margin-top: 1px;">{{ icoEye }}</span>
+            <div>
+              <div style="font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: #8a7f70; margin-bottom: 4px;">Geheim</div>
+              <div style="line-height: 1.55; font-size: 14px; color: #a2968a;">Der Leuchtturmwärter ist nicht verschwunden — er wird in der Bucht festgehalten, damit das Leuchtfeuer dunkel bleibt.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </x-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(name, size, color) {
+    const e = React.createElement, s = size || 16, c = color || 'currentColor';
+    const svg = kids => e('svg', { width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: c, strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', style: { flex: 'none', display: 'block' } }, ...kids);
+    switch (name) {
+      case 'search': return svg([e('circle', { key: 1, cx: 11, cy: 11, r: 7 }), e('line', { key: 2, x1: 21, y1: 21, x2: 16.3, y2: 16.3 })]);
+      case 'logo': return svg([
+        e('path', { key: 1, d: 'M12 10.5c-2.4-2.4-5.8-3.2-8.8-3.2v11.6c3 0 6.4.8 8.8 3.2 2.4-2.4 5.8-3.2 8.8-3.2V7.3c-3 0-6.4.8-8.8 3.2z' }),
+        e('path', { key: 2, d: 'M12 10.5v11.6' }),
+        e('path', { key: 3, d: 'M12 .8l1.3 2.6 2.6 1.3-2.6 1.3L12 8.6l-1.3-2.6-2.6-1.3 2.6-1.3z', fill: c, stroke: 'none' })
+      ]);
+      case 'chevR': return svg([e('path', { key: 1, d: 'm9 6 6 6-6 6' })]);
+      case 'chevL': return svg([e('path', { key: 1, d: 'm15 6-6 6 6 6' })]);
+      case 'bookmark': return svg([e('path', { key: 1, d: 'M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z' })]);
+      case 'branch': return svg([e('circle', { key: 1, cx: 6, cy: 18, r: 3 }), e('circle', { key: 2, cx: 18, cy: 6, r: 3 }), e('path', { key: 3, d: 'M18 9a9 9 0 0 1-9 9' })]);
+      case 'user': return svg([e('circle', { key: 1, cx: 12, cy: 7.5, r: 4 }), e('path', { key: 2, d: 'M5 21v-1.5a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5V21' })]);
+      case 'eye': return svg([e('path', { key: 1, d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z' }), e('circle', { key: 2, cx: 12, cy: 12, r: 3 })]);
+      case 'dice': return svg([e('rect', { key: 1, x: 3, y: 3, width: 18, height: 18, rx: 3 }), e('circle', { key: 2, cx: 8.2, cy: 8.2, r: 1.1, fill: c, stroke: 'none' }), e('circle', { key: 3, cx: 12, cy: 12, r: 1.1, fill: c, stroke: 'none' }), e('circle', { key: 4, cx: 15.8, cy: 15.8, r: 1.1, fill: c, stroke: 'none' })]);
+    }
+    return null;
+  }
+  renderVals() {
+    return {
+      icoLogo: this.ic('logo', 20, '#c8a35a'),
+      icoSearch: this.ic('search', 17, '#7a6f61'),
+      icoChev: this.ic('chevR', 15, '#5d554a'),
+      icoBack: this.ic('chevL', 18, '#c8a35a'),
+      icoBookmark: this.ic('bookmark', 15, '#93a888'),
+      icoDice: this.ic('dice', 16, '#c8a35a'),
+      icoEye: this.ic('eye', 16, '#8a7f70'),
+      recent: [
+        { title: 'Ankunft am Leuchtturm', meta: 'Szene · Der Leuchtturm von Salzhafen', icon: this.ic('bookmark', 16, '#7a6f61') },
+        { title: 'Von den Schmugglern erwischt', meta: 'Kontingenz · Bucht', icon: this.ic('branch', 16, '#7a6f61') },
+        { title: 'Fenn', meta: 'NPC · Anführer der Schmuggler', icon: this.ic('user', 16, '#7a6f61') }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

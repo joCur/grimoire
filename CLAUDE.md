@@ -32,6 +32,8 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   dokumentiert und dort abzuhaken, wenn implementiert.
 - `app/` — das Frontend (bei erster UI-Aufgabe anlegen: Vite-Scaffold).
 - `generator/` — LLM-Pipeline (Prompt, Few-Shot, Ablauf-README).
+- `design/` — verbindliche Design-Referenz (Claude-Design-Export des PO,
+  siehe design/README.md). Bei Widerspruch zu UI-BRIEF.md gewinnt design/.
 
 ## Arbeitsweise
 

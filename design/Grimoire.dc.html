@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;0,7..72,600;1,7..72,400;1,7..72,500&amp;display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #1d1a16; }
+  * { box-sizing: border-box; }
+  a { color: #c8a35a; text-decoration: none; }
+  a:hover { color: #dcb96e; }
+  *:focus-visible { outline: 2px solid #c8a35a; outline-offset: 2px; border-radius: 2px; }
+  ::selection { background: rgba(200,163,90,.28); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #38322a; border-radius: 5px; border: 2px solid #1d1a16; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</helmet>
+<div style="height: 100vh; display: flex; flex-direction: column; background: #1d1a16; color: #e7dfd2; font-family: system-ui, -apple-system, sans-serif; font-size: 14px; overflow: hidden;" data-screen-label="Grimoire">
+
+  <!-- ============ TOPBAR (konstant) ============ -->
+  <header style="display: flex; align-items: center; gap: 14px; padding: 0 24px; height: 56px; border-bottom: 1px solid #2e2925; flex: none;">
+    <button onClick="{{ goPool }}" style="display: flex; align-items: center; gap: 9px; background: none; border: none; padding: 4px 6px; margin-left: -6px; border-radius: 6px; font-family: Literata, serif; font-size: 17px; font-weight: 600; letter-spacing: .01em; color: #e7dfd2; cursor: pointer;" style-hover="color: #dcb96e;">{{ icoLogo }} Grimoire</button>
+    <sc-if value="{{ isPool }}" hint-placeholder-val="{{ true }}">
+      <div style="position: relative;">
+        <button onClick="{{ toggleCampMenu }}" style="display: flex; align-items: center; gap: 7px; background: none; border: 1px solid transparent; color: #a2968a; font-size: 13px; font-family: inherit; cursor: pointer; padding: 5px 10px; border-radius: 6px;" style-hover="color: #e7dfd2; border-color: #38322a;">
+          Kampagne: {{ campName }}
+          {{ icoChevD }}
+        </button>
+        <sc-if value="{{ campMenuOpen }}" hint-placeholder-val="{{ false }}">
+          <div onClick="{{ toggleCampMenu }}" style="position: fixed; inset: 0; z-index: 55;"></div>
+          <div style="position: absolute; top: 38px; left: 0; width: 290px; background: #23201b; border: 1px solid #38322a; border-radius: 10px; box-shadow: 0 16px 40px rgba(0,0,0,.5); padding: 6px; z-index: 60;">
+            <sc-for list="{{ campaignRows }}" as="c" hint-placeholder-count="2">
+              <button onClick="{{ c.onPick }}" style="display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: none; border-radius: 7px; padding: 9px 10px; cursor: pointer; font-family: inherit;" style-hover="background: #2b2724;">
+                <div style="flex: 1;">
+                  <div style="font-size: 13.5px; color: #e7dfd2;">{{ c.name }}</div>
+                  <div style="font-size: 11.5px; color: #7a6f61; margin-top: 1px;">{{ c.meta }}</div>
+                </div>
+                <sc-if value="{{ c.active }}" hint-placeholder-val="{{ false }}">{{ icoCheckSm }}</sc-if>
+              </button>
+            </sc-for>
+            <div style="border-top: 1px solid #2e2925; margin: 6px 0;"></div>
+            <div style="padding: 7px 10px 5px; font-size: 11.5px; color: #5d554a;">Kampagnen liegen als Ordner unter campaigns/</div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isScene }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0;">
+        <button onClick="{{ goPool }}" style="background: none; border: none; padding: 0; color: #a2968a; font-size: 13px; font-family: inherit; cursor: pointer;" style-hover="color: #e7dfd2;">{{ campName }}</button>
+        <span style="color: #4a4237;">/</span>
+        <button onClick="{{ goPool }}" style="background: none; border: none; padding: 0; color: #a2968a; font-size: 13px; font-family: inherit; cursor: pointer;" style-hover="color: #e7dfd2;">{{ sceneChapter }}</button>
+        <span style="color: #4a4237;">/</span>
+        <span style="color: #c9bfae; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ sceneTitle }}</span>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isLive }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: #7a6f61;">
+        <span style="display: inline-flex; align-items: center; gap: 6px; color: #93a888; border: 1px solid rgba(143,174,126,.35); border-radius: 999px; padding: 2px 10px; font-size: 12px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #8fae7e;"></span>Live</span>
+        <span>Kapitel 1 · Der Leuchtturm von Salzhafen</span>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isReview }}" hint-placeholder-val="{{ false }}">
+      <div style="color: #7a6f61; font-size: 13px;">Review</div>
+    </sc-if>
+    <div style="flex: 1;"></div>
+    <button onClick="{{ openCmdk }}" style="display: flex; align-items: center; gap: 8px; background: #23201b; border: 1px solid #38322a; color: #a2968a; border-radius: 6px; padding: 6px 12px; font-size: 13px; font-family: inherit; cursor: pointer; min-width: 200px;" style-hover="border-color: #4a4237; color: #c9bfae;">
+      {{ icoSearch }}
+      <span style="flex: 1; text-align: left;">Suchen …</span>
+      <span style="font-family: ui-monospace, monospace; font-size: 11px; color: #7a6f61; border: 1px solid #38322a; border-radius: 4px; padding: 1px 5px;">⌘K</span>
+    </button>
+    <sc-if value="{{ isPool }}" hint-placeholder-val="{{ true }}">
+      <button onClick="{{ startSession }}" style="display: flex; align-items: center; gap: 8px; background: #c8a35a; color: #241d10; border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer;" style-hover="background: #dcb96e;">
+        {{ icoPlay }}
+        Session starten
+      </button>
+    </sc-if>
+    <sc-if value="{{ isScene }}" hint-placeholder-val="{{ false }}">
+      <span style="font-family: ui-monospace, monospace; font-size: 11.5px; color: #5d554a;">{{ sceneId }}</span>
+    </sc-if>
+    <sc-if value="{{ isLive }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; align-items: center; gap: 8px; color: #c9bfae;">
+        {{ icoClock }}
+        <span style="font-family: ui-monospace, monospace; font-size: 14px;">{{ elapsed }}</span>
+      </div>
+      <button onClick="{{ addPause }}" style="display: flex; align-items: center; gap: 6px; background: #23201b; border: 1px solid #38322a; color: #a2968a; border-radius: 6px; padding: 6px 12px; font-size: 13px; font-family: inherit; cursor: pointer;" style-hover="color: #e7dfd2; border-color: #4a4237;">{{ icoPause }} Pause</button>
+      <button onClick="{{ endSession }}" style="background: none; border: 1px solid #38322a; color: #c9bfae; border-radius: 6px; padding: 6px 12px; font-size: 13px; font-family: inherit; cursor: pointer;" style-hover="border-color: #c8a35a; color: #dcb96e;">Session beenden</button>
+    </sc-if>
+    <sc-if value="{{ isReview }}" hint-placeholder-val="{{ false }}">
+      <div style="font-size: 13px; color: #c9bfae;">{{ reviewProgress }}</div>
+    </sc-if>
+  </header>
+  <div style="flex: 1; min-height: 0; display: flex; flex-direction: column;">
+
+  <!-- ============ POOL ============ -->
+  <sc-if value="{{ isPool }}" hint-placeholder-val="{{ true }}">
+    <div style="display: flex; flex-direction: column; height: 100%; overflow: hidden;" data-screen-label="Pool">
+      <div style="flex: 1; overflow-y: auto;">
+        <div style="max-width: 760px; margin: 0 auto; padding: 40px 28px 80px;">
+          <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px;">
+            <h1 style="font-family: Literata, serif; font-size: 28px; font-weight: 600; margin: 0; line-height: 1.25;">{{ campName }}</h1>
+            <span style="font-size: 13px; color: #7a6f61;">{{ campMeta }}</span>
+          </div>
+          <div style="display: flex; gap: 8px; margin-bottom: 28px;">
+            <sc-for list="{{ filterChips }}" as="chip" hint-placeholder-count="4">
+              <button onClick="{{ chip.onClick }}" style="background: {{ chip.bg }}; color: {{ chip.color }}; border: 1px solid {{ chip.border }}; border-radius: 999px; padding: 5px 14px; font-size: 12.5px; font-family: inherit; cursor: pointer;">{{ chip.label }}</button>
+            </sc-for>
+          </div>
+          <sc-for list="{{ chapters }}" as="ch" hint-placeholder-count="2">
+          <div style="margin-bottom: 16px;">
+            <button onClick="{{ ch.onToggle }}" style="display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid #2e2925; padding: 10px 0 12px; font-family: inherit; cursor: pointer;">
+              {{ ch.chev }}
+              <span style="font-family: Literata, serif; font-size: 18px; font-weight: 600; color: #e7dfd2;">{{ ch.title }}</span>
+              <span style="font-size: 11.5px; color: {{ ch.statusColor }}; border: 1px solid {{ ch.statusBorder }}; border-radius: 999px; padding: 1px 9px;">{{ ch.statusLabel }}</span>
+              <span style="flex: 1;"></span>
+              <span style="font-size: 12.5px; color: #7a6f61;">{{ ch.count }}</span>
+            </button>
+            <sc-if value="{{ ch.expanded }}" hint-placeholder-val="{{ true }}">
+            <div style="padding: 16px 0 4px 25px;">
+            <p style="margin: 0 0 12px; color: #a2968a; font-size: 14px; line-height: 1.6;">Ziel: {{ ch.goal }}</p>
+          <div style="display: flex; flex-direction: column; gap: 7px; margin-bottom: 36px;">
+            <sc-for list="{{ ch.threads }}" as="t" hint-placeholder-count="1">
+              <div style="display: flex; align-items: center; gap: 8px; color: #a2968a; font-size: 13px;">
+                {{ icoThread }}
+                <span>{{ t.text }}</span>
+                <sc-if value="{{ t.isNew }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-size: 11px; color: #dcb96e; background: rgba(200,163,90,.12); border-radius: 4px; padding: 1px 7px;">neu aus Review</span>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <sc-if value="{{ ch.empty }}" hint-placeholder-val="{{ false }}">
+            <div style="padding: 2px 0 16px; color: #7a6f61; font-size: 13.5px;">Noch keine Szenen in diesem Kapitel — erste Szene anlegen.</div>
+          </sc-if>
+          <sc-if value="{{ ch.hasScenes }}" hint-placeholder-val="{{ true }}">
+          <div style="margin-bottom: 28px;">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #2e2925; color: #a2968a; font-size: 13px;">
+              {{ icoPin }}
+              <span style="font-weight: 500; color: #c9bfae;">{{ ch.groupLabel }}</span>
+            </div>
+            <sc-for list="{{ ch.planned }}" as="row" hint-placeholder-count="2">
+              <div onClick="{{ row.onOpen }}" style="display: flex; align-items: center; gap: 12px; padding: 13px 10px; border-bottom: 1px solid #262220; cursor: pointer; border-radius: 6px;" style-hover="background: #23201b;">
+                {{ row.icon }}
+                <div style="flex: 1; min-width: 0;">
+                  <div style="font-size: 14.5px; color: #e7dfd2;">{{ row.title }}</div>
+                  <div style="font-size: 12.5px; color: #7a6f61; margin-top: 2px;">{{ row.meta }}</div>
+                </div>
+                <sc-if value="{{ row.showId }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-family: ui-monospace, monospace; font-size: 11px; color: #5d554a;">{{ row.id }}</span>
+                </sc-if>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="width: 7px; height: 7px; border-radius: 50%; background: {{ row.dotColor }};"></span>
+                  <span style="font-size: 12px; color: {{ row.statusColor }};">{{ row.statusLabel }}</span>
+                </div>
+              </div>
+            </sc-for>
+            <sc-if value="{{ ch.plannedEmpty }}" hint-placeholder-val="{{ false }}">
+              <div style="padding: 24px 10px; color: #7a6f61; font-size: 13.5px;">Keine Szenen mit diesem Status — Filter zurücksetzen oder erste Szene anlegen.</div>
+            </sc-if>
+          </div>
+          </sc-if>
+          <sc-if value="{{ ch.hasConting }}" hint-placeholder-val="{{ true }}">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #2e2925; color: #a2968a; font-size: 13px;">
+              {{ icoBranch }}
+              <span style="font-weight: 500; color: #c9bfae;">Falls es schiefgeht</span>
+              <span style="color: #7a6f61;">· Kontingenzen</span>
+            </div>
+            <sc-for list="{{ ch.conting }}" as="row" hint-placeholder-count="1">
+              <div onClick="{{ row.onOpen }}" style="display: flex; align-items: center; gap: 12px; padding: 13px 10px; border-bottom: 1px solid #262220; cursor: pointer; border-radius: 6px;" style-hover="background: #23201b;">
+                {{ row.icon }}
+                <div style="flex: 1; min-width: 0;">
+                  <div style="font-size: 14.5px; color: #e7dfd2;">{{ row.title }}</div>
+                  <div style="font-size: 12.5px; color: #7a6f61; margin-top: 2px; font-style: italic;">Wenn: {{ row.trigger }}</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="width: 7px; height: 7px; border-radius: 50%; background: {{ row.dotColor }};"></span>
+                  <span style="font-size: 12px; color: {{ row.statusColor }};">{{ row.statusLabel }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          </sc-if>
+            </div>
+            </sc-if>
+          </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ SZENE (Lesen) ============ -->
+  <sc-if value="{{ isScene }}" hint-placeholder-val="{{ false }}">
+    <div style="display: flex; flex-direction: column; height: 100%; overflow: hidden;" data-screen-label="Szene">
+      <div style="flex: 1; overflow-y: auto;">
+        <div style="max-width: 1060px; margin: 0 auto; padding: 40px 28px 100px; display: flex; gap: 40px; align-items: flex-start;">
+          <article style="flex: 1; min-width: 0; max-width: 680px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+              {{ sceneTypeIcon }}
+              <span style="font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: {{ sceneTypeColor }};">{{ sceneTypeLabel }}</span>
+            </div>
+            <h1 style="font-family: Literata, serif; font-size: 30px; font-weight: 600; margin: 0 0 14px; line-height: 1.2;">{{ sceneTitle }}</h1>
+            <sc-if value="{{ sceneHasTrigger }}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; gap: 8px; align-items: baseline; margin-bottom: 12px; font-size: 13.5px;">
+                <span style="color: #7a6f61;">Auslöser</span>
+                <span style="color: #c9bfae; font-style: italic;">{{ sceneTrigger }}</span>
+              </div>
+            </sc-if>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-bottom: 20px; border-bottom: 1px solid #2e2925; margin-bottom: 28px;">
+              <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: #a2968a; background: #23201b; border: 1px solid #2e2925; border-radius: 999px; padding: 4px 12px;">{{ icoPinSm }} {{ sceneLocation }}</span>
+              <sc-for list="{{ sceneTags }}" as="tag" hint-placeholder-count="2">
+                <span style="font-size: 12.5px; color: #7a6f61; background: #23201b; border: 1px solid #2e2925; border-radius: 999px; padding: 4px 12px;">#{{ tag }}</span>
+              </sc-for>
+              <sc-for list="{{ sceneHandouts }}" as="h" hint-placeholder-count="1">
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: #a2968a; border: 1px dashed #38322a; border-radius: 999px; padding: 4px 12px;">Handout: {{ h }}</span>
+              </sc-for>
+            </div>
+            <sc-for list="{{ sceneBlocks }}" as="b" hint-placeholder-count="5">
+              <div style="margin-left: {{ b.ml }}px;">
+                <sc-if value="{{ b.isH2 }}" hint-placeholder-val="{{ false }}">
+                  <h2 style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #7a6f61; font-weight: 600; margin: 26px 0 12px;">{{ b.text }}</h2>
+                </sc-if>
+                <sc-if value="{{ b.isP }}" hint-placeholder-val="{{ false }}">
+                  <p style="margin: 0 0 14px; line-height: 1.65; color: #d6ccbc; font-size: 14.5px;">{{ b.text }}</p>
+                </sc-if>
+                <sc-if value="{{ b.isUl }}" hint-placeholder-val="{{ false }}">
+                  <div style="display: flex; flex-direction: column; gap: 7px; margin: 0 0 14px;">
+                    <sc-for list="{{ b.items }}" as="it" hint-placeholder-count="3">
+                      <div style="display: flex; gap: 10px; line-height: 1.55; color: #d6ccbc; font-size: 14.5px;">
+                        <span style="color: #c8a35a; flex: none;">–</span>
+                        <span><strong style="color: #e7dfd2;">{{ it.b }}</strong>{{ it.t }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ b.isIf }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ b.onToggle }}" style="display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: none; border-top: 1px solid #2e2925; color: #e7dfd2; font-family: inherit; font-size: 14px; padding: 14px 0 12px; margin-top: 10px; cursor: pointer;" style-hover="color: #dcb96e;">
+                    {{ b.chev }}
+                    <span style="color: #c8a35a; font-weight: 600;">Falls:</span>
+                    <span style="font-style: italic;">{{ b.cond }}</span>
+                  </button>
+                </sc-if>
+                <sc-if value="{{ b.isReadaloud }}" hint-placeholder-val="{{ false }}">
+                  <div onMouseEnter="{{ b.onEnter }}" onMouseLeave="{{ b.onLeave }}" style="position: relative; background: #29241d; border-left: 3px solid #c8a35a; border-radius: 4px; padding: 20px 24px; margin: 6px 0 18px;">
+                    <div style="font-family: Literata, serif; font-size: {{ raSize }}px; line-height: 1.75; color: #ece2cf;">{{ b.text }}</div>
+                    <button onClick="{{ b.onCopy }}" style="position: absolute; top: 10px; right: 10px; display: flex; align-items: center; gap: 6px; background: #1d1a16; border: 1px solid #38322a; color: #a2968a; border-radius: 6px; padding: 5px 10px; font-size: 12px; font-family: system-ui, sans-serif; cursor: pointer; opacity: {{ b.copyOpacity }}; transition: opacity .15s;" style-hover="color: #e7dfd2; border-color: #4a4237;">{{ b.copyIcon }} {{ b.copyLabel }}</button>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ b.isCallout }}" hint-placeholder-val="{{ false }}">
+                  <div style="display: flex; gap: 12px; align-items: flex-start; background: {{ b.bg }}; border: 1px solid {{ b.border }}; border-radius: 6px; padding: 12px 14px; margin: 6px 0 14px;">
+                    <span style="flex: none; margin-top: 1px;">{{ b.icon }}</span>
+                    <div style="min-width: 0;">
+                      <div style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: {{ b.labelColor }}; margin-bottom: 4px;">{{ b.label }}</div>
+                      <div style="line-height: 1.6; font-size: 14px; color: {{ b.textColor }};">{{ b.text }}</div>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </article>
+          <aside style="width: 280px; flex: none; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 0;">
+            <div style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #7a6f61; font-weight: 600;">NPCs dieser Szene</div>
+            <sc-for list="{{ sceneNpcs }}" as="n" hint-placeholder-count="1">
+              <div style="background: #23201b; border: 1px solid #2e2925; border-radius: 8px; padding: 16px;">
+                <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px;">
+                  <div style="font-family: Literata, serif; font-size: 16px; font-weight: 600;">{{ n.name }}</div>
+                  <span style="font-family: ui-monospace, monospace; font-size: 10.5px; color: #5d554a;">{{ n.id }}</span>
+                </div>
+                <div style="font-size: 12.5px; color: #7a6f61; margin-bottom: 12px;">{{ n.role }}</div>
+                <div style="font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #7a6f61; margin-bottom: 3px;">Stimme</div>
+                <div style="font-size: 13px; color: #d6ccbc; line-height: 1.5; margin-bottom: 10px; font-style: italic;">{{ n.voice }}</div>
+                <div style="font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #7a6f61; margin-bottom: 3px;">Will</div>
+                <div style="font-size: 13px; color: #d6ccbc; line-height: 1.5; margin-bottom: 12px;">{{ n.will }}</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                  <sc-for list="{{ n.stats }}" as="s" hint-placeholder-count="3">
+                    <span style="font-family: ui-monospace, monospace; font-size: 11px; color: #c9bfae; background: #1d1a16; border: 1px solid #38322a; border-radius: 4px; padding: 3px 7px;">{{ s }}</span>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ LIVE ============ -->
+  <sc-if value="{{ isLive }}" hint-placeholder-val="{{ false }}">
+    <div style="display: flex; flex-direction: column; height: 100%; overflow: hidden;" data-screen-label="Live">
+      <div style="flex: 1; display: flex; min-height: 0;">
+        <nav style="width: 250px; flex: none; border-right: 1px solid #2e2925; overflow-y: auto; padding: 18px 12px;">
+          <div style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #7a6f61; font-weight: 600; padding: 0 8px 8px;">Geplant</div>
+          <div style="display: flex; flex-direction: column; gap: 2px; margin-bottom: 24px;">
+            <sc-for list="{{ livePlanned }}" as="s" hint-placeholder-count="2">
+              <button onClick="{{ s.onPick }}" style="display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; background: {{ s.bg }}; border: none; border-left: 2px solid {{ s.edge }}; border-radius: 0 6px 6px 0; color: {{ s.color }}; font-family: inherit; font-size: 13.5px; padding: 9px 10px; cursor: pointer;" style-hover="background: #262220;">
+                {{ s.icon }}
+                <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ s.title }}</span>
+                <sc-if value="{{ s.played }}" hint-placeholder-val="{{ false }}">{{ icoCheckSm }}</sc-if>
+              </button>
+            </sc-for>
+          </div>
+          <div style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #7a6f61; font-weight: 600; padding: 0 8px 8px;">Falls es schiefgeht</div>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <sc-for list="{{ liveContingency }}" as="s" hint-placeholder-count="1">
+              <button onClick="{{ s.onPick }}" style="display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; background: {{ s.bg }}; border: none; border-left: 2px solid {{ s.edge }}; border-radius: 0 6px 6px 0; color: {{ s.color }}; font-family: inherit; font-size: 13.5px; padding: 9px 10px; cursor: pointer;" style-hover="background: #262220;">
+                {{ s.icon }}
+                <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ s.title }}</span>
+              </button>
+            </sc-for>
+          </div>
+        </nav>
+        <main style="flex: 1; min-width: 0; overflow-y: auto;">
+          <div style="max-width: 680px; margin: 0 auto; padding: 30px 28px 100px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+              {{ liveTypeIcon }}
+              <span style="font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: {{ liveTypeColor }};">{{ liveTypeLabel }}</span>
+              <span style="color: #38322a;">·</span>
+              <span style="font-size: 12.5px; color: #7a6f61;">{{ liveLocation }}</span>
+            </div>
+            <h1 style="font-family: Literata, serif; font-size: 26px; font-weight: 600; margin: 0 0 6px; line-height: 1.2;">{{ liveTitle }}</h1>
+            <sc-if value="{{ liveHasTrigger }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size: 13px; color: #c9bfae; font-style: italic; margin-bottom: 4px;">Wenn: {{ liveTrigger }}</div>
+            </sc-if>
+            <div style="border-bottom: 1px solid #2e2925; margin: 16px 0 10px;"></div>
+            <sc-for list="{{ liveBlocks }}" as="b" hint-placeholder-count="5">
+              <div style="margin-left: {{ b.ml }}px;">
+                <sc-if value="{{ b.isH2 }}" hint-placeholder-val="{{ false }}">
+                  <h2 style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #7a6f61; font-weight: 600; margin: 24px 0 12px;">{{ b.text }}</h2>
+                </sc-if>
+                <sc-if value="{{ b.isP }}" hint-placeholder-val="{{ false }}">
+                  <p style="margin: 0 0 14px; line-height: 1.65; color: #d6ccbc; font-size: 14.5px;">{{ b.text }}</p>
+                </sc-if>
+                <sc-if value="{{ b.isUl }}" hint-placeholder-val="{{ false }}">
+                  <div style="display: flex; flex-direction: column; gap: 7px; margin: 0 0 14px;">
+                    <sc-for list="{{ b.items }}" as="it" hint-placeholder-count="3">
+                      <div style="display: flex; gap: 10px; line-height: 1.55; color: #d6ccbc; font-size: 14.5px;">
+                        <span style="color: #c8a35a; flex: none;">–</span>
+                        <span><strong style="color: #e7dfd2;">{{ it.b }}</strong>{{ it.t }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ b.isIf }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ b.onToggle }}" style="display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: none; border-top: 1px solid #2e2925; color: #e7dfd2; font-family: inherit; font-size: 14px; padding: 14px 0 12px; margin-top: 10px; cursor: pointer;" style-hover="color: #dcb96e;">
+                    {{ b.chev }}
+                    <span style="color: #c8a35a; font-weight: 600;">Falls:</span>
+                    <span style="font-style: italic;">{{ b.cond }}</span>
+                  </button>
+                </sc-if>
+                <sc-if value="{{ b.isReadaloud }}" hint-placeholder-val="{{ false }}">
+                  <div onMouseEnter="{{ b.onEnter }}" onMouseLeave="{{ b.onLeave }}" style="position: relative; background: #29241d; border-left: 3px solid #c8a35a; border-radius: 4px; padding: 20px 24px; margin: 6px 0 18px;">
+                    <div style="font-family: Literata, serif; font-size: {{ raSize }}px; line-height: 1.75; color: #ece2cf;">{{ b.text }}</div>
+                    <button onClick="{{ b.onCopy }}" style="position: absolute; top: 10px; right: 10px; display: flex; align-items: center; gap: 6px; background: #1d1a16; border: 1px solid #38322a; color: #a2968a; border-radius: 6px; padding: 5px 10px; font-size: 12px; font-family: system-ui, sans-serif; cursor: pointer; opacity: {{ b.copyOpacity }}; transition: opacity .15s;" style-hover="color: #e7dfd2; border-color: #4a4237;">{{ b.copyIcon }} {{ b.copyLabel }}</button>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ b.isCallout }}" hint-placeholder-val="{{ false }}">
+                  <div style="display: flex; gap: 12px; align-items: flex-start; background: {{ b.bg }}; border: 1px solid {{ b.border }}; border-radius: 6px; padding: 12px 14px; margin: 6px 0 14px;">
+                    <span style="flex: none; margin-top: 1px;">{{ b.icon }}</span>
+                    <div style="min-width: 0;">
+                      <div style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: {{ b.labelColor }}; margin-bottom: 4px;">{{ b.label }}</div>
+                      <div style="line-height: 1.6; font-size: 14px; color: {{ b.textColor }};">{{ b.text }}</div>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </main>
+        <aside style="width: 300px; flex: none; border-left: 1px solid #2e2925; display: flex; flex-direction: column; min-height: 0;">
+          <div style="flex: 1; overflow-y: auto; padding: 18px 16px; display: flex; flex-direction: column; gap: 12px;">
+            <div style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #7a6f61; font-weight: 600;">NPCs</div>
+            <sc-for list="{{ liveNpcs }}" as="n" hint-placeholder-count="2">
+              <div style="background: #23201b; border: 1px solid #2e2925; border-radius: 8px; padding: 14px;">
+                <div style="font-family: Literata, serif; font-size: 15px; font-weight: 600; margin-bottom: 1px;">{{ n.name }}</div>
+                <div style="font-size: 12px; color: #7a6f61; margin-bottom: 9px;">{{ n.role }}</div>
+                <div style="font-size: 12.5px; color: #d6ccbc; line-height: 1.5; font-style: italic; margin-bottom: 8px;">{{ n.voice }}</div>
+                <div style="font-size: 12.5px; color: #a2968a; line-height: 1.5; margin-bottom: 10px;"><span style="color: #7a6f61;">Will:</span> {{ n.will }}</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+                  <sc-for list="{{ n.stats }}" as="s" hint-placeholder-count="3">
+                    <span style="font-family: ui-monospace, monospace; font-size: 10.5px; color: #c9bfae; background: #1d1a16; border: 1px solid #38322a; border-radius: 4px; padding: 2px 6px;">{{ s }}</span>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="flex: none; display: flex; flex-direction: column; max-height: 46%; background: #191613; border-top: 1px solid #2e2925;">
+            <div style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #7a6f61; font-weight: 600; padding: 14px 16px 8px;">Log</div>
+            <div style="flex: 1; overflow-y: auto; padding: 0 16px 10px; display: flex; flex-direction: column; gap: 8px;">
+            <sc-if value="{{ logEmpty }}" hint-placeholder-val="{{ true }}">
+              <div style="font-size: 12.5px; color: #7a6f61; line-height: 1.5;">Noch keine Einträge — die Schnellnotiz unten landet hier.</div>
+            </sc-if>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <sc-for list="{{ logView }}" as="e" hint-placeholder-count="0">
+                <div style="display: flex; gap: 8px; font-size: 12.5px; line-height: 1.5;">
+                  <span style="font-family: ui-monospace, monospace; color: #7a6f61; flex: none;">{{ e.time }}</span>
+                  <span style="color: #d6ccbc;">{{ e.text }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="flex: none; padding: 4px 16px 14px;">
+            <input value="{{ note }}" onChange="{{ onNoteChange }}" onKeyDown="{{ onNoteKey }}" placeholder="Schnellnotiz … #thread #npc #loot" style="width: 100%; background: #23201b; border: 1px solid #38322a; border-radius: 8px; color: #e7dfd2; font-family: inherit; font-size: 13.5px; padding: 11px 13px; outline: none;">
+            <div style="font-size: 11.5px; color: #5d554a; margin-top: 7px;">Enter sendet · Zeit und Szene werden automatisch gesetzt</div>
+          </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ REVIEW ============ -->
+  <sc-if value="{{ isReview }}" hint-placeholder-val="{{ false }}">
+    <div style="display: flex; flex-direction: column; height: 100%; overflow: hidden;" data-screen-label="Review">
+      <div style="flex: 1; overflow-y: auto;">
+        <div style="max-width: 680px; margin: 0 auto; padding: 40px 28px 100px;">
+          <h1 style="font-family: Literata, serif; font-size: 26px; font-weight: 600; margin: 0 0 8px;">Fünf Minuten Ernte</h1>
+          <p style="margin: 0 0 32px; color: #a2968a; font-size: 14px; line-height: 1.6;">Einträge mit #thread und #npc aus Log und Inbox. Übernehmen, anlegen oder verwerfen — der Rest bleibt im Log.</p>
+          <sc-if value="{{ reviewEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="padding: 32px; text-align: center; color: #7a6f61; font-size: 14px; border: 1px dashed #38322a; border-radius: 8px;">Keine markierten Einträge in dieser Session — nichts zu sichten.</div>
+          </sc-if>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <sc-for list="{{ reviewItems }}" as="r" hint-placeholder-count="3">
+              <div style="background: #23201b; border: 1px solid #2e2925; border-radius: 8px; padding: 14px 16px; opacity: {{ r.opacity }};">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px;">
+                  <span style="color: #7a6f61;">{{ r.source }}</span>
+                  <span style="font-family: ui-monospace, monospace; color: #5d554a;">{{ r.time }}</span>
+                  <span style="color: {{ r.tagColor }}; background: {{ r.tagBg }}; border-radius: 4px; padding: 1px 7px; font-size: 11.5px; font-family: ui-monospace, monospace;">#{{ r.tag }}</span>
+                </div>
+                <div style="font-size: 14px; color: #e7dfd2; line-height: 1.55; margin-bottom: 11px;">{{ r.text }}</div>
+                <sc-if value="{{ r.pending }}" hint-placeholder-val="{{ true }}">
+                  <div style="display: flex; gap: 8px;">
+                    <sc-if value="{{ r.isThread }}" hint-placeholder-val="{{ false }}">
+                      <button onClick="{{ r.onThread }}" style="background: rgba(200,163,90,.12); border: 1px solid rgba(200,163,90,.4); color: #dcb96e; border-radius: 6px; padding: 6px 12px; font-size: 12.5px; font-family: inherit; cursor: pointer;" style-hover="background: rgba(200,163,90,.2);">Als Faden übernehmen</button>
+                    </sc-if>
+                    <sc-if value="{{ r.isNpc }}" hint-placeholder-val="{{ false }}">
+                      <button onClick="{{ r.onNpc }}" style="background: rgba(200,163,90,.12); border: 1px solid rgba(200,163,90,.4); color: #dcb96e; border-radius: 6px; padding: 6px 12px; font-size: 12.5px; font-family: inherit; cursor: pointer;" style-hover="background: rgba(200,163,90,.2);">NPC-Stub anlegen</button>
+                    </sc-if>
+                    <button onClick="{{ r.onDismiss }}" style="background: none; border: 1px solid #38322a; color: #a2968a; border-radius: 6px; padding: 6px 12px; font-size: 12.5px; font-family: inherit; cursor: pointer;" style-hover="color: #e7dfd2; border-color: #4a4237;">Verwerfen</button>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ r.done }}" hint-placeholder-val="{{ false }}">
+                  <div style="display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: {{ r.doneColor }};">{{ icoCheckSm }} {{ r.doneLabel }}</div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="margin-top: 36px; padding-top: 20px; border-top: 1px solid #2e2925;">
+            <div style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #7a6f61; font-weight: 600; margin-bottom: 12px;">Offene Fäden des Kapitels</div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <sc-for list="{{ threads }}" as="t" hint-placeholder-count="2">
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: #d6ccbc;">
+                  <span style="width: 14px; height: 14px; border: 1.5px solid #7a6f61; border-radius: 4px; flex: none;"></span>
+                  <span>{{ t.text }}</span>
+                  <sc-if value="{{ t.isNew }}" hint-placeholder-val="{{ false }}">
+                    <span style="font-size: 11px; color: #dcb96e; background: rgba(200,163,90,.12); border-radius: 4px; padding: 1px 7px;">neu</span>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <button onClick="{{ goPool }}" style="margin-top: 36px; background: #c8a35a; color: #241d10; border: none; border-radius: 6px; padding: 10px 18px; font-size: 13.5px; font-weight: 600; font-family: inherit; cursor: pointer;" style-hover="background: #dcb96e;">Fertig — zurück zum Pool</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+  </div>
+
+  <!-- ============ CMD-K ============ -->
+  <sc-if value="{{ cmdkOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeCmdk }}" style="position: fixed; inset: 0; background: rgba(15,13,10,.7); display: flex; justify-content: center; align-items: flex-start; padding-top: 14vh; z-index: 50;">
+      <div onClick="{{ stop }}" style="width: 560px; max-width: 90vw; background: #23201b; border: 1px solid #38322a; border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,.5); overflow: hidden;">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid #2e2925;">
+          {{ icoSearch }}
+          <input value="{{ q }}" onChange="{{ onQChange }}" placeholder="Szenen, NPCs, Orte durchsuchen …" autoFocus="{{ true }}" style="flex: 1; background: none; border: none; outline: none; color: #e7dfd2; font-family: inherit; font-size: 15px;">
+          <span style="font-family: ui-monospace, monospace; font-size: 11px; color: #7a6f61; border: 1px solid #38322a; border-radius: 4px; padding: 1px 5px;">esc</span>
+        </div>
+        <div style="max-height: 320px; overflow-y: auto; padding: 8px;">
+          <sc-if value="{{ resultsEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="padding: 20px; text-align: center; color: #7a6f61; font-size: 13.5px;">Nichts gefunden.</div>
+          </sc-if>
+          <sc-for list="{{ results }}" as="res" hint-placeholder-count="4">
+            <button onClick="{{ res.onPick }}" style="display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; background: none; border: none; border-radius: 7px; padding: 10px 10px; cursor: pointer; font-family: inherit;" style-hover="background: #2b2724;">
+              {{ res.icon }}
+              <span style="flex: 1; color: #e7dfd2; font-size: 14px;">{{ res.title }}</span>
+              <span style="color: #7a6f61; font-size: 12px;">{{ res.kind }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;readAloudSize&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 19, &quot;min&quot;: 17, &quot;max&quot;: 22, &quot;step&quot;: 1, &quot;unit&quot;: &quot;px&quot;, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Lesbarkeit&quot;}, &quot;showIds&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Anzeige&quot;}}">
+class Component extends DCLogic {
+  state = {
+    view: 'pool', sceneId: null, statusFilter: 'Alle', collapsed: {},
+    campaignId: 'beispiel', campMenu: false, chOpen: { '01-salzhafen': true },
+    liveSceneId: 'lighthouse-arrival', playedIds: {}, log: [], note: '',
+    startedAt: null, now: Date.now(), cmdk: false, q: '',
+    review: {}, adopted: [], hoverKey: null, copiedKey: null
+  };
+
+  componentDidMount() {
+    this._tick = setInterval(() => this.setState({ now: Date.now() }), 15000);
+    this._key = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); this.setState(s => ({ cmdk: !s.cmdk, q: '' })); }
+      else if (e.key === 'Escape' && this.state.cmdk) this.setState({ cmdk: false });
+    };
+    window.addEventListener('keydown', this._key);
+  }
+  componentWillUnmount() { clearInterval(this._tick); window.removeEventListener('keydown', this._key); }
+
+  data() {
+    const npcs = {
+      jorna: { id: 'jorna', name: 'Hafenmeisterin Jorna', role: 'Auftraggeberin, Hafenmeisterin von Salzhafen',
+        voice: 'knapp, wetterrau, duzt jeden',
+        will: 'Das Leuchtfeuer muss wieder brennen, bevor die Herbstkonvois kommen — ihr Amt hängt daran.',
+        stats: ['insight +2', 'pass. perception 12'] },
+      fenn: { id: 'fenn', name: 'Fenn', role: 'Anführer der Schmuggler in der Nordbucht',
+        voice: 'leise, höflich — wird stiller, je gefährlicher es wird',
+        will: 'Den Auftrag zu Ende bringen, ohne dass jemand stirbt — er ist Schmuggler, kein Mörder, und das ist sein wunder Punkt.',
+        stats: ['wis +2', 'insight +2', 'pass. perception 13'] }
+    };
+    const scenes = [
+      { id: 'lighthouse-arrival', title: 'Ankunft am Leuchtturm', type: 'planned', location: 'Der Leuchtturm von Salzhafen',
+        npcs: ['jorna'], handouts: ['Karte von Salzhafen'], tags: ['social', 'travel'], status: 'ready', group: 'Hafen',
+        blocks: [
+          { k: 'h2', text: 'Flow' },
+          { k: 'p', text: 'Die Gruppe erreicht den Leuchtturm bei Einbruch der Dunkelheit. Hafenmeisterin Jorna wartet am Fuß der Treppe — sie hat die Gruppe angeheuert und will Ergebnisse sehen.' },
+          { k: 'callout', type: 'readaloud', text: 'Der Turm ragt schwarz gegen den Abendhimmel auf. Kein Licht brennt in der Laterne, und die Gischt schlägt hart gegen die Felsen. Irgendwo über euch schlägt eine Tür im Wind — wieder und wieder, als hätte niemand mehr die Kraft, sie zu schließen.' },
+          { k: 'callout', type: 'check', text: 'Wisdom (Perception) DC 13: frische Stiefelspuren im Sand, die NICHT vom Dorf kommen, sondern von der Bucht im Norden.' },
+          { k: 'callout', type: 'secret', text: 'Der Leuchtturmwärter ist nicht verschwunden — er wird in der Bucht festgehalten, damit das Leuchtfeuer dunkel bleibt.' },
+          { k: 'callout', type: 'note', text: 'Wenn die Gruppe nachts die Bucht auskundschaftet und erwischt wird → Kontingenz smuggler-captured.' }
+        ] },
+      { id: 'bucht-nacht', title: 'Die Bucht bei Nacht', type: 'planned', location: 'bucht',
+        npcs: [], handouts: [], tags: ['stealth'], status: 'draft', group: 'Hafen',
+        blocks: [
+          { k: 'h2', text: 'Flow' },
+          { k: 'p', text: 'Noch nicht ausgearbeitet — Ansatz: die Gruppe beobachtet die Schmugglerbucht bei Nacht und zählt Boote und Wachen.' }
+        ] },
+      { id: 'smuggler-captured', title: 'Von den Schmugglern erwischt', type: 'contingency', location: 'bucht',
+        trigger: 'Charaktere werden beim Auskundschaften der Bucht entdeckt',
+        npcs: ['fenn'], handouts: [], tags: ['social', 'escape'], status: 'ready', group: 'Hafen',
+        blocks: [
+          { k: 'h2', text: 'Flow' },
+          { k: 'p', text: 'Entwaffnet und gefesselt werden die Charaktere vor Fenn gebracht, den Anführer der Schmuggler. Er befragt jeden einzeln: Wer schickt euch? Wie viel wisst ihr?' },
+          { k: 'if', id: 'if1', cond: 'sie geben zu, für Jorna zu arbeiten', blocks: [
+            { k: 'p', text: 'Fenn lässt sie in die alte Räucherkammer sperren — er will erst mit seinem Auftraggeber sprechen, bevor er entscheidet. Die Gruppe hat bis zum Morgengrauen Zeit zu entkommen.' },
+            { k: 'ul', items: [
+              { t: 'die morschen Bretter der Rückwand aufbrechen' },
+              { t: 'den gelangweilten Wachposten becircen oder bestechen' },
+              { t: 'clevere Verwendung für einen Cantrip' }
+            ] },
+            { k: 'callout', type: 'note', text: 'Notfall-Ventil: Der gefangene Leuchtturmwärter in der Nachbarkammer kennt ein loses Bodenbrett.' }
+          ] },
+          { k: 'if', id: 'if2', cond: 'sie lügen (Schiffbrüchige, verirrte Reisende …)', blocks: [
+            { k: 'callout', type: 'check', text: 'Charisma (Deception) jedes Charakters vs. Fenns Wisdom (Insight) +2. Advantage/Disadvantage nach Plausibilität, für jeden Charakter einzeln.' },
+            { k: 'ul', items: [
+              { b: 'Geglaubt', t: ' → sie werden zum Dorf eskortiert und beobachtet' },
+              { b: 'Nicht geglaubt', t: ' → Räucherkammer wie oben' }
+            ] }
+          ] },
+          { k: 'callout', type: 'outcome', text: 'Fenn kennt nach dieser Szene die Gesichter der Gruppe — egal wie sie ausgeht.' }
+        ] }
+    ];
+    return { npcs, scenes };
+  }
+
+  ic(name, size, color) {
+    const e = React.createElement, s = size || 16, c = color || 'currentColor';
+    const svg = (kids, fill) => e('svg', { width: s, height: s, viewBox: '0 0 24 24', fill: fill ? c : 'none', stroke: fill ? 'none' : c, strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', style: { flex: 'none', display: 'block' } }, ...kids);
+    switch (name) {
+      case 'search': return svg([e('circle', { key: 1, cx: 11, cy: 11, r: 7 }), e('line', { key: 2, x1: 21, y1: 21, x2: 16.3, y2: 16.3 })]);
+      case 'play': return svg([e('path', { key: 1, d: 'M8 5v14l11-7z', fill: c, stroke: 'none' })]);
+      case 'pause': return svg([e('line', { key: 1, x1: 9, y1: 5, x2: 9, y2: 19 }), e('line', { key: 2, x1: 15, y1: 5, x2: 15, y2: 19 })]);
+      case 'clock': return svg([e('circle', { key: 1, cx: 12, cy: 12, r: 9 }), e('polyline', { key: 2, points: '12 7 12 12 15 14' })]);
+      case 'check': return svg([e('path', { key: 1, d: 'M20 6 9 17l-5-5' })]);
+      case 'chevD': return svg([e('path', { key: 1, d: 'm6 9 6 6 6-6' })]);
+      case 'chevR': return svg([e('path', { key: 1, d: 'm9 6 6 6-6 6' })]);
+      case 'copy': return svg([e('rect', { key: 1, x: 9, y: 9, width: 12, height: 12, rx: 2 }), e('path', { key: 2, d: 'M5 15V5a2 2 0 0 1 2-2h10' })]);
+      case 'eye': return svg([e('path', { key: 1, d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z' }), e('circle', { key: 2, cx: 12, cy: 12, r: 3 })]);
+      case 'book': return svg([e('path', { key: 1, d: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20' }), e('path', { key: 2, d: 'M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z' })]);
+      case 'logo': return svg([
+        e('path', { key: 1, d: 'M12 10.5c-2.4-2.4-5.8-3.2-8.8-3.2v11.6c3 0 6.4.8 8.8 3.2 2.4-2.4 5.8-3.2 8.8-3.2V7.3c-3 0-6.4.8-8.8 3.2z' }),
+        e('path', { key: 2, d: 'M12 10.5v11.6' }),
+        e('path', { key: 3, d: 'M12 .8l1.3 2.6 2.6 1.3-2.6 1.3L12 8.6l-1.3-2.6-2.6-1.3 2.6-1.3z', fill: c, stroke: 'none' })
+      ]);
+      case 'dice': return svg([e('rect', { key: 1, x: 3, y: 3, width: 18, height: 18, rx: 3 }), e('circle', { key: 2, cx: 8.2, cy: 8.2, r: 1.1, fill: c, stroke: 'none' }), e('circle', { key: 3, cx: 12, cy: 12, r: 1.1, fill: c, stroke: 'none' }), e('circle', { key: 4, cx: 15.8, cy: 15.8, r: 1.1, fill: c, stroke: 'none' })]);
+      case 'branch': return svg([e('circle', { key: 1, cx: 6, cy: 18, r: 3 }), e('circle', { key: 2, cx: 18, cy: 6, r: 3 }), e('path', { key: 3, d: 'M18 9a9 9 0 0 1-9 9' })]);
+      case 'bookmark': return svg([e('path', { key: 1, d: 'M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z' })]);
+      case 'user': return svg([e('circle', { key: 1, cx: 12, cy: 7.5, r: 4 }), e('path', { key: 2, d: 'M5 21v-1.5a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5V21' })]);
+      case 'pin': return svg([e('path', { key: 1, d: 'M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z' }), e('circle', { key: 2, cx: 12, cy: 10, r: 3 })]);
+      case 'thread': return svg([e('path', { key: 1, d: 'M4 4v7a4 4 0 0 0 4 4h11' }), e('polyline', { key: 2, points: '15 10 20 15 15 20' })]);
+      case 'gem': return svg([e('path', { key: 1, d: 'M6 3h12l4 6-10 12L2 9z' }), e('path', { key: 2, d: 'M2 9h20' })]);
+      case 'pen': return svg([e('path', { key: 1, d: 'M12 20h9' }), e('path', { key: 2, d: 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z' })]);
+    }
+    return null;
+  }
+
+  calloutMeta(type) {
+    switch (type) {
+      case 'check': return { label: 'Check', bg: 'rgba(200,163,90,.07)', border: 'rgba(200,163,90,.45)', labelColor: '#dcb96e', textColor: '#e7dfd2', icon: this.ic('dice', 17, '#c8a35a') };
+      case 'secret': return { label: 'Geheim', bg: '#171410', border: '#2a251f', labelColor: '#8a7f70', textColor: '#a2968a', icon: this.ic('eye', 17, '#8a7f70') };
+      case 'outcome': return { label: 'Konsequenz', bg: '#23201b', border: '#38322a', labelColor: '#c9bfae', textColor: '#d6ccbc', icon: this.ic('thread', 17, '#c9bfae') };
+      case 'loot': return { label: 'Beute', bg: '#23201b', border: '#38322a', labelColor: '#c9bfae', textColor: '#d6ccbc', icon: this.ic('gem', 17, '#c9bfae') };
+      default: return { label: 'Notiz', bg: 'transparent', border: '#2e2925', labelColor: '#7a6f61', textColor: '#a2968a', icon: this.ic('pen', 16, '#7a6f61') };
+    }
+  }
+
+  prepBlocks(scene) {
+    const out = [];
+    const push = (b, i, ml, pfx) => {
+      const key = pfx + i;
+      if (b.k === 'h2') out.push({ key, isH2: true, text: b.text, ml });
+      else if (b.k === 'p') out.push({ key, isP: true, text: b.text, ml });
+      else if (b.k === 'ul') out.push({ key, isUl: true, items: b.items.map(it => ({ b: it.b || '', t: it.t })), ml });
+      else if (b.k === 'if') {
+        const col = !!this.state.collapsed[scene.id + b.id];
+        out.push({ key, isIf: true, cond: b.cond, ml: 0, chev: this.ic(col ? 'chevR' : 'chevD', 15, '#7a6f61'),
+          onToggle: () => this.setState(s => ({ collapsed: { ...s.collapsed, [scene.id + b.id]: !s.collapsed[scene.id + b.id] } })) });
+        if (!col) b.blocks.forEach((nb, j) => push(nb, j, 18, key + '-'));
+      } else if (b.k === 'callout') {
+        if (b.type === 'readaloud') {
+          const copied = this.state.copiedKey === key;
+          out.push({ key, isReadaloud: true, text: b.text, ml,
+            copyOpacity: (this.state.hoverKey === key || copied) ? 1 : 0.25,
+            copyIcon: this.ic(copied ? 'check' : 'copy', 13, copied ? '#8fae7e' : 'currentColor'),
+            copyLabel: copied ? 'Kopiert' : 'Kopieren',
+            onEnter: () => this.setState({ hoverKey: key }),
+            onLeave: () => this.setState({ hoverKey: null }),
+            onCopy: () => { try { navigator.clipboard.writeText(b.text); } catch (err) {} this.setState({ copiedKey: key }); setTimeout(() => this.setState({ copiedKey: null }), 1600); } });
+        } else {
+          const m = this.calloutMeta(b.type);
+          out.push({ key, isCallout: true, text: b.text, ml, ...m });
+        }
+      }
+    };
+    scene.blocks.forEach((b, i) => push(b, i, 0, scene.id + '-'));
+    return out;
+  }
+
+  statusMeta(st) {
+    if (st === 'ready') return { label: 'bereit', dot: '#8fae7e', color: '#93a888' };
+    if (st === 'draft') return { label: 'Entwurf', dot: '#7a6f61', color: '#8a7f70' };
+    if (st === 'played') return { label: 'gespielt', dot: '#5d554a', color: '#7a6f61' };
+    return { label: st, dot: '#7a6f61', color: '#8a7f70' };
+  }
+
+  poolRow(sc) {
+    const st = this.statusMeta(sc.status);
+    return { id: sc.id, title: sc.title, trigger: sc.trigger || '',
+      meta: (sc.location === 'bucht' ? 'Bucht' : sc.location) + ' · ' + sc.tags.map(t => '#' + t).join(' '),
+      icon: this.ic(sc.type === 'contingency' ? 'branch' : 'bookmark', 17, '#7a6f61'),
+      dotColor: st.dot, statusColor: st.color, statusLabel: st.label,
+      showId: !!(this.props.showIds ?? false),
+      onOpen: () => this.setState({ view: 'scene', sceneId: sc.id }) };
+  }
+
+  fmtTime(ts) { const d = new Date(ts); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+
+  addLog(text) {
+    this.setState(s => ({ log: [...s.log, { time: this.fmtTime(Date.now()), scene: s.liveSceneId, text }] }));
+  }
+
+  renderVals() {
+    const { npcs, scenes } = this.data();
+    const st = this.state;
+    const byId = Object.fromEntries(scenes.map(s => [s.id, s]));
+    const raSize = this.props.readAloudSize ?? 19;
+
+    // Pool
+    const filter = st.statusFilter;
+    const match = sc => filter === 'Alle' || this.statusMeta(sc.status).label.toLowerCase() === filter.toLowerCase();
+    const planned = scenes.filter(s => s.type === 'planned' && match(s));
+    const conting = scenes.filter(s => s.type === 'contingency' && match(s));
+    const chips = ['Alle', 'Bereit', 'Entwurf', 'Gespielt'].map(label => ({
+      label, onClick: () => this.setState({ statusFilter: label }),
+      bg: filter === label ? 'rgba(200,163,90,.14)' : 'transparent',
+      color: filter === label ? '#dcb96e' : '#a2968a',
+      border: filter === label ? 'rgba(200,163,90,.45)' : '#38322a'
+    }));
+    const openThreads = [
+      { text: 'Wer bezahlt die Schmuggler?', isNew: false },
+      ...st.adopted.map(t => ({ text: t, isNew: true }))
+    ];
+    const camps = [
+      { id: 'beispiel', name: 'Beispiel', meta: '2 Kapitel · 3 Szenen', chapters: [
+        { id: '01-salzhafen', title: 'Kapitel 1: Der Leuchtturm von Salzhafen', status: 'aktiv', goal: 'Herausfinden, warum das Leuchtfeuer seit drei Nächten erloschen ist.', hasScenes: true, groupLabel: 'Hafen' },
+        { id: '02-schmugglerbucht', title: 'Kapitel 2: Die Schmugglerbucht', status: 'geplant', goal: 'Den Auftraggeber der Schmuggler stellen.', hasScenes: false, groupLabel: '' }
+      ] },
+      { id: 'aschenkrone', name: 'Aschenkrone', meta: '1 Kapitel · noch keine Szenen', chapters: [
+        { id: '01-totenmoor', title: 'Kapitel 1: Das Totenmoor', status: 'aktiv', goal: 'Die Quelle der Fäulnis im Moor finden.', hasScenes: false, groupLabel: '' }
+      ] }
+    ];
+    const camp = camps.find(c => c.id === st.campaignId) || camps[0];
+    const campaignRows = camps.map(c => ({ name: c.name, meta: c.meta, active: c.id === st.campaignId,
+      onPick: () => this.setState({ campaignId: c.id, campMenu: false, chOpen: { [c.chapters[0].id]: true } }) }));
+    const chaptersVm = camp.chapters.map(ch => {
+      const expanded = !!st.chOpen[ch.id];
+      const chPlanned = ch.hasScenes ? planned.map(s => this.poolRow(s)) : [];
+      const chCont = ch.hasScenes ? conting.map(s => this.poolRow(s)) : [];
+      return { key: ch.id, title: ch.title, goal: ch.goal, expanded,
+        chev: this.ic(expanded ? 'chevD' : 'chevR', 15, '#7a6f61'),
+        onToggle: () => this.setState(s => ({ chOpen: { ...s.chOpen, [ch.id]: !s.chOpen[ch.id] } })),
+        statusLabel: ch.status,
+        statusColor: ch.status === 'aktiv' ? '#93a888' : '#8a7f70',
+        statusBorder: ch.status === 'aktiv' ? 'rgba(143,174,126,.35)' : '#38322a',
+        count: ch.hasScenes ? scenes.length + ' Szenen' : 'keine Szenen',
+        threads: ch.id === '01-salzhafen' ? openThreads : [],
+        empty: !ch.hasScenes, hasScenes: ch.hasScenes, groupLabel: ch.groupLabel,
+        planned: chPlanned, conting: chCont, hasConting: chCont.length > 0,
+        plannedEmpty: ch.hasScenes && chPlanned.length === 0 };
+    });
+
+    // Scene view
+    const scene = byId[st.sceneId] || scenes[0];
+    const typeMeta = s => s.type === 'contingency'
+      ? { label: 'Kontingenz', color: '#c9bfae', icon: this.ic('branch', 16, '#c9bfae') }
+      : { label: 'Geplante Szene', color: '#93a888', icon: this.ic('bookmark', 16, '#93a888') };
+    const stm = typeMeta(scene);
+    const npcCard = id => { const n = npcs[id]; return n ? { ...n } : null; };
+
+    // Live
+    const live = byId[st.liveSceneId];
+    const ltm = typeMeta(live);
+    const liveRow = sc => ({
+      title: sc.title, played: !!st.playedIds[sc.id],
+      bg: sc.id === st.liveSceneId ? '#282420' : 'transparent',
+      edge: sc.id === st.liveSceneId ? '#c8a35a' : 'transparent',
+      color: sc.id === st.liveSceneId ? '#e7dfd2' : '#a2968a',
+      icon: this.ic(sc.type === 'contingency' ? 'branch' : 'bookmark', 15, sc.id === st.liveSceneId ? '#c8a35a' : '#7a6f61'),
+      onPick: () => this.setState(s => ({ liveSceneId: sc.id, playedIds: { ...s.playedIds, [s.liveSceneId]: true } }))
+    });
+    const el = st.startedAt ? Math.max(0, st.now - st.startedAt) : 0;
+    const mins = Math.floor(el / 60000);
+    const elapsed = Math.floor(mins / 60) + ':' + String(mins % 60).padStart(2, '0');
+    const liveNpcIds = [...new Set([...(live.npcs || []), ...(live.type === 'planned' ? [] : [])])];
+    const liveNpcList = (liveNpcIds.length ? liveNpcIds : ['jorna', 'fenn']).map(npcCard).filter(Boolean);
+
+    // Review
+    const inbox = [{ id: 'inbox1', source: 'Inbox', time: '2026-01-10', text: 'Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug', tag: 'thread' }];
+    const tagged = st.log.filter(e => e.text.includes('#')).map((e, i) => {
+      const m = e.text.match(/#(\w+)/);
+      return { id: 'log' + i, source: 'Log', time: e.time, text: e.text.replace(/\s*#\w+/g, ''), tag: m ? m[1] : 'note' };
+    });
+    const allReview = [...tagged, ...inbox];
+    const reviewItems = allReview.map(r => {
+      const stt = st.review[r.id];
+      const setR = v => this.setState(s => ({ review: { ...s.review, [r.id]: v } }));
+      return { ...r,
+        tagColor: '#dcb96e', tagBg: 'rgba(200,163,90,.12)',
+        isThread: r.tag === 'thread' || r.tag === 'decision', isNpc: r.tag === 'npc',
+        pending: !stt, done: !!stt, opacity: stt ? 0.55 : 1,
+        doneLabel: stt === 'thread' ? 'Als Faden übernommen' : stt === 'npc' ? 'NPC-Stub angelegt' : 'Verworfen',
+        doneColor: stt === 'dismissed' ? '#7a6f61' : '#93a888',
+        onThread: () => this.setState(s => ({ review: { ...s.review, [r.id]: 'thread' }, adopted: [...s.adopted, r.text] })),
+        onNpc: () => setR('npc'), onDismiss: () => setR('dismissed') };
+    });
+    const seen = reviewItems.filter(r => r.done).length;
+
+    // Cmd-K
+    const q = st.q.trim().toLowerCase();
+    const searchable = [
+      ...scenes.map(s => ({ title: s.title, kind: s.type === 'contingency' ? 'Kontingenz' : 'Szene', icon: this.ic(s.type === 'contingency' ? 'branch' : 'bookmark', 16, '#7a6f61'), hay: (s.title + ' ' + s.id + ' ' + s.tags.join(' ')).toLowerCase(), go: () => this.setState({ view: 'scene', sceneId: s.id, cmdk: false }) })),
+      ...Object.values(npcs).map(n => ({ title: n.name, kind: 'NPC', icon: this.ic('user', 16, '#7a6f61'), hay: (n.name + ' ' + n.id + ' ' + n.role).toLowerCase(), go: () => this.setState({ view: 'scene', sceneId: scenes.find(s => s.npcs.includes(n.id)).id, cmdk: false }) })),
+      { title: 'Der Leuchtturm von Salzhafen', kind: 'Ort', icon: this.ic('pin', 16, '#7a6f61'), hay: 'leuchtturm salzhafen ort', go: () => this.setState({ view: 'scene', sceneId: 'lighthouse-arrival', cmdk: false }) }
+    ];
+    const results = (q ? searchable.filter(r => r.hay.includes(q)) : searchable).slice(0, 8).map(r => ({ ...r, onPick: r.go }));
+
+    return {
+      isPool: st.view === 'pool', isScene: st.view === 'scene', isLive: st.view === 'live', isReview: st.view === 'review',
+      raSize,
+      // header
+      icoLogo: this.ic('logo', 19, '#c8a35a'),
+      icoSearch: this.ic('search', 15, '#7a6f61'), icoPlay: this.ic('play', 13, '#241d10'),
+      icoThread: this.ic('thread', 15, '#c8a35a'), icoPin: this.ic('pin', 15, '#7a6f61'),
+      icoBranch: this.ic('branch', 15, '#7a6f61'), icoClock: this.ic('clock', 15, '#c9bfae'),
+      icoPause: this.ic('pause', 13, 'currentColor'), icoCheckSm: this.ic('check', 13, '#93a888'),
+      icoPinSm: this.ic('pin', 13, '#7a6f61'),
+      openCmdk: () => this.setState({ cmdk: true, q: '' }),
+      closeCmdk: () => this.setState({ cmdk: false }),
+      stop: e => e.stopPropagation(),
+      startSession: () => this.setState({ startedAt: Date.now(), now: Date.now(), log: [], playedIds: {}, view: 'live' }),
+      goPool: () => this.setState({ view: 'pool' }),
+      // pool
+      filterChips: chips, chapters: chaptersVm,
+      campName: camp.name, campMeta: camp.meta, campaignRows, campMenuOpen: st.campMenu,
+      toggleCampMenu: () => this.setState(s => ({ campMenu: !s.campMenu })),
+      icoChevD: this.ic('chevD', 14, '#7a6f61'),
+      // scene
+      sceneId: scene.id, sceneTitle: scene.title, sceneChapter: 'Kapitel 1', sceneTags: scene.tags, sceneHandouts: scene.handouts,
+      sceneLocation: scene.location === 'bucht' ? 'Bucht' : scene.location,
+      sceneTypeLabel: stm.label, sceneTypeColor: stm.color, sceneTypeIcon: stm.icon,
+      sceneHasTrigger: !!scene.trigger, sceneTrigger: scene.trigger || '',
+      sceneBlocks: this.prepBlocks(scene),
+      sceneNpcs: scene.npcs.map(npcCard).filter(Boolean),
+      // live
+      livePlanned: scenes.filter(s => s.type === 'planned').map(liveRow),
+      liveContingency: scenes.filter(s => s.type === 'contingency').map(liveRow),
+      liveTitle: live.title, liveLocation: live.location === 'bucht' ? 'Bucht' : live.location,
+      liveTypeLabel: ltm.label, liveTypeColor: ltm.color, liveTypeIcon: ltm.icon,
+      liveHasTrigger: !!live.trigger, liveTrigger: live.trigger || '',
+      liveBlocks: this.prepBlocks(live), liveNpcs: liveNpcList,
+      elapsed,
+      addPause: () => this.setState(s => ({ log: [...s.log, { time: this.fmtTime(Date.now()), text: '— Pause' }] })),
+      endSession: () => this.setState({ view: 'review' }),
+      note: st.note,
+      onNoteChange: e => this.setState({ note: e.target.value }),
+      onNoteKey: e => { if (e.key === 'Enter' && st.note.trim()) { this.addLog('(' + st.liveSceneId + ') ' + st.note.trim()); this.setState({ note: '' }); } },
+      logView: [...st.log].reverse().map(e => ({ time: e.time, text: e.text })),
+      logEmpty: st.log.length === 0,
+      // review
+      reviewItems, reviewEmpty: allReview.length === 0,
+      reviewProgress: seen + ' von ' + allReview.length + ' gesichtet',
+      threads: [
+        { text: 'Wer bezahlt die Schmuggler?', isNew: false },
+        ...st.adopted.map(t => ({ text: t, isNew: true }))
+      ],
+      // cmdk
+      cmdkOpen: st.cmdk, q: st.q, onQChange: e => this.setState({ q: e.target.value }),
+      results, resultsEmpty: results.length === 0
+    };
+  }
+}
+</script>
+</body>
+</html>
