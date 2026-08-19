@@ -1,33 +1,45 @@
-// Grimoire-Server — Grundgerüst.
-// Läuft mit Bun (bun run src/server.ts) oder Node >= 20 mit tsx.
-// Bewusst ohne Framework-Magie: die API ist klein genug für Handarbeit.
-
-import { createProvider } from "./llm-provider";
-
-const CAMPAIGN_ROOT = process.env.CAMPAIGN_ROOT ?? "../examples"; // Dev-Default: Beispieldaten; echte Daten per CAMPAIGN_ROOT=../campaigns
-const PORT = Number(process.env.PORT ?? 3000);
-
-// Geplante API (Konventionen siehe /README.md):
+// Grimoire server — Hono app.
+// Runs on Bun (bun run src/server.ts). No Bun-only runtime APIs are used
+// (DECISIONS #5/#7): Bun picks up the default { port, fetch } export below;
+// on Node >= 20 the same app runs via @hono/node-server instead:
+//   import { serve } from "@hono/node-server"; serve({ fetch: app.fetch, port: PORT });
 //
-//   GET  /api/campaigns                       Kampagnen-Liste (Ordner)
-//   GET  /api/:campaign/tree                  Szenen/NPCs/Orte als Baum (Frontmatter geparst)
-//   GET  /api/:campaign/file?path=...         eine Datei (roh + geparst + mtime)
-//   PATCH /api/:campaign/frontmatter          { path, mtime, patch } — nur bei
-//                                             unverändertem mtime, sonst 409
-//   POST /api/:campaign/session/start         legt sessions/<heute>.md an
-//   POST /api/:campaign/session/end           setzt `ended`
-//   POST /api/:campaign/log                   { text, sceneId? } → append mit Zeitstempel
-//   POST /api/:campaign/inbox                 { text } → append an inbox.md
-//   POST /api/:campaign/generate              { chapter, sourceText } → GenerateResult
-//                                             (Review-Vorschau; schreibt NICHTS)
-//   POST /api/:campaign/generate/apply        { scenes, stubs } → schreibt Drafts
+// Planned API — the living checklist (conventions: /README.md). Tick an
+// endpoint here when it is implemented:
 //
-// Validierung nach generate: Frontmatter parsebar, status==draft,
-// Referenzen existieren oder liegen als Stub bei, nur bekannte Callouts.
-// Fehler → Korrektur-Turn ans LLM (max. 2), siehe generator/README.md.
+//   [x] GET  /api/campaigns                    campaign list (directories)
+//   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (frontmatter parsed)
+//   [x] GET  /api/:campaign/file?path=...      one file (raw + parsed + mtime)
+//   [ ] PATCH /api/:campaign/frontmatter       { path, mtime, patch } — only if
+//                                              mtime is unchanged, otherwise 409
+//   [ ] POST /api/:campaign/session/start      creates sessions/<today>.md
+//   [ ] POST /api/:campaign/session/end        sets `ended`
+//   [ ] POST /api/:campaign/log                { text, sceneId? } -> append with timestamp
+//   [ ] POST /api/:campaign/inbox              { text } -> append to inbox.md
+//   [ ] POST /api/:campaign/generate           { chapter, sourceText } -> GenerateResult
+//                                              (review preview; writes NOTHING)
+//   [ ] POST /api/:campaign/generate/apply     { scenes, stubs } -> writes drafts
+//
+// Validation after generate: frontmatter parseable, status==draft, references
+// exist or ship as stubs, only known callouts. Errors -> correction turn to
+// the LLM (max 2), see generator/README.md.
+//
+// The LLM provider (./llm-provider) is created lazily when the generate
+// endpoints land — instantiating it at boot would require an API key even
+// for the read-only API.
 
-const provider = createProvider(process.env);
-console.log(
-  `Grimoire server (stub) — provider: ${provider.name}, campaigns: ${CAMPAIGN_ROOT}, port: ${PORT}`,
-);
-console.log("Endpoints sind oben dokumentiert und noch zu implementieren.");
+import { Hono } from "hono";
+import { CAMPAIGN_ROOT, PORT } from "./config";
+import { api } from "./routes/api";
+
+export const app = new Hono();
+app.route("/api", api);
+
+console.log(`Grimoire server — campaigns: ${CAMPAIGN_ROOT}, port: ${PORT}`);
+
+// Bun serves this automatically when the file is the entrypoint; the app
+// object itself stays runtime-neutral (see Node alternative above).
+export default {
+  port: PORT,
+  fetch: app.fetch,
+};
