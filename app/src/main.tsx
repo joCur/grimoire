@@ -5,7 +5,8 @@ import { BrowserRouter } from "react-router";
 
 import { App } from "@/App";
 
-import "@fontsource-variable/source-serif-4";
+import "@fontsource-variable/literata";
+import "@fontsource-variable/literata/wght-italic.css";
 import "./index.css";
 
 // No localStorage persistence anywhere — the server is the source of truth

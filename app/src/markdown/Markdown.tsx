@@ -1,8 +1,11 @@
 // The markdown pipeline: react-markdown + the Grimoire remark plugin.
 // The plugin annotates callouts as `<section data-callout>` and `## If:`
-// sections as `<details data-if-section>`; the component overrides below
-// map those elements to their React rendering.
+// sections as `<details data-if-section open>`; the component overrides
+// below map those elements to their React rendering per the design
+// reference: a borderless summary row — chevron, brass "Falls:" prefix,
+// italic condition — over 18px-indented content, no box.
 
+import { ChevronDown } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 
 import { Callout } from "./Callout";
@@ -23,13 +26,32 @@ const components: Components = {
     }
     return <section {...rest}>{children}</section>;
   },
+  details(props) {
+    const { node: _node, children, ...rest } = props;
+    const attrs = rest as Record<string, unknown>;
+    // Only if-sections get the branch styling; anything else stays native.
+    if (attrs["data-if-section"] === undefined) return <details {...rest}>{children}</details>;
+    return (
+      <details {...rest} className="group mt-2.5 [&>:not(summary)]:ml-[18px]">
+        {children}
+      </details>
+    );
+  },
   summary(props) {
     // Summaries only come from the plugin (raw HTML is not rendered).
     const { node: _node, children, ...rest } = props;
     return (
-      <summary {...rest}>
-        <span className="font-medium text-muted-foreground">Falls: </span>
-        {children}
+      <summary
+        {...rest}
+        className="flex w-full cursor-pointer list-none items-center gap-2 border-t border-border pt-3.5 pb-3 text-[14px] text-foreground select-none hover:text-primary-hover [&::-webkit-details-marker]:hidden"
+      >
+        <ChevronDown
+          aria-hidden
+          size={15}
+          className="flex-none -rotate-90 text-muted-foreground transition-transform group-open:rotate-0"
+        />
+        <span className="font-semibold text-primary">Falls:</span>
+        <span className="italic">{children}</span>
       </summary>
     );
   },

@@ -131,6 +131,8 @@ export interface SceneSummary {
   title: string;
   type: OrString<SceneType>;
   status: OrString<SceneStatus>;
+  /** Free-text firing condition — only meaningful for `type: contingency`. */
+  trigger?: string;
   location?: string;
   npcs: string[];
   tags: string[];

@@ -3,54 +3,72 @@
 /*
  * Grimoire design tokens.
  *
- * Dark is the PRIMARY mode (evening sessions): deep warm anthracite with a
- * brown undertone — deliberately not blue-black. Light mode is a warm paper
- * tone. Each token is defined once via light-dark(); `color-scheme` follows
- * the system preference and can be forced with a `.light`/`.dark` class on
- * the root element.
+ * Dark is the PRIMARY mode (evening sessions) and its values are copied
+ * verbatim from the binding design reference (design/Grimoire.dc.html —
+ * the PO's prototype): deep warm anthracite with a brown undertone,
+ * a single brass accent. Light mode is a derived warm-paper palette —
+ * functional, not the star. Each token is defined once via light-dark();
+ * `color-scheme` follows the system preference and can be forced with a
+ * `.light`/`.dark` class on the root element.
  *
  * Naming follows the shadcn/ui vocabulary so shadcn components drop in
- * unchanged. Note: in that vocabulary `--primary` is the single brand
- * accent (muted gold/brass, cf. UI-BRIEF "Buchschnitt/Lesebändchen") and
- * `--accent` is merely a hover surface. Semantic status colors
- * (success/warn/destructive) are for status only, never decoration.
+ * unchanged; Grimoire-specific text tones the vocabulary lacks get their
+ * own tokens (--text-body, --soft, --dim, --faint, …) instead of hex
+ * values in components.
  */
 
 :root {
   color-scheme: light dark;
 
   /* base surfaces + text */
-  --background: light-dark(oklch(0.972 0.008 85), oklch(0.22 0.012 65));
-  --foreground: light-dark(oklch(0.26 0.015 60), oklch(0.91 0.012 80));
-  --card: light-dark(oklch(0.955 0.009 85), oklch(0.255 0.013 65));
+  --background: light-dark(#f7f2e7, #1d1a16);
+  --foreground: light-dark(#2c261c, #e7dfd2);
+  --card: light-dark(#efe9da, #23201b);
   --card-foreground: var(--foreground);
-  --popover: light-dark(oklch(0.985 0.006 85), oklch(0.27 0.014 65));
+  --popover: light-dark(#fbf7ee, #23201b);
   --popover-foreground: var(--foreground);
 
   /* the single accent: muted gold/brass */
-  --primary: light-dark(oklch(0.55 0.09 80), oklch(0.76 0.095 85));
-  --primary-foreground: light-dark(oklch(0.985 0.008 85), oklch(0.23 0.03 80));
+  --primary: light-dark(#8a6b2f, #c8a35a);
+  --primary-hover: light-dark(#6f5622, #dcb96e);
+  --primary-foreground: light-dark(#faf5e9, #241d10);
 
   /* quiet chrome */
-  --secondary: light-dark(oklch(0.93 0.01 85), oklch(0.3 0.015 65));
+  --secondary: light-dark(#e9e2d1, #2b2724);
   --secondary-foreground: var(--foreground);
-  --muted: light-dark(oklch(0.93 0.01 85), oklch(0.28 0.012 65));
-  --muted-foreground: light-dark(oklch(0.48 0.02 70), oklch(0.68 0.018 75));
-  --accent: light-dark(oklch(0.91 0.015 85), oklch(0.3 0.02 75));
+  --muted: light-dark(#ece6d6, #23201b);
+  --muted-foreground: light-dark(#8b8071, #7a6f61);
+  --accent: light-dark(#ece5d4, #2b2724);
   --accent-foreground: var(--foreground);
-  --border: light-dark(oklch(0.87 0.012 80), oklch(0.32 0.012 65));
-  --input: var(--border);
+  /* two border weights: hairline (structure) and control (interactive chrome) */
+  --border: light-dark(#ded5c2, #2e2925);
+  --input: light-dark(#ccc2ab, #38322a);
+  --border-hover: light-dark(#b3a88f, #4a4237);
+  /* row separator inside lists — softer than the hairline */
+  --divider: light-dark(#e7dfcf, #262220);
   --ring: var(--primary);
 
+  /* Grimoire text scale (prototype: body, secondary, soft, dim, faint) */
+  --text-body: light-dark(#453d2f, #d6ccbc);
+  --text-secondary: light-dark(#6f6555, #a2968a);
+  --soft: light-dark(#5a5241, #c9bfae);
+  --dim: light-dark(#837868, #8a7f70);
+  --faint: light-dark(#a4998a, #5d554a);
+
   /* semantic status colors — status only, never decoration */
-  --success: light-dark(oklch(0.52 0.12 150), oklch(0.65 0.11 150));
+  --success: light-dark(#5c7c4a, #8fae7e);
+  --success-text: light-dark(#4f7040, #93a888);
   --warn: light-dark(oklch(0.58 0.13 65), oklch(0.72 0.13 65));
   --destructive: light-dark(oklch(0.55 0.17 27), oklch(0.58 0.15 27));
   --destructive-foreground: light-dark(oklch(0.98 0.01 80), oklch(0.97 0.01 80));
 
   /* signature: read-aloud "book page" — slightly lighter and warmer */
-  --readaloud: light-dark(oklch(0.985 0.012 90), oklch(0.265 0.02 78));
-  --readaloud-foreground: light-dark(oklch(0.24 0.02 60), oklch(0.93 0.02 85));
+  --readaloud: light-dark(#fdfaf1, #29241d);
+  --readaloud-foreground: light-dark(#362d1d, #ece2cf);
+
+  /* secret callout: darker than the page — secrets look secret */
+  --secret: light-dark(#f1ebdc, #171410);
+  --secret-border: light-dark(#e2d9c6, #2a251f);
 
   --radius: 0.5rem;
 }
@@ -66,6 +84,7 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -75,18 +94,29 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-border-hover: var(--border-hover);
+  --color-divider: var(--divider);
   --color-ring: var(--ring);
+  --color-body: var(--text-body);
+  --color-body-secondary: var(--text-secondary);
+  --color-soft: var(--soft);
+  --color-dim: var(--dim);
+  --color-faint: var(--faint);
   --color-success: var(--success);
+  --color-success-text: var(--success-text);
   --color-warn: var(--warn);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-readaloud: var(--readaloud);
   --color-readaloud-foreground: var(--readaloud-foreground);
+  --color-secret: var(--secret);
+  --color-secret-border: var(--secret-border);
 
-  /* Read-aloud typography: literary serif (self-hosted Source Serif 4).
+  /* Serif carries the personality: page/scene titles, NPC names, the
+     wordmark and the read-aloud text (self-hosted Literata).
      UI chrome stays on the system stack — the UI whispers. */
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-serif: "Source Serif 4 Variable", "Source Serif 4", Georgia, serif;
+  --font-serif: "Literata Variable", Literata, Georgia, serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   --radius-sm: calc(var(--radius) - 4px);
@@ -104,8 +134,21 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
+    font-size: 14px;
     -webkit-font-smoothing: antialiased;
   }
+
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 28%, transparent);
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--input);
+    border-radius: 5px;
+    border: 2px solid var(--background);
+  }
+  ::-webkit-scrollbar-track { background: transparent; }
 
   /* Keyboard focus must always be visible (quality floor). */
   :focus-visible {
@@ -125,85 +168,101 @@
   }
 }
 
-/* Rendered markdown body — functional defaults, not the final design. */
+/* Rendered markdown body — pixel values from the design prototype. */
 @layer components {
   .md-body {
-    max-width: 42rem;
+    font-size: 14.5px;
     line-height: 1.65;
+    color: var(--text-body);
   }
-  .md-body > * + * {
-    margin-block-start: 0.75rem;
+  .md-body p {
+    margin: 0 0 14px;
   }
-  .md-body h1,
-  .md-body h2,
+  .md-body strong {
+    color: var(--foreground);
+    font-weight: 600;
+  }
+  /* H2 is the working-structure heading ("Flow", …): quiet overline. */
+  .md-body h2 {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+    font-weight: 600;
+    margin: 26px 0 12px;
+  }
+  .md-body h1 {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.25;
+    margin: 26px 0 12px;
+  }
   .md-body h3,
   .md-body h4 {
+    font-size: 13px;
     font-weight: 600;
-    line-height: 1.3;
-    margin-block-start: 1.5rem;
+    color: var(--soft);
+    margin: 20px 0 10px;
   }
-  .md-body h1 { font-size: 1.35rem; }
-  .md-body h2 { font-size: 1.15rem; }
-  .md-body h3 { font-size: 1rem; }
-  .md-body ul,
+  /* Lists: brass en-dash markers instead of bullets. */
+  .md-body ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin: 0 0 14px;
+    padding: 0;
+  }
+  .md-body ul > li {
+    position: relative;
+    padding-inline-start: 20px;
+    line-height: 1.55;
+  }
+  .md-body ul > li::before {
+    content: "–";
+    position: absolute;
+    inset-inline-start: 0;
+    color: var(--primary);
+  }
   .md-body ol {
+    list-style: decimal;
     padding-inline-start: 1.4rem;
+    margin: 0 0 14px;
   }
-  .md-body ul { list-style: disc; }
-  .md-body ol { list-style: decimal; }
-  .md-body li + li { margin-block-start: 0.25rem; }
+  .md-body ol > li + li { margin-block-start: 7px; }
   .md-body a {
-    color: var(--color-primary);
+    color: var(--primary);
     text-decoration: underline;
     text-underline-offset: 2px;
   }
+  .md-body a:hover { color: var(--primary-hover); }
   .md-body code {
     font-family: var(--font-mono);
     font-size: 0.875em;
-    background-color: var(--color-muted);
+    background-color: var(--color-card);
     border-radius: var(--radius-sm);
     padding: 0.1em 0.35em;
   }
   .md-body pre {
-    background-color: var(--color-muted);
+    background-color: var(--color-card);
     border-radius: var(--radius-md);
     padding: 0.75rem;
+    margin: 0 0 14px;
     overflow-x: auto;
   }
   .md-body pre code { background: none; padding: 0; }
   .md-body hr {
     border: 0;
     border-top: 1px solid var(--color-border);
+    margin: 16px 0;
   }
-  /* Collapsible `## If:` sections (details/summary from the remark plugin). */
-  .md-body details[data-if-section] {
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-  }
-  .md-body details[data-if-section] > summary {
-    cursor: pointer;
-    padding: 0.625rem 1rem;
-    user-select: none;
-  }
-  .md-body details[data-if-section] > summary:hover {
-    background-color: var(--color-accent);
-    border-radius: var(--radius-md);
-  }
-  .md-body details[data-if-section][open] > summary {
-    border-bottom: 1px solid var(--color-border);
-    border-end-start-radius: 0;
-    border-end-end-radius: 0;
-  }
-  .md-body details[data-if-section] > :not(summary) {
-    margin-inline: 1rem;
-  }
-  .md-body details[data-if-section] > :last-child:not(summary) {
-    margin-block-end: 1rem;
-  }
+
   /* Plain blockquote = degrade path for unknown callout kinds. */
   .md-body blockquote {
     border-inline-start: 2px solid var(--color-border);
     padding-inline-start: 0.875rem;
+    margin: 0 0 14px;
     color: var(--color-muted-foreground);
   }
 }

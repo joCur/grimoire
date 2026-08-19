@@ -97,6 +97,8 @@ describe("if-sections", () => {
     const data = dataOf(section);
     expect(data.hName).toBe("details");
     expect(data.hProperties?.["data-if-section"]).toBe("sie lügen");
+    // branches are open by default (design reference)
+    expect(data.hProperties?.["open"]).toBe(true);
 
     const kids = childrenOf(section);
     // summary + paragraph + list
@@ -145,6 +147,14 @@ describe("if-sections", () => {
     const kids = childrenOf(tree.children[0]);
     expect(kids).toHaveLength(1);
     expect(dataOf(kids[0]).hName).toBe("summary");
+  });
+
+  test("every if-section carries the open attribute", () => {
+    const tree = run("## If: a\n\nEins.\n\n## If: b\n\nZwei.");
+    expect(tree.children).toHaveLength(2);
+    for (const child of tree.children) {
+      expect(dataOf(child).hProperties?.["open"]).toBe(true);
+    }
   });
 });
 

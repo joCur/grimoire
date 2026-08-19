@@ -9,8 +9,9 @@
 //
 // 2. `## If: <condition>` headings: the heading plus every sibling up to the
 //    next depth<=2 heading (or end of document) is wrapped in a custom node
-//    that renders as `<details data-if-section>` with the condition as its
-//    `<summary>` label.
+//    that renders as `<details data-if-section open>` with the condition as
+//    its `<summary>` label. Branches are OPEN by default (design reference) —
+//    the DM collapses what does not apply.
 //
 // Both transforms only annotate/regroup mdast nodes; the React side maps the
 // resulting elements to components (see Markdown.tsx).
@@ -113,7 +114,7 @@ function transformIfSections(tree: Root): void {
     };
     const section = {
       type: "ifSection",
-      data: { hName: "details", hProperties: { "data-if-section": condition } },
+      data: { hName: "details", hProperties: { "data-if-section": condition, open: true } },
       children: [summary, ...body],
     };
     // Custom node types are not part of the mdast content union; they carry

@@ -1,24 +1,18 @@
-import { Link, Outlet, Route, Routes } from "react-router";
+import { Outlet, Route, Routes } from "react-router";
 
+import { Topbar } from "@/components/Topbar";
 import { CampaignsRoute } from "@/routes/campaigns";
 import { HarnessRoute } from "@/routes/harness";
 import { PoolRoute } from "@/routes/pool";
 import { SceneRoute } from "@/routes/scene";
 
+// App shell per the design reference: constant topbar, the view below is
+// the scroll container (keeps the scene aside sticky against it).
 function Layout() {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6">
-      <header className="mb-8 flex items-baseline justify-between gap-4">
-        <Link to="/" className="font-serif text-xl font-semibold">
-          Grimoire
-        </Link>
-        {import.meta.env.DEV && (
-          <Link to="/dev/markdown" className="text-xs text-muted-foreground underline">
-            Markdown-Harness
-          </Link>
-        )}
-      </header>
-      <main>
+    <div className="flex h-dvh flex-col">
+      <Topbar />
+      <main className="min-h-0 flex-1 overflow-y-auto">
         <Outlet />
       </main>
     </div>
@@ -30,7 +24,9 @@ export function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<CampaignsRoute />} />
-        <Route path="dev/markdown" element={<HarnessRoute />} />
+        {/* Dev-only markdown harness (CLAUDE.md renderer check) — reached by
+            URL, deliberately not linked from the chrome. */}
+        {import.meta.env.DEV && <Route path="dev/markdown" element={<HarnessRoute />} />}
         <Route path=":campaign" element={<PoolRoute />} />
         <Route path=":campaign/file/*" element={<SceneRoute />} />
       </Route>

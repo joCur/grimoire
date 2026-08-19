@@ -213,6 +213,7 @@ export function sceneSummary(f: ParsedFile): SceneSummary {
     // "draft" is the conservative lifecycle default.
     type: asStringOr(fm.type, "planned"),
     status: asStringOr(fm.status, "draft"),
+    trigger: asOptionalString(fm.trigger),
     location: asOptionalString(fm.location),
     npcs: asStringArray(fm.npcs),
     tags: asStringArray(fm.tags),

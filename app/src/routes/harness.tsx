@@ -49,7 +49,7 @@ function Fixture({ name, raw }: { name: string; raw: string }) {
 
 export function HarnessRoute() {
   return (
-    <div className="space-y-8">
+    <div className="mx-auto max-w-[760px] space-y-8 px-7 py-10">
       <header>
         <h1 className="text-lg font-semibold">Markdown-Harness</h1>
         <p className="text-sm text-muted-foreground">

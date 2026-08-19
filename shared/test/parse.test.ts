@@ -242,6 +242,17 @@ describe("summary builders against real fixtures", () => {
     });
   });
 
+  test("sceneSummary passes the contingency trigger through", () => {
+    const s = sceneSummary(loadFixture("01-salzhafen/hafen/von-schmugglern-erwischt.md"));
+    expect(s.type).toBe("contingency");
+    expect(s.trigger).toBe("Charaktere werden beim Auskundschaften der Bucht entdeckt");
+  });
+
+  test("sceneSummary trigger is undefined when the frontmatter has none", () => {
+    const s = sceneSummary(parseMarkdown("---\nid: s\n---\n", "01-x/s.md", 1));
+    expect(s.trigger).toBeUndefined();
+  });
+
   test("npcSummary for fenn.md", () => {
     const s = npcSummary(loadFixture("npcs/fenn.md"));
     expect(s).toEqual({
