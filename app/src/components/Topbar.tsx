@@ -1,14 +1,18 @@
 // The constant topbar (design reference: 56px, hairline below). Left side
-// is contextual: campaign switcher on the pool, breadcrumb on a scene.
-// Right side: search placeholder (⌘K — the palette is a later slice) and,
-// on the pool, the brass "Session starten" button (no-op until the live
-// mode lands, issue #9).
+// is contextual: campaign switcher on the pool, breadcrumb on a scene,
+// green Live pill + chapter label in the live mode. Right side: search
+// placeholder (⌘K — the palette is a later slice), the brass "Session
+// starten" button on pool and scene views (issue #9: starts today's
+// session and enters /:campaign/live), and in the live mode the elapsed
+// timer plus Pause / "Session beenden".
 
+import type { FileResponse } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, Play, Search } from "lucide-react";
+import { Check, ChevronDown, Clock, Pause, Play, Search } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link, matchPath, useLocation, useNavigate } from "react-router";
 
-import { fetchCampaigns, fetchFile, fetchTree } from "@/api";
+import { appendLog, endSession, fetchCampaigns, fetchFile, fetchTree, startSession } from "@/api";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,18 +23,26 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { IconLogo } from "@/icons";
 import { fmString } from "@/lib/frontmatter";
+import { formatElapsed, parseLocalDateTime } from "@/lib/session";
 import { cn } from "@/lib/utils";
+import { useSessionFile, useSessionWrite } from "@/lib/use-session";
 
 export function Topbar() {
   const { pathname } = useLocation();
   const sceneMatch = matchPath("/:campaign/file/*", pathname);
+  const liveMatch = matchPath("/:campaign/live", pathname);
   const poolMatch = matchPath("/:campaign", pathname);
-  const campaign = sceneMatch?.params.campaign ?? poolMatch?.params.campaign ?? "";
+  const campaign =
+    sceneMatch?.params.campaign ??
+    liveMatch?.params.campaign ??
+    poolMatch?.params.campaign ??
+    "";
   const filePath = sceneMatch?.params["*"] ?? "";
   const isScene = sceneMatch !== null && filePath !== "" && campaign !== "";
+  const isLive = liveMatch !== null && campaign !== "";
   const isPool = poolMatch !== null && campaign !== "";
 
-  // Shares the react-query cache with SceneRoute/PoolRoute — no extra fetch.
+  // Shares the react-query cache with the routes — no extra fetch.
   const file = useQuery({
     queryKey: ["file", campaign, filePath],
     queryFn: () => fetchFile(campaign, filePath),
@@ -39,13 +51,19 @@ export function Topbar() {
   const tree = useQuery({
     queryKey: ["tree", campaign],
     queryFn: () => fetchTree(campaign),
-    enabled: isScene,
+    enabled: isScene || isLive,
   });
+  const session = useSessionFile(campaign, isLive);
 
   const fm = file.data?.frontmatter;
   const chapterId = fmString(fm?.chapter);
   const chapterTitle = tree.data?.chapters.find((c) => c.id === chapterId)?.title ?? chapterId;
   const sceneTitle = fmString(fm?.title) ?? filePath;
+
+  // The live chapter label: the ACTIVE chapter (fallback: first) — the same
+  // rule the live nav uses.
+  const liveChapter =
+    tree.data?.chapters.find((c) => c.status === "active") ?? tree.data?.chapters[0];
 
   return (
     <header className="flex h-14 flex-none items-center gap-3.5 border-b border-border px-6">
@@ -80,6 +98,18 @@ export function Topbar() {
         </div>
       )}
 
+      {isLive && session.data !== undefined && (
+        <div className="flex min-w-0 items-center gap-2.5 text-[13px] text-muted-foreground">
+          <span className="inline-flex flex-none items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--success)_35%,transparent)] px-2.5 py-[2px] text-[12px] text-success-text">
+            <span aria-hidden className="size-1.5 rounded-full bg-success" />
+            Live
+          </span>
+          {liveChapter !== undefined && (
+            <span className="hidden truncate md:inline">{liveChapter.title}</span>
+          )}
+        </div>
+      )}
+
       <div className="flex-1" />
 
       {/* Search placeholder — the ⌘K palette is a later slice. */}
@@ -96,17 +126,87 @@ export function Topbar() {
         </span>
       </Button>
 
-      {isPool && (
-        <Button
-          type="button"
-          title="kommt mit dem Live-Modus"
-          className="h-auto gap-2 px-4 py-2 text-[13px] font-semibold [&_svg]:size-[13px]"
-        >
-          <Play aria-hidden className="fill-current" />
-          Session starten
-        </Button>
+      {(isPool || isScene) && <StartSessionButton campaign={campaign} />}
+
+      {isLive && session.data !== undefined && (
+        <LiveControls campaign={campaign} session={session.data} />
       )}
     </header>
+  );
+}
+
+/** Starts (or re-enters) today's session and navigates to the live mode. */
+function StartSessionButton({ campaign }: { campaign: string }) {
+  const navigate = useNavigate();
+  const start = useSessionWrite(
+    campaign,
+    () => startSession(campaign),
+    () => void navigate(`/${campaign}/live`),
+  );
+  return (
+    <Button
+      type="button"
+      disabled={start.isPending}
+      onClick={() => start.mutate()}
+      title={start.isError ? "Session nicht gestartet — Server prüfen" : undefined}
+      className="h-auto gap-2 px-4 py-2 text-[13px] font-semibold [&_svg]:size-[13px]"
+    >
+      <Play aria-hidden className="fill-current" />
+      Session starten
+    </Button>
+  );
+}
+
+/** Elapsed timer (ticks ~15s, text only — nothing animates), Pause and
+ * "Session beenden" per the prototype's live topbar. */
+function LiveControls({ campaign, session }: { campaign: string; session: FileResponse }) {
+  const navigate = useNavigate();
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const startedMs = parseLocalDateTime(session.frontmatter.started);
+  const endedMs = parseLocalDateTime(session.frontmatter.ended);
+  const elapsed =
+    startedMs === undefined ? undefined : formatElapsed(startedMs, endedMs ?? nowMs);
+
+  const pause = useSessionWrite(campaign, () => appendLog(campaign, "— Pause"));
+  const end = useSessionWrite(
+    campaign,
+    () => endSession(campaign),
+    () => void navigate(`/${campaign}`),
+  );
+
+  return (
+    <>
+      {elapsed !== undefined && (
+        <div className="hidden flex-none items-center gap-2 text-soft sm:flex">
+          <Clock aria-hidden size={15} className="flex-none" />
+          <span className="font-mono text-[14px]">{elapsed}</span>
+        </div>
+      )}
+      <Button
+        type="button"
+        variant="outline"
+        disabled={pause.isPending}
+        onClick={() => pause.mutate()}
+        className="hidden h-auto gap-1.5 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-card hover:text-foreground sm:flex [&_svg]:size-[13px]"
+      >
+        <Pause aria-hidden />
+        Pause
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={end.isPending}
+        onClick={() => end.mutate()}
+        className="h-auto border-input bg-transparent px-3 py-1.5 text-[13px] font-normal text-soft hover:border-primary hover:bg-transparent hover:text-primary-hover"
+      >
+        Session beenden
+      </Button>
+    </>
   );
 }
 

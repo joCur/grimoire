@@ -3,6 +3,7 @@ import { Outlet, Route, Routes } from "react-router";
 import { Topbar } from "@/components/Topbar";
 import { CampaignsRoute } from "@/routes/campaigns";
 import { HarnessRoute } from "@/routes/harness";
+import { LiveRoute } from "@/routes/live";
 import { PoolRoute } from "@/routes/pool";
 import { SceneRoute } from "@/routes/scene";
 
@@ -28,6 +29,7 @@ export function App() {
             URL, deliberately not linked from the chrome. */}
         {import.meta.env.DEV && <Route path="dev/markdown" element={<HarnessRoute />} />}
         <Route path=":campaign" element={<PoolRoute />} />
+        <Route path=":campaign/live" element={<LiveRoute />} />
         <Route path=":campaign/file/*" element={<SceneRoute />} />
       </Route>
     </Routes>
