@@ -1,0 +1,18 @@
+name: Idee
+description: Rohe Idee einkippen — das Refinement machen wir danach gemeinsam im Issue.
+title: "Idee: "
+labels: ["idee"]
+body:
+  - type: textarea
+    id: idee
+    attributes:
+      label: Worum geht es?
+      description: Freitext genügt. Problem am Spieltisch, halbgarer Gedanke, Screenshot — alles erlaubt.
+    validations:
+      required: true
+  - type: textarea
+    id: nutzen
+    attributes:
+      label: Was wird dadurch am Spieltisch besser? (optional)
+    validations:
+      required: false

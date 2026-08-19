@@ -53,6 +53,19 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   mit mtime-Check (409 bei Konflikt).
 - Sprache der UI: Deutsch. Code, Kommentare, Commits: Englisch.
 
+## Backlog-Prozess
+
+- Der PO kippt Ideen als Issues mit Label `idee` ein (Template „Idee") —
+  formlos, Freitext genügt.
+- Refinement findet IM Issue statt: Rückfragen als Kommentare stellen;
+  danach den Issue-Body zum Ticket ausbauen — User Story („Als DM will
+  ich … damit …"), Akzeptanzkriterien (nachprüfbar), Scope/Nicht-Ziele,
+  Abhängigkeiten. Erst nach PO-Ok im Thread: Label `idee` → `ready`.
+- Das Team nimmt nur `ready`-Tickets. Übernahme = Label „in Arbeit" +
+  Kommentar mit Zuschnitt; fertig = Schließen mit Commit-Verweis.
+- Zu Beginn jeder Arbeitssitzung: offene `idee`-Issues sichten, bevor
+  neue Arbeit startet.
+
 ## Qualitäts-Boden (nicht verhandelbar)
 
 - Responsive bis Mobil (Mobile = Suche, Leseansicht, Inbox — siehe UI-BRIEF)
