@@ -86,3 +86,14 @@ benannt:
 - **Echte Mehrnutzer-/Rechte-Anforderungen?** Dann ist nicht die Runtime
   das Problem, sondern Datenmodell (#1) und Auth-Modell (#3) — an dem
   Punkt bewusst neu entscheiden statt anbauen.
+
+## 8. Monorepo mit Bun-Workspaces und shared/-Paket
+
+Repo als Bun-Workspace-Monorepo: `shared/` (Entitäts-Typen +
+Frontmatter-Parser), `server/`, `app/`. Das Datenformat aus README.md ist
+damit genau einmal in Code beschrieben; Server und Frontend importieren
+dieselben Typen (`@grimoire/shared`). shared/ wird ohne Build-Schritt als
+TypeScript-Quelle konsumiert (Bun und Vite können das nativ; Node-Fallback
+über tsx, siehe #7). Test-Runner ist `bun test` — Dev-Werkzeug, kein
+Runtime-Code; die Bun-only-Regel aus #5 betrifft weiterhin nur
+Laufzeit-APIs.

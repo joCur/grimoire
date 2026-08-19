@@ -1,0 +1,9 @@
+{
+  "name": "grimoire",
+  "private": true,
+  "workspaces": ["shared", "server", "app"],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bun run --filter '*' typecheck"
+  }
+}

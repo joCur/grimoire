@@ -1,0 +1,39 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "grimoire",
+    },
+    "app": {
+      "name": "@grimoire/app",
+      "version": "0.1.0",
+    },
+    "server": {
+      "name": "@grimoire/server",
+      "version": "0.1.0",
+      "dependencies": {
+        "@grimoire/shared": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.0",
+      },
+    },
+    "shared": {
+      "name": "@grimoire/shared",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.9.0",
+      },
+    },
+  },
+  "packages": {
+    "@grimoire/app": ["@grimoire/app@workspace:app"],
+
+    "@grimoire/server": ["@grimoire/server@workspace:server"],
+
+    "@grimoire/shared": ["@grimoire/shared@workspace:shared"],
+
+    "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
+  }
+}

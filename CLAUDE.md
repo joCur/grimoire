@@ -25,6 +25,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - `campaigns/` — echte Kampagnendaten, in `.gitignore` (Nutzungsdaten,
   ggf. urheberrechtlich geschütztes Quellmaterial). Im Code nie fest
   verdrahten — der Datenpfad kommt aus `CAMPAIGN_ROOT`.
+- `shared/` — Entitäts-Typen und Frontmatter-Parser (`@grimoire/shared`),
+  von Server und App gemeinsam genutzt. Das Datenformat ist hier genau
+  einmal in Code beschrieben (Spiegel von README.md — beides synchron halten).
 - `server/` — Hono-API. Geplante Endpoints sind in `server/src/server.ts`
   dokumentiert und dort abzuhaken, wenn implementiert.
 - `app/` — das Frontend (bei erster UI-Aufgabe anlegen: Vite-Scaffold).
