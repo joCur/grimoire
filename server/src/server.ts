@@ -4,7 +4,7 @@
 
 import { createProvider } from "./llm-provider";
 
-const CAMPAIGN_ROOT = process.env.CAMPAIGN_ROOT ?? "../campaigns";
+const CAMPAIGN_ROOT = process.env.CAMPAIGN_ROOT ?? "../examples"; // Dev-Default: Beispieldaten; echte Daten per CAMPAIGN_ROOT=../campaigns
 const PORT = Number(process.env.PORT ?? 3000);
 
 // Geplante API (Konventionen siehe /README.md):

@@ -6,6 +6,9 @@ dist/
 build/
 *.tsbuildinfo
 
+# Echte Kampagnendaten — bleiben lokal (Beispiele liegen in examples/)
+/campaigns/
+
 # Umgebung / Secrets
 .env
 .env.*

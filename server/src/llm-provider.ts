@@ -14,7 +14,7 @@ export interface GenerateRequest {
 }
 
 export interface GeneratedScene {
-  path: string;    // relativ zur Kampagne, z. B. "02-raiders-camp/camp/captured.md"
+  path: string;    // relativ zur Kampagne, z. B. "01-salzhafen/hafen/ankunft-leuchtturm.md"
   content: string; // vollständige Markdown-Datei inkl. Frontmatter
 }
 

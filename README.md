@@ -8,9 +8,10 @@ Grundprinzip: Das Format degradiert, es validiert nicht — unbekannte
 ## Ordnerstruktur
 
 ```
-campaigns/
+examples/                  # generische Beispielkampagne — committet, Format-Referenz
+campaigns/                 # ECHTE Kampagnendaten — in .gitignore, bleiben lokal
   <campaign-id>/
-    <chapter>/              # z. B. 02-raiders-camp
+    <chapter>/              # z. B. 01-salzhafen
       _chapter.md           # Kapitelnotizen, offene Fäden
       <location-slug>/      # grobe Orts-Gruppierung (max. 2 Ebenen!)
         <scene>.md
@@ -25,15 +26,15 @@ campaigns/
 
 ```yaml
 ---
-id: captured                # slug, stabil, NIE ändern (Referenzen!)
-title: Gefangen genommen    # Anzeigename, frei änderbar
+id: lighthouse-arrival      # slug, stabil, NIE ändern (Referenzen!)
+title: Ankunft am Leuchtturm  # Anzeigename, frei änderbar
 type: planned | contingency
 trigger: <Freitext>         # nur bei contingency: wann feuert sie?
-chapter: 02-raiders-camp
-location: camp              # id aus locations/ ODER freier String
-npcs: [frulam-mondath, leosin]   # ids aus npcs/
-handouts: ["Leosins Brief"] # Name des Roll20-Handouts, nur Verweis
-tags: [social, escape]      # frei; empfohlen: combat, social, stealth, travel
+chapter: 01-salzhafen
+location: leuchtturm        # id aus locations/ ODER freier String
+npcs: [jorna, fenn]         # ids aus npcs/
+handouts: ["Karte von Salzhafen"]  # Name des Roll20-Handouts, nur Verweis
+tags: [social, travel]      # frei; empfohlen: combat, social, stealth, travel
 status: draft | ready | played | dropped
 ---
 ```
@@ -61,13 +62,13 @@ status: draft | ready | played | dropped
 
 ```yaml
 ---
-id: frulam-mondath
-name: Frulam Mondath
+id: fenn
+name: Fenn
 role: <einzeiler>
-chapter: 02-raiders-camp        # wo eingeführt
+chapter: 01-salzhafen           # wo eingeführt
 status: alive | dead | missing | unknown
 statblock: "Roll20: <Sheet-Name>"   # Verweis, KEINE Kopie
-quickstats: { wis: +1, insight: +3, passive-perception: 11 }  # frei, nur was sozial gebraucht wird
+quickstats: { wis: +2, insight: +2, passive-perception: 13 }  # frei, nur was sozial gebraucht wird
 voice: <wie klingt er/sie>
 appearance: <1-2 Merkmale>
 ---
@@ -84,10 +85,10 @@ Szenentext oder `#npc`-Lognotiz.
 
 ```yaml
 ---
-id: camp
-name: Das Lager der Räuber
-chapter: 02-raiders-camp
-roll20-page: "Raiders Camp"     # Verweis auf die Page, keine Karten-Kopie
+id: leuchtturm
+name: Der Leuchtturm von Salzhafen
+chapter: 01-salzhafen
+roll20-page: "Leuchtturm"       # Verweis auf die Page, keine Karten-Kopie
 ---
 ```
 
@@ -101,7 +102,7 @@ Abschnitte frei; empfohlen: `## Beim ersten Betreten` (mit `[!readaloud]`),
 id: 2026-08-19
 started: 2026-08-19T19:32
 ended: 2026-08-19T23:10         # gesetzt bei "Session beenden"
-scenes_played: [arrival, captured]   # automatisch gepflegt
+scenes_played: [lighthouse-arrival, smuggler-captured]   # automatisch gepflegt
 ---
 ```
 

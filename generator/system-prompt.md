@@ -51,45 +51,41 @@ Gib ausschließlich einen JSON-Block zurück, kein Markdown drumherum:
 
 ### Eingabe (Quelltext, EN)
 
-> **Captured:** If the characters are caught, they are disarmed, their
-> hands are bound, and they are brought before Frulam Mondath for
-> judgment. One by one, she asks who they are, where they come from,
-> and what they are doing in her camp. If anyone was recognized from
-> the fighting in Greenest, it doesn't matter what the characters say —
-> Mondath sentences them all to be executed the next morning, after
-> spending the night tied to stakes next to the monk Leosin. The
-> characters have one night to escape this fate. They could wriggle
-> out of their bonds, bribe or charm a cult member into freeing them,
-> or come up with a clever use of a cantrip. If all else fails, Leosin
-> reveals that he has a hidden knife they can use to cut themselves
-> free. If the characters admit they come from Greenest and are enemies
-> of the cult, the effect is the same as if they were recognized.
-> If the characters lie to Mondath — claiming to be new recruits, that
-> it's all a misunderstanding, or that they are studying the cult
-> before deciding to join — compare their Charisma (Deception) checks
-> against Mondath's Wisdom check to determine whether she believes
-> them. You can grant advantage or disadvantage based on how plausible
-> the lies are. Compare rolls for each character individually. Anyone
-> Mondath believes is released but watched, and stopped if they try to
-> leave the camp. Anyone she doesn't believe is sentenced to death as
-> above.
+> **Caught by the smugglers:** If the characters are spotted while
+> scouting the cove, they are disarmed, their hands are bound, and they
+> are brought before Fenn, the leader of the smugglers. One by one, he
+> asks who sent them and how much they know. If the characters admit
+> they work for the harbormaster, Fenn has them locked in the old
+> smokehouse — he wants to speak to his employer before deciding what
+> to do with them. The characters have until dawn to escape. They could
+> break through the rotten boards of the back wall, charm or bribe the
+> bored guard, or come up with a clever use of a cantrip. If all else
+> fails, the captive lighthouse keeper in the next chamber knows about
+> a loose floorboard. If the characters lie to Fenn — claiming to be
+> shipwrecked sailors or lost travelers — compare their Charisma
+> (Deception) checks against Fenn's Wisdom (Insight) check to determine
+> whether he believes them. You can grant advantage or disadvantage
+> based on how plausible the lies are. Compare rolls for each character
+> individually. Anyone Fenn believes is escorted back to the village
+> and watched. Anyone he doesn't believe is locked in the smokehouse
+> as above.
 
 ### Kontext (Auszug)
 
 ```
-npcs: frulam-mondath (Frulam Mondath), leosin (Leosin Erlanthar)
-locations: camp (Das Lager der Räuber)
-chapter: 02-raiders-camp
+npcs: fenn (Fenn), jorna (Hafenmeisterin Jorna)
+locations: bucht (Die Schmugglerbucht)
+chapter: 01-salzhafen
 ```
 
 ### Erwartete Ausgabe
 
-Eine Szene `02-raiders-camp/camp/captured.md` mit `type: contingency`,
-`trigger: Charaktere werden im Lager erwischt`, `npcs: [frulam-mondath,
-leosin]`, einem `## Flow`-Abschnitt (Vorführung und Befragung), zwei
-`## If:`-Abschnitten (wiedererkannt/zugegeben → Todesurteil mit
-Fluchtoptionen und `[!note]` zum versteckten Messer; Lügen → `[!check]`
-mit dem Contested Check und beiden Ausgängen) sowie einem `[!outcome]`
-(Mondath kennt die Gesichter der Gruppe). Keine Stubs (beide NPCs
-existieren). — Die Referenz-Zieldatei liegt dem Prompt als
+Eine Szene `01-salzhafen/hafen/smuggler-captured.md` mit
+`type: contingency`, `trigger: Charaktere werden beim Auskundschaften
+der Bucht entdeckt`, `npcs: [fenn]`, einem `## Flow`-Abschnitt
+(Vorführung und Befragung), zwei `## If:`-Abschnitten (Zugeben →
+Räucherkammer mit Fluchtoptionen und `[!note]` zum losen Bodenbrett;
+Lügen → `[!check]` mit dem Contested Check und beiden Ausgängen) sowie
+einem `[!outcome]` (Fenn kennt die Gesichter der Gruppe). Keine Stubs
+(beide NPCs existieren). — Die Referenz-Zieldatei liegt dem Prompt als
 `example-output.md` bei.
