@@ -27,13 +27,18 @@ import {
   type SceneGroup,
   type SessionSummary,
 } from "@grimoire/shared";
-import { CAMPAIGN_ROOT } from "./config";
+import { getCampaignRoot } from "./config";
 
-/** Error with an HTTP status; route handlers map it to a JSON error body. */
+/**
+ * Error with an HTTP status; route handlers map it to a JSON error body.
+ * `extra` is merged into the body next to `error` (e.g. the current mtimeMs
+ * on a 409 conflict).
+ */
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    public readonly extra?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -94,9 +99,9 @@ export function assertSafeRelativeMdPath(rel: string): void {
 }
 
 /** Absolute directory of a campaign; 404 if it does not exist. */
-async function campaignDir(campaign: string): Promise<string> {
+export async function campaignDir(campaign: string): Promise<string> {
   assertSafeCampaignId(campaign);
-  const dir = path.join(CAMPAIGN_ROOT, campaign);
+  const dir = path.join(getCampaignRoot(), campaign);
   try {
     const s = await stat(dir);
     if (!s.isDirectory()) throw new ApiError(404, "campaign not found");
@@ -112,10 +117,10 @@ async function campaignDir(campaign: string): Promise<string> {
  * its REAL path (symlinks resolved) still lives inside the campaign root.
  * Missing file -> 404, escape attempt -> 400.
  */
-async function resolveInsideCampaign(dir: string, rel: string): Promise<string> {
+export async function resolveInsideCampaign(dir: string, rel: string): Promise<string> {
   assertSafeRelativeMdPath(rel);
   const abs = path.resolve(dir, rel);
-  const rootReal = await realpath(CAMPAIGN_ROOT);
+  const rootReal = await realpath(getCampaignRoot());
   let fileReal: string;
   try {
     fileReal = await realpath(abs);
@@ -134,7 +139,7 @@ async function resolveInsideCampaign(dir: string, rel: string): Promise<string> 
 export async function listCampaigns(): Promise<CampaignSummary[]> {
   let entries;
   try {
-    entries = await readdir(CAMPAIGN_ROOT, { withFileTypes: true });
+    entries = await readdir(getCampaignRoot(), { withFileTypes: true });
   } catch {
     return []; // missing root degrades to an empty list
   }
@@ -145,7 +150,7 @@ export async function listCampaigns(): Promise<CampaignSummary[]> {
       ids.push(e.name);
     } else if (e.isSymbolicLink()) {
       try {
-        if ((await stat(path.join(CAMPAIGN_ROOT, e.name))).isDirectory()) ids.push(e.name);
+        if ((await stat(path.join(getCampaignRoot(), e.name))).isDirectory()) ids.push(e.name);
       } catch {
         // dangling symlink — skip
       }
