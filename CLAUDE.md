@@ -33,8 +33,10 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 ## Arbeitsweise
 
 - Vertikale Scheiben, eine pro Auftrag. Nicht mehrere Views gleichzeitig.
-- Gegen echte Daten entwickeln: Server auf `campaigns/` zeigen lassen,
-  keine erfundenen Mock-Objekte.
+- Gegen echte Daten entwickeln: Server im Dev-Modus auf `examples/`
+  zeigen lassen (Default von `CAMPAIGN_ROOT`), keine erfundenen
+  Mock-Objekte. `campaigns/` existiert nur lokal beim Nutzer und darf
+  in Code, Tests und Doku nie vorausgesetzt werden.
 - Der Callout-Renderer (`[!readaloud]`, `[!check]`, `[!secret]`,
   `[!outcome]`, `[!loot]`, `[!note]`) ist die zentrale Komponente —
   Änderungen daran immer gegen
