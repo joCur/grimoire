@@ -1,10 +1,13 @@
-// API routes (read: issue #2, write: issue #5). Mounted under /api in
-// server.ts. Response shapes are the contracts in @grimoire/shared (types.ts).
+// API routes (read: issue #2, write: issue #5, search/version: issues #7/#8).
+// Mounted under /api in server.ts. Response shapes are the contracts in
+// @grimoire/shared (types.ts); the search result shape lives in
+// ../search-index.ts for now.
 
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { ApiError, buildTree, listCampaigns, readParsedFile } from "../campaign-fs";
+import { ApiError, buildTree, campaignDir, listCampaigns, readParsedFile } from "../campaign-fs";
+import { getCampaignVersion, searchCampaign } from "../search-index";
 import {
   appendInboxEntry,
   appendLogEntry,
@@ -70,6 +73,26 @@ api.get("/:campaign/file", async (c) => {
   const rel = c.req.query("path");
   if (rel === undefined) throw new ApiError(400, "missing path query parameter");
   return c.json(await readParsedFile(c.req.param("campaign"), rel));
+});
+
+// GET /api/:campaign/search?q=... -> { results: SearchResult[] } (max 20)
+// Fuzzy in-memory search (Fuse.js) over scenes/npcs/locations/chapters;
+// the index builds lazily per campaign and the file watcher invalidates it.
+api.get("/:campaign/search", async (c) => {
+  const q = c.req.query("q")?.trim();
+  if (q === undefined || q === "") throw new ApiError(400, "missing q query parameter");
+  const campaign = c.req.param("campaign");
+  await campaignDir(campaign); // 400 unsafe id, 404 unknown campaign
+  return c.json({ results: await searchCampaign(campaign, q) });
+});
+
+// GET /api/:campaign/version -> { version } — bumped by the file watcher on
+// every markdown change; the app polls this and refetches when it changes
+// (polling instead of SSE, DECISIONS #9).
+api.get("/:campaign/version", async (c) => {
+  const campaign = c.req.param("campaign");
+  await campaignDir(campaign);
+  return c.json({ version: getCampaignVersion(campaign) });
 });
 
 // --- write endpoints (issue #5) ---------------------------------------------------

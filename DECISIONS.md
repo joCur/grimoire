@@ -97,3 +97,15 @@ TypeScript-Quelle konsumiert (Bun und Vite können das nativ; Node-Fallback
 über tsx, siehe #7). Test-Runner ist `bun test` — Dev-Werkzeug, kein
 Runtime-Code; die Bun-only-Regel aus #5 betrifft weiterhin nur
 Laufzeit-APIs.
+
+## 9. Client-Aktualisierung: Polling statt SSE
+
+Externe Edits (Editor, git pull, Generator) sollen in der App sichtbar
+werden, ohne manuell neu zu laden. Mechanismus: chokidar beobachtet
+CAMPAIGN_ROOT und invalidiert pro Kampagne den In-Memory-Suchindex und
+einen Versionszähler; die App pollt `GET /api/:campaign/version` und
+invalidiert ihre Queries, wenn sich der Wert ändert. Das Poll-Intervall
+ist rein clientseitig. SSE/WebSockets erwogen und zurückgestellt: für
+einen Einzelnutzer (#3) reicht Polling, und SSE ist später ohne
+API-Bruch nachrüstbar — der Versionszähler bleibt dann als Fallback
+gültig.

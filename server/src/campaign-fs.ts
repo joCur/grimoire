@@ -18,6 +18,7 @@ import {
   parseMarkdown,
   sceneSummary,
   sessionSummary,
+  type ParsedFile,
   type CampaignSummary,
   type CampaignTree,
   type ChapterNode,
@@ -205,6 +206,20 @@ async function parseMdFilesIn(
   return out;
 }
 
+/** Names of non-hidden subdirectories of `dir`, sorted; [] on error. */
+async function subdirNames(dir: string): Promise<string[]> {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((e) => !isHidden(e.name) && e.isDirectory())
+    .map((e) => e.name)
+    .sort(cmp);
+}
+
 /**
  * Walk one chapter directory per the README layout:
  *
@@ -233,20 +248,13 @@ async function walkChapter(campaignAbs: string, chapterId: string): Promise<Chap
   }
   if (directScenes.length > 0) node.groups.push({ slug: "", scenes: directScenes });
 
-  let entries: Dirent[];
-  try {
-    entries = await readdir(chapterAbs, { withFileTypes: true });
-  } catch {
-    entries = [];
-  }
   const groups: SceneGroup[] = [];
-  for (const e of entries) {
-    if (isHidden(e.name) || !e.isDirectory()) continue;
-    const scenes = (await parseMdFilesIn(path.join(chapterAbs, e.name), `${chapterId}/${e.name}`))
+  for (const slug of await subdirNames(chapterAbs)) {
+    const scenes = (await parseMdFilesIn(path.join(chapterAbs, slug), `${chapterId}/${slug}`))
       .filter((f) => f.kind === "scene")
       .map(sceneSummary)
       .sort((a, b) => cmp(a.path, b.path));
-    if (scenes.length > 0) groups.push({ slug: e.name, scenes });
+    if (scenes.length > 0) groups.push({ slug, scenes });
   }
   node.groups.push(...groups);
   node.groups.sort((a, b) => cmp(a.slug, b.slug));
@@ -262,20 +270,7 @@ async function walkChapter(campaignAbs: string, chapterId: string): Promise<Chap
 export async function buildTree(campaign: string): Promise<CampaignTree> {
   const dir = await campaignDir(campaign);
 
-  let entries: Dirent[];
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    entries = [];
-  }
-
-  const chapterIds: string[] = [];
-  for (const e of entries) {
-    if (isHidden(e.name) || !e.isDirectory()) continue;
-    if (RESERVED_DIRS.has(e.name)) continue;
-    chapterIds.push(e.name);
-  }
-  chapterIds.sort(cmp);
+  const chapterIds = (await subdirNames(dir)).filter((name) => !RESERVED_DIRS.has(name));
 
   const chapters = await Promise.all(chapterIds.map((id) => walkChapter(dir, id)));
 
@@ -292,4 +287,27 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
     .sort((a, b) => cmp(b.id, a.id)); // newest first
 
   return { campaign, chapters, npcs, locations, sessions };
+}
+
+/**
+ * All searchable markdown files of a campaign, parsed: npcs/, locations/,
+ * and every chapter directory — direct files (scenes + `_chapter.md`) plus
+ * one level of location-slug subdirectories, same layout rules as buildTree.
+ * Sessions, inbox and glossary are not collected; the search index
+ * (issue #7) does not cover them.
+ */
+export async function collectCampaignFiles(campaign: string): Promise<ParsedFile[]> {
+  const dir = await campaignDir(campaign);
+  const files: ParsedFile[] = [
+    ...(await parseMdFilesIn(path.join(dir, "npcs"), "npcs")),
+    ...(await parseMdFilesIn(path.join(dir, "locations"), "locations")),
+  ];
+  for (const chapterId of (await subdirNames(dir)).filter((name) => !RESERVED_DIRS.has(name))) {
+    const chapterAbs = path.join(dir, chapterId);
+    files.push(...(await parseMdFilesIn(chapterAbs, chapterId)));
+    for (const slug of await subdirNames(chapterAbs)) {
+      files.push(...(await parseMdFilesIn(path.join(chapterAbs, slug), `${chapterId}/${slug}`)));
+    }
+  }
+  return files;
 }

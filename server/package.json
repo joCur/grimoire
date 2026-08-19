@@ -9,6 +9,8 @@
   },
   "dependencies": {
     "@grimoire/shared": "workspace:*",
+    "chokidar": "^5.0.0",
+    "fuse.js": "^7.5.0",
     "gray-matter": "^4.0.3",
     "hono": "^4.13.3",
     "js-yaml": "^5.3.0"
