@@ -2,12 +2,18 @@
   "name": "@grimoire/shared",
   "version": "0.1.0",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@types/bun": "^1.3.14",
     "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3"
   }
 }
