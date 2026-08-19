@@ -21,3 +21,8 @@ Callout-Labels: Check · Geheim · Konsequenz · Beute · Notiz;
 Read-Aloud ohne Label. Status-Labels: bereit · Entwurf · gespielt.
 `Falls:`-Zweige: randlose Zeile, Chevron, kursive Bedingung, Inhalt
 eingerückt, standardmäßig GEÖFFNET.
+
+## Abweichungen per PO-Entscheid (aktueller als der Prototyp)
+
+- Keine Szenen-`id` in der Topbar (Prototyp zeigt sie rechts) — ids
+  erscheinen nirgends in der UI, auch nicht optional (showIds entfällt).
