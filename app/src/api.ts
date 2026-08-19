@@ -2,7 +2,12 @@
 // server/src/server.ts). All response shapes come from @grimoire/shared —
 // the format contract exists exactly once.
 
-import type { CampaignSummary, CampaignTree, FileResponse } from "@grimoire/shared/types";
+import type {
+  CampaignSummary,
+  CampaignTree,
+  FileResponse,
+  SearchResponse,
+} from "@grimoire/shared/types";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -34,6 +39,24 @@ export function fetchFile(campaign: string, path: string): Promise<FileResponse>
   return getJson<FileResponse>(
     `/${encodeURIComponent(campaign)}/file?path=${encodeURIComponent(path)}`,
   );
+}
+
+/**
+ * Fuzzy search over scenes/npcs/locations/chapters (max 20 results).
+ * The server 400s on an empty/whitespace query — callers must not send one.
+ */
+export function fetchSearch(campaign: string, q: string): Promise<SearchResponse> {
+  return getJson<SearchResponse>(
+    `/${encodeURIComponent(campaign)}/search?q=${encodeURIComponent(q)}`,
+  );
+}
+
+/**
+ * Campaign version counter (issue #8) — bumped by the server's file watcher
+ * on every markdown change; polled by useCampaignVersion.
+ */
+export function fetchVersion(campaign: string): Promise<{ version: number }> {
+  return getJson<{ version: number }>(`/${encodeURIComponent(campaign)}/version`);
 }
 
 // --- write endpoints (session/log, issue #9) --------------------------------

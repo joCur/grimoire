@@ -14,8 +14,12 @@
 // without breaking this API (DECISIONS #9).
 
 import Fuse, { type IFuseOptions } from "fuse.js";
-import type { EntityKind, ParsedFile } from "@grimoire/shared";
+import type { EntityKind, ParsedFile, SearchResult } from "@grimoire/shared";
 import { collectCampaignFiles } from "./campaign-fs";
+
+// The row shape of GET /api/:campaign/search lives in @grimoire/shared
+// (the app consumes it too); re-exported here for the server tests.
+export type { SearchResult };
 
 /** Entity kinds covered by the search index. */
 const INDEXED_KINDS = new Set<EntityKind>(["scene", "npc", "location", "chapter"]);
@@ -32,18 +36,6 @@ interface SearchDoc {
   location?: string;
   /** Raw markdown body, frontmatter stripped (ParsedFile.body). */
   body: string;
-}
-
-/** One row of GET /api/:campaign/search — { results: SearchResult[] }. */
-export interface SearchResult {
-  kind: EntityKind;
-  id: string;
-  title: string;
-  path: string;
-  /** Fuse.js score: 0 is a perfect match, values grow toward 1. */
-  score: number;
-  /** ~120 chars of body context around the first literal query hit. */
-  snippet?: string;
 }
 
 const MAX_RESULTS = 20;

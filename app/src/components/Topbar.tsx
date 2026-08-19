@@ -1,10 +1,10 @@
 // The constant topbar (design reference: 56px, hairline below). Left side
 // is contextual: campaign switcher on the pool, breadcrumb on a scene,
-// green Live pill + chapter label in the live mode. Right side: search
-// placeholder (⌘K — the palette is a later slice), the brass "Session
-// starten" button on pool and scene views (issue #9: starts today's
-// session and enters /:campaign/live), and in the live mode the elapsed
-// timer plus Pause / "Session beenden".
+// green Live pill + chapter label in the live mode. Right side: the ⌘K
+// search chip (opens the palette; hidden on the campaign list — no campaign
+// context there), the brass "Session starten" button on pool and scene
+// views (issue #9: starts today's session and enters /:campaign/live), and
+// in the live mode the elapsed timer plus Pause / "Session beenden".
 
 import type { FileResponse } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { Link, matchPath, useLocation, useNavigate } from "react-router";
 
 import { appendLog, endSession, fetchCampaigns, fetchFile, fetchTree, startSession } from "@/api";
+import { CommandPalette } from "@/components/CommandPalette";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -41,6 +42,8 @@ export function Topbar() {
   const isScene = sceneMatch !== null && filePath !== "" && campaign !== "";
   const isLive = liveMatch !== null && campaign !== "";
   const isPool = poolMatch !== null && campaign !== "";
+
+  const [searchOpen, setSearchOpen] = useState(false);
 
   // Shares the react-query cache with the routes — no extra fetch.
   const file = useQuery({
@@ -112,19 +115,25 @@ export function Topbar() {
 
       <div className="flex-1" />
 
-      {/* Search placeholder — the ⌘K palette is a later slice. */}
-      <Button
-        type="button"
-        variant="outline"
-        disabled
-        className="hidden h-auto min-w-[200px] gap-2 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary disabled:opacity-100 sm:flex"
-      >
-        <Search aria-hidden size={15} className="text-muted-foreground" />
-        <span className="flex-1 text-left">Suchen …</span>
-        <span className="rounded-[4px] border border-input px-[5px] py-px font-mono text-[11px] text-muted-foreground">
-          ⌘K
-        </span>
-      </Button>
+      {/* Only on campaign-scoped views — the campaign list has no search
+          context (palette and shortcut are not mounted there at all). */}
+      {campaign !== "" && (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setSearchOpen(true)}
+            className="hidden h-auto min-w-[200px] gap-2 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-card hover:text-soft sm:flex"
+          >
+            <Search aria-hidden size={15} className="text-muted-foreground" />
+            <span className="flex-1 text-left">Suchen …</span>
+            <span className="rounded-[4px] border border-input px-[5px] py-px font-mono text-[11px] text-muted-foreground">
+              ⌘K
+            </span>
+          </Button>
+          <CommandPalette campaign={campaign} open={searchOpen} onOpenChange={setSearchOpen} />
+        </>
+      )}
 
       {(isPool || isScene) && <StartSessionButton campaign={campaign} />}
 

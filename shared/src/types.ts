@@ -193,3 +193,24 @@ export interface FileResponse extends ParsedFile {
   /** Full file contents including the frontmatter block. */
   raw: string;
 }
+
+/**
+ * One row of GET /api/:campaign/search (the response wraps them as
+ * `{ results: SearchResult[] }`, see SearchResponse). Only scenes, npcs,
+ * locations and chapters are indexed — see server/src/search-index.ts.
+ */
+export interface SearchResult {
+  kind: EntityKind;
+  id: string;
+  title: string;
+  path: string;
+  /** Fuse.js score: 0 is a perfect match, values grow toward 1. */
+  score: number;
+  /** ~120 chars of body context around the first literal query hit. */
+  snippet?: string;
+}
+
+/** GET /api/:campaign/search?q=… (400 on missing/empty q) */
+export interface SearchResponse {
+  results: SearchResult[];
+}

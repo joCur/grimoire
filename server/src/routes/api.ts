@@ -1,7 +1,6 @@
 // API routes (read: issue #2, write: issue #5, search/version: issues #7/#8).
 // Mounted under /api in server.ts. Response shapes are the contracts in
-// @grimoire/shared (types.ts); the search result shape lives in
-// ../search-index.ts for now.
+// @grimoire/shared (types.ts).
 
 import { Hono } from "hono";
 import type { Context } from "hono";

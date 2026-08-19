@@ -73,6 +73,10 @@
   /* recessed panel (live log): one step deeper than the page background */
   --panel-deep: light-dark(#f0ead9, #191613);
 
+  /* modal scrim (⌘K palette) — dark value verbatim from the prototype,
+     light derived from the warm text family */
+  --overlay: light-dark(rgba(44, 38, 28, 0.4), rgba(15, 13, 10, 0.7));
+
   --radius: 0.5rem;
 }
 
@@ -115,6 +119,7 @@
   --color-secret: var(--secret);
   --color-secret-border: var(--secret-border);
   --color-panel-deep: var(--panel-deep);
+  --color-overlay: var(--overlay);
 
   /* Serif carries the personality: page/scene titles, NPC names, the
      wordmark and the read-aloud text (self-hosted Literata).
