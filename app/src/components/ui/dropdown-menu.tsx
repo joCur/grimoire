@@ -43,6 +43,29 @@ function DropdownMenuItem({
   );
 }
 
+const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup;
+
+/**
+ * One option of a single-choice menu (`role="menuitemradio"`, so the current
+ * value is announced as checked). The check mark itself is rendered by the
+ * caller inside a fixed-width slot — the indicator column keeps the labels
+ * aligned whether the option is the current one or not.
+ */
+function DropdownMenuRadioItem({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem>) {
+  return (
+    <DropdownMenuPrimitive.RadioItem
+      className={cn(
+        "flex w-full cursor-pointer items-center gap-2.5 rounded-[7px] px-2.5 py-[9px] text-left outline-none select-none focus:bg-secondary data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 function DropdownMenuSeparator({
   className,
   ...props
@@ -55,4 +78,12 @@ function DropdownMenuSeparator({
   );
 }
 
-export { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger };
+export {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+};

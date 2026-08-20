@@ -3,9 +3,15 @@
 // the live center column ("live"); live is the denser variant from the
 // design prototype: 26px title, location inside the overline, italic
 // "Wenn:" line and a plain hairline instead of the chip row.
+//
+// `statusControl` (issue #28) is the status regler of the reading view; it
+// rides at the right end of the overline row. The component stays free of
+// queries — the route owns the control and passes it in, so the live view
+// simply passes nothing.
 
 import type { CampaignTree, FileResponse } from "@grimoire/shared/types";
 import { Bookmark, GitFork, MapPin } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { locationName } from "@/lib/campaign";
 import { fmString, fmStringArray } from "@/lib/frontmatter";
@@ -16,10 +22,12 @@ export function SceneArticle({
   file,
   tree,
   variant,
+  statusControl,
 }: {
   file: FileResponse;
   tree: CampaignTree | undefined;
   variant: "scene" | "live";
+  statusControl?: ReactNode;
 }) {
   const live = variant === "live";
   const fm = file.frontmatter;
@@ -55,6 +63,12 @@ export function SceneArticle({
             <span className="min-w-0 truncate text-[12.5px] normal-case text-muted-foreground">
               {location}
             </span>
+          </>
+        )}
+        {statusControl !== undefined && (
+          <>
+            <span className="flex-1" />
+            {statusControl}
           </>
         )}
       </div>

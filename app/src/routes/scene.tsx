@@ -18,8 +18,9 @@ import { EntityArticle } from "@/components/EntityArticle";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/components/NpcCard";
 import { SceneArticle } from "@/components/SceneArticle";
+import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { entityHeaderKind } from "@/lib/entity";
-import { fmStringArray } from "@/lib/frontmatter";
+import { fmString, fmStringArray } from "@/lib/frontmatter";
 
 export function SceneRoute() {
   const params = useParams();
@@ -58,7 +59,23 @@ export function SceneRoute() {
       <div className="mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 pb-[100px] md:px-7 md:pt-10 lg:flex-row">
         <div className="w-full min-w-0 flex-1 lg:max-w-[680px]">
           {isScene ? (
-            <SceneArticle file={data} tree={tree.data} variant="scene" />
+            <SceneArticle
+              file={data}
+              tree={tree.data}
+              variant="scene"
+              // Issue #28: the status display IS the control here. The mtime
+              // comes from the FileResponse on screen, so the patch carries
+              // exactly the version the DM was looking at.
+              statusControl={
+                <SceneStatusControl
+                  campaign={campaign}
+                  path={data.path}
+                  status={fmString(data.frontmatter.status) ?? "draft"}
+                  mtimeMs={data.mtimeMs}
+                  variant="pill"
+                />
+              }
+            />
           ) : (
             <EntityArticle file={data} />
           )}

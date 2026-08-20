@@ -94,6 +94,28 @@ export function fetchVersion(campaign: string): Promise<VersionResponse> {
 
 // --- write endpoints (session/log, issue #9) --------------------------------
 
+/**
+ * Set/delete frontmatter keys of one file (issue #5 endpoint, used by the
+ * scene-status control of issue #28). `patch` is flat: a value sets the key,
+ * `null` deletes it. `mtimeMs` is the optimistic-concurrency token and must be
+ * the one from the FileResponse the UI is showing — when the file changed on
+ * disk since, the server answers 409 with the current `mtimeMs` in
+ * `ApiError.details` and writes nothing.
+ */
+export async function patchFrontmatter(
+  campaign: string,
+  input: { path: string; mtimeMs: number; patch: Record<string, unknown> },
+): Promise<FileResponse> {
+  const path = `/${encodeURIComponent(campaign)}/frontmatter`;
+  const response = await fetch(`/api${path}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw await failure(`PATCH /api${path}`, response);
+  return (await response.json()) as FileResponse;
+}
+
 async function postJson<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method: "POST",

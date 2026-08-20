@@ -12,28 +12,13 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { fetchFile, fetchTree } from "@/api";
+import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { locationName } from "@/lib/campaign";
 import { firstParagraphOfSection } from "@/lib/md-section";
 import { useCampaignMeta } from "@/lib/use-campaign";
 import { cn } from "@/lib/utils";
 import { MobileStart } from "@/routes/mobile-start";
-
-/** Scene status → German label + dot/text colors (unknown values pass through). */
-function statusMeta(status: string): { label: string; dot: string; text: string } {
-  switch (status) {
-    case "ready":
-      return { label: "bereit", dot: "bg-success", text: "text-success-text" };
-    case "draft":
-      return { label: "Entwurf", dot: "bg-muted-foreground", text: "text-dim" };
-    case "played":
-      return { label: "gespielt", dot: "bg-faint", text: "text-muted-foreground" };
-    case "dropped":
-      return { label: "verworfen", dot: "bg-faint", text: "text-muted-foreground" };
-    default:
-      return { label: status, dot: "bg-muted-foreground", text: "text-dim" };
-  }
-}
 
 function sceneCountLabel(count: number): string {
   if (count === 0) return "keine Szenen";
@@ -248,6 +233,13 @@ function PlannedGroup({
   );
 }
 
+/**
+ * One pool row. The row opens the scene — except the status area, which is
+ * its own control since issue #28 (same menu as the reading view). The link
+ * therefore covers everything but that control instead of wrapping it: a
+ * button inside an anchor is invalid markup and would need click juggling,
+ * two siblings in one hover row need neither.
+ */
 function SceneRow({
   campaign,
   scene,
@@ -258,35 +250,39 @@ function SceneRow({
   tree: CampaignTree;
 }) {
   const isContingency = scene.type === "contingency";
-  const status = statusMeta(scene.status);
   const meta = [locationName(tree, scene.location), scene.tags.map((t) => `#${t}`).join(" ")]
     .filter((part) => part !== undefined && part !== "")
     .join(" · ");
 
   return (
-    <Link
-      to={`/${campaign}/file/${scene.path}`}
-      className="flex items-center gap-3 rounded-md border-b border-divider px-2.5 py-[13px] hover:bg-card"
-    >
-      {isContingency ? (
-        <GitFork aria-hidden size={17} className="flex-none text-muted-foreground" />
-      ) : (
-        <Bookmark aria-hidden size={17} className="flex-none text-muted-foreground" />
-      )}
-      <span className="min-w-0 flex-1">
-        <span className="block text-[14.5px] text-foreground">{scene.title}</span>
-        {isContingency && scene.trigger !== undefined ? (
-          <span className="mt-0.5 block text-[12.5px] text-muted-foreground italic">
-            Wenn: {scene.trigger}
-          </span>
-        ) : meta !== "" ? (
-          <span className="mt-0.5 block text-[12.5px] text-muted-foreground">{meta}</span>
-        ) : null}
-      </span>
-      <span className="flex flex-none items-center gap-1.5">
-        <span aria-hidden className={cn("size-[7px] rounded-full", status.dot)} />
-        <span className={cn("text-[12px]", status.text)}>{status.label}</span>
-      </span>
-    </Link>
+    <div className="group flex items-center gap-3 rounded-md border-b border-divider px-2.5 hover:bg-card">
+      <Link
+        to={`/${campaign}/file/${scene.path}`}
+        className="flex min-w-0 flex-1 items-center gap-3 py-[13px]"
+      >
+        {isContingency ? (
+          <GitFork aria-hidden size={17} className="flex-none text-muted-foreground" />
+        ) : (
+          <Bookmark aria-hidden size={17} className="flex-none text-muted-foreground" />
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block text-[14.5px] text-foreground">{scene.title}</span>
+          {isContingency && scene.trigger !== undefined ? (
+            <span className="mt-0.5 block text-[12.5px] text-muted-foreground italic">
+              Wenn: {scene.trigger}
+            </span>
+          ) : meta !== "" ? (
+            <span className="mt-0.5 block text-[12.5px] text-muted-foreground">{meta}</span>
+          ) : null}
+        </span>
+      </Link>
+      {/* No mtime in the tree — the control fetches the file when it opens. */}
+      <SceneStatusControl
+        campaign={campaign}
+        path={scene.path}
+        status={scene.status}
+        variant="row"
+      />
+    </div>
   );
 }

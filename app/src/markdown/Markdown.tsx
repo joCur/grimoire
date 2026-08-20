@@ -62,7 +62,13 @@ const remarkPlugins = [remarkGrimoire];
 export function Markdown({ children }: { children: string }) {
   return (
     <div className="md-body">
-      <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
+      {/* skipHtml: raw HTML in a body is DROPPED, not printed. Without it
+          react-markdown shows the raw source as text — the generator's
+          `<!-- wird von der App … -->` hints ended up visible under
+          `## Notizen` (review of issue #26). Nothing in the format needs
+          HTML: callouts and `## If:` sections become elements through the
+          remark plugin's hName, never through raw HTML. */}
+      <ReactMarkdown remarkPlugins={remarkPlugins} components={components} skipHtml>
         {children}
       </ReactMarkdown>
     </div>
