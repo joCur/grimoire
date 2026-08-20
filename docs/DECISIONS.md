@@ -109,3 +109,17 @@ ist rein clientseitig. SSE/WebSockets erwogen und zurückgestellt: für
 einen Einzelnutzer (#3) reicht Polling, und SSE ist später ohne
 API-Bruch nachrüstbar — der Versionszähler bleibt dann als Fallback
 gültig.
+
+## 10. Long-running Operationen laufen serverseitig als Job
+
+Jede Operation, die länger als ein paar Sekunden dauern kann (Generator,
+künftige LLM-Pipelines, Massen-Operationen), läuft als serverseitiger
+Job: Start-Endpoint antwortet sofort mit einer Job-Referenz, Status und
+Ergebnis werden gepollt, die UI stellt den Zustand nach Navigation,
+Reload oder Tab-Schließen vollständig wieder her. Nie an einen offenen
+Browser-Tab oder eine offene HTTP-Verbindung gebunden — ein
+Space-Wechsel auf macOS hat einmal ein bezahltes Generierungs-Ergebnis
+vernichtet (PO-Vorfall zu #19); das darf konstruktionsbedingt nicht
+möglich sein. Job-Store in-memory (Kampagnendateien bleiben die einzige
+Platten-Wahrheit, #1); Verlust bei Server-Neustart ist der akzeptierte
+Trade-off und wird der UI sauber gemeldet.
