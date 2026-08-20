@@ -1,8 +1,8 @@
-// "/:campaign/list/:kind" — the simple mobile list pages (issue #11),
-// reached from the start surface's "Nachschlagen" rows: scenes grouped flat
-// by chapter, npcs and locations alphabetical. Every row opens the read
-// view (/:campaign/file/<path>). The layout is width-agnostic (a plain
-// list), but the pages are only linked from the mobile chrome.
+// "/:campaign/list/:kind" — the simple list pages (issue #11), reached from
+// the mobile start surface's "Nachschlagen" rows and, since issue #26, from
+// the pool's quiet "NPCs · Orte" line on the desktop: scenes grouped flat by
+// chapter, npcs and locations alphabetical. Every row opens the read view
+// (/:campaign/file/<path>). The layout is width-agnostic (a plain list).
 
 import type { CampaignTree } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
@@ -13,12 +13,7 @@ import { Link, useParams } from "react-router";
 import { fetchTree } from "@/api";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { locationName } from "@/lib/campaign";
-
-const TITLES: Record<string, string> = {
-  scenes: "Szenen",
-  npcs: "NPCs",
-  locations: "Orte",
-};
+import { browseListTitle } from "@/lib/entity";
 
 export function BrowseRoute() {
   const { campaign = "", kind = "" } = useParams();
@@ -28,7 +23,7 @@ export function BrowseRoute() {
     enabled: campaign !== "",
   });
 
-  const title = TITLES[kind];
+  const title = browseListTitle(kind);
 
   return (
     <>

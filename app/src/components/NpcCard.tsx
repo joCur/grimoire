@@ -2,13 +2,30 @@
 // `## Will` section) and quickstats, exactly those three per UI-BRIEF.
 // Two densities per the design prototype: the scene aside ("full", with id
 // badge and labeled rows) and the live aside ("compact", inline "Will:").
-// A missing or broken npc file skips the card silently (degrade).
+// The whole card links to the NPC reading view (issue #26).
+//
+// Degradation (issue #26): a referenced id WITHOUT a file used to render
+// nothing at all — the DM saw a bare slug in the scene and no explanation.
+// Now the 404 shows a quiet placeholder with "Stub anlegen" (POST
+// /review/npc-stub), so the gap is visible and closable from where it hurts.
+// Any OTHER failure stays a quiet one-liner (server down — nothing to fix
+// here), and while the query is still running nothing is claimed at all.
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+import { Link } from "react-router";
 
-import { fetchFile } from "@/api";
+import { ApiError, fetchFile } from "@/api";
+import { Button } from "@/components/ui/button";
 import { fmQuickstats, fmString } from "@/lib/frontmatter";
 import { firstParagraphOfSection } from "@/lib/md-section";
+import { ensureNpcStub } from "@/lib/npc-stub";
+import { cn } from "@/lib/utils";
+
+/** Campaign-relative path of an npc file — the reference key is the id. */
+function npcPath(id: string): string {
+  return `npcs/${id}.md`;
+}
 
 export function NpcCard({
   campaign,
@@ -19,12 +36,52 @@ export function NpcCard({
   id: string;
   compact?: boolean;
 }) {
-  const { data, isError } = useQuery({
-    queryKey: ["file", campaign, `npcs/${id}.md`],
-    queryFn: () => fetchFile(campaign, `npcs/${id}.md`),
+  const path = npcPath(id);
+  const queryClient = useQueryClient();
+  const { data, isPending, isError, error } = useQuery({
+    queryKey: ["file", campaign, path],
+    queryFn: () => fetchFile(campaign, path),
     retry: false,
   });
-  if (isError || !data) return null;
+
+  const stub = useMutation({
+    // 409 (the file exists now) counts as success — see lib/npc-stub.ts.
+    mutationFn: () => ensureNpcStub(campaign, id),
+    onSuccess: (file) => {
+      // The endpoint returns the fresh file: seed, then invalidate on top.
+      if (file !== undefined) queryClient.setQueryData(["file", campaign, file.path], file);
+      void queryClient.invalidateQueries({ queryKey: ["file", campaign, path] });
+      // A new npc file changes the tree (lists, search) as well.
+      void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
+    },
+  });
+
+  // Nothing decided yet — never claim a missing file while loading.
+  if (isPending) return null;
+
+  if (isError) {
+    const missing = error instanceof ApiError && error.status === 404;
+    if (!missing) {
+      return (
+        <p className="text-[12px] leading-[1.5] text-muted-foreground">
+          <span className="font-mono">{id}</span> — NPC nicht ladbar, Server prüfen.
+        </p>
+      );
+    }
+    return (
+      <MissingNpcCard
+        id={id}
+        compact={compact}
+        pending={stub.isPending}
+        error={stub.isError ? "Stub nicht angelegt — Server prüfen." : undefined}
+        onCreate={() => {
+          stub.reset();
+          stub.mutate();
+        }}
+      />
+    );
+  }
+  if (data === undefined) return null;
 
   const fm = data.frontmatter;
   const name = fmString(fm.name) ?? id;
@@ -36,7 +93,7 @@ export function NpcCard({
 
   if (compact) {
     return (
-      <div className="rounded-lg border border-border bg-card p-3.5">
+      <CardLink campaign={campaign} id={id} className="p-3.5">
         <p className="mb-px font-serif text-[15px] font-semibold text-foreground">{name}</p>
         {role !== undefined && (
           <p className="mb-[9px] text-[12px] text-muted-foreground">{role}</p>
@@ -61,12 +118,12 @@ export function NpcCard({
             ))}
           </div>
         )}
-      </div>
+      </CardLink>
     );
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
+    <CardLink campaign={campaign} id={id} className="p-4">
       <div className="mb-[2px] flex items-baseline gap-2">
         <span className="font-serif text-[16px] font-semibold text-foreground">{name}</span>
         <span className="font-mono text-[10.5px] text-faint">{npcId}</span>
@@ -99,6 +156,79 @@ export function NpcCard({
             </span>
           ))}
         </div>
+      )}
+    </CardLink>
+  );
+}
+
+/** The card body as one link into the NPC reading view — quiet hover per the
+ * app's style, keyboard-focusable by being a link (global focus outline). */
+function CardLink({
+  campaign,
+  id,
+  className,
+  children,
+}: {
+  campaign: string;
+  id: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Link
+      to={`/${campaign}/file/${npcPath(id)}`}
+      className={cn(
+        "block rounded-lg border border-border bg-card transition-colors hover:border-border-hover",
+        className,
+      )}
+    >
+      {children}
+    </Link>
+  );
+}
+
+/**
+ * The visible degradation of a referenced npc id without a file: mono slug,
+ * the reason, and the one action that fixes it. Exported for the render test
+ * — it is pure, the query/mutation lives in NpcCard.
+ */
+export function MissingNpcCard({
+  id,
+  compact = false,
+  pending,
+  error,
+  onCreate,
+}: {
+  id: string;
+  compact?: boolean;
+  pending: boolean;
+  error?: string | undefined;
+  onCreate: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg border border-dashed border-input bg-transparent",
+        compact ? "p-3.5" : "p-4",
+      )}
+    >
+      <p className="font-mono text-[12.5px] text-soft">{id}</p>
+      <p className="mt-1 mb-2.5 text-[12.5px] leading-[1.5] text-muted-foreground">
+        NPC-Datei fehlt
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={pending}
+        onClick={onCreate}
+        className="h-auto border-input bg-transparent px-2.5 py-1 text-[12px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
+      >
+        Stub anlegen
+      </Button>
+      {error !== undefined && (
+        <p className="mt-2 text-[12px] text-destructive" aria-live="polite">
+          {error}
+        </p>
       )}
     </div>
   );

@@ -168,7 +168,7 @@ export function adoptThread(
 }
 
 /**
- * Create `npcs/<id>.md` (status: unknown, note under `## Notizen`).
+ * Create `npcs/<id>.md` (status: alive, note under `## Notizen`).
  * Never overwrites: an existing slug is an ApiError with status 409.
  */
 export function createNpcStub(

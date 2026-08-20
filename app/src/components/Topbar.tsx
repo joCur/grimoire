@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { IconLogo } from "@/icons";
 import { campaignDescription, campaignLabel } from "@/lib/campaign";
+import { browseListTitle } from "@/lib/entity";
 import { fmString } from "@/lib/frontmatter";
 import { formatElapsed, parseLocalDateTime } from "@/lib/session";
 import { useCampaignMeta } from "@/lib/use-campaign";
@@ -61,6 +62,10 @@ export function Topbar() {
   const isReview = reviewMatch !== null && campaign !== "";
   const isGenerator = generateMatch !== null && campaign !== "";
   const isPool = poolMatch !== null && campaign !== "";
+  // Browse lists are linked from the pool on the desktop since issue #26 —
+  // so they need the same way back the other views have.
+  const listTitle = browseListTitle(listMatch?.params["*"] ?? "");
+  const isList = listMatch !== null && campaign !== "" && listTitle !== undefined;
 
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -84,7 +89,9 @@ export function Topbar() {
   const fm = file.data?.frontmatter;
   const chapterId = fmString(fm?.chapter);
   const chapterTitle = tree.data?.chapters.find((c) => c.id === chapterId)?.title ?? chapterId;
-  const sceneTitle = fmString(fm?.title) ?? filePath;
+  // Scenes/chapters carry `title`, npcs/locations `name` (issue #26: the
+  // breadcrumb of an NPC view must not read as a bare path either).
+  const sceneTitle = fmString(fm?.title) ?? fmString(fm?.name) ?? filePath;
 
   // The live chapter label: the ACTIVE chapter (fallback: first) — the same
   // rule the live nav uses.
@@ -146,6 +153,19 @@ export function Topbar() {
           {liveChapter !== undefined && (
             <span className="hidden truncate md:inline">{liveChapter.title}</span>
           )}
+        </div>
+      )}
+
+      {isList && (
+        <div className="flex min-w-0 items-center gap-2 text-[13px]">
+          <Link
+            to={`/${campaign}`}
+            className="max-w-[220px] flex-none truncate text-body-secondary hover:text-foreground"
+          >
+            {campaignName}
+          </Link>
+          <span aria-hidden className="text-border-hover">/</span>
+          <span className="truncate text-soft">{listTitle}</span>
         </div>
       )}
 

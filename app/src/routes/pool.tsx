@@ -105,6 +105,23 @@ export function PoolRoute() {
                 defaultOpen={anyActive ? chapter.status === "active" : index === 0}
               />
             ))}
+            {/* Desktop access to the browse lists (issue #26): they already
+                work at every width, they were only linked from the mobile
+                start surface — one quiet line, no second list design. */}
+            <nav
+              // Distinct from the mobile start surface's "Nachschlagen" nav —
+              // both live in the DOM at once (responsive swap).
+              aria-label="NPCs und Orte"
+              className="mt-8 flex items-center gap-2 text-[13px] text-muted-foreground"
+            >
+              <Link to={`/${campaign}/list/npcs`} className="hover:text-foreground">
+                NPCs
+              </Link>
+              <span aria-hidden>·</span>
+              <Link to={`/${campaign}/list/locations`} className="hover:text-foreground">
+                Orte
+              </Link>
+            </nav>
           </>
         )}
       </div>
