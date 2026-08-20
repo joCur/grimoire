@@ -130,6 +130,14 @@ export interface ParsedFile<F = Record<string, unknown>> {
 export interface CampaignSummary {
   /** Directory name under CAMPAIGN_ROOT. */
   id: string;
+  /**
+   * Id of the campaign's newest session file (`sessions/<id>.md` without the
+   * extension, i.e. `yyyy-mm-dd`). Session ids are dates, so their string
+   * order IS their date order and the newest one is the lexicographically
+   * largest. Absent when the campaign has no readable session — the client
+   * uses it to pick the last active campaign (issue #14).
+   */
+  lastSession?: string;
 }
 
 export interface SceneSummary {

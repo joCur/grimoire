@@ -4,9 +4,9 @@ import { Topbar } from "@/components/Topbar";
 import { ReviewMemoryProvider } from "@/lib/review-memory";
 import { useCampaignVersion } from "@/lib/use-campaign-version";
 import { BrowseRoute } from "@/routes/browse";
-import { CampaignsRoute } from "@/routes/campaigns";
 import { GenerateRoute } from "@/routes/generate";
 import { HarnessRoute } from "@/routes/harness";
+import { HomeRoute } from "@/routes/home";
 import { LiveRoute } from "@/routes/live";
 import { PoolRoute } from "@/routes/pool";
 import { ReviewRoute } from "@/routes/review";
@@ -42,7 +42,9 @@ export function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<CampaignsRoute />} />
+        {/* "/" is a redirect into the last active campaign (issue #14) —
+            there is no campaign list page. */}
+        <Route index element={<HomeRoute />} />
         {/* Dev-only markdown harness (CLAUDE.md renderer check) — reached by
             URL, deliberately not linked from the chrome. */}
         {import.meta.env.DEV && <Route path="dev/markdown" element={<HarnessRoute />} />}

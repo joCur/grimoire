@@ -7,7 +7,7 @@
 // Planned API — the living checklist (conventions: /README.md). Tick an
 // endpoint here when it is implemented:
 //
-//   [x] GET  /api/campaigns                    campaign list (directories)
+//   [x] GET  /api/campaigns                    campaign list (directories + lastSession)
 //   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (frontmatter parsed)
 //   [x] GET  /api/:campaign/file?path=...      one file (raw + parsed + mtime)
 //   [x] PATCH /api/:campaign/frontmatter       { path, mtimeMs, patch } — only if

@@ -2,26 +2,69 @@
 // points at ../examples). The Hono app runs in-process via app.request() —
 // no live port needed.
 
-import { describe, expect, test } from "bun:test";
-import { stat } from "node:fs/promises";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import type { CampaignSummary, CampaignTree, FileResponse } from "@grimoire/shared";
+import { getCampaignRoot, setCampaignRoot } from "../src/config";
 import { app } from "../src/server";
 
 const EXAMPLES = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../../examples");
 
 describe("GET /api/campaigns", () => {
-  test("lists example campaign directories", async () => {
+  const campaigns = async (): Promise<CampaignSummary[]> => {
     const res = await app.request("/api/campaigns");
     expect(res.status).toBe(200);
-    const body = (await res.json()) as CampaignSummary[];
-    expect(body).toContainEqual({ id: "beispiel" });
+    return (await res.json()) as CampaignSummary[];
+  };
+
+  test("lists example campaign directories", async () => {
+    const body = await campaigns();
+    expect(body).toContainEqual({ id: "beispiel", lastSession: "2026-01-15" });
     // Only directories, no root-level files or hidden entries.
     for (const c of body) {
       expect(c.id.startsWith(".")).toBe(false);
       expect(c.id.endsWith(".md")).toBe(false);
     }
+  });
+
+  test("lastSession is the newest session id of the example campaign", async () => {
+    const beispiel = (await campaigns()).find((c) => c.id === "beispiel");
+    expect(beispiel?.lastSession).toBe("2026-01-15");
+  });
+
+  describe("in a temp root", () => {
+    let originalRoot: string;
+    let tmpRoot: string;
+
+    beforeAll(async () => {
+      originalRoot = getCampaignRoot();
+      tmpRoot = await mkdtemp(path.join(os.tmpdir(), "grimoire-campaigns-"));
+      // One campaign with two sessions (the later id must win) …
+      await mkdir(path.join(tmpRoot, "mit-sessions", "sessions"), { recursive: true });
+      await writeFile(path.join(tmpRoot, "mit-sessions", "sessions", "2026-02-01.md"), "---\n---\n");
+      await writeFile(path.join(tmpRoot, "mit-sessions", "sessions", "2026-03-09.md"), "---\n---\n");
+      // … one without a sessions directory at all, and one with an empty one.
+      await mkdir(path.join(tmpRoot, "ohne-sessions"), { recursive: true });
+      await mkdir(path.join(tmpRoot, "leere-sessions", "sessions"), { recursive: true });
+      setCampaignRoot(tmpRoot);
+    });
+
+    afterAll(async () => {
+      setCampaignRoot(originalRoot);
+      await rm(tmpRoot, { recursive: true, force: true });
+    });
+
+    test("newest session id wins; no sessions → no lastSession field", async () => {
+      const body = await campaigns();
+      expect(body).toEqual([
+        { id: "leere-sessions" },
+        { id: "mit-sessions", lastSession: "2026-03-09" },
+        { id: "ohne-sessions" },
+      ]);
+    });
   });
 });
 

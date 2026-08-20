@@ -136,7 +136,11 @@ export async function resolveInsideCampaign(dir: string, rel: string): Promise<s
 
 // --- reading -------------------------------------------------------------------
 
-/** List directories directly under CAMPAIGN_ROOT (hidden and files skipped). */
+/**
+ * List directories directly under CAMPAIGN_ROOT (hidden and files skipped).
+ * Each entry also carries `lastSession` — the newest session id, used by the
+ * app to open the last active campaign (issue #14).
+ */
 export async function listCampaigns(): Promise<CampaignSummary[]> {
   let entries;
   try {
@@ -157,7 +161,36 @@ export async function listCampaigns(): Promise<CampaignSummary[]> {
       }
     }
   }
-  return ids.sort(cmp).map((id) => ({ id }));
+  return Promise.all(
+    ids.sort(cmp).map(async (id) => {
+      const lastSession = await newestSessionId(path.join(getCampaignRoot(), id));
+      return lastSession === undefined ? { id } : { id, lastSession };
+    }),
+  );
+}
+
+/**
+ * Id of the newest session of one campaign, or undefined when there is none.
+ * Session ids are dates (`sessions/yyyy-mm-dd.md`), so the lexicographically
+ * largest file name is the newest session — no file needs to be read.
+ * Degrades: a missing, empty or unreadable sessions/ directory yields
+ * undefined instead of an error.
+ */
+async function newestSessionId(campaignAbs: string): Promise<string | undefined> {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(path.join(campaignAbs, "sessions"), { withFileTypes: true });
+  } catch {
+    return undefined;
+  }
+  let newest: string | undefined;
+  for (const e of entries) {
+    if (isHidden(e.name) || !e.name.endsWith(".md")) continue;
+    if (!e.isFile() && !e.isSymbolicLink()) continue;
+    const id = e.name.slice(0, -".md".length);
+    if (id !== "" && (newest === undefined || cmp(id, newest) > 0)) newest = id;
+  }
+  return newest;
 }
 
 /** Read + parse one markdown file; mtimeMs is the file's real mtime. */

@@ -1,8 +1,9 @@
 // The constant topbar (design reference: 56px, hairline below). Left side
 // is contextual: campaign switcher on the pool, breadcrumb on a scene,
 // green Live pill + chapter label in the live mode. Right side: the ⌘K
-// search chip (opens the palette; hidden on the campaign list — no campaign
-// context there), the brass "Session starten" button on pool and scene
+// search chip (opens the palette; hidden without a campaign in the URL —
+// "/" only ever shows the empty state), the brass "Session starten" button
+// on pool and scene
 // views (issue #9: starts today's session and enters /:campaign/live), and
 // in the live mode the elapsed timer plus Pause / "Session beenden".
 // On the review view (issue #10) the left side reads "Review" and the right
@@ -85,7 +86,9 @@ export function Topbar() {
   return (
     // Below md the campaign-scoped views carry their own mobile chrome
     // (start-surface wordmark, "‹ Pool" back rows — issue #11); the topbar
-    // is desktop chrome there. The campaign list at "/" keeps it everywhere.
+    // is desktop chrome there. Without a campaign in the URL ("/" with no
+    // campaign at all) it stays visible on every width, so the empty state
+    // is not a bare page.
     <header
       className={cn(
         "flex h-14 flex-none items-center gap-3.5 border-b border-border px-6",
@@ -149,8 +152,8 @@ export function Topbar() {
 
       <div className="flex-1" />
 
-      {/* Only on campaign-scoped views — the campaign list has no search
-          context (palette and shortcut are not mounted there at all). */}
+      {/* Only on campaign-scoped views — "/" has no search context (palette
+          and shortcut are not mounted there at all). */}
       {campaign !== "" && (
         <>
           <Button

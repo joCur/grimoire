@@ -167,7 +167,8 @@ describe("/api is untouched", () => {
   test("the API still answers under the static catch-all", async () => {
     const res = await app.request("/api/campaigns");
     expect(res.status).toBe(200);
-    expect(await res.json()).toContainEqual({ id: "beispiel" });
+    const body = (await res.json()) as Array<{ id: string }>;
+    expect(body.map((c) => c.id)).toContain("beispiel");
   });
 
   test("unknown /api paths 404 instead of falling back to index.html", async () => {
