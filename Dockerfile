@@ -1,5 +1,5 @@
 # Grimoire — one container: Hono API + the built frontend (issue #13).
-# Operations doc: DEPLOYMENT.md. Deployment shape per DECISIONS #3/#5.
+# Operations doc: docs/DEPLOYMENT.md. Deployment shape per DECISIONS #3/#5.
 #
 #   docker build -t grimoire .
 #   docker run -d -p 3000:3000 -v /srv/grimoire/campaigns:/campaigns grimoire
@@ -56,7 +56,7 @@ COPY --from=build /app/app/dist ./app/dist
 
 # The demo campaign ships in the image at the default CAMPAIGN_ROOT, so a
 # container started WITHOUT a volume is not empty. A mounted volume on
-# /campaigns simply shadows it (see DEPLOYMENT.md). Owned by the bun user
+# /campaigns simply shadows it (see docs/DEPLOYMENT.md). Owned by the bun user
 # because the API writes into the campaign root (session logs, inbox, drafts).
 COPY --chown=bun:bun examples /campaigns
 

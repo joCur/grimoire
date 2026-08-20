@@ -2,7 +2,7 @@
 
 Export aus dem Claude-Design-Projekt des PO (Quelle:
 https://claude.ai/design/p/bdec0f7c-9772-4d68-91f1-49623f1b530a).
-Diese Dateien sind die Design-Wahrheit für alle Views; UI-BRIEF.md bleibt
+Diese Dateien sind die Design-Wahrheit für alle Views; docs/UI-BRIEF.md bleibt
 die Intentions-Ebene darüber. Bei Widerspruch gewinnt diese Referenz.
 
 - `Grimoire.dc.html` — Desktop-Prototyp: Topbar (Kampagnen-Switcher, ⌘K,

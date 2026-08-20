@@ -37,4 +37,4 @@ Die drei OpenAI-kompatiblen Fälle teilen eine Klasse
 Auth-Header. Fehlende Pflicht-Variablen und ein unbekannter
 `LLM_PROVIDER`-Wert werden nicht verschluckt: `POST /api/:campaign/generate`
 antwortet `503` mit der Meldung im Klartext. Vollständige Variablen-Tabelle:
-DEPLOYMENT.md Abschnitt 2.
+docs/DEPLOYMENT.md Abschnitt 2.

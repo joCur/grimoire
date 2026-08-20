@@ -7,15 +7,15 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 ## Pflichtlektüre vor jeder Aufgabe
 
 1. `README.md` — Datenformat und Konventionen (Entitäten, Callouts, `If:`-Abschnitte, Hashtags)
-2. `DECISIONS.md` — Architektur-Entscheidungen inkl. Tech-Stack. Entscheidungen dort sind bindend; Abweichungen nur mit neuem Eintrag.
-3. `UI-BRIEF.md` — Design-Richtung für alles Sichtbare
+2. `docs/DECISIONS.md` — Architektur-Entscheidungen inkl. Tech-Stack. Entscheidungen dort sind bindend; Abweichungen nur mit neuem Eintrag.
+3. `docs/UI-BRIEF.md` — Design-Richtung für alles Sichtbare
 
-## Stack (Kurzfassung, Details in DECISIONS.md #5)
+## Stack (Kurzfassung, Details in docs/DECISIONS.md #5)
 
 - Frontend: Vite + React 19 + Tailwind v4 + shadcn/ui, TanStack Query,
   react-markdown + eigenes Remark-Plugin für Callouts und `## If:`
 - Backend: Bun + Hono, gray-matter, chokidar, Fuse.js
-- Regel: Keine Bun-only-APIs ohne Eintrag in DECISIONS.md (Node-Portabilität)
+- Regel: Keine Bun-only-APIs ohne Eintrag in docs/DECISIONS.md (Node-Portabilität)
 
 ## Projektstruktur
 
@@ -33,7 +33,10 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - `app/` — das Frontend (bei erster UI-Aufgabe anlegen: Vite-Scaffold).
 - `generator/` — LLM-Pipeline (Prompt, Few-Shot, Ablauf-README).
 - `design/` — verbindliche Design-Referenz (Claude-Design-Export des PO,
-  siehe design/README.md). Bei Widerspruch zu UI-BRIEF.md gewinnt design/.
+  siehe design/README.md). Bei Widerspruch zu docs/UI-BRIEF.md gewinnt design/.
+- `docs/` — die längeren Dokumente: `DECISIONS.md` (bindende ADRs),
+  `UI-BRIEF.md` (Design-Intention), `DEPLOYMENT.md` (Betrieb).
+  `README.md` und `CLAUDE.md` bleiben im Root (Tooling-Konvention).
 
 ## Arbeitsweise
 

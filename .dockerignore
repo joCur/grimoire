@@ -25,11 +25,12 @@ build/
 .env.*
 !.env.example
 
-# Docs and design references are not needed at runtime.
+# Docs and design references are not needed at runtime. `*.md` only matches
+# the context root, so docs/ needs its own line.
 *.md
 !generator/*.md
 design/
-UI-BRIEF.md
+docs/
 
 # Tests are not part of the runtime image.
 **/test/

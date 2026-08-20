@@ -38,6 +38,44 @@ docker run --rm -p 3000:3000 grimoire   # zeigt die Beispielkampagne
 **Update:** neu bauen, Container ersetzen (`docker rm -f grimoire` + `run`).
 Es gibt keinen Zustand im Container — alles steht im Volume.
 
+### Alternative: fertiges Image aus GHCR ziehen
+
+Die CI-Pipeline (`.github/workflows/ci.yml`) baut bei jedem Push auf `main`
+dasselbe Dockerfile und pusht das Ergebnis in die GitHub Container Registry —
+getaggt mit `latest` und mit dem Commit-SHA. Das Produktivsystem muss dann
+nicht mehr selbst bauen:
+
+```bash
+docker pull ghcr.io/jocur/grimoire:latest
+# oder festgenagelt auf einen Commit (empfohlen für Rollbacks):
+docker pull ghcr.io/jocur/grimoire:<commit-sha>
+
+docker run -d --name grimoire \
+  --restart unless-stopped \
+  -p 127.0.0.1:3000:3000 \
+  -v /srv/grimoire/campaigns:/campaigns \
+  --env-file /srv/grimoire/.env \
+  ghcr.io/jocur/grimoire:latest
+```
+
+Das Package ist bei GHCR standardmäßig **privat**, ein `docker pull` ohne
+Anmeldung schlägt deshalb zunächst fehl. Zwei Wege:
+
+- **Öffentlich schalten** (einmalig, einfachster Weg): GitHub → Packages →
+  `grimoire` → Package settings → Change visibility → `public`. Danach zieht
+  jeder Host ohne Login. Das Image enthält nur Code und die Beispielkampagne,
+  keine Kampagnendaten und keine Secrets (`.dockerignore`).
+- **Privat lassen** und auf dem Host einmal anmelden, mit einem Personal
+  Access Token (classic) mit dem Scope `read:packages`:
+
+  ```bash
+  echo <PAT> | docker login ghcr.io -u jocur --password-stdin
+  ```
+
+**Update** in dieser Variante: `docker pull …:latest`, dann Container
+ersetzen (`docker rm -f grimoire` + `run`). Rollback = derselbe `run` mit dem
+SHA-Tag des vorherigen Commits.
+
 ## 2. Konfiguration (Env-Variablen)
 
 | Variable            | Default      | Bedeutung                                                     |
