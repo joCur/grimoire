@@ -11,6 +11,7 @@ Grundprinzip: Das Format degradiert, es validiert nicht — unbekannte
 examples/                  # generische Beispielkampagne — committet, Format-Referenz
 campaigns/                 # ECHTE Kampagnendaten — in .gitignore, bleiben lokal
   <campaign-id>/
+    _campaign.md            # optional: Anzeigename, Beschreibung
     <chapter>/              # z. B. 01-salzhafen
       _chapter.md           # Kapitelnotizen, offene Fäden
       <location-slug>/      # grobe Orts-Gruppierung (max. 2 Ebenen!)
@@ -21,6 +22,22 @@ campaigns/                 # ECHTE Kampagnendaten — in .gitignore, bleiben lok
     inbox.md                   # Ideen-Eingang, append-only
     glossary.md                # Übersetzungs-Glossar für den Generator
 ```
+
+## Entität: Kampagne (optional)
+
+`_campaign.md` im Kampagnen-Root — Gegenstück zur `_chapter.md`-Konvention.
+Fehlt die Datei, zeigt die UI den Ordnernamen; nichts bricht.
+
+```yaml
+---
+id: beispiel                # = Ordnername, stabil
+name: Der Leuchtturm von Salzhafen   # Anzeigename in der UI
+description: <Kurzbeschreibung, eine Zeile>
+---
+```
+
+Body = freier Notizraum für Kampagnenweites. Weitere Frontmatter-Keys
+(z. B. `system`) sind erlaubt und bleiben erhalten.
 
 ## Entität: Szene
 
