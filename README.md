@@ -103,6 +103,7 @@ id: 2026-08-19
 started: 2026-08-19T19:32
 ended: 2026-08-19T23:10         # gesetzt bei "Session beenden"
 scenes_played: [lighthouse-arrival, smuggler-captured]   # automatisch gepflegt
+reviewed: [a1b2c3d4]            # Kurzhashes gesichteter Log-Zeilen (Review-Schritt)
 ---
 ```
 
@@ -111,6 +112,21 @@ scenes_played: [lighthouse-arrival, smuggler-captured]   # automatisch gepflegt
 - `## Threads`: Checkliste offener Fäden, im Review-Schritt befüllt.
 - Timer = jetzt − `started`. Kein laufender Zustand, reine Anzeige.
 - Pause = Log-Eintrag, keine Timer-Logik.
+- `reviewed`: von der App im Review-Schritt gepflegt. Ein Eintrag ist der
+  Kurzhash (erste 8 Hex-Zeichen von SHA-256) der ROHEN Log-Zeile — so
+  bleibt `## Log` strikt append-only und externes Umsortieren ist egal.
+
+### Review-Aktionen (App-verwaltet)
+
+- „Als Faden übernehmen" → append `- [ ] <Text>` unter `## Offene Fäden`
+  der `_chapter.md` des aktiven Kapitels (Abschnitt wird angelegt, wenn er
+  fehlt).
+- „NPC-Stub anlegen" → erzeugt `npcs/<slug>.md` mit Minimal-Frontmatter
+  (`status: unknown`) und dem Log-Text unter `## Notizen`. Existiert der
+  Slug, meldet die App einen Konflikt statt zu überschreiben.
+- Erledigte Inbox-Einträge werden zu `- [x] …` umgeschrieben — die EINE
+  dokumentierte Ausnahme vom Append-only der Inbox, damit erledigte Ideen
+  nicht in jeder künftigen Review wieder auftauchen.
 
 ### Hashtags im Log (Konvention, App filtert danach)
 
