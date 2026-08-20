@@ -74,7 +74,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 
 ## Branch- & PR-Prozess (main ist produktiv)
 
-- KEINE Direkt-Pushes auf main — Branch-Protection erzwingt PRs.
+- KEINE Direkt-Pushes auf main. (Serverseitige Branch-Protection ist im
+  Free-Plan für private Repos nicht verfügbar — die Regel ist prozessual
+  bindend; bei Wechsel auf Pro/public wird sie technisch erzwungen.)
 - Jedes Ticket: eigener Worktree + Feature-Branch (`<nr>-<slug>`),
   Ergebnis als PR. Merge-Voraussetzungen: CI grün (Tests, Typecheck,
   Build, E2E), Lead-Klickpfad, UND PO-Approval auf dem PR.
