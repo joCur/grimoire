@@ -21,7 +21,8 @@
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-thumb { background: #38322a; border-radius: 5px; border: 2px solid #1d1a16; }
   ::-webkit-scrollbar-track { background: transparent; }
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  @keyframes gen-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </helmet>
 <div style="height: 100vh; display: flex; flex-direction: column; background: #1d1a16; color: #e7dfd2; font-family: system-ui, -apple-system, sans-serif; font-size: 14px; overflow: hidden;" data-screen-label="Grimoire">
@@ -71,6 +72,13 @@
     <sc-if value="{{ isReview }}" hint-placeholder-val="{{ false }}">
       <div style="color: #7a6f61; font-size: 13px;">Review</div>
     </sc-if>
+    <sc-if value="{{ isGenerator }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+        <button onClick="{{ goPool }}" style="background: none; border: none; padding: 0; color: #a2968a; font-size: 13px; font-family: inherit; cursor: pointer;" style-hover="color: #e7dfd2;">{{ campName }}</button>
+        <span style="color: #4a4237;">/</span>
+        <span style="color: #c9bfae;">Generator</span>
+      </div>
+    </sc-if>
     <div style="flex: 1;"></div>
     <button onClick="{{ openCmdk }}" style="display: flex; align-items: center; gap: 8px; background: #23201b; border: 1px solid #38322a; color: #a2968a; border-radius: 6px; padding: 6px 12px; font-size: 13px; font-family: inherit; cursor: pointer; min-width: 200px;" style-hover="border-color: #4a4237; color: #c9bfae;">
       {{ icoSearch }}
@@ -78,6 +86,10 @@
       <span style="font-family: ui-monospace, monospace; font-size: 11px; color: #7a6f61; border: 1px solid #38322a; border-radius: 4px; padding: 1px 5px;">⌘K</span>
     </button>
     <sc-if value="{{ isPool }}" hint-placeholder-val="{{ true }}">
+      <button onClick="{{ openGenerator }}" style="display: flex; align-items: center; gap: 7px; background: #23201b; border: 1px solid #38322a; color: #c9bfae; border-radius: 6px; padding: 7px 14px; font-size: 13px; font-family: inherit; cursor: pointer;" style-hover="border-color: #4a4237; color: #e7dfd2;">
+        {{ icoSpark }}
+        Generator
+      </button>
       <button onClick="{{ startSession }}" style="display: flex; align-items: center; gap: 8px; background: #c8a35a; color: #241d10; border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer;" style-hover="background: #dcb96e;">
         {{ icoPlay }}
         Session starten
@@ -472,6 +484,166 @@
       </div>
     </div>
   </sc-if>
+
+  <!-- ============ GENERATOR ============ -->
+  <sc-if value="{{ isGenerator }}" hint-placeholder-val="{{ false }}">
+    <div style="display: flex; flex-direction: column; height: 100%; overflow: hidden;" data-screen-label="Generator">
+      <div style="flex: 1; overflow-y: auto;">
+        <div style="max-width: 680px; margin: 0 auto; padding: 40px 28px 100px;">
+
+          <sc-if value="{{ genIsInput }}" hint-placeholder-val="{{ true }}">
+            <h1 style="font-family: Literata, serif; font-size: 26px; font-weight: 600; margin: 0 0 8px;">Szenen generieren</h1>
+            <p style="margin: 0 0 28px; color: #a2968a; font-size: 14px; line-height: 1.6;">Englisches Quellmaterial rein, deutsche Szenen-Drafts raus. Immer status draft, immer mit Review — geschrieben wird erst beim Übernehmen.</p>
+            <div style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #7a6f61; font-weight: 600; margin-bottom: 8px;">Ziel-Kapitel</div>
+            <div style="display: flex; gap: 8px; margin-bottom: 22px;">
+              <sc-for list="{{ genChapters }}" as="c" hint-placeholder-count="2">
+                <button onClick="{{ c.onPick }}" style="background: {{ c.bg }}; color: {{ c.color }}; border: 1px solid {{ c.border }}; border-radius: 999px; padding: 5px 14px; font-size: 12.5px; font-family: inherit; cursor: pointer;">{{ c.label }}</button>
+              </sc-for>
+            </div>
+            <sc-if value="{{ genIsNewChapter }}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; flex-direction: column; gap: 7px; margin: -10px 0 22px;">
+                <input value="{{ genNewTitle }}" onChange="{{ onGenNewTitle }}" placeholder="Kapiteltitel, z. B. Die Schmugglerbucht" style="width: 320px; background: #23201b; border: 1px solid #38322a; border-radius: 8px; color: #e7dfd2; font-family: inherit; font-size: 13.5px; padding: 10px 13px; outline: none;">
+                <div style="font-family: ui-monospace, monospace; font-size: 11.5px; color: #5d554a;">wird angelegt als: {{ genNewChapterPath }}</div>
+              </div>
+            </sc-if>
+            <div style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #7a6f61; font-weight: 600; margin-bottom: 8px;">Quelltext (EN)</div>
+            <textarea value="{{ genText }}" onChange="{{ onGenTextChange }}" rows="{{ 12 }}" placeholder="Abenteuertext einfügen — Absätze, Boxed Text, Statblock-Verweise …" style="width: 100%; background: #23201b; border: 1px solid #38322a; border-radius: 8px; color: #d6ccbc; font-family: inherit; font-size: 13.5px; line-height: 1.6; padding: 14px 16px; resize: vertical; outline: none;"></textarea>
+            <div style="display: flex; align-items: baseline; gap: 6px; margin: 10px 0 26px; font-size: 12px; color: #5d554a; line-height: 1.5;">
+              <span>Mitgeschickter Kontext:</span>
+              <span style="color: #7a6f61;">{{ genContext }}</span>
+            </div>
+            <button onClick="{{ genGo }}" style="display: flex; align-items: center; gap: 8px; background: #c8a35a; color: #241d10; border: none; border-radius: 6px; padding: 10px 18px; font-size: 13.5px; font-weight: 600; font-family: inherit; cursor: pointer;" style-hover="background: #dcb96e;">
+              {{ icoSparkDark }}
+              Entwürfe generieren
+            </button>
+          </sc-if>
+
+          <sc-if value="{{ genIsWorking }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 120px 0; text-align: center;">
+              <div style="width: 30px; height: 30px; border: 3px solid #38322a; border-top-color: #c8a35a; border-radius: 50%; animation: gen-spin .9s linear infinite;"></div>
+              <div style="font-size: 14.5px; color: #e7dfd2;">Drafts werden generiert …</div>
+              <div style="font-size: 13px; color: #7a6f61; max-width: 380px; line-height: 1.6;">Der Server validiert die Antwort mechanisch; Formfehler gehen automatisch als Korrektur ans Modell zurück (max. 2 Versuche).</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ genIsReview }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px;">
+              <h1 style="font-family: Literata, serif; font-size: 26px; font-weight: 600; margin: 0;">Review</h1>
+              <span style="font-size: 13px; color: #7a6f61;">1 Szene · 1 Stub · noch nichts geschrieben</span>
+            </div>
+            <p style="margin: 0 0 22px; color: #a2968a; font-size: 14px; line-height: 1.6;">Prüfen, anpassen, Stubs einzeln entscheiden. Erst „Übernehmen" schreibt auf die Platte — als Drafts, nie überschreibend.</p>
+            <sc-for list="{{ genWarnings }}" as="w" hint-placeholder-count="2">
+              <div style="display: flex; gap: 10px; align-items: flex-start; background: rgba(200,163,90,.06); border: 1px solid rgba(200,163,90,.3); border-radius: 6px; padding: 10px 13px; margin-bottom: 8px;">
+                <span style="flex: none; margin-top: 1px;">{{ icoNoteSm }}</span>
+                <div style="font-size: 13px; color: #c9bfae; line-height: 1.55;">{{ w }}</div>
+              </div>
+            </sc-for>
+            <div style="border: 1px solid #2e2925; border-radius: 10px; padding: 20px 24px; margin: 16px 0 18px; background: #201d18;">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+                <h2 style="font-family: Literata, serif; font-size: 20px; font-weight: 600; margin: 0; flex: 1;">Von den Schmugglern erwischt</h2>
+                <span style="font-size: 11.5px; color: #8a7f70; border: 1px solid #38322a; border-radius: 999px; padding: 1px 9px;">draft</span>
+                <button onClick="{{ toggleGenEdit }}" style="display: flex; align-items: center; gap: 6px; background: none; border: 1px solid #38322a; color: #a2968a; border-radius: 6px; padding: 5px 10px; font-size: 12px; font-family: inherit; cursor: pointer;" style-hover="color: #e7dfd2; border-color: #4a4237;">{{ icoPenSm }} {{ genEditLabel }}</button>
+              </div>
+              <div style="font-family: ui-monospace, monospace; font-size: 11.5px; color: #5d554a; margin-bottom: 14px;">{{ genScenePath }}</div>
+              <div style="display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid #2e2925; margin-bottom: 8px;">
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: #c9bfae; background: #23201b; border: 1px solid #2e2925; border-radius: 999px; padding: 4px 12px;">{{ icoBranchSm }} Kontingenz</span>
+                <span style="font-size: 12.5px; color: #a2968a; background: #23201b; border: 1px solid #2e2925; border-radius: 999px; padding: 4px 12px;">Bucht</span>
+                <span style="font-size: 12.5px; color: #7a6f61; background: #23201b; border: 1px solid #2e2925; border-radius: 999px; padding: 4px 12px;">#social</span>
+                <span style="font-size: 12.5px; color: #7a6f61; background: #23201b; border: 1px solid #2e2925; border-radius: 999px; padding: 4px 12px;">#escape</span>
+              </div>
+              <sc-if value="{{ genEditing }}" hint-placeholder-val="{{ false }}">
+                <textarea value="{{ genRaw }}" onChange="{{ onGenRawChange }}" rows="{{ 22 }}" style="width: 100%; background: #1d1a16; border: 1px solid #38322a; border-radius: 8px; color: #d6ccbc; font-family: ui-monospace, monospace; font-size: 12.5px; line-height: 1.6; padding: 14px 16px; resize: vertical; outline: none; margin-top: 8px;"></textarea>
+              </sc-if>
+              <sc-if value="{{ genNotEditing }}" hint-placeholder-val="{{ true }}">
+                <sc-for list="{{ genBlocks }}" as="b" hint-placeholder-count="5">
+                  <div style="margin-left: {{ b.ml }}px;">
+                    <sc-if value="{{ b.isH2 }}" hint-placeholder-val="{{ false }}">
+                      <h2 style="font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #7a6f61; font-weight: 600; margin: 22px 0 12px;">{{ b.text }}</h2>
+                    </sc-if>
+                    <sc-if value="{{ b.isP }}" hint-placeholder-val="{{ false }}">
+                      <p style="margin: 0 0 14px; line-height: 1.65; color: #d6ccbc; font-size: 14.5px;">{{ b.text }}</p>
+                    </sc-if>
+                    <sc-if value="{{ b.isUl }}" hint-placeholder-val="{{ false }}">
+                      <div style="display: flex; flex-direction: column; gap: 7px; margin: 0 0 14px;">
+                        <sc-for list="{{ b.items }}" as="it" hint-placeholder-count="3">
+                          <div style="display: flex; gap: 10px; line-height: 1.55; color: #d6ccbc; font-size: 14.5px;">
+                            <span style="color: #c8a35a; flex: none;">–</span>
+                            <span><strong style="color: #e7dfd2;">{{ it.b }}</strong>{{ it.t }}</span>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ b.isIf }}" hint-placeholder-val="{{ false }}">
+                      <button onClick="{{ b.onToggle }}" style="display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: none; border-top: 1px solid #2e2925; color: #e7dfd2; font-family: inherit; font-size: 14px; padding: 14px 0 12px; margin-top: 10px; cursor: pointer;" style-hover="color: #dcb96e;">
+                        {{ b.chev }}
+                        <span style="color: #c8a35a; font-weight: 600;">Falls:</span>
+                        <span style="font-style: italic;">{{ b.cond }}</span>
+                      </button>
+                    </sc-if>
+                    <sc-if value="{{ b.isReadaloud }}" hint-placeholder-val="{{ false }}">
+                      <div onMouseEnter="{{ b.onEnter }}" onMouseLeave="{{ b.onLeave }}" style="position: relative; background: #29241d; border-left: 3px solid #c8a35a; border-radius: 4px; padding: 20px 24px; margin: 6px 0 18px;">
+                        <div style="font-family: Literata, serif; font-size: {{ raSize }}px; line-height: 1.75; color: #ece2cf;">{{ b.text }}</div>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ b.isCallout }}" hint-placeholder-val="{{ false }}">
+                      <div style="display: flex; gap: 12px; align-items: flex-start; background: {{ b.bg }}; border: 1px solid {{ b.border }}; border-radius: 6px; padding: 12px 14px; margin: 6px 0 14px;">
+                        <span style="flex: none; margin-top: 1px;">{{ b.icon }}</span>
+                        <div style="min-width: 0;">
+                          <div style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: {{ b.labelColor }}; margin-bottom: 4px;">{{ b.label }}</div>
+                          <div style="line-height: 1.6; font-size: 14px; color: {{ b.textColor }};">{{ b.text }}</div>
+                        </div>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </sc-if>
+            </div>
+            <div style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #7a6f61; font-weight: 600; margin-bottom: 10px;">Stubs — einzeln entscheiden</div>
+            <sc-for list="{{ genStubs }}" as="s" hint-placeholder-count="1">
+              <div style="display: flex; align-items: center; gap: 12px; background: #23201b; border: 1px solid #2e2925; border-radius: 8px; padding: 13px 16px; margin-bottom: 18px; opacity: {{ s.opacity }};">
+                {{ icoUserSm }}
+                <div style="flex: 1; min-width: 0;">
+                  <div style="display: flex; align-items: baseline; gap: 8px;">
+                    <span style="font-size: 14px; color: #e7dfd2;">{{ s.name }}</span>
+                    <span style="font-family: ui-monospace, monospace; font-size: 11px; color: #5d554a;">{{ s.path }}</span>
+                  </div>
+                  <div style="font-size: 12.5px; color: #7a6f61; font-style: italic; margin-top: 2px;">{{ s.reason }}</div>
+                </div>
+                <sc-if value="{{ s.pending }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ s.onAccept }}" style="background: rgba(200,163,90,.12); border: 1px solid rgba(200,163,90,.4); color: #dcb96e; border-radius: 6px; padding: 6px 12px; font-size: 12.5px; font-family: inherit; cursor: pointer;" style-hover="background: rgba(200,163,90,.2);">Annehmen</button>
+                  <button onClick="{{ s.onReject }}" style="background: none; border: 1px solid #38322a; color: #a2968a; border-radius: 6px; padding: 6px 12px; font-size: 12.5px; font-family: inherit; cursor: pointer;" style-hover="color: #e7dfd2; border-color: #4a4237;">Ablehnen</button>
+                </sc-if>
+                <sc-if value="{{ s.done }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-size: 12.5px; color: {{ s.doneColor }};">{{ s.doneLabel }}</span>
+                </sc-if>
+              </div>
+            </sc-for>
+            <div style="display: flex; align-items: center; gap: 10px; padding-top: 18px; border-top: 1px solid #2e2925;">
+              <button onClick="{{ genApply }}" style="background: #c8a35a; color: #241d10; border: none; border-radius: 6px; padding: 10px 18px; font-size: 13.5px; font-weight: 600; font-family: inherit; cursor: pointer;" style-hover="background: #dcb96e;">Übernehmen ({{ genApplySummary }})</button>
+              <button onClick="{{ genDiscard }}" style="background: none; border: 1px solid #38322a; color: #a2968a; border-radius: 6px; padding: 9px 14px; font-size: 13px; font-family: inherit; cursor: pointer;" style-hover="color: #e7dfd2; border-color: #4a4237;">Verwerfen</button>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ genIsDone }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 80px 0;">
+              <div style="display: flex; align-items: center; gap: 10px; color: #93a888;">
+                {{ icoCheckSm }}
+                <span style="font-size: 15px; color: #e7dfd2;">Geschrieben — alles als draft</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                <sc-for list="{{ genWritten }}" as="f" hint-placeholder-count="2">
+                  <div style="font-family: ui-monospace, monospace; font-size: 12.5px; color: #a2968a;">{{ f }}</div>
+                </sc-for>
+              </div>
+              <div style="font-size: 13px; color: #7a6f61; line-height: 1.6; max-width: 420px;">Die Szene erscheint im Pool mit Status „Entwurf". Bestehende Dateien werden nie überschrieben — bei Konflikt schreibt der Server nichts (409).</div>
+              <button onClick="{{ goPool }}" style="margin-top: 8px; background: #c8a35a; color: #241d10; border: none; border-radius: 6px; padding: 9px 16px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer;" style-hover="background: #dcb96e;">Zum Pool</button>
+            </div>
+          </sc-if>
+
+        </div>
+      </div>
+    </div>
+  </sc-if>
   </div>
 
   <!-- ============ CMD-K ============ -->
@@ -507,7 +679,10 @@ class Component extends DCLogic {
     campaignId: 'beispiel', campMenu: false, chOpen: { '01-salzhafen': true },
     liveSceneId: 'lighthouse-arrival', playedIds: {}, log: [], note: '',
     startedAt: null, now: Date.now(), cmdk: false, q: '',
-    review: {}, adopted: [], hoverKey: null, copiedKey: null
+    review: {}, adopted: [], hoverKey: null, copiedKey: null,
+    genStep: 'input', genChapter: '01-salzhafen', genEditing: false, genStubs: {}, genNewTitle: '',
+    genText: "Caught by the smugglers: If the characters are spotted while scouting the cove, they are disarmed, their hands are bound, and they are brought before Fenn, the leader of the smugglers. One by one, he asks who sent them and how much they know. If the characters admit they work for the harbormaster, Fenn has them locked in the old smokehouse — he wants to speak to his employer before deciding what to do with them. The characters have until dawn to escape. They could break through the rotten boards of the back wall, charm or bribe the bored guard, or come up with a clever use of a cantrip. If all else fails, the captive lighthouse keeper in the next chamber knows about a loose floorboard. If the characters lie to Fenn — claiming to be shipwrecked sailors or lost travelers — compare their Charisma (Deception) checks against Fenn's Wisdom (Insight) check to determine whether he believes them. You can grant advantage or disadvantage based on how plausible the lies are. Compare rolls for each character individually. Anyone Fenn believes is escorted back to the village and watched. Anyone he doesn't believe is locked in the smokehouse as above.",
+    genRaw: "---\nid: smuggler-captured\ntitle: Von den Schmugglern erwischt\ntype: contingency\ntrigger: Charaktere werden beim Auskundschaften der Bucht entdeckt\nchapter: 01-salzhafen\nlocation: bucht\nnpcs: [fenn]\nhandouts: []\ntags: [social, escape]\nstatus: draft\n---\n\n## Flow\n\nEntwaffnet und gefesselt werden die Charaktere vor Fenn gebracht, den\nAnführer der Schmuggler. Er befragt jeden einzeln: Wer schickt euch?\nWie viel wisst ihr?\n\n## If: sie geben zu, für Jorna zu arbeiten\n\nFenn lässt sie in die alte Räucherkammer sperren — er will erst mit\nseinem Auftraggeber sprechen, bevor er entscheidet. Die Gruppe hat bis\nzum Morgengrauen Zeit zu entkommen.\n\n- die morschen Bretter der Rückwand aufbrechen\n- den gelangweilten Wachposten becircen oder bestechen\n- clevere Verwendung für einen Cantrip\n\n> [!note] Notfall-Ventil: Der gefangene Leuchtturmwärter in der\n> Nachbarkammer kennt ein loses Bodenbrett.\n\n## If: sie lügen (Schiffbrüchige, verirrte Reisende ...)\n\n> [!check] Charisma (Deception) jedes Charakters vs. Fenns\n> Wisdom (Insight) +2. Advantage/Disadvantage nach Plausibilität,\n> für jeden Charakter einzeln.\n\n- **Geglaubt** → sie werden zum Dorf eskortiert und beobachtet\n- **Nicht geglaubt** → Räucherkammer wie oben\n\n> [!outcome] Fenn kennt nach dieser Szene die Gesichter der Gruppe —\n> egal wie sie ausgeht."
   };
 
   componentDidMount() {
@@ -603,6 +778,7 @@ class Component extends DCLogic {
       case 'thread': return svg([e('path', { key: 1, d: 'M4 4v7a4 4 0 0 0 4 4h11' }), e('polyline', { key: 2, points: '15 10 20 15 15 20' })]);
       case 'gem': return svg([e('path', { key: 1, d: 'M6 3h12l4 6-10 12L2 9z' }), e('path', { key: 2, d: 'M2 9h20' })]);
       case 'pen': return svg([e('path', { key: 1, d: 'M12 20h9' }), e('path', { key: 2, d: 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z' })]);
+      case 'spark': return svg([e('path', { key: 1, d: 'M12 3l2 4.5L18.5 9.5l-4.5 2L12 16l-2-4.5L5.5 9.5l4.5-2z', fill: c, stroke: 'none' }), e('path', { key: 2, d: 'M18.5 15.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z', fill: c, stroke: 'none' })]);
     }
     return null;
   }
@@ -777,6 +953,14 @@ class Component extends DCLogic {
     ];
     const results = (q ? searchable.filter(r => r.hay.includes(q)) : searchable).slice(0, 8).map(r => ({ ...r, onPick: r.go }));
 
+    // Generator: Ziel-Kapitel / neues Kapitel
+    const slug = (st.genNewTitle || 'neues kapitel').toLowerCase()
+      .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const newChapterId = String(camp.chapters.length + 1).padStart(2, '0') + '-' + slug;
+    const genChapterId = st.genChapter === '_new' ? newChapterId : st.genChapter;
+    const genIsNew = st.genChapter === '_new';
+
     return {
       isPool: st.view === 'pool', isScene: st.view === 'scene', isLive: st.view === 'live', isReview: st.view === 'review',
       raSize,
@@ -826,6 +1010,49 @@ class Component extends DCLogic {
         { text: 'Wer bezahlt die Schmuggler?', isNew: false },
         ...st.adopted.map(t => ({ text: t, isNew: true }))
       ],
+      // generator
+      isGenerator: st.view === 'generator',
+      openGenerator: () => this.setState(s => ({ view: 'generator',
+        ...(s.genStep === 'done' ? { genStep: 'input', genStubs: {}, genEditing: false } : {}) })),
+      icoSpark: this.ic('spark', 15, '#c8a35a'), icoSparkDark: this.ic('spark', 15, '#241d10'),
+      icoNoteSm: this.ic('pen', 15, '#c9bfae'), icoPenSm: this.ic('pen', 13, 'currentColor'),
+      icoBranchSm: this.ic('branch', 13, '#c9bfae'), icoUserSm: this.ic('user', 17, '#7a6f61'),
+      genIsInput: st.genStep === 'input', genIsWorking: st.genStep === 'working',
+      genIsReview: st.genStep === 'review', genIsDone: st.genStep === 'done',
+      genText: st.genText, onGenTextChange: e => this.setState({ genText: e.target.value }),
+      genChapters: [...camp.chapters.map(ch => ({ id: ch.id, label: ch.title })), { id: '_new', label: '+ Neues Kapitel' }].map(ch => ({ label: ch.label,
+        onPick: () => this.setState({ genChapter: ch.id }),
+        bg: st.genChapter === ch.id ? 'rgba(200,163,90,.14)' : 'transparent',
+        color: st.genChapter === ch.id ? '#dcb96e' : '#a2968a',
+        border: st.genChapter === ch.id ? 'rgba(200,163,90,.45)' : '#38322a' })),
+      genIsNewChapter: st.genChapter === '_new',
+      genNewTitle: st.genNewTitle,
+      onGenNewTitle: e => this.setState({ genNewTitle: e.target.value }),
+      genNewChapterPath: newChapterId + '/_chapter.md',
+      genScenePath: genChapterId + '/hafen/smuggler-captured.md',
+      genContext: 'npcs: fenn, jorna · locations: leuchtturm, bucht · glossary.md (4 Einträge) · Few-Shot-Zieldatei',
+      genGo: () => { this.setState({ genStep: 'working' }); setTimeout(() => this.setState({ genStep: 'review' }), 1600); },
+      genWarnings: [
+        'Der Quelltext nennt keinen DC für die morschen Bretter der Rückwand — beim Review ergänzen.',
+        '„lighthouse keeper" existiert nicht als NPC — liegt als Stub bei.'
+      ],
+      genBlocks: this.prepBlocks({ ...byId['smuggler-captured'], id: 'genprev' }),
+      genEditing: st.genEditing, genNotEditing: !st.genEditing,
+      genEditLabel: st.genEditing ? 'Vorschau' : 'Bearbeiten',
+      toggleGenEdit: () => this.setState(s => ({ genEditing: !s.genEditing })),
+      genRaw: st.genRaw, onGenRawChange: e => this.setState({ genRaw: e.target.value }),
+      genStubs: [{ id: 'lighthouse-keeper', name: 'Leuchtturmwärter', path: 'npcs/lighthouse-keeper.md', reason: 'im Quelltext erwähnt, existiert noch nicht' }].map(sb => {
+        const stt = st.genStubs[sb.id];
+        return { ...sb, pending: !stt, done: !!stt, opacity: stt === 'rejected' ? 0.55 : 1,
+          doneLabel: stt === 'accepted' ? 'Wird angelegt' : 'Abgelehnt',
+          doneColor: stt === 'accepted' ? '#93a888' : '#7a6f61',
+          onAccept: () => this.setState(s => ({ genStubs: { ...s.genStubs, [sb.id]: 'accepted' } })),
+          onReject: () => this.setState(s => ({ genStubs: { ...s.genStubs, [sb.id]: 'rejected' } })) };
+      }),
+      genApplySummary: (genIsNew ? '1 Kapitel · ' : '') + '1 Szene' + (st.genStubs['lighthouse-keeper'] === 'accepted' ? ' · 1 NPC-Stub' : ''),
+      genApply: () => this.setState({ genStep: 'done' }),
+      genDiscard: () => this.setState({ genStep: 'input', genStubs: {}, genEditing: false }),
+      genWritten: [...(genIsNew ? [genChapterId + '/_chapter.md'] : []), genChapterId + '/hafen/smuggler-captured.md', ...(st.genStubs['lighthouse-keeper'] === 'accepted' ? ['npcs/lighthouse-keeper.md'] : [])],
       // cmdk
       cmdkOpen: st.cmdk, q: st.q, onQChange: e => this.setState({ q: e.target.value }),
       results, resultsEmpty: results.length === 0

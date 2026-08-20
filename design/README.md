@@ -26,3 +26,15 @@ eingerückt, standardmäßig GEÖFFNET.
 
 - Keine Szenen-`id` in der Topbar (Prototyp zeigt sie rechts) — ids
   erscheinen nirgends in der UI, auch nicht optional (showIds entfällt).
+
+## Update 2026-08-20: Generator-Ansicht
+
+`Grimoire.dc.html` enthält jetzt die GENERATOR-Sektion (vier Zustände:
+Eingabe → Arbeiten → Review → Geschrieben) plus Topbar-Einstieg
+(„Generator"-Button im Pool, Breadcrumb). Kernpunkte: Ziel-Kapitel als
+Chips inkl. „Neues Kapitel"-Flow (Titel-Input, Pfad-Vorschau),
+Quelltext-Textarea mit Kontext-Hinweiszeile, Spinner mit
+Korrektur-Turn-Erklärtext, Review mit Warnungs-Callouts, Szene-Karte
+(gerenderter Body ODER Roh-Markdown-Edit umschaltbar), Stub-Zeilen
+einzeln annehmen/ablehnen, „Übernehmen (n)" + Verwerfen,
+Erfolgs-Zustand mit geschriebenen Pfaden.
