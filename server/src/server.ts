@@ -33,19 +33,28 @@
 //                                              (issue #19; writes NOTHING). newChapter
 //                                              allows a chapter directory that does not
 //                                              exist yet. 409 { jobId } while one runs.
+//   [x] POST /api/:campaign/generate/npc       { sourceText, id? } -> 202 { jobId } —
+//                                              one NPC file draft from source material
+//                                              (issue #21), same job model and same
+//                                              pipeline mechanics as the scene run;
+//                                              409 { jobId } while ANY generator job
+//                                              runs, 409 { path } when the pinned id's
+//                                              file exists. Writes NOTHING.
 //   [x] GET  /api/:campaign/generate/job       GenerateJob (running/done/failed incl.
-//                                              result, error body and draftEdits), 404
-//                                              when there is none
+//                                              kind, result/npcResult, error body and
+//                                              draftEdits), 404 when there is none
 //   [x] DELETE /api/:campaign/generate/job     discard the job ("Verwerfen")
 //   [x] PUT  /api/:campaign/generate/job/drafts { path, markdown } -> keep one review
 //                                              edit in the job (400 unknown path)
-//   [x] POST /api/:campaign/generate/apply     { scenes, stubs, chapter?, chapterTitle?,
-//                                              jobId? } -> { written } (drafts on disk;
-//                                              409 { conflicts } when any target exists —
-//                                              nothing partially written). chapter +
-//                                              chapterTitle create <chapter>/_chapter.md
-//                                              when missing, in the same batch; jobId
-//                                              discards that job after a successful write.
+//   [x] POST /api/:campaign/generate/apply     { scenes?, stubs?, npc?, chapter?,
+//                                              chapterTitle?, jobId? } -> { written }
+//                                              (drafts on disk; 409 { conflicts } when any
+//                                              target exists — nothing partially written).
+//                                              chapter + chapterTitle create
+//                                              <chapter>/_chapter.md when missing, in the
+//                                              same batch; `npc` is the NPC run's single
+//                                              draft (issue #21); jobId discards that job
+//                                              after a successful write.
 //   [x] POST /api/:campaign/review/seen        { path, line } -> add the line's short hash
 //                                              to the session's `reviewed` list (idempotent)
 //   [x] POST /api/:campaign/review/thread      { chapter, text } -> append `- [ ] text` under

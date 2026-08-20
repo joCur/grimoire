@@ -1,5 +1,5 @@
 // API routes (read: issue #2, write: issue #5, search/version: issues #7/#8,
-// generator: issue #6, its background jobs: issue #19).
+// generator: issue #6, its background jobs: issue #19, the NPC run: issue #21).
 // Mounted under /api in server.ts. Response shapes are the contracts in
 // @grimoire/shared (types.ts).
 
@@ -20,7 +20,12 @@ import {
   patchFrontmatter,
   startSession,
 } from "../campaign-write";
-import { applyGenerated, assertGenerateTarget, obtainProvider } from "../generator";
+import {
+  applyGenerated,
+  assertGenerateTarget,
+  assertNpcGenerateTarget,
+  obtainProvider,
+} from "../generator";
 import {
   deleteJob,
   deleteJobIfCurrent,
@@ -272,10 +277,47 @@ api.post("/:campaign/generate", async (c) => {
   await assertGenerateTarget(campaign, chapter, newChapter === true); // 400/404
   const provider = obtainProvider(); // 503 when nothing is configured
   const job = startJob({
+    kind: "scene",
     campaign,
     chapter,
     sourceText,
     newChapter: newChapter === true,
+    provider,
+  });
+  return c.json({ jobId: job.id }, 202);
+});
+
+// POST /api/:campaign/generate/npc { sourceText, id? } -> 202 { jobId }
+// One NPC file from source material (issue #21) — the same background job
+// model as the scene run: ONE generator job per campaign, so a start while
+// ANY run (scene or npc) is going answers 409 { jobId }. Writes NOTHING.
+//
+// Synchronous, before a job exists: 400 for a malformed body or an id that is
+// not a kebab slug, 404 for an unknown campaign, 409 { path } when the pinned
+// id's file already exists (never overwrite — enriching an existing NPC file
+// is an explicit non-goal), 503 without a configured provider.
+// `id` is optional: without it the model picks the id, and a collision with
+// an existing npc becomes a correction turn.
+api.post("/:campaign/generate/npc", async (c) => {
+  const body = await jsonBody(c, ["sourceText", "id"]);
+  const campaign = c.req.param("campaign");
+  const sourceText = body.sourceText;
+  if (typeof sourceText !== "string" || sourceText.trim() === "") {
+    throw new ApiError(400, "sourceText must be a non-empty string");
+  }
+  let npcId: string | undefined;
+  if (body.id !== undefined && body.id !== null) {
+    if (typeof body.id !== "string") throw new ApiError(400, "id must be a string");
+    npcId = body.id.trim();
+    if (npcId === "") npcId = undefined; // an empty field means "model chooses"
+  }
+  await assertNpcGenerateTarget(campaign, npcId); // 400/404/409
+  const provider = obtainProvider(); // 503 when nothing is configured
+  const job = startJob({
+    kind: "npc",
+    campaign,
+    sourceText,
+    ...(npcId === undefined ? {} : { npcId }),
     provider,
   });
   return c.json({ jobId: job.id }, 202);
@@ -319,7 +361,7 @@ api.put("/:campaign/generate/job/drafts", async (c) => {
 });
 
 // POST /api/:campaign/generate/apply
-// { scenes, stubs, chapter?, chapterTitle?, jobId? } -> { written }
+// { scenes?, stubs?, npc?, chapter?, chapterTitle?, jobId? } -> { written }
 // Writes the reviewed drafts — synchronous on purpose: this is a short file
 // write, and the DM waits for its result. Re-validates server-side
 // (frontmatter parses, status draft, safe paths); 409 { conflicts } when any
@@ -331,20 +373,17 @@ api.put("/:campaign/generate/job/drafts", async (c) => {
 // SUCCESSFUL apply discards that job — the drafts are on disk, there is
 // nothing left to restore. A stale id (a newer run started meanwhile) is
 // ignored rather than dropping the wrong job.
+// `npc` is the NPC generator's one draft (issue #21) — deliberately the SAME
+// endpoint: it needs exactly the same all-or-nothing write, the same 409 and
+// the same job cleanup, and re-validates server-side just like a scene.
 api.post("/:campaign/generate/apply", async (c) => {
-  const body = await jsonBody(c, ["scenes", "stubs", "chapter", "chapterTitle", "jobId"]);
+  const body = await jsonBody(c, ["scenes", "stubs", "npc", "chapter", "chapterTitle", "jobId"]);
   const campaign = c.req.param("campaign");
   const jobId = body.jobId;
   if (jobId !== undefined && typeof jobId !== "string") {
     throw new ApiError(400, "jobId must be a string");
   }
-  const written = await applyGenerated(
-    campaign,
-    body.scenes,
-    body.stubs,
-    body.chapter,
-    body.chapterTitle,
-  );
+  const written = await applyGenerated(campaign, body);
   if (typeof jobId === "string") deleteJobIfCurrent(campaign, jobId);
   return c.json(written);
 });

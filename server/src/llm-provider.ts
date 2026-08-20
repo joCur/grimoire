@@ -17,13 +17,16 @@
 // usage, normalized so the generator can sum it over a whole run.
 
 export interface GenerateRequest {
-  systemPrompt: string; // generator/system-prompt.md
-  fewShotTarget: string; // generator/example-output.md
+  systemPrompt: string; // generator/system-prompt.md (npc run: npc-system-prompt.md)
+  fewShotTarget: string; // generator/example-output.md (npc run: npc-example-output.md)
   glossary: string; // <campaign>/glossary.md body ("" when missing)
   context: {
-    chapter: string;
+    /** Target chapter of a scene run; absent for an NPC run (issue #21). */
+    chapter?: string;
     npcs: Array<{ id: string; name: string }>;
     locations: Array<{ id: string; name: string }>;
+    /** Id the DM pinned for the generated file (NPC run) — absent: free choice. */
+    targetId?: string;
   };
   sourceText: string; // English source text
 }
@@ -99,9 +102,14 @@ function buildPrompt(req: GenerateRequest): string {
     "## Glossar",
     req.glossary,
     "## Kontext",
-    `chapter: ${req.context.chapter}`,
-    `npcs: ${npcList || "(keine)"}`,
-    `locations: ${locList || "(keine)"}`,
+    // Only the lines that HAVE a value: an NPC run has no target chapter,
+    // and a pinned id only exists when the DM typed one (issue #21).
+    [
+      ...(req.context.chapter === undefined ? [] : [`chapter: ${req.context.chapter}`]),
+      `npcs: ${npcList || "(keine)"}`,
+      `locations: ${locList || "(keine)"}`,
+      ...(req.context.targetId === undefined ? [] : [`vorgegebene id: ${req.context.targetId}`]),
+    ].join("\n"),
     "## Referenz-Zieldatei (Few-Shot)",
     "```markdown",
     req.fewShotTarget,

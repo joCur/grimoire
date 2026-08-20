@@ -13,9 +13,12 @@ import {
   countLabel,
   generatePhase,
   jobErrorBody,
+  jobMode,
   markdownBody,
   newChapterId,
   nextChapterPrefix,
+  npcIdError,
+  restoredMode,
   slugify,
   stringField,
   stringList,
@@ -320,5 +323,81 @@ describe("jobErrorBody", () => {
         draftEdits: {},
       }),
     ).toBeUndefined();
+  });
+});
+
+// --- generator mode (issue #21) ---------------------------------------------
+
+describe("jobMode", () => {
+  const job = (kind?: string) =>
+    ({
+      id: "j1",
+      campaign: "beispiel",
+      status: "done",
+      startedAt: "2026-08-20T10:00:00.000Z",
+      draftEdits: {},
+      ...(kind === undefined ? {} : { kind }),
+    }) as never;
+
+  test("an npc job is npc mode", () => {
+    expect(jobMode(job("npc"))).toBe("npc");
+  });
+
+  test("everything else is scene mode — also a payload without kind", () => {
+    expect(jobMode(job("scene"))).toBe("scene");
+    expect(jobMode(job())).toBe("scene");
+    expect(jobMode(job("etwas-neues"))).toBe("scene");
+    expect(jobMode(null)).toBe("scene");
+    expect(jobMode(undefined)).toBe("scene");
+  });
+});
+
+describe("restoredMode", () => {
+  const job = (kind: "scene" | "npc") =>
+    ({
+      id: "j1",
+      campaign: "beispiel",
+      kind,
+      status: "running",
+      startedAt: "2026-08-20T10:00:00.000Z",
+      draftEdits: {},
+    }) as never;
+
+  test("a job that exists decides the mode — in both directions", () => {
+    expect(restoredMode("scene", job("npc"))).toBe("npc");
+    expect(restoredMode("npc", job("scene"))).toBe("scene");
+  });
+
+  test("no job leaves the DM's own choice alone", () => {
+    // applying/discarding an npc run must not throw the view back to scenes
+    expect(restoredMode("npc", null)).toBe("npc");
+    expect(restoredMode("npc", undefined)).toBe("npc");
+    expect(restoredMode("scene", null)).toBe("scene");
+  });
+});
+
+describe("npcIdError", () => {
+  test("an empty field is not an error — it means 'the model chooses'", () => {
+    expect(npcIdError("")).toBeUndefined();
+  });
+
+  test("accepts kebab ids", () => {
+    expect(npcIdError("grella")).toBeUndefined();
+    expect(npcIdError("die-graue-witwe")).toBeUndefined();
+    expect(npcIdError("wache-2")).toBeUndefined();
+  });
+
+  test("rejects what the server would reject", () => {
+    expect(npcIdError("Grella")).toContain("Kleinbuchstaben");
+    expect(npcIdError("die graue")).toContain("Leerzeichen");
+    expect(npcIdError("npcs/grella")).toContain("Schrägstriche");
+    expect(npcIdError("grella_2")).toContain("Kleinbuchstaben");
+    expect(npcIdError("-grella")).toContain("Kleinbuchstaben");
+    expect(npcIdError("gräfin")).toContain("Kleinbuchstaben");
+  });
+
+  test("an id whose file exists is named as such — the server would 409", () => {
+    expect(npcIdError("fenn", ["fenn", "jorna"])).toContain("existiert schon");
+    expect(npcIdError("grella", ["fenn", "jorna"])).toBeUndefined();
   });
 });

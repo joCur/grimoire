@@ -10,6 +10,15 @@
 //           accepted/rejected one by one. NOTHING is on disk yet.
 //   done    the paths POST /generate/apply wrote — all as drafts
 //
+// Since issue #21 the route has TWO modes, picked by the quiet chip row above
+// the input form: „Szenen" (scene drafts for a chapter) and „NPC" (one npc
+// file from source material). Both run through the same four states, the same
+// background job (there is one generator job per campaign, whatever its kind)
+// and the same apply endpoint — the NPC mode only asks for less (source text
+// plus an optional id) and reviews exactly one card. The mode is not local
+// trivia: a restored job decides it (job.kind), so a reload during an NPC run
+// comes back in NPC mode.
+//
 // Since issue #19 the run is a background JOB on the server and this route
 // is only its window: on mount it asks GET …/generate/job and restores
 // whatever it finds (running -> working with ~3s polling, done -> review
@@ -28,7 +37,12 @@
 // Stub decisions are deliberately NOT persisted — re-deciding two rows is
 // cheap, and nothing is lost on disk.
 
-import type { CampaignTree, GenerateResult, GeneratedStub } from "@grimoire/shared/types";
+import type {
+  CampaignTree,
+  GenerateResult,
+  GeneratedNpcDraft,
+  GeneratedStub,
+} from "@grimoire/shared/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bookmark,
@@ -46,15 +60,18 @@ import { useNavigate, useParams } from "react-router";
 import {
   ApiError,
   applyDrafts,
+  applyNpcDraft,
   deleteGenerateJob,
   fetchFile,
   fetchTree,
   startGenerateJob,
+  startGenerateNpcJob,
 } from "@/api";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { Button } from "@/components/ui/button";
 import { locationName } from "@/lib/campaign";
-import { fmString, fmStringArray } from "@/lib/frontmatter";
+import { npcStatusLabel } from "@/lib/entity";
+import { fmQuickstats, fmString, fmStringArray } from "@/lib/frontmatter";
 import {
   applySummary,
   chapterIdError,
@@ -62,11 +79,15 @@ import {
   contextHint,
   generatePhase,
   jobErrorBody,
+  jobMode,
   markdownBody,
   newChapterId,
+  npcIdError,
+  restoredMode,
   stringField,
   stringList,
   usageLabel,
+  type GenerateMode,
 } from "@/lib/generate";
 import { generateJobKey, useDraftEditSync, useGenerateJob } from "@/lib/use-generate-job";
 import { cn } from "@/lib/utils";
@@ -115,6 +136,10 @@ export function GenerateRoute() {
   // live nav and the review use as well.
   const defaultChapter = (chapters.find((c) => c.status === "active") ?? chapters[0])?.id;
 
+  // Which run kind the form is for (issue #21). Local — until a job says
+  // otherwise (see the seeding block below).
+  const [mode, setMode] = useState<GenerateMode>("scene");
+
   const [picked, setPicked] = useState<Target>();
   const target: Target =
     picked ?? (defaultChapter === undefined ? { kind: "new" } : { kind: "chapter", id: defaultChapter });
@@ -147,6 +172,14 @@ export function GenerateRoute() {
   // on its own.
   const showIdError = newIdError !== undefined && newIdInput !== "";
 
+  // The NPC mode's own two fields (issue #21): its own source buffer, so
+  // switching modes never eats what the DM pasted, and the optional id.
+  const [npcSource, setNpcSource] = useState("");
+  const [npcId, setNpcId] = useState("");
+  const npcIds = (tree.data?.npcs ?? []).map((npc) => npc.id);
+  const trimmedNpcId = npcId.trim();
+  const npcIdMessage = npcIdError(trimmedNpcId, npcIds);
+
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<Record<string, boolean>>({});
   const [decisions, setDecisions] = useState<Record<string, StubDecision>>({});
@@ -173,24 +206,33 @@ export function GenerateRoute() {
     setEdits(job?.draftEdits ?? {});
     setEditing({});
     setDecisions({});
+    // A restored run decides the mode (issue #21) — its result belongs to its
+    // kind. No job leaves the DM's choice alone.
+    setMode((current) => restoredMode(current, job));
     if (previous === undefined) setWritten(undefined);
     // Gone without us applying or discarding it: the server was restarted.
     setLostJob(jobId === null && previous !== undefined && previous !== null && !droppedRef.current);
     if (jobId === null) droppedRef.current = false;
   }
 
-  const result = job?.status === "done" ? job.result : undefined;
+  // Which result field to read is the job's kind, never the local mode: a
+  // done job of the other kind must not be rendered as this one's.
+  const jobKind = jobMode(job);
+  const result = job?.status === "done" && jobKind === "scene" ? job.result : undefined;
+  const npcResult = job?.status === "done" && jobKind === "npc" ? job.npcResult : undefined;
   const scenes = result?.scenes ?? [];
   const stubs = result?.stubs ?? [];
   const acceptedStubs = stubs.filter((s) => decisions[stubKey(s)] === "accepted");
 
   const start = useMutation({
     mutationFn: () =>
-      startGenerateJob(campaign, {
-        chapter: chapterId as string,
-        sourceText,
-        newChapter: creatingChapter,
-      }),
+      mode === "npc"
+        ? startGenerateNpcJob(campaign, { sourceText: npcSource, id: trimmedNpcId })
+        : startGenerateJob(campaign, {
+            chapter: chapterId as string,
+            sourceText,
+            newChapter: creatingChapter,
+          }),
     // 202 (or an adopted 409 — the api client hands back the running job's
     // id): from here on the job query drives the view.
     onSuccess: () => {
@@ -201,8 +243,17 @@ export function GenerateRoute() {
   });
 
   const apply = useMutation({
-    mutationFn: () =>
-      applyDrafts(campaign, {
+    mutationFn: () => {
+      // The NPC run's one draft goes through the same endpoint (issue #21),
+      // with the review edit applied on top just like a scene draft.
+      if (npcResult !== undefined) {
+        const npc = npcResult.npc;
+        return applyNpcDraft(campaign, {
+          npc: { path: npc.path, markdown: edits[npc.path] ?? npc.markdown },
+          ...(job === null ? {} : { jobId: job.id }),
+        });
+      }
+      return applyDrafts(campaign, {
         scenes: scenes.map((s) => ({ path: s.path, markdown: edits[s.path] ?? s.markdown })),
         stubs: acceptedStubs,
         // The new chapter's _chapter.md is created in the same batch — only
@@ -213,7 +264,8 @@ export function GenerateRoute() {
           : {}),
         // The server drops the job once the drafts are on disk.
         ...(job === null ? {} : { jobId: job.id }),
-      }),
+      });
+    },
     onMutate: () => {
       droppedRef.current = true;
     },
@@ -254,22 +306,24 @@ export function GenerateRoute() {
   // the last raw reply and (when the endpoint reports usage) what the run
   // cost — a truncated reply additionally carries the server's German
   // LLM_MAX_TOKENS message instead of a validation error list (issue #18).
-  const failed = jobErrorBody(job);
+  // Shown only in ITS OWN mode: after switching to the other mode the block
+  // would talk about a run this form cannot repeat.
+  const failed = jobKind === mode ? jobErrorBody(job) : undefined;
   const validationErrors = stringList(failed?.validationErrors);
   const rawReply = stringField(failed?.rawReply);
   const failedUsage = usageLabel(failed?.usage);
   const failedMessage = stringField(failed?.error);
-  const resultUsage = usageLabel(result?.usage);
+  const resultUsage = usageLabel(result?.usage ?? npcResult?.usage);
   const conflicts = apply.error instanceof ApiError && apply.error.status === 409
     ? stringList(apply.error.details.conflicts)
     : [];
 
   const canGenerate =
     campaign !== "" &&
-    chapterId !== undefined &&
-    !titleMissing &&
-    sourceText.trim() !== "" &&
-    !starting;
+    !starting &&
+    (mode === "npc"
+      ? npcSource.trim() !== "" && npcIdMessage === undefined
+      : chapterId !== undefined && !titleMissing && sourceText.trim() !== "");
 
   return (
     <>
@@ -278,129 +332,216 @@ export function GenerateRoute() {
         {phase === "input" && (
           <>
             <h1 className="mb-2 font-serif text-[26px] leading-[1.25] font-semibold text-foreground">
-              Szenen generieren
+              {mode === "npc" ? "NPC generieren" : "Szenen generieren"}
             </h1>
-            <p className="mb-7 text-[14px] leading-[1.6] text-body-secondary">
-              Englisches Quellmaterial rein, deutsche Szenen-Drafts raus. Immer status draft,
-              immer mit Review — geschrieben wird erst beim Übernehmen.
+            <p className="mb-5 text-[14px] leading-[1.6] text-body-secondary">
+              {mode === "npc"
+                ? "Quellmaterial zu einer Figur rein, eine NPC-Datei nach Format raus — Will, Weiß, Beziehungen. Immer mit Review; geschrieben wird erst beim Übernehmen."
+                : "Englisches Quellmaterial rein, deutsche Szenen-Drafts raus. Immer status draft, immer mit Review — geschrieben wird erst beim Übernehmen."}
             </p>
 
-            <div className={cn(OVERLINE, "mb-2")} id="gen-target-label">
-              Ziel-Kapitel
-            </div>
-            <div role="group" aria-labelledby="gen-target-label" className="mb-[22px] flex flex-wrap gap-2">
-              {chapters.map((chapter) => {
-                const on = target.kind === "chapter" && target.id === chapter.id;
-                return (
-                  <button
-                    key={chapter.id}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => setPicked({ kind: "chapter", id: chapter.id })}
-                    className={cn(CHIP, on ? CHIP_ON : CHIP_OFF)}
-                  >
-                    {chapter.title}
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                aria-pressed={target.kind === "new"}
-                onClick={() => setPicked({ kind: "new" })}
-                className={cn(CHIP, target.kind === "new" ? CHIP_ON : CHIP_OFF)}
-              >
-                Neues Kapitel
-              </button>
+            {/* The mode switch (issue #21): two quiet chips, same vocabulary
+                as the chapter chips below. Switching drops a stale error of
+                the other mode's last attempt, nothing else — both modes keep
+                their own source buffer. */}
+            <div role="group" aria-label="Generator-Modus" className="mb-[26px] flex flex-wrap gap-2">
+              {(["scene", "npc"] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={mode === option}
+                  onClick={() => {
+                    setMode(option);
+                    start.reset();
+                    apply.reset();
+                  }}
+                  className={cn(CHIP, mode === option ? CHIP_ON : CHIP_OFF)}
+                >
+                  {option === "npc" ? "NPC" : "Szenen"}
+                </button>
+              ))}
             </div>
 
-            {/* The "Neues Kapitel" flow: display name + the directory name.
-                The id used to be a read-only preview; since issue #22 it is
-                the field that decides where the drafts land — the DM owns
-                it, because renaming a chapter later is expensive (ids are
-                stable references). The title is only the display name and
-                is meaningless for an id that already exists. */}
-            {target.kind === "new" && (
-              <div className="mt-[-10px] mb-[22px] flex flex-col gap-[7px]">
-                <label htmlFor="gen-new-title" className="sr-only">
-                  Kapiteltitel
+            {mode === "npc" && (
+              <>
+                <label htmlFor="gen-npc-source" className={cn(OVERLINE, "mb-2 block")}>
+                  Quelltext
                 </label>
-                <input
-                  id="gen-new-title"
-                  type="text"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  disabled={newIdExists}
-                  placeholder="Kapiteltitel, z. B. Die Schmugglerbucht"
-                  className={cn(
-                    FIELD,
-                    "max-w-[320px] py-2.5",
-                    newIdExists && "opacity-50 cursor-not-allowed",
-                  )}
+                <textarea
+                  id="gen-npc-source"
+                  rows={12}
+                  value={npcSource}
+                  onChange={(e) => setNpcSource(e.target.value)}
+                  placeholder="Bio, Hintergrund, Notizen zum NPC …"
+                  className={cn(FIELD, "resize-y leading-[1.6] text-body")}
                 />
-                {titleMissing && (
-                  <p className="text-[12px] leading-[1.5] text-muted-foreground">
-                    Titel fehlt — er wird der Anzeigename des neuen Kapitels.
-                  </p>
-                )}
 
-                <label htmlFor="gen-new-id" className="mt-2 text-[12px] text-muted-foreground">
-                  Ordnername (Kapitel-id)
+                <label
+                  htmlFor="gen-npc-id"
+                  className="mt-3.5 mb-1.5 block text-[12px] text-muted-foreground"
+                >
+                  id (optional)
                 </label>
                 <input
-                  id="gen-new-id"
+                  id="gen-npc-id"
                   type="text"
-                  value={newIdInput}
-                  // Emptying the field is not a value — it hands the field
-                  // back to the title (issue #22 AK4).
-                  onChange={(e) =>
-                    setManualId(e.target.value === "" ? undefined : e.target.value)
-                  }
+                  value={npcId}
+                  onChange={(e) => setNpcId(e.target.value)}
                   spellCheck={false}
                   autoCapitalize="off"
                   autoCorrect="off"
-                  aria-invalid={showIdError}
-                  aria-describedby="gen-new-id-note"
-                  placeholder="z. B. 03-schmugglerbucht"
+                  aria-invalid={npcIdMessage !== undefined}
+                  aria-describedby="gen-npc-id-note"
+                  placeholder="z. B. grella"
                   className={cn(
                     FIELD,
                     "max-w-[320px] py-2.5 font-mono text-[12.5px]",
-                    showIdError && "border-destructive focus-visible:border-destructive",
+                    npcIdMessage !== undefined && "border-destructive focus-visible:border-destructive",
                   )}
                 />
                 <p
-                  id="gen-new-id-note"
+                  id="gen-npc-id-note"
                   aria-live="polite"
                   className={cn(
-                    "text-[11.5px] leading-[1.5]",
-                    showIdError
+                    "mt-[7px] text-[11.5px] leading-[1.5]",
+                    npcIdMessage !== undefined
                       ? "text-destructive"
-                      : newIdExists || newIdInput === ""
+                      : trimmedNpcId === ""
                         ? "text-muted-foreground"
                         : "font-mono text-faint",
                   )}
                 >
-                  {showIdError
-                    ? newIdError
-                    : newIdExists
-                      ? "Kapitel existiert — Szenen werden dort angelegt"
-                      : newIdInput === ""
-                        ? "wird aus dem Titel vorgeschlagen"
-                        : `wird angelegt als: ${newIdInput}/`}
+                  {npcIdMessage ??
+                    (trimmedNpcId === ""
+                      ? "leer lassen — dann wählt das Modell die id"
+                      : `wird angelegt als: npcs/${trimmedNpcId}.md`)}
                 </p>
-              </div>
+              </>
             )}
 
-            <label htmlFor="gen-source" className={cn(OVERLINE, "mb-2 block")}>
-              Quelltext (EN)
-            </label>
-            <textarea
-              id="gen-source"
-              rows={12}
-              value={sourceText}
-              onChange={(e) => setSourceText(e.target.value)}
-              placeholder="Abenteuertext einfügen — Absätze, Boxed Text, Statblock-Verweise …"
-              className={cn(FIELD, "resize-y leading-[1.6] text-body")}
-            />
+            {mode === "scene" && (
+              <>
+                <div className={cn(OVERLINE, "mb-2")} id="gen-target-label">
+                  Ziel-Kapitel
+                </div>
+                <div role="group" aria-labelledby="gen-target-label" className="mb-[22px] flex flex-wrap gap-2">
+                  {chapters.map((chapter) => {
+                    const on = target.kind === "chapter" && target.id === chapter.id;
+                    return (
+                      <button
+                        key={chapter.id}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setPicked({ kind: "chapter", id: chapter.id })}
+                        className={cn(CHIP, on ? CHIP_ON : CHIP_OFF)}
+                      >
+                        {chapter.title}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    aria-pressed={target.kind === "new"}
+                    onClick={() => setPicked({ kind: "new" })}
+                    className={cn(CHIP, target.kind === "new" ? CHIP_ON : CHIP_OFF)}
+                  >
+                    Neues Kapitel
+                  </button>
+                </div>
+
+                {/* The "Neues Kapitel" flow: display name + the directory name.
+                    The id used to be a read-only preview; since issue #22 it is
+                    the field that decides where the drafts land — the DM owns
+                    it, because renaming a chapter later is expensive (ids are
+                    stable references). The title is only the display name and
+                    is meaningless for an id that already exists. */}
+                {target.kind === "new" && (
+                  <div className="mt-[-10px] mb-[22px] flex flex-col gap-[7px]">
+                    <label htmlFor="gen-new-title" className="sr-only">
+                      Kapiteltitel
+                    </label>
+                    <input
+                      id="gen-new-title"
+                      type="text"
+                      value={newTitle}
+                      onChange={(e) => setNewTitle(e.target.value)}
+                      disabled={newIdExists}
+                      placeholder="Kapiteltitel, z. B. Die Schmugglerbucht"
+                      className={cn(
+                        FIELD,
+                        "max-w-[320px] py-2.5",
+                        newIdExists && "opacity-50 cursor-not-allowed",
+                      )}
+                    />
+                    {titleMissing && (
+                      <p className="text-[12px] leading-[1.5] text-muted-foreground">
+                        Titel fehlt — er wird der Anzeigename des neuen Kapitels.
+                      </p>
+                    )}
+
+                    <label htmlFor="gen-new-id" className="mt-2 text-[12px] text-muted-foreground">
+                      Ordnername (Kapitel-id)
+                    </label>
+                    <input
+                      id="gen-new-id"
+                      type="text"
+                      value={newIdInput}
+                      // Emptying the field is not a value — it hands the field
+                      // back to the title (issue #22 AK4).
+                      onChange={(e) =>
+                        setManualId(e.target.value === "" ? undefined : e.target.value)
+                      }
+                      spellCheck={false}
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      aria-invalid={showIdError}
+                      aria-describedby="gen-new-id-note"
+                      placeholder="z. B. 03-schmugglerbucht"
+                      className={cn(
+                        FIELD,
+                        "max-w-[320px] py-2.5 font-mono text-[12.5px]",
+                        showIdError && "border-destructive focus-visible:border-destructive",
+                      )}
+                    />
+                    <p
+                      id="gen-new-id-note"
+                      aria-live="polite"
+                      className={cn(
+                        "text-[11.5px] leading-[1.5]",
+                        showIdError
+                          ? "text-destructive"
+                          : newIdExists || newIdInput === ""
+                            ? "text-muted-foreground"
+                            : "font-mono text-faint",
+                      )}
+                    >
+                      {showIdError
+                        ? newIdError
+                        : newIdExists
+                          ? "Kapitel existiert — Szenen werden dort angelegt"
+                          : newIdInput === ""
+                            ? "wird aus dem Titel vorgeschlagen"
+                            : `wird angelegt als: ${newIdInput}/`}
+                    </p>
+                  </div>
+                )}
+
+                <label htmlFor="gen-source" className={cn(OVERLINE, "mb-2 block")}>
+                  Quelltext (EN)
+                </label>
+                <textarea
+                  id="gen-source"
+                  rows={12}
+                  value={sourceText}
+                  onChange={(e) => setSourceText(e.target.value)}
+                  placeholder="Abenteuertext einfügen — Absätze, Boxed Text, Statblock-Verweise …"
+                  className={cn(FIELD, "resize-y leading-[1.6] text-body")}
+                />
+              </>
+            )}
+
+            {/* Both modes send the same context along (npc/location names +
+                the glossary, generator/README.md step 1). */}
             <p className="mt-2.5 mb-[26px] flex flex-wrap items-baseline gap-1.5 text-[12px] leading-[1.5] text-faint">
               <span>Mitgeschickter Kontext:</span>
               <span className="text-muted-foreground">
@@ -422,12 +563,14 @@ export function GenerateRoute() {
               className="h-auto gap-2 px-[18px] py-2.5 text-[13.5px] font-semibold [&_svg]:size-[15px]"
             >
               <Sparkles aria-hidden />
-              Entwürfe generieren
+              {mode === "npc" ? "NPC generieren" : "Entwürfe generieren"}
             </Button>
 
             {tree.isError && (
               <p className="mt-4 text-[13px] text-muted-foreground">
-                Kapitel nicht ladbar — Grimoire-Server auf Port 3000 starten.
+                {mode === "npc"
+                  ? "Kampagne nicht ladbar — Grimoire-Server auf Port 3000 starten."
+                  : "Kapitel nicht ladbar — Grimoire-Server auf Port 3000 starten."}
               </p>
             )}
 
@@ -496,12 +639,16 @@ export function GenerateRoute() {
             )}
 
             {/* Everything else (incl. a plain network failure, where there is
-                no ApiError at all) stays one honest line. */}
+                no ApiError at all) stays one honest line. A 409 here can only
+                be the NPC id collision (a 409 carrying a jobId is adopted by
+                the api client, not thrown). */}
             {start.isError && startError?.status !== 503 && (
               <p aria-live="polite" className="mt-4 text-[13px] text-destructive">
-                {startError?.status === 404
-                  ? "Kapitel nicht gefunden — anderes Ziel wählen."
-                  : "Nicht generiert — Server prüfen."}
+                {startError?.status === 409
+                  ? "NPC-Datei existiert schon — andere id wählen; bestehende Dateien werden nie überschrieben."
+                  : startError?.status === 404
+                    ? "Kapitel nicht gefunden — anderes Ziel wählen."
+                    : "Nicht generiert — Server prüfen."}
               </p>
             )}
           </>
@@ -637,11 +784,110 @@ export function GenerateRoute() {
           </>
         )}
 
+        {/* The NPC review (issue #21): one card, the same warnings/usage/cost
+            lines and the same two actions — there is nothing to decide per
+            item, so no stub rows and no count in the apply button. */}
+        {phase === "review" && npcResult !== undefined && (
+          <>
+            <div className="mb-1.5 flex flex-wrap items-baseline gap-3">
+              <h1 className="font-serif text-[26px] leading-[1.25] font-semibold text-foreground">
+                Review
+              </h1>
+              <span className="text-[13px] text-muted-foreground">
+                1 NPC · noch nichts geschrieben
+              </span>
+            </div>
+            <p
+              className={cn(
+                "text-[14px] leading-[1.6] text-body-secondary",
+                resultUsage === undefined ? "mb-[22px]" : "mb-1.5",
+              )}
+            >
+              Prüfen und anpassen. Erst „Übernehmen“ schreibt die Datei — bestehende NPCs
+              werden nie überschrieben.
+            </p>
+            {resultUsage !== undefined && (
+              <p className="mb-[22px] text-[12px] text-faint">{resultUsage}</p>
+            )}
+
+            {npcResult.warnings.map((warning) => (
+              <div
+                key={warning}
+                className="mb-2 flex items-start gap-2.5 rounded-md border border-[color-mix(in_srgb,var(--primary)_30%,transparent)] bg-[color-mix(in_srgb,var(--primary)_6%,transparent)] px-3.5 py-2.5"
+              >
+                <StickyNote aria-hidden size={15} className="mt-px flex-none text-primary" />
+                <p className="text-[13px] leading-[1.55] text-soft">{warning}</p>
+              </div>
+            ))}
+
+            <NpcDraftCard
+              draft={npcResult.npc}
+              markdown={edits[npcResult.npc.path] ?? npcResult.npc.markdown}
+              editing={editing[npcResult.npc.path] === true}
+              onToggleEditing={() =>
+                setEditing((prev) => ({
+                  ...prev,
+                  [npcResult.npc.path]: prev[npcResult.npc.path] !== true,
+                }))
+              }
+              onChange={(markdown) => {
+                setEdits((prev) => ({ ...prev, [npcResult.npc.path]: markdown }));
+                syncEdit(npcResult.npc.path, markdown);
+              }}
+            />
+
+            {conflicts.length > 0 && (
+              <div aria-live="polite" className="mb-3 rounded-md border border-input bg-card px-3.5 py-3">
+                <p className="mb-1.5 text-[13px] text-foreground">
+                  Diese Datei existiert schon — nichts geschrieben:
+                </p>
+                <ul className="flex flex-col gap-1">
+                  {conflicts.map((path) => (
+                    <li key={path} className="font-mono text-[11.5px] text-body-secondary">
+                      {path}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {apply.isError && conflicts.length === 0 && (
+              <p aria-live="polite" className="mb-3 text-[13px] text-destructive">
+                Nicht geschrieben — Server prüfen.
+              </p>
+            )}
+            {discard.isError && (
+              <p aria-live="polite" className="mb-3 text-[13px] text-destructive">
+                Nicht verworfen — Server prüfen.
+              </p>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2.5 border-t border-border pt-[18px]">
+              <Button
+                type="button"
+                disabled={apply.isPending}
+                onClick={() => apply.mutate()}
+                className="h-auto px-[18px] py-2.5 text-[13.5px] font-semibold"
+              >
+                Übernehmen
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={apply.isPending || discard.isPending}
+                onClick={() => discard.mutate()}
+                className="h-auto border-input bg-transparent px-3.5 py-2 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
+              >
+                Verwerfen
+              </Button>
+            </div>
+          </>
+        )}
+
         {phase === "done" && written !== undefined && (
           <div className="flex flex-col items-start gap-3.5 py-14 md:py-20">
             <p className="flex items-center gap-2.5 text-[15px] text-foreground">
               <Check aria-hidden size={17} className="flex-none text-success-text" />
-              Geschrieben — alles als draft
+              {mode === "npc" ? "Geschrieben — NPC-Datei angelegt" : "Geschrieben — alles als draft"}
             </p>
             <ul className="flex flex-col gap-1.5">
               {written.map((path) => (
@@ -651,19 +897,35 @@ export function GenerateRoute() {
               ))}
             </ul>
             <p className="max-w-[420px] text-[13px] leading-[1.6] text-muted-foreground">
-              Die Szenen erscheinen im Pool mit Status „Entwurf“. Bestehende Dateien werden nie
-              überschrieben — bei Konflikt schreibt der Server nichts.
+              {mode === "npc"
+                ? "Der NPC erscheint in der NPC-Liste und in der Suche. Bestehende Dateien werden nie überschrieben — bei Konflikt schreibt der Server nichts."
+                : "Die Szenen erscheinen im Pool mit Status „Entwurf“. Bestehende Dateien werden nie überschrieben — bei Konflikt schreibt der Server nichts."}
             </p>
-            <Button
-              type="button"
-              onClick={() => {
-                void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
-                void navigate(`/${campaign}`);
-              }}
-              className="mt-2 h-auto px-4 py-2.5 text-[13px] font-semibold"
-            >
-              Zum Pool
-            </Button>
+            <div className="mt-2 flex flex-wrap gap-2.5">
+              {mode === "npc" && written[0] !== undefined && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
+                    void navigate(`/${campaign}/file/${written[0]}`);
+                  }}
+                  className="h-auto border-input bg-transparent px-4 py-2.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
+                >
+                  NPC ansehen
+                </Button>
+              )}
+              <Button
+                type="button"
+                onClick={() => {
+                  void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
+                  void navigate(`/${campaign}`);
+                }}
+                className="h-auto px-4 py-2.5 text-[13px] font-semibold"
+              >
+                Zum Pool
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -801,6 +1063,107 @@ function SceneCard({
           value={markdown}
           onChange={(e) => onChange(e.target.value)}
           aria-label={`Roh-Markdown von ${title}`}
+          className="mt-2 w-full resize-y rounded-lg border border-input bg-background px-4 py-3.5 font-mono text-[12.5px] leading-[1.6] text-body outline-none focus-visible:border-border-hover"
+        />
+      ) : (
+        <Markdown>{markdownBody(markdown)}</Markdown>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The generated NPC file as a card (issue #21): the generator's own card
+ * chrome (title, status pill, edit toggle, mono target path) with the NPC
+ * facts of the reading view above the body — role, voice, appearance,
+ * quickstats chips, statblock reference, in the same vocabulary and with the
+ * same helpers as EntityArticle's NPC header (issue #26). The presentation is
+ * rebuilt here rather than reused wholesale on purpose: EntityArticle takes a
+ * FileResponse of a file that EXISTS, and nothing is on disk yet.
+ *
+ * Same two views as a scene draft: the rendered body through the normal
+ * markdown pipeline, or the raw markdown in a mono textarea.
+ */
+function NpcDraftCard({
+  draft,
+  markdown,
+  editing,
+  onToggleEditing,
+  onChange,
+}: {
+  draft: GeneratedNpcDraft;
+  markdown: string;
+  editing: boolean;
+  onToggleEditing: () => void;
+  onChange: (markdown: string) => void;
+}) {
+  const fm = draft.frontmatter;
+  const name = fmString(fm.name) ?? draft.path;
+  const status = fmString(fm.status);
+  const role = fmString(fm.role);
+  const voice = fmString(fm.voice);
+  const appearance = fmString(fm.appearance);
+  const statblock = fmString(fm.statblock);
+  const quickstats = fmQuickstats(fm.quickstats);
+  const textareaId = `gen-raw-${draft.path.replace(/[^a-zA-Z0-9-]/g, "-")}`;
+
+  return (
+    <div className="my-4 rounded-[10px] border border-border bg-[color-mix(in_srgb,var(--card)_60%,var(--background))] px-5 py-5 md:px-6">
+      <div className="mb-1 flex flex-wrap items-center gap-2.5">
+        <h2 className="flex-1 font-serif text-[20px] leading-[1.3] font-semibold text-foreground">
+          {name}
+        </h2>
+        {status !== undefined && (
+          <span className="flex-none rounded-full border border-input px-[9px] py-px text-[11.5px] text-dim">
+            {npcStatusLabel(status)}
+          </span>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          aria-expanded={editing}
+          aria-controls={editing ? textareaId : undefined}
+          onClick={onToggleEditing}
+          className="h-auto flex-none gap-1.5 border-input bg-transparent px-2.5 py-[5px] text-[12px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground [&_svg]:size-[13px]"
+        >
+          <PenLine aria-hidden />
+          {editing ? "Vorschau" : "Bearbeiten"}
+        </Button>
+      </div>
+      <p className="mb-3.5 font-mono text-[11.5px] text-faint">{draft.path}</p>
+      <div className="mb-2 border-b border-border pb-4">
+        {role !== undefined && (
+          <p className="text-[13.5px] leading-[1.5] text-muted-foreground">{role}</p>
+        )}
+        {voice !== undefined && (
+          <p className="mt-2 text-[14px] leading-[1.6] text-body italic">{voice}</p>
+        )}
+        {appearance !== undefined && (
+          <p className="mt-1 text-[14px] leading-[1.6] text-body-secondary italic">{appearance}</p>
+        )}
+        {quickstats.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {quickstats.map(([key, value]) => (
+              <span
+                key={key}
+                className="rounded-[4px] border border-input bg-background px-[7px] py-[3px] font-mono text-[11px] text-soft"
+              >
+                {key} {value}
+              </span>
+            ))}
+          </div>
+        )}
+        {statblock !== undefined && (
+          <p className="mt-3 text-[12.5px] text-muted-foreground">Statblock: {statblock}</p>
+        )}
+      </div>
+      {editing ? (
+        <textarea
+          id={textareaId}
+          rows={22}
+          value={markdown}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label={`Roh-Markdown von ${name}`}
           className="mt-2 w-full resize-y rounded-lg border border-input bg-background px-4 py-3.5 font-mono text-[12.5px] leading-[1.6] text-body outline-none focus-visible:border-border-hover"
         />
       ) : (

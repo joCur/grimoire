@@ -4,7 +4,10 @@
 //
 // The fix is deliberately small:
 //
-//   - ONE job per campaign, held in memory (Map keyed by campaign id).
+//   - ONE job per campaign, held in memory (Map keyed by campaign id) —
+//     since issue #21 regardless of its KIND: a scene run and an NPC run
+//     share the store and the 409 gate, `kind` only says which result field
+//     is filled (and which UI mode to restore).
 //   - POST /generate validates as before, then starts a job and answers 202;
 //     the pipeline (./generator runGenerate) is untouched — same prompt, same
 //     validation, same correction turns, same 422 shaping.
@@ -23,19 +26,29 @@
 // #18/#20 (rawReply, usage, validationErrors) changes for the client.
 
 import { randomUUID } from "node:crypto";
-import type { GenerateJob, GenerateJobError, GenerateResult } from "@grimoire/shared";
+import type {
+  GenerateJob,
+  GenerateJobError,
+  GenerateJobKind,
+  GenerateNpcResult,
+  GenerateResult,
+} from "@grimoire/shared";
 import { ApiError } from "./campaign-fs";
 import { now } from "./clock";
-import { runGenerate } from "./generator";
+import { runGenerate, runGenerateNpc } from "./generator";
 import type { LLMProvider } from "./llm-provider";
 
 /** Server-side job record; `draftEdits` is a Map here, an object on the wire. */
 interface Job {
   id: string;
   campaign: string;
-  chapter: string;
+  /** Scene run or NPC run (issue #21) — still one job per campaign. */
+  kind: GenerateJobKind;
+  /** Target chapter; only a scene run has one. */
+  chapter?: string;
   status: "running" | "done" | "failed";
   result?: GenerateResult;
+  npcResult?: GenerateNpcResult;
   error?: GenerateJobError;
   startedAt: string;
   finishedAt?: string;
@@ -68,11 +81,13 @@ export function serializeJob(job: Job): GenerateJob {
   return {
     id: job.id,
     campaign: job.campaign,
-    chapter: job.chapter,
+    kind: job.kind,
+    ...(job.chapter === undefined ? {} : { chapter: job.chapter }),
     status: job.status,
     startedAt: job.startedAt,
     ...(job.finishedAt === undefined ? {} : { finishedAt: job.finishedAt }),
     ...(job.result === undefined ? {} : { result: job.result }),
+    ...(job.npcResult === undefined ? {} : { npcResult: job.npcResult }),
     ...(job.error === undefined ? {} : { error: job.error }),
     draftEdits: Object.fromEntries(job.draftEdits),
   };
@@ -93,13 +108,7 @@ export function getJob(campaign: string): Job | undefined {
  * "no provider configured" stays a synchronous 503 instead of becoming a
  * failed job.
  */
-export function startJob(input: {
-  campaign: string;
-  chapter: string;
-  sourceText: string;
-  newChapter: boolean;
-  provider: LLMProvider;
-}): Job {
+export function startJob(input: JobInput): Job {
   const running = jobs.get(input.campaign);
   if (running !== undefined && running.status === "running") {
     throw new ApiError(409, "a generate job is already running for this campaign", {
@@ -110,7 +119,8 @@ export function startJob(input: {
   const job: Job = {
     id: randomUUID(),
     campaign: input.campaign,
-    chapter: input.chapter,
+    kind: input.kind,
+    ...(input.kind === "scene" ? { chapter: input.chapter } : {}),
     status: "running",
     startedAt: timestamp(),
     draftEdits: new Map(),
@@ -121,6 +131,19 @@ export function startJob(input: {
   // turns it into a failed job.
   void (async () => {
     try {
+      if (input.kind === "npc") {
+        const npcResult = await runGenerateNpc(
+          input.campaign,
+          input.sourceText,
+          input.npcId,
+          () => input.provider,
+        );
+        finish(job, (j) => {
+          j.status = "done";
+          j.npcResult = npcResult;
+        });
+        return;
+      }
       const result = await runGenerate(
         input.campaign,
         input.chapter,
@@ -143,6 +166,16 @@ export function startJob(input: {
 
   return job;
 }
+
+/**
+ * What a run needs, per kind (issue #21). One union instead of two start
+ * functions: the 409 gate ("one generator job per campaign, whatever its
+ * kind") must exist exactly once.
+ */
+export type JobInput = { campaign: string; provider: LLMProvider } & (
+  | { kind: "scene"; chapter: string; sourceText: string; newChapter: boolean }
+  | { kind: "npc"; sourceText: string; npcId?: string }
+);
 
 /**
  * Write the outcome — but only while the job is still the campaign's current
@@ -174,15 +207,18 @@ export function deleteJobIfCurrent(campaign: string, jobId: string): boolean {
 
 /**
  * Store one review edit in the job (PUT …/generate/job/drafts). 404 without
- * a job, 400 for a path that is not one of the result's scene paths — the
+ * a job, 400 for a path that is not one of the result's draft paths — the
  * store is not a free-form key/value bag, and an unknown path is a client
- * bug worth seeing. Stub markdown is not editable in the review, so only
- * scenes are accepted.
+ * bug worth seeing. Editable are the scene drafts of a scene run and the one
+ * npc draft of an NPC run (issue #21); stub markdown is not editable in the
+ * review, so stubs are not accepted.
  */
 export function setDraftEdit(campaign: string, rel: string, markdown: string): void {
   const job = jobs.get(campaign);
   if (job === undefined) throw new ApiError(404, "no generate job for this campaign");
-  const known = job.result?.scenes.some((scene) => scene.path === rel) === true;
+  const known =
+    job.result?.scenes.some((scene) => scene.path === rel) === true ||
+    job.npcResult?.npc.path === rel;
   if (!known) throw new ApiError(400, `unknown draft path: ${rel}`);
   job.draftEdits.set(rel, markdown);
 }

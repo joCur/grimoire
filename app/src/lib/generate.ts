@@ -113,6 +113,25 @@ export function chapterIdError(id: string): string | undefined {
 }
 
 /**
+ * Is this string usable as an npc id (issue #21)? The npc generator's `id`
+ * field is OPTIONAL — an empty field means "the model chooses" and is
+ * therefore not an error. Everything else follows the same bar as a chapter
+ * id (the server's kebab pattern) plus the one check only the client can do
+ * cheaply: an id whose file already exists would be a 409, and saying so
+ * before the run costs nothing.
+ */
+export function npcIdError(id: string, existingIds: readonly string[] = []): string | undefined {
+  if (id === "") return undefined;
+  if (id.includes("/") || id.includes("\\")) return "Keine Schrägstriche — die id ist der Dateiname.";
+  if (/\s/.test(id)) return "Keine Leerzeichen — Wörter mit Bindestrich trennen.";
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) {
+    return "Nur Kleinbuchstaben, Ziffern und Bindestriche; Anfang keine Bindestriche.";
+  }
+  if (existingIds.includes(id)) return "NPC existiert schon — bestehende Dateien werden nie überschrieben.";
+  return undefined;
+}
+
+/**
  * What the chapter-id field shows (issue #22 AK4): the manually entered
  * value once the DM has touched the field, the derived suggestion until
  * then. `manual === undefined` IS the untouched state — and because the view
@@ -219,6 +238,31 @@ export function generatePhase(input: {
   if (input.jobStatus === "running") return "working";
   if (input.jobStatus === "done") return "review";
   return "input";
+}
+
+// --- generator mode (issue #21) --------------------------------------------
+
+/** Which kind of run the generator view is set up for. */
+export type GenerateMode = "scene" | "npc";
+
+/**
+ * The mode a job belongs to. Anything that is not explicitly an NPC run is a
+ * scene run — `kind` is an additive field, so a payload without it (an older
+ * server, a job from before the field existed) must not land in NPC mode.
+ */
+export function jobMode(job: GenerateJob | null | undefined): GenerateMode {
+  return job?.kind === "npc" ? "npc" : "scene";
+}
+
+/**
+ * Which mode the view shows after the server's job answered: a job that
+ * EXISTS decides (its result belongs to its kind — restoring a run must land
+ * in the right mode), no job leaves the DM's own choice alone. That
+ * asymmetry is the point: applying or discarding an NPC run must not throw
+ * the view back to scenes while the DM is still writing NPCs.
+ */
+export function restoredMode(current: GenerateMode, job: GenerateJob | null | undefined): GenerateMode {
+  return job === null || job === undefined ? current : jobMode(job);
 }
 
 /**

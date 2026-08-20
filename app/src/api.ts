@@ -259,6 +259,40 @@ export async function startGenerateJob(
 }
 
 /**
+ * Start an NPC run (issue #21): source material in, ONE npc file draft out.
+ * Same job model as the scene run — 202 { jobId }, the result is fetched via
+ * fetchGenerateJob (`kind: "npc"`, `npcResult`), and a 409 that carries a
+ * jobId means "a generator job is already running for this campaign" and is
+ * adopted instead of shown as an error.
+ *
+ * `id` is optional: empty means the model picks the id. A 409 WITHOUT a jobId
+ * is the other collision — the pinned id's file already exists (never
+ * overwritten); its `details.path` names the file.
+ */
+export async function startGenerateNpcJob(
+  campaign: string,
+  input: { sourceText: string; id?: string },
+): Promise<GenerateJobStarted> {
+  const path = `/${encodeURIComponent(campaign)}/generate/npc`;
+  const response = await fetch(`/api${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      sourceText: input.sourceText,
+      ...(input.id === undefined || input.id === "" ? {} : { id: input.id }),
+    }),
+  });
+  if (!response.ok) {
+    const error = await failure(`POST /api${path}`, response);
+    if (error.status === 409 && typeof error.details.jobId === "string") {
+      return { jobId: error.details.jobId };
+    }
+    throw error;
+  }
+  return (await response.json()) as GenerateJobStarted;
+}
+
+/**
  * The campaign's generate job, or null when there is none (the server's 404
  * is the normal "nothing running, nothing to restore" answer — never an
  * error state in the UI). A `null` after a job WAS there means it is gone:
@@ -326,6 +360,22 @@ export function applyDrafts(
     ...(input.chapter === undefined || input.chapterTitle === undefined
       ? {}
       : { chapter: input.chapter, chapterTitle: input.chapterTitle }),
+    ...(input.jobId === undefined ? {} : { jobId: input.jobId }),
+  });
+}
+
+/**
+ * Write the reviewed NPC draft (issue #21) — the same apply endpoint as the
+ * scene drafts: it re-validates server-side (path, id, status, parseable
+ * frontmatter), answers 409 with `details.conflicts` when the file already
+ * exists (nothing written), and drops the job the draft came from.
+ */
+export function applyNpcDraft(
+  campaign: string,
+  input: { npc: { path: string; markdown: string }; jobId?: string },
+): Promise<{ written: string[] }> {
+  return postJson<{ written: string[] }>(`/${encodeURIComponent(campaign)}/generate/apply`, {
+    npc: input.npc,
     ...(input.jobId === undefined ? {} : { jobId: input.jobId }),
   });
 }

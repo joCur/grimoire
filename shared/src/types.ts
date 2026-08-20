@@ -310,10 +310,49 @@ export interface GenerateResult {
   usage?: GenerateUsage;
 }
 
+/**
+ * One generated NPC file draft (issue #21). Same "nothing is on disk yet"
+ * rule as a scene draft: writing happens only via POST
+ * /api/:campaign/generate/apply. The path is always `npcs/<id>.md` and the
+ * frontmatter id matches that filename — the server validates both before
+ * the draft ever reaches the review.
+ */
+export interface GeneratedNpcDraft {
+  /** Campaign-relative target path, always "npcs/<kebab-id>.md". */
+  path: string;
+  /** The complete markdown file including the frontmatter block. */
+  markdown: string;
+  /** The parsed frontmatter (id/name/status guaranteed), for the review UI. */
+  frontmatter: Record<string, unknown>;
+}
+
+/**
+ * Result of an NPC run (POST /api/:campaign/generate/npc, issue #21) —
+ * deliberately its OWN shape instead of a scene-less GenerateResult: an NPC
+ * run produces exactly one file, has no stubs and no chapter, and a
+ * `scenes: []` would be a lie every consumer would have to special-case.
+ * Carried by a finished job as `npcResult` (see GenerateJob).
+ */
+export interface GenerateNpcResult {
+  npc: GeneratedNpcDraft;
+  /** The LLM's own review notes for the DM (gaps in the source text). */
+  warnings: string[];
+  /** Token spend of the run; absent when the endpoint reports no usage. */
+  usage?: GenerateUsage;
+}
+
 // --- background generate jobs (issue #19) ----------------------------------
 
 export const GENERATE_JOB_STATUSES = ["running", "done", "failed"] as const;
 export type GenerateJobStatus = (typeof GENERATE_JOB_STATUSES)[number];
+
+/**
+ * What a generator job produces (issue #21): scene drafts for a chapter, or
+ * one NPC file draft. There is still exactly ONE job per campaign — the kind
+ * only tells the client which result field to read and which mode to restore.
+ */
+export const GENERATE_JOB_KINDS = ["scene", "npc"] as const;
+export type GenerateJobKind = (typeof GENERATE_JOB_KINDS)[number];
 
 /**
  * A failed run, exactly as the synchronous endpoint would have answered it:
@@ -341,25 +380,37 @@ export interface GenerateJob {
   /** crypto.randomUUID — the client sends it back on apply. */
   id: string;
   campaign: string;
-  chapter: string;
+  /**
+   * What this run produces (issue #21). Additive and optional: a payload
+   * without it is a scene run — the field exists so the UI can restore the
+   * right generator mode (and read the right result field).
+   */
+  kind?: GenerateJobKind;
+  /** Target chapter of a SCENE run; absent for `kind: "npc"` (no chapter). */
+  chapter?: string;
   status: GenerateJobStatus;
   /** ISO timestamps (server clock). `finishedAt` only once it is not running. */
   startedAt: string;
   finishedAt?: string;
-  /** Present iff status is "done". */
+  /** Present iff status is "done" and kind is "scene". */
   result?: GenerateResult;
+  /** Present iff status is "done" and kind is "npc" (issue #21). */
+  npcResult?: GenerateNpcResult;
   /** Present iff status is "failed". */
   error?: GenerateJobError;
   /**
    * Review edits kept server-side, keyed by the draft's campaign-relative
    * path (PUT …/generate/job/drafts) — so an edited draft survives a reload
    * as well. Empty until the DM edits something; applied ON TOP of
-   * `result.scenes` by the review UI.
+   * `result.scenes` (or of `npcResult.npc`) by the review UI.
    */
   draftEdits: Record<string, string>;
 }
 
-/** POST /api/:campaign/generate — 202 with the started job's id. */
+/**
+ * POST /api/:campaign/generate and POST /api/:campaign/generate/npc — 202
+ * with the started job's id.
+ */
 export interface GenerateJobStarted {
   jobId: string;
 }

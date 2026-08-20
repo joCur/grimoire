@@ -22,6 +22,16 @@ Pipeline: Quelltext (EN) → LLM → Szenen-Drafts (DE) → Review-Vorschau → 
 5. App zeigt Review-Vorschau: Szenen editierbar, Stubs einzeln
    annehmen/ablehnen. Erst „Übernehmen" schreibt auf die Platte.
 
+## NPC-Generator
+
+Gleiche Pipeline, eigener Endpoint (`POST /api/:campaign/generate/npc`)
+und eigene Prompt-Assets (`npc-system-prompt.md`, `npc-example-output.md`
+— Few-Shot ist die Format-Referenz `examples/beispiel/npcs/fenn.md`).
+Zielformat: NPC-Entität aus README.md; Beziehungen nur auf existierende
+ids, Quickstats als gequotete Strings (das Plus überlebt YAML),
+status alive als Normalfall. Ein Generator-Job pro Kampagne, egal ob
+Szenen oder NPC.
+
 ## Provider
 
 Abstraktion in `server/src/llm-provider.ts`, Auswahl per Env-Var

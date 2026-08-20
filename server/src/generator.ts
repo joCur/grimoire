@@ -21,6 +21,14 @@
 // until it is applied or discarded. runGenerate itself is unchanged by that
 // — it is the job runner's one call.
 //
+// Since issue #21 there is a SECOND run kind next to scenes: one NPC file
+// from source material (runGenerateNpc, POST /generate/npc). It shares
+// everything that is mechanics — provider factory, correction turns,
+// truncation fail-fast, usage accounting, JSON extraction (runPipeline) and
+// the apply endpoint — and differs only in its prompt assets
+// (generator/npc-*.md), its context (no chapter) and its validation rules
+// (validateNpcReply). Still ONE job per campaign, whatever its kind.
+//
 // The provider is resolved lazily (per request, after the cheap request
 // checks), so the read-only API never needs an API key (see server.ts).
 
@@ -33,6 +41,7 @@ import {
   NPC_STATUSES,
   SCENE_TYPES,
   parseMarkdown,
+  type GenerateNpcResult,
   type GenerateResult,
   type GenerateUsage,
   type GeneratedSceneDraft,
@@ -123,27 +132,51 @@ const PACKAGE_DIR = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "
 /** The prompt assets ship with the repo — resolved relative to the package. */
 const GENERATOR_DIR = path.resolve(PACKAGE_DIR, "../generator");
 
-let promptAssets: { systemPrompt: string; fewShotTarget: string } | null = null;
+interface PromptAssets {
+  systemPrompt: string;
+  fewShotTarget: string;
+}
 
-async function loadPromptAssets(): Promise<{ systemPrompt: string; fewShotTarget: string }> {
-  if (promptAssets === null) {
-    promptAssets = {
-      systemPrompt: await readFile(path.join(GENERATOR_DIR, "system-prompt.md"), "utf8"),
-      fewShotTarget: await readFile(path.join(GENERATOR_DIR, "example-output.md"), "utf8"),
-    };
-  }
-  return promptAssets;
+/**
+ * The two asset pairs (issue #21): scenes and NPCs have their own prompt and
+ * their own few-shot target file, cached per kind after the first read.
+ */
+const ASSET_FILES = {
+  scene: { systemPrompt: "system-prompt.md", fewShotTarget: "example-output.md" },
+  npc: { systemPrompt: "npc-system-prompt.md", fewShotTarget: "npc-example-output.md" },
+} as const;
+
+const promptAssets = new Map<keyof typeof ASSET_FILES, PromptAssets>();
+
+async function loadPromptAssets(kind: keyof typeof ASSET_FILES): Promise<PromptAssets> {
+  const cached = promptAssets.get(kind);
+  if (cached !== undefined) return cached;
+  const files = ASSET_FILES[kind];
+  const assets: PromptAssets = {
+    systemPrompt: await readFile(path.join(GENERATOR_DIR, files.systemPrompt), "utf8"),
+    fewShotTarget: await readFile(path.join(GENERATOR_DIR, files.fewShotTarget), "utf8"),
+  };
+  promptAssets.set(kind, assets);
+  return assets;
 }
 
 // --- context collection ------------------------------------------------------
 
+/**
+ * What every run sends along: the campaign's npc/location ids + names (so the
+ * model can only REFERENCE what exists) and the glossary.
+ */
 interface CampaignContext {
-  chapter: string;
   npcs: Array<{ id: string; name: string }>;
   locations: Array<{ id: string; name: string }>;
   glossary: string;
   npcIds: Set<string>;
   locationIds: Set<string>;
+}
+
+/** A scene run additionally targets one chapter. */
+interface SceneContext extends CampaignContext {
+  chapter: string;
 }
 
 /** A chapter id is a single, non-hidden path segment. */
@@ -196,18 +229,60 @@ export async function assertGenerateTarget(
 }
 
 /**
- * Collect the prompt context. Runs the same target checks again (they are
- * cheap and the pipeline must never depend on a caller having done them);
- * the chapter contributes only its id to the context, so nothing else
- * changes when its directory (and _chapter.md) are still missing.
+ * The id of an existing npc file, for the collision check of an NPC run
+ * (issue #21) — a request-level 409 before a single token is spent.
+ * `assertSafeRelativeMdPath` is not enough here: the id must be a kebab slug,
+ * because it becomes the file name AND the reference key.
  */
-async function collectContext(
+export const NPC_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+
+/**
+ * Cheap request checks of an NPC run: unsafe campaign id -> 400, unknown
+ * campaign -> 404, an unusable pinned id -> 400, and a pinned id whose file
+ * already exists -> 409 (never overwrite, issue #21 non-goal: enriching an
+ * existing NPC file). Exported for the same reason as assertGenerateTarget:
+ * POST /generate/npc runs it BEFORE it creates a background job.
+ */
+export async function assertNpcGenerateTarget(campaign: string, npcId?: string): Promise<string> {
+  const dir = await campaignDir(campaign); // 400 unsafe id, 404 unknown campaign
+  if (npcId === undefined) return dir;
+  if (!NPC_ID_PATTERN.test(npcId)) throw new ApiError(400, "invalid npc id");
+  const rel = `npcs/${npcId}.md`;
+  try {
+    await stat(path.join(dir, rel));
+  } catch {
+    return dir; // free — the run may target it
+  }
+  throw new ApiError(409, "npc file already exists", { path: rel });
+}
+
+/**
+ * Collect the prompt context of an NPC run: the campaign's npcs (collision
+ * check + the only allowed relationship targets), its locations and the
+ * glossary. No chapter — an NPC run has no target chapter.
+ */
+async function collectNpcContext(campaign: string, npcId?: string): Promise<CampaignContext> {
+  const dir = await assertNpcGenerateTarget(campaign, npcId);
+  return collectContext(campaign, dir);
+}
+
+/**
+ * Collect the prompt context of a scene run. Runs the same target checks
+ * again (they are cheap and the pipeline must never depend on a caller having
+ * done them); the chapter contributes only its id to the context, so nothing
+ * else changes when its directory (and _chapter.md) are still missing.
+ */
+async function collectSceneContext(
   campaign: string,
   chapter: string,
   allowMissingChapter = false,
-): Promise<CampaignContext> {
+): Promise<SceneContext> {
   const dir = await assertGenerateTarget(campaign, chapter, allowMissingChapter);
+  return { ...(await collectContext(campaign, dir)), chapter };
+}
 
+/** The part of the context that is the same for every run kind. */
+async function collectContext(campaign: string, dir: string): Promise<CampaignContext> {
   const files = await collectCampaignFiles(campaign);
   const pick = (kind: "npc" | "location") =>
     files
@@ -228,7 +303,6 @@ async function collectContext(
   }
 
   return {
-    chapter,
     npcs,
     locations,
     glossary,
@@ -408,16 +482,28 @@ function parseRawReply(raw: string, errors: string[]): RawReply | null {
  * re-validation (-> 400): the same rule, checked on both ways in.
  */
 function stubStatusErrors(kind: "npc" | "location", fm: Record<string, unknown>): string[] {
-  const present = Object.hasOwn(fm, "status");
   if (kind === "location") {
-    return present ? ['"status" ist nicht erlaubt — locations haben keinen status'] : [];
+    return Object.hasOwn(fm, "status")
+      ? ['"status" ist nicht erlaubt — locations haben keinen status']
+      : [];
   }
-  if (!present) return ['"status" fehlt — NPC-Stubs brauchen einen status (im Normalfall "alive")'];
+  return npcStatusErrors(fm, "NPC-Stubs");
+}
+
+/**
+ * The npc `status` rule, shared by the stub validation and the NPC generator
+ * (issue #21): present, and one of NPC_STATUSES. `subject` names who the rule
+ * is about, so the correction turn reads naturally in both places.
+ */
+function npcStatusErrors(fm: Record<string, unknown>, subject: string): string[] {
+  if (!Object.hasOwn(fm, "status")) {
+    return [`"status" fehlt — ${subject} brauchen einen status (im Normalfall "alive")`];
+  }
   const status = fm.status;
   if (typeof status !== "string" || !(NPC_STATUSES as readonly string[]).includes(status)) {
     return [
       `"status" muss einer von ${NPC_STATUSES.join(", ")} sein — ` +
-        'NPC-Stubs im Normalfall "alive"',
+        `${subject} im Normalfall "alive"`,
     ];
   }
   return [];
@@ -465,7 +551,7 @@ function validateStub(
  */
 export function validateReply(
   raw: string,
-  ctx: CampaignContext,
+  ctx: SceneContext,
 ): { ok: true; result: GenerateResult } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   const reply = parseRawReply(raw, errors);
@@ -552,15 +638,249 @@ export function validateReply(
   return { ok: true, result: { scenes, stubs, warnings: reply.warnings } };
 }
 
-// German on purpose: it is part of the (German) prompt conversation.
-function buildCorrectionMessage(errors: string[]): string {
+// --- mechanical validation of an NPC reply (issue #21) -----------------------
+
+/** The NPC reply schema the npc system prompt demands: one file, warnings. */
+interface RawNpcReply {
+  npc: RawEntry;
+  warnings: string[];
+}
+
+/** The only legal target of an NPC run — the id IS the file name. */
+const NPC_PATH_PATTERN = /^npcs\/[a-z0-9][a-z0-9-]*\.md$/;
+
+/** The sections of the NPC format that carry rules (README "Entität: NPC"). */
+const KNOWLEDGE_SECTION = "Weiß";
+const RELATIONS_SECTION = "Beziehungen";
+const NOTES_SECTION = "Notizen";
+
+/** `- <npc-id>: <text>` — the relationship line of the format contract. */
+const RELATION_ITEM = /^\s*[-*]\s+(.*)$/;
+const RELATION_ENTRY = /^([a-z0-9][a-z0-9-]*)\s*:\s*\S/;
+
+/** The title of a `##` heading line, or undefined for any other line. */
+function h2Title(line: string): string | undefined {
+  const match = /^##[ \t]+(.+?)[ \t]*$/.exec(line);
+  return match?.[1];
+}
+
+/**
+ * Body of one `## <heading>` section (up to the next heading of any level), or
+ * undefined when the section is not there. Sections are NOT required — the
+ * format degrades — but the ones that exist have to follow their rules.
+ */
+function sectionBody(body: string, heading: string): string | undefined {
+  const lines = body.split("\n");
+  const start = lines.findIndex((line) => h2Title(line) === heading);
+  if (start === -1) return undefined;
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => /^#{1,6}[ \t]/.test(line));
+  return (end === -1 ? rest : rest.slice(0, end)).join("\n");
+}
+
+/**
+ * `## Beziehungen` may only point at npcs that EXIST (the prompt's rule is
+ * "weglassen statt erfinden"): every list line must be `- <npc-id>: <text>`
+ * with an id from the campaign context. Prose lines inside the section are
+ * left alone — that is the format degrading, not a mechanical error.
+ */
+function relationErrors(body: string, ctx: CampaignContext): string[] {
+  const section = sectionBody(body, RELATIONS_SECTION);
+  if (section === undefined) return [];
+  const errors: string[] = [];
+  for (const line of section.split("\n")) {
+    const item = RELATION_ITEM.exec(line);
+    if (item === null) continue;
+    const text = item[1]!.trim();
+    const entry = RELATION_ENTRY.exec(text);
+    if (entry === null) {
+      errors.push(
+        `## ${RELATIONS_SECTION}: "${text}" ist keine "- <npc-id>: <Text>"-Zeile — ` +
+          "nur ids aus der Kontextliste",
+      );
+      continue;
+    }
+    const id = entry[1]!;
+    if (!ctx.npcIds.has(id)) {
+      errors.push(
+        `## ${RELATIONS_SECTION}: npc "${id}" existiert nicht in der Kampagne — ` +
+          "Beziehung weglassen statt erfinden",
+      );
+    }
+  }
+  return errors;
+}
+
+/**
+ * Inside `## Weiß` only `[!secret]` belongs (that section is the aggregated
+ * player-unknown knowledge). Other KNOWN callouts elsewhere in the file are
+ * fine; unknown ones are reported once for the whole file by unknownCallouts.
+ */
+function knowledgeCalloutErrors(body: string): string[] {
+  const section = sectionBody(body, KNOWLEDGE_SECTION);
+  if (section === undefined) return [];
+  const errors: string[] = [];
+  const seen = new Set<string>();
+  for (const m of section.matchAll(CALLOUT_MARKER)) {
+    const kind = m[1]!.toLowerCase();
+    if (!KNOWN_CALLOUTS.has(kind) || kind === "secret" || seen.has(kind)) continue;
+    seen.add(kind);
+    errors.push(
+      `## ${KNOWLEDGE_SECTION}: nur [!secret] erlaubt — [!${kind}] gehört in einen anderen Abschnitt`,
+    );
+  }
+  return errors;
+}
+
+/** `## Notizen` is app-managed (README) — it must arrive empty. */
+function notesErrors(body: string): string[] {
+  const section = sectionBody(body, NOTES_SECTION);
+  if (section === undefined) return [];
+  const text = section.replace(/<!--[\s\S]*?-->/g, "").trim();
+  return text === ""
+    ? []
+    : [`## ${NOTES_SECTION} bleibt leer — die App füllt den Abschnitt im Review-Schritt`];
+}
+
+/**
+ * Quickstats values must be quoted STRINGS: YAML reads a bare `+2` as the
+ * number 2 and the plus — the whole point of a social modifier — is gone
+ * before anyone sees the file.
+ */
+function quickstatsErrors(fm: Record<string, unknown>): string[] {
+  const quickstats = fm.quickstats;
+  if (quickstats === undefined || quickstats === null) return [];
+  if (typeof quickstats !== "object" || Array.isArray(quickstats)) {
+    return ['"quickstats" muss ein Objekt sein, z. B. { wis: "+2" }'];
+  }
+  const bad = Object.entries(quickstats)
+    .filter(([, value]) => typeof value !== "string")
+    .map(([key]) => key);
+  return bad.length === 0
+    ? []
+    : [
+        '"quickstats" — Werte als Strings in Anführungszeichen ("+2"), sonst verschluckt ' +
+          `YAML das Plus: ${bad.join(", ")}`,
+      ];
+}
+
+function parseRawNpcReply(raw: string, errors: string[]): RawNpcReply | null {
+  const extracted = extractJsonReply(raw);
+  if (extracted === null) {
+    errors.push("reply is not valid JSON");
+    return null;
+  }
+  const parsed = extracted.value;
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    errors.push("reply must be a JSON object");
+    return null;
+  }
+  const obj = parsed as Record<string, unknown>;
+  if (!isRawEntry(obj.npc)) {
+    errors.push('"npc" must be an object with string "path" and "content"');
+    return null;
+  }
+  const warnings = Array.isArray(obj.warnings)
+    ? obj.warnings.filter((w): w is string => typeof w === "string")
+    : [];
+  return { npc: obj.npc, warnings };
+}
+
+/**
+ * Mechanical validation of one raw NPC reply against the campaign context —
+ * the NPC counterpart of validateReply. Same contract: the mapped result, or
+ * the error list for the correction turn.
+ *
+ * The rules, all from the format contract (README "Entität: NPC"):
+ * target path `npcs/<kebab-id>.md`, parseable frontmatter whose `id` matches
+ * the file name, a `name`, a valid NpcStatus (`alive` unless the source says
+ * otherwise), no invented `chapter`, quoted quickstats, relationships only to
+ * npcs that exist, only `[!secret]` inside `## Weiß`, only known callouts, and
+ * an empty `## Notizen`. An id that already exists is an error too — the DM
+ * can pin a different one via the request's `id`.
+ */
+export function validateNpcReply(
+  raw: string,
+  ctx: CampaignContext,
+  pinnedId?: string,
+): { ok: true; result: GenerateNpcResult } | { ok: false; errors: string[] } {
+  const errors: string[] = [];
+  const reply = parseRawNpcReply(raw, errors);
+  if (reply === null) return { ok: false, errors };
+
+  const entry = reply.npc;
+  const label = `npc "${entry.path}"`;
+  // Without a usable path nothing else can be judged (the id comes from it).
+  if (!NPC_PATH_PATTERN.test(entry.path)) {
+    return { ok: false, errors: [`${label}: path muss "npcs/<kebab-id>.md" sein`] };
+  }
+  const id = fileStem(entry.path);
+  if (pinnedId !== undefined && id !== pinnedId) {
+    errors.push(`${label}: die id ist vorgegeben — die Datei muss "npcs/${pinnedId}.md" heißen`);
+  }
+  if (ctx.npcIds.has(id)) {
+    errors.push(
+      `${label}: id "${id}" existiert schon in der Kampagne — andere id wählen ` +
+        '(oder der DM gibt eine id über das Feld "id" vor)',
+    );
+  }
+
+  const { parsed, error } = parseWithFrontmatter(entry.content, entry.path);
+  if (error !== undefined) {
+    errors.push(`${label}: ${error}`);
+    return { ok: false, errors };
+  }
+  const fm = parsed.frontmatter;
+
+  // `name` is NOT checked: the shared parser degrades a missing display name
+  // to the id (README/parse.ts), so there is nothing mechanical left to
+  // complain about — the prompt asks for one, the format survives without it.
+  if (fm.id !== id) {
+    errors.push(`${label}: frontmatter id "${String(fm.id)}" passt nicht zum Dateinamen`);
+  }
+  if (Object.hasOwn(fm, "chapter")) {
+    errors.push(`${label}: kein "chapter" — der NPC-Lauf kennt kein Ziel-Kapitel`);
+  }
+  for (const msg of npcStatusErrors(fm, "NPC-Dateien")) errors.push(`${label}: ${msg}`);
+  for (const msg of quickstatsErrors(fm)) errors.push(`${label}: ${msg}`);
+
+  for (const kind of unknownCallouts(parsed.body)) {
+    errors.push(
+      `${label}: unknown callout "[!${kind}]" — allowed: ${CALLOUT_KINDS.map((k) => `[!${k}]`).join(", ")}`,
+    );
+  }
+  for (const msg of [
+    ...knowledgeCalloutErrors(parsed.body),
+    ...relationErrors(parsed.body, ctx),
+    ...notesErrors(parsed.body),
+  ]) {
+    errors.push(`${label}: ${msg}`);
+  }
+
+  if (errors.length > 0) return { ok: false, errors };
+  return {
+    ok: true,
+    result: {
+      npc: { path: entry.path, markdown: entry.content, frontmatter: fm },
+      warnings: reply.warnings,
+    },
+  };
+}
+
+// German on purpose: it is part of the (German) prompt conversation. The tail
+// names what the corrected reply must still contain — the only part that
+// differs between a scene run and an NPC run (issue #21).
+function buildCorrectionMessage(errors: string[], tail: string): string {
   return [
     "Deine letzte Antwort hat die mechanische Validierung nicht bestanden:",
     errors.map((e) => `- ${e}`).join("\n"),
-    "Antworte erneut mit dem vollständigen, korrigierten JSON — gleiches Schema, " +
-      "alle Szenen und Stubs enthalten, kein Text außerhalb des JSON-Blocks.",
+    `Antworte erneut mit dem vollständigen, korrigierten JSON — gleiches Schema, ${tail}, ` +
+      "kein Text außerhalb des JSON-Blocks.",
   ].join("\n\n");
 }
+
+const SCENE_CORRECTION_TAIL = "alle Szenen und Stubs enthalten";
+const NPC_CORRECTION_TAIL = "die vollständige NPC-Datei enthalten";
 
 // --- run accounting (issue #18) -----------------------------------------------
 
@@ -645,18 +965,37 @@ export async function runGenerate(
   newChapter = false,
   getProvider: () => LLMProvider = obtainProvider,
 ): Promise<GenerateResult> {
-  const ctx = await collectContext(campaign, chapter, newChapter);
-  const assets = await loadPromptAssets();
-  const provider = getProvider();
+  const ctx = await collectSceneContext(campaign, chapter, newChapter);
+  const assets = await loadPromptAssets("scene");
+  return runPipeline({
+    req: {
+      systemPrompt: assets.systemPrompt,
+      fewShotTarget: assets.fewShotTarget,
+      glossary: ctx.glossary,
+      context: { chapter: ctx.chapter, npcs: ctx.npcs, locations: ctx.locations },
+      sourceText,
+    },
+    provider: getProvider(),
+    validate: (raw) => validateReply(raw, ctx),
+    correctionTail: SCENE_CORRECTION_TAIL,
+  });
+}
 
-  const req: GenerateRequest = {
-    systemPrompt: assets.systemPrompt,
-    fewShotTarget: assets.fewShotTarget,
-    glossary: ctx.glossary,
-    context: { chapter: ctx.chapter, npcs: ctx.npcs, locations: ctx.locations },
-    sourceText,
-  };
-
+/**
+ * The provider loop itself, shared by both run kinds (issue #21) so the
+ * mechanics can only ever be IDENTICAL: correction turns bounded by
+ * LLM_CORRECTION_TURNS, truncation fail-fast before any validation, usage
+ * summed over every call, and the raw reply in both 422 bodies.
+ *
+ * `validate` is the only difference between a scene run and an NPC run.
+ */
+async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
+  req: GenerateRequest;
+  provider: LLMProvider;
+  validate: (raw: string) => { ok: true; result: T } | { ok: false; errors: string[] };
+  correctionTail: string;
+}): Promise<T> {
+  const { req, provider, validate } = input;
   const corrections: CorrectionTurn[] = [];
   // Read once per run: the bound must not change under a running loop.
   const maxCorrections = parseCorrectionTurns();
@@ -676,7 +1015,7 @@ export async function runGenerate(
       });
     }
 
-    const outcome = validateReply(raw, ctx);
+    const outcome = validate(raw);
     if (outcome.ok) {
       spend.log(provider.name, "ok");
       const usage = spend.usage();
@@ -690,14 +1029,57 @@ export async function runGenerate(
         ...(spend.usage() === undefined ? {} : { usage: spend.usage() }),
       });
     }
-    corrections.push({ assistant: raw, correction: buildCorrectionMessage(outcome.errors) });
+    corrections.push({
+      assistant: raw,
+      correction: buildCorrectionMessage(outcome.errors, input.correctionTail),
+    });
   }
+}
+
+// --- POST /api/:campaign/generate/npc (issue #21) -----------------------------
+
+/**
+ * Run the NPC pipeline: context -> npc prompt -> provider -> mechanical
+ * validation, with the same correction turns, the same truncation fail-fast
+ * and the same usage accounting as a scene run (runPipeline). Writes NOTHING;
+ * the draft goes into the review and only apply touches the disk.
+ *
+ * `npcId` is the DM's optional pin: it decides the target file name and is
+ * checked for collisions BEFORE the provider is called. Without it the model
+ * picks the id (and a collision becomes a correction turn).
+ */
+export async function runGenerateNpc(
+  campaign: string,
+  sourceText: string,
+  npcId?: string,
+  getProvider: () => LLMProvider = obtainProvider,
+): Promise<GenerateNpcResult> {
+  const ctx = await collectNpcContext(campaign, npcId);
+  const assets = await loadPromptAssets("npc");
+  return runPipeline({
+    req: {
+      systemPrompt: assets.systemPrompt,
+      fewShotTarget: assets.fewShotTarget,
+      glossary: ctx.glossary,
+      context: {
+        npcs: ctx.npcs,
+        locations: ctx.locations,
+        ...(npcId === undefined ? {} : { targetId: npcId }),
+      },
+      sourceText,
+    },
+    provider: getProvider(),
+    validate: (raw) => validateNpcReply(raw, ctx, npcId),
+    correctionTail: NPC_CORRECTION_TAIL,
+  });
 }
 
 // --- POST /api/:campaign/generate/apply -----------------------------------------
 
 const SCENE_ITEM_KEYS = new Set(["path", "markdown", "frontmatter"]);
 const STUB_ITEM_KEYS = new Set(["kind", "id", "name", "markdown"]);
+/** Same three keys as a scene draft — the client may pass the draft verbatim. */
+const NPC_ITEM_KEYS = SCENE_ITEM_KEYS;
 
 /** One validated file ready to be written. */
 interface ApplyTarget {
@@ -741,6 +1123,41 @@ function applySceneTarget(item: unknown, index: number): ApplyTarget {
   if (parsed.frontmatter.status !== "draft") {
     throw new ApiError(400, `${label}: "status" must be "draft"`);
   }
+  return { rel, markdown };
+}
+
+/**
+ * Deep-validate the `npc` item of the apply body -> write target (issue #21).
+ * Re-validated on the way in, exactly like a scene draft and for the same
+ * reason (apply is a separate request — never trust the client): the target
+ * path, parseable frontmatter, the id matching the file name and a valid
+ * NpcStatus. The rules that shape the MODEL's reply (relationship targets,
+ * `[!secret]`-only inside `## Weiß`) are deliberately not re-run here — from
+ * here on the DM is the author of the markdown, and their raw edit must not
+ * be rejected for a prompt rule.
+ */
+function applyNpcTarget(item: unknown): ApplyTarget {
+  const label = "npc";
+  if (!isPlainObject(item)) throw new ApiError(400, `${label} must be an object`);
+  assertKnownKeys(item, NPC_ITEM_KEYS, label);
+  const rel = item.path;
+  const markdown = item.markdown;
+  if (typeof rel !== "string") throw new ApiError(400, `${label}.path must be a string`);
+  if (typeof markdown !== "string" || markdown === "") {
+    throw new ApiError(400, `${label}.markdown must be a non-empty string`);
+  }
+  if (!NPC_PATH_PATTERN.test(rel)) {
+    throw new ApiError(400, `${label}.path must be "npcs/<kebab-case-id>.md"`);
+  }
+  assertSafeRelativeMdPath(rel); // defense in depth — the pattern rules escapes out
+  const { parsed, error } = parseWithFrontmatter(markdown, rel);
+  if (error !== undefined) throw new ApiError(400, `${label}: ${error}`);
+  const id = fileStem(rel);
+  if (parsed.frontmatter.id !== id) {
+    throw new ApiError(400, `${label}: frontmatter id does not match the filename`);
+  }
+  const statusError = npcStatusErrors(parsed.frontmatter, "NPC-Dateien")[0];
+  if (statusError !== undefined) throw new ApiError(400, `${label}: ${statusError}`);
   return { rel, markdown };
 }
 
@@ -818,15 +1235,23 @@ async function newChapterTarget(
  * `chapter`/`chapterTitle` (both or neither) add the chapter's `_chapter.md`
  * to the SAME all-or-nothing batch when it does not exist yet — the app's
  * "Neues Kapitel" flow.
+ *
+ * `npc` is the NPC generator's single draft (issue #21) — the same endpoint on
+ * purpose: conflict handling, atomic writes and the job cleanup are identical,
+ * and a second apply endpoint would only duplicate them.
  */
 export async function applyGenerated(
   campaign: string,
-  scenes: unknown,
-  stubs: unknown,
-  chapter?: unknown,
-  chapterTitle?: unknown,
+  body: {
+    scenes?: unknown;
+    stubs?: unknown;
+    npc?: unknown;
+    chapter?: unknown;
+    chapterTitle?: unknown;
+  },
 ): Promise<{ written: string[] }> {
   const dir = await campaignDir(campaign);
+  const { scenes, stubs, npc, chapter, chapterTitle } = body;
 
   if (scenes !== undefined && !Array.isArray(scenes)) {
     throw new ApiError(400, "scenes must be an array");
@@ -837,6 +1262,7 @@ export async function applyGenerated(
   const targets: ApplyTarget[] = [
     ...((scenes as unknown[] | undefined) ?? []).map(applySceneTarget),
     ...((stubs as unknown[] | undefined) ?? []).map(applyStubTarget),
+    ...(npc === undefined || npc === null ? [] : [applyNpcTarget(npc)]),
   ];
   if (targets.length === 0) throw new ApiError(400, "nothing to apply");
 
