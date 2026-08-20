@@ -70,6 +70,11 @@ jobs:
         with:
           context: .
           push: true
+          # Burns the commit into bundle AND server (issue #24): a tab still
+          # running an older bundle then sees the reload banner instead of
+          # crashing against the new API.
+          build-args: |
+            GRIMOIRE_BUILD=${{ github.sha }}
           # Lowercase owner: GHCR repository names are case-sensitive.
           tags: |
             ghcr.io/jocur/grimoire:latest

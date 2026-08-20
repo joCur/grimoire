@@ -1,0 +1,46 @@
+- generic [ref=f1e3]:
+  - status [ref=f1e4]:
+    - generic [ref=f1e5]: Neue Version verfügbar — neu laden
+    - button "Neu laden" [ref=f1e6]
+  - banner [ref=f1e10]:
+    - link "Grimoire" [ref=f1e11] [cursor=pointer]:
+      - /url: /
+    - 'button "Kampagne: Der Leuchtturm von Salzhafen" [ref=f1e15]'
+    - button "Suchen … ⌘K" [ref=f1e17]:
+      - generic [ref=f1e18]: Suchen …
+      - generic [ref=f1e19]: ⌘K
+    - link "Generator" [ref=f1e20] [cursor=pointer]:
+      - /url: /beispiel/generate
+    - button "Session starten" [ref=f1e21]
+  - main [ref=f1e22]:
+    - generic [ref=f1e23]:
+      - generic [ref=f1e24]:
+        - generic [ref=f1e25]:
+          - heading "Der Leuchtturm von Salzhafen" [level=1] [ref=f1e26]
+          - generic [ref=f1e27]: 1 Kapitel · 2 Szenen
+        - paragraph [ref=f1e28]: Eine Küstenkampagne um einen erloschenen Leuchtturm, Schmuggler und die Frage, wer im Hafen wirklich das Sagen hat.
+      - generic [ref=f1e29]:
+        - 'button "Kapitel 1: Der Leuchtturm von Salzhafen aktiv 2 Szenen" [expanded] [ref=f1e30]':
+          - generic [ref=f1e33]: "Kapitel 1: Der Leuchtturm von Salzhafen"
+          - generic [ref=f1e34]: aktiv
+          - generic [ref=f1e35]: 2 Szenen
+        - generic [ref=f1e37]:
+          - paragraph [ref=f1e38]: "Ziel: Herausfinden, warum das Leuchtfeuer seit drei Nächten erloschen ist."
+          - generic [ref=f1e39]:
+            - generic [ref=f1e40]: hafen
+            - 'link "Ankunft am Leuchtturm Der Leuchtturm von Salzhafen · #social #travel bereit" [ref=f1e45] [cursor=pointer]':
+              - /url: /beispiel/file/01-salzhafen/hafen/ankunft-leuchtturm.md
+              - generic [ref=f1e48]:
+                - generic [ref=f1e49]: Ankunft am Leuchtturm
+                - generic [ref=f1e50]: "Der Leuchtturm von Salzhafen · #social #travel"
+              - generic [ref=f1e51]: bereit
+          - generic [ref=f1e54]:
+            - generic [ref=f1e55]:
+              - generic [ref=f1e61]: Falls es schiefgeht
+              - generic [ref=f1e62]: · Kontingenzen
+            - 'link "Von den Schmugglern erwischt Wenn: Charaktere werden beim Auskundschaften der Bucht entdeckt bereit" [ref=f1e63] [cursor=pointer]':
+              - /url: /beispiel/file/01-salzhafen/hafen/von-schmugglern-erwischt.md
+              - generic [ref=f1e69]:
+                - generic [ref=f1e70]: Von den Schmugglern erwischt
+                - generic [ref=f1e71]: "Wenn: Charaktere werden beim Auskundschaften der Bucht entdeckt"
+              - generic [ref=f1e72]: bereit

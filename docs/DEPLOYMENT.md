@@ -88,6 +88,7 @@ SHA-Tag des vorherigen Commits.
 | `CAMPAIGN_ROOT`     | `/campaigns` | Ordner mit den Kampagnen-Verzeichnissen (im Image gesetzt)     |
 | `PORT`              | `3000`       | HTTP-Port im Container                                        |
 | `APP_DIST`          | `../app/dist` (relativ zum `server/`-Paket) | Pfad des Frontend-Builds; im Image bereits richtig |
+| `GRIMOIRE_BUILD`    | `dev`        | Build-Id (Commit-SHA); die CI brennt sie als Build-Arg in Bundle **und** Server ein |
 
 ### Generator (LLM-Provider)
 
@@ -236,6 +237,12 @@ Dateien zurückkopieren, Container neu starten (der Watcher liest neu ein).
   (DECISIONS #9). Auf exotischen Mounts (NFS, manche FUSE-Setups) kommen
   keine Datei-Events an — dann hilft nur ein Reload im Browser bzw. ein
   Container-Neustart.
+- Banner „Neue Version verfügbar — neu laden": ein offener Tab läuft noch mit
+  einem älteren Bundle als der Server (Build-Ids aus `GRIMOIRE_BUILD` weichen
+  ab, Vergleich beim laufenden Versions-Polling) — der Klick lädt hart neu,
+  automatisch passiert bewusst nichts. Lokal und in selbst gebauten Images
+  ohne `--build-arg GRIMOIRE_BUILD=…` steht auf beiden Seiten `dev`, dann
+  bleibt das Banner immer aus.
 - Caching: `/assets/*` (gehashte Dateinamen) wird `immutable` ausgeliefert,
   `index.html` mit `no-cache`. Ein Deploy ist damit sofort sichtbar, ohne
   dass der Browser Bundles doppelt lädt.

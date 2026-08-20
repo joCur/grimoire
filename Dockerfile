@@ -12,6 +12,13 @@
 FROM oven/bun:1 AS build
 WORKDIR /app
 
+# Build id of this image (issue #24): the CI passes the commit sha
+# (--build-arg GRIMOIRE_BUILD=$GITHUB_SHA); a local `docker build` without it
+# gets "dev", which switches the app's version handshake off. Exported as env
+# so the Vite build below can bake it into the bundle.
+ARG GRIMOIRE_BUILD=dev
+ENV GRIMOIRE_BUILD=$GRIMOIRE_BUILD
+
 # Manifests first so `bun install` stays cached while sources change.
 # app/package.json is needed in every stage because the root package.json
 # declares it as a workspace.
@@ -37,6 +44,12 @@ RUN bun run --filter '@grimoire/app' build
 FROM oven/bun:1-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+
+# Same id for the server (ARG does not cross stage boundaries, so it is
+# declared again): bundle and server must report the SAME value, otherwise
+# every fresh deploy would show its own reload banner.
+ARG GRIMOIRE_BUILD=dev
+ENV GRIMOIRE_BUILD=$GRIMOIRE_BUILD
 
 # Runtime dependencies only: --production drops devDependencies, --filter
 # leaves the app's build-time deps (vite, react, tailwind) out of the image.

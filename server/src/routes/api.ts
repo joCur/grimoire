@@ -6,6 +6,7 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { getBuildId } from "../config";
 import { ApiError, buildTree, campaignDir, listCampaigns, readParsedFile } from "../campaign-fs";
 import { getCampaignVersion, searchCampaign } from "../search-index";
 import {
@@ -38,6 +39,17 @@ api.onError((err, c) => {
   }
   console.error(err);
   return c.json({ error: "internal server error" }, 500);
+});
+
+// Every /api response carries the server's build id (issue #24). The primary
+// carrier is GET /:campaign/version (the app polls it anyway); this header is
+// the cheap belt-and-braces copy for anything that talks to the API without
+// that poll — curl during a deploy, a future client, the browser network tab.
+// Set on the finished response so handlers that return a raw Response (not
+// c.json) get it too.
+api.use("*", async (c, next) => {
+  await next();
+  c.res.headers.set("x-grimoire-build", getBuildId());
 });
 
 // --- request body validation ---------------------------------------------------
@@ -100,13 +112,16 @@ api.get("/:campaign/search", async (c) => {
   return c.json({ results: await searchCampaign(campaign, q) });
 });
 
-// GET /api/:campaign/version -> { version } — bumped by the file watcher on
-// every markdown change; the app polls this and refetches when it changes
-// (polling instead of SSE, DECISIONS #9).
+// GET /api/:campaign/version -> { version, build } — `version` is bumped by
+// the file watcher on every markdown change; the app polls this and refetches
+// when it changes (polling instead of SSE, DECISIONS #9). `build` rides along
+// on that existing poll (issue #24): the app compares it with its own build id
+// and offers a reload when a deploy left it with a stale bundle. No extra
+// request, no extra polling loop.
 api.get("/:campaign/version", async (c) => {
   const campaign = c.req.param("campaign");
   await campaignDir(campaign);
-  return c.json({ version: getCampaignVersion(campaign) });
+  return c.json({ version: getCampaignVersion(campaign), build: getBuildId() });
 });
 
 // --- write endpoints (issue #5) ---------------------------------------------------

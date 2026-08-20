@@ -37,6 +37,21 @@ export function setCampaignRoot(dir: string): void {
 export const PORT = Number(process.env.PORT ?? 3000);
 
 /**
+ * Build id of this server — the commit the image was built from
+ * (GRIMOIRE_BUILD, baked in by the Dockerfile via a build arg; see
+ * .github/workflows/ci.yml). Outside an image it is "dev".
+ *
+ * The app compares it with its own build id and offers a reload when the two
+ * differ (issue #24: an old SPA bundle in an open tab talking to a new
+ * server). Read from the env on every call — like getAppDistDir() and unlike
+ * the campaign root — so tests can set GRIMOIRE_BUILD without a test-only
+ * setter; the cost is one env lookup per version poll.
+ */
+export function getBuildId(): string {
+  return process.env.GRIMOIRE_BUILD?.trim() || "dev";
+}
+
+/**
  * Directory of the built frontend (Vite output). Defaults to ../app/dist
  * relative to the server PACKAGE dir, which is also the layout inside the
  * Docker image (/app/server + /app/app/dist). APP_DIST overrides it with

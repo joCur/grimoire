@@ -1,6 +1,7 @@
 import { Outlet, Route, Routes, useParams } from "react-router";
 
 import { Topbar } from "@/components/Topbar";
+import { UpdateBanner } from "@/components/UpdateBanner";
 import { ReviewMemoryProvider } from "@/lib/review-memory";
 import { useCampaignVersion } from "@/lib/use-campaign-version";
 import { BrowseRoute } from "@/routes/browse";
@@ -25,10 +26,14 @@ function CampaignScope() {
 // the scroll container (keeps the scene aside sticky against it).
 // The review memory (issue #10) wraps both so the topbar's progress counts
 // exactly the cards the review page shows.
+// The update banner (issue #24) sits above the topbar and therefore above
+// every view including the mobile surfaces, where the topbar is hidden; it
+// renders nothing unless the version poll saw a build mismatch.
 function Layout() {
   return (
     <ReviewMemoryProvider>
       <div className="flex h-dvh flex-col">
+        <UpdateBanner />
         <Topbar />
         <main className="min-h-0 flex-1 overflow-y-auto">
           <Outlet />

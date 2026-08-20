@@ -1,11 +1,18 @@
 // Client half of issue #8: poll GET /api/:campaign/version and invalidate
 // the campaign's read queries when the counter changes (the server's file
 // watcher bumps it on every markdown change). No UI — data just refreshes.
+//
+// The same response carries the server's build id (issue #24), so this one
+// poll doubles as the version handshake: every tick hands the id to
+// reportServerBuild, which flips a sticky flag when it no longer matches the
+// bundle this tab is running. The banner (components/UpdateBanner.tsx) reads
+// that flag. No second request, no second interval.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
 import { fetchVersion } from "@/api";
+import { reportServerBuild } from "@/lib/build-id";
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -31,6 +38,10 @@ export function useCampaignVersion(campaign: string): void {
 
   useEffect(() => {
     if (data === undefined) return;
+    // Build handshake first — it must run on EVERY poll, including the very
+    // first one and polls where the counter did not move (a deploy changes
+    // the build id, not the campaign files).
+    reportServerBuild(data.build);
     const previous = last.current;
     last.current = { campaign, version: data.version };
     if (previous === null || previous.campaign !== campaign) return;

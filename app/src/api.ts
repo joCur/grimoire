@@ -78,9 +78,18 @@ export function fetchSearch(campaign: string, q: string): Promise<SearchResponse
 /**
  * Campaign version counter (issue #8) — bumped by the server's file watcher
  * on every markdown change; polled by useCampaignVersion.
+ *
+ * `build` (issue #24) is the server's build id, riding along on this poll so
+ * the handshake costs no extra request. Optional in the type because an older
+ * server (or a stale tab talking to one) may not send it.
  */
-export function fetchVersion(campaign: string): Promise<{ version: number }> {
-  return getJson<{ version: number }>(`/${encodeURIComponent(campaign)}/version`);
+export interface VersionResponse {
+  version: number;
+  build?: string;
+}
+
+export function fetchVersion(campaign: string): Promise<VersionResponse> {
+  return getJson<VersionResponse>(`/${encodeURIComponent(campaign)}/version`);
 }
 
 // --- write endpoints (session/log, issue #9) --------------------------------

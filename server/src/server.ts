@@ -20,9 +20,14 @@
 //   [x] GET  /api/:campaign/search?q=...       { results } — fuzzy search (Fuse.js, in-memory,
 //                                              scenes/npcs/locations/chapters/_campaign.md,
 //                                              max 20 results)
-//   [x] GET  /api/:campaign/version            { version } — bumped by the file watcher on md
-//                                              changes; the app polls it and refetches on change
-//                                              (SSE considered and deferred, DECISIONS #9)
+//   [x] GET  /api/:campaign/version            { version, build } — version is bumped by the
+//                                              file watcher on md changes; the app polls it and
+//                                              refetches on change (SSE considered and deferred,
+//                                              DECISIONS #9). build is this server's build id
+//                                              (GRIMOIRE_BUILD, "dev" outside an image) — issue
+//                                              #24: when it differs from the app's own build id
+//                                              the app shows a reload banner. Every /api
+//                                              response also carries it as x-grimoire-build.
 //   [x] POST /api/:campaign/generate           { chapter, sourceText, newChapter? } ->
 //                                              202 { jobId } — starts a background job
 //                                              (issue #19; writes NOTHING). newChapter
