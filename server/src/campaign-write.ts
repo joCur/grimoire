@@ -175,8 +175,10 @@ function currentFrontmatter(raw: string): Record<string, unknown> {
  * Only the YAML block is regenerated; the body stays byte-identical. A file
  * without a frontmatter block gets one prepended iff the resulting
  * frontmatter is non-empty; deleting the last key drops the block.
+ * (Exported for the rename cascade of issue #30 — it patches reference keys
+ * in many files and must use the exact same raw-patch mechanism.)
  */
-function applyFrontmatterPatch(raw: string, patch: Record<string, unknown>): string {
+export function applyFrontmatterPatch(raw: string, patch: Record<string, unknown>): string {
   const block = splitFrontmatterBlock(raw);
   const fm = currentFrontmatter(raw);
 

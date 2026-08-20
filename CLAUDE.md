@@ -72,6 +72,37 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Klickpfad selbst (Server + gebaute App, Produktions-Topologie) —
   Agent-Smoke-Berichte ersetzen das nicht.
 
+## Branch- & PR-Prozess (main ist produktiv)
+
+- KEINE Direkt-Pushes auf main — Branch-Protection erzwingt PRs.
+- Jedes Ticket: eigener Worktree + Feature-Branch (`<nr>-<slug>`),
+  Ergebnis als PR. Merge-Voraussetzungen: CI grün (Tests, Typecheck,
+  Build, E2E), Lead-Klickpfad, UND PO-Approval auf dem PR.
+- `:latest` baut weiter bei jedem Merge — main ist per Definition
+  deploybar; der PO pullt bewusst (nie direkt vor einer Session),
+  SHA-Tags erlauben Rollback.
+
+## Kritische Pfade (E2E-Pflicht, echte Suite ohne Mocks)
+
+Playwright gegen den echten Stack (realer Server auf Kampagnen-Kopie,
+gebaute App, echter Browser; einzige Ausnahme: das LLM ist ein lokaler
+Stub-HTTP-Server — der Provider-Pfad läuft real). Die Pfade:
+
+1. Auto-Einstieg `/` → Pool lädt die Kampagne
+2. Szene lesen: Callouts, If-Sections, NPC-Karten der Referenzszenen
+3. ⌘K-Suche findet und öffnet
+4. Session-Zyklus: starten → Schnellnotiz → Log + scenes_played →
+   Pause → beenden → Review
+5. Ernte: Thread übernehmen → _chapter.md; Inbox abhaken
+6. Generator-Zyklus (Stub-LLM): Job → Review → Übernehmen → draft im
+   Pool; plus 409-/Fehlerpfad
+7. Frontmatter-Patch/Status-Regler inkl. 409-Konflikt
+8. Mobil-Startfläche + Inbox-Einwurf bei 390px
+
+Regel für neue Features: Jedes ready-Ticket benennt die berührten
+kritischen Pfade; wer einen berührt oder schafft, erweitert die
+E2E-Suite im selben PR — sonst kein Merge.
+
 ## Qualitäts-Boden (nicht verhandelbar)
 
 - Responsive bis Mobil (Mobile = Suche, Leseansicht, Inbox — siehe UI-BRIEF)

@@ -9,6 +9,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { getBuildId } from "../config";
 import { ApiError, buildTree, campaignDir, listCampaigns, readParsedFile } from "../campaign-fs";
 import { getCampaignVersion, searchCampaign } from "../search-index";
+import { isRenameKind, RENAME_KINDS, renameEntity } from "../campaign-rename";
 import {
   appendInboxEntry,
   appendLogEntry,
@@ -176,6 +177,38 @@ api.post("/:campaign/inbox", async (c) => {
   const text = normalizeLineText(body.text);
   if (text === undefined) throw new ApiError(400, "text must be a non-empty string");
   return c.json(await appendInboxEntry(c.req.param("campaign"), text));
+});
+
+// --- rename with reference cascade (issue #30) --------------------------------------
+
+// POST /api/:campaign/rename { kind, oldId, newId, dryRun? }
+//   -> { renamed: { from, to }, changed: string[] }
+// Renames the entity's file (a DIRECTORY for kind "chapter") and patches
+// every reference site of the format contract — see campaign-rename.ts for
+// the list, the plan/execute split and the write order. Prose mentions are
+// deliberately left alone.
+// 400 unknown kind / invalid or unchanged newId, 404 unknown id,
+// 409 { path } when the target exists. `dryRun: true` answers with the very
+// same plan and writes nothing (the UI's "betrifft N Dateien" preview).
+api.post("/:campaign/rename", async (c) => {
+  const body = await jsonBody(c, ["kind", "oldId", "newId", "dryRun"]);
+  if (!isRenameKind(body.kind)) {
+    throw new ApiError(400, `kind must be one of: ${RENAME_KINDS.join(", ")}`);
+  }
+  if (typeof body.oldId !== "string") throw new ApiError(400, "oldId must be a string");
+  if (typeof body.newId !== "string") throw new ApiError(400, "newId must be a string");
+  if (body.dryRun !== undefined && typeof body.dryRun !== "boolean") {
+    throw new ApiError(400, "dryRun must be a boolean");
+  }
+  return c.json(
+    await renameEntity(
+      c.req.param("campaign"),
+      body.kind,
+      body.oldId.trim(),
+      body.newId.trim(),
+      body.dryRun === true,
+    ),
+  );
 });
 
 // --- review-action endpoints (issue #10) --------------------------------------------

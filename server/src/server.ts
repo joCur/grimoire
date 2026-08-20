@@ -55,6 +55,15 @@
 //                                              same batch; `npc` is the NPC run's single
 //                                              draft (issue #21); jobId discards that job
 //                                              after a successful write.
+//   [x] POST /api/:campaign/rename             { kind, oldId, newId, dryRun? } ->
+//                                              { renamed: { from, to }, changed } —
+//                                              renames npcs/locations/scenes (file) or a
+//                                              chapter (DIRECTORY) and patches every
+//                                              reference site: frontmatter npcs/location/
+//                                              chapter, session scenes_played, `## Beziehungen`
+//                                              lines, log scene markers. Prose is NOT touched.
+//                                              Plan-then-execute: 400/404/409 { path } write
+//                                              nothing; dryRun returns the plan only (issue #30)
 //   [x] POST /api/:campaign/review/seen        { path, line } -> add the line's short hash
 //                                              to the session's `reviewed` list (idempotent)
 //   [x] POST /api/:campaign/review/thread      { chapter, text } -> append `- [ ] text` under
