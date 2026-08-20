@@ -28,3 +28,6 @@ yarn-error.log*
 
 # Browser-Verifikations-Artefakte (Playwright MCP)
 .playwright-mcp/
+
+# Worktrees der Team-Agenten
+.claude/worktrees/

@@ -21,13 +21,19 @@
 // NICHT"). Same for `inbox.md` and `glossary.md`: they carry no reference
 // fields by contract, so they are not even scanned.
 //
-// Mechanics, all reused from the write layer (campaign-write.ts):
+// Mechanics — everything here is TOKEN-LEVEL, because AK5 asks for a cascade
+// that is byte-exact ("nur Referenzstellen ändern sich"):
 //
-//   * FRONTMATTER changes go through the raw-patch mechanism — only the YAML
-//     block is re-emitted, the body stays byte-identical.
-//   * BODY changes (`## Beziehungen` entries, log markers) are line-level and
-//     anchored: a regex replaces the id token only and keeps every other byte
-//     of the line (indent, spacing, text, hashtags) verbatim.
+//   * FRONTMATTER references are rewritten inside their own line: the value of
+//     a scalar key (`location: leuchtturm`), the matching member of a flow
+//     sequence (`npcs: [jorna, fenn]`) or of a block sequence (`- jorna`).
+//     Only the id token changes — quoting, spacing, comments and every other
+//     key stay verbatim. A shape this does not recognize falls back to the
+//     write layer's raw-patch mechanism (campaign-write.ts), which re-emits
+//     the YAML block and may normalize ITS formatting (documented there);
+//     the body stays byte-identical either way.
+//   * BODY references (`## Beziehungen` entries, log markers) are line-level
+//     and anchored the same way: indent, spacing, text and hashtags verbatim.
 //   * Every write is an atomicWrite under the per-file lock.
 //
 // PLAN, then EXECUTE. The whole cascade is computed in memory first: entity
@@ -203,6 +209,153 @@ function replacedRef(value: unknown, oldId: string, newId: string): unknown {
   return names(value) ? newId : undefined;
 }
 
+// --- frontmatter references, token-level -----------------------------------------
+
+/**
+ * Byte offsets of the YAML frontmatter block's TEXT (between the two `---`
+ * delimiter lines), or null when the file has no closed block. Same rules as
+ * the write layer's splitter — an unclosed block degrades to "no frontmatter".
+ */
+function frontmatterRange(raw: string): { start: number; end: number } | null {
+  if (!raw.startsWith("---\n") && !raw.startsWith("---\r\n")) return null;
+  const firstNl = raw.indexOf("\n");
+  let pos = firstNl + 1;
+  while (pos <= raw.length) {
+    const nl = raw.indexOf("\n", pos);
+    const lineEnd = nl === -1 ? raw.length : nl;
+    let line = raw.slice(pos, lineEnd);
+    if (line.endsWith("\r")) line = line.slice(0, -1);
+    if (line === "---") return { start: firstNl + 1, end: pos };
+    if (nl === -1) break;
+    pos = nl + 1;
+  }
+  return null;
+}
+
+/** Trailing part of a YAML line that must survive verbatim: spaces, comment, CR. */
+const TAIL = "[ \\t]*(?:#.*)?\\r?";
+
+/** One flow-sequence member (`[a, "b" , c]`) split into quotes and value. */
+const FLOW_MEMBER = /^([ \t]*)(['"]?)(.*?)\2([ \t]*)$/;
+
+/** Replace `oldId` inside a `[a, b]` flow sequence, keeping quotes/spacing. */
+function patchFlowMembers(inner: string, oldId: string, newId: string): string | null {
+  let hit = false;
+  const parts = inner.split(",").map((part) => {
+    const m = FLOW_MEMBER.exec(part);
+    if (m === null || m[3] !== oldId) return part;
+    hit = true;
+    return `${m[1]}${m[2]}${newId}${m[2]}${m[4]}`;
+  });
+  return hit ? parts.join(",") : null;
+}
+
+/**
+ * Rewrite the id token in the frontmatter value of `key`, in place. Handles
+ * the three shapes the format uses:
+ *
+ *   key: <id>              scalar (quoted or not)
+ *   key: [<id>, other]     flow sequence
+ *   key:                   block sequence
+ *     - <id>
+ *
+ * Returns the patched text, "no-key" when the file's frontmatter has no such
+ * top-level key at all, or "unsupported" when the key is there but no token
+ * matched (an exotic YAML shape) — the caller then decides.
+ */
+type TokenPatch = { done: true; raw: string } | { done: false; reason: "no-key" | "unsupported" };
+
+function patchFrontmatterToken(
+  raw: string,
+  key: string,
+  oldId: string,
+  newId: string,
+): TokenPatch {
+  const range = frontmatterRange(raw);
+  if (range === null) return { done: false, reason: "no-key" };
+  const lines = raw.slice(range.start, range.end).split("\n");
+  const keyLine = new RegExp(`^${escapeRe(key)}:`);
+  const at = lines.findIndex((line) => keyLine.test(line));
+  if (at === -1) return { done: false, reason: "no-key" };
+
+  const line = lines[at]!;
+  const id = escapeRe(oldId);
+  const k = escapeRe(key);
+  const scalar = new RegExp(`^(${k}:[ \\t]*)(['"]?)${id}\\2(${TAIL})$`);
+  const flow = new RegExp(`^(${k}:[ \\t]*\\[)(.*)(\\]${TAIL})$`);
+  const empty = new RegExp(`^${k}:(${TAIL})$`);
+
+  const commit = (): TokenPatch => ({
+    done: true,
+    raw: raw.slice(0, range.start) + lines.join("\n") + raw.slice(range.end),
+  });
+
+  const asScalar = scalar.exec(line);
+  if (asScalar !== null) {
+    lines[at] = `${asScalar[1]}${asScalar[2]}${newId}${asScalar[2]}${asScalar[3]}`;
+    return commit();
+  }
+  const asFlow = flow.exec(line);
+  if (asFlow !== null) {
+    const inner = patchFlowMembers(asFlow[2]!, oldId, newId);
+    if (inner === null) return { done: false, reason: "unsupported" };
+    lines[at] = `${asFlow[1]}${inner}${asFlow[3]}`;
+    return commit();
+  }
+  if (empty.test(line)) {
+    // Block sequence: the indented `- <id>` items that follow, up to the next
+    // top-level key.
+    const item = new RegExp(`^([ \\t]*-[ \\t]+)(['"]?)${id}\\2(${TAIL})$`);
+    let hit = false;
+    for (let i = at + 1; i < lines.length; i++) {
+      const current = lines[i]!;
+      // Sequence items may sit at zero indent; anything else at zero indent
+      // is the next key.
+      if (current.trim() !== "" && !/^[ \t]/.test(current) && !/^-[ \t]/.test(current)) break;
+      const m = item.exec(current);
+      if (m !== null) {
+        lines[i] = `${m[1]}${m[2]}${newId}${m[2]}${m[3]}`;
+        hit = true;
+      }
+    }
+    if (hit) return commit();
+  }
+  return { done: false, reason: "unsupported" };
+}
+
+/**
+ * Rewrite one frontmatter reference: token-level when the YAML shape allows
+ * it (byte-exact), otherwise through the write layer's raw-patch mechanism
+ * with `value` as the new value (the YAML block is re-emitted then — the body
+ * still stays byte-identical).
+ */
+function patchRef(
+  raw: string,
+  key: string,
+  oldId: string,
+  newId: string,
+  value: unknown,
+): string {
+  const patched = patchFrontmatterToken(raw, key, oldId, newId);
+  return patched.done ? patched.raw : applyFrontmatterPatch(raw, { [key]: value });
+}
+
+/**
+ * The renamed entity's own `id`. A file whose id is only the FILE NAME
+ * (no `id:` key — the parser's fallback) needs no write at all: the rename
+ * itself gives it the new id.
+ */
+function patchOwnId(raw: string, oldId: string, newId: string): string {
+  const patched = patchFrontmatterToken(raw, "id", oldId, newId);
+  if (patched.done) return patched.raw;
+  if (patched.reason === "no-key") return raw;
+  // An `id:` key that does not read as `oldId` (a chapter whose _chapter.md
+  // carries a different id than its directory, an exotic YAML shape): set it.
+  return applyFrontmatterPatch(raw, { id: newId });
+}
+
+// --- body references, line-level ---------------------------------------------------
+
 /** True for a markdown ATX heading line. */
 const HEADING = /^#{1,6}[ \t]/;
 
@@ -377,7 +530,7 @@ async function planRename(
   //    would degrade to anyway). A chapter without `_chapter.md` has nothing
   //    to patch; the tree then takes the id from the directory name.
   if (entity !== undefined) {
-    edit(edits, entity, finalRel(entity.rel), (raw) => applyFrontmatterPatch(raw, { id: newId }));
+    edit(edits, entity, finalRel(entity.rel), (raw) => patchOwnId(raw, oldId, newId));
   }
 
   // 2. the reference sites of this kind.
@@ -387,7 +540,7 @@ async function planRename(
       if (f.parsed.kind === "scene") {
         const npcs = replacedRef(fm.npcs, oldId, newId);
         if (npcs !== undefined) {
-          edit(edits, f, finalRel(f.rel), (raw) => applyFrontmatterPatch(raw, { npcs }));
+          edit(edits, f, finalRel(f.rel), (raw) => patchRef(raw, "npcs", oldId, newId, npcs));
         }
       }
       if (f.parsed.kind === "npc") {
@@ -397,7 +550,9 @@ async function planRename(
       if (f.parsed.kind === "scene") {
         const location = replacedRef(fm.location, oldId, newId);
         if (location !== undefined) {
-          edit(edits, f, finalRel(f.rel), (raw) => applyFrontmatterPatch(raw, { location }));
+          edit(edits, f, finalRel(f.rel), (raw) =>
+            patchRef(raw, "location", oldId, newId, location),
+          );
         }
       }
     } else if (kind === "chapter") {
@@ -405,14 +560,14 @@ async function planRename(
       // (README) — all three are patched.
       const chapter = replacedRef(fm.chapter, oldId, newId);
       if (chapter !== undefined) {
-        edit(edits, f, finalRel(f.rel), (raw) => applyFrontmatterPatch(raw, { chapter }));
+        edit(edits, f, finalRel(f.rel), (raw) => patchRef(raw, "chapter", oldId, newId, chapter));
       }
     }
   }
   for (const f of sessions) {
     const played = replacedRef(f.parsed.frontmatter.scenes_played, oldId, newId);
     if (played !== undefined) {
-      edit(edits, f, f.rel, (raw) => applyFrontmatterPatch(raw, { scenes_played: played }));
+      edit(edits, f, f.rel, (raw) => patchRef(raw, "scenes_played", oldId, newId, played));
     }
     edit(edits, f, f.rel, (raw) => patchLogMarkers(raw, oldId, newId));
   }

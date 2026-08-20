@@ -5,9 +5,10 @@
 // "Wenn:" line and a plain hairline instead of the chip row.
 //
 // `statusControl` (issue #28) is the status regler of the reading view; it
-// rides at the right end of the overline row. The component stays free of
-// queries — the route owns the control and passes it in, so the live view
-// simply passes nothing.
+// rides at the right end of the overline row. `actions` (issue #30:
+// „Umbenennen") sits quietly to its left. The component stays free of
+// queries — the route owns both and passes them in, so the live view simply
+// passes nothing.
 
 import type { CampaignTree, FileResponse } from "@grimoire/shared/types";
 import { Bookmark, GitFork, MapPin } from "lucide-react";
@@ -23,11 +24,13 @@ export function SceneArticle({
   tree,
   variant,
   statusControl,
+  actions,
 }: {
   file: FileResponse;
   tree: CampaignTree | undefined;
   variant: "scene" | "live";
   statusControl?: ReactNode;
+  actions?: ReactNode;
 }) {
   const live = variant === "live";
   const fm = file.frontmatter;
@@ -65,9 +68,10 @@ export function SceneArticle({
             </span>
           </>
         )}
-        {statusControl !== undefined && (
+        {(statusControl !== undefined || actions !== undefined) && (
           <>
             <span className="flex-1" />
+            {actions}
             {statusControl}
           </>
         )}
