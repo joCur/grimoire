@@ -3,25 +3,30 @@
 //
 //   input   target chapter (existing chip or the "Neues Kapitel" flow with
 //           a live path preview) + source text + the context hint
-//   working the spinner while POST /generate runs (correction turns happen
-//           inside that one request, generator/README.md)
-//   review  the returned drafts: rendered through the SAME markdown
+//   working the spinner while the SERVER's job runs (correction turns happen
+//           inside that job, generator/README.md)
+//   review  the drafts of a finished job: rendered through the SAME markdown
 //           pipeline as a real scene, editable as raw markdown, stubs
 //           accepted/rejected one by one. NOTHING is on disk yet.
 //   done    the paths POST /generate/apply wrote — all as drafts
+//
+// Since issue #19 the run is a background JOB on the server and this route
+// is only its window: on mount it asks GET …/generate/job and restores
+// whatever it finds (running -> working with ~3s polling, done -> review
+// incl. the edits kept in the job, failed -> the error block). That is the
+// whole point of the ticket: a browser-back gesture, a reload or a closed
+// tab may not destroy minutes of generation any more.
 //
 // A failed run stays in the input state and shows the server's 422 in full
 // (issue #18): the message (for a truncated reply the one naming
 // LLM_MAX_TOKENS), the validation errors when there are any, the last raw
 // reply behind a collapsed „Rohantwort anzeigen“, and the run's token spend.
 //
-// The state machine is derived, not stored: `written` (apply succeeded) beats
-// `result` (generate succeeded) beats the generate mutation's pending flag.
-// "Verwerfen" drops `result` — client state only, nothing was written.
-//
-// All review edits live in this component (a raw-markdown map keyed by the
-// draft path, plus one decision per stub) and are sent on apply; the server
-// re-validates and never trusts them.
+// Local state is only what the server cannot know: the current edit buffers
+// (mirrored into the job, debounced, so they survive too), which cards are
+// in edit mode, the stub decisions, and the paths a finished apply wrote.
+// Stub decisions are deliberately NOT persisted — re-deciding two rows is
+// cheap, and nothing is lost on disk.
 
 import type { CampaignTree, GenerateResult, GeneratedStub } from "@grimoire/shared/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -35,10 +40,17 @@ import {
   StickyNote,
   User,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 
-import { ApiError, applyDrafts, fetchFile, fetchTree, generateDrafts } from "@/api";
+import {
+  ApiError,
+  applyDrafts,
+  deleteGenerateJob,
+  fetchFile,
+  fetchTree,
+  startGenerateJob,
+} from "@/api";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { Button } from "@/components/ui/button";
 import { locationName } from "@/lib/campaign";
@@ -46,12 +58,15 @@ import { fmString, fmStringArray } from "@/lib/frontmatter";
 import {
   applySummary,
   contextHint,
+  generatePhase,
+  jobErrorBody,
   markdownBody,
   newChapterId,
   stringField,
   stringList,
   usageLabel,
 } from "@/lib/generate";
+import { generateJobKey, useDraftEditSync, useGenerateJob } from "@/lib/use-generate-job";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/markdown/Markdown";
 
@@ -107,28 +122,56 @@ export function GenerateRoute() {
   const newId = newChapterId(newTitle, chapterIds);
   const chapterId = target.kind === "new" ? newId : target.id;
 
-  const [result, setResult] = useState<GenerateResult>();
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<Record<string, boolean>>({});
   const [decisions, setDecisions] = useState<Record<string, StubDecision>>({});
   const [written, setWritten] = useState<string[]>();
 
+  // The server's job IS the state of a run (issue #19).
+  const jobQuery = useGenerateJob(campaign);
+  const job = jobQuery.data ?? null;
+  const jobId = job?.id ?? null;
+  const syncEdit = useDraftEditSync(campaign, job?.id);
+
+  // Seed the local buffers from the job whenever the job IDENTITY changes —
+  // a restored job brings its stored edits along, a new run starts clean.
+  // Not on every poll: while typing, the local buffer is authoritative.
+  // Tagged with the campaign, so switching campaigns is never mistaken for
+  // "the job vanished" (same rule as useCampaignVersion).
+  const [seeded, setSeeded] = useState<{ campaign: string; jobId: string | null }>();
+  const [lostJob, setLostJob] = useState(false);
+  // A job that disappears because WE applied or discarded it is not a loss.
+  const droppedRef = useRef(false);
+  if (jobQuery.isSuccess && (seeded?.campaign !== campaign || seeded.jobId !== jobId)) {
+    const previous = seeded?.campaign === campaign ? seeded.jobId : undefined;
+    setSeeded({ campaign, jobId });
+    setEdits(job?.draftEdits ?? {});
+    setEditing({});
+    setDecisions({});
+    if (previous === undefined) setWritten(undefined);
+    // Gone without us applying or discarding it: the server was restarted.
+    setLostJob(jobId === null && previous !== undefined && previous !== null && !droppedRef.current);
+    if (jobId === null) droppedRef.current = false;
+  }
+
+  const result = job?.status === "done" ? job.result : undefined;
   const scenes = result?.scenes ?? [];
   const stubs = result?.stubs ?? [];
   const acceptedStubs = stubs.filter((s) => decisions[stubKey(s)] === "accepted");
 
-  const generate = useMutation({
+  const start = useMutation({
     mutationFn: () =>
-      generateDrafts(campaign, {
+      startGenerateJob(campaign, {
         chapter: chapterId as string,
         sourceText,
         newChapter: target.kind === "new",
       }),
-    onSuccess: (data) => {
-      setResult(data);
-      setEdits({});
-      setEditing({});
-      setDecisions({});
+    // 202 (or an adopted 409 — the api client hands back the running job's
+    // id): from here on the job query drives the view.
+    onSuccess: () => {
+      setLostJob(false);
+      setWritten(undefined);
+      void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
     },
   });
 
@@ -141,29 +184,50 @@ export function GenerateRoute() {
         ...(target.kind === "new" && chapterId !== undefined
           ? { chapter: chapterId, chapterTitle: newTitle.trim() }
           : {}),
+        // The server drops the job once the drafts are on disk.
+        ...(job === null ? {} : { jobId: job.id }),
       }),
+    onMutate: () => {
+      droppedRef.current = true;
+    },
     onSuccess: (data) => {
       setWritten(data.written);
       // The drafts exist now — the pool has to show them.
       void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
+      void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
     },
   });
 
-  const phase =
-    written !== undefined
-      ? "done"
-      : result !== undefined
-        ? "review"
-        : generate.isPending
-          ? "working"
-          : "input";
+  // "Verwerfen": nothing was written, so this only drops the server's job.
+  const discard = useMutation({
+    mutationFn: () => deleteGenerateJob(campaign),
+    onMutate: () => {
+      droppedRef.current = true;
+    },
+    onSettled: () => {
+      apply.reset();
+      start.reset();
+      void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
+    },
+  });
 
-  const genError = generate.error instanceof ApiError ? generate.error : undefined;
-  // Every generator 422 comes with the last raw reply and (when the endpoint
-  // reports usage) what the run cost — a truncated reply additionally
-  // carries the server's German LLM_MAX_TOKENS message instead of a
-  // validation error list (issue #18).
-  const failed = genError?.status === 422 ? genError.details : undefined;
+  const applied = written !== undefined;
+  // The window between "POST /generate answered" and "the job shows up in
+  // the query" is still the working state — nothing else would be honest.
+  const starting = start.isPending || (start.isSuccess && job === null && !applied);
+  const phase = generatePhase({
+    applied,
+    starting,
+    jobChecked: jobQuery.isSuccess || jobQuery.isError,
+    ...(job === null ? {} : { jobStatus: job.status }),
+  });
+
+  const startError = start.error instanceof ApiError ? start.error : undefined;
+  // A failed job carries the same body the endpoint used to answer with:
+  // the last raw reply and (when the endpoint reports usage) what the run
+  // cost — a truncated reply additionally carries the server's German
+  // LLM_MAX_TOKENS message instead of a validation error list (issue #18).
+  const failed = jobErrorBody(job);
   const validationErrors = stringList(failed?.validationErrors);
   const rawReply = stringField(failed?.rawReply);
   const failedUsage = usageLabel(failed?.usage);
@@ -174,7 +238,7 @@ export function GenerateRoute() {
     : [];
 
   const canGenerate =
-    campaign !== "" && chapterId !== undefined && sourceText.trim() !== "" && !generate.isPending;
+    campaign !== "" && chapterId !== undefined && sourceText.trim() !== "" && !starting;
 
   return (
     <>
@@ -264,7 +328,7 @@ export function GenerateRoute() {
               disabled={!canGenerate}
               onClick={() => {
                 apply.reset();
-                generate.mutate();
+                start.mutate();
               }}
               className="h-auto gap-2 px-[18px] py-2.5 text-[13.5px] font-semibold [&_svg]:size-[15px]"
             >
@@ -278,7 +342,17 @@ export function GenerateRoute() {
               </p>
             )}
 
-            {genError?.status === 503 && (
+            {/* Jobs live in memory only (issue #19, bewusstes Nicht-Ziel):
+                after a server restart the run is gone — said once, quietly,
+                instead of a spinner that never ends. */}
+            {lostJob && (
+              <p aria-live="polite" className="mt-4 text-[13px] text-muted-foreground">
+                Der Generierungs-Job ist nicht mehr vorhanden (Server-Neustart?) — erneut
+                starten.
+              </p>
+            )}
+
+            {startError?.status === 503 && (
               <p className="mt-4 text-[13px] text-muted-foreground">
                 ANTHROPIC_API_KEY fehlt — siehe server/.env
               </p>
@@ -334,15 +408,20 @@ export function GenerateRoute() {
 
             {/* Everything else (incl. a plain network failure, where there is
                 no ApiError at all) stays one honest line. */}
-            {generate.isError && genError?.status !== 503 && failed === undefined && (
+            {start.isError && startError?.status !== 503 && (
               <p aria-live="polite" className="mt-4 text-[13px] text-destructive">
-                {genError?.status === 404
+                {startError?.status === 404
                   ? "Kapitel nicht gefunden — anderes Ziel wählen."
                   : "Nicht generiert — Server prüfen."}
               </p>
             )}
           </>
         )}
+
+        {/* The first job lookup: one request, and until it answers neither
+            the form nor a spinner would be honest — a running job would
+            flash the empty form. */}
+        {phase === "checking" && <div className="py-24 md:py-[120px]" />}
 
         {phase === "working" && <Working />}
 
@@ -391,7 +470,12 @@ export function GenerateRoute() {
                 onToggleEditing={() =>
                   setEditing((prev) => ({ ...prev, [scene.path]: prev[scene.path] !== true }))
                 }
-                onChange={(markdown) => setEdits((prev) => ({ ...prev, [scene.path]: markdown }))}
+                onChange={(markdown) => {
+                  // Local first (the textarea must not lag), then debounced
+                  // into the job so the edit survives navigation too.
+                  setEdits((prev) => ({ ...prev, [scene.path]: markdown }));
+                  syncEdit(scene.path, markdown);
+                }}
               />
             ))}
 
@@ -436,6 +520,11 @@ export function GenerateRoute() {
                 Nicht geschrieben — Server prüfen.
               </p>
             )}
+            {discard.isError && (
+              <p aria-live="polite" className="mb-3 text-[13px] text-destructive">
+                Nicht verworfen — Server prüfen.
+              </p>
+            )}
 
             <div className="flex flex-wrap items-center gap-2.5 border-t border-border pt-[18px]">
               <Button
@@ -449,16 +538,8 @@ export function GenerateRoute() {
               <Button
                 type="button"
                 variant="outline"
-                disabled={apply.isPending}
-                onClick={() => {
-                  // Client state only — nothing was written.
-                  apply.reset();
-                  generate.reset();
-                  setResult(undefined);
-                  setEdits({});
-                  setEditing({});
-                  setDecisions({});
-                }}
+                disabled={apply.isPending || discard.isPending}
+                onClick={() => discard.mutate()}
                 className="h-auto border-input bg-transparent px-3.5 py-2 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
               >
                 Verwerfen
@@ -512,7 +593,12 @@ function stubReason(scenes: GenerateResult["scenes"]): string {
   return scenes.length === 1 ? `aus ${title}` : `aus ${title} u. a.`;
 }
 
-/** The working state: spinner + the correction-turn explainer. */
+/**
+ * The working state: spinner + the correction-turn explainer + the one fact
+ * that matters since issue #19 — the run is on the server, so the tab may
+ * go. No number of attempts here: LLM_CORRECTION_TURNS is a server setting
+ * (default 1) and a hardcoded "max. 2" would be a lie in half the setups.
+ */
 function Working() {
   return (
     <div
@@ -532,7 +618,11 @@ function Working() {
       <p className="text-[14.5px] text-foreground">Drafts werden generiert …</p>
       <p className="max-w-[380px] text-[13px] leading-[1.6] text-muted-foreground">
         Der Server validiert die Antwort mechanisch; Formfehler gehen automatisch als Korrektur
-        ans Modell zurück (max. 2 Versuche).
+        ans Modell zurück.
+      </p>
+      <p className="max-w-[380px] text-[12.5px] leading-[1.6] text-faint">
+        Läuft auf dem Server weiter — dieser Tab darf zu. Das Ergebnis wartet hier, bis es
+        übernommen oder verworfen wird.
       </p>
     </div>
   );

@@ -5,21 +5,36 @@
 // No real LLM and no ANTHROPIC_API_KEY: a FakeProvider with scripted raw
 // replies is injected via setProviderForTests(). It records every call, so
 // the tests can assert the correction-turn mechanics (assistant reply
-// replayed + validation errors sent back, max 2 correction turns).
+// replayed + validation errors sent back, LLM_CORRECTION_TURNS turns).
 //
 // A scripted reply is either a plain string (fine, not truncated, no usage
 // reported) or the full CompletionResult shape — that is how the truncation
 // fail-fast and the token accounting of issue #18 are exercised.
+//
+// Since issue #19 the run is a background job, so the pipeline tests go
+// through `generate()`: POST /generate (202), poll the job in-process, then
+// answer like the old synchronous endpoint did. The job endpoints
+// themselves (lifecycle, 409, drafts, apply cleanup, restart) have their own
+// describe block at the end; a FakeProvider that waits on a manual gate
+// makes "running" observable without a single timer.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { cp, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { GenerateResult, GenerateUsage } from "@grimoire/shared";
+import type { GenerateJob, GenerateResult, GenerateUsage } from "@grimoire/shared";
 import { app } from "../src/server";
 import { getCampaignRoot, setCampaignRoot } from "../src/config";
-import { RAW_REPLY_LIMIT, extractJsonReply, setProviderForTests } from "../src/generator";
+import { clearJobsForTests } from "../src/generate-jobs";
+import {
+  DEFAULT_CORRECTION_TURNS,
+  MAX_CORRECTION_TURNS,
+  RAW_REPLY_LIMIT,
+  extractJsonReply,
+  parseCorrectionTurns,
+  setProviderForTests,
+} from "../src/generator";
 import type {
   CompletionResult,
   CorrectionTurn,
@@ -58,6 +73,9 @@ afterAll(async () => {
 
 afterEach(() => {
   setProviderForTests(null);
+  // No job may leak into the next test (a leftover RUNNING one would 409).
+  clearJobsForTests();
+  delete process.env.LLM_CORRECTION_TURNS;
 });
 
 // --- fake provider ------------------------------------------------------------
@@ -77,6 +95,8 @@ class FakeProvider implements LLMProvider {
   constructor(
     private replies: ScriptedReply[],
     readonly maxTokens?: number,
+    /** Awaited before the FIRST reply — the "still running" gate. */
+    private gate?: Promise<unknown>,
   ) {}
 
   async complete(
@@ -84,6 +104,11 @@ class FakeProvider implements LLMProvider {
     corrections: CorrectionTurn[] = [],
   ): Promise<CompletionResult> {
     this.calls.push({ req, corrections: corrections.map((c) => ({ ...c })) });
+    if (this.gate !== undefined) {
+      const gate = this.gate;
+      this.gate = undefined;
+      await gate;
+    }
     const reply = this.replies.shift();
     if (reply === undefined) throw new Error("FakeProvider: no scripted reply left");
     if (typeof reply === "string") return { text: reply, truncated: false };
@@ -91,10 +116,23 @@ class FakeProvider implements LLMProvider {
   }
 }
 
-function useFake(replies: ScriptedReply[], maxTokens?: number): FakeProvider {
-  const fake = new FakeProvider(replies, maxTokens);
+function useFake(
+  replies: ScriptedReply[],
+  maxTokens?: number,
+  gate?: Promise<unknown>,
+): FakeProvider {
+  const fake = new FakeProvider(replies, maxTokens, gate);
   setProviderForTests(fake);
   return fake;
+}
+
+/** A promise the test resolves when it wants the provider to answer. */
+function gate(): { promise: Promise<void>; open: () => void } {
+  let open = (): void => undefined;
+  const promise = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { promise, open };
 }
 
 /** Same shape the Anthropic/OpenAI usage objects normalize to. */
@@ -198,6 +236,57 @@ async function postJson(url: string, body?: unknown): Promise<Response> {
 
 const generateBody = { chapter: "01-salzhafen", sourceText: "Fenn waits at the docks." };
 
+// --- job helpers (issue #19) ------------------------------------------------
+
+/** GET the campaign's job, or null on the 404 "there is none". */
+async function fetchJob(campaign = "beispiel"): Promise<GenerateJob | null> {
+  const res = await app.request(`/api/${campaign}/generate/job`);
+  if (res.status === 404) return null;
+  expect(res.status).toBe(200);
+  return (await res.json()) as GenerateJob;
+}
+
+/** PUT one review edit into the job store. */
+async function putDraft(campaign: string, body: unknown): Promise<Response> {
+  return app.request(`/api/${campaign}/generate/job/drafts`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+/** Poll the in-process app until the job is no longer running. */
+async function waitForJob(campaign = "beispiel"): Promise<GenerateJob> {
+  for (let i = 0; i < 2000; i++) {
+    const job = await fetchJob(campaign);
+    if (job === null) throw new Error("job disappeared while waiting");
+    if (job.status !== "running") return job;
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
+  throw new Error("job never finished");
+}
+
+/** What the endpoint answered before issue #19, rebuilt over the job flow. */
+interface GenerateOutcome {
+  status: number;
+  json: () => Promise<unknown>;
+}
+
+/**
+ * Start a run and wait for it: the synchronous view of the job flow, so the
+ * pipeline tests keep asserting the pipeline instead of the plumbing.
+ * A non-202 answer (400/404/409/503 — all decided BEFORE a job exists) is
+ * passed through unchanged.
+ */
+async function generate(body?: unknown, campaign = "beispiel"): Promise<GenerateOutcome> {
+  const res = await postJson(`/api/${campaign}/generate`, body);
+  if (res.status !== 202) return { status: res.status, json: () => res.json() };
+  expect(await res.json()).toEqual({ jobId: expect.any(String) });
+  const job = await waitForJob(campaign);
+  if (job.status === "done") return { status: 200, json: async () => job.result };
+  return { status: job.error?.status ?? 500, json: async () => job.error?.body };
+}
+
 // --- JSON extraction (issue #20) -------------------------------------------------
 
 describe("extractJsonReply", () => {
@@ -274,7 +363,7 @@ describe("extractJsonReply", () => {
 describe("POST /api/:campaign/generate", () => {
   test("happy path: GenerateResult from one call, nothing written", async () => {
     const fake = useFake([reply()]);
-    const res = await postJson("/api/beispiel/generate", generateBody);
+    const res = await generate(generateBody);
     expect(res.status).toBe(200);
     const result = (await res.json()) as GenerateResult;
 
@@ -315,7 +404,7 @@ describe("POST /api/:campaign/generate", () => {
       npc_stubs: [],
     });
     const fake = useFake([bad, reply()]);
-    const res = await postJson("/api/beispiel/generate", generateBody);
+    const res = await generate(generateBody);
     expect(res.status).toBe(200);
 
     expect(fake.calls).toHaveLength(2);
@@ -332,13 +421,15 @@ describe("POST /api/:campaign/generate", () => {
       scenes: [{ path: SCENE_PATH, content: sceneMarkdown({ callout: "danger" }) }],
     });
     const fake = useFake([bad, reply()]);
-    const res = await postJson("/api/beispiel/generate", generateBody);
+    const res = await generate(generateBody);
     expect(res.status).toBe(200);
     expect(fake.calls).toHaveLength(2);
     expect(fake.calls[1]!.corrections[0]!.correction).toContain("[!danger]");
   });
 
   test("422 with the remaining errors after 2 correction turns", async () => {
+    // Two turns is the MAXIMUM, not the default any more (issue #19).
+    process.env.LLM_CORRECTION_TURNS = "2";
     const bad = reply({
       scenes: [{ path: SCENE_PATH, content: sceneMarkdown({ status: "ready" }) }],
     });
@@ -353,7 +444,7 @@ describe("POST /api/:campaign/generate", () => {
       { text: bad, usage: usage(2000, 200) },
       { text: last, usage: usage(3000, 300) },
     ]);
-    const res = await postJson("/api/beispiel/generate", generateBody);
+    const res = await generate(generateBody);
     expect(res.status).toBe(422);
     const body = (await res.json()) as {
       error: string;
@@ -380,7 +471,7 @@ describe("POST /api/:campaign/generate", () => {
   test("a truncated reply aborts after ONE call with the LLM_MAX_TOKENS message", async () => {
     const cut = '{"scenes":[{"path":"01-salzhafen/hafen/treffen-am-kai.md","content":"---\\nid: tre';
     const fake = useFake([{ text: cut, truncated: true, usage: usage(9000, 8000) }, reply()], 8000);
-    const res = await postJson("/api/beispiel/generate", generateBody);
+    const res = await generate(generateBody);
     expect(res.status).toBe(422);
     const body = (await res.json()) as {
       error: string;
@@ -405,7 +496,7 @@ describe("POST /api/:campaign/generate", () => {
 
   test("without a configured cap the message names the endpoint default", async () => {
     const fake = useFake([{ text: "abgeschnitten", truncated: true }]);
-    const res = await postJson("/api/beispiel/generate", generateBody);
+    const res = await generate(generateBody);
     expect(res.status).toBe(422);
     const body = (await res.json()) as { error: string; usage?: GenerateUsage };
     expect(body.error).toBe(
@@ -420,7 +511,7 @@ describe("POST /api/:campaign/generate", () => {
   test("the raw reply in the 422 body is capped and says so", async () => {
     const long = `x${"y".repeat(RAW_REPLY_LIMIT + 500)}`;
     useFake([{ text: long, truncated: true }]);
-    const res = await postJson("/api/beispiel/generate", generateBody);
+    const res = await generate(generateBody);
     expect(res.status).toBe(422);
     const body = (await res.json()) as { rawReply: string };
     expect(body.rawReply).toBe(`${long.slice(0, RAW_REPLY_LIMIT)}… [gekürzt]`);
@@ -430,7 +521,7 @@ describe("POST /api/:campaign/generate", () => {
   test("a reply exactly at the cap is not marked as capped", async () => {
     const exact = "z".repeat(RAW_REPLY_LIMIT);
     useFake([{ text: exact, truncated: true }]);
-    const res = await postJson("/api/beispiel/generate", generateBody);
+    const res = await generate(generateBody);
     const body = (await res.json()) as { rawReply: string };
     expect(body.rawReply).toBe(exact);
   });
@@ -444,7 +535,7 @@ describe("POST /api/:campaign/generate", () => {
       { text: bad, usage: usage(5000, 1200) },
       { text: reply(), usage: usage(6400, 1300) },
     ]);
-    const res = await postJson("/api/beispiel/generate", generateBody);
+    const res = await generate(generateBody);
     expect(res.status).toBe(200);
     const result = (await res.json()) as GenerateResult;
     expect(result.usage).toEqual({ inputTokens: 11400, outputTokens: 2500, attempts: 2 });
@@ -455,7 +546,7 @@ describe("POST /api/:campaign/generate", () => {
 
   test("the PO case — explainer paragraph before the object — costs ONE call", async () => {
     const fake = useFake([proseThenJson(replyJson())]);
-    const res = await postJson("/api/beispiel/generate", generateBody);
+    const res = await generate(generateBody);
     expect(res.status).toBe(200);
     const result = (await res.json()) as GenerateResult;
     // extraction only loosens the PARSING: the full validation still ran
@@ -475,7 +566,7 @@ describe("POST /api/:campaign/generate", () => {
       `Vorbemerkung.\n\n${replyJson()}\n\nNachbemerkung ohne Klammern.`,
     ]) {
       const fake = useFake([raw]);
-      const res = await postJson("/api/beispiel/generate", generateBody);
+      const res = await generate(generateBody);
       expect(res.status).toBe(200);
       expect(fake.calls).toHaveLength(1);
     }
@@ -486,7 +577,7 @@ describe("POST /api/:campaign/generate", () => {
       replyJson({ scenes: [{ path: SCENE_PATH, content: sceneMarkdown({ status: "ready" }) }] }),
     );
     const fake = useFake([bad, reply()]);
-    const res = await postJson("/api/beispiel/generate", generateBody);
+    const res = await generate(generateBody);
     expect(res.status).toBe(200);
     expect(fake.calls).toHaveLength(2);
     expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad); // replayed verbatim
@@ -495,7 +586,7 @@ describe("POST /api/:campaign/generate", () => {
 
   test("garbage without any brace still triggers the correction turn", async () => {
     const fake = useFake(["Ich kann diese Aufgabe leider nicht erfüllen.", reply()]);
-    const res = await postJson("/api/beispiel/generate", generateBody);
+    const res = await generate(generateBody);
     expect(res.status).toBe(200);
     expect(fake.calls).toHaveLength(2);
     expect(fake.calls[1]!.corrections[0]!.correction).toContain("not valid JSON");
@@ -505,14 +596,15 @@ describe("POST /api/:campaign/generate", () => {
     const bad = proseThenJson(
       replyJson({ scenes: [{ path: SCENE_PATH, content: sceneMarkdown({ status: "ready" }) }] }),
     );
-    const fake = useFake([bad, bad, bad]);
-    const res = await postJson("/api/beispiel/generate", generateBody);
+    const fake = useFake([bad, bad]);
+    const res = await generate(generateBody);
     expect(res.status).toBe(422);
     const body = (await res.json()) as { rawReply: string; validationErrors: string[] };
     expect(body.rawReply).toBe(bad);
     expect(body.rawReply.startsWith("I need to be careful")).toBe(true);
     expect(body.validationErrors).toEqual([expect.stringContaining('"status" must be "draft"')]);
-    expect(fake.calls).toHaveLength(3);
+    // initial call + the default single correction turn (issue #19)
+    expect(fake.calls).toHaveLength(2);
   });
 
   test("truncation is still checked BEFORE extraction (issue #18 order)", async () => {
@@ -521,7 +613,7 @@ describe("POST /api/:campaign/generate", () => {
     // object out of a reply the model itself reported as cut off.
     const cut = proseThenJson(replyJson());
     const fake = useFake([{ text: cut, truncated: true, usage: usage(9000, 8000) }, reply()], 8000);
-    const res = await postJson("/api/beispiel/generate", generateBody);
+    const res = await generate(generateBody);
     expect(res.status).toBe(422);
     const body = (await res.json()) as {
       error: string;
@@ -540,12 +632,12 @@ describe("POST /api/:campaign/generate", () => {
     const bad = reply({
       scenes: [{ path: "02-anderswo/kai.md", content: sceneMarkdown() }],
     });
-    const fake = useFake([bad, bad, bad]);
-    const res = await postJson("/api/beispiel/generate", generateBody);
+    const fake = useFake([bad, bad]);
+    const res = await generate(generateBody);
     expect(res.status).toBe(422);
     const body = (await res.json()) as { validationErrors: string[] };
     expect(body.validationErrors[0]).toContain("01-salzhafen/");
-    expect(fake.calls).toHaveLength(3);
+    expect(fake.calls).toHaveLength(2);
   });
 
   test("400 on malformed bodies — provider never called", async () => {
@@ -561,19 +653,19 @@ describe("POST /api/:campaign/generate", () => {
       { chapter: "..", sourceText: "x" }, // traversal
     ];
     for (const b of bad) {
-      expect((await postJson("/api/beispiel/generate", b)).status).toBe(400);
+      expect((await generate(b)).status).toBe(400);
     }
     expect(fake.calls).toHaveLength(0);
   });
 
   test("404 for unknown campaign, unknown chapter, and reserved dirs", async () => {
     const fake = useFake([]);
-    expect((await postJson("/api/nope/generate", generateBody)).status).toBe(404);
+    expect((await generate(generateBody, "nope")).status).toBe(404);
     expect(
-      (await postJson("/api/beispiel/generate", { ...generateBody, chapter: "99-nope" })).status,
+      (await generate({ ...generateBody, chapter: "99-nope" })).status,
     ).toBe(404);
     expect(
-      (await postJson("/api/beispiel/generate", { ...generateBody, chapter: "npcs" })).status,
+      (await generate({ ...generateBody, chapter: "npcs" })).status,
     ).toBe(404);
     expect(fake.calls).toHaveLength(0);
   });
@@ -595,7 +687,7 @@ describe("POST /api/:campaign/generate", () => {
         npc_stubs: [],
       }),
     ]);
-    const res = await postJson("/api/beispiel/generate", {
+    const res = await generate({
       chapter,
       sourceText: "A hidden cove full of smugglers.",
       newChapter: true,
@@ -620,13 +712,13 @@ describe("POST /api/:campaign/generate", () => {
     const fake = useFake([]);
     // reserved dirs are never chapters, not even new ones
     expect(
-      (await postJson("/api/beispiel/generate", { ...generateBody, chapter: "npcs", newChapter: true }))
+      (await generate({ ...generateBody, chapter: "npcs", newChapter: true }))
         .status,
     ).toBe(404);
     // an existing NON-directory of that name is not a chapter either
     expect(
       (
-        await postJson("/api/beispiel/generate", {
+        await generate({
           ...generateBody,
           chapter: "glossary.md",
           newChapter: true,
@@ -635,15 +727,15 @@ describe("POST /api/:campaign/generate", () => {
     ).toBe(404);
     // traversal stays a 400, and the flag itself is type-checked
     expect(
-      (await postJson("/api/beispiel/generate", { ...generateBody, chapter: "..", newChapter: true }))
+      (await generate({ ...generateBody, chapter: "..", newChapter: true }))
         .status,
     ).toBe(400);
     expect(
-      (await postJson("/api/beispiel/generate", { ...generateBody, newChapter: "yes" })).status,
+      (await generate({ ...generateBody, newChapter: "yes" })).status,
     ).toBe(400);
     // and without the flag a missing chapter is still a 404
     expect(
-      (await postJson("/api/beispiel/generate", { ...generateBody, chapter: "02-nowhere" })).status,
+      (await generate({ ...generateBody, chapter: "02-nowhere" })).status,
     ).toBe(404);
     expect(fake.calls).toHaveLength(0);
   });
@@ -655,7 +747,7 @@ describe("POST /api/:campaign/generate", () => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.LLM_PROVIDER;
     try {
-      const res = await postJson("/api/beispiel/generate", generateBody);
+      const res = await generate(generateBody);
       expect(res.status).toBe(503);
       expect(await res.json()).toEqual({ error: "ANTHROPIC_API_KEY fehlt" });
     } finally {
@@ -672,7 +764,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     // What the client sends is what /generate returned (frontmatter/name
     // keys included) — the endpoint accepts the documented shapes as-is.
     const fake = useFake([reply()]);
-    const gen = await postJson("/api/beispiel/generate", generateBody);
+    const gen = await generate(generateBody);
     const result = (await gen.json()) as GenerateResult;
     expect(fake.calls).toHaveLength(1);
 
@@ -880,5 +972,338 @@ describe("POST /api/:campaign/generate/apply", () => {
     ).toBe(404);
     expect(await exists("05-halb/neu.md")).toBe(false);
     expect(await exists("05-halb/_chapter.md")).toBe(false);
+  });
+});
+
+// --- background jobs (issue #19) --------------------------------------------
+
+describe("generate jobs", () => {
+  /** A reply into a fresh path, without stubs (npcs/grella.md exists by now). */
+  function jobReply(scenePath: string): string {
+    return reply({
+      scenes: [
+        {
+          path: scenePath,
+          content: sceneMarkdown({ npcs: "fenn" }).replace(
+            "id: treffen-am-kai",
+            `id: ${fileStem(scenePath)}`,
+          ),
+        },
+      ],
+      npc_stubs: [],
+    });
+  }
+  const fileStem = (rel: string) => rel.slice(rel.lastIndexOf("/") + 1, -3);
+
+  test("202 { jobId }, status running, then done — the result waits in the store", async () => {
+    const open = gate();
+    const scenePath = "01-salzhafen/hafen/job-lifecycle.md";
+    const fake = useFake([jobReply(scenePath)], undefined, open.promise);
+
+    const res = await postJson("/api/beispiel/generate", generateBody);
+    expect(res.status).toBe(202);
+    const { jobId } = (await res.json()) as { jobId: string };
+    expect(jobId).toEqual(expect.any(String));
+
+    // The provider has not answered yet — the job is observably running.
+    const running = await fetchJob();
+    expect(running).toMatchObject({
+      id: jobId,
+      campaign: "beispiel",
+      chapter: "01-salzhafen",
+      status: "running",
+      draftEdits: {},
+    });
+    expect(running!.startedAt).toEqual(expect.any(String));
+    expect(running!.finishedAt).toBeUndefined();
+    expect(running!.result).toBeUndefined();
+    expect(running!.error).toBeUndefined();
+
+    open.open();
+    const done = await waitForJob();
+    expect(done.status).toBe("done");
+    expect(done.id).toBe(jobId);
+    expect(done.finishedAt).toEqual(expect.any(String));
+    expect(done.result!.scenes[0]!.path).toBe(scenePath);
+    expect(done.error).toBeUndefined();
+    expect(fake.calls).toHaveLength(1);
+
+    // Still there on the next GET: only apply/discard/a new start remove it.
+    expect((await fetchJob())!.id).toBe(jobId);
+    // …and nothing was written (the pipeline is still a preview)
+    expect(await exists(scenePath)).toBe(false);
+  });
+
+  test("a second start while one runs answers 409 with the running jobId", async () => {
+    const open = gate();
+    useFake([jobReply("01-salzhafen/hafen/job-parallel.md")], undefined, open.promise);
+
+    const first = await postJson("/api/beispiel/generate", generateBody);
+    expect(first.status).toBe(202);
+    const { jobId } = (await first.json()) as { jobId: string };
+
+    const second = await postJson("/api/beispiel/generate", generateBody);
+    expect(second.status).toBe(409);
+    expect(await second.json()).toEqual({
+      error: "a generate job is already running for this campaign",
+      jobId,
+    });
+
+    open.open();
+    expect((await waitForJob()).id).toBe(jobId);
+  });
+
+  test("a failed run keeps the 422 body — rawReply, usage, validationErrors", async () => {
+    const bad = reply({
+      scenes: [{ path: SCENE_PATH, content: sceneMarkdown({ status: "ready" }) }],
+    });
+    useFake([
+      { text: bad, usage: usage(1000, 100) },
+      { text: bad, usage: usage(2000, 200) },
+    ]);
+    expect((await postJson("/api/beispiel/generate", generateBody)).status).toBe(202);
+
+    const job = await waitForJob();
+    expect(job.status).toBe("failed");
+    expect(job.result).toBeUndefined();
+    expect(job.finishedAt).toEqual(expect.any(String));
+    expect(job.error!.status).toBe(422);
+    expect(job.error!.body.error).toContain("validation");
+    expect(job.error!.body.validationErrors).toEqual([
+      expect.stringContaining('"status" must be "draft"'),
+    ]);
+    expect(job.error!.body.rawReply).toBe(bad);
+    expect(job.error!.body.usage).toEqual({ inputTokens: 3000, outputTokens: 300, attempts: 2 });
+  });
+
+  test("a truncated run keeps the fail-fast 422 body (issue #18 through the job)", async () => {
+    const cut = '{"scenes":[{"path":"01-salzhafen/hafen/x.md","content":"---\\nid: x';
+    const fake = useFake([{ text: cut, truncated: true, usage: usage(9000, 8000) }], 8000);
+    expect((await postJson("/api/beispiel/generate", generateBody)).status).toBe(202);
+
+    const job = await waitForJob();
+    expect(job.status).toBe("failed");
+    expect(job.error!.status).toBe(422);
+    expect(job.error!.body.error).toContain("abgeschnitten");
+    expect(job.error!.body.rawReply).toBe(cut);
+    expect(job.error!.body.validationErrors).toBeUndefined();
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  test("DELETE discards the job — also a finished one; 404 afterwards", async () => {
+    useFake([jobReply("01-salzhafen/hafen/job-delete.md")]);
+    await generate(generateBody);
+    expect((await fetchJob())!.status).toBe("done");
+
+    const res = await app.request("/api/beispiel/generate/job", { method: "DELETE" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ deleted: true });
+    expect(await fetchJob()).toBeNull();
+    // nothing left to discard
+    expect(
+      (await app.request("/api/beispiel/generate/job", { method: "DELETE" })).status,
+    ).toBe(404);
+  });
+
+  test("DELETE of a RUNNING job abandons it — its result never lands", async () => {
+    const open = gate();
+    useFake([jobReply("01-salzhafen/hafen/job-abandon.md")], undefined, open.promise);
+    expect((await postJson("/api/beispiel/generate", generateBody)).status).toBe(202);
+    expect((await fetchJob())!.status).toBe("running");
+
+    expect(
+      (await app.request("/api/beispiel/generate/job", { method: "DELETE" })).status,
+    ).toBe(200);
+    open.open();
+    // Let the abandoned run finish into nothing.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(await fetchJob()).toBeNull();
+  });
+
+  test("PUT drafts: 404 without a job, 400 for an unknown path, and edits survive", async () => {
+    const scenePath = "01-salzhafen/hafen/job-drafts.md";
+    const edited = `${sceneMarkdown({ npcs: "fenn" })}\nHandgeschriebene Ergänzung.\n`;
+
+    // no job at all
+    let res = await putDraft("beispiel", { path: scenePath, markdown: edited });
+    expect(res.status).toBe(404);
+
+    useFake([jobReply(scenePath)]);
+    await generate(generateBody);
+
+    // a path that is not part of the result
+    res = await putDraft("beispiel", { path: "01-salzhafen/hafen/fremd.md", markdown: edited });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain("unknown draft path");
+
+    // malformed bodies
+    expect((await putDraft("beispiel", { path: scenePath })).status).toBe(400);
+    expect((await putDraft("beispiel", { markdown: edited })).status).toBe(400);
+    expect(
+      (await putDraft("beispiel", { path: scenePath, markdown: 42 })).status,
+    ).toBe(400);
+    expect(
+      (await putDraft("beispiel", { path: scenePath, markdown: edited, extra: 1 })).status,
+    ).toBe(400);
+
+    // the real thing
+    res = await putDraft("beispiel", { path: scenePath, markdown: edited });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ path: scenePath });
+
+    const job = await fetchJob();
+    expect(job!.draftEdits).toEqual({ [scenePath]: edited });
+    // the result itself is untouched — the edit sits next to it
+    expect(job!.result!.scenes[0]!.markdown).not.toBe(edited);
+
+    // last write wins
+    expect((await putDraft("beispiel", { path: scenePath, markdown: "---\nid: x\n---\n" })).status)
+      .toBe(200);
+    expect((await fetchJob())!.draftEdits[scenePath]).toBe("---\nid: x\n---\n");
+  });
+
+  test("apply with jobId discards the job; a stale id leaves it alone", async () => {
+    const scenePath = "01-salzhafen/hafen/job-apply.md";
+    useFake([jobReply(scenePath)]);
+    await generate(generateBody);
+    const job = await fetchJob();
+
+    // a stale id (a newer run started meanwhile) must not drop this job
+    let res = await postJson("/api/beispiel/generate/apply", {
+      scenes: [{ path: "01-salzhafen/hafen/job-apply-stale.md", markdown: sceneMarkdown() }],
+      jobId: "00000000-0000-0000-0000-000000000000",
+    });
+    expect(res.status).toBe(200);
+    expect((await fetchJob())!.id).toBe(job!.id);
+
+    res = await postJson("/api/beispiel/generate/apply", {
+      scenes: job!.result!.scenes,
+      stubs: [],
+      jobId: job!.id,
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ written: [scenePath] });
+    expect(await exists(scenePath)).toBe(true);
+    // the drafts are on disk — there is nothing left to restore
+    expect(await fetchJob()).toBeNull();
+  });
+
+  test("a FAILED apply keeps the job — the review must stay restorable", async () => {
+    const scenePath = "01-salzhafen/hafen/job-apply.md"; // written by the test above
+    useFake([jobReply(scenePath)]);
+    await generate(generateBody);
+    const job = await fetchJob();
+
+    const res = await postJson("/api/beispiel/generate/apply", {
+      scenes: job!.result!.scenes,
+      stubs: [],
+      jobId: job!.id,
+    });
+    expect(res.status).toBe(409);
+    expect((await fetchJob())!.id).toBe(job!.id);
+  });
+
+  test("400 for a jobId that is not a string", async () => {
+    const res = await postJson("/api/beispiel/generate/apply", {
+      scenes: [{ path: "01-salzhafen/hafen/job-badid.md", markdown: sceneMarkdown() }],
+      jobId: 7,
+    });
+    expect(res.status).toBe(400);
+    expect(await exists("01-salzhafen/hafen/job-badid.md")).toBe(false);
+  });
+
+  test("a new start replaces a finished job", async () => {
+    useFake([
+      jobReply("01-salzhafen/hafen/job-first.md"),
+      jobReply("01-salzhafen/hafen/job-second.md"),
+    ]);
+    await generate(generateBody);
+    const first = await fetchJob();
+    expect(first!.status).toBe("done");
+
+    await generate(generateBody);
+    const second = await fetchJob();
+    expect(second!.status).toBe("done");
+    expect(second!.id).not.toBe(first!.id);
+    expect(second!.result!.scenes[0]!.path).toBe("01-salzhafen/hafen/job-second.md");
+  });
+
+  test("a restarted server has no jobs at all — GET answers 404", async () => {
+    useFake([jobReply("01-salzhafen/hafen/job-restart.md")]);
+    await generate(generateBody);
+    expect((await fetchJob())!.status).toBe("done");
+
+    // The store is the only place jobs live (issue #19 non-goal: no disk).
+    clearJobsForTests();
+    expect(await fetchJob()).toBeNull();
+    const res = await app.request("/api/beispiel/generate/job");
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "no generate job for this campaign" });
+  });
+
+  test("jobs are per campaign — an unknown campaign simply has none", async () => {
+    expect(await fetchJob("nope")).toBeNull();
+    useFake([jobReply("01-salzhafen/hafen/job-scope.md")]);
+    await generate(generateBody);
+    expect((await fetchJob("beispiel"))!.status).toBe("done");
+    expect(await fetchJob("nope")).toBeNull();
+  });
+});
+
+// --- LLM_CORRECTION_TURNS (issue #19 AK6) -----------------------------------
+
+describe("LLM_CORRECTION_TURNS", () => {
+  test("parses 0..2 and falls back to the default on junk", () => {
+    expect(DEFAULT_CORRECTION_TURNS).toBe(1);
+    expect(parseCorrectionTurns({})).toBe(1);
+    expect(parseCorrectionTurns({ LLM_CORRECTION_TURNS: "0" })).toBe(0);
+    expect(parseCorrectionTurns({ LLM_CORRECTION_TURNS: "1" })).toBe(1);
+    expect(parseCorrectionTurns({ LLM_CORRECTION_TURNS: "2" })).toBe(MAX_CORRECTION_TURNS);
+    expect(parseCorrectionTurns({ LLM_CORRECTION_TURNS: " 2 " })).toBe(2);
+    for (const junk of ["", "   ", "3", "-1", "1.5", "viele", "NaN", "true"]) {
+      expect(parseCorrectionTurns({ LLM_CORRECTION_TURNS: junk })).toBe(1);
+    }
+  });
+
+  /** One bad reply per attempt — the run can only end in a 422. */
+  function badReplies(count: number): string[] {
+    return Array.from({ length: count }, () =>
+      reply({ scenes: [{ path: SCENE_PATH, content: sceneMarkdown({ status: "ready" }) }] }),
+    );
+  }
+
+  test("0: no correction turn at all — one call, then 422", async () => {
+    process.env.LLM_CORRECTION_TURNS = "0";
+    const fake = useFake(badReplies(1));
+    const res = await generate(generateBody);
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { validationErrors: string[] };
+    expect(body.validationErrors).toEqual([
+      expect.stringContaining('"status" must be "draft"'),
+    ]);
+    expect(fake.calls).toHaveLength(1);
+    expect(fake.calls[0]!.corrections).toEqual([]);
+  });
+
+  test("1 (default): one correction turn", async () => {
+    const fake = useFake(badReplies(2));
+    expect((await generate(generateBody)).status).toBe(422);
+    expect(fake.calls).toHaveLength(2);
+    expect(fake.calls[1]!.corrections).toHaveLength(1);
+  });
+
+  test("2: two correction turns", async () => {
+    process.env.LLM_CORRECTION_TURNS = "2";
+    const fake = useFake(badReplies(3));
+    expect((await generate(generateBody)).status).toBe(422);
+    expect(fake.calls).toHaveLength(3);
+    expect(fake.calls[2]!.corrections).toHaveLength(2);
+  });
+
+  test("junk keeps the default instead of raising the spend", async () => {
+    process.env.LLM_CORRECTION_TURNS = "9";
+    const fake = useFake(badReplies(2));
+    expect((await generate(generateBody)).status).toBe(422);
+    expect(fake.calls).toHaveLength(2);
   });
 });

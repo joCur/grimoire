@@ -1,6 +1,7 @@
 // Unit tests for the generator view's derivations (issue #12): the
 // new-chapter id (numeric prefix + kebab slug), the client-side frontmatter
-// split the review preview needs, and the German labels.
+// split the review preview needs, the German labels — and (issue #19) which
+// state the server's job puts the view in.
 
 import { describe, expect, test } from "bun:test";
 
@@ -8,6 +9,8 @@ import {
   applySummary,
   contextHint,
   countLabel,
+  generatePhase,
+  jobErrorBody,
   markdownBody,
   newChapterId,
   nextChapterPrefix,
@@ -162,5 +165,79 @@ describe("usageLabel", () => {
   test("survives a partial usage object instead of printing NaN", () => {
     expect(usageLabel({ attempts: 1 })).toBe("~0 Tokens · 1 Versuch");
     expect(usageLabel({ inputTokens: 500, attempts: "viele" })).toBe("~500 Tokens · 0 Versuche");
+  });
+});
+
+// --- the view's state, derived from the server's job (issue #19) -----------
+
+describe("generatePhase", () => {
+  const base = { applied: false, starting: false, jobChecked: true };
+
+  test("no job: the input form", () => {
+    expect(generatePhase(base)).toBe("input");
+  });
+
+  test("before the first job lookup answers, neither form nor spinner", () => {
+    expect(generatePhase({ ...base, jobChecked: false })).toBe("checking");
+  });
+
+  test("the server's job decides: running -> working, done -> review", () => {
+    expect(generatePhase({ ...base, jobStatus: "running" })).toBe("working");
+    expect(generatePhase({ ...base, jobStatus: "done" })).toBe("review");
+  });
+
+  test("a failed job belongs to the input state — its error block sits there", () => {
+    expect(generatePhase({ ...base, jobStatus: "failed" })).toBe("input");
+  });
+
+  test("a start in flight is already the working state", () => {
+    // …even before the job shows up in the query (and before it was checked)
+    expect(generatePhase({ ...base, starting: true })).toBe("working");
+    expect(generatePhase({ ...base, starting: true, jobChecked: false })).toBe("working");
+  });
+
+  test("a finished apply wins over everything the job still says", () => {
+    expect(generatePhase({ ...base, applied: true, jobStatus: "done" })).toBe("done");
+    expect(generatePhase({ ...base, applied: true, starting: true })).toBe("done");
+  });
+});
+
+describe("jobErrorBody", () => {
+  const failed = (error: unknown) =>
+    ({
+      id: "j1",
+      campaign: "beispiel",
+      chapter: "01-salzhafen",
+      status: "failed",
+      startedAt: "2026-08-20T10:00:00.000Z",
+      draftEdits: {},
+      error,
+    }) as never;
+
+  test("hands back the error body of a failed job unchanged", () => {
+    const body = {
+      error: "generation failed mechanical validation after retries",
+      validationErrors: ['scene "x.md": "status" must be "draft"'],
+      rawReply: "…",
+      usage: { inputTokens: 1, outputTokens: 2, attempts: 2 },
+    };
+    expect(jobErrorBody(failed({ status: 422, body }))).toEqual(body);
+  });
+
+  test("nothing for a job that is not failed, or has no usable body", () => {
+    expect(jobErrorBody(undefined)).toBeUndefined();
+    expect(jobErrorBody(null)).toBeUndefined();
+    expect(jobErrorBody(failed(undefined))).toBeUndefined();
+    expect(jobErrorBody(failed({ status: 500, body: "kaputt" }))).toBeUndefined();
+    expect(
+      jobErrorBody({
+        id: "j2",
+        campaign: "beispiel",
+        chapter: "01-salzhafen",
+        status: "running",
+        startedAt: "2026-08-20T10:00:00.000Z",
+        draftEdits: {},
+      }),
+    ).toBeUndefined();
   });
 });

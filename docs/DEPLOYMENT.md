@@ -107,6 +107,7 @@ jeweils nur für den gewählten:
 | `LMSTUDIO_URL`       | `lmstudio`   | `http://localhost:1234/v1`     | API-Root der lokalen LM-Studio-Instanz                 |
 | `LMSTUDIO_MODEL`     | `lmstudio`   | `local-model`                  | Modellname in LM Studio                                |
 | `LLM_MAX_TOKENS`     | alle         | `8000` (`claude`), sonst Endpoint-Default | Obergrenze der Antwortlänge (positive Ganzzahl; unbrauchbare Werte werden ignoriert) |
+| `LLM_CORRECTION_TURNS` | alle       | `1`                            | Korrektur-Turns nach dem ersten Aufruf (`0`–`2`; unbrauchbare Werte werden ignoriert) |
 | `LLM_FORCE_JSON`     | `openrouter`, `openai`, `lmstudio` | an              | Sendet `response_format: {"type":"json_object"}` mit; `0` = aus, für Endpoints/Modelle ohne `response_format`-Unterstützung (der `claude`-Pfad erzwingt JSON per Assistant-Prefill und ist davon unberührt) |
 
 `LLM_MAX_TOKENS` lohnt sich beim Modellvergleich: schneidet ein Modell die
@@ -115,6 +116,25 @@ und bricht sofort mit `422` und der Meldung „Antwort wurde vom Modell
 abgeschnitten — LLM_MAX_TOKENS erhöhen (aktuell: …) oder Quelltext
 verkleinern" ab, statt zwei teure Korrektur-Turns zu drehen; dann das Limit
 erhöhen oder den Quelltext verkleinern.
+
+`LLM_CORRECTION_TURNS` regelt, wie oft eine fehlgeschlagene Formprüfung als
+Fehlerliste ans Modell zurückgeht (Default `1`): die nicht heilbaren Auslöser
+sind weg (abgeschnittene Antworten brechen sofort ab, Prosa um das JSON wird
+toleriert), und was übrig bleibt, repariert ein Modell mit Fehlerliste fast
+immer im ersten Turn — ein zweiter kostet nur. `0` schaltet Korrektur-Turns
+ganz ab (billigster, strengster Modus), `2` ist das Maximum.
+
+**Generierungen laufen im Hintergrund** (Issue #19): `POST
+/api/:campaign/generate` startet einen Job und antwortet mit `202
+{"jobId":…}`; das Ergebnis holt die App über `GET
+/api/:campaign/generate/job`. Ein Job pro Kampagne (zweiter Start → `409`
+mit der laufenden `jobId`), und er bleibt inklusive Review-Edits liegen, bis
+er übernommen oder verworfen wird — Navigation, Reload oder ein geschlossener
+Tab kosten damit keine Generierung mehr. Die Jobs liegen **nur im
+Arbeitsspeicher**: ein Container-Neustart verliert einen laufenden Job
+(bewusst — auf der Platte bleiben die Kampagnendateien die einzige Wahrheit).
+Die App meldet das dann im Generator als „Der Generierungs-Job ist nicht mehr
+vorhanden (Server-Neustart?)".
 
 Fehlt eine erforderliche Variable, antwortet nur `POST
 /api/:campaign/generate` mit `503` und der Meldung im Klartext, z. B.

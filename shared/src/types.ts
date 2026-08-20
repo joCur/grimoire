@@ -297,9 +297,10 @@ export interface GenerateUsage {
 }
 
 /**
- * POST /api/:campaign/generate — the review preview. Mechanically validated
- * (frontmatter parses, status is draft, references resolve, only known
- * callouts); `warnings` are the LLM's own review notes for the DM.
+ * The generator's review preview. Mechanically validated (frontmatter
+ * parses, status is draft, references resolve, only known callouts);
+ * `warnings` are the LLM's own review notes for the DM. Carried by a
+ * finished job (see GenerateJob) — POST /generate itself only starts one.
  */
 export interface GenerateResult {
   scenes: GeneratedSceneDraft[];
@@ -307,4 +308,58 @@ export interface GenerateResult {
   warnings: string[];
   /** Token spend of the run; absent when the endpoint reports no usage. */
   usage?: GenerateUsage;
+}
+
+// --- background generate jobs (issue #19) ----------------------------------
+
+export const GENERATE_JOB_STATUSES = ["running", "done", "failed"] as const;
+export type GenerateJobStatus = (typeof GENERATE_JOB_STATUSES)[number];
+
+/**
+ * A failed run, exactly as the synchronous endpoint would have answered it:
+ * the HTTP status and the JSON error body it would have sent. So a job
+ * failure carries the same `error`/`validationErrors`/`rawReply`/`usage`
+ * fields the client already knows from the generator's 422 (issues #18/#20)
+ * — the UI feeds `body` into the same block it feeds `ApiError.details`.
+ */
+export interface GenerateJobError {
+  status: number;
+  body: Record<string, unknown>;
+}
+
+/**
+ * GET /api/:campaign/generate/job — the one generate job of a campaign
+ * (issue #19). The run outlives the browser tab: POST /generate answers
+ * `202 { jobId }` and the result waits here until it is applied, discarded
+ * or replaced by the next run.
+ *
+ * In-memory on the server ON PURPOSE (issue #19 non-goal): a restart loses
+ * jobs, and the client says so instead of waiting forever. The campaign
+ * files stay the only truth on disk.
+ */
+export interface GenerateJob {
+  /** crypto.randomUUID — the client sends it back on apply. */
+  id: string;
+  campaign: string;
+  chapter: string;
+  status: GenerateJobStatus;
+  /** ISO timestamps (server clock). `finishedAt` only once it is not running. */
+  startedAt: string;
+  finishedAt?: string;
+  /** Present iff status is "done". */
+  result?: GenerateResult;
+  /** Present iff status is "failed". */
+  error?: GenerateJobError;
+  /**
+   * Review edits kept server-side, keyed by the draft's campaign-relative
+   * path (PUT …/generate/job/drafts) — so an edited draft survives a reload
+   * as well. Empty until the DM edits something; applied ON TOP of
+   * `result.scenes` by the review UI.
+   */
+  draftEdits: Record<string, string>;
+}
+
+/** POST /api/:campaign/generate — 202 with the started job's id. */
+export interface GenerateJobStarted {
+  jobId: string;
 }

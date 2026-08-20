@@ -10,7 +10,8 @@
 // side carries the harvest progress; the pool gets a quiet link into the
 // review while today's session still has unharvested entries.
 // The generator (issue #12) adds a "campaign / Generator" breadcrumb and the
-// quiet "Generator" button on the pool.
+// quiet "Generator" button on the pool; that button carries a discreet
+// running indicator while a generate job is working (issue #19).
 
 import type { FileResponse } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
@@ -33,6 +34,7 @@ import { campaignDescription, campaignLabel } from "@/lib/campaign";
 import { fmString } from "@/lib/frontmatter";
 import { formatElapsed, parseLocalDateTime } from "@/lib/session";
 import { useCampaignMeta } from "@/lib/use-campaign";
+import { useGenerateJob } from "@/lib/use-generate-job";
 import { cn } from "@/lib/utils";
 import { useReviewEntries } from "@/lib/use-review";
 import { useSessionFile, useSessionWrite } from "@/lib/use-session";
@@ -189,19 +191,9 @@ export function Topbar() {
       {isPool && <PoolReviewLink campaign={campaign} />}
 
       {/* Quiet entry into the generator (issue #12) — pool only, next to the
-          brass session button per the prototype. */}
-      {isPool && (
-        <Link
-          to={`/${campaign}/generate`}
-          className={cn(
-            buttonVariants({ variant: "outline" }),
-            "h-auto flex-none gap-[7px] border-input bg-card px-3.5 py-[7px] text-[13px] font-normal text-soft hover:border-border-hover hover:bg-card hover:text-foreground [&_svg]:size-[15px]",
-          )}
-        >
-          <Sparkles aria-hidden />
-          Generator
-        </Link>
-      )}
+          brass session button per the prototype. Carries the run indicator
+          of issue #19. */}
+      {isPool && <GeneratorLink campaign={campaign} />}
 
       {(isPool || isScene) && <StartSessionButton campaign={campaign} />}
 
@@ -288,6 +280,41 @@ function LiveControls({ campaign, session }: { campaign: string; session: FileRe
         Session beenden
       </Button>
     </>
+  );
+}
+
+/**
+ * The pool's generator entry — with a quiet run indicator while a generate
+ * job is working (issue #19 AK5). It shares the generator route's query key,
+ * so there is no second poll loop: one lookup when the pool mounts, then
+ * polling only while a job is actually running.
+ */
+function GeneratorLink({ campaign }: { campaign: string }) {
+  const { data } = useGenerateJob(campaign);
+  const running = data?.status === "running";
+  return (
+    <Link
+      to={`/${campaign}/generate`}
+      title={running ? "Generierung läuft" : undefined}
+      className={cn(
+        buttonVariants({ variant: "outline" }),
+        "h-auto flex-none gap-[7px] border-input bg-card px-3.5 py-[7px] text-[13px] font-normal text-soft hover:border-border-hover hover:bg-card hover:text-foreground [&_svg]:size-[15px]",
+      )}
+    >
+      <Sparkles aria-hidden />
+      Generator
+      {running && (
+        <>
+          {/* Pulses only where motion is welcome; otherwise a static dot
+              carries the same information. */}
+          <span
+            aria-hidden
+            className="size-1.5 flex-none rounded-full bg-primary motion-safe:animate-pulse"
+          />
+          <span className="sr-only">Generierung läuft</span>
+        </>
+      )}
+    </Link>
   );
 }
 

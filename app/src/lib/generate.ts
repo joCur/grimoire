@@ -11,6 +11,10 @@
 //   - German count labels for the context hint and the apply button.
 //   - the run's token spend as one quiet line (issue #18), formatted from
 //     whatever the server sent — a successful run and a 422 both carry it.
+//   - which of the view's states the server's job puts us in (issue #19),
+//     and the error body of a failed job.
+
+import type { GenerateJob } from "@grimoire/shared/types";
 
 /** German umlauts/ß first — NFKD would strip them to bare vowels. */
 const UMLAUTS: Array<[RegExp, string]> = [
@@ -124,6 +128,55 @@ function groupedNumber(n: number): string {
   return Math.round(n)
     .toString()
     .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+// --- the view's state, derived from the server's job (issue #19) ----------
+
+/**
+ * The generator view's states. `checking` is the first job lookup on mount —
+ * one request, and while it is in flight neither the input form nor a
+ * spinner would be honest (a running job would flash the form).
+ */
+export type GeneratePhase = "checking" | "input" | "working" | "review" | "done";
+
+/**
+ * Which state the view is in. The server's job decides everything except
+ * the two purely local outcomes: an apply that wrote (done) and a start
+ * request still in flight (working — the job does not exist yet).
+ * A FAILED job belongs to the input state: its error block sits above the
+ * form, so the next run is one click away (see jobErrorBody).
+ */
+export function generatePhase(input: {
+  /** An apply wrote drafts — the run is over, whatever the job says. */
+  applied: boolean;
+  /** POST /generate is in flight (or its job has not shown up yet). */
+  starting: boolean;
+  /** The job lookup answered at least once (data or error). */
+  jobChecked: boolean;
+  /** Status of the campaign's job; undefined when there is none. */
+  jobStatus?: GenerateJob["status"];
+}): GeneratePhase {
+  if (input.applied) return "done";
+  if (input.starting) return "working";
+  if (!input.jobChecked) return "checking";
+  if (input.jobStatus === "running") return "working";
+  if (input.jobStatus === "done") return "review";
+  return "input";
+}
+
+/**
+ * The error body of a failed job — the same `{ error, validationErrors?,
+ * rawReply?, usage? }` shape the synchronous endpoint used to answer with
+ * (issues #18/#20), so the 422 block in the view is unchanged. Undefined for
+ * every other status, and for a failed job without a body to show.
+ */
+export function jobErrorBody(
+  job: GenerateJob | null | undefined,
+): Record<string, unknown> | undefined {
+  if (job === null || job === undefined || job.status !== "failed") return undefined;
+  const body = job.error?.body;
+  if (body === null || typeof body !== "object" || Array.isArray(body)) return undefined;
+  return body;
 }
 
 /**

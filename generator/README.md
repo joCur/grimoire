@@ -13,7 +13,8 @@ Pipeline: Quelltext (EN) → LLM → Szenen-Drafts (DE) → Review-Vorschau → 
    - Frontmatter parsebar? `type`/`status` gültig? `status == draft`?
    - alle `npcs`-/`location`-Referenzen existieren ODER liegen als Stub bei?
    - nur bekannte Callout-Typen?
-   Fehler gehen als Korrektur-Turn zurück ans LLM (max. 2 Versuche),
+   Fehler gehen als Korrektur-Turn zurück ans LLM (konfigurierbar
+   über LLM_CORRECTION_TURNS, 0–2, Default 1),
    nicht an den Nutzer. Ausnahme: eine vom Modell abgeschnittene Antwort
    (finish_reason/stop_reason) bricht sofort ab — Korrektur-Turns können
    ein Token-Limit nicht heilen, sie kosten nur.

@@ -6,7 +6,8 @@ import type {
   CampaignSummary,
   CampaignTree,
   FileResponse,
-  GenerateResult,
+  GenerateJob,
+  GenerateJobStarted,
   GeneratedStub,
   SearchResponse,
 } from "@grimoire/shared/types";
@@ -186,25 +187,86 @@ export function markInboxLineDone(campaign: string, line: string): Promise<FileR
 // --- generator (issue #12) ---------------------------------------------------
 
 /**
- * Run the generator pipeline for one chapter — a review PREVIEW, nothing is
- * written (generator/README.md). `newChapter` allows a chapter directory
- * that does not exist yet (created by applyDrafts below).
- * ApiError statuses worth handling: 422 and 503 (no provider configured — no
- * API key). Every 422 carries `details.rawReply` (the last attempt's raw
- * model reply, capped by the server) and, when the endpoint reported usage,
- * `details.usage` — plus either `details.validationErrors` (the correction
- * turns did not fix the form) or nothing else, when `details.error` is the
- * truncation message and the run was aborted after one call (issue #18).
+ * Start a generator run for one chapter — a BACKGROUND job since issue #19:
+ * the server answers 202 with the job id and the result is fetched via
+ * fetchGenerateJob. Nothing is written (generator/README.md); `newChapter`
+ * allows a chapter directory that does not exist yet (created by
+ * applyDrafts below).
+ *
+ * A 409 is NOT an error here: it means a job for this campaign is already
+ * running, and its id is the answer to "start a run" — the view adopts the
+ * running job instead of showing a failure. Everything else throws as
+ * usual; worth handling are 503 (no provider configured — no API key), 404
+ * (unknown chapter) and 400.
+ *
+ * The run's own failure (the 422 of issues #18/#20 with `rawReply`, `usage`
+ * and possibly `validationErrors`) never comes back from THIS call — it
+ * lands in the job's `error.body`.
  */
-export function generateDrafts(
+export async function startGenerateJob(
   campaign: string,
   input: { chapter: string; sourceText: string; newChapter?: boolean },
-): Promise<GenerateResult> {
-  return postJson<GenerateResult>(`/${encodeURIComponent(campaign)}/generate`, {
-    chapter: input.chapter,
-    sourceText: input.sourceText,
-    ...(input.newChapter === true ? { newChapter: true } : {}),
+): Promise<GenerateJobStarted> {
+  const path = `/${encodeURIComponent(campaign)}/generate`;
+  const response = await fetch(`/api${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      chapter: input.chapter,
+      sourceText: input.sourceText,
+      ...(input.newChapter === true ? { newChapter: true } : {}),
+    }),
   });
+  if (!response.ok) {
+    const error = await failure(`POST /api${path}`, response);
+    if (error.status === 409 && typeof error.details.jobId === "string") {
+      return { jobId: error.details.jobId };
+    }
+    throw error;
+  }
+  return (await response.json()) as GenerateJobStarted;
+}
+
+/**
+ * The campaign's generate job, or null when there is none (the server's 404
+ * is the normal "nothing running, nothing to restore" answer — never an
+ * error state in the UI). A `null` after a job WAS there means it is gone:
+ * applied, discarded, or lost to a server restart (jobs are in-memory only).
+ */
+export async function fetchGenerateJob(campaign: string): Promise<GenerateJob | null> {
+  const path = `/${encodeURIComponent(campaign)}/generate/job`;
+  const response = await fetch(`/api${path}`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw await failure(`GET /api${path}`, response);
+  return (await response.json()) as GenerateJob;
+}
+
+/** Discard the campaign's generate job ("Verwerfen"). A missing job is fine. */
+export async function deleteGenerateJob(campaign: string): Promise<void> {
+  const path = `/${encodeURIComponent(campaign)}/generate/job`;
+  const response = await fetch(`/api${path}`, { method: "DELETE" });
+  if (!response.ok && response.status !== 404) {
+    throw await failure(`DELETE /api${path}`, response);
+  }
+}
+
+/**
+ * Keep one review edit in the job store, so an edited draft survives
+ * navigation and reload (issue #19). Debounced by the caller; the local
+ * editor state stays authoritative while typing.
+ */
+export async function putDraftEdit(
+  campaign: string,
+  path: string,
+  markdown: string,
+): Promise<void> {
+  const url = `/${encodeURIComponent(campaign)}/generate/job/drafts`;
+  const response = await fetch(`/api${url}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path, markdown }),
+  });
+  if (!response.ok) throw await failure(`PUT /api${url}`, response);
 }
 
 /**
@@ -213,6 +275,9 @@ export function generateDrafts(
  * server also creates `<chapter>/_chapter.md` when it is missing.
  * ApiError 409 carries the existing paths in `details.conflicts` — nothing
  * was written then.
+ *
+ * `jobId` hands the server the job these drafts came from: a successful
+ * apply discards it (the drafts are on disk — nothing left to restore).
  */
 export function applyDrafts(
   campaign: string,
@@ -221,6 +286,7 @@ export function applyDrafts(
     stubs: GeneratedStub[];
     chapter?: string;
     chapterTitle?: string;
+    jobId?: string;
   },
 ): Promise<{ written: string[] }> {
   return postJson<{ written: string[] }>(`/${encodeURIComponent(campaign)}/generate/apply`, {
@@ -229,5 +295,6 @@ export function applyDrafts(
     ...(input.chapter === undefined || input.chapterTitle === undefined
       ? {}
       : { chapter: input.chapter, chapterTitle: input.chapterTitle }),
+    ...(input.jobId === undefined ? {} : { jobId: input.jobId }),
   });
 }

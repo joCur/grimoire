@@ -1,4 +1,5 @@
-// API routes (read: issue #2, write: issue #5, search/version: issues #7/#8).
+// API routes (read: issue #2, write: issue #5, search/version: issues #7/#8,
+// generator: issue #6, its background jobs: issue #19).
 // Mounted under /api in server.ts. Response shapes are the contracts in
 // @grimoire/shared (types.ts).
 
@@ -18,7 +19,15 @@ import {
   patchFrontmatter,
   startSession,
 } from "../campaign-write";
-import { applyGenerated, runGenerate } from "../generator";
+import { applyGenerated, assertGenerateTarget, obtainProvider } from "../generator";
+import {
+  deleteJob,
+  deleteJobIfCurrent,
+  getJob,
+  serializeJob,
+  setDraftEdit,
+  startJob,
+} from "../generate-jobs";
 
 export const api = new Hono();
 
@@ -218,14 +227,21 @@ api.post("/:campaign/review/inbox-done", async (c) => {
 // --- generator endpoints (issue #6) -------------------------------------------------
 
 // POST /api/:campaign/generate { chapter, sourceText, newChapter? } ->
-// GenerateResult. Review preview only — writes NOTHING
-// (generator/README.md). 404 when the chapter does not exist (unless
-// newChapter marks the app's new-chapter flow, where the directory is
-// created on apply), 422 when the LLM reply keeps failing mechanical
-// validation, 503 when no provider is configured (e.g. ANTHROPIC_API_KEY
-// missing); the provider is instantiated lazily per request.
+// 202 { jobId }. Starts a BACKGROUND job (issue #19) and returns
+// immediately; the result is picked up via GET …/generate/job. Writes
+// NOTHING (generator/README.md).
+//
+// Everything cheap stays a synchronous answer, BEFORE a job exists — a
+// request error must not turn into a failed job the DM has to go and read:
+// 400 for a malformed body/unsafe chapter id, 404 for an unknown
+// campaign/chapter (unless newChapter marks the app's new-chapter flow,
+// where the directory is created on apply), 503 when no provider is
+// configured (e.g. ANTHROPIC_API_KEY missing). 409 { error, jobId } while a
+// job for this campaign is still running — one job per campaign.
+// The run's own outcome (incl. the 422 of issues #18/#20) lands in the job.
 api.post("/:campaign/generate", async (c) => {
   const body = await jsonBody(c, ["chapter", "sourceText", "newChapter"]);
+  const campaign = c.req.param("campaign");
   const chapter = body.chapter;
   const sourceText = body.sourceText;
   const newChapter = body.newChapter;
@@ -238,27 +254,82 @@ api.post("/:campaign/generate", async (c) => {
   if (newChapter !== undefined && typeof newChapter !== "boolean") {
     throw new ApiError(400, "newChapter must be a boolean");
   }
-  return c.json(
-    await runGenerate(c.req.param("campaign"), chapter, sourceText, newChapter === true),
-  );
+  await assertGenerateTarget(campaign, chapter, newChapter === true); // 400/404
+  const provider = obtainProvider(); // 503 when nothing is configured
+  const job = startJob({
+    campaign,
+    chapter,
+    sourceText,
+    newChapter: newChapter === true,
+    provider,
+  });
+  return c.json({ jobId: job.id }, 202);
 });
 
-// POST /api/:campaign/generate/apply { scenes, stubs, chapter?, chapterTitle? }
-// -> { written }
-// Writes the reviewed drafts. Re-validates server-side (frontmatter parses,
-// status draft, safe paths); 409 { conflicts } when any target file exists —
-// then nothing is written at all. chapter + chapterTitle (both or neither)
-// additionally create `<chapter>/_chapter.md` when it is missing, in the same
-// all-or-nothing batch (the app's "Neues Kapitel" flow).
+// GET /api/:campaign/generate/job -> GenerateJob (404 when there is none).
+// The campaign is NOT re-validated here: the job store is the authority for
+// this endpoint, and "no job" is the honest answer for an unknown campaign
+// too. Polled by the generator route while a job runs (~3s) and once per
+// campaign mount by the topbar's run indicator.
+api.get("/:campaign/generate/job", (c) => {
+  const job = getJob(c.req.param("campaign"));
+  if (job === undefined) throw new ApiError(404, "no generate job for this campaign");
+  return c.json(serializeJob(job));
+});
+
+// DELETE /api/:campaign/generate/job -> { deleted: true } ("Verwerfen").
+// Works for every status — a running job is abandoned, its result never
+// lands (see finish() in generate-jobs.ts). 404 when there is none.
+api.delete("/:campaign/generate/job", (c) => {
+  if (!deleteJob(c.req.param("campaign"))) {
+    throw new ApiError(404, "no generate job for this campaign");
+  }
+  return c.json({ deleted: true });
+});
+
+// PUT /api/:campaign/generate/job/drafts { path, markdown } -> { path }
+// One review edit into the job store, so edits survive navigation as well
+// (issue #19 AK3). 404 without a job, 400 when the path is not one of the
+// result's scene paths. The markdown is stored verbatim and NOT validated
+// here — apply re-validates everything server-side anyway, and a
+// half-written draft must still be storable while the DM types.
+api.put("/:campaign/generate/job/drafts", async (c) => {
+  const body = await jsonBody(c, ["path", "markdown"]);
+  const rel = body.path;
+  const markdown = body.markdown;
+  if (typeof rel !== "string" || rel === "") throw new ApiError(400, "path must be a string");
+  if (typeof markdown !== "string") throw new ApiError(400, "markdown must be a string");
+  setDraftEdit(c.req.param("campaign"), rel, markdown);
+  return c.json({ path: rel });
+});
+
+// POST /api/:campaign/generate/apply
+// { scenes, stubs, chapter?, chapterTitle?, jobId? } -> { written }
+// Writes the reviewed drafts — synchronous on purpose: this is a short file
+// write, and the DM waits for its result. Re-validates server-side
+// (frontmatter parses, status draft, safe paths); 409 { conflicts } when any
+// target file exists — then nothing is written at all. chapter +
+// chapterTitle (both or neither) additionally create `<chapter>/_chapter.md`
+// when it is missing, in the same all-or-nothing batch (the app's "Neues
+// Kapitel" flow).
+// `jobId` (issue #19) ties the apply to the background job it came from: a
+// SUCCESSFUL apply discards that job — the drafts are on disk, there is
+// nothing left to restore. A stale id (a newer run started meanwhile) is
+// ignored rather than dropping the wrong job.
 api.post("/:campaign/generate/apply", async (c) => {
-  const body = await jsonBody(c, ["scenes", "stubs", "chapter", "chapterTitle"]);
-  return c.json(
-    await applyGenerated(
-      c.req.param("campaign"),
-      body.scenes,
-      body.stubs,
-      body.chapter,
-      body.chapterTitle,
-    ),
+  const body = await jsonBody(c, ["scenes", "stubs", "chapter", "chapterTitle", "jobId"]);
+  const campaign = c.req.param("campaign");
+  const jobId = body.jobId;
+  if (jobId !== undefined && typeof jobId !== "string") {
+    throw new ApiError(400, "jobId must be a string");
+  }
+  const written = await applyGenerated(
+    campaign,
+    body.scenes,
+    body.stubs,
+    body.chapter,
+    body.chapterTitle,
   );
+  if (typeof jobId === "string") deleteJobIfCurrent(campaign, jobId);
+  return c.json(written);
 });

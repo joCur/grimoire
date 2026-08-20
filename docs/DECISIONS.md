@@ -63,7 +63,9 @@ Pipeline mit Review-Vorschau, nie Direkt-Schreiben; Drafts immer
 `status: draft`. Provider hinter Interface (`server/src/llm-provider.ts`):
 Start Claude API, Umschalten auf LM Studio per Env-Var. Mechanische
 Validierung nach Generierung, Fehler als Korrektur-Turn ans LLM
-(max. 2 Versuche). Details: generator/README.md.
+(konfigurierbar über LLM_CORRECTION_TURNS, 0–2; Default seit #10-Ära 1 —
+nicht heilbare Fehlerklassen wurden eliminiert, verbleibende Formfehler
+repariert ein Turn). Details: generator/README.md.
 
 ## 7. Wachstums-Pfad (damit #5 keine Sackgasse ist)
 

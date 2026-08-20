@@ -6,14 +6,20 @@
 //   4. extract the JSON object from the reply (issue #20 — prose around the
 //      object is tolerated, the validation itself is not loosened) and
 //      validate it MECHANICALLY; errors go back to the model as a
-//      correction turn (max 2), never to the user; exhausted retries -> 422.
+//      correction turn (LLM_CORRECTION_TURNS, default 1, max 2 — issue
+//      #19), never to the user; exhausted retries -> 422.
 //      A TRUNCATED reply (the provider saw finish_reason/stop_reason) skips
 //      the correction turns entirely: re-asking for the same oversized JSON
 //      cannot succeed and a correction turn resends the whole prompt plus
 //      the previous reply — the most expensive retry there is (issue #18).
-//   5. the app shows the result as a review preview — POST /generate writes
+//   5. the app shows the result as a review preview — generating writes
 //      NOTHING; only POST /generate/apply touches the disk, and it
 //      re-validates server-side instead of trusting the client.
+//
+// Steps 1-4 run in the BACKGROUND since issue #19: POST /generate starts a
+// job (./generate-jobs) and answers 202, the result waits in the job store
+// until it is applied or discarded. runGenerate itself is unchanged by that
+// — it is the job runner's one call.
 //
 // The provider is resolved lazily (per request, after the cheap request
 // checks), so the read-only API never needs an API key (see server.ts).
@@ -47,8 +53,35 @@ import {
   type LLMProvider,
 } from "./llm-provider";
 
-/** Max correction turns after the initial call (DECISIONS #6: "max. 2"). */
+/**
+ * Upper bound for correction turns after the initial call (DECISIONS #6:
+ * "max. 2"). Issue #19 makes the number configurable BELOW that bound and
+ * lowers the default to 1: #18/#20 removed the non-fixable triggers
+ * (truncation, prose around the JSON), and a model that gets an explicit
+ * error list back repairs the remaining form errors in the first turn
+ * almost always — the second one only costs money.
+ */
 export const MAX_CORRECTION_TURNS = 2;
+
+/** Default when LLM_CORRECTION_TURNS is unset or unusable (issue #19). */
+export const DEFAULT_CORRECTION_TURNS = 1;
+
+/**
+ * `LLM_CORRECTION_TURNS`: how many correction turns one run may spend,
+ * 0…MAX_CORRECTION_TURNS. Junk (non-integer, negative, above the bound)
+ * falls back to the default instead of failing the run — same spirit as
+ * parseMaxTokens in llm-provider.ts: config junk must never take the
+ * generator down or push the spend UP.
+ */
+export function parseCorrectionTurns(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.LLM_CORRECTION_TURNS;
+  if (raw === undefined || raw.trim() === "") return DEFAULT_CORRECTION_TURNS;
+  const n = Number(raw);
+  if (!Number.isSafeInteger(n) || n < 0 || n > MAX_CORRECTION_TURNS) {
+    return DEFAULT_CORRECTION_TURNS;
+  }
+  return n;
+}
 
 /**
  * How much of the model's raw reply travels in a 422 body. Enough to see
@@ -129,18 +162,22 @@ function assertSafeChapterId(chapter: string): void {
 }
 
 /**
- * Collect the prompt context. `allowMissingChapter` is the "new chapter"
- * flow (issue #12): the target directory does not exist yet — it is created
- * on apply, so generating into it must not 404. Everything else stays: an
- * unsafe/reserved id and a non-directory of that name are still 400/404.
- * The chapter contributes only its id to the context, so nothing else
- * changes when its directory (and _chapter.md) are still missing.
+ * The cheap request-level checks of a generate target, without touching the
+ * LLM: unsafe campaign/chapter id -> 400, unknown campaign/chapter or a
+ * reserved dir -> 404. `allowMissingChapter` is the "new chapter" flow
+ * (issue #12): the target directory does not exist yet — it is created on
+ * apply, so generating into it must not 404.
+ *
+ * Exported because POST /generate runs these BEFORE it creates a background
+ * job (issue #19): a 400/404 is a request error and must stay a synchronous
+ * answer instead of becoming a failed job the DM has to go and read.
+ * Returns the campaign directory, so callers do not resolve it twice.
  */
-async function collectContext(
+export async function assertGenerateTarget(
   campaign: string,
   chapter: string,
   allowMissingChapter = false,
-): Promise<CampaignContext> {
+): Promise<string> {
   const dir = await campaignDir(campaign); // 400 unsafe id, 404 unknown campaign
   assertSafeChapterId(chapter);
   let chapterStats: Awaited<ReturnType<typeof stat>> | null = null;
@@ -154,6 +191,21 @@ async function collectContext(
   } else if (!chapterStats.isDirectory()) {
     throw new ApiError(404, "chapter not found");
   }
+  return dir;
+}
+
+/**
+ * Collect the prompt context. Runs the same target checks again (they are
+ * cheap and the pipeline must never depend on a caller having done them);
+ * the chapter contributes only its id to the context, so nothing else
+ * changes when its directory (and _chapter.md) are still missing.
+ */
+async function collectContext(
+  campaign: string,
+  chapter: string,
+  allowMissingChapter = false,
+): Promise<CampaignContext> {
+  const dir = await assertGenerateTarget(campaign, chapter, allowMissingChapter);
 
   const files = await collectCampaignFiles(campaign);
   const pick = (kind: "npc" | "location") =>
@@ -539,7 +591,8 @@ export function truncationMessage(maxTokens: number | undefined): string {
 
 /**
  * Run the pipeline: context -> prompt -> provider -> mechanical validation,
- * with up to MAX_CORRECTION_TURNS correction turns. Writes NOTHING.
+ * with up to `LLM_CORRECTION_TURNS` correction turns (default 1, hard bound
+ * MAX_CORRECTION_TURNS — see parseCorrectionTurns). Writes NOTHING.
  *
  * Two ways out with 422, both carrying the last raw reply (capped) and the
  * run's token usage so the DM sees WHAT came back and what it cost:
@@ -572,6 +625,8 @@ export async function runGenerate(
   };
 
   const corrections: CorrectionTurn[] = [];
+  // Read once per run: the bound must not change under a running loop.
+  const maxCorrections = parseCorrectionTurns();
   const spend = new RunUsage();
   for (;;) {
     const completion = await provider.complete(req, corrections);
@@ -594,7 +649,7 @@ export async function runGenerate(
       const usage = spend.usage();
       return usage === undefined ? outcome.result : { ...outcome.result, usage };
     }
-    if (corrections.length >= MAX_CORRECTION_TURNS) {
+    if (corrections.length >= maxCorrections) {
       spend.log(provider.name, "validation failed");
       throw new ApiError(422, "generation failed mechanical validation after retries", {
         validationErrors: outcome.errors,

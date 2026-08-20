@@ -24,17 +24,23 @@
 //                                              changes; the app polls it and refetches on change
 //                                              (SSE considered and deferred, DECISIONS #9)
 //   [x] POST /api/:campaign/generate           { chapter, sourceText, newChapter? } ->
-//                                              GenerateResult (review preview; writes
-//                                              NOTHING). newChapter allows a chapter
-//                                              directory that does not exist yet.
-//                                              GenerateResult.usage carries the run's
-//                                              token spend when the endpoint reports it.
-//   [x] POST /api/:campaign/generate/apply     { scenes, stubs, chapter?, chapterTitle? }
-//                                              -> { written } (drafts on disk; 409
-//                                              { conflicts } when any target exists —
+//                                              202 { jobId } — starts a background job
+//                                              (issue #19; writes NOTHING). newChapter
+//                                              allows a chapter directory that does not
+//                                              exist yet. 409 { jobId } while one runs.
+//   [x] GET  /api/:campaign/generate/job       GenerateJob (running/done/failed incl.
+//                                              result, error body and draftEdits), 404
+//                                              when there is none
+//   [x] DELETE /api/:campaign/generate/job     discard the job ("Verwerfen")
+//   [x] PUT  /api/:campaign/generate/job/drafts { path, markdown } -> keep one review
+//                                              edit in the job (400 unknown path)
+//   [x] POST /api/:campaign/generate/apply     { scenes, stubs, chapter?, chapterTitle?,
+//                                              jobId? } -> { written } (drafts on disk;
+//                                              409 { conflicts } when any target exists —
 //                                              nothing partially written). chapter +
 //                                              chapterTitle create <chapter>/_chapter.md
-//                                              when missing, in the same batch.
+//                                              when missing, in the same batch; jobId
+//                                              discards that job after a successful write.
 //   [x] POST /api/:campaign/review/seen        { path, line } -> add the line's short hash
 //                                              to the session's `reviewed` list (idempotent)
 //   [x] POST /api/:campaign/review/thread      { chapter, text } -> append `- [ ] text` under
@@ -46,10 +52,16 @@
 //
 // Validation after generate: frontmatter parseable, status==draft, references
 // exist or ship as stubs, only known callouts. Errors -> correction turn to
-// the LLM (max 2), see generator/README.md; exhausted retries -> 422. A reply
-// the model TRUNCATED (finish_reason/stop_reason) skips the correction turns
-// and answers 422 right away (issue #18). Every generator 422 carries the
-// last raw reply (`rawReply`, capped) and the run's `usage`.
+// the LLM (LLM_CORRECTION_TURNS, default 1, max 2 — issue #19), see
+// generator/README.md; exhausted retries -> 422. A reply the model TRUNCATED
+// (finish_reason/stop_reason) skips the correction turns and answers 422
+// right away (issue #18). Every generator 422 carries the last raw reply
+// (`rawReply`, capped) and the run's `usage` — since issue #19 inside the
+// job's `error` body instead of as the POST's response.
+//
+// Generate jobs live in memory only (./generate-jobs): a restart loses them,
+// deliberately — the campaign files stay the only truth on disk. The app
+// reports a vanished job instead of waiting forever.
 //
 // Everything that is NOT under /api is served from the frontend build
 // (app/dist) with an index.html fallback for client-side routes — see
