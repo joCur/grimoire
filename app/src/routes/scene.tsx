@@ -17,10 +17,12 @@ import { fetchFile, fetchTree } from "@/api";
 import { EntityArticle } from "@/components/EntityArticle";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/components/NpcCard";
+import { RenameAction } from "@/components/RenameAction";
 import { SceneArticle } from "@/components/SceneArticle";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { entityHeaderKind } from "@/lib/entity";
 import { fmString, fmStringArray } from "@/lib/frontmatter";
+import { renameTargetFor } from "@/lib/rename";
 
 export function SceneRoute() {
   const params = useParams();
@@ -52,6 +54,12 @@ export function SceneRoute() {
   const isScene = entityHeaderKind(data.kind) === "scene";
   // The aside belongs to scenes: only they reference npcs in frontmatter.
   const npcs = isScene ? fmStringArray(data.frontmatter.npcs) : [];
+  // „Umbenennen" (issue #30) — offered for the kinds that HAVE a renameable
+  // id (npc, location, scene, chapter); undefined for sessions, inbox,
+  // glossary and the campaign file, where the action renders nothing.
+  const renameAction = (
+    <RenameAction campaign={campaign} currentPath={data.path} target={renameTargetFor(data)} />
+  );
 
   return (
     <>
@@ -63,6 +71,7 @@ export function SceneRoute() {
               file={data}
               tree={tree.data}
               variant="scene"
+              actions={renameAction}
               // Issue #28: the status display IS the control here. The mtime
               // comes from the FileResponse on screen, so the patch carries
               // exactly the version the DM was looking at.
@@ -77,7 +86,7 @@ export function SceneRoute() {
               }
             />
           ) : (
-            <EntityArticle file={data} />
+            <EntityArticle file={data} actions={renameAction} />
           )}
         </div>
         {npcs.length > 0 && (
