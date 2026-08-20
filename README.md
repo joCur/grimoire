@@ -139,7 +139,8 @@ reviewed: [a1b2c3d4]            # Kurzhashes gesichteter Log-Zeilen (Review-Schr
   der `_chapter.md` des aktiven Kapitels (Abschnitt wird angelegt, wenn er
   fehlt).
 - „NPC-Stub anlegen" → erzeugt `npcs/<slug>.md` mit Minimal-Frontmatter
-  (`status: unknown`) und dem Log-Text unter `## Notizen`. Existiert der
+  (`status: alive` — wer am Tisch auftaucht, lebt; Ausnahmen stellt der
+  DM um) und dem Log-Text unter `## Notizen`. Existiert der
   Slug, meldet die App einen Konflikt statt zu überschreiben.
 - Erledigte Inbox-Einträge werden zu `- [x] …` umgeschrieben — die EINE
   dokumentierte Ausnahme vom Append-only der Inbox, damit erledigte Ideen

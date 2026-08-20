@@ -534,7 +534,7 @@ export async function createNpcStub(
     if (exists) throw new ApiError(409, "npc already exists — not overwriting", { path: rel });
     await mkdir(path.dirname(abs), { recursive: true });
     const yaml = dump(
-      { id, name: name ?? id, status: "unknown" },
+      { id, name: name ?? id, status: "alive" },
       { schema: CORE_SCHEMA, flowLevel: 1, lineWidth: -1 },
     );
     // `## Notizen` is the app-managed review section (README) — always

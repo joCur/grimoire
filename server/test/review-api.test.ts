@@ -246,10 +246,10 @@ describe("POST /api/:campaign/review/npc-stub", () => {
     const file = (await res.json()) as FileResponse;
     expect(file.path).toBe("npcs/old-metta.md");
     expect(file.kind).toBe("npc");
-    expect(file.frontmatter.status).toBe("unknown");
+    expect(file.frontmatter.status).toBe("alive");
     const raw = await readFile(absOf("npcs/old-metta.md"), "utf8");
     expect(raw).toBe(
-      "---\nid: old-metta\nname: Old Metta\nstatus: unknown\n---\n\n## Notizen\n\n- Fischerin am Steg, kennt die Gezeiten #npc\n",
+      "---\nid: old-metta\nname: Old Metta\nstatus: alive\n---\n\n## Notizen\n\n- Fischerin am Steg, kennt die Gezeiten #npc\n",
     );
   });
 
@@ -257,7 +257,7 @@ describe("POST /api/:campaign/review/npc-stub", () => {
     const res = await postJson("/api/beispiel/review/npc-stub", { id: "kai" });
     expect(res.status).toBe(200);
     const raw = await readFile(absOf("npcs/kai.md"), "utf8");
-    expect(raw).toBe("---\nid: kai\nname: kai\nstatus: unknown\n---\n\n## Notizen\n");
+    expect(raw).toBe("---\nid: kai\nname: kai\nstatus: alive\n---\n\n## Notizen\n");
   });
 
   test("409 with { error, path } for an existing slug — file untouched", async () => {
