@@ -21,17 +21,20 @@
 //   [x] GET  /api/:campaign/version            { version } — bumped by the file watcher on md
 //                                              changes; the app polls it and refetches on change
 //                                              (SSE considered and deferred, DECISIONS #9)
-//   [ ] POST /api/:campaign/generate           { chapter, sourceText } -> GenerateResult
+//   [x] POST /api/:campaign/generate           { chapter, sourceText } -> GenerateResult
 //                                              (review preview; writes NOTHING)
-//   [ ] POST /api/:campaign/generate/apply     { scenes, stubs } -> writes drafts
+//   [x] POST /api/:campaign/generate/apply     { scenes, stubs } -> { written } (drafts
+//                                              on disk; 409 { conflicts } when any
+//                                              target exists — nothing partially written)
 //
 // Validation after generate: frontmatter parseable, status==draft, references
 // exist or ship as stubs, only known callouts. Errors -> correction turn to
-// the LLM (max 2), see generator/README.md.
+// the LLM (max 2), see generator/README.md; exhausted retries -> 422.
 //
-// The LLM provider (./llm-provider) is created lazily when the generate
-// endpoints land — instantiating it at boot would require an API key even
-// for the read-only API.
+// The LLM provider (./llm-provider) is created lazily per generate request
+// (./generator obtainProvider) — instantiating it at boot would require an
+// API key even for the read-only API. Unconfigured provider -> 503 with the
+// factory's message ("ANTHROPIC_API_KEY fehlt").
 
 import { Hono } from "hono";
 import { getCampaignRoot, PORT } from "./config";

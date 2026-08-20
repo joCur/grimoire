@@ -214,3 +214,42 @@ export interface SearchResult {
 export interface SearchResponse {
   results: SearchResult[];
 }
+
+// --- generator (POST /api/:campaign/generate, see generator/README.md) -----
+
+/**
+ * One generated scene draft in the review preview. Nothing is on disk yet —
+ * writing happens only via POST /api/:campaign/generate/apply.
+ */
+export interface GeneratedSceneDraft {
+  /** Campaign-relative target path, e.g. "01-salzhafen/hafen/captured.md". */
+  path: string;
+  /** The complete markdown file including the frontmatter block. */
+  markdown: string;
+  /** The parsed frontmatter (always `status: draft`), for the review UI. */
+  frontmatter: Record<string, unknown>;
+}
+
+/**
+ * A stub for an npc/location the source text mentions but the campaign does
+ * not know yet. The review UI accepts/rejects stubs individually; the target
+ * path on apply is derived as `npcs/<id>.md` / `locations/<id>.md`.
+ */
+export interface GeneratedStub {
+  kind: "npc" | "location";
+  id: string;
+  name: string;
+  /** The complete stub markdown file including the frontmatter block. */
+  markdown: string;
+}
+
+/**
+ * POST /api/:campaign/generate — the review preview. Mechanically validated
+ * (frontmatter parses, status is draft, references resolve, only known
+ * callouts); `warnings` are the LLM's own review notes for the DM.
+ */
+export interface GenerateResult {
+  scenes: GeneratedSceneDraft[];
+  stubs: GeneratedStub[];
+  warnings: string[];
+}

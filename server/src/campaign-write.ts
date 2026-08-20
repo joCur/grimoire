@@ -41,8 +41,10 @@ const writeChains = new Map<string, Promise<unknown>>();
 /**
  * Run `fn` after all previously queued writes for `abs` have settled.
  * Failures of earlier writes do not poison the queue.
+ * (Exported for the generator's apply step — same lock map, so generator
+ * writes serialize with the write API's writes.)
  */
-function withFileLock<T>(abs: string, fn: () => Promise<T>): Promise<T> {
+export function withFileLock<T>(abs: string, fn: () => Promise<T>): Promise<T> {
   const prev = writeChains.get(abs) ?? Promise.resolve();
   const run = prev.then(fn, fn);
   const tail = run.then(
@@ -64,8 +66,9 @@ let tmpCounter = 0;
  * Write `content` to a temp file next to `abs`, then rename it into place.
  * The temp name starts with a dot, so a leftover from a crash is invisible
  * to the readers (hidden files are skipped everywhere).
+ * (Exported for the generator's apply step.)
  */
-async function atomicWrite(abs: string, content: string): Promise<void> {
+export async function atomicWrite(abs: string, content: string): Promise<void> {
   const tmp = path.join(
     path.dirname(abs),
     `.${path.basename(abs)}.${process.pid}.${tmpCounter++}.tmp`,

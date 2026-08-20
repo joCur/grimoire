@@ -1,0 +1,564 @@
+// Generator pipeline (GitHub issue #6, generator/README.md):
+//
+//   1. collect campaign context (npc/location ids+names, chapter, glossary)
+//   2. prompt = system-prompt.md + example-output.md + context + source text
+//   3. call the LLM provider
+//   4. validate the reply MECHANICALLY; errors go back to the model as a
+//      correction turn (max 2), never to the user; exhausted retries -> 422
+//   5. the app shows the result as a review preview — POST /generate writes
+//      NOTHING; only POST /generate/apply touches the disk, and it
+//      re-validates server-side instead of trusting the client.
+//
+// The provider is resolved lazily (per request, after the cheap request
+// checks), so the read-only API never needs an API key (see server.ts).
+
+import { mkdir, readFile, stat } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  CALLOUT_KINDS,
+  SCENE_TYPES,
+  parseMarkdown,
+  type GenerateResult,
+  type GeneratedSceneDraft,
+  type GeneratedStub,
+  type ParsedFile,
+} from "@grimoire/shared";
+import {
+  ApiError,
+  assertSafeRelativeMdPath,
+  campaignDir,
+  collectCampaignFiles,
+} from "./campaign-fs";
+import { atomicWrite, withFileLock } from "./campaign-write";
+import {
+  createProvider,
+  type CorrectionTurn,
+  type GenerateRequest,
+  type LLMProvider,
+} from "./llm-provider";
+
+/** Max correction turns after the initial call (DECISIONS #6: "max. 2"). */
+export const MAX_CORRECTION_TURNS = 2;
+
+/** Directories under a campaign that can never be chapters. */
+const RESERVED_DIRS = new Set(["npcs", "locations", "sessions"]);
+
+// --- provider resolution ---------------------------------------------------
+
+let providerOverride: LLMProvider | null = null;
+
+/** Test-only hook: route requests through a fake provider (null resets). */
+export function setProviderForTests(provider: LLMProvider | null): void {
+  providerOverride = provider;
+}
+
+/**
+ * Resolve the configured provider — lazily, per generate request. An
+ * unconfigured provider (e.g. missing ANTHROPIC_API_KEY) answers 503 with
+ * the factory's message; the rest of the API stays usable without a key.
+ */
+export function obtainProvider(): LLMProvider {
+  if (providerOverride !== null) return providerOverride;
+  try {
+    return createProvider(process.env);
+  } catch (err) {
+    throw new ApiError(503, err instanceof Error ? err.message : "LLM provider not configured");
+  }
+}
+
+// --- prompt assets -----------------------------------------------------------
+
+/** Server package dir (parent of src/), same resolution as config.ts. */
+const PACKAGE_DIR = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
+/** The prompt assets ship with the repo — resolved relative to the package. */
+const GENERATOR_DIR = path.resolve(PACKAGE_DIR, "../generator");
+
+let promptAssets: { systemPrompt: string; fewShotTarget: string } | null = null;
+
+async function loadPromptAssets(): Promise<{ systemPrompt: string; fewShotTarget: string }> {
+  if (promptAssets === null) {
+    promptAssets = {
+      systemPrompt: await readFile(path.join(GENERATOR_DIR, "system-prompt.md"), "utf8"),
+      fewShotTarget: await readFile(path.join(GENERATOR_DIR, "example-output.md"), "utf8"),
+    };
+  }
+  return promptAssets;
+}
+
+// --- context collection ------------------------------------------------------
+
+interface CampaignContext {
+  chapter: string;
+  npcs: Array<{ id: string; name: string }>;
+  locations: Array<{ id: string; name: string }>;
+  glossary: string;
+  npcIds: Set<string>;
+  locationIds: Set<string>;
+}
+
+/** A chapter id is a single, non-hidden path segment. */
+function assertSafeChapterId(chapter: string): void {
+  if (
+    chapter.length === 0 ||
+    chapter.startsWith(".") ||
+    chapter.includes("/") ||
+    chapter.includes("\\") ||
+    chapter.includes("\0") ||
+    chapter.includes("..")
+  ) {
+    throw new ApiError(400, "invalid chapter");
+  }
+  // npcs/locations/sessions exist as directories but are not chapters.
+  if (RESERVED_DIRS.has(chapter)) throw new ApiError(404, "chapter not found");
+}
+
+async function collectContext(campaign: string, chapter: string): Promise<CampaignContext> {
+  const dir = await campaignDir(campaign); // 400 unsafe id, 404 unknown campaign
+  assertSafeChapterId(chapter);
+  try {
+    if (!(await stat(path.join(dir, chapter))).isDirectory()) {
+      throw new Error("not a directory");
+    }
+  } catch {
+    throw new ApiError(404, "chapter not found");
+  }
+
+  const files = await collectCampaignFiles(campaign);
+  const pick = (kind: "npc" | "location") =>
+    files
+      .filter((f) => f.kind === kind)
+      .map((f) => ({
+        id: String(f.frontmatter.id),
+        name: String(f.frontmatter.name ?? f.frontmatter.id),
+      }));
+  const npcs = pick("npc");
+  const locations = pick("location");
+
+  let glossary = "";
+  try {
+    const raw = await readFile(path.join(dir, "glossary.md"), "utf8");
+    glossary = parseMarkdown(raw, "glossary.md", 0).body;
+  } catch {
+    // no glossary — send an empty one
+  }
+
+  return {
+    chapter,
+    npcs,
+    locations,
+    glossary,
+    npcIds: new Set(npcs.map((n) => n.id)),
+    locationIds: new Set(locations.map((l) => l.id)),
+  };
+}
+
+// --- mechanical validation (generator/README.md step 4) ----------------------
+
+/** The reply schema the system prompt demands. */
+interface RawEntry {
+  path: string;
+  content: string;
+}
+
+interface RawReply {
+  scenes: RawEntry[];
+  npc_stubs: RawEntry[];
+  location_stubs: RawEntry[];
+  warnings: string[];
+}
+
+const KNOWN_CALLOUTS = new Set<string>(CALLOUT_KINDS);
+/** `> [!kind]` markers at line starts (nested `>>` included). */
+const CALLOUT_MARKER = /^\s*>+\s*\[!([^\]\s]+)\]/gm;
+
+function unknownCallouts(body: string): string[] {
+  const unknown: string[] = [];
+  for (const m of body.matchAll(CALLOUT_MARKER)) {
+    const kind = m[1]!.toLowerCase();
+    if (!KNOWN_CALLOUTS.has(kind) && !unknown.includes(m[1]!)) unknown.push(m[1]!);
+  }
+  return unknown;
+}
+
+/** Filename of a campaign-relative path, without the `.md` extension. */
+function fileStem(rel: string): string {
+  const base = rel.slice(rel.lastIndexOf("/") + 1);
+  return base.endsWith(".md") ? base.slice(0, -3) : base;
+}
+
+/**
+ * "Frontmatter parseable" through the shared parser: the parser never
+ * throws, it DEGRADES — a missing or broken block leaves the whole raw text
+ * as the body. So: parseable iff the content opens a block and the parser
+ * actually split it off.
+ */
+function parseWithFrontmatter(
+  content: string,
+  rel: string,
+): { parsed: ParsedFile; error?: string } {
+  const parsed = parseMarkdown(content, rel, 0);
+  if (!content.startsWith("---\n") && !content.startsWith("---\r\n")) {
+    return { parsed, error: "missing frontmatter block" };
+  }
+  if (parsed.body === content) return { parsed, error: "frontmatter is not parseable YAML" };
+  return { parsed };
+}
+
+/** Shape check for one scenes/stubs entry of the raw reply. */
+function isRawEntry(v: unknown): v is RawEntry {
+  return (
+    v !== null &&
+    typeof v === "object" &&
+    typeof (v as RawEntry).path === "string" &&
+    typeof (v as RawEntry).content === "string"
+  );
+}
+
+function parseRawReply(raw: string, errors: string[]): RawReply | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+  } catch {
+    errors.push("reply is not valid JSON");
+    return null;
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    errors.push("reply must be a JSON object");
+    return null;
+  }
+  const obj = parsed as Record<string, unknown>;
+  const entryList = (key: "scenes" | "npc_stubs" | "location_stubs"): RawEntry[] => {
+    const v = obj[key] ?? [];
+    if (!Array.isArray(v)) {
+      errors.push(`"${key}" must be an array`);
+      return [];
+    }
+    const good: RawEntry[] = [];
+    v.forEach((item, i) => {
+      if (isRawEntry(item)) good.push(item);
+      else errors.push(`"${key}[${i}]" must be an object with string "path" and "content"`);
+    });
+    return good;
+  };
+  const scenes = entryList("scenes");
+  const npc_stubs = entryList("npc_stubs");
+  const location_stubs = entryList("location_stubs");
+  if (errors.length > 0) return null;
+  if (scenes.length === 0) {
+    errors.push('"scenes" must contain at least one scene');
+    return null;
+  }
+  const warnings = Array.isArray(obj.warnings)
+    ? obj.warnings.filter((w): w is string => typeof w === "string")
+    : [];
+  return { scenes, npc_stubs, location_stubs, warnings };
+}
+
+/** Validate one stub entry; returns the GeneratedStub or pushes errors. */
+function validateStub(
+  entry: RawEntry,
+  kind: "npc" | "location",
+  errors: string[],
+): GeneratedStub | null {
+  const dirName = kind === "npc" ? "npcs" : "locations";
+  const label = `${kind} stub "${entry.path}"`;
+  if (!new RegExp(`^${dirName}/[a-z0-9][a-z0-9-]*\\.md$`).test(entry.path)) {
+    errors.push(`${label}: path must be "${dirName}/<kebab-case-id>.md"`);
+    return null;
+  }
+  const { parsed, error } = parseWithFrontmatter(entry.content, entry.path);
+  if (error !== undefined) {
+    errors.push(`${label}: ${error}`);
+    return null;
+  }
+  const id = fileStem(entry.path);
+  const fmId = parsed.frontmatter.id;
+  if (typeof fmId === "string" && fmId !== id) {
+    errors.push(`${label}: frontmatter id "${fmId}" does not match the filename`);
+    return null;
+  }
+  return {
+    kind,
+    id,
+    name: typeof parsed.frontmatter.name === "string" ? parsed.frontmatter.name : id,
+    markdown: entry.content,
+  };
+}
+
+/**
+ * Mechanical validation of one raw model reply against the campaign context.
+ * Returns the mapped GenerateResult, or the list of errors for the
+ * correction turn.
+ */
+export function validateReply(
+  raw: string,
+  ctx: CampaignContext,
+): { ok: true; result: GenerateResult } | { ok: false; errors: string[] } {
+  const errors: string[] = [];
+  const reply = parseRawReply(raw, errors);
+  if (reply === null) return { ok: false, errors };
+
+  // Stubs first — scene references may point at them.
+  const stubs: GeneratedStub[] = [];
+  for (const entry of reply.npc_stubs) {
+    const stub = validateStub(entry, "npc", errors);
+    if (stub !== null) stubs.push(stub);
+  }
+  for (const entry of reply.location_stubs) {
+    const stub = validateStub(entry, "location", errors);
+    if (stub !== null) stubs.push(stub);
+  }
+  const stubNpcIds = new Set(stubs.filter((s) => s.kind === "npc").map((s) => s.id));
+  const stubLocationIds = new Set(stubs.filter((s) => s.kind === "location").map((s) => s.id));
+
+  const scenes: GeneratedSceneDraft[] = [];
+  const seenPaths = new Set<string>();
+  for (const entry of reply.scenes) {
+    const label = `scene "${entry.path}"`;
+
+    try {
+      assertSafeRelativeMdPath(entry.path);
+    } catch {
+      errors.push(`${label}: invalid path`);
+      continue;
+    }
+    const segments = entry.path.split("/");
+    if (segments[0] !== ctx.chapter || segments.length < 2 || segments.length > 3) {
+      errors.push(
+        `${label}: path must be "${ctx.chapter}/<scene>.md" or "${ctx.chapter}/<location-slug>/<scene>.md"`,
+      );
+    }
+    if (seenPaths.has(entry.path)) errors.push(`${label}: duplicate path`);
+    seenPaths.add(entry.path);
+
+    const { parsed, error } = parseWithFrontmatter(entry.content, entry.path);
+    if (error !== undefined) {
+      errors.push(`${label}: ${error}`);
+      continue;
+    }
+    const fm = parsed.frontmatter;
+
+    if (!(SCENE_TYPES as readonly string[]).includes(String(fm.type))) {
+      errors.push(`${label}: "type" must be one of ${SCENE_TYPES.join(", ")}`);
+    }
+    if (fm.status !== "draft") {
+      errors.push(`${label}: "status" must be "draft"`);
+    }
+
+    if (fm.npcs !== undefined && fm.npcs !== null) {
+      if (!Array.isArray(fm.npcs) || fm.npcs.some((n) => typeof n !== "string")) {
+        errors.push(`${label}: "npcs" must be an array of npc ids`);
+      } else {
+        for (const npc of fm.npcs as string[]) {
+          if (!ctx.npcIds.has(npc) && !stubNpcIds.has(npc)) {
+            errors.push(
+              `${label}: npc "${npc}" does not exist in the campaign and no npc_stub provides it`,
+            );
+          }
+        }
+      }
+    }
+    if (typeof fm.location === "string" && fm.location !== "") {
+      if (!ctx.locationIds.has(fm.location) && !stubLocationIds.has(fm.location)) {
+        errors.push(
+          `${label}: location "${fm.location}" does not exist in the campaign and no location_stub provides it`,
+        );
+      }
+    }
+
+    for (const kind of unknownCallouts(parsed.body)) {
+      errors.push(
+        `${label}: unknown callout "[!${kind}]" — allowed: ${CALLOUT_KINDS.map((k) => `[!${k}]`).join(", ")}`,
+      );
+    }
+
+    scenes.push({ path: entry.path, markdown: entry.content, frontmatter: fm });
+  }
+
+  if (errors.length > 0) return { ok: false, errors };
+  return { ok: true, result: { scenes, stubs, warnings: reply.warnings } };
+}
+
+// German on purpose: it is part of the (German) prompt conversation.
+function buildCorrectionMessage(errors: string[]): string {
+  return [
+    "Deine letzte Antwort hat die mechanische Validierung nicht bestanden:",
+    errors.map((e) => `- ${e}`).join("\n"),
+    "Antworte erneut mit dem vollständigen, korrigierten JSON — gleiches Schema, " +
+      "alle Szenen und Stubs enthalten, kein Text außerhalb des JSON-Blocks.",
+  ].join("\n\n");
+}
+
+// --- POST /api/:campaign/generate ---------------------------------------------
+
+/**
+ * Run the pipeline: context -> prompt -> provider -> mechanical validation,
+ * with up to MAX_CORRECTION_TURNS correction turns. Writes NOTHING. Throws
+ * ApiError(422) with the remaining errors when the retries are exhausted.
+ *
+ * `getProvider` is called lazily after the request-level checks (unknown
+ * campaign/chapter answer 404 before an unconfigured provider answers 503);
+ * tests inject a fake here.
+ */
+export async function runGenerate(
+  campaign: string,
+  chapter: string,
+  sourceText: string,
+  getProvider: () => LLMProvider = obtainProvider,
+): Promise<GenerateResult> {
+  const ctx = await collectContext(campaign, chapter);
+  const assets = await loadPromptAssets();
+  const provider = getProvider();
+
+  const req: GenerateRequest = {
+    systemPrompt: assets.systemPrompt,
+    fewShotTarget: assets.fewShotTarget,
+    glossary: ctx.glossary,
+    context: { chapter: ctx.chapter, npcs: ctx.npcs, locations: ctx.locations },
+    sourceText,
+  };
+
+  const corrections: CorrectionTurn[] = [];
+  for (;;) {
+    const raw = await provider.complete(req, corrections);
+    const outcome = validateReply(raw, ctx);
+    if (outcome.ok) return outcome.result;
+    if (corrections.length >= MAX_CORRECTION_TURNS) {
+      throw new ApiError(422, "generation failed mechanical validation after retries", {
+        validationErrors: outcome.errors,
+      });
+    }
+    corrections.push({ assistant: raw, correction: buildCorrectionMessage(outcome.errors) });
+  }
+}
+
+// --- POST /api/:campaign/generate/apply -----------------------------------------
+
+const STUB_KINDS = new Set(["npc", "location"]);
+const SCENE_ITEM_KEYS = new Set(["path", "markdown", "frontmatter"]);
+const STUB_ITEM_KEYS = new Set(["kind", "id", "name", "markdown"]);
+
+/** One validated file ready to be written. */
+interface ApplyTarget {
+  rel: string;
+  markdown: string;
+}
+
+function assertKnownKeys(item: Record<string, unknown>, allowed: Set<string>, label: string): void {
+  for (const key of Object.keys(item)) {
+    if (!allowed.has(key)) throw new ApiError(400, `${label}: unknown key "${key}"`);
+  }
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+/** Deep-validate one scene item of the apply body -> write target. */
+function applySceneTarget(item: unknown, index: number): ApplyTarget {
+  const label = `scenes[${index}]`;
+  if (!isPlainObject(item)) throw new ApiError(400, `${label} must be an object`);
+  assertKnownKeys(item, SCENE_ITEM_KEYS, label);
+  const rel = item.path;
+  const markdown = item.markdown;
+  if (typeof rel !== "string") throw new ApiError(400, `${label}.path must be a string`);
+  if (typeof markdown !== "string" || markdown === "") {
+    throw new ApiError(400, `${label}.markdown must be a non-empty string`);
+  }
+  assertSafeRelativeMdPath(rel); // 400 on traversal/absolute/non-md
+  const segments = rel.split("/");
+  if (segments.length < 2 || segments.length > 3 || RESERVED_DIRS.has(segments[0]!)) {
+    throw new ApiError(
+      400,
+      `${label}.path must be "<chapter>/<scene>.md" or "<chapter>/<location-slug>/<scene>.md"`,
+    );
+  }
+  // Re-validation (apply is a separate request — never trust the client):
+  // the frontmatter must still parse and the draft must still be a draft.
+  const { parsed, error } = parseWithFrontmatter(markdown, rel);
+  if (error !== undefined) throw new ApiError(400, `${label}: ${error}`);
+  if (parsed.frontmatter.status !== "draft") {
+    throw new ApiError(400, `${label}: "status" must be "draft"`);
+  }
+  return { rel, markdown };
+}
+
+/** Deep-validate one stub item of the apply body -> write target. */
+function applyStubTarget(item: unknown, index: number): ApplyTarget {
+  const label = `stubs[${index}]`;
+  if (!isPlainObject(item)) throw new ApiError(400, `${label} must be an object`);
+  assertKnownKeys(item, STUB_ITEM_KEYS, label);
+  const kind = item.kind;
+  const id = item.id;
+  const markdown = item.markdown;
+  if (typeof kind !== "string" || !STUB_KINDS.has(kind)) {
+    throw new ApiError(400, `${label}.kind must be "npc" or "location"`);
+  }
+  if (typeof id !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(id)) {
+    throw new ApiError(400, `${label}.id must be a kebab-case slug`);
+  }
+  if (typeof markdown !== "string" || markdown === "") {
+    throw new ApiError(400, `${label}.markdown must be a non-empty string`);
+  }
+  const rel = `${kind}s/${id}.md`;
+  assertSafeRelativeMdPath(rel); // defense in depth — the slug check above rules escapes out
+  const { error } = parseWithFrontmatter(markdown, rel);
+  if (error !== undefined) throw new ApiError(400, `${label}: ${error}`);
+  return { rel, markdown };
+}
+
+/**
+ * Write reviewed drafts to disk. Validates ALL files first (400), then
+ * checks ALL target paths for conflicts (409 with the conflicting paths,
+ * nothing partially written), then writes via the shared per-file locks and
+ * atomic writes. Returns the written campaign-relative paths.
+ */
+export async function applyGenerated(
+  campaign: string,
+  scenes: unknown,
+  stubs: unknown,
+): Promise<{ written: string[] }> {
+  const dir = await campaignDir(campaign);
+
+  if (scenes !== undefined && !Array.isArray(scenes)) {
+    throw new ApiError(400, "scenes must be an array");
+  }
+  if (stubs !== undefined && !Array.isArray(stubs)) {
+    throw new ApiError(400, "stubs must be an array");
+  }
+  const targets: ApplyTarget[] = [
+    ...((scenes as unknown[] | undefined) ?? []).map(applySceneTarget),
+    ...((stubs as unknown[] | undefined) ?? []).map(applyStubTarget),
+  ];
+  if (targets.length === 0) throw new ApiError(400, "nothing to apply");
+
+  const seen = new Set<string>();
+  for (const t of targets) {
+    if (seen.has(t.rel)) throw new ApiError(400, `duplicate target path: ${t.rel}`);
+    seen.add(t.rel);
+  }
+
+  // Validate ALL, then write: collect every conflict before touching disk.
+  const conflicts: string[] = [];
+  for (const t of targets) {
+    try {
+      await stat(path.resolve(dir, t.rel));
+      conflicts.push(t.rel);
+    } catch {
+      // does not exist — good
+    }
+  }
+  if (conflicts.length > 0) {
+    throw new ApiError(409, "target files already exist", { conflicts });
+  }
+
+  const written: string[] = [];
+  for (const t of targets) {
+    const abs = path.resolve(dir, t.rel);
+    await mkdir(path.dirname(abs), { recursive: true });
+    await withFileLock(abs, () => atomicWrite(abs, t.markdown));
+    written.push(t.rel);
+  }
+  return { written };
+}
