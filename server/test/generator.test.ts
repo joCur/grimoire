@@ -279,6 +279,76 @@ describe("POST /api/:campaign/generate", () => {
     expect(fake.calls).toHaveLength(0);
   });
 
+  test("newChapter: true generates into a chapter directory that does not exist yet", async () => {
+    const chapter = "02-schmugglerbucht";
+    const scenePath = `${chapter}/erste-szene.md`;
+    const fake = useFake([
+      reply({
+        scenes: [
+          {
+            path: scenePath,
+            content: sceneMarkdown({ npcs: "fenn" }).replace(
+              "chapter: 01-salzhafen",
+              `chapter: ${chapter}`,
+            ),
+          },
+        ],
+        npc_stubs: [],
+      }),
+    ]);
+    const res = await postJson("/api/beispiel/generate", {
+      chapter,
+      sourceText: "A hidden cove full of smugglers.",
+      newChapter: true,
+    });
+    expect(res.status).toBe(200);
+    const result = (await res.json()) as GenerateResult;
+    expect(result.scenes[0]!.path).toBe(scenePath);
+
+    // context still collected (npcs/locations/glossary are campaign-wide),
+    // only the chapter directory is absent
+    const req = fake.calls[0]!.req;
+    expect(req.context.chapter).toBe(chapter);
+    expect(req.context.npcs.map((n) => n.id).sort()).toEqual(["fenn", "jorna"]);
+    expect(req.glossary).toContain("Leuchtturmwärter");
+
+    // still a preview: neither the directory nor the scene exist
+    expect(await exists(chapter)).toBe(false);
+    expect(await exists(scenePath)).toBe(false);
+  });
+
+  test("newChapter does not weaken the other chapter checks", async () => {
+    const fake = useFake([]);
+    // reserved dirs are never chapters, not even new ones
+    expect(
+      (await postJson("/api/beispiel/generate", { ...generateBody, chapter: "npcs", newChapter: true }))
+        .status,
+    ).toBe(404);
+    // an existing NON-directory of that name is not a chapter either
+    expect(
+      (
+        await postJson("/api/beispiel/generate", {
+          ...generateBody,
+          chapter: "glossary.md",
+          newChapter: true,
+        })
+      ).status,
+    ).toBe(404);
+    // traversal stays a 400, and the flag itself is type-checked
+    expect(
+      (await postJson("/api/beispiel/generate", { ...generateBody, chapter: "..", newChapter: true }))
+        .status,
+    ).toBe(400);
+    expect(
+      (await postJson("/api/beispiel/generate", { ...generateBody, newChapter: "yes" })).status,
+    ).toBe(400);
+    // and without the flag a missing chapter is still a 404
+    expect(
+      (await postJson("/api/beispiel/generate", { ...generateBody, chapter: "02-nowhere" })).status,
+    ).toBe(404);
+    expect(fake.calls).toHaveLength(0);
+  });
+
   test("503 with the factory message when no provider is configured", async () => {
     setProviderForTests(null);
     const savedKey = process.env.ANTHROPIC_API_KEY;
@@ -423,5 +493,93 @@ describe("POST /api/:campaign/generate/apply", () => {
       scenes: [{ path: SCENE_PATH, markdown: sceneMarkdown() }],
     });
     expect(res.status).toBe(404);
+  });
+
+  // --- new-chapter flow (issue #12) ------------------------------------------
+
+  test("chapter + chapterTitle create _chapter.md once — and never twice", async () => {
+    const chapter = "03-neues-kapitel";
+    const scenePath = `${chapter}/erste-szene.md`;
+    const chapterRel = `${chapter}/_chapter.md`;
+
+    let res = await postJson("/api/beispiel/generate/apply", {
+      scenes: [{ path: scenePath, markdown: sceneMarkdown() }],
+      chapter,
+      chapterTitle: "Kapitel 3: Die Schmugglerbucht",
+    });
+    expect(res.status).toBe(200);
+    // the chapter file comes first — the drafts live inside it
+    expect(await res.json()).toEqual({ written: [chapterRel, scenePath] });
+
+    const written = await readFile(absOf(chapterRel), "utf8");
+    expect(written).toBe(
+      `---\nid: ${chapter}\ntitle: 'Kapitel 3: Die Schmugglerbucht'\nstatus: planned\n---\n`,
+    );
+    // and the read API sees it as a chapter with its title
+    const get = await app.request(`/api/beispiel/file?path=${encodeURIComponent(chapterRel)}`);
+    expect(get.status).toBe(200);
+    const file = (await get.json()) as { frontmatter: Record<string, unknown> };
+    expect(file.frontmatter.title).toBe("Kapitel 3: Die Schmugglerbucht");
+    expect(file.frontmatter.status).toBe("planned");
+
+    // second apply into the SAME chapter: the existing _chapter.md is left
+    // untouched (not a conflict, not rewritten) — only the new scene lands
+    const second = `${chapter}/zweite-szene.md`;
+    res = await postJson("/api/beispiel/generate/apply", {
+      scenes: [{ path: second, markdown: sceneMarkdown() }],
+      chapter,
+      chapterTitle: "Ein anderer Titel",
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ written: [second] });
+    expect(await readFile(absOf(chapterRel), "utf8")).toBe(written);
+  });
+
+  test("new-chapter batch stays all-or-nothing: a scene conflict writes no _chapter.md", async () => {
+    const chapter = "04-konflikt";
+    const existing = "01-salzhafen/hafen/ankunft-leuchtturm.md";
+    const res = await postJson("/api/beispiel/generate/apply", {
+      scenes: [
+        { path: `${chapter}/neu.md`, markdown: sceneMarkdown() },
+        { path: existing, markdown: sceneMarkdown() },
+      ],
+      chapter,
+      chapterTitle: "Kapitel 4",
+    });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { conflicts: string[] }).conflicts).toEqual([existing]);
+    expect(await exists(`${chapter}/_chapter.md`)).toBe(false);
+    expect(await exists(chapter)).toBe(false);
+  });
+
+  test("400 on half or unusable chapter arguments — nothing written", async () => {
+    const md = sceneMarkdown();
+    const bad = [
+      // the two belong together
+      { scenes: [{ path: "05-halb/neu.md", markdown: md }], chapter: "05-halb" },
+      { scenes: [{ path: "05-halb/neu.md", markdown: md }], chapterTitle: "Halb" },
+      // empty / whitespace-only title
+      { scenes: [{ path: "05-halb/neu.md", markdown: md }], chapter: "05-halb", chapterTitle: "  " },
+      // unsafe chapter ids
+      { scenes: [{ path: "05-halb/neu.md", markdown: md }], chapter: "..", chapterTitle: "X" },
+      { scenes: [{ path: "05-halb/neu.md", markdown: md }], chapter: "a/b", chapterTitle: "X" },
+      // nothing to apply — a chapter alone is not a draft
+      { chapter: "05-halb", chapterTitle: "Halb" },
+    ];
+    for (const b of bad) {
+      expect((await postJson("/api/beispiel/generate/apply", b)).status).toBe(400);
+    }
+    // reserved dirs are not chapters
+    expect(
+      (
+        await postJson("/api/beispiel/generate/apply", {
+          scenes: [{ path: "05-halb/neu.md", markdown: md }],
+          chapter: "npcs",
+          chapterTitle: "X",
+        })
+      ).status,
+    ).toBe(404);
+    expect(await exists("05-halb/neu.md")).toBe(false);
+    expect(await exists("05-halb/_chapter.md")).toBe(false);
   });
 });

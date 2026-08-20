@@ -5,6 +5,7 @@ import { ReviewMemoryProvider } from "@/lib/review-memory";
 import { useCampaignVersion } from "@/lib/use-campaign-version";
 import { BrowseRoute } from "@/routes/browse";
 import { CampaignsRoute } from "@/routes/campaigns";
+import { GenerateRoute } from "@/routes/generate";
 import { HarnessRoute } from "@/routes/harness";
 import { LiveRoute } from "@/routes/live";
 import { PoolRoute } from "@/routes/pool";
@@ -50,6 +51,8 @@ export function App() {
           {/* Mobile list pages (issue #11) — linked only from the start surface. */}
           <Route path="list/:kind" element={<BrowseRoute />} />
           <Route path="live" element={<LiveRoute />} />
+          {/* Generator (issue #12) — entered from the pool's "Generator". */}
+          <Route path="generate" element={<GenerateRoute />} />
           {/* Review ("Fünf Minuten Ernte", issue #10) — entered after
               "Session beenden" and from the pool affordance. */}
           <Route path="review" element={<ReviewRoute />} />

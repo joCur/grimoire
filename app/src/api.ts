@@ -6,24 +6,46 @@ import type {
   CampaignSummary,
   CampaignTree,
   FileResponse,
+  GenerateResult,
+  GeneratedStub,
   SearchResponse,
 } from "@grimoire/shared/types";
 
 export class ApiError extends Error {
   readonly status: number;
+  /**
+   * The server's JSON error body when there was one — the endpoints answer
+   * `{ error, … }` and put the interesting parts next to it (`conflicts` on
+   * 409, `validationErrors` on 422, `mtimeMs` on a frontmatter conflict).
+   */
+  readonly details: Record<string, unknown>;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, details: Record<string, unknown> = {}) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.details = details;
   }
+}
+
+/** Build the ApiError for a failed response, keeping the JSON error body. */
+async function failure(what: string, response: Response): Promise<ApiError> {
+  let details: Record<string, unknown> = {};
+  try {
+    const body: unknown = await response.json();
+    if (body !== null && typeof body === "object" && !Array.isArray(body)) {
+      details = body as Record<string, unknown>;
+    }
+  } catch {
+    // no/!JSON body — the status is all we know
+  }
+  const message = typeof details.error === "string" ? details.error : undefined;
+  return new ApiError(response.status, `${what} → ${response.status}${message === undefined ? "" : `: ${message}`}`, details);
 }
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`/api${path}`);
-  if (!response.ok) {
-    throw new ApiError(response.status, `GET /api${path} → ${response.status}`);
-  }
+  if (!response.ok) throw await failure(`GET /api${path}`, response);
   return (await response.json()) as T;
 }
 
@@ -68,9 +90,7 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
       ? {}
       : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
   });
-  if (!response.ok) {
-    throw new ApiError(response.status, `POST /api${path} → ${response.status}`);
-  }
+  if (!response.ok) throw await failure(`POST /api${path}`, response);
   return (await response.json()) as T;
 }
 
@@ -160,4 +180,49 @@ export function createNpcStub(
  */
 export function markInboxLineDone(campaign: string, line: string): Promise<FileResponse> {
   return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/review/inbox-done`, { line });
+}
+
+// --- generator (issue #12) ---------------------------------------------------
+
+/**
+ * Run the generator pipeline for one chapter — a review PREVIEW, nothing is
+ * written (generator/README.md). `newChapter` allows a chapter directory
+ * that does not exist yet (created by applyDrafts below).
+ * ApiError statuses worth handling: 422 (`details.validationErrors` after the
+ * correction turns), 503 (no provider configured — no API key).
+ */
+export function generateDrafts(
+  campaign: string,
+  input: { chapter: string; sourceText: string; newChapter?: boolean },
+): Promise<GenerateResult> {
+  return postJson<GenerateResult>(`/${encodeURIComponent(campaign)}/generate`, {
+    chapter: input.chapter,
+    sourceText: input.sourceText,
+    ...(input.newChapter === true ? { newChapter: true } : {}),
+  });
+}
+
+/**
+ * Write the reviewed drafts (all or nothing): the possibly edited scene
+ * markdown plus the accepted stubs. With `chapter` + `chapterTitle` the
+ * server also creates `<chapter>/_chapter.md` when it is missing.
+ * ApiError 409 carries the existing paths in `details.conflicts` — nothing
+ * was written then.
+ */
+export function applyDrafts(
+  campaign: string,
+  input: {
+    scenes: Array<{ path: string; markdown: string }>;
+    stubs: GeneratedStub[];
+    chapter?: string;
+    chapterTitle?: string;
+  },
+): Promise<{ written: string[] }> {
+  return postJson<{ written: string[] }>(`/${encodeURIComponent(campaign)}/generate/apply`, {
+    scenes: input.scenes,
+    stubs: input.stubs,
+    ...(input.chapter === undefined || input.chapterTitle === undefined
+      ? {}
+      : { chapter: input.chapter, chapterTitle: input.chapterTitle }),
+  });
 }

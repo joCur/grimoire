@@ -216,29 +216,48 @@ api.post("/:campaign/review/inbox-done", async (c) => {
 
 // --- generator endpoints (issue #6) -------------------------------------------------
 
-// POST /api/:campaign/generate { chapter, sourceText } -> GenerateResult
-// Review preview only — writes NOTHING (generator/README.md). 404 when the
-// chapter does not exist, 422 when the LLM reply keeps failing mechanical
+// POST /api/:campaign/generate { chapter, sourceText, newChapter? } ->
+// GenerateResult. Review preview only — writes NOTHING
+// (generator/README.md). 404 when the chapter does not exist (unless
+// newChapter marks the app's new-chapter flow, where the directory is
+// created on apply), 422 when the LLM reply keeps failing mechanical
 // validation, 503 when no provider is configured (e.g. ANTHROPIC_API_KEY
 // missing); the provider is instantiated lazily per request.
 api.post("/:campaign/generate", async (c) => {
-  const body = await jsonBody(c, ["chapter", "sourceText"]);
+  const body = await jsonBody(c, ["chapter", "sourceText", "newChapter"]);
   const chapter = body.chapter;
   const sourceText = body.sourceText;
+  const newChapter = body.newChapter;
   if (typeof chapter !== "string" || chapter.trim() === "") {
     throw new ApiError(400, "chapter must be a non-empty string");
   }
   if (typeof sourceText !== "string" || sourceText.trim() === "") {
     throw new ApiError(400, "sourceText must be a non-empty string");
   }
-  return c.json(await runGenerate(c.req.param("campaign"), chapter, sourceText));
+  if (newChapter !== undefined && typeof newChapter !== "boolean") {
+    throw new ApiError(400, "newChapter must be a boolean");
+  }
+  return c.json(
+    await runGenerate(c.req.param("campaign"), chapter, sourceText, newChapter === true),
+  );
 });
 
-// POST /api/:campaign/generate/apply { scenes, stubs } -> { written }
+// POST /api/:campaign/generate/apply { scenes, stubs, chapter?, chapterTitle? }
+// -> { written }
 // Writes the reviewed drafts. Re-validates server-side (frontmatter parses,
 // status draft, safe paths); 409 { conflicts } when any target file exists —
-// then nothing is written at all.
+// then nothing is written at all. chapter + chapterTitle (both or neither)
+// additionally create `<chapter>/_chapter.md` when it is missing, in the same
+// all-or-nothing batch (the app's "Neues Kapitel" flow).
 api.post("/:campaign/generate/apply", async (c) => {
-  const body = await jsonBody(c, ["scenes", "stubs"]);
-  return c.json(await applyGenerated(c.req.param("campaign"), body.scenes, body.stubs));
+  const body = await jsonBody(c, ["scenes", "stubs", "chapter", "chapterTitle"]);
+  return c.json(
+    await applyGenerated(
+      c.req.param("campaign"),
+      body.scenes,
+      body.stubs,
+      body.chapter,
+      body.chapterTitle,
+    ),
+  );
 });

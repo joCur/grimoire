@@ -8,10 +8,12 @@
 // On the review view (issue #10) the left side reads "Review" and the right
 // side carries the harvest progress; the pool gets a quiet link into the
 // review while today's session still has unharvested entries.
+// The generator (issue #12) adds a "campaign / Generator" breadcrumb and the
+// quiet "Generator" button on the pool.
 
 import type { FileResponse } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, Clock, Pause, Play, Search } from "lucide-react";
+import { Check, ChevronDown, Clock, Pause, Play, Search, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, matchPath, useLocation, useNavigate } from "react-router";
 
@@ -37,12 +39,14 @@ export function Topbar() {
   const sceneMatch = matchPath("/:campaign/file/*", pathname);
   const liveMatch = matchPath("/:campaign/live", pathname);
   const reviewMatch = matchPath("/:campaign/review", pathname);
+  const generateMatch = matchPath("/:campaign/generate", pathname);
   const listMatch = matchPath("/:campaign/list/*", pathname);
   const poolMatch = matchPath("/:campaign", pathname);
   const campaign =
     sceneMatch?.params.campaign ??
     liveMatch?.params.campaign ??
     reviewMatch?.params.campaign ??
+    generateMatch?.params.campaign ??
     listMatch?.params.campaign ??
     poolMatch?.params.campaign ??
     "";
@@ -50,6 +54,7 @@ export function Topbar() {
   const isScene = sceneMatch !== null && filePath !== "" && campaign !== "";
   const isLive = liveMatch !== null && campaign !== "";
   const isReview = reviewMatch !== null && campaign !== "";
+  const isGenerator = generateMatch !== null && campaign !== "";
   const isPool = poolMatch !== null && campaign !== "";
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -132,6 +137,16 @@ export function Topbar() {
 
       {isReview && <div className="flex-none text-[13px] text-muted-foreground">Review</div>}
 
+      {isGenerator && (
+        <div className="flex min-w-0 items-center gap-2 text-[13px]">
+          <Link to={`/${campaign}`} className="flex-none text-body-secondary hover:text-foreground">
+            {campaign}
+          </Link>
+          <span aria-hidden className="text-border-hover">/</span>
+          <span className="truncate text-soft">Generator</span>
+        </div>
+      )}
+
       <div className="flex-1" />
 
       {/* Only on campaign-scoped views — the campaign list has no search
@@ -157,6 +172,21 @@ export function Topbar() {
       {/* Quiet review affordance — only while today's session still has
           unharvested entries (issue #10); otherwise nothing is shown. */}
       {isPool && <PoolReviewLink campaign={campaign} />}
+
+      {/* Quiet entry into the generator (issue #12) — pool only, next to the
+          brass session button per the prototype. */}
+      {isPool && (
+        <Link
+          to={`/${campaign}/generate`}
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            "h-auto flex-none gap-[7px] border-input bg-card px-3.5 py-[7px] text-[13px] font-normal text-soft hover:border-border-hover hover:bg-card hover:text-foreground [&_svg]:size-[15px]",
+          )}
+        >
+          <Sparkles aria-hidden />
+          Generator
+        </Link>
+      )}
 
       {(isPool || isScene) && <StartSessionButton campaign={campaign} />}
 

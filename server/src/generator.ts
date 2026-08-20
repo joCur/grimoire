@@ -15,6 +15,7 @@
 import { mkdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { CORE_SCHEMA, dump } from "js-yaml";
 import {
   CALLOUT_KINDS,
   SCENE_TYPES,
@@ -113,14 +114,30 @@ function assertSafeChapterId(chapter: string): void {
   if (RESERVED_DIRS.has(chapter)) throw new ApiError(404, "chapter not found");
 }
 
-async function collectContext(campaign: string, chapter: string): Promise<CampaignContext> {
+/**
+ * Collect the prompt context. `allowMissingChapter` is the "new chapter"
+ * flow (issue #12): the target directory does not exist yet — it is created
+ * on apply, so generating into it must not 404. Everything else stays: an
+ * unsafe/reserved id and a non-directory of that name are still 400/404.
+ * The chapter contributes only its id to the context, so nothing else
+ * changes when its directory (and _chapter.md) are still missing.
+ */
+async function collectContext(
+  campaign: string,
+  chapter: string,
+  allowMissingChapter = false,
+): Promise<CampaignContext> {
   const dir = await campaignDir(campaign); // 400 unsafe id, 404 unknown campaign
   assertSafeChapterId(chapter);
+  let chapterStats: Awaited<ReturnType<typeof stat>> | null = null;
   try {
-    if (!(await stat(path.join(dir, chapter))).isDirectory()) {
-      throw new Error("not a directory");
-    }
+    chapterStats = await stat(path.join(dir, chapter));
   } catch {
+    // missing — allowed only for the new-chapter flow (checked below)
+  }
+  if (chapterStats === null) {
+    if (!allowMissingChapter) throw new ApiError(404, "chapter not found");
+  } else if (!chapterStats.isDirectory()) {
     throw new ApiError(404, "chapter not found");
   }
 
@@ -400,14 +417,18 @@ function buildCorrectionMessage(errors: string[]): string {
  * `getProvider` is called lazily after the request-level checks (unknown
  * campaign/chapter answer 404 before an unconfigured provider answers 503);
  * tests inject a fake here.
+ *
+ * `newChapter` marks the app's "new chapter" flow: the chapter directory
+ * does not exist yet and is created by apply, so a missing one is not a 404.
  */
 export async function runGenerate(
   campaign: string,
   chapter: string,
   sourceText: string,
+  newChapter = false,
   getProvider: () => LLMProvider = obtainProvider,
 ): Promise<GenerateResult> {
-  const ctx = await collectContext(campaign, chapter);
+  const ctx = await collectContext(campaign, chapter, newChapter);
   const assets = await loadPromptAssets();
   const provider = getProvider();
 
@@ -509,15 +530,56 @@ function applyStubTarget(item: unknown, index: number): ApplyTarget {
 }
 
 /**
+ * The new-chapter flow (issue #12): `chapter` + `chapterTitle` mean "the
+ * drafts go into a chapter that does not exist yet". Returns the
+ * `<chapter>/_chapter.md` target to create in the same batch, or null when
+ * the file is already there (idempotent — an existing chapter is not a
+ * conflict). Minimal frontmatter per the examples convention
+ * (id/title/status: planned — a generator-created chapter is upcoming,
+ * never the active one); the body stays empty and degrades.
+ */
+async function newChapterTarget(
+  dir: string,
+  chapter: unknown,
+  chapterTitle: unknown,
+): Promise<ApplyTarget | null> {
+  if (chapter === undefined && chapterTitle === undefined) return null;
+  if (typeof chapter !== "string" || typeof chapterTitle !== "string") {
+    throw new ApiError(400, "chapter and chapterTitle must be sent together as strings");
+  }
+  const title = chapterTitle.replace(/\s*\r?\n\s*/g, " ").trim();
+  if (title === "") throw new ApiError(400, "chapterTitle must be a non-empty string");
+  assertSafeChapterId(chapter); // 400 unsafe id, 404 reserved dirs
+  const rel = `${chapter}/_chapter.md`;
+  try {
+    await stat(path.resolve(dir, rel));
+    return null; // chapter already has its file — nothing to create
+  } catch {
+    // missing — create it below
+  }
+  const yaml = dump(
+    { id: chapter, title, status: "planned" },
+    { schema: CORE_SCHEMA, flowLevel: 1, lineWidth: -1 },
+  );
+  return { rel, markdown: `---\n${yaml}---\n` };
+}
+
+/**
  * Write reviewed drafts to disk. Validates ALL files first (400), then
  * checks ALL target paths for conflicts (409 with the conflicting paths,
  * nothing partially written), then writes via the shared per-file locks and
  * atomic writes. Returns the written campaign-relative paths.
+ *
+ * `chapter`/`chapterTitle` (both or neither) add the chapter's `_chapter.md`
+ * to the SAME all-or-nothing batch when it does not exist yet — the app's
+ * "Neues Kapitel" flow.
  */
 export async function applyGenerated(
   campaign: string,
   scenes: unknown,
   stubs: unknown,
+  chapter?: unknown,
+  chapterTitle?: unknown,
 ): Promise<{ written: string[] }> {
   const dir = await campaignDir(campaign);
 
@@ -532,6 +594,10 @@ export async function applyGenerated(
     ...((stubs as unknown[] | undefined) ?? []).map(applyStubTarget),
   ];
   if (targets.length === 0) throw new ApiError(400, "nothing to apply");
+
+  // The chapter file comes first — the drafts live inside it.
+  const chapterFile = await newChapterTarget(dir, chapter, chapterTitle);
+  if (chapterFile !== null) targets.unshift(chapterFile);
 
   const seen = new Set<string>();
   for (const t of targets) {

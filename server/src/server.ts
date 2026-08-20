@@ -21,11 +21,16 @@
 //   [x] GET  /api/:campaign/version            { version } — bumped by the file watcher on md
 //                                              changes; the app polls it and refetches on change
 //                                              (SSE considered and deferred, DECISIONS #9)
-//   [x] POST /api/:campaign/generate           { chapter, sourceText } -> GenerateResult
-//                                              (review preview; writes NOTHING)
-//   [x] POST /api/:campaign/generate/apply     { scenes, stubs } -> { written } (drafts
-//                                              on disk; 409 { conflicts } when any
-//                                              target exists — nothing partially written)
+//   [x] POST /api/:campaign/generate           { chapter, sourceText, newChapter? } ->
+//                                              GenerateResult (review preview; writes
+//                                              NOTHING). newChapter allows a chapter
+//                                              directory that does not exist yet.
+//   [x] POST /api/:campaign/generate/apply     { scenes, stubs, chapter?, chapterTitle? }
+//                                              -> { written } (drafts on disk; 409
+//                                              { conflicts } when any target exists —
+//                                              nothing partially written). chapter +
+//                                              chapterTitle create <chapter>/_chapter.md
+//                                              when missing, in the same batch.
 //   [x] POST /api/:campaign/review/seen        { path, line } -> add the line's short hash
 //                                              to the session's `reviewed` list (idempotent)
 //   [x] POST /api/:campaign/review/thread      { chapter, text } -> append `- [ ] text` under
