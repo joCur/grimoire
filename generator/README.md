@@ -20,5 +20,21 @@ Pipeline: Quelltext (EN) → LLM → Szenen-Drafts (DE) → Review-Vorschau → 
 
 ## Provider
 
-Abstraktion in `server/src/llm-provider.ts`. Start: Claude API.
-Später umschaltbar auf LM Studio (OpenAI-kompatibler Endpoint) per Config.
+Abstraktion in `server/src/llm-provider.ts`, Auswahl per Env-Var
+`LLM_PROVIDER` — keine Code-Änderung nötig:
+
+- `claude` (Default): Claude API direkt (`ANTHROPIC_API_KEY`, optional
+  `CLAUDE_MODEL`).
+- `openrouter`: OpenRouter als Modell-Router (`OPENROUTER_API_KEY` +
+  `LLM_MODEL`, z. B. `anthropic/claude-sonnet-4.6`) — ein Key, viele
+  Modelle, damit lässt sich vergleichen, ohne die Konfiguration umzubauen.
+- `openai`: derselbe Transport für **jeden** OpenAI-kompatiblen Endpoint
+  (`LLM_BASE_URL` + `LLM_MODEL`, `LLM_API_KEY` nur falls verlangt).
+- `lmstudio`: lokal ohne Key (`LMSTUDIO_URL`, `LMSTUDIO_MODEL`).
+
+Die drei OpenAI-kompatiblen Fälle teilen eine Klasse
+(`OpenAICompatProvider`); sie unterscheiden sich nur in Base-URL, Modell und
+Auth-Header. Fehlende Pflicht-Variablen und ein unbekannter
+`LLM_PROVIDER`-Wert werden nicht verschluckt: `POST /api/:campaign/generate`
+antwortet `503` mit der Meldung im Klartext. Vollständige Variablen-Tabelle:
+DEPLOYMENT.md Abschnitt 2.

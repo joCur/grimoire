@@ -45,13 +45,64 @@ Es gibt keinen Zustand im Container — alles steht im Volume.
 | `CAMPAIGN_ROOT`     | `/campaigns` | Ordner mit den Kampagnen-Verzeichnissen (im Image gesetzt)     |
 | `PORT`              | `3000`       | HTTP-Port im Container                                        |
 | `APP_DIST`          | `../app/dist` (relativ zum `server/`-Paket) | Pfad des Frontend-Builds; im Image bereits richtig |
-| `ANTHROPIC_API_KEY` | –            | **optional**, nur für den Generator                            |
-| `CLAUDE_MODEL`      | Provider-Default | optional, Modell-Override für den Generator                |
 
-Ohne `ANTHROPIC_API_KEY` läuft alles außer dem Generator: `POST
-/api/:campaign/generate` antwortet dann `503 {"error":"ANTHROPIC_API_KEY
-fehlt"}` (der Provider wird bewusst erst pro Request erzeugt). Lese- und
-Schreib-API sind davon nicht betroffen.
+### Generator (LLM-Provider)
+
+Alles hier ist **optional** — ohne Konfiguration läuft alles außer dem
+Generator. `LLM_PROVIDER` wählt den Provider, die übrigen Variablen gelten
+jeweils nur für den gewählten:
+
+| Variable             | Gilt für     | Default                        | Bedeutung                                             |
+| -------------------- | ------------ | ------------------------------ | ----------------------------------------------------- |
+| `LLM_PROVIDER`       | –            | `claude`                       | `claude`, `openrouter`, `openai`, `lmstudio`           |
+| `ANTHROPIC_API_KEY`  | `claude`     | –                              | **erforderlich** für `claude`                          |
+| `CLAUDE_MODEL`       | `claude`     | `claude-sonnet-4-6`            | Modell-Override                                        |
+| `OPENROUTER_API_KEY` | `openrouter` | –                              | **erforderlich** für `openrouter`                      |
+| `LLM_MODEL`          | `openrouter`, `openai` | –                    | **erforderlich**, z. B. `anthropic/claude-sonnet-4.6`  |
+| `LLM_BASE_URL`       | `openai` (Pflicht), `openrouter` (Override) | `https://openrouter.ai/api/v1` | API-Root eines OpenAI-kompatiblen Endpoints, **ohne** `/chat/completions` |
+| `LLM_API_KEY`        | `openai`     | –                              | optional, nur wenn der Endpoint Auth verlangt          |
+| `LMSTUDIO_URL`       | `lmstudio`   | `http://localhost:1234/v1`     | API-Root der lokalen LM-Studio-Instanz                 |
+| `LMSTUDIO_MODEL`     | `lmstudio`   | `local-model`                  | Modellname in LM Studio                                |
+| `LLM_MAX_TOKENS`     | alle         | `8000` (`claude`), sonst Endpoint-Default | Obergrenze der Antwortlänge (positive Ganzzahl; unbrauchbare Werte werden ignoriert) |
+
+`LLM_MAX_TOKENS` lohnt sich beim Modellvergleich: schneidet ein Modell die
+JSON-Antwort ab, ist sie kein gültiges JSON mehr — der Generator sieht das
+als Validierungsfehler, dreht zwei Korrektur-Turns und endet in `422`
+(„Antwort abgeschnitten → Validierungsfehler"); dann das Limit erhöhen.
+
+Fehlt eine erforderliche Variable, antwortet nur `POST
+/api/:campaign/generate` mit `503` und der Meldung im Klartext, z. B.
+`{"error":"ANTHROPIC_API_KEY fehlt"}`, `{"error":"OPENROUTER_API_KEY fehlt"}`
+oder `{"error":"LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-4.6)"}` (der
+Provider wird bewusst erst pro Request erzeugt). Ein Tippfehler in
+`LLM_PROVIDER` fällt genauso auf statt still auf Claude zurückzufallen:
+`{"error":"Unbekannter LLM_PROVIDER: …"}`. Lese- und Schreib-API sind von
+all dem nicht betroffen.
+
+**Beispiel OpenRouter** (ein Key, viele Modelle — praktisch zum Vergleichen):
+
+```bash
+LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-v1-…
+LLM_MODEL=anthropic/claude-sonnet-4.6
+```
+
+Modellwechsel = `LLM_MODEL` ändern und Container neu starten. Grimoire
+schickt dabei OpenRouters optionale Attributions-Header (`HTTP-Referer`,
+`X-Title`) mit; das ist reine Kennzeichnung in deren Dashboard.
+
+**Beispiel LM Studio** (lokal, ohne Key — der Container muss den Host
+erreichen, unter Docker Desktop z. B. `http://host.docker.internal:1234/v1`):
+
+```bash
+LLM_PROVIDER=lmstudio
+LMSTUDIO_URL=http://host.docker.internal:1234/v1
+LMSTUDIO_MODEL=qwen2.5-32b-instruct
+```
+
+`LLM_PROVIDER=openai` ist derselbe Transport für jeden anderen
+OpenAI-kompatiblen Endpoint (vLLM, Ollama, LiteLLM, Azure-Proxy, …):
+`LLM_BASE_URL` + `LLM_MODEL`, `LLM_API_KEY` nur falls nötig.
 
 Secrets nicht ins Image: `.env` ist gitignored **und** in `.dockerignore`.
 Zur Laufzeit übergeben:
