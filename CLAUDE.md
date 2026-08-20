@@ -68,6 +68,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Kommentar mit Zuschnitt; fertig = Schließen mit Commit-Verweis.
 - Zu Beginn jeder Arbeitssitzung: offene `idee`-Issues sichten, bevor
   neue Arbeit startet.
+- Vor dem Merge einer Scheibe mit UI-Anteil läuft der Lead den echten
+  Klickpfad selbst (Server + gebaute App, Produktions-Topologie) —
+  Agent-Smoke-Berichte ersetzen das nicht.
 
 ## Qualitäts-Boden (nicht verhandelbar)
 
