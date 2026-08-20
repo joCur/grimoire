@@ -7,6 +7,8 @@ import { describe, expect, test } from "bun:test";
 
 import {
   applySummary,
+  chapterIdError,
+  chapterIdValue,
   contextHint,
   countLabel,
   generatePhase,
@@ -75,6 +77,85 @@ describe("newChapterId", () => {
   test("undefined while the title has no slug yet", () => {
     expect(newChapterId("", ["01-salzhafen"])).toBeUndefined();
     expect(newChapterId("  ", [])).toBeUndefined();
+  });
+});
+
+describe("chapterIdError", () => {
+  test("accepts kebab ids with and without a number prefix", () => {
+    expect(chapterIdError("03-schmugglerbucht")).toBeUndefined();
+    expect(chapterIdError("schmugglerbucht")).toBeUndefined();
+    expect(chapterIdError("prolog")).toBeUndefined();
+    expect(chapterIdError("007")).toBeUndefined();
+  });
+
+  test("rejects an empty id", () => {
+    expect(chapterIdError("")).toBe("Ordnername fehlt.");
+  });
+
+  test("rejects path separators", () => {
+    expect(chapterIdError("a/b")).toContain("Schrägstriche");
+    expect(chapterIdError("a\\b")).toContain("Schrägstriche");
+    expect(chapterIdError("/absolut")).toContain("Schrägstriche");
+  });
+
+  test("rejects traversal and hidden segments", () => {
+    expect(chapterIdError("..")).toContain("..");
+    expect(chapterIdError("a..b")).toContain("..");
+    expect(chapterIdError(".versteckt")).toContain("Punkt am Anfang");
+  });
+
+  test("rejects whitespace anywhere", () => {
+    expect(chapterIdError("03 schmugglerbucht")).toContain("Leerzeichen");
+    expect(chapterIdError(" 03-bucht")).toContain("Leerzeichen");
+    expect(chapterIdError("03-bucht ")).toContain("Leerzeichen");
+    expect(chapterIdError("   ")).toContain("Leerzeichen");
+    expect(chapterIdError("03-bucht\t")).toContain("Leerzeichen");
+  });
+
+  test("rejects anything outside lowercase kebab — no silent rewrite", () => {
+    const charset = "Nur Kleinbuchstaben, Ziffern und Bindestriche.";
+    expect(chapterIdError("03-Schmugglerbucht")).toBe(charset);
+    expect(chapterIdError("03-schmüggler")).toBe(charset);
+    expect(chapterIdError("03_bucht")).toBe(charset);
+    expect(chapterIdError("bucht.md")).toBe(charset);
+    expect(chapterIdError("bucht\0")).toBe(charset);
+  });
+
+  test("rejects the reserved campaign directories", () => {
+    expect(chapterIdError("npcs")).toContain("reserviert");
+    expect(chapterIdError("locations")).toContain("reserviert");
+    expect(chapterIdError("sessions")).toContain("reserviert");
+    // Only the exact names are reserved.
+    expect(chapterIdError("02-sessions-am-kai")).toBeUndefined();
+  });
+});
+
+describe("chapterIdValue", () => {
+  test("follows the title while the field is untouched", () => {
+    expect(chapterIdValue("02-die-schmugglerbucht", undefined)).toBe("02-die-schmugglerbucht");
+    expect(chapterIdValue(undefined, undefined)).toBe("");
+  });
+
+  test("a manual value wins over the suggestion", () => {
+    expect(chapterIdValue("02-die-schmugglerbucht", "03-bucht")).toBe("03-bucht");
+    // …even when the title yields no suggestion at all.
+    expect(chapterIdValue(undefined, "03-bucht")).toBe("03-bucht");
+  });
+
+  test("the suggestion follows the title only until the first manual edit", () => {
+    const ids = ["01-salzhafen"];
+    // Typing the title: the field mirrors the suggestion.
+    let manual: string | undefined;
+    expect(chapterIdValue(newChapterId("Die Bucht", ids), manual)).toBe("02-die-bucht");
+    // The DM edits the id — from here the title no longer moves it.
+    manual = "07-bucht";
+    expect(chapterIdValue(newChapterId("Die Bucht", ids), manual)).toBe("07-bucht");
+    expect(chapterIdValue(newChapterId("Ganz anderer Titel", ids), manual)).toBe("07-bucht");
+    // Clearing the field (the view maps "" back to undefined) hands it back.
+    manual = undefined;
+    expect(chapterIdValue(newChapterId("Ganz anderer Titel", ids), manual)).toBe(
+      "02-ganz-anderer-titel",
+    );
   });
 });
 

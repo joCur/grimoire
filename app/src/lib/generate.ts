@@ -3,7 +3,11 @@
 //
 //   - the "Neues Kapitel" flow needs a chapter id BEFORE anything exists:
 //     the next free numeric prefix from the tree plus a kebab slug of the
-//     title (the path preview shows exactly what apply will create).
+//     title (the path preview shows exactly what apply will create). Since
+//     issue #22 that preview is an editable field: the suggestion is only a
+//     suggestion, the DM may name the directory freely — so the id also
+//     needs a client-side check (chapterIdError) and the rule for when the
+//     suggestion still follows the title (chapterIdValue).
 //   - the review preview renders the body of a draft the user may have
 //     edited as raw markdown, so the frontmatter block has to be split off
 //     client-side (same rule as the server's parser: it degrades, it never
@@ -67,6 +71,59 @@ export function newChapterId(title: string, chapterIds: readonly string[]): stri
   const slug = slugify(title);
   if (slug === "") return undefined;
   return `${nextChapterPrefix(chapterIds)}-${slug}`;
+}
+
+/**
+ * Directories under a campaign that can never be a chapter — mirrors the
+ * server's RESERVED_DIRS (server/src/generator.ts), which answers 404 for
+ * them. Checking client-side only saves the round trip; the server stays the
+ * last instance.
+ */
+const RESERVED_CHAPTER_IDS = new Set(["npcs", "locations", "sessions"]);
+
+/**
+ * Is this string usable as a chapter directory name? Returns the German
+ * error text for the field, or undefined when the id is fine (issue #22).
+ *
+ * The bar is the server's: a chapter id is ONE safe, non-hidden path segment
+ * (assertSafeChapterId) and not a reserved directory. On top of that the
+ * data format's ids are kebab (README: `01-salzhafen`), so uppercase,
+ * umlauts and underscores are rejected here as well — deliberately as an
+ * error, never as a silent rewrite: a manually typed id is the DM's
+ * decision, and an id is a stable reference that must not change under them.
+ * (A number prefix is optional — `schmugglerbucht` is as valid as
+ * `03-schmugglerbucht`.)
+ *
+ * Order of the checks is by specificity: the most precise complaint wins,
+ * the charset rule is the catch-all.
+ */
+export function chapterIdError(id: string): string | undefined {
+  if (id === "") return "Ordnername fehlt.";
+  if (id.includes("/") || id.includes("\\")) {
+    return "Keine Schrägstriche — der Ordnername ist ein einzelnes Segment.";
+  }
+  if (id.includes("..")) return "Kein „..“ im Ordnernamen.";
+  if (id.startsWith(".")) return "Kein Punkt am Anfang — keine versteckten Ordner.";
+  if (/\s/.test(id)) return "Keine Leerzeichen — Wörter mit Bindestrich trennen.";
+  if (!/^[a-z0-9-]+$/.test(id)) return "Nur Kleinbuchstaben, Ziffern und Bindestriche.";
+  if (RESERVED_CHAPTER_IDS.has(id)) {
+    return "„npcs“, „locations“ und „sessions“ sind reserviert — kein Kapitelname.";
+  }
+  return undefined;
+}
+
+/**
+ * What the chapter-id field shows (issue #22 AK4): the manually entered
+ * value once the DM has touched the field, the derived suggestion until
+ * then. `manual === undefined` IS the untouched state — and because the view
+ * maps an emptied field back to undefined, clearing the field lets the
+ * suggestion follow the title again.
+ */
+export function chapterIdValue(
+  suggestion: string | undefined,
+  manual: string | undefined,
+): string {
+  return manual ?? suggestion ?? "";
 }
 
 /**

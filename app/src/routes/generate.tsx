@@ -57,6 +57,8 @@ import { locationName } from "@/lib/campaign";
 import { fmString, fmStringArray } from "@/lib/frontmatter";
 import {
   applySummary,
+  chapterIdError,
+  chapterIdValue,
   contextHint,
   generatePhase,
   jobErrorBody,
@@ -118,9 +120,32 @@ export function GenerateRoute() {
     picked ?? (defaultChapter === undefined ? { kind: "new" } : { kind: "chapter", id: defaultChapter });
   const [newTitle, setNewTitle] = useState("");
   const [sourceText, setSourceText] = useState("");
+  // The chapter id of the "Neues Kapitel" flow (issue #22). undefined means
+  // "the DM has not touched the field" — then the suggestion follows the
+  // title. A manual edit pins the value; emptying the field maps back to
+  // undefined, so a cleared field starts following the title again.
+  const [manualId, setManualId] = useState<string>();
 
-  const newId = newChapterId(newTitle, chapterIds);
-  const chapterId = target.kind === "new" ? newId : target.id;
+  const suggestedId = newChapterId(newTitle, chapterIds);
+  const newIdInput = chapterIdValue(suggestedId, manualId);
+  const newIdError = chapterIdError(newIdInput);
+  // A typed id may name a chapter that is already there: then this is NOT a
+  // new chapter — the drafts go into the existing directory and its
+  // _chapter.md stays untouched (#12 semantics), so neither the newChapter
+  // flag nor a chapterTitle travels.
+  const newIdExists = newIdError === undefined && chapterIds.includes(newIdInput);
+  const creatingChapter = target.kind === "new" && !newIdExists;
+  const chapterId =
+    target.kind === "new" ? (newIdError === undefined ? newIdInput : undefined) : target.id;
+  // A chapter that does not exist yet needs its display name — the server
+  // rejects an empty chapterTitle on apply, so the run may not start without
+  // one either. Only said once the id itself is usable: two complaints about
+  // one half-filled form are noise.
+  const titleMissing = creatingChapter && chapterId !== undefined && newTitle.trim() === "";
+  // An empty field is the untouched state (no title yet, nothing typed) —
+  // that is not a mistake to shout about, the generate button stays disabled
+  // on its own.
+  const showIdError = newIdError !== undefined && newIdInput !== "";
 
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<Record<string, boolean>>({});
@@ -164,7 +189,7 @@ export function GenerateRoute() {
       startGenerateJob(campaign, {
         chapter: chapterId as string,
         sourceText,
-        newChapter: target.kind === "new",
+        newChapter: creatingChapter,
       }),
     // 202 (or an adopted 409 — the api client hands back the running job's
     // id): from here on the job query drives the view.
@@ -180,8 +205,10 @@ export function GenerateRoute() {
       applyDrafts(campaign, {
         scenes: scenes.map((s) => ({ path: s.path, markdown: edits[s.path] ?? s.markdown })),
         stubs: acceptedStubs,
-        // The new chapter's _chapter.md is created in the same batch.
-        ...(target.kind === "new" && chapterId !== undefined
+        // The new chapter's _chapter.md is created in the same batch — only
+        // for a chapter that really is new: for an existing id the pair
+        // stays out of the body so apply cannot touch its _chapter.md.
+        ...(creatingChapter && chapterId !== undefined
           ? { chapter: chapterId, chapterTitle: newTitle.trim() }
           : {}),
         // The server drops the job once the drafts are on disk.
@@ -238,7 +265,11 @@ export function GenerateRoute() {
     : [];
 
   const canGenerate =
-    campaign !== "" && chapterId !== undefined && sourceText.trim() !== "" && !starting;
+    campaign !== "" &&
+    chapterId !== undefined &&
+    !titleMissing &&
+    sourceText.trim() !== "" &&
+    !starting;
 
   return (
     <>
@@ -282,6 +313,12 @@ export function GenerateRoute() {
               </button>
             </div>
 
+            {/* The "Neues Kapitel" flow: display name + the directory name.
+                The id used to be a read-only preview; since issue #22 it is
+                the field that decides where the drafts land — the DM owns
+                it, because renaming a chapter later is expensive (ids are
+                stable references). The title is only the display name and
+                is meaningless for an id that already exists. */}
             {target.kind === "new" && (
               <div className="mt-[-10px] mb-[22px] flex flex-col gap-[7px]">
                 <label htmlFor="gen-new-title" className="sr-only">
@@ -292,12 +329,64 @@ export function GenerateRoute() {
                   type="text"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
+                  disabled={newIdExists}
                   placeholder="Kapiteltitel, z. B. Die Schmugglerbucht"
-                  className={cn(FIELD, "max-w-[320px] py-2.5")}
+                  className={cn(
+                    FIELD,
+                    "max-w-[320px] py-2.5",
+                    newIdExists && "opacity-50 cursor-not-allowed",
+                  )}
                 />
-                {newId !== undefined && (
-                  <p className="font-mono text-[11.5px] text-faint">wird angelegt als: {newId}</p>
+                {titleMissing && (
+                  <p className="text-[12px] leading-[1.5] text-muted-foreground">
+                    Titel fehlt — er wird der Anzeigename des neuen Kapitels.
+                  </p>
                 )}
+
+                <label htmlFor="gen-new-id" className="mt-2 text-[12px] text-muted-foreground">
+                  Ordnername (Kapitel-id)
+                </label>
+                <input
+                  id="gen-new-id"
+                  type="text"
+                  value={newIdInput}
+                  // Emptying the field is not a value — it hands the field
+                  // back to the title (issue #22 AK4).
+                  onChange={(e) =>
+                    setManualId(e.target.value === "" ? undefined : e.target.value)
+                  }
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  aria-invalid={showIdError}
+                  aria-describedby="gen-new-id-note"
+                  placeholder="z. B. 03-schmugglerbucht"
+                  className={cn(
+                    FIELD,
+                    "max-w-[320px] py-2.5 font-mono text-[12.5px]",
+                    showIdError && "border-destructive focus-visible:border-destructive",
+                  )}
+                />
+                <p
+                  id="gen-new-id-note"
+                  aria-live="polite"
+                  className={cn(
+                    "text-[11.5px] leading-[1.5]",
+                    showIdError
+                      ? "text-destructive"
+                      : newIdExists || newIdInput === ""
+                        ? "text-muted-foreground"
+                        : "font-mono text-faint",
+                  )}
+                >
+                  {showIdError
+                    ? newIdError
+                    : newIdExists
+                      ? "Kapitel existiert — Szenen werden dort angelegt"
+                      : newIdInput === ""
+                        ? "wird aus dem Titel vorgeschlagen"
+                        : `wird angelegt als: ${newIdInput}/`}
+                </p>
               </div>
             )}
 
