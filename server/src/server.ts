@@ -26,6 +26,14 @@
 //   [x] POST /api/:campaign/generate/apply     { scenes, stubs } -> { written } (drafts
 //                                              on disk; 409 { conflicts } when any
 //                                              target exists — nothing partially written)
+//   [x] POST /api/:campaign/review/seen        { path, line } -> add the line's short hash
+//                                              to the session's `reviewed` list (idempotent)
+//   [x] POST /api/:campaign/review/thread      { chapter, text } -> append `- [ ] text` under
+//                                              ## Offene Fäden of <chapter>/_chapter.md
+//   [x] POST /api/:campaign/review/npc-stub    { id, name?, note? } -> create npcs/<id>.md
+//                                              (status: unknown); 409 when the slug exists
+//   [x] POST /api/:campaign/review/inbox-done  { line } -> rewrite the inbox line to `- [x] …`
+//                                              (documented append-only exception)
 //
 // Validation after generate: frontmatter parseable, status==draft, references
 // exist or ship as stubs, only known callouts. Errors -> correction turn to

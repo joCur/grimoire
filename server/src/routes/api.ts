@@ -10,7 +10,11 @@ import { getCampaignVersion, searchCampaign } from "../search-index";
 import {
   appendInboxEntry,
   appendLogEntry,
+  appendThreadToChapter,
+  createNpcStub,
   endSession,
+  markInboxLineDone,
+  markLogLineSeen,
   patchFrontmatter,
   startSession,
 } from "../campaign-write";
@@ -142,6 +146,72 @@ api.post("/:campaign/inbox", async (c) => {
   const text = normalizeLineText(body.text);
   if (text === undefined) throw new ApiError(400, "text must be a non-empty string");
   return c.json(await appendInboxEntry(c.req.param("campaign"), text));
+});
+
+// --- review-action endpoints (issue #10) --------------------------------------------
+
+/** One raw log/inbox line as sent by the review UI: non-empty, single line. */
+function rawLine(v: unknown, what: string): string {
+  if (typeof v !== "string" || v.trim() === "") {
+    throw new ApiError(400, `${what} must be a non-empty string`);
+  }
+  if (v.includes("\n") || v.includes("\r")) {
+    throw new ApiError(400, `${what} must be a single line`);
+  }
+  return v;
+}
+
+// POST /api/:campaign/review/seen { path, line } -> FileResponse
+// Adds the short hash (first 8 hex chars of SHA-256) of the RAW log line to
+// the session's `reviewed` frontmatter list iff absent. Idempotent; the line
+// is hashed exactly as sent — it is never written anywhere.
+api.post("/:campaign/review/seen", async (c) => {
+  const body = await jsonBody(c, ["path", "line"]);
+  if (typeof body.path !== "string") throw new ApiError(400, "path must be a string");
+  const line = rawLine(body.line, "line");
+  return c.json(await markLogLineSeen(c.req.param("campaign"), body.path, line));
+});
+
+// POST /api/:campaign/review/thread { chapter, text } -> FileResponse
+// Appends `- [ ] text` under ## Offene Fäden of <chapter>/_chapter.md
+// (section/file created when missing; 404 when the chapter dir is missing).
+api.post("/:campaign/review/thread", async (c) => {
+  const body = await jsonBody(c, ["chapter", "text"]);
+  if (typeof body.chapter !== "string") throw new ApiError(400, "chapter must be a string");
+  const text = normalizeLineText(body.text);
+  if (text === undefined) throw new ApiError(400, "text must be a non-empty string");
+  return c.json(await appendThreadToChapter(c.req.param("campaign"), body.chapter, text));
+});
+
+// POST /api/:campaign/review/npc-stub { id, name?, note? } -> FileResponse
+// Creates npcs/<id>.md (status: unknown); 409 { error, path } when the slug
+// already exists — never overwrites.
+api.post("/:campaign/review/npc-stub", async (c) => {
+  const body = await jsonBody(c, ["id", "name", "note"]);
+  if (typeof body.id !== "string") throw new ApiError(400, "id must be a string");
+  let name: string | undefined;
+  if (body.name !== undefined && body.name !== null) {
+    if (typeof body.name !== "string") throw new ApiError(400, "name must be a string");
+    name = normalizeLineText(body.name); // empty after trim -> default (the id)
+  }
+  let note: string | undefined;
+  if (body.note !== undefined && body.note !== null) {
+    if (typeof body.note !== "string") throw new ApiError(400, "note must be a string");
+    note = normalizeLineText(body.note); // empty after trim -> no note line
+  }
+  return c.json(await createNpcStub(c.req.param("campaign"), body.id, name, note));
+});
+
+// POST /api/:campaign/review/inbox-done { line } -> FileResponse
+// Rewrites the FIRST exactly-matching inbox line to `- [x] …` (the one
+// documented append-only exception). Idempotent; 404 when not found.
+api.post("/:campaign/review/inbox-done", async (c) => {
+  const body = await jsonBody(c, ["line"]);
+  const line = rawLine(body.line, "line");
+  if (!line.startsWith("- ")) {
+    throw new ApiError(400, "line must be an inbox list line (starting with '- ')");
+  }
+  return c.json(await markInboxLineDone(c.req.param("campaign"), line));
 });
 
 // --- generator endpoints (issue #6) -------------------------------------------------

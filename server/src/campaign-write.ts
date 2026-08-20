@@ -25,12 +25,20 @@
 //      the mtime check is for.
 //   4. Node APIs only (node:fs/promises, node:path) — DECISIONS #5/#7.
 
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
 import { CORE_SCHEMA, dump } from "js-yaml";
 import type { FileResponse } from "@grimoire/shared";
-import { ApiError, campaignDir, readParsedFile, resolveInsideCampaign } from "./campaign-fs";
+import {
+  ApiError,
+  assertSafeRelativeMdPath,
+  campaignDir,
+  readParsedFile,
+  resolveInsideCampaign,
+  RESERVED_DIRS,
+} from "./campaign-fs";
 import { localDate, localDateTime, localTime, now } from "./clock";
 
 // --- per-file write serialization ---------------------------------------------
@@ -360,6 +368,215 @@ export async function appendInboxEntry(campaign: string, text: string): Promise<
         ? `# Inbox\n\n${line}`
         : `${raw}${raw.endsWith("\n") ? "" : "\n"}${line}`;
     await atomicWrite(abs, content);
+  });
+  return readParsedFile(campaign, rel);
+}
+
+// --- review actions (issue #10) --------------------------------------------------
+
+/**
+ * Short hash of one raw log line: first 8 hex chars of SHA-256 over the line
+ * string exactly as sent. This is the `reviewed` entry format (README,
+ * "Entität: Session") — hashing the raw line keeps `## Log` strictly
+ * append-only and makes external reordering irrelevant.
+ */
+export function logLineShortHash(line: string): string {
+  return createHash("sha256").update(line, "utf8").digest("hex").slice(0, 8);
+}
+
+/**
+ * POST /api/:campaign/review/seen — add the short hash of `line` to the
+ * session file's `reviewed` frontmatter list iff absent (raw-patch
+ * mechanism, same degrade rules and guarantees as scenes_played: the body is
+ * never touched). Idempotent. Only sessions/*.md files carry `reviewed`.
+ */
+export async function markLogLineSeen(
+  campaign: string,
+  rel: string,
+  line: string,
+): Promise<FileResponse> {
+  const dir = await campaignDir(campaign);
+  assertSafeRelativeMdPath(rel);
+  const segments = rel.split("/");
+  if (segments.length !== 2 || segments[0] !== "sessions") {
+    throw new ApiError(400, "path must be a sessions/*.md file");
+  }
+  const abs = await resolveInsideCampaign(dir, rel); // 404 missing, 400 unsafe
+  const hash = logLineShortHash(line);
+  await withFileLock(abs, async () => {
+    let raw: string;
+    try {
+      raw = await readFile(abs, "utf8");
+    } catch {
+      throw new ApiError(404, "file not found");
+    }
+    const cur = currentFrontmatter(raw).reviewed;
+    // Degrade path (same as scenes_played): missing/null key -> empty list
+    // (the key is then created), a scalar -> one-element list.
+    const reviewed = Array.isArray(cur) ? cur : cur === undefined || cur === null ? [] : [cur];
+    if (reviewed.some((v) => String(v) === hash)) return; // already seen
+    await atomicWrite(abs, applyFrontmatterPatch(raw, { reviewed: [...reviewed, hash] }));
+  });
+  return readParsedFile(campaign, rel);
+}
+
+/** A chapter id must be one non-hidden path segment (like a campaign id). */
+function assertSafeChapterId(chapter: string): void {
+  if (
+    chapter.length === 0 ||
+    chapter.startsWith(".") ||
+    chapter.includes("/") ||
+    chapter.includes("\\") ||
+    chapter.includes("\0") ||
+    chapter.includes("..")
+  ) {
+    throw new ApiError(400, "invalid chapter");
+  }
+}
+
+/**
+ * Append one item to the `## Offene Fäden` section of raw chapter text.
+ * The item goes to the end of the section (right before the next heading, or
+ * the end of the file when the section is last); a missing section is created
+ * at the end of the file. Only blank separator lines around the insertion
+ * point are adjusted — everything else stays byte-identical.
+ */
+function appendThreadItem(raw: string, item: string): string {
+  const heading = /^## Offene Fäden[ \t]*\r?$/m.exec(raw);
+  if (heading === null) {
+    let base = raw;
+    if (base.length > 0 && !base.endsWith("\n")) base += "\n";
+    if (base.length > 0 && !base.endsWith("\n\n")) base += "\n";
+    return `${base}## Offene Fäden\n\n${item}\n`;
+  }
+  const nlAfterHeading = raw.indexOf("\n", heading.index);
+  const sectionStart = nlAfterHeading === -1 ? raw.length : nlAfterHeading + 1;
+  const nextHeading = /^#{1,6}[ \t]/m.exec(raw.slice(sectionStart));
+  const sectionEnd = nextHeading === null ? raw.length : sectionStart + nextHeading.index;
+  const section = raw.slice(sectionStart, sectionEnd).replace(/\s+$/, "");
+  const newSection = section === "" ? `\n${item}\n` : `${section}\n${item}\n`;
+  const rest = raw.slice(sectionEnd);
+  return raw.slice(0, sectionStart) + newSection + (rest === "" ? "" : `\n${rest}`);
+}
+
+/**
+ * POST /api/:campaign/review/thread — append `- [ ] text` under
+ * `## Offene Fäden` of `<chapter>/_chapter.md` (README, "Review-Aktionen").
+ * The section is created when missing; a missing `_chapter.md` is created
+ * with minimal frontmatter (degrade-friendly — the tree walker only needs
+ * id/title). The chapter DIRECTORY must exist -> 404 otherwise.
+ */
+export async function appendThreadToChapter(
+  campaign: string,
+  chapter: string,
+  text: string,
+): Promise<FileResponse> {
+  const dir = await campaignDir(campaign);
+  assertSafeChapterId(chapter);
+  if (RESERVED_DIRS.has(chapter)) throw new ApiError(404, "chapter not found");
+  const chapterAbs = path.join(dir, chapter);
+  let s;
+  try {
+    s = await stat(chapterAbs);
+  } catch {
+    throw new ApiError(404, "chapter not found");
+  }
+  if (!s.isDirectory()) throw new ApiError(404, "chapter not found");
+  const rel = `${chapter}/_chapter.md`;
+  const abs = path.resolve(dir, rel);
+  await withFileLock(abs, async () => {
+    let raw: string | null = null;
+    try {
+      raw = await readFile(abs, "utf8");
+    } catch {
+      // missing — create with minimal frontmatter below
+    }
+    if (raw === null) {
+      const yaml = dump(
+        { id: chapter, title: chapter },
+        { schema: CORE_SCHEMA, flowLevel: 1, lineWidth: -1 },
+      );
+      raw = `---\n${yaml}---\n`;
+    }
+    await atomicWrite(abs, appendThreadItem(raw, `- [ ] ${text}`));
+  });
+  return readParsedFile(campaign, rel);
+}
+
+/** npc ids are kebab slugs — the README's stable reference keys. */
+const NPC_SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/**
+ * POST /api/:campaign/review/npc-stub — create `npcs/<id>.md` with minimal
+ * frontmatter (`status: unknown`) and the log text under `## Notizen`
+ * (README, "Review-Aktionen"). An existing file is NEVER overwritten ->
+ * 409 { error, path }.
+ */
+export async function createNpcStub(
+  campaign: string,
+  id: string,
+  name?: string,
+  note?: string,
+): Promise<FileResponse> {
+  const dir = await campaignDir(campaign);
+  if (!NPC_SLUG.test(id)) {
+    throw new ApiError(400, "id must be a kebab-case slug (a-z, 0-9, single dashes)");
+  }
+  const rel = `npcs/${id}.md`;
+  const abs = path.resolve(dir, rel);
+  await withFileLock(abs, async () => {
+    let exists = true;
+    try {
+      await stat(abs);
+    } catch {
+      exists = false;
+    }
+    if (exists) throw new ApiError(409, "npc already exists — not overwriting", { path: rel });
+    await mkdir(path.dirname(abs), { recursive: true });
+    const yaml = dump(
+      { id, name: name ?? id, status: "unknown" },
+      { schema: CORE_SCHEMA, flowLevel: 1, lineWidth: -1 },
+    );
+    // `## Notizen` is the app-managed review section (README) — always
+    // present in a stub so later review notes have their place.
+    const body = note === undefined ? "\n## Notizen\n" : `\n## Notizen\n\n- ${note}\n`;
+    await atomicWrite(abs, `---\n${yaml}---\n${body}`);
+  });
+  return readParsedFile(campaign, rel);
+}
+
+/**
+ * POST /api/:campaign/review/inbox-done — rewrite the FIRST line of inbox.md
+ * that exactly matches `line` from `- …` to `- [x] …`. This is the ONE
+ * documented exception to the inbox's append-only rule (README) so done
+ * ideas stop resurfacing in every review. Only the matching line changes —
+ * every other byte of the file stays identical. Idempotent: a line that is
+ * already `- [x] …` (matched directly, or as the done form of the sent
+ * line) -> 200 without a write. Line not found -> 404.
+ */
+export async function markInboxLineDone(campaign: string, line: string): Promise<FileResponse> {
+  const dir = await campaignDir(campaign);
+  const rel = "inbox.md";
+  const abs = path.resolve(dir, rel);
+  const doneForm = (l: string) =>
+    l.startsWith("- [ ] ") ? `- [x] ${l.slice(6)}` : `- [x] ${l.slice(2)}`;
+  await withFileLock(abs, async () => {
+    let raw: string;
+    try {
+      raw = await readFile(abs, "utf8");
+    } catch {
+      throw new ApiError(404, "line not found in inbox");
+    }
+    const lines = raw.split("\n"); // exact split/join keeps every other byte
+    const idx = lines.indexOf(line);
+    if (idx === -1) {
+      // The done form already on disk means an earlier call succeeded.
+      if (!line.startsWith("- [x]") && lines.includes(doneForm(line))) return;
+      throw new ApiError(404, "line not found in inbox");
+    }
+    if (line.startsWith("- [x]")) return; // already done
+    lines[idx] = doneForm(line);
+    await atomicWrite(abs, lines.join("\n"));
   });
   return readParsedFile(campaign, rel);
 }

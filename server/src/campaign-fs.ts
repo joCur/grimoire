@@ -46,7 +46,7 @@ export class ApiError extends Error {
 }
 
 /** Directories under a campaign that are NOT chapters. */
-const RESERVED_DIRS = new Set(["npcs", "locations", "sessions"]);
+export const RESERVED_DIRS = new Set(["npcs", "locations", "sessions"]);
 
 // --- path safety -------------------------------------------------------------
 

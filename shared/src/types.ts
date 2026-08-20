@@ -94,6 +94,13 @@ export interface SessionFrontmatter {
   started?: string;
   ended?: string;
   scenes_played?: string[];
+  /**
+   * Short hashes of log lines seen in the review step (app-managed). One
+   * entry is the first 8 hex chars of SHA-256 over the RAW log line — this
+   * keeps `## Log` strictly append-only and survives external reordering
+   * (README, "Entität: Session").
+   */
+  reviewed?: string[];
   [key: string]: unknown;
 }
 
