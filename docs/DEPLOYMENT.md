@@ -7,6 +7,11 @@ Images in einem Volume. Zugriffsschutz ist Deployment-Sache, nicht App-Sache
 
 ## 1. Bauen und starten
 
+> Am schnellsten: die `docker-compose.yml` im Repo-Root auf den Server
+> kopieren, `.env` mit `OPENROUTER_API_KEY=…` daneben legen,
+> `docker compose up -d`. Alles Folgende ist der manuelle Weg.
+
+
 ```bash
 docker build -t grimoire .
 

@@ -1,0 +1,26 @@
+# Grimoire — Produktiv-Setup (Details: docs/DEPLOYMENT.md).
+# Kopieren, .env daneben legen (OPENROUTER_API_KEY=…), dann:
+#   docker compose up -d
+#
+# Zugriffsschutz ist Deployment-Sache (DECISIONS #3): der Port bindet nur an
+# localhost — davor gehört Tailscale, z. B.:  tailscale serve --bg --https=443 3000
+
+services:
+  grimoire:
+    image: ghcr.io/jocur/grimoire:latest
+    container_name: grimoire
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000" # nie 0.0.0.0 — Zugriff läuft über Tailscale
+    volumes:
+      # Kampagnendaten liegen AUSSERHALB des Containers. Der Container läuft
+      # als uid 1000 — einmalig: chown -R 1000:1000 ./campaigns
+      # Ohne existierendes Verzeichnis zeigt der Container die Demo-Kampagne.
+      - ./campaigns:/campaigns
+    environment:
+      # Generator (optional): ohne Key antwortet nur /generate mit 503,
+      # alles andere läuft. Provider-Matrix: docs/DEPLOYMENT.md Abschnitt 2.
+      LLM_PROVIDER: openrouter
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      LLM_MODEL: anthropic/claude-sonnet-4.6
+      # LLM_MAX_TOKENS: "12000"  # falls ein Modell die JSON-Antwort abschneidet
