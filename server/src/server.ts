@@ -44,28 +44,47 @@
 // exist or ship as stubs, only known callouts. Errors -> correction turn to
 // the LLM (max 2), see generator/README.md; exhausted retries -> 422.
 //
+// Everything that is NOT under /api is served from the frontend build
+// (app/dist) with an index.html fallback for client-side routes — see
+// ./static-files (production only; in dev Vite does this and proxies /api).
+//
 // The LLM provider (./llm-provider) is created lazily per generate request
 // (./generator obtainProvider) — instantiating it at boot would require an
 // API key even for the read-only API. Unconfigured provider -> 503 with the
 // factory's message ("ANTHROPIC_API_KEY fehlt").
 
+import { existsSync } from "node:fs";
 import { Hono } from "hono";
-import { getCampaignRoot, PORT } from "./config";
+import { getAppDistDir, getCampaignRoot, PORT } from "./config";
 import { api } from "./routes/api";
+import { mountStaticApp } from "./static-files";
 import { startWatcher } from "./watcher";
 
 export const app = new Hono();
 app.route("/api", api);
 
-// The file watcher (issue #8) starts ONLY when this file is the process
-// entrypoint — importing the app for in-process tests must stay free of
-// side effects (no live fs watcher keeping `bun test` alive).
+// The file watcher (issue #8) and the static SPA routes (issue #13) are wired
+// up ONLY when this file is the process entrypoint — importing the app for
+// in-process tests must stay free of side effects (no live fs watcher keeping
+// `bun test` alive, and no catch-all route swallowing 404 assertions; the
+// static tests mount their own app via mountStaticApp).
 // import.meta.main is supported by Bun and Node >= 24; a Node entrypoint
-// that serves the app via @hono/node-server (see above) should call
-// startWatcher() itself.
+// that serves the app via @hono/node-server (see above) should do the same
+// two calls itself.
 if (import.meta.main) {
   console.log(`Grimoire server — campaigns: ${getCampaignRoot()}, port: ${PORT}`);
   startWatcher();
+
+  // Production: serve the Vite build from the same process (deployment is one
+  // container, DECISIONS #5). In dev app/dist does not exist — Vite serves the
+  // app and proxies /api — so this stays inactive and the server is API-only.
+  const dist = getAppDistDir();
+  if (existsSync(dist)) {
+    mountStaticApp(app, dist);
+    console.log(`Serving app build from ${dist}`);
+  } else {
+    console.log(`No app build at ${dist} — API only (dev: use the Vite dev server)`);
+  }
 }
 
 // Bun serves this automatically when the file is the entrypoint; the app

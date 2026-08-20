@@ -1,0 +1,44 @@
+# Build context for the Dockerfile. Note what is deliberately NOT ignored:
+#   examples/  -> copied to /campaigns as the demo campaign (see Dockerfile)
+#   generator/ -> prompt assets read at runtime by the generate endpoint
+
+# Installed per stage inside the image (host modules are the wrong platform).
+node_modules/
+**/node_modules/
+
+# Real campaign data never belongs in an image — it is mounted as a volume.
+campaigns/
+
+# Build output is produced in the build stage; a stale host build must not
+# leak into the context.
+app/dist/
+dist/
+build/
+*.tsbuildinfo
+
+.git/
+.github/
+.claude/
+
+# Secrets stay out of the image; pass env vars at run time.
+.env
+.env.*
+!.env.example
+
+# Docs and design references are not needed at runtime.
+*.md
+!generator/*.md
+design/
+UI-BRIEF.md
+
+# Tests are not part of the runtime image.
+**/test/
+
+Dockerfile
+.dockerignore
+
+.DS_Store
+**/.DS_Store
+.idea/
+.vscode/
+*.log

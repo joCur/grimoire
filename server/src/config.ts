@@ -35,3 +35,18 @@ export function setCampaignRoot(dir: string): void {
 }
 
 export const PORT = Number(process.env.PORT ?? 3000);
+
+/**
+ * Directory of the built frontend (Vite output). Defaults to ../app/dist
+ * relative to the server PACKAGE dir, which is also the layout inside the
+ * Docker image (/app/server + /app/app/dist). APP_DIST overrides it with
+ * normal CLI semantics (relative to cwd).
+ *
+ * The directory only exists after `bun run --filter @grimoire/app build`; in
+ * dev it is absent and the app is served by Vite instead (see static-files.ts).
+ */
+export function getAppDistDir(): string {
+  return process.env.APP_DIST
+    ? path.resolve(process.cwd(), process.env.APP_DIST)
+    : path.resolve(PACKAGE_DIR, "../app/dist");
+}
