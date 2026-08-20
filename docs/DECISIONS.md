@@ -125,3 +125,21 @@ vernichtet (PO-Vorfall zu #19); das darf konstruktionsbedingt nicht
 möglich sein. Job-Store in-memory (Kampagnendateien bleiben die einzige
 Platten-Wahrheit, #1); Verlust bei Server-Neustart ist der akzeptierte
 Trade-off und wird der UI sauber gemeldet.
+
+## 11. App-first: Bearbeitung in der App ist das Ziel, der Editor Ausweichlösung
+
+Revidiert die Gewichtung aus #4: Externes Editieren (VS Code o. ä.) ist
+Übergangs-Ventil, nicht Produktziel. Zielbild des PO: alle Pflege-
+Operationen aus der App heraus (#15). Priorisierung richtet sich danach.
+
+Speicherformat-Konsequenz (Diskussion zu #29): Markdown-Dateien bleiben
+vorerst Source of Truth — nicht aus Prinzip, sondern aus Reihenfolge:
+Die Editing-UI (#15) ist speicheragnostisch (die API ist die Naht),
+eine Migration vor fertiger Editing-UI würde eine Bearbeitungs-Lücke
+reißen, und der akute Schmerz (id-Umbenennung) ist auf Dateien billig
+lösbar (Rename-Kaskade). Erwartete Evolution, vom PO benannt und hier
+festgehalten: Job-Persistenz (#23), parallele Jobs und eventuelles
+Usermanagement sind die Trigger, bei denen der SQLite-Umzug hinter der
+API-Naht als eigenes ADR-Verfahren ansteht — dann mit Editing-UI als
+Sicherheitsnetz und Export/Import als Teil des Umzugs.
+Wiedervorlage: nach #15 v1.
