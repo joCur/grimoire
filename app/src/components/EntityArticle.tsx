@@ -8,6 +8,7 @@
 // format references Roll20 by name, it never links or copies it (README).
 
 import type { FileResponse } from "@grimoire/shared/types";
+import type { ReactNode } from "react";
 
 import { entityHeaderKind, npcStatusLabel } from "@/lib/entity";
 import { fmQuickstats, fmString } from "@/lib/frontmatter";
@@ -28,7 +29,18 @@ function Title({ children, className }: { children: string; className?: string }
   );
 }
 
-export function EntityArticle({ file }: { file: FileResponse }) {
+/**
+ * `actions` is the header's quiet action slot (issue #30: „Umbenennen"). The
+ * component stays free of queries — the route owns the action and passes it
+ * in, exactly like the scene article's status control.
+ */
+export function EntityArticle({
+  file,
+  actions,
+}: {
+  file: FileResponse;
+  actions?: ReactNode;
+}) {
   const header = entityHeaderKind(file.kind);
   const fm = file.frontmatter;
   // npc/location files carry `name`, chapter/campaign files `title` — either
@@ -39,18 +51,29 @@ export function EntityArticle({ file }: { file: FileResponse }) {
   return (
     <article className="w-full min-w-0">
       {header === "npc" ? (
-        <NpcHeader file={file} name={name} />
+        <NpcHeader file={file} name={name} actions={actions} />
       ) : header === "location" ? (
-        <LocationHeader file={file} name={name} />
+        <LocationHeader file={file} name={name} actions={actions} />
       ) : (
-        <Title className="mb-6">{title}</Title>
+        <div className="mb-6 flex items-start justify-between gap-3">
+          <Title>{title}</Title>
+          {actions}
+        </div>
       )}
       <Markdown>{file.body}</Markdown>
     </article>
   );
 }
 
-function NpcHeader({ file, name }: { file: FileResponse; name: string }) {
+function NpcHeader({
+  file,
+  name,
+  actions,
+}: {
+  file: FileResponse;
+  name: string;
+  actions?: ReactNode;
+}) {
   const fm = file.frontmatter;
   const role = fmString(fm.role);
   const status = fmString(fm.status);
@@ -68,6 +91,7 @@ function NpcHeader({ file, name }: { file: FileResponse; name: string }) {
             {npcStatusLabel(status)}
           </span>
         )}
+        {actions !== undefined && <span className="ml-auto">{actions}</span>}
       </div>
       {role !== undefined && (
         <p className="mt-1.5 text-[13.5px] leading-[1.5] text-muted-foreground">{role}</p>
@@ -97,11 +121,22 @@ function NpcHeader({ file, name }: { file: FileResponse; name: string }) {
   );
 }
 
-function LocationHeader({ file, name }: { file: FileResponse; name: string }) {
+function LocationHeader({
+  file,
+  name,
+  actions,
+}: {
+  file: FileResponse;
+  name: string;
+  actions?: ReactNode;
+}) {
   const page = fmString(file.frontmatter["roll20-page"]);
   return (
     <header className="mb-7 border-b border-border pb-5">
-      <Title>{name}</Title>
+      <div className="flex items-start justify-between gap-3">
+        <Title>{name}</Title>
+        {actions}
+      </div>
       {page !== undefined && (
         <p className="mt-2 text-[12.5px] text-muted-foreground">Roll20-Seite: {page}</p>
       )}

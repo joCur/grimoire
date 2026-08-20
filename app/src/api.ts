@@ -215,6 +215,45 @@ export function markInboxLineDone(campaign: string, line: string): Promise<FileR
   return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/review/inbox-done`, { line });
 }
 
+// --- rename with reference cascade (issue #30) -------------------------------
+
+/** The entity kinds the rename endpoint accepts (server: campaign-rename.ts). */
+export type RenameKind = "npc" | "location" | "scene" | "chapter";
+
+/**
+ * The answer of POST /:campaign/rename — the moved file (or, for a chapter,
+ * the moved DIRECTORY) plus every file whose bytes changed, named by its path
+ * AFTER the rename. With `dryRun` nothing was written and this is the plan
+ * the dialog previews. (Declared here rather than in @grimoire/shared: the
+ * rename ticket keeps its footprint to server/ and app/.)
+ */
+export interface RenameResult {
+  renamed: { from: string; to: string };
+  changed: string[];
+  dryRun?: boolean;
+}
+
+/**
+ * Rename an entity id and let the server drag all references along
+ * (frontmatter npcs/location/chapter, session scenes_played, `## Beziehungen`
+ * entries, log scene markers — prose is deliberately left alone).
+ *
+ * `dryRun: true` returns the very same plan without writing a byte: same code
+ * path, so a preview that succeeds is a rename that will succeed. Errors
+ * arrive as ApiError — 409 carries the blocking `path` in `details`.
+ */
+export function renameEntity(
+  campaign: string,
+  input: { kind: RenameKind; oldId: string; newId: string; dryRun?: boolean },
+): Promise<RenameResult> {
+  return postJson<RenameResult>(`/${encodeURIComponent(campaign)}/rename`, {
+    kind: input.kind,
+    oldId: input.oldId,
+    newId: input.newId,
+    ...(input.dryRun === true ? { dryRun: true } : {}),
+  });
+}
+
 // --- generator (issue #12) ---------------------------------------------------
 
 /**
