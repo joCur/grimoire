@@ -32,10 +32,12 @@ export function Topbar() {
   const { pathname } = useLocation();
   const sceneMatch = matchPath("/:campaign/file/*", pathname);
   const liveMatch = matchPath("/:campaign/live", pathname);
+  const listMatch = matchPath("/:campaign/list/*", pathname);
   const poolMatch = matchPath("/:campaign", pathname);
   const campaign =
     sceneMatch?.params.campaign ??
     liveMatch?.params.campaign ??
+    listMatch?.params.campaign ??
     poolMatch?.params.campaign ??
     "";
   const filePath = sceneMatch?.params["*"] ?? "";
@@ -69,7 +71,15 @@ export function Topbar() {
     tree.data?.chapters.find((c) => c.status === "active") ?? tree.data?.chapters[0];
 
   return (
-    <header className="flex h-14 flex-none items-center gap-3.5 border-b border-border px-6">
+    // Below md the campaign-scoped views carry their own mobile chrome
+    // (start-surface wordmark, "‹ Pool" back rows — issue #11); the topbar
+    // is desktop chrome there. The campaign list at "/" keeps it everywhere.
+    <header
+      className={cn(
+        "flex h-14 flex-none items-center gap-3.5 border-b border-border px-6",
+        campaign !== "" && "max-md:hidden",
+      )}
+    >
       <Link
         to="/"
         className="-ml-1.5 flex flex-none items-center gap-[9px] rounded-md px-1.5 py-1 font-serif text-[17px] font-semibold tracking-[.01em] text-foreground hover:text-primary-hover"

@@ -21,15 +21,27 @@ interface CommandPaletteProps {
   campaign: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Register the global ⌘K/Ctrl-K toggle (default). The mobile start surface
+   * mounts a second palette instance and turns this off so the shortcut only
+   * ever opens the topbar's instance.
+   */
+  hotkey?: boolean;
 }
 
-export function CommandPalette({ campaign, open, onOpenChange }: CommandPaletteProps) {
+export function CommandPalette({
+  campaign,
+  open,
+  onOpenChange,
+  hotkey = true,
+}: CommandPaletteProps) {
   const navigate = useNavigate();
   const listboxId = useId();
 
   // ⌘K / Ctrl-K toggles globally (the palette is only mounted on
   // campaign-scoped views, so the shortcut is inert on the campaign list).
   useEffect(() => {
+    if (!hotkey) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -38,7 +50,7 @@ export function CommandPalette({ campaign, open, onOpenChange }: CommandPaletteP
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onOpenChange]);
+  }, [open, onOpenChange, hotkey]);
 
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -102,7 +114,9 @@ export function CommandPalette({ campaign, open, onOpenChange }: CommandPaletteP
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-overlay" />
         <DialogPrimitive.Content
           aria-describedby={undefined}
-          className="fixed top-[14vh] left-1/2 z-50 w-[560px] max-w-[90vw] -translate-x-1/2 overflow-hidden rounded-xl border border-input bg-card shadow-[0_24px_60px_rgba(0,0,0,.5)]"
+          // Full-width-ish on touch viewports; at md+ the calc exceeds the
+          // 560px cap, so the desktop panel is unchanged.
+          className="fixed top-[14vh] left-1/2 z-50 w-[calc(100vw-32px)] max-w-[560px] -translate-x-1/2 overflow-hidden rounded-xl border border-input bg-card shadow-[0_24px_60px_rgba(0,0,0,.5)]"
         >
           <DialogPrimitive.Title className="sr-only">Suchen</DialogPrimitive.Title>
           <div className="flex items-center gap-2.5 border-b border-border px-4 py-3.5">
@@ -123,11 +137,12 @@ export function CommandPalette({ campaign, open, onOpenChange }: CommandPaletteP
               aria-autocomplete="list"
               autoComplete="off"
               spellCheck={false}
-              className="min-w-0 flex-1 bg-transparent text-[15px] text-foreground outline-none placeholder:text-muted-foreground"
+              // 16px below md — anything smaller makes iOS zoom into the input.
+              className="min-w-0 flex-1 bg-transparent text-[16px] text-foreground outline-none placeholder:text-muted-foreground md:text-[15px]"
             />
             <span
               aria-hidden
-              className="flex-none rounded-[4px] border border-input px-[5px] py-px font-mono text-[11px] text-muted-foreground"
+              className="flex-none rounded-[4px] border border-input px-[5px] py-px font-mono text-[11px] text-muted-foreground max-md:hidden"
             >
               esc
             </span>
@@ -154,7 +169,7 @@ export function CommandPalette({ campaign, open, onOpenChange }: CommandPaletteP
                   onPointerMove={() => setActive(index)}
                   onClick={() => pick(index)}
                   className={cn(
-                    "flex cursor-pointer items-center gap-[11px] rounded-[7px] px-2.5 py-2.5",
+                    "flex cursor-pointer items-center gap-[11px] rounded-[7px] px-2.5 py-2.5 max-md:min-h-11",
                     index === activeIndex && "bg-secondary",
                   )}
                 >

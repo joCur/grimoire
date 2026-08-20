@@ -2,6 +2,7 @@ import { Outlet, Route, Routes, useParams } from "react-router";
 
 import { Topbar } from "@/components/Topbar";
 import { useCampaignVersion } from "@/lib/use-campaign-version";
+import { BrowseRoute } from "@/routes/browse";
 import { CampaignsRoute } from "@/routes/campaigns";
 import { HarnessRoute } from "@/routes/harness";
 import { LiveRoute } from "@/routes/live";
@@ -40,6 +41,8 @@ export function App() {
         {import.meta.env.DEV && <Route path="dev/markdown" element={<HarnessRoute />} />}
         <Route path=":campaign" element={<CampaignScope />}>
           <Route index element={<PoolRoute />} />
+          {/* Mobile list pages (issue #11) — linked only from the start surface. */}
+          <Route path="list/:kind" element={<BrowseRoute />} />
           <Route path="live" element={<LiveRoute />} />
           <Route path="file/*" element={<SceneRoute />} />
         </Route>

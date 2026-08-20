@@ -23,7 +23,8 @@ export function SceneArticle({
 }) {
   const live = variant === "live";
   const fm = file.frontmatter;
-  const title = fmString(fm.title) ?? file.path;
+  // npc/location files opened as a file view carry `name` instead of `title`.
+  const title = fmString(fm.title) ?? fmString(fm.name) ?? file.path;
   // Everything that is not explicitly a contingency reads as a planned
   // scene (degrade — "planned" is the unmarked case).
   const isContingency = fmString(fm.type) === "contingency";
@@ -60,7 +61,8 @@ export function SceneArticle({
       <h1
         className={cn(
           "font-serif leading-[1.2] font-semibold text-foreground",
-          live ? "mb-1.5 text-[26px]" : "mb-3.5 text-[30px]",
+          // Reading view: 24px below md (design/Grimoire-Mobil), 30px at md+.
+          live ? "mb-1.5 text-[26px]" : "mb-3.5 text-[24px] md:text-[30px]",
         )}
       >
         {title}

@@ -85,6 +85,14 @@ export function endSession(campaign: string): Promise<FileResponse> {
 }
 
 /**
+ * Append a line to the campaign's inbox.md (mobile capture, issue #11);
+ * the server creates the file on the first entry.
+ */
+export function appendInbox(campaign: string, text: string): Promise<FileResponse> {
+  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/inbox`, { text });
+}
+
+/**
  * Append a log line to today's session (404 without a session today).
  * With a sceneId the server also maintains `scenes_played`.
  */

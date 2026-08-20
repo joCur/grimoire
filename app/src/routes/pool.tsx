@@ -1,6 +1,9 @@
 // "/:campaign" — the scene pool per the design reference: campaign header,
 // chapter accordions with goal line, location-grouped planned scenes and a
 // separate contingency group ("Falls es schiefgeht").
+// Below md the SAME route shows the mobile start surface instead (issue #11,
+// responsive swap — no separate URL): desktop pool `hidden md:block`, mobile
+// start `md:hidden`. Both share the tree query cache, so nothing fetches twice.
 
 import type { CampaignTree, ChapterNode, SceneGroup, SceneSummary } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
@@ -13,6 +16,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { locationName } from "@/lib/campaign";
 import { firstParagraphOfSection } from "@/lib/md-section";
 import { cn } from "@/lib/utils";
+import { MobileStart } from "@/routes/mobile-start";
 
 /** Scene status → German label + dot/text colors (unknown values pass through). */
 function statusMeta(status: string): { label: string; dot: string; text: string } {
@@ -54,41 +58,46 @@ export function PoolRoute() {
   const anyActive = data?.chapters.some((ch) => ch.status === "active") ?? false;
 
   return (
-    <div className="mx-auto max-w-[760px] px-7 pt-10 pb-20">
-      {isPending && <p className="text-muted-foreground">Lade Szenen …</p>}
-      {isError && (
-        <p className="text-muted-foreground">
-          Server nicht erreichbar — Grimoire-Server auf Port 3000 starten.
-        </p>
-      )}
-      {data && (
-        <>
-          <div className="mb-5 flex flex-wrap items-baseline gap-3">
-            <h1 className="font-serif text-[28px] leading-[1.25] font-semibold text-foreground">
-              {data.campaign}
-            </h1>
-            <span className="text-[13px] text-muted-foreground">
-              {chapterCount === 1 ? "1 Kapitel" : `${chapterCount} Kapitel`} ·{" "}
-              {sceneCountLabel(sceneCount)}
-            </span>
-          </div>
-          {data.chapters.length === 0 && (
-            <p className="text-[13.5px] text-muted-foreground">
-              Noch keine Kapitel — Kapitel-Ordner mit _chapter.md anlegen.
-            </p>
-          )}
-          {data.chapters.map((chapter, index) => (
-            <Chapter
-              key={chapter.id}
-              campaign={campaign}
-              chapter={chapter}
-              tree={data}
-              defaultOpen={anyActive ? chapter.status === "active" : index === 0}
-            />
-          ))}
-        </>
-      )}
-    </div>
+    <>
+      <div className="md:hidden">
+        <MobileStart campaign={campaign} />
+      </div>
+      <div className="mx-auto hidden max-w-[760px] px-7 pt-10 pb-20 md:block">
+        {isPending && <p className="text-muted-foreground">Lade Szenen …</p>}
+        {isError && (
+          <p className="text-muted-foreground">
+            Server nicht erreichbar — Grimoire-Server auf Port 3000 starten.
+          </p>
+        )}
+        {data && (
+          <>
+            <div className="mb-5 flex flex-wrap items-baseline gap-3">
+              <h1 className="font-serif text-[28px] leading-[1.25] font-semibold text-foreground">
+                {data.campaign}
+              </h1>
+              <span className="text-[13px] text-muted-foreground">
+                {chapterCount === 1 ? "1 Kapitel" : `${chapterCount} Kapitel`} ·{" "}
+                {sceneCountLabel(sceneCount)}
+              </span>
+            </div>
+            {data.chapters.length === 0 && (
+              <p className="text-[13.5px] text-muted-foreground">
+                Noch keine Kapitel — Kapitel-Ordner mit _chapter.md anlegen.
+              </p>
+            )}
+            {data.chapters.map((chapter, index) => (
+              <Chapter
+                key={chapter.id}
+                campaign={campaign}
+                chapter={chapter}
+                tree={data}
+                defaultOpen={anyActive ? chapter.status === "active" : index === 0}
+              />
+            ))}
+          </>
+        )}
+      </div>
+    </>
   );
 }
 

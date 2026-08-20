@@ -1,12 +1,15 @@
 // "/:campaign/file/*" — the scene reading view per the design reference:
 // the scene article (type overline, Literata title, trigger row, chip row,
 // markdown body — shared with the live view via SceneArticle) and a sticky
-// right aside with the scene's NPC cards.
+// right aside with the scene's NPC cards. Below md (issue #11): a "‹ Pool"
+// back row on top and the NPC cards stacked below the body (the column
+// layout already stacks under lg).
 
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router";
 
 import { fetchFile, fetchTree } from "@/api";
+import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/components/NpcCard";
 import { SceneArticle } from "@/components/SceneArticle";
 import { fmStringArray } from "@/lib/frontmatter";
@@ -41,20 +44,23 @@ export function SceneRoute() {
   const npcs = fmStringArray(data.frontmatter.npcs);
 
   return (
-    <div className="mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-7 pt-10 pb-[100px] lg:flex-row">
-      <div className="w-full min-w-0 flex-1 lg:max-w-[680px]">
-        <SceneArticle file={data} tree={tree.data} variant="scene" />
+    <>
+      <MobileBackRow campaign={campaign} />
+      <div className="mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 pb-[100px] md:px-7 md:pt-10 lg:flex-row">
+        <div className="w-full min-w-0 flex-1 lg:max-w-[680px]">
+          <SceneArticle file={data} tree={tree.data} variant="scene" />
+        </div>
+        {npcs.length > 0 && (
+          <aside className="flex w-full flex-none flex-col gap-3.5 lg:sticky lg:top-0 lg:w-[280px]">
+            <h2 className="text-[12px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
+              NPCs dieser Szene
+            </h2>
+            {npcs.map((id) => (
+              <NpcCard key={id} campaign={campaign} id={id} />
+            ))}
+          </aside>
+        )}
       </div>
-      {npcs.length > 0 && (
-        <aside className="flex w-full flex-none flex-col gap-3.5 lg:sticky lg:top-0 lg:w-[280px]">
-          <h2 className="text-[12px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
-            NPCs dieser Szene
-          </h2>
-          {npcs.map((id) => (
-            <NpcCard key={id} campaign={campaign} id={id} />
-          ))}
-        </aside>
-      )}
-    </div>
+    </>
   );
 }

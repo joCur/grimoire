@@ -6,14 +6,17 @@
 // returns the fresh file, the "played" checkmark comes from scenes_played
 // (server-maintained — never faked client-side). The only client state is
 // which scene is selected.
+// There is NO mobile live mode (UI-BRIEF §4) — below md the route shows a
+// quiet note with a link to the read view of the active scene instead.
 
 import type { SceneSummary } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
 import { Bookmark, Check, GitFork } from "lucide-react";
 import { useState } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 
 import { appendLog, fetchFile, fetchTree, startSession } from "@/api";
+import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/components/NpcCard";
 import { SceneArticle } from "@/components/SceneArticle";
 import { Button } from "@/components/ui/button";
@@ -24,6 +27,53 @@ import { noSessionYet, useSessionFile, useSessionWrite } from "@/lib/use-session
 
 export function LiveRoute() {
   const { campaign = "" } = useParams();
+  return (
+    <>
+      <div className="md:hidden">
+        <MobileLiveNote campaign={campaign} />
+      </div>
+      <div className="hidden h-full min-h-0 md:block">
+        <LiveDesktop campaign={campaign} />
+      </div>
+    </>
+  );
+}
+
+/** Below md: no live mode — a quiet pointer to the reading view instead. */
+function MobileLiveNote({ campaign }: { campaign: string }) {
+  const tree = useQuery({
+    queryKey: ["tree", campaign],
+    queryFn: () => fetchTree(campaign),
+    enabled: campaign !== "",
+  });
+  // "Active scene" = the live view's default selection: first planned scene
+  // of the active chapter (fallbacks as in LiveDesktop).
+  const chapters = tree.data?.chapters ?? [];
+  const chapter = chapters.find((ch) => ch.status === "active") ?? chapters[0];
+  const scenes = chapter?.groups.flatMap((g) => g.scenes) ?? [];
+  const scene = scenes.find((s) => s.type !== "contingency") ?? scenes[0];
+
+  return (
+    <>
+      <MobileBackRow campaign={campaign} />
+      <div className="px-5 pt-12 text-center">
+        <p className="text-[14px] leading-[1.6] text-muted-foreground">
+          Der Live-Modus ist für den Desktop gedacht.
+        </p>
+        {scene !== undefined && (
+          <Link
+            to={`/${campaign}/file/${scene.path}`}
+            className="mt-2 inline-flex min-h-11 items-center text-[15px] text-primary hover:text-primary-hover"
+          >
+            Szene lesen: {scene.title}
+          </Link>
+        )}
+      </div>
+    </>
+  );
+}
+
+function LiveDesktop({ campaign }: { campaign: string }) {
   const session = useSessionFile(campaign);
   const tree = useQuery({
     queryKey: ["tree", campaign],
