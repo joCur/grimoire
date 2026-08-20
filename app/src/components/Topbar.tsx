@@ -5,6 +5,9 @@
 // context there), the brass "Session starten" button on pool and scene
 // views (issue #9: starts today's session and enters /:campaign/live), and
 // in the live mode the elapsed timer plus Pause / "Session beenden".
+// On the review view (issue #10) the left side reads "Review" and the right
+// side carries the harvest progress; the pool gets a quiet link into the
+// review while today's session still has unharvested entries.
 
 import type { FileResponse } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
@@ -26,23 +29,27 @@ import { IconLogo } from "@/icons";
 import { fmString } from "@/lib/frontmatter";
 import { formatElapsed, parseLocalDateTime } from "@/lib/session";
 import { cn } from "@/lib/utils";
+import { useReviewEntries } from "@/lib/use-review";
 import { useSessionFile, useSessionWrite } from "@/lib/use-session";
 
 export function Topbar() {
   const { pathname } = useLocation();
   const sceneMatch = matchPath("/:campaign/file/*", pathname);
   const liveMatch = matchPath("/:campaign/live", pathname);
+  const reviewMatch = matchPath("/:campaign/review", pathname);
   const listMatch = matchPath("/:campaign/list/*", pathname);
   const poolMatch = matchPath("/:campaign", pathname);
   const campaign =
     sceneMatch?.params.campaign ??
     liveMatch?.params.campaign ??
+    reviewMatch?.params.campaign ??
     listMatch?.params.campaign ??
     poolMatch?.params.campaign ??
     "";
   const filePath = sceneMatch?.params["*"] ?? "";
   const isScene = sceneMatch !== null && filePath !== "" && campaign !== "";
   const isLive = liveMatch !== null && campaign !== "";
+  const isReview = reviewMatch !== null && campaign !== "";
   const isPool = poolMatch !== null && campaign !== "";
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -123,6 +130,8 @@ export function Topbar() {
         </div>
       )}
 
+      {isReview && <div className="flex-none text-[13px] text-muted-foreground">Review</div>}
+
       <div className="flex-1" />
 
       {/* Only on campaign-scoped views — the campaign list has no search
@@ -145,11 +154,17 @@ export function Topbar() {
         </>
       )}
 
+      {/* Quiet review affordance — only while today's session still has
+          unharvested entries (issue #10); otherwise nothing is shown. */}
+      {isPool && <PoolReviewLink campaign={campaign} />}
+
       {(isPool || isScene) && <StartSessionButton campaign={campaign} />}
 
       {isLive && session.data !== undefined && (
         <LiveControls campaign={campaign} session={session.data} />
       )}
+
+      {isReview && <ReviewProgress campaign={campaign} />}
     </header>
   );
 }
@@ -192,10 +207,12 @@ function LiveControls({ campaign, session }: { campaign: string; session: FileRe
     startedMs === undefined ? undefined : formatElapsed(startedMs, endedMs ?? nowMs);
 
   const pause = useSessionWrite(campaign, () => appendLog(campaign, "— Pause"));
+  // "Session beenden" leads into the review, not back to the pool
+  // (prototype: endSession → review) — the harvest is the next step.
   const end = useSessionWrite(
     campaign,
     () => endSession(campaign),
-    () => void navigate(`/${campaign}`),
+    () => void navigate(`/${campaign}/review`),
   );
 
   return (
@@ -226,6 +243,30 @@ function LiveControls({ campaign, session }: { campaign: string; session: FileRe
         Session beenden
       </Button>
     </>
+  );
+}
+
+/** "n von m gesichtet" on the review view (prototype's isReview topbar). */
+function ReviewProgress({ campaign }: { campaign: string }) {
+  const review = useReviewEntries(campaign);
+  if (review.isPending || review.noSession || review.isError || review.total === 0) return null;
+  return <div className="flex-none text-[13px] text-soft">{review.progressLabel}</div>;
+}
+
+/** Pool affordance into the review: only when today's session exists and
+ *  still has entries to harvest — nothing to see otherwise. */
+function PoolReviewLink({ campaign }: { campaign: string }) {
+  const review = useReviewEntries(campaign);
+  if (review.isPending || review.noSession || review.isError || review.pendingCount === 0) {
+    return null;
+  }
+  return (
+    <Link
+      to={`/${campaign}/review`}
+      className="flex-none rounded-md px-1.5 py-1 text-[13px] text-body-secondary hover:text-foreground"
+    >
+      Review · {review.pendingCount} offen
+    </Link>
   );
 }
 

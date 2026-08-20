@@ -9,6 +9,12 @@ export interface LogEntry {
   /** Scene id from the `(sceneId)` group; pauses and free notes have none. */
   sceneId?: string;
   text: string;
+  /**
+   * The line as it stands in the file (trimmed — the write API never emits
+   * indented log lines). The review hashes THIS string for the session's
+   * `reviewed` list, so it must travel alongside the parsed form.
+   */
+  raw: string;
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -38,11 +44,11 @@ export function parseLogEntries(body: string): LogEntry[] {
     if (/^#{1,6}(\s|$)/.test(line)) break; // next section ends the log
     const m = LOG_LINE.exec(line);
     if (m !== null) {
-      const entry: LogEntry = { time: m[1] ?? "", text: m[3] ?? "" };
+      const entry: LogEntry = { time: m[1] ?? "", text: m[3] ?? "", raw: line };
       if (m[2] !== undefined) entry.sceneId = m[2];
       entries.push(entry);
     } else {
-      entries.push({ text: line });
+      entries.push({ text: line, raw: line });
     }
   }
   return entries;

@@ -28,15 +28,17 @@ describe("parseLogEntries", () => {
       time: "19:52",
       sceneId: "lighthouse-arrival",
       text: "Spuren gefunden, Gruppe will sofort zur Bucht #decision",
+      raw: "- 19:52 (lighthouse-arrival) Spuren gefunden, Gruppe will sofort zur Bucht #decision",
     });
   });
 
   test("parses pause and free lines without sceneId", () => {
     const entries = parseLogEntries(body);
-    expect(entries[1]).toEqual({ time: "20:30", text: "— Pause" });
+    expect(entries[1]).toEqual({ time: "20:30", text: "— Pause", raw: "- 20:30 — Pause" });
     expect(entries[2]).toEqual({
       time: "22:40",
       text: "— Cliffhanger: Lichter in der Bucht gesichtet #thread",
+      raw: "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread",
     });
   });
 
@@ -46,7 +48,10 @@ describe("parseLogEntries", () => {
 
   test("degrades garbage lines to raw text entries", () => {
     const entries = parseLogEntries("## Log\n\nkein Listenpunkt\n- ohne Zeitstempel\n");
-    expect(entries).toEqual([{ text: "kein Listenpunkt" }, { text: "- ohne Zeitstempel" }]);
+    expect(entries).toEqual([
+      { text: "kein Listenpunkt", raw: "kein Listenpunkt" },
+      { text: "- ohne Zeitstempel", raw: "- ohne Zeitstempel" },
+    ]);
   });
 
   test("missing Log section yields an empty list", () => {

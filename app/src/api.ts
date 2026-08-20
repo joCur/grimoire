@@ -106,3 +106,58 @@ export function appendLog(
     sceneId === undefined ? { text } : { text, sceneId },
   );
 }
+
+// --- review actions (issue #10) ---------------------------------------------
+
+/**
+ * Mark a log line as reviewed: the server adds the short hash of the RAW
+ * line to the session's `reviewed` list (idempotent). Returns the session file.
+ */
+export function markLogLineSeen(
+  campaign: string,
+  path: string,
+  line: string,
+): Promise<FileResponse> {
+  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/review/seen`, { path, line });
+}
+
+/**
+ * Append `- [ ] text` under `## Offene Fäden` of the chapter's _chapter.md
+ * (section created when missing). Returns the chapter file.
+ */
+export function adoptThread(
+  campaign: string,
+  chapter: string,
+  text: string,
+): Promise<FileResponse> {
+  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/review/thread`, {
+    chapter,
+    text,
+  });
+}
+
+/**
+ * Create `npcs/<id>.md` (status: unknown, note under `## Notizen`).
+ * Never overwrites: an existing slug is an ApiError with status 409.
+ */
+export function createNpcStub(
+  campaign: string,
+  id: string,
+  name?: string,
+  note?: string,
+): Promise<FileResponse> {
+  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/review/npc-stub`, {
+    id,
+    ...(name === undefined ? {} : { name }),
+    ...(note === undefined ? {} : { note }),
+  });
+}
+
+/**
+ * Rewrite an inbox line to `- [x] …` (the one documented exception to the
+ * inbox's append-only rule). Idempotent; the line must match byte for byte.
+ * Returns inbox.md.
+ */
+export function markInboxLineDone(campaign: string, line: string): Promise<FileResponse> {
+  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/review/inbox-done`, { line });
+}
