@@ -21,6 +21,8 @@ Gib ausschließlich einen JSON-Block zurück, kein Markdown drumherum:
 }
 ```
 
+Antworte ausschließlich mit dem JSON-Objekt — kein Text davor oder danach.
+
 ## Regeln
 
 1. **Szenen-Schnitt**: Eine Szene = eine Situation, die am Tisch am Stück

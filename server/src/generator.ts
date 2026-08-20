@@ -3,7 +3,9 @@
 //   1. collect campaign context (npc/location ids+names, chapter, glossary)
 //   2. prompt = system-prompt.md + example-output.md + context + source text
 //   3. call the LLM provider
-//   4. validate the reply MECHANICALLY; errors go back to the model as a
+//   4. extract the JSON object from the reply (issue #20 — prose around the
+//      object is tolerated, the validation itself is not loosened) and
+//      validate it MECHANICALLY; errors go back to the model as a
 //      correction turn (max 2), never to the user; exhausted retries -> 422.
 //      A TRUNCATED reply (the provider saw finish_reason/stop_reason) skips
 //      the correction turns entirely: re-asking for the same oversized JSON
@@ -182,6 +184,63 @@ async function collectContext(
   };
 }
 
+// --- JSON extraction (generator/README.md step 4, issue #20) -----------------
+
+/**
+ * ```json fence (labelled wins) or a bare ``` fence. Non-greedy: the FIRST
+ * fence of the reply. The bare variant requires the newline right after the
+ * backticks, so it can never swallow a "json" label as content.
+ */
+const LABELLED_FENCE = /```json\b[ \t]*\r?\n?([\s\S]*?)```/i;
+const BARE_FENCE = /```[ \t]*\r?\n([\s\S]*?)```/;
+
+function fenceContent(raw: string): string | null {
+  const labelled = LABELLED_FENCE.exec(raw);
+  if (labelled !== null) return labelled[1]!;
+  const bare = BARE_FENCE.exec(raw);
+  return bare === null ? null : bare[1]!;
+}
+
+/** Substring from the first `{` to the last `}` — prose on both sides falls off. */
+function braceSpan(raw: string): string | null {
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start === -1 || end <= start) return null;
+  return raw.slice(start, end + 1);
+}
+
+/**
+ * Get the JSON value out of a raw model reply (issue #20). Models like to
+ * put an explainer sentence in front of the object ("I need to be careful
+ * about characters inside string values…"); that must not cost two
+ * correction turns for an otherwise usable reply.
+ *
+ * Three stages, first one that PARSES wins:
+ *   (a) the whole text — what a well-behaved model returns,
+ *   (b) the content of a ```json (or bare ```) fence,
+ *   (c) the substring from the first `{` to the last `}` (braces inside
+ *       string values cannot confuse this — only the outermost pair counts).
+ *
+ * The extraction loosens ONLY the parsing: whatever comes out goes through
+ * the unchanged full validation below. Returns null when no stage parses —
+ * then, and only then, the reply "is not valid JSON" and the correction turn
+ * runs as before. Wrapped in an object because a parsed value may itself be
+ * `null` (the validation rejects that, the extractor must not swallow it).
+ */
+export function extractJsonReply(raw: string): { value: unknown } | null {
+  for (const candidate of [raw, fenceContent(raw), braceSpan(raw)]) {
+    if (candidate === null) continue;
+    const trimmed = candidate.trim();
+    if (trimmed === "") continue;
+    try {
+      return { value: JSON.parse(trimmed) };
+    } catch {
+      // next stage
+    }
+  }
+  return null;
+}
+
 // --- mechanical validation (generator/README.md step 4) ----------------------
 
 /** The reply schema the system prompt demands. */
@@ -245,13 +304,12 @@ function isRawEntry(v: unknown): v is RawEntry {
 }
 
 function parseRawReply(raw: string, errors: string[]): RawReply | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
-  } catch {
+  const extracted = extractJsonReply(raw);
+  if (extracted === null) {
     errors.push("reply is not valid JSON");
     return null;
   }
+  const parsed = extracted.value;
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     errors.push("reply must be a JSON object");
     return null;

@@ -107,6 +107,7 @@ jeweils nur für den gewählten:
 | `LMSTUDIO_URL`       | `lmstudio`   | `http://localhost:1234/v1`     | API-Root der lokalen LM-Studio-Instanz                 |
 | `LMSTUDIO_MODEL`     | `lmstudio`   | `local-model`                  | Modellname in LM Studio                                |
 | `LLM_MAX_TOKENS`     | alle         | `8000` (`claude`), sonst Endpoint-Default | Obergrenze der Antwortlänge (positive Ganzzahl; unbrauchbare Werte werden ignoriert) |
+| `LLM_FORCE_JSON`     | `openrouter`, `openai`, `lmstudio` | an              | Sendet `response_format: {"type":"json_object"}` mit; `0` = aus, für Endpoints/Modelle ohne `response_format`-Unterstützung (der `claude`-Pfad erzwingt JSON per Assistant-Prefill und ist davon unberührt) |
 
 `LLM_MAX_TOKENS` lohnt sich beim Modellvergleich: schneidet ein Modell die
 JSON-Antwort ab, erkennt der Generator das an `finish_reason`/`stop_reason`

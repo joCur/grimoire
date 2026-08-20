@@ -19,6 +19,7 @@ import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import {
   ClaudeProvider,
   DEFAULT_MAX_TOKENS,
+  JSON_PREFILL,
   OpenAICompatProvider,
   createProvider,
 } from "../src/llm-provider";
@@ -118,6 +119,7 @@ interface Captured {
     model: string;
     temperature: number;
     max_tokens?: number;
+    response_format?: { type: string };
     messages: Array<{ role: string; content: string }>;
   };
 }
@@ -272,6 +274,59 @@ describe("OpenAICompatProvider request", () => {
     expect((await next).path).toBe("/v1/chat/completions");
   });
 
+  // --- JSON mode (issue #20, AK 6) ------------------------------------------
+
+  test("response_format is sent by default on every OpenAI-compatible path", async () => {
+    const envs: NodeJS.ProcessEnv[] = [
+      { LLM_PROVIDER: "lmstudio" } as NodeJS.ProcessEnv,
+      {
+        LLM_PROVIDER: "openrouter",
+        OPENROUTER_API_KEY: "sk-or-test",
+        LLM_MODEL: "anthropic/claude-sonnet-4.6",
+      } as NodeJS.ProcessEnv,
+      { LLM_PROVIDER: "openai", LLM_MODEL: "m" } as NodeJS.ProcessEnv,
+    ];
+    for (const env of envs) {
+      const { baseUrl, next } = await captureServer();
+      // every path takes its base url from a different variable
+      const provider = createProvider({
+        ...env,
+        LMSTUDIO_URL: baseUrl,
+        LLM_BASE_URL: baseUrl,
+      });
+      await provider.complete(REQ);
+      expect((await next).body.response_format).toEqual({ type: "json_object" });
+      const s = server;
+      server = null;
+      if (s !== null) await new Promise<void>((resolve) => s.close(() => resolve()));
+    }
+  });
+
+  test("LLM_FORCE_JSON=0 drops response_format, junk keeps it on", async () => {
+    for (const [raw, expected] of [
+      ["0", false],
+      ["false", false],
+      ["off", false],
+      ["no", false],
+      ["1", true],
+      ["yes", true],
+      ["nonsense", true],
+      [undefined, true],
+    ] as Array<[string | undefined, boolean]>) {
+      const { baseUrl, next } = await captureServer();
+      const provider = createProvider({
+        LLM_PROVIDER: "lmstudio",
+        LMSTUDIO_URL: baseUrl,
+        ...(raw === undefined ? {} : { LLM_FORCE_JSON: raw }),
+      } as NodeJS.ProcessEnv);
+      await provider.complete(REQ);
+      expect("response_format" in (await next).body).toBe(expected);
+      const s = server;
+      server = null;
+      if (s !== null) await new Promise<void>((resolve) => s.close(() => resolve()));
+    }
+  });
+
   test("an error status surfaces provider name, status and body", async () => {
     const s = createServer((_req, res) => {
       res.writeHead(401, { "content-type": "application/json" });
@@ -369,7 +424,8 @@ describe("ClaudeProvider reply", () => {
       },
       async (p) => {
         const answer = await p.complete(REQ);
-        expect(answer.text).toBe("halbes JSON");
+        // the prefilled brace is part of the reply (issue #20)
+        expect(answer.text).toBe(`${JSON_PREFILL}halbes JSON`);
         expect(answer.truncated).toBe(true);
         expect(answer.usage).toEqual({ inputTokens: 9123, outputTokens: 8000 });
       },
@@ -377,6 +433,62 @@ describe("ClaudeProvider reply", () => {
     // the cap the message will name is the one actually sent
     expect(sent.max_tokens).toBe(8000);
     expect(sent.model).toBe("claude-sonnet-4-6");
+  });
+
+  // --- JSON mode: assistant prefill (issue #20, AK 6) ------------------------
+
+  test("the assistant prefill is the last turn and comes back in front of the reply", async () => {
+    const sent = await withStubbedFetch(
+      {
+        // the API returns the CONTINUATION of the prefill, without the brace
+        content: [{ type: "text", text: '"scenes": [], "warnings": []}' }],
+        stop_reason: "end_turn",
+      },
+      async (p) => {
+        const answer = await p.complete(REQ);
+        expect(answer.text).toBe('{"scenes": [], "warnings": []}');
+        expect(JSON.parse(answer.text)).toEqual({ scenes: [], warnings: [] });
+      },
+    );
+    const messages = sent.messages as Array<{ role: string; content: string }>;
+    expect(messages.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(messages[1]).toEqual({ role: "assistant", content: JSON_PREFILL });
+  });
+
+  test("the prefill stays the LAST turn after replayed correction turns", async () => {
+    const sent = await withStubbedFetch(
+      { content: [{ type: "text", text: '"scenes": []}' }], stop_reason: "end_turn" },
+      async (p) => {
+        const answer = await p.complete(REQ, [
+          { assistant: '{"scenes": "kaputt"}', correction: "bitte korrigieren" },
+          { assistant: '{"scenes": 0}', correction: "nochmal" },
+        ]);
+        expect(answer.text).toBe('{"scenes": []}');
+      },
+    );
+    const messages = sent.messages as Array<{ role: string; content: string }>;
+    // initial user prompt + two replayed pairs + the prefill at the very end
+    expect(messages.map((m) => m.role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+    ]);
+    expect(messages.at(-1)).toEqual({ role: "assistant", content: JSON_PREFILL });
+    expect(messages[3]!.content).toBe('{"scenes": 0}');
+  });
+
+  test("exactly what was prefilled is prepended — a nested continuation keeps both braces", async () => {
+    await withStubbedFetch(
+      { content: [{ type: "text", text: '{"a": 1}}' }], stop_reason: "end_turn" },
+      async (p) => {
+        // the model continued with a nested object; dropping the brace here
+        // would corrupt a perfectly good reply
+        expect((await p.complete(REQ)).text).toBe('{{"a": 1}}');
+      },
+    );
   });
 
   test('stop_reason "end_turn" is a complete reply', async () => {
@@ -388,8 +500,8 @@ describe("ClaudeProvider reply", () => {
       },
       async (p) => {
         const answer = await p.complete(REQ);
-        // only text blocks, joined
-        expect(answer.text).toBe("ganzes \nJSON");
+        // only text blocks, joined — behind the prefilled brace
+        expect(answer.text).toBe(`${JSON_PREFILL}ganzes \nJSON`);
         expect(answer.truncated).toBe(false);
         expect(answer.usage).toEqual({ inputTokens: 100, outputTokens: 20 });
       },

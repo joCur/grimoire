@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import type { GenerateResult, GenerateUsage } from "@grimoire/shared";
 import { app } from "../src/server";
 import { getCampaignRoot, setCampaignRoot } from "../src/config";
-import { RAW_REPLY_LIMIT, setProviderForTests } from "../src/generator";
+import { RAW_REPLY_LIMIT, extractJsonReply, setProviderForTests } from "../src/generator";
 import type {
   CompletionResult,
   CorrectionTurn,
@@ -148,14 +148,15 @@ const STUB_MARKDOWN = [
   "",
 ].join("\n");
 
-function reply(
-  over: {
-    scenes?: Array<{ path: string; content: string }>;
-    npc_stubs?: Array<{ path: string; content: string; reason?: string }>;
-    location_stubs?: Array<{ path: string; content: string; reason?: string }>;
-    warnings?: string[];
-  } = {},
-): string {
+interface ReplyOver {
+  scenes?: Array<{ path: string; content: string }>;
+  npc_stubs?: Array<{ path: string; content: string; reason?: string }>;
+  location_stubs?: Array<{ path: string; content: string; reason?: string }>;
+  warnings?: string[];
+}
+
+/** The reply's JSON object, bare — what a model SHOULD return (issue #20). */
+function replyJson(over: ReplyOver = {}): string {
   const body = {
     scenes: over.scenes ?? [{ path: SCENE_PATH, content: sceneMarkdown() }],
     npc_stubs: over.npc_stubs ?? [
@@ -164,8 +165,27 @@ function reply(
     location_stubs: over.location_stubs ?? [],
     warnings: over.warnings ?? ["Quelltext nennt keinen DC — DC 12 gesetzt"],
   };
-  // Wrapped in a fence like real models tend to do — the parser strips it.
-  return "```json\n" + JSON.stringify(body, null, 2) + "\n```";
+  return JSON.stringify(body, null, 2);
+}
+
+function reply(over: ReplyOver = {}): string {
+  // Wrapped in a fence like real models tend to do — the extraction (issue
+  // #20, stage b) takes the fence content.
+  return "```json\n" + replyJson(over) + "\n```";
+}
+
+/**
+ * The PO's production reply (issue #20): an English explainer paragraph, a
+ * blank line, then the JSON object. Valid JSON the old whole-text parse
+ * rejected — three correction turns for a usable answer.
+ */
+function proseThenJson(json: string): string {
+  return [
+    "I need to be careful about characters inside string values — the markdown",
+    "content contains quotes and newlines that must be escaped properly.",
+    "",
+    json,
+  ].join("\n");
 }
 
 async function postJson(url: string, body?: unknown): Promise<Response> {
@@ -177,6 +197,77 @@ async function postJson(url: string, body?: unknown): Promise<Response> {
 }
 
 const generateBody = { chapter: "01-salzhafen", sourceText: "Fenn waits at the docks." };
+
+// --- JSON extraction (issue #20) -------------------------------------------------
+
+describe("extractJsonReply", () => {
+  const OBJ = { scenes: [{ path: "a.md" }], warnings: ["w"] };
+  const JSON_TEXT = JSON.stringify(OBJ, null, 2);
+  /** Convenience: the extracted value, or undefined when nothing parsed. */
+  const value = (raw: string) => extractJsonReply(raw)?.value;
+
+  test("stage (a): the whole text, leading/trailing whitespace included", () => {
+    expect(value(JSON_TEXT)).toEqual(OBJ);
+    expect(value(`\n\n${JSON_TEXT}\n  `)).toEqual(OBJ);
+    // a parseable non-object still wins the stage — the validation below
+    // rejects it with "reply must be a JSON object", not with a parse error
+    expect(value("[1, 2]")).toEqual([1, 2]);
+    expect(extractJsonReply("null")).toEqual({ value: null });
+  });
+
+  test("the exact PO case: explainer paragraph, blank line, then the object", () => {
+    expect(value(proseThenJson(JSON_TEXT))).toEqual(OBJ);
+  });
+
+  test("stage (b): a ```json fence surrounded by prose", () => {
+    const raw = [
+      "Hier ist das Ergebnis:",
+      "```json",
+      JSON_TEXT,
+      "```",
+      "Ich hoffe, das passt so.",
+    ].join("\n");
+    expect(value(raw)).toEqual(OBJ);
+  });
+
+  test("stage (b): a bare fence works too", () => {
+    expect(value("Antwort:\n```\n" + JSON_TEXT + "\n```\n")).toEqual(OBJ);
+  });
+
+  test("stage (c): prose before AND after the object", () => {
+    const raw = ["Kurze Vorbemerkung.", "", JSON_TEXT, "", "Nachbemerkung ohne Klammern."].join(
+      "\n",
+    );
+    expect(value(raw)).toEqual(OBJ);
+  });
+
+  test("braces inside string values do not confuse the first-{-to-last-} span", () => {
+    const tricky = {
+      scenes: [{ path: "a.md", content: "Text mit { und } und {\"nested\": \"braces\"}" }],
+      warnings: ["}{"],
+    };
+    const raw = `Vorbemerkung.\n\n${JSON.stringify(tricky, null, 2)}\n\nNachwort.`;
+    expect(value(raw)).toEqual(tricky);
+  });
+
+  test("garbage without a single brace does not parse", () => {
+    expect(extractJsonReply("Ich kann diese Aufgabe nicht erfüllen.")).toBeNull();
+    expect(extractJsonReply("")).toBeNull();
+    expect(extractJsonReply("   \n  ")).toBeNull();
+  });
+
+  test("a brace span that is not JSON does not parse either", () => {
+    expect(extractJsonReply("Nimm { diesen } Hinweis.")).toBeNull();
+    expect(extractJsonReply("```json\nnicht wirklich json\n```")).toBeNull();
+  });
+
+  test("a truncated object fails extraction (all three stages)", () => {
+    const cut = '{\n  "scenes": [\n    { "path": "01-salzhafen/kai.md", "content": "---\\nid: k';
+    expect(extractJsonReply(cut)).toBeNull();
+    // …also when the model prefixed it with prose and opened a fence
+    expect(extractJsonReply(`Los geht's:\n\n\`\`\`json\n${cut}`)).toBeNull();
+  });
+});
 
 // --- POST /api/:campaign/generate --------------------------------------------------
 
@@ -358,6 +449,91 @@ describe("POST /api/:campaign/generate", () => {
     const result = (await res.json()) as GenerateResult;
     expect(result.usage).toEqual({ inputTokens: 11400, outputTokens: 2500, attempts: 2 });
     expect(fake.calls).toHaveLength(2);
+  });
+
+  // --- prose around the JSON (issue #20) --------------------------------------
+
+  test("the PO case — explainer paragraph before the object — costs ONE call", async () => {
+    const fake = useFake([proseThenJson(replyJson())]);
+    const res = await postJson("/api/beispiel/generate", generateBody);
+    expect(res.status).toBe(200);
+    const result = (await res.json()) as GenerateResult;
+    // extraction only loosens the PARSING: the full validation still ran
+    expect(result.scenes[0]!.path).toBe(SCENE_PATH);
+    expect(result.scenes[0]!.markdown).toBe(sceneMarkdown());
+    expect(result.stubs).toEqual([
+      { kind: "npc", id: "grella", name: "Grella", markdown: STUB_MARKDOWN },
+    ]);
+    // no correction turn — that is the whole point of the fix
+    expect(fake.calls).toHaveLength(1);
+    expect(await exists(SCENE_PATH)).toBe(false);
+  });
+
+  test("prose around a fence, and prose on both sides of a bare object, cost ONE call", async () => {
+    for (const raw of [
+      `Hier ist das Ergebnis:\n\n${reply()}\n\nSag mir, ob das passt.`,
+      `Vorbemerkung.\n\n${replyJson()}\n\nNachbemerkung ohne Klammern.`,
+    ]) {
+      const fake = useFake([raw]);
+      const res = await postJson("/api/beispiel/generate", generateBody);
+      expect(res.status).toBe(200);
+      expect(fake.calls).toHaveLength(1);
+    }
+  });
+
+  test("extraction does not weaken the validation: prose + invalid draft still corrects", async () => {
+    const bad = proseThenJson(
+      replyJson({ scenes: [{ path: SCENE_PATH, content: sceneMarkdown({ status: "ready" }) }] }),
+    );
+    const fake = useFake([bad, reply()]);
+    const res = await postJson("/api/beispiel/generate", generateBody);
+    expect(res.status).toBe(200);
+    expect(fake.calls).toHaveLength(2);
+    expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad); // replayed verbatim
+    expect(fake.calls[1]!.corrections[0]!.correction).toContain('"status" must be "draft"');
+  });
+
+  test("garbage without any brace still triggers the correction turn", async () => {
+    const fake = useFake(["Ich kann diese Aufgabe leider nicht erfüllen.", reply()]);
+    const res = await postJson("/api/beispiel/generate", generateBody);
+    expect(res.status).toBe(200);
+    expect(fake.calls).toHaveLength(2);
+    expect(fake.calls[1]!.corrections[0]!.correction).toContain("not valid JSON");
+  });
+
+  test("the 422 rawReply is the ORIGINAL reply text, not the extracted JSON", async () => {
+    const bad = proseThenJson(
+      replyJson({ scenes: [{ path: SCENE_PATH, content: sceneMarkdown({ status: "ready" }) }] }),
+    );
+    const fake = useFake([bad, bad, bad]);
+    const res = await postJson("/api/beispiel/generate", generateBody);
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { rawReply: string; validationErrors: string[] };
+    expect(body.rawReply).toBe(bad);
+    expect(body.rawReply.startsWith("I need to be careful")).toBe(true);
+    expect(body.validationErrors).toEqual([expect.stringContaining('"status" must be "draft"')]);
+    expect(fake.calls).toHaveLength(3);
+  });
+
+  test("truncation is still checked BEFORE extraction (issue #18 order)", async () => {
+    // Extractable, valid JSON — but the transport saw the output cap. The run
+    // must still abort after ONE call instead of extracting a maybe-complete
+    // object out of a reply the model itself reported as cut off.
+    const cut = proseThenJson(replyJson());
+    const fake = useFake([{ text: cut, truncated: true, usage: usage(9000, 8000) }, reply()], 8000);
+    const res = await postJson("/api/beispiel/generate", generateBody);
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      error: string;
+      rawReply: string;
+      usage: GenerateUsage;
+      validationErrors?: string[];
+    };
+    expect(body.error).toContain("abgeschnitten");
+    expect(body.rawReply).toBe(cut);
+    expect(body.usage).toEqual({ inputTokens: 9000, outputTokens: 8000, attempts: 1 });
+    expect(body.validationErrors).toBeUndefined();
+    expect(fake.calls).toHaveLength(1);
   });
 
   test("scene path outside the requested chapter is a validation error", async () => {

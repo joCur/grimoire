@@ -3,7 +3,9 @@
 // config change, not a code change (DECISIONS #6).
 //
 // Providers are pure transports: they build the prompt, replay prior
-// correction turns, and return the model's RAW text reply. Parsing and
+// correction turns, force JSON the way their API allows (issue #20:
+// `response_format` on the OpenAI-compatible path, an assistant prefill on
+// the Messages API) and return the model's RAW text reply. Parsing and
 // mechanical validation live in generator.ts — a malformed reply is a
 // validation error that goes back to the model as a correction turn, not an
 // exception (generator/README.md step 4).
@@ -124,6 +126,16 @@ function buildMessages(
   return messages;
 }
 
+// --- JSON forcing (issue #20, AK 6) -----------------------------------------
+
+/**
+ * Assistant prefill for the Messages API: an open brace as the last turn
+ * forces the model to CONTINUE a JSON object instead of writing an explainer
+ * sentence first. The API returns only the continuation, so the provider puts
+ * the brace back in front of the reply (see ClaudeProvider.complete).
+ */
+export const JSON_PREFILL = "{";
+
 // --- Claude API ------------------------------------------------------------
 
 /** Output cap when nothing is configured — enough for a full scene batch. */
@@ -153,7 +165,12 @@ export class ClaudeProvider implements LLMProvider {
         model: this.model,
         max_tokens: this.maxTokens,
         system: req.systemPrompt,
-        messages: buildMessages(req, corrections),
+        // The prefill has to be the LAST turn of every attempt — after the
+        // replayed correction turns, which end with a user message.
+        messages: [
+          ...buildMessages(req, corrections),
+          { role: "assistant", content: JSON_PREFILL },
+        ],
       }),
     });
     if (!res.ok) throw new Error(`Claude API: ${res.status} ${await res.text()}`);
@@ -163,7 +180,11 @@ export class ClaudeProvider implements LLMProvider {
       .map((b: { text: string }) => b.text)
       .join("\n");
     return {
-      text,
+      // What came back is the CONTINUATION of the prefill, so exactly what
+      // was prefilled goes back in front — never conditionally on the reply's
+      // first character: a nested object legitimately continues with `{`, and
+      // dropping the brace there would corrupt a perfectly good reply.
+      text: JSON_PREFILL + text,
       // Messages API: the reply stopped because it ran into max_tokens.
       truncated: data.stop_reason === "max_tokens",
       usage: normalizeUsage(data.usage, "input_tokens", "output_tokens"),
@@ -183,6 +204,12 @@ export interface OpenAICompatOptions {
   extraHeaders?: Record<string, string>;
   /** Output cap; omitted from the body when unset (endpoint's own default). */
   maxTokens?: number;
+  /**
+   * Send `response_format: { type: "json_object" }` (issue #20). Default on;
+   * the factory turns it off for `LLM_FORCE_JSON=0`, because some routed
+   * models reject the field and would fail every single run.
+   */
+  forceJson?: boolean;
   /** Shown in error messages ("openrouter: 401 …"). */
   name?: string;
 }
@@ -198,6 +225,7 @@ export class OpenAICompatProvider implements LLMProvider {
   private model: string;
   private apiKey?: string;
   private extraHeaders: Record<string, string>;
+  private forceJson: boolean;
   readonly maxTokens?: number;
 
   constructor(opts: OpenAICompatOptions) {
@@ -207,6 +235,7 @@ export class OpenAICompatProvider implements LLMProvider {
     this.model = opts.model;
     this.apiKey = opts.apiKey;
     this.extraHeaders = opts.extraHeaders ?? {};
+    this.forceJson = opts.forceJson ?? true;
     this.maxTokens = opts.maxTokens;
   }
 
@@ -235,6 +264,9 @@ export class OpenAICompatProvider implements LLMProvider {
         // Unset means "endpoint default" — local servers and routed models
         // disagree about sensible caps, so we do not invent one.
         ...(this.maxTokens === undefined ? {} : { max_tokens: this.maxTokens }),
+        // JSON mode (issue #20): the extraction in generator.ts stays the
+        // safety net for endpoints that accept the field and ignore it.
+        ...(this.forceJson ? { response_format: { type: "json_object" } } : {}),
       }),
     });
     if (!res.ok) throw new Error(`${this.name}: ${res.status} ${await res.text()}`);
@@ -282,11 +314,24 @@ function parseMaxTokens(env: NodeJS.ProcessEnv): number | undefined {
   return n;
 }
 
+/**
+ * `LLM_FORCE_JSON` (issue #20): JSON mode is ON unless it is explicitly
+ * switched off. Off wins only for the unambiguous "no" values — an
+ * unrecognized value keeps the default instead of silently disabling the
+ * forcing (same spirit as parseMaxTokens: config junk must not change
+ * behaviour in a surprising direction).
+ */
+function parseForceJson(env: NodeJS.ProcessEnv): boolean {
+  const raw = env.LLM_FORCE_JSON?.trim().toLowerCase();
+  return !(raw === "0" || raw === "false" || raw === "off" || raw === "no");
+}
+
 // The German "fehlt" messages are deliberate: they surface in the (German) UI
 // when the generate endpoint answers 503 because no provider is configured.
 export function createProvider(env: NodeJS.ProcessEnv): LLMProvider {
   const kind = env.LLM_PROVIDER ?? "claude";
   const maxTokens = parseMaxTokens(env);
+  const forceJson = parseForceJson(env);
   switch (kind) {
     case "claude": {
       if (!env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY fehlt");
@@ -307,6 +352,7 @@ export function createProvider(env: NodeJS.ProcessEnv): LLMProvider {
         apiKey: env.OPENROUTER_API_KEY,
         extraHeaders: OPENROUTER_HEADERS,
         maxTokens,
+        forceJson,
       });
     }
     case "openai": {
@@ -317,6 +363,7 @@ export function createProvider(env: NodeJS.ProcessEnv): LLMProvider {
         model: requireModel(env),
         apiKey: env.LLM_API_KEY,
         maxTokens,
+        forceJson,
       });
     }
     case "lmstudio": {
@@ -326,6 +373,7 @@ export function createProvider(env: NodeJS.ProcessEnv): LLMProvider {
         baseUrl: env.LMSTUDIO_URL ?? "http://localhost:1234/v1",
         model: env.LMSTUDIO_MODEL ?? "local-model",
         maxTokens,
+        forceJson,
       });
     }
     default:
