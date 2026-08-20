@@ -28,3 +28,8 @@ yarn-error.log*
 
 # Browser-Verifikations-Artefakte (Playwright MCP)
 .playwright-mcp/
+
+# E2E-Artefakte (Report, Traces, Screenshots der Suite in e2e/)
+e2e/playwright-report/
+e2e/test-results/
+e2e/blob-report/
