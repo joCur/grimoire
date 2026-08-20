@@ -163,6 +163,30 @@ describe("PATCH /api/:campaign/frontmatter", () => {
     expect(raw).toBe(`---\nstatus: draft\n---\n${body}`);
   });
 
+  test("_campaign.md is patchable through the same endpoint (issue #17)", async () => {
+    const rel = "_campaign.md";
+    const before = await getFile(rel);
+    expect(before.kind).toBe("campaign");
+    const res = await patchReq({
+      path: rel,
+      mtimeMs: before.mtimeMs,
+      patch: { description: "Neue Kurzbeschreibung." },
+    });
+    expect(res.status).toBe(200);
+    const after = (await res.json()) as FileResponse;
+    expect(after.frontmatter.description).toBe("Neue Kurzbeschreibung.");
+    expect(after.frontmatter.name).toBe("Der Leuchtturm von Salzhafen");
+    const raw = await readFile(absOf(rel), "utf8");
+    expect(topLevelKeys(raw)).toEqual(["id", "name", "description"]); // order stable
+    expect(raw).toContain("description: Neue Kurzbeschreibung.\n");
+    // the list endpoint picks the new value up right away
+    const list = (await (await app.request("/api/campaigns")).json()) as Array<{
+      id: string;
+      description?: string;
+    }>;
+    expect(list.find((c) => c.id === "beispiel")?.description).toBe("Neue Kurzbeschreibung.");
+  });
+
   test("409 on stale mtimeMs carries the current mtimeMs", async () => {
     const s = await stat(absOf(SCENE));
     const res = await patchReq({ path: SCENE, mtimeMs: s.mtimeMs - 1, patch: { status: "ready" } });

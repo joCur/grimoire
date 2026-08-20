@@ -11,7 +11,12 @@ import {
   sceneSummary,
   sessionSummary,
 } from "../src/parse";
-import type { NpcFrontmatter, SceneFrontmatter, SessionFrontmatter } from "../src/types";
+import type {
+  CampaignFrontmatter,
+  NpcFrontmatter,
+  SceneFrontmatter,
+  SessionFrontmatter,
+} from "../src/types";
 
 const FIXTURES = join(import.meta.dir, "..", "..", "examples", "beispiel");
 
@@ -34,6 +39,19 @@ describe("kindFromPath", () => {
     expect(kindFromPath("01-salzhafen/_chapter.md")).toBe("chapter");
     expect(kindFromPath("01-salzhafen/hafen/ankunft-leuchtturm.md")).toBe("scene");
     expect(kindFromPath("01-salzhafen/hafen/von-schmugglern-erwischt.md")).toBe("scene");
+    expect(kindFromPath("_campaign.md")).toBe("campaign");
+  });
+
+  test("_campaign.md is campaign metadata in the campaign ROOT only", () => {
+    expect(kindFromPath("_campaign.md")).toBe("campaign");
+    expect(kindFromPath("./_campaign.md")).toBe("campaign");
+    // Deeper occurrences keep the kind their depth already gave them — the
+    // new rule is additive and changes nothing below the root.
+    expect(kindFromPath("01-salzhafen/_campaign.md")).toBe("scene");
+    expect(kindFromPath("01-salzhafen/hafen/_campaign.md")).toBe("scene");
+    // …and _chapter.md detection is untouched.
+    expect(kindFromPath("01-salzhafen/_chapter.md")).toBe("chapter");
+    expect(kindFromPath("01-salzhafen/hafen/_chapter.md")).toBe("chapter");
   });
 
   test("scene directly in a chapter directory (no location slug)", () => {
@@ -133,6 +151,17 @@ describe("parseMarkdown: remaining fixtures", () => {
     expect(f.frontmatter.status).toBe("active");
   });
 
+  test("campaign fixture (_campaign.md)", () => {
+    const f = loadFixture("_campaign.md");
+    const fm = f.frontmatter as CampaignFrontmatter;
+    expect(f.kind).toBe("campaign");
+    expect(fm.id).toBe("beispiel");
+    expect(fm.name).toBe("Der Leuchtturm von Salzhafen");
+    expect(typeof fm.description).toBe("string");
+    expect(f.body).not.toContain("id: beispiel");
+    expect(f.body).toContain("Kampagnenweite Notizen");
+  });
+
   test("inbox and glossary fixtures", () => {
     const inbox = loadFixture("inbox.md");
     expect(inbox.kind).toBe("inbox");
@@ -213,6 +242,29 @@ describe("parseMarkdown: degradation (never throws)", () => {
 
     const withId = parseMarkdown("---\nid: real-id\n---\n", "locations/ort.md", 1);
     expect(withId.frontmatter.name).toBe("real-id");
+
+    // A campaign file follows the npc/location rule: no `name` -> the id.
+    const campaign = parseMarkdown("---\nid: beispiel\n---\n", "_campaign.md", 1);
+    expect(campaign.kind).toBe("campaign");
+    expect(campaign.frontmatter.name).toBe("beispiel");
+  });
+
+  test("broken campaign frontmatter degrades instead of throwing", () => {
+    const raw = "---\nname: [unclosed\n---\n\nNotizen.";
+    const f = parseMarkdown(raw, "_campaign.md", 1);
+    expect(f.kind).toBe("campaign");
+    expect(f.frontmatter.id).toBe("_campaign"); // file-stem fallback
+    expect(f.frontmatter.description).toBeUndefined();
+    expect(f.body).toBe(raw);
+  });
+
+  test("campaign keys beyond id/name/description are preserved verbatim", () => {
+    const f = parseMarkdown(
+      "---\nid: beispiel\nname: Salzhafen\nsystem: D&D 5e\n---\nbody",
+      "_campaign.md",
+      1,
+    );
+    expect(f.frontmatter.system).toBe("D&D 5e");
   });
 
   test("repeated parsing of the same string is stable (gray-matter cache safety)", () => {

@@ -80,7 +80,8 @@ api.get("/:campaign/file", async (c) => {
 });
 
 // GET /api/:campaign/search?q=... -> { results: SearchResult[] } (max 20)
-// Fuzzy in-memory search (Fuse.js) over scenes/npcs/locations/chapters;
+// Fuzzy in-memory search (Fuse.js) over scenes/npcs/locations/chapters and
+// the campaign file;
 // the index builds lazily per campaign and the file watcher invalidates it.
 api.get("/:campaign/search", async (c) => {
   const q = c.req.query("q")?.trim();

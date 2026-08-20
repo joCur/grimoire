@@ -48,6 +48,9 @@ export class ApiError extends Error {
 /** Directories under a campaign that are NOT chapters. */
 export const RESERVED_DIRS = new Set(["npcs", "locations", "sessions"]);
 
+/** Optional campaign-metadata file in the campaign root (issue #17). */
+export const CAMPAIGN_FILE = "_campaign.md";
+
 // --- path safety -------------------------------------------------------------
 
 /** Lexicographic (code-unit) compare for stable, locale-independent sorting. */
@@ -137,9 +140,54 @@ export async function resolveInsideCampaign(dir: string, rel: string): Promise<s
 // --- reading -------------------------------------------------------------------
 
 /**
+ * Read and parse `<campaign>/_campaign.md`, or undefined when the campaign
+ * has none. Never throws — a missing or unreadable file simply has no
+ * metadata (README: the format degrades).
+ */
+export async function readCampaignFile(campaignAbs: string): Promise<ParsedFile | undefined> {
+  const abs = path.join(campaignAbs, CAMPAIGN_FILE);
+  try {
+    const s = await stat(abs); // follows symlinks
+    if (!s.isFile()) return undefined;
+    return parseMarkdown(await readFile(abs, "utf8"), CAMPAIGN_FILE, s.mtimeMs);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Non-empty string or undefined — frontmatter is hand-edited, trust nothing. */
+function metaString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
+}
+
+type CampaignMeta = Pick<CampaignSummary, "name" | "description">;
+
+/**
+ * The additive `name`/`description` of one campaign, from its optional
+ * `_campaign.md`. Missing file, broken YAML or unusable values yield an
+ * empty object — the client then falls back to the directory name.
+ */
+async function campaignMeta(campaignAbs: string): Promise<CampaignMeta> {
+  const parsed = await readCampaignFile(campaignAbs);
+  if (parsed === undefined) return {};
+  const fm = parsed.frontmatter;
+  const meta: CampaignMeta = {};
+  const name = metaString(fm.name);
+  // parseMarkdown falls a missing `name` back to the id (the npc/location
+  // rule). That fallback is a parser artifact, not an authored display name
+  // — and on broken YAML the id itself degrades to the file stem. Either way
+  // the UI must show the directory name, so drop a name that IS the id.
+  if (name !== undefined && name !== fm.id) meta.name = name;
+  const description = metaString(fm.description);
+  if (description !== undefined) meta.description = description;
+  return meta;
+}
+
+/**
  * List directories directly under CAMPAIGN_ROOT (hidden and files skipped).
  * Each entry also carries `lastSession` — the newest session id, used by the
- * app to open the last active campaign (issue #14).
+ * app to open the last active campaign (issue #14) — plus the optional
+ * `name`/`description` from `_campaign.md` (issue #17).
  */
 export async function listCampaigns(): Promise<CampaignSummary[]> {
   let entries;
@@ -163,8 +211,14 @@ export async function listCampaigns(): Promise<CampaignSummary[]> {
   }
   return Promise.all(
     ids.sort(cmp).map(async (id) => {
-      const lastSession = await newestSessionId(path.join(getCampaignRoot(), id));
-      return lastSession === undefined ? { id } : { id, lastSession };
+      const campaignAbs = path.join(getCampaignRoot(), id);
+      const [lastSession, meta] = await Promise.all([
+        newestSessionId(campaignAbs),
+        campaignMeta(campaignAbs),
+      ]);
+      const summary: CampaignSummary = { id, ...meta };
+      if (lastSession !== undefined) summary.lastSession = lastSession;
+      return summary;
     }),
   );
 }
@@ -323,11 +377,11 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
 }
 
 /**
- * All searchable markdown files of a campaign, parsed: npcs/, locations/,
- * and every chapter directory — direct files (scenes + `_chapter.md`) plus
- * one level of location-slug subdirectories, same layout rules as buildTree.
- * Sessions, inbox and glossary are not collected; the search index
- * (issue #7) does not cover them.
+ * All searchable markdown files of a campaign, parsed: the optional
+ * `_campaign.md`, npcs/, locations/, and every chapter directory — direct
+ * files (scenes + `_chapter.md`) plus one level of location-slug
+ * subdirectories, same layout rules as buildTree. Sessions, inbox and
+ * glossary are not collected; the search index (issue #7) does not cover them.
  */
 export async function collectCampaignFiles(campaign: string): Promise<ParsedFile[]> {
   const dir = await campaignDir(campaign);
@@ -335,6 +389,8 @@ export async function collectCampaignFiles(campaign: string): Promise<ParsedFile
     ...(await parseMdFilesIn(path.join(dir, "npcs"), "npcs")),
     ...(await parseMdFilesIn(path.join(dir, "locations"), "locations")),
   ];
+  const campaignFile = await readCampaignFile(dir);
+  if (campaignFile !== undefined) files.push(campaignFile);
   for (const chapterId of (await subdirNames(dir)).filter((name) => !RESERVED_DIRS.has(name))) {
     const chapterAbs = path.join(dir, chapterId);
     files.push(...(await parseMdFilesIn(chapterAbs, chapterId)));

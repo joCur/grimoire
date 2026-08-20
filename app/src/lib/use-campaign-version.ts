@@ -39,5 +39,8 @@ export function useCampaignVersion(campaign: string): void {
     for (const key of ["tree", "file", "search"]) {
       void queryClient.invalidateQueries({ queryKey: [key, campaign] });
     }
+    // …plus the campaign list, which carries name/description from
+    // `_campaign.md` (issue #17) and is keyed without a campaign segment.
+    void queryClient.invalidateQueries({ queryKey: ["campaigns"] });
   }, [data, campaign, queryClient]);
 }

@@ -16,6 +16,30 @@ export function locationName(
 }
 
 /**
+ * The campaign's display label: the `name` from its optional `_campaign.md`
+ * (issue #17), else the id — which is the directory name and stays the key in
+ * every URL. Never returns an empty string.
+ */
+export function campaignLabel(campaign: CampaignSummary | undefined, id: string): string {
+  const name = campaign?.name;
+  return typeof name === "string" && name.trim() !== "" ? name : id;
+}
+
+/** The campaign's one-line description, or undefined when it has none. */
+export function campaignDescription(campaign: CampaignSummary | undefined): string | undefined {
+  const description = campaign?.description;
+  return typeof description === "string" && description.trim() !== "" ? description : undefined;
+}
+
+/** The list entry for one campaign id (the /campaigns response is cached). */
+export function findCampaign(
+  campaigns: CampaignSummary[] | undefined,
+  id: string,
+): CampaignSummary | undefined {
+  return campaigns?.find((c) => c.id === id);
+}
+
+/**
  * Order of the campaign list for "last active first" (issue #14): the
  * campaign with the newest session wins, campaigns without a session rank
  * behind all that have one, and ties fall back to the alphabetically first

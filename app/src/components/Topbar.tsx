@@ -29,8 +29,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { IconLogo } from "@/icons";
+import { campaignDescription, campaignLabel } from "@/lib/campaign";
 import { fmString } from "@/lib/frontmatter";
 import { formatElapsed, parseLocalDateTime } from "@/lib/session";
+import { useCampaignMeta } from "@/lib/use-campaign";
 import { cn } from "@/lib/utils";
 import { useReviewEntries } from "@/lib/use-review";
 import { useSessionFile, useSessionWrite } from "@/lib/use-session";
@@ -59,6 +61,10 @@ export function Topbar() {
   const isPool = poolMatch !== null && campaign !== "";
 
   const [searchOpen, setSearchOpen] = useState(false);
+
+  // Display name of the campaign (from _campaign.md, fallback: the id) for
+  // the breadcrumb crumbs — the switcher renders its own rows below.
+  const { label: campaignName } = useCampaignMeta(campaign);
 
   // Shares the react-query cache with the routes — no extra fetch.
   const file = useQuery({
@@ -107,8 +113,11 @@ export function Topbar() {
 
       {isScene && (
         <div className="flex min-w-0 items-center gap-2 text-[13px]">
-          <Link to={`/${campaign}`} className="flex-none text-body-secondary hover:text-foreground">
-            {campaign}
+          <Link
+            to={`/${campaign}`}
+            className="max-w-[220px] flex-none truncate text-body-secondary hover:text-foreground"
+          >
+            {campaignName}
           </Link>
           {chapterTitle !== undefined && (
             <>
@@ -142,8 +151,11 @@ export function Topbar() {
 
       {isGenerator && (
         <div className="flex min-w-0 items-center gap-2 text-[13px]">
-          <Link to={`/${campaign}`} className="flex-none text-body-secondary hover:text-foreground">
-            {campaign}
+          <Link
+            to={`/${campaign}`}
+            className="max-w-[220px] flex-none truncate text-body-secondary hover:text-foreground"
+          >
+            {campaignName}
           </Link>
           <span aria-hidden className="text-border-hover">/</span>
           <span className="truncate text-soft">Generator</span>
@@ -306,22 +318,37 @@ function PoolReviewLink({ campaign }: { campaign: string }) {
 function CampaignSwitcher({ campaign }: { campaign: string }) {
   const navigate = useNavigate();
   const { data } = useQuery({ queryKey: ["campaigns"], queryFn: fetchCampaigns });
+  const current = campaignLabel(
+    (data ?? []).find((c) => c.id === campaign),
+    campaign,
+  );
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(
           buttonVariants({ variant: "ghost" }),
-          "h-auto gap-[7px] rounded-md border border-transparent px-2.5 py-[5px] text-[13px] font-normal text-body-secondary hover:border-input hover:bg-transparent hover:text-foreground",
+          "h-auto min-w-0 gap-[7px] rounded-md border border-transparent px-2.5 py-[5px] text-[13px] font-normal text-body-secondary hover:border-input hover:bg-transparent hover:text-foreground",
         )}
       >
-        Kampagne: {campaign}
-        <ChevronDown aria-hidden size={14} className="text-muted-foreground" />
+        <span className="max-w-[280px] truncate">Kampagne: {current}</span>
+        <ChevronDown aria-hidden size={14} className="flex-none text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-[290px]">
+        {/* Name over description — the prototype's campaignRows (name + meta);
+            the id never shows up, it only lives in the URL. */}
         {(data ?? []).map((c) => (
           <DropdownMenuItem key={c.id} onSelect={() => void navigate(`/${c.id}`)}>
-            <span className="flex-1 text-[13.5px] text-foreground">{c.id}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[13.5px] text-foreground">
+                {campaignLabel(c, c.id)}
+              </span>
+              {campaignDescription(c) !== undefined && (
+                <span className="mt-px block truncate text-[11.5px] text-muted-foreground">
+                  {campaignDescription(c)}
+                </span>
+              )}
+            </span>
             {c.id === campaign && (
               <Check aria-hidden size={13} className="flex-none text-success-text" />
             )}

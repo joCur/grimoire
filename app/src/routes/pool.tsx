@@ -15,6 +15,7 @@ import { fetchFile, fetchTree } from "@/api";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { locationName } from "@/lib/campaign";
 import { firstParagraphOfSection } from "@/lib/md-section";
+import { useCampaignMeta } from "@/lib/use-campaign";
 import { cn } from "@/lib/utils";
 import { MobileStart } from "@/routes/mobile-start";
 
@@ -54,6 +55,9 @@ export function PoolRoute() {
       0,
     ) ?? 0;
   const chapterCount = data?.chapters.length ?? 0;
+  // Display name + description from _campaign.md (issue #17); the header
+  // degrades to the campaign id when the file is missing.
+  const meta = useCampaignMeta(campaign);
   // Open the active chapter(s) by default; without one, the first.
   const anyActive = data?.chapters.some((ch) => ch.status === "active") ?? false;
 
@@ -71,14 +75,21 @@ export function PoolRoute() {
         )}
         {data && (
           <>
-            <div className="mb-5 flex flex-wrap items-baseline gap-3">
-              <h1 className="font-serif text-[28px] leading-[1.25] font-semibold text-foreground">
-                {data.campaign}
-              </h1>
-              <span className="text-[13px] text-muted-foreground">
-                {chapterCount === 1 ? "1 Kapitel" : `${chapterCount} Kapitel`} ·{" "}
-                {sceneCountLabel(sceneCount)}
-              </span>
+            <div className="mb-5">
+              <div className="flex flex-wrap items-baseline gap-3">
+                <h1 className="font-serif text-[28px] leading-[1.25] font-semibold text-foreground">
+                  {meta.label}
+                </h1>
+                <span className="text-[13px] text-muted-foreground">
+                  {chapterCount === 1 ? "1 Kapitel" : `${chapterCount} Kapitel`} ·{" "}
+                  {sceneCountLabel(sceneCount)}
+                </span>
+              </div>
+              {meta.description !== undefined && (
+                <p className="mt-1.5 max-w-[62ch] text-[13.5px] leading-[1.55] text-body-secondary">
+                  {meta.description}
+                </p>
+              )}
             </div>
             {data.chapters.length === 0 && (
               <p className="text-[13.5px] text-muted-foreground">

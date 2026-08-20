@@ -22,7 +22,14 @@ describe("GET /api/campaigns", () => {
 
   test("lists example campaign directories", async () => {
     const body = await campaigns();
-    expect(body).toContainEqual({ id: "beispiel", lastSession: "2026-01-15" });
+    // The example campaign carries a _campaign.md (issue #17), so name and
+    // description come along additively.
+    expect(body).toContainEqual({
+      id: "beispiel",
+      lastSession: "2026-01-15",
+      name: "Der Leuchtturm von Salzhafen",
+      description: expect.any(String),
+    });
     // Only directories, no root-level files or hidden entries.
     for (const c of body) {
       expect(c.id.startsWith(".")).toBe(false);
@@ -33,6 +40,12 @@ describe("GET /api/campaigns", () => {
   test("lastSession is the newest session id of the example campaign", async () => {
     const beispiel = (await campaigns()).find((c) => c.id === "beispiel");
     expect(beispiel?.lastSession).toBe("2026-01-15");
+  });
+
+  test("name/description come from examples/beispiel/_campaign.md", async () => {
+    const beispiel = (await campaigns()).find((c) => c.id === "beispiel");
+    expect(beispiel?.name).toBe("Der Leuchtturm von Salzhafen");
+    expect(beispiel?.description).toContain("Leuchtturm");
   });
 
   describe("in a temp root", () => {
@@ -49,6 +62,22 @@ describe("GET /api/campaigns", () => {
       // … one without a sessions directory at all, and one with an empty one.
       await mkdir(path.join(tmpRoot, "ohne-sessions"), { recursive: true });
       await mkdir(path.join(tmpRoot, "leere-sessions", "sessions"), { recursive: true });
+
+      // Campaign-metadata files (issue #17) in every degradation flavour.
+      const campaignFile = async (id: string, content: string) => {
+        await mkdir(path.join(tmpRoot, id), { recursive: true });
+        await writeFile(path.join(tmpRoot, id, "_campaign.md"), content);
+      };
+      await campaignFile(
+        "mit-meta",
+        "---\nid: mit-meta\nname: Tyranny of Dragons\ndescription: Drachen, überall.\nsystem: D&D 5e\n---\n\nNotizen.\n",
+      );
+      await campaignFile("kaputte-meta", "---\nname: [unclosed\n---\n\nNotizen.\n");
+      await campaignFile("meta-ohne-name", "---\nid: meta-ohne-name\n---\n\nNur Notizen.\n");
+      await campaignFile(
+        "krude-meta",
+        "---\nid: krude-meta\nname: Krude Kampagne\ndescription:\n  nested: nope\n---\n",
+      );
       setCampaignRoot(tmpRoot);
     });
 
@@ -60,10 +89,28 @@ describe("GET /api/campaigns", () => {
     test("newest session id wins; no sessions → no lastSession field", async () => {
       const body = await campaigns();
       expect(body).toEqual([
+        { id: "kaputte-meta" },
+        { id: "krude-meta", name: "Krude Kampagne" },
         { id: "leere-sessions" },
+        { id: "meta-ohne-name" },
+        { id: "mit-meta", name: "Tyranny of Dragons", description: "Drachen, überall." },
         { id: "mit-sessions", lastSession: "2026-03-09" },
         { id: "ohne-sessions" },
       ]);
+    });
+
+    test("_campaign.md degrades: broken YAML, missing name, non-string values", async () => {
+      const byId = new Map((await campaigns()).map((c) => [c.id, c]));
+      // Broken frontmatter → no fields at all, never an error and never the
+      // parser's file-stem fallback ("_campaign").
+      expect(byId.get("kaputte-meta")).toEqual({ id: "kaputte-meta" });
+      // File present but without `name` → the id stays the label (the
+      // parser's name→id fallback is not an authored display name).
+      expect(byId.get("meta-ohne-name")).toEqual({ id: "meta-ohne-name" });
+      // Non-string description is dropped, the valid name survives.
+      expect(byId.get("krude-meta")).toEqual({ id: "krude-meta", name: "Krude Kampagne" });
+      // No file at all → unchanged behaviour.
+      expect(byId.get("ohne-sessions")).toEqual({ id: "ohne-sessions" });
     });
   });
 });
@@ -108,6 +155,19 @@ describe("GET /api/:campaign/tree", () => {
     expect(ids).toEqual([...ids].sort().reverse());
   });
 
+  test("root-level files (incl. _campaign.md) never appear in the tree", async () => {
+    const t = await tree();
+    // The tree has no slot for campaign metadata (issue #17 keeps it out);
+    // root markdown files were never walked and still are not.
+    expect(t.chapters.map((c) => c.id)).toEqual(["01-salzhafen"]);
+    const paths = t.chapters.flatMap((c) => [
+      ...(c.path === undefined ? [] : [c.path]),
+      ...c.groups.flatMap((g) => g.scenes.map((s) => s.path)),
+    ]);
+    expect(paths).not.toContain("_campaign.md");
+    expect(paths.some((p) => !p.includes("/"))).toBe(false);
+  });
+
   test("404 for unknown campaign", async () => {
     const res = await app.request("/api/nope/tree");
     expect(res.status).toBe(404);
@@ -141,6 +201,16 @@ describe("GET /api/:campaign/file", () => {
     const s = await stat(path.join(EXAMPLES, "beispiel", rel));
     expect(body.mtimeMs).toBe(s.mtimeMs);
     expect(typeof body.mtimeMs).toBe("number");
+  });
+
+  test("serves _campaign.md as kind campaign (no new endpoint needed)", async () => {
+    const res = await app.request("/api/beispiel/file?path=_campaign.md");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as FileResponse;
+    expect(body.kind).toBe("campaign");
+    expect(body.frontmatter.id).toBe("beispiel");
+    expect(body.frontmatter.name).toBe("Der Leuchtturm von Salzhafen");
+    expect(body.raw.startsWith("---")).toBe(true);
   });
 
   test("404 for unknown file and unknown campaign", async () => {

@@ -65,6 +65,15 @@ describe("GET /api/:campaign/search", () => {
     }
   });
 
+  test("'Leuchtturm' also finds the campaign itself (kind campaign, issue #17)", async () => {
+    const results = await search("Leuchtturm");
+    const campaign = results.find((r) => r.kind === "campaign");
+    expect(campaign).toBeDefined();
+    expect(campaign!.id).toBe("beispiel");
+    expect(campaign!.title).toBe("Der Leuchtturm von Salzhafen");
+    expect(campaign!.path).toBe("_campaign.md");
+  });
+
   test("'Fenn' finds the npc", async () => {
     const results = await search("Fenn");
     const npc = results.find((r) => r.kind === "npc" && r.id === "fenn");

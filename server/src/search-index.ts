@@ -22,13 +22,24 @@ import { collectCampaignFiles } from "./campaign-fs";
 export type { SearchResult };
 
 /** Entity kinds covered by the search index. */
-const INDEXED_KINDS = new Set<EntityKind>(["scene", "npc", "location", "chapter"]);
+const INDEXED_KINDS = new Set<EntityKind>([
+  "scene",
+  "npc",
+  "location",
+  "chapter",
+  // The optional `_campaign.md` (issue #17) — one document per campaign,
+  // opened as the pool view by the palette.
+  "campaign",
+]);
 
 /** One indexed document; the searchable fields feed the Fuse keys below. */
 interface SearchDoc {
   kind: EntityKind;
   id: string;
-  /** Display name: `title` for scenes/chapters, `name` for npcs/locations. */
+  /**
+   * Display name: `title` for scenes/chapters, `name` for
+   * npcs/locations/campaigns.
+   */
   title: string;
   path: string;
   tags: string[];

@@ -16,6 +16,7 @@ import { appendInbox, fetchTree } from "@/api";
 import { CommandPalette } from "@/components/CommandPalette";
 import { Button } from "@/components/ui/button";
 import { IconLogo } from "@/icons";
+import { useCampaignMeta } from "@/lib/use-campaign";
 import { cn } from "@/lib/utils";
 
 function countLabel(count: number | undefined, singular: string, plural: string) {
@@ -30,6 +31,8 @@ export function MobileStart({ campaign }: { campaign: string }) {
     queryFn: () => fetchTree(campaign),
     enabled: campaign !== "",
   });
+  // Display name from _campaign.md (issue #17), id as the fallback.
+  const { label: campaignName } = useCampaignMeta(campaign);
   const sceneCount = tree?.chapters.reduce(
     (n, ch) => n + ch.groups.reduce((m, g) => m + g.scenes.length, 0),
     0,
@@ -43,7 +46,7 @@ export function MobileStart({ campaign }: { campaign: string }) {
           Grimoire
         </span>
         <span className="min-w-0 truncate text-[13px] text-muted-foreground">
-          Kampagne: {campaign}
+          Kampagne: {campaignName}
         </span>
       </div>
 

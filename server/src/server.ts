@@ -7,7 +7,8 @@
 // Planned API — the living checklist (conventions: /README.md). Tick an
 // endpoint here when it is implemented:
 //
-//   [x] GET  /api/campaigns                    campaign list (directories + lastSession)
+//   [x] GET  /api/campaigns                    campaign list (directories + lastSession +
+//                                              name/description from _campaign.md)
 //   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (frontmatter parsed)
 //   [x] GET  /api/:campaign/file?path=...      one file (raw + parsed + mtime)
 //   [x] PATCH /api/:campaign/frontmatter       { path, mtimeMs, patch } — only if
@@ -17,7 +18,8 @@
 //   [x] POST /api/:campaign/log                { text, sceneId? } -> append with timestamp
 //   [x] POST /api/:campaign/inbox              { text } -> append to inbox.md
 //   [x] GET  /api/:campaign/search?q=...       { results } — fuzzy search (Fuse.js, in-memory,
-//                                              scenes/npcs/locations/chapters, max 20 results)
+//                                              scenes/npcs/locations/chapters/_campaign.md,
+//                                              max 20 results)
 //   [x] GET  /api/:campaign/version            { version } — bumped by the file watcher on md
 //                                              changes; the app polls it and refetches on change
 //                                              (SSE considered and deferred, DECISIONS #9)

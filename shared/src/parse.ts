@@ -25,6 +25,7 @@ import type {
  *   npcs/<id>.md            -> npc
  *   locations/<id>.md       -> location
  *   sessions/<date>.md      -> session
+ *   _campaign.md            -> campaign  (campaign root only)
  *   inbox.md                -> inbox
  *   glossary.md             -> glossary
  *   **\/_chapter.md         -> chapter
@@ -41,6 +42,9 @@ export function kindFromPath(path: string): EntityKind {
   if (!basename.endsWith(".md")) return "unknown";
 
   if (segments.length === 1) {
+    // Campaign metadata lives in the campaign ROOT only (issue #17); deeper
+    // `_campaign.md` files keep whatever kind their depth gives them.
+    if (basename === "_campaign.md") return "campaign";
     if (basename === "inbox.md") return "inbox";
     if (basename === "glossary.md") return "glossary";
     return "unknown";
@@ -125,7 +129,7 @@ function fileStem(path: string): string {
  *   is the only stable identity a frontmatter-less file has, and for
  *   sessions/inbox/glossary it matches the convention anyway.
  * - Missing display name falls back to the id (`title` for scene/chapter,
- *   `name` for npc/location).
+ *   `name` for npc/location/campaign).
  */
 export function parseMarkdown(raw: string, path: string, mtimeMs: number): ParsedFile {
   const kind = kindFromPath(path);
@@ -161,7 +165,7 @@ export function parseMarkdown(raw: string, path: string, mtimeMs: number): Parse
           : frontmatter.id;
     }
   }
-  if (kind === "npc" || kind === "location") {
+  if (kind === "npc" || kind === "location" || kind === "campaign") {
     if (typeof frontmatter.name !== "string" || frontmatter.name === "") {
       frontmatter.name =
         frontmatter.name !== undefined && frontmatter.name !== null && frontmatter.name !== ""

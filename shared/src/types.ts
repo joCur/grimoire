@@ -76,6 +76,20 @@ export interface LocationFrontmatter {
   [key: string]: unknown;
 }
 
+/**
+ * Frontmatter of a campaign's `_campaign.md` (README, "Entität: Kampagne
+ * (optional)"). The file is optional — without it the UI shows the directory
+ * name. `id` is the directory name, `name` the display name; further keys
+ * (e.g. `system`) are preserved verbatim.
+ */
+export interface CampaignFrontmatter {
+  id: string;
+  name: string;
+  /** One-liner shown next to the name (switcher meta, pool subtitle). */
+  description?: string;
+  [key: string]: unknown;
+}
+
 /** Frontmatter of a chapter's `_chapter.md`. */
 export interface ChapterFrontmatter {
   id: string;
@@ -109,6 +123,7 @@ export type EntityKind =
   | "npc"
   | "location"
   | "chapter"
+  | "campaign"
   | "session"
   | "inbox"
   | "glossary"
@@ -138,6 +153,14 @@ export interface CampaignSummary {
    * uses it to pick the last active campaign (issue #14).
    */
   lastSession?: string;
+  /**
+   * Display name from `<campaign>/_campaign.md` (additive, issue #17).
+   * Absent when the file is missing, unreadable or carries no usable `name`
+   * — clients fall back to `id` (which stays the key in every URL).
+   */
+  name?: string;
+  /** One-line description from the same file; absent under the same rules. */
+  description?: string;
 }
 
 export interface SceneSummary {
@@ -212,7 +235,8 @@ export interface FileResponse extends ParsedFile {
 /**
  * One row of GET /api/:campaign/search (the response wraps them as
  * `{ results: SearchResult[] }`, see SearchResponse). Only scenes, npcs,
- * locations and chapters are indexed — see server/src/search-index.ts.
+ * locations, chapters and the campaign file are indexed — see
+ * server/src/search-index.ts.
  */
 export interface SearchResult {
   kind: EntityKind;

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { CampaignTree } from "@grimoire/shared/types";
-import { BookOpen, Bookmark, FileText, GitFork, MapPin, User } from "lucide-react";
+import { BookMarked, BookOpen, Bookmark, FileText, GitFork, MapPin, User } from "lucide-react";
 
 import { contingencyPaths, kindIcon, kindLabel, resultHref } from "./search";
 
@@ -10,6 +10,7 @@ describe("kindLabel", () => {
     expect(kindLabel("npc")).toBe("NPC");
     expect(kindLabel("location")).toBe("Ort");
     expect(kindLabel("chapter")).toBe("Kapitel");
+    expect(kindLabel("campaign")).toBe("Kampagne");
   });
 
   test("unknown kinds pass through unchanged (degrade, never throw)", () => {
@@ -24,6 +25,7 @@ describe("kindIcon", () => {
     expect(kindIcon("npc")).toBe(User);
     expect(kindIcon("location")).toBe(MapPin);
     expect(kindIcon("chapter")).toBe(BookOpen);
+    expect(kindIcon("campaign")).toBe(BookMarked);
   });
 
   test("contingency scenes get the fork; the flag is ignored for other kinds", () => {
@@ -69,12 +71,25 @@ describe("contingencyPaths", () => {
 });
 
 describe("resultHref", () => {
-  test("routes every kind to the file view", () => {
-    expect(resultHref("beispiel", { path: "npcs/fenn.md" })).toBe("/beispiel/file/npcs/fenn.md");
+  test("routes every file-backed kind to the file view", () => {
+    expect(resultHref("beispiel", { kind: "npc", path: "npcs/fenn.md" })).toBe(
+      "/beispiel/file/npcs/fenn.md",
+    );
+    expect(resultHref("beispiel", { kind: "chapter", path: "01-salzhafen/_chapter.md" })).toBe(
+      "/beispiel/file/01-salzhafen/_chapter.md",
+    );
+  });
+
+  test("the campaign itself opens the pool, not a file view", () => {
+    expect(resultHref("beispiel", { kind: "campaign", path: "_campaign.md" })).toBe("/beispiel");
+    expect(resultHref("höhlen kampagne", { kind: "campaign", path: "_campaign.md" })).toBe(
+      "/h%C3%B6hlen%20kampagne",
+    );
   });
 
   test("encodes path segments but keeps the slashes routable", () => {
-    expect(resultHref("beispiel", { path: "01-salzhafen/höhle/späh trupp.md" })).toBe(
+    const result = { kind: "scene", path: "01-salzhafen/höhle/späh trupp.md" } as const;
+    expect(resultHref("beispiel", result)).toBe(
       "/beispiel/file/01-salzhafen/h%C3%B6hle/sp%C3%A4h%20trupp.md",
     );
   });
