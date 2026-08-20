@@ -11,6 +11,7 @@ Pipeline: Quelltext (EN) → LLM → Szenen-Drafts (DE) → Review-Vorschau → 
 3. LLM antwortet mit JSON (Schema siehe system-prompt.md).
 4. Server validiert mechanisch:
    - Frontmatter parsebar? `type`/`status` gültig? `status == draft`?
+     Stubs: NPC-Status gültig (Normalfall `alive`), Orte ohne status-Key.
    - alle `npcs`-/`location`-Referenzen existieren ODER liegen als Stub bei?
    - nur bekannte Callout-Typen?
    Fehler gehen als Korrektur-Turn zurück ans LLM (konfigurierbar

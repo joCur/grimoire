@@ -171,20 +171,48 @@ function sceneMarkdown(over: { status?: string; npcs?: string; callout?: string 
   ].join("\n");
 }
 
-const STUB_MARKDOWN = [
-  "---",
-  "id: grella",
-  "name: Grella",
-  "role: Schmugglerin mit eigenen Plänen",
-  "chapter: 01-salzhafen",
-  "status: alive",
-  "---",
-  "",
-  "## Will",
-  "",
-  "Im Quelltext nur erwähnt — Details fehlen.",
-  "",
-].join("\n");
+/**
+ * An npc stub. `status` defaults to what the prompt asks for (`alive`);
+ * `null` drops the key entirely — both are validated since issue #27.
+ */
+function npcStub(over: { id?: string; name?: string; status?: string | null } = {}): string {
+  const status = over.status === undefined ? "alive" : over.status;
+  return [
+    "---",
+    `id: ${over.id ?? "grella"}`,
+    `name: ${over.name ?? "Grella"}`,
+    "role: Schmugglerin mit eigenen Plänen",
+    "chapter: 01-salzhafen",
+    ...(status === null ? [] : [`status: ${status}`]),
+    "---",
+    "",
+    "## Will",
+    "",
+    "Im Quelltext nur erwähnt — Details fehlen.",
+    "",
+  ].join("\n");
+}
+
+const STUB_MARKDOWN = npcStub();
+
+const LOCATION_STUB_PATH = "locations/raeucherkammer.md";
+
+/** A location stub — correct form carries NO status key at all (issue #27). */
+function locationStub(over: { status?: string } = {}): string {
+  return [
+    "---",
+    "id: raeucherkammer",
+    "name: Die alte Räucherkammer",
+    "chapter: 01-salzhafen",
+    ...(over.status === undefined ? [] : [`status: ${over.status}`]),
+    "---",
+    "",
+    "## Atmosphäre",
+    "",
+    "Im Quelltext nur erwähnt — Details fehlen.",
+    "",
+  ].join("\n");
+}
 
 interface ReplyOver {
   scenes?: Array<{ path: string; content: string }>;
@@ -425,6 +453,75 @@ describe("POST /api/:campaign/generate", () => {
     expect(res.status).toBe(200);
     expect(fake.calls).toHaveLength(2);
     expect(fake.calls[1]!.corrections[0]!.correction).toContain("[!danger]");
+  });
+
+  // --- stub status rules (issue #27) -------------------------------------------
+
+  test("npc stub with the SCENE status draft triggers a correction turn, then succeeds", async () => {
+    const bad = reply({
+      npc_stubs: [{ path: "npcs/grella.md", content: npcStub({ status: "draft" }) }],
+    });
+    const fake = useFake([bad, reply()]);
+    const res = await generate(generateBody);
+    expect(res.status).toBe(200);
+
+    expect(fake.calls).toHaveLength(2);
+    expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad);
+    const correction = fake.calls[1]!.corrections[0]!.correction;
+    expect(correction).toContain('npc stub "npcs/grella.md"');
+    expect(correction).toContain("alive, dead, missing, unknown");
+    expect(correction).toContain('"alive"');
+    // the draft status is the ONLY error — the stub still resolves the
+    // scene's npc reference instead of cascading into "npc does not exist"
+    expect(correction.match(/^- /gm)).toHaveLength(1);
+
+    // the corrected second reply is the one that got through
+    const result = (await res.json()) as GenerateResult;
+    expect(result.stubs).toEqual([
+      { kind: "npc", id: "grella", name: "Grella", markdown: STUB_MARKDOWN },
+    ]);
+    expect(await exists("npcs/grella.md")).toBe(false);
+  });
+
+  test("npc stub without any status triggers a correction turn", async () => {
+    const bad = reply({
+      npc_stubs: [{ path: "npcs/grella.md", content: npcStub({ status: null }) }],
+    });
+    const fake = useFake([bad, reply()]);
+    expect((await generate(generateBody)).status).toBe(200);
+    expect(fake.calls).toHaveLength(2);
+    expect(fake.calls[1]!.corrections[0]!.correction).toContain('"status" fehlt');
+  });
+
+  test("location stub with ANY status triggers a correction turn", async () => {
+    for (const status of ["draft", "alive"]) {
+      const bad = reply({
+        location_stubs: [{ path: LOCATION_STUB_PATH, content: locationStub({ status }) }],
+      });
+      const fake = useFake([bad, reply()]);
+      expect((await generate(generateBody)).status).toBe(200);
+      expect(fake.calls).toHaveLength(2);
+      const correction = fake.calls[1]!.corrections[0]!.correction;
+      expect(correction).toContain(`location stub "${LOCATION_STUB_PATH}"`);
+      expect(correction).toContain("locations haben keinen status");
+    }
+  });
+
+  test("prompt-conform stubs pass in ONE call: npc dead/alive, location without status", async () => {
+    const fake = useFake([
+      reply({
+        npc_stubs: [{ path: "npcs/grella.md", content: npcStub({ status: "dead" }) }],
+        location_stubs: [{ path: LOCATION_STUB_PATH, content: locationStub() }],
+      }),
+    ]);
+    const res = await generate(generateBody);
+    expect(res.status).toBe(200);
+    expect(fake.calls).toHaveLength(1);
+    const result = (await res.json()) as GenerateResult;
+    expect(result.stubs.map((s) => `${s.kind}:${s.id}`)).toEqual([
+      "npc:grella",
+      "location:raeucherkammer",
+    ]);
   });
 
   test("422 with the remaining errors after 2 correction turns", async () => {
@@ -852,6 +949,46 @@ describe("POST /api/:campaign/generate/apply", () => {
     });
     expect(res.status).toBe(400);
     expect(await exists(rel)).toBe(false);
+  });
+
+  test("400 re-validation: the stub status rules (issue #27) — nothing written", async () => {
+    const brix = { id: "brix", name: "Brix" };
+    const cases: Array<[unknown, string]> = [
+      // the scene status sneaked into an npc stub after the review
+      [
+        { kind: "npc", id: "brix", markdown: npcStub({ ...brix, status: "draft" }) },
+        "alive, dead, missing, unknown",
+      ],
+      // npc stub without any status
+      [
+        { kind: "npc", id: "brix", markdown: npcStub({ ...brix, status: null }) },
+        '"status" fehlt',
+      ],
+      // a location stub must not carry a status key at all
+      [
+        { kind: "location", id: "raeucherkammer", markdown: locationStub({ status: "alive" }) },
+        "locations haben keinen status",
+      ],
+    ];
+    for (const [stub, expected] of cases) {
+      const res = await postJson("/api/beispiel/generate/apply", { stubs: [stub] });
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toContain(expected);
+    }
+    expect(await exists("npcs/brix.md")).toBe(false);
+    expect(await exists("locations/raeucherkammer.md")).toBe(false);
+
+    // the prompt-conform forms write fine
+    const ok = await postJson("/api/beispiel/generate/apply", {
+      stubs: [
+        { kind: "npc", id: "brix", markdown: npcStub({ ...brix, status: "missing" }) },
+        { kind: "location", id: "raeucherkammer", markdown: locationStub() },
+      ],
+    });
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({
+      written: ["npcs/brix.md", "locations/raeucherkammer.md"],
+    });
   });
 
   test("400 on malformed bodies", async () => {

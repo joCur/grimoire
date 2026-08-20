@@ -30,6 +30,7 @@ import { fileURLToPath } from "node:url";
 import { CORE_SCHEMA, dump } from "js-yaml";
 import {
   CALLOUT_KINDS,
+  NPC_STATUSES,
   SCENE_TYPES,
   parseMarkdown,
   type GenerateResult,
@@ -394,6 +395,34 @@ function parseRawReply(raw: string, errors: string[]): RawReply | null {
   return { scenes, npc_stubs, location_stubs, warnings };
 }
 
+/**
+ * The `status` rules for stubs (issue #27), as messages — empty list means
+ * fine. `status: draft` belongs to SCENES only: per the data contract
+ * (README) an npc knows alive/dead/missing/unknown and a location has no
+ * status at all, so a `draft` leaking into a stub becomes an invalid
+ * pass-through value in the UI. Any valid NpcStatus is accepted for an npc
+ * stub; the prompt asks for `alive` unless the source text says otherwise,
+ * which is why a MISSING npc status is an error too.
+ *
+ * Shared by the reply validation (-> correction turn) and the apply
+ * re-validation (-> 400): the same rule, checked on both ways in.
+ */
+function stubStatusErrors(kind: "npc" | "location", fm: Record<string, unknown>): string[] {
+  const present = Object.hasOwn(fm, "status");
+  if (kind === "location") {
+    return present ? ['"status" ist nicht erlaubt — locations haben keinen status'] : [];
+  }
+  if (!present) return ['"status" fehlt — NPC-Stubs brauchen einen status (im Normalfall "alive")'];
+  const status = fm.status;
+  if (typeof status !== "string" || !(NPC_STATUSES as readonly string[]).includes(status)) {
+    return [
+      `"status" muss einer von ${NPC_STATUSES.join(", ")} sein — ` +
+        'NPC-Stubs im Normalfall "alive"',
+    ];
+  }
+  return [];
+}
+
 /** Validate one stub entry; returns the GeneratedStub or pushes errors. */
 function validateStub(
   entry: RawEntry,
@@ -417,6 +446,10 @@ function validateStub(
     errors.push(`${label}: frontmatter id "${fmId}" does not match the filename`);
     return null;
   }
+  // A status error does not stop the mapping: the stub still resolves the
+  // scene's reference, so the correction turn gets the ONE real error
+  // instead of a cascade of "npc does not exist".
+  for (const msg of stubStatusErrors(kind, parsed.frontmatter)) errors.push(`${label}: ${msg}`);
   return {
     kind,
     id,
@@ -663,7 +696,6 @@ export async function runGenerate(
 
 // --- POST /api/:campaign/generate/apply -----------------------------------------
 
-const STUB_KINDS = new Set(["npc", "location"]);
 const SCENE_ITEM_KEYS = new Set(["path", "markdown", "frontmatter"]);
 const STUB_ITEM_KEYS = new Set(["kind", "id", "name", "markdown"]);
 
@@ -720,7 +752,9 @@ function applyStubTarget(item: unknown, index: number): ApplyTarget {
   const kind = item.kind;
   const id = item.id;
   const markdown = item.markdown;
-  if (typeof kind !== "string" || !STUB_KINDS.has(kind)) {
+  // Narrowed to the literal union on purpose — the status re-validation
+  // below is kind-specific (issue #27).
+  if (kind !== "npc" && kind !== "location") {
     throw new ApiError(400, `${label}.kind must be "npc" or "location"`);
   }
   if (typeof id !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(id)) {
@@ -731,8 +765,12 @@ function applyStubTarget(item: unknown, index: number): ApplyTarget {
   }
   const rel = `${kind}s/${id}.md`;
   assertSafeRelativeMdPath(rel); // defense in depth — the slug check above rules escapes out
-  const { error } = parseWithFrontmatter(markdown, rel);
+  const { parsed, error } = parseWithFrontmatter(markdown, rel);
   if (error !== undefined) throw new ApiError(400, `${label}: ${error}`);
+  // Re-validation, same as for scenes: a client payload must not sneak a
+  // stub status past the reply validation (issue #27).
+  const statusError = stubStatusErrors(kind, parsed.frontmatter)[0];
+  if (statusError !== undefined) throw new ApiError(400, `${label}: ${statusError}`);
   return { rel, markdown };
 }
 

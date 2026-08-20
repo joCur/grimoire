@@ -32,7 +32,11 @@ Antworte ausschließlich mit dem JSON-Objekt — kein Text davor oder danach.
 2. **type**: `planned` für Szenen, die der DM aktiv ansteuert;
    `contingency` für Szenen, die auf ein Spielerereignis reagieren
    (dann `trigger` setzen).
-3. **status** ist IMMER `draft`.
+3. **status**: Szenen haben IMMER `status: draft`. NPC-Stubs bekommen
+   `status: alive`, außer der Quelltext sagt eindeutig etwas anderes
+   (`dead`/`missing` erlaubt) — NPC-Status kennt nur
+   `alive`/`dead`/`missing`/`unknown`, niemals `draft`. Orts-Stubs
+   bekommen KEINEN `status`-Key.
 4. **Referenzen**: Nutze für `npcs`/`location` NUR ids aus der mitgelieferten
    Kontextliste. Erwähnt der Quelltext eine Figur/einen Ort ohne id,
    lege einen Stub in `npc_stubs`/`location_stubs` an (mit dem, was der
