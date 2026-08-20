@@ -7,6 +7,12 @@
 // mechanical validation live in generator.ts — a malformed reply is a
 // validation error that goes back to the model as a correction turn, not an
 // exception (generator/README.md step 4).
+//
+// Two facts travel WITH the text, because only the transport can see them
+// (issue #18): whether the model hit its output cap (`finish_reason: length`
+// / `stop_reason: max_tokens` — a truncated reply is unfixable by a
+// correction turn, so the generator fails fast on it) and the API's token
+// usage, normalized so the generator can sum it over a whole run.
 
 export interface GenerateRequest {
   systemPrompt: string; // generator/system-prompt.md
@@ -30,10 +36,51 @@ export interface CorrectionTurn {
   correction: string;
 }
 
+/** Token usage of one call, normalized across the APIs' different key names. */
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** One completion: the raw text plus what only the transport can know. */
+export interface CompletionResult {
+  /** The model's RAW text reply (unparsed, fences included). */
+  text: string;
+  /** The reply hit the output cap — it is cut off, not merely malformed. */
+  truncated: boolean;
+  /** Absent when the endpoint reports no usage (some local servers do not). */
+  usage?: TokenUsage;
+}
+
 export interface LLMProvider {
   readonly name: string;
-  /** One completion: prompt (+ prior correction turns) -> raw model text. */
-  complete(req: GenerateRequest, corrections?: CorrectionTurn[]): Promise<string>;
+  /**
+   * Effective output cap in tokens, or undefined when the endpoint's own
+   * default applies. Read-only reporting only — the truncation message names
+   * it so the DM knows which value to raise (issue #18).
+   */
+  readonly maxTokens?: number;
+  /** One completion: prompt (+ prior correction turns) -> raw model reply. */
+  complete(req: GenerateRequest, corrections?: CorrectionTurn[]): Promise<CompletionResult>;
+}
+
+/**
+ * Normalize one API's usage object. Absent object -> undefined; a present
+ * object with unusable numbers counts as 0 rather than failing the run —
+ * cost reporting must never take a successful generation down.
+ */
+function normalizeUsage(
+  raw: unknown,
+  inputKey: string,
+  outputKey: string,
+): TokenUsage | undefined {
+  if (raw === null || typeof raw !== "object") return undefined;
+  const obj = raw as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+  const inputTokens = num(obj[inputKey]);
+  const outputTokens = num(obj[outputKey]);
+  if (inputTokens === undefined && outputTokens === undefined) return undefined;
+  return { inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -87,10 +134,14 @@ export class ClaudeProvider implements LLMProvider {
   constructor(
     private apiKey: string,
     private model = "claude-sonnet-4-6",
-    private maxTokens = DEFAULT_MAX_TOKENS,
+    // The Messages API requires max_tokens, so this one is never undefined.
+    readonly maxTokens: number = DEFAULT_MAX_TOKENS,
   ) {}
 
-  async complete(req: GenerateRequest, corrections: CorrectionTurn[] = []): Promise<string> {
+  async complete(
+    req: GenerateRequest,
+    corrections: CorrectionTurn[] = [],
+  ): Promise<CompletionResult> {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -107,10 +158,16 @@ export class ClaudeProvider implements LLMProvider {
     });
     if (!res.ok) throw new Error(`Claude API: ${res.status} ${await res.text()}`);
     const data = await res.json();
-    return data.content
+    const text = data.content
       .filter((b: { type: string }) => b.type === "text")
       .map((b: { text: string }) => b.text)
       .join("\n");
+    return {
+      text,
+      // Messages API: the reply stopped because it ran into max_tokens.
+      truncated: data.stop_reason === "max_tokens",
+      usage: normalizeUsage(data.usage, "input_tokens", "output_tokens"),
+    };
   }
 }
 
@@ -141,7 +198,7 @@ export class OpenAICompatProvider implements LLMProvider {
   private model: string;
   private apiKey?: string;
   private extraHeaders: Record<string, string>;
-  private maxTokens?: number;
+  readonly maxTokens?: number;
 
   constructor(opts: OpenAICompatOptions) {
     this.name = opts.name ?? "openai";
@@ -153,7 +210,10 @@ export class OpenAICompatProvider implements LLMProvider {
     this.maxTokens = opts.maxTokens;
   }
 
-  async complete(req: GenerateRequest, corrections: CorrectionTurn[] = []): Promise<string> {
+  async complete(
+    req: GenerateRequest,
+    corrections: CorrectionTurn[] = [],
+  ): Promise<CompletionResult> {
     const headers: Record<string, string> = {
       "content-type": "application/json",
       ...this.extraHeaders,
@@ -179,7 +239,14 @@ export class OpenAICompatProvider implements LLMProvider {
     });
     if (!res.ok) throw new Error(`${this.name}: ${res.status} ${await res.text()}`);
     const data = await res.json();
-    return data.choices[0].message.content;
+    const choice = data.choices[0];
+    const content = choice?.message?.content;
+    return {
+      text: typeof content === "string" ? content : "",
+      // OpenAI-compatible: "length" means the cap cut the reply off.
+      truncated: choice?.finish_reason === "length",
+      usage: normalizeUsage(data.usage, "prompt_tokens", "completion_tokens"),
+    };
   }
 }
 
@@ -204,8 +271,8 @@ function requireModel(env: NodeJS.ProcessEnv): string {
  * Optional output cap. Providers get it from here (never from the env
  * themselves) so the whole configuration lives in one place. A junk value is
  * NOT an error: a bad cap must not take the generator down, so it falls back
- * to the provider default — a truncated reply merely shows up as a
- * validation error, and the fix is one env var away.
+ * to the provider default — a reply that then gets truncated fails fast with
+ * a message naming the effective cap, and the fix is one env var away.
  */
 function parseMaxTokens(env: NodeJS.ProcessEnv): number | undefined {
   const raw = env.LLM_MAX_TOKENS;

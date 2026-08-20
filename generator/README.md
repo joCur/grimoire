@@ -14,7 +14,9 @@ Pipeline: Quelltext (EN) → LLM → Szenen-Drafts (DE) → Review-Vorschau → 
    - alle `npcs`-/`location`-Referenzen existieren ODER liegen als Stub bei?
    - nur bekannte Callout-Typen?
    Fehler gehen als Korrektur-Turn zurück ans LLM (max. 2 Versuche),
-   nicht an den Nutzer.
+   nicht an den Nutzer. Ausnahme: eine vom Modell abgeschnittene Antwort
+   (finish_reason/stop_reason) bricht sofort ab — Korrektur-Turns können
+   ein Token-Limit nicht heilen, sie kosten nur.
 5. App zeigt Review-Vorschau: Szenen editierbar, Stubs einzeln
    annehmen/ablehnen. Erst „Übernehmen" schreibt auf die Platte.
 

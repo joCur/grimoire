@@ -9,6 +9,8 @@
 //     client-side (same rule as the server's parser: it degrades, it never
 //     throws).
 //   - German count labels for the context hint and the apply button.
+//   - the run's token spend as one quiet line (issue #18), formatted from
+//     whatever the server sent — a successful run and a 422 both carry it.
 
 /** German umlauts/ß first — NFKD would strip them to bare vowels. */
 const UMLAUTS: Array<[RegExp, string]> = [
@@ -107,4 +109,39 @@ export function contextHint(npcCount: number, locationCount: number, hasGlossary
 export function stringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((v): v is string => typeof v === "string");
+}
+
+/** One string out of an error body field (`error`, `rawReply`). */
+export function stringField(value: unknown): string | undefined {
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+/**
+ * German thousands grouping, done by hand: Intl needs full ICU data, and a
+ * runtime without it would silently print "12400" instead of "12.400".
+ */
+function groupedNumber(n: number): string {
+  return Math.round(n)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+/**
+ * The quiet cost line of one generator run: "~12.400 Tokens · 1 Versuch".
+ * Takes the raw value because it comes either from GenerateResult.usage or
+ * out of an error body (`ApiError.details.usage`) — undefined whenever the
+ * endpoint reported no usage, and then nothing is shown at all.
+ */
+export function usageLabel(value: unknown): string | undefined {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const usage = value as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const tokens = num(usage.inputTokens) + num(usage.outputTokens);
+  const attempts = num(usage.attempts);
+  if (tokens <= 0 && attempts <= 0) return undefined;
+  return `~${groupedNumber(Math.max(tokens, 0))} Tokens · ${countLabel(
+    Math.max(attempts, 0),
+    "Versuch",
+    "Versuche",
+  )}`;
 }

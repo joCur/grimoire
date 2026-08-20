@@ -10,6 +10,11 @@
 //           accepted/rejected one by one. NOTHING is on disk yet.
 //   done    the paths POST /generate/apply wrote — all as drafts
 //
+// A failed run stays in the input state and shows the server's 422 in full
+// (issue #18): the message (for a truncated reply the one naming
+// LLM_MAX_TOKENS), the validation errors when there are any, the last raw
+// reply behind a collapsed „Rohantwort anzeigen“, and the run's token spend.
+//
 // The state machine is derived, not stored: `written` (apply succeeded) beats
 // `result` (generate succeeded) beats the generate mutation's pending flag.
 // "Verwerfen" drops `result` — client state only, nothing was written.
@@ -43,7 +48,9 @@ import {
   contextHint,
   markdownBody,
   newChapterId,
+  stringField,
   stringList,
+  usageLabel,
 } from "@/lib/generate";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/markdown/Markdown";
@@ -152,8 +159,16 @@ export function GenerateRoute() {
           : "input";
 
   const genError = generate.error instanceof ApiError ? generate.error : undefined;
-  const validationErrors =
-    genError?.status === 422 ? stringList(genError.details.validationErrors) : [];
+  // Every generator 422 comes with the last raw reply and (when the endpoint
+  // reports usage) what the run cost — a truncated reply additionally
+  // carries the server's German LLM_MAX_TOKENS message instead of a
+  // validation error list (issue #18).
+  const failed = genError?.status === 422 ? genError.details : undefined;
+  const validationErrors = stringList(failed?.validationErrors);
+  const rawReply = stringField(failed?.rawReply);
+  const failedUsage = usageLabel(failed?.usage);
+  const failedMessage = stringField(failed?.error);
+  const resultUsage = usageLabel(result?.usage);
   const conflicts = apply.error instanceof ApiError && apply.error.status === 409
     ? stringList(apply.error.details.conflicts)
     : [];
@@ -269,30 +284,57 @@ export function GenerateRoute() {
               </p>
             )}
 
-            {validationErrors.length > 0 && (
+            {/* The 422 block: the message first, then WHY (validation
+                errors), then WHAT came back (the raw reply, collapsed), then
+                what the run cost. A truncated reply has no error list — its
+                message is the server's, and it names LLM_MAX_TOKENS. */}
+            {failed !== undefined && (
               <div
                 aria-live="polite"
                 className="mt-4 rounded-md border border-input bg-card px-3.5 py-3"
               >
-                <p className="mb-1.5 text-[13px] text-foreground">
-                  Das Modell hat die Formprüfung nicht bestanden — nichts generiert.
+                <p className="mb-1.5 text-[13.5px] leading-[1.5] font-medium text-foreground">
+                  {validationErrors.length > 0
+                    ? "Das Modell hat die Formprüfung nicht bestanden — nichts generiert."
+                    : (failedMessage ??
+                      "Das Modell hat keine verwertbare Antwort geliefert — nichts generiert.")}
                 </p>
-                <ul className="flex flex-col gap-1">
-                  {validationErrors.map((error) => (
-                    <li key={error} className="font-mono text-[11.5px] leading-[1.5] text-body-secondary">
-                      {error}
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2 text-[12px] text-muted-foreground">
-                  Quelltext kürzen oder klarer strukturieren und erneut generieren.
-                </p>
+                {validationErrors.length > 0 && (
+                  <>
+                    <ul className="flex flex-col gap-1">
+                      {validationErrors.map((error) => (
+                        <li
+                          key={error}
+                          className="font-mono text-[11.5px] leading-[1.5] text-body-secondary"
+                        >
+                          {error}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 text-[12px] text-muted-foreground">
+                      Quelltext kürzen oder klarer strukturieren und erneut generieren.
+                    </p>
+                  </>
+                )}
+                {rawReply !== undefined && (
+                  <details className="mt-2.5">
+                    <summary className="cursor-pointer text-[12.5px] text-body-secondary hover:text-foreground">
+                      Rohantwort anzeigen
+                    </summary>
+                    <pre className="mt-2 max-h-[260px] overflow-auto rounded-md border border-input bg-background px-3 py-2.5 font-mono text-[11.5px] leading-[1.55] whitespace-pre-wrap text-body-secondary">
+                      {rawReply}
+                    </pre>
+                  </details>
+                )}
+                {failedUsage !== undefined && (
+                  <p className="mt-2.5 text-[12px] text-faint">{failedUsage}</p>
+                )}
               </div>
             )}
 
             {/* Everything else (incl. a plain network failure, where there is
                 no ApiError at all) stays one honest line. */}
-            {generate.isError && genError?.status !== 503 && validationErrors.length === 0 && (
+            {generate.isError && genError?.status !== 503 && failed === undefined && (
               <p aria-live="polite" className="mt-4 text-[13px] text-destructive">
                 {genError?.status === 404
                   ? "Kapitel nicht gefunden — anderes Ziel wählen."
@@ -314,10 +356,19 @@ export function GenerateRoute() {
                 {applySummary(scenes.length, stubs.length)} · noch nichts geschrieben
               </span>
             </div>
-            <p className="mb-[22px] text-[14px] leading-[1.6] text-body-secondary">
+            <p
+              className={cn(
+                "text-[14px] leading-[1.6] text-body-secondary",
+                resultUsage === undefined ? "mb-[22px]" : "mb-1.5",
+              )}
+            >
               Prüfen, anpassen, Stubs einzeln entscheiden. Erst „Übernehmen“ schreibt auf die
               Platte — als Drafts, nie überschreibend.
             </p>
+            {/* What the run cost — quiet, but never invisible (issue #18). */}
+            {resultUsage !== undefined && (
+              <p className="mb-[22px] text-[12px] text-faint">{resultUsage}</p>
+            )}
 
             {result.warnings.map((warning) => (
               <div

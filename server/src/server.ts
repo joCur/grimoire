@@ -27,6 +27,8 @@
 //                                              GenerateResult (review preview; writes
 //                                              NOTHING). newChapter allows a chapter
 //                                              directory that does not exist yet.
+//                                              GenerateResult.usage carries the run's
+//                                              token spend when the endpoint reports it.
 //   [x] POST /api/:campaign/generate/apply     { scenes, stubs, chapter?, chapterTitle? }
 //                                              -> { written } (drafts on disk; 409
 //                                              { conflicts } when any target exists —
@@ -44,7 +46,10 @@
 //
 // Validation after generate: frontmatter parseable, status==draft, references
 // exist or ship as stubs, only known callouts. Errors -> correction turn to
-// the LLM (max 2), see generator/README.md; exhausted retries -> 422.
+// the LLM (max 2), see generator/README.md; exhausted retries -> 422. A reply
+// the model TRUNCATED (finish_reason/stop_reason) skips the correction turns
+// and answers 422 right away (issue #18). Every generator 422 carries the
+// last raw reply (`rawReply`, capped) and the run's `usage`.
 //
 // Everything that is NOT under /api is served from the frontend build
 // (app/dist) with an index.html fallback for client-side routes — see

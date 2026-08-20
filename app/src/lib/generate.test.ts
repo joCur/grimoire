@@ -12,7 +12,9 @@ import {
   newChapterId,
   nextChapterPrefix,
   slugify,
+  stringField,
   stringList,
+  usageLabel,
 } from "./generate";
 
 describe("slugify", () => {
@@ -119,5 +121,46 @@ describe("stringList", () => {
     expect(stringList(["a", 1, null, "b"])).toEqual(["a", "b"]);
     expect(stringList(undefined)).toEqual([]);
     expect(stringList("a")).toEqual([]);
+  });
+});
+
+describe("stringField", () => {
+  test("keeps a non-empty string, drops everything else", () => {
+    expect(stringField("Rohantwort")).toBe("Rohantwort");
+    expect(stringField("")).toBeUndefined();
+    expect(stringField(42)).toBeUndefined();
+    expect(stringField(undefined)).toBeUndefined();
+  });
+});
+
+describe("usageLabel", () => {
+  test("sums the tokens and groups them the German way", () => {
+    expect(usageLabel({ inputTokens: 11400, outputTokens: 1000, attempts: 1 })).toBe(
+      "~12.400 Tokens · 1 Versuch",
+    );
+    expect(usageLabel({ inputTokens: 40000, outputTokens: 1234, attempts: 3 })).toBe(
+      "~41.234 Tokens · 3 Versuche",
+    );
+    // below the grouping threshold, and the plural of 0
+    expect(usageLabel({ inputTokens: 800, outputTokens: 20, attempts: 2 })).toBe(
+      "~820 Tokens · 2 Versuche",
+    );
+    expect(usageLabel({ inputTokens: 1000000, outputTokens: 0, attempts: 1 })).toBe(
+      "~1.000.000 Tokens · 1 Versuch",
+    );
+  });
+
+  test("nothing to show without usable numbers", () => {
+    expect(usageLabel(undefined)).toBeUndefined();
+    expect(usageLabel(null)).toBeUndefined();
+    expect(usageLabel("12400")).toBeUndefined();
+    expect(usageLabel([1, 2])).toBeUndefined();
+    expect(usageLabel({})).toBeUndefined();
+    expect(usageLabel({ inputTokens: 0, outputTokens: 0, attempts: 0 })).toBeUndefined();
+  });
+
+  test("survives a partial usage object instead of printing NaN", () => {
+    expect(usageLabel({ attempts: 1 })).toBe("~0 Tokens · 1 Versuch");
+    expect(usageLabel({ inputTokens: 500, attempts: "viele" })).toBe("~500 Tokens · 0 Versuche");
   });
 });

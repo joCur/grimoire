@@ -109,9 +109,11 @@ jeweils nur für den gewählten:
 | `LLM_MAX_TOKENS`     | alle         | `8000` (`claude`), sonst Endpoint-Default | Obergrenze der Antwortlänge (positive Ganzzahl; unbrauchbare Werte werden ignoriert) |
 
 `LLM_MAX_TOKENS` lohnt sich beim Modellvergleich: schneidet ein Modell die
-JSON-Antwort ab, ist sie kein gültiges JSON mehr — der Generator sieht das
-als Validierungsfehler, dreht zwei Korrektur-Turns und endet in `422`
-(„Antwort abgeschnitten → Validierungsfehler"); dann das Limit erhöhen.
+JSON-Antwort ab, erkennt der Generator das an `finish_reason`/`stop_reason`
+und bricht sofort mit `422` und der Meldung „Antwort wurde vom Modell
+abgeschnitten — LLM_MAX_TOKENS erhöhen (aktuell: …) oder Quelltext
+verkleinern" ab, statt zwei teure Korrektur-Turns zu drehen; dann das Limit
+erhöhen oder den Quelltext verkleinern.
 
 Fehlt eine erforderliche Variable, antwortet nur `POST
 /api/:campaign/generate` mit `503` und der Meldung im Klartext, z. B.

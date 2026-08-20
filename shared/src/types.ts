@@ -283,6 +283,20 @@ export interface GeneratedStub {
 }
 
 /**
+ * Token spend of ONE generator run, summed over every provider call (the
+ * initial one plus each correction turn). Absent when the endpoint reports
+ * no usage at all — the UI then simply shows nothing. The generator's 422
+ * bodies carry the same shape next to `error`, so a run that produced
+ * nothing is just as visible as a successful one (issue #18).
+ */
+export interface GenerateUsage {
+  inputTokens: number;
+  outputTokens: number;
+  /** Provider calls in this run — 1 when no correction turn was needed. */
+  attempts: number;
+}
+
+/**
  * POST /api/:campaign/generate — the review preview. Mechanically validated
  * (frontmatter parses, status is draft, references resolve, only known
  * callouts); `warnings` are the LLM's own review notes for the DM.
@@ -291,4 +305,6 @@ export interface GenerateResult {
   scenes: GeneratedSceneDraft[];
   stubs: GeneratedStub[];
   warnings: string[];
+  /** Token spend of the run; absent when the endpoint reports no usage. */
+  usage?: GenerateUsage;
 }

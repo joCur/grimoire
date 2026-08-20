@@ -16,7 +16,8 @@ export class ApiError extends Error {
   /**
    * The server's JSON error body when there was one — the endpoints answer
    * `{ error, … }` and put the interesting parts next to it (`conflicts` on
-   * 409, `validationErrors` on 422, `mtimeMs` on a frontmatter conflict).
+   * 409, `validationErrors`/`rawReply`/`usage` on the generator's 422,
+   * `mtimeMs` on a frontmatter conflict).
    */
   readonly details: Record<string, unknown>;
 
@@ -188,8 +189,12 @@ export function markInboxLineDone(campaign: string, line: string): Promise<FileR
  * Run the generator pipeline for one chapter — a review PREVIEW, nothing is
  * written (generator/README.md). `newChapter` allows a chapter directory
  * that does not exist yet (created by applyDrafts below).
- * ApiError statuses worth handling: 422 (`details.validationErrors` after the
- * correction turns), 503 (no provider configured — no API key).
+ * ApiError statuses worth handling: 422 and 503 (no provider configured — no
+ * API key). Every 422 carries `details.rawReply` (the last attempt's raw
+ * model reply, capped by the server) and, when the endpoint reported usage,
+ * `details.usage` — plus either `details.validationErrors` (the correction
+ * turns did not fix the form) or nothing else, when `details.error` is the
+ * truncation message and the run was aborted after one call (issue #18).
  */
 export function generateDrafts(
   campaign: string,

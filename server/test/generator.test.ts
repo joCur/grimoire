@@ -6,17 +6,27 @@
 // replies is injected via setProviderForTests(). It records every call, so
 // the tests can assert the correction-turn mechanics (assistant reply
 // replayed + validation errors sent back, max 2 correction turns).
+//
+// A scripted reply is either a plain string (fine, not truncated, no usage
+// reported) or the full CompletionResult shape — that is how the truncation
+// fail-fast and the token accounting of issue #18 are exercised.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { cp, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { GenerateResult } from "@grimoire/shared";
+import type { GenerateResult, GenerateUsage } from "@grimoire/shared";
 import { app } from "../src/server";
 import { getCampaignRoot, setCampaignRoot } from "../src/config";
-import { setProviderForTests } from "../src/generator";
-import type { CorrectionTurn, GenerateRequest, LLMProvider } from "../src/llm-provider";
+import { RAW_REPLY_LIMIT, setProviderForTests } from "../src/generator";
+import type {
+  CompletionResult,
+  CorrectionTurn,
+  GenerateRequest,
+  LLMProvider,
+  TokenUsage,
+} from "../src/llm-provider";
 
 const EXAMPLES = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../../examples");
 
@@ -57,25 +67,41 @@ interface RecordedCall {
   corrections: CorrectionTurn[];
 }
 
+/** A scripted reply: raw text, or text plus truncation/usage signals. */
+type ScriptedReply = string | { text: string; truncated?: boolean; usage?: TokenUsage };
+
 /** Scripted provider: returns its replies in order and records every call. */
 class FakeProvider implements LLMProvider {
   readonly name = "fake";
   readonly calls: RecordedCall[] = [];
-  constructor(private replies: string[]) {}
+  constructor(
+    private replies: ScriptedReply[],
+    readonly maxTokens?: number,
+  ) {}
 
-  async complete(req: GenerateRequest, corrections: CorrectionTurn[] = []): Promise<string> {
+  async complete(
+    req: GenerateRequest,
+    corrections: CorrectionTurn[] = [],
+  ): Promise<CompletionResult> {
     this.calls.push({ req, corrections: corrections.map((c) => ({ ...c })) });
     const reply = this.replies.shift();
     if (reply === undefined) throw new Error("FakeProvider: no scripted reply left");
-    return reply;
+    if (typeof reply === "string") return { text: reply, truncated: false };
+    return { text: reply.text, truncated: reply.truncated ?? false, usage: reply.usage };
   }
 }
 
-function useFake(replies: string[]): FakeProvider {
-  const fake = new FakeProvider(replies);
+function useFake(replies: ScriptedReply[], maxTokens?: number): FakeProvider {
+  const fake = new FakeProvider(replies, maxTokens);
   setProviderForTests(fake);
   return fake;
 }
+
+/** Same shape the Anthropic/OpenAI usage objects normalize to. */
+const usage = (inputTokens: number, outputTokens: number): TokenUsage => ({
+  inputTokens,
+  outputTokens,
+});
 
 // --- fixtures -------------------------------------------------------------------
 
@@ -170,6 +196,8 @@ describe("POST /api/:campaign/generate", () => {
       { kind: "npc", id: "grella", name: "Grella", markdown: STUB_MARKDOWN },
     ]);
     expect(result.warnings).toEqual(["Quelltext nennt keinen DC — DC 12 gesetzt"]);
+    // this provider reports no usage — then the field stays absent
+    expect(result.usage).toBeUndefined();
 
     // exactly one provider call, no correction turns
     expect(fake.calls).toHaveLength(1);
@@ -223,18 +251,113 @@ describe("POST /api/:campaign/generate", () => {
     const bad = reply({
       scenes: [{ path: SCENE_PATH, content: sceneMarkdown({ status: "ready" }) }],
     });
-    const fake = useFake(["kein json", bad, bad]);
+    // same mechanical error, but distinguishable text — the 422 must carry
+    // the LAST attempt's reply, not the first one's
+    const last = reply({
+      scenes: [{ path: SCENE_PATH, content: sceneMarkdown({ status: "ready" }) }],
+      warnings: ["letzter Versuch"],
+    });
+    const fake = useFake([
+      { text: "kein json", usage: usage(1000, 100) },
+      { text: bad, usage: usage(2000, 200) },
+      { text: last, usage: usage(3000, 300) },
+    ]);
     const res = await postJson("/api/beispiel/generate", generateBody);
     expect(res.status).toBe(422);
-    const body = (await res.json()) as { error: string; validationErrors: string[] };
+    const body = (await res.json()) as {
+      error: string;
+      validationErrors: string[];
+      rawReply: string;
+      usage: GenerateUsage;
+    };
     expect(body.error).toContain("validation");
     expect(body.validationErrors).toEqual([expect.stringContaining('"status" must be "draft"')]);
+    // the raw reply of the LAST attempt, not of the first one
+    expect(body.rawReply).toBe(last);
+    // summed over all three attempts
+    expect(body.usage).toEqual({ inputTokens: 6000, outputTokens: 600, attempts: 3 });
 
     // initial call + exactly 2 correction turns = 3 provider calls
     expect(fake.calls).toHaveLength(3);
     expect(fake.calls[1]!.corrections[0]!.correction).toContain("not valid JSON");
     expect(fake.calls[2]!.corrections).toHaveLength(2);
     expect(await exists(SCENE_PATH)).toBe(false);
+  });
+
+  // --- truncation fail-fast (issue #18) ---------------------------------------
+
+  test("a truncated reply aborts after ONE call with the LLM_MAX_TOKENS message", async () => {
+    const cut = '{"scenes":[{"path":"01-salzhafen/hafen/treffen-am-kai.md","content":"---\\nid: tre';
+    const fake = useFake([{ text: cut, truncated: true, usage: usage(9000, 8000) }, reply()], 8000);
+    const res = await postJson("/api/beispiel/generate", generateBody);
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      error: string;
+      rawReply: string;
+      usage: GenerateUsage;
+      validationErrors?: string[];
+    };
+    expect(body.error).toBe(
+      "Antwort wurde vom Modell abgeschnitten — LLM_MAX_TOKENS erhöhen " +
+        "(aktuell: 8000) oder Quelltext verkleinern.",
+    );
+    expect(body.rawReply).toBe(cut);
+    expect(body.usage).toEqual({ inputTokens: 9000, outputTokens: 8000, attempts: 1 });
+    // truncation is not a form error — no validation error list
+    expect(body.validationErrors).toBeUndefined();
+
+    // THE point of the fix: no correction turn, the second reply is unused
+    expect(fake.calls).toHaveLength(1);
+    expect(fake.calls[0]!.corrections).toEqual([]);
+    expect(await exists(SCENE_PATH)).toBe(false);
+  });
+
+  test("without a configured cap the message names the endpoint default", async () => {
+    const fake = useFake([{ text: "abgeschnitten", truncated: true }]);
+    const res = await postJson("/api/beispiel/generate", generateBody);
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error: string; usage?: GenerateUsage };
+    expect(body.error).toBe(
+      "Antwort wurde vom Modell abgeschnitten — LLM_MAX_TOKENS erhöhen " +
+        "(aktuell: Standard des Endpoints) oder Quelltext verkleinern.",
+    );
+    // no usage reported by the endpoint => no usage in the body
+    expect(body.usage).toBeUndefined();
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  test("the raw reply in the 422 body is capped and says so", async () => {
+    const long = `x${"y".repeat(RAW_REPLY_LIMIT + 500)}`;
+    useFake([{ text: long, truncated: true }]);
+    const res = await postJson("/api/beispiel/generate", generateBody);
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { rawReply: string };
+    expect(body.rawReply).toBe(`${long.slice(0, RAW_REPLY_LIMIT)}… [gekürzt]`);
+    expect(body.rawReply.startsWith("xyy")).toBe(true);
+  });
+
+  test("a reply exactly at the cap is not marked as capped", async () => {
+    const exact = "z".repeat(RAW_REPLY_LIMIT);
+    useFake([{ text: exact, truncated: true }]);
+    const res = await postJson("/api/beispiel/generate", generateBody);
+    const body = (await res.json()) as { rawReply: string };
+    expect(body.rawReply).toBe(exact);
+  });
+
+  test("success carries the run's usage, summed over the correction turn", async () => {
+    const bad = reply({
+      scenes: [{ path: SCENE_PATH, content: sceneMarkdown({ npcs: "fenn, nobody" }) }],
+      npc_stubs: [],
+    });
+    const fake = useFake([
+      { text: bad, usage: usage(5000, 1200) },
+      { text: reply(), usage: usage(6400, 1300) },
+    ]);
+    const res = await postJson("/api/beispiel/generate", generateBody);
+    expect(res.status).toBe(200);
+    const result = (await res.json()) as GenerateResult;
+    expect(result.usage).toEqual({ inputTokens: 11400, outputTokens: 2500, attempts: 2 });
+    expect(fake.calls).toHaveLength(2);
   });
 
   test("scene path outside the requested chapter is a validation error", async () => {

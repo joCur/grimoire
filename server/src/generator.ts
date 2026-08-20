@@ -4,7 +4,11 @@
 //   2. prompt = system-prompt.md + example-output.md + context + source text
 //   3. call the LLM provider
 //   4. validate the reply MECHANICALLY; errors go back to the model as a
-//      correction turn (max 2), never to the user; exhausted retries -> 422
+//      correction turn (max 2), never to the user; exhausted retries -> 422.
+//      A TRUNCATED reply (the provider saw finish_reason/stop_reason) skips
+//      the correction turns entirely: re-asking for the same oversized JSON
+//      cannot succeed and a correction turn resends the whole prompt plus
+//      the previous reply — the most expensive retry there is (issue #18).
 //   5. the app shows the result as a review preview — POST /generate writes
 //      NOTHING; only POST /generate/apply touches the disk, and it
 //      re-validates server-side instead of trusting the client.
@@ -21,6 +25,7 @@ import {
   SCENE_TYPES,
   parseMarkdown,
   type GenerateResult,
+  type GenerateUsage,
   type GeneratedSceneDraft,
   type GeneratedStub,
   type ParsedFile,
@@ -34,6 +39,7 @@ import {
 import { atomicWrite, withFileLock } from "./campaign-write";
 import {
   createProvider,
+  type CompletionResult,
   type CorrectionTurn,
   type GenerateRequest,
   type LLMProvider,
@@ -41,6 +47,12 @@ import {
 
 /** Max correction turns after the initial call (DECISIONS #6: "max. 2"). */
 export const MAX_CORRECTION_TURNS = 2;
+
+/**
+ * How much of the model's raw reply travels in a 422 body. Enough to see
+ * WHERE a reply broke off, small enough to stay a JSON error body.
+ */
+export const RAW_REPLY_LIMIT = 4000;
 
 /** Directories under a campaign that can never be chapters. */
 const RESERVED_DIRS = new Set(["npcs", "locations", "sessions"]);
@@ -407,12 +419,73 @@ function buildCorrectionMessage(errors: string[]): string {
   ].join("\n\n");
 }
 
+// --- run accounting (issue #18) -----------------------------------------------
+
+/** The raw reply for a 422 body: capped, and honest about being capped. */
+export function capRawReply(raw: string): string {
+  return raw.length <= RAW_REPLY_LIMIT ? raw : `${raw.slice(0, RAW_REPLY_LIMIT)}… [gekürzt]`;
+}
+
+/**
+ * Token spend of one run. Every provider call is counted; the token numbers
+ * are only reported when at least one call carried usage (a local endpoint
+ * may report none — then `usage()` stays undefined instead of claiming 0).
+ */
+class RunUsage {
+  private attempts = 0;
+  private inputTokens = 0;
+  private outputTokens = 0;
+  private reported = false;
+
+  add(completion: CompletionResult): void {
+    this.attempts += 1;
+    if (completion.usage === undefined) return;
+    this.reported = true;
+    this.inputTokens += completion.usage.inputTokens;
+    this.outputTokens += completion.usage.outputTokens;
+  }
+
+  usage(): GenerateUsage | undefined {
+    if (!this.reported) return undefined;
+    const { inputTokens, outputTokens, attempts } = this;
+    return { inputTokens, outputTokens, attempts };
+  }
+
+  /** One line per run, so an expensive run is visible in the server log. */
+  log(providerName: string, outcome: string): void {
+    const usage = this.usage();
+    const tokens =
+      usage === undefined
+        ? "tokens unknown"
+        : `${usage.inputTokens} in / ${usage.outputTokens} out`;
+    console.log(
+      `generate: ${providerName}, ${this.attempts} attempt(s), ${tokens} — ${outcome}`,
+    );
+  }
+}
+
+/**
+ * The truncation message (German — it goes straight into the UI). It names
+ * the effective cap so the DM knows which number to raise; see the
+ * LLM_MAX_TOKENS section of docs/DEPLOYMENT.md.
+ */
+export function truncationMessage(maxTokens: number | undefined): string {
+  const current = maxTokens === undefined ? "Standard des Endpoints" : String(maxTokens);
+  return (
+    `Antwort wurde vom Modell abgeschnitten — LLM_MAX_TOKENS erhöhen ` +
+    `(aktuell: ${current}) oder Quelltext verkleinern.`
+  );
+}
+
 // --- POST /api/:campaign/generate ---------------------------------------------
 
 /**
  * Run the pipeline: context -> prompt -> provider -> mechanical validation,
- * with up to MAX_CORRECTION_TURNS correction turns. Writes NOTHING. Throws
- * ApiError(422) with the remaining errors when the retries are exhausted.
+ * with up to MAX_CORRECTION_TURNS correction turns. Writes NOTHING.
+ *
+ * Two ways out with 422, both carrying the last raw reply (capped) and the
+ * run's token usage so the DM sees WHAT came back and what it cost:
+ * a truncated reply (immediately, no correction turn) and exhausted retries.
  *
  * `getProvider` is called lazily after the request-level checks (unknown
  * campaign/chapter answer 404 before an unconfigured provider answers 503);
@@ -441,13 +514,34 @@ export async function runGenerate(
   };
 
   const corrections: CorrectionTurn[] = [];
+  const spend = new RunUsage();
   for (;;) {
-    const raw = await provider.complete(req, corrections);
+    const completion = await provider.complete(req, corrections);
+    spend.add(completion);
+    const raw = completion.text;
+
+    // Fail fast: a cut-off reply is not a form error the model can fix, and
+    // a correction turn would resend prompt + reply at full price.
+    if (completion.truncated) {
+      spend.log(provider.name, "truncated");
+      throw new ApiError(422, truncationMessage(provider.maxTokens), {
+        rawReply: capRawReply(raw),
+        ...(spend.usage() === undefined ? {} : { usage: spend.usage() }),
+      });
+    }
+
     const outcome = validateReply(raw, ctx);
-    if (outcome.ok) return outcome.result;
+    if (outcome.ok) {
+      spend.log(provider.name, "ok");
+      const usage = spend.usage();
+      return usage === undefined ? outcome.result : { ...outcome.result, usage };
+    }
     if (corrections.length >= MAX_CORRECTION_TURNS) {
+      spend.log(provider.name, "validation failed");
       throw new ApiError(422, "generation failed mechanical validation after retries", {
         validationErrors: outcome.errors,
+        rawReply: capRawReply(raw),
+        ...(spend.usage() === undefined ? {} : { usage: spend.usage() }),
       });
     }
     corrections.push({ assistant: raw, correction: buildCorrectionMessage(outcome.errors) });
