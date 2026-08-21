@@ -107,6 +107,30 @@ describe("EntityArticle — location and titled entities", () => {
     expect(html).not.toContain("Geplante Szene");
   });
 
+  test("the action slot stays ONE spaced group in every header variant", () => {
+    // Since issue #15 the slot carries „Bearbeiten" AND „Umbenennen"; the
+    // headers put it in a `justify-between` row, so without the group wrapper
+    // the first button would be stranded in the middle of the header.
+    const actions = (
+      <>
+        <button type="button">Bearbeiten</button>
+        <button type="button">Umbenennen</button>
+      </>
+    );
+    const grouped =
+      /<span class="[^"]*gap-2[^"]*"><button[^>]*>Bearbeiten<\/button><button[^>]*>Umbenennen<\/button><\/span>/;
+    const variants = [
+      jorna, // npc header
+      file("location", { id: "leuchtturm", name: "Leuchtturm" }),
+      file("chapter", { id: "01-salzhafen", title: "Salzhafen" }),
+    ];
+    for (const f of variants) {
+      expect(renderToStaticMarkup(<EntityArticle file={f} actions={actions} />)).toMatch(grouped);
+    }
+    // No actions, no wrapper markup.
+    expect(render(jorna)).not.toMatch(/<span class="[^"]*gap-2[^"]*"><\/span>/);
+  });
+
   test("campaign and unknown kinds render the same quiet titled header", () => {
     expect(render(file("campaign", { id: "beispiel", name: "Beispiel" }))).toContain("Beispiel");
     const unknown = render(file("unknown", {}, "Freitext.\n"));

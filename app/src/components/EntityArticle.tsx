@@ -30,6 +30,18 @@ function Title({ children, className }: { children: string; className?: string }
 }
 
 /**
+ * The header's action slot is a GROUP, not a single button: since issue #15 it
+ * carries „Bearbeiten" next to „Umbenennen". Wrapping them keeps them one
+ * right-aligned, evenly spaced unit in every header variant — without it the
+ * `justify-between` rows below would strand the first button in the middle of
+ * the header. Renders nothing when there are no actions.
+ */
+function ActionGroup({ children }: { children?: ReactNode }) {
+  if (children === undefined) return null;
+  return <span className="flex flex-none items-center gap-2">{children}</span>;
+}
+
+/**
  * `actions` is the header's quiet action slot (issue #30: „Umbenennen"). The
  * component stays free of queries — the route owns the action and passes it
  * in, exactly like the scene article's status control.
@@ -37,9 +49,15 @@ function Title({ children, className }: { children: string; className?: string }
 export function EntityArticle({
   file,
   actions,
+  body,
 }: {
   file: FileResponse;
   actions?: ReactNode;
+  /**
+   * Replaces the rendered body — edit mode (issue #15) puts its markdown
+   * editor here and keeps the entity header standing above it.
+   */
+  body?: ReactNode;
 }) {
   const header = entityHeaderKind(file.kind);
   const fm = file.frontmatter;
@@ -57,10 +75,10 @@ export function EntityArticle({
       ) : (
         <div className="mb-6 flex items-start justify-between gap-3">
           <Title>{title}</Title>
-          {actions}
+          <ActionGroup>{actions}</ActionGroup>
         </div>
       )}
-      <Markdown>{file.body}</Markdown>
+      {body ?? <Markdown>{file.body}</Markdown>}
     </article>
   );
 }
@@ -91,7 +109,9 @@ function NpcHeader({
             {npcStatusLabel(status)}
           </span>
         )}
-        {actions !== undefined && <span className="ml-auto">{actions}</span>}
+        {actions !== undefined && (
+          <span className="ml-auto flex flex-none items-center gap-2">{actions}</span>
+        )}
       </div>
       {role !== undefined && (
         <p className="mt-1.5 text-[13.5px] leading-[1.5] text-muted-foreground">{role}</p>
@@ -135,7 +155,7 @@ function LocationHeader({
     <header className="mb-7 border-b border-border pb-5">
       <div className="flex items-start justify-between gap-3">
         <Title>{name}</Title>
-        {actions}
+        <ActionGroup>{actions}</ActionGroup>
       </div>
       {page !== undefined && (
         <p className="mt-2 text-[12.5px] text-muted-foreground">Roll20-Seite: {page}</p>

@@ -100,6 +100,9 @@ Stub-HTTP-Server — der Provider-Pfad läuft real). Die Pfade:
    Pool; plus 409-/Fehlerpfad
 7. Frontmatter-Patch/Status-Regler inkl. 409-Konflikt
 8. Mobil-Startfläche + Inbox-Einwurf bei 390px
+9. Datei bearbeiten: öffnen → Body ändern → speichern → gerendert
+   sichtbar; 409 bei externer Änderung → neu laden statt still
+   überschreiben
 
 Regel für neue Features: Jedes ready-Ticket benennt die berührten
 kritischen Pfade; wer einen berührt oder schafft, erweitert die

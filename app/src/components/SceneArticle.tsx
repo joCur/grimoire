@@ -25,12 +25,19 @@ export function SceneArticle({
   variant,
   statusControl,
   actions,
+  body,
 }: {
   file: FileResponse;
   tree: CampaignTree | undefined;
   variant: "scene" | "live";
   statusControl?: ReactNode;
   actions?: ReactNode;
+  /**
+   * Replaces the rendered body — the reading view's edit mode (issue #15)
+   * puts its markdown editor here, header and chips keep standing. Nothing
+   * passed means the file's body, which is what the live view wants.
+   */
+  body?: ReactNode;
 }) {
   const live = variant === "live";
   const fm = file.frontmatter;
@@ -125,7 +132,7 @@ export function SceneArticle({
           </div>
         )
       )}
-      <Markdown>{file.body}</Markdown>
+      {body ?? <Markdown>{file.body}</Markdown>}
     </article>
   );
 }

@@ -116,6 +116,30 @@ export async function patchFrontmatter(
   return (await response.json()) as FileResponse;
 }
 
+/**
+ * Replace the markdown BODY of one file, frontmatter untouched (issue #15 —
+ * the reading view's edit mode). `body` is what GET /file hands out: the file
+ * without its frontmatter block. `mtimeMs` is the same optimistic-concurrency
+ * token as above and must come from the FileResponse the editor was seeded
+ * from — on a mismatch the server answers 409 with the current `mtimeMs` in
+ * `ApiError.details` and writes nothing.
+ */
+export async function putFileBody(
+  campaign: string,
+  path: string,
+  body: string,
+  mtimeMs: number,
+): Promise<FileResponse> {
+  const url = `/${encodeURIComponent(campaign)}/file`;
+  const response = await fetch(`/api${url}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path, mtimeMs, body }),
+  });
+  if (!response.ok) throw await failure(`PUT /api${url}`, response);
+  return (await response.json()) as FileResponse;
+}
+
 async function postJson<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method: "POST",
