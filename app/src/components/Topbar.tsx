@@ -14,11 +14,12 @@
 // The generator (issue #12) adds a "campaign / Generator" breadcrumb and the
 // quiet "Generator" button on the pool; that button carries a discreet
 // running indicator while a generate job is working (issue #19).
-// Since issue #34 the left side also carries the quiet "NPCs"/"Orte"
-// navigation into the browse lists (every campaign view except live, lg and
-// up) — the pool's footer line of issue #26 is gone. Because those links are
-// one click away from the pool, the campaign context must not change shape
-// between the two views (PO feedback on PR #35).
+// Since issue #34 the left side also carries the quiet "Kapitel · NPCs · Orte"
+// navigation (every campaign view except live, lg and up) — the pool's footer
+// line of issue #26 is gone. "Kapitel" IS the pool, and therefore the way back
+// from the lists; the current one of the three is marked with aria-current.
+// Because those links are one click away from the pool, the campaign context
+// must not change shape between the views either (PO feedback on PR #35).
 
 import type { FileResponse } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
@@ -200,11 +201,14 @@ export function Topbar() {
         </div>
       )}
 
-      {/* Quiet campaign navigation (issue #34): NPCs and Orte are reachable
-          without scrolling, from every campaign view. The design prototype
-          does not cover this navigation — the pool's "NPCs · Orte" footer of
-          issue #26 was a team interim solution and is gone; these links fill
-          the gap per PO decision (design/README.md).
+      {/* Quiet campaign navigation (issue #34): the three campaign-wide views
+          are reachable without scrolling, from every campaign view. The design
+          prototype does not cover this navigation — the pool's "NPCs · Orte"
+          footer of issue #26 was a team interim solution and is gone; these
+          links fill the gap per PO decision (design/README.md).
+          "Kapitel" is the pool — and the obvious way BACK from the lists: the
+          campaign label next to it is the switcher trigger, not a link, and
+          the wordmark is a detour via "/" (PO feedback on PR #35).
           Not in the live mode: that topbar belongs to the running session.
           Below lg the row is already carrying switcher, search and the session
           controls, so the links step aside there — mobile has the start
@@ -214,14 +218,24 @@ export function Topbar() {
           // Deliberately NOT "Nachschlagen": that is the mobile start
           // surface's nav, and on the pool both live in the DOM at once
           // (responsive swap) — two navs with one name is a worse tree.
-          aria-label="NPCs und Orte"
+          aria-label="Kapitel, NPCs und Orte"
           className="flex flex-none items-center gap-1 border-l border-border pl-3 text-[13px] max-lg:hidden"
         >
-          {/* On the list itself the same word also stands in the crumb behind
-              the switcher; aria-current makes that repetition read as "you are
-              here" instead of as an accident. */}
-          <BrowseLink campaign={campaign} kind="npcs" label="NPCs" current={listKind} />
-          <BrowseLink campaign={campaign} kind="locations" label="Orte" current={listKind} />
+          {/* Whichever of the three IS the current view carries aria-current
+              and the stronger tone — on a list the same word also stands in
+              the crumb behind the switcher, and that marking is what makes the
+              repetition read as "you are here" instead of as an accident. */}
+          <TopbarNavLink to={`/${campaign}`} label="Kapitel" active={isPool} />
+          <TopbarNavLink
+            to={`/${campaign}/list/npcs`}
+            label="NPCs"
+            active={isList && listKind === "npcs"}
+          />
+          <TopbarNavLink
+            to={`/${campaign}/list/locations`}
+            label="Orte"
+            active={isList && listKind === "locations"}
+          />
         </nav>
       )}
 
@@ -267,22 +281,23 @@ export function Topbar() {
   );
 }
 
-/** One quiet topbar link into a browse list, marked when it is the open one. */
-function BrowseLink({
-  campaign,
-  kind,
+/**
+ * One quiet link of the topbar's campaign navigation ("Kapitel · NPCs ·
+ * Orte"), marked when it is the view currently open. The caller decides what
+ * "current" means — the pool and the two lists are matched differently.
+ */
+function TopbarNavLink({
+  to,
   label,
-  current,
+  active,
 }: {
-  campaign: string;
-  kind: string;
+  to: string;
   label: string;
-  current: string;
+  active: boolean;
 }) {
-  const active = kind === current;
   return (
     <Link
-      to={`/${campaign}/list/${kind}`}
+      to={to}
       aria-current={active ? "page" : undefined}
       className={cn(
         "rounded-md px-1.5 py-1 hover:text-foreground",

@@ -26,9 +26,14 @@ eingerückt, standardmäßig GEÖFFNET.
 
 - Keine Szenen-`id` in der Topbar (Prototyp zeigt sie rechts) — ids
   erscheinen nirgends in der UI, auch nicht optional (showIds entfällt).
-- Topbar-Navigation „NPCs" und „Orte": leise Links in der Titelleiste,
-  kampagnenbezogen, ab `lg` sichtbar, nicht im Live-Modus (dessen Topbar
-  gehört der laufenden Session). Der Prototyp deckt diese Navigation nicht
+- Topbar-Navigation „Kapitel · NPCs · Orte": leise Links in der
+  Titelleiste, kampagnenbezogen, ab `lg` sichtbar, nicht im Live-Modus
+  (dessen Topbar gehört der laufenden Session). „Kapitel" ist der Pool und
+  damit der offensichtliche Rückweg aus den Listen — das Kampagnen-Label
+  daneben ist der Switcher-Trigger, kein Link, und die Wortmarke wäre ein
+  Umweg über „/" (PO-Rückmeldung zu PR #35). Der jeweils offene der drei
+  Einträge trägt `aria-current="page"` und den kräftigeren Ton — auch
+  „Kapitel" auf dem Pool selbst. Der Prototyp deckt diese Navigation nicht
   ab; die bisherige Pool-Fußzeile („NPCs · Orte" unter der Kapitelliste,
   aus #26) war eine Team-Minimallösung und entfällt. Die Topbar-Links
   schließen die Design-Lücke per PO-Entscheid (#34) — künftige Views
