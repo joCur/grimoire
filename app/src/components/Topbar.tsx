@@ -1,8 +1,8 @@
 // The constant topbar (design reference: 56px, hairline below). Left side
-// is contextual: campaign switcher on the pool AND on the browse lists (there
-// with the list title as a crumb behind it — the switcher never turns into a
-// different element under the cursor), breadcrumb on a scene, green Live pill
-// + chapter label in the live mode. Right side: the ⌘K
+// is contextual: campaign switcher on the pool AND on the browse lists (the
+// same element in the same place — those three views differ only in which nav
+// entry is marked), breadcrumb on a scene, green Live pill + chapter label in
+// the live mode. Right side: the ⌘K
 // search chip (opens the palette; hidden without a campaign in the URL —
 // "/" only ever shows the empty state), the brass "Session starten" button
 // on pool and scene
@@ -17,9 +17,11 @@
 // Since issue #34 the left side also carries the quiet "Kapitel · NPCs · Orte"
 // navigation (every campaign view except live, lg and up) — the pool's footer
 // line of issue #26 is gone. "Kapitel" IS the pool, and therefore the way back
-// from the lists; the current one of the three is marked with aria-current.
-// Because those links are one click away from the pool, the campaign context
-// must not change shape between the views either (PO feedback on PR #35).
+// from the lists; the current one of the three is marked with aria-current and
+// full contrast. It is a PERSISTENT SECTION NAV, so the left block of pool and
+// both lists is structurally identical and nothing appears or disappears when
+// hopping between them (PO feedback on PR #35). Breadcrumbs stay reserved for
+// hierarchy descent — the file/scene and generator views.
 
 import type { FileResponse } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
@@ -71,11 +73,13 @@ export function Topbar() {
   const isGenerator = generateMatch !== null && campaign !== "";
   const isPool = poolMatch !== null && campaign !== "";
   // Browse lists are reachable from the desktop chrome (issue #26, now the
-  // topbar nav below) — so they carry the campaign context too, as the same
-  // switcher the pool has plus the list title as a crumb (see below).
+  // topbar nav below) — so they carry the same campaign context the pool has.
+  // browseListTitle is the validity check here (an unknown /list/<kind> is not
+  // a list view at all); the title itself is no longer rendered in the topbar,
+  // only the nav's active marking names the open list.
   const listKind = listMatch?.params["*"] ?? "";
-  const listTitle = browseListTitle(listKind);
-  const isList = listMatch !== null && campaign !== "" && listTitle !== undefined;
+  const isList =
+    listMatch !== null && campaign !== "" && browseListTitle(listKind) !== undefined;
 
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -128,27 +132,16 @@ export function Topbar() {
         Grimoire
       </Link>
 
-      {/* The campaign context of pool AND browse lists is the SAME element in
-          the same place: the switcher trigger, prefix and styling included.
-          The list views used to swap it for a name-only breadcrumb, so
-          clicking the topbar's NPCs/Orte links made the label jump ("Kampagne:
-          X" -> "X"). The list title is appended as a crumb instead — the
-          switcher stays a switcher there, because switching campaigns from a
-          list is just as sensible as from the pool, and picking the current
-          campaign in it is also the way back to the pool.
-          The wrapper is rendered in both cases (no padding, no margin) so the
-          trigger's x-position is identical with and without the crumb. */}
-      {(isPool || isList) && (
-        <div className="flex min-w-0 items-center gap-2">
-          <CampaignSwitcher campaign={campaign} />
-          {isList && (
-            <>
-              <span aria-hidden className="text-border-hover">/</span>
-              <span className="truncate text-[13px] text-soft">{listTitle}</span>
-            </>
-          )}
-        </div>
-      )}
+      {/* The campaign context of the pool AND both browse lists is the same
+          element in the same place: the switcher trigger, prefix and styling
+          included. The list views used to swap it for a name-only breadcrumb,
+          so clicking the topbar's NPCs/Orte links made the label jump
+          ("Kampagne: X" -> "X"); a list-title crumb behind it was the first
+          fix, and it was dropped again because the nav's active marking below
+          already says where you are — a breadcrumb is for hierarchy descent
+          (the file/scene views keep theirs), not for sibling sections.
+          So nothing appears or disappears between these three views. */}
+      {(isPool || isList) && <CampaignSwitcher campaign={campaign} />}
 
       {isScene && (
         <div className="flex min-w-0 items-center gap-2 text-[13px]">
@@ -222,9 +215,10 @@ export function Topbar() {
           className="flex flex-none items-center gap-1 border-l border-border pl-3 text-[13px] max-lg:hidden"
         >
           {/* Whichever of the three IS the current view carries aria-current
-              and the stronger tone — on a list the same word also stands in
-              the crumb behind the switcher, and that marking is what makes the
-              repetition read as "you are here" instead of as an accident. */}
+              and the stronger tone. That marking is the ONLY thing saying
+              where you are on these three views — there is no crumb behind
+              the switcher any more — so it is a full step of contrast, not a
+              hint. */}
           <TopbarNavLink to={`/${campaign}`} label="Kapitel" active={isPool} />
           <TopbarNavLink
             to={`/${campaign}/list/npcs`}
@@ -285,6 +279,11 @@ export function Topbar() {
  * One quiet link of the topbar's campaign navigation ("Kapitel · NPCs ·
  * Orte"), marked when it is the view currently open. The caller decides what
  * "current" means — the pool and the two lists are matched differently.
+ *
+ * The marking is COLOUR ONLY (full contrast step: body-secondary ->
+ * foreground). A heavier weight would reflow the row and move the other two
+ * links, and this navigation's whole point is that nothing shifts between the
+ * three views.
  */
 function TopbarNavLink({
   to,
@@ -301,7 +300,7 @@ function TopbarNavLink({
       aria-current={active ? "page" : undefined}
       className={cn(
         "rounded-md px-1.5 py-1 hover:text-foreground",
-        active ? "text-soft" : "text-body-secondary",
+        active ? "text-foreground" : "text-body-secondary",
       )}
     >
       {label}

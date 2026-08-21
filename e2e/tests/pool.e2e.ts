@@ -91,31 +91,40 @@ test("a group header shows the location NAME once the location file exists", asy
   await expect(page.getByText("hafen", { exact: true })).toHaveCount(0);
 });
 
-test("the topbar trio navigates back and forth without the campaign label jumping", async ({
-  page,
-}) => {
-  await page.goto("/beispiel");
-
-  const nav = page.getByRole("banner").getByRole("navigation", { name: "Kapitel, NPCs und Orte" });
+test("the topbar trio navigates without anything in the left block moving", async ({ page }) => {
   const CAMPAIGN_LABEL = "Kampagne: Der Leuchtturm von Salzhafen";
-  // The campaign context of the pool: the switcher, prefix included.
+  const nav = page.getByRole("banner").getByRole("navigation", { name: "Kapitel, NPCs und Orte" });
+  // The campaign context: the switcher trigger, prefix included.
   const label = page.getByRole("banner").getByRole("button", { name: /^Kampagne: / });
   /** aria-current marks the one of the three that IS the current view. */
   const current = nav.locator("[aria-current='page']");
 
-  // All three links, and the pool marks its own entry ("Kapitel").
-  for (const name of ["Kapitel", "NPCs", "Orte"]) {
-    await expect(nav.getByRole("link", { name })).toBeVisible();
-  }
+  /**
+   * The whole left block of the topbar, as text and as geometry. Pool and both
+   * lists must agree on every bit of it EXCEPT which entry is marked: the trio
+   * is a persistent section nav, not a breadcrumb — nothing appears,
+   * disappears or shifts when hopping between the three (PO feedback on #35).
+   */
+  const leftBlock = async () => ({
+    campaign: await label.textContent(),
+    nav: await nav.textContent(),
+    switcherBox: await label.boundingBox(),
+    linkBoxes: await Promise.all(
+      ["Kapitel", "NPCs", "Orte"].map((name) => nav.getByRole("link", { name }).boundingBox()),
+    ),
+  });
+
+  await page.goto("/beispiel");
+  await expect(label).toHaveAccessibleName(CAMPAIGN_LABEL);
+  await expect(nav.getByRole("link")).toHaveText(["Kapitel", "NPCs", "Orte"]);
+  // The pool marks its own entry.
   await expect(current).toHaveText("Kapitel");
+  const onPool = await leftBlock();
 
   // The pool's own "NPCs · Orte" footer line (issue #26) is gone — the topbar
   // is the only place that navigation lives now (issue #34).
   await expect(page.getByRole("main").getByRole("link", { name: "NPCs" })).toHaveCount(0);
   await expect(page.getByRole("main").getByRole("link", { name: "Orte" })).toHaveCount(0);
-
-  await expect(label).toHaveAccessibleName(CAMPAIGN_LABEL);
-  const boxOnPool = await label.boundingBox();
 
   await nav.getByRole("link", { name: "Orte" }).click();
   await expect(page).toHaveURL(/\/beispiel\/list\/locations$/);
@@ -124,35 +133,23 @@ test("the topbar trio navigates back and forth without the campaign label jumpin
     page.getByRole("main").getByRole("link", { name: /Der Leuchtturm von Salzhafen/ }),
   ).toBeVisible();
   await expect(current).toHaveText("Orte");
+  expect(await leftBlock()).toEqual(onPool);
+  // No list-title crumb behind the switcher any more — "Orte" appears in the
+  // banner exactly once, in the nav.
+  await expect(page.getByRole("banner").getByText("Orte", { exact: true })).toHaveCount(1);
 
-  // Same element, same prefix, same place — the list view must not swap the
-  // switcher for a bare name (PO feedback on PR #35). The list title rides
-  // behind it as a crumb, which is why "Orte" is in the banner twice.
-  await expect(label).toHaveAccessibleName(CAMPAIGN_LABEL);
-  const boxOnList = await label.boundingBox();
-  expect(boxOnList?.x).toBe(boxOnPool?.x);
-  expect(boxOnList?.y).toBe(boxOnPool?.y);
-  expect(boxOnList?.width).toBe(boxOnPool?.width);
-  await expect(page.getByRole("banner").getByText("Orte", { exact: true })).toHaveCount(2);
-
-  // The links stay reachable from the list view itself.
   await nav.getByRole("link", { name: "NPCs" }).click();
   await expect(page).toHaveURL(/\/beispiel\/list\/npcs$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("NPCs");
   await expect(current).toHaveText("NPCs");
-  await expect(label).toHaveAccessibleName(CAMPAIGN_LABEL);
-  expect((await label.boundingBox())?.x).toBe(boxOnPool?.x);
+  expect(await leftBlock()).toEqual(onPool);
 
   // "Kapitel" is the way back to the pool — the reason the trio exists.
   await nav.getByRole("link", { name: "Kapitel" }).click();
   await expect(page).toHaveURL(/\/beispiel$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Der Leuchtturm von Salzhafen");
   await expect(current).toHaveText("Kapitel");
-  await expect(label).toHaveAccessibleName(CAMPAIGN_LABEL);
-  const boxBackOnPool = await label.boundingBox();
-  expect(boxBackOnPool?.x).toBe(boxOnPool?.x);
-  expect(boxBackOnPool?.y).toBe(boxOnPool?.y);
-  expect(boxBackOnPool?.width).toBe(boxOnPool?.width);
+  expect(await leftBlock()).toEqual(onPool);
 
   // The switcher still switches, from a list as well.
   await nav.getByRole("link", { name: "Orte" }).click();
