@@ -1,4 +1,4 @@
-// Kritischer Pfad 3: ⌘K-Suche findet und öffnet.
+// Kritischer Pfad 3: ⌘K-Suche findet und öffnet — siehe CLAUDE.md.
 //
 // Der ganze Weg läuft echt: Tastenkürzel → Palette → GET /search (Fuse.js im
 // Server) → Tastatur-Navigation → Enter öffnet die Leseansicht.

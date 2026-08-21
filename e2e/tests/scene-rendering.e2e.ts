@@ -1,6 +1,7 @@
-// Kritischer Pfad 2: Szene lesen — Callouts, If-Sections, NPC-Karten der
-// Referenzszenen (CLAUDE.md nennt genau diese zwei Dateien als Prüfsteine des
-// Callout-Renderers).
+// Kritischer Pfad 2: Szene lesen — Callouts, If-Sections, NPC-Karten — siehe CLAUDE.md.
+//
+// Geprüft an den zwei Referenzszenen, die CLAUDE.md als Prüfsteine des
+// Callout-Renderers benennt.
 //
 // Alle sechs Callout-Sorten kommen vor: readaloud/check/secret/note in
 // ankunft-leuchtturm, check/note/outcome in von-schmugglern-erwischt — und

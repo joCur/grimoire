@@ -1,5 +1,7 @@
-// Kritischer Pfad 5: Ernte — Thread übernehmen → _chapter.md, Inbox abhaken,
-// NPC-Stub anlegen, und der Fortschrittszähler.
+// Kritischer Pfad 5: Ernte — siehe CLAUDE.md.
+//
+// Thread übernehmen → _chapter.md, Inbox abhaken, NPC-Stub anlegen, und der
+// Fortschrittszähler.
 //
 // Die Session von HEUTE ist die Datenlage der Ernte, deshalb legt der Test sie
 // direkt in seine Kampagnen-Kopie (dieselben Zeilen, die die Live-Ansicht

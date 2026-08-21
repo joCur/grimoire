@@ -16,7 +16,7 @@ bun run e2e                          # aus dem Repo-Root
 # oder direkt in e2e/
 cd e2e
 npx playwright test                          # alles
-npx playwright test 06                       # nur den Generator-Pfad
+npx playwright test generator                # nur den Generator-Pfad
 npx playwright test -g "Schnellnotiz"        # nach Testnamen
 npx playwright test --headed --debug 04      # zuschauen
 npx playwright show-report                   # Report nach einem Fehlschlag
@@ -42,7 +42,7 @@ support/test.ts          das `test` der Suite: eigener Server + eigene
 support/procs.ts         verwaltete Kindprozesse (Start, Warten, Stoppen)
 fixtures/stub-llm.ts     standalone LLM-Stub (auch einzeln startbar)
 fixtures/replies.ts      die kanonischen Modellantworten
-tests/0X-*.e2e.ts        ein Spec pro kritischem Pfad
+tests/*.e2e.ts           ein Spec pro kritischem Pfad (Zuordnung unten)
 ```
 
 **Isolation:** Jeder Test bekommt seine eigene Kampagnen-Kopie *und* seinen
@@ -92,18 +92,20 @@ LLM_PROVIDER=openai LLM_BASE_URL=http://127.0.0.1:4319/v1 LLM_MODEL=stub \
 
 **Wer einen kritischen Pfad berührt oder einen neuen schafft, erweitert diese
 Suite im selben PR — sonst kein Merge** (`CLAUDE.md`, „Kritische Pfade"). Die
-Pfade und die Specs stehen 1:1 zueinander:
+Pfade und die Specs stehen 1:1 zueinander; die Nummer steht außerdem in der
+Kopfzeile des jeweiligen Specs (die Dateinamen tragen sie bewusst nicht — die
+Suite hat keine Reihenfolge):
 
-| Pfad | Spec                        |
-| ---- | --------------------------- |
-| 1    | `01-entry-pool.e2e.ts`      |
-| 2    | `02-scene-reading.e2e.ts`   |
-| 3    | `03-command-palette.e2e.ts` |
-| 4    | `04-session-cycle.e2e.ts`   |
-| 5    | `05-review-harvest.e2e.ts`  |
-| 6    | `06-generator.e2e.ts`       |
-| 7    | `07-status-conflict.e2e.ts` |
-| 8    | `08-mobile.e2e.ts`          |
+| Pfad (CLAUDE.md) | Spec                        |
+| ---------------- | --------------------------- |
+| 1 Auto-Einstieg  | `tests/pool.e2e.ts`           |
+| 2 Szene lesen    | `tests/scene-rendering.e2e.ts` |
+| 3 ⌘K-Suche       | `tests/search.e2e.ts`         |
+| 4 Session-Zyklus | `tests/session-cycle.e2e.ts`  |
+| 5 Ernte          | `tests/review-harvest.e2e.ts` |
+| 6 Generator      | `tests/generator.e2e.ts`      |
+| 7 Status/409     | `tests/status-control.e2e.ts` |
+| 8 Mobil          | `tests/mobile.e2e.ts`         |
 
 Deutsche UI-Strings in Zusicherungen kommen aus den Komponenten, nicht aus dem
 Gedächtnis: bei einer Textänderung in der App wandert der Spec mit.

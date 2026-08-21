@@ -1,4 +1,5 @@
-// Kritischer Pfad 8: Mobil-Startfläche und Inbox-Einwurf bei 390px.
+// Kritischer Pfad 8: Mobil-Startfläche + Inbox-Einwurf bei 390px — siehe
+// CLAUDE.md.
 //
 // Mobil ist laut UI-BRIEF Suche, Leseansicht und Inbox — genau das wird hier
 // bei 390×844 (iPhone-Größe) geprüft, inklusive der Datei auf der Platte.

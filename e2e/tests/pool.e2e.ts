@@ -1,4 +1,4 @@
-// Kritischer Pfad 1: Auto-Einstieg "/" → Pool lädt die Kampagne.
+// Kritischer Pfad 1: Auto-Einstieg → Pool lädt die Kampagne — siehe CLAUDE.md.
 //
 // "/" has no page of its own (issue #14): it redirects into the campaign the
 // server reports, and the pool is the first thing the DM sees — campaign

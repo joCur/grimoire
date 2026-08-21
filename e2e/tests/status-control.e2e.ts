@@ -1,5 +1,5 @@
-// Kritischer Pfad 7: Frontmatter-Patch über den Status-Regler, inklusive
-// 409-Konflikt bei extern geänderter Datei.
+// Kritischer Pfad 7: Frontmatter-Patch/Status-Regler inkl. 409-Konflikt —
+// siehe CLAUDE.md.
 //
 // Der Patch geht durch die dokumentierte API mit mtime-Check (CLAUDE.md); der
 // Konflikt wird provoziert, indem der Test die Datei hinter der App verändert

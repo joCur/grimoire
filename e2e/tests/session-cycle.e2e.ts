@@ -1,5 +1,6 @@
-// Kritischer Pfad 4: Session-Zyklus — starten → Schnellnotiz → Log +
-// scenes_played → Pause → beenden → Review.
+// Kritischer Pfad 4: Session-Zyklus — siehe CLAUDE.md.
+//
+// starten → Schnellnotiz → Log + scenes_played → Pause → beenden → Review.
 //
 // Jede Behauptung wird zweimal geprüft: einmal in der UI und einmal in der
 // Datei auf der Platte (der Server ist die Wahrheit, die App hält keinen

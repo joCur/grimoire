@@ -1,5 +1,7 @@
-// Kritischer Pfad 6: Generator-Zyklus gegen das Stub-LLM — Job → Review →
-// Übernehmen → draft im Pool, dazu der NPC-Modus und ein Fehlerpfad.
+// Kritischer Pfad 6: Generator-Zyklus (Stub-LLM) — siehe CLAUDE.md.
+//
+// Job → Review → Übernehmen → draft im Pool, dazu der NPC-Modus und der
+// Fehlerpfad.
 //
 // Nichts daran ist gemockt außer dem Modell selbst: die App startet einen
 // echten Hintergrund-Job, der Server ruft über den echten
