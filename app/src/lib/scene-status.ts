@@ -1,14 +1,15 @@
 // Scene status (issue #28): the German labels/colors the pool and the reading
-// view share, the patch payload for PATCH /frontmatter, and the write flow
-// including the mtime conflict.
+// view share, the patch payload for PATCH /frontmatter, and the write itself
+// (the mtime conflict is the shared protocol in write-with-mtime.ts).
 //
 // Degrade rule (README): an unknown status value is shown VERBATIM — the file
 // stays the truth. The menu only ever offers the known quartet, and picking
 // one replaces whatever stood there.
 
-import { SCENE_STATUSES, type FileResponse, type SceneStatus } from "@grimoire/shared/types";
+import { SCENE_STATUSES, type SceneStatus } from "@grimoire/shared/types";
 
-import { ApiError, fetchFile, patchFrontmatter } from "@/api";
+import { fetchFile, patchFrontmatter } from "@/api";
+import { writeWithMtime, type MtimeWriteResult } from "@/lib/write-with-mtime";
 
 /** German labels + dot/text colors per design/README.md ("bereit · Entwurf · gespielt"). */
 const SCENE_STATUS_META: Record<SceneStatus, { label: string; dot: string; text: string }> = {
@@ -55,46 +56,19 @@ export function sceneStatusPatchBody(
   return { path, mtimeMs, patch: { status } };
 }
 
-/** True for the server's mtime conflict (409) — the file changed on disk. */
-export function isStaleFileError(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 409;
-}
-
-/** Shown inline (no toast) after a conflict; the next attempt uses the fresh mtime. */
-export const STALE_FILE_MESSAGE = "Datei extern geändert — neu laden";
-
-export type SceneStatusWriteResult =
-  /** Written: the server's fresh file, ready to seed into the query cache. */
-  | { ok: true; file: FileResponse }
-  /**
-   * NOT written — the file changed on disk. `file` is the re-read file when
-   * the reload succeeded (its mtime makes the next attempt work); undefined
-   * when even the reload failed.
-   */
-  | { ok: false; file?: FileResponse };
-
 /**
- * Write `status` into the file's frontmatter. On a 409 nothing was written:
- * the file is re-read so the view shows the current state and the next
- * attempt carries the fresh mtime. Every other failure throws.
+ * Write `status` into the file's frontmatter. The 409 handling — nothing
+ * written, re-read once so the next attempt carries the fresh mtime — is the
+ * shared protocol of write-with-mtime.ts. Every other failure throws.
  */
-export async function writeSceneStatus(
+export function writeSceneStatus(
   campaign: string,
   path: string,
   mtimeMs: number,
   status: SceneStatus,
-): Promise<SceneStatusWriteResult> {
-  try {
-    const file = await patchFrontmatter(campaign, sceneStatusPatchBody(path, mtimeMs, status));
-    return { ok: true, file };
-  } catch (error) {
-    if (!isStaleFileError(error)) throw error;
-    try {
-      return { ok: false, file: await fetchFile(campaign, path) };
-    } catch {
-      // The reload failed too (server gone): the conflict message stands,
-      // the cache keeps the stale file and the normal queries retry.
-      return { ok: false };
-    }
-  }
+): Promise<MtimeWriteResult> {
+  return writeWithMtime(
+    () => patchFrontmatter(campaign, sceneStatusPatchBody(path, mtimeMs, status)),
+    () => fetchFile(campaign, path),
+  );
 }

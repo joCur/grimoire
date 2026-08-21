@@ -20,6 +20,7 @@ import type { FileResponse } from "@grimoire/shared/types";
 import { PenLine } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { HeaderAction } from "@/components/HeaderAction";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,19 +35,10 @@ import { useFileBodyMutation } from "@/lib/use-file-body";
 
 /**
  * The quiet header trigger, in the same vocabulary as „Umbenennen" and the
- * campaign metadata action next to it.
+ * campaign metadata action next to it — hence the shared HeaderAction.
  */
 export function FileBodyEditAction({ onEdit }: { onEdit: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onEdit}
-      className="inline-flex flex-none items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-    >
-      <PenLine aria-hidden size={12.5} className="flex-none" />
-      Bearbeiten
-    </button>
-  );
+  return <HeaderAction icon={PenLine} label="Bearbeiten" onClick={onEdit} />;
 }
 
 /** A textarea id that survives any path (same rule as the generator cards). */

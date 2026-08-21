@@ -13,11 +13,12 @@
 // parser's id fallback), so an unnamed campaign starts with an empty field and
 // the id only as a placeholder — the dialog never proposes the id as a name.
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { PenLine } from "lucide-react";
 import { useState } from "react";
 
 import { ApiError, fetchCampaigns, fetchFile } from "@/api";
+import { HeaderAction } from "@/components/HeaderAction";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,11 +30,11 @@ import {
 import { findCampaign } from "@/lib/campaign";
 import {
   CAMPAIGN_META_PATH,
-  STALE_FILE_MESSAGE,
   canSubmitCampaignMeta,
   writeCampaignMeta,
   type CampaignMetaValues,
 } from "@/lib/campaign-meta";
+import { useMtimeWriteMutation } from "@/lib/use-mtime-write";
 
 /** The quiet trigger; the dialog itself mounts only while it is open. */
 export function CampaignMetaAction({ campaign }: { campaign: string }) {
@@ -42,14 +43,7 @@ export function CampaignMetaAction({ campaign }: { campaign: string }) {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex flex-none items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-      >
-        <PenLine aria-hidden size={12.5} className="flex-none" />
-        Bearbeiten
-      </button>
+      <HeaderAction icon={PenLine} label="Bearbeiten" onClick={() => setOpen(true)} />
       {open && <CampaignMetaDialog campaign={campaign} onClose={() => setOpen(false)} />}
     </>
   );
@@ -62,9 +56,6 @@ function CampaignMetaDialog({
   campaign: string;
   onClose: () => void;
 }) {
-  const queryClient = useQueryClient();
-  const [message, setMessage] = useState<string>();
-
   // Authored name/description — the same cached list the switcher reads.
   // Prefill and edits are kept apart instead of seeding useState: the list is
   // normally already cached, but if it arrives a tick later the fields must
@@ -91,27 +82,14 @@ function CampaignMetaDialog({
   const unreachable = file.isError && !missing;
   const mtimeMs = file.data?.mtimeMs;
 
-  const save = useMutation({
-    mutationFn: () => writeCampaignMeta(campaign, values, mtimeMs),
-    onMutate: () => setMessage(undefined),
-    onSuccess: (result) => {
-      const fileKey = ["file", campaign, CAMPAIGN_META_PATH];
-      // Whatever came back — the patched file, or the re-read one after a
-      // conflict — is the new truth for this path.
-      if (result.file !== undefined) queryClient.setQueryData(fileKey, result.file);
-      void queryClient.invalidateQueries({ queryKey: fileKey });
-      if (!result.ok) {
-        setMessage(STALE_FILE_MESSAGE);
-        return;
-      }
-      // The switcher and the pool header read the campaign list; the file also
-      // sits in the tree/search surfaces.
-      void queryClient.invalidateQueries({ queryKey: ["campaigns"] });
-      void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
-      void queryClient.invalidateQueries({ queryKey: ["search", campaign] });
-      onClose();
-    },
-    onError: () => setMessage("Nicht gespeichert — Server prüfen"),
+  const save = useMtimeWriteMutation<void>({
+    write: () => writeCampaignMeta(campaign, values, mtimeMs),
+    fileKey: ["file", campaign, CAMPAIGN_META_PATH],
+    // The switcher and the pool header read the campaign list; the file also
+    // sits in the tree/search surfaces.
+    invalidateOnSuccess: [["campaigns"], ["tree", campaign], ["search", campaign]],
+    errorMessage: "Nicht gespeichert — Server prüfen",
+    onSaved: onClose,
   });
 
   const loading = file.isPending;
@@ -136,7 +114,7 @@ function CampaignMetaDialog({
           onSubmit={(e) => {
             e.preventDefault();
             if (!canSubmit) return;
-            save.mutate();
+            save.write();
           }}
           className="mt-4 flex flex-col gap-3.5"
         >
@@ -165,7 +143,7 @@ function CampaignMetaDialog({
           <p aria-live="polite" className="min-h-[17px] text-[12px] text-destructive">
             {unreachable
               ? "Kampagnendatei nicht ladbar — Server prüfen"
-              : (message ?? "")}
+              : (save.message ?? "")}
           </p>
 
           <div className="flex items-center justify-end gap-2">
