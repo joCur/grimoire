@@ -1,9 +1,10 @@
 {
   "name": "grimoire",
   "private": true,
-  "workspaces": ["shared", "server", "app"],
+  "workspaces": ["shared", "server", "app", "e2e"],
   "scripts": {
     "test": "bun test",
-    "typecheck": "bun run --filter '*' typecheck"
+    "typecheck": "bun run --filter '*' typecheck",
+    "e2e": "bun run --filter '@grimoire/e2e' test"
   }
 }
