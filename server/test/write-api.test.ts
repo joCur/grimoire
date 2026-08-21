@@ -5,7 +5,7 @@
 // clock is overridden per test via setNow() for deterministic dates.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { cp, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -458,5 +458,80 @@ describe("POST /api/:campaign/inbox", () => {
   test("404 for an unknown campaign", async () => {
     expect((await postJson("/api/nope/inbox", { text: "x" })).status).toBe(404);
     expect((await postJson("/api/nope/session/start")).status).toBe(404);
+  });
+});
+
+// The meta dialog of issue #34 edits an EXISTING _campaign.md through
+// PATCH /frontmatter (covered above). This endpoint only closes the gap where
+// there is no file yet — hence a second campaign directory without one.
+describe("POST /api/:campaign/campaign-meta", () => {
+  const FRESH = "frischling";
+
+  beforeEach(async () => {
+    await rm(path.join(tmpRoot, FRESH), { recursive: true, force: true });
+    await mkdir(path.join(tmpRoot, FRESH), { recursive: true });
+  });
+
+  test("creates _campaign.md with id, name and description", async () => {
+    const res = await postJson(`/api/${FRESH}/campaign-meta`, {
+      name: "Die Aschekönige",
+      description: "Eine Wüstenkampagne um verschüttete Städte.",
+    });
+    expect(res.status).toBe(200);
+    const file = (await res.json()) as FileResponse;
+    expect(file.path).toBe("_campaign.md");
+    expect(file.kind).toBe("campaign");
+    expect(file.frontmatter.name).toBe("Die Aschekönige");
+
+    const raw = await readFile(path.join(tmpRoot, FRESH, "_campaign.md"), "utf8");
+    // The id is the DIRECTORY name — never client input.
+    expect(raw).toBe(
+      "---\nid: frischling\nname: Die Aschekönige\ndescription: Eine Wüstenkampagne um verschüttete Städte.\n---\n",
+    );
+
+    // The campaign list serves the new metadata right away.
+    const list = (await (await app.request("/api/campaigns")).json()) as Array<
+      Record<string, unknown>
+    >;
+    expect(list.find((c) => c.id === FRESH)).toMatchObject({
+      name: "Die Aschekönige",
+      description: "Eine Wüstenkampagne um verschüttete Städte.",
+    });
+  });
+
+  test("a blank description writes no key at all", async () => {
+    const res = await postJson(`/api/${FRESH}/campaign-meta`, {
+      name: "Nur ein Name",
+      description: "   ",
+    });
+    expect(res.status).toBe(200);
+    const raw = await readFile(path.join(tmpRoot, FRESH, "_campaign.md"), "utf8");
+    expect(raw).toBe("---\nid: frischling\nname: Nur ein Name\n---\n");
+  });
+
+  test("409 when the file exists — the existing one is never touched", async () => {
+    const before = await readFile(absOf("_campaign.md"), "utf8");
+    const res = await postJson("/api/beispiel/campaign-meta", { name: "Überschrieben" });
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { path: string }).toMatchObject({ path: "_campaign.md" });
+    expect(await readFile(absOf("_campaign.md"), "utf8")).toBe(before);
+  });
+
+  test("400 on a missing, blank or non-string name and a non-string description", async () => {
+    expect((await postJson(`/api/${FRESH}/campaign-meta`, {})).status).toBe(400);
+    expect((await postJson(`/api/${FRESH}/campaign-meta`, { name: "  " })).status).toBe(400);
+    expect((await postJson(`/api/${FRESH}/campaign-meta`, { name: 42 })).status).toBe(400);
+    expect(
+      (await postJson(`/api/${FRESH}/campaign-meta`, { name: "Ok", description: 7 })).status,
+    ).toBe(400);
+    expect(
+      (await postJson(`/api/${FRESH}/campaign-meta`, { name: "Ok", id: "gehackt" })).status,
+    ).toBe(400);
+    // None of the rejected requests created a file.
+    expect((await postJson(`/api/${FRESH}/campaign-meta`, { name: "Danach" })).status).toBe(200);
+  });
+
+  test("404 for an unknown campaign", async () => {
+    expect((await postJson("/api/nope/campaign-meta", { name: "x" })).status).toBe(404);
   });
 });

@@ -26,6 +26,60 @@ eingerückt, standardmäßig GEÖFFNET.
 
 - Keine Szenen-`id` in der Topbar (Prototyp zeigt sie rechts) — ids
   erscheinen nirgends in der UI, auch nicht optional (showIds entfällt).
+- Topbar-Navigation „Kapitel · NPCs · Orte" ist eine PERSISTENTE
+  Sektions-Navigation, keine Breadcrumb: leise Links in der Titelleiste,
+  kampagnenbezogen, ab `lg` sichtbar, nicht im Live-Modus. „Kapitel" ist
+  der Pool und damit der Rückweg von überall — das Kampagnen-Label daneben
+  ist der Switcher-Trigger, kein Link, und die Wortmarke wäre ein Umweg
+  über „/" (PO-Rückmeldung zu PR #35). Markiert wird die SEKTION der
+  aktuellen Ansicht, nicht die Route: Pool und Szenendateien →
+  „Kapitel", NPC-Datei und NPC-Liste → „NPCs", Ort-Datei und Ortsliste →
+  „Orte", Generator/Review/Kampagnendatei/Session/Inbox/Glossar → keine
+  Markierung (eine willkürliche wäre eine Lüge). Der markierte Eintrag
+  trägt `aria-current="page"` und volle Textfarbe (`foreground` gegen
+  `body-secondary`) — nur Farbe, keine Schriftstärke: ein Gewichtswechsel
+  würde die Zeile umbrechen lassen. Der Prototyp deckt diese Navigation
+  nicht ab; die bisherige Pool-Fußzeile („NPCs · Orte" unter der
+  Kapitelliste, aus #26) war eine Team-Minimallösung und entfällt. Die
+  Topbar-Links schließen die Design-Lücke per PO-Entscheid (#34) —
+  künftige Views denken sie mit. Mobil bleibt die „Nachschlagen"-Liste der
+  Startfläche der Zugang; ⌘K findet beide Listen in jeder Breite.
+- CHROME IST GLOBAL UND STABIL. Der linke Topbar-Block ist auf ALLEN
+  kampagnenbezogenen Ansichten identisch — Pool, Nachschlage-Listen,
+  Datei-/Szenen-Ansicht, Generator, Review:
+
+      Grimoire │ Kampagne: <Name> ⌄ │ Kapitel · NPCs · Orte
+
+  Beim Wechsel zwischen ihnen erscheint und verschwindet nichts, nichts
+  verschiebt sich; der einzige Unterschied ist die Markierung im Trio.
+  Ausnahme ist nur der Live-Modus, der seinen eigenen linken Block behält
+  (Live-Pille + Kapitel-Label) — diese Topbar gehört der laufenden Session.
+  Die rechte Seite bleibt ansichtsspezifisch (⌘K, Session-Button,
+  Live-Steuerung, Review-Fortschritt, Generator-Einstieg).
+- KEINE BREADCRUMBS IN DER TOPBAR — nirgends. Die drei früheren
+  (Szene, Liste, Generator) haben jeweils den Kampagnennamen wiederholt,
+  mit der Navigation daneben konkurriert und auf einer Datei einen
+  Kapitelpfad behauptet, der für einen aus der NPC-Liste geöffneten NPC
+  schlicht falsch war (PO-Rückmeldung mit Screenshot zu PR #35).
+- SEITEN-KONTEXT LEBT IN DER SEITE. Die Hierarchie steht als leise
+  Kontextzeile über dem Titel, direkt bei dem, was sie beschreibt:
+  Szene → `<Kapiteltitel> › <Gruppe>` (Kapitel verlinkt auf den Pool,
+  Gruppe wie ein Pool-Gruppenkopf aufgelöst), `_chapter.md` → nur das
+  Kapitel, NPC → „NPCs", Ort → „Orte" (jeweils auf ihre Liste). Kampagnen-
+  Datei, Sessions, Inbox, Glossar bekommen keine Zeile. Desktop-Pendant
+  der mobilen „‹ Pool"-Zeile (die bleibt unter `md`).
+- KAMPAGNENNAME GENAU EINMAL im Chrome: im Switcher. Nie in Krümeln, nie
+  in Kontextzeilen.
+- Anzeigenamen statt ids: Pool-Gruppenköpfe zeigen den Ortsnamen, wenn
+  `locations/<slug>.md` existiert (sonst den Slug unverändert — Gruppen-
+  Ordner sind lose Konvention), der Review-Quellchip den Szenentitel
+  („Log · Ankunft am Leuchtturm", Fallback id). Sichtbare ids bleiben nur
+  in Identifikations-Kontexten, dort mono: Rename-Dialog, NPC-Stub-
+  Platzhalter, id-Badge der NPC-Karte, Pfad-Vorschauen im Generator.
+- „Bearbeiten" am Pool-Kopf und im Kampagnen-Lesekopf: Dialog mit Name +
+  Beschreibung (schreibt `_campaign.md`, mtime-sicher). Auch nicht im
+  Prototyp — erste kleine Scheibe des #15-Territoriums, per PO-Entscheid
+  (#34).
 
 ## Update 2026-08-20: Generator-Ansicht
 

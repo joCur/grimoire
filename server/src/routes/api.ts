@@ -14,6 +14,7 @@ import {
   appendInboxEntry,
   appendLogEntry,
   appendThreadToChapter,
+  createCampaignMeta,
   createNpcStub,
   endSession,
   markInboxLineDone,
@@ -146,6 +147,26 @@ api.patch("/:campaign/frontmatter", async (c) => {
   }
   if (!isPlainObject(patch)) throw new ApiError(400, "patch must be an object");
   return c.json(await patchFrontmatter(c.req.param("campaign"), rel, mtimeMs, patch));
+});
+
+// POST /api/:campaign/campaign-meta { name, description? } -> FileResponse
+// Creates `<campaign>/_campaign.md` with id (the directory name), name and the
+// optional description — the one gap the meta dialog of issue #34 could not
+// close with PATCH /frontmatter, which needs an existing file and its mtime.
+// CREATE ONLY: 409 { path } when the file exists (editing is PATCH's job),
+// 400 for a missing/blank name.
+api.post("/:campaign/campaign-meta", async (c) => {
+  const body = await jsonBody(c, ["name", "description"]);
+  const name = normalizeLineText(body.name);
+  if (name === undefined) throw new ApiError(400, "name must be a non-empty string");
+  let description: string | undefined;
+  if (body.description !== undefined && body.description !== null) {
+    if (typeof body.description !== "string") {
+      throw new ApiError(400, "description must be a string");
+    }
+    description = normalizeLineText(body.description); // blank -> no key at all
+  }
+  return c.json(await createCampaignMeta(c.req.param("campaign"), name, description));
 });
 
 // POST /api/:campaign/session/start -> FileResponse (idempotent per day)

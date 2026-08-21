@@ -16,6 +16,25 @@ export function locationName(
 }
 
 /**
+ * Resolve a scene id to its title via the tree (issue #34: the review's
+ * source chip names the scene, not its id). Unknown ids pass through
+ * unchanged — the id is the honest fallback, never a prettified guess.
+ */
+export function sceneTitle(
+  tree: CampaignTree | undefined,
+  sceneId: string | undefined,
+): string | undefined {
+  if (sceneId === undefined) return undefined;
+  for (const chapter of tree?.chapters ?? []) {
+    for (const group of chapter.groups) {
+      const scene = group.scenes.find((s) => s.id === sceneId);
+      if (scene !== undefined) return scene.title;
+    }
+  }
+  return sceneId;
+}
+
+/**
  * The campaign's display label: the `name` from its optional `_campaign.md`
  * (issue #17), else the id — which is the directory name and stays the key in
  * every URL. Never returns an empty string.

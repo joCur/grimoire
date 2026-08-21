@@ -55,7 +55,9 @@ export function App() {
         {import.meta.env.DEV && <Route path="dev/markdown" element={<HarnessRoute />} />}
         <Route path=":campaign" element={<CampaignScope />}>
           <Route index element={<PoolRoute />} />
-          {/* Mobile list pages (issue #11) — linked only from the start surface. */}
+          {/* The browse list pages (issue #11) — reached from the mobile start
+              surface's "Nachschlagen" rows and from the topbar's quiet
+              NPCs/Orte links on the desktop (issue #34). */}
           <Route path="list/:kind" element={<BrowseRoute />} />
           <Route path="live" element={<LiveRoute />} />
           {/* Generator (issue #12) — entered from the pool's "Generator". */}

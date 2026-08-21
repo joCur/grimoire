@@ -1,17 +1,32 @@
-// The constant topbar (design reference: 56px, hairline below). Left side
-// is contextual: campaign switcher on the pool, breadcrumb on a scene,
-// green Live pill + chapter label in the live mode. Right side: the ⌘K
-// search chip (opens the palette; hidden without a campaign in the URL —
-// "/" only ever shows the empty state), the brass "Session starten" button
-// on pool and scene
-// views (issue #9: starts today's session and enters /:campaign/live), and
-// in the live mode the elapsed timer plus Pause / "Session beenden".
-// On the review view (issue #10) the left side reads "Review" and the right
-// side carries the harvest progress; the pool gets a quiet link into the
-// review while today's session still has unharvested entries.
-// The generator (issue #12) adds a "campaign / Generator" breadcrumb and the
-// quiet "Generator" button on the pool; that button carries a discreet
-// running indicator while a generate job is working (issue #19).
+// The constant topbar (design reference: 56px, hairline below).
+//
+// THE CHROME IS GLOBAL AND STABLE (PO rework of PR #35). Every campaign-scoped
+// view — pool, browse lists, file/scene, generator, review — shows the very
+// same left block:
+//
+//     Grimoire │ Kampagne: <name> ⌄ │ Kapitel · NPCs · Orte
+//
+// Nothing appears, disappears or shifts when moving between them; the only
+// difference is which nav entry is marked as the current section
+// (lib/topbar-nav.ts). There are NO breadcrumbs in the topbar any more. The
+// three it used to have (scene, list, generator) each repeated the campaign
+// name the switcher already carries, competed with the nav next to them, and
+// on a file view claimed a chapter path that was misleading for an NPC opened
+// from the NPC list. Hierarchical context now lives in the page header instead
+// (components/PageContext.tsx) — where it belongs, next to the title it
+// describes. The campaign name appears exactly ONCE in the chrome.
+//
+// The live mode is the one exception: it keeps its own left block (green Live
+// pill + chapter label), because that topbar belongs to the running session.
+//
+// The right side stays per-view and unchanged: the ⌘K search chip (opens the
+// palette; hidden without a campaign in the URL — "/" only ever shows the
+// empty state), the brass "Session starten" button on pool and scene views
+// (issue #9: starts today's session and enters /:campaign/live), the elapsed
+// timer plus Pause / "Session beenden" in the live mode, the harvest progress
+// on the review (issue #10) with a quiet pool link into it while today's
+// session still has unharvested entries, and the quiet "Generator" button on
+// the pool (issue #12) with its run indicator (issue #19).
 
 import type { FileResponse } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
@@ -19,7 +34,7 @@ import { Check, ChevronDown, Clock, Pause, Play, Search, Sparkles } from "lucide
 import { useEffect, useState } from "react";
 import { Link, matchPath, useLocation, useNavigate } from "react-router";
 
-import { appendLog, endSession, fetchCampaigns, fetchFile, fetchTree, startSession } from "@/api";
+import { appendLog, endSession, fetchCampaigns, fetchTree, startSession } from "@/api";
 import { CommandPalette } from "@/components/CommandPalette";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -31,10 +46,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { IconLogo } from "@/icons";
 import { campaignDescription, campaignLabel } from "@/lib/campaign";
-import { browseListTitle } from "@/lib/entity";
-import { fmString } from "@/lib/frontmatter";
 import { formatElapsed, parseLocalDateTime } from "@/lib/session";
-import { useCampaignMeta } from "@/lib/use-campaign";
+import { navSection } from "@/lib/topbar-nav";
 import { useGenerateJob } from "@/lib/use-generate-job";
 import { cn } from "@/lib/utils";
 import { useReviewEntries } from "@/lib/use-review";
@@ -60,38 +73,21 @@ export function Topbar() {
   const isScene = sceneMatch !== null && filePath !== "" && campaign !== "";
   const isLive = liveMatch !== null && campaign !== "";
   const isReview = reviewMatch !== null && campaign !== "";
-  const isGenerator = generateMatch !== null && campaign !== "";
   const isPool = poolMatch !== null && campaign !== "";
-  // Browse lists are linked from the pool on the desktop since issue #26 —
-  // so they need the same way back the other views have.
-  const listTitle = browseListTitle(listMatch?.params["*"] ?? "");
-  const isList = listMatch !== null && campaign !== "" && listTitle !== undefined;
+  const listKind = listMatch?.params["*"] ?? "";
 
   const [searchOpen, setSearchOpen] = useState(false);
 
-  // Display name of the campaign (from _campaign.md, fallback: the id) for
-  // the breadcrumb crumbs — the switcher renders its own rows below.
-  const { label: campaignName } = useCampaignMeta(campaign);
+  // Which nav entry is the current view — the ONE thing that differs between
+  // the campaign-scoped views. Route-derived, so it never lags behind a query.
+  const section = navSection({ isPool, listKind, filePath });
 
-  // Shares the react-query cache with the routes — no extra fetch.
-  const file = useQuery({
-    queryKey: ["file", campaign, filePath],
-    queryFn: () => fetchFile(campaign, filePath),
-    enabled: isScene,
-  });
   const tree = useQuery({
     queryKey: ["tree", campaign],
     queryFn: () => fetchTree(campaign),
-    enabled: isScene || isLive,
+    enabled: isLive,
   });
   const session = useSessionFile(campaign, isLive);
-
-  const fm = file.data?.frontmatter;
-  const chapterId = fmString(fm?.chapter);
-  const chapterTitle = tree.data?.chapters.find((c) => c.id === chapterId)?.title ?? chapterId;
-  // Scenes/chapters carry `title`, npcs/locations `name` (issue #26: the
-  // breadcrumb of an NPC view must not read as a bare path either).
-  const sceneTitle = fmString(fm?.title) ?? fmString(fm?.name) ?? filePath;
 
   // The live chapter label: the ACTIVE chapter (fallback: first) — the same
   // rule the live nav uses.
@@ -118,31 +114,13 @@ export function Topbar() {
         Grimoire
       </Link>
 
-      {isPool && <CampaignSwitcher campaign={campaign} />}
-
-      {isScene && (
-        <div className="flex min-w-0 items-center gap-2 text-[13px]">
-          <Link
-            to={`/${campaign}`}
-            className="max-w-[220px] flex-none truncate text-body-secondary hover:text-foreground"
-          >
-            {campaignName}
-          </Link>
-          {chapterTitle !== undefined && (
-            <>
-              <span aria-hidden className="text-border-hover">/</span>
-              <Link
-                to={`/${campaign}`}
-                className="truncate text-body-secondary hover:text-foreground"
-              >
-                {chapterTitle}
-              </Link>
-            </>
-          )}
-          <span aria-hidden className="text-border-hover">/</span>
-          <span className="truncate text-soft">{sceneTitle}</span>
-        </div>
-      )}
+      {/* ONE campaign context for every campaign-scoped view: the switcher
+          trigger, always the same element in the same place. It replaced three
+          different breadcrumbs (scene, list, generator) that each spelled the
+          campaign name again and, on a file, a chapter path that was plain
+          misleading for an NPC opened from the NPC list. Hierarchical context
+          moved into the page header (components/PageContext.tsx). */}
+      {!isLive && campaign !== "" && <CampaignSwitcher campaign={campaign} />}
 
       {isLive && session.data !== undefined && (
         <div className="flex min-w-0 items-center gap-2.5 text-[13px] text-muted-foreground">
@@ -156,32 +134,47 @@ export function Topbar() {
         </div>
       )}
 
-      {isList && (
-        <div className="flex min-w-0 items-center gap-2 text-[13px]">
-          <Link
+      {/* Quiet campaign navigation (issue #34): the three campaign-wide entry
+          points, reachable without scrolling, from every campaign view. The
+          design prototype does not cover this navigation — the pool's
+          "NPCs · Orte" footer of issue #26 was a team interim solution and is
+          gone; these links fill the gap per PO decision (design/README.md).
+          "Kapitel" is the pool — and the way BACK from everywhere: the
+          campaign label next to it is the switcher trigger, not a link, and
+          the wordmark is a detour via "/" (PO feedback on PR #35).
+          Not in the live mode: that topbar belongs to the running session.
+          Below lg the row is already carrying switcher, search and the session
+          controls, so the links step aside there — mobile has the start
+          surface's "Nachschlagen" list, and ⌘K finds both lists at any width. */}
+      {campaign !== "" && !isLive && (
+        <nav
+          // Deliberately NOT "Nachschlagen": that is the mobile start
+          // surface's nav, and on the pool both live in the DOM at once
+          // (responsive swap) — two navs with one name is a worse tree.
+          aria-label="Kapitel, NPCs und Orte"
+          className="flex flex-none items-center gap-1 border-l border-border pl-3 text-[13px] max-lg:hidden"
+        >
+          {/* The section of the current view carries aria-current and the
+              stronger tone (lib/topbar-nav.ts). It is the ONLY thing that
+              differs between the campaign-scoped views, so it is a full step
+              of contrast, not a hint. Generator and review belong to no
+              section and mark nothing. */}
+          <TopbarNavLink
             to={`/${campaign}`}
-            className="max-w-[220px] flex-none truncate text-body-secondary hover:text-foreground"
-          >
-            {campaignName}
-          </Link>
-          <span aria-hidden className="text-border-hover">/</span>
-          <span className="truncate text-soft">{listTitle}</span>
-        </div>
-      )}
-
-      {isReview && <div className="flex-none text-[13px] text-muted-foreground">Review</div>}
-
-      {isGenerator && (
-        <div className="flex min-w-0 items-center gap-2 text-[13px]">
-          <Link
-            to={`/${campaign}`}
-            className="max-w-[220px] flex-none truncate text-body-secondary hover:text-foreground"
-          >
-            {campaignName}
-          </Link>
-          <span aria-hidden className="text-border-hover">/</span>
-          <span className="truncate text-soft">Generator</span>
-        </div>
+            label="Kapitel"
+            active={section === "chapters"}
+          />
+          <TopbarNavLink
+            to={`/${campaign}/list/npcs`}
+            label="NPCs"
+            active={section === "npcs"}
+          />
+          <TopbarNavLink
+            to={`/${campaign}/list/locations`}
+            label="Orte"
+            active={section === "locations"}
+          />
+        </nav>
       )}
 
       <div className="flex-1" />
@@ -223,6 +216,39 @@ export function Topbar() {
 
       {isReview && <ReviewProgress campaign={campaign} />}
     </header>
+  );
+}
+
+/**
+ * One quiet link of the topbar's campaign navigation ("Kapitel · NPCs ·
+ * Orte"), marked when it is the view currently open. The caller decides what
+ * "current" means — the pool and the two lists are matched differently.
+ *
+ * The marking is COLOUR ONLY (full contrast step: body-secondary ->
+ * foreground). A heavier weight would reflow the row and move the other two
+ * links, and this navigation's whole point is that nothing shifts between the
+ * three views.
+ */
+function TopbarNavLink({
+  to,
+  label,
+  active,
+}: {
+  to: string;
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      to={to}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "rounded-md px-1.5 py-1 hover:text-foreground",
+        active ? "text-foreground" : "text-body-secondary",
+      )}
+    >
+      {label}
+    </Link>
   );
 }
 

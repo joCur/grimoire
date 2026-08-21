@@ -109,3 +109,8 @@ Suite hat keine Reihenfolge):
 
 Deutsche UI-Strings in Zusicherungen kommen aus den Komponenten, nicht aus dem
 Gedächtnis: bei einer Textänderung in der App wandert der Spec mit.
+
+Ein Spec deckt auch spätere Scheiben auf seinem Pfad ab, nicht nur die Scheibe,
+die ihn angelegt hat: `tests/pool.e2e.ts` prüft zusätzlich Gruppenkopf-Namen,
+die Topbar-Navigation und den Kampagnen-Metadaten-Dialog (#34),
+`tests/review-harvest.e2e.ts` den Szenentitel im Quellchip.

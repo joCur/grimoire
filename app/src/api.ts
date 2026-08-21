@@ -127,6 +127,24 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
   return (await response.json()) as T;
 }
 
+/**
+ * Create the campaign's `_campaign.md` with name + optional description
+ * (issue #34). The server sets `id` from the DIRECTORY name and never
+ * overwrites: an existing file is an ApiError with status 409. Editing an
+ * existing file goes through patchFrontmatter — only that carries the mtime
+ * check.
+ */
+export function createCampaignMeta(
+  campaign: string,
+  name: string,
+  description?: string,
+): Promise<FileResponse> {
+  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/campaign-meta`, {
+    name,
+    ...(description === undefined || description === "" ? {} : { description }),
+  });
+}
+
 /** Create today's session file (idempotent — an existing one is returned). */
 export function startSession(campaign: string): Promise<FileResponse> {
   return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/start`);

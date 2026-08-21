@@ -1,7 +1,8 @@
 // "/:campaign/list/:kind" — the simple list pages (issue #11), reached from
-// the mobile start surface's "Nachschlagen" rows and, since issue #26, from
-// the pool's quiet "NPCs · Orte" line on the desktop: scenes grouped flat by
-// chapter, npcs and locations alphabetical. Every row opens the read view
+// the mobile start surface's "Nachschlagen" rows and, since issue #34, from
+// the topbar's quiet "NPCs"/"Orte" links on the desktop (the pool's own footer
+// line of issue #26 was the interim solution before that): scenes grouped flat
+// by chapter, npcs and locations alphabetical. Every row opens the read view
 // (/:campaign/file/<path>). The layout is width-agnostic (a plain list).
 
 import type { CampaignTree } from "@grimoire/shared/types";

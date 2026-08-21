@@ -34,6 +34,7 @@ import type { FileResponse } from "@grimoire/shared";
 import {
   ApiError,
   assertSafeRelativeMdPath,
+  CAMPAIGN_FILE,
   campaignDir,
   readParsedFile,
   resolveInsideCampaign,
@@ -501,6 +502,43 @@ export async function appendThreadToChapter(
       raw = `---\n${yaml}---\n`;
     }
     await atomicWrite(abs, appendThreadItem(raw, `- [ ] ${text}`));
+  });
+  return readParsedFile(campaign, rel);
+}
+
+/**
+ * POST /api/:campaign/campaign-meta — create the campaign's `_campaign.md`
+ * with `id` (always the DIRECTORY name, never client input), `name` and the
+ * optional `description` (issue #34: the meta dialog must also work for a
+ * campaign that has no metadata file yet).
+ *
+ * CREATE ONLY: an existing file is never touched -> 409 { path }. Editing an
+ * existing one is PATCH /frontmatter's job, which carries the mtime check —
+ * that contract stays untouched on purpose.
+ */
+export async function createCampaignMeta(
+  campaign: string,
+  name: string,
+  description?: string,
+): Promise<FileResponse> {
+  const dir = await campaignDir(campaign);
+  const rel = CAMPAIGN_FILE;
+  const abs = path.resolve(dir, rel);
+  await withFileLock(abs, async () => {
+    let exists = true;
+    try {
+      await stat(abs);
+    } catch {
+      exists = false;
+    }
+    if (exists) {
+      throw new ApiError(409, "campaign file already exists — not overwriting", { path: rel });
+    }
+    const yaml = dump(
+      { id: campaign, name, ...(description === undefined ? {} : { description }) },
+      { schema: CORE_SCHEMA, flowLevel: 1, lineWidth: -1 },
+    );
+    await atomicWrite(abs, `---\n${yaml}---\n`);
   });
   return readParsedFile(campaign, rel);
 }

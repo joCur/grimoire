@@ -48,6 +48,8 @@ export interface CampaignFiles {
   exists(rel: string): Promise<boolean>;
   /** Write a file (creating parent directories) — e.g. an external change. */
   write(rel: string, content: string): Promise<void>;
+  /** Delete a file — e.g. a campaign without `_campaign.md`. */
+  remove(rel: string): Promise<void>;
   /** `sessions/<today>.md` — the server's local-date convention. */
   todaySession(): string;
 }
@@ -144,6 +146,7 @@ export const test = base.extend<Fixtures>({
         await mkdir(path.dirname(abs(rel)), { recursive: true });
         await writeFile(abs(rel), content, "utf8");
       },
+      remove: (rel) => rm(abs(rel), { force: true }),
       todaySession: () => todaySessionRel(),
     });
   },

@@ -9,19 +9,26 @@
 // `kind` the server sends: NPC, location, or a plain titled header for
 // chapter/campaign/anything else. The scene's type overline belongs to scenes
 // only — "Geplante Szene" above an NPC was the PO's pain report.
+//
+// Above the article sits the context line (issue #34): the topbar carries no
+// breadcrumb any more, so "chapter › group" for a scene and "NPCs"/"Orte" for
+// an npc/location live here, right above the title they belong to.
 
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router";
 
 import { fetchFile, fetchTree } from "@/api";
+import { CampaignMetaAction } from "@/components/CampaignMetaAction";
 import { EntityArticle } from "@/components/EntityArticle";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/components/NpcCard";
+import { PageContext } from "@/components/PageContext";
 import { RenameAction } from "@/components/RenameAction";
 import { SceneArticle } from "@/components/SceneArticle";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { entityHeaderKind } from "@/lib/entity";
 import { fmString, fmStringArray } from "@/lib/frontmatter";
+import { pageContextCrumbs } from "@/lib/page-context";
 import { renameTargetFor } from "@/lib/rename";
 
 export function SceneRoute() {
@@ -60,12 +67,21 @@ export function SceneRoute() {
   const renameAction = (
     <RenameAction campaign={campaign} currentPath={data.path} target={renameTargetFor(data)} />
   );
+  // The campaign file's header carries „Bearbeiten" instead (issue #34): its
+  // name/description are what this page shows, and its id is the campaign
+  // directory — not renameable from here.
+  const headerActions =
+    data.kind === "campaign" ? <CampaignMetaAction campaign={campaign} /> : renameAction;
 
   return (
     <>
       <MobileBackRow campaign={campaign} />
       <div className="mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 pb-[100px] md:px-7 md:pt-10 lg:flex-row">
         <div className="w-full min-w-0 flex-1 lg:max-w-[680px]">
+          {/* Where this file sits — the context the topbar breadcrumb used to
+              carry (issue #34): chapter › group for a scene, the list for an
+              npc/location, nothing for the rest. */}
+          <PageContext crumbs={pageContextCrumbs(campaign, data.path, tree.data)} />
           {isScene ? (
             <SceneArticle
               file={data}
@@ -86,7 +102,7 @@ export function SceneRoute() {
               }
             />
           ) : (
-            <EntityArticle file={data} actions={renameAction} />
+            <EntityArticle file={data} actions={headerActions} />
           )}
         </div>
         {npcs.length > 0 && (

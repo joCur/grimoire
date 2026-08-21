@@ -6,6 +6,9 @@
 // TODAY's session is the harvest's data, so the test writes it straight into
 // its own campaign copy (the same lines the live view would have written —
 // path 4 covers the writing itself).
+//
+// Issue #34 touches this path too: the source chip of a log line names the
+// SCENE by its title (resolved via the tree), not by the id in the log line.
 
 import { expect, test } from "../support/test";
 
@@ -54,6 +57,9 @@ test("adopting a thread lands in _chapter.md, the inbox line gets ticked off", a
 
   // --- adopt the #thread log line -----------------------------------------
   const threadCard = page.locator("div").filter({ hasText: THREAD_TEXT }).last();
+  // This line was logged without a scene marker, so the chip stays bare
+  // (issue #34 — the scene part only appears when the line names one).
+  await expect(threadCard.getByText("Log", { exact: true })).toBeVisible();
   await threadCard.getByRole("button", { name: "Als Faden übernehmen" }).click();
 
   await expect(threadCard.getByText("Als Faden übernommen")).toBeVisible();
@@ -90,6 +96,10 @@ test("creating an NPC stub from a #npc log line", async ({ page, files }) => {
   await page.goto("/beispiel/review");
 
   const npcCard = page.locator("div").filter({ hasText: NPC_TEXT }).last();
+  // The source chip names the SCENE the line was logged under, resolved from
+  // the tree — never the `(lighthouse-arrival)` id of the log line (issue #34).
+  await expect(npcCard.getByText("Log · Ankunft am Leuchtturm")).toBeVisible();
+  await expect(npcCard.getByText("lighthouse-arrival")).toHaveCount(0);
   await npcCard.getByRole("button", { name: "NPC-Stub anlegen" }).click();
 
   // The dialog proposes id and name from the log text.
