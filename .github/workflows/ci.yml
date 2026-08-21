@@ -2,7 +2,8 @@
 # built from a commit whose checks passed, and `needs:` expresses that inside
 # one run instead of chaining workflow_run across two files.
 #
-#   test  — every push and PR: install, typecheck all workspaces, tests, app build
+#   test  — every PR and every main push: install, typecheck all workspaces,
+#           tests, app build
 #   e2e   — after `test`: the real-stack Playwright suite over the critical
 #           paths (CLAUDE.md) — built app, real server, stub LLM
 #   image — main only, after `test` + `e2e`: build the Dockerfile, push to GHCR
@@ -11,7 +12,13 @@
 name: CI
 
 on:
+  # Feature work is always reviewed as a PR (CLAUDE.md, "Branch- & PR-Prozess"),
+  # so a per-branch push run only ever duplicated the pull_request run — same
+  # commit, same three jobs, twice. Pushes are watched on main only: that is
+  # where the image job belongs (see its `if` below, which now matches the only
+  # ref a push event can carry).
   push:
+    branches: [main]
   pull_request:
 
 # Superseded runs of the same branch are pointless — except on main, where a
@@ -86,6 +93,9 @@ jobs:
 
   image:
     needs: [test, e2e]
+    # Still needed after narrowing the push trigger: a pull_request run carries
+    # `refs/pull/<n>/merge`, so this keeps the image a main-only artifact. With
+    # pushes limited to main, the two now agree instead of overlapping.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
