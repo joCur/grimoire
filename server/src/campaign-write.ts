@@ -30,7 +30,7 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
 import { CORE_SCHEMA, dump } from "js-yaml";
-import type { FileResponse } from "@grimoire/shared";
+import { kindFromPath, parseMarkdown, type FileResponse } from "@grimoire/shared";
 import {
   ApiError,
   assertSafeRelativeMdPath,
@@ -117,7 +117,38 @@ function splitFrontmatterBlock(raw: string): { yamlText: string; body: string } 
     if (nl === -1) break;
     pos = nl + 1;
   }
-  return null; // unclosed block degrades to "no frontmatter", like the parser
+  // An unclosed block has no body to reattach, so there is nothing to split.
+  // CAREFUL: this is NOT what the parser does — gray-matter still reads
+  // frontmatter out of several files this rejects (a stray space after the
+  // closing fence, a file that ends inside the block, a BOM in front of the
+  // opening one). Every caller that writes a body back must therefore compare
+  // its result against the parser's; see writeFileBody.
+  return null;
+}
+
+/**
+ * Replace the BODY of raw file text, keeping the frontmatter block verbatim.
+ * `body` has the same semantics as `ParsedFile.body` (gray-matter's
+ * `content`): everything after the closing delimiter's newline — so a body
+ * read via GET /file can be written back unchanged. A file without a
+ * frontmatter block IS its body.
+ *
+ * Nothing is normalized except the trailing newline: a non-empty body that
+ * lacks one gets exactly one appended (every file of the format ends with a
+ * single newline). Existing trailing newlines are left alone, so a roundtrip
+ * stays byte-identical.
+ */
+function replaceBody(raw: string, body: string): string {
+  const next = body === "" || body.endsWith("\n") ? body : `${body}\n`;
+  const block = splitFrontmatterBlock(raw);
+  if (block === null) return next;
+  // The frontmatter block is exactly the raw prefix in front of the old body,
+  // reused byte for byte — never re-emitted from parsed YAML (rule 1 above).
+  let prefix = raw.slice(0, raw.length - block.body.length);
+  // Degenerate file that ends right at the closing `---` without a newline:
+  // without this the new body would be glued onto the delimiter line.
+  if (next !== "" && !prefix.endsWith("\n")) prefix += "\n";
+  return prefix + next;
 }
 
 /**
@@ -228,6 +259,75 @@ export async function patchFrontmatter(
     }
     const raw = await readFile(abs, "utf8");
     const next = applyFrontmatterPatch(raw, patch);
+    if (next !== raw) await atomicWrite(abs, next);
+  });
+  return readParsedFile(campaign, rel);
+}
+
+/**
+ * PUT /api/:campaign/file — replace the markdown BODY of an EXISTING file
+ * (issue #15: editing content in the app instead of an external editor,
+ * DECISIONS #11). The frontmatter block is carried over byte-identically;
+ * frontmatter keys are only ever changed through PATCH /frontmatter.
+ * Same optimistic concurrency as the frontmatter patch (DECISIONS #4): the
+ * file's current mtime must equal the one the client read, otherwise 409 with
+ * the current mtimeMs.
+ * Append-only kinds (session logs, inbox) are refused with 400 — they grow by
+ * lines through their own endpoints, never by a body rewrite (DECISIONS #4).
+ */
+export async function writeFileBody(
+  campaign: string,
+  rel: string,
+  mtimeMs: number,
+  body: string,
+): Promise<FileResponse> {
+  const dir = await campaignDir(campaign);
+  const abs = await resolveInsideCampaign(dir, rel); // 404 missing, 400 unsafe
+  // DECISIONS #4: session logs and the inbox are APPEND-ONLY — the app adds
+  // single lines through POST /log and POST /inbox and never rewrites them.
+  // The reading view already hides „Bearbeiten" for these kinds, but the rule
+  // belongs to the endpoint: the API is the contract, not the button.
+  const kind = kindFromPath(rel);
+  if (kind === "session" || kind === "inbox") {
+    throw new ApiError(400, "this file is append-only — use the log/inbox endpoints");
+  }
+  await withFileLock(abs, async () => {
+    let s;
+    try {
+      s = await stat(abs);
+    } catch {
+      throw new ApiError(404, "file not found");
+    }
+    if (!s.isFile()) throw new ApiError(404, "file not found"); // e.g. a dir named *.md
+    if (s.mtimeMs !== mtimeMs) {
+      throw new ApiError(409, "file changed on disk — reload before saving", {
+        mtimeMs: s.mtimeMs,
+      });
+    }
+    const raw = await readFile(abs, "utf8");
+    // Guard every case where the client's notion of "body" (what GET /file
+    // handed out, i.e. the PARSER's body) and the raw split disagree — the
+    // parser is what seeded the editor, so a mismatch means the write would
+    // change more than the body:
+    //
+    //   block found, parser body differs — the block is not a YAML mapping,
+    //     the parser degrades and reports the WHOLE file as body (README:
+    //     format degrades); writing that back would duplicate the block.
+    //   NO block found, parser body differs from the raw file — the parser
+    //     DID read frontmatter where the raw split sees none (stray space
+    //     after the closing fence, a file that ends inside the block, a BOM
+    //     in front of the opening fence). replaceBody would write the body
+    //     alone and DELETE the frontmatter from disk.
+    //
+    // Same 400 as the frontmatter patch — such a file is fixed externally.
+    // The parser's body is compared instead of relying on a thrown YAML
+    // error: gray-matter caches by content and degrades silently.
+    const block = splitFrontmatterBlock(raw);
+    const parsedBody = parseMarkdown(raw, rel, s.mtimeMs).body;
+    if (block === null ? parsedBody !== raw : parsedBody !== block.body) {
+      throw new ApiError(400, "frontmatter is not valid YAML — fix the file externally");
+    }
+    const next = replaceBody(raw, body);
     if (next !== raw) await atomicWrite(abs, next);
   });
   return readParsedFile(campaign, rel);

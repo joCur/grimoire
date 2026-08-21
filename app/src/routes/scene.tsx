@@ -13,13 +13,20 @@
 // Above the article sits the context line (issue #34): the topbar carries no
 // breadcrumb any more, so "chapter › group" for a scene and "NPCs"/"Orte" for
 // an npc/location live here, right above the title they belong to.
+//
+// „Bearbeiten" in the header (issue #15) turns the body into the raw markdown
+// editor — header, chips and status regler keep standing, the frontmatter is
+// not part of it. The route owns only the "which path is being edited" bit;
+// the write, the 409 and the discard guard live in FileBodyEditor.
 
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 
 import { fetchFile, fetchTree } from "@/api";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
 import { EntityArticle } from "@/components/EntityArticle";
+import { FileBodyEditAction, FileBodyEditor } from "@/components/FileBodyEditor";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/components/NpcCard";
 import { PageContext } from "@/components/PageContext";
@@ -27,6 +34,7 @@ import { RenameAction } from "@/components/RenameAction";
 import { SceneArticle } from "@/components/SceneArticle";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { entityHeaderKind } from "@/lib/entity";
+import { canEditFileBody } from "@/lib/file-body";
 import { fmString, fmStringArray } from "@/lib/frontmatter";
 import { pageContextCrumbs } from "@/lib/page-context";
 import { renameTargetFor } from "@/lib/rename";
@@ -35,8 +43,20 @@ export function SceneRoute() {
   const params = useParams();
   const campaign = params.campaign ?? "";
   const path = params["*"] ?? "";
+  // Edit mode (issue #15) is remembered BY PATH, not as a plain boolean: this
+  // route stays mounted across a navigation, and an editor seeded from another
+  // file would be a lie. Opening a different file simply leaves edit mode.
+  const [editingPath, setEditingPath] = useState<string>();
+  const editing = editingPath !== undefined && editingPath === path;
+  // … and it ENDS at a navigation. Leaving the file drops the draft (accepted
+  // for this slice), so coming back must not re-open the editor unasked: an
+  // editor seeded from disk looks exactly like the one the DM left, and the
+  // paragraph they typed would be silently gone from it.
+  useEffect(() => {
+    setEditingPath(undefined);
+  }, [path]);
   const enabled = campaign !== "" && path !== "";
-  const { data, isPending, isError } = useQuery({
+  const { data, isPending } = useQuery({
     queryKey: ["file", campaign, path],
     queryFn: () => fetchFile(campaign, path),
     enabled,
@@ -50,7 +70,11 @@ export function SceneRoute() {
   if (isPending) {
     return <p className="mx-auto max-w-[1060px] px-7 pt-10 text-muted-foreground">Lade Datei …</p>;
   }
-  if (isError || !data) {
+  // The error screen only when there is NOTHING to show. A failing BACKGROUND
+  // refetch (server restarted, network blip) also flips the query to 'error'
+  // while the cached file is still there — swapping the page for an error line
+  // then would unmount an open editor and take the DM's unsaved text with it.
+  if (data === undefined) {
     return (
       <p className="mx-auto max-w-[1060px] px-7 pt-10 text-muted-foreground">
         Datei nicht ladbar — Pfad prüfen oder Server starten.
@@ -67,11 +91,35 @@ export function SceneRoute() {
   const renameAction = (
     <RenameAction campaign={campaign} currentPath={data.path} target={renameTargetFor(data)} />
   );
-  // The campaign file's header carries „Bearbeiten" instead (issue #34): its
-  // name/description are what this page shows, and its id is the campaign
-  // directory — not renameable from here.
+  // „Bearbeiten" (issue #15) — the body editor, offered for the kinds whose
+  // prose the DM maintains (canEditFileBody). While it runs the trigger is
+  // gone: the editor's own toggle owns the mode from then on.
+  const editAction =
+    canEditFileBody(data.kind) && !editing ? (
+      <FileBodyEditAction onEdit={() => setEditingPath(path)} />
+    ) : null;
+  // The body slot of the article — the editor while edit mode is on, seeded
+  // from the file on screen (and re-keyed per path, so it never carries the
+  // draft of another file).
+  const bodyEditor = editing ? (
+    <FileBodyEditor
+      key={data.path}
+      campaign={campaign}
+      file={data}
+      onClose={() => setEditingPath(undefined)}
+    />
+  ) : undefined;
+  const articleActions = (
+    <>
+      {editAction}
+      {renameAction}
+    </>
+  );
+  // The campaign file's header carries the metadata „Bearbeiten" instead
+  // (issue #34): its name/description are what this page shows, and its id is
+  // the campaign directory — not renameable from here.
   const headerActions =
-    data.kind === "campaign" ? <CampaignMetaAction campaign={campaign} /> : renameAction;
+    data.kind === "campaign" ? <CampaignMetaAction campaign={campaign} /> : articleActions;
 
   return (
     <>
@@ -87,7 +135,8 @@ export function SceneRoute() {
               file={data}
               tree={tree.data}
               variant="scene"
-              actions={renameAction}
+              actions={articleActions}
+              body={bodyEditor}
               // Issue #28: the status display IS the control here. The mtime
               // comes from the FileResponse on screen, so the patch carries
               // exactly the version the DM was looking at.
@@ -102,7 +151,7 @@ export function SceneRoute() {
               }
             />
           ) : (
-            <EntityArticle file={data} actions={headerActions} />
+            <EntityArticle file={data} actions={headerActions} body={bodyEditor} />
           )}
         </div>
         {npcs.length > 0 && (

@@ -21,6 +21,7 @@ import {
   markLogLineSeen,
   patchFrontmatter,
   startSession,
+  writeFileBody,
 } from "../campaign-write";
 import {
   applyGenerated,
@@ -147,6 +148,27 @@ api.patch("/:campaign/frontmatter", async (c) => {
   }
   if (!isPlainObject(patch)) throw new ApiError(400, "patch must be an object");
   return c.json(await patchFrontmatter(c.req.param("campaign"), rel, mtimeMs, patch));
+});
+
+// PUT /api/:campaign/file { path, mtimeMs, body } -> FileResponse
+// Writes the markdown BODY of an existing file — `body` is the markdown
+// WITHOUT the frontmatter block, exactly what GET /file returns as `body`.
+// The frontmatter block on disk stays byte-identical (keys are PATCH
+// /frontmatter's job). Same mtime guard: 409 { error, mtimeMs } when the file
+// changed on disk since it was read; 404 for a file that does not exist; 400
+// for the append-only kinds (sessions/*.md, inbox.md — DECISIONS #4) and for a
+// file whose frontmatter block cannot be split off safely.
+api.put("/:campaign/file", async (c) => {
+  const body = await jsonBody(c, ["path", "mtimeMs", "body"]);
+  const rel = body.path;
+  const mtimeMs = body.mtimeMs;
+  const markdown = body.body;
+  if (typeof rel !== "string") throw new ApiError(400, "path must be a string");
+  if (typeof mtimeMs !== "number" || !Number.isFinite(mtimeMs)) {
+    throw new ApiError(400, "mtimeMs must be a number");
+  }
+  if (typeof markdown !== "string") throw new ApiError(400, "body must be a string");
+  return c.json(await writeFileBody(c.req.param("campaign"), rel, mtimeMs, markdown));
 });
 
 // POST /api/:campaign/campaign-meta { name, description? } -> FileResponse

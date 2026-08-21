@@ -1,6 +1,6 @@
 # e2e — die kritischen Pfade gegen den echten Stack
 
-Playwright-Suite für die acht kritischen Pfade aus `CLAUDE.md`. Gebaute App,
+Playwright-Suite für die neun kritischen Pfade aus `CLAUDE.md`. Gebaute App,
 echter Server-Prozess auf einer Kopie von `examples/beispiel`, echter Browser.
 Nichts im Browser ist gemockt — die einzige Attrappe ist das LLM: ein lokaler,
 OpenAI-kompatibler Stub (`fixtures/stub-llm.ts`), den der Server über den
@@ -96,16 +96,17 @@ Pfade und die Specs stehen 1:1 zueinander; die Nummer steht außerdem in der
 Kopfzeile des jeweiligen Specs (die Dateinamen tragen sie bewusst nicht — die
 Suite hat keine Reihenfolge):
 
-| Pfad (CLAUDE.md) | Spec                        |
-| ---------------- | --------------------------- |
-| 1 Auto-Einstieg  | `tests/pool.e2e.ts`           |
-| 2 Szene lesen    | `tests/scene-rendering.e2e.ts` |
-| 3 ⌘K-Suche       | `tests/search.e2e.ts`         |
-| 4 Session-Zyklus | `tests/session-cycle.e2e.ts`  |
-| 5 Ernte          | `tests/review-harvest.e2e.ts` |
-| 6 Generator      | `tests/generator.e2e.ts`      |
-| 7 Status/409     | `tests/status-control.e2e.ts` |
-| 8 Mobil          | `tests/mobile.e2e.ts`         |
+| Pfad (CLAUDE.md)   | Spec                           |
+| ------------------ | ------------------------------ |
+| 1 Auto-Einstieg    | `tests/pool.e2e.ts`            |
+| 2 Szene lesen      | `tests/scene-rendering.e2e.ts` |
+| 3 ⌘K-Suche         | `tests/search.e2e.ts`          |
+| 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`   |
+| 5 Ernte            | `tests/review-harvest.e2e.ts`  |
+| 6 Generator        | `tests/generator.e2e.ts`       |
+| 7 Status/409       | `tests/status-control.e2e.ts`  |
+| 8 Mobil            | `tests/mobile.e2e.ts`          |
+| 9 Datei bearbeiten | `tests/file-edit.e2e.ts`       |
 
 Deutsche UI-Strings in Zusicherungen kommen aus den Komponenten, nicht aus dem
 Gedächtnis: bei einer Textänderung in der App wandert der Spec mit.

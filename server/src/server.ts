@@ -13,6 +13,10 @@
 //   [x] GET  /api/:campaign/file?path=...      one file (raw + parsed + mtime)
 //   [x] PATCH /api/:campaign/frontmatter       { path, mtimeMs, patch } — only if
 //                                              mtimeMs is unchanged, otherwise 409
+//   [x] PUT  /api/:campaign/file               { path, mtimeMs, body } — write the markdown
+//                                              BODY of an existing file (issue #15); the
+//                                              frontmatter block is kept byte-identically,
+//                                              same mtime guard as PATCH above (409)
 //   [x] POST /api/:campaign/campaign-meta      { name, description? } -> create
 //                                              _campaign.md (id = directory name);
 //                                              409 when it exists — editing it is

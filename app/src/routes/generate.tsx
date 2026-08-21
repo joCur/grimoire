@@ -49,7 +49,6 @@ import {
   Check,
   GitFork,
   MapPin,
-  PenLine,
   Sparkles,
   StickyNote,
   User,
@@ -67,6 +66,10 @@ import {
   startGenerateJob,
   startGenerateNpcJob,
 } from "@/api";
+import {
+  MarkdownEditorSurface,
+  MarkdownEditorToggle,
+} from "@/components/MarkdownEditor";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { Button } from "@/components/ui/button";
 import { locationName } from "@/lib/campaign";
@@ -91,7 +94,6 @@ import {
 } from "@/lib/generate";
 import { generateJobKey, useDraftEditSync, useGenerateJob } from "@/lib/use-generate-job";
 import { cn } from "@/lib/utils";
-import { Markdown } from "@/markdown/Markdown";
 
 /** Which chapter the drafts are for: an existing one, or a new one. */
 type Target = { kind: "chapter"; id: string } | { kind: "new" };
@@ -1019,17 +1021,11 @@ function SceneCard({
         <span className="flex-none rounded-full border border-input px-[9px] py-px text-[11.5px] text-dim">
           {status}
         </span>
-        <Button
-          type="button"
-          variant="outline"
-          aria-expanded={editing}
-          aria-controls={editing ? textareaId : undefined}
-          onClick={onToggleEditing}
-          className="h-auto flex-none gap-1.5 border-input bg-transparent px-2.5 py-[5px] text-[12px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground [&_svg]:size-[13px]"
-        >
-          <PenLine aria-hidden />
-          {editing ? "Vorschau" : "Bearbeiten"}
-        </Button>
+        <MarkdownEditorToggle
+          editing={editing}
+          onToggleEditing={onToggleEditing}
+          controlsId={textareaId}
+        />
       </div>
       <p className="mb-3.5 font-mono text-[11.5px] text-faint">{path}</p>
       <div className="mb-2 flex flex-wrap gap-2 border-b border-border pb-4">
@@ -1056,18 +1052,15 @@ function SceneCard({
           </span>
         ))}
       </div>
-      {editing ? (
-        <textarea
-          id={textareaId}
-          rows={22}
-          value={markdown}
-          onChange={(e) => onChange(e.target.value)}
-          aria-label={`Roh-Markdown von ${title}`}
-          className="mt-2 w-full resize-y rounded-lg border border-input bg-background px-4 py-3.5 font-mono text-[12.5px] leading-[1.6] text-body outline-none focus-visible:border-border-hover"
-        />
-      ) : (
-        <Markdown>{markdownBody(markdown)}</Markdown>
-      )}
+      <MarkdownEditorSurface
+        editing={editing}
+        id={textareaId}
+        value={markdown}
+        onChange={onChange}
+        label={`Roh-Markdown von ${title}`}
+        // A draft is a whole file — the preview renders the body only.
+        preview={markdownBody(markdown)}
+      />
     </div>
   );
 }
@@ -1118,17 +1111,11 @@ function NpcDraftCard({
             {npcStatusLabel(status)}
           </span>
         )}
-        <Button
-          type="button"
-          variant="outline"
-          aria-expanded={editing}
-          aria-controls={editing ? textareaId : undefined}
-          onClick={onToggleEditing}
-          className="h-auto flex-none gap-1.5 border-input bg-transparent px-2.5 py-[5px] text-[12px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground [&_svg]:size-[13px]"
-        >
-          <PenLine aria-hidden />
-          {editing ? "Vorschau" : "Bearbeiten"}
-        </Button>
+        <MarkdownEditorToggle
+          editing={editing}
+          onToggleEditing={onToggleEditing}
+          controlsId={textareaId}
+        />
       </div>
       <p className="mb-3.5 font-mono text-[11.5px] text-faint">{draft.path}</p>
       <div className="mb-2 border-b border-border pb-4">
@@ -1157,18 +1144,15 @@ function NpcDraftCard({
           <p className="mt-3 text-[12.5px] text-muted-foreground">Statblock: {statblock}</p>
         )}
       </div>
-      {editing ? (
-        <textarea
-          id={textareaId}
-          rows={22}
-          value={markdown}
-          onChange={(e) => onChange(e.target.value)}
-          aria-label={`Roh-Markdown von ${name}`}
-          className="mt-2 w-full resize-y rounded-lg border border-input bg-background px-4 py-3.5 font-mono text-[12.5px] leading-[1.6] text-body outline-none focus-visible:border-border-hover"
-        />
-      ) : (
-        <Markdown>{markdownBody(markdown)}</Markdown>
-      )}
+      <MarkdownEditorSurface
+        editing={editing}
+        id={textareaId}
+        value={markdown}
+        onChange={onChange}
+        label={`Roh-Markdown von ${name}`}
+        // A draft is a whole file — the preview renders the body only.
+        preview={markdownBody(markdown)}
+      />
     </div>
   );
 }

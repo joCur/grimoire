@@ -35,6 +35,14 @@ async function patchReq(body: unknown): Promise<Response> {
   });
 }
 
+async function putFile(body: unknown): Promise<Response> {
+  return app.request("/api/beispiel/file", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 async function postJson(url: string, body?: unknown): Promise<Response> {
   return app.request(url, {
     method: "POST",
@@ -533,5 +541,231 @@ describe("POST /api/:campaign/campaign-meta", () => {
 
   test("404 for an unknown campaign", async () => {
     expect((await postJson("/api/nope/campaign-meta", { name: "x" })).status).toBe(404);
+  });
+});
+
+// Body writes (issue #15): content editing in the app. The invariant under
+// test everywhere here is that the frontmatter block on disk is carried over
+// byte for byte — only the bytes after the closing delimiter may change.
+describe("PUT /api/:campaign/file", () => {
+  const REFERENCE = "01-salzhafen/hafen/von-schmugglern-erwischt.md";
+  const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm.md";
+
+  /** Raw prefix up to and including the frontmatter block's closing `---\n`. */
+  function fmBlock(raw: string): string {
+    return raw.slice(0, raw.indexOf("\n---\n") + "\n---\n".length);
+  }
+
+  test("roundtrip: writing the read body back changes no byte on disk", async () => {
+    const before = await getFile(REFERENCE);
+    const rawBefore = await readFile(absOf(REFERENCE), "utf8");
+    // the reference scene carries callouts and `## If:` sections
+    expect(before.body).toContain("> [!check] Charisma (Deception)");
+    expect(before.body).toContain("## If: sie lügen");
+
+    const res = await putFile({ path: REFERENCE, mtimeMs: before.mtimeMs, body: before.body });
+    expect(res.status).toBe(200);
+    const after = (await res.json()) as FileResponse;
+    expect(after.body).toBe(before.body);
+    expect(after.raw).toBe(rawBefore);
+    // unchanged bytes mean no write at all — mtime stays exactly the same
+    expect(await readFile(absOf(REFERENCE), "utf8")).toBe(rawBefore);
+    expect((await stat(absOf(REFERENCE))).mtimeMs).toBe(before.mtimeMs);
+    expect(after.mtimeMs).toBe(before.mtimeMs);
+  });
+
+  test("unknown callouts and headings survive a write verbatim", async () => {
+    const before = await getFile(REFERENCE);
+    const body = "\n## Völlig Eigenes\n\n> [!wetter] Nebel über der Bucht\n\n### Unter-Titel\n";
+    const res = await putFile({ path: REFERENCE, mtimeMs: before.mtimeMs, body });
+    expect(res.status).toBe(200);
+    const after = (await res.json()) as FileResponse;
+    expect(after.body).toBe(body);
+    // and back again, byte for byte
+    const back = await putFile({ path: REFERENCE, mtimeMs: after.mtimeMs, body: before.body });
+    expect(back.status).toBe(200);
+    expect(await readFile(absOf(REFERENCE), "utf8")).toBe(before.raw);
+  });
+
+  test("happy path: new body on disk, frontmatter block byte-identical", async () => {
+    const before = await getFile(SCENE);
+    const rawBefore = await readFile(absOf(SCENE), "utf8");
+    const body = "\n## Flow\n\nKomplett neu geschrieben.\n";
+
+    const res = await putFile({ path: SCENE, mtimeMs: before.mtimeMs, body });
+    expect(res.status).toBe(200);
+    const after = (await res.json()) as FileResponse;
+    expect(after.path).toBe(SCENE);
+    expect(after.kind).toBe("scene");
+    expect(after.body).toBe(body);
+    // frontmatter untouched — same keys, same values, same bytes
+    expect(after.frontmatter).toEqual(before.frontmatter);
+    const raw = await readFile(absOf(SCENE), "utf8");
+    expect(fmBlock(raw)).toBe(fmBlock(rawBefore));
+    expect(raw).toBe(fmBlock(rawBefore) + body);
+    expect(after.raw).toBe(raw);
+    // fresh mtimeMs, matching the file on disk, and a GET sees the write
+    const s = await stat(absOf(SCENE));
+    expect(after.mtimeMs).toBe(s.mtimeMs);
+    expect(after.mtimeMs).toBeGreaterThanOrEqual(before.mtimeMs);
+    expect((await getFile(SCENE)).body).toBe(body);
+  });
+
+  test("a body without a trailing newline gets exactly one", async () => {
+    const before = await getFile(SCENE);
+    const res = await putFile({ path: SCENE, mtimeMs: before.mtimeMs, body: "\nOhne Newline" });
+    expect(res.status).toBe(200);
+    const raw = await readFile(absOf(SCENE), "utf8");
+    expect(raw.endsWith("\nOhne Newline\n")).toBe(true);
+    expect(raw.endsWith("\n\n")).toBe(false);
+  });
+
+  test("an empty body leaves the frontmatter block alone", async () => {
+    const before = await getFile(SCENE);
+    const rawBefore = await readFile(absOf(SCENE), "utf8");
+    const res = await putFile({ path: SCENE, mtimeMs: before.mtimeMs, body: "" });
+    expect(res.status).toBe(200);
+    expect(await readFile(absOf(SCENE), "utf8")).toBe(fmBlock(rawBefore));
+  });
+
+  test("409 on stale mtimeMs carries the current mtimeMs and writes nothing", async () => {
+    const rawBefore = await readFile(absOf(SCENE), "utf8");
+    const s = await stat(absOf(SCENE));
+    const res = await putFile({ path: SCENE, mtimeMs: s.mtimeMs - 1, body: "\nZu spät\n" });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string; mtimeMs: number };
+    expect(typeof body.error).toBe("string");
+    expect(body.mtimeMs).toBe(s.mtimeMs);
+    expect(await readFile(absOf(SCENE), "utf8")).toBe(rawBefore);
+    expect((await stat(absOf(SCENE))).mtimeMs).toBe(s.mtimeMs);
+  });
+
+  test("a file without a frontmatter block: the body IS the file", async () => {
+    const rel = "01-salzhafen/kein-frontmatter.md";
+    await writeFile(absOf(rel), "Nur Text, kein Frontmatter.\n", "utf8");
+    const before = await getFile(rel);
+    expect(before.body).toBe("Nur Text, kein Frontmatter.\n");
+    const res = await putFile({
+      path: rel,
+      mtimeMs: before.mtimeMs,
+      body: "## Jetzt mit Überschrift\n",
+    });
+    expect(res.status).toBe(200);
+    expect(await readFile(absOf(rel), "utf8")).toBe("## Jetzt mit Überschrift\n");
+  });
+
+  test("400 for a file whose frontmatter block is not valid YAML", async () => {
+    const rel = "01-salzhafen/kaputtes-frontmatter.md";
+    const broken = "---\ntitle: [unclosed\n---\n\nText.\n";
+    await writeFile(absOf(rel), broken, "utf8");
+    const before = await getFile(rel);
+    // the parser degrades and reports the WHOLE file as body — writing that
+    // back must not duplicate the frontmatter block
+    expect(before.body).toBe(broken);
+    const res = await putFile({ path: rel, mtimeMs: before.mtimeMs, body: before.body });
+    expect(res.status).toBe(400);
+    expect(await readFile(absOf(rel), "utf8")).toBe(broken);
+  });
+
+  // Degenerate frontmatter blocks the RAW SPLIT cannot see but gray-matter
+  // still reads: writing the body alone would delete the frontmatter from
+  // disk. All of them are 400 and must leave the file byte-identical.
+  const DEGENERATE: Array<[string, string]> = [
+    // a stray space behind the closing fence — invisible in an editor
+    ["stray-space", "---\ntitle: Kaputt\nstatus: ready\n--- \n\nText.\n"],
+    // the file ends INSIDE the block (never closed, no body at all)
+    ["unclosed", "---\ntitle: Kaputt\nstatus: ready\n"],
+    // a BOM in front of the opening fence (a Windows editor's gift)
+    ["bom", "﻿---\ntitle: Kaputt\nstatus: ready\n---\n\nText.\n"],
+  ];
+
+  for (const [name, content] of DEGENERATE) {
+    test(`400 for a degenerate frontmatter block (${name}) — nothing written`, async () => {
+      const rel = `01-salzhafen/degeneriert-${name}.md`;
+      await writeFile(absOf(rel), content, "utf8");
+      const before = await getFile(rel);
+      // The parser found frontmatter, so the editor was seeded with a body
+      // the raw split does not know how to reattach.
+      expect(before.frontmatter.title).toBe("Kaputt");
+      const res = await putFile({ path: rel, mtimeMs: before.mtimeMs, body: before.body });
+      expect(res.status).toBe(400);
+      // The frontmatter is still on disk — byte for byte.
+      expect(await readFile(absOf(rel), "utf8")).toBe(content);
+    });
+  }
+
+  test("a file the parser reads as pure body stays writable", async () => {
+    // Counter-case to the guard above: an unclosed block WITH text after it
+    // degrades in the parser too (the whole file IS the body), so client and
+    // server agree and the write is legal.
+    const rel = "01-salzhafen/kein-block-nur-text.md";
+    const content = "---\ntitle: Kaputt\n\nText.\n";
+    await writeFile(absOf(rel), content, "utf8");
+    const before = await getFile(rel);
+    expect(before.body).toBe(content);
+    const res = await putFile({ path: rel, mtimeMs: before.mtimeMs, body: `${content}Mehr.\n` });
+    expect(res.status).toBe(200);
+    expect(await readFile(absOf(rel), "utf8")).toBe(`${content}Mehr.\n`);
+  });
+
+  test("400 for the append-only kinds — session logs and inbox", async () => {
+    // DECISIONS #4: they grow by lines through POST /log and POST /inbox; a
+    // free-hand body rewrite is not a maintenance action, and the rule lives
+    // in the endpoint, not only in the UI that hides the button.
+    for (const rel of ["sessions/2026-01-15.md", "inbox.md"]) {
+      const before = await getFile(rel);
+      const rawBefore = await readFile(absOf(rel), "utf8");
+      const res = await putFile({ path: rel, mtimeMs: before.mtimeMs, body: "\nAlles neu.\n" });
+      expect(res.status).toBe(400);
+      expect(await readFile(absOf(rel), "utf8")).toBe(rawBefore);
+    }
+  });
+
+  test("400 on malformed bodies", async () => {
+    const s = await stat(absOf(SCENE));
+    const rawBefore = await readFile(absOf(SCENE), "utf8");
+    const bad = [
+      {}, // missing everything
+      { path: SCENE, mtimeMs: s.mtimeMs }, // missing body
+      { path: SCENE, mtimeMs: "später", body: "x" }, // mtimeMs not a number
+      { path: SCENE, mtimeMs: s.mtimeMs, body: 42 }, // body not a string
+      { path: SCENE, mtimeMs: s.mtimeMs, body: ["x"] }, // body not a string
+      { path: SCENE, mtimeMs: s.mtimeMs, body: null }, // body not a string
+      { path: SCENE, mtimeMs: s.mtimeMs, body: "x", patch: {} }, // unknown key
+      { path: 42, mtimeMs: s.mtimeMs, body: "x" }, // path not a string
+    ];
+    for (const b of bad) {
+      expect((await putFile(b)).status).toBe(400);
+    }
+    const res = await app.request("/api/beispiel/file", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: "no json",
+    });
+    expect(res.status).toBe(400);
+    // none of the rejected requests touched the file
+    expect(await readFile(absOf(SCENE), "utf8")).toBe(rawBefore);
+  });
+
+  test("path safety and missing files behave like the read API", async () => {
+    expect((await putFile({ path: "../../etc/passwd.md", mtimeMs: 1, body: "x" })).status).toBe(
+      400,
+    );
+    expect((await putFile({ path: "notes.txt", mtimeMs: 1, body: "x" })).status).toBe(400);
+    expect((await putFile({ path: "01-salzhafen/nope.md", mtimeMs: 1, body: "x" })).status).toBe(
+      404,
+    );
+    expect(
+      (await putFile({ path: "01-salzhafen/hafen/../hafen/x.md", mtimeMs: 1, body: "x" })).status,
+    ).toBe(400);
+  });
+
+  test("404 for an unknown campaign", async () => {
+    const res = await app.request("/api/nope/file", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: "a.md", mtimeMs: 1, body: "x" }),
+    });
+    expect(res.status).toBe(404);
   });
 });
