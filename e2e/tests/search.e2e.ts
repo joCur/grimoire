@@ -1,11 +1,11 @@
-// Kritischer Pfad 3: ⌘K-Suche findet und öffnet — siehe CLAUDE.md.
+// Critical path 3: the ⌘K search finds and opens; see CLAUDE.md.
 //
-// Der ganze Weg läuft echt: Tastenkürzel → Palette → GET /search (Fuse.js im
-// Server) → Tastatur-Navigation → Enter öffnet die Leseansicht.
+// The whole way is real: shortcut → palette → GET /search (Fuse.js on the
+// server) → keyboard navigation → Enter opens the reading view.
 
 import { expect, test } from "../support/test";
 
-test("⌘K findet „leucht“ und Enter öffnet den Treffer", async ({ page }) => {
+test("⌘K finds \"leucht\" and Enter opens the hit", async ({ page }) => {
   await page.goto("/beispiel");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
@@ -49,7 +49,7 @@ test("⌘K findet „leucht“ und Enter öffnet den Treffer", async ({ page }) 
   await expect(page.getByRole("combobox")).toHaveCount(0);
 });
 
-test("⌘K sagt es, wenn nichts passt, und Esc schließt", async ({ page }) => {
+test("⌘K says so when nothing matches, and Esc closes it", async ({ page }) => {
   await page.goto("/beispiel");
   await page.keyboard.press("ControlOrMeta+KeyK");
   const input = page.getByRole("combobox");

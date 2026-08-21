@@ -1,16 +1,15 @@
-// Kritischer Pfad 4: Session-Zyklus — siehe CLAUDE.md.
+// Critical path 4: the session cycle; see CLAUDE.md.
 //
-// starten → Schnellnotiz → Log + scenes_played → Pause → beenden → Review.
+// start → quick note → log + scenes_played → pause → end → review.
 //
-// Jede Behauptung wird zweimal geprüft: einmal in der UI und einmal in der
-// Datei auf der Platte (der Server ist die Wahrheit, die App hält keinen
-// eigenen Zustand).
+// Every claim is checked twice: once in the UI and once in the file on disk
+// (the server is the truth, the app keeps no state of its own).
 
 import { expect, test } from "../support/test";
 
 const NOTE = "Gruppe verhandelt mit Jorna am Fuß der Treppe #thread";
 
-test("Session starten, Notiz, Pause, beenden — Log und Datei ziehen mit", async ({
+test("session start, quick note, pause, end — log and file follow", async ({
   page,
   files,
 }) => {
@@ -47,7 +46,7 @@ test("Session starten, Notiz, Pause, beenden — Log und Datei ziehen mit", asyn
     .poll(() => files.read(sessionPath))
     .toContain("scenes_played: []");
 
-  // --- Schnellnotiz ---------------------------------------------------------
+  // --- quick note ("Schnellnotiz") ------------------------------------------
   const quickNote = page.getByLabel("Schnellnotiz");
   await quickNote.fill(NOTE);
   await quickNote.press("Enter");
@@ -67,12 +66,12 @@ test("Session starten, Notiz, Pause, beenden — Log und Datei ziehen mit", asyn
   // The played checkmark comes from scenes_played — never faked client-side.
   await expect(nav.getByText("gespielt")).toBeAttached();
 
-  // --- Pause ---------------------------------------------------------------
+  // --- pause ---------------------------------------------------------------
   await page.getByRole("button", { name: "Pause" }).click();
   await expect(page.getByText("— Pause")).toBeVisible();
   await expect.poll(() => files.read(sessionPath)).toMatch(/- \d{2}:\d{2} — Pause/);
 
-  // --- beenden -> Review ---------------------------------------------------
+  // --- end -> review -------------------------------------------------------
   await page.getByRole("button", { name: "Session beenden" }).click();
   await expect(page).toHaveURL(/\/beispiel\/review$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fünf Minuten Ernte");

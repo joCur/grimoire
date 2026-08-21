@@ -1,9 +1,9 @@
-// Kritischer Pfad 7: Frontmatter-Patch/Status-Regler inkl. 409-Konflikt —
-// siehe CLAUDE.md.
+// Critical path 7: frontmatter patch via the status control, including the
+// 409 conflict; see CLAUDE.md.
 //
-// Der Patch geht durch die dokumentierte API mit mtime-Check (CLAUDE.md); der
-// Konflikt wird provoziert, indem der Test die Datei hinter der App verändert
-// — genau der Fall "im Editor gespeichert, während die App offen war".
+// The patch goes through the documented API with its mtime check (CLAUDE.md);
+// the conflict is provoked by changing the file behind the app's back — the
+// "saved it in the editor while the app was open" case.
 
 import { expect, test } from "../support/test";
 
@@ -11,7 +11,7 @@ const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm.md";
 const SCENE_URL = `/beispiel/file/${SCENE}`;
 const STALE_MESSAGE = "Datei extern geändert — neu laden";
 
-test("Status-Regler schreibt den Status in die Datei", async ({ page, files }) => {
+test("the status control writes the status into the file", async ({ page, files }) => {
   await page.goto(SCENE_URL);
   expect(await files.read(SCENE)).toContain("status: ready");
 
@@ -42,7 +42,7 @@ test("Status-Regler schreibt den Status in die Datei", async ({ page, files }) =
   ).toBeVisible();
 });
 
-test("Extern geänderte Datei: der Status-Pick meldet den Konflikt inline", async ({
+test("externally changed file: the status pick reports the conflict inline", async ({
   page,
   files,
 }) => {

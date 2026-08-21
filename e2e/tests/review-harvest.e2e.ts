@@ -1,11 +1,11 @@
-// Kritischer Pfad 5: Ernte — siehe CLAUDE.md.
+// Critical path 5: the harvest ("Ernte"); see CLAUDE.md.
 //
-// Thread übernehmen → _chapter.md, Inbox abhaken, NPC-Stub anlegen, und der
-// Fortschrittszähler.
+// Adopt a thread → _chapter.md, tick off an inbox line, create an NPC stub,
+// and the progress counter.
 //
-// Die Session von HEUTE ist die Datenlage der Ernte, deshalb legt der Test sie
-// direkt in seine Kampagnen-Kopie (dieselben Zeilen, die die Live-Ansicht
-// geschrieben hätte — Pfad 4 prüft das Schreiben selbst).
+// TODAY's session is the harvest's data, so the test writes it straight into
+// its own campaign copy (the same lines the live view would have written —
+// path 4 covers the writing itself).
 
 import { expect, test } from "../support/test";
 
@@ -36,7 +36,7 @@ test.beforeEach(async ({ files }) => {
   await files.write(rel, sessionFile(rel.slice("sessions/".length, -".md".length)));
 });
 
-test("Faden übernehmen landet in _chapter.md, Inbox-Zeile wird abgehakt", async ({
+test("adopting a thread lands in _chapter.md, the inbox line gets ticked off", async ({
   page,
   files,
 }) => {
@@ -86,7 +86,7 @@ test("Faden übernehmen landet in _chapter.md, Inbox-Zeile wird abgehakt", async
   await expect(page.getByRole("link", { name: "Review · 2 offen" })).toBeVisible();
 });
 
-test("NPC-Stub aus einer #npc-Zeile anlegen", async ({ page, files }) => {
+test("creating an NPC stub from a #npc log line", async ({ page, files }) => {
   await page.goto("/beispiel/review");
 
   const npcCard = page.locator("div").filter({ hasText: NPC_TEXT }).last();

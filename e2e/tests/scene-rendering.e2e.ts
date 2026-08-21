@@ -1,12 +1,13 @@
-// Kritischer Pfad 2: Szene lesen — Callouts, If-Sections, NPC-Karten — siehe CLAUDE.md.
+// Critical path 2: reading a scene — callouts, If-sections, NPC cards; see
+// CLAUDE.md.
 //
-// Geprüft an den zwei Referenzszenen, die CLAUDE.md als Prüfsteine des
-// Callout-Renderers benennt.
+// Checked against the two reference scenes CLAUDE.md names as the touchstones
+// of the callout renderer.
 //
-// Alle sechs Callout-Sorten kommen vor: readaloud/check/secret/note in
-// ankunft-leuchtturm, check/note/outcome in von-schmugglern-erwischt — und
-// [!loot], das in examples/ nicht vorkommt, über eine Zusatzdatei, die dieser
-// Test in SEINE Kampagnen-Kopie legt (examples/ bleibt unberührt).
+// All six callout kinds appear: readaloud/check/secret/note in
+// ankunft-leuchtturm, check/note/outcome in von-schmugglern-erwischt — and
+// [!loot], which examples/ does not contain, through an extra file this test
+// seeds into ITS OWN campaign copy (examples/ stays untouched).
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -17,7 +18,7 @@ import { expect, test } from "../support/test";
 const ARRIVAL = "/beispiel/file/01-salzhafen/hafen/ankunft-leuchtturm.md";
 const CAPTURED = "/beispiel/file/01-salzhafen/hafen/von-schmugglern-erwischt.md";
 
-test("Referenzszene 1: Vorlesetext, Check, Geheim, Notiz und die NPC-Karte", async ({ page }) => {
+test("reference scene 1: read-aloud, check, secret, note and the NPC card", async ({ page }) => {
   await page.goto(ARRIVAL);
 
   const article = page.getByRole("article");
@@ -64,7 +65,7 @@ test("Referenzszene 1: Vorlesetext, Check, Geheim, Notiz und die NPC-Karte", asy
   await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/jorna\.md$/);
 });
 
-test("Referenzszene 2: Kontingenz-Kopf, If-Sections zum Zuklappen, Konsequenz", async ({
+test("reference scene 2: contingency header, collapsible If-sections, consequence", async ({
   page,
 }) => {
   await page.goto(CAPTURED);
@@ -115,7 +116,10 @@ test("Referenzszene 2: Kontingenz-Kopf, If-Sections zum Zuklappen, Konsequenz", 
   await expect(aside).toContainText("leise, höflich");
 });
 
-test("Beute-Callout rendert, unbekannte Sorte degradiert zum Zitat", async ({ page, files }) => {
+test("the loot callout renders, an unknown kind degrades to a blockquote", async ({
+  page,
+  files,
+}) => {
   // [!loot] is missing from the reference scenes and examples/ must not be
   // reformatted — so the sixth kind is checked on a file this test seeds into
   // its own campaign copy.

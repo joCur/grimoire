@@ -1,12 +1,12 @@
-// Kritischer Pfad 6: Generator-Zyklus (Stub-LLM) — siehe CLAUDE.md.
+// Critical path 6: the generator cycle against the stub LLM; see CLAUDE.md.
 //
-// Job → Review → Übernehmen → draft im Pool, dazu der NPC-Modus und der
-// Fehlerpfad.
+// Job → review → apply → draft in the pool, plus the NPC mode and the failure
+// path.
 //
-// Nichts daran ist gemockt außer dem Modell selbst: die App startet einen
-// echten Hintergrund-Job, der Server ruft über den echten
-// OpenAICompatProvider ein echtes HTTP-Endpoint (e2e/fixtures/stub-llm.ts) und
-// validiert die Antwort mechanisch wie in Produktion.
+// Nothing about it is mocked except the model itself: the app starts a real
+// background job, the server calls a real HTTP endpoint
+// (e2e/fixtures/stub-llm.ts) through the real OpenAICompatProvider and
+// validates the reply mechanically exactly as in production.
 
 import {
   LOCATION_STUB_ID,
@@ -28,7 +28,7 @@ const NPC_SOURCE = `Brakk Ironhand, an ageing fisherman who knows every sandbank
 of the north bay. He has seen strangers carrying crates at night and keeps
 quiet out of fear.`;
 
-test("Szenen-Lauf: Job, Review, Übernehmen — Draft liegt auf der Platte und im Pool", async ({
+test("scene run: job, review, apply — the draft is on disk and in the pool", async ({
   page,
   files,
 }) => {
@@ -108,7 +108,7 @@ test("Szenen-Lauf: Job, Review, Übernehmen — Draft liegt auf der Platte und i
   await expect(page.getByText("1 Kapitel · 3 Szenen")).toBeVisible();
 });
 
-test("NPC-Lauf: vorgegebene id, Review, Übernehmen", async ({ page, files }) => {
+test("npc run: pinned id, review, apply", async ({ page, files }) => {
   await page.goto("/beispiel/generate");
   await page.getByRole("button", { name: "NPC", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("NPC generieren");
@@ -146,7 +146,7 @@ test("NPC-Lauf: vorgegebene id, Review, Übernehmen", async ({ page, files }) =>
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_DEFAULT_NAME);
 });
 
-test("Fehlerpfad: ungültige Modellantwort zeigt den 422-Block mit Rohantwort", async ({
+test("failure path: an invalid model reply shows the 422 block with the raw reply", async ({
   page,
   files,
 }) => {

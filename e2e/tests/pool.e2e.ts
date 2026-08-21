@@ -1,4 +1,4 @@
-// Kritischer Pfad 1: Auto-Einstieg → Pool lädt die Kampagne — siehe CLAUDE.md.
+// Critical path 1: auto entry — the pool loads the campaign; see CLAUDE.md.
 //
 // "/" has no page of its own (issue #14): it redirects into the campaign the
 // server reports, and the pool is the first thing the DM sees — campaign
@@ -7,7 +7,9 @@
 
 import { expect, test } from "../support/test";
 
-test("„/“ leitet in die Kampagne und der Pool zeigt Kapitel und Szenen", async ({ page }) => {
+test("\"/\" redirects into the campaign and the pool shows chapter and scenes", async ({
+  page,
+}) => {
   await page.goto("/");
 
   // The redirect target comes from the server (lastSession per campaign).

@@ -1,8 +1,8 @@
-// Kritischer Pfad 8: Mobil-Startfläche + Inbox-Einwurf bei 390px — siehe
-// CLAUDE.md.
+// Critical path 8: the mobile start surface and the inbox capture at 390px;
+// see CLAUDE.md.
 //
-// Mobil ist laut UI-BRIEF Suche, Leseansicht und Inbox — genau das wird hier
-// bei 390×844 (iPhone-Größe) geprüft, inklusive der Datei auf der Platte.
+// Mobile is search, reading view and inbox (UI-BRIEF) — exactly that, checked
+// at 390×844 (iPhone size), including the file on disk.
 
 import { expect, test } from "../support/test";
 
@@ -10,7 +10,7 @@ test.use({ viewport: { width: 390, height: 844 } });
 
 const IDEA = "Nachtmarkt im Hafen als Aufhänger #thread";
 
-test("Mobil-Startfläche: Suche, Inbox-Einwurf, Nachschlagen-Listen", async ({ page, files }) => {
+test("mobile start surface: search, inbox capture, lookup lists", async ({ page, files }) => {
   await page.goto("/beispiel");
 
   // The desktop topbar is desktop chrome — below md the surface carries its
@@ -29,7 +29,7 @@ test("Mobil-Startfläche: Suche, Inbox-Einwurf, Nachschlagen-Listen", async ({ p
   await expect(lookup.getByRole("link", { name: /NPCs/ })).toContainText("2 NPCs");
   await expect(lookup.getByRole("link", { name: /Orte/ })).toContainText("1 Ort");
 
-  // --- Inbox-Einwurf -------------------------------------------------------
+  // --- inbox capture -------------------------------------------------------
   const inbox = page.getByLabel("Inbox");
   await inbox.fill(IDEA);
   await page.getByRole("button", { name: "Einwerfen" }).click();
@@ -42,7 +42,7 @@ test("Mobil-Startfläche: Suche, Inbox-Einwurf, Nachschlagen-Listen", async ({ p
     .poll(() => files.read("inbox.md"))
     .toContain("- 2026-01-10 Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug");
 
-  // --- Suche und Leseansicht ----------------------------------------------
+  // --- search and reading view ---------------------------------------------
   await page.getByRole("button", { name: "Szenen, NPCs, Orte suchen …" }).click();
   const search = page.getByRole("combobox");
   await expect(search).toBeVisible();
@@ -58,7 +58,7 @@ test("Mobil-Startfläche: Suche, Inbox-Einwurf, Nachschlagen-Listen", async ({ p
   await expect(page.getByLabel("Inbox")).toBeVisible();
 });
 
-test("Mobil: die Leseansicht der Referenzszene bleibt lesbar", async ({ page }) => {
+test("mobile: the reference scene's reading view stays readable", async ({ page }) => {
   await page.goto("/beispiel/file/01-salzhafen/hafen/ankunft-leuchtturm.md");
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
