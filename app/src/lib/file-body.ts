@@ -14,9 +14,6 @@ import type { EntityKind, FileResponse } from "@grimoire/shared/types";
 import { fetchFile, putFileBody } from "@/api";
 import { writeWithMtime, type MtimeWriteResult } from "@/lib/write-with-mtime";
 
-/** Shown inline (no toast) when the write failed for any other reason. */
-export const SAVE_FAILED_MESSAGE = "Nicht gespeichert — Server prüfen";
-
 /**
  * Whether the reading view offers „Bearbeiten" for a kind.
  *

@@ -41,6 +41,39 @@ export function canSubmitCampaignMeta(values: CampaignMetaValues): boolean {
 }
 
 /**
+ * The version the open dialog writes against. `mtimeMs === undefined` is the
+ * create path (there is no `_campaign.md` yet).
+ */
+export interface CampaignMetaBase {
+  mtimeMs: number | undefined;
+}
+
+/** What the file query knows: the file, „missing" (404), or nothing yet. */
+export type CampaignMetaAnswer = { mtimeMs: number } | "missing" | undefined;
+
+/**
+ * Decide the base version ONCE, at the first answer of the file query.
+ *
+ * The file query keeps refetching while the dialog is open — the 5s version
+ * poll (issue #8) invalidates it — so reading its mtime at save time would let
+ * an external edit of `_campaign.md` advance the base silently: the save would
+ * overwrite that edit instead of answering 409. Same trap the body editor
+ * avoids (see `shouldAdvanceBase` in file-body.ts), same answer: freeze it.
+ *
+ * `undefined` in, `undefined` out means "no answer yet, nothing to write
+ * against". Once frozen the base never moves on its own — only the conflict
+ * re-read replaces it, knowingly, in the caller.
+ */
+export function seedCampaignMetaBase(
+  base: CampaignMetaBase | undefined,
+  answer: CampaignMetaAnswer,
+): CampaignMetaBase | undefined {
+  if (base !== undefined) return base;
+  if (answer === undefined) return undefined;
+  return { mtimeMs: answer === "missing" ? undefined : answer.mtimeMs };
+}
+
+/**
  * Save name/description. `mtimeMs` is the mtime of the `_campaign.md` the
  * dialog is showing — `undefined` means there is no file yet, which is the
  * create path. A 409 from EITHER endpoint means nothing was written (the file

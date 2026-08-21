@@ -3,11 +3,13 @@
 // where those two values are on screen.
 //
 // The dialog writes through the documented API: PATCH /frontmatter with the
-// mtime of the `_campaign.md` it read (409 → inline "Datei extern geändert —
-// neu laden" plus a refetch, nothing lost), or POST /campaign-meta when the
-// campaign has no metadata file yet. On success the campaigns/tree/file
-// queries are invalidated — the switcher label and the pool header read from
-// the campaign list, so they must not keep the old name.
+// mtime the open dialog was seeded with — frozen, not the live query value, or
+// the 5s version poll would hand it an external edit's mtime and turn the save
+// into a silent overwrite (409 → inline "Datei extern geändert — neu laden",
+// the typed values stay, the next attempt writes on top of disk). Or POST
+// /campaign-meta when the campaign has no metadata file yet. On success the
+// campaigns/tree/search queries are invalidated — the switcher label and the
+// pool header read from the campaign list, so they must not keep the old name.
 //
 // Prefilled from the AUTHORED values of GET /campaigns (which drops the
 // parser's id fallback), so an unnamed campaign starts with an empty field and
@@ -15,7 +17,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { PenLine } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ApiError, fetchCampaigns, fetchFile } from "@/api";
 import { HeaderAction } from "@/components/HeaderAction";
@@ -31,7 +33,9 @@ import { findCampaign } from "@/lib/campaign";
 import {
   CAMPAIGN_META_PATH,
   canSubmitCampaignMeta,
+  seedCampaignMetaBase,
   writeCampaignMeta,
+  type CampaignMetaBase,
   type CampaignMetaValues,
 } from "@/lib/campaign-meta";
 import { useMtimeWriteMutation } from "@/lib/use-mtime-write";
@@ -71,8 +75,8 @@ function CampaignMetaDialog({
   const setValue = (key: keyof CampaignMetaValues, value: string) =>
     setEdited((prev) => ({ ...prev, [key]: value }));
 
-  // The mtime for the patch — and the answer to "is there a file at all?".
-  // A 404 is the normal "no metadata yet" case, not an error state.
+  // Where the base version comes from — and the answer to "is there a file at
+  // all?". A 404 is the normal "no metadata yet" case, not an error state.
   const file = useQuery({
     queryKey: ["file", campaign, CAMPAIGN_META_PATH],
     queryFn: () => fetchFile(campaign, CAMPAIGN_META_PATH),
@@ -80,20 +84,36 @@ function CampaignMetaDialog({
   });
   const missing = file.isError && file.error instanceof ApiError && file.error.status === 404;
   const unreachable = file.isError && !missing;
-  const mtimeMs = file.data?.mtimeMs;
+
+  // The version the save is checked against, frozen at the query's first
+  // answer (seedCampaignMetaBase explains why): the 5s version poll refetches
+  // this file while the dialog stands, and following it would turn an external
+  // edit of _campaign.md into a silent overwrite instead of a 409. It moves
+  // only after a conflict, to the file the re-read brought.
+  const [base, setBase] = useState<CampaignMetaBase>();
+  useEffect(() => {
+    setBase((previous) => seedCampaignMetaBase(previous, missing ? "missing" : file.data));
+  }, [missing, file.data]);
 
   const save = useMtimeWriteMutation<void>({
-    write: () => writeCampaignMeta(campaign, values, mtimeMs),
+    // No base yet (still loading, or the file is not readable) — nothing to
+    // write against, so the mutation cannot start.
+    write:
+      base === undefined ? undefined : () => writeCampaignMeta(campaign, values, base.mtimeMs),
     fileKey: ["file", campaign, CAMPAIGN_META_PATH],
     // The switcher and the pool header read the campaign list; the file also
     // sits in the tree/search surfaces.
     invalidateOnSuccess: [["campaigns"], ["tree", campaign], ["search", campaign]],
-    errorMessage: "Nicht gespeichert — Server prüfen",
     onSaved: onClose,
+    // The file changed on disk (or appeared while the dialog was open): the
+    // typed values stay, only the version underneath them moves on, so the
+    // next „Speichern" writes on top of what is on disk now.
+    onConflict: (reread) => {
+      if (reread !== undefined) setBase({ mtimeMs: reread.mtimeMs });
+    },
   });
 
-  const loading = file.isPending;
-  const canSubmit = canSubmitCampaignMeta(values) && !save.isPending && !loading && !unreachable;
+  const canSubmit = canSubmitCampaignMeta(values) && !save.isPending && base !== undefined;
 
   return (
     <Dialog
