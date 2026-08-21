@@ -34,6 +34,13 @@ eingerückt, standardmäßig GEÖFFNET.
   schließen die Design-Lücke per PO-Entscheid (#34) — künftige Views
   denken sie mit. Mobil bleibt die „Nachschlagen"-Liste der Startfläche
   der Zugang; ⌘K findet beide Listen in jeder Breite.
+- Kampagnen-Kontext bleibt stabil: Pool UND Nachschlage-Listen zeigen
+  dasselbe Element an derselben Stelle — den Switcher-Trigger mit
+  „Kampagne: <Name>"; auf den Listen hängt der Listentitel als Krümel
+  dahinter (`Kampagne: X / NPCs`). Das Label darf beim Klick auf die
+  Topbar-Links nicht springen (PO-Rückmeldung zu PR #35). Die
+  Datei-/Szenen-Ansichten behalten ihren Namens-Breadcrumb — das ist
+  Navigations-Kontext (Rückweg), keine Kampagnen-Auswahl.
 - Anzeigenamen statt ids: Pool-Gruppenköpfe zeigen den Ortsnamen, wenn
   `locations/<slug>.md` existiert (sonst den Slug unverändert — Gruppen-
   Ordner sind lose Konvention), der Review-Quellchip den Szenentitel

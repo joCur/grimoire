@@ -91,7 +91,7 @@ test("a group header shows the location NAME once the location file exists", asy
   await expect(page.getByText("hafen", { exact: true })).toHaveCount(0);
 });
 
-test("the topbar links reach the NPC and location lists", async ({ page }) => {
+test("the topbar links reach the lists without the campaign label jumping", async ({ page }) => {
   await page.goto("/beispiel");
 
   const nav = page.getByRole("banner").getByRole("navigation", { name: "NPCs und Orte" });
@@ -102,6 +102,11 @@ test("the topbar links reach the NPC and location lists", async ({ page }) => {
   await expect(page.getByRole("main").getByRole("link", { name: "NPCs" })).toHaveCount(0);
   await expect(page.getByRole("main").getByRole("link", { name: "Orte" })).toHaveCount(0);
 
+  // The campaign context of the pool: the switcher, prefix included.
+  const label = page.getByRole("banner").getByRole("button", { name: /^Kampagne: / });
+  await expect(label).toHaveAccessibleName("Kampagne: Der Leuchtturm von Salzhafen");
+  const boxOnPool = await label.boundingBox();
+
   await nav.getByRole("link", { name: "Orte" }).click();
   await expect(page).toHaveURL(/\/beispiel\/list\/locations$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Orte");
@@ -109,10 +114,28 @@ test("the topbar links reach the NPC and location lists", async ({ page }) => {
     page.getByRole("main").getByRole("link", { name: /Der Leuchtturm von Salzhafen/ }),
   ).toBeVisible();
 
+  // Same element, same prefix, same place — the list view must not swap the
+  // switcher for a bare name (PO feedback on PR #35). The list title rides
+  // behind it as a crumb.
+  await expect(label).toHaveAccessibleName("Kampagne: Der Leuchtturm von Salzhafen");
+  const boxOnList = await label.boundingBox();
+  expect(boxOnList?.x).toBe(boxOnPool?.x);
+  expect(boxOnList?.y).toBe(boxOnPool?.y);
+  expect(boxOnList?.width).toBe(boxOnPool?.width);
+  await expect(page.getByRole("banner").getByText("Orte", { exact: true })).toHaveCount(2);
+
   // The links stay reachable from the list view itself.
   await page.getByRole("banner").getByRole("link", { name: "NPCs" }).click();
   await expect(page).toHaveURL(/\/beispiel\/list\/npcs$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("NPCs");
+  await expect(label).toHaveAccessibleName("Kampagne: Der Leuchtturm von Salzhafen");
+  expect((await label.boundingBox())?.x).toBe(boxOnPool?.x);
+
+  // The switcher still switches here: picking the current campaign is also
+  // the way back to the pool.
+  await label.click();
+  await page.getByRole("menuitem", { name: /Der Leuchtturm von Salzhafen/ }).click();
+  await expect(page).toHaveURL(/\/beispiel$/);
 });
 
 test("editing the campaign metadata updates header, switcher and the file", async ({

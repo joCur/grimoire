@@ -1,6 +1,8 @@
 // The constant topbar (design reference: 56px, hairline below). Left side
-// is contextual: campaign switcher on the pool, breadcrumb on a scene,
-// green Live pill + chapter label in the live mode. Right side: the ⌘K
+// is contextual: campaign switcher on the pool AND on the browse lists (there
+// with the list title as a crumb behind it — the switcher never turns into a
+// different element under the cursor), breadcrumb on a scene, green Live pill
+// + chapter label in the live mode. Right side: the ⌘K
 // search chip (opens the palette; hidden without a campaign in the URL —
 // "/" only ever shows the empty state), the brass "Session starten" button
 // on pool and scene
@@ -14,7 +16,9 @@
 // running indicator while a generate job is working (issue #19).
 // Since issue #34 the left side also carries the quiet "NPCs"/"Orte"
 // navigation into the browse lists (every campaign view except live, lg and
-// up) — the pool's footer line of issue #26 is gone.
+// up) — the pool's footer line of issue #26 is gone. Because those links are
+// one click away from the pool, the campaign context must not change shape
+// between the two views (PO feedback on PR #35).
 
 import type { FileResponse } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
@@ -66,8 +70,10 @@ export function Topbar() {
   const isGenerator = generateMatch !== null && campaign !== "";
   const isPool = poolMatch !== null && campaign !== "";
   // Browse lists are reachable from the desktop chrome (issue #26, now the
-  // topbar nav below) — so they need the same way back the other views have.
-  const listTitle = browseListTitle(listMatch?.params["*"] ?? "");
+  // topbar nav below) — so they carry the campaign context too, as the same
+  // switcher the pool has plus the list title as a crumb (see below).
+  const listKind = listMatch?.params["*"] ?? "";
+  const listTitle = browseListTitle(listKind);
   const isList = listMatch !== null && campaign !== "" && listTitle !== undefined;
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -121,7 +127,27 @@ export function Topbar() {
         Grimoire
       </Link>
 
-      {isPool && <CampaignSwitcher campaign={campaign} />}
+      {/* The campaign context of pool AND browse lists is the SAME element in
+          the same place: the switcher trigger, prefix and styling included.
+          The list views used to swap it for a name-only breadcrumb, so
+          clicking the topbar's NPCs/Orte links made the label jump ("Kampagne:
+          X" -> "X"). The list title is appended as a crumb instead — the
+          switcher stays a switcher there, because switching campaigns from a
+          list is just as sensible as from the pool, and picking the current
+          campaign in it is also the way back to the pool.
+          The wrapper is rendered in both cases (no padding, no margin) so the
+          trigger's x-position is identical with and without the crumb. */}
+      {(isPool || isList) && (
+        <div className="flex min-w-0 items-center gap-2">
+          <CampaignSwitcher campaign={campaign} />
+          {isList && (
+            <>
+              <span aria-hidden className="text-border-hover">/</span>
+              <span className="truncate text-[13px] text-soft">{listTitle}</span>
+            </>
+          )}
+        </div>
+      )}
 
       {isScene && (
         <div className="flex min-w-0 items-center gap-2 text-[13px]">
@@ -159,19 +185,6 @@ export function Topbar() {
         </div>
       )}
 
-      {isList && (
-        <div className="flex min-w-0 items-center gap-2 text-[13px]">
-          <Link
-            to={`/${campaign}`}
-            className="max-w-[220px] flex-none truncate text-body-secondary hover:text-foreground"
-          >
-            {campaignName}
-          </Link>
-          <span aria-hidden className="text-border-hover">/</span>
-          <span className="truncate text-soft">{listTitle}</span>
-        </div>
-      )}
-
       {isReview && <div className="flex-none text-[13px] text-muted-foreground">Review</div>}
 
       {isGenerator && (
@@ -204,18 +217,11 @@ export function Topbar() {
           aria-label="NPCs und Orte"
           className="flex flex-none items-center gap-1 border-l border-border pl-3 text-[13px] max-lg:hidden"
         >
-          <Link
-            to={`/${campaign}/list/npcs`}
-            className="rounded-md px-1.5 py-1 text-body-secondary hover:text-foreground"
-          >
-            NPCs
-          </Link>
-          <Link
-            to={`/${campaign}/list/locations`}
-            className="rounded-md px-1.5 py-1 text-body-secondary hover:text-foreground"
-          >
-            Orte
-          </Link>
+          {/* On the list itself the same word also stands in the crumb behind
+              the switcher; aria-current makes that repetition read as "you are
+              here" instead of as an accident. */}
+          <BrowseLink campaign={campaign} kind="npcs" label="NPCs" current={listKind} />
+          <BrowseLink campaign={campaign} kind="locations" label="Orte" current={listKind} />
         </nav>
       )}
 
@@ -258,6 +264,33 @@ export function Topbar() {
 
       {isReview && <ReviewProgress campaign={campaign} />}
     </header>
+  );
+}
+
+/** One quiet topbar link into a browse list, marked when it is the open one. */
+function BrowseLink({
+  campaign,
+  kind,
+  label,
+  current,
+}: {
+  campaign: string;
+  kind: string;
+  label: string;
+  current: string;
+}) {
+  const active = kind === current;
+  return (
+    <Link
+      to={`/${campaign}/list/${kind}`}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "rounded-md px-1.5 py-1 hover:text-foreground",
+        active ? "text-soft" : "text-body-secondary",
+      )}
+    >
+      {label}
+    </Link>
   );
 }
 
