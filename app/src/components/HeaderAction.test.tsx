@@ -1,0 +1,67 @@
+// Issue #38: the three header triggers („Bearbeiten" for the body, for the
+// campaign metadata, „Umbenennen") were byte-identical copies. What must hold
+// is that they STAY one component — so each call site is compared against a
+// live render of the equivalent <HeaderAction …/> instead of against frozen
+// markup (pinning lucide-react/react-dom byte output would break on every
+// dependency bump without a single pixel moving).
+
+import { describe, expect, test } from "bun:test";
+import { PenLine } from "lucide-react";
+import { renderToStaticMarkup } from "react-dom/server";
+
+import { CampaignMetaAction } from "./CampaignMetaAction";
+import { FileBodyEditAction } from "./FileBodyEditor";
+import { HeaderAction } from "./HeaderAction";
+import { RenameAction } from "./RenameAction";
+
+/** The shared trigger with the icon all three call sites use. */
+function headerAction(label: string): string {
+  return renderToStaticMarkup(<HeaderAction icon={PenLine} label={label} onClick={() => {}} />);
+}
+
+describe("HeaderAction", () => {
+  test("is the quiet header trigger: a plain button, decorative icon, label", () => {
+    // The one explicit assertion on the shape — the class list is the thing
+    // the three copies used to drift apart in.
+    expect(headerAction("Bearbeiten")).toStartWith(
+      '<button type="button" class="inline-flex flex-none items-center gap-1.5 rounded-md px-1.5 py-1' +
+        ' text-[12px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">' +
+        "<svg ",
+    );
+    expect(headerAction("Bearbeiten")).toEndWith("</svg>Bearbeiten</button>");
+    // The glyph carries no meaning of its own; the label does.
+    expect(headerAction("Bearbeiten")).toContain('aria-hidden="true"');
+  });
+
+  test("the label is the only thing that varies", () => {
+    expect(headerAction("Umbenennen")).toBe(
+      headerAction("Bearbeiten").replace("Bearbeiten<", "Umbenennen<"),
+    );
+  });
+});
+
+describe("the three call sites", () => {
+  test("Bearbeiten of the body editor is the shared trigger", () => {
+    expect(renderToStaticMarkup(<FileBodyEditAction onEdit={() => {}} />)).toBe(
+      headerAction("Bearbeiten"),
+    );
+  });
+
+  test("Umbenennen is the shared trigger (closed dialog: only the trigger)", () => {
+    expect(
+      renderToStaticMarkup(
+        <RenameAction
+          campaign="beispiel"
+          currentPath="npcs/jorna.md"
+          target={{ kind: "npc", oldId: "jorna" }}
+        />,
+      ),
+    ).toBe(headerAction("Umbenennen"));
+  });
+
+  test("Bearbeiten of the campaign metadata is the shared trigger", () => {
+    expect(renderToStaticMarkup(<CampaignMetaAction campaign="beispiel" />)).toBe(
+      headerAction("Bearbeiten"),
+    );
+  });
+});

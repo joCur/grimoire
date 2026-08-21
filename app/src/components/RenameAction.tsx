@@ -21,6 +21,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 
 import { renameEntity, type RenameResult } from "@/api";
+import { HeaderAction } from "@/components/HeaderAction";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -58,14 +59,7 @@ export function RenameAction({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex flex-none items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-      >
-        <PenLine aria-hidden size={12.5} className="flex-none" />
-        Umbenennen
-      </button>
+      <HeaderAction icon={PenLine} label="Umbenennen" onClick={() => setOpen(true)} />
       {open && (
         <RenameDialog
           campaign={campaign}

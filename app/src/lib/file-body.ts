@@ -12,15 +12,7 @@
 import type { EntityKind, FileResponse } from "@grimoire/shared/types";
 
 import { fetchFile, putFileBody } from "@/api";
-// The conflict message and its 409 test are the app's ONE wording for "the
-// file moved under you" — they live with the scene-status write flow that
-// first needed them (campaign-meta.ts borrows them the same way).
-import { STALE_FILE_MESSAGE, isStaleFileError } from "@/lib/scene-status";
-
-export { STALE_FILE_MESSAGE };
-
-/** Shown inline (no toast) when the write failed for any other reason. */
-export const SAVE_FAILED_MESSAGE = "Nicht gespeichert — Server prüfen";
+import { writeWithMtime, type MtimeWriteResult } from "@/lib/write-with-mtime";
 
 /**
  * Whether the reading view offers „Bearbeiten" for a kind.
@@ -78,39 +70,21 @@ export function shouldAdvanceBase(base: FileResponse, incoming: FileResponse | u
   return incoming.body === base.body;
 }
 
-export type FileBodyWriteResult =
-  /** Written: the server's fresh file, ready to seed into the query cache. */
-  | { ok: true; file: FileResponse }
-  /**
-   * NOT written — the file changed on disk. `file` is the re-read file when
-   * the reload succeeded (its mtime makes the next attempt work); undefined
-   * when even the reload failed.
-   */
-  | { ok: false; file?: FileResponse };
-
 /**
- * Write the body. On a 409 nothing was written: the file is re-read so the
- * view knows the current state and the next „Speichern" carries the fresh
- * mtime — the DM's text stays in the editor either way (the caller keeps it).
- * Every other failure throws.
+ * Write the body. The 409 handling is the shared protocol of
+ * write-with-mtime.ts: nothing was written, the file is re-read so the view
+ * knows the current state and the next „Speichern" carries the fresh mtime —
+ * the DM's text stays in the editor either way (the caller keeps it). Every
+ * other failure throws.
  */
-export async function writeFileBody(
+export function writeFileBody(
   campaign: string,
   path: string,
   body: string,
   mtimeMs: number,
-): Promise<FileBodyWriteResult> {
-  try {
-    const file = await putFileBody(campaign, path, body, mtimeMs);
-    return { ok: true, file };
-  } catch (error) {
-    if (!isStaleFileError(error)) throw error;
-    try {
-      return { ok: false, file: await fetchFile(campaign, path) };
-    } catch {
-      // The reload failed too (server gone): the conflict message stands,
-      // the cache keeps the file we had and the normal queries retry.
-      return { ok: false };
-    }
-  }
+): Promise<MtimeWriteResult> {
+  return writeWithMtime(
+    () => putFileBody(campaign, path, body, mtimeMs),
+    () => fetchFile(campaign, path),
+  );
 }

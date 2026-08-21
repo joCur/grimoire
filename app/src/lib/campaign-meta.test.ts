@@ -5,6 +5,7 @@ import { ApiError } from "@/api";
 import {
   campaignMetaPatch,
   canSubmitCampaignMeta,
+  seedCampaignMetaBase,
   writeCampaignMeta,
 } from "./campaign-meta";
 
@@ -90,6 +91,30 @@ describe("canSubmitCampaignMeta", () => {
     expect(canSubmitCampaignMeta({ name: "", description: "x" })).toBe(false);
     expect(canSubmitCampaignMeta({ name: "   ", description: "x" })).toBe(false);
     expect(canSubmitCampaignMeta({ name: "Salzhafen", description: "" })).toBe(true);
+  });
+});
+
+describe("seedCampaignMetaBase", () => {
+  test("no answer yet means nothing to write against", () => {
+    expect(seedCampaignMetaBase(undefined, undefined)).toBe(undefined);
+  });
+
+  test("the first answer freezes the version the dialog writes against", () => {
+    expect(seedCampaignMetaBase(undefined, { mtimeMs: 42 })).toEqual({ mtimeMs: 42 });
+  });
+
+  test("a missing file is the create path — a base without a version", () => {
+    expect(seedCampaignMetaBase(undefined, "missing")).toEqual({ mtimeMs: undefined });
+  });
+
+  test("a later poll does NOT advance the base (that would overwrite the foreign edit)", () => {
+    const frozen = { mtimeMs: 42 };
+    // The 5s version poll refetches _campaign.md while the dialog stands; an
+    // external edit must answer 409 on save, so the base stays where it was.
+    expect(seedCampaignMetaBase(frozen, { mtimeMs: 99 })).toBe(frozen);
+    // …and a file appearing under an open create dialog does not either.
+    const created = { mtimeMs: undefined };
+    expect(seedCampaignMetaBase(created, { mtimeMs: 7 })).toBe(created);
   });
 });
 
