@@ -21,10 +21,25 @@ const CAPTURED = "/beispiel/file/01-salzhafen/hafen/von-schmugglern-erwischt.md"
 test("reference scene 1: read-aloud, check, secret, note and the NPC card", async ({ page }) => {
   await page.goto(ARRIVAL);
 
+  // The context line above the title (issue #34): chapter › group, replacing
+  // the topbar breadcrumb. The chapter links back to the pool.
+  const context = page.getByRole("navigation", { name: "Kontext" });
+  await expect(
+    context.getByRole("link", { name: "Kapitel 1: Der Leuchtturm von Salzhafen" }),
+  ).toBeVisible();
+  // The scene's group directory; "hafen" has no location file, so the slug
+  // stands as written (no invented prettification).
+  await expect(context).toContainText("hafen");
+  // The chrome names the campaign exactly ONCE — in the switcher. The old
+  // breadcrumb spelled it again right next to the near-identical chapter title.
+  await expect(
+    page.getByRole("banner").getByText(/Der Leuchtturm von Salzhafen/),
+  ).toHaveCount(1);
+
   const article = page.getByRole("article");
   await expect(article.getByText("Geplante Szene")).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
-  // Chip row from the frontmatter (the breadcrumb carries the same name).
+  // Chip row from the frontmatter (the scene's location, resolved to its name).
   await expect(article.getByText("Der Leuchtturm von Salzhafen", { exact: true })).toBeVisible();
   await expect(article.getByText("#social", { exact: true })).toBeVisible();
   await expect(article.getByText("Handout: Karte von Salzhafen")).toBeVisible();

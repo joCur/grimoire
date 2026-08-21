@@ -28,29 +28,48 @@ eingerückt, standardmäßig GEÖFFNET.
   erscheinen nirgends in der UI, auch nicht optional (showIds entfällt).
 - Topbar-Navigation „Kapitel · NPCs · Orte" ist eine PERSISTENTE
   Sektions-Navigation, keine Breadcrumb: leise Links in der Titelleiste,
-  kampagnenbezogen, ab `lg` sichtbar, nicht im Live-Modus (dessen Topbar
-  gehört der laufenden Session). „Kapitel" ist der Pool und damit der
-  offensichtliche Rückweg aus den Listen — das Kampagnen-Label daneben ist
-  der Switcher-Trigger, kein Link, und die Wortmarke wäre ein Umweg über
-  „/" (PO-Rückmeldung zu PR #35). Der jeweils offene der drei Einträge
+  kampagnenbezogen, ab `lg` sichtbar, nicht im Live-Modus. „Kapitel" ist
+  der Pool und damit der Rückweg von überall — das Kampagnen-Label daneben
+  ist der Switcher-Trigger, kein Link, und die Wortmarke wäre ein Umweg
+  über „/" (PO-Rückmeldung zu PR #35). Markiert wird die SEKTION der
+  aktuellen Ansicht, nicht die Route: Pool und Szenendateien →
+  „Kapitel", NPC-Datei und NPC-Liste → „NPCs", Ort-Datei und Ortsliste →
+  „Orte", Generator/Review/Kampagnendatei/Session/Inbox/Glossar → keine
+  Markierung (eine willkürliche wäre eine Lüge). Der markierte Eintrag
   trägt `aria-current="page"` und volle Textfarbe (`foreground` gegen
-  `body-secondary`) — auch „Kapitel" auf dem Pool selbst. Nur Farbe, keine
-  Schriftstärke: ein Gewichtswechsel würde die Zeile umbrechen lassen.
-  Der Prototyp deckt diese Navigation nicht ab; die bisherige Pool-Fußzeile
-  („NPCs · Orte" unter der Kapitelliste, aus #26) war eine
-  Team-Minimallösung und entfällt. Die Topbar-Links schließen die
-  Design-Lücke per PO-Entscheid (#34) — künftige Views denken sie mit.
-  Mobil bleibt die „Nachschlagen"-Liste der Startfläche der Zugang; ⌘K
-  findet beide Listen in jeder Breite.
-- Linker Topbar-Block ist auf Pool und beiden Listen STRUKTURGLEICH:
-  Wortmarke │ Switcher-Trigger („Kampagne: <Name>") │ Trio. Zwischen diesen
-  drei Ansichten erscheint und verschwindet nichts, nichts verschiebt sich;
-  der einzige Unterschied ist die Markierung im Trio. Kein Listentitel als
-  Krümel hinter dem Switcher (war eine Zwischenstufe in PR #35 und ist
-  redundant, sobald das Trio den Ort nennt).
-- Breadcrumbs nur für hierarchischen Abstieg — Datei-/Szenen-Ansicht
-  (`Kampagne / Kapitel / Szene`) und Generator. Geschwister-Sektionen
-  bekommen Navigation mit Aktiv-Zustand, keine Krümel.
+  `body-secondary`) — nur Farbe, keine Schriftstärke: ein Gewichtswechsel
+  würde die Zeile umbrechen lassen. Der Prototyp deckt diese Navigation
+  nicht ab; die bisherige Pool-Fußzeile („NPCs · Orte" unter der
+  Kapitelliste, aus #26) war eine Team-Minimallösung und entfällt. Die
+  Topbar-Links schließen die Design-Lücke per PO-Entscheid (#34) —
+  künftige Views denken sie mit. Mobil bleibt die „Nachschlagen"-Liste der
+  Startfläche der Zugang; ⌘K findet beide Listen in jeder Breite.
+- CHROME IST GLOBAL UND STABIL. Der linke Topbar-Block ist auf ALLEN
+  kampagnenbezogenen Ansichten identisch — Pool, Nachschlage-Listen,
+  Datei-/Szenen-Ansicht, Generator, Review:
+
+      Grimoire │ Kampagne: <Name> ⌄ │ Kapitel · NPCs · Orte
+
+  Beim Wechsel zwischen ihnen erscheint und verschwindet nichts, nichts
+  verschiebt sich; der einzige Unterschied ist die Markierung im Trio.
+  Ausnahme ist nur der Live-Modus, der seinen eigenen linken Block behält
+  (Live-Pille + Kapitel-Label) — diese Topbar gehört der laufenden Session.
+  Die rechte Seite bleibt ansichtsspezifisch (⌘K, Session-Button,
+  Live-Steuerung, Review-Fortschritt, Generator-Einstieg).
+- KEINE BREADCRUMBS IN DER TOPBAR — nirgends. Die drei früheren
+  (Szene, Liste, Generator) haben jeweils den Kampagnennamen wiederholt,
+  mit der Navigation daneben konkurriert und auf einer Datei einen
+  Kapitelpfad behauptet, der für einen aus der NPC-Liste geöffneten NPC
+  schlicht falsch war (PO-Rückmeldung mit Screenshot zu PR #35).
+- SEITEN-KONTEXT LEBT IN DER SEITE. Die Hierarchie steht als leise
+  Kontextzeile über dem Titel, direkt bei dem, was sie beschreibt:
+  Szene → `<Kapiteltitel> › <Gruppe>` (Kapitel verlinkt auf den Pool,
+  Gruppe wie ein Pool-Gruppenkopf aufgelöst), `_chapter.md` → nur das
+  Kapitel, NPC → „NPCs", Ort → „Orte" (jeweils auf ihre Liste). Kampagnen-
+  Datei, Sessions, Inbox, Glossar bekommen keine Zeile. Desktop-Pendant
+  der mobilen „‹ Pool"-Zeile (die bleibt unter `md`).
+- KAMPAGNENNAME GENAU EINMAL im Chrome: im Switcher. Nie in Krümeln, nie
+  in Kontextzeilen.
 - Anzeigenamen statt ids: Pool-Gruppenköpfe zeigen den Ortsnamen, wenn
   `locations/<slug>.md` existiert (sonst den Slug unverändert — Gruppen-
   Ordner sind lose Konvention), der Review-Quellchip den Szenentitel

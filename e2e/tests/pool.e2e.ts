@@ -100,10 +100,11 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   const current = nav.locator("[aria-current='page']");
 
   /**
-   * The whole left block of the topbar, as text and as geometry. Pool and both
-   * lists must agree on every bit of it EXCEPT which entry is marked: the trio
-   * is a persistent section nav, not a breadcrumb — nothing appears,
-   * disappears or shifts when hopping between the three (PO feedback on #35).
+   * The whole left block of the topbar, as text and as geometry. EVERY
+   * campaign-scoped view must agree on every bit of it except which entry is
+   * marked: the chrome is global and stable, the trio is a persistent section
+   * nav, and no view brings a breadcrumb of its own any more (PO rework of
+   * PR #35). So nothing appears, disappears or shifts while navigating.
    */
   const leftBlock = async () => ({
     campaign: await label.textContent(),
@@ -114,12 +115,19 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     ),
   });
 
+  /** The campaign name belongs to the switcher — and to nothing else up there. */
+  const assertChromeIsStable = async (onPool: Awaited<ReturnType<typeof leftBlock>>) => {
+    expect(await leftBlock()).toEqual(onPool);
+    await expect(page.getByRole("banner").getByText(/Der Leuchtturm von Salzhafen/)).toHaveCount(1);
+  };
+
   await page.goto("/beispiel");
   await expect(label).toHaveAccessibleName(CAMPAIGN_LABEL);
   await expect(nav.getByRole("link")).toHaveText(["Kapitel", "NPCs", "Orte"]);
   // The pool marks its own entry.
   await expect(current).toHaveText("Kapitel");
   const onPool = await leftBlock();
+  await expect(page.getByRole("banner").getByText(/Der Leuchtturm von Salzhafen/)).toHaveCount(1);
 
   // The pool's own "NPCs · Orte" footer line (issue #26) is gone — the topbar
   // is the only place that navigation lives now (issue #34).
@@ -133,23 +141,51 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     page.getByRole("main").getByRole("link", { name: /Der Leuchtturm von Salzhafen/ }),
   ).toBeVisible();
   await expect(current).toHaveText("Orte");
-  expect(await leftBlock()).toEqual(onPool);
-  // No list-title crumb behind the switcher any more — "Orte" appears in the
-  // banner exactly once, in the nav.
+  await assertChromeIsStable(onPool);
+  // No list-title crumb behind the switcher — "Orte" appears in the banner
+  // exactly once, in the nav.
   await expect(page.getByRole("banner").getByText("Orte", { exact: true })).toHaveCount(1);
 
   await nav.getByRole("link", { name: "NPCs" }).click();
   await expect(page).toHaveURL(/\/beispiel\/list\/npcs$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("NPCs");
   await expect(current).toHaveText("NPCs");
-  expect(await leftBlock()).toEqual(onPool);
+  await assertChromeIsStable(onPool);
+
+  // --- file views: same chrome, section marking follows the entity ----------
+  // A scene belongs to Kapitel; its hierarchy lives in the page's context
+  // line, not in the topbar.
+  await page.goto("/beispiel/file/01-salzhafen/hafen/ankunft-leuchtturm.md");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
+  await expect(current).toHaveText("Kapitel");
+  await assertChromeIsStable(onPool);
+
+  // An NPC belongs to NPCs — whichever chapter happens to mention it. The old
+  // breadcrumb claimed a chapter path here, which was plain misleading for an
+  // NPC opened from the NPC list.
+  await page.goto("/beispiel/file/npcs/fenn.md");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fenn");
+  await expect(current).toHaveText("NPCs");
+  await assertChromeIsStable(onPool);
+  // Its context line points at the list it came from.
+  await expect(
+    page.getByRole("navigation", { name: "Kontext" }).getByRole("link", { name: "NPCs" }),
+  ).toBeVisible();
+
+  // Views that belong to no section mark nothing at all.
+  await page.goto("/beispiel/generate");
+  await expect(current).toHaveCount(0);
+  await assertChromeIsStable(onPool);
+  await page.goto("/beispiel/review");
+  await expect(current).toHaveCount(0);
+  await assertChromeIsStable(onPool);
 
   // "Kapitel" is the way back to the pool — the reason the trio exists.
   await nav.getByRole("link", { name: "Kapitel" }).click();
   await expect(page).toHaveURL(/\/beispiel$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Der Leuchtturm von Salzhafen");
   await expect(current).toHaveText("Kapitel");
-  expect(await leftBlock()).toEqual(onPool);
+  await assertChromeIsStable(onPool);
 
   // The switcher still switches, from a list as well.
   await nav.getByRole("link", { name: "Orte" }).click();
