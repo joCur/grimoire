@@ -163,7 +163,7 @@ function RenameDialog({
               spellCheck={false}
               autoComplete="off"
               aria-invalid={ruleError !== undefined}
-              className="w-full rounded-md border border-input bg-panel-deep px-3 py-2 font-mono text-[13.5px] text-foreground outline-none placeholder:text-muted-foreground max-md:text-[16px]"
+              className="w-full rounded-md border border-input bg-panel-deep px-3 py-2 font-mono text-[13.5px] text-foreground placeholder:text-muted-foreground max-md:text-[16px]"
               placeholder={target.oldId}
             />
           </label>

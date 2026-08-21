@@ -146,7 +146,7 @@ function CampaignMetaDialog({
               onChange={(e) => setValue("name", e.target.value)}
               autoComplete="off"
               placeholder={campaign}
-              className="w-full rounded-md border border-input bg-panel-deep px-3 py-2 text-[13.5px] text-foreground outline-none placeholder:text-muted-foreground max-md:text-[16px]"
+              className="w-full rounded-md border border-input bg-panel-deep px-3 py-2 text-[13.5px] text-foreground placeholder:text-muted-foreground max-md:text-[16px]"
             />
           </label>
           <label className="flex flex-col gap-1.5">
@@ -156,7 +156,7 @@ function CampaignMetaDialog({
               value={values.description}
               onChange={(e) => setValue("description", e.target.value)}
               placeholder="Ein Satz, der die Kampagne einordnet"
-              className="w-full resize-y rounded-md border border-input bg-panel-deep px-3 py-2 text-[13.5px] leading-[1.55] text-foreground outline-none placeholder:text-muted-foreground max-md:text-[16px]"
+              className="w-full resize-y rounded-md border border-input bg-panel-deep px-3 py-2 text-[13.5px] leading-[1.55] text-foreground placeholder:text-muted-foreground max-md:text-[16px]"
             />
           </label>
 
