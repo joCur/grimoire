@@ -8,7 +8,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import { fetchFile } from "@/api";
+import { fetchFile, fetchTree } from "@/api";
+import { sceneTitle } from "@/lib/campaign";
 import { fmStringArray } from "@/lib/frontmatter";
 import { useActedKeys } from "@/lib/review-memory";
 import {
@@ -30,7 +31,12 @@ export interface ReviewEntry {
    *  inbox rewrite happens in place). */
   key: string;
   source: "log" | "inbox";
-  /** Prototype card label. */
+  /**
+   * Prototype card label — "Inbox", or "Log" plus the SCENE the line was
+   * written under ("Log · Ankunft am Leuchtturm", issue #34). The scene id
+   * from the log line is resolved against the tree; an id the tree does not
+   * know stays as it is (degrade).
+   */
   sourceLabel: string;
   /** Mono meta column: `HH:MM` for log lines, `yyyy-mm-dd` for inbox lines. */
   meta?: string;
@@ -89,6 +95,14 @@ export function useReviewEntries(
     [acted],
   );
   const session = useSessionFile(campaign, enabled);
+  // The tree turns the log line's scene id into the scene TITLE for the
+  // source chip. Same query key as every other view — shared cache, no
+  // second request; a tree that is not there yet simply shows the id.
+  const tree = useQuery({
+    queryKey: ["tree", campaign],
+    queryFn: () => fetchTree(campaign),
+    enabled: enabled && campaign !== "",
+  });
   // inbox.md may not exist yet (404) — that is an empty inbox, not an error.
   const inbox = useQuery({
     queryKey: ["file", campaign, INBOX_PATH],
@@ -129,14 +143,17 @@ export function useReviewEntries(
     [session.data?.frontmatter.reviewed],
   );
 
+  const treeData = tree.data;
+
   const entries = useMemo<ReviewEntry[]>(() => {
     const hashOf = hashes.data;
     const logEntries: ReviewEntry[] = logLines.map(({ entry, index, tag }) => {
       const hash = hashOf?.[entry.raw];
+      const scene = sceneTitle(treeData, entry.sceneId);
       const item: ReviewEntry = {
         key: `log:${index}`,
         source: "log",
-        sourceLabel: "Log",
+        sourceLabel: scene === undefined ? "Log" : `Log · ${scene}`,
         tag,
         text: stripHashtags(entry.text),
         rawLine: entry.raw,
@@ -171,7 +188,7 @@ export function useReviewEntries(
     );
 
     return [...logEntries, ...inboxEntries];
-  }, [logLines, inboxBody, keepDoneInbox, hashes.data, reviewed]);
+  }, [logLines, inboxBody, keepDoneInbox, hashes.data, reviewed, treeData]);
 
   const seenCount = entries.filter((e) => e.done).length;
   const total = entries.length;

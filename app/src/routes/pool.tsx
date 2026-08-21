@@ -12,6 +12,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { fetchFile, fetchTree } from "@/api";
+import { CampaignMetaAction } from "@/components/CampaignMetaAction";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { locationName } from "@/lib/campaign";
@@ -69,6 +70,11 @@ export function PoolRoute() {
                   {chapterCount === 1 ? "1 Kapitel" : `${chapterCount} Kapitel`} ·{" "}
                   {sceneCountLabel(sceneCount)}
                 </span>
+                {/* Name/description are editable right where they are read
+                    (issue #34) — quiet, like „Umbenennen" in the read view. */}
+                <span className="ml-auto">
+                  <CampaignMetaAction campaign={campaign} />
+                </span>
               </div>
               {meta.description !== undefined && (
                 <p className="mt-1.5 max-w-[62ch] text-[13.5px] leading-[1.55] text-body-secondary">
@@ -90,23 +96,9 @@ export function PoolRoute() {
                 defaultOpen={anyActive ? chapter.status === "active" : index === 0}
               />
             ))}
-            {/* Desktop access to the browse lists (issue #26): they already
-                work at every width, they were only linked from the mobile
-                start surface — one quiet line, no second list design. */}
-            <nav
-              // Distinct from the mobile start surface's "Nachschlagen" nav —
-              // both live in the DOM at once (responsive swap).
-              aria-label="NPCs und Orte"
-              className="mt-8 flex items-center gap-2 text-[13px] text-muted-foreground"
-            >
-              <Link to={`/${campaign}/list/npcs`} className="hover:text-foreground">
-                NPCs
-              </Link>
-              <span aria-hidden>·</span>
-              <Link to={`/${campaign}/list/locations`} className="hover:text-foreground">
-                Orte
-              </Link>
-            </nav>
+            {/* The quiet "NPCs · Orte" line of issue #26 lived here until
+                issue #34 — a team interim solution the design never covered.
+                The topbar carries that navigation now (design/README.md). */}
           </>
         )}
       </div>
@@ -223,7 +215,11 @@ function PlannedGroup({
       {group.slug !== "" && (
         <div className="flex items-center gap-2 border-b border-border py-2 text-[13px]">
           <MapPin aria-hidden size={15} className="flex-none text-muted-foreground" />
-          <span className="font-medium text-soft">{group.slug}</span>
+          {/* The group directory is a loose convention (README): it MAY name a
+              location. When `locations/<slug>.md` exists the header reads its
+              name; otherwise the slug stands as written — never prettified,
+              because a guessed name would claim a location that has no file. */}
+          <span className="font-medium text-soft">{locationName(tree, group.slug)}</span>
         </div>
       )}
       {planned.map((scene) => (

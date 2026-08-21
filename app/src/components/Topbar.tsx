@@ -12,6 +12,9 @@
 // The generator (issue #12) adds a "campaign / Generator" breadcrumb and the
 // quiet "Generator" button on the pool; that button carries a discreet
 // running indicator while a generate job is working (issue #19).
+// Since issue #34 the left side also carries the quiet "NPCs"/"Orte"
+// navigation into the browse lists (every campaign view except live, lg and
+// up) — the pool's footer line of issue #26 is gone.
 
 import type { FileResponse } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
@@ -62,8 +65,8 @@ export function Topbar() {
   const isReview = reviewMatch !== null && campaign !== "";
   const isGenerator = generateMatch !== null && campaign !== "";
   const isPool = poolMatch !== null && campaign !== "";
-  // Browse lists are linked from the pool on the desktop since issue #26 —
-  // so they need the same way back the other views have.
+  // Browse lists are reachable from the desktop chrome (issue #26, now the
+  // topbar nav below) — so they need the same way back the other views have.
   const listTitle = browseListTitle(listMatch?.params["*"] ?? "");
   const isList = listMatch !== null && campaign !== "" && listTitle !== undefined;
 
@@ -182,6 +185,38 @@ export function Topbar() {
           <span aria-hidden className="text-border-hover">/</span>
           <span className="truncate text-soft">Generator</span>
         </div>
+      )}
+
+      {/* Quiet campaign navigation (issue #34): NPCs and Orte are reachable
+          without scrolling, from every campaign view. The design prototype
+          does not cover this navigation — the pool's "NPCs · Orte" footer of
+          issue #26 was a team interim solution and is gone; these links fill
+          the gap per PO decision (design/README.md).
+          Not in the live mode: that topbar belongs to the running session.
+          Below lg the row is already carrying switcher, search and the session
+          controls, so the links step aside there — mobile has the start
+          surface's "Nachschlagen" list, and ⌘K finds both lists at any width. */}
+      {campaign !== "" && !isLive && (
+        <nav
+          // Deliberately NOT "Nachschlagen": that is the mobile start
+          // surface's nav, and on the pool both live in the DOM at once
+          // (responsive swap) — two navs with one name is a worse tree.
+          aria-label="NPCs und Orte"
+          className="flex flex-none items-center gap-1 border-l border-border pl-3 text-[13px] max-lg:hidden"
+        >
+          <Link
+            to={`/${campaign}/list/npcs`}
+            className="rounded-md px-1.5 py-1 text-body-secondary hover:text-foreground"
+          >
+            NPCs
+          </Link>
+          <Link
+            to={`/${campaign}/list/locations`}
+            className="rounded-md px-1.5 py-1 text-body-secondary hover:text-foreground"
+          >
+            Orte
+          </Link>
+        </nav>
       )}
 
       <div className="flex-1" />

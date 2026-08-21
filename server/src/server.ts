@@ -13,6 +13,10 @@
 //   [x] GET  /api/:campaign/file?path=...      one file (raw + parsed + mtime)
 //   [x] PATCH /api/:campaign/frontmatter       { path, mtimeMs, patch } — only if
 //                                              mtimeMs is unchanged, otherwise 409
+//   [x] POST /api/:campaign/campaign-meta      { name, description? } -> create
+//                                              _campaign.md (id = directory name);
+//                                              409 when it exists — editing it is
+//                                              PATCH /frontmatter's job (issue #34)
 //   [x] POST /api/:campaign/session/start      creates sessions/<today>.md
 //   [x] POST /api/:campaign/session/end        sets `ended`
 //   [x] POST /api/:campaign/log                { text, sceneId? } -> append with timestamp

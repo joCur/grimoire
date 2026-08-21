@@ -14,6 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router";
 
 import { fetchFile, fetchTree } from "@/api";
+import { CampaignMetaAction } from "@/components/CampaignMetaAction";
 import { EntityArticle } from "@/components/EntityArticle";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/components/NpcCard";
@@ -60,6 +61,11 @@ export function SceneRoute() {
   const renameAction = (
     <RenameAction campaign={campaign} currentPath={data.path} target={renameTargetFor(data)} />
   );
+  // The campaign file's header carries „Bearbeiten" instead (issue #34): its
+  // name/description are what this page shows, and its id is the campaign
+  // directory — not renameable from here.
+  const headerActions =
+    data.kind === "campaign" ? <CampaignMetaAction campaign={campaign} /> : renameAction;
 
   return (
     <>
@@ -86,7 +92,7 @@ export function SceneRoute() {
               }
             />
           ) : (
-            <EntityArticle file={data} actions={renameAction} />
+            <EntityArticle file={data} actions={headerActions} />
           )}
         </div>
         {npcs.length > 0 && (

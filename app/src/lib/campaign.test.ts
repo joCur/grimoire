@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { CampaignSummary } from "@grimoire/shared/types";
+import type { CampaignSummary, CampaignTree, SceneSummary } from "@grimoire/shared/types";
 
-import { pickLastCampaign } from "./campaign";
+import { locationName, pickLastCampaign, sceneTitle } from "./campaign";
 
 const c = (id: string, lastSession?: string): CampaignSummary =>
   lastSession === undefined ? { id } : { id, lastSession };
@@ -37,5 +37,63 @@ describe("pickLastCampaign", () => {
   test("degrades on unexpected values: empty lastSession counts as none", () => {
     expect(pickLastCampaign([c("alpha", ""), c("zeta", "2026-01-15")])).toBe("zeta");
     expect(pickLastCampaign([c("zeta", ""), c("alpha", "")])).toBe("alpha");
+  });
+});
+
+const scene = (id: string, title: string): SceneSummary => ({
+  path: `01-salzhafen/hafen/${id}.md`,
+  id,
+  title,
+  type: "planned",
+  status: "ready",
+  npcs: [],
+  tags: [],
+});
+
+const tree: CampaignTree = {
+  campaign: "beispiel",
+  chapters: [
+    { id: "01-salzhafen", title: "Kapitel 1", groups: [] },
+    {
+      id: "02-bucht",
+      title: "Kapitel 2",
+      groups: [
+        { slug: "", scenes: [scene("lighthouse-arrival", "Ankunft am Leuchtturm")] },
+        { slug: "hafen", scenes: [scene("smuggler-captured", "Von den Schmugglern erwischt")] },
+      ],
+    },
+  ],
+  npcs: [],
+  locations: [
+    { path: "locations/leuchtturm.md", id: "leuchtturm", name: "Der Leuchtturm von Salzhafen" },
+  ],
+  sessions: [],
+};
+
+describe("locationName", () => {
+  test("resolves a known id to its name — this is what a pool group header shows", () => {
+    expect(locationName(tree, "leuchtturm")).toBe("Der Leuchtturm von Salzhafen");
+  });
+
+  test("an unknown slug passes through unchanged (group dirs need no location)", () => {
+    expect(locationName(tree, "hafen")).toBe("hafen");
+    expect(locationName(undefined, "hafen")).toBe("hafen");
+    expect(locationName(tree, undefined)).toBeUndefined();
+  });
+});
+
+describe("sceneTitle", () => {
+  test("finds the title across chapters and groups", () => {
+    expect(sceneTitle(tree, "lighthouse-arrival")).toBe("Ankunft am Leuchtturm");
+    expect(sceneTitle(tree, "smuggler-captured")).toBe("Von den Schmugglern erwischt");
+  });
+
+  test("degrades to the id when the tree does not know the scene", () => {
+    expect(sceneTitle(tree, "weg-vom-fenster")).toBe("weg-vom-fenster");
+    expect(sceneTitle(undefined, "lighthouse-arrival")).toBe("lighthouse-arrival");
+  });
+
+  test("no scene id at all → nothing to label", () => {
+    expect(sceneTitle(tree, undefined)).toBeUndefined();
   });
 });
