@@ -9,22 +9,25 @@
 // left, Literata 19px, and a quiet copy button (for the Roll20 chat) that
 // only surfaces on hover/focus.
 
-import { CALLOUT_KINDS, type CalloutKind } from "@grimoire/shared/types";
+import type { CalloutKind } from "@grimoire/shared/types";
 import { Check, Copy, CornerDownRight, Dice3, Eye, Gem, PenLine } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { CALLOUT_LABELS, isCalloutKind } from "@/markdown/grammar";
 
-// Labels per the prototype's calloutMeta(); markers are the closest lucide
-// glyphs (Dice3/Eye/CornerDownRight/Gem/PenLine match the prototype's own
-// stroke SVGs closely enough — DECISIONS #5: lucide first).
-const META: Record<Exclude<CalloutKind, "readaloud">, { label: string; icon: ReactNode }> = {
-  check: { label: "Check", icon: <Dice3 aria-hidden size={17} /> },
-  secret: { label: "Geheim", icon: <Eye aria-hidden size={17} /> },
-  outcome: { label: "Konsequenz", icon: <CornerDownRight aria-hidden size={17} /> },
-  loot: { label: "Beute", icon: <Gem aria-hidden size={17} /> },
-  note: { label: "Notiz", icon: <PenLine aria-hidden size={16} /> },
+// The labels are the format's vocabulary and live with it (grammar.ts) — the
+// composer's cards name the same six blocks and must not invent second names.
+// Markers are the closest lucide glyphs (Dice3/Eye/CornerDownRight/Gem/PenLine
+// match the prototype's own stroke SVGs closely enough — DECISIONS #5: lucide
+// first).
+const ICONS: Record<Exclude<CalloutKind, "readaloud">, ReactNode> = {
+  check: <Dice3 aria-hidden size={17} />,
+  secret: <Eye aria-hidden size={17} />,
+  outcome: <CornerDownRight aria-hidden size={17} />,
+  loot: <Gem aria-hidden size={17} />,
+  note: <PenLine aria-hidden size={16} />,
 };
 
 // Per-kind colors, straight from the prototype's calloutMeta().
@@ -64,10 +67,6 @@ const KIND_CLASSES: Record<
   },
 };
 
-function isCalloutKind(kind: string): kind is CalloutKind {
-  return (CALLOUT_KINDS as readonly string[]).includes(kind);
-}
-
 interface CalloutProps {
   kind: string;
   copyText?: string | undefined;
@@ -80,7 +79,8 @@ export function Callout({ kind, copyText, children }: CalloutProps) {
   if (!isCalloutKind(kind)) return <blockquote>{children}</blockquote>;
   if (kind === "readaloud") return <ReadAloud copyText={copyText}>{children}</ReadAloud>;
 
-  const { label, icon } = META[kind];
+  const label = CALLOUT_LABELS[kind];
+  const icon = ICONS[kind];
   const colors = KIND_CLASSES[kind];
   return (
     <section

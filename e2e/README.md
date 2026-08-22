@@ -107,7 +107,7 @@ mehrere Schreibwege auf ihm liegen:
 | 6 Generator        | `tests/generator.e2e.ts`                                       |
 | 7 Frontmatter/409  | `tests/status-control.e2e.ts`, `tests/frontmatter-form.e2e.ts` |
 | 8 Mobil            | `tests/mobile.e2e.ts`                                          |
-| 9 Datei bearbeiten | `tests/file-edit.e2e.ts`                                       |
+| 9 Datei bearbeiten | `tests/block-composer.e2e.ts`, `tests/file-edit.e2e.ts`        |
 
 Auf Pfad 7 teilen sich zwei Specs die Arbeit: `status-control.e2e.ts` deckt den
 Status-Regler ab (ein Schlüssel, Konflikt über das Poll-Fenster),
@@ -116,6 +116,23 @@ Entitätsart, Chips/Referenzen/Select, Leeren löscht den Schlüssel, und der
 deterministische 409, weil der Dialog seine mtime beim Öffnen einfriert). Der
 Dialog berührt zusätzlich Pfad 2 (die Leseansicht zeigt die neuen Werte sofort)
 und Pfad 8 (Formular bei 390px) — beides steht in demselben Spec.
+
+Auf Pfad 9 teilen sich zwei Specs die zwei Oberflächen von „Bearbeiten", die
+sich seit #43 EINEN Entwurf teilen: `block-composer.e2e.ts` deckt den
+Block-Composer ab — Standardmodus, eine Karte pro Block, Anlegen/Verschieben,
+Kinder eines `## If:`-Abschnitts, unbekannte Konstrukte als Roh-Block, die
+Save-Sperre bei einem `##` in einem If-Kind (Hinweis an der Karte, „Speichern"
+aus, Datei unverändert), der 409 mit offenem Blockformular und die Bedienung
+bei 390px. `file-edit.e2e.ts` deckt
+den „Roh"-Fallback ab: die Textarea aus #39, ihre „Vorschau" (die es nur dort
+gibt), die Kinds mit und ohne Editor und die Verlustpfade (Navigation,
+fehlgeschlagener Refetch, Status-Regler daneben). Jeder Test dort betritt den
+Editor über `openRawEditor` — erst „Bearbeiten", dann der Umschalter „Roh" —,
+weil „Bearbeiten" allein seit #43 im Composer landet.
+
+Beide lesen nach jedem Speichern die Datei zurück, und der Composer parst und
+serialisiert den Textkörper: „kein Byte Diff außer dem bearbeiteten Block" ist
+darum die eigentliche Zusicherung, nicht ein `toContain` auf dem neuen Satz.
 
 Deutsche UI-Strings in Zusicherungen kommen aus den Komponenten, nicht aus dem
 Gedächtnis: bei einer Textänderung in der App wandert der Spec mit.

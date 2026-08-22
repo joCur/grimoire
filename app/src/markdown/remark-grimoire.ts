@@ -16,15 +16,19 @@
 // Both transforms only annotate/regroup mdast nodes; the React side maps the
 // resulting elements to components (see Markdown.tsx).
 
-import { CALLOUT_KINDS } from "@grimoire/shared/types";
 import type { Blockquote, Heading, Root, RootContent } from "mdast";
 import { toString as mdastToString } from "mdast-util-to-string";
 import { visit } from "unist-util-visit";
 
-const CALLOUT_MARKER = /^\[!([a-z0-9-]+)\][ \t]*/i;
-const IF_PREFIX = /^if:\s*/i;
-
-const KNOWN_KINDS: readonly string[] = CALLOUT_KINDS;
+// The marker, the If-prefix and the depth boundary are the FORMAT, not this
+// plugin's private business — the Block-Composer reads the same document with
+// the same rules (app/src/markdown/grammar.ts).
+import {
+  CALLOUT_MARKER,
+  endsIfSection,
+  ifSectionCondition,
+  isCalloutKind,
+} from "@/markdown/grammar";
 
 /**
  * Plain text of a callout body (clipboard payload for the Roll20 chat):
@@ -49,7 +53,7 @@ function transformCallouts(tree: Root): void {
     if (!match) return;
     const kind = (match[1] ?? "").toLowerCase();
     // Unknown kind: leave the blockquote as it is (plain rendering, no error).
-    if (!KNOWN_KINDS.includes(kind)) return;
+    if (!isCalloutKind(kind)) return;
 
     // Strip the `[!kind]` marker (and a soft line break right after it).
     const rest = firstInline.value.slice(match[0].length).replace(/^\r?\n/, "");
@@ -72,13 +76,13 @@ function transformCallouts(tree: Root): void {
   });
 }
 
-/** Returns the condition text if the heading is a `## If: …` heading. */
+/**
+ * Returns the condition text if the heading is a `## If: …` heading. The
+ * heading's PLAIN text is what decides (mdastToString), so `## *If:* x` is a
+ * section too — the shared predicate strips the same wrappers for the composer.
+ */
 function ifCondition(node: Heading): string | null {
-  if (node.depth !== 2) return null;
-  const text = mdastToString(node);
-  const match = IF_PREFIX.exec(text);
-  if (!match) return null;
-  return text.slice(match[0].length).trim();
+  return ifSectionCondition(node.depth, mdastToString(node));
 }
 
 function transformIfSections(tree: Root): void {
@@ -101,7 +105,7 @@ function transformIfSections(tree: Root): void {
     while (j < children.length) {
       const sibling = children[j];
       if (!sibling) break;
-      if (sibling.type === "heading" && sibling.depth <= 2) break;
+      if (sibling.type === "heading" && endsIfSection(sibling.depth)) break;
       body.push(sibling);
       j++;
     }

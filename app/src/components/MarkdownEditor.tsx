@@ -5,13 +5,13 @@
 // and is now also the reading view's edit mode (issue #15) — same surface, so
 // "Bearbeiten" feels identical wherever the DM meets it.
 //
-// Two granularities on purpose:
-//
-//   MarkdownEditorToggle / MarkdownEditorSurface — the two halves separately,
-//   for the generator cards where the toggle rides in the card header and the
-//   surface sits below the chip row (they are not siblings).
-//   MarkdownEditor — the composed block (toolbar + surface) for callers that
-//   own the whole editing area, with an `actions` slot for their own buttons.
+// Three parts, and every caller composes them itself: the TOGGLE, the SURFACE
+// and the framed EditorShell around them. Nothing here is a composed
+// „whole editor" — the generator cards put the toggle in the card header and
+// the surface below the chip row (they are not siblings), and the reading view
+// puts a mode switch and its Speichern/Abbrechen into the same toolbar. A
+// pre-composed block would fit neither, and the one that used to sit here fit
+// nobody: it had no caller left.
 //
 // No local state: the caller owns `value` and `editing`, because both outlive
 // this component (the generator mirrors edits into its server job, the reading
@@ -94,43 +94,32 @@ export function MarkdownEditorSurface({
 }
 
 /**
- * Toolbar plus surface as one block: the toggle on the left, the caller's
- * `actions` (Speichern/Abbrechen in the reading view) on the right. Wraps at
- * narrow widths so the actions drop below the toggle instead of shrinking.
+ * The framed editing card: a wrapping toolbar row (mode controls left, the
+ * caller's actions right) over whatever surface is on screen. Wraps at narrow
+ * widths so the actions drop below the controls instead of shrinking.
+ *
+ * Shared with the block composer (issue #43), which puts its own controls in
+ * the toolbar and its block list below — one frame, so „Bearbeiten" looks the
+ * same whichever surface the DM is on.
  */
-export function MarkdownEditor({
-  value,
-  onChange,
-  editing,
-  onToggleEditing,
-  id,
-  label,
-  preview,
+export function EditorShell({
+  controls,
   actions,
-}: MarkdownEditorSurfaceProps & {
-  onToggleEditing: () => void;
+  children,
+}: {
+  controls: ReactNode;
   actions?: ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div className="rounded-[10px] border border-border bg-[color-mix(in_srgb,var(--card)_60%,var(--background))] px-4 py-4 md:px-5">
       <div className="flex flex-wrap items-center gap-2">
-        <MarkdownEditorToggle
-          editing={editing}
-          onToggleEditing={onToggleEditing}
-          controlsId={id}
-        />
+        {controls}
         {actions !== undefined && (
           <span className="ml-auto flex flex-wrap items-center gap-2">{actions}</span>
         )}
       </div>
-      <MarkdownEditorSurface
-        value={value}
-        onChange={onChange}
-        editing={editing}
-        id={id}
-        label={label}
-        preview={preview}
-      />
+      {children}
     </div>
   );
 }

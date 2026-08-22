@@ -20,6 +20,7 @@ import { ChevronDown, X } from "lucide-react";
 import type { KeyboardEvent, ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { INPUT_CLASS } from "@/components/ui/field";
 import {
   referenceLabel,
   referenceOptions,
@@ -29,10 +30,6 @@ import {
   type FrontmatterField,
 } from "@/lib/frontmatter-form";
 import { cn } from "@/lib/utils";
-
-/** The input vocabulary of the two existing dialogs (issues #30/#34). */
-const INPUT_CLASS =
-  "w-full rounded-md border border-input bg-panel-deep px-3 py-2 text-[13.5px] text-foreground placeholder:text-muted-foreground max-md:text-[16px]";
 
 /** Stable per-field DOM id — one dialog is on screen at a time. */
 function fieldId(key: string): string {
