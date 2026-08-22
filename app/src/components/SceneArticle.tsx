@@ -53,7 +53,7 @@ export function SceneArticle({
 
   return (
     <article className="w-full min-w-0">
-      <div className={cn("flex items-center gap-2.5", live ? "mb-2" : "mb-2.5")}>
+      <div className={cn("flex flex-wrap items-center gap-2.5", live ? "mb-2" : "mb-2.5")}>
         {isContingency ? (
           <GitFork aria-hidden size={16} className="flex-none text-soft" />
         ) : (
@@ -78,8 +78,13 @@ export function SceneArticle({
         {(statusControl !== undefined || actions !== undefined) && (
           <>
             <span className="flex-1" />
-            {actions}
-            {statusControl}
+            {/* One wrapping unit since issue #42 made this three actions plus
+                the status regler: below md they need a second row instead of
+                being squeezed off the edge. */}
+            <span className="flex flex-wrap items-center justify-end gap-2">
+              {actions}
+              {statusControl}
+            </span>
           </>
         )}
       </div>

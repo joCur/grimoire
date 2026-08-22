@@ -92,21 +92,30 @@ LLM_PROVIDER=openai LLM_BASE_URL=http://127.0.0.1:4319/v1 LLM_MODEL=stub \
 
 **Wer einen kritischen Pfad berührt oder einen neuen schafft, erweitert diese
 Suite im selben PR — sonst kein Merge** (`CLAUDE.md`, „Kritische Pfade"). Die
-Pfade und die Specs stehen 1:1 zueinander; die Nummer steht außerdem in der
+Pfade und die Specs stehen zueinander; die Nummer steht außerdem in der
 Kopfzeile des jeweiligen Specs (die Dateinamen tragen sie bewusst nicht — die
-Suite hat keine Reihenfolge):
+Suite hat keine Reihenfolge). Ein Pfad kann mehr als einen Spec haben, wenn
+mehrere Schreibwege auf ihm liegen:
 
-| Pfad (CLAUDE.md)   | Spec                           |
-| ------------------ | ------------------------------ |
-| 1 Auto-Einstieg    | `tests/pool.e2e.ts`            |
-| 2 Szene lesen      | `tests/scene-rendering.e2e.ts` |
-| 3 ⌘K-Suche         | `tests/search.e2e.ts`          |
-| 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`   |
-| 5 Ernte            | `tests/review-harvest.e2e.ts`  |
-| 6 Generator        | `tests/generator.e2e.ts`       |
-| 7 Status/409       | `tests/status-control.e2e.ts`  |
-| 8 Mobil            | `tests/mobile.e2e.ts`          |
-| 9 Datei bearbeiten | `tests/file-edit.e2e.ts`       |
+| Pfad (CLAUDE.md)   | Spec                                                           |
+| ------------------ | -------------------------------------------------------------- |
+| 1 Auto-Einstieg    | `tests/pool.e2e.ts`                                            |
+| 2 Szene lesen      | `tests/scene-rendering.e2e.ts`                                 |
+| 3 ⌘K-Suche         | `tests/search.e2e.ts`                                          |
+| 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`                                   |
+| 5 Ernte            | `tests/review-harvest.e2e.ts`                                  |
+| 6 Generator        | `tests/generator.e2e.ts`                                       |
+| 7 Frontmatter/409  | `tests/status-control.e2e.ts`, `tests/frontmatter-form.e2e.ts` |
+| 8 Mobil            | `tests/mobile.e2e.ts`                                          |
+| 9 Datei bearbeiten | `tests/file-edit.e2e.ts`                                       |
+
+Auf Pfad 7 teilen sich zwei Specs die Arbeit: `status-control.e2e.ts` deckt den
+Status-Regler ab (ein Schlüssel, Konflikt über das Poll-Fenster),
+`frontmatter-form.e2e.ts` den „Eigenschaften"-Dialog von #42 (alle Felder einer
+Entitätsart, Chips/Referenzen/Select, Leeren löscht den Schlüssel, und der
+deterministische 409, weil der Dialog seine mtime beim Öffnen einfriert). Der
+Dialog berührt zusätzlich Pfad 2 (die Leseansicht zeigt die neuen Werte sofort)
+und Pfad 8 (Formular bei 390px) — beides steht in demselben Spec.
 
 Deutsche UI-Strings in Zusicherungen kommen aus den Komponenten, nicht aus dem
 Gedächtnis: bei einer Textänderung in der App wandert der Spec mit.

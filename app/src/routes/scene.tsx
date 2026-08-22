@@ -18,6 +18,11 @@
 // editor — header, chips and status regler keep standing, the frontmatter is
 // not part of it. The route owns only the "which path is being edited" bit;
 // the write, the 409 and the discard guard live in FileBodyEditor.
+//
+// „Eigenschaften" next to it (issue #42) is the frontmatter half: a form over
+// all typed fields of the kind. It stays available while the body editor runs —
+// its patch never touches the body, and the editor adopts a body-neutral new
+// version instead of turning it into a conflict (shouldAdvanceBase).
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -27,6 +32,7 @@ import { fetchFile, fetchTree } from "@/api";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
 import { EntityArticle } from "@/components/EntityArticle";
 import { FileBodyEditAction, FileBodyEditor } from "@/components/FileBodyEditor";
+import { FrontmatterAction } from "@/components/FrontmatterAction";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/components/NpcCard";
 import { PageContext } from "@/components/PageContext";
@@ -109,9 +115,16 @@ export function SceneRoute() {
       onClose={() => setEditingPath(undefined)}
     />
   ) : undefined;
+  // „Eigenschaften" (issue #42) — the frontmatter form of the kinds that have
+  // typed fields (scene, npc, location, chapter); it renders nothing for the
+  // rest. The tree feeds its reference fields (npc/location/chapter ids).
+  const propertiesAction = (
+    <FrontmatterAction campaign={campaign} file={data} tree={tree.data} />
+  );
   const articleActions = (
     <>
       {editAction}
+      {propertiesAction}
       {renameAction}
     </>
   );

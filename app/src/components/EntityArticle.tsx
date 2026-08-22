@@ -35,10 +35,16 @@ function Title({ children, className }: { children: string; className?: string }
  * right-aligned, evenly spaced unit in every header variant — without it the
  * `justify-between` rows below would strand the first button in the middle of
  * the header. Renders nothing when there are no actions.
+ *
+ * It WRAPS since issue #42 added „Eigenschaften" as a third action: three
+ * labels plus a long title do not fit a 390px line, and a clipped action is
+ * worse than a second row.
  */
 function ActionGroup({ children }: { children?: ReactNode }) {
   if (children === undefined) return null;
-  return <span className="flex flex-none items-center gap-2">{children}</span>;
+  return (
+    <span className="flex flex-wrap items-center justify-end gap-2">{children}</span>
+  );
 }
 
 /**
@@ -73,7 +79,7 @@ export function EntityArticle({
       ) : header === "location" ? (
         <LocationHeader file={file} name={name} actions={actions} />
       ) : (
-        <div className="mb-6 flex items-start justify-between gap-3">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
           <Title>{title}</Title>
           <ActionGroup>{actions}</ActionGroup>
         </div>
@@ -110,7 +116,7 @@ function NpcHeader({
           </span>
         )}
         {actions !== undefined && (
-          <span className="ml-auto flex flex-none items-center gap-2">{actions}</span>
+          <span className="ml-auto flex flex-wrap items-center justify-end gap-2">{actions}</span>
         )}
       </div>
       {role !== undefined && (
@@ -153,7 +159,7 @@ function LocationHeader({
   const page = fmString(file.frontmatter["roll20-page"]);
   return (
     <header className="mb-7 border-b border-border pb-5">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <Title>{name}</Title>
         <ActionGroup>{actions}</ActionGroup>
       </div>

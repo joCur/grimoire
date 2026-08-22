@@ -5,12 +5,14 @@
 // markup (pinning lucide-react/react-dom byte output would break on every
 // dependency bump without a single pixel moving).
 
+import type { FileResponse } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
-import { PenLine } from "lucide-react";
+import { PenLine, SlidersHorizontal } from "lucide-react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { CampaignMetaAction } from "./CampaignMetaAction";
 import { FileBodyEditAction } from "./FileBodyEditor";
+import { FrontmatterAction } from "./FrontmatterAction";
 import { HeaderAction } from "./HeaderAction";
 import { RenameAction } from "./RenameAction";
 
@@ -63,5 +65,43 @@ describe("the three call sites", () => {
     expect(renderToStaticMarkup(<CampaignMetaAction campaign="beispiel" />)).toBe(
       headerAction("Bearbeiten"),
     );
+  });
+
+  test("Eigenschaften (issue #42) is the shared trigger with its own glyph", () => {
+    const npc: FileResponse = {
+      path: "npcs/jorna.md",
+      kind: "npc",
+      frontmatter: { id: "jorna", name: "Jorna" },
+      body: "",
+      mtimeMs: 1,
+      raw: "",
+    };
+    expect(
+      renderToStaticMarkup(
+        <FrontmatterAction campaign="beispiel" file={npc} tree={undefined} />,
+      ),
+    ).toBe(
+      renderToStaticMarkup(
+        <HeaderAction icon={SlidersHorizontal} label="Eigenschaften" onClick={() => {}} />,
+      ),
+    );
+  });
+
+  test("no Eigenschaften where there is no typed frontmatter (session, inbox, campaign)", () => {
+    for (const kind of ["session", "inbox", "campaign", "glossary"] as const) {
+      const file: FileResponse = {
+        path: "x.md",
+        kind,
+        frontmatter: {},
+        body: "",
+        mtimeMs: 1,
+        raw: "",
+      };
+      expect(
+        renderToStaticMarkup(
+          <FrontmatterAction campaign="beispiel" file={file} tree={undefined} />,
+        ),
+      ).toBe("");
+    }
   });
 });
