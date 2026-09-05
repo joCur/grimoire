@@ -187,3 +187,93 @@ ein Image und ein Compose-File:
 Bewusst nicht dabei: Multi-Arch (amd64 genügt), Auto-Deploy (der PO pullt
 weiterhin selbst) und rückwirkende Changelog-Generierung für die Commits vor
 diesem Eintrag.
+
+## 13. SQLite ist die Quelle der Wahrheit (ENTWURF — finalisiert in Scheibe 4)
+
+> **Status: Entwurf.** Eingecheckt mit Scheibe 1 der Migration (#54), damit
+> Schema und Werkzeug nicht ohne festgehaltene Begründung im Repo liegen.
+> Finalisiert wird dieser Eintrag in Scheibe 4 (#52), wenn der Cutover
+> abgeschlossen ist. Bis dahin gilt **ADR #1 für den laufenden Betrieb**: die
+> Lauf-API liest weiterhin Dateien.
+
+**Löst ADR #11 ab** (und damit die dort formulierte Reihenfolge „Markdown
+bleibt vorerst Source of Truth"). Die dort benannten Trigger sind eingetreten:
+Job-Persistenz (#23), Rename als Datenoperation (#29/#30) und die
+Editing-UI (#15/#42/#43) als Sicherheitsnetz stehen. Planung und
+PO-Entscheidungen: #52 (Fassung 3, final).
+
+**Entscheidung:** Eine SQLite-Datenbank ist die **alleinige** Quelle der
+Wahrheit für Kampagneninhalte. Kein Spiegel auf das Dateisystem, kein
+Auto-Export, kein Zwei-Wege-Abgleich — die Klasse von Konfliktproblemen, die
+ein Spiegel erzeugt, wird nicht gebaut.
+
+- **Markdown bleibt an genau zwei Stellen:** (a) als Quelle der EINMALIGEN
+  Migration aus dem Dateibaum, (b) als Inhaltsformat der `body`-Spalten. Das
+  Body-Vokabular aus README.md (Callouts, `## If:`, Hashtags) bleibt
+  normativ; das Datenformat-Kapitel wird zum „Import-Format (historisch)".
+- **Ein Body = ein Markdown-Feld,** in der UI als Markdown editierbar
+  (PO-Entscheidung). „Blöcke als Zeilen" ist eine bewusst offen gelassene
+  Später-Option; das Schema verbaut sie nicht.
+- **Das Glossar ist eine strukturierte Tabelle** (Begriff → Erklärung), kein
+  Markdown-Blob. Der Ausbau zur Generator-Wissensbasis ist Folge-Feature #53.
+- **Altdateien werden nie gelöscht, verschoben oder markiert.** Nach der
+  Migration fasst der Server `CAMPAIGN_ROOT` nicht mehr an. Der komplette,
+  menschenlesbare Vor-Migrations-Stand bleibt damit liegen — das ist die
+  Abfederung der Einbahnstraße, zusammen mit „manueller Export" als bekanntem
+  Später-Pfad.
+- **Die Migration verliert nie still Inhalt.** Was nicht zu Zeilen wird,
+  liegt wörtlich in `unknown_files` — Textdateien in `content`, Nicht-Text
+  (Karten-PNG, PDF-Handout) als Bytes in `content_blob`, denn eine als UTF-8
+  verstümmelte Kopie unter der Überschrift „unverändert übernommen" wäre
+  schlimmer als eine ehrliche Absage. Jede Degradierung steht mit Grund und
+  Lauf-Id (`migration_report.run_id`) daneben.
+- **Die Migration ist wiederaufnehmbar.** Neben `meta['migrated_at']` (Lauf
+  fertig) markiert `meta['migrated_campaign:<id>']` jede einzelne, in ihrer
+  eigenen Transaktion committete Kampagne. Ein Abbruch zwischen zwei
+  Kampagnen führt damit zum Wiederaufsetzen statt in die Sackgasse
+  „Inhalt ohne Marker — wird nie wieder angefasst".
+- **Sicherung der DB-Datei ist Sache des Stack-Owners** (Volume-Backup,
+  Hinweis in DEPLOYMENT.md); ein eigenes Backup-System ist bewusst kein
+  Feature.
+- **ORM: Drizzle** (`drizzle-orm`, `drizzle-kit` als Dev-Dependency).
+  `server/src/db/schema.ts` ist die eine Typquelle; Migrationen sind
+  generierte, **committete** SQL-Dateien und werden beim Boot in einer
+  Transaktion angewandt. Downgrade wird nicht unterstützt; Rückweg ist
+  Volume-Sicherung plus Image-Rollback per SHA-Tag (#12).
+- **FTS5 statt Fuse.js** für die Suche, als handgeschriebene
+  Custom-Migration (Tokenizer `unicode61 remove_diacritics 2`, Ranking
+  `bm25(search_fts, 10, 6, 4, 1)`), explizit aus der Store-Schicht gepflegt.
+- **`rev` ersetzt `mtimeMs`** als 409-Guard (Zeilenversion statt Dateizeit —
+  löst #37). **PRAGMAs:** `journal_mode=WAL`, `foreign_keys=ON`,
+  `busy_timeout=5000`. **`GRIMOIRE_DATA`** (Default `./data`) hält
+  `grimoire.db` samt `-wal`/`-shm`; `CAMPAIGN_ROOT` ist nur noch Quelle der
+  Einmal-Migration bzw. des Dev-Seeds.
+
+**Treiber — Abweichung von der Planung, hier als Bun-Kopplung registriert
+(Pflicht aus #7):** Die Planung ging davon aus, dass `node:sqlite` auf beiden
+Laufzeiten verfügbar ist und dass Drizzle einen `drizzle-orm/node-sqlite`
+-Treiber mitbringt. Beides trifft nicht zu: **Bun implementiert `node:sqlite`
+nicht** (geprüft mit 1.3.14, der in CI gepinnten Version — Bun verweist auf
+`bun:sqlite`), und **drizzle-orm 0.45.2 hat keinen `node-sqlite`-Treiber**.
+Konsequenz, gekapselt in `server/src/db/driver.ts`:
+
+- **`node:sqlite` ist der primäre Treiber** (Node ≥ 22.16 — ab 22.13 ohne
+  Flag, ab 22.16 mit `setReturnArrays`). Der Server läuft damit auf reinem
+  Node **ohne native Abhängigkeit**; die Node-Portabilität aus #7 ist real und
+  nicht nur behauptet.
+- **`bun:sqlite` ist der Fallback,** genutzt genau dann, wenn `node:sqlite`
+  fehlt. Das ist die eine dokumentierte Bun-only-API des Projekts.
+- Beide hängen hinter EINER Schnittstelle mit identischer Parameter- und
+  Zeilenbehandlung. **`test/db-smoke.test.ts` beweist FTS5, Transaktionen und
+  UPSERT auf beiden Laufzeiten**; der CI-Job `db-smoke-node` fährt dieselbe
+  Datei auf Node. Driftet ein Treiber, ist das das Frühwarnsignal.
+- `better-sqlite3` bleibt der dokumentierte, nicht gebaute Notausgang, falls
+  einer der beiden eingebauten Treiber ausfällt.
+
+**Nachtrag zu ADR #10:** Generator-Jobs werden persistent (`generate_jobs`);
+der dort akzeptierte Verlust bei Neustart entfällt, laufende Jobs werden beim
+Boot auf `failed` gesetzt (Scheibe 4, #23).
+
+**Bewusst nicht Teil der Entscheidung:** Export/Import jenseits der
+Erstmigration, Trigram-Tokenizer für tippfehlertolerante Suche, Auto-Backups,
+Mehrnutzer-Betrieb (dafür gelten weiter #3 und die Neubewertung aus #7).
