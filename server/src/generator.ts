@@ -32,7 +32,7 @@
 // The provider is resolved lazily (per request, after the cheap request
 // checks), so the read-only API never needs an API key (see server.ts).
 
-import { mkdir, readFile, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CORE_SCHEMA, dump } from "js-yaml";
@@ -40,6 +40,7 @@ import {
   CALLOUT_KINDS,
   NPC_STATUSES,
   SCENE_TYPES,
+  kindFromPath,
   parseMarkdown,
   type GenerateNpcResult,
   type GenerateResult,
@@ -48,13 +49,12 @@ import {
   type GeneratedStub,
   type ParsedFile,
 } from "@grimoire/shared";
-import {
-  ApiError,
-  assertSafeRelativeMdPath,
-  campaignDir,
-  collectCampaignFiles,
-} from "./campaign-fs";
-import { atomicWrite, withFileLock } from "./campaign-write";
+import { ApiError, assertSafeRelativeMdPath } from "./campaign-fs";
+// The generator reads its context and writes its drafts through the store
+// (issue #57) — the campaign file tree is not a data source any more.
+import { buildTree, glossaryText, requireCampaign } from "./store/read";
+import { applyDrafts, chapterExists, draftTargetExists } from "./store/write";
+import { scenePath } from "./store/paths";
 import {
   createProvider,
   type CompletionResult,
@@ -205,27 +205,17 @@ function assertSafeChapterId(chapter: string): void {
  * Exported because POST /generate runs these BEFORE it creates a background
  * job (issue #19): a 400/404 is a request error and must stay a synchronous
  * answer instead of becoming a failed job the DM has to go and read.
- * Returns the campaign directory, so callers do not resolve it twice.
  */
 export async function assertGenerateTarget(
   campaign: string,
   chapter: string,
   allowMissingChapter = false,
-): Promise<string> {
-  const dir = await campaignDir(campaign); // 400 unsafe id, 404 unknown campaign
+): Promise<void> {
+  await requireCampaign(campaign); // 400 unsafe id, 404 unknown campaign
   assertSafeChapterId(chapter);
-  let chapterStats: Awaited<ReturnType<typeof stat>> | null = null;
-  try {
-    chapterStats = await stat(path.join(dir, chapter));
-  } catch {
-    // missing — allowed only for the new-chapter flow (checked below)
-  }
-  if (chapterStats === null) {
-    if (!allowMissingChapter) throw new ApiError(404, "chapter not found");
-  } else if (!chapterStats.isDirectory()) {
+  if (!(await chapterExists(campaign, chapter)) && !allowMissingChapter) {
     throw new ApiError(404, "chapter not found");
   }
-  return dir;
 }
 
 /**
@@ -243,17 +233,14 @@ export const NPC_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
  * existing NPC file). Exported for the same reason as assertGenerateTarget:
  * POST /generate/npc runs it BEFORE it creates a background job.
  */
-export async function assertNpcGenerateTarget(campaign: string, npcId?: string): Promise<string> {
-  const dir = await campaignDir(campaign); // 400 unsafe id, 404 unknown campaign
-  if (npcId === undefined) return dir;
+export async function assertNpcGenerateTarget(campaign: string, npcId?: string): Promise<void> {
+  await requireCampaign(campaign); // 400 unsafe id, 404 unknown campaign
+  if (npcId === undefined) return;
   if (!NPC_ID_PATTERN.test(npcId)) throw new ApiError(400, "invalid npc id");
   const rel = `npcs/${npcId}.md`;
-  try {
-    await stat(path.join(dir, rel));
-  } catch {
-    return dir; // free — the run may target it
+  if (await draftTargetExists(campaign, rel)) {
+    throw new ApiError(409, "npc file already exists", { path: rel });
   }
-  throw new ApiError(409, "npc file already exists", { path: rel });
 }
 
 /**
@@ -262,8 +249,8 @@ export async function assertNpcGenerateTarget(campaign: string, npcId?: string):
  * glossary. No chapter — an NPC run has no target chapter.
  */
 async function collectNpcContext(campaign: string, npcId?: string): Promise<CampaignContext> {
-  const dir = await assertNpcGenerateTarget(campaign, npcId);
-  return collectContext(campaign, dir);
+  await assertNpcGenerateTarget(campaign, npcId);
+  return collectContext(campaign);
 }
 
 /**
@@ -277,30 +264,21 @@ async function collectSceneContext(
   chapter: string,
   allowMissingChapter = false,
 ): Promise<SceneContext> {
-  const dir = await assertGenerateTarget(campaign, chapter, allowMissingChapter);
-  return { ...(await collectContext(campaign, dir)), chapter };
+  await assertGenerateTarget(campaign, chapter, allowMissingChapter);
+  return { ...(await collectContext(campaign)), chapter };
 }
 
-/** The part of the context that is the same for every run kind. */
-async function collectContext(campaign: string, dir: string): Promise<CampaignContext> {
-  const files = await collectCampaignFiles(campaign);
-  const pick = (kind: "npc" | "location") =>
-    files
-      .filter((f) => f.kind === kind)
-      .map((f) => ({
-        id: String(f.frontmatter.id),
-        name: String(f.frontmatter.name ?? f.frontmatter.id),
-      }));
-  const npcs = pick("npc");
-  const locations = pick("location");
-
-  let glossary = "";
-  try {
-    const raw = await readFile(path.join(dir, "glossary.md"), "utf8");
-    glossary = parseMarkdown(raw, "glossary.md", 0).body;
-  } catch {
-    // no glossary — send an empty one
-  }
+/**
+ * The part of the context that is the same for every run kind. Reads the
+ * campaign's npcs/locations out of the tree query and the glossary out of its
+ * TABLE (issue #57) — rendered as the `EN → DE` lines the prompt documents,
+ * so the prompt text the LLM sees is the same as before.
+ */
+async function collectContext(campaign: string): Promise<CampaignContext> {
+  const tree = await buildTree(campaign);
+  const npcs = tree.npcs.map((n) => ({ id: n.id, name: n.name }));
+  const locations = tree.locations.map((l) => ({ id: l.id, name: l.name }));
+  const glossary = (await glossaryText(campaign)) ?? "";
 
   return {
     npcs,
@@ -1201,7 +1179,7 @@ function applyStubTarget(item: unknown, index: number): ApplyTarget {
  * never the active one); the body stays empty and degrades.
  */
 async function newChapterTarget(
-  dir: string,
+  campaign: string,
   chapter: unknown,
   chapterTitle: unknown,
 ): Promise<ApplyTarget | null> {
@@ -1213,12 +1191,8 @@ async function newChapterTarget(
   if (title === "") throw new ApiError(400, "chapterTitle must be a non-empty string");
   assertSafeChapterId(chapter); // 400 unsafe id, 404 reserved dirs
   const rel = `${chapter}/_chapter.md`;
-  try {
-    await stat(path.resolve(dir, rel));
-    return null; // chapter already has its file — nothing to create
-  } catch {
-    // missing — create it below
-  }
+  // An existing chapter is not a conflict — idempotent, as before.
+  if (await chapterExists(campaign, chapter)) return null;
   const yaml = dump(
     { id: chapter, title, status: "planned" },
     { schema: CORE_SCHEMA, flowLevel: 1, lineWidth: -1 },
@@ -1227,10 +1201,11 @@ async function newChapterTarget(
 }
 
 /**
- * Write reviewed drafts to disk. Validates ALL files first (400), then
- * checks ALL target paths for conflicts (409 with the conflicting paths,
- * nothing partially written), then writes via the shared per-file locks and
- * atomic writes. Returns the written campaign-relative paths.
+ * Write the reviewed drafts (issue #57: as ROWS). Validates ALL drafts first
+ * (400), then checks ALL targets for conflicts (409 with the conflicting
+ * paths, nothing partially written), then inserts them in ONE transaction —
+ * which is what "all or nothing" now means literally. Returns the written
+ * campaign-relative paths.
  *
  * `chapter`/`chapterTitle` (both or neither) add the chapter's `_chapter.md`
  * to the SAME all-or-nothing batch when it does not exist yet — the app's
@@ -1250,7 +1225,7 @@ export async function applyGenerated(
     chapterTitle?: unknown;
   },
 ): Promise<{ written: string[] }> {
-  const dir = await campaignDir(campaign);
+  await requireCampaign(campaign);
   const { scenes, stubs, npc, chapter, chapterTitle } = body;
 
   if (scenes !== undefined && !Array.isArray(scenes)) {
@@ -1267,7 +1242,7 @@ export async function applyGenerated(
   if (targets.length === 0) throw new ApiError(400, "nothing to apply");
 
   // The chapter file comes first — the drafts live inside it.
-  const chapterFile = await newChapterTarget(dir, chapter, chapterTitle);
+  const chapterFile = await newChapterTarget(campaign, chapter, chapterTitle);
   if (chapterFile !== null) targets.unshift(chapterFile);
 
   const seen = new Set<string>();
@@ -1276,26 +1251,34 @@ export async function applyGenerated(
     seen.add(t.rel);
   }
 
-  // Validate ALL, then write: collect every conflict before touching disk.
+  // Validate ALL, then write: collect every conflict before a single row is
+  // inserted. `draftTargetExists` asks by ID, which is the key now — so a
+  // draft that would collide with an existing entity is caught even when the
+  // model chose a different file name for it.
   const conflicts: string[] = [];
   for (const t of targets) {
-    try {
-      await stat(path.resolve(dir, t.rel));
-      conflicts.push(t.rel);
-    } catch {
-      // does not exist — good
-    }
+    if (await draftTargetExists(campaign, t.rel)) conflicts.push(t.rel);
   }
   if (conflicts.length > 0) {
     throw new ApiError(409, "target files already exist", { conflicts });
   }
 
-  const written: string[] = [];
-  for (const t of targets) {
-    const abs = path.resolve(dir, t.rel);
-    await mkdir(path.dirname(abs), { recursive: true });
-    await withFileLock(abs, () => atomicWrite(abs, t.markdown));
-    written.push(t.rel);
-  }
+  const drafts = targets.map((t) => {
+    const parsed = parseMarkdown(t.markdown, t.rel, 0);
+    return { rel: t.rel, frontmatter: parsed.frontmatter, body: parsed.body };
+  });
+  await applyDrafts(campaign, drafts);
+  // The written paths are the ADDRESSES the entities now have (store/paths):
+  // for a scene that is `<chapter>/<group>/<id>.md`, which is where the app
+  // opens it — the model's file name is not part of the addressing any more.
+  const written = drafts.map((draft) => {
+    const kind = kindFromPath(draft.rel);
+    if (kind !== "scene") return draft.rel;
+    const segments = draft.rel.split("/");
+    const chapterId = segments[0] ?? "";
+    const groupSlug = segments.length === 3 ? (segments[1] ?? "") : "";
+    const id = typeof draft.frontmatter.id === "string" ? draft.frontmatter.id : "";
+    return id === "" ? draft.rel : scenePath(chapterId, groupSlug, id);
+  });
   return { written };
 }

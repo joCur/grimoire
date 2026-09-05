@@ -64,11 +64,20 @@
 //                                              to the ACTIVE session (issue #40); STRICT —
 //                                              404 when no session is running
 //   [x] POST /api/:campaign/inbox              { text } -> append to inbox.md
-//   [x] GET  /api/:campaign/search?q=...       { results } — fuzzy search (Fuse.js, in-memory,
-//                                              scenes/npcs/locations/chapters/_campaign.md,
-//                                              max 20 results)
-//   [x] GET  /api/:campaign/version            { version, build } — version is bumped by the
-//                                              file watcher on md changes; the app polls it and
+//   [x] GET  /api/:campaign/search?q=...       { results } — full-text search (FTS5, bm25,
+//                                              prefix terms, diacritics folded;
+//                                              scenes/npcs/locations/chapters/campaign/
+//                                              GLOSSARY, max 20 results — issue #57)
+//   [x] GET  /api/:campaign/glossary           { entries: [{ term, explanation }] } — the
+//                                              glossary TABLE (issue #57, planning F6)
+//   [x] PUT  /api/:campaign/glossary           { entries } -> { entries }; replaces the list
+//   [x] GET  /api/:campaign/migration-report   { entries: [{ path, reason, at }] } — what the
+//                                              one-time markdown import had to degrade;
+//                                              empty = clean import (issue #57)
+//   [x] GET  /api/:campaign/version            { version, build } — version is
+//                                              `campaigns.version`, bumped by every write in
+//                                              the same transaction (the chokidar watcher is
+//                                              gone with the cutover); the app polls it and
 //                                              refetches on change (SSE considered and deferred,
 //                                              DECISIONS #9). build is this server's build id
 //                                              (GRIMOIRE_BUILD, "dev" outside an image) — issue
@@ -144,25 +153,46 @@
 
 import { existsSync } from "node:fs";
 import { Hono } from "hono";
-import { getAppDistDir, getCampaignRoot, PORT } from "./config";
+import { getAppDistDir, getCampaignRoot, getDbFile, PORT } from "./config";
 import { api } from "./routes/api";
 import { mountStaticApp } from "./static-files";
-import { startWatcher } from "./watcher";
+import { initStore } from "./store/handle";
 
 export const app = new Hono();
 app.route("/api", api);
 
-// The file watcher (issue #8) and the static SPA routes (issue #13) are wired
-// up ONLY when this file is the process entrypoint — importing the app for
-// in-process tests must stay free of side effects (no live fs watcher keeping
-// `bun test` alive, and no catch-all route swallowing 404 assertions; the
-// static tests mount their own app via mountStaticApp).
+// The database boot (issue #57) and the static SPA routes (issue #13) are
+// wired up ONLY when this file is the process entrypoint — importing the app
+// for in-process tests must stay free of side effects (no database file
+// created next to the repo, and no catch-all route swallowing 404 assertions;
+// the static tests mount their own app via mountStaticApp).
 // import.meta.main is supported by Bun and Node >= 24; a Node entrypoint
 // that serves the app via @hono/node-server (see above) should do the same
 // two calls itself.
 if (import.meta.main) {
-  console.log(`Grimoire server — campaigns: ${getCampaignRoot()}, port: ${PORT}`);
-  startWatcher();
+  console.log(`Grimoire server — database: ${getDbFile()}, port: ${PORT}`);
+  // Opens the database, applies the schema migrations and runs the one-time
+  // import from CAMPAIGN_ROOT when (and only when) the database is still
+  // empty — see store/handle.ts and db/migrate-campaigns.ts. Awaited before
+  // the first request so a boot that cannot open its database fails loudly
+  // instead of on the first query.
+  const store = await initStore();
+  void store;
+  const info = (await import("./store/handle")).storeInfo();
+  if (info?.migration.migrated === true) {
+    console.log(
+      `First-run import from ${getCampaignRoot()}: ` +
+        `${info.migration.campaigns.join(", ") || "(nothing)"}` +
+        (info.migration.reportEntries > 0
+          ? ` — ${info.migration.reportEntries} migration-report entr${info.migration.reportEntries === 1 ? "y" : "ies"} to read (GET /api/:campaign/migration-report)`
+          : " — clean import"),
+    );
+  } else {
+    console.log(
+      `Database in use (${info?.backend ?? "unknown backend"}); no import needed ` +
+        `(${info?.migration.skipped ?? "already migrated"}). CAMPAIGN_ROOT is not read.`,
+    );
+  }
 
   // Production: serve the Vite build from the same process (deployment is one
   // container, DECISIONS #5). In dev app/dist does not exist — Vite serves the
