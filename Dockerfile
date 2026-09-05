@@ -12,8 +12,8 @@
 FROM oven/bun:1 AS build
 WORKDIR /app
 
-# Build id of this image (issue #24): the CI passes the commit sha
-# (--build-arg GRIMOIRE_BUILD=$GITHUB_SHA); a local `docker build` without it
+# Build id of this image (issue #24): the release workflow passes the version
+# tag (--build-arg GRIMOIRE_BUILD=v1.2.3); a local `docker build` without it
 # gets "dev", which switches the app's version handshake off. Exported as env
 # so the Vite build below can bake it into the bundle.
 ARG GRIMOIRE_BUILD=dev

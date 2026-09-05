@@ -6,7 +6,7 @@ import { defineConfig } from "vite";
 const repoRoot = path.resolve(import.meta.dirname, "..");
 
 // Build id burned into the bundle (issue #24). The Dockerfile's build stage
-// passes the commit sha as GRIMOIRE_BUILD; a plain `bun run build` has none
+// passes the release tag as GRIMOIRE_BUILD; a plain `bun run build` has none
 // and gets "dev", which switches the version handshake off (see
 // src/lib/build-id.ts).
 const buildId = process.env.GRIMOIRE_BUILD?.trim() || "dev";

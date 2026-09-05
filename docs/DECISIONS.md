@@ -215,18 +215,44 @@ ein Image und ein Compose-File:
   Zustand gelesen und repariert wird.
 - **Geänderte `:latest`-Semantik:** `:latest` und die Versions-Tags entstehen
   nur im Release-Workflow, mit Checkout **am Tag** (nicht am Branch-Head).
-  Normale main-Merges bauen in `ci.yml` weiterhin ein Image, aber nur unter
-  dem Commit-SHA. `:latest` heißt damit „letzter Release", nicht „letzter
-  Merge". Das Compose-File referenziert
-  `${GRIMOIRE_VERSION:-latest}`; empfohlen ist eine festgenagelte Version.
+  `:latest` heißt damit „letzter Release", nicht „letzter Merge". Das
+  Compose-File referenziert `${GRIMOIRE_VERSION:-latest}`; empfohlen ist eine
+  festgenagelte Version.
 - Die Build-Id für den Reload-Banner (#24, `GRIMOIRE_BUILD`) bleibt
-  erhalten: Release-Images brennen den Tag ein, CI-Images den SHA — in beiden
-  Fällen derselbe Wert in Bundle und Server, sonst zeigte jeder Deploy sein
-  eigenes Banner.
+  erhalten: das Release-Image brennt den Tag ein — derselbe Wert in Bundle
+  und Server, sonst zeigte jeder Deploy sein eigenes Banner.
 
 Bewusst nicht dabei: Multi-Arch (amd64 genügt), Auto-Deploy (der PO pullt
 weiterhin selbst) und rückwirkende Changelog-Generierung für die Commits vor
 diesem Eintrag.
+
+### Nachtrag 2026-09-06 (#66): CI baut zur Prüfung, publiziert nie
+
+Ursprünglich baute `ci.yml` bei jedem main-Merge ein Image unter dem
+Commit-SHA und **pushte** es. Das Pushen ist entfallen — **der
+Release-Workflow ist der einzige Schreiber der GHCR-Registry.**
+
+- Ein SHA-Push bei jedem Merge hielt das Paket dauerhaft „gerade
+  aktualisiert" und verwässerte damit genau die Release-Semantik, für die
+  dieser Eintrag existiert: Publikation ist ein bewusstes, mit Changelog
+  belegtes Ereignis.
+- Rollback läuft über die **Versions-Tags** — zu ihnen gehört ein Changelog,
+  zu einem SHA nicht. Die SHA-Images waren als „Vorschau/Debug" gedacht und
+  wurden nie so genutzt.
+- Das CI-Gate bleibt unverändert wirksam: `require-green-ci` verlangt den
+  grünen `ci`-Push-Run des getaggten Commits, bevor `publish-image` läuft.
+  CI prüft, Release publiziert.
+- **Gebaut wird trotzdem:** `ci.yml` hat einen Job `image-build`
+  (`docker/build-push-action` mit `push: false`, ohne Registry-Login und
+  ohne `packages: write` — er *kann* nicht publizieren). Er läuft auf PRs
+  und main-Pushes, hängt nur an `test` und nutzt denselben GHA-Cache wie der
+  Release-Build. Damit fällt ein Fehler **im Dockerfile selbst** im Review
+  auf und nicht erst im Release-Lauf, wo der Tag schon existiert; der
+  Release-Build findet den Cache zusätzlich warm vor. Preis: ein paar
+  Runner-Minuten pro PR — deutlich billiger als ein Patch-Release, das nur
+  ein kaputtes Image reparieren soll. `GRIMOIRE_BUILD` bekommt hier den
+  Commit-SHA als Wegwerf-Wert; die echte Build-Id brennt nur der
+  Release-Build ein.
 
 ## 13. SQLite ist die Quelle der Wahrheit
 
@@ -307,7 +333,7 @@ ein Spiegel erzeugt, wird nicht gebaut.
   `server/src/db/schema.ts` ist die eine Typquelle; Migrationen sind
   generierte, **committete** SQL-Dateien und werden beim Boot in einer
   Transaktion angewandt. Downgrade wird nicht unterstützt; Rückweg ist
-  Volume-Sicherung plus Image-Rollback per SHA-Tag (#12).
+  Volume-Sicherung plus Image-Rollback auf einen älteren Versions-Tag (#12).
 - **FTS5 statt Fuse.js** für die Suche, als handgeschriebene
   Custom-Migration (Tokenizer `unicode61 remove_diacritics 2`, Ranking
   `bm25(search_fts, 10, 6, 4, 1)`), explizit aus der Store-Schicht gepflegt.
