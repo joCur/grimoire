@@ -6,7 +6,9 @@
 #           tests, app build
 #   e2e   — after `test`: the real-stack Playwright suite over the critical
 #           paths (CLAUDE.md) — built app, real server, stub LLM
-#   image — main only, after `test` + `e2e`: build the Dockerfile, push to GHCR
+#   image — main only, after `test` + `e2e`: build the Dockerfile, push to
+#           GHCR under the commit SHA. The `:latest` and version tags come
+#           from .github/workflows/release.yml, only on an actual release.
 #
 # Docs: docs/DEPLOYMENT.md (section 1) describes pulling the published image.
 name: CI
@@ -125,8 +127,10 @@ jobs:
           build-args: |
             GRIMOIRE_BUILD=${{ github.sha }}
           # Lowercase owner: GHCR repository names are case-sensitive.
+          # SHA tag only. `:latest` is built by the release workflow and by
+          # nothing else (issue #47, DECISIONS #12) — a main merge must not
+          # move the tag a production host pulls by default.
           tags: |
-            ghcr.io/jocur/grimoire:latest
             ghcr.io/jocur/grimoire:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
