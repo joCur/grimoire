@@ -6,15 +6,7 @@ import {
   parseLogEntries,
   sessionEndMs,
   sessionStartMs,
-  todaySessionRel,
 } from "./session";
-
-describe("todaySessionRel", () => {
-  test("formats the LOCAL date with zero padding", () => {
-    expect(todaySessionRel(new Date(2026, 0, 5, 23, 59))).toBe("sessions/2026-01-05.md");
-    expect(todaySessionRel(new Date(2026, 11, 31, 0, 0))).toBe("sessions/2026-12-31.md");
-  });
-});
 
 describe("parseLogEntries", () => {
   const body = `

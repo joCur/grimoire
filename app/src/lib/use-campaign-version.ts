@@ -50,7 +50,8 @@ export function useCampaignVersion(campaign: string): void {
     // "active-session" rides along (issue #40): a session ended in another
     // tab, a hand-edited `ended`, or simply midnight passing must reach the
     // global live indicator without a reload.
-    for (const key of ["tree", "file", "search", "active-session"]) {
+    // "last-session" is the review's file (ended or not) — same reasoning.
+    for (const key of ["tree", "file", "search", "active-session", "last-session"]) {
       void queryClient.invalidateQueries({ queryKey: [key, campaign] });
     }
     // …plus the campaign list, which carries name/description from

@@ -180,16 +180,42 @@ export function createCampaignMeta(
  * the live runtime correct.
  */
 export async function fetchActiveSession(campaign: string): Promise<FileResponse | null> {
-  const path = `/${encodeURIComponent(campaign)}/session`;
+  return fetchSession(campaign, false);
+}
+
+/**
+ * The LAST STARTED session, ended or not (`?includeEnded=1`) — the REVIEW's
+ * session. Same reason the app must not guess it: an evening that ran past
+ * midnight was ended in yesterday's file, so "today's file" would harvest
+ * nothing (or the wrong log). null when the campaign has no session at all.
+ */
+export async function fetchLastStartedSession(campaign: string): Promise<FileResponse | null> {
+  return fetchSession(campaign, true);
+}
+
+async function fetchSession(
+  campaign: string,
+  includeEnded: boolean,
+): Promise<FileResponse | null> {
+  const path = `/${encodeURIComponent(campaign)}/session${includeEnded ? "?includeEnded=1" : ""}`;
   const response = await fetch(`/api${path}`);
   if (response.status === 404) return null;
   if (!response.ok) throw await failure(`GET /api${path}`, response);
   return (await response.json()) as FileResponse;
 }
 
-/** Create today's session file (idempotent — an existing one is returned). */
+/**
+ * Start today's session. Idempotent while today's session is the running one;
+ * 409 otherwise — `details.code` says which case (see sessionStartConflict):
+ * an older session is still open, or today's is already ended.
+ */
 export function startSession(campaign: string): Promise<FileResponse> {
   return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/start`);
+}
+
+/** Re-open the last started session (removes `ended`) — explicit "fortsetzen". */
+export function resumeSession(campaign: string): Promise<FileResponse> {
+  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/resume`);
 }
 
 /** Set `ended` in the ACTIVE session file (404 when there is none). */

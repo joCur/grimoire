@@ -106,11 +106,14 @@ export function ReviewRoute() {
         written.push(await createNpcStub(campaign, npc.id, npc.name, entry.text));
       }
       // Only after the harvest succeeded is the source marked done.
-      written.push(
-        entry.source === "log"
-          ? await markLogLineSeen(campaign, model.sessionPath, entry.rawLine)
-          : await markInboxLineDone(campaign, entry.rawLine),
-      );
+      if (entry.source === "log") {
+        // The path comes from the server (the last started session — which
+        // may be yesterday's file). Without it there is nothing to patch.
+        if (model.sessionPath === "") throw new Error("keine Session");
+        written.push(await markLogLineSeen(campaign, model.sessionPath, entry.rawLine));
+      } else {
+        written.push(await markInboxLineDone(campaign, entry.rawLine));
+      }
       return written;
     },
     onSuccess: (files, vars) => {
@@ -159,7 +162,7 @@ export function ReviewRoute() {
           </p>
         ) : model.noSession ? (
           <p className="text-[14px] leading-[1.6] text-muted-foreground">
-            Heute läuft keine Session — es gibt nichts zu sichten.{" "}
+            Es gibt keine Session zum Sichten.{" "}
             <Link to={`/${campaign}`} className="text-primary hover:text-primary-hover">
               Zurück zum Pool
             </Link>

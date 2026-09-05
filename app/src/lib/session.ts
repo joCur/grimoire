@@ -2,11 +2,12 @@
 // timer and the epoch readings of `started`/`ended`. Pure functions —
 // unit-tested, no react or query imports here.
 //
-// `todaySessionRel` is what is LEFT of the client-side date guessing (issue
-// #40): the review works on today's file, but WHICH session is running is the
-// server's answer (GET /:campaign/session, lib/use-session.ts) — a session
-// past midnight lives in yesterday's file, and a browser in another timezone
-// than the server would get both the file and the runtime wrong.
+// There is NO client-side date guessing left here (issue #40 and its
+// review): WHICH file a session lives in is always the server's answer
+// (GET /:campaign/session, with ?includeEnded=1 for the review — see
+// lib/use-session.ts). A session past midnight lives in YESTERDAY's file,
+// and a browser in another timezone than the server would get both the file
+// and the runtime wrong.
 
 export interface LogEntry {
   /** `HH:MM` — undefined for degraded raw lines. */
@@ -23,11 +24,6 @@ export interface LogEntry {
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
-
-/** `sessions/<yyyy-mm-dd>.md` for the LOCAL date — mirrors the server clock. */
-export function todaySessionRel(d: Date = new Date()): string {
-  return `sessions/${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.md`;
-}
 
 /** `- HH:MM (sceneId) text` — the sceneId group is optional (pause lines …). */
 const LOG_LINE = /^-\s+(\d{1,2}:\d{2})(?:\s+\(([^)]+)\))?\s+(.+)$/;

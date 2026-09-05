@@ -135,4 +135,25 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // The harvest card for the tagged note is waiting there.
   await expect(page.getByText("Gruppe verhandelt mit Jorna am Fuß der Treppe")).toBeVisible();
   await expect(page.getByText("#thread", { exact: true }).first()).toBeVisible();
+
+  // --- ended too early? fortsetzen (issue #40 review) ----------------------
+  // "Session beenden" one scene too soon used to be a dead end until
+  // midnight: the Start button answered 200 with the ENDED file and nothing
+  // happened. Now the start says "already ended" and the button offers to
+  // resume — same file, so the evening's log stays in one piece.
+  await page.goto("/beispiel");
+  const startButton = page.getByRole("button", { name: "Session starten" });
+  await expect(startButton).toBeVisible();
+  await startButton.click();
+
+  const resumeButton = page.getByRole("button", { name: "Session fortsetzen" });
+  await expect(resumeButton).toBeVisible();
+  await resumeButton.click();
+
+  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  // The same session, not a fresh one: the note from before is still there …
+  await expect(page.getByText(NOTE)).toBeVisible();
+  // … and `ended` is gone from the file, so the session really runs again.
+  await expect.poll(() => files.read(sessionPath)).not.toContain("ended:");
+  await expect(page.getByRole("button", { name: "Session beenden" })).toBeVisible();
 });

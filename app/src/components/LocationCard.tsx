@@ -20,7 +20,12 @@ import { EntityCardShell } from "@/components/EntityCardShell";
 import { fmString } from "@/lib/frontmatter";
 import { firstParagraphOfSection } from "@/lib/md-section";
 
-/** Campaign-relative path of a location file — the reference key is the id. */
+/**
+ * Fallback path of a location file — used ONLY when the caller has no tree
+ * entry for the id (a free-text `location`, which the format allows). Where
+ * the tree knows the entity, its `path` is passed in instead of guessed here:
+ * the file's real place is the tree's answer, not a convention.
+ */
 export function locationPath(id: string): string {
   return `locations/${id}.md`;
 }
@@ -28,14 +33,17 @@ export function locationPath(id: string): string {
 export function LocationCard({
   campaign,
   id,
+  path: knownPath,
   onOpen,
 }: {
   campaign: string;
   id: string;
+  /** The tree entry's path, when the caller has one (LocationSummary.path). */
+  path?: string;
   /** Opens the live drawer instead of navigating (see EntityCardShell). */
   onOpen?: (path: string) => void;
 }) {
-  const path = locationPath(id);
+  const path = knownPath ?? locationPath(id);
   const { data, isPending, isError, error } = useQuery({
     queryKey: ["file", campaign, path],
     queryFn: () => fetchFile(campaign, path),

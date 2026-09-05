@@ -44,7 +44,7 @@ import { Check, ChevronDown, Clock, Pause, Play, Search, Sparkles } from "lucide
 import { useEffect, useState } from "react";
 import { Link, matchPath, useLocation, useNavigate } from "react-router";
 
-import { appendLog, endSession, fetchCampaigns, fetchTree, startSession } from "@/api";
+import { appendLog, endSession, fetchCampaigns, fetchTree } from "@/api";
 import { CommandPalette } from "@/components/CommandPalette";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -61,7 +61,7 @@ import { navSection } from "@/lib/topbar-nav";
 import { useGenerateJob } from "@/lib/use-generate-job";
 import { cn } from "@/lib/utils";
 import { useReviewEntries } from "@/lib/use-review";
-import { useActiveSession, useSessionWrite } from "@/lib/use-session";
+import { useActiveSession, useSessionStartFlow, useSessionWrite } from "@/lib/use-session";
 
 export function Topbar() {
   const { pathname } = useLocation();
@@ -229,8 +229,11 @@ export function Topbar() {
           </>
         )}
 
-        {/* Quiet review affordance — only while today's session still has
-            unharvested entries (issue #10); otherwise nothing is shown. */}
+        {/* Quiet review affordance — only while the harvested session still
+            has unharvested entries (issue #10); otherwise nothing is shown.
+            "The harvested session" is the server's last STARTED one, the same
+            file the review page works on (issue #40 review): after a session
+            that ran past midnight, today's date names no file at all. */}
         {isPool && <PoolReviewLink campaign={campaign} />}
 
         {/* Quiet entry into the generator (issue #12) — pool only, next to the
@@ -238,11 +241,22 @@ export function Topbar() {
             of issue #19. */}
         {isPool && <GeneratorLink campaign={campaign} />}
 
-        {/* Nothing to start while a session runs (issue #40) — and nothing to
-            start before the session query answered either, so the button never
-            flashes into a running session. */}
-        {(isPool || isScene) && live === undefined && !session.isPending && (
+        {/* The Start button appears for EXACTLY one server answer: `null` —
+            "no session is running" (issue #40 review, finding 6). Not while
+            the query is still pending (it would flash into a running
+            session), and not when it FAILED: a broken query used to look
+            exactly like "nothing running", so the topbar offered a start that
+            could not work while the live pill was gone at the same time. */}
+        {(isPool || isScene) && session.data === null && (
           <StartSessionButton campaign={campaign} />
+        )}
+
+        {/* An unreachable session query is its own state — say so instead of
+            pretending either "live" or "nothing running". */}
+        {(isPool || isScene || isLive) && session.isError && (
+          <span className="flex-none text-[12.5px] text-muted-foreground">
+            Session-Status unbekannt — Server prüfen.
+          </span>
         )}
 
         {isLive && live !== undefined && <LiveControls campaign={campaign} session={live} />}
@@ -340,24 +354,42 @@ function TopbarNavLink({
   );
 }
 
-/** Starts (or re-enters) today's session and navigates to the live mode. */
+/**
+ * Starts (or re-enters) today's session and navigates to the live mode.
+ *
+ * A start can answer 409 (issue #40 review): today's session is already
+ * ended, or an older one still runs. The ended case is answered right here —
+ * the button becomes "Session fortsetzen" — because that is the accident this
+ * button causes ("beenden" hit one evening too early). For the still-running
+ * case the live view is the place that asks, so the click navigates there.
+ */
 function StartSessionButton({ campaign }: { campaign: string }) {
   const navigate = useNavigate();
-  const start = useSessionWrite(
-    campaign,
-    () => startSession(campaign),
-    () => void navigate(`/${campaign}/live`),
-  );
+  const toLive = () => void navigate(`/${campaign}/live`);
+  const { start, resume, conflict, failed } = useSessionStartFlow(campaign, toLive);
+  const resuming = conflict === "session_ended";
   return (
     <Button
       type="button"
-      disabled={start.isPending}
-      onClick={() => start.mutate()}
-      title={start.isError ? "Session nicht gestartet — Server prüfen" : undefined}
+      disabled={start.isPending || resume.isPending}
+      onClick={() => {
+        if (resuming) resume.mutate();
+        else if (conflict === "session_running") toLive();
+        else start.mutate();
+      }}
+      title={
+        failed || resume.isError
+          ? "Session nicht gestartet — Server prüfen"
+          : conflict === "session_running"
+            ? "Eine ältere Session läuft noch — im Live-Modus beenden"
+            : resuming
+              ? "Die heutige Session ist beendet — fortsetzen"
+              : undefined
+      }
       className="h-auto gap-2 px-4 py-2 text-[13px] font-semibold [&_svg]:size-[13px]"
     >
       <Play aria-hidden className="fill-current" />
-      Session starten
+      {resuming ? "Session fortsetzen" : "Session starten"}
     </Button>
   );
 }
@@ -445,8 +477,8 @@ function ReviewProgress({ campaign }: { campaign: string }) {
   return <div className="flex-none text-[13px] text-soft">{review.progressLabel}</div>;
 }
 
-/** Pool affordance into the review: only when today's session exists and
- *  still has entries to harvest — nothing to see otherwise. */
+/** Pool affordance into the review: only when the harvested session (the
+ *  server's last started one) still has entries — nothing to see otherwise. */
 function PoolReviewLink({ campaign }: { campaign: string }) {
   const review = useReviewEntries(campaign);
   if (review.isPending || review.noSession || review.isError || review.pendingCount === 0) {
@@ -475,7 +507,10 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
       <DropdownMenuTrigger
         className={cn(
           buttonVariants({ variant: "ghost" }),
-          "h-auto min-w-0 gap-[7px] rounded-md border border-transparent px-2.5 py-[5px] text-[13px] font-normal text-body-secondary hover:border-input hover:bg-transparent hover:text-foreground",
+          // flex-none: the campaign context is the anchor of the topbar and
+          // must not shrink when the right-hand side fills up (an extra
+          // affordance there used to truncate the campaign NAME instead).
+          "h-auto min-w-0 flex-none gap-[7px] rounded-md border border-transparent px-2.5 py-[5px] text-[13px] font-normal text-body-secondary hover:border-input hover:bg-transparent hover:text-foreground",
         )}
       >
         <span className="max-w-[280px] truncate">Kampagne: {current}</span>

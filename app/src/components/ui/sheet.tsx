@@ -1,6 +1,10 @@
-// Sheet primitives (shadcn/ui shape, Grimoire tokens) on top of Radix Dialog —
+// Sheet primitive (shadcn/ui shape, Grimoire tokens) on top of Radix Dialog —
 // a panel that slides in from the right edge instead of a centered modal.
 // Focus trap, Esc, outside click and aria-modal come from the primitive.
+//
+// ONLY SheetContent is its own thing: the panel geometry. Root, Title and
+// Description are the dialog's (./dialog) under sheet names — they were
+// byte-identical copies before, which is one styling decision in two files.
 //
 // Like ./dialog there is NO enter/leave animation: the quality floor asks for
 // prefers-reduced-motion safety, and in the live mode (issue #40 — the NPC and
@@ -12,11 +16,11 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import * as React from "react";
 
+import { Dialog, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-const Sheet = DialogPrimitive.Root;
-const SheetTrigger = DialogPrimitive.Trigger;
-const SheetClose = DialogPrimitive.Close;
+const Sheet = Dialog;
+const SheetTitle = DialogTitle;
 
 function SheetContent({
   className,
@@ -45,25 +49,4 @@ function SheetContent({
   );
 }
 
-function SheetTitle({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) {
-  return (
-    <DialogPrimitive.Title
-      className={cn("font-serif text-[18px] font-semibold text-foreground", className)}
-      {...props}
-    />
-  );
-}
-
-function SheetDescription({
-  className,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Description>) {
-  return (
-    <DialogPrimitive.Description
-      className={cn("text-[13px] leading-[1.55] text-body-secondary", className)}
-      {...props}
-    />
-  );
-}
-
-export { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle, SheetTrigger };
+export { Sheet, SheetContent, SheetTitle };

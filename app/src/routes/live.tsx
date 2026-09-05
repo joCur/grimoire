@@ -21,7 +21,7 @@ import { Bookmark, Check, GitFork } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
-import { appendLog, fetchFile, fetchTree, startSession } from "@/api";
+import { appendLog, endSession, fetchFile, fetchTree } from "@/api";
 import { LiveEntityDrawer } from "@/components/LiveEntityDrawer";
 import { LocationCard } from "@/components/LocationCard";
 import { MobileBackRow } from "@/components/MobileBackRow";
@@ -31,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import { fmStringArray } from "@/lib/frontmatter";
 import { parseLogEntries } from "@/lib/session";
 import { cn } from "@/lib/utils";
-import { useActiveSession, useSessionWrite } from "@/lib/use-session";
+import { useActiveSession, useSessionStartFlow, useSessionWrite } from "@/lib/use-session";
 
 export function LiveRoute() {
   const { campaign = "" } = useParams();
@@ -192,7 +192,14 @@ function LiveDesktop({ campaign }: { campaign: string }) {
                 Ort
               </p>
               {knownLocation !== undefined ? (
-                <LocationCard campaign={campaign} id={knownLocation.id} onOpen={setDrawerPath} />
+                // The tree knows the REAL path of the file — the card must not
+                // re-derive `locations/<id>.md` (finding 10).
+                <LocationCard
+                  campaign={campaign}
+                  id={knownLocation.id}
+                  path={knownLocation.path}
+                  onOpen={setDrawerPath}
+                />
               ) : (
                 // A free-text location (no entity file behind it) is exactly
                 // what the format allows — show it, claim nothing.
@@ -356,26 +363,66 @@ function LogPanel({
   );
 }
 
-/** Quiet empty state when the live route is opened while nothing is running. */
+/**
+ * Quiet empty state when the live route is opened while nothing is running —
+ * and the ONE place the start's 409s become a question the DM can answer
+ * (issue #40 review, finding 2). Before, "Session starten" on an evening that
+ * was already ended answered 200 with the ended file, the cache seeded `null`
+ * again and this very screen came back: a dead end until midnight.
+ */
 function NoSessionYet({ campaign }: { campaign: string }) {
-  const start = useSessionWrite(campaign, () => startSession(campaign));
+  const { start, resume, conflict, conflictPath, failed } = useSessionStartFlow(campaign);
+  const end = useSessionWrite(campaign, () => endSession(campaign));
+  const busy = start.isPending || resume.isPending || end.isPending;
   return (
     <div className="flex h-full items-center justify-center px-7">
-      <div className="text-center">
-        <p className="mb-4 text-[14px] text-muted-foreground">
-          Es läuft keine Session.
-        </p>
-        <Button
-          type="button"
-          disabled={start.isPending}
-          onClick={() => start.mutate()}
-          className="h-auto px-4 py-2 text-[13px] font-semibold"
-        >
-          Session starten
-        </Button>
-        {start.isError && (
+      <div className="max-w-[380px] text-center">
+        {conflict === "session_ended" ? (
+          <>
+            <p className="mb-4 text-[14px] leading-[1.6] text-muted-foreground">
+              Die heutige Session ist beendet — fortsetzen?
+            </p>
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => resume.mutate()}
+              className="h-auto px-4 py-2 text-[13px] font-semibold"
+            >
+              Session fortsetzen
+            </Button>
+          </>
+        ) : conflict === "session_running" ? (
+          <>
+            <p className="mb-4 text-[14px] leading-[1.6] text-muted-foreground">
+              Eine ältere Session läuft noch
+              {conflictPath === undefined ? "" : ` (${conflictPath})`} — erst beenden.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => end.mutate()}
+              className="h-auto px-4 py-2 text-[13px]"
+            >
+              Alte Session beenden
+            </Button>
+          </>
+        ) : (
+          <>
+            <p className="mb-4 text-[14px] text-muted-foreground">Es läuft keine Session.</p>
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => start.mutate()}
+              className="h-auto px-4 py-2 text-[13px] font-semibold"
+            >
+              Session starten
+            </Button>
+          </>
+        )}
+        {(failed || resume.isError || end.isError) && (
           <p className="mt-3 text-[12.5px] text-destructive">
-            Session nicht gestartet — Server prüfen.
+            Session nicht geändert — Server prüfen.
           </p>
         )}
       </div>
