@@ -12,9 +12,10 @@
 //     It is a flag on the log row, and the frontmatter renders the flagged
 //     rows in LOG ORDER (store/render.ts sessionFrontmatter) — a stable
 //     reading order instead of a click order.
-//   * A `review/seen` hash matching no log line is a SILENT NO-OP. The file
-//     version appended the hash regardless and left an orphan entry behind
-//     that nothing could ever clear.
+//   * A `review/seen` hash matching no log line changes NOTHING and answers
+//     `marked: false`. The file version appended the hash regardless and left
+//     an orphan entry behind that nothing could ever clear; staying silent
+//     about it would hide a client bug behind a 200.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
@@ -128,17 +129,34 @@ describe("POST /api/:campaign/review/seen", () => {
     expect(both.raw).toContain(`reviewed: [${sha8(LINE)}, ${sha8(LINE2)}]\n`);
   });
 
-  test("a line that is not in the log is a silent no-op", async () => {
+  test("a line that is not in the log changes nothing and says so", async () => {
     // NEW with the cutover: the hash addresses a ROW. A line the session does
     // not have (a stale review view, a hand-edited log) can therefore not be
     // flagged — and instead of an orphan frontmatter entry nothing happens.
+    // It is not SILENT though: `marked: false` is the answer saying "no row
+    // hashes to what you sent", which a bare 200 would hide.
     const before = await getFile(SESSION);
-    const after = await postOk("/api/beispiel/review/seen", {
+    const after = (await postOk("/api/beispiel/review/seen", {
       path: SESSION,
       line: "- 23:59 gibt es in diesem Log nicht",
-    });
+    })) as FileResponse & { marked?: boolean };
+    expect(after.marked).toBe(false);
     expect(after.frontmatter.reviewed).toBeUndefined();
-    expect(after).toEqual(before);
+    const { marked: _marked, ...file } = after;
+    expect(file).toEqual(before);
+  });
+
+  test("a line that IS in the log answers marked: true, and again on a repeat", async () => {
+    const first = (await postOk("/api/beispiel/review/seen", {
+      path: SESSION,
+      line: LINE,
+    })) as FileResponse & { marked?: boolean };
+    expect(first.marked).toBe(true);
+    const again = (await postOk("/api/beispiel/review/seen", {
+      path: SESSION,
+      line: LINE,
+    })) as FileResponse & { marked?: boolean };
+    expect(again.marked).toBe(true);
   });
 
   test("400 unless path is a sessions/*.md file", async () => {

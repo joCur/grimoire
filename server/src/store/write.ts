@@ -33,7 +33,12 @@ import {
 import { ApiError, assertSafeRelativeMdPath } from "../campaign-fs";
 import { localDate, localDateTime, localDateTimeSeconds, localTime, now } from "../clock";
 import type { GrimoireDb } from "../db/client";
-import { logLineShortHash, parseGlossaryBody, parseRelationsSection, removeSection, SECTION_LEVEL } from "../db/import-markdown";
+import {
+  logLineShortHash,
+  parseGlossaryBody,
+  parseRelationsSection,
+  removeRelationLines,
+} from "../db/import-markdown";
 import {
   campaigns,
   chapters,
@@ -75,6 +80,7 @@ import {
   renderInbox,
   renderLocation,
   renderNpc,
+  renderNpcBody,
   renderScene,
   type CampaignRow,
   type ChapterRow,
@@ -182,14 +188,26 @@ function indexScene(tx: GrimoireDb, campaign: string, row: SceneRow, tags: strin
   });
 }
 
-function indexNpc(tx: GrimoireDb, campaign: string, row: NpcRow, body: string): void {
+/**
+ * ONE rule for the npc index (they disagreed before: a frontmatter patch
+ * indexed the STRIPPED body, a body save the full one — so a search for a
+ * relationship note stopped matching after an unrelated status change):
+ * the indexed text is the npc's FULL document text, `## Beziehungen`
+ * included, exactly as `GET /file` renders it.
+ */
+function indexNpc(
+  tx: GrimoireDb,
+  campaign: string,
+  row: NpcRow,
+  relations: Array<{ otherNpcId: string; note: string }>,
+): void {
   indexEntity(tx, campaign, {
     kind: "npc",
     entityId: row.id,
     title: row.name === "" ? row.id : row.name,
     ref: row.id,
     tags: row.role ?? "",
-    body,
+    body: renderNpcBody(row, relations),
   });
 }
 
@@ -297,6 +315,10 @@ function locationRowOf(tx: GrimoireDb, campaign: string, id: string): LocationRo
     .all()[0] as LocationRow | undefined;
 }
 
+function chapterIdExists(tx: GrimoireDb, campaign: string, id: string): boolean {
+  return chapterRowOf(tx, campaign, id) !== undefined;
+}
+
 function nextPos(rows: Array<{ pos: number }>): number {
   return rows.reduce((max, row) => Math.max(max, row.pos), -1) + 1;
 }
@@ -346,9 +368,41 @@ function replaceRelations(tx: GrimoireDb, campaign: string, npcId: string, body:
       })
       .run();
   }
-  // The section became rows, so it must not also survive as prose (the
-  // renderer puts it back). Only the span that was parsed is removed.
-  return removeSection(body, "Beziehungen", SECTION_LEVEL);
+  // Only the LINES that became rows leave the body — the renderer puts those
+  // back. Everything the parser could not turn into a relation (prose under
+  // the heading, a note without a colon, a second line for a counterpart that
+  // already has a row) stays exactly where it stands: `removeSection` used to
+  // cut the whole span, and with it the DM's text.
+  return removeRelationLines(body);
+}
+
+/**
+ * Re-index one entity from its current row — used by the rename cascade,
+ * which must refresh the index row's `title` too, not only its id.
+ */
+export function reindexEntity(
+  tx: GrimoireDb,
+  campaign: string,
+  kind: "npc" | "location" | "scene" | "chapter",
+  id: string,
+): void {
+  if (kind === "npc") {
+    const row = npcRowOf(tx, campaign, id);
+    if (row !== undefined) indexNpc(tx, campaign, row, relationRows(tx, campaign, id));
+    return;
+  }
+  if (kind === "location") {
+    const row = locationRowOf(tx, campaign, id);
+    if (row !== undefined) indexLocation(tx, campaign, row);
+    return;
+  }
+  if (kind === "chapter") {
+    const row = chapterRowOf(tx, campaign, id);
+    if (row !== undefined) indexChapter(tx, campaign, row);
+    return;
+  }
+  const row = sceneRowOf(tx, campaign, id);
+  if (row !== undefined) indexScene(tx, campaign, row, refTags(tx, campaign, id));
 }
 
 // --- PATCH /api/:campaign/frontmatter ----------------------------------------
@@ -468,14 +522,22 @@ function patchLocator(
       const fm = applyPatch(before.frontmatter, patch);
       const npcRefs = asStrArray(fm.npcs);
       const tags = asStrArray(fm.tags);
+      // The chapter a scene belongs to is part of its ADDRESS (the path), so
+      // a patch may MOVE the scene — but only into a chapter that exists
+      // (400 otherwise: a scene under an unknown chapter has no node to hang
+      // in and would drop out of the tree). `{ chapter: null }` deletes the
+      // KEY, as it always could, and leaves the address alone.
+      const declared = asOptStr(fm.chapter);
+      if (declared !== null && declared !== row.chapterId && !chapterIdExists(tx, campaign, declared)) {
+        throw new ApiError(400, `unknown chapter: ${declared} — create the chapter first`);
+      }
       const next: SceneRow = {
         ...row,
         title: asStr(fm.title, row.id),
         type: asStr(fm.type, "planned"),
         trigger: asOptStr(fm.trigger),
-        // The chapter a scene belongs to is part of its ADDRESS (the path);
-        // a patch may move it, and the tree follows.
-        chapterId: asOptStr(fm.chapter) ?? row.chapterId,
+        chapterId: declared ?? row.chapterId,
+        chapterDeclared: declared === null ? 0 : 1,
         location: asOptStr(fm.location),
         status: asStr(fm.status, "draft"),
         handouts: packJson(asStrArray(fm.handouts)),
@@ -488,6 +550,7 @@ function patchLocator(
           type: next.type,
           trigger: next.trigger,
           chapterId: next.chapterId,
+          chapterDeclared: next.chapterDeclared,
           location: next.location,
           status: next.status,
           handouts: next.handouts,
@@ -536,7 +599,7 @@ function patchLocator(
         .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, row.id)))
         .run();
       const relations = relationRows(tx, campaign, row.id);
-      indexNpc(tx, campaign, next, next.body);
+      indexNpc(tx, campaign, next, relations);
       return renderNpc(next, relations);
     }
     case "location": {
@@ -759,8 +822,9 @@ export async function writeFileBody(
           .set({ body: next.body, rev: next.rev })
           .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, row.id)))
           .run();
-        indexNpc(tx, campaign, next, body);
-        return renderNpc(next, relationRows(tx, campaign, row.id));
+        const relations = relationRows(tx, campaign, row.id);
+        indexNpc(tx, campaign, next, relations);
+        return renderNpc(next, relations);
       }
       case "location": {
         const row = locationRowOf(tx, campaign, locator.id);
@@ -777,17 +841,34 @@ export async function writeFileBody(
       case "glossary": {
         const row = campaignRow(tx, campaign);
         if (row === undefined) throw new ApiError(404, "file not found");
-        guardRev(row.version, rev, "glossary changed");
+        // The glossary's OWN counter, not `campaigns.version`: an unrelated
+        // write during a running session must not invalidate an open edit.
+        guardRev(row.glossaryRev, rev, "glossary changed");
         const parsedGlossary = parseGlossaryBody(body);
+        // A term typed twice would silently lose its second explanation
+        // ("first wins" is the IMPORT's degrade rule, not a save's) — say so
+        // instead, with the term in the message.
+        const duplicate = parsedGlossary.duplicates[0];
+        if (duplicate !== undefined) {
+          throw new ApiError(
+            400,
+            `Glossar-Begriff „${duplicate}" kommt mehrfach vor — bitte zusammenfassen`,
+          );
+        }
+        const nextRev = row.glossaryRev + 1;
+        // Prose above the first heading belongs to no term. It is KEPT
+        // (campaigns.glossary_intro) and rendered back in front of the list;
+        // dropping it is what made a save lose text.
+        tx.update(campaigns)
+          .set({ glossaryIntro: parsedGlossary.preamble, glossaryRev: nextRev })
+          .where(eq(campaigns.id, campaign))
+          .run();
         writeGlossaryRows(
           tx,
           campaign,
           parsedGlossary.entries.map((e) => ({ term: e.term, explanation: e.explanation })),
         );
-        // The campaign version is the glossary's guard token, and `mutate`
-        // bumps it right after this — so the response carries the value the
-        // next write must send.
-        return renderGlossary(glossaryRows(tx, campaign), row.version + 1);
+        return renderGlossary(glossaryRows(tx, campaign), nextRev, parsedGlossary.preamble);
       }
       default:
         throw new ApiError(404, "file not found");
@@ -827,6 +908,12 @@ export async function writeGlossary(
 ): Promise<{ entries: Array<{ term: string; explanation: string }> }> {
   return mutate(campaign, (tx) => {
     writeGlossaryRows(tx, campaign, entries);
+    // Same document, same guard token: an editor holding `glossary.md` must
+    // see a changed `mtimeMs` after this.
+    tx.update(campaigns)
+      .set({ glossaryRev: sql`${campaigns.glossaryRev} + 1` })
+      .where(eq(campaigns.id, campaign))
+      .run();
     return {
       entries: glossaryRows(tx, campaign).map((row) => ({
         term: row.term,
@@ -1078,6 +1165,12 @@ export async function appendLogEntry(
   text: string,
   sceneId?: string,
 ): Promise<FileResponse> {
+  // The scene marker is a PARSE COLUMN of the log line (`- HH:MM (id) text`),
+  // so an id carrying `)` — or a space, or a newline — would shift `text` and
+  // `sceneId` apart on the way back in. Same slug rule as `createNpcStub`.
+  if (sceneId !== undefined && !ENTITY_SLUG.test(sceneId)) {
+    throw new ApiError(400, "sceneId must be a kebab-case slug (a-z, 0-9, single dashes)");
+  }
   return mutate(campaign, (tx) => {
     const row = requireActive(tx, campaign);
     const raw = `- ${localTime(now())}${sceneId ? ` (${sceneId})` : ""} ${text}`;
@@ -1125,9 +1218,18 @@ export async function appendInboxEntry(campaign: string, text: string): Promise<
         done: 0,
       })
       .run();
-    const row = campaignRow(tx, campaign);
-    return renderInbox(campaign, inboxRows(tx, campaign), (row?.version ?? 0) + 1);
+    return renderInbox(campaign, inboxRows(tx, campaign), bumpInboxRev(tx, campaign));
   });
+}
+
+/** The inbox document's own guard token, bumped and returned (see read.ts). */
+function bumpInboxRev(tx: GrimoireDb, campaign: string): number {
+  const next = (campaignRow(tx, campaign)?.inboxRev ?? 0) + 1;
+  tx.update(campaigns)
+    .set({ inboxRev: next })
+    .where(eq(campaigns.id, campaign))
+    .run();
+  return next;
 }
 
 /**
@@ -1141,21 +1243,22 @@ export async function markInboxLineDone(campaign: string, line: string): Promise
     l.startsWith("- [ ] ") ? `- [x] ${l.slice(6)}` : `- [x] ${l.slice(2)}`;
   return mutate(campaign, (tx) => {
     const rows = inboxRows(tx, campaign);
-    const version = (campaignRow(tx, campaign)?.version ?? 0) + 1;
+    const rev = campaignRow(tx, campaign)?.inboxRev ?? 1;
     const match = rows.find((row) => row.raw === line);
     if (match === undefined) {
-      // The done form already stored means an earlier call succeeded.
+      // The done form already stored means an earlier call succeeded. An
+      // idempotent repeat changes nothing, so the guard token stays as it is.
       if (!line.startsWith("- [x]") && rows.some((row) => row.raw === doneForm(line))) {
-        return renderInbox(campaign, rows, version);
+        return renderInbox(campaign, rows, rev);
       }
       throw new ApiError(404, "line not found in inbox");
     }
-    if (line.startsWith("- [x]")) return renderInbox(campaign, rows, version);
+    if (line.startsWith("- [x]")) return renderInbox(campaign, rows, rev);
     tx.update(inboxEntries)
       .set({ raw: doneForm(line), done: 1 })
       .where(and(eq(inboxEntries.campaignId, campaign), eq(inboxEntries.pos, match.pos)))
       .run();
-    return renderInbox(campaign, inboxRows(tx, campaign), version);
+    return renderInbox(campaign, inboxRows(tx, campaign), bumpInboxRev(tx, campaign));
   });
 }
 
@@ -1165,15 +1268,22 @@ export async function markInboxLineDone(campaign: string, line: string): Promise
  * POST /api/:campaign/review/seen — mark one log line as reviewed. The
  * `reviewed` frontmatter hash list became a flag on the log row (schema.ts),
  * and the hash is still the id the app speaks: the line is hashed exactly as
- * sent and the row with that hash gets the flag. Idempotent — and a hash that
- * matches no line is a silent no-op, where the file version used to grow an
- * orphan entry.
+ * sent and the row with that hash gets the flag.
+ *
+ * CONTRACT of the answer's `marked` flag: true means a row now carries the
+ * flag (it was set here, or an earlier call had already set it), false means
+ * NO LOG LINE OF THIS SESSION HASHES TO THE LINE THAT WAS SENT — the session
+ * moved on, or the caller did not send the line byte for byte. The file
+ * version grew an orphan `reviewed` entry for that case; the row version
+ * cannot, and staying silent about it would hide a client bug behind a 200.
+ * The app sends the row's own `raw` (app/src/lib/use-review.ts), so `false`
+ * is not a state it reaches — which is exactly why it must be visible.
  */
 export async function markLogLineSeen(
   campaign: string,
   rel: string,
   line: string,
-): Promise<FileResponse> {
+): Promise<FileResponse & { marked: boolean }> {
   assertSafeRelativeMdPath(rel);
   const segments = rel.split("/");
   if (segments.length !== 2 || segments[0] !== "sessions") {
@@ -1185,7 +1295,10 @@ export async function markLogLineSeen(
     const row = sessionRow(tx, campaign, sessionId);
     if (row === undefined) throw new ApiError(404, "file not found");
     const entry = logRows(tx, campaign, sessionId).find((l) => l.hash === hash);
-    if (entry !== undefined && entry.reviewed === 0) {
+    if (entry === undefined) {
+      return { ...renderSessionRow(tx, campaign, row), marked: false };
+    }
+    if (entry.reviewed === 0) {
       tx.update(logEntries)
         .set({ reviewed: 1 })
         .where(
@@ -1197,9 +1310,12 @@ export async function markLogLineSeen(
         )
         .run();
       bumpSessionRev(tx, campaign, row);
-      return renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 });
+      return {
+        ...renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 }),
+        marked: true,
+      };
     }
-    return renderSessionRow(tx, campaign, row);
+    return { ...renderSessionRow(tx, campaign, row), marked: true };
   });
 }
 
@@ -1269,8 +1385,8 @@ export async function appendThreadToChapter(
   });
 }
 
-/** npc ids are kebab slugs — the README's stable reference keys. */
-const NPC_SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+/** Entity ids are kebab slugs — the README's stable reference keys. */
+export const ENTITY_SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /**
  * POST /api/:campaign/review/npc-stub — create the npc row with minimal
@@ -1283,7 +1399,7 @@ export async function createNpcStub(
   name?: string,
   note?: string,
 ): Promise<FileResponse> {
-  if (!NPC_SLUG.test(id)) {
+  if (!ENTITY_SLUG.test(id)) {
     throw new ApiError(400, "id must be a kebab-case slug (a-z, 0-9, single dashes)");
   }
   return mutate(campaign, (tx) => {
@@ -1298,7 +1414,7 @@ export async function createNpcStub(
       .run();
     const row = npcRowOf(tx, campaign, id);
     if (row === undefined) throw new ApiError(500, "npc could not be created");
-    indexNpc(tx, campaign, row, body);
+    indexNpc(tx, campaign, row, []);
     return renderNpc(row, []);
   });
 }
@@ -1308,6 +1424,12 @@ export async function createNpcStub(
 export interface EntityDraft {
   /** Campaign-relative target path (the generator's own addressing). */
   rel: string;
+  /**
+   * The ADDRESS the row will actually have — `rel` with the id segment taken
+   * from the frontmatter (generator.ts `draftAddress`). The conflict check
+   * asks about this, `rel` is only what a 409 reports back to the client.
+   */
+  address: string;
   frontmatter: Record<string, unknown>;
   body: string;
 }
@@ -1339,6 +1461,7 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           campaignId: campaign,
           id,
           chapterId: locator.chapterId,
+          chapterDeclared: fm.chapter === undefined || fm.chapter === null ? 0 : 1,
           groupSlug: locator.groupSlug,
           title,
           type: asStr(fm.type, "planned"),
@@ -1362,7 +1485,9 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       // row exists: `npc_relations` has a foreign key on (campaign, npc_id),
       // so inserting the relations first fails the constraint.
       const parsedRelations = parseRelationsSection(draft.body);
-      const stripped = removeSection(draft.body, "Beziehungen", SECTION_LEVEL);
+      // Only the parsed relation LINES leave the body — prose under the
+      // heading stays (see `replaceRelations`).
+      const stripped = removeRelationLines(draft.body);
       tx.insert(npcs)
         .values({
           campaignId: campaign,
@@ -1391,7 +1516,9 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           .run();
       }
       const row = npcRowOf(tx, campaign, id);
-      if (row !== undefined) indexNpc(tx, campaign, row, draft.body);
+      if (row !== undefined) {
+        indexNpc(tx, campaign, row, relationRows(tx, campaign, id));
+      }
       return;
     }
     case "location": {
@@ -1440,16 +1567,51 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
   }
 }
 
-/** Run a batch of generator writes in ONE transaction (all or nothing). */
+/**
+ * Run a batch of generator writes in ONE transaction — and CHECK THE
+ * CONFLICTS IN IT. The check used to sit in front of the transaction
+ * (generator.ts), which left a window between "nothing exists yet" and the
+ * insert: a scene created in between turned the documented
+ * `409 { conflicts }` into a primary-key violation, i.e. a 500. Inside the
+ * transaction there is no window, and a constraint that fires anyway is
+ * translated back to the documented answer instead of escaping as a 500 —
+ * either way the transaction rolls back, so a partial apply is impossible.
+ */
 export async function applyDrafts(campaign: string, drafts: EntityDraft[]): Promise<void> {
-  await mutate(campaign, (tx) => {
-    for (const draft of drafts) insertDraft(tx, campaign, draft);
-  });
+  try {
+    await mutate(campaign, (tx) => {
+      const conflicts = drafts
+        .filter((draft) => draftTargetExistsIn(tx, campaign, draft.address))
+        .map((draft) => draft.rel);
+      if (conflicts.length > 0) {
+        throw new ApiError(409, "target files already exist", { conflicts });
+      }
+      for (const draft of drafts) insertDraft(tx, campaign, draft);
+    });
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (isConstraintViolation(error)) {
+      throw new ApiError(409, "target files already exist", {
+        conflicts: drafts.map((draft) => draft.rel),
+      });
+    }
+    throw error;
+  }
+}
+
+/** A UNIQUE/PRIMARY KEY violation from either SQLite backend (ADR #13). */
+function isConstraintViolation(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /constraint/i.test(message);
 }
 
 /** True when a generated target already exists (the apply step's 409). */
 export async function draftTargetExists(campaign: string, rel: string): Promise<boolean> {
-  const db = await getDb();
+  return draftTargetExistsIn(await getDb(), campaign, rel);
+}
+
+/** The same question inside a transaction — synchronous, so it can be. */
+function draftTargetExistsIn(db: GrimoireDb, campaign: string, rel: string): boolean {
   let locator: Locator;
   try {
     locator = locatorFromPath(rel);

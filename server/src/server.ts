@@ -10,9 +10,21 @@
 //   [x] GET  /api/campaigns                    campaign list (directories + lastSession +
 //                                              name/description from _campaign.md)
 //   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (frontmatter parsed)
-//   [x] GET  /api/:campaign/file?path=...      one file (raw + parsed + mtime)
+//   [x] GET  /api/:campaign/file?path=...      one file (raw + parsed + mtime). glossary.md
+//                                              answers 200 with an EMPTY body when the
+//                                              campaign has no terms — it is an empty
+//                                              document, not a missing one (#57 review:
+//                                              the 404 made a glossary the DM had just
+//                                              emptied unreachable from the editor).
+//                                              `mtimeMs` of glossary.md/inbox.md is that
+//                                              DOCUMENT's own counter, not campaigns.version
 //   [x] PATCH /api/:campaign/frontmatter       { path, mtimeMs, patch } — only if
-//                                              mtimeMs is unchanged, otherwise 409
+//                                              mtimeMs is unchanged, otherwise 409.
+//                                              A scene's `chapter` may be SET (400 when
+//                                              the chapter does not exist — a scene must
+//                                              never fall out of the tree) or DELETED with
+//                                              null, which drops the key and leaves the
+//                                              scene's address alone
 //   [x] PUT  /api/:campaign/file               { path, mtimeMs, body } — write the markdown
 //                                              BODY of an existing file (issue #15); the
 //                                              frontmatter block is kept byte-identically,
@@ -62,7 +74,9 @@
 //                                              nothing is running
 //   [x] POST /api/:campaign/log                { text, sceneId? } -> append with timestamp
 //                                              to the ACTIVE session (issue #40); STRICT —
-//                                              404 when no session is running
+//                                              404 when no session is running, 400 when
+//                                              sceneId is not a kebab slug (it is a PARSE
+//                                              COLUMN of `- HH:MM (id) text`)
 //   [x] POST /api/:campaign/inbox              { text } -> append to inbox.md
 //   [x] GET  /api/:campaign/search?q=...       { results } — full-text search (FTS5, bm25,
 //                                              prefix terms, diacritics folded;
@@ -104,24 +118,38 @@
 //                                              edit in the job (400 unknown path)
 //   [x] POST /api/:campaign/generate/apply     { scenes?, stubs?, npc?, chapter?,
 //                                              chapterTitle?, jobId? } -> { written }
-//                                              (drafts on disk; 409 { conflicts } when any
-//                                              target exists — nothing partially written).
+//                                              (drafts as rows; 409 { conflicts } when any
+//                                              target exists — checked IN the insert
+//                                              transaction, so nothing is ever partially
+//                                              written; 422 when a draft's `id` is not an
+//                                              addressable slug).
 //                                              chapter + chapterTitle create
 //                                              <chapter>/_chapter.md when missing, in the
 //                                              same batch; `npc` is the NPC run's single
 //                                              draft (issue #21); jobId discards that job
 //                                              after a successful write.
 //   [x] POST /api/:campaign/rename             { kind, oldId, newId, dryRun? } ->
-//                                              { renamed: { from, to }, changed } —
-//                                              renames npcs/locations/scenes (file) or a
-//                                              chapter (DIRECTORY) and patches every
-//                                              reference site: frontmatter npcs/location/
-//                                              chapter, session scenes_played, `## Beziehungen`
-//                                              lines, log scene markers. Prose is NOT touched.
+//                                              { renamed: { from, to }, changed } — renames
+//                                              the id of an npc/location/scene/chapter and
+//                                              patches every reference site: scene npcs/
+//                                              location/chapter, session scenes_played,
+//                                              `## Beziehungen` lines, log scene markers,
+//                                              and the search index. Prose is NOT touched.
+//                                              CHANGED with the cutover (#57): `from`/`to`
+//                                              are DOCUMENT paths for every kind, so a
+//                                              chapter reads `<id>/_chapter.md` where the
+//                                              file version named the bare DIRECTORY —
+//                                              there is no directory to rename any more
+//                                              (store/paths.ts). A display name that was
+//                                              literally the old id follows the id.
 //                                              Plan-then-execute: 400/404/409 { path } write
 //                                              nothing; dryRun returns the plan only (issue #30)
-//   [x] POST /api/:campaign/review/seen        { path, line } -> add the line's short hash
-//                                              to the session's `reviewed` list (idempotent)
+//   [x] POST /api/:campaign/review/seen        { path, line } -> FileResponse &
+//                                              { marked } — flags the log ROW whose short
+//                                              hash the line has (idempotent). marked=false
+//                                              means NO row hashes to the line that was
+//                                              sent: nothing was changed, and the answer
+//                                              says so instead of hiding it behind a 200
 //   [x] POST /api/:campaign/review/thread      { chapter, text } -> append `- [ ] text` under
 //                                              ## Offene Fäden of <chapter>/_chapter.md
 //   [x] POST /api/:campaign/review/npc-stub    { id, name?, note? } -> create npcs/<id>.md

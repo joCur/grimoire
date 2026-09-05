@@ -49,6 +49,10 @@ export interface CampaignRow {
   extra: string;
   version: number;
   rev: number;
+  /** The glossary's prose preamble and the two list documents' guard tokens. */
+  glossaryIntro: string;
+  glossaryRev: number;
+  inboxRev: number;
 }
 
 export interface ChapterRow {
@@ -66,6 +70,8 @@ export interface SceneRow {
   campaignId: string;
   id: string;
   chapterId: string | null;
+  /** 1 when the frontmatter declares `chapter:` (schema.ts). */
+  chapterDeclared: number;
   groupSlug: string;
   title: string;
   type: string;
@@ -244,7 +250,10 @@ export function sceneFrontmatter(
       // they are always present so a status control never has to guess.
       ["type", row.type === "" ? "planned" : row.type],
       ["trigger", row.trigger],
-      ["chapter", row.chapterId],
+      // The ADDRESS keeps the chapter either way; the key is only rendered
+      // while the frontmatter declares it (schema.ts `chapter_declared`), so
+      // `PATCH { chapter: null }` can delete it as it always could.
+      ["chapter", row.chapterDeclared === 0 ? null : row.chapterId],
       ["location", row.location],
       // Empty reference lists are omitted, not written as `[]`: the format
       // says nothing about them, and an authored file had no key either.
@@ -276,16 +285,37 @@ export function renderRelationsSection(
   return `## Beziehungen\n\n${lines.join("\n")}\n`;
 }
 
+/** The `## Beziehungen` heading a body kept because it still holds prose. */
+const RELATIONS_HEADING = /^##[ \t]+Beziehungen[ \t]*\r?$/im;
+
 /**
- * The npc body with its relations section appended. The migration cut the
- * section out of the body (it became rows), so it is rendered back — at the
- * END of the body, which is deterministic; the section's original position
- * inside the file was never part of the contract.
+ * The npc body with its relations rows rendered back in.
+ *
+ * Two cases, and the second one is why this is not a plain append:
+ *
+ *   * the body has NO `## Beziehungen` section (the normal case — the whole
+ *     section became rows): the section is appended at the END, which is
+ *     deterministic; its original position inside the file was never part of
+ *     the contract.
+ *   * the body still HAS the section: it kept lines that became no row —
+ *     prose, a note without a colon, a duplicate counterpart
+ *     (`removeRelationLines`). The rows then go back INTO that section, above
+ *     what stayed, so the DM sees one `## Beziehungen` in its original place
+ *     with nothing missing.
  */
 export function renderNpcBody(
   row: NpcRow,
   relations: Array<{ otherNpcId: string; note: string }>,
 ): string {
+  const kept = RELATIONS_HEADING.exec(row.body);
+  if (kept !== null) {
+    const lines = relations.map((r) =>
+      r.note === "" ? `- ${r.otherNpcId}:` : `- ${r.otherNpcId}: ${r.note}`,
+    );
+    if (lines.length === 0) return row.body;
+    const headingEnd = kept.index + kept[0].length;
+    return `${row.body.slice(0, headingEnd)}\n\n${lines.join("\n")}${row.body.slice(headingEnd)}`;
+  }
   const section = renderRelationsSection(relations);
   if (section === "") return row.body;
   const base = row.body === "" ? "" : row.body.endsWith("\n") ? row.body : `${row.body}\n`;
@@ -452,18 +482,31 @@ export function renderInbox(campaignId: string, rows: InboxRow[], rev: number): 
  * the `EN → DE` list line the format documents; a multi-line one keeps its
  * own `##` section, which is the shape the importer read it out of.
  */
-export function renderGlossaryBody(rows: GlossaryRow[]): string {
-  if (rows.length === 0) return "";
+export function renderGlossaryBody(rows: GlossaryRow[], intro = ""): string {
   const listed = rows.filter((r) => !r.explanation.includes("\n"));
   const sectioned = rows.filter((r) => r.explanation.includes("\n"));
   const parts: string[] = [];
+  // The prose above the first heading comes first — that is where it was
+  // (campaigns.glossary_intro); it belongs to no term and must not vanish.
+  if (intro !== "") parts.push(intro);
   if (listed.length > 0) {
     parts.push(listed.map((r) => `- ${r.term} → ${r.explanation}`).join("\n"));
   }
   for (const row of sectioned) parts.push(`## ${row.term}\n\n${row.explanation}`);
+  if (parts.length === 0) return "";
   return `\n${parts.join("\n\n")}\n`;
 }
 
-export function renderGlossary(rows: GlossaryRow[], rev: number): FileResponse {
-  return parsed(GLOSSARY_PATH, "glossary", { id: "glossary" }, renderGlossaryBody(rows), rev);
+export function renderGlossary(
+  rows: GlossaryRow[],
+  rev: number,
+  intro = "",
+): FileResponse {
+  return parsed(
+    GLOSSARY_PATH,
+    "glossary",
+    { id: "glossary" },
+    renderGlossaryBody(rows, intro),
+    rev,
+  );
 }

@@ -30,9 +30,10 @@ import {
   scenes,
   sessionScenesPlayed,
 } from "../db/schema";
-import { renameEntityIndex } from "./fts";
+import { dropEntity } from "./fts";
 import { getDb } from "./handle";
 import { requireCampaign } from "./read";
+import { reindexEntity } from "./write";
 import { chapterPath, locationPath, npcPath, scenePath } from "./paths";
 
 /** The entity kinds that have a rename cascade (sessions have no id). */
@@ -190,6 +191,87 @@ function referenceSites(
   return [...changed];
 }
 
+/**
+ * A display name that was literally the OLD ID follows the id. `npcs/jorna.md`
+ * with `name: jorna` is a file that never had a real name — the id was the
+ * fallback, spelled out — and leaving it behind means the tree and the search
+ * title keep naming a reference that does not exist any more. Files with no
+ * `name:`/`title:` at all were imported as "" and fall back dynamically, so
+ * this touches only the spelled-out case.
+ */
+function carryFallbackName(
+  tx: GrimoireDb,
+  campaign: string,
+  kind: RenameKind,
+  oldId: string,
+  newId: string,
+): void {
+  if (kind === "npc") {
+    tx.update(npcs)
+      .set({ name: newId })
+      .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, newId), eq(npcs.name, oldId)))
+      .run();
+    return;
+  }
+  if (kind === "location") {
+    tx.update(locations)
+      .set({ name: newId })
+      .where(
+        and(
+          eq(locations.campaignId, campaign),
+          eq(locations.id, newId),
+          eq(locations.name, oldId),
+        ),
+      )
+      .run();
+    return;
+  }
+  if (kind === "chapter") {
+    tx.update(chapters)
+      .set({ title: newId })
+      .where(
+        and(eq(chapters.campaignId, campaign), eq(chapters.id, newId), eq(chapters.title, oldId)),
+      )
+      .run();
+    return;
+  }
+  tx.update(scenes)
+    .set({ title: newId })
+    .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, newId), eq(scenes.title, oldId)))
+    .run();
+}
+
+function escapeRe(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Rewrite the SCENE MARKER of log lines: `- HH:MM (<oldId>) Text` (README
+ * format), ported unchanged from the file cascade.
+ *
+ * Two rules, and both matter:
+ *
+ *   * ANCHORED on the timestamp, so only a real marker matches. A plain
+ *     `raw.replace("(id)", …)` also hit the same token in FREE TEXT
+ *     (`Improvisiert (lighthouse-arrival) am Steg`), which is prose and never
+ *     a reference.
+ *   * EVERY line of the value is offered the rewrite. `String.replace` with a
+ *     string needle replaces the first hit only; a `raw` is one line today,
+ *     but the loop is what makes that not a silent assumption.
+ */
+function patchLogMarkers(raw: string, oldId: string, newId: string): string {
+  const marker = new RegExp(`^(\\s*-\\s+\\d{1,2}:\\d{2}\\s+\\()${escapeRe(oldId)}(\\))`);
+  const lines = raw.split("\n");
+  let changed = false;
+  lines.forEach((line, index) => {
+    const next = line.replace(marker, `$1${newId}$2`);
+    if (next === line) return;
+    lines[index] = next;
+    changed = true;
+  });
+  return changed ? lines.join("\n") : raw;
+}
+
 /** The soft-reference updates of one rename (the hard ones cascade). */
 function updateSoftReferences(
   tx: GrimoireDb,
@@ -233,7 +315,7 @@ function updateSoftReferences(
       .from(logEntries)
       .where(and(eq(logEntries.campaignId, campaign), eq(logEntries.sceneId, newId)))
       .all()) {
-      const raw = row.raw.replace(`(${oldId})`, `(${newId})`);
+      const raw = patchLogMarkers(row.raw, oldId, newId);
       if (raw === row.raw) continue;
       tx.update(logEntries)
         .set({ raw, hash: logLineShortHash(raw) })
@@ -324,8 +406,18 @@ export async function renameEntity(
       .set({ id: newId })
       .where(and(eq(table.campaignId, campaign), eq(table.id, oldId)))
       .run();
+    // A DISPLAY NAME that was only the id's fallback follows the id. Files
+    // that carried no `name:`/`title:` were imported with "" and fall back
+    // dynamically, so nothing to do for those — but a file that spelled the
+    // fallback out (`name: jorna`) would keep pointing at a reference that
+    // no longer exists, in the tree and in search alike.
+    carryFallbackName(tx, campaign, kind, oldId, newId);
     updateSoftReferences(tx, campaign, kind, oldId, newId);
-    renameEntityIndex(tx, campaign, kind, oldId, newId);
+    // The index row is REPLACED, not patched: its `title` has to follow too
+    // (see fts.ts). Dropping the old id first is what keeps the contract of
+    // one row per (campaign, kind, entity_id).
+    dropEntity(tx, campaign, kind, oldId);
+    reindexEntity(tx, campaign, kind, newId);
     tx.update(campaigns)
       .set({ version: sql`${campaigns.version} + 1` })
       .where(eq(campaigns.id, campaign))

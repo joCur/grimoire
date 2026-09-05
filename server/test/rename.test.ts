@@ -127,6 +127,33 @@ describe("POST /api/:campaign/rename — npc", () => {
     expect((await read("glossary.md")).body).toContain("lighthouse keeper → Leuchtturmwärter");
   });
 
+  test("a display name that was the id's fallback follows the id", async () => {
+    // `npcs/jorna.md` with `name: jorna` never had a real name — the id was
+    // the fallback, spelled out. Leaving it behind means the tree and the
+    // search title keep naming a reference that no longer exists.
+    const before = await read("npcs/jorna.md");
+    const patched = await app.request("/api/beispiel/frontmatter", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        path: "npcs/jorna.md",
+        mtimeMs: before.mtimeMs,
+        patch: { name: "jorna" },
+      }),
+    });
+    expect(patched.status).toBe(200);
+
+    await renameOk({ kind: "npc", oldId: "jorna", newId: "hafenmeisterin" });
+    expect((await read("npcs/hafenmeisterin.md")).frontmatter.name).toBe("hafenmeisterin");
+    const npc = (await tree()).npcs.find((n) => n.id === "hafenmeisterin");
+    expect(npc?.name).toBe("hafenmeisterin");
+  });
+
+  test("a REAL display name is not touched by a rename", async () => {
+    await renameOk({ kind: "npc", oldId: "jorna", newId: "hafenmeisterin" });
+    expect((await read("npcs/hafenmeisterin.md")).frontmatter.name).toBe("Hafenmeisterin Jorna");
+  });
+
   test("unknown npc id -> 404, nothing written", async () => {
     const before = await version();
     const res = await rename({ kind: "npc", oldId: "nobody", newId: "somebody" });
@@ -160,6 +187,7 @@ describe("POST /api/:campaign/rename — location", () => {
 
 describe("POST /api/:campaign/rename — scene", () => {
   test("cascade: own address, scenes_played and the log markers", async () => {
+    const sessionBefore = (await read(SESSION)).body;
     const result = await renameOk({
       kind: "scene",
       oldId: "lighthouse-arrival",
@@ -195,6 +223,10 @@ describe("POST /api/:campaign/rename — scene", () => {
     expect(session.body).toContain("- 20:30 — Pause");
     expect(session.body).toContain("- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread");
     expect(session.body).not.toContain("lighthouse-arrival");
+    // PORTED from the file era ("log otherwise byte-identical"): the WHOLE
+    // rendered session differs from before by nothing but the id token —
+    // timestamps, em-dashes, quotes, hashtags and blank lines included.
+    expect(session.body).toBe(sessionBefore.replaceAll("lighthouse-arrival", "ankunft-am-leuchtturm"));
 
     // the tree names the scene by its new id, under its new path
     const chapter = (await tree()).chapters[0]!;
@@ -202,6 +234,28 @@ describe("POST /api/:campaign/rename — scene", () => {
       "ankunft-am-leuchtturm",
       "smuggler-captured",
     ]);
+  });
+
+  test("only the log MARKER moves — the same token in free text stays", async () => {
+    // `raw.replace("(id)", …)` replaced the first occurrence anywhere, free
+    // text included. The rewrite is anchored on the timestamp, exactly as the
+    // file cascade was: `- HH:MM (<id>) …` is a reference, prose is not.
+    expect((await app.request("/api/beispiel/session/start", { method: "POST" })).status).toBe(200);
+    const logged = await app.request("/api/beispiel/log", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        text: "Rückverweis auf (smuggler-captured) im Text",
+        sceneId: "smuggler-captured",
+      }),
+    });
+    expect(logged.status).toBe(200);
+    const sessionPath = ((await logged.json()) as FileResponse).path;
+
+    await renameOk({ kind: "scene", oldId: "smuggler-captured", newId: "in-der-bucht-erwischt" });
+
+    const body = (await read(sessionPath)).body;
+    expect(body).toContain("(in-der-bucht-erwischt) Rückverweis auf (smuggler-captured) im Text");
   });
 
   test("a scene named in prose only (contingency note) is not rewritten", async () => {

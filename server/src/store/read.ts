@@ -503,20 +503,25 @@ export function readByLocator(
     case "inbox": {
       const rows = inboxRows(db, campaign);
       // Neither the inbox nor the glossary is a single row that could carry a
-      // `rev`, so the campaign's version counter is their guard token. It is
-      // monotonic and changes on EVERY write of the campaign, which makes it
-      // stricter than necessary — an unrelated log line can cost a pending
-      // glossary edit one reload. That is the safe direction (the strict
-      // answer is "re-read", never "overwrite"), and a content hash would be
-      // the unsafe one: two different edits can produce the same hash.
+      // `rev`, so each has its own counter on the campaign row
+      // (`inbox_rev` / `glossary_rev`, schema.ts). `version` used to stand in
+      // for both, and because EVERY write bumps that, one unrelated log line
+      // invalidated a glossary edit the DM had open — un-saveable during a
+      // running session. A content hash would be the unsafe fix (two
+      // different edits can hash alike); a per-document counter is the exact
+      // one.
       if (rows.length === 0) throw new ApiError(404, "file not found");
-      return renderInbox(campaign, rows, campaignRowValue.version);
+      return renderInbox(campaign, rows, campaignRowValue.inboxRev);
     }
-    case "glossary": {
-      const rows = glossaryRows(db, campaign);
-      if (rows.length === 0) throw new ApiError(404, "file not found");
-      return renderGlossary(rows, campaignRowValue.version);
-    }
+    case "glossary":
+      // An EMPTY glossary is an empty document, not a missing one (200). The
+      // 404 it used to answer was a trap: saving an empty body through the
+      // editor made the file the editor was in unreachable.
+      return renderGlossary(
+        glossaryRows(db, campaign),
+        campaignRowValue.glossaryRev,
+        campaignRowValue.glossaryIntro,
+      );
   }
 }
 

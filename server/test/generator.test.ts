@@ -919,6 +919,36 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect(after.mtimeMs).toBe(before.mtimeMs); // the row's rev never moved
   });
 
+  test("422 when a draft's `id` cannot be addressed — nothing written", async () => {
+    // The `id` BECOMES the primary key, and for a scene also the id segment
+    // of its address. Taken on trust, `id: a/b` inserted a row whose address
+    // parses as a completely different path — content written and lost in
+    // the same request. Refused now, with the reason in the message.
+    const bad = ["a/b", "Gross", "trailing-", "../evil", "mit leerzeichen"];
+    for (const [index, id] of bad.entries()) {
+      const rel = `01-salzhafen/hafen/unaddressable-${index}.md`;
+      const res = await postJson("/api/beispiel/generate/apply", {
+        scenes: [{ path: rel, markdown: sceneWithId(id) }],
+      });
+      expect(res.status).toBe(422);
+      expect(((await res.json()) as { error: string }).error).toContain("id");
+      expect(await exists(rel)).toBe(false);
+    }
+  });
+
+  test("an EMPTY id degrades to the file name, as the parser always did", async () => {
+    // `id: ""` never reaches the store as an empty key: shared/parse.ts falls
+    // a missing or empty id back to the file stem, which is the only stable
+    // identity such a draft has. So this is addressable and applies — the
+    // guard above is about ids that are present and unusable.
+    const rel = "01-salzhafen/hafen/leere-id.md";
+    const res = await postJson("/api/beispiel/generate/apply", {
+      scenes: [{ path: rel, markdown: sceneMarkdown().replace("id: treffen-am-kai", 'id: ""') }],
+    });
+    expect(res.status).toBe(200);
+    expect((await read(rel)).frontmatter.id).toBe("leere-id");
+  });
+
   test("400 on path traversal and unsafe targets — nothing written", async () => {
     const md = sceneMarkdown();
     const bad = [

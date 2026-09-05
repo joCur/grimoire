@@ -1247,6 +1247,7 @@ export async function applyGenerated(
 
   const drafts = targets.map((t) => {
     const parsed = parseMarkdown(t.markdown, t.rel, 0);
+    assertDraftId(parsed.frontmatter.id, t.rel);
     // The ADDRESS the entity will have (store/paths) — for a scene that is
     // `<chapter>/<group>/<id>.md`, derived from the FRONTMATTER id, because
     // that is the key `insertDraft` writes under. The model's file name is
@@ -1268,24 +1269,43 @@ export async function applyGenerated(
     seen.add(draft.address);
   }
 
-  // Validate ALL, then write: collect every conflict before a single row is
-  // inserted. `draftTargetExists` asks by ID, which is the key now — so a
-  // draft that would collide with an existing entity is caught even when the
-  // model chose a different file name for it. The conflict is REPORTED under
-  // the path the client sent, which is the draft it has to fix.
-  const conflicts: string[] = [];
-  for (const draft of drafts) {
-    if (await draftTargetExists(campaign, draft.address)) conflicts.push(draft.rel);
-  }
-  if (conflicts.length > 0) {
-    throw new ApiError(409, "target files already exist", { conflicts });
-  }
-
-  await applyDrafts(
-    campaign,
-    drafts.map((draft) => ({ rel: draft.rel, frontmatter: draft.frontmatter, body: draft.body })),
-  );
+  // The conflict check runs in the SAME transaction as the inserts — see
+  // store/write.ts `applyDrafts`. Asking here first left a window between
+  // "free" and "inserted" in which a target could appear, and the documented
+  // `409 { conflicts }` became a primary-key violation (a 500). It asks by
+  // ADDRESS, i.e. by id, which is the key now — so a draft that collides with
+  // an existing entity is caught even when the model chose a different file
+  // name for it; the conflict is REPORTED under the path the client sent,
+  // which is the draft it has to fix.
+  await applyDrafts(campaign, drafts);
   return { written: drafts.map((draft) => draft.address) };
+}
+
+/** An entity id is a kebab slug — the README's stable reference key. */
+const DRAFT_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/**
+ * The `id` of a draft BECOMES THE PRIMARY KEY of the inserted row (and, for a
+ * scene, the id segment of its address). It arrives from a client payload and
+ * was taken on trust: `id: ""` inserted a row nothing can address, and
+ * `id: "a/b"` inserted one whose address parses as a different path — both
+ * unreachable through `GET /file`, i.e. content written and lost in the same
+ * request. A frontmatter that HAS an `id` must therefore carry a usable one;
+ * a draft without the key keeps falling back to its file name, which the
+ * path validation already constrains.
+ *
+ * 422 like the generator's other content rejections: the payload is
+ * well-formed, its CONTENT is unusable.
+ */
+function assertDraftId(id: unknown, rel: string): void {
+  if (id === undefined) return;
+  if (typeof id !== "string" || !DRAFT_ID_PATTERN.test(id.trim())) {
+    throw new ApiError(
+      422,
+      `${rel}: "id" must be a kebab-case slug (a-z, 0-9, single dashes) — ` +
+        `"${String(id)}" cannot be addressed`,
+    );
+  }
 }
 
 /**

@@ -35,10 +35,10 @@ function fileStem(path: string): string {
  * file has no renameable id: sessions (their id is the date), the campaign
  * file, inbox, glossary, and anything unknown.
  *
- * For a chapter the id is its DIRECTORY name — `_chapter.md` is only the
- * chapter's metadata file, and the tree takes the id from the directory.
- * For every other kind it is the frontmatter id (which the parser already
- * falls back to the file stem).
+ * For a chapter the id is the FIRST PATH SEGMENT of its `_chapter.md` (the
+ * former directory name, and the chapter row's id). For every other kind it
+ * is the frontmatter id (which the parser already falls back to the file
+ * stem).
  */
 export function renameTargetFor(file: {
   path: string;
@@ -98,9 +98,13 @@ export function changedCountLabel(count: number): string {
 
 /**
  * The path the reading view must go to after the rename: the file on screen,
- * moved along with the rename. For npc/location/scene that is the renamed
- * file itself; for a chapter the DIRECTORY moved, so the `_chapter.md` we
- * were looking at sits under the new directory.
+ * moved along with the rename.
+ *
+ * The server names `from`/`to` in DOCUMENTS for every kind since the SQLite
+ * cutover (#57) — a chapter rename reports `<id>/_chapter.md`, not the bare
+ * directory — so the file on screen is usually `from` itself. The prefix
+ * branch stays for the case where the view sits on something UNDER the
+ * renamed address; it costs nothing and is the safe direction.
  */
 export function renamedPath(
   currentPath: string,

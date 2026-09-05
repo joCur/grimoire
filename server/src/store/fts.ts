@@ -49,16 +49,10 @@ export function indexEntity(db: GrimoireDb, campaignId: string, entity: IndexedE
   `);
 }
 
-/** Move an entity's index row to a new id (the rename cascade, issue #30). */
-export function renameEntityIndex(
-  db: GrimoireDb,
-  campaignId: string,
-  kind: string,
-  oldId: string,
-  newId: string,
-): void {
-  db.run(sql`
-    update search_fts set entity_id = ${newId}, ref = ${newId}
-    where campaign_id = ${campaignId} and kind = ${kind} and entity_id = ${oldId}
-  `);
-}
+// NOTE: there is deliberately no "move the index row to a new id" helper any
+// more. It only rewrote `entity_id` and `ref` and left `title` behind, so a
+// renamed entity whose display name FOLLOWED its id (the id fallback) stayed
+// findable under its old name and missing under the new one. A rename drops
+// the old row and re-indexes the entity completely instead — see
+// store/write.ts `reindexEntity`, which is the only place that knows what a
+// title means per kind.

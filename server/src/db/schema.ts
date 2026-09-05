@@ -68,6 +68,23 @@ export const campaigns = sqliteTable("campaigns", {
   /** Bumped on every write; the app polls it to invalidate its queries. */
   version: integer("version").notNull().default(1),
   rev: revColumn(),
+  /**
+   * The glossary's PROSE PREAMBLE — the text of `glossary.md` above the first
+   * heading, which belongs to no term (see `parseGlossaryBody`). It has no
+   * row of its own and would be lost on every save, so it lives here and is
+   * rendered back in front of the term list. Empty for the usual glossary.
+   */
+  glossaryIntro: text("glossary_intro").notNull().default(""),
+  /**
+   * Guard tokens of the two SINGLETON LIST documents (`glossary.md`,
+   * `inbox.md`). Neither is a single row that could carry a `rev`, and using
+   * `version` for it — which every unrelated write bumps — made an open
+   * glossary edit unsaveable during a running session. These count only
+   * their own document's writes, so `mtimeMs` behaves exactly like an
+   * entity's `rev`.
+   */
+  glossaryRev: integer("glossary_rev").notNull().default(1),
+  inboxRev: integer("inbox_rev").notNull().default(1),
 });
 
 // --- chapters ---------------------------------------------------------------
@@ -105,6 +122,16 @@ export const scenes = sqliteTable(
      * from the directory, which is what the tree was actually built from.
      */
     chapterId: text("chapter_id"),
+    /**
+     * Whether the scene's FRONTMATTER declares `chapter:`. In the file tree
+     * the owning chapter was the DIRECTORY and `chapter:` was a decorative
+     * copy of it, so `PATCH { chapter: null }` deleted a key and left the
+     * scene where it was. `chapter_id` is the address now, so nulling it
+     * would drop the scene out of the tree — the declaration is a flag
+     * instead: 0 hides the key from the rendered frontmatter, the address
+     * stays.
+     */
+    chapterDeclared: integer("chapter_declared").notNull().default(1),
     /**
      * The location-slug subfolder the scene sat in ("" for scenes directly in
      * the chapter directory). Purely a DISPLAY grouping — the tree renders

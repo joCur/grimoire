@@ -419,3 +419,44 @@ test("_campaign.md keeps its ONE Bearbeiten — the metadata dialog", async ({ p
   await expect(page.getByRole("dialog")).toContainText("Kampagne bearbeiten");
   await expect(page.getByRole("textbox", { name: TEXTAREA })).toHaveCount(0);
 });
+
+test("the glossary stays saveable while a session writes next to it", async ({ page, api }) => {
+  // Critical path 9 for the campaign's list document, and the regression of a
+  // cutover bug: `glossary.md` was guarded by `campaigns.version`, which EVERY
+  // write bumps. A quick note during a running session therefore answered the
+  // DM's open glossary edit with „Inzwischen geändert" — un-saveable exactly
+  // while the campaign is in use. Each document carries its own token now.
+  await page.goto("/beispiel/file/glossary.md");
+  await expect(page.getByRole("article")).toContainText("Leuchtturmwärter");
+
+  await openRawEditor(page);
+  const textarea = page.getByRole("textbox", { name: TEXTAREA });
+  await expect(textarea).toBeVisible();
+
+  // Something unrelated happens in the campaign while the editor stands open.
+  await api.send("POST", "beispiel/session/start");
+  await api.send("POST", "beispiel/log", { text: "Die Gruppe betritt den Turm" });
+
+  const added = "- tide pool → Gezeitentümpel";
+  await textarea.fill(`${await textarea.inputValue()}${added}\n`);
+  const save = page.getByRole("button", { name: "Speichern" });
+  await expect(save).toBeEnabled();
+  await save.click();
+
+  // No conflict, and the new term is stored and rendered.
+  await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
+  await expect(textarea).toHaveCount(0);
+  await expect(page.getByRole("article")).toContainText("Gezeitentümpel");
+  await expect.poll(() => api.raw("glossary.md")).toContain(added);
+  // The structured endpoint agrees — the body was decomposed into rows.
+  const glossary = await api.get<{ entries: Array<{ term: string }> }>("beispiel/glossary");
+  expect(glossary.entries.map((e) => e.term)).toContain("tide pool");
+
+  // A REAL second writer still conflicts — the token did not become toothless.
+  await openRawEditor(page);
+  await expect(page.getByRole("textbox", { name: TEXTAREA })).toBeVisible();
+  await api.writeBody("glossary.md", "\n- harbour master → Hafenmeisterin\n");
+  await page.getByRole("textbox", { name: TEXTAREA }).fill("\n- ganz was anderes → nope\n");
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText(STALE_MESSAGE)).toBeVisible();
+});
