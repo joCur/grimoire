@@ -171,7 +171,7 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
     await ok("/api/beispiel/session/pause");
     setNow(() => new Date(2026, 7, 19, 23, 0, 0));
     const ended = await ok("/api/beispiel/session/end");
-    expect(ended.frontmatter.ended).toBe("2026-08-19T23:00");
+    expect(ended.frontmatter.ended).toBe("2026-08-19T23:00:00");
     expect(ended.frontmatter.pauses).toEqual([
       { from: "2026-08-19T22:50:00", to: "2026-08-19T23:00:00" },
     ]);

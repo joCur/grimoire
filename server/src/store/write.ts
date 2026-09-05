@@ -32,7 +32,7 @@ import {
   type FileResponse,
 } from "@grimoire/shared";
 import { ApiError, assertSafeRelativeMdPath } from "../campaign-fs";
-import { localDate, localDateTime, localDateTimeSeconds, localTime, now } from "../clock";
+import { localDate, localDateTimeSeconds, localTime, now } from "../clock";
 import type { GrimoireDb } from "../db/client";
 import {
   logLineShortHash,
@@ -1027,7 +1027,7 @@ export async function startSession(campaign: string): Promise<FileResponse> {
     if (active !== undefined) return renderSessionRow(tx, campaign, active);
     const id = nextSessionId(tx, campaign, todayId);
     tx.insert(sessions)
-      .values({ campaignId: campaign, id, started: localDateTime(d) })
+      .values({ campaignId: campaign, id, started: localDateTimeSeconds(d) })
       .run();
     const row = sessionRow(tx, campaign, id);
     if (row === undefined) throw new ApiError(500, "session could not be created");
@@ -1048,7 +1048,7 @@ export async function endSession(campaign: string): Promise<FileResponse> {
     if (isEnded({ ended: row.ended })) return renderSessionRow(tx, campaign, row);
     const d = now();
     closeOpenPauses(tx, campaign, row.id, localDateTimeSeconds(d));
-    const ended = localDateTime(d);
+    const ended = localDateTimeSeconds(d);
     tx.update(sessions)
       .set({ ended, rev: row.rev + 1 })
       .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, row.id)))

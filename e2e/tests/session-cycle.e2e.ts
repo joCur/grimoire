@@ -85,6 +85,10 @@ test("session start, quick note, pause, end — log and file follow", async ({
     );
   }
   await expect(chip).toContainText(/\d+:\d{2}:\d{2}/);
+  // …and it starts at ZERO. `started` is written to the second (issue #58);
+  // when it was minute-precise the reading rounded down to the start of the
+  // minute and the fresh chip could open at up to 0:00:59.
+  await expect(chip).toContainText(/\b0:00:0[0-4]\b/);
   await expect(page.getByText("Live", { exact: true })).toHaveCount(0);
 
   // The clock really ticks (1s), it is not a frozen render: two readings more
@@ -247,7 +251,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await (await sessionMenuItem(page, "Session beenden")).click();
   await expect(page).toHaveURL(/\/beispiel\/review$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fünf Minuten Ernte");
-  await expect.poll(() => api.raw(sessionPath)).toMatch(/^ended: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/m);
+  await expect.poll(() => api.raw(sessionPath)).toMatch(/^ended: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/m);
 
   // The harvest card for the tagged note is waiting there.
   await expect(page.getByText("Gruppe verhandelt mit Jorna am Fuß der Treppe")).toBeVisible();
@@ -266,6 +270,9 @@ test("session start, quick note, pause, end — log and file follow", async ({
 
   await expect(page).toHaveURL(/\/beispiel\/live$/);
   await expect(sessionMenuChip(page)).toBeVisible();
+  // The timer of the SECOND session starts at zero too — the bug that made an
+  // end→start look like the old session kept counting (issue #58).
+  await expect(sessionMenuChip(page)).toContainText(/\b0:00:0[0-4]\b/);
   // A fresh, empty session: nothing of the first evening is shown …
   await expect(page.getByText(NOTE)).toHaveCount(0);
   await expect(page.getByText("— Pause")).toHaveCount(0);
@@ -279,7 +286,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   expect(second).not.toContain(NOTE);
   // … and the first session is untouched: still ended, log and pauses intact.
   const first = await api.raw(sessionPath);
-  expect(first).toMatch(/^ended: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/m);
+  expect(first).toMatch(/^ended: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/m);
   expect(first).toContain(NOTE);
   expect(first).toMatch(/pauses: \[\{from: [\d\-T:]+, to: [\d\-T:]+\}\]/);
 

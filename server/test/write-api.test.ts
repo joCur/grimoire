@@ -326,23 +326,46 @@ describe("POST /api/:campaign/session/start", () => {
     expect(file.path).toBe("sessions/2026-08-19.md");
     expect(file.kind).toBe("session");
     expect(file.frontmatter.id).toBe("2026-08-19");
-    expect(file.frontmatter.started).toBe("2026-08-19T21:05");
+    expect(file.frontmatter.started).toBe("2026-08-19T21:05:00");
     expect(file.frontmatter.scenes_played).toEqual([]);
     // The rendered skeleton is the one the format prescribes — the `## Log`
     // section is rendered from (still zero) log rows.
     expect(file.raw).toBe(
-      "---\nid: 2026-08-19\nstarted: 2026-08-19T21:05\nscenes_played: []\n---\n\n## Log\n",
+      "---\nid: 2026-08-19\nstarted: 2026-08-19T21:05:00\nscenes_played: []\n---\n\n## Log\n",
     );
     // A fresh row starts at rev 1, and the GET agrees.
     expect(file.mtimeMs).toBe(1);
     expect((await getFile("sessions/2026-08-19.md")).mtimeMs).toBe(1);
   });
 
+  // Issue #58 bug: `started` used to be minute-precise, so it rounded DOWN to
+  // the start of its minute and the timer chip opened at up to 0:00:59 — after
+  // an end→start that read like the old session kept counting.
+  test("`started` keeps the seconds, so a fresh session starts at 0", async () => {
+    setNow(() => new Date(2026, 7, 19, 21, 5, 50));
+    const file = await postOk("/api/beispiel/session/start");
+    expect(file.frontmatter.started).toBe("2026-08-19T21:05:50");
+    // The seconds survive the YAML rendering the editor is shown, too.
+    expect(file.raw).toContain("started: 2026-08-19T21:05:50\n");
+    // …and what the app actually clocks — startedMs vs. the same instant — is
+    // zero, not 50 seconds.
+    expect(file.startedMs).toBe(new Date(2026, 7, 19, 21, 5, 50).getTime());
+  });
+
+  test("a session started on the REAL clock has an elapsed under 2s (#58)", async () => {
+    setNow(null); // the real clock: this is the bug's actual surface
+    const before = Date.now();
+    const file = await postOk("/api/beispiel/session/start");
+    expect(file.startedMs).toBeDefined();
+    expect(file.startedMs as number).toBeGreaterThanOrEqual(before - 1000);
+    expect(Date.now() - (file.startedMs as number)).toBeLessThan(2000);
+  });
+
   test("second start on the same day is idempotent (nothing reset)", async () => {
     const first = await postOk("/api/beispiel/session/start");
     setNow(() => new Date(2026, 7, 19, 21, 30));
     const again = await postOk("/api/beispiel/session/start");
-    expect(again.frontmatter.started).toBe("2026-08-19T21:05"); // NOT 21:30
+    expect(again.frontmatter.started).toBe("2026-08-19T21:05:00"); // NOT 21:30
     // Idempotent all the way down: no write happened, so the token stands.
     expect(again.mtimeMs).toBe(first.mtimeMs);
   });
@@ -357,7 +380,7 @@ describe("POST /api/:campaign/session/start", () => {
     // Own id, own `started`, and the log skeleton is EMPTY — the runtime of
     // the new session starts at 0 instead of inheriting the first evening's.
     expect(second.raw).toBe(
-      "---\nid: 2026-08-19-2\nstarted: 2026-08-19T23:30\nscenes_played: []\n---\n\n## Log\n",
+      "---\nid: 2026-08-19-2\nstarted: 2026-08-19T23:30:00\nscenes_played: []\n---\n\n## Log\n",
     );
     expect(second.mtimeMs).toBe(1);
   });
@@ -515,9 +538,9 @@ describe("POST /api/:campaign/session/end", () => {
     await postOk("/api/beispiel/log", { text: "Zeile eins Zeile zwei" });
     setNow(() => new Date(2026, 7, 19, 23, 45));
     const file = await postOk("/api/beispiel/session/end");
-    expect(file.frontmatter.ended).toBe("2026-08-19T23:45");
+    expect(file.frontmatter.ended).toBe("2026-08-19T23:45:00");
     expect(Object.keys(file.frontmatter)).toEqual(["id", "started", "ended", "scenes_played"]);
-    expect(file.frontmatter.started).toBe("2026-08-19T21:05");
+    expect(file.frontmatter.started).toBe("2026-08-19T21:05:00");
     // the log line appended earlier survives verbatim
     expect(file.body.endsWith("- 21:25 Zeile eins Zeile zwei\n")).toBe(true);
   });
@@ -528,7 +551,7 @@ describe("POST /api/:campaign/session/end", () => {
     const first = await postOk("/api/beispiel/session/end");
     setNow(() => new Date(2026, 7, 19, 23, 59));
     const second = await postOk("/api/beispiel/session/end");
-    expect(second.frontmatter.ended).toBe("2026-08-19T23:45");
+    expect(second.frontmatter.ended).toBe("2026-08-19T23:45:00");
     // Idempotent means no write: the guard token stands still.
     expect(second.mtimeMs).toBe(first.mtimeMs);
   });
@@ -543,7 +566,7 @@ describe("POST /api/:campaign/session/end", () => {
     setNow(() => new Date(2026, 7, 22, 22, 0));
     const file = await postOk("/api/beispiel/session/end");
     expect(file.path).toBe("sessions/2026-08-19.md");
-    expect(file.frontmatter.ended).toBe("2026-08-19T23:45");
+    expect(file.frontmatter.ended).toBe("2026-08-19T23:45:00");
     // A log line, however, is STRICTLY the running session's business: a note
     // typed after the end used to land in the closed log with a 200.
     const log = await postJson("/api/beispiel/log", { text: "verloren" });
