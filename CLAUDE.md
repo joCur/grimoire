@@ -1,12 +1,16 @@
 # CLAUDE.md — Grimoire
 
 Grimoire ist ein selbst gehostetes Einzelnutzer-Tool für einen D&D-Spielleiter:
-Session-Vorbereitung und Live-Moderation über einer Markdown-Datenbasis.
+Session-Vorbereitung und Live-Moderation über einer Kampagnen-Datenbank
+(SQLite, ADR #13; Markdown ist das Inhaltsformat der Bodies).
 Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 
 ## Pflichtlektüre vor jeder Aufgabe
 
-1. `README.md` — Datenformat und Konventionen (Entitäten, Callouts, `If:`-Abschnitte, Hashtags)
+1. `README.md` — Datenformat und Konventionen. Achtung auf die Zweiteilung
+   (ADR #13): Ordnerstruktur/Dateinamen sind das **Import-Format
+   (historisch)**, das Body-Vokabular (Callouts, `If:`-Abschnitte, Hashtags)
+   und die Frontmatter-Keys sind **normativ**
 2. `docs/DECISIONS.md` — Architektur-Entscheidungen inkl. Tech-Stack. Entscheidungen dort sind bindend; Abweichungen nur mit neuem Eintrag.
 3. `docs/UI-BRIEF.md` — Design-Richtung für alles Sichtbare
 
@@ -14,22 +18,36 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 
 - Frontend: Vite + React 19 + Tailwind v4 + shadcn/ui, TanStack Query,
   react-markdown + eigenes Remark-Plugin für Callouts und `## If:`
-- Backend: Bun + Hono, gray-matter, chokidar, Fuse.js
-- Regel: Keine Bun-only-APIs ohne Eintrag in docs/DECISIONS.md (Node-Portabilität)
+- Backend: Bun + Hono, SQLite über Drizzle (`server/src/db/`), Suche als
+  FTS5-Index, gray-matter nur noch im Import-/Parser-Pfad
+- Speicher: **eine SQLite-Datei ist die Quelle der Wahrheit** (ADR #13),
+  `GRIMOIRE_DATA/grimoire.db`
+- Regel: Keine Bun-only-APIs ohne Eintrag in docs/DECISIONS.md
+  (Node-Portabilität). Eingetragen ist genau eine: `bun:sqlite` als Fallback
+  hinter `server/src/db/driver.ts`
 
 ## Projektstruktur
 
-- `examples/` — generische Beispielkampagne (committet). Das sind die
-  Dev-Fixtures und die Format-Referenz. NIE umformatieren oder „aufräumen";
-  das Format ist Vertrag.
-- `campaigns/` — echte Kampagnendaten, in `.gitignore` (Nutzungsdaten,
-  ggf. urheberrechtlich geschütztes Quellmaterial). Im Code nie fest
-  verdrahten — der Datenpfad kommt aus `CAMPAIGN_ROOT`.
+- `examples/` — generische Beispielkampagne (committet). Sie ist der **Seed**
+  für Dev/Tests/E2E (der echte Import liest sie, es gibt keine zweiten
+  Fixtures) und die Referenz des Import-Formats. NIE umformatieren oder
+  „aufräumen"; das Format ist Vertrag.
+- `campaigns/` — echte Kampagnendaten als Markdown-Baum, in `.gitignore`
+  (Nutzungsdaten, ggf. urheberrechtlich geschütztes Quellmaterial). Seit
+  ADR #13 nur noch **Quelle der Erstmigration**: Pfad aus `CAMPAIGN_ROOT`,
+  nach dem Import fasst der Server ihn nicht mehr an. Im Code nie fest
+  verdrahten.
+- `GRIMOIRE_DATA` (Default `./data`, gitignored) — hier liegt
+  `grimoire.db` samt `-wal`/`-shm`: die eigentlichen Daten. Kein Code liest
+  Kampagneninhalte von woanders.
 - `shared/` — Entitäts-Typen und Frontmatter-Parser (`@grimoire/shared`),
   von Server und App gemeinsam genutzt. Das Datenformat ist hier genau
-  einmal in Code beschrieben (Spiegel von README.md — beides synchron halten).
+  einmal in Code beschrieben (Spiegel von README.md — beides synchron halten);
+  die Speicherform steht genau einmal in `server/src/db/schema.ts`.
 - `server/` — Hono-API. Geplante Endpoints sind in `server/src/server.ts`
-  dokumentiert und dort abzuhaken, wenn implementiert.
+  dokumentiert und dort abzuhaken, wenn implementiert. Datenzugriff
+  ausschließlich über `server/src/store/` (Queries), nie direkt SQL aus einer
+  Route.
 - `app/` — das Frontend (bei erster UI-Aufgabe anlegen: Vite-Scaffold).
 - `generator/` — LLM-Pipeline (Prompt, Few-Shot, Ablauf-README).
 - `design/` — verbindliche Design-Referenz (Claude-Design-Export des PO,
@@ -56,8 +74,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   und `.../ankunft-leuchtturm.md` prüfen.
 - Format degradiert: unbekannte Callouts/Überschriften als normalen Text
   rendern, niemals Fehler werfen.
-- Schreibzugriffe der App nur über die dokumentierte API; Frontmatter-Patches
-  mit mtime-Check (409 bei Konflikt).
+- Schreibzugriffe der App nur über die dokumentierte API; Patches tragen das
+  Guard-Token des Lesevorgangs mit (`mtimeMs` auf der Leitung, intern die
+  Zeilenversion `rev`) — 409 bei Konflikt, nie stilles Überschreiben.
 - Sprache der UI: Deutsch. Code, Kommentare, Commits: Englisch.
 
 ## Backlog-Prozess
@@ -109,9 +128,10 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 
 ## Kritische Pfade (E2E-Pflicht, echte Suite ohne Mocks)
 
-Playwright gegen den echten Stack (realer Server auf Kampagnen-Kopie,
-gebaute App, echter Browser; einzige Ausnahme: das LLM ist ein lokaler
-Stub-HTTP-Server — der Provider-Pfad läuft real). Die Pfade:
+Playwright gegen den echten Stack (realer Server auf einer eigenen, aus
+`examples/` importierten DB, gebaute App, echter Browser; einzige Ausnahme:
+das LLM ist ein lokaler Stub-HTTP-Server — der Provider-Pfad läuft real).
+Die Pfade:
 
 1. Auto-Einstieg `/` → Pool lädt die Kampagne
 2. Szene lesen: Callouts, If-Sections, NPC-Karten der Referenzszenen
@@ -120,7 +140,8 @@ Stub-HTTP-Server — der Provider-Pfad läuft real). Die Pfade:
    Pause → beenden → Review
 5. Ernte: Thread übernehmen → _chapter.md; Inbox abhaken
 6. Generator-Zyklus (Stub-LLM): Job → Review → Übernehmen → draft im
-   Pool; plus 409-/Fehlerpfad
+   Pool; plus 409-/Fehlerpfad und Server-Neustart (fertiger Job übersteht
+   ihn und bleibt übernehmbar, laufender wird als `failed` gemeldet)
 7. Frontmatter-Patch/Status-Regler inkl. 409-Konflikt
 8. Mobil-Startfläche + Inbox-Einwurf bei 390px
 9. Datei bearbeiten: öffnen → Body ändern → speichern → gerendert

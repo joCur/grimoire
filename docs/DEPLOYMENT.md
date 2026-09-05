@@ -366,30 +366,35 @@ kein In-App-Auth nachbauen.
 
 ## 4. Backup
 
-`campaigns/` sind reine Markdown-Dateien — Backup ist Dateikopie, kein Dump:
+**Gesichert wird das `GRIMOIRE_DATA`-Volume — siehe Abschnitt 2a**, dort steht
+das Verfahren (`VACUUM INTO` im Betrieb, oder Container stoppen und das
+Verzeichnis kopieren) und die Wiederherstellung.
 
-- **Git** (empfohlen): Kampagnen-Ordner ist ein Repo, `git add -A && git
-  commit` per Cron oder nach der Session. Nebeneffekt: Historie und Diff für
-  jede Szene.
-- **rsync/restic** auf einen anderen Host bzw. Storage.
-
-Die Schreibzugriffe der App sind klein und append-orientiert (DECISIONS #4),
-ein Snapshot im laufenden Betrieb ist unkritisch. Wiederherstellung =
-Dateien zurückkopieren, Container neu starten (der Watcher liest neu ein).
+Was hier früher stand, galt für die Markdown-Ära: „Backup ist Dateikopie",
+Git-Historie pro Szene, `rsync` über `campaigns/`. Seit ADR #13 ist das nicht
+mehr die Sicherung, sondern höchstens ein Archiv des Vor-Migrations-Stands —
+`campaigns/` wird nach der Erstmigration nicht mehr beschrieben und nicht mehr
+gelesen. Wer diesen Ordner weiter versioniert, sichert damit **keine** laufende
+Kampagne.
 
 ## 5. Betrieb & Fehlersuche
 
-- Logs: `docker logs -f grimoire`. Beim Start erscheinen der Kampagnen-Pfad,
-  der Port und `Serving app build from /app/app/dist`. Steht dort
+- Logs: `docker logs -f grimoire`. Beim Start erscheinen der Pfad der
+  Datenbank, der Port, eine Zeile zur Erstmigration (bzw. „no import needed …
+  CAMPAIGN_ROOT is not read") und `Serving app build from /app/app/dist`. Steht dort
   stattdessen `No app build at …`, fehlt `app/dist` im Image (Build-Stage
   fehlgeschlagen) und der Container liefert nur die API.
 - Healthcheck: eingebaut (`GET /api/campaigns`), sichtbar über
   `docker inspect --format '{{.State.Health.Status}}' grimoire`.
-- Externe Edits (VS Code Remote, `git pull`) erkennt der chokidar-Watcher und
-  erhöht den Versionszähler; die App pollt `GET /api/:campaign/version`
-  (DECISIONS #9). Auf exotischen Mounts (NFS, manche FUSE-Setups) kommen
-  keine Datei-Events an — dann hilft nur ein Reload im Browser bzw. ein
-  Container-Neustart.
+- Aktualisierung im Browser: jeder Write zählt `campaigns.version` in
+  derselben Transaktion hoch, die App pollt `GET /api/:campaign/version`
+  (DECISIONS #9). Es gibt keinen Datei-Watcher mehr — Edits im Dateibaum
+  wirken NICHT, die Datenbank ist die Wahrheit (ADR #13).
+- Generator-Jobs überleben einen Neustart (ADR #10-Nachtrag): ein fertiger
+  Job ist nach dem Boot noch da und übernehmbar. War ein Job im Lauf, steht im
+  Log `N generate job(s) were running at the last shutdown — marked as
+  failed`, und die App zeigt „Server wurde während des Laufs neu gestartet —
+  Job neu starten". Das ist die erwartete Meldung, kein Defekt.
 - Banner „Neue Version verfügbar — neu laden": ein offener Tab läuft noch mit
   einem älteren Bundle als der Server (Build-Ids aus `GRIMOIRE_BUILD` weichen
   ab, Vergleich beim laufenden Versions-Polling) — der Klick lädt hart neu,
