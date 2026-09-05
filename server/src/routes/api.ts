@@ -26,7 +26,6 @@ import {
   appendLogEntry,
   appendThreadToChapter,
   continueSession,
-  createCampaignMeta,
   createNpcStub,
   discardSession,
   endSession,
@@ -234,25 +233,14 @@ api.put("/:campaign/file", async (c) => {
   return c.json(await writeFileBody(c.req.param("campaign"), rel, mtimeMs, markdown));
 });
 
-// POST /api/:campaign/campaign-meta { name, description? } -> FileResponse
-// Creates `<campaign>/_campaign.md` with id (the directory name), name and the
-// optional description — the one gap the meta dialog of issue #34 could not
-// close with PATCH /frontmatter, which needs an existing file and its mtime.
-// CREATE ONLY: 409 { path } when the file exists (editing is PATCH's job),
-// 400 for a missing/blank name.
-api.post("/:campaign/campaign-meta", async (c) => {
-  const body = await jsonBody(c, ["name", "description"]);
-  const name = normalizeLineText(body.name);
-  if (name === undefined) throw new ApiError(400, "name must be a non-empty string");
-  let description: string | undefined;
-  if (body.description !== undefined && body.description !== null) {
-    if (typeof body.description !== "string") {
-      throw new ApiError(400, "description must be a string");
-    }
-    description = normalizeLineText(body.description); // blank -> no key at all
-  }
-  return c.json(await createCampaignMeta(c.req.param("campaign"), name, description));
-});
+// POST /api/:campaign/campaign-meta is GONE (issue #62). It was the create
+// half of the metadata dialog (issue #34), for the case PATCH /frontmatter
+// cannot serve: no `_campaign.md`, hence no guard token to write against.
+// Since the cutover every campaign HAS a row, so GET /file?path=_campaign.md
+// always answers 200 with a `rev` and there is no create case left — the
+// endpoint had become unreachable from the app (#59). Name and description
+// are written like every other frontmatter field now, through PATCH
+// /frontmatter and its 409.
 
 // POST /api/:campaign/session/start -> FileResponse
 // Creates sessions/<today>.md. Idempotent while TODAY's session is the running
@@ -510,7 +498,7 @@ api.post("/:campaign/generate", async (c) => {
   }
   await assertGenerateTarget(campaign, chapter, newChapter === true); // 400/404
   const provider = obtainProvider(); // 503 when nothing is configured
-  const job = startJob({
+  const job = await startJob({
     kind: "scene",
     campaign,
     chapter,
@@ -547,7 +535,7 @@ api.post("/:campaign/generate/npc", async (c) => {
   }
   await assertNpcGenerateTarget(campaign, npcId); // 400/404/409
   const provider = obtainProvider(); // 503 when nothing is configured
-  const job = startJob({
+  const job = await startJob({
     kind: "npc",
     campaign,
     sourceText,
@@ -562,8 +550,8 @@ api.post("/:campaign/generate/npc", async (c) => {
 // this endpoint, and "no job" is the honest answer for an unknown campaign
 // too. Polled by the generator route while a job runs (~3s) and once per
 // campaign mount by the topbar's run indicator.
-api.get("/:campaign/generate/job", (c) => {
-  const job = getJob(c.req.param("campaign"));
+api.get("/:campaign/generate/job", async (c) => {
+  const job = await getJob(c.req.param("campaign"));
   if (job === undefined) throw new ApiError(404, "no generate job for this campaign");
   return c.json(serializeJob(job));
 });
@@ -571,8 +559,8 @@ api.get("/:campaign/generate/job", (c) => {
 // DELETE /api/:campaign/generate/job -> { deleted: true } ("Verwerfen").
 // Works for every status — a running job is abandoned, its result never
 // lands (see finish() in generate-jobs.ts). 404 when there is none.
-api.delete("/:campaign/generate/job", (c) => {
-  if (!deleteJob(c.req.param("campaign"))) {
+api.delete("/:campaign/generate/job", async (c) => {
+  if (!(await deleteJob(c.req.param("campaign")))) {
     throw new ApiError(404, "no generate job for this campaign");
   }
   return c.json({ deleted: true });
@@ -590,7 +578,7 @@ api.put("/:campaign/generate/job/drafts", async (c) => {
   const markdown = body.markdown;
   if (typeof rel !== "string" || rel === "") throw new ApiError(400, "path must be a string");
   if (typeof markdown !== "string") throw new ApiError(400, "markdown must be a string");
-  setDraftEdit(c.req.param("campaign"), rel, markdown);
+  await setDraftEdit(c.req.param("campaign"), rel, markdown);
   return c.json({ path: rel });
 });
 
@@ -618,6 +606,6 @@ api.post("/:campaign/generate/apply", async (c) => {
     throw new ApiError(400, "jobId must be a string");
   }
   const written = await applyGenerated(campaign, body);
-  if (typeof jobId === "string") deleteJobIfCurrent(campaign, jobId);
+  if (typeof jobId === "string") await deleteJobIfCurrent(campaign, jobId);
   return c.json(written);
 });

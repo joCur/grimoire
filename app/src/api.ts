@@ -76,8 +76,9 @@ export function fetchSearch(campaign: string, q: string): Promise<SearchResponse
 }
 
 /**
- * Campaign version counter (issue #8) — bumped by the server's file watcher
- * on every markdown change; polled by useCampaignVersion.
+ * Campaign version counter (issue #8) — bumped by every server-side write, in
+ * the same transaction as the change (the file watcher is gone with the SQLite
+ * cutover, DECISIONS #9/#13); polled by useCampaignVersion.
  *
  * `build` (issue #24) is the server's build id, riding along on this poll so
  * the handshake costs no extra request. Optional in the type because an older
@@ -209,24 +210,6 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
   });
   if (!response.ok) throw await failure(`POST /api${path}`, response);
   return (await response.json()) as T;
-}
-
-/**
- * Create the campaign's `_campaign.md` with name + optional description
- * (issue #34). The server sets `id` from the DIRECTORY name and never
- * overwrites: an existing file is an ApiError with status 409. Editing an
- * existing file goes through patchFrontmatter — only that carries the mtime
- * check.
- */
-export function createCampaignMeta(
-  campaign: string,
-  name: string,
-  description?: string,
-): Promise<FileResponse> {
-  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/campaign-meta`, {
-    name,
-    ...(description === undefined || description === "" ? {} : { description }),
-  });
 }
 
 /**
@@ -567,7 +550,9 @@ export async function startGenerateNpcJob(
  * The campaign's generate job, or null when there is none (the server's 404
  * is the normal "nothing running, nothing to restore" answer — never an
  * error state in the UI). A `null` after a job WAS there means it is gone:
- * applied, discarded, or lost to a server restart (jobs are in-memory only).
+ * applied or discarded. A server restart does NOT lose it any more (issue
+ * #23): a finished job comes back, and one that was still running comes back
+ * as `failed` with a message saying so.
  */
 export async function fetchGenerateJob(campaign: string): Promise<GenerateJob | null> {
   const path = `/${encodeURIComponent(campaign)}/generate/job`;

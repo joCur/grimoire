@@ -576,9 +576,12 @@ export function GenerateRoute() {
               </p>
             )}
 
-            {/* Jobs live in memory only (issue #19, bewusstes Nicht-Ziel):
-                after a server restart the run is gone — said once, quietly,
-                instead of a spinner that never ends. */}
+            {/* A job that vanished (applied elsewhere, discarded in another
+                tab) — said once, quietly, instead of a spinner that never
+                ends. Since issue #23 a restart is NOT one of the reasons any
+                more: the job comes back, a running one as `failed` with its
+                own message. The hint keeps the restart as a parenthetical
+                guess because that is still the likeliest cause for a DM. */}
             {lostJob && (
               <p aria-live="polite" className="mt-4 text-[13px] text-muted-foreground">
                 Der Generierungs-Job ist nicht mehr vorhanden (Server-Neustart?) — erneut

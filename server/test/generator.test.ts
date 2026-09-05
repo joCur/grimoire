@@ -20,11 +20,17 @@
 // themselves (lifecycle, 409, drafts, apply cleanup, restart) have their own
 // describe block at the end; a FakeProvider that waits on a manual gate
 // makes "running" observable without a single timer.
+//
+// Since issue #23 the job is a ROW, so a "restart" is no longer "drop the
+// Map": it is `failInterruptedJobs()` — literally what the boot runs — over
+// the same database. That is why the restart cases below call it directly.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import type { FileResponse, GenerateJob, GenerateResult, GenerateUsage } from "@grimoire/shared";
 import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generate-jobs";
+import { failInterruptedJobs, RESTART_FAILURE_MESSAGE } from "../src/db/job-boot";
+import { getDb } from "../src/store/handle";
 import { dropStore, seedStore } from "./support/store";
 import {
   DEFAULT_CORRECTION_TURNS,
@@ -67,12 +73,17 @@ afterAll(() => {
   dropStore();
 });
 
-afterEach(() => {
+afterEach(async () => {
   setProviderForTests(null);
   // No job may leak into the next test (a leftover RUNNING one would 409).
-  clearJobsForTests();
+  await clearJobsForTests();
   delete process.env.LLM_CORRECTION_TURNS;
 });
+
+/** What the server does at boot with the jobs a dead process left behind. */
+async function restartServer(): Promise<number> {
+  return failInterruptedJobs(await getDb());
+}
 
 // --- fake provider ------------------------------------------------------------
 
@@ -1407,14 +1418,73 @@ describe("generate jobs", () => {
     expect(second!.result!.scenes[0]!.path).toBe("01-salzhafen/hafen/job-second.md");
   });
 
-  test("a restarted server has no jobs at all — GET answers 404", async () => {
-    useFake([jobReply("01-salzhafen/hafen/job-restart.md")]);
-    await generate(generateBody);
-    expect((await fetchJob())!.status).toBe("done");
+  // --- surviving a restart (issue #23) --------------------------------------
 
-    // The store is the only place jobs live (issue #19 non-goal: no disk).
-    clearJobsForTests();
+  test("a FINISHED job survives a restart whole — result, edits, applyable", async () => {
+    const scenePath = "01-salzhafen/hafen/job-restart.md";
+    const edited = `${sceneMarkdown({ npcs: "fenn" })}\nNach dem Neustart noch da.\n`;
+    useFake([jobReply(scenePath)]);
+    await generate(generateBody);
+    const before = (await fetchJob())!;
+    expect(before.status).toBe("done");
+    expect((await putDraft("beispiel", { path: scenePath, markdown: edited })).status).toBe(200);
+
+    // The boot touches nothing that already finished.
+    expect(await restartServer()).toBe(0);
+
+    const after = (await fetchJob())!;
+    expect(after.id).toBe(before.id);
+    expect(after.status).toBe("done");
+    expect(after.startedAt).toBe(before.startedAt);
+    expect(after.finishedAt).toBe(before.finishedAt);
+    expect(after.kind).toBe("scene");
+    expect(after.chapter).toBe("01-salzhafen");
+    expect(after.result).toEqual(before.result!);
+    expect(after.draftEdits).toEqual({ [scenePath]: edited });
+
+    // …and it can still be applied, which is the whole point of keeping it.
+    const res = await postJson("/api/beispiel/generate/apply", {
+      scenes: after.result!.scenes,
+      stubs: [],
+      jobId: after.id,
+    });
+    expect(res.status).toBe(200);
+    expect(await exists(scenePath)).toBe(true);
     expect(await fetchJob()).toBeNull();
+  });
+
+  test("a RUNNING job cannot survive — the boot fails it with a German message", async () => {
+    const open = gate();
+    useFake([jobReply("01-salzhafen/hafen/job-interrupted.md")], undefined, open.promise);
+    expect((await postJson("/api/beispiel/generate", generateBody)).status).toBe(202);
+    const started = (await fetchJob())!;
+    expect(started.status).toBe("running");
+
+    // The process that owned that provider call is gone.
+    expect(await restartServer()).toBe(1);
+
+    const failed = (await fetchJob())!;
+    expect(failed.id).toBe(started.id);
+    expect(failed.status).toBe("failed");
+    expect(failed.finishedAt).toEqual(expect.any(String));
+    expect(failed.error!.status).toBe(503);
+    expect(failed.error!.body.error).toBe(RESTART_FAILURE_MESSAGE);
+    expect(failed.result).toBeUndefined();
+
+    // The abandoned run finishing later must NOT resurrect the job as done.
+    open.open();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect((await fetchJob())!.status).toBe("failed");
+  });
+
+  test("a discarded job stays gone across a restart — GET answers 404", async () => {
+    useFake([jobReply("01-salzhafen/hafen/job-discarded.md")]);
+    await generate(generateBody);
+    expect(
+      (await app.request("/api/beispiel/generate/job", { method: "DELETE" })).status,
+    ).toBe(200);
+
+    expect(await restartServer()).toBe(0);
     const res = await app.request("/api/beispiel/generate/job");
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "no generate job for this campaign" });

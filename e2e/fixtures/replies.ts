@@ -28,7 +28,16 @@ export const TRIGGER = {
   invalid: "E2E_INVALID",
   /** The stub answers `finish_reason: "length"` (a cut-off reply). */
   truncated: "E2E_TRUNCATED",
+  /**
+   * The stub HOLDS the reply (see SLOW_REPLY_MS) instead of answering — the
+   * only way a spec can look at a job while it is genuinely `running`, which
+   * is what the restart case of issue #23 needs.
+   */
+  slow: "E2E_SLOW",
 } as const;
+
+/** How long a TRIGGER.slow request is held before it would answer. */
+export const SLOW_REPLY_MS = 60_000;
 
 // --- scene run ---------------------------------------------------------------
 
