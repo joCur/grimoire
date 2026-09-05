@@ -380,7 +380,7 @@ export interface RelationParseResult {
  * reference that never existed.
  */
 export function parseRelationsSection(body: string): RelationParseResult {
-  // Level 2 exactly — the same heading campaign-rename.ts rewrites
+  // Level 2 exactly — the same heading the rename cascade rewrites
   // (`/^##[ \t]+Beziehungen[ \t]*\r?$/`).
   const lines = sectionLines(body, "Beziehungen", SECTION_LEVEL);
   const result: RelationParseResult = { relations: [], foreignLines: [] };

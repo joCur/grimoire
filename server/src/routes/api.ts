@@ -20,6 +20,7 @@ import {
 } from "../store/read";
 import { searchCampaign } from "../store/search";
 import { isRenameKind, RENAME_KINDS, renameEntity } from "../store/rename";
+import { isUsageKind, readUsage, USAGE_KINDS } from "../store/usage";
 import {
   appendInboxEntry,
   appendLogEntry,
@@ -384,6 +385,31 @@ api.post("/:campaign/rename", async (c) => {
       body.dryRun === true,
     ),
   );
+});
+
+// --- usage: where is this entity referenced? (issue #60) ---------------------------
+
+// GET /api/:campaign/usage?kind=<npc|location|scene|chapter>&id=<slug>
+//   -> { kind, id, path, total, groups: [{ ref, count, sites: [{ kind, id, title,
+//        path, count }] }] }
+// The reference count of one entity, as queries over the reference tables
+// (store/usage.ts): scene `npcs`/`location`/`chapter`, another npc's
+// `## Beziehungen` line, session `scenes_played`, log scene markers. A group
+// counts ROWS, its sites are the referencing DOCUMENTS. Same queries the
+// rename's `dryRun` answers with, so the preview counts what the cascade
+// rewrites.
+// 404 unknown campaign or entity, 400 unknown/missing kind or empty id.
+api.get("/:campaign/usage", async (c) => {
+  // Campaign first, then the query — the order renameEntity uses, so an
+  // unknown campaign answers 404 whatever the query looks like (server.ts).
+  await requireCampaign(c.req.param("campaign"));
+  const kind = c.req.query("kind");
+  if (!isUsageKind(kind)) {
+    throw new ApiError(400, `kind must be one of: ${USAGE_KINDS.join(", ")}`);
+  }
+  const id = (c.req.query("id") ?? "").trim();
+  if (id === "") throw new ApiError(400, "id is required");
+  return c.json(await readUsage(c.req.param("campaign"), kind, id));
 });
 
 // --- review-action endpoints (issue #10) --------------------------------------------

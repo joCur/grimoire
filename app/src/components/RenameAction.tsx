@@ -6,7 +6,9 @@
 //
 //   1. new id -> „Vorschau" (a dryRun of the endpoint: the server computes
 //      the whole plan and writes nothing),
-//   2. „betrifft N Dateien" plus the file list -> „Umbenennen" commits.
+//   2. the usage summary („12 Verwendungen: 3 Szenen, 2 Beziehungen …",
+//      issue #60) plus „betrifft N Dateien" and the file list ->
+//      „Umbenennen" commits.
 //
 // The preview is the same code path as the commit, so a preview that
 // succeeded is a rename that will succeed. Editing the id after a preview
@@ -37,6 +39,8 @@ import {
   renameErrorMessage,
   renameKindLabel,
   renamedPath,
+  usageSummary,
+  usageTotalLabel,
   type RenameTarget,
 } from "@/lib/rename";
 
@@ -204,7 +208,11 @@ function RenameDialog({
   );
 }
 
-/** The dry run's plan: the move, the count, and every file it touches. */
+/**
+ * The dry run's plan: the move, the USAGE summary (issue #60 — what hangs off
+ * the id, counted by the same queries the cascade rewrites), the file count
+ * and every file it touches.
+ */
 function RenamePlanPreview({ plan }: { plan: RenameResult }) {
   return (
     <div className="rounded-md border border-input bg-panel-deep px-3 py-2.5">
@@ -212,6 +220,12 @@ function RenamePlanPreview({ plan }: { plan: RenameResult }) {
         <span className="font-mono text-[11.5px] text-soft">{plan.renamed.from}</span>
         {" → "}
         <span className="font-mono text-[11.5px] text-foreground">{plan.renamed.to}</span>
+      </p>
+      <p className="mt-2 text-[12px] text-body" data-testid="rename-usage">
+        {plan.usage.total > 0 && (
+          <span className="font-semibold text-body">{usageTotalLabel(plan.usage.total)}: </span>
+        )}
+        <span className="text-body-secondary">{usageSummary(plan.usage)}</span>
       </p>
       <p className="mt-2 text-[12px] font-semibold text-body">{changedCountLabel(plan.changed.length)}</p>
       <ul className="mt-1 max-h-[160px] overflow-y-auto">

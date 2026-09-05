@@ -5,7 +5,7 @@
 import type { EntityKind } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
 
-import { ApiError } from "@/api";
+import { ApiError, type UsageGroup, type UsageReport } from "@/api";
 import {
   canSubmitNewId,
   changedCountLabel,
@@ -14,6 +14,9 @@ import {
   renameKindLabel,
   renamedPath,
   renameTargetFor,
+  usageGroupLabel,
+  usageSummary,
+  usageTotalLabel,
 } from "@/lib/rename";
 
 function file(path: string, kind: EntityKind, frontmatter: Record<string, unknown> = {}) {
@@ -144,5 +147,54 @@ describe("renameKindLabel", () => {
     expect(renameKindLabel("location")).toBe("Ort");
     expect(renameKindLabel("scene")).toBe("Szene");
     expect(renameKindLabel("chapter")).toBe("Kapitel");
+  });
+});
+
+// --- usage summary (issue #60) ----------------------------------------------
+
+function group(ref: UsageGroup["ref"], count: number): UsageGroup {
+  return { ref, count, sites: [] };
+}
+
+function report(groups: UsageGroup[]): UsageReport {
+  return {
+    kind: "npc",
+    id: "jorna",
+    path: "npcs/jorna.md",
+    total: groups.reduce((sum, g) => sum + g.count, 0),
+    groups,
+  };
+}
+
+describe("usage summary", () => {
+  test("one German line per group, in the server's order", () => {
+    expect(
+      usageSummary(
+        report([group("sceneNpcs", 3), group("npcRelations", 2), group("logEntries", 4)]),
+      ),
+    ).toBe("3 Szenen, 2 Beziehungen, 4 Log-Zeilen");
+  });
+
+  test("singular per group, not per report", () => {
+    expect(usageGroupLabel(group("sceneNpcs", 1))).toBe("1 Szene");
+    expect(usageGroupLabel(group("npcRelations", 1))).toBe("1 Beziehung");
+    expect(usageGroupLabel(group("scenesPlayed", 1))).toBe("1 Session-Eintrag");
+    expect(usageGroupLabel(group("scenesPlayed", 2))).toBe("2 Session-Einträge");
+    expect(usageGroupLabel(group("logEntries", 1))).toBe("1 Log-Zeile");
+    expect(usageGroupLabel(group("chapterNpcs", 1))).toBe("1 NPC");
+    expect(usageGroupLabel(group("chapterNpcs", 3))).toBe("3 NPCs");
+    expect(usageGroupLabel(group("chapterLocations", 1))).toBe("1 Ort");
+    expect(usageGroupLabel(group("chapterLocations", 2))).toBe("2 Orte");
+    expect(usageGroupLabel(group("sceneLocation", 2))).toBe("2 Szenen");
+    expect(usageGroupLabel(group("chapterScenes", 2))).toBe("2 Szenen");
+  });
+
+  test("nothing references the id — the reassuring case is spelled out", () => {
+    expect(usageSummary(report([]))).toContain("Keine Referenzen");
+  });
+
+  test("the headline counts usages, not documents", () => {
+    expect(usageTotalLabel(1)).toBe("1 Verwendung");
+    expect(usageTotalLabel(12)).toBe("12 Verwendungen");
   });
 });

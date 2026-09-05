@@ -142,12 +142,12 @@ mehrere Schreibwege auf ihm liegen:
 | Pfad (CLAUDE.md)   | Spec                                                           |
 | ------------------ | -------------------------------------------------------------- |
 | 1 Auto-Einstieg    | `tests/pool.e2e.ts`                                            |
-| 2 Szene lesen      | `tests/scene-rendering.e2e.ts`                                 |
+| 2 Szene lesen      | `tests/scene-rendering.e2e.ts`, `tests/rename.e2e.ts`          |
 | 3 ⌘K-Suche         | `tests/search.e2e.ts`                                          |
 | 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`                                   |
 | 5 Ernte            | `tests/review-harvest.e2e.ts`                                  |
 | 6 Generator        | `tests/generator.e2e.ts`                                       |
-| 7 Frontmatter/409  | `tests/status-control.e2e.ts`, `tests/frontmatter-form.e2e.ts` |
+| 7 Frontmatter/409  | `tests/status-control.e2e.ts`, `tests/frontmatter-form.e2e.ts`, `tests/rename.e2e.ts` |
 | 8 Mobil            | `tests/mobile.e2e.ts`                                          |
 | 9 Datei bearbeiten | `tests/block-composer.e2e.ts`, `tests/file-edit.e2e.ts`        |
 
@@ -168,6 +168,14 @@ deterministische 409, weil der Dialog sein Wächter-Token beim Öffnen
 einfriert). Der
 Dialog berührt zusätzlich Pfad 2 (die Leseansicht zeigt die neuen Werte sofort)
 und Pfad 8 (Formular bei 390px) — beides steht in demselben Spec.
+
+Auf den Pfaden 2 und 7 liegt zusätzlich `rename.e2e.ts` (#30, erweitert um die
+Usage-Vorschau aus #60): „Umbenennen" in der Leseansicht, die zweistufige
+Bestätigung („Vorschau" ist ein `dryRun` und schreibt nichts), die deutsche
+Usage-Zusammenfassung („2 Verwendungen: 1 Szene, 1 Beziehung" — die eigene
+ausgehende Beziehungszeile ist keine Referenz AUF die id) und danach die
+Kaskade selbst — Szenen-`npcs:`, die `## Beziehungen`-Gegenzeile, der Umzug der
+Leseansicht, und `GET /usage` auf der neuen id gegen 404 auf der alten.
 
 Auf Pfad 9 teilen sich zwei Specs die zwei Oberflächen von „Bearbeiten", die
 sich seit #43 EINEN Entwurf teilen: `block-composer.e2e.ts` deckt den
