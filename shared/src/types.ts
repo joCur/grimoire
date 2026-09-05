@@ -7,6 +7,8 @@
 // frontmatter keys are preserved, and nothing in shared/ ever throws on
 // odd input.
 
+import type { SessionPause } from "./session-state";
+
 /** Known scene lifecycle states; files may contain other values (degrade). */
 export const SCENE_STATUSES = ["draft", "ready", "played", "dropped"] as const;
 export type SceneStatus = (typeof SCENE_STATUSES)[number];
@@ -108,6 +110,14 @@ export interface SessionFrontmatter {
   started?: string;
   ended?: string;
   scenes_played?: string[];
+  /**
+   * Pause intervals of the session (app-managed, hand-editable — issue #40
+   * AK8): `[{ from: yyyy-mm-ddTHH:MM:SS, to?: … }]` in the same zone-less
+   * local-time convention as started/ended. An entry without `to` is the
+   * running pause. Read it through `sessionPauses` (session-state.ts), which
+   * carries the degrade rules.
+   */
+  pauses?: SessionPause[];
   /**
    * Short hashes of log lines seen in the review step (app-managed). One
    * entry is the first 8 hex chars of SHA-256 over the RAW log line — this
@@ -240,6 +250,19 @@ export interface FileResponse extends ParsedFile {
   startedMs?: number;
   /** SESSION FILES ONLY: `ended` as epoch milliseconds (see startedMs). */
   endedMs?: number;
+  /**
+   * SESSION FILES ONLY (issue #40 AK8): the total length of the session's
+   * CLOSED `pauses` intervals in milliseconds, computed by the server for the
+   * same reason as startedMs — the strings are zone-less. Absent when the
+   * session has no usable closed pause.
+   */
+  pausedMs?: number;
+  /**
+   * SESSION FILES ONLY: start of the OPEN pause interval as epoch
+   * milliseconds — present exactly while the session is paused, so the client
+   * needs no parsing of its own to freeze the clock.
+   */
+  pausedSinceMs?: number;
 }
 
 /**

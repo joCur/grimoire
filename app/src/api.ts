@@ -224,6 +224,24 @@ export function endSession(campaign: string): Promise<FileResponse> {
 }
 
 /**
+ * Pause the ACTIVE session (issue #40 AK8): the server opens a `pauses`
+ * interval — the runtime really stops — and writes the `— Pause` log line.
+ * Idempotent; 404 when no session is running.
+ */
+export function pauseSession(campaign: string): Promise<FileResponse> {
+  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/pause`);
+}
+
+/**
+ * "Weiter" — close the open pause interval and log `— Weiter`. Named after
+ * the endpoint, and deliberately not `resume…`: `resumeSession` above re-opens
+ * an ENDED session, which is a different action.
+ */
+export function continueSession(campaign: string): Promise<FileResponse> {
+  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/continue`);
+}
+
+/**
  * DELETE the active session's file — the undo of a mis-clicked "Session
  * starten" (issue #40 AK7). Only an EMPTY session may be discarded; the
  * server answers 409 (`code: "session_not_empty"`) otherwise and 404 when

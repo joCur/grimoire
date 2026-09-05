@@ -119,6 +119,7 @@ Abschnitte frei; empfohlen: `## Beim ersten Betreten` (mit `[!readaloud]`),
 id: 2026-08-19
 started: 2026-08-19T19:32
 ended: 2026-08-19T23:10         # gesetzt bei "Session beenden"
+pauses: [{from: 2026-08-19T21:40:12, to: 2026-08-19T21:58:03}]   # Pausen, App-verwaltet
 scenes_played: [lighthouse-arrival, smuggler-captured]   # automatisch gepflegt
 reviewed: [a1b2c3d4]            # Kurzhashes gesichteter Log-Zeilen (Review-Schritt)
 ---
@@ -127,8 +128,17 @@ reviewed: [a1b2c3d4]            # Kurzhashes gesichteter Log-Zeilen (Review-Schr
 - `## Log`: append-only, Format `- HH:MM (scene-id) Text #hashtags`
   — Zeitstempel und Szenen-Kontext setzt die App automatisch.
 - `## Threads`: Checkliste offener Fäden, im Review-Schritt befüllt.
-- Timer = jetzt − `started`. Kein laufender Zustand, reine Anzeige.
-- Pause = Log-Eintrag, keine Timer-Logik.
+- Timer = (`ended` ?? jetzt) − `started` − Summe der Pausen. Kein laufender
+  Zustand im Client: den Epochen-Wert der zonenlosen Zeitstempel liefert der
+  Server (nur er kennt die Zeitzone der Wanduhr-Ziffern).
+- `pauses`: Liste von `{from, to}` in derselben zonenlosen Lokalzeit wie
+  started/ended, aber sekundengenau. Ein Eintrag OHNE `to` heißt „läuft
+  gerade in einer Pause" — dann steht die Uhr. „Session beenden" schließt
+  eine offene Pause. Handeditierbar; degradiert wie alles andere: kaputte
+  Einträge (fehlendes/unlesbares `from`, unlesbares `to`) werden ignoriert,
+  nie ein Fehler.
+- Pause schreibt zusätzlich die Log-Zeile `— Pause`, „Weiter" die Zeile
+  `— Weiter` — das Log bleibt die lesbare Chronik des Abends.
 - `reviewed`: von der App im Review-Schritt gepflegt. Ein Eintrag ist der
   Kurzhash (erste 8 Hex-Zeichen von SHA-256) der ROHEN Log-Zeile — so
   bleibt `## Log` strikt append-only und externes Umsortieren ist egal.

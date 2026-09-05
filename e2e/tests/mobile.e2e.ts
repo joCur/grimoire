@@ -75,12 +75,13 @@ test("mobile: a running session shows its own live row with the way back", async
   );
 
   await page.goto("/beispiel");
-  const row = page.getByRole("link", { name: /Zur Session/ });
+  // The same chip the desktop topbar carries (PO feedback on issue #40) — in
+  // link mode, in the mobile row: one tap back into the session.
+  const row = page.getByRole("link", { name: /Session läuft/ });
   await expect(row).toBeVisible();
-  await expect(row).toContainText("Live");
   // The runtime is computed from the SERVER's reading of `started`, so it is
-  // a real elapsed time (well over an hour by now), not 0:00.
-  await expect(row).toContainText(/\d+:\d{2}/);
+  // a real elapsed time (well over an hour by now), not 0:00:00.
+  await expect(row).toContainText(/\d+:\d{2}:\d{2}/);
   await row.click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
 });

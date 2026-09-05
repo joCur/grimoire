@@ -171,6 +171,24 @@ export function useSessionStartFlow(campaign: string, onEnter?: (data: FileRespo
   return {
     start,
     resume,
+    /**
+     * ONE click into the session (PO feedback on issue #40): "starten" and
+     * "fortsetzen" are the same intention — get into tonight's session — so
+     * the `session_ended` 409 is answered right here instead of turning into
+     * a screen that asks the DM to press a second button. Only
+     * `session_running` (an OLDER session was never ended) stays a question,
+     * because ending someone else's evening is not implied by "starten".
+     */
+    enter: () => {
+      if (start.isPending || resume.isPending) return;
+      start.mutate(undefined, {
+        onError: (error) => {
+          if (sessionStartConflict(error) === "session_ended") resume.mutate();
+        },
+      });
+    },
+    /** True while either half of `enter` is in flight. */
+    entering: start.isPending || resume.isPending,
     /** The 409 the LAST start answered with, when it was one of the two. */
     conflict: sessionStartConflict(start.error),
     /** The session file that 409 pointed at (the old or the ended one). */

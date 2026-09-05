@@ -27,9 +27,14 @@ export { kindFromPath };
  * gray-matter's js-yaml parses unquoted `2026-08-19` and
  * `2026-08-19T19:32:00` as JS Date objects (zone-less timestamps are read
  * as UTC). We normalize them back to the plain strings the format uses:
- * date-only -> `yyyy-mm-dd`, datetime -> `yyyy-mm-ddTHH:MM` (no seconds,
- * no zone — the wall-clock digits as written in the file, which is why we
- * read them back with the UTC getters).
+ * date-only -> `yyyy-mm-dd`, datetime -> `yyyy-mm-ddTHH:MM` (no zone — the
+ * wall-clock digits as written in the file, which is why we read them back
+ * with the UTC getters).
+ *
+ * SECONDS are kept when they are not zero (issue #40 AK8): the session's
+ * `pauses` intervals are second-precise, and truncating them here would make
+ * every pause up to a minute wrong on the next read. `started`/`ended` are
+ * written without seconds and are therefore untouched by this.
  *
  * A datetime that happens to be exactly midnight UTC is indistinguishable
  * from a date-only value and degrades to `yyyy-mm-dd`.
@@ -43,7 +48,9 @@ function dateToString(d: Date): string {
     d.getUTCSeconds() === 0 &&
     d.getUTCMilliseconds() === 0;
   if (isMidnight) return date;
-  return `${date}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+  const time = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+  const secs = d.getUTCSeconds();
+  return `${date}T${secs === 0 ? time : `${time}:${pad(secs)}`}`;
 }
 
 /**

@@ -39,6 +39,66 @@ export function isEnded(frontmatter: Record<string, unknown> | undefined): boole
  * lines are the skeleton `startSession` writes, anything else — a log line,
  * a hand-typed note, a `## Threads` entry — is content.
  */
+/**
+ * One entry of the session's `pauses` list (issue #40 AK8): the wall-clock
+ * strings as they stand in the file, zone-less like `started`/`ended` and
+ * second-precise. A MISSING `to` means "paused right now".
+ */
+export interface SessionPause {
+  from: string;
+  to?: string;
+}
+
+function isTimestampish(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}([T ]\d{1,2}:\d{2}(:\d{2})?)?$/.test(value.trim());
+}
+
+/**
+ * The USABLE `pauses` entries of a session's frontmatter, in file order —
+ * shared so the server's runtime arithmetic and the client's fallback read
+ * the same list out of the same hand-editable field.
+ *
+ * Degrade rules (README: the format degrades, it never throws):
+ *   - no key / null -> empty list; a single mapping instead of a list is read
+ *     as a one-element list.
+ *   - an entry that is not a mapping, or whose `from` is not a timestamp-ish
+ *     string, is DROPPED.
+ *   - an entry whose `to` is present but not timestamp-ish is dropped as
+ *     well: treating it as an OPEN interval would stop the session clock
+ *     forever on a typo, which is worse than ignoring a broken pause.
+ */
+export function sessionPauses(frontmatter: Record<string, unknown> | undefined): SessionPause[] {
+  const raw = frontmatter?.pauses;
+  if (raw === undefined || raw === null) return [];
+  const list = Array.isArray(raw) ? raw : [raw];
+  const out: SessionPause[] = [];
+  for (const entry of list) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const { from, to } = entry as Record<string, unknown>;
+    if (!isTimestampish(from)) continue;
+    if (to === undefined || to === null) {
+      out.push({ from: from.trim() });
+      continue;
+    }
+    if (!isTimestampish(to)) continue;
+    out.push({ from: from.trim(), to: to.trim() });
+  }
+  return out;
+}
+
+/** The open (still running) pause of a session, if any — the LAST one wins. */
+export function openPause(
+  frontmatter: Record<string, unknown> | undefined,
+): SessionPause | undefined {
+  const open = sessionPauses(frontmatter).filter((p) => p.to === undefined);
+  return open[open.length - 1];
+}
+
+/** True while the session is paused (an open `pauses` interval, AK8). */
+export function isPaused(frontmatter: Record<string, unknown> | undefined): boolean {
+  return openPause(frontmatter) !== undefined;
+}
+
 export function isSessionEmpty(
   frontmatter: Record<string, unknown> | undefined,
   body: string,

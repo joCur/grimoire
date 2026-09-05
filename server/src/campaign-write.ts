@@ -32,9 +32,11 @@ import matter from "gray-matter";
 import { CORE_SCHEMA, dump } from "js-yaml";
 import {
   isEnded,
+  isPaused,
   isSessionEmpty,
   kindFromPath,
   parseMarkdown,
+  sessionPauses,
   type FileResponse,
 } from "@grimoire/shared";
 import {
@@ -48,7 +50,7 @@ import {
   resolveInsideCampaign,
   RESERVED_DIRS,
 } from "./campaign-fs";
-import { localDate, localDateTime, localTime, now } from "./clock";
+import { localDate, localDateTime, localDateTimeSeconds, localTime, now } from "./clock";
 
 // --- per-file write serialization ---------------------------------------------
 
@@ -175,7 +177,12 @@ function normalizeDates(value: unknown): unknown {
       value.getUTCMinutes() === 0 &&
       value.getUTCSeconds() === 0 &&
       value.getUTCMilliseconds() === 0;
-    return isMidnight ? date : `${date}T${pad(value.getUTCHours())}:${pad(value.getUTCMinutes())}`;
+    if (isMidnight) return date;
+    // Seconds survive when they are not zero — the session's `pauses` are
+    // second-precise (issue #40 AK8); started/ended carry no seconds anyway.
+    const time = `${pad(value.getUTCHours())}:${pad(value.getUTCMinutes())}`;
+    const secs = value.getUTCSeconds();
+    return `${date}T${secs === 0 ? time : `${time}:${pad(secs)}`}`;
   }
   if (Array.isArray(value)) return value.map(normalizeDates);
   if (value !== null && typeof value === "object") {
@@ -440,8 +447,99 @@ export async function endSession(campaign: string): Promise<FileResponse> {
     } catch {
       throw new ApiError(404, "no active session");
     }
-    if (isEnded(currentFrontmatter(raw))) return; // keep the first `ended`
-    await atomicWrite(abs, applyFrontmatterPatch(raw, { ended: localDateTime(now()) }));
+    const fm = currentFrontmatter(raw);
+    if (isEnded(fm)) return; // keep the first `ended`
+    const d = now();
+    // An open pause is CLOSED by the end (issue #40 AK8): an evening that was
+    // ended while paused would otherwise leave a pause running forever, and
+    // the review's runtime would keep shrinking with every passing minute.
+    const closed = closeOpenPause(fm, d);
+    await atomicWrite(
+      abs,
+      applyFrontmatterPatch(raw, {
+        ...(closed === undefined ? {} : { pauses: closed }),
+        ended: localDateTime(d),
+      }),
+    );
+  });
+  return readParsedFile(campaign, rel);
+}
+
+/**
+ * The session's `pauses` list with its OPEN interval closed at `d` — or
+ * undefined when there is nothing open to close.
+ *
+ * Only the intervals `sessionPauses` considers usable are written back, so a
+ * broken hand-edited entry is dropped rather than carried along (README: the
+ * format degrades). Everything else about the list stays as it is, order
+ * included — `pauses` is chronological like the log.
+ */
+function closeOpenPause(
+  fm: Record<string, unknown>,
+  d: Date,
+): { from: string; to: string }[] | undefined {
+  const pauses = sessionPauses(fm);
+  if (!pauses.some((p) => p.to === undefined)) return undefined;
+  const to = localDateTimeSeconds(d);
+  return pauses.map((p) => ({ from: p.from, to: p.to ?? to }));
+}
+
+/**
+ * POST /api/:campaign/session/pause — really STOP the clock (issue #40 AK8):
+ * a `{ from: … }` interval is opened in the session's `pauses` frontmatter and
+ * the familiar `— Pause` log line is appended in the SAME write. Before this,
+ * "Pause" wrote the log line alone and the runtime kept counting, so the
+ * number on the chip was not the time played.
+ *
+ * IDEMPOTENT: pausing an already paused session is a no-op (200 with the file
+ * unchanged, no second interval and no duplicate log line) — the menu entry is
+ * a toggle, and a double click must not cost the DM a bogus pause.
+ * 404 when no session is running — strictly the running session, like the log.
+ */
+export async function pauseSession(campaign: string): Promise<FileResponse> {
+  return writeSessionPause(campaign, "pause");
+}
+
+/**
+ * POST /api/:campaign/session/continue — close the open pause interval (`to`)
+ * and append `— Weiter`. The counterpart of `pauseSession`, and deliberately
+ * NOT called `resume`: `session/resume` already means "re-open an ENDED
+ * session" (removes `ended`), which is a different thing entirely.
+ *
+ * IDEMPOTENT the same way: nothing open -> 200, file unchanged.
+ */
+export async function continueSession(campaign: string): Promise<FileResponse> {
+  return writeSessionPause(campaign, "continue");
+}
+
+async function writeSessionPause(
+  campaign: string,
+  op: "pause" | "continue",
+): Promise<FileResponse> {
+  const dir = await campaignDir(campaign);
+  const rel = await findActiveSessionRel(campaign);
+  if (rel === undefined) throw new ApiError(404, "no active session");
+  const abs = path.resolve(dir, rel);
+  await withFileLock(abs, async () => {
+    let raw: string;
+    try {
+      raw = await readFile(abs, "utf8");
+    } catch {
+      throw new ApiError(404, "no active session");
+    }
+    const fm = currentFrontmatter(raw);
+    const d = now();
+    if (op === "pause") {
+      if (isPaused(fm)) return; // already paused — no-op
+      const pauses = [...sessionPauses(fm), { from: localDateTimeSeconds(d) }];
+      raw = applyFrontmatterPatch(raw, { pauses });
+    } else {
+      const closed = closeOpenPause(fm, d);
+      if (closed === undefined) return; // not paused — no-op
+      raw = applyFrontmatterPatch(raw, { pauses: closed });
+    }
+    const entry = `- ${localTime(d)} ${op === "pause" ? "— Pause" : "— Weiter"}`;
+    await atomicWrite(abs, insertLogLine(raw, entry));
   });
   return readParsedFile(campaign, rel);
 }

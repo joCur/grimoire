@@ -226,7 +226,9 @@ describe("parseMarkdown: degradation (never throws)", () => {
       "---\nid: x\nwhen: 2026-08-19\nexact: 2026-08-19T19:32:07\ndates: [2026-01-01, 2026-01-02T08:05:00]\nnested: { at: 2026-03-04 }\n---\n";
     const f = parseMarkdown(raw, "sessions/x.md", 1);
     expect(f.frontmatter.when).toBe("2026-08-19");
-    expect(f.frontmatter.exact).toBe("2026-08-19T19:32"); // seconds dropped
+    // Non-zero SECONDS survive (issue #40 AK8: the session's `pauses` are
+    // second-precise); a `:00` still normalizes away.
+    expect(f.frontmatter.exact).toBe("2026-08-19T19:32:07");
     expect(f.frontmatter.dates).toEqual(["2026-01-01", "2026-01-02T08:05"]);
     expect(f.frontmatter.nested).toEqual({ at: "2026-03-04" });
   });

@@ -25,10 +25,11 @@
 //                                              STARTED session file that is not ended —
 //                                              today's OR an older one, so a session past
 //                                              midnight stays active. Same shape as
-//                                              GET /file plus startedMs/endedMs (the
-//                                              server's epoch reading of the zone-less
-//                                              timestamps — the client must never guess
-//                                              the timezone); 404 when none runs.
+//                                              GET /file plus startedMs/endedMs/pausedMs/
+//                                              pausedSinceMs (the server's epoch reading of
+//                                              the zone-less timestamps and of the pause
+//                                              intervals — the client must never guess the
+//                                              timezone); 404 when none runs.
 //                                              ?includeEnded=1 -> the last STARTED session
 //                                              regardless of `ended`: the file the REVIEW
 //                                              harvests (a session ended past midnight
@@ -46,7 +47,14 @@
 //                                              "beenden"; 404 without any session, 409 when
 //                                              that session is still running
 //   [x] POST /api/:campaign/session/end        sets `ended` in the ACTIVE session; idempotent
-//                                              (falls back to the last started session)
+//                                              (falls back to the last started session) and
+//                                              closes an open pause interval
+//   [x] POST /api/:campaign/session/pause      opens a `pauses` interval + `— Pause` log line
+//                                              — the clock really stops (issue #40 AK8);
+//                                              idempotent, 404 when nothing runs
+//   [x] POST /api/:campaign/session/continue   closes that interval + `— Weiter`; idempotent.
+//                                              Distinct from /session/resume, which re-opens
+//                                              an ENDED session
 //   [x] POST /api/:campaign/session/discard    deletes the ACTIVE session's file — allowed
 //                                              only while it is EMPTY (no log entry, no
 //                                              scenes_played); 409 { code:

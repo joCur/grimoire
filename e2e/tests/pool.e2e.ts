@@ -194,6 +194,56 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   await expect(page).toHaveURL(/\/beispiel$/);
 });
 
+/**
+ * Issue #50: the topbar must not overflow at ANY width from 390px up. The
+ * medium widths were the broken ones — switcher, live pill, timer, Pause,
+ * verwerfen, beenden, search and Generator in one 56px row simply ran over.
+ * With the session consolidated into ONE chip (PO feedback on issue #40) the
+ * row fits; this test is the guard that keeps it fitting.
+ */
+test("the topbar does not overflow at medium widths while a session runs", async ({
+  page,
+  files,
+}) => {
+  const today = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const id = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  await files.write(
+    `sessions/${id}.md`,
+    `---\nid: ${id}\nstarted: ${id}T19:30\nscenes_played: []\n---\n\n## Log\n`,
+  );
+
+  const overflow = () =>
+    page.evaluate(() => {
+      const header = document.querySelector("header");
+      const doc = document.documentElement;
+      return {
+        page: doc.scrollWidth - doc.clientWidth,
+        header: header === null ? 0 : header.scrollWidth - header.clientWidth,
+      };
+    });
+
+  // The pool carries the fullest topbar there is: switcher, session chip,
+  // search, Generator — plus the review link once something is harvestable.
+  for (const width of [640, 768, 900, 1024, 1100]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/beispiel");
+    await expect(page.getByRole("link", { name: /Session läuft/ })).toBeVisible();
+    expect(await overflow(), `pool at ${width}px`).toEqual({ page: 0, header: 0 });
+
+    // …and the live route, whose chip is the menu trigger — from md up,
+    // where the topbar IS the chrome; below that the mobile row's link chip
+    // is the one on screen.
+    await page.goto("/beispiel/live");
+    await expect(
+      width >= 768
+        ? page.getByRole("button", { name: /Session läuft/ })
+        : page.getByRole("link", { name: /Session läuft/ }),
+    ).toBeVisible();
+    expect(await overflow(), `live at ${width}px`).toEqual({ page: 0, header: 0 });
+  }
+});
+
 test("editing the campaign metadata updates header, switcher and the file", async ({
   page,
   files,

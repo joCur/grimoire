@@ -6,7 +6,14 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { isEnded, isEndedValue, isSessionEmpty } from "../src/session-state";
+import {
+  isEnded,
+  isEndedValue,
+  isPaused,
+  isSessionEmpty,
+  openPause,
+  sessionPauses,
+} from "../src/session-state";
 
 describe("isEndedValue", () => {
   test("a real timestamp ends the session", () => {
@@ -58,5 +65,62 @@ describe("isSessionEmpty", () => {
     // Degraded shape: a scalar instead of a list still counts as played.
     expect(isSessionEmpty({ scenes_played: "lighthouse-arrival" }, FRESH)).toBe(false);
     expect(isSessionEmpty({ scenes_played: null }, FRESH)).toBe(true);
+  });
+});
+
+// The `pauses` field (issue #40 AK8): hand-editable, so every reader goes
+// through these degrade rules instead of trusting the shape.
+describe("sessionPauses / openPause / isPaused", () => {
+  test("reads the intervals in file order, open interval last", () => {
+    const fm = {
+      pauses: [
+        { from: "2026-08-19T21:10:00", to: "2026-08-19T21:20:30" },
+        { from: "2026-08-19T22:00:00" },
+      ],
+    };
+    expect(sessionPauses(fm)).toEqual([
+      { from: "2026-08-19T21:10:00", to: "2026-08-19T21:20:30" },
+      { from: "2026-08-19T22:00:00" },
+    ]);
+    expect(openPause(fm)).toEqual({ from: "2026-08-19T22:00:00" });
+    expect(isPaused(fm)).toBe(true);
+  });
+
+  test("no key, null, or a closed list -> not paused", () => {
+    expect(sessionPauses(undefined)).toEqual([]);
+    expect(sessionPauses({})).toEqual([]);
+    expect(sessionPauses({ pauses: null })).toEqual([]);
+    expect(isPaused({ pauses: [{ from: "2026-08-19T21:10", to: "2026-08-19T21:20" }] })).toBe(false);
+  });
+
+  test("a single mapping instead of a list is read as one entry", () => {
+    expect(sessionPauses({ pauses: { from: "2026-08-19T21:10" } })).toEqual([
+      { from: "2026-08-19T21:10" },
+    ]);
+  });
+
+  test("broken entries are DROPPED, never fatal", () => {
+    const fm = {
+      pauses: [
+        "kaputt", // not a mapping
+        42,
+        null,
+        ["nested"],
+        { to: "2026-08-19T21:10" }, // no from
+        { from: "gestern abend" }, // unreadable from
+        { from: 12345 }, // not a string
+        // An unreadable `to` drops the entry too: reading it as OPEN would
+        // stop the session clock forever on a typo.
+        { from: "2026-08-19T21:20", to: "irgendwann" },
+        { from: " 2026-08-19T21:30 ", to: "2026-08-19T21:33" }, // trimmed
+      ],
+    };
+    expect(sessionPauses(fm)).toEqual([{ from: "2026-08-19T21:30", to: "2026-08-19T21:33" }]);
+    expect(openPause(fm)).toBeUndefined();
+    expect(isPaused(fm)).toBe(false);
+  });
+
+  test("a date-only value is a usable timestamp (midnight, like started)", () => {
+    expect(sessionPauses({ pauses: [{ from: "2026-08-19" }] })).toEqual([{ from: "2026-08-19" }]);
   });
 });
