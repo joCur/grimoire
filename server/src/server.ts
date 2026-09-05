@@ -21,9 +21,40 @@
 //                                              _campaign.md (id = directory name);
 //                                              409 when it exists — editing it is
 //                                              PATCH /frontmatter's job (issue #34)
-//   [x] POST /api/:campaign/session/start      creates sessions/<today>.md
-//   [x] POST /api/:campaign/session/end        sets `ended`
+//   [x] GET  /api/:campaign/session            the ACTIVE session (issue #40): the last
+//                                              STARTED session file that is not ended —
+//                                              today's OR an older one, so a session past
+//                                              midnight stays active. Same shape as
+//                                              GET /file plus startedMs/endedMs (the
+//                                              server's epoch reading of the zone-less
+//                                              timestamps — the client must never guess
+//                                              the timezone); 404 when none runs.
+//                                              ?includeEnded=1 -> the last STARTED session
+//                                              regardless of `ended`: the file the REVIEW
+//                                              harvests (a session ended past midnight
+//                                              lives in yesterday's file, so the client
+//                                              must not guess it either); 404 only when the
+//                                              campaign has no session file at all
+//   [x] POST /api/:campaign/session/start      creates sessions/<today>.md; idempotent while
+//                                              today's session is the running one.
+//                                              409 { code: "session_running", path } when an
+//                                              OLDER session is still open, 409 { code:
+//                                              "session_ended", path } when today's is
+//                                              already ended (the app offers /resume)
+//   [x] POST /api/:campaign/session/resume     removes `ended` from the last started session
+//                                              — the explicit undo of an accidental
+//                                              "beenden"; 404 without any session, 409 when
+//                                              that session is still running
+//   [x] POST /api/:campaign/session/end        sets `ended` in the ACTIVE session; idempotent
+//                                              (falls back to the last started session)
+//   [x] POST /api/:campaign/session/discard    deletes the ACTIVE session's file — allowed
+//                                              only while it is EMPTY (no log entry, no
+//                                              scenes_played); 409 { code:
+//                                              "session_not_empty" } otherwise, 404 when
+//                                              nothing is running
 //   [x] POST /api/:campaign/log                { text, sceneId? } -> append with timestamp
+//                                              to the ACTIVE session (issue #40); STRICT —
+//                                              404 when no session is running
 //   [x] POST /api/:campaign/inbox              { text } -> append to inbox.md
 //   [x] GET  /api/:campaign/search?q=...       { results } — fuzzy search (Fuse.js, in-memory,
 //                                              scenes/npcs/locations/chapters/_campaign.md,

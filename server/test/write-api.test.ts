@@ -43,6 +43,15 @@ async function putFile(body: unknown): Promise<Response> {
   });
 }
 
+async function exists(rel: string): Promise<boolean> {
+  try {
+    await stat(absOf(rel));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function postJson(url: string, body?: unknown): Promise<Response> {
   return app.request(url, {
     method: "POST",
@@ -265,16 +274,29 @@ describe("POST /api/:campaign/session/start", () => {
     const raw = await readFile(absOf("sessions/2026-08-19.md"), "utf8");
     expect(raw).toContain("started: 2026-08-19T21:05\n");
   });
+
+  test("409 session_running when an OLDER session is still open", async () => {
+    // 2026-08-19 (created above) is still running; a start on the NEXT day
+    // must not open a second session silently — the app offers to end the
+    // old one (issue #40 review, finding 3).
+    setNow(() => new Date(2026, 7, 20, 20, 0));
+    const res = await postJson("/api/beispiel/session/start");
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: expect.any(String),
+      code: "session_running",
+      path: "sessions/2026-08-19.md",
+    });
+    // …and nothing was created for the new day.
+    expect(await exists("sessions/2026-08-20.md")).toBe(false);
+  });
 });
 
 describe("POST /api/:campaign/log", () => {
-  test("404 without a session today", async () => {
-    setNow(() => new Date(2026, 7, 21, 20, 0)); // a day with no session file
-    const res = await postJson("/api/beispiel/log", { text: "verloren" });
-    expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ error: expect.any(String) });
-  });
-
+  // NOTE (issue #40): a log line lands in the ACTIVE session — the last
+  // started file without `ended`, which is 2026-08-19 throughout this
+  // describe. "no session at all" is covered further down, once every
+  // session in the fixture is ended.
   test("appends `- HH:MM (sceneId) text` under ## Log", async () => {
     setNow(() => new Date(2026, 7, 19, 21, 12));
     const res = await postJson("/api/beispiel/log", {
@@ -307,15 +329,31 @@ describe("POST /api/:campaign/log", () => {
   });
 
   test("inserts before ## Threads when the section exists", async () => {
-    setNow(() => new Date(2026, 0, 15, 23, 0)); // the committed example session
-    const res = await postJson("/api/beispiel/log", { text: "Nachtrag nach dem Cliffhanger" });
-    expect(res.status).toBe(200);
-    const raw = await readFile(absOf("sessions/2026-01-15.md"), "utf8");
-    expect(raw).toContain(
-      "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread\n- 23:00 Nachtrag nach dem Cliffhanger\n\n## Threads\n",
+    // Own session file, shaped like the committed example (which is ended and
+    // therefore not the active session any more): started LATER than
+    // 2026-08-19, so this is the active one for the duration of the test, and
+    // removed again at the end so it does not become the active session of
+    // the describes below.
+    const rel = "sessions/2026-08-26.md";
+    await writeFile(
+      absOf(rel),
+      "---\nid: 2026-08-26\nstarted: 2026-08-26T19:30\nscenes_played: [lighthouse-arrival]\n---\n\n## Log\n\n- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread\n\n## Threads\n\n- [ ] Wer bezahlt die Schmuggler?\n",
+      "utf8",
     );
-    // Threads content untouched
-    expect(raw).toContain("- [ ] Wer bezahlt die Schmuggler?");
+    try {
+      setNow(() => new Date(2026, 7, 26, 23, 0));
+      const res = await postJson("/api/beispiel/log", { text: "Nachtrag nach dem Cliffhanger" });
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as FileResponse).path).toBe(rel);
+      const raw = await readFile(absOf(rel), "utf8");
+      expect(raw).toContain(
+        "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread\n- 23:00 Nachtrag nach dem Cliffhanger\n\n## Threads\n",
+      );
+      // Threads content untouched
+      expect(raw).toContain("- [ ] Wer bezahlt die Schmuggler?");
+    } finally {
+      await rm(absOf(rel), { force: true });
+    }
   });
 
   test("400 on empty or missing text", async () => {
@@ -331,7 +369,15 @@ describe("scenes_played maintenance (POST log with sceneId)", () => {
 
   test("first log with a sceneId adds it to scenes_played", async () => {
     setNow(() => new Date(2026, 7, 23, 19, 0));
-    expect((await postJson("/api/beispiel/session/start")).status).toBe(200);
+    // Written directly, not via session/start: 2026-08-19 is still open in
+    // this file, and since the review of issue #40 `start` refuses to open a
+    // second session next to a running one (409 session_running — its own
+    // test below). A newer OPEN file is the active session all the same.
+    await writeFile(
+      absOf(REL),
+      "---\nid: 2026-08-23\nstarted: 2026-08-23T19:00\nscenes_played: []\n---\n\n## Log\n",
+      "utf8",
+    );
     const res = await postJson("/api/beispiel/log", {
       text: "Ankunft",
       sceneId: "lighthouse-arrival",
@@ -406,6 +452,15 @@ describe("scenes_played maintenance (POST log with sceneId)", () => {
 });
 
 describe("POST /api/:campaign/session/end", () => {
+  // The scenes_played tests above left two later, still-open session files
+  // behind. Since issue #40 `end` targets the ACTIVE session (the newest one
+  // without `ended`), so they have to go for these tests to be about
+  // 2026-08-19 again.
+  beforeAll(async () => {
+    await rm(absOf("sessions/2026-08-23.md"), { force: true });
+    await rm(absOf("sessions/2026-08-24.md"), { force: true });
+  });
+
   test("sets ended via the raw-patch mechanism, log untouched", async () => {
     setNow(() => new Date(2026, 7, 19, 23, 45));
     const res = await postJson("/api/beispiel/session/end");
@@ -428,11 +483,34 @@ describe("POST /api/:campaign/session/end", () => {
     expect(file.frontmatter.ended).toBe("2026-08-19T23:45");
   });
 
-  test("404 without a session today", async () => {
+  // Every session in the fixture is ended now, so nothing is active.
+  test("end stays idempotent across days, log is refused (issue #40 review)", async () => {
     setNow(() => new Date(2026, 7, 22, 22, 0));
+    // `end` falls back to the LAST STARTED session — ended or not — and keeps
+    // its `ended`. That is what makes "Session beenden" safe to press twice,
+    // also after midnight.
     const res = await postJson("/api/beispiel/session/end");
-    expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ error: expect.any(String) });
+    expect(res.status).toBe(200);
+    const file = (await res.json()) as FileResponse;
+    expect(file.path).toBe("sessions/2026-08-19.md");
+    expect(file.frontmatter.ended).toBe("2026-08-19T23:45");
+    // A log line, however, is STRICTLY the running session's business: a note
+    // typed after the end used to land in the closed log with a 200.
+    const log = await postJson("/api/beispiel/log", { text: "verloren" });
+    expect(log.status).toBe(404);
+    expect(await log.json()).toEqual({ error: expect.any(String) });
+  });
+
+  test("404 for a campaign that has no session file at all", async () => {
+    const fresh = "sessionlos";
+    await mkdir(path.join(tmpRoot, fresh), { recursive: true });
+    try {
+      expect((await postJson(`/api/${fresh}/session/end`)).status).toBe(404);
+      expect((await postJson(`/api/${fresh}/session/resume`)).status).toBe(404);
+      expect((await postJson(`/api/${fresh}/log`, { text: "x" })).status).toBe(404);
+    } finally {
+      await rm(path.join(tmpRoot, fresh), { recursive: true, force: true });
+    }
   });
 });
 

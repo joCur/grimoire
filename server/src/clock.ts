@@ -34,3 +34,35 @@ export function localTime(d: Date): string {
 export function localDateTime(d: Date): string {
   return `${localDate(d)}T${localTime(d)}`;
 }
+
+/**
+ * The inverse of localDateTime: a zone-less `started`/`ended` value as epoch
+ * milliseconds, interpreted in the SERVER's timezone (issue #40).
+ *
+ * The file format stays zone-less on purpose (hand-editable, README), but
+ * only the server knows which wall clock those digits belong to — a browser
+ * in another timezone would compute a session runtime that is hours off. So
+ * the server ships the interpretation alongside the string (FileResponse
+ * startedMs/endedMs) and the client does plain epoch arithmetic.
+ *
+ * Accepted: `yyyy-mm-dd[T ]HH:MM(:ss)?` and — deliberately — a DATE-ONLY
+ * `yyyy-mm-dd`, which is read as 00:00 local. A session started at exactly
+ * midnight is written as `…T00:00`, and the YAML normalization cannot tell
+ * that apart from a date-only value (shared/src/parse.ts); treating it as
+ * midnight is the reading that keeps the timer alive instead of dropping it
+ * silently. Anything unparseable yields undefined.
+ */
+export function localDateTimeToMs(value: unknown): number | undefined {
+  if (typeof value !== "string") return undefined;
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(value.trim());
+  if (m === null) return undefined;
+  const ms = new Date(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3]),
+    Number(m[4] ?? 0),
+    Number(m[5] ?? 0),
+    Number(m[6] ?? 0),
+  ).getTime();
+  return Number.isNaN(ms) ? undefined : ms;
+}

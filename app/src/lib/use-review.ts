@@ -1,5 +1,5 @@
-// The review model (issue #10, app half): the union of today's tagged
-// session-log lines and the tagged inbox lines, plus the done-state that
+// The review model (issue #10, app half): the union of the harvested
+// session's tagged log lines and the tagged inbox lines, plus the done-state that
 // comes from the server files ONLY — log lines via the session's `reviewed`
 // short hashes, inbox lines via their `- [x]` marker. Used by the review
 // route and by the topbar (progress, pool affordance); both share the same
@@ -21,8 +21,8 @@ import {
   tagAllowsNpc,
   tagAllowsThread,
 } from "@/lib/review";
-import { parseLogEntries, todaySessionRel } from "@/lib/session";
-import { noSessionYet, useSessionFile } from "@/lib/use-session";
+import { parseLogEntries } from "@/lib/session";
+import { useLastStartedSession } from "@/lib/use-session";
 
 export const INBOX_PATH = "inbox.md";
 
@@ -63,7 +63,7 @@ export interface ReviewModel {
   progressLabel: string;
   /** Still loading session/inbox/hashes — nothing decided yet. */
   isPending: boolean;
-  /** No session file for today (the review has nothing to harvest). */
+  /** No session file at all (the review has nothing to harvest). */
   noSession: boolean;
   /** The session file could not be loaded at all (server down …). */
   isError: boolean;
@@ -80,7 +80,6 @@ export function useReviewEntries(
   campaign: string,
   { enabled = true }: UseReviewOptions = {},
 ): ReviewModel {
-  const sessionPath = todaySessionRel();
   // Inbox lines acted on in THIS browser session keep their (now `- [x]`)
   // card visible instead of vanishing under the cursor — and the topbar
   // counts the same cards as the page because the memory sits above both.
@@ -94,7 +93,13 @@ export function useReviewEntries(
       ),
     [acted],
   );
-  const session = useSessionFile(campaign, enabled);
+  // WHICH session is harvested is the server's answer: the last STARTED one,
+  // ended or not (finding 1). Deriving today's file name here broke every
+  // session that ran past midnight — `end` writes into the file the session
+  // started in, so the harvest was empty and `review/seen` patched a path
+  // that does not exist.
+  const session = useLastStartedSession(campaign, enabled);
+  const sessionPath = session.data?.path ?? "";
   // The tree turns the log line's scene id into the scene TITLE for the
   // source chip. Same query key as every other view — shared cache, no
   // second request; a tree that is not there yet simply shows the id.
@@ -192,7 +197,7 @@ export function useReviewEntries(
 
   const seenCount = entries.filter((e) => e.done).length;
   const total = entries.length;
-  const noSession = session.isError && noSessionYet(session.error);
+  const noSession = session.data === null;
   const hashesWaiting = rawLines.length > 0 && hashes.data === undefined && !hashes.isError;
 
   return {
@@ -203,7 +208,7 @@ export function useReviewEntries(
     progressLabel: `${seenCount} von ${total} gesichtet`,
     isPending: session.isPending || inbox.isPending || hashesWaiting,
     noSession,
-    isError: session.isError && !noSession,
+    isError: session.isError,
     hashUnavailable: hashes.isError,
     sessionPath,
   };

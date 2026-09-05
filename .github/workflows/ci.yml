@@ -76,8 +76,11 @@ jobs:
 
       # One browser is enough (the suite is about the stack, not a browser
       # matrix); --with-deps installs the system libraries chromium needs.
+      # The workspace binary, NOT `bunx playwright`: bunx resolves the CLI
+      # from the registry and follows the latest release, which downloads a
+      # browser revision the locked @playwright/test does not launch.
       - name: Install Playwright chromium
-        run: bunx playwright install --with-deps chromium
+        run: ./e2e/node_modules/.bin/playwright install --with-deps chromium
 
       # Builds the app, starts the stub LLM and the server processes itself.
       - name: E2E (critical paths)

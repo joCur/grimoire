@@ -26,16 +26,24 @@
 //   4. Node APIs only (node:fs/promises, node:path) — DECISIONS #5/#7.
 
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
 import { CORE_SCHEMA, dump } from "js-yaml";
-import { kindFromPath, parseMarkdown, type FileResponse } from "@grimoire/shared";
+import {
+  isEnded,
+  isSessionEmpty,
+  kindFromPath,
+  parseMarkdown,
+  type FileResponse,
+} from "@grimoire/shared";
 import {
   ApiError,
   assertSafeRelativeMdPath,
   CAMPAIGN_FILE,
   campaignDir,
+  findActiveSessionRel,
+  findLastStartedSessionRel,
   readParsedFile,
   resolveInsideCampaign,
   RESERVED_DIRS,
@@ -333,53 +341,152 @@ export async function writeFileBody(
   return readParsedFile(campaign, rel);
 }
 
-/** Campaign-relative path of today's session file (local date). */
-function todaySessionRel(): string {
-  return `sessions/${localDate(now())}.md`;
-}
-
 /**
  * POST /api/:campaign/session/start — create today's session file.
- * Idempotent: if the file already exists it is returned untouched.
+ *
+ * The session state machine has exactly three answers here (issue #40 review):
+ *
+ *   - a session is RUNNING and it is today's file -> return it untouched
+ *     (idempotent: pressing "Session starten" twice re-enters the session).
+ *   - a session is RUNNING but in an OLDER file (the evening ran past
+ *     midnight, or an old session was never ended) -> 409 { code:
+ *     "session_running", path }. No implicit ending of someone else's session
+ *     and no second parallel session: the app offers "alte Session beenden".
+ *     This is also what keeps a past-midnight session alive — it stays THE
+ *     session instead of being shadowed by a fresh file for the new day.
+ *   - today's file exists and is ENDED -> 409 { code: "session_ended", path }.
+ *     Silently handing out the ended file made the live view a dead end until
+ *     midnight (a Start button that changed nothing); re-opening it silently
+ *     would rewrite history behind the DM's back. The app asks and calls
+ *     `resumeSession` — the explicit undo of an accidental "beenden".
  */
 export async function startSession(campaign: string): Promise<FileResponse> {
   const dir = await campaignDir(campaign);
   const d = now();
   const rel = `sessions/${localDate(d)}.md`;
   const abs = path.resolve(dir, rel);
+  const activeRel = await findActiveSessionRel(campaign);
+  if (activeRel !== undefined && activeRel !== rel) {
+    throw new ApiError(409, "another session is still running — end it first", {
+      code: "session_running",
+      path: activeRel,
+    });
+  }
+  if (activeRel === rel) return readParsedFile(campaign, rel);
+  let created = false;
   await withFileLock(abs, async () => {
     try {
-      if ((await stat(abs)).isFile()) return; // already started today
+      if ((await stat(abs)).isFile()) return; // exists and is not active => ended
     } catch {
       // does not exist yet — create below
     }
     await mkdir(path.dirname(abs), { recursive: true });
     const content = `---\nid: ${localDate(d)}\nstarted: ${localDateTime(d)}\nscenes_played: []\n---\n\n## Log\n`;
     await atomicWrite(abs, content);
+    created = true;
   });
+  if (!created) {
+    throw new ApiError(409, "today's session is already ended", {
+      code: "session_ended",
+      path: rel,
+    });
+  }
   return readParsedFile(campaign, rel);
 }
 
 /**
- * POST /api/:campaign/session/end — set `ended` in today's session file via
- * the raw-patch mechanism. Idempotent: an existing `ended` is kept.
+ * POST /api/:campaign/session/resume — re-open the last started session by
+ * REMOVING `ended` (issue #40 review): the explicit undo of an accidental
+ * "Session beenden", so the evening can continue in the same file instead of
+ * being split in two. 404 when there is no session file at all, 409 when the
+ * last started session is still running (nothing to resume).
  */
-export async function endSession(campaign: string): Promise<FileResponse> {
+export async function resumeSession(campaign: string): Promise<FileResponse> {
   const dir = await campaignDir(campaign);
-  const rel = todaySessionRel();
+  const rel = await findLastStartedSessionRel(campaign);
+  if (rel === undefined) throw new ApiError(404, "no session to resume");
   const abs = path.resolve(dir, rel);
   await withFileLock(abs, async () => {
     let raw: string;
     try {
       raw = await readFile(abs, "utf8");
     } catch {
-      throw new ApiError(404, "no session today");
+      throw new ApiError(404, "no session to resume");
     }
-    const fm = currentFrontmatter(raw);
-    if (fm.ended !== undefined && fm.ended !== null) return; // keep the first `ended`
+    if (!isEnded(currentFrontmatter(raw))) {
+      throw new ApiError(409, "this session is still running", { path: rel });
+    }
+    await atomicWrite(abs, applyFrontmatterPatch(raw, { ended: null }));
+  });
+  return readParsedFile(campaign, rel);
+}
+
+/**
+ * POST /api/:campaign/session/end — set `ended` in the RUNNING session via the
+ * raw-patch mechanism (that may be YESTERDAY's file when the session went past
+ * midnight). Idempotent: with nothing running it falls back to the LAST
+ * STARTED session and keeps its existing `ended`; 404 only when the campaign
+ * has no session file at all.
+ */
+export async function endSession(campaign: string): Promise<FileResponse> {
+  const dir = await campaignDir(campaign);
+  const rel = (await findActiveSessionRel(campaign)) ?? (await findLastStartedSessionRel(campaign));
+  if (rel === undefined) throw new ApiError(404, "no active session");
+  const abs = path.resolve(dir, rel);
+  await withFileLock(abs, async () => {
+    let raw: string;
+    try {
+      raw = await readFile(abs, "utf8");
+    } catch {
+      throw new ApiError(404, "no active session");
+    }
+    if (isEnded(currentFrontmatter(raw))) return; // keep the first `ended`
     await atomicWrite(abs, applyFrontmatterPatch(raw, { ended: localDateTime(now()) }));
   });
   return readParsedFile(campaign, rel);
+}
+
+/**
+ * POST /api/:campaign/session/discard — DELETE the active session file
+ * (issue #40 AK7). The one write in this layer that removes a file, and it is
+ * allowed for exactly one shape: a session with no log entry and no
+ * `scenes_played` (shared `isSessionEmpty` — the app offers the action for the
+ * same predicate, so the button never leads into a 409).
+ *
+ * Why delete at all: "Session starten" mis-clicked leaves a file that shows up
+ * as the last started session forever — the review harvests it, and today's
+ * real session cannot start next to it (409 session_running). Ending it would
+ * only turn the litter into ended litter.
+ *
+ * Why never more than that: session logs are append-only (DECISIONS #4). A
+ * session with content is ENDED, not deleted — 409 with a message that says
+ * so. 404 when nothing is running.
+ *
+ * The unlink is the atomic step (no temp file, no partial state); the watcher
+ * picks the removal up and bumps the campaign version like any other change.
+ */
+export async function discardSession(campaign: string): Promise<{ path: string }> {
+  const dir = await campaignDir(campaign);
+  const rel = await findActiveSessionRel(campaign);
+  if (rel === undefined) throw new ApiError(404, "no active session");
+  const abs = path.resolve(dir, rel);
+  await withFileLock(abs, async () => {
+    let raw: string;
+    try {
+      raw = await readFile(abs, "utf8");
+    } catch {
+      throw new ApiError(404, "no active session");
+    }
+    const body = splitFrontmatterBlock(raw)?.body ?? raw;
+    if (!isSessionEmpty(currentFrontmatter(raw), body)) {
+      throw new ApiError(409, "this session has content — end it instead of discarding it", {
+        code: "session_not_empty",
+        path: rel,
+      });
+    }
+    await unlink(abs);
+  });
+  return { path: rel };
 }
 
 /**
@@ -406,9 +513,12 @@ function insertLogLine(raw: string, entry: string): string {
 }
 
 /**
- * POST /api/:campaign/log — append `- HH:MM (sceneId) text` to today's
- * session file. 404 when no session was started today (the UI tells the DM
- * to start one). `text`/`sceneId` arrive pre-normalized from the route.
+ * POST /api/:campaign/log — append `- HH:MM (sceneId) text` to the RUNNING
+ * session file (issue #40: that may be yesterday's file past midnight).
+ * STRICTLY the running session: 404 when none runs, so a note typed after
+ * "Session beenden" is refused instead of quietly landing in a closed log
+ * (it used to fall back to today's file and answer 200). `text`/`sceneId`
+ * arrive pre-normalized from the route.
  *
  * When a sceneId is given, `scenes_played` is maintained in the same write
  * (README: "automatisch gepflegt" — the app is the only writer of session
@@ -424,14 +534,15 @@ export async function appendLogEntry(
   sceneId?: string,
 ): Promise<FileResponse> {
   const dir = await campaignDir(campaign);
-  const rel = todaySessionRel();
+  const rel = await findActiveSessionRel(campaign);
+  if (rel === undefined) throw new ApiError(404, "no active session");
   const abs = path.resolve(dir, rel);
   await withFileLock(abs, async () => {
     let raw: string;
     try {
       raw = await readFile(abs, "utf8");
     } catch {
-      throw new ApiError(404, "no session today");
+      throw new ApiError(404, "no active session");
     }
     if (sceneId !== undefined) {
       const fm = currentFrontmatter(raw);

@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { formatElapsed, parseLocalDateTime, parseLogEntries, todaySessionRel } from "./session";
-
-describe("todaySessionRel", () => {
-  test("formats the LOCAL date with zero padding", () => {
-    expect(todaySessionRel(new Date(2026, 0, 5, 23, 59))).toBe("sessions/2026-01-05.md");
-    expect(todaySessionRel(new Date(2026, 11, 31, 0, 0))).toBe("sessions/2026-12-31.md");
-  });
-});
+import {
+  formatElapsed,
+  parseLocalDateTime,
+  parseLogEntries,
+  sessionEndMs,
+  sessionStartMs,
+} from "./session";
 
 describe("parseLogEntries", () => {
   const body = `
@@ -69,10 +68,48 @@ describe("parseLocalDateTime", () => {
     expect(parseLocalDateTime("2026-01-15T19:30")).toBe(new Date(2026, 0, 15, 19, 30).getTime());
   });
 
+  test("a date-only value is midnight (issue #40: the degraded `…T00:00`)", () => {
+    expect(parseLocalDateTime("2026-01-15")).toBe(new Date(2026, 0, 15, 0, 0).getTime());
+  });
+
   test("returns undefined for garbage and non-strings", () => {
     expect(parseLocalDateTime("gestern Abend")).toBeUndefined();
     expect(parseLocalDateTime(undefined)).toBeUndefined();
     expect(parseLocalDateTime(1234)).toBeUndefined();
+  });
+});
+
+describe("sessionStartMs / sessionEndMs (issue #40)", () => {
+  test("the SERVER's epoch reading wins over the local parse", () => {
+    // A browser two hours off the server would compute 19:30 in ITS zone;
+    // the server's value is the truth and must be used as it is.
+    const serverMs = new Date(2026, 0, 15, 17, 30).getTime();
+    const session = {
+      startedMs: serverMs,
+      endedMs: serverMs + 3 * 3_600_000,
+      frontmatter: { started: "2026-01-15T19:30", ended: "2026-01-15T22:30" },
+    };
+    expect(sessionStartMs(session)).toBe(serverMs);
+    expect(sessionEndMs(session)).toBe(serverMs + 3 * 3_600_000);
+  });
+
+  test("falls back to the local parse when the server sends no epoch fields", () => {
+    const session = { frontmatter: { started: "2026-01-15T19:30" } };
+    expect(sessionStartMs(session)).toBe(new Date(2026, 0, 15, 19, 30).getTime());
+    expect(sessionEndMs(session)).toBeUndefined();
+  });
+
+  test("a midnight start still yields a time — the timer must not vanish", () => {
+    // The frontmatter string degraded to a plain date (shared/src/parse.ts).
+    expect(sessionStartMs({ frontmatter: { started: "2026-01-15" } })).toBe(
+      new Date(2026, 0, 15, 0, 0).getTime(),
+    );
+  });
+
+  test("no session, no frontmatter, no usable value -> undefined", () => {
+    expect(sessionStartMs(undefined)).toBeUndefined();
+    expect(sessionStartMs({})).toBeUndefined();
+    expect(sessionStartMs({ frontmatter: {} })).toBeUndefined();
   });
 });
 

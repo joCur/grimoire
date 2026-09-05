@@ -1,6 +1,10 @@
 // Critical path 4: the session cycle; see CLAUDE.md.
 //
-// start → quick note → log + scenes_played → pause → end → review.
+// start → quick note → log + scenes_played → NPC/location drawer → back into
+// the session via the global live indicator → pause → end → review.
+//
+// Plus its undo at the very start: "Session verwerfen" deletes the file of a
+// session that has nothing in it (issue #40 AK7) — its own test below.
 //
 // Every claim is checked twice: once in the UI and once in the file on disk
 // (the server is the truth, the app keeps no state of its own).
@@ -34,8 +38,11 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect(page.getByRole("article").getByRole("heading", { level: 1 })).toHaveText(
     "Ankunft am Leuchtturm",
   );
-  // NPC card of the selected scene in the right aside.
-  await expect(page.getByRole("link", { name: /Hafenmeisterin Jorna/ })).toBeVisible();
+  // NPC card of the selected scene in the right aside — a BUTTON here, not a
+  // link: in the live mode it opens the drawer (issue #40).
+  await expect(page.getByRole("button", { name: /Hafenmeisterin Jorna/ })).toBeVisible();
+  // …and the location of the scene, as its own card next to the NPCs.
+  await expect(page.getByRole("button", { name: /Der Leuchtturm von Salzhafen/ })).toBeVisible();
 
   // Fresh session: the log is empty and says where entries come from.
   await expect(
@@ -45,6 +52,9 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect
     .poll(() => files.read(sessionPath))
     .toContain("scenes_played: []");
+
+  // …and while it is empty, it can be discarded (issue #40 AK7).
+  await expect(page.getByRole("button", { name: "Session verwerfen" })).toBeVisible();
 
   // --- quick note ("Schnellnotiz") ------------------------------------------
   const quickNote = page.getByLabel("Schnellnotiz");
@@ -66,6 +76,61 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // The played checkmark comes from scenes_played — never faked client-side.
   await expect(nav.getByText("gespielt")).toBeAttached();
 
+  // The session has content now — discarding it is no longer on offer; the
+  // way out is "Session beenden".
+  await expect(page.getByRole("button", { name: "Session verwerfen" })).toHaveCount(0);
+
+  // --- NPC drawer inside the live mode (issue #40) --------------------------
+  // A card click must NOT navigate: the selected scene and a half-typed
+  // Schnellnotiz have to survive opening and closing the drawer.
+  const draft = "halb getippt, nicht gesendet";
+  await quickNote.fill(draft);
+  await page.getByRole("button", { name: /Hafenmeisterin Jorna/ }).click();
+
+  const drawer = page.getByRole("dialog");
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
+  // The full file, not the card excerpt — and the way out into the full view.
+  await expect(drawer.getByRole("link", { name: "Datei öffnen" })).toHaveAttribute(
+    "href",
+    "/beispiel/file/npcs/jorna.md",
+  );
+  // Still in the live mode, session still running.
+  await expect(page).toHaveURL(/\/beispiel\/live$/);
+
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  await expect(nav.getByRole("button", { name: /Ankunft am Leuchtturm/ })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+  await expect(quickNote).toHaveValue(draft);
+  await quickNote.fill("");
+
+  // --- the location card opens in the same drawer ---------------------------
+  await page.getByRole("button", { name: /Der Leuchtturm von Salzhafen/ }).click();
+  await expect(page.getByRole("dialog").getByRole("heading", { level: 1 })).toHaveText(
+    "Der Leuchtturm von Salzhafen",
+  );
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeHidden();
+
+  // --- the global live indicator brings the DM back (issue #40) -------------
+  // The live topbar has no campaign nav (it belongs to the session), so this
+  // is the DM looking something up: away to the pool, then back.
+  await page.goto("/beispiel");
+  await expect(page).toHaveURL(/\/beispiel$/);
+  // No "Session starten" anywhere while a session runs …
+  await expect(page.getByRole("button", { name: "Session starten" })).toHaveCount(0);
+  // … but the live indicator with the running time, on this route too.
+  const backToLive = page.getByRole("link", { name: /Zur laufenden Session/ });
+  await expect(backToLive).toBeVisible();
+  await expect(backToLive).toContainText(/\d+:\d{2}/);
+  await backToLive.click();
+  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  await expect(page.getByText(NOTE)).toBeVisible();
+
   // --- pause ---------------------------------------------------------------
   await page.getByRole("button", { name: "Pause" }).click();
   await expect(page.getByText("— Pause")).toBeVisible();
@@ -80,4 +145,65 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // The harvest card for the tagged note is waiting there.
   await expect(page.getByText("Gruppe verhandelt mit Jorna am Fuß der Treppe")).toBeVisible();
   await expect(page.getByText("#thread", { exact: true }).first()).toBeVisible();
+
+  // --- ended too early? fortsetzen (issue #40 review) ----------------------
+  // "Session beenden" one scene too soon used to be a dead end until
+  // midnight: the Start button answered 200 with the ENDED file and nothing
+  // happened. Now the start says "already ended" and the button offers to
+  // resume — same file, so the evening's log stays in one piece.
+  await page.goto("/beispiel");
+  const startButton = page.getByRole("button", { name: "Session starten" });
+  await expect(startButton).toBeVisible();
+  await startButton.click();
+
+  const resumeButton = page.getByRole("button", { name: "Session fortsetzen" });
+  await expect(resumeButton).toBeVisible();
+  await resumeButton.click();
+
+  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  // The same session, not a fresh one: the note from before is still there …
+  await expect(page.getByText(NOTE)).toBeVisible();
+  // … and `ended` is gone from the file, so the session really runs again.
+  await expect.poll(() => files.read(sessionPath)).not.toContain("ended:");
+  await expect(page.getByRole("button", { name: "Session beenden" })).toBeVisible();
+});
+
+test("session verwerfen — the mis-click's undo removes the empty file", async ({
+  page,
+  files,
+}) => {
+  await page.goto("/beispiel");
+  const sessionPath = files.todaySession();
+
+  // "Session starten" hit by accident.
+  await page.getByRole("button", { name: "Session starten" }).click();
+  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  await expect.poll(() => files.exists(sessionPath)).toBe(true);
+
+  // It asks first — the file is deleted, and that is what the dialog says.
+  await page.getByRole("button", { name: "Session verwerfen" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Leere Session verwerfen?");
+  await expect(dialog).toContainText("Die Datei wird gelöscht.");
+
+  // Abbrechen changes nothing at all.
+  await dialog.getByRole("button", { name: "Abbrechen" }).click();
+  await expect(dialog).toBeHidden();
+  expect(await files.exists(sessionPath)).toBe(true);
+
+  await page.getByRole("button", { name: "Session verwerfen" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
+
+  // Back in the non-live state: the pool offers a start again …
+  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page.getByRole("button", { name: "Session starten" })).toBeVisible();
+  // … no live indicator is left over …
+  await expect(page.getByRole("link", { name: /Zur laufenden Session/ })).toHaveCount(0);
+  // … and the file is gone from disk.
+  await expect.poll(() => files.exists(sessionPath)).toBe(false);
+
+  // And the start really works again (it is not blocked by a stale session).
+  await page.getByRole("button", { name: "Session starten" }).click();
+  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  await expect.poll(() => files.exists(sessionPath)).toBe(true);
 });

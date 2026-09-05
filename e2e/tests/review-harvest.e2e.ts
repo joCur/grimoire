@@ -121,3 +121,38 @@ test("creating an NPC stub from a #npc log line", async ({ page, files }) => {
   await page.goto("/beispiel/list/npcs");
   await expect(page.getByRole("link", { name: /Old Metta/ })).toBeVisible();
 });
+
+test("a session that ran past midnight is still the harvest (issue #40 review)", async ({
+  page,
+  files,
+}) => {
+  // The evening of yesterday was ENDED after midnight, so `ended` sits in
+  // YESTERDAY's file and there is no file for today at all. The review used
+  // to look at `sessions/<today>.md` and found nothing to harvest; now the
+  // server names the session (GET /session?includeEnded=1).
+  await files.remove(files.todaySession());
+  const today = files.todaySession().slice("sessions/".length, -".md".length);
+  const yesterdayDate = new Date(`${today}T12:00:00`);
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = yesterdayDate.toISOString().slice(0, 10);
+  const rel = `sessions/${yesterday}.md`;
+  await files.write(
+    rel,
+    `---\nid: ${yesterday}\nstarted: ${yesterday}T21:30\nended: ${today}T01:40\nscenes_played: [lighthouse-arrival]\n---\n\n## Log\n\n${THREAD_LINE}\n`,
+  );
+
+  await page.goto("/beispiel/review");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fünf Minuten Ernte");
+  const threadCard = page.locator("div").filter({ hasText: THREAD_TEXT }).last();
+  await expect(threadCard).toBeVisible();
+  await threadCard.getByRole("button", { name: "Als Faden übernehmen" }).click();
+  await expect(threadCard.getByText("Als Faden übernommen")).toBeVisible();
+
+  // The `reviewed` hash lands in YESTERDAY's file — the one the session
+  // actually lives in — and no file was invented for today.
+  await expect.poll(() => files.read(rel)).toContain("reviewed:");
+  expect(await files.exists(files.todaySession())).toBe(false);
+  await expect
+    .poll(() => files.read("01-salzhafen/_chapter.md"))
+    .toContain(`- [ ] ${THREAD_TEXT}`);
+});

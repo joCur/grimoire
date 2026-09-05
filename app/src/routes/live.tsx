@@ -1,11 +1,17 @@
 // "/:campaign/live" — the live mode (issue #9), three zones per the design
 // prototype: left the planned scenes and contingencies of the ACTIVE
 // chapter, center the selected scene through the same article pipeline as
-// the reading view, right the NPC cards plus the log panel and the
-// Schnellnotiz. The session file on the server is the truth: every write
+// the reading view, right the location and NPC cards plus the log panel and
+// the Schnellnotiz. The session file on the server is the truth: every write
 // returns the fresh file, the "played" checkmark comes from scenes_played
-// (server-maintained — never faked client-side). The only client state is
-// which scene is selected.
+// (server-maintained — never faked client-side). WHICH session is running is
+// the server's answer too (GET /:campaign/session, issue #40) — a session
+// past midnight lives in yesterday's file.
+//
+// Client state is exactly two things: the selected scene and which entity the
+// detail drawer shows (issue #40). Aside cards therefore do NOT navigate here
+// — a click used to leave the live route and take the selected scene and the
+// half-typed Schnellnotiz with it.
 // There is NO mobile live mode (UI-BRIEF §4) — below md the route shows a
 // quiet note with a link to the read view of the active scene instead.
 
@@ -15,7 +21,9 @@ import { Bookmark, Check, GitFork } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
-import { appendLog, fetchFile, fetchTree, startSession } from "@/api";
+import { appendLog, endSession, fetchFile, fetchTree } from "@/api";
+import { LiveEntityDrawer } from "@/components/LiveEntityDrawer";
+import { LocationCard } from "@/components/LocationCard";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/components/NpcCard";
 import { SceneArticle } from "@/components/SceneArticle";
@@ -23,7 +31,7 @@ import { Button } from "@/components/ui/button";
 import { fmStringArray } from "@/lib/frontmatter";
 import { parseLogEntries } from "@/lib/session";
 import { cn } from "@/lib/utils";
-import { noSessionYet, useSessionFile, useSessionWrite } from "@/lib/use-session";
+import { useActiveSession, useSessionStartFlow, useSessionWrite } from "@/lib/use-session";
 
 export function LiveRoute() {
   const { campaign = "" } = useParams();
@@ -74,7 +82,7 @@ function MobileLiveNote({ campaign }: { campaign: string }) {
 }
 
 function LiveDesktop({ campaign }: { campaign: string }) {
-  const session = useSessionFile(campaign);
+  const session = useActiveSession(campaign);
   const tree = useQuery({
     queryKey: ["tree", campaign],
     queryFn: () => fetchTree(campaign),
@@ -92,15 +100,26 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   const [selectedPath, setSelectedPath] = useState<string>();
   const selected = scenes.find((s) => s.path === selectedPath) ?? planned[0] ?? scenes[0];
 
+  // Which entity file the drawer shows — undefined = closed. Sitting HERE
+  // (not inside the aside) is what keeps scene selection and note draft
+  // untouched while the drawer opens and closes.
+  const [drawerPath, setDrawerPath] = useState<string>();
+
   const playedIds = fmStringArray(session.data?.frontmatter.scenes_played);
 
-  if (session.isError && noSessionYet(session.error)) {
-    return <NoSessionYet campaign={campaign} />;
-  }
+  // Only the tree decides whether a scene's `location` is an entity: the
+  // format allows a free string there, and that must stay plain text instead
+  // of claiming a missing file (degrade, README).
+  const locationId = selected?.location;
+  const knownLocation = tree.data?.locations.find((l) => l.id === locationId);
+
   if (session.isPending) {
     return <p className="px-7 pt-10 text-muted-foreground">Lade Session …</p>;
   }
-  if (session.isError) {
+  if (session.data === null) {
+    return <NoSessionYet campaign={campaign} />;
+  }
+  if (session.isError || session.data === undefined) {
     return (
       <p className="px-7 pt-10 text-muted-foreground">
         Session nicht ladbar — Server prüfen und neu laden.
@@ -167,11 +186,32 @@ function LiveDesktop({ campaign }: { campaign: string }) {
 
       <aside className="flex w-full flex-none flex-col border-t border-border lg:min-h-0 lg:w-[300px] lg:border-t-0 lg:border-l">
         <div className="flex flex-col gap-3 px-4 py-[18px] lg:flex-1 lg:overflow-y-auto">
+          {locationId !== undefined && (
+            <>
+              <p className="text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
+                Ort
+              </p>
+              {knownLocation !== undefined ? (
+                // The tree knows the REAL path of the file — the card must not
+                // re-derive `locations/<id>.md` (finding 10).
+                <LocationCard
+                  campaign={campaign}
+                  id={knownLocation.id}
+                  path={knownLocation.path}
+                  onOpen={setDrawerPath}
+                />
+              ) : (
+                // A free-text location (no entity file behind it) is exactly
+                // what the format allows — show it, claim nothing.
+                <p className="text-[12.5px] leading-[1.5] text-body-secondary">{locationId}</p>
+              )}
+            </>
+          )}
           <p className="text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
             NPCs
           </p>
           {(selected?.npcs ?? []).map((id) => (
-            <NpcCard key={id} campaign={campaign} id={id} compact />
+            <NpcCard key={id} campaign={campaign} id={id} compact onOpen={setDrawerPath} />
           ))}
           {(selected?.npcs ?? []).length === 0 && (
             <p className="text-[12.5px] text-muted-foreground">Keine NPCs in dieser Szene.</p>
@@ -179,6 +219,12 @@ function LiveDesktop({ campaign }: { campaign: string }) {
         </div>
         <LogPanel campaign={campaign} body={session.data.body} activeSceneId={selected?.id} />
       </aside>
+
+      <LiveEntityDrawer
+        campaign={campaign}
+        path={drawerPath}
+        onClose={() => setDrawerPath(undefined)}
+      />
     </div>
   );
 }
@@ -317,26 +363,66 @@ function LogPanel({
   );
 }
 
-/** Quiet empty state when the live route is opened without a session today. */
+/**
+ * Quiet empty state when the live route is opened while nothing is running —
+ * and the ONE place the start's 409s become a question the DM can answer
+ * (issue #40 review, finding 2). Before, "Session starten" on an evening that
+ * was already ended answered 200 with the ended file, the cache seeded `null`
+ * again and this very screen came back: a dead end until midnight.
+ */
 function NoSessionYet({ campaign }: { campaign: string }) {
-  const start = useSessionWrite(campaign, () => startSession(campaign));
+  const { start, resume, conflict, conflictPath, failed } = useSessionStartFlow(campaign);
+  const end = useSessionWrite(campaign, () => endSession(campaign));
+  const busy = start.isPending || resume.isPending || end.isPending;
   return (
     <div className="flex h-full items-center justify-center px-7">
-      <div className="text-center">
-        <p className="mb-4 text-[14px] text-muted-foreground">
-          Heute läuft noch keine Session.
-        </p>
-        <Button
-          type="button"
-          disabled={start.isPending}
-          onClick={() => start.mutate()}
-          className="h-auto px-4 py-2 text-[13px] font-semibold"
-        >
-          Session starten
-        </Button>
-        {start.isError && (
+      <div className="max-w-[380px] text-center">
+        {conflict === "session_ended" ? (
+          <>
+            <p className="mb-4 text-[14px] leading-[1.6] text-muted-foreground">
+              Die heutige Session ist beendet — fortsetzen?
+            </p>
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => resume.mutate()}
+              className="h-auto px-4 py-2 text-[13px] font-semibold"
+            >
+              Session fortsetzen
+            </Button>
+          </>
+        ) : conflict === "session_running" ? (
+          <>
+            <p className="mb-4 text-[14px] leading-[1.6] text-muted-foreground">
+              Eine ältere Session läuft noch
+              {conflictPath === undefined ? "" : ` (${conflictPath})`} — erst beenden.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => end.mutate()}
+              className="h-auto px-4 py-2 text-[13px]"
+            >
+              Alte Session beenden
+            </Button>
+          </>
+        ) : (
+          <>
+            <p className="mb-4 text-[14px] text-muted-foreground">Es läuft keine Session.</p>
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => start.mutate()}
+              className="h-auto px-4 py-2 text-[13px] font-semibold"
+            >
+              Session starten
+            </Button>
+          </>
+        )}
+        {(failed || resume.isError || end.isError) && (
           <p className="mt-3 text-[12.5px] text-destructive">
-            Session nicht gestartet — Server prüfen.
+            Session nicht geändert — Server prüfen.
           </p>
         )}
       </div>

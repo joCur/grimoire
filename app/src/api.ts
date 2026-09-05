@@ -169,14 +169,68 @@ export function createCampaignMeta(
   });
 }
 
-/** Create today's session file (idempotent — an existing one is returned). */
+/**
+ * The ACTIVE session (issue #40), or null when none is running — the server's
+ * 404 is the normal "no session" answer, never an error state in the UI.
+ *
+ * The app must NOT derive the session file from its own date: a session that
+ * runs past midnight lives in yesterday's file, and a browser in another
+ * timezone than the server would guess wrong. The response carries
+ * `startedMs`/`endedMs` (epoch, resolved by the server), which is what makes
+ * the live runtime correct.
+ */
+export async function fetchActiveSession(campaign: string): Promise<FileResponse | null> {
+  return fetchSession(campaign, false);
+}
+
+/**
+ * The LAST STARTED session, ended or not (`?includeEnded=1`) — the REVIEW's
+ * session. Same reason the app must not guess it: an evening that ran past
+ * midnight was ended in yesterday's file, so "today's file" would harvest
+ * nothing (or the wrong log). null when the campaign has no session at all.
+ */
+export async function fetchLastStartedSession(campaign: string): Promise<FileResponse | null> {
+  return fetchSession(campaign, true);
+}
+
+async function fetchSession(
+  campaign: string,
+  includeEnded: boolean,
+): Promise<FileResponse | null> {
+  const path = `/${encodeURIComponent(campaign)}/session${includeEnded ? "?includeEnded=1" : ""}`;
+  const response = await fetch(`/api${path}`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw await failure(`GET /api${path}`, response);
+  return (await response.json()) as FileResponse;
+}
+
+/**
+ * Start today's session. Idempotent while today's session is the running one;
+ * 409 otherwise — `details.code` says which case (see sessionStartConflict):
+ * an older session is still open, or today's is already ended.
+ */
 export function startSession(campaign: string): Promise<FileResponse> {
   return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/start`);
 }
 
-/** Set `ended` in today's session file (404 without a session today). */
+/** Re-open the last started session (removes `ended`) — explicit "fortsetzen". */
+export function resumeSession(campaign: string): Promise<FileResponse> {
+  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/resume`);
+}
+
+/** Set `ended` in the ACTIVE session file (404 when there is none). */
 export function endSession(campaign: string): Promise<FileResponse> {
   return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/end`);
+}
+
+/**
+ * DELETE the active session's file — the undo of a mis-clicked "Session
+ * starten" (issue #40 AK7). Only an EMPTY session may be discarded; the
+ * server answers 409 (`code: "session_not_empty"`) otherwise and 404 when
+ * nothing is running. Returns the path of the file that is gone.
+ */
+export function discardSession(campaign: string): Promise<{ path: string }> {
+  return postJson<{ path: string }>(`/${encodeURIComponent(campaign)}/session/discard`);
 }
 
 /**
@@ -188,7 +242,8 @@ export function appendInbox(campaign: string, text: string): Promise<FileRespons
 }
 
 /**
- * Append a log line to today's session (404 without a session today).
+ * Append a log line to the ACTIVE session (404 when none runs) — which may be
+ * yesterday's file when the session ran past midnight; the server picks it.
  * With a sceneId the server also maintains `scenes_played`.
  */
 export function appendLog(

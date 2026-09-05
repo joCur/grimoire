@@ -13,6 +13,7 @@ import type { Dirent } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import {
+  isEnded,
   locationSummary,
   npcSummary,
   parseMarkdown,
@@ -28,6 +29,7 @@ import {
   type SceneGroup,
   type SessionSummary,
 } from "@grimoire/shared";
+import { localDateTimeToMs } from "./clock";
 import { getCampaignRoot } from "./config";
 
 /**
@@ -260,7 +262,198 @@ export async function readParsedFile(campaign: string, rel: string): Promise<Fil
   if (!s.isFile()) throw new ApiError(404, "file not found");
   const raw = await readFile(abs, "utf8");
   const parsed = parseMarkdown(raw, rel, s.mtimeMs);
-  return { ...parsed, raw };
+  return { ...parsed, raw, ...sessionTimes(parsed) };
+}
+
+/**
+ * The epoch interpretation of a session file's `started`/`ended` (issue #40),
+ * added to every FileResponse of a session file — the GET, and every write
+ * endpoint that answers with the session (start/end/log), so the client's
+ * timer never loses it on a cache seed. Zone-less strings stay in the file;
+ * only the SERVER resolves them, because only the server knows the timezone
+ * those wall-clock digits were written in.
+ */
+function sessionTimes(parsed: ParsedFile): { startedMs?: number; endedMs?: number } {
+  if (parsed.kind !== "session") return {};
+  const startedMs = localDateTimeToMs(parsed.frontmatter.started);
+  const endedMs = localDateTimeToMs(parsed.frontmatter.ended);
+  return {
+    ...(startedMs === undefined ? {} : { startedMs }),
+    ...(endedMs === undefined ? {} : { endedMs }),
+  };
+}
+
+// --- the active session (issue #40) --------------------------------------------
+
+/** `sessions/<yyyy-mm-dd>.md` — the shape the write API creates. */
+const SESSION_ID_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Chronological order key of a session, in epoch milliseconds — or undefined
+ * when the file says nothing usable about WHEN it was started.
+ *
+ * `started` (the server's zone-less reading, ./clock) comes first, the id
+ * (a date) is the fallback for a file whose `started` is missing or degraded.
+ * A session with NEITHER — `sessions/gestern abend.md` with a prose `started`,
+ * or `notes.md` sitting in sessions/ — has no key and therefore never wins
+ * anything: it used to hijack the active session forever, because the old raw
+ * STRING sort ranked "gestern abend" above every date. Degrade, never throw
+ * (README: unknown shapes render as themselves).
+ */
+export function sessionOrderKey(session: SessionSummary): number | undefined {
+  const started = localDateTimeToMs(session.started);
+  if (started !== undefined) return started;
+  return SESSION_ID_DATE.test(session.id) ? localDateTimeToMs(session.id) : undefined;
+}
+
+/**
+ * The active session out of a campaign's session summaries: the LAST STARTED
+ * one that is not ended (shared `isEnded` — the single predicate, blank
+ * `ended` counts as running). Deliberately not limited to today: a session
+ * that runs past midnight stays the active one, which is why the client asks
+ * the server instead of deriving today's file name itself.
+ *
+ * Pure and exported — this function IS the ordering definition the
+ * newest-first scan below implements, and the unit tests pin it here.
+ */
+export function pickActiveSession(sessions: SessionSummary[]): SessionSummary | undefined {
+  return pickLatest(sessions.filter((s) => !isEnded({ ended: s.ended })));
+}
+
+/**
+ * The LAST STARTED session regardless of `ended` — what GET /session
+ * ?includeEnded=1 answers (the review harvests the session that was just
+ * ended, which may be YESTERDAY's file) and what `end` falls back to so it
+ * stays idempotent.
+ */
+export function pickLastStartedSession(sessions: SessionSummary[]): SessionSummary | undefined {
+  return pickLatest(sessions);
+}
+
+function pickLatest(sessions: SessionSummary[]): SessionSummary | undefined {
+  let best: SessionSummary | undefined;
+  let bestKey = -Infinity;
+  for (const session of sessions) {
+    const key = sessionOrderKey(session);
+    if (key === undefined) continue; // unparseable = never a candidate
+    if (best === undefined || key > bestKey) {
+      best = session;
+      bestKey = key;
+    }
+  }
+  return best;
+}
+
+/** One scanned session file — parsed ONCE and passed on to the response. */
+interface ScannedSession {
+  rel: string;
+  raw: string;
+  parsed: ParsedFile;
+}
+
+/** Read + parse one session file; undefined when it is not a readable file. */
+async function readSessionFile(
+  campaignAbs: string,
+  name: string,
+): Promise<ScannedSession | undefined> {
+  const abs = path.join(campaignAbs, "sessions", name);
+  try {
+    const s = await stat(abs);
+    if (!s.isFile()) return undefined;
+    const raw = await readFile(abs, "utf8");
+    return { rel: `sessions/${name}`, raw, parsed: parseMarkdown(raw, `sessions/${name}`, s.mtimeMs) };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The active (or, with `includeEnded`, simply the last started) session file —
+ * read NEWEST FIRST with an early stop instead of parsing every session file
+ * of the campaign on every request (the live view polls this).
+ *
+ * The cheap path is the only one that normally runs: session file names ARE
+ * their date (the write API writes `started` with the file's own date), so
+ * descending file-name order is descending `started` order and the first hit
+ * is the answer. Only when that finds nothing do the oddly named files get
+ * read — there the order key must come out of `started`, which means parsing
+ * them; they are a hand-made exception, not the common case.
+ */
+async function scanSession(
+  campaignAbs: string,
+  includeEnded: boolean,
+): Promise<ScannedSession | undefined> {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(path.join(campaignAbs, "sessions"), { withFileTypes: true });
+  } catch {
+    return undefined; // no sessions/ dir at all
+  }
+  const names = entries
+    .filter((e) => !isHidden(e.name) && e.name.endsWith(".md"))
+    .map((e) => e.name);
+  const dated = names
+    .filter((name) => SESSION_ID_DATE.test(name.slice(0, -".md".length)))
+    .sort((a, b) => cmp(b, a)); // newest first
+  for (const name of dated) {
+    const file = await readSessionFile(campaignAbs, name);
+    if (file === undefined) continue;
+    if (includeEnded || !isEnded(file.parsed.frontmatter)) return file;
+  }
+  // Degraded fallback: files whose NAME is not a date. Their `started` decides,
+  // so they have to be parsed — but only when nothing above answered.
+  const rest = names.filter((name) => !SESSION_ID_DATE.test(name.slice(0, -".md".length)));
+  const scanned: ScannedSession[] = [];
+  for (const name of rest) {
+    const file = await readSessionFile(campaignAbs, name);
+    if (file !== undefined) scanned.push(file);
+  }
+  const summaries = scanned.map((f) => sessionSummary(f.parsed));
+  const picked = includeEnded ? pickLastStartedSession(summaries) : pickActiveSession(summaries);
+  return picked === undefined ? undefined : scanned.find((f) => f.rel === picked.path);
+}
+
+/** FileResponse of a scanned session file — no second read, no second parse. */
+function scannedResponse(file: ScannedSession): FileResponse {
+  return { ...file.parsed, raw: file.raw, ...sessionTimes(file.parsed) };
+}
+
+/**
+ * Campaign-relative path of the active session file, or undefined when no
+ * session is running. Used by the write endpoints that must land in the
+ * RUNNING session rather than in today's file.
+ */
+export async function findActiveSessionRel(campaign: string): Promise<string | undefined> {
+  const dir = await campaignDir(campaign);
+  return (await scanSession(dir, false))?.rel;
+}
+
+/**
+ * Campaign-relative path of the LAST STARTED session file, ended or not —
+ * `end`'s idempotency fallback.
+ */
+export async function findLastStartedSessionRel(campaign: string): Promise<string | undefined> {
+  const dir = await campaignDir(campaign);
+  return (await scanSession(dir, true))?.rel;
+}
+
+/**
+ * GET /api/:campaign/session — the active session file; 404 when none runs.
+ * With `includeEnded` the LAST STARTED session is returned even when it is
+ * already ended (`?includeEnded=1`): that is the file the review harvests, and
+ * it must not be guessed from the client's date — a session that ran past
+ * midnight lives in yesterday's file.
+ */
+export async function readActiveSession(
+  campaign: string,
+  includeEnded = false,
+): Promise<FileResponse> {
+  const dir = await campaignDir(campaign);
+  const file = await scanSession(dir, includeEnded);
+  if (file === undefined) {
+    throw new ApiError(404, includeEnded ? "no session yet" : "no active session");
+  }
+  return scannedResponse(file);
 }
 
 // --- tree walker ---------------------------------------------------------------
