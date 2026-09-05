@@ -1,17 +1,17 @@
-# Release (issue #47). release-please hält aus den Conventional Commits auf
-# main einen Release-PR. Dessen Merge — wie jeder PR erst nach PO-Approval —
-# erzeugt Tag `vX.Y.Z`, GitHub-Release und CHANGELOG.md.
+# Release (issue #47). release-please maintains a release PR from the
+# Conventional Commits on main. Merging that PR — like any PR, only after
+# PO approval — creates the `vX.Y.Z` tag, the GitHub release and CHANGELOG.md.
 #
-# Erst dieser Release baut das GHCR-Image mit Versions-Tag UND `:latest`
-# (Checkout am Tag, nicht am Branch-Head). Normale main-Merges bauen in
-# ci.yml nur noch den SHA-Tag — `:latest` mutiert damit nicht mehr bei jedem
-# Merge (DECISIONS #12).
+# Only that release builds the GHCR image with the version tags AND `:latest`
+# (checked out at the tag, not the branch head). Regular main merges build
+# only the SHA tag in ci.yml — `:latest` no longer moves on every merge
+# (DECISIONS #12).
 #
-# Veröffentlicht wird nichts aus einem Baum, dessen CI nicht grün war:
-# `require-green-ci` löst den Tag zum Commit auf und wartet auf dessen
-# `ci`-Push-Run. release-please selbst bleibt ungegated — der Release-PR muss
-# auch bei rotem main gepflegt werden können, denn er ist das Werkzeug, mit
-# dem der Zustand gelesen und repariert wird.
+# Nothing is published from a tree whose CI was not green: `require-green-ci`
+# resolves the tag to its commit and waits for that commit's `ci` push run.
+# release-please itself stays ungated — the release PR must remain
+# maintainable even while main is red, because it is the tool used to read
+# and repair that state.
 name: Release
 
 on:
@@ -26,49 +26,47 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     outputs:
-      # "true" nur im Lauf, der den Release-PR gemergt hat; jeder andere
-      # Push auf main lässt das leer und stoppt damit den Publish-Pfad.
+      # "true" only in the run that merged the release PR; every other push
+      # to main leaves it empty and thereby stops the publish path.
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
       version: ${{ steps.release.outputs.version }}
     steps:
-      # Konfiguriert über `release-please-config.json` und
-      # `.release-please-manifest.json` im Repo-Root (statt `release-type`
-      # hier), weil eine Version nicht nur ins Changelog muss: sie wird in die
-      # Root-package.json geschrieben und in jedes Workspace-Manifest kopiert.
-      # Das Manifest ist der Stand, von dem der nächste Release zählt; die
-      # Action schreibt es im Release-Commit fort.
+      # Configured via `release-please-config.json` and
+      # `.release-please-manifest.json` in the repo root (instead of a
+      # `release-type` input here), because the version has to go beyond the
+      # changelog: it is written into the root package.json and copied into
+      # every workspace manifest. The manifest is the state the next release
+      # counts from; the action advances it in the release commit.
       #
-      # Das Repo released als eine unbenannte Einheit, der Tag ist deshalb ein
-      # nacktes `vX.Y.Z`. Zwei Einstellungen erzeugen das — und eine davon ist
-      # die Falle, die in Quorum Geld gekostet hat: leer sein muss
-      # `package-name`, NICHT `component`. release-please löst die Komponente
-      # als `component || <name aus package.json>` auf, ein leeres `component`
-      # fällt also still auf den Paketnamen zurück. Beim Bauen des Release-PRs
-      # sieht man davon nichts; es fällt erst beim Merge auf, wenn die
-      # Tagging-Phase die Komponente des gemergten Branches gegen die
-      # konfigurierte prüft, leeren String gegen Paketnamen findet, nicht
-      # taggt — und ein untagged gemergter Release-PR blockiert jeden
-      # folgenden Release.
+      # The repo releases as one unnamed unit, so the tag is a bare
+      # `vX.Y.Z`. Two settings produce that — and one of them is the trap
+      # that cost money in Quorum: it is `package-name` that must be empty,
+      # NOT `component`. release-please resolves the component as
+      # `component || <name from package.json>`, so an empty `component`
+      # silently falls back to the package name. Nothing shows while the
+      # release PR is being built; it surfaces only on merge, when the
+      # tagging phase compares the merged branch's component against the
+      # configured one, finds empty string vs. package name, does not tag —
+      # and an untagged merged release PR blocks every following release.
       - uses: googleapis/release-please-action@v4
         id: release
 
-  # Das Gate. Alles, was das Repo verlässt, hängt daran: ein Fehlschlag hier
-  # ist ein Release, der nach dem Tag stehen bleibt — kein Image, und ein
-  # roter Job, der sagt warum.
+  # The gate. Everything that leaves the repo hangs off it: a failure here
+  # is a release that stops after the tag — no image, and a red job saying
+  # why.
   require-green-ci:
     name: Require green CI for the released commit
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
-    # Der CI-Lauf des Release-Commits startet aus demselben Push wie dieser
-    # Workflow, dieser Job wartet also in der Regel darauf. Das Limit liegt
-    # deutlich über einem normalen Lauf (inkl. E2E) und existiert, damit ein
-    # hängender Lauf den Release scheitern lässt statt stundenlang einen
-    # Runner zu halten.
+    # The release commit's CI run starts from the same push as this
+    # workflow, so this job usually waits for it. The limit sits well above
+    # a normal run (incl. E2E) and exists so a hung run fails the release
+    # instead of holding a runner for hours.
     timeout-minutes: 45
     permissions:
-      # Nur Workflow-Läufe lesen; dieser Job berührt weder Baum noch Release.
+      # Read workflow runs only; this job touches neither tree nor release.
       contents: read
       actions: read
     steps:
@@ -79,21 +77,21 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Der Tag, nicht der Branch-Head: ein weiterer Merge auf main
-          # zwischen Release-Commit und diesem Job würde den Release sonst
-          # das CI-Ergebnis eines anderen Commits erben lassen. Es ist genau
-          # der Commit, den `publish-image` auscheckt.
+          # The tag, not the branch head: another merge to main between the
+          # release commit and this job would otherwise let the release
+          # inherit a different commit's CI result. It is exactly the commit
+          # `publish-image` checks out.
           sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)
           echo "Released commit: $sha"
 
-          # Die ci-Läufe für exakt diesen Commit, neuester zuletzt. Auf
-          # push-Events eingeschränkt, weil das ist, was ein Commit auf main
-          # erzeugt; ein pull_request-Lauf gehört zu einer Merge-Ref und damit
-          # zu einem anderen Baum.
+          # The ci runs for exactly this commit, newest last. Restricted to
+          # push events because that is what a commit on main produces; a
+          # pull_request run belongs to a merge ref and hence a different
+          # tree.
           #
-          # Aus jq kommen nur die zwei Skalare heraus: Commit-Betreffs landen
-          # in dieser Response, und ein JSON-Blob durch eine Shell-Variable
-          # stolpert über die Steuerzeichen, die manche davon enthalten.
+          # Only the two scalars leave jq: commit subjects appear in this
+          # response, and a JSON blob passed through a shell variable trips
+          # over the control characters some of them contain.
           run=$(gh api \
             "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$sha&per_page=100" \
             --jq '[.workflow_runs[] | select(.event == "push")]
@@ -107,16 +105,16 @@ jobs:
             exit 1
           fi
 
-          # Der neueste Lauf gewinnt: ein Re-Run nach behobenem
-          # Infrastruktur-Fehler ist die Antwort, die zählt.
+          # The newest run wins: a re-run after a fixed infrastructure
+          # failure is the answer that counts.
           id=${run%% *}
           echo "CI run: ${run#* }"
 
-          # Blockiert bis der Lauf fertig ist und endet non-zero, wenn er
-          # nicht erfolgreich war — ein noch laufender CI-Lauf wird also
-          # abgewartet statt geraten, ein bereits gescheiterter stoppt den
-          # Release sofort. `-R`, weil dieser Job nichts auscheckt und die CLI
-          # das Repository deshalb nicht ableiten kann.
+          # Blocks until the run finishes and exits non-zero if it did not
+          # succeed — a still-running CI run is awaited instead of guessed
+          # at, an already-failed one stops the release immediately. `-R`
+          # because this job checks nothing out, so the CLI cannot infer the
+          # repository.
           gh run watch "$id" -R "$GITHUB_REPOSITORY" --exit-status --interval 30 >/dev/null
 
           conclusion=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id" --jq .conclusion)
@@ -133,23 +131,22 @@ jobs:
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
     permissions:
-      # Ein Job-Block ersetzt den Workflow-Block komplett: `packages: write`
-      # ist, was GITHUB_TOKEN nach GHCR pushen lässt; mehr als den Baum lesen
-      # braucht dieser Job nicht.
+      # A job block replaces the workflow block entirely: `packages: write`
+      # is what lets GITHUB_TOKEN push to GHCR; beyond reading the tree this
+      # job needs nothing.
       contents: read
       packages: write
     steps:
-      # Ausdrücklich der getaggte Commit, nicht der Branch-Head: ein weiterer
-      # Merge auf main dazwischen würde sonst unter dieser Versionsnummer
-      # gebaut.
+      # Explicitly the tagged commit, not the branch head: another merge to
+      # main in between would otherwise be built under this version number.
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.release-please.outputs.tag_name }}
 
       - uses: docker/setup-buildx-action@v3
 
-      # Keine Repo-Secrets im Spiel: GITHUB_TOKEN genügt für GHCR-Pushes in
-      # das eigene Package dieses Repositories.
+      # No repo secrets involved: GITHUB_TOKEN suffices for GHCR pushes to
+      # this repository's own package.
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -161,27 +158,27 @@ jobs:
         with:
           context: .
           push: true
-          # Build-Id in Bundle UND Server (issue #24) — hier der Tag statt des
-          # SHA, damit der Reload-Banner-Vergleich zwischen altem Tab und
-          # neuem Server-Stand denselben Wert auf beiden Seiten sieht und ein
-          # Release als neue Version erkannt wird.
+          # Build id in bundle AND server (issue #24) — the tag here instead
+          # of the SHA, so the reload-banner comparison between an old tab
+          # and the new server state sees the same value on both sides and a
+          # release is recognized as a new version.
           build-args: |
             GRIMOIRE_BUILD=${{ needs.release-please.outputs.tag_name }}
-          # Kleingeschriebener Owner: GHCR-Repository-Namen sind
-          # case-sensitiv, die GitHub-Organisation wird groß geschrieben.
-          # Der Versions-Tag ist, worauf ein Deployment festnagelt; `:latest`
-          # entsteht nur hier — nicht mehr bei jedem main-Merge.
-          # Beide Schreibweisen der Version, damit ein Deployment sowohl
-          # `v0.1.0` (wie der Tag/das Release heißt) als auch `0.1.0`
-          # festnageln kann.
+          # Lowercase owner: GHCR repository names are case-sensitive, the
+          # GitHub account is capitalized.
+          # The version tag is what a deployment pins; `:latest` is created
+          # only here — no longer on every main merge.
+          # Both spellings of the version, so a deployment can pin either
+          # `v0.1.0` (what the tag/release is called) or `0.1.0`.
           tags: |
             ghcr.io/jocur/grimoire:${{ needs.release-please.outputs.tag_name }}
             ghcr.io/jocur/grimoire:${{ needs.release-please.outputs.version }}
             ghcr.io/jocur/grimoire:latest
-          # Nur linux/amd64, was der Runner nativ baut. arm64 hieße Emulation
-          # und Builds in Zehnerminuten; es gibt kein arm64-Ziel.
+          # linux/amd64 only, which the runner builds natively. arm64 would
+          # mean emulation and builds measured in tens of minutes; there is
+          # no arm64 target.
           platforms: linux/amd64
-          # Geteilt mit ci.yml: der PR, der zum Release-Commit führte, hat den
-          # Scope meist schon gefüllt.
+          # Shared with ci.yml: the PR that led to the release commit has
+          # usually filled the scope already.
           cache-from: type=gha
           cache-to: type=gha,mode=max
