@@ -21,6 +21,7 @@ import {
   appendInboxEntry,
   appendLogEntry,
   appendThreadToChapter,
+  continueSession,
   createCampaignMeta,
   createNpcStub,
   discardSession,
@@ -28,6 +29,7 @@ import {
   markInboxLineDone,
   markLogLineSeen,
   patchFrontmatter,
+  pauseSession,
   resumeSession,
   startSession,
   writeFileBody,
@@ -130,8 +132,10 @@ api.get("/:campaign/file", async (c) => {
 // This is the one place that decides what "the running session" is: the app
 // must never derive it from its own date (a browser in another timezone, or
 // simply a session past midnight, would get it wrong). Same shape as GET
-// /file plus `startedMs`/`endedMs` — the server's epoch reading of the
-// zone-less timestamps, which is what makes the live runtime correct.
+// /file plus `startedMs`/`endedMs` and `pausedMs`/`pausedSinceMs` — the
+// server's epoch reading of the zone-less timestamps and of the `pauses`
+// intervals, which is what makes the live runtime correct (AK8: paused time
+// does not count).
 //
 // `?includeEnded=1` asks the OTHER question: the last STARTED session, ended
 // or not. That is the review's session (the harvest runs right after "Session
@@ -254,6 +258,22 @@ api.post("/:campaign/session/resume", async (c) =>
 // returned with its existing `ended`; 404 when there is no session file at
 // all.
 api.post("/:campaign/session/end", async (c) => c.json(await endSession(c.req.param("campaign"))));
+
+// POST /api/:campaign/session/pause -> FileResponse — really STOPS the clock
+// (issue #40 AK8): opens a `{ from: … }` interval in the session's `pauses`
+// frontmatter AND appends the `— Pause` log line in the same write. Idempotent
+// (already paused -> 200, file unchanged); 404 when no session is running.
+api.post("/:campaign/session/pause", async (c) =>
+  c.json(await pauseSession(c.req.param("campaign"))),
+);
+
+// POST /api/:campaign/session/continue -> FileResponse — closes the open pause
+// interval (`to`) and appends `— Weiter`. NOT named `resume`: that endpoint
+// re-opens an ENDED session. Idempotent (not paused -> 200, file unchanged);
+// 404 when no session is running.
+api.post("/:campaign/session/continue", async (c) =>
+  c.json(await continueSession(c.req.param("campaign"))),
+);
 
 // POST /api/:campaign/session/discard -> { path } — DELETES the active
 // session's file (issue #40 AK7), the undo of a mis-clicked "Session

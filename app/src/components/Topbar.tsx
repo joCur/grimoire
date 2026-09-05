@@ -31,7 +31,8 @@
 // time as H:MM:SS, ticking every second — the 15s tick of the minutes-only
 // readout looked frozen, which is the one thing a live clock must not do.
 // Off /live a click on it navigates back into the session; ON /live it opens
-// a small menu with the three session actions (Pause, beenden, verwerfen —
+// a small menu with the three session actions (Pause/Weiter — which really
+// stops and restarts the runtime, issue #40 AK8 —, beenden, verwerfen —
 // the last only while the session is still empty, issue #40 AK7). Below md,
 // where the topbar is not the chrome, the very same chip sits in its own slim
 // row (in link mode: there is no mobile live mode), so a session is never
@@ -71,7 +72,7 @@ import { Check, ChevronDown, Pause, Play, Search, Sparkles, Square, Trash2 } fro
 import { useEffect, useState } from "react";
 import { Link, matchPath, useLocation, useNavigate } from "react-router";
 
-import { appendLog, endSession, fetchCampaigns, fetchTree } from "@/api";
+import { continueSession, endSession, fetchCampaigns, fetchTree, pauseSession } from "@/api";
 import { CommandPalette } from "@/components/CommandPalette";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -90,7 +91,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { IconLogo } from "@/icons";
 import { campaignDescription, campaignLabel } from "@/lib/campaign";
-import { formatElapsed, sessionEndMs, sessionStartMs } from "@/lib/session";
+import { sessionElapsedLabel, sessionIsPaused } from "@/lib/session";
 import { navSection } from "@/lib/topbar-nav";
 import { useGenerateJob } from "@/lib/use-generate-job";
 import { cn } from "@/lib/utils";
@@ -279,11 +280,13 @@ export function Topbar() {
 /**
  * The running time of the session as `H:MM:SS`, re-rendered every second.
  *
- * The start is the SERVER's epoch reading of `started` (lib/session.ts): the
- * file format is zone-less, so a browser in another timezone than the server
- * used to show a runtime that was hours off (issue #40). Pauses are NOT
- * deducted — that stays a non-goal. An ENDED session freezes at its `ended`
- * (the chip is gone by then, but a resume race must not tick backwards).
+ * Every epoch reading comes from the SERVER (lib/session.ts): the file format
+ * is zone-less, so a browser in another timezone than the server used to show
+ * a runtime that was hours off (issue #40). PAUSED time is deducted and the
+ * clock STANDS while a pause runs (AK8) — the number on the chip is the time
+ * played, which is what makes „Pause" mean something. An ENDED session freezes
+ * at its `ended` (the chip is gone by then, but a resume race must not tick
+ * backwards).
  */
 function useElapsedLabel(session: FileResponse): string | undefined {
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -291,9 +294,7 @@ function useElapsedLabel(session: FileResponse): string | undefined {
     const timer = setInterval(() => setNowMs(Date.now()), 1_000);
     return () => clearInterval(timer);
   }, []);
-  const startedMs = sessionStartMs(session);
-  if (startedMs === undefined) return undefined;
-  return formatElapsed(startedMs, sessionEndMs(session) ?? nowMs);
+  return sessionElapsedLabel(session, nowMs);
 }
 
 /**
@@ -316,6 +317,12 @@ const SESSION_CHIP_TONE = {
   // A session is running: brass, but quiet — nothing to decide, just present.
   running:
     "border-[color-mix(in_srgb,var(--primary)_45%,transparent)] bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] text-primary hover:border-primary hover:bg-[color-mix(in_srgb,var(--primary)_16%,transparent)] hover:text-primary-hover",
+  // Paused (issue #40 AK8): the SAME chip, dimmed — the session has not gone
+  // anywhere, it just does not count right now. Muted instead of brass, so
+  // "läuft" and "pausiert" are told apart at a glance; the standing clock and
+  // the aria-label carry the state itself.
+  paused:
+    "border-input bg-transparent text-muted-foreground hover:border-border hover:text-body-secondary",
   // The query failed: dimmed and inert — it is neither live nor an offer.
   error: "border-input bg-transparent text-muted-foreground",
 } as const;
@@ -351,12 +358,19 @@ function sessionChipState({
   return "hidden";
 }
 
-/** The brass dot: it pulses only where motion is welcome (quality floor). */
-function SessionDot() {
+/**
+ * The brass dot: it pulses only where motion is welcome (quality floor). While
+ * the session is PAUSED it stops pulsing and loses the accent — a standing
+ * clock next to a pulsing dot would read as "still counting".
+ */
+function SessionDot({ paused = false }: { paused?: boolean }) {
   return (
     <span
       aria-hidden
-      className="size-[7px] flex-none rounded-full bg-primary motion-safe:animate-pulse"
+      className={cn(
+        "size-[7px] flex-none rounded-full",
+        paused ? "bg-muted-foreground" : "bg-primary motion-safe:animate-pulse",
+      )}
     />
   );
 }
@@ -422,22 +436,34 @@ function SessionRunningChip({
   mode: "link" | "menu";
 }) {
   const elapsed = useElapsedLabel(session);
-  const label = elapsed === undefined ? "Session läuft" : `Session läuft, ${elapsed}`;
+  // The state is part of the accessible name — the dimmed colour alone is not
+  // information (quality floor, AK8).
+  const paused = sessionIsPaused(session);
+  const state = paused ? "Session pausiert" : "Session läuft";
+  const label = elapsed === undefined ? state : `${state}, ${elapsed}`;
 
   if (mode === "link") {
     return (
       <Link
         to={`/${campaign}/live`}
         aria-label={`${label} — zur laufenden Session`}
-        data-session-chip="running"
-        className={cn(SESSION_CHIP_BASE, SESSION_CHIP_TONE.running)}
+        data-session-chip={paused ? "paused" : "running"}
+        className={cn(SESSION_CHIP_BASE, paused ? SESSION_CHIP_TONE.paused : SESSION_CHIP_TONE.running)}
       >
-        <SessionDot />
-        <span className="font-mono tabular-nums">{elapsed ?? "läuft"}</span>
+        <SessionDot paused={paused} />
+        <span className="font-mono tabular-nums">{elapsed ?? (paused ? "pausiert" : "läuft")}</span>
       </Link>
     );
   }
-  return <SessionMenuChip campaign={campaign} session={session} label={label} elapsed={elapsed} />;
+  return (
+    <SessionMenuChip
+      campaign={campaign}
+      session={session}
+      label={label}
+      elapsed={elapsed}
+      paused={paused}
+    />
+  );
 }
 
 /**
@@ -499,15 +525,22 @@ function SessionMenuChip({
   session,
   label,
   elapsed,
+  paused,
 }: {
   campaign: string;
   session: FileResponse;
   label: string;
   elapsed: string | undefined;
+  paused: boolean;
 }) {
   const navigate = useNavigate();
   const [discardOpen, setDiscardOpen] = useState(false);
-  const pause = useSessionWrite(campaign, () => appendLog(campaign, "— Pause"));
+  // ONE entry, two directions (issue #40 AK8): the pause endpoints open and
+  // close a `pauses` interval in the file — the log line comes with it, and
+  // the runtime really stops instead of only being annotated.
+  const pause = useSessionWrite(campaign, () =>
+    paused ? continueSession(campaign) : pauseSession(campaign),
+  );
   // "Session beenden" leads into the review, not back to the pool
   // (prototype: endSession → review) — the harvest is the next step.
   const end = useSessionWrite(
@@ -523,17 +556,26 @@ function SessionMenuChip({
         <DropdownMenuTrigger
           aria-label={`${label} — Session-Menü`}
           disabled={busy}
-          data-session-chip="running"
-          className={cn(SESSION_CHIP_BASE, SESSION_CHIP_TONE.running)}
+          data-session-chip={paused ? "paused" : "running"}
+          className={cn(
+            SESSION_CHIP_BASE,
+            paused ? SESSION_CHIP_TONE.paused : SESSION_CHIP_TONE.running,
+          )}
         >
-          <SessionDot />
-          <span className="font-mono tabular-nums">{elapsed ?? "läuft"}</span>
+          <SessionDot paused={paused} />
+          <span className="font-mono tabular-nums">
+            {elapsed ?? (paused ? "pausiert" : "läuft")}
+          </span>
           <ChevronDown aria-hidden size={13} className="flex-none opacity-70" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-[210px] text-[13px]">
           <DropdownMenuItem onSelect={() => pause.mutate()}>
-            <Pause aria-hidden size={14} className="flex-none text-muted-foreground" />
-            Pause
+            {paused ? (
+              <Play aria-hidden size={14} className="flex-none text-muted-foreground" />
+            ) : (
+              <Pause aria-hidden size={14} className="flex-none text-muted-foreground" />
+            )}
+            {paused ? "Weiter" : "Pause"}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => end.mutate()}>
             <Square aria-hidden size={14} className="flex-none text-muted-foreground" />

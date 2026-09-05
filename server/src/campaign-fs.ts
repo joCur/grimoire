@@ -18,6 +18,7 @@ import {
   npcSummary,
   parseMarkdown,
   sceneSummary,
+  sessionPauses,
   sessionSummary,
   type ParsedFile,
   type CampaignSummary,
@@ -273,13 +274,35 @@ export async function readParsedFile(campaign: string, rel: string): Promise<Fil
  * only the SERVER resolves them, because only the server knows the timezone
  * those wall-clock digits were written in.
  */
-function sessionTimes(parsed: ParsedFile): { startedMs?: number; endedMs?: number } {
+function sessionTimes(parsed: ParsedFile): {
+  startedMs?: number;
+  endedMs?: number;
+  pausedMs?: number;
+  pausedSinceMs?: number;
+} {
   if (parsed.kind !== "session") return {};
   const startedMs = localDateTimeToMs(parsed.frontmatter.started);
   const endedMs = localDateTimeToMs(parsed.frontmatter.ended);
+  // The pause arithmetic is the server's too (issue #40 AK8): same zone-less
+  // strings, same reason — the client only ever does epoch subtraction.
+  let pausedMs = 0;
+  let pausedSinceMs: number | undefined;
+  for (const pause of sessionPauses(parsed.frontmatter)) {
+    const from = localDateTimeToMs(pause.from);
+    if (from === undefined) continue;
+    if (pause.to === undefined) {
+      pausedSinceMs = from; // a later open interval wins (openPause: the last)
+      continue;
+    }
+    const to = localDateTimeToMs(pause.to);
+    if (to === undefined) continue;
+    pausedMs += Math.max(0, to - from); // a `to` before `from` counts as zero
+  }
   return {
     ...(startedMs === undefined ? {} : { startedMs }),
     ...(endedMs === undefined ? {} : { endedMs }),
+    ...(pausedMs === 0 ? {} : { pausedMs }),
+    ...(pausedSinceMs === undefined ? {} : { pausedSinceMs }),
   };
 }
 

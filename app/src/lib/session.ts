@@ -9,6 +9,8 @@
 // and a browser in another timezone than the server would get both the file
 // and the runtime wrong.
 
+import { isPaused, openPause, sessionPauses } from "@grimoire/shared/session-state";
+
 export interface LogEntry {
   /** `HH:MM` — undefined for degraded raw lines. */
   time?: string;
@@ -60,6 +62,9 @@ export function parseLogEntries(body: string): LogEntry[] {
  * reading of `started`/`ended` for a server that does not ship the epoch
  * values (see sessionStartMs). Undefined when the value does not parse.
  *
+ * SECONDS are read when present — the `pauses` timestamps carry them (issue
+ * #40 AK8), and dropping them made every pause up to a minute wrong.
+ *
  * A DATE-ONLY `yyyy-mm-dd` is read as 00:00: a session started at exactly
  * midnight is written as `…T00:00`, and the YAML normalization cannot tell
  * that apart from a date-only value (shared/src/parse.ts) — so requiring a
@@ -67,7 +72,7 @@ export function parseLogEntries(body: string): LogEntry[] {
  */
 export function parseLocalDateTime(value: unknown): number | undefined {
   if (typeof value !== "string") return undefined;
-  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{1,2}):(\d{2}))?/.exec(value.trim());
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(value.trim());
   if (m === null) return undefined;
   const ms = new Date(
     Number(m[1]),
@@ -75,6 +80,7 @@ export function parseLocalDateTime(value: unknown): number | undefined {
     Number(m[3]),
     Number(m[4] ?? 0),
     Number(m[5] ?? 0),
+    Number(m[6] ?? 0),
   ).getTime();
   return Number.isNaN(ms) ? undefined : ms;
 }
@@ -99,11 +105,72 @@ export function sessionEndMs(session: SessionTimes | undefined): number | undefi
   return session.endedMs ?? parseLocalDateTime(session.frontmatter?.ended);
 }
 
-/** The bit of a session FileResponse the two helpers above need. */
+/** The bit of a session FileResponse the helpers here need. */
 export interface SessionTimes {
   startedMs?: number;
   endedMs?: number;
+  /** Sum of the CLOSED pause intervals (server arithmetic, issue #40 AK8). */
+  pausedMs?: number;
+  /** Start of the OPEN pause interval — present exactly while paused. */
+  pausedSinceMs?: number;
   frontmatter?: Record<string, unknown>;
+}
+
+/**
+ * Total paused time in milliseconds — the server's sum, with a local fallback
+ * from the `pauses` frontmatter for a response that carries no `pausedMs`
+ * (same fallback rule as sessionStartMs; degraded entries are dropped by the
+ * shared `sessionPauses`).
+ */
+export function sessionPausedMs(session: SessionTimes | undefined): number {
+  if (session === undefined) return 0;
+  if (session.pausedMs !== undefined) return session.pausedMs;
+  let sum = 0;
+  for (const pause of sessionPauses(session.frontmatter)) {
+    if (pause.to === undefined) continue;
+    const from = parseLocalDateTime(pause.from);
+    const to = parseLocalDateTime(pause.to);
+    if (from === undefined || to === undefined) continue;
+    sum += Math.max(0, to - from);
+  }
+  return sum;
+}
+
+/** Start of the running pause, or undefined when the session is not paused. */
+export function sessionPausedSinceMs(session: SessionTimes | undefined): number | undefined {
+  if (session === undefined) return undefined;
+  if (session.pausedSinceMs !== undefined) return session.pausedSinceMs;
+  const open = openPause(session.frontmatter);
+  return open === undefined ? undefined : parseLocalDateTime(open.from);
+}
+
+/** True while the session is paused — the chip's dimmed state (AK8). */
+export function sessionIsPaused(session: SessionTimes | undefined): boolean {
+  return sessionPausedSinceMs(session) !== undefined || isPaused(session?.frontmatter);
+}
+
+/**
+ * The session's RUNTIME in milliseconds (issue #40 AK8):
+ *
+ *     (ended ?? paused-since ?? now) − started − paused
+ *
+ * Pauses are deducted, and while one runs the clock STANDS: the reference
+ * point is then the moment the pause began, so a re-render a minute later
+ * shows the same number. `ended` and an open pause together (only reachable by
+ * hand-editing) take the earlier of the two, so the value can never grow past
+ * the end. Undefined when the file says nothing usable about `started`.
+ */
+export function sessionElapsedMs(
+  session: SessionTimes | undefined,
+  nowMs: number,
+): number | undefined {
+  const startedMs = sessionStartMs(session);
+  if (startedMs === undefined) return undefined;
+  const stops = [sessionEndMs(session), sessionPausedSinceMs(session)].filter(
+    (v): v is number => v !== undefined,
+  );
+  const reference = stops.length === 0 ? nowMs : Math.min(...stops);
+  return Math.max(0, reference - startedMs - sessionPausedMs(session));
 }
 
 /**
@@ -115,6 +182,23 @@ export interface SessionTimes {
  * not tell a live clock from a stale render.
  */
 export function formatElapsed(startMs: number, nowMs: number): string {
-  const secs = Math.max(0, Math.floor((nowMs - startMs) / 1000));
+  return formatDuration(nowMs - startMs);
+}
+
+/** A duration in milliseconds as `H:MM:SS`, clamped at `0:00:00`. */
+export function formatDuration(ms: number): string {
+  const secs = Math.max(0, Math.floor(ms / 1000));
   return `${Math.floor(secs / 3600)}:${pad(Math.floor(secs / 60) % 60)}:${pad(secs % 60)}`;
+}
+
+/**
+ * The session's runtime as `H:MM:SS` — the label the chip shows. Undefined
+ * when there is no usable `started` (the chip then says "läuft").
+ */
+export function sessionElapsedLabel(
+  session: SessionTimes | undefined,
+  nowMs: number,
+): string | undefined {
+  const ms = sessionElapsedMs(session, nowMs);
+  return ms === undefined ? undefined : formatDuration(ms);
 }

@@ -1,7 +1,8 @@
 // Critical path 4: the session cycle; see CLAUDE.md.
 //
 // start → quick note → log + scenes_played → NPC/location drawer → back into
-// the session via the global live indicator → pause → end → review.
+// the session via the global live indicator → pause (the clock stops) →
+// weiter (it ticks again) → end → review.
 //
 // Plus its undo at the very start: "Session verwerfen" deletes the file of a
 // session that has nothing in it (issue #40 AK7) — its own test below.
@@ -22,9 +23,13 @@ const sessionMenuChip = (page: Page) =>
 /** The session chip in link mode (every other route, and the mobile row). */
 const sessionLinkChip = (page: Page) => page.getByRole("link", { name: /Session läuft/ }).first();
 
-/** Opens the session menu on /live and returns the requested entry. */
+/**
+ * Opens the session menu on /live and returns the requested entry. The chip
+ * carries the STATE in its accessible name, so a paused session is reached
+ * through "Session pausiert" (issue #40 AK8).
+ */
 async function sessionMenuItem(page: Page, name: string) {
-  await sessionMenuChip(page).click();
+  await page.getByRole("button", { name: /Session (läuft|pausiert)/ }).first().click();
   return page.getByRole("menuitem", { name });
 }
 
@@ -187,10 +192,44 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect(page).toHaveURL(/\/beispiel\/live$/);
   await expect(page.getByText(NOTE)).toBeVisible();
 
-  // --- pause (from the session menu) ---------------------------------------
+  // --- pause: the clock really STOPS (issue #40 AK8) ------------------------
   await (await sessionMenuItem(page, "Pause")).click();
   await expect(page.getByText("— Pause")).toBeVisible();
   await expect.poll(() => files.read(sessionPath)).toMatch(/- \d{2}:\d{2} — Pause/);
+  // The interval is in the file, still open (no `to` yet) …
+  await expect.poll(() => files.read(sessionPath)).toMatch(/pauses: \[\{from: [\d\-T:]+\}\]/);
+
+  // … the chip is the same chip, dimmed, and says so.
+  const pausedChip = page.getByRole("button", { name: /Session pausiert/ }).first();
+  await expect(pausedChip).toBeVisible();
+  await expect(pausedChip).toHaveAttribute("data-session-chip", "paused");
+
+  // And this is the point of the whole ticket: the time does NOT move while
+  // the session is paused. Two readings more than a second apart are equal
+  // (the running clock above was proven to tick within the same test).
+  const stopped = await pausedChip.textContent();
+  await page.waitForTimeout(2_500);
+  expect(await pausedChip.textContent()).toBe(stopped);
+
+  // --- weiter: the same menu entry, the other direction ---------------------
+  await (await sessionMenuItem(page, "Weiter")).click();
+  await expect(page.getByText("— Weiter")).toBeVisible();
+  // The interval is closed on disk (`to` written) …
+  await expect
+    .poll(() => files.read(sessionPath))
+    .toMatch(/pauses: \[\{from: [\d\-T:]+, to: [\d\-T:]+\}\]/);
+  // … the chip is brass again, and the clock ticks once more.
+  const runningAgain = sessionMenuChip(page);
+  await expect(runningAgain).toBeVisible();
+  const resumed = await runningAgain.textContent();
+  await expect
+    .poll(() => runningAgain.textContent(), { timeout: 5_000 })
+    .not.toBe(resumed);
+
+  // Both log lines are in the file — the readable chronicle of the evening.
+  const withPause = await files.read(sessionPath);
+  expect(withPause).toMatch(/- \d{2}:\d{2} — Pause/);
+  expect(withPause).toMatch(/- \d{2}:\d{2} — Weiter/);
 
   // --- end -> review -------------------------------------------------------
   await (await sessionMenuItem(page, "Session beenden")).click();

@@ -36,6 +36,18 @@ export function localDateTime(d: Date): string {
 }
 
 /**
+ * `yyyy-mm-ddTHH:MM:SS` in local time — the `pauses` timestamps (issue #40
+ * AK8). Same zone-less convention as localDateTime, one field wider: a pause
+ * is measured in seconds, and a minute-precise `from`/`to` would make the
+ * session runtime jump by up to a minute per pause. The shared parser keeps
+ * the seconds on the way back in (parse.ts), and localDateTimeToMs has always
+ * accepted them.
+ */
+export function localDateTimeSeconds(d: Date): string {
+  return `${localDateTime(d)}:${pad(d.getSeconds())}`;
+}
+
+/**
  * The inverse of localDateTime: a zone-less `started`/`ended` value as epoch
  * milliseconds, interpreted in the SERVER's timezone (issue #40).
  *

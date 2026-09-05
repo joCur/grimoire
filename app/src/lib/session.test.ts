@@ -4,7 +4,12 @@ import {
   formatElapsed,
   parseLocalDateTime,
   parseLogEntries,
+  sessionElapsedLabel,
+  sessionElapsedMs,
   sessionEndMs,
+  sessionIsPaused,
+  sessionPausedMs,
+  sessionPausedSinceMs,
   sessionStartMs,
 } from "./session";
 
@@ -131,5 +136,123 @@ describe("formatElapsed", () => {
     expect(formatElapsed(start, start + 1_000)).toBe("0:00:01");
     expect(formatElapsed(start, start + 59_000)).toBe("0:00:59");
     expect(formatElapsed(start, start + 61_500)).toBe("0:01:01");
+  });
+});
+
+// The runtime with pauses deducted (issue #40 AK8). Every epoch value the
+// server ships is used as-is; the frontmatter fallback is only for a response
+// without them.
+describe("sessionElapsedMs (pauses deducted)", () => {
+  const started = new Date(2026, 0, 15, 19, 0).getTime();
+  const now = started + 60 * 60_000; // 20:00
+
+  test("no pause: (now − started)", () => {
+    expect(sessionElapsedMs({ startedMs: started }, now)).toBe(60 * 60_000);
+    expect(sessionElapsedLabel({ startedMs: started }, now)).toBe("1:00:00");
+  });
+
+  test("ONE closed pause is subtracted", () => {
+    const session = { startedMs: started, pausedMs: 10 * 60_000 };
+    expect(sessionElapsedMs(session, now)).toBe(50 * 60_000);
+    expect(sessionElapsedLabel(session, now)).toBe("0:50:00");
+    expect(sessionIsPaused(session)).toBe(false);
+  });
+
+  test("SEVERAL pauses: the server's sum is subtracted once", () => {
+    const session = { startedMs: started, pausedMs: 10 * 60_000 + 5 * 60_000 + 30_000 };
+    expect(sessionElapsedLabel(session, now)).toBe("0:44:30");
+  });
+
+  test("while a pause runs the clock STANDS", () => {
+    const session = {
+      startedMs: started,
+      pausedMs: 10 * 60_000,
+      pausedSinceMs: started + 45 * 60_000, // paused at 19:45
+    };
+    expect(sessionIsPaused(session)).toBe(true);
+    // 45 min wall clock − 10 min earlier pause, and it stays there …
+    expect(sessionElapsedLabel(session, now)).toBe("0:35:00");
+    expect(sessionElapsedLabel(session, now + 10 * 60_000)).toBe("0:35:00");
+  });
+
+  test("an ENDED session freezes at `ended`, pauses still deducted", () => {
+    const session = {
+      startedMs: started,
+      endedMs: started + 3 * 60 * 60_000,
+      pausedMs: 20 * 60_000,
+    };
+    expect(sessionElapsedLabel(session, now + 10 * 60 * 60_000)).toBe("2:40:00");
+  });
+
+  test("`ended` plus an open pause (hand-edited): the EARLIER one wins", () => {
+    const session = {
+      startedMs: started,
+      endedMs: started + 3 * 60 * 60_000,
+      pausedSinceMs: started + 60 * 60_000,
+    };
+    expect(sessionElapsedLabel(session, now)).toBe("1:00:00");
+  });
+
+  test("no usable `started` -> no runtime at all", () => {
+    expect(sessionElapsedMs(undefined, now)).toBeUndefined();
+    expect(sessionElapsedMs({ frontmatter: {} }, now)).toBeUndefined();
+    expect(sessionElapsedLabel({}, now)).toBeUndefined();
+  });
+
+  test("never negative: a `started` in the future clamps at 0:00:00", () => {
+    expect(sessionElapsedLabel({ startedMs: now + 60_000 }, now)).toBe("0:00:00");
+    // …and so does a pause sum larger than the wall-clock span.
+    expect(sessionElapsedLabel({ startedMs: started, pausedMs: 99 * 60 * 60_000 }, now)).toBe(
+      "0:00:00",
+    );
+  });
+});
+
+describe("sessionPausedMs / sessionPausedSinceMs — the frontmatter fallback", () => {
+  test("sums the closed intervals of `pauses` when the server sent no epochs", () => {
+    const session = {
+      frontmatter: {
+        started: "2026-01-15T19:00",
+        pauses: [
+          { from: "2026-01-15T19:10:00", to: "2026-01-15T19:20:30" },
+          { from: "2026-01-15T19:40:00", to: "2026-01-15T19:45:00" },
+        ],
+      },
+    };
+    expect(sessionPausedMs(session)).toBe(10 * 60_000 + 30_000 + 5 * 60_000);
+    expect(sessionPausedSinceMs(session)).toBeUndefined();
+    expect(sessionElapsedLabel(session, new Date(2026, 0, 15, 20, 0).getTime())).toBe("0:44:30");
+  });
+
+  test("an open interval freezes the clock; degraded entries are ignored", () => {
+    const session = {
+      frontmatter: {
+        started: "2026-01-15T19:00",
+        pauses: ["kaputt", { from: "gestern" }, { from: "2026-01-15T19:30:00" }],
+      },
+    };
+    expect(sessionPausedMs(session)).toBe(0);
+    expect(sessionPausedSinceMs(session)).toBe(new Date(2026, 0, 15, 19, 30).getTime());
+    expect(sessionIsPaused(session)).toBe(true);
+    expect(sessionElapsedLabel(session, new Date(2026, 0, 15, 21, 0).getTime())).toBe("0:30:00");
+  });
+
+  test("the SERVER's values win over the frontmatter", () => {
+    const session = {
+      startedMs: new Date(2026, 0, 15, 19, 0).getTime(),
+      pausedMs: 60_000,
+      frontmatter: {
+        started: "2026-01-15T19:00",
+        pauses: [{ from: "2026-01-15T19:10", to: "2026-01-15T19:50" }],
+      },
+    };
+    expect(sessionPausedMs(session)).toBe(60_000);
+  });
+
+  test("no pauses at all -> 0 and not paused", () => {
+    expect(sessionPausedMs(undefined)).toBe(0);
+    expect(sessionPausedMs({ frontmatter: {} })).toBe(0);
+    expect(sessionIsPaused({ frontmatter: {} })).toBe(false);
+    expect(sessionPausedSinceMs({})).toBeUndefined();
   });
 });
