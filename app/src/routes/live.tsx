@@ -291,7 +291,7 @@ function LiveScene({ campaign, path }: { campaign: string; path: string }) {
 
   if (isPending) return <p className="text-muted-foreground">Lade Szene …</p>;
   if (isError || !data) {
-    return <p className="text-muted-foreground">Szene nicht ladbar — Datei prüfen.</p>;
+    return <p className="text-muted-foreground">Szene nicht ladbar — Pfad prüfen.</p>;
   }
   return <SceneArticle file={data} tree={tree.data} variant="live" />;
 }

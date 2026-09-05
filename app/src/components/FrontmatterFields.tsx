@@ -223,7 +223,7 @@ function ReferenceHint({ options, value }: { options: readonly FieldOption[]; va
   const name = referenceLabel(options, id);
   if (name !== undefined) return <p className="text-[11.5px] text-faint">{name}</p>;
   if (options.some((option) => option.value === id)) return null;
-  return <p className="text-[11.5px] text-faint">Noch keine Datei mit dieser id.</p>;
+  return <p className="text-[11.5px] text-faint">Noch kein Eintrag mit dieser id.</p>;
 }
 
 /** Chips for a string list (`tags`, `handouts`) or an id list (`npcs`). */

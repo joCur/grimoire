@@ -74,7 +74,7 @@ export function SceneRoute() {
   });
 
   if (isPending) {
-    return <p className="mx-auto max-w-[1060px] px-7 pt-10 text-muted-foreground">Lade Datei …</p>;
+    return <p className="mx-auto max-w-[1060px] px-7 pt-10 text-muted-foreground">Lade Eintrag …</p>;
   }
   // The error screen only when there is NOTHING to show. A failing BACKGROUND
   // refetch (server restarted, network blip) also flips the query to 'error'
@@ -83,7 +83,7 @@ export function SceneRoute() {
   if (data === undefined) {
     return (
       <p className="mx-auto max-w-[1060px] px-7 pt-10 text-muted-foreground">
-        Datei nicht ladbar — Pfad prüfen oder Server starten.
+        Eintrag nicht ladbar — Pfad prüfen oder Server starten.
       </p>
     );
   }

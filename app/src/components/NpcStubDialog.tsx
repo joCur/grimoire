@@ -64,7 +64,7 @@ export function NpcStubDialog({
           className="mt-4 flex flex-col gap-3.5"
         >
           <label className="flex flex-col gap-1.5">
-            <span className="text-[12px] text-body-secondary">id (wird der Dateiname)</span>
+            <span className="text-[12px] text-body-secondary">id (steht im Pfad)</span>
             <input
               // Radix focuses the first focusable element on open — this input.
               value={id}

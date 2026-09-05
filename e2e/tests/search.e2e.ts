@@ -74,7 +74,7 @@ test("content the APP just wrote is findable right away (issue #57 AK5)", async 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await page.getByRole("button", { name: "Bearbeiten" }).click();
   await page.getByRole("button", { name: "Roh", exact: true }).click();
-  const textarea = page.getByRole("textbox", { name: "Markdown-Text der Datei" });
+  const textarea = page.getByRole("textbox", { name: "Markdown-Text von" });
   const body = await textarea.inputValue();
   await textarea.fill(`${body}\nAm Steg liegt eine ${WORD} im Tang.\n`);
   await page.getByRole("button", { name: "Speichern" }).click();

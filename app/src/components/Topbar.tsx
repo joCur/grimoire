@@ -680,7 +680,7 @@ function DiscardSessionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogTitle>Leere Session verwerfen?</DialogTitle>
-        <DialogDescription>Die Datei wird gelöscht.</DialogDescription>
+        <DialogDescription>Die Session wird gelöscht.</DialogDescription>
         {discard.isError && (
           <p className="mt-3 text-[12.5px] text-destructive">
             Session nicht verworfen — Server prüfen und neu laden.
@@ -830,7 +830,7 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
         )}
         <DropdownMenuSeparator />
         <p className="px-2.5 pt-[7px] pb-[5px] text-[11.5px] text-faint">
-          Kampagnen liegen als Ordner unter campaigns/
+          Kampagnen liegen in der Datenbank — Import über „grimoire seed“
         </p>
       </DropdownMenuContent>
     </DropdownMenu>

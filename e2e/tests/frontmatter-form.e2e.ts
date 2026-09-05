@@ -138,7 +138,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   // An id without a file stays typeable — the format degrades (README) — and
   // the hint says so instead of letting a typo pass unnoticed.
   await location.fill("bucht");
-  await expect(referenceHint(dialog, "Noch keine Datei mit dieser id.")).toBeVisible();
+  await expect(referenceHint(dialog, "Noch kein Eintrag mit dieser id.")).toBeVisible();
   await expect(referenceHint(dialog, "Der Leuchtturm von Salzhafen")).toHaveCount(0);
 
   await dialog.getByLabel("Status").selectOption("draft");

@@ -167,7 +167,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect(drawer).toBeVisible();
   await expect(drawer.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
   // The full file, not the card excerpt — and the way out into the full view.
-  await expect(drawer.getByRole("link", { name: "Datei öffnen" })).toHaveAttribute(
+  await expect(drawer.getByRole("link", { name: "Eintrag öffnen" })).toHaveAttribute(
     "href",
     "/beispiel/file/npcs/jorna.md",
   );
@@ -332,7 +332,7 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   await (await sessionMenuItem(page, "Session verwerfen")).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Leere Session verwerfen?");
-  await expect(dialog).toContainText("Die Datei wird gelöscht.");
+  await expect(dialog).toContainText("Die Session wird gelöscht.");
 
   // Abbrechen changes nothing at all.
   await dialog.getByRole("button", { name: "Abbrechen" }).click();

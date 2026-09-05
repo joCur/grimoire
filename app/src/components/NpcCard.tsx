@@ -196,7 +196,7 @@ export function MissingNpcCard({
     >
       <p className="font-mono text-[12.5px] text-soft">{id}</p>
       <p className="mt-1 mb-2.5 text-[12.5px] leading-[1.5] text-muted-foreground">
-        NPC-Datei fehlt
+        NPC-Eintrag fehlt
       </p>
       <Button
         type="button"

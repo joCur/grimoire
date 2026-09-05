@@ -68,7 +68,7 @@ describe("reference fields", () => {
   test("an id without a file is kept and says so — it is not an error", () => {
     const html = render(sceneField("location"), { kind: "text", text: "nordbucht" });
     expect(html).toContain('value="nordbucht"');
-    expect(html).toContain("Noch keine Datei mit dieser id.");
+    expect(html).toContain("Noch kein Eintrag mit dieser id.");
   });
 
   test("npcs are chips: each id removable, the add-input suggests the known ones", () => {

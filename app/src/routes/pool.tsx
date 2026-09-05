@@ -88,7 +88,7 @@ export function PoolRoute() {
             </div>
             {data.chapters.length === 0 && (
               <p className="text-[13.5px] text-muted-foreground">
-                Noch keine Kapitel — Kapitel-Ordner mit _chapter.md anlegen.
+                Noch keine Kapitel — über „Szenen generieren“ eines anlegen.
               </p>
             )}
             {data.chapters.map((chapter, index) => (

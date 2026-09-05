@@ -35,7 +35,7 @@ const SCENE_URL = `/beispiel/file/${SCENE}`;
 const NPC = "npcs/jorna.md";
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 /** aria-label of the raw-markdown textarea (FileBodyEditor). */
-const TEXTAREA = "Markdown-Text der Datei";
+const TEXTAREA = "Markdown-Text von";
 
 /**
  * The frontmatter block including both fences and the newline after the
@@ -305,9 +305,9 @@ test("a failing background refetch leaves the open editor standing", async ({ pa
 
   // The cached file is still there, so the PAGE must not swap itself for its
   // error line and take the unsaved text with it. (The status pill next to the
-  // editor says „Datei nicht ladbar" for its own failed read — that is its job
+  // editor says „Eintrag nicht ladbar" for its own failed read — that is its job
   // and stays, which is why this looks for the route's full sentence.)
-  await expect(page.getByText("Datei nicht ladbar — Pfad prüfen")).toHaveCount(0);
+  await expect(page.getByText("Eintrag nicht ladbar — Pfad prüfen")).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await expect(textarea).toHaveValue(draft);
 });

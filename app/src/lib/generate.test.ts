@@ -92,7 +92,7 @@ describe("chapterIdError", () => {
   });
 
   test("rejects an empty id", () => {
-    expect(chapterIdError("")).toBe("Ordnername fehlt.");
+    expect(chapterIdError("")).toBe("Kapitel-id fehlt.");
   });
 
   test("rejects path separators", () => {

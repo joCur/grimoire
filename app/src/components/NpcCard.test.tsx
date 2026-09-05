@@ -18,7 +18,7 @@ describe("MissingNpcCard", () => {
     const html = render();
     expect(html).toContain("alte-fischerin");
     expect(html).toContain("font-mono");
-    expect(html).toContain("NPC-Datei fehlt");
+    expect(html).toContain("NPC-Eintrag fehlt");
     expect(html).toContain("Stub anlegen");
   });
 

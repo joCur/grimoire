@@ -26,7 +26,7 @@ export function HomeRoute() {
     <section className="mx-auto max-w-[560px] px-7 pt-16 pb-20 text-[14.5px] text-muted-foreground">
       {isPending && <p>Kampagne wird geöffnet …</p>}
       {isError && <p>Server nicht erreichbar — Grimoire-Server auf Port 3000 starten.</p>}
-      {data !== undefined && <p>Keine Kampagne gefunden — Ordner unter campaigns/ anlegen</p>}
+      {data !== undefined && <p>Keine Kampagne gefunden — Kampagne mit „grimoire seed“ importieren</p>}
     </section>
   );
 }

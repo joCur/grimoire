@@ -43,7 +43,7 @@ test("rename with usage preview: count first, then the cascade", async ({ page, 
   await expect(summary).toContainText("1 Beziehung");
 
   // …and which documents that means: those two plus her own, which moves.
-  await expect(dialog).toContainText("betrifft 3 Dateien");
+  await expect(dialog).toContainText("betrifft 3 Einträge");
   await expect(dialog).toContainText(SCENE);
   await expect(dialog).toContainText("npcs/fenn.md");
 
