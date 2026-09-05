@@ -58,6 +58,33 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
   await expect(page.getByLabel("Inbox")).toBeVisible();
 });
 
+// Issue #40 AK2: a running session must be visible on EVERY route, mobile
+// included — where the topbar is not the chrome, the indicator is its own row.
+test("mobile: a running session shows its own live row with the way back", async ({
+  page,
+  files,
+}) => {
+  // A session that started YESTERDAY and was never ended — the case the
+  // client could not see before (it derived today's file name itself).
+  const yesterday = new Date(Date.now() - 24 * 3600_000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const id = `${yesterday.getFullYear()}-${pad(yesterday.getMonth() + 1)}-${pad(yesterday.getDate())}`;
+  await files.write(
+    `sessions/${id}.md`,
+    `---\nid: ${id}\nstarted: ${id}T22:30\nscenes_played: []\n---\n\n## Log\n`,
+  );
+
+  await page.goto("/beispiel");
+  const row = page.getByRole("link", { name: /Zur Session/ });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText("Live");
+  // The runtime is computed from the SERVER's reading of `started`, so it is
+  // a real elapsed time (well over an hour by now), not 0:00.
+  await expect(row).toContainText(/\d+:\d{2}/);
+  await row.click();
+  await expect(page).toHaveURL(/\/beispiel\/live$/);
+});
+
 test("mobile: the reference scene's reading view stays readable", async ({ page }) => {
   await page.goto("/beispiel/file/01-salzhafen/hafen/ankunft-leuchtturm.md");
 
