@@ -27,6 +27,7 @@ import {
   markInboxLineDone,
   markLogLineSeen,
   patchFrontmatter,
+  resumeSession,
   startSession,
   writeFileBody,
 } from "../campaign-write";
@@ -88,6 +89,11 @@ async function jsonBody(c: Context, allowed: string[]): Promise<Record<string, u
   return body;
 }
 
+/** Query flag: present and not `0`/`false` counts as on (`?includeEnded=1`). */
+function isTruthyFlag(v: string | undefined): boolean {
+  return v !== undefined && v !== "0" && v.toLowerCase() !== "false";
+}
+
 /**
  * Normalize free text destined for a single markdown list line: trim and
  * collapse any internal newline (plus surrounding spaces) to one space.
@@ -125,7 +131,16 @@ api.get("/:campaign/file", async (c) => {
 // simply a session past midnight, would get it wrong). Same shape as GET
 // /file plus `startedMs`/`endedMs` — the server's epoch reading of the
 // zone-less timestamps, which is what makes the live runtime correct.
-api.get("/:campaign/session", async (c) => c.json(await readActiveSession(c.req.param("campaign"))));
+//
+// `?includeEnded=1` asks the OTHER question: the last STARTED session, ended
+// or not. That is the review's session (the harvest runs right after "Session
+// beenden"), and it must come from the server for the same reason: a session
+// that ran past midnight was ended in YESTERDAY's file, so the client's own
+// date would harvest an empty — or wrong — file. 404 when the campaign has no
+// session file at all.
+api.get("/:campaign/session", async (c) =>
+  c.json(await readActiveSession(c.req.param("campaign"), isTruthyFlag(c.req.query("includeEnded")))),
+);
 
 // GET /api/:campaign/search?q=... -> { results: SearchResult[] } (max 20)
 // Fuzzy in-memory search (Fuse.js) over scenes/npcs/locations/chapters and
@@ -210,20 +225,39 @@ api.post("/:campaign/campaign-meta", async (c) => {
   return c.json(await createCampaignMeta(c.req.param("campaign"), name, description));
 });
 
-// POST /api/:campaign/session/start -> FileResponse (idempotent per day)
+// POST /api/:campaign/session/start -> FileResponse
+// Creates sessions/<today>.md. Idempotent while TODAY's session is the running
+// one (pressing the button twice re-enters it). Two 409s instead of a silent
+// surprise (issue #40 review):
+//   { code: "session_running", path } — an OLDER session is still open (past
+//     midnight, or never ended). The app offers to end that one; nothing
+//     starts a second parallel session.
+//   { code: "session_ended", path } — today's session is already ended. The
+//     app offers POST /session/resume; before, the ended file came back with
+//     200 and the Start button did nothing until midnight.
 api.post("/:campaign/session/start", async (c) =>
   c.json(await startSession(c.req.param("campaign"))),
 );
 
+// POST /api/:campaign/session/resume -> FileResponse — re-opens the last
+// started session by REMOVING `ended` (the explicit undo of an accidental
+// "Session beenden", issue #40 review). 404 without any session file, 409
+// { path } when that session is still running.
+api.post("/:campaign/session/resume", async (c) =>
+  c.json(await resumeSession(c.req.param("campaign"))),
+);
+
 // POST /api/:campaign/session/end -> FileResponse — ends the ACTIVE session
 // (issue #40: that may be yesterday's file when the session ran past
-// midnight). Idempotent — the first `ended` wins; 404 when there is no
-// session file to end at all.
+// midnight). Idempotent — with nothing running the LAST STARTED session is
+// returned with its existing `ended`; 404 when there is no session file at
+// all.
 api.post("/:campaign/session/end", async (c) => c.json(await endSession(c.req.param("campaign"))));
 
 // POST /api/:campaign/log { text, sceneId? } -> FileResponse
 // Appends `- HH:MM (sceneId) text` to the ACTIVE session (issue #40 — not
-// stubbornly to today's file); 404 when no session is running.
+// stubbornly to today's file); 404 when no session is running — including
+// right after "Session beenden", where a note used to land in the closed log.
 api.post("/:campaign/log", async (c) => {
   const body = await jsonBody(c, ["text", "sceneId"]);
   const text = normalizeLineText(body.text);

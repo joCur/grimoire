@@ -43,6 +43,15 @@ async function putFile(body: unknown): Promise<Response> {
   });
 }
 
+async function exists(rel: string): Promise<boolean> {
+  try {
+    await stat(absOf(rel));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function postJson(url: string, body?: unknown): Promise<Response> {
   return app.request(url, {
     method: "POST",
@@ -265,6 +274,22 @@ describe("POST /api/:campaign/session/start", () => {
     const raw = await readFile(absOf("sessions/2026-08-19.md"), "utf8");
     expect(raw).toContain("started: 2026-08-19T21:05\n");
   });
+
+  test("409 session_running when an OLDER session is still open", async () => {
+    // 2026-08-19 (created above) is still running; a start on the NEXT day
+    // must not open a second session silently — the app offers to end the
+    // old one (issue #40 review, finding 3).
+    setNow(() => new Date(2026, 7, 20, 20, 0));
+    const res = await postJson("/api/beispiel/session/start");
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: expect.any(String),
+      code: "session_running",
+      path: "sessions/2026-08-19.md",
+    });
+    // …and nothing was created for the new day.
+    expect(await exists("sessions/2026-08-20.md")).toBe(false);
+  });
 });
 
 describe("POST /api/:campaign/log", () => {
@@ -344,7 +369,15 @@ describe("scenes_played maintenance (POST log with sceneId)", () => {
 
   test("first log with a sceneId adds it to scenes_played", async () => {
     setNow(() => new Date(2026, 7, 23, 19, 0));
-    expect((await postJson("/api/beispiel/session/start")).status).toBe(200);
+    // Written directly, not via session/start: 2026-08-19 is still open in
+    // this file, and since the review of issue #40 `start` refuses to open a
+    // second session next to a running one (409 session_running — its own
+    // test below). A newer OPEN file is the active session all the same.
+    await writeFile(
+      absOf(REL),
+      "---\nid: 2026-08-23\nstarted: 2026-08-23T19:00\nscenes_played: []\n---\n\n## Log\n",
+      "utf8",
+    );
     const res = await postJson("/api/beispiel/log", {
       text: "Ankunft",
       sceneId: "lighthouse-arrival",
@@ -450,16 +483,34 @@ describe("POST /api/:campaign/session/end", () => {
     expect(file.frontmatter.ended).toBe("2026-08-19T23:45");
   });
 
-  // Every session in the fixture is ended now, so nothing is active: the
-  // write endpoints fall back to today's file, which does not exist.
-  test("404 when no session is active and today has no file", async () => {
+  // Every session in the fixture is ended now, so nothing is active.
+  test("end stays idempotent across days, log is refused (issue #40 review)", async () => {
     setNow(() => new Date(2026, 7, 22, 22, 0));
+    // `end` falls back to the LAST STARTED session — ended or not — and keeps
+    // its `ended`. That is what makes "Session beenden" safe to press twice,
+    // also after midnight.
     const res = await postJson("/api/beispiel/session/end");
-    expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ error: expect.any(String) });
+    expect(res.status).toBe(200);
+    const file = (await res.json()) as FileResponse;
+    expect(file.path).toBe("sessions/2026-08-19.md");
+    expect(file.frontmatter.ended).toBe("2026-08-19T23:45");
+    // A log line, however, is STRICTLY the running session's business: a note
+    // typed after the end used to land in the closed log with a 200.
     const log = await postJson("/api/beispiel/log", { text: "verloren" });
     expect(log.status).toBe(404);
     expect(await log.json()).toEqual({ error: expect.any(String) });
+  });
+
+  test("404 for a campaign that has no session file at all", async () => {
+    const fresh = "sessionlos";
+    await mkdir(path.join(tmpRoot, fresh), { recursive: true });
+    try {
+      expect((await postJson(`/api/${fresh}/session/end`)).status).toBe(404);
+      expect((await postJson(`/api/${fresh}/session/resume`)).status).toBe(404);
+      expect((await postJson(`/api/${fresh}/log`, { text: "x" })).status).toBe(404);
+    } finally {
+      await rm(path.join(tmpRoot, fresh), { recursive: true, force: true });
+    }
   });
 });
 
