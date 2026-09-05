@@ -17,6 +17,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { CampaignTree, FileResponse } from "@grimoire/shared";
 import { app } from "../src/server";
+import type { UsageReport } from "../src/store/usage";
 import { dropStore, seedStore } from "./support/store";
 
 beforeEach(async () => {
@@ -34,6 +35,8 @@ const SESSION = "sessions/2026-01-15.md";
 interface RenameResponse {
   renamed: { from: string; to: string };
   changed: string[];
+  /** The reference counts behind `changed` (issue #60). */
+  usage: UsageReport;
   dryRun?: boolean;
 }
 
@@ -49,6 +52,13 @@ async function renameOk(body: unknown): Promise<RenameResponse> {
   const res = await rename(body);
   expect(res.status).toBe(200);
   return (await res.json()) as RenameResponse;
+}
+
+/** GET /usage — the reference counts of one entity (issue #60). */
+async function usageOf(kind: string, id: string): Promise<UsageReport> {
+  const res = await app.request(`/api/beispiel/usage?kind=${kind}&id=${encodeURIComponent(id)}`);
+  expect(res.status).toBe(200);
+  return (await res.json()) as UsageReport;
 }
 
 /** GET /file — the way the app sees an entity. */
@@ -357,6 +367,39 @@ describe("POST /api/:campaign/rename — dry run", () => {
     expect(done.renamed).toEqual(plan.renamed);
     expect(done.dryRun).toBeUndefined();
   });
+
+  // Issue #60: the preview's numbers ARE the cascade's numbers — one set of
+  // queries answers both (store/usage.ts). The proof is the round trip: what
+  // the dry run counted for the old id is what the new id carries afterwards.
+  test.each(["npc", "location", "scene", "chapter"] as const)(
+    "dryRun usage counts match the rows the real rename moved (%s)",
+    async (kind) => {
+      const oldId = {
+        npc: "jorna",
+        location: "leuchtturm",
+        scene: "lighthouse-arrival",
+        chapter: "01-salzhafen",
+      }[kind];
+      const newId = "neu-getauft";
+
+      const before = await usageOf(kind, oldId);
+      const plan = await renameOk({ kind, oldId, newId, dryRun: true });
+      // The plan reports the usage of the id it is about to move …
+      expect(plan.usage).toEqual(before);
+      expect(plan.usage.total).toBeGreaterThan(0);
+
+      await renameOk({ kind, oldId, newId });
+
+      // … and the rows now hang off the NEW id, group for group.
+      const after = await usageOf(kind, newId);
+      expect(after.total).toBe(plan.usage.total);
+      expect(after.groups.map((g) => [g.ref, g.count])).toEqual(
+        plan.usage.groups.map((g) => [g.ref, g.count]),
+      );
+      // Nothing is left pointing at the old id.
+      expect((await app.request(`/api/beispiel/usage?kind=${kind}&id=${oldId}`)).status).toBe(404);
+    },
+  );
 });
 
 describe("POST /api/:campaign/rename — validation", () => {

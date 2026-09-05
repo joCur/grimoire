@@ -6,8 +6,11 @@
 // renaming files nobody reads any more. So the endpoint moves with the
 // cutover, at exactly the size the cutover needs: the id update plus the
 // reference cascade, with the response shape (`{ renamed, changed }`) and the
-// error semantics (400 / 404 / 409) unchanged. What Scheibe 3 still owns is
-// the `GET /usage` endpoint and the rename preview built on usage COUNTs.
+// error semantics (400 / 404 / 409) unchanged. Scheibe 3 (#60) then added
+// what was left: the reference COUNTS. They come from store/usage.ts, which
+// is also what `GET /usage` answers with — so the plan's `changed` list, the
+// dialog's German summary and the endpoint are one set of queries, and the
+// preview cannot count something the cascade does not rewrite.
 //
 // What the migration bought here is visible in the code below: the id IS the
 // primary key, so the hard references cascade in the database
@@ -33,20 +36,39 @@ import {
 import { dropEntity } from "./fts";
 import { getDb } from "./handle";
 import { requireCampaign } from "./read";
+import {
+  entityExists,
+  entityTable,
+  isUsageKind,
+  pathOf,
+  usageReport,
+  USAGE_KINDS,
+  type UsageKind,
+  type UsageReport,
+} from "./usage";
 import { reindexEntity } from "./write";
 import { chapterPath, locationPath, npcPath, scenePath } from "./paths";
 
-/** The entity kinds that have a rename cascade (sessions have no id). */
-export const RENAME_KINDS = ["npc", "location", "scene", "chapter"] as const;
-export type RenameKind = (typeof RENAME_KINDS)[number];
+/**
+ * The entity kinds that have a rename cascade (sessions have no id) — the
+ * same set that can be counted, so the two features cannot drift (usage.ts).
+ */
+export const RENAME_KINDS = USAGE_KINDS;
+export type RenameKind = UsageKind;
 
 export function isRenameKind(value: unknown): value is RenameKind {
-  return typeof value === "string" && (RENAME_KINDS as readonly string[]).includes(value);
+  return isUsageKind(value);
 }
 
 export interface RenameResult {
   renamed: { from: string; to: string };
   changed: string[];
+  /**
+   * The reference count behind `changed` (issue #60), from the very same
+   * queries `GET /usage` answers with — the dialog's German summary reads off
+   * this, so the preview counts what the cascade rewrites.
+   */
+  usage: UsageReport;
   dryRun?: true;
 }
 
@@ -74,120 +96,30 @@ function assertNewId(newId: string): void {
   if (RESERVED.has(newId)) throw new ApiError(400, `newId is a reserved name: ${newId}`);
 }
 
-/** Path of one entity, for the `renamed`/`changed` fields. */
-function pathOf(db: GrimoireDb, campaign: string, kind: RenameKind, id: string): string {
-  if (kind === "npc") return npcPath(id);
-  if (kind === "location") return locationPath(id);
-  if (kind === "chapter") return chapterPath(id);
-  const row = db
-    .select({ chapterId: scenes.chapterId, groupSlug: scenes.groupSlug })
-    .from(scenes)
-    .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, id)))
-    .all()[0];
-  return scenePath(row?.chapterId ?? "", row?.groupSlug ?? "", id);
-}
-
-function exists(db: GrimoireDb, campaign: string, kind: RenameKind, id: string): boolean {
-  const table = kind === "npc" ? npcs : kind === "location" ? locations : kind === "chapter" ? chapters : scenes;
-  return (
-    db
-      .select({ id: table.id })
-      .from(table)
-      .where(and(eq(table.campaignId, campaign), eq(table.id, id)))
-      .all().length > 0
-  );
-}
-
 /**
  * The reference sites of one rename, as the paths whose CONTENT changes —
- * the same list the file cascade reported, derived from the tables that hold
- * the references now.
+ * derived from the USAGE report, so the preview's numbers and the cascade's
+ * file list come from one set of queries (issue #60).
+ *
+ * Two corrections on top of the raw sites:
+ *
+ *   * a chapter rename MOVES its scenes (the chapter id is part of a scene's
+ *     path), so those sites are reported at their new address,
+ *   * the entity's OWN document is not a reference site — it is the thing
+ *     being renamed, and the caller adds its new path.
  */
-function referenceSites(
-  db: GrimoireDb,
-  campaign: string,
-  kind: RenameKind,
-  oldId: string,
-  newId: string,
-): string[] {
+function referenceSites(usage: UsageReport, oldId: string, newId: string): string[] {
   const changed = new Set<string>();
-  const scenePathOf = (id: string): string => pathOf(db, campaign, "scene", id);
-
-  if (kind === "npc") {
-    for (const row of db
-      .select({ sceneId: sceneNpcs.sceneId })
-      .from(sceneNpcs)
-      .where(and(eq(sceneNpcs.campaignId, campaign), eq(sceneNpcs.npcId, oldId)))
-      .all()) {
-      changed.add(scenePathOf(row.sceneId));
-    }
-    for (const row of db
-      .select({ npcId: npcRelations.npcId })
-      .from(npcRelations)
-      .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.otherNpcId, oldId)))
-      .all()) {
-      changed.add(npcPath(row.npcId));
+  for (const group of usage.groups) {
+    for (const site of group.sites) {
+      if (site.path === usage.path) continue;
+      changed.add(
+        usage.kind === "chapter" && site.path.startsWith(`${oldId}/`)
+          ? `${newId}/${site.path.slice(oldId.length + 1)}`
+          : site.path,
+      );
     }
   }
-
-  if (kind === "location") {
-    for (const row of db
-      .select({ id: scenes.id })
-      .from(scenes)
-      .where(and(eq(scenes.campaignId, campaign), eq(scenes.location, oldId)))
-      .all()) {
-      changed.add(scenePathOf(row.id));
-    }
-  }
-
-  if (kind === "scene") {
-    for (const row of db
-      .select({ sessionId: sessionScenesPlayed.sessionId })
-      .from(sessionScenesPlayed)
-      .where(
-        and(
-          eq(sessionScenesPlayed.campaignId, campaign),
-          eq(sessionScenesPlayed.sceneId, oldId),
-        ),
-      )
-      .all()) {
-      changed.add(`sessions/${row.sessionId}.md`);
-    }
-    for (const row of db
-      .select({ sessionId: logEntries.sessionId })
-      .from(logEntries)
-      .where(and(eq(logEntries.campaignId, campaign), eq(logEntries.sceneId, oldId)))
-      .all()) {
-      changed.add(`sessions/${row.sessionId}.md`);
-    }
-  }
-
-  if (kind === "chapter") {
-    // Every scene of the chapter MOVES — its path carries the chapter id —
-    // and npcs/locations that name the chapter change their reference.
-    for (const row of db
-      .select({ id: scenes.id, groupSlug: scenes.groupSlug })
-      .from(scenes)
-      .where(and(eq(scenes.campaignId, campaign), eq(scenes.chapterId, oldId)))
-      .all()) {
-      changed.add(scenePath(newId, row.groupSlug, row.id));
-    }
-    for (const row of db
-      .select({ id: npcs.id })
-      .from(npcs)
-      .where(and(eq(npcs.campaignId, campaign), eq(npcs.chapterId, oldId)))
-      .all()) {
-      changed.add(npcPath(row.id));
-    }
-    for (const row of db
-      .select({ id: locations.id })
-      .from(locations)
-      .where(and(eq(locations.campaignId, campaign), eq(locations.chapterId, oldId)))
-      .all()) {
-      changed.add(locationPath(row.id));
-    }
-  }
-
   return [...changed];
 }
 
@@ -364,17 +296,20 @@ export async function renameEntity(
   if (oldId === newId) throw new ApiError(400, "newId equals oldId — nothing to rename");
 
   const db = await getDb();
-  if (!exists(db, campaign, kind, oldId)) {
+  if (!entityExists(db, campaign, kind, oldId)) {
     throw new ApiError(404, `${kind} "${oldId}" not found`);
   }
-  if (exists(db, campaign, kind, newId)) {
+  if (entityExists(db, campaign, kind, newId)) {
     throw new ApiError(409, "target already exists — not overwriting", {
       path: pathOf(db, campaign, kind, newId),
     });
   }
 
   const from = pathOf(db, campaign, kind, oldId);
-  const changed = new Set(referenceSites(db, campaign, kind, oldId, newId));
+  // ONE reference pass for both answers: the counts the dialog shows and the
+  // paths the cascade touches (issue #60).
+  const usage = usageReport(db, campaign, kind, oldId);
+  const changed = new Set(referenceSites(usage, oldId, newId));
   const to =
     kind === "chapter"
       ? chapterPath(newId)
@@ -395,13 +330,12 @@ export async function renameEntity(
   changed.add(to);
 
   if (dryRun) {
-    return { renamed: { from, to }, changed: [...changed].sort(), dryRun: true };
+    return { renamed: { from, to }, changed: [...changed].sort(), usage, dryRun: true };
   }
 
   db.transaction((handle) => {
     const tx = handle as unknown as GrimoireDb;
-    const table =
-      kind === "npc" ? npcs : kind === "location" ? locations : kind === "chapter" ? chapters : scenes;
+    const table = entityTable(kind);
     tx.update(table)
       .set({ id: newId })
       .where(and(eq(table.campaignId, campaign), eq(table.id, oldId)))
@@ -424,5 +358,5 @@ export async function renameEntity(
       .run();
   });
 
-  return { renamed: { from, to }, changed: [...changed].sort() };
+  return { renamed: { from, to }, changed: [...changed].sort(), usage };
 }

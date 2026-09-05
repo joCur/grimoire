@@ -9,7 +9,7 @@
 
 import type { EntityKind } from "@grimoire/shared/types";
 
-import { ApiError, type RenameKind } from "@/api";
+import { ApiError, type RenameKind, type UsageGroup, type UsageRef, type UsageReport } from "@/api";
 import { fmString } from "@/lib/frontmatter";
 import { isNpcSlug } from "@/lib/review";
 
@@ -94,6 +94,44 @@ export function canSubmitNewId(newId: string, oldId: string): boolean {
 /** „betrifft 1 Datei" / „betrifft 3 Dateien" — the preview's headline. */
 export function changedCountLabel(count: number): string {
   return `betrifft ${count} ${count === 1 ? "Datei" : "Dateien"}`;
+}
+
+// --- usage summary (issue #60) ----------------------------------------------
+
+/**
+ * German name of each reference kind, singular and plural. The wire keeps
+ * stable English keys (`UsageRef`); the DM reads „3 Szenen, 2 Beziehungen,
+ * 4 Log-Zeilen".
+ */
+const USAGE_REF_LABEL: Record<UsageRef, [string, string]> = {
+  sceneNpcs: ["Szene", "Szenen"],
+  npcRelations: ["Beziehung", "Beziehungen"],
+  sceneLocation: ["Szene", "Szenen"],
+  scenesPlayed: ["Session-Eintrag", "Session-Einträge"],
+  logEntries: ["Log-Zeile", "Log-Zeilen"],
+  chapterScenes: ["Szene", "Szenen"],
+  chapterNpcs: ["NPC", "NPCs"],
+  chapterLocations: ["Ort", "Orte"],
+};
+
+/** „4 Log-Zeilen" — one group as a German phrase. */
+export function usageGroupLabel(group: UsageGroup): string {
+  const [one, many] = USAGE_REF_LABEL[group.ref];
+  return `${group.count} ${group.count === 1 ? one : many}`;
+}
+
+/**
+ * The whole report in one line: „3 Szenen, 2 Beziehungen, 4 Log-Zeilen" —
+ * or the honest empty case, which is the reassuring one before a rename.
+ */
+export function usageSummary(usage: UsageReport): string {
+  if (usage.groups.length === 0) return "Keine Referenzen — nichts hängt an dieser id.";
+  return usage.groups.map(usageGroupLabel).join(", ");
+}
+
+/** „12 Verwendungen" / „1 Verwendung" — the summary's headline. */
+export function usageTotalLabel(total: number): string {
+  return `${total} ${total === 1 ? "Verwendung" : "Verwendungen"}`;
 }
 
 /**

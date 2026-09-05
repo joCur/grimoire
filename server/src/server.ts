@@ -143,7 +143,20 @@
 //                                              (store/paths.ts). A display name that was
 //                                              literally the old id follows the id.
 //                                              Plan-then-execute: 400/404/409 { path } write
-//                                              nothing; dryRun returns the plan only (issue #30)
+//                                              nothing; dryRun returns the plan only (issue #30).
+//                                              Every answer carries `usage` — the reference
+//                                              counts of GET /usage (issue #60), which is what
+//                                              the dialog's German summary reads off.
+//   [x] GET  /api/:campaign/usage              ?kind=<npc|location|scene|chapter>&id=<slug> ->
+//                                              { kind, id, path, total, groups: [{ ref, count,
+//                                              sites: [{ kind, id, title, path, count }] }] } —
+//                                              where an entity is REFERENCED, as queries over
+//                                              the reference tables (scene npcs/location/
+//                                              chapter, `## Beziehungen` both ways, session
+//                                              scenes_played, log scene markers). A group
+//                                              counts ROWS, its sites are the referencing
+//                                              DOCUMENTS. 400 unknown kind/empty id,
+//                                              404 unknown entity (issue #60)
 //   [x] POST /api/:campaign/review/seen        { path, line } -> FileResponse &
 //                                              { marked } — flags the log ROW whose short
 //                                              hash the line has (idempotent). marked=false

@@ -392,7 +392,7 @@ export function markInboxLineDone(campaign: string, line: string): Promise<FileR
 
 // --- rename with reference cascade (issue #30) -------------------------------
 
-/** The entity kinds the rename endpoint accepts (server: campaign-rename.ts). */
+/** The entity kinds the rename endpoint accepts (server: store/rename.ts). */
 export type RenameKind = "npc" | "location" | "scene" | "chapter";
 
 /**
@@ -402,10 +402,67 @@ export type RenameKind = "npc" | "location" | "scene" | "chapter";
  * the dialog previews. (Declared here rather than in @grimoire/shared: the
  * rename ticket keeps its footprint to server/ and app/.)
  */
+/** The kinds of reference `GET /usage` counts (server: store/usage.ts). */
+export type UsageRef =
+  | "sceneNpcs"
+  | "npcRelations"
+  | "sceneLocation"
+  | "scenesPlayed"
+  | "logEntries"
+  | "chapterScenes"
+  | "chapterNpcs"
+  | "chapterLocations";
+
+/** One referencing document, with how many of its rows point at the entity. */
+export interface UsageSite {
+  kind: "scene" | "npc" | "location" | "session" | "chapter";
+  id: string;
+  title: string;
+  path: string;
+  count: number;
+}
+
+export interface UsageGroup {
+  ref: UsageRef;
+  /** Referencing ROWS, not documents. */
+  count: number;
+  sites: UsageSite[];
+}
+
+/**
+ * The answer of GET /:campaign/usage — where one entity is referenced
+ * (issue #60). The rename's response carries the same report, which is what
+ * the dialog previews before it commits.
+ */
+export interface UsageReport {
+  kind: RenameKind;
+  id: string;
+  path: string;
+  total: number;
+  groups: UsageGroup[];
+}
+
 export interface RenameResult {
   renamed: { from: string; to: string };
   changed: string[];
+  /** Reference counts of the OLD id — the preview's German summary. */
+  usage: UsageReport;
   dryRun?: boolean;
+}
+
+/**
+ * Where an entity is referenced, straight from the endpoint (issue #60).
+ * The rename dialog does not need this — its `dryRun` answer already carries
+ * the identical report — but a caller that only wants the numbers can ask.
+ */
+export function fetchUsage(
+  campaign: string,
+  kind: RenameKind,
+  id: string,
+): Promise<UsageReport> {
+  return getJson<UsageReport>(
+    `/${encodeURIComponent(campaign)}/usage?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}`,
+  );
 }
 
 /**
