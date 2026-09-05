@@ -1,4 +1,18 @@
-// Filesystem access layer for the read API.
+// Filesystem access layer of the pre-database read API.
+//
+// SINCE THE CUTOVER (issue #57) ONLY THREE THINGS IN HERE ARE STILL LIVE:
+// `ApiError`, `assertSafeCampaignId` and `assertSafeRelativeMdPath` — the
+// error type every route maps to a JSON body, and the two path-safety guards
+// the store's addressing still runs before it looks a row up. The readers
+// below (campaignDir, buildTree, readParsedFile, the session scan, the tree
+// walker, collectCampaignFiles) are NOT called any more: the store answers
+// every endpoint from the database, and CAMPAIGN_ROOT is only ever read by
+// the one-time migration (db/migrate-campaigns.ts).
+//
+// They are still here because the planning removes them in Scheibe 4
+// (planning #52, section 6) together with the last `mtimeMs` compatibility —
+// deleting them in the same pull request as the cutover would have mixed
+// "the behaviour moved" with "the old code is gone" in one diff.
 //
 // Everything here works on campaign-relative paths (forward slashes, as in
 // ParsedFile.path) and enforces the two non-negotiables:

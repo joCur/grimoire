@@ -260,6 +260,27 @@ function sceneRowOf(tx: GrimoireDb, campaign: string, id: string): SceneRow | un
     .all()[0] as SceneRow | undefined;
 }
 
+/**
+ * The scene a `{ kind: "scene" }` locator addresses — 404 unless the path
+ * names the scene's CURRENT chapter and group too. Same rule as the read side
+ * (read.ts `readByLocator`): a path with the wrong chapter is a stale link,
+ * and a write must not silently land on the row it happens to share an id
+ * with. Without this a write through a stale link answered 200 while the
+ * matching GET answered 404.
+ */
+function sceneRowAt(
+  tx: GrimoireDb,
+  campaign: string,
+  locator: Extract<Locator, { kind: "scene" }>,
+): SceneRow {
+  const row = sceneRowOf(tx, campaign, locator.id);
+  if (row === undefined) throw new ApiError(404, "file not found");
+  if ((row.chapterId ?? "") !== locator.chapterId || row.groupSlug !== locator.groupSlug) {
+    throw new ApiError(404, "file not found");
+  }
+  return row;
+}
+
 function npcRowOf(tx: GrimoireDb, campaign: string, id: string): NpcRow | undefined {
   return tx
     .select()
@@ -436,8 +457,7 @@ function patchLocator(
       return renderChapter(next);
     }
     case "scene": {
-      const row = sceneRowOf(tx, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "file not found");
+      const row = sceneRowAt(tx, campaign, locator);
       guardRev(row.rev, rev, "scene changed");
       rejectIdPatch(patch, row.id);
       const before = renderScene(
@@ -675,13 +695,20 @@ export async function writeFileBody(
   campaign: string,
   rel: string,
   rev: number,
-  body: string,
+  markdown: string,
 ): Promise<FileResponse> {
   assertSafeRelativeMdPath(rel);
   const locator = locatorFromPath(rel);
   if (locator.kind === "session" || locator.kind === "inbox") {
     throw new ApiError(400, "this file is append-only — use the log/inbox endpoints");
   }
+  // A non-empty body gets its closing newline — the same normalisation the
+  // file writer did (campaign-write.ts `replaceBody`), kept because `raw` is
+  // still handed to a markdown editor and to the generator's prompt: a body
+  // without its final newline made the next appended section run into the
+  // last line. EXISTING trailing newlines are left alone, so a read/write
+  // roundtrip changes nothing; an empty body stays empty.
+  const body = markdown === "" || markdown.endsWith("\n") ? markdown : `${markdown}\n`;
   return mutate(campaign, (tx) => {
     switch (locator.kind) {
       case "campaign": {
@@ -709,8 +736,7 @@ export async function writeFileBody(
         return renderChapter(next);
       }
       case "scene": {
-        const row = sceneRowOf(tx, campaign, locator.id);
-        if (row === undefined) throw new ApiError(404, "file not found");
+        const row = sceneRowAt(tx, campaign, locator);
         guardRev(row.rev, rev, "scene changed");
         const next: SceneRow = { ...row, body, rev: row.rev + 1 };
         tx.update(scenes)
@@ -777,16 +803,8 @@ function writeGlossaryRows(
   campaign: string,
   entries: Array<{ term: string; explanation: string }>,
 ): void {
-  for (const row of glossaryRows(tx, campaign)) {
-    indexEntity(tx, campaign, {
-      kind: "glossary",
-      entityId: row.term,
-      title: "",
-      ref: "",
-      tags: "",
-      body: "",
-    });
-  }
+  // The whole list is replaced, so the index rows go in one statement rather
+  // than one per term — a term that disappears must not survive in search.
   tx.run(sql`delete from search_fts where campaign_id = ${campaign} and kind = 'glossary'`);
   tx.delete(glossary).where(eq(glossary.campaignId, campaign)).run();
   const seen = new Set<string>();
@@ -1340,7 +1358,11 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
     }
     case "npc": {
       const id = asStr(fm.id, locator.id);
-      const stripped = replaceRelationsForNew(tx, campaign, id, draft.body);
+      // The `## Beziehungen` section becomes rows — but only AFTER the npc
+      // row exists: `npc_relations` has a foreign key on (campaign, npc_id),
+      // so inserting the relations first fails the constraint.
+      const parsedRelations = parseRelationsSection(draft.body);
+      const stripped = removeSection(draft.body, "Beziehungen", SECTION_LEVEL);
       tx.insert(npcs)
         .values({
           campaignId: campaign,
@@ -1357,6 +1379,17 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           extra: extraOf(fm, NPC_KEYS),
         })
         .run();
+      for (const relation of parsedRelations.relations) {
+        tx.insert(npcRelations)
+          .values({
+            campaignId: campaign,
+            npcId: id,
+            otherNpcId: relation.otherNpcId,
+            note: relation.note,
+            pos: relation.pos,
+          })
+          .run();
+      }
       const row = npcRowOf(tx, campaign, id);
       if (row !== undefined) indexNpc(tx, campaign, row, draft.body);
       return;
@@ -1405,27 +1438,6 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
     default:
       throw new ApiError(400, `cannot write ${draft.rel}`);
   }
-}
-
-function replaceRelationsForNew(
-  tx: GrimoireDb,
-  campaign: string,
-  npcId: string,
-  body: string,
-): string {
-  const parsedRelations = parseRelationsSection(body);
-  for (const relation of parsedRelations.relations) {
-    tx.insert(npcRelations)
-      .values({
-        campaignId: campaign,
-        npcId,
-        otherNpcId: relation.otherNpcId,
-        note: relation.note,
-        pos: relation.pos,
-      })
-      .run();
-  }
-  return removeSection(body, "Beziehungen", SECTION_LEVEL);
 }
 
 /** Run a batch of generator writes in ONE transaction (all or nothing). */

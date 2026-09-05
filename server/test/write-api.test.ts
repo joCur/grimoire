@@ -1,30 +1,51 @@
-// Write-API tests (issue #5). They run against a TEMP COPY of the example
-// campaign: examples/ is the committed format reference and must never be
-// mutated, so beforeAll copies examples/beispiel into a mkdtemp dir and
-// points the app there via setCampaignRoot() (restored in afterAll). The
-// clock is overridden per test via setNow() for deterministic dates.
+// Write-API tests (issue #5), ported to the database stack (issue #57).
+//
+// What changed with the cutover, and therefore in this file:
+//
+//   * THE STORE IS THE DATABASE. Every case runs against its OWN in-memory
+//     database, seeded from `examples/` by the real migration (test/support/
+//     store.ts). No file is written any more, so the old "the bytes on disk
+//     are X" assertions are re-expressed against the API's own answer — which
+//     is what the app sees and therefore what the contract is about.
+//   * `mtimeMs` IS THE ROW'S `rev` — a small integer that starts at 1 and
+//     grows by one per write, and still a deliberately opaque guard token.
+//     "nothing was written" is now "the rev did not move".
+//   * A SCENE'S PATH SEGMENT IS ITS ID (store/paths.ts), so the reference
+//     scenes are addressed as `01-salzhafen/hafen/lighthouse-arrival.md` and
+//     `.../smuggler-captured.md` instead of by their former file names.
+//   * `raw` IS A DETERMINISTIC RENDERING (YAML block + body), not stored
+//     bytes. Byte assertions about `raw` are still meaningful — the rendering
+//     is a pure function of the row — but they say "this is what the editor
+//     is shown", not "this is what is on disk".
+//   * EVERY CASE IS SELF-CONTAINED. The old file lived off a shared temp copy
+//     and let cases build on each other; a fresh database per case makes that
+//     impossible, which is the better contract anyway.
+//
+// The clock is overridden per case via setNow() for deterministic dates —
+// src/clock.ts is untouched by the cutover.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import type { FileResponse } from "@grimoire/shared";
 import { app } from "../src/server";
-import { getCampaignRoot, setCampaignRoot } from "../src/config";
 import { setNow } from "../src/clock";
+import {
+  dropStore,
+  removeTempRoot,
+  seedStore,
+  tempCampaignRoot,
+  useCampaignRoot,
+} from "./support/store";
 
-const EXAMPLES = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../../examples");
-
-let tmpRoot = "";
-let originalRoot = "";
-
-const absOf = (rel: string) => path.join(tmpRoot, "beispiel", rel);
-
-async function getFile(rel: string): Promise<FileResponse> {
-  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+async function getFile(rel: string, campaign = "beispiel"): Promise<FileResponse> {
+  const res = await app.request(`/api/${campaign}/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
   return (await res.json()) as FileResponse;
+}
+
+async function fileStatus(rel: string, campaign = "beispiel"): Promise<number> {
+  return (await app.request(`/api/${campaign}/file?path=${encodeURIComponent(rel)}`)).status;
 }
 
 async function patchReq(body: unknown): Promise<Response> {
@@ -35,6 +56,12 @@ async function patchReq(body: unknown): Promise<Response> {
   });
 }
 
+async function patchOk(body: unknown): Promise<FileResponse> {
+  const res = await patchReq(body);
+  expect(res.status).toBe(200);
+  return (await res.json()) as FileResponse;
+}
+
 async function putFile(body: unknown): Promise<Response> {
   return app.request("/api/beispiel/file", {
     method: "PUT",
@@ -43,13 +70,10 @@ async function putFile(body: unknown): Promise<Response> {
   });
 }
 
-async function exists(rel: string): Promise<boolean> {
-  try {
-    await stat(absOf(rel));
-    return true;
-  } catch {
-    return false;
-  }
+async function putOk(body: unknown): Promise<FileResponse> {
+  const res = await putFile(body);
+  expect(res.status).toBe(200);
+  return (await res.json()) as FileResponse;
 }
 
 async function postJson(url: string, body?: unknown): Promise<Response> {
@@ -60,46 +84,57 @@ async function postJson(url: string, body?: unknown): Promise<Response> {
   });
 }
 
-beforeAll(async () => {
-  originalRoot = getCampaignRoot();
-  tmpRoot = await mkdtemp(path.join(os.tmpdir(), "grimoire-write-"));
-  await cp(path.join(EXAMPLES, "beispiel"), path.join(tmpRoot, "beispiel"), { recursive: true });
-  setCampaignRoot(tmpRoot);
-});
-
-afterAll(async () => {
-  setCampaignRoot(originalRoot);
-  setNow(null);
-  await rm(tmpRoot, { recursive: true, force: true });
-});
-
-beforeEach(() => {
-  // 2026-08-19 21:05 local time unless a test overrides it.
-  setNow(() => new Date(2026, 7, 19, 21, 5));
-});
-
-/** Top-level YAML keys of the frontmatter block, in file order. */
-function topLevelKeys(raw: string): string[] {
-  const m = /^---\n([\s\S]*?)\n---\n/.exec(raw);
-  if (!m) return [];
-  return [...m[1]!.matchAll(/^([A-Za-z_][\w-]*):/gm)].map((k) => k[1]!);
+async function postOk(url: string, body?: unknown): Promise<FileResponse> {
+  const res = await postJson(url, body);
+  expect(res.status).toBe(200);
+  return (await res.json()) as FileResponse;
 }
 
+/**
+ * A campaign root with a SECOND, empty campaign directory next to
+ * `beispiel` — the migration turns it into a campaign row with no name, no
+ * sessions and no inbox, which is what the "there is nothing yet" cases need
+ * (they used to create a bare directory in the temp tree).
+ */
+const FRESH = "frischling";
+
+async function withFreshCampaign(fn: () => Promise<void>): Promise<void> {
+  const root = await tempCampaignRoot();
+  const restore = useCampaignRoot(root);
+  try {
+    await mkdir(path.join(root, FRESH), { recursive: true });
+    await seedStore(root);
+    await fn();
+  } finally {
+    restore();
+    await removeTempRoot(root);
+  }
+}
+
+beforeEach(async () => {
+  // 2026-08-19 21:05 local time unless a test overrides it.
+  setNow(() => new Date(2026, 7, 19, 21, 5));
+  await seedStore();
+});
+
+afterEach(() => {
+  setNow(null);
+  dropStore();
+});
+
 describe("PATCH /api/:campaign/frontmatter", () => {
-  const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm.md";
+  const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
 
-  test("happy path: only named keys change, key order stable, body byte-identical", async () => {
+  test("happy path: only named keys change, key order stable, body untouched", async () => {
     const before = await getFile(SCENE);
-    const bodyBefore = before.raw.slice(before.raw.indexOf("\n---\n") + "\n---\n".length);
 
-    const res = await patchReq({ path: SCENE, mtimeMs: before.mtimeMs, patch: { status: "played" } });
-    expect(res.status).toBe(200);
-    const after = (await res.json()) as FileResponse;
+    const after = await patchOk({ path: SCENE, mtimeMs: before.mtimeMs, patch: { status: "played" } });
     expect(after.frontmatter.status).toBe("played");
 
-    const raw = await readFile(absOf(SCENE), "utf8");
-    // key order: exactly the original file order, nothing added or removed
-    expect(topLevelKeys(raw)).toEqual([
+    // Key order: the contract order of the kind, nothing added or removed.
+    // In the file tree this was "the file's own order"; the columns produce it
+    // now (store/render.ts rule 1), which is the same order the fixture had.
+    expect(Object.keys(after.frontmatter)).toEqual([
       "id",
       "title",
       "type",
@@ -110,92 +145,104 @@ describe("PATCH /api/:campaign/frontmatter", () => {
       "tags",
       "status",
     ]);
-    expect(raw).toContain("\nstatus: played\n");
-    expect(raw).toContain("id: lighthouse-arrival\n");
-    expect(raw).toContain("npcs: [jorna]\n");
-    // body after the closing delimiter is byte-identical
-    const bodyAfter = raw.slice(raw.indexOf("\n---\n") + "\n---\n".length);
-    expect(bodyAfter).toBe(bodyBefore);
-    expect(after.raw).toBe(raw);
-    // fresh mtimeMs matches the file on disk and a subsequent GET sees the write
-    const s = await stat(absOf(SCENE));
-    expect(after.mtimeMs).toBe(s.mtimeMs);
+    expect(after.frontmatter.id).toBe("lighthouse-arrival");
+    expect(after.frontmatter.npcs).toEqual(["jorna"]);
+    // The body is not a patch's business — unchanged, character for character.
+    expect(after.body).toBe(before.body);
+    expect(after.raw).toBe(before.raw.replace("status: ready", "status: played"));
+    // Fresh guard token (exactly one write) and a subsequent GET sees both.
+    expect(after.mtimeMs).toBe(before.mtimeMs + 1);
     const again = await getFile(SCENE);
     expect(again.frontmatter.status).toBe("played");
-    expect(again.mtimeMs).toBe(s.mtimeMs);
+    expect(again.mtimeMs).toBe(after.mtimeMs);
   });
 
   test("new keys are appended after the existing ones", async () => {
     const before = await getFile(SCENE);
-    const res = await patchReq({
+    const after = await patchOk({
       path: SCENE,
       mtimeMs: before.mtimeMs,
       patch: { review_note: "nochmal lesen" },
     });
-    expect(res.status).toBe(200);
-    const raw = await readFile(absOf(SCENE), "utf8");
-    const keys = topLevelKeys(raw);
+    // A key the schema has no column for is preserved in `extra` and rendered
+    // AFTER the contract keys — the successor of "appended to the block".
+    const keys = Object.keys(after.frontmatter);
     expect(keys[keys.length - 1]).toBe("review_note");
-    expect(raw).toContain("review_note: nochmal lesen\n");
+    expect(after.frontmatter.review_note).toBe("nochmal lesen");
+    expect(after.raw).toContain("review_note: nochmal lesen\n");
   });
 
   test("null deletes a key, everything else untouched", async () => {
     const before = await getFile(SCENE);
-    const res = await patchReq({
+    // Set it first: every case starts from the untouched fixture now, so the
+    // key to delete has to be created here rather than inherited.
+    const withKey = await patchOk({
       path: SCENE,
       mtimeMs: before.mtimeMs,
+      patch: { review_note: "nochmal lesen" },
+    });
+    const after = await patchOk({
+      path: SCENE,
+      mtimeMs: withKey.mtimeMs,
       patch: { review_note: null },
     });
-    expect(res.status).toBe(200);
-    const raw = await readFile(absOf(SCENE), "utf8");
-    expect(raw).not.toContain("review_note");
-    expect(topLevelKeys(raw)).not.toContain("review_note");
-    expect(raw).toContain("id: lighthouse-arrival\n");
-    expect(raw).toContain("\nstatus: played\n"); // from the earlier test
+    expect(Object.keys(after.frontmatter)).not.toContain("review_note");
+    expect(after.raw).not.toContain("review_note");
+    // …and nothing else moved: this is the untouched fixture again.
+    expect(after.frontmatter).toEqual(before.frontmatter);
+    expect(after.body).toBe(before.body);
   });
 
-  test("a file without `id` on disk does not gain one", async () => {
-    const rel = "01-salzhafen/hafen/ohne-id.md";
-    await writeFile(absOf(rel), "---\ntitle: Ohne Id\n---\n\nNur Text.\n", "utf8");
-    const before = await getFile(rel);
-    // the parser injects the filename id into the RESPONSE...
-    expect(before.frontmatter.id).toBe("ohne-id");
-    const res = await patchReq({ path: rel, mtimeMs: before.mtimeMs, patch: { status: "draft" } });
-    expect(res.status).toBe(200);
-    // ...but the patched FILE must not materialize it
-    const raw = await readFile(absOf(rel), "utf8");
-    expect(topLevelKeys(raw)).toEqual(["title", "status"]);
-    expect(raw).not.toContain("id:");
-    expect(raw.endsWith("\n---\n\nNur Text.\n")).toBe(true);
+  test("400 when the patch carries `id` — that is POST /rename's job", async () => {
+    // Replaces the old "a file without `id` on disk does not gain one": in the
+    // database the id IS the primary key, always present and never patchable,
+    // so the degrade case it guarded cannot exist. What CAN happen is a form
+    // sending the whole frontmatter back, `id` included — and that must not
+    // orphan every reference to the entity (issues #29/#30).
+    const before = await getFile(SCENE);
+    const res = await patchReq({ path: SCENE, mtimeMs: before.mtimeMs, patch: { id: "neu" } });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain("id is the primary key");
+    // Refused means refused: the row did not move.
+    expect((await getFile(SCENE)).mtimeMs).toBe(before.mtimeMs);
+    // An id patch that changes NOTHING is a no-op, not an error — that is what
+    // "send the form back unchanged" looks like.
+    const same = await patchOk({
+      path: SCENE,
+      mtimeMs: before.mtimeMs,
+      patch: { id: "lighthouse-arrival", status: "played" },
+    });
+    expect(same.frontmatter.id).toBe("lighthouse-arrival");
+    expect(same.frontmatter.status).toBe("played");
   });
 
-  test("a file without a frontmatter block gets one, body untouched", async () => {
-    const rel = "01-salzhafen/nur-text.md";
-    const body = "## Nur Text\n\nKein Frontmatter hier.\n";
-    await writeFile(absOf(rel), body, "utf8");
-    const before = await getFile(rel);
-    const res = await patchReq({ path: rel, mtimeMs: before.mtimeMs, patch: { status: "draft" } });
-    expect(res.status).toBe(200);
-    const raw = await readFile(absOf(rel), "utf8");
-    expect(raw).toBe(`---\nstatus: draft\n---\n${body}`);
+  // DELETED: "a file without a frontmatter block gets one, body untouched" —
+  // a row always renders its frontmatter (store/render.ts), so the case it
+  // described has no counterpart. The 400 for the two frontmatter-less kinds
+  // below is what guards this corner now.
+  test("400 for inbox.md and glossary.md — lists of rows, not entities", async () => {
+    for (const rel of ["inbox.md", "glossary.md"]) {
+      const before = await getFile(rel);
+      const res = await patchReq({ path: rel, mtimeMs: before.mtimeMs, patch: { status: "x" } });
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toContain("no frontmatter");
+      expect(await getFile(rel)).toEqual(before);
+    }
   });
 
   test("_campaign.md is patchable through the same endpoint (issue #17)", async () => {
     const rel = "_campaign.md";
     const before = await getFile(rel);
     expect(before.kind).toBe("campaign");
-    const res = await patchReq({
+    const after = await patchOk({
       path: rel,
       mtimeMs: before.mtimeMs,
       patch: { description: "Neue Kurzbeschreibung." },
     });
-    expect(res.status).toBe(200);
-    const after = (await res.json()) as FileResponse;
     expect(after.frontmatter.description).toBe("Neue Kurzbeschreibung.");
     expect(after.frontmatter.name).toBe("Der Leuchtturm von Salzhafen");
-    const raw = await readFile(absOf(rel), "utf8");
-    expect(topLevelKeys(raw)).toEqual(["id", "name", "description"]); // order stable
-    expect(raw).toContain("description: Neue Kurzbeschreibung.\n");
+    expect(Object.keys(after.frontmatter)).toEqual(["id", "name", "description"]); // order stable
+    expect(after.raw).toContain("description: Neue Kurzbeschreibung.\n");
     // the list endpoint picks the new value up right away
     const list = (await (await app.request("/api/campaigns")).json()) as Array<{
       id: string;
@@ -204,26 +251,30 @@ describe("PATCH /api/:campaign/frontmatter", () => {
     expect(list.find((c) => c.id === "beispiel")?.description).toBe("Neue Kurzbeschreibung.");
   });
 
-  test("409 on stale mtimeMs carries the current mtimeMs", async () => {
-    const s = await stat(absOf(SCENE));
-    const res = await patchReq({ path: SCENE, mtimeMs: s.mtimeMs - 1, patch: { status: "ready" } });
+  test("409 on a stale token carries the current one and writes nothing", async () => {
+    const before = await getFile(SCENE);
+    const res = await patchReq({
+      path: SCENE,
+      mtimeMs: before.mtimeMs - 1,
+      patch: { status: "ready" },
+    });
     expect(res.status).toBe(409);
     const body = (await res.json()) as { error: string; mtimeMs: number };
     expect(typeof body.error).toBe("string");
-    expect(body.mtimeMs).toBe(s.mtimeMs);
-    // and nothing was written
-    expect((await stat(absOf(SCENE))).mtimeMs).toBe(s.mtimeMs);
+    expect(body.mtimeMs).toBe(before.mtimeMs);
+    // and nothing was written — same row, same token
+    expect(await getFile(SCENE)).toEqual(before);
   });
 
   test("400 on malformed bodies", async () => {
-    const s = await stat(absOf(SCENE));
+    const before = await getFile(SCENE);
     const bad = [
       {}, // missing everything
-      { path: SCENE, mtimeMs: s.mtimeMs }, // missing patch
+      { path: SCENE, mtimeMs: before.mtimeMs }, // missing patch
       { path: SCENE, mtimeMs: "later", patch: {} }, // mtimeMs not a number
-      { path: SCENE, mtimeMs: s.mtimeMs, patch: ["status"] }, // patch not an object
-      { path: SCENE, mtimeMs: s.mtimeMs, patch: {}, extra: 1 }, // unknown key
-      { path: 42, mtimeMs: s.mtimeMs, patch: {} }, // path not a string
+      { path: SCENE, mtimeMs: before.mtimeMs, patch: ["status"] }, // patch not an object
+      { path: SCENE, mtimeMs: before.mtimeMs, patch: {}, extra: 1 }, // unknown key
+      { path: 42, mtimeMs: before.mtimeMs, patch: {} }, // path not a string
     ];
     for (const b of bad) {
       expect((await patchReq(b)).status).toBe(400);
@@ -235,9 +286,11 @@ describe("PATCH /api/:campaign/frontmatter", () => {
       body: "no json",
     });
     expect(res.status).toBe(400);
+    // none of the rejected requests touched the row
+    expect(await getFile(SCENE)).toEqual(before);
   });
 
-  test("path safety and missing files behave like the read API", async () => {
+  test("path safety and missing rows behave like the read API", async () => {
     expect(
       (await patchReq({ path: "../../etc/passwd.md", mtimeMs: 1, patch: {} })).status,
     ).toBe(400);
@@ -245,40 +298,45 @@ describe("PATCH /api/:campaign/frontmatter", () => {
     expect(
       (await patchReq({ path: "01-salzhafen/nope.md", mtimeMs: 1, patch: {} })).status,
     ).toBe(404);
+    // A path naming the WRONG chapter for an existing scene id is a stale
+    // link: 404, exactly as GET answers it (store/read.ts readByLocator).
+    expect(
+      (await patchReq({ path: "02-nebel/lighthouse-arrival.md", mtimeMs: 1, patch: {} })).status,
+    ).toBe(404);
   });
 });
 
 describe("POST /api/:campaign/session/start", () => {
-  test("creates today's session file with the documented shape", async () => {
-    const res = await postJson("/api/beispiel/session/start");
-    expect(res.status).toBe(200);
-    const file = (await res.json()) as FileResponse;
+  test("creates today's session with the documented shape", async () => {
+    const file = await postOk("/api/beispiel/session/start");
     expect(file.path).toBe("sessions/2026-08-19.md");
     expect(file.kind).toBe("session");
     expect(file.frontmatter.id).toBe("2026-08-19");
     expect(file.frontmatter.started).toBe("2026-08-19T21:05");
     expect(file.frontmatter.scenes_played).toEqual([]);
-    const raw = await readFile(absOf("sessions/2026-08-19.md"), "utf8");
-    expect(raw).toBe(
+    // The rendered skeleton is the one the format prescribes — the `## Log`
+    // section is rendered from (still zero) log rows.
+    expect(file.raw).toBe(
       "---\nid: 2026-08-19\nstarted: 2026-08-19T21:05\nscenes_played: []\n---\n\n## Log\n",
     );
-    expect(file.mtimeMs).toBe((await stat(absOf("sessions/2026-08-19.md"))).mtimeMs);
+    // A fresh row starts at rev 1, and the GET agrees.
+    expect(file.mtimeMs).toBe(1);
+    expect((await getFile("sessions/2026-08-19.md")).mtimeMs).toBe(1);
   });
 
   test("second start on the same day is idempotent (nothing reset)", async () => {
+    const first = await postOk("/api/beispiel/session/start");
     setNow(() => new Date(2026, 7, 19, 21, 30));
-    const res = await postJson("/api/beispiel/session/start");
-    expect(res.status).toBe(200);
-    const file = (await res.json()) as FileResponse;
-    expect(file.frontmatter.started).toBe("2026-08-19T21:05"); // NOT 21:30
-    const raw = await readFile(absOf("sessions/2026-08-19.md"), "utf8");
-    expect(raw).toContain("started: 2026-08-19T21:05\n");
+    const again = await postOk("/api/beispiel/session/start");
+    expect(again.frontmatter.started).toBe("2026-08-19T21:05"); // NOT 21:30
+    // Idempotent all the way down: no write happened, so the token stands.
+    expect(again.mtimeMs).toBe(first.mtimeMs);
   });
 
   test("409 session_running when an OLDER session is still open", async () => {
-    // 2026-08-19 (created above) is still running; a start on the NEXT day
-    // must not open a second session silently — the app offers to end the
-    // old one (issue #40 review, finding 3).
+    // A start on the NEXT day must not open a second session silently — the
+    // app offers to end the old one (issue #40 review, finding 3).
+    await postOk("/api/beispiel/session/start");
     setNow(() => new Date(2026, 7, 20, 20, 0));
     const res = await postJson("/api/beispiel/session/start");
     expect(res.status).toBe(409);
@@ -288,75 +346,68 @@ describe("POST /api/:campaign/session/start", () => {
       path: "sessions/2026-08-19.md",
     });
     // …and nothing was created for the new day.
-    expect(await exists("sessions/2026-08-20.md")).toBe(false);
+    expect(await fileStatus("sessions/2026-08-20.md")).toBe(404);
   });
 });
 
 describe("POST /api/:campaign/log", () => {
   // NOTE (issue #40): a log line lands in the ACTIVE session — the last
-  // started file without `ended`, which is 2026-08-19 throughout this
-  // describe. "no session at all" is covered further down, once every
-  // session in the fixture is ended.
+  // started row without `ended`. Each case starts one; "no session at all"
+  // is covered under session/end below.
   test("appends `- HH:MM (sceneId) text` under ## Log", async () => {
+    await postOk("/api/beispiel/session/start");
     setNow(() => new Date(2026, 7, 19, 21, 12));
-    const res = await postJson("/api/beispiel/log", {
+    const file = await postOk("/api/beispiel/log", {
       text: "Spuren am Strand #thread",
       sceneId: "lighthouse-arrival",
     });
-    expect(res.status).toBe(200);
-    const raw = await readFile(absOf("sessions/2026-08-19.md"), "utf8");
-    expect(raw.endsWith("## Log\n\n- 21:12 (lighthouse-arrival) Spuren am Strand #thread\n")).toBe(
-      true,
-    );
+    expect(file.body).toBe("\n## Log\n\n- 21:12 (lighthouse-arrival) Spuren am Strand #thread\n");
   });
 
   test("omits the parens without sceneId and appends after existing entries", async () => {
+    await postOk("/api/beispiel/session/start");
+    setNow(() => new Date(2026, 7, 19, 21, 12));
+    await postOk("/api/beispiel/log", {
+      text: "Spuren am Strand #thread",
+      sceneId: "lighthouse-arrival",
+    });
     setNow(() => new Date(2026, 7, 19, 21, 20));
-    const res = await postJson("/api/beispiel/log", { text: "Pause" });
-    expect(res.status).toBe(200);
-    const raw = await readFile(absOf("sessions/2026-08-19.md"), "utf8");
+    const file = await postOk("/api/beispiel/log", { text: "Pause" });
+    // Append order is the rows' `pos` order — a log line is never rewritten.
     expect(
-      raw.endsWith("- 21:12 (lighthouse-arrival) Spuren am Strand #thread\n- 21:20 Pause\n"),
+      file.body.endsWith("- 21:12 (lighthouse-arrival) Spuren am Strand #thread\n- 21:20 Pause\n"),
     ).toBe(true);
   });
 
   test("multi-line text collapses to a single log line", async () => {
+    await postOk("/api/beispiel/session/start");
     setNow(() => new Date(2026, 7, 19, 21, 25));
-    const res = await postJson("/api/beispiel/log", { text: "  Zeile eins\n   Zeile zwei  " });
-    expect(res.status).toBe(200);
-    const raw = await readFile(absOf("sessions/2026-08-19.md"), "utf8");
-    expect(raw.endsWith("- 21:25 Zeile eins Zeile zwei\n")).toBe(true);
+    const file = await postOk("/api/beispiel/log", { text: "  Zeile eins\n   Zeile zwei  " });
+    expect(file.body.endsWith("- 21:25 Zeile eins Zeile zwei\n")).toBe(true);
   });
 
-  test("inserts before ## Threads when the section exists", async () => {
-    // Own session file, shaped like the committed example (which is ended and
-    // therefore not the active session any more): started LATER than
-    // 2026-08-19, so this is the active one for the duration of the test, and
-    // removed again at the end so it does not become the active session of
-    // the describes below.
-    const rel = "sessions/2026-08-26.md";
-    await writeFile(
-      absOf(rel),
-      "---\nid: 2026-08-26\nstarted: 2026-08-26T19:30\nscenes_played: [lighthouse-arrival]\n---\n\n## Log\n\n- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread\n\n## Threads\n\n- [ ] Wer bezahlt die Schmuggler?\n",
-      "utf8",
+  test("the line goes into ## Log, above the session's other sections", async () => {
+    // The old case wrote a session file with a `## Threads` section and
+    // checked the INSERTION POINT of the markdown surgery. There is no
+    // surgery any more: `## Log` is rendered from `log_entries` and the rest
+    // of the session's prose follows it (store/render.ts renderSessionBody).
+    // The invariant that mattered survives — a note does not land in, or
+    // clobber, the DM's own sections — so it is asserted on the fixture
+    // session, re-opened for the purpose.
+    const resumed = await postOk("/api/beispiel/session/resume");
+    expect(resumed.path).toBe("sessions/2026-01-15.md");
+    setNow(() => new Date(2026, 0, 15, 23, 0));
+    const file = await postOk("/api/beispiel/log", { text: "Nachtrag nach dem Cliffhanger" });
+    expect(file.path).toBe("sessions/2026-01-15.md");
+    expect(file.body).toContain(
+      "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread\n- 23:00 Nachtrag nach dem Cliffhanger\n\n## Threads\n",
     );
-    try {
-      setNow(() => new Date(2026, 7, 26, 23, 0));
-      const res = await postJson("/api/beispiel/log", { text: "Nachtrag nach dem Cliffhanger" });
-      expect(res.status).toBe(200);
-      expect(((await res.json()) as FileResponse).path).toBe(rel);
-      const raw = await readFile(absOf(rel), "utf8");
-      expect(raw).toContain(
-        "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread\n- 23:00 Nachtrag nach dem Cliffhanger\n\n## Threads\n",
-      );
-      // Threads content untouched
-      expect(raw).toContain("- [ ] Wer bezahlt die Schmuggler?");
-    } finally {
-      await rm(absOf(rel), { force: true });
-    }
+    // Threads content untouched
+    expect(file.body).toContain("- [ ] Wer bezahlt die Schmuggler?");
   });
 
   test("400 on empty or missing text", async () => {
+    await postOk("/api/beispiel/session/start");
     expect((await postJson("/api/beispiel/log", { text: "" })).status).toBe(400);
     expect((await postJson("/api/beispiel/log", { text: "   \n " })).status).toBe(400);
     expect((await postJson("/api/beispiel/log", {})).status).toBe(400);
@@ -365,133 +416,98 @@ describe("POST /api/:campaign/log", () => {
 });
 
 describe("scenes_played maintenance (POST log with sceneId)", () => {
-  const REL = "sessions/2026-08-23.md";
-
   test("first log with a sceneId adds it to scenes_played", async () => {
-    setNow(() => new Date(2026, 7, 23, 19, 0));
-    // Written directly, not via session/start: 2026-08-19 is still open in
-    // this file, and since the review of issue #40 `start` refuses to open a
-    // second session next to a running one (409 session_running — its own
-    // test below). A newer OPEN file is the active session all the same.
-    await writeFile(
-      absOf(REL),
-      "---\nid: 2026-08-23\nstarted: 2026-08-23T19:00\nscenes_played: []\n---\n\n## Log\n",
-      "utf8",
-    );
-    const res = await postJson("/api/beispiel/log", {
+    await postOk("/api/beispiel/session/start");
+    const file = await postOk("/api/beispiel/log", {
       text: "Ankunft",
       sceneId: "lighthouse-arrival",
     });
-    expect(res.status).toBe(200);
-    const file = (await res.json()) as FileResponse;
     expect(file.frontmatter.scenes_played).toEqual(["lighthouse-arrival"]);
-    const raw = await readFile(absOf(REL), "utf8");
-    expect(raw).toContain("scenes_played: [lighthouse-arrival]\n");
-    expect(topLevelKeys(raw)).toEqual(["id", "started", "scenes_played"]);
-    // frontmatter rewrite left the Log section intact
-    expect(raw.endsWith("## Log\n\n- 19:00 (lighthouse-arrival) Ankunft\n")).toBe(true);
+    expect(file.raw).toContain("scenes_played: [lighthouse-arrival]\n");
+    // The played scene is a row, and rendering it back did not disturb the log
+    expect(file.body).toBe("\n## Log\n\n- 21:05 (lighthouse-arrival) Ankunft\n");
   });
 
   test("second log with the same sceneId does not duplicate", async () => {
-    setNow(() => new Date(2026, 7, 23, 19, 5));
-    const res = await postJson("/api/beispiel/log", {
+    await postOk("/api/beispiel/session/start");
+    await postOk("/api/beispiel/log", { text: "Ankunft", sceneId: "lighthouse-arrival" });
+    setNow(() => new Date(2026, 7, 19, 21, 10));
+    const file = await postOk("/api/beispiel/log", {
       text: "Immer noch da",
       sceneId: "lighthouse-arrival",
     });
-    expect(res.status).toBe(200);
-    const raw = await readFile(absOf(REL), "utf8");
-    expect(raw).toContain("scenes_played: [lighthouse-arrival]\n");
-    expect(raw).not.toContain("lighthouse-arrival, lighthouse-arrival");
-    expect(
-      raw.endsWith("- 19:00 (lighthouse-arrival) Ankunft\n- 19:05 (lighthouse-arrival) Immer noch da\n"),
-    ).toBe(true);
+    expect(file.frontmatter.scenes_played).toEqual(["lighthouse-arrival"]);
+    // The log, however, grows — both lines are there, in order.
+    expect(file.body.endsWith("- 21:05 (lighthouse-arrival) Ankunft\n- 21:10 (lighthouse-arrival) Immer noch da\n")).toBe(
+      true,
+    );
   });
 
   test("a different sceneId is appended in first-played order", async () => {
-    setNow(() => new Date(2026, 7, 23, 19, 10));
-    const res = await postJson("/api/beispiel/log", {
-      text: "Erwischt",
-      sceneId: "smuggler-captured",
+    await postOk("/api/beispiel/session/start");
+    await postOk("/api/beispiel/log", { text: "Ankunft", sceneId: "lighthouse-arrival" });
+    setNow(() => new Date(2026, 7, 19, 21, 10));
+    await postOk("/api/beispiel/log", { text: "Erwischt", sceneId: "smuggler-captured" });
+    setNow(() => new Date(2026, 7, 19, 21, 15));
+    // Playing the FIRST scene again must not reorder the list — the order is
+    // "first played", not "last played" (it is the review's reading order).
+    const file = await postOk("/api/beispiel/log", {
+      text: "Zurück am Turm",
+      sceneId: "lighthouse-arrival",
     });
-    expect(res.status).toBe(200);
-    const file = (await res.json()) as FileResponse;
     expect(file.frontmatter.scenes_played).toEqual(["lighthouse-arrival", "smuggler-captured"]);
-    const raw = await readFile(absOf(REL), "utf8");
-    expect(raw).toContain("scenes_played: [lighthouse-arrival, smuggler-captured]\n");
+    expect(file.raw).toContain("scenes_played: [lighthouse-arrival, smuggler-captured]\n");
   });
 
   test("log without sceneId leaves scenes_played untouched", async () => {
-    setNow(() => new Date(2026, 7, 23, 19, 15));
-    const res = await postJson("/api/beispiel/log", { text: "Pause" });
-    expect(res.status).toBe(200);
-    const raw = await readFile(absOf(REL), "utf8");
-    expect(raw).toContain("scenes_played: [lighthouse-arrival, smuggler-captured]\n");
-    expect(raw.endsWith("- 19:15 Pause\n")).toBe(true);
+    await postOk("/api/beispiel/session/start");
+    await postOk("/api/beispiel/log", { text: "Ankunft", sceneId: "lighthouse-arrival" });
+    setNow(() => new Date(2026, 7, 19, 21, 15));
+    const file = await postOk("/api/beispiel/log", { text: "Pause" });
+    expect(file.frontmatter.scenes_played).toEqual(["lighthouse-arrival"]);
+    expect(file.body.endsWith("- 21:15 Pause\n")).toBe(true);
   });
 
-  test("a session file without scenes_played gains the key on first sceneId-log", async () => {
-    const rel = "sessions/2026-08-24.md";
-    await writeFile(
-      absOf(rel),
-      "---\nid: 2026-08-24\nstarted: 2026-08-24T19:00\n---\n\n## Log\n",
-      "utf8",
-    );
-    setNow(() => new Date(2026, 7, 24, 19, 30));
-    const res = await postJson("/api/beispiel/log", {
-      text: "Los geht es",
-      sceneId: "lighthouse-arrival",
-    });
-    expect(res.status).toBe(200);
-    const raw = await readFile(absOf(rel), "utf8");
-    // key appended after the existing ones (documented degrade path)
-    expect(topLevelKeys(raw)).toEqual(["id", "started", "scenes_played"]);
-    expect(raw).toContain("scenes_played: [lighthouse-arrival]\n");
-    expect(raw).toContain("started: 2026-08-24T19:00\n");
-    expect(raw.endsWith("## Log\n\n- 19:30 (lighthouse-arrival) Los geht es\n")).toBe(true);
-  });
+  // DELETED: "a session file without scenes_played gains the key on first
+  // sceneId-log" — that was the degrade path of a hand-written file. The key
+  // is rendered from `session_scenes_played` and therefore always present
+  // (empty list included, asserted in the session/start case above).
 });
 
 describe("POST /api/:campaign/session/end", () => {
-  // The scenes_played tests above left two later, still-open session files
-  // behind. Since issue #40 `end` targets the ACTIVE session (the newest one
-  // without `ended`), so they have to go for these tests to be about
-  // 2026-08-19 again.
-  beforeAll(async () => {
-    await rm(absOf("sessions/2026-08-23.md"), { force: true });
-    await rm(absOf("sessions/2026-08-24.md"), { force: true });
-  });
-
-  test("sets ended via the raw-patch mechanism, log untouched", async () => {
+  test("sets ended, log untouched", async () => {
+    await postOk("/api/beispiel/session/start");
+    setNow(() => new Date(2026, 7, 19, 21, 25));
+    await postOk("/api/beispiel/log", { text: "Zeile eins Zeile zwei" });
     setNow(() => new Date(2026, 7, 19, 23, 45));
-    const res = await postJson("/api/beispiel/session/end");
-    expect(res.status).toBe(200);
-    const file = (await res.json()) as FileResponse;
+    const file = await postOk("/api/beispiel/session/end");
     expect(file.frontmatter.ended).toBe("2026-08-19T23:45");
-    const raw = await readFile(absOf("sessions/2026-08-19.md"), "utf8");
-    expect(topLevelKeys(raw)).toEqual(["id", "started", "scenes_played", "ended"]);
-    expect(raw).toContain("started: 2026-08-19T21:05\n");
-    expect(raw).toContain("ended: 2026-08-19T23:45\n");
-    // the log lines appended earlier survive byte-identically
-    expect(raw.endsWith("- 21:25 Zeile eins Zeile zwei\n")).toBe(true);
+    expect(Object.keys(file.frontmatter)).toEqual(["id", "started", "ended", "scenes_played"]);
+    expect(file.frontmatter.started).toBe("2026-08-19T21:05");
+    // the log line appended earlier survives verbatim
+    expect(file.body.endsWith("- 21:25 Zeile eins Zeile zwei\n")).toBe(true);
   });
 
   test("second end keeps the first ended (idempotent)", async () => {
+    await postOk("/api/beispiel/session/start");
+    setNow(() => new Date(2026, 7, 19, 23, 45));
+    const first = await postOk("/api/beispiel/session/end");
     setNow(() => new Date(2026, 7, 19, 23, 59));
-    const res = await postJson("/api/beispiel/session/end");
-    expect(res.status).toBe(200);
-    const file = (await res.json()) as FileResponse;
-    expect(file.frontmatter.ended).toBe("2026-08-19T23:45");
+    const second = await postOk("/api/beispiel/session/end");
+    expect(second.frontmatter.ended).toBe("2026-08-19T23:45");
+    // Idempotent means no write: the guard token stands still.
+    expect(second.mtimeMs).toBe(first.mtimeMs);
   });
 
-  // Every session in the fixture is ended now, so nothing is active.
   test("end stays idempotent across days, log is refused (issue #40 review)", async () => {
+    await postOk("/api/beispiel/session/start");
+    setNow(() => new Date(2026, 7, 19, 23, 45));
+    await postOk("/api/beispiel/session/end");
+    // With nothing running, `end` falls back to the LAST STARTED session —
+    // ended or not — and keeps its `ended`. That is what makes "Session
+    // beenden" safe to press twice, also after midnight.
     setNow(() => new Date(2026, 7, 22, 22, 0));
-    // `end` falls back to the LAST STARTED session — ended or not — and keeps
-    // its `ended`. That is what makes "Session beenden" safe to press twice,
-    // also after midnight.
-    const res = await postJson("/api/beispiel/session/end");
-    expect(res.status).toBe(200);
-    const file = (await res.json()) as FileResponse;
+    const file = await postOk("/api/beispiel/session/end");
     expect(file.path).toBe("sessions/2026-08-19.md");
     expect(file.frontmatter.ended).toBe("2026-08-19T23:45");
     // A log line, however, is STRICTLY the running session's business: a note
@@ -501,39 +517,40 @@ describe("POST /api/:campaign/session/end", () => {
     expect(await log.json()).toEqual({ error: expect.any(String) });
   });
 
-  test("404 for a campaign that has no session file at all", async () => {
-    const fresh = "sessionlos";
-    await mkdir(path.join(tmpRoot, fresh), { recursive: true });
-    try {
-      expect((await postJson(`/api/${fresh}/session/end`)).status).toBe(404);
-      expect((await postJson(`/api/${fresh}/session/resume`)).status).toBe(404);
-      expect((await postJson(`/api/${fresh}/log`, { text: "x" })).status).toBe(404);
-    } finally {
-      await rm(path.join(tmpRoot, fresh), { recursive: true, force: true });
-    }
+  test("404 for a campaign that has no session at all", async () => {
+    await withFreshCampaign(async () => {
+      expect((await postJson(`/api/${FRESH}/session/end`)).status).toBe(404);
+      expect((await postJson(`/api/${FRESH}/session/resume`)).status).toBe(404);
+      expect((await postJson(`/api/${FRESH}/log`, { text: "x" })).status).toBe(404);
+    });
   });
 });
 
 describe("POST /api/:campaign/inbox", () => {
-  test("appends `- text` to the existing inbox.md", async () => {
-    const before = await readFile(absOf("inbox.md"), "utf8");
-    const res = await postJson("/api/beispiel/inbox", { text: "Schmied beobachten #thread" });
-    expect(res.status).toBe(200);
-    const raw = await readFile(absOf("inbox.md"), "utf8");
-    expect(raw.startsWith(before)).toBe(true); // append-only
-    expect(raw.endsWith("- Schmied beobachten #thread\n")).toBe(true);
-    // visible in a subsequent GET with fresh mtimeMs
+  test("appends `- text` to the existing inbox", async () => {
+    const before = await getFile("inbox.md");
+    const after = await postOk("/api/beispiel/inbox", { text: "Schmied beobachten #thread" });
+    // Append-only: the existing rendering is a PREFIX of the new one.
+    expect(after.body.startsWith(before.body.replace(/\n$/, ""))).toBe(true);
+    expect(after.body.endsWith("- Schmied beobachten #thread\n")).toBe(true);
+    // visible in a subsequent GET with the fresh token
     const file = await getFile("inbox.md");
-    expect(file.raw).toBe(raw);
-    expect(file.mtimeMs).toBe((await stat(absOf("inbox.md"))).mtimeMs);
+    expect(file.body).toBe(after.body);
+    expect(file.mtimeMs).toBe(after.mtimeMs);
   });
 
-  test("creates inbox.md with a # Inbox heading when missing", async () => {
-    await rm(absOf("inbox.md"));
-    const res = await postJson("/api/beispiel/inbox", { text: "Erste Idee" });
-    expect(res.status).toBe(200);
-    const raw = await readFile(absOf("inbox.md"), "utf8");
-    expect(raw).toBe("# Inbox\n\n- Erste Idee\n");
+  test("creates the inbox with a # Inbox heading when there is none", async () => {
+    // The "missing inbox.md" case of the file version: a campaign whose
+    // migration produced no inbox rows at all answers 404 on GET, and the
+    // first entry brings the heading the format opened the file with.
+    await withFreshCampaign(async () => {
+      expect(await fileStatus("inbox.md", FRESH)).toBe(404);
+      const res = await postJson(`/api/${FRESH}/inbox`, { text: "Erste Idee" });
+      expect(res.status).toBe(200);
+      const file = (await res.json()) as FileResponse;
+      expect(file.body).toBe("\n# Inbox\n\n- Erste Idee\n");
+      expect(file.raw).toBe("---\nid: inbox\n---\n\n# Inbox\n\n- Erste Idee\n");
+    });
   });
 
   test("400 on empty text", async () => {
@@ -547,74 +564,74 @@ describe("POST /api/:campaign/inbox", () => {
   });
 });
 
-// The meta dialog of issue #34 edits an EXISTING _campaign.md through
+// The meta dialog of issue #34 edits an EXISTING campaign name through
 // PATCH /frontmatter (covered above). This endpoint only closes the gap where
-// there is no file yet — hence a second campaign directory without one.
+// there is no NAME yet: after the cutover the campaign ROW always exists, so
+// "the file does not exist" became "the row has no name" — hence a second
+// campaign whose directory had no `_campaign.md`.
 describe("POST /api/:campaign/campaign-meta", () => {
-  const FRESH = "frischling";
+  test("sets name and description on a campaign that has none", async () => {
+    await withFreshCampaign(async () => {
+      const res = await postJson(`/api/${FRESH}/campaign-meta`, {
+        name: "Die Aschekönige",
+        description: "Eine Wüstenkampagne um verschüttete Städte.",
+      });
+      expect(res.status).toBe(200);
+      const file = (await res.json()) as FileResponse;
+      expect(file.path).toBe("_campaign.md");
+      expect(file.kind).toBe("campaign");
+      expect(file.frontmatter.name).toBe("Die Aschekönige");
+      // The id is the CAMPAIGN key — never client input.
+      expect(file.raw).toBe(
+        "---\nid: frischling\nname: Die Aschekönige\ndescription: Eine Wüstenkampagne um verschüttete Städte.\n---\n",
+      );
 
-  beforeEach(async () => {
-    await rm(path.join(tmpRoot, FRESH), { recursive: true, force: true });
-    await mkdir(path.join(tmpRoot, FRESH), { recursive: true });
-  });
-
-  test("creates _campaign.md with id, name and description", async () => {
-    const res = await postJson(`/api/${FRESH}/campaign-meta`, {
-      name: "Die Aschekönige",
-      description: "Eine Wüstenkampagne um verschüttete Städte.",
-    });
-    expect(res.status).toBe(200);
-    const file = (await res.json()) as FileResponse;
-    expect(file.path).toBe("_campaign.md");
-    expect(file.kind).toBe("campaign");
-    expect(file.frontmatter.name).toBe("Die Aschekönige");
-
-    const raw = await readFile(path.join(tmpRoot, FRESH, "_campaign.md"), "utf8");
-    // The id is the DIRECTORY name — never client input.
-    expect(raw).toBe(
-      "---\nid: frischling\nname: Die Aschekönige\ndescription: Eine Wüstenkampagne um verschüttete Städte.\n---\n",
-    );
-
-    // The campaign list serves the new metadata right away.
-    const list = (await (await app.request("/api/campaigns")).json()) as Array<
-      Record<string, unknown>
-    >;
-    expect(list.find((c) => c.id === FRESH)).toMatchObject({
-      name: "Die Aschekönige",
-      description: "Eine Wüstenkampagne um verschüttete Städte.",
+      // The campaign list serves the new metadata right away.
+      const list = (await (await app.request("/api/campaigns")).json()) as Array<
+        Record<string, unknown>
+      >;
+      expect(list.find((c) => c.id === FRESH)).toMatchObject({
+        name: "Die Aschekönige",
+        description: "Eine Wüstenkampagne um verschüttete Städte.",
+      });
     });
   });
 
   test("a blank description writes no key at all", async () => {
-    const res = await postJson(`/api/${FRESH}/campaign-meta`, {
-      name: "Nur ein Name",
-      description: "   ",
+    await withFreshCampaign(async () => {
+      const res = await postJson(`/api/${FRESH}/campaign-meta`, {
+        name: "Nur ein Name",
+        description: "   ",
+      });
+      expect(res.status).toBe(200);
+      const file = (await res.json()) as FileResponse;
+      expect(Object.keys(file.frontmatter)).toEqual(["id", "name"]);
+      expect(file.raw).toBe("---\nid: frischling\nname: Nur ein Name\n---\n");
     });
-    expect(res.status).toBe(200);
-    const raw = await readFile(path.join(tmpRoot, FRESH, "_campaign.md"), "utf8");
-    expect(raw).toBe("---\nid: frischling\nname: Nur ein Name\n---\n");
   });
 
-  test("409 when the file exists — the existing one is never touched", async () => {
-    const before = await readFile(absOf("_campaign.md"), "utf8");
+  test("409 when a name already exists — the existing one is never touched", async () => {
+    const before = await getFile("_campaign.md");
     const res = await postJson("/api/beispiel/campaign-meta", { name: "Überschrieben" });
     expect(res.status).toBe(409);
     expect((await res.json()) as { path: string }).toMatchObject({ path: "_campaign.md" });
-    expect(await readFile(absOf("_campaign.md"), "utf8")).toBe(before);
+    expect(await getFile("_campaign.md")).toEqual(before);
   });
 
   test("400 on a missing, blank or non-string name and a non-string description", async () => {
-    expect((await postJson(`/api/${FRESH}/campaign-meta`, {})).status).toBe(400);
-    expect((await postJson(`/api/${FRESH}/campaign-meta`, { name: "  " })).status).toBe(400);
-    expect((await postJson(`/api/${FRESH}/campaign-meta`, { name: 42 })).status).toBe(400);
-    expect(
-      (await postJson(`/api/${FRESH}/campaign-meta`, { name: "Ok", description: 7 })).status,
-    ).toBe(400);
-    expect(
-      (await postJson(`/api/${FRESH}/campaign-meta`, { name: "Ok", id: "gehackt" })).status,
-    ).toBe(400);
-    // None of the rejected requests created a file.
-    expect((await postJson(`/api/${FRESH}/campaign-meta`, { name: "Danach" })).status).toBe(200);
+    await withFreshCampaign(async () => {
+      expect((await postJson(`/api/${FRESH}/campaign-meta`, {})).status).toBe(400);
+      expect((await postJson(`/api/${FRESH}/campaign-meta`, { name: "  " })).status).toBe(400);
+      expect((await postJson(`/api/${FRESH}/campaign-meta`, { name: 42 })).status).toBe(400);
+      expect(
+        (await postJson(`/api/${FRESH}/campaign-meta`, { name: "Ok", description: 7 })).status,
+      ).toBe(400);
+      expect(
+        (await postJson(`/api/${FRESH}/campaign-meta`, { name: "Ok", id: "gehackt" })).status,
+      ).toBe(400);
+      // None of the rejected requests named the campaign — so this still works.
+      expect((await postJson(`/api/${FRESH}/campaign-meta`, { name: "Danach" })).status).toBe(200);
+    });
   });
 
   test("404 for an unknown campaign", async () => {
@@ -623,194 +640,146 @@ describe("POST /api/:campaign/campaign-meta", () => {
 });
 
 // Body writes (issue #15): content editing in the app. The invariant under
-// test everywhere here is that the frontmatter block on disk is carried over
-// byte for byte — only the bytes after the closing delimiter may change.
+// test everywhere here is that a body write is ONLY a body write — the
+// frontmatter of the row comes back unchanged, key for key and value for
+// value ("the frontmatter block stays byte-identical" of the file version).
 describe("PUT /api/:campaign/file", () => {
-  const REFERENCE = "01-salzhafen/hafen/von-schmugglern-erwischt.md";
-  const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm.md";
+  const REFERENCE = "01-salzhafen/hafen/smuggler-captured.md";
+  const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
 
-  /** Raw prefix up to and including the frontmatter block's closing `---\n`. */
+  /** The rendered prefix up to and including the YAML block's closing `---\n`. */
   function fmBlock(raw: string): string {
     return raw.slice(0, raw.indexOf("\n---\n") + "\n---\n".length);
   }
 
-  test("roundtrip: writing the read body back changes no byte on disk", async () => {
+  test("roundtrip: writing the read body back changes nothing but the token", async () => {
     const before = await getFile(REFERENCE);
-    const rawBefore = await readFile(absOf(REFERENCE), "utf8");
     // the reference scene carries callouts and `## If:` sections
     expect(before.body).toContain("> [!check] Charisma (Deception)");
     expect(before.body).toContain("## If: sie lügen");
 
-    const res = await putFile({ path: REFERENCE, mtimeMs: before.mtimeMs, body: before.body });
-    expect(res.status).toBe(200);
-    const after = (await res.json()) as FileResponse;
+    const after = await putOk({ path: REFERENCE, mtimeMs: before.mtimeMs, body: before.body });
     expect(after.body).toBe(before.body);
-    expect(after.raw).toBe(rawBefore);
-    // unchanged bytes mean no write at all — mtime stays exactly the same
-    expect(await readFile(absOf(REFERENCE), "utf8")).toBe(rawBefore);
-    expect((await stat(absOf(REFERENCE))).mtimeMs).toBe(before.mtimeMs);
-    expect(after.mtimeMs).toBe(before.mtimeMs);
+    expect(after.frontmatter).toEqual(before.frontmatter);
+    expect(after.raw).toBe(before.raw);
+    // The file writer could skip an identical write and keep the mtime; a row
+    // write is a write, so the rev moves — the token is opaque and monotonic,
+    // never a content hash.
+    expect(after.mtimeMs).toBe(before.mtimeMs + 1);
+    expect((await getFile(REFERENCE)).mtimeMs).toBe(after.mtimeMs);
   });
 
   test("unknown callouts and headings survive a write verbatim", async () => {
     const before = await getFile(REFERENCE);
     const body = "\n## Völlig Eigenes\n\n> [!wetter] Nebel über der Bucht\n\n### Unter-Titel\n";
-    const res = await putFile({ path: REFERENCE, mtimeMs: before.mtimeMs, body });
-    expect(res.status).toBe(200);
-    const after = (await res.json()) as FileResponse;
+    const after = await putOk({ path: REFERENCE, mtimeMs: before.mtimeMs, body });
     expect(after.body).toBe(body);
-    // and back again, byte for byte
-    const back = await putFile({ path: REFERENCE, mtimeMs: after.mtimeMs, body: before.body });
-    expect(back.status).toBe(200);
-    expect(await readFile(absOf(REFERENCE), "utf8")).toBe(before.raw);
+    // and back again, character for character
+    const back = await putOk({ path: REFERENCE, mtimeMs: after.mtimeMs, body: before.body });
+    expect(back.raw).toBe(before.raw);
   });
 
-  test("happy path: new body on disk, frontmatter block byte-identical", async () => {
+  test("happy path: new body, frontmatter untouched", async () => {
     const before = await getFile(SCENE);
-    const rawBefore = await readFile(absOf(SCENE), "utf8");
     const body = "\n## Flow\n\nKomplett neu geschrieben.\n";
 
-    const res = await putFile({ path: SCENE, mtimeMs: before.mtimeMs, body });
-    expect(res.status).toBe(200);
-    const after = (await res.json()) as FileResponse;
+    const after = await putOk({ path: SCENE, mtimeMs: before.mtimeMs, body });
     expect(after.path).toBe(SCENE);
     expect(after.kind).toBe("scene");
     expect(after.body).toBe(body);
-    // frontmatter untouched — same keys, same values, same bytes
+    // frontmatter untouched — same keys, same values, same order
     expect(after.frontmatter).toEqual(before.frontmatter);
-    const raw = await readFile(absOf(SCENE), "utf8");
-    expect(fmBlock(raw)).toBe(fmBlock(rawBefore));
-    expect(raw).toBe(fmBlock(rawBefore) + body);
-    expect(after.raw).toBe(raw);
-    // fresh mtimeMs, matching the file on disk, and a GET sees the write
-    const s = await stat(absOf(SCENE));
-    expect(after.mtimeMs).toBe(s.mtimeMs);
-    expect(after.mtimeMs).toBeGreaterThanOrEqual(before.mtimeMs);
+    expect(Object.keys(after.frontmatter)).toEqual(Object.keys(before.frontmatter));
+    expect(fmBlock(after.raw)).toBe(fmBlock(before.raw));
+    expect(after.raw).toBe(fmBlock(before.raw) + body);
+    // fresh token, and a GET sees the write
+    expect(after.mtimeMs).toBe(before.mtimeMs + 1);
     expect((await getFile(SCENE)).body).toBe(body);
   });
 
   test("a body without a trailing newline gets exactly one", async () => {
     const before = await getFile(SCENE);
-    const res = await putFile({ path: SCENE, mtimeMs: before.mtimeMs, body: "\nOhne Newline" });
-    expect(res.status).toBe(200);
-    const raw = await readFile(absOf(SCENE), "utf8");
-    expect(raw.endsWith("\nOhne Newline\n")).toBe(true);
-    expect(raw.endsWith("\n\n")).toBe(false);
+    const after = await putOk({ path: SCENE, mtimeMs: before.mtimeMs, body: "\nOhne Newline" });
+    expect(after.body).toBe("\nOhne Newline\n");
+    expect(after.raw.endsWith("\nOhne Newline\n")).toBe(true);
+    expect(after.raw.endsWith("\n\n")).toBe(false);
   });
 
-  test("an empty body leaves the frontmatter block alone", async () => {
+  test("an empty body leaves the frontmatter alone", async () => {
     const before = await getFile(SCENE);
-    const rawBefore = await readFile(absOf(SCENE), "utf8");
-    const res = await putFile({ path: SCENE, mtimeMs: before.mtimeMs, body: "" });
-    expect(res.status).toBe(200);
-    expect(await readFile(absOf(SCENE), "utf8")).toBe(fmBlock(rawBefore));
+    const after = await putOk({ path: SCENE, mtimeMs: before.mtimeMs, body: "" });
+    expect(after.body).toBe("");
+    expect(after.frontmatter).toEqual(before.frontmatter);
+    expect(after.raw).toBe(fmBlock(before.raw));
   });
 
-  test("409 on stale mtimeMs carries the current mtimeMs and writes nothing", async () => {
-    const rawBefore = await readFile(absOf(SCENE), "utf8");
-    const s = await stat(absOf(SCENE));
-    const res = await putFile({ path: SCENE, mtimeMs: s.mtimeMs - 1, body: "\nZu spät\n" });
+  test("glossary.md: the edited markdown is parsed back into rows", async () => {
+    // NEW with the cutover (planning F6): the glossary is a TABLE, so a body
+    // write is the one PUT that decomposes what it is given — through the same
+    // parser the migration used, so a hand-edited file and a DM's edit in the
+    // app produce the same rows.
+    const before = await getFile("glossary.md");
+    expect(before.body).toContain("- lighthouse keeper → Leuchtturmwärter");
+    const body = "\n- tide pool → Gezeitentümpel\n- harbour master → Hafenmeisterin\n";
+    const after = await putOk({ path: "glossary.md", mtimeMs: before.mtimeMs, body });
+    expect(after.body).toBe(body);
+    // …and the structured endpoint sees the same list, in the same order.
+    const glossary = (await (await app.request("/api/beispiel/glossary")).json()) as {
+      entries: Array<{ term: string; explanation: string }>;
+    };
+    expect(glossary.entries).toEqual([
+      { term: "tide pool", explanation: "Gezeitentümpel" },
+      { term: "harbour master", explanation: "Hafenmeisterin" },
+    ]);
+    // The whole list was replaced — the fixture's terms are gone, not merged.
+    expect(after.body).not.toContain("lighthouse keeper");
+  });
+
+  test("409 on a stale token carries the current one and writes nothing", async () => {
+    const before = await getFile(SCENE);
+    const res = await putFile({ path: SCENE, mtimeMs: before.mtimeMs - 1, body: "\nZu spät\n" });
     expect(res.status).toBe(409);
     const body = (await res.json()) as { error: string; mtimeMs: number };
     expect(typeof body.error).toBe("string");
-    expect(body.mtimeMs).toBe(s.mtimeMs);
-    expect(await readFile(absOf(SCENE), "utf8")).toBe(rawBefore);
-    expect((await stat(absOf(SCENE))).mtimeMs).toBe(s.mtimeMs);
+    expect(body.mtimeMs).toBe(before.mtimeMs);
+    expect(await getFile(SCENE)).toEqual(before);
   });
 
-  test("a file without a frontmatter block: the body IS the file", async () => {
-    const rel = "01-salzhafen/kein-frontmatter.md";
-    await writeFile(absOf(rel), "Nur Text, kein Frontmatter.\n", "utf8");
-    const before = await getFile(rel);
-    expect(before.body).toBe("Nur Text, kein Frontmatter.\n");
-    const res = await putFile({
-      path: rel,
-      mtimeMs: before.mtimeMs,
-      body: "## Jetzt mit Überschrift\n",
-    });
-    expect(res.status).toBe(200);
-    expect(await readFile(absOf(rel), "utf8")).toBe("## Jetzt mit Überschrift\n");
-  });
-
-  test("400 for a file whose frontmatter block is not valid YAML", async () => {
-    const rel = "01-salzhafen/kaputtes-frontmatter.md";
-    const broken = "---\ntitle: [unclosed\n---\n\nText.\n";
-    await writeFile(absOf(rel), broken, "utf8");
-    const before = await getFile(rel);
-    // the parser degrades and reports the WHOLE file as body — writing that
-    // back must not duplicate the frontmatter block
-    expect(before.body).toBe(broken);
-    const res = await putFile({ path: rel, mtimeMs: before.mtimeMs, body: before.body });
-    expect(res.status).toBe(400);
-    expect(await readFile(absOf(rel), "utf8")).toBe(broken);
-  });
-
-  // Degenerate frontmatter blocks the RAW SPLIT cannot see but gray-matter
-  // still reads: writing the body alone would delete the frontmatter from
-  // disk. All of them are 400 and must leave the file byte-identical.
-  const DEGENERATE: Array<[string, string]> = [
-    // a stray space behind the closing fence — invisible in an editor
-    ["stray-space", "---\ntitle: Kaputt\nstatus: ready\n--- \n\nText.\n"],
-    // the file ends INSIDE the block (never closed, no body at all)
-    ["unclosed", "---\ntitle: Kaputt\nstatus: ready\n"],
-    // a BOM in front of the opening fence (a Windows editor's gift)
-    ["bom", "﻿---\ntitle: Kaputt\nstatus: ready\n---\n\nText.\n"],
-  ];
-
-  for (const [name, content] of DEGENERATE) {
-    test(`400 for a degenerate frontmatter block (${name}) — nothing written`, async () => {
-      const rel = `01-salzhafen/degeneriert-${name}.md`;
-      await writeFile(absOf(rel), content, "utf8");
-      const before = await getFile(rel);
-      // The parser found frontmatter, so the editor was seeded with a body
-      // the raw split does not know how to reattach.
-      expect(before.frontmatter.title).toBe("Kaputt");
-      const res = await putFile({ path: rel, mtimeMs: before.mtimeMs, body: before.body });
-      expect(res.status).toBe(400);
-      // The frontmatter is still on disk — byte for byte.
-      expect(await readFile(absOf(rel), "utf8")).toBe(content);
-    });
-  }
-
-  test("a file the parser reads as pure body stays writable", async () => {
-    // Counter-case to the guard above: an unclosed block WITH text after it
-    // degrades in the parser too (the whole file IS the body), so client and
-    // server agree and the write is legal.
-    const rel = "01-salzhafen/kein-block-nur-text.md";
-    const content = "---\ntitle: Kaputt\n\nText.\n";
-    await writeFile(absOf(rel), content, "utf8");
-    const before = await getFile(rel);
-    expect(before.body).toBe(content);
-    const res = await putFile({ path: rel, mtimeMs: before.mtimeMs, body: `${content}Mehr.\n` });
-    expect(res.status).toBe(200);
-    expect(await readFile(absOf(rel), "utf8")).toBe(`${content}Mehr.\n`);
-  });
+  // DELETED, all four of them: "a file without a frontmatter block: the body
+  // IS the file", "400 for a file whose frontmatter block is not valid YAML",
+  // the three degenerate-frontmatter cases (stray space behind the fence,
+  // unclosed block, BOM) and "a file the parser reads as pure body stays
+  // writable". Every one of those guarded the RAW SPLIT of a markdown file:
+  // the writer had to reattach a frontmatter block it could not always find,
+  // and refused rather than delete it. There is no split any more — the
+  // frontmatter is columns and the body is a column — so the failure mode is
+  // gone with it. What a malformed file can still do is fail the one-time
+  // migration's parse, which is `unknown_files` plus a `migration_report`
+  // entry (covered by test/db-migration.test.ts).
 
   test("400 for the append-only kinds — session logs and inbox", async () => {
-    // DECISIONS #4: they grow by lines through POST /log and POST /inbox; a
+    // DECISIONS #4: they grow by ROWS through POST /log and POST /inbox; a
     // free-hand body rewrite is not a maintenance action, and the rule lives
     // in the endpoint, not only in the UI that hides the button.
     for (const rel of ["sessions/2026-01-15.md", "inbox.md"]) {
       const before = await getFile(rel);
-      const rawBefore = await readFile(absOf(rel), "utf8");
       const res = await putFile({ path: rel, mtimeMs: before.mtimeMs, body: "\nAlles neu.\n" });
       expect(res.status).toBe(400);
-      expect(await readFile(absOf(rel), "utf8")).toBe(rawBefore);
+      expect(await getFile(rel)).toEqual(before);
     }
   });
 
   test("400 on malformed bodies", async () => {
-    const s = await stat(absOf(SCENE));
-    const rawBefore = await readFile(absOf(SCENE), "utf8");
+    const before = await getFile(SCENE);
     const bad = [
       {}, // missing everything
-      { path: SCENE, mtimeMs: s.mtimeMs }, // missing body
+      { path: SCENE, mtimeMs: before.mtimeMs }, // missing body
       { path: SCENE, mtimeMs: "später", body: "x" }, // mtimeMs not a number
-      { path: SCENE, mtimeMs: s.mtimeMs, body: 42 }, // body not a string
-      { path: SCENE, mtimeMs: s.mtimeMs, body: ["x"] }, // body not a string
-      { path: SCENE, mtimeMs: s.mtimeMs, body: null }, // body not a string
-      { path: SCENE, mtimeMs: s.mtimeMs, body: "x", patch: {} }, // unknown key
-      { path: 42, mtimeMs: s.mtimeMs, body: "x" }, // path not a string
+      { path: SCENE, mtimeMs: before.mtimeMs, body: 42 }, // body not a string
+      { path: SCENE, mtimeMs: before.mtimeMs, body: ["x"] }, // body not a string
+      { path: SCENE, mtimeMs: before.mtimeMs, body: null }, // body not a string
+      { path: SCENE, mtimeMs: before.mtimeMs, body: "x", patch: {} }, // unknown key
+      { path: 42, mtimeMs: before.mtimeMs, body: "x" }, // path not a string
     ];
     for (const b of bad) {
       expect((await putFile(b)).status).toBe(400);
@@ -821,11 +790,11 @@ describe("PUT /api/:campaign/file", () => {
       body: "no json",
     });
     expect(res.status).toBe(400);
-    // none of the rejected requests touched the file
-    expect(await readFile(absOf(SCENE), "utf8")).toBe(rawBefore);
+    // none of the rejected requests touched the row
+    expect(await getFile(SCENE)).toEqual(before);
   });
 
-  test("path safety and missing files behave like the read API", async () => {
+  test("path safety and missing rows behave like the read API", async () => {
     expect((await putFile({ path: "../../etc/passwd.md", mtimeMs: 1, body: "x" })).status).toBe(
       400,
     );
@@ -836,6 +805,11 @@ describe("PUT /api/:campaign/file", () => {
     expect(
       (await putFile({ path: "01-salzhafen/hafen/../hafen/x.md", mtimeMs: 1, body: "x" })).status,
     ).toBe(400);
+    // A stale link — right scene id, wrong chapter — is 404 on write just as
+    // it is on read (store/read.ts readByLocator).
+    expect(
+      (await putFile({ path: "02-nebel/lighthouse-arrival.md", mtimeMs: 1, body: "x" })).status,
+    ).toBe(404);
   });
 
   test("404 for an unknown campaign", async () => {
