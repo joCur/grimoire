@@ -32,6 +32,7 @@
 
 import { sql } from "drizzle-orm";
 import {
+  blob,
   foreignKey,
   integer,
   primaryKey,
@@ -381,7 +382,14 @@ export const logEntries = sqliteTable(
   ],
 );
 
-/** `scenes_played: [...]` of a session — ordered, soft scene references. */
+/**
+ * `scenes_played: [...]` of a session — ordered, soft scene references.
+ *
+ * The key is (campaign, session, POS), not (…, scene): the list is a
+ * SEQUENCE, and a scene the party returned to later stands in it twice. A
+ * scene-keyed table swallowed that repetition, and with it the order the
+ * review reads the evening back in.
+ */
 export const sessionScenesPlayed = sqliteTable(
   "session_scenes_played",
   {
@@ -391,7 +399,7 @@ export const sessionScenesPlayed = sqliteTable(
     pos: integer("pos").notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.campaignId, t.sessionId, t.sceneId] }),
+    primaryKey({ columns: [t.campaignId, t.sessionId, t.pos] }),
     foreignKey({
       columns: [t.campaignId, t.sessionId],
       foreignColumns: [sessions.campaignId, sessions.id],
@@ -503,6 +511,11 @@ export const generateJobs = sqliteTable(
  * This is the promise "nothing is lost": whatever the importer did not
  * understand is still readable here, byte for byte, next to a
  * `migration_report` row saying why.
+ *
+ * TEXT files live in `content`, non-text files (a map png, a pdf handout) in
+ * `content_blob` — decoding those as UTF-8 would replace unmappable bytes
+ * with U+FFFD, and a mangled copy under the label "verbatim" is worse than
+ * an honest one.
  */
 export const unknownFiles = sqliteTable(
   "unknown_files",
@@ -510,8 +523,10 @@ export const unknownFiles = sqliteTable(
     campaignId: text("campaign_id").notNull(),
     /** Campaign-relative path the file had, forward slashes. */
     path: text("path").notNull(),
-    /** The complete file contents, frontmatter block included. */
+    /** The complete file contents, frontmatter block included; "" for a blob. */
     content: text("content").notNull(),
+    /** The raw bytes of a NON-TEXT file; NULL when `content` holds the file. */
+    contentBlob: blob("content_blob", { mode: "buffer" }),
     /** ISO timestamp of the import. */
     at: text("at").notNull(),
   },
@@ -540,6 +555,14 @@ export const migrationReport = sqliteTable("migration_report", {
   /** Human-readable German reason — this is read by the DM, not by code. */
   reason: text("reason").notNull(),
   at: text("at").notNull(),
+  /**
+   * Which migration RUN produced this row. The table is cumulative (a run
+   * interrupted mid-way is resumed by a later one), so "the findings of this
+   * run" needs an id of its own — two runs can share an `at` to the
+   * millisecond, and reading someone else's findings as fresh is how a
+   * report stops being trusted.
+   */
+  runId: text("run_id").notNull().default(""),
 });
 
 /**
@@ -547,6 +570,11 @@ export const migrationReport = sqliteTable("migration_report", {
  *   `migrated_at`   — ISO timestamp of the one-time migration. Its PRESENCE
  *                     is what makes the migration idempotent.
  *   `migrated_from` — the CAMPAIGN_ROOT the import read.
+ *   `migrated_campaign:<id>`
+ *                   — ISO timestamp of ONE campaign's committed import,
+ *                     written inside that campaign's own transaction. This is
+ *                     what lets a run interrupted between two campaigns
+ *                     resume instead of dead-ending on "content, no marker".
  */
 export const meta = sqliteTable("meta", {
   key: text("key").primaryKey(),

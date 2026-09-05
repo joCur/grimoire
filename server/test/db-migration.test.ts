@@ -18,7 +18,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { and, eq, sql } from "drizzle-orm";
 import { openDb, type OpenDb } from "../src/db/client";
-import { runInitialMigration } from "../src/db/migrate-campaigns";
+import { campaignMarkerKey, runInitialMigration } from "../src/db/migrate-campaigns";
 import {
   campaigns,
   chapters,
@@ -490,6 +490,207 @@ Freitext ganz oben, der zu keinem Begriff gehört.
   });
 });
 
+// --- review follow-ups: the content-loss holes ------------------------------
+//
+// Every test here is one review finding. They all guard the same rule: the
+// migration may degrade and it may report, but it may never lose a line.
+
+describe("no silent content loss", () => {
+  /** A scratch campaign with just the files a test needs. */
+  async function campaignWith(files: Record<string, string | Uint8Array>): Promise<string> {
+    const id = "review";
+    const root = path.join(tmpRoot, id);
+    for (const [rel, content] of Object.entries(files)) {
+      const abs = path.join(root, rel);
+      await mkdir(path.dirname(abs), { recursive: true });
+      await writeFile(abs, content as never);
+    }
+    return id;
+  }
+
+  test("an inbox.md the APP wrote — no frontmatter — is imported, not degraded", async () => {
+    // campaign-write.ts `appendInboxEntry` creates exactly this file when a
+    // campaign has no inbox yet. Degrading it hid every ingested idea.
+    const id = await campaignWith({
+      "_campaign.md": "---\nid: review\nname: Review\n---\n",
+      "inbox.md": "# Inbox\n\n- eine Idee aus der App #thread\n- [x] schon erledigt\n",
+    });
+    const { db } = await freshDb();
+    await runInitialMigration(db, tmpRoot);
+
+    const rows = db
+      .select()
+      .from(inboxEntries)
+      .where(eq(inboxEntries.campaignId, id))
+      .all()
+      .sort((a, b) => a.pos - b.pos);
+    expect(rows.map((r) => r.raw)).toEqual([
+      "# Inbox",
+      "- eine Idee aus der App #thread",
+      "- [x] schon erledigt",
+    ]);
+    expect(rows[1]?.text).toBe("eine Idee aus der App #thread");
+    expect(rows[2]?.done).toBe(1);
+    // And it is NOT a degradation: no report entry, nothing in unknown_files.
+    expect(db.select().from(migrationReport).where(eq(migrationReport.campaignId, id)).all()).toEqual(
+      [],
+    );
+    expect(db.select().from(unknownFiles).where(eq(unknownFiles.campaignId, id)).all()).toEqual([]);
+  });
+
+  test("a glossary without frontmatter is imported too", async () => {
+    const id = await campaignWith({
+      "_campaign.md": "---\nid: review\n---\n",
+      "glossary.md": "# Glossar\n\n- cove -> Bucht\n",
+    });
+    const { db } = await freshDb();
+    await runInitialMigration(db, tmpRoot);
+    expect(
+      db.select().from(glossary).where(eq(glossary.campaignId, id)).all().map((t) => t.term),
+    ).toContain("cove");
+    expect(db.select().from(migrationReport).where(eq(migrationReport.campaignId, id)).all()).toEqual(
+      [],
+    );
+  });
+
+  test("an inbox with a BROKEN frontmatter block still degrades verbatim", async () => {
+    const broken = "---\nid: [unclosed\n---\n\n- eine Idee\n";
+    const id = await campaignWith({
+      "_campaign.md": "---\nid: review\n---\n",
+      "inbox.md": broken,
+    });
+    const { db } = await freshDb();
+    await runInitialMigration(db, tmpRoot);
+    expect(db.select().from(inboxEntries).where(eq(inboxEntries.campaignId, id)).all()).toEqual([]);
+    expect(
+      db.select().from(unknownFiles).where(eq(unknownFiles.campaignId, id)).all()[0]?.content,
+    ).toBe(broken);
+  });
+
+  test("a `### ` subsection under `## Log` survives in the session body", async () => {
+    const id = await campaignWith({
+      "_campaign.md": "---\nid: review\n---\n",
+      "sessions/2026-03-01.md":
+        "---\nid: 2026-03-01\nstarted: 2026-03-01T19:00\n---\n\n" +
+        "## Log\n\n- 19:00 (a) los\n\n### Nachtrag\n\nDer Wärter log.\n\n## Threads\n\n- [ ] t\n",
+    });
+    const { db } = await freshDb();
+    await runInitialMigration(db, tmpRoot);
+    const session = db.select().from(sessions).where(eq(sessions.campaignId, id)).all()[0];
+    // The lines that became rows are gone …
+    expect(session?.body).not.toContain("19:00");
+    // … everything else is still there, including the subsection.
+    expect(session?.body).toContain("### Nachtrag");
+    expect(session?.body).toContain("Der Wärter log.");
+    expect(session?.body).toContain("## Threads");
+  });
+
+  test("a second `## Log` section is not deleted along with the first", async () => {
+    const id = await campaignWith({
+      "_campaign.md": "---\nid: review\n---\n",
+      "sessions/2026-03-02.md":
+        "---\nid: 2026-03-02\n---\n\n## Log\n\n- 19:00 (a) eins\n\n## Log\n\n- 20:00 (a) zwei\n",
+    });
+    const { db } = await freshDb();
+    await runInitialMigration(db, tmpRoot);
+    const log = db.select().from(logEntries).where(eq(logEntries.campaignId, id)).all();
+    expect(log.map((l) => l.text)).toEqual(["eins"]);
+    const session = db.select().from(sessions).where(eq(sessions.campaignId, id)).all()[0];
+    // The second section was never parsed — so it stays readable in the body.
+    expect(session?.body).toContain("- 20:00 (a) zwei");
+  });
+
+  test("`scenes_played` keeps repetitions and their order", async () => {
+    const id = await campaignWith({
+      "_campaign.md": "---\nid: review\n---\n",
+      "sessions/2026-03-03.md":
+        "---\nid: 2026-03-03\nscenes_played: [hafen, leuchtturm, hafen]\n---\n",
+    });
+    const { db } = await freshDb();
+    await runInitialMigration(db, tmpRoot);
+    expect(
+      db
+        .select()
+        .from(sessionScenesPlayed)
+        .where(eq(sessionScenesPlayed.campaignId, id))
+        .all()
+        .sort((a, b) => a.pos - b.pos)
+        .map((r) => r.sceneId),
+    ).toEqual(["hafen", "leuchtturm", "hafen"]);
+  });
+
+  test("a `quickstats` that is not a map is kept in extra and reported", async () => {
+    const id = await campaignWith({
+      "_campaign.md": "---\nid: review\n---\n",
+      "npcs/fenn.md": "---\nid: fenn\nname: Fenn\nquickstats: [ac 12, hp 9]\n---\n\nText.\n",
+    });
+    const { db } = await freshDb();
+    await runInitialMigration(db, tmpRoot);
+    const fenn = db.select().from(npcs).where(eq(npcs.campaignId, id)).all()[0];
+    expect(unpackJson(fenn?.quickstats)).toEqual({});
+    // The value itself is not gone — it moved to the extra fields.
+    expect(unpackJson(fenn?.extra).quickstats).toEqual(["ac 12", "hp 9"]);
+    expect(
+      db
+        .select()
+        .from(migrationReport)
+        .where(eq(migrationReport.campaignId, id))
+        .all()
+        .map((r) => r.reason)
+        .join(" "),
+    ).toContain("quickstats");
+  });
+
+  test("a binary file is stored as BYTES and the report says so", async () => {
+    // A png header — not valid UTF-8, so decoding it would mangle it.
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff, 0xfe]);
+    const id = await campaignWith({
+      "_campaign.md": "---\nid: review\n---\n",
+      "karte.png": png,
+    });
+    const { db } = await freshDb();
+    await runInitialMigration(db, tmpRoot);
+    const row = db
+      .select()
+      .from(unknownFiles)
+      .where(and(eq(unknownFiles.campaignId, id), eq(unknownFiles.path, "karte.png")))
+      .all()[0];
+    // The bytes are byte-for-byte what was on disk …
+    expect(row?.contentBlob).not.toBeNull();
+    expect(Array.from(row?.contentBlob ?? new Uint8Array())).toEqual(Array.from(png));
+    // … and no mangled text pretends to be the file.
+    expect(row?.content).toBe("");
+    const reason = db
+      .select()
+      .from(migrationReport)
+      .where(eq(migrationReport.campaignId, id))
+      .all()
+      .map((r) => r.reason)
+      .join(" ");
+    expect(reason).toContain("binär");
+    expect(reason).toContain("content_blob");
+    // The old claim was a lie and must not come back.
+    expect(reason).not.toContain("Inhalt unverändert übernommen");
+  });
+
+  test("a UTF-8 text file with non-ASCII characters is still stored as text", async () => {
+    const text = "lose Notizen über Salzhäfen — mit Gedankenstrich\n";
+    const id = await campaignWith({
+      "_campaign.md": "---\nid: review\n---\n",
+      "notizen.txt": text,
+    });
+    const { db } = await freshDb();
+    await runInitialMigration(db, tmpRoot);
+    const row = db
+      .select()
+      .from(unknownFiles)
+      .where(and(eq(unknownFiles.campaignId, id), eq(unknownFiles.path, "notizen.txt")))
+      .all()[0];
+    expect(row?.content).toBe(text);
+    expect(row?.contentBlob).toBeNull();
+  });
+});
+
 // --- AK3: idempotency ---------------------------------------------------------
 
 describe("AK3 — a second run does nothing", () => {
@@ -509,6 +710,80 @@ describe("AK3 — a second run does nothing", () => {
     expect(db.select().from(meta).all().find((r) => r.key === "migrated_at")?.value).toBe(
       markerBefore,
     );
+  });
+
+  test("a run interrupted between two campaigns RESUMES instead of dead-ending", async () => {
+    // The crash scenario: campaign A is committed (its per-campaign marker
+    // with it), the process dies before B, so the global `migrated_at` was
+    // never written. Without per-campaign markers the next run would see
+    // "content, no marker" and skip forever.
+    await mkdir(path.join(tmpRoot, "zweite"), { recursive: true });
+    await writeFile(
+      path.join(tmpRoot, "zweite", "_campaign.md"),
+      "---\nid: zweite\nname: Zweite Kampagne\n---\n",
+      "utf8",
+    );
+
+    const { db } = await freshDb();
+    // Simulate the interrupted run: import "beispiel" only, no global marker.
+    const half = await runInitialMigration(db, tmpRoot, { force: true });
+    expect(half.migrated).toBe(true);
+    db.delete(meta).where(eq(meta.key, "migrated_at")).run();
+    db.delete(meta).where(eq(meta.key, campaignMarkerKey("zweite"))).run();
+    db.delete(campaigns).where(eq(campaigns.id, "zweite")).run();
+    expect(db.select().from(campaigns).all().map((c) => c.id)).toEqual(["beispiel"]);
+
+    const resumed = await runInitialMigration(db, tmpRoot);
+    expect(resumed.migrated).toBe(true);
+    // Only the missing campaign was imported; the committed one was left alone.
+    expect(resumed.campaigns).toEqual(["zweite"]);
+    expect(resumed.resumedFrom).toEqual(["beispiel"]);
+    expect(db.select().from(campaigns).all().map((c) => c.id).sort()).toEqual([
+      "beispiel",
+      "zweite",
+    ]);
+    // Exactly one row per campaign — nothing was imported twice.
+    expect(db.select().from(campaigns).all()).toHaveLength(2);
+    // And now the run is finished for good.
+    const third = await runInitialMigration(db, tmpRoot);
+    expect(third.skipped).toBe("already-migrated");
+  });
+
+  test("the report is attributable to ONE run — `outcome.runId` is the filter", async () => {
+    // The CLI printed the whole cumulative table, so a resumed run presented
+    // an earlier run's findings as if they had just happened.
+    const first = path.join(tmpRoot, "eins");
+    await mkdir(first, { recursive: true });
+    await writeFile(path.join(first, "_campaign.md"), "---\nid: eins\n---\n", "utf8");
+    await writeFile(path.join(first, "notizen.txt"), "lose Notizen", "utf8");
+
+    const { db } = await freshDb();
+    const run1 = await runInitialMigration(db, tmpRoot);
+    expect(run1.reportEntries).toBe(1);
+    expect(run1.runId).toBeDefined();
+
+    // A second campaign appears and the run is re-opened (the resume path).
+    const second = path.join(tmpRoot, "zwei");
+    await mkdir(second, { recursive: true });
+    await writeFile(path.join(second, "_campaign.md"), "---\nid: zwei\n---\n", "utf8");
+    await writeFile(path.join(second, "andere.txt"), "andere Notizen", "utf8");
+    db.delete(meta).where(eq(meta.key, "migrated_at")).run();
+
+    const run2 = await runInitialMigration(db, tmpRoot);
+    expect(run2.campaigns).toEqual(["zwei"]);
+    // A run id, not a timestamp: two runs can share an `at` to the millisecond.
+    expect(run2.runId).not.toBe(run1.runId);
+    expect(run2.reportEntries).toBe(1);
+
+    // The table is cumulative …
+    expect(db.select().from(migrationReport).all()).toHaveLength(2);
+    // … but this run's rows are exactly the ones the CLI prints.
+    const thisRun = db
+      .select()
+      .from(migrationReport)
+      .where(eq(migrationReport.runId, run2.runId ?? ""))
+      .all();
+    expect(thisRun.map((r) => r.path)).toEqual(["andere.txt"]);
   });
 
   test("a non-empty database without a marker is never overwritten", async () => {

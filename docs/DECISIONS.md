@@ -221,6 +221,17 @@ ein Spiegel erzeugt, wird nicht gebaut.
   menschenlesbare Vor-Migrations-Stand bleibt damit liegen — das ist die
   Abfederung der Einbahnstraße, zusammen mit „manueller Export" als bekanntem
   Später-Pfad.
+- **Die Migration verliert nie still Inhalt.** Was nicht zu Zeilen wird,
+  liegt wörtlich in `unknown_files` — Textdateien in `content`, Nicht-Text
+  (Karten-PNG, PDF-Handout) als Bytes in `content_blob`, denn eine als UTF-8
+  verstümmelte Kopie unter der Überschrift „unverändert übernommen" wäre
+  schlimmer als eine ehrliche Absage. Jede Degradierung steht mit Grund und
+  Lauf-Id (`migration_report.run_id`) daneben.
+- **Die Migration ist wiederaufnehmbar.** Neben `meta['migrated_at']` (Lauf
+  fertig) markiert `meta['migrated_campaign:<id>']` jede einzelne, in ihrer
+  eigenen Transaktion committete Kampagne. Ein Abbruch zwischen zwei
+  Kampagnen führt damit zum Wiederaufsetzen statt in die Sackgasse
+  „Inhalt ohne Marker — wird nie wieder angefasst".
 - **Sicherung der DB-Datei ist Sache des Stack-Owners** (Volume-Backup,
   Hinweis in DEPLOYMENT.md); ein eigenes Backup-System ist bewusst kein
   Feature.

@@ -11,9 +11,12 @@
 //      exactly as it was and is simply ignored afterwards — it stays the
 //      readable pre-migration snapshot, which is the whole fallback story
 //      (planning risk R1).
-//   2. IT IS IDEMPOTENT, twice over: `meta['migrated_at']` marks a finished
-//      run, and — defensively, for a database that has content but somehow
-//      no marker — a NON-EMPTY database is never overwritten.
+//   2. IT IS IDEMPOTENT, three times over: `meta['migrated_at']` marks a
+//      finished run, `meta['migrated_campaign:<id>']` marks each single
+//      campaign as committed (so a run interrupted between two campaigns
+//      RESUMES instead of dead-ending), and — defensively, for a database
+//      that has content but no marker at all — a NON-EMPTY database is never
+//      overwritten.
 //   3. ONE TRANSACTION PER CAMPAIGN. A campaign is either fully in the
 //      database or not at all; a broken file in campaign B cannot leave
 //      campaign A half-imported.
@@ -22,6 +25,7 @@
 //      `migration_report`. An empty report means a clean import; a non-empty
 //      one is a reading task for the DM, not an error.
 
+import { randomUUID } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { kindFromPath, parseMarkdown, sessionPauses } from "@grimoire/shared";
@@ -32,6 +36,7 @@ import {
   parseLogSection,
   parseRelationsSection,
   removeSection,
+  SECTION_LEVEL,
 } from "./import-markdown";
 import {
   campaigns as campaignsTable,
@@ -73,10 +78,47 @@ export interface MigrationOutcome {
   skipped?: "already-migrated" | "database-not-empty" | "no-campaigns";
   /** Ids of the campaigns imported (empty when skipped). */
   campaigns: string[];
+  /**
+   * Campaigns a PREVIOUS, interrupted run had already committed and that this
+   * run therefore left alone. Non-empty means this call resumed.
+   */
+  resumedFrom: string[];
   /** Number of `migration_report` rows this run wrote. 0 = clean import. */
   reportEntries: number;
   /** Number of files kept verbatim in `unknown_files`. */
   unknownFiles: number;
+  /** The run's ISO timestamp — the `at` of every row this run wrote. */
+  at?: string;
+  /**
+   * Id of THIS run. `migration_report` rows carry it, so "the findings of
+   * this run" is an exact query (the CLI prints exactly those). Undefined
+   * when nothing was imported.
+   */
+  runId?: string;
+}
+
+/**
+ * `meta` key marking ONE campaign as fully committed. Written inside the
+ * campaign's own transaction, so it exists exactly when its rows do.
+ *
+ * This is what makes a crash mid-migration recoverable: the global
+ * `migrated_at` is only written after the LAST campaign, so without these
+ * per-campaign markers a database with campaign A committed and B missing
+ * would look like "content without a marker" — and the defensive rule would
+ * refuse to ever touch it again. With them, the next run resumes at B.
+ */
+export function campaignMarkerKey(id: string): string {
+  return `migrated_campaign:${id}`;
+}
+
+const CAMPAIGN_MARKER_PREFIX = "migrated_campaign:";
+
+/** The campaigns a previous run already committed. */
+function migratedCampaigns(db: GrimoireDb): Set<string> {
+  const rows = db.all<{ key: string }>(
+    sql`select key from meta where key like ${`${CAMPAIGN_MARKER_PREFIX}%`}`,
+  );
+  return new Set(rows.map((r) => r.key.slice(CAMPAIGN_MARKER_PREFIX.length)));
 }
 
 /** One report entry, collected while importing and written in the same tx. */
@@ -90,10 +132,31 @@ interface ReportEntry {
 interface RawFile {
   /** Campaign-relative path, forward slashes. */
   rel: string;
-  /** File contents as UTF-8. */
+  /**
+   * File contents as UTF-8 — EMPTY for a binary file, whose text form does
+   * not exist (see `bytes`).
+   */
   raw: string;
   /** False for a file that is not `.md` — reported and kept verbatim. */
   markdown: boolean;
+  /**
+   * The raw bytes, kept only for a file that is NOT valid UTF-8 text (a map
+   * png, a pdf handout). Decoding those into a string would replace every
+   * unmappable byte with U+FFFD and the "kept verbatim" promise would be a
+   * lie — so the bytes go into `unknown_files.content_blob` instead.
+   */
+  bytes?: Buffer;
+  /** True when the file is not decodable text. */
+  binary: boolean;
+}
+
+/**
+ * True when `bytes` is not UTF-8 text: a NUL byte, or a decode that does not
+ * round-trip (the sign that the decoder substituted U+FFFD for something).
+ */
+function isBinary(bytes: Buffer, decoded: string): boolean {
+  if (bytes.includes(0)) return true;
+  return Buffer.compare(Buffer.from(decoded, "utf8"), bytes) !== 0;
 }
 
 interface RawCampaign {
@@ -138,13 +201,21 @@ async function readCampaign(root: string, id: string): Promise<RawCampaign> {
         continue;
       }
       if (!s.isFile()) continue;
-      let raw: string;
+      let bytes: Buffer;
       try {
-        raw = await readFile(abs, "utf8");
+        bytes = await readFile(abs);
       } catch {
         continue;
       }
-      files.push({ rel, raw, markdown: entry.name.endsWith(".md") });
+      const decoded = bytes.toString("utf8");
+      const binary = isBinary(bytes, decoded);
+      files.push({
+        rel,
+        raw: binary ? "" : decoded,
+        markdown: entry.name.endsWith(".md"),
+        binary,
+        ...(binary ? { bytes } : {}),
+      });
     }
   };
 
@@ -229,6 +300,29 @@ function frontmatterUnusable(raw: string, body: string): boolean {
   return body === raw;
 }
 
+/**
+ * True for a file whose import needs NO frontmatter at all, so a missing
+ * block is normal rather than a degradation.
+ *
+ * The inbox is the case that matters: THE APP ITSELF writes it. A campaign
+ * that never had an `inbox.md` gets one from `POST /api/:campaign/inbox` as
+ * plain `# Inbox\n\n- text` with no frontmatter (campaign-write.ts,
+ * `appendInboxEntry`) — treating that as unusable would push every ingested
+ * idea of such a campaign into `unknown_files` and out of the app's inbox.
+ * The glossary is the same shape: `parseGlossaryBody` reads only the body,
+ * and the frontmatter block holds at most a decorative `id`.
+ *
+ * Everything else keeps degrading: an npc, scene or session without
+ * frontmatter has no id, and an invented id is a reference that never existed.
+ *
+ * A BROKEN frontmatter block still degrades even here — its `---` lines would
+ * otherwise turn into inbox rows.
+ */
+function needsNoFrontmatter(cls: FileClass, raw: string): boolean {
+  if (hasFrontmatterBlock(raw)) return false;
+  return cls.kind === "inbox" || cls.kind === "glossary";
+}
+
 // --- the FTS index ------------------------------------------------------------
 
 /**
@@ -276,6 +370,19 @@ type FileClass =
 function classify(file: RawFile): FileClass {
   const segments = file.rel.split("/");
   const basename = segments[segments.length - 1]!;
+
+  if (file.binary) {
+    // No verbatim TEXT exists for these — say so instead of claiming the
+    // content came through (the bytes go into `unknown_files.content_blob`).
+    const size = file.bytes?.length ?? 0;
+    return {
+      kind: "unknown",
+      reason:
+        `Keine Textdatei (${size} Byte, binär) — nicht als Text übernommen. ` +
+        "Die Bytes liegen unverändert in unknown_files.content_blob, " +
+        "das Original bleibt im Dateibaum liegen.",
+    };
+  }
 
   if (!file.markdown) {
     return { kind: "unknown", reason: "Keine Markdown-Datei — Inhalt unverändert übernommen." };
@@ -366,7 +473,7 @@ function importCampaign(
     // a divergence here would mean the two drifted apart.
     void kindFromPath(file.rel);
     const p = parseMarkdown(file.raw, file.rel, 0);
-    if (frontmatterUnusable(file.raw, p.body)) {
+    if (frontmatterUnusable(file.raw, p.body) && !needsNoFrontmatter(cls, file.raw)) {
       degrade(
         file,
         hasFrontmatterBlock(file.raw)
@@ -464,6 +571,14 @@ function importCampaign(
     npcIds.add(id);
     const name = asString(p.frontmatter.name, id);
     const relations = parseRelationsSection(p.body);
+    // `quickstats` is a MAP in the format (README, "Entität: NPC"). A
+    // hand-edited file can hold a list or a scalar there, and packing that
+    // into the object column would degrade it to `{}` — a value gone with no
+    // trace. Keep it in `extra` under its own key and say so in the report.
+    const rawQuickstats = p.frontmatter.quickstats;
+    const quickstatsIsMap =
+      typeof rawQuickstats === "object" && rawQuickstats !== null && !Array.isArray(rawQuickstats);
+    const quickstatsMisshaped = rawQuickstats !== undefined && rawQuickstats !== null && !quickstatsIsMap;
     tx.insert(npcsTable)
       .values({
         campaignId,
@@ -473,13 +588,15 @@ function importCampaign(
         chapterId: asOptionalString(p.frontmatter.chapter) ?? null,
         status: asString(p.frontmatter.status, "unknown"),
         statblock: asOptionalString(p.frontmatter.statblock) ?? null,
-        quickstats: packJson(p.frontmatter.quickstats ?? {}),
+        quickstats: packJson(quickstatsIsMap ? rawQuickstats : {}),
         voice: asOptionalString(p.frontmatter.voice) ?? null,
         appearance: asOptionalString(p.frontmatter.appearance) ?? null,
         // `## Beziehungen` becomes rows, so it must not also stay as prose.
-        body: removeSection(p.body, "Beziehungen"),
-        extra: packJson(
-          splitFrontmatter(p.frontmatter, [
+        // Only the span that was PARSED goes (see removeSection): a `###`
+        // subsection under it stays in the body rather than vanishing.
+        body: removeSection(p.body, "Beziehungen", SECTION_LEVEL),
+        extra: packJson({
+          ...splitFrontmatter(p.frontmatter, [
             "id",
             "name",
             "role",
@@ -490,9 +607,18 @@ function importCampaign(
             "voice",
             "appearance",
           ]),
-        ),
+          // Only when it does not fit the column (see above).
+          ...(quickstatsMisshaped ? { quickstats: rawQuickstats } : {}),
+        }),
       })
       .run();
+    if (quickstatsMisshaped) {
+      degrade(
+        p.file,
+        '„quickstats" ist keine Schlüssel-Wert-Liste und passt nicht in die Quickstats-Spalte — ' +
+          "der Wert wurde unverändert in die Zusatzfelder (extra) übernommen.",
+      );
+    }
     for (const relation of relations.relations) {
       tx.insert(relationsTable)
         .values({ campaignId, npcId: id, otherNpcId: relation.otherNpcId, note: relation.note, pos: relation.pos })
@@ -638,7 +764,7 @@ function importCampaign(
         ended: asOptionalString(p.frontmatter.ended) ?? null,
         // `## Log` becomes rows; everything else (`## Threads` above all)
         // stays as the session's body.
-        body: removeSection(p.body, "Log"),
+        body: removeSection(p.body, "Log", SECTION_LEVEL),
         extra: packJson(
           splitFrontmatter(p.frontmatter, [
             "id",
@@ -707,12 +833,12 @@ function importCampaign(
       );
     }
 
+    // `scenes_played` is an ORDERED list and a scene the party returned to
+    // appears in it twice. `pos` is part of the key, so a repetition is a
+    // second row: the sequence is what the review reads back.
     asStringArray(p.frontmatter.scenes_played).forEach((sceneId, pos) => {
       if (sceneId === "") return;
-      tx.insert(playedTable)
-        .values({ campaignId, sessionId: id, sceneId, pos })
-        .onConflictDoNothing()
-        .run();
+      tx.insert(playedTable).values({ campaignId, sessionId: id, sceneId, pos }).run();
     });
   }
 
@@ -793,7 +919,13 @@ function importCampaign(
     if (stored.has(file.rel)) continue;
     stored.add(file.rel);
     tx.insert(unknownTable)
-      .values({ campaignId, path: file.rel, content: file.raw, at })
+      .values({
+        campaignId,
+        path: file.rel,
+        content: file.raw,
+        contentBlob: file.bytes ?? null,
+        at,
+      })
       .run();
   }
   return stored.size;
@@ -814,56 +946,81 @@ export async function runInitialMigration(
   root: string,
   options: { force?: boolean } = {},
 ): Promise<MigrationOutcome> {
+  const nothing = (skipped: MigrationOutcome["skipped"]): MigrationOutcome => ({
+    migrated: false,
+    skipped,
+    campaigns: [],
+    resumedFrom: [],
+    reportEntries: 0,
+    unknownFiles: 0,
+  });
+
+  // Campaigns a previous run committed. Read even under `--force`, so a forced
+  // seed does not try to insert a campaign that is already in there.
+  let done = migratedCampaigns(db);
+
   if (options.force !== true) {
     const marker = db.all<{ value: string }>(
       sql`select value from meta where key = 'migrated_at'`,
     );
-    if (marker.length > 0) {
-      return { migrated: false, skipped: "already-migrated", campaigns: [], reportEntries: 0, unknownFiles: 0 };
-    }
-    if (!isDbEmpty(db)) {
-      // The defensive rule (planning section 3): content without a marker is
+    if (marker.length > 0) return nothing("already-migrated");
+    if (!isDbEmpty(db) && done.size === 0) {
+      // The defensive rule (planning section 3): content without ANY marker is
       // still content. Overwriting it would be the one unrecoverable move.
-      return { migrated: false, skipped: "database-not-empty", campaigns: [], reportEntries: 0, unknownFiles: 0 };
+      // (With per-campaign markers present we resume instead — see below.)
+      return nothing("database-not-empty");
     }
+  } else {
+    // A forced run on a database that never ran the migration must not skip
+    // anything because of stale markers from another source.
+    if (isDbEmpty(db)) done = new Set();
   }
 
   const ids = await listCampaignDirs(root);
-  if (ids.length === 0) {
-    return { migrated: false, skipped: "no-campaigns", campaigns: [], reportEntries: 0, unknownFiles: 0 };
-  }
+  if (ids.length === 0) return nothing("no-campaigns");
+
+  const todo = ids.filter((id) => !done.has(id));
+  const resumedFrom = ids.filter((id) => done.has(id));
 
   const at = new Date().toISOString();
+  // Not derived from `at`: two runs can fall into the same millisecond.
+  const runId = randomUUID();
   let reportEntries = 0;
   let unknownFiles = 0;
   const imported: string[] = [];
 
-  for (const id of ids) {
+  const upsertMeta = (writer: DbWriter, key: string, value: string): void => {
+    writer
+      .insert(metaTable)
+      .values({ key, value })
+      .onConflictDoUpdate({ target: metaTable.key, set: { value } })
+      .run();
+  };
+
+  for (const id of todo) {
     // Read the whole campaign BEFORE opening the transaction: the driver is
     // synchronous, so no `await` may happen inside `db.transaction`.
     const campaign = await readCampaign(root, id);
     const report: ReportEntry[] = [];
     db.transaction((tx) => {
-      const stored = importCampaign(tx as unknown as DbWriter, campaign, at, report);
+      const writer = tx as unknown as DbWriter;
+      const stored = importCampaign(writer, campaign, at, report);
       for (const entry of report) {
         tx.insert(reportTable)
-          .values({ campaignId: id, path: entry.path, reason: entry.reason, at })
+          .values({ campaignId: id, path: entry.path, reason: entry.reason, at, runId })
           .run();
       }
+      // Same transaction as the rows: the marker cannot outlive a rollback,
+      // and a crash after this commit leaves a resumable state.
+      upsertMeta(writer, campaignMarkerKey(id), at);
       unknownFiles += stored;
     });
     reportEntries += report.length;
     imported.push(id);
   }
 
-  const upsertMeta = (key: string, value: string): void => {
-    db.insert(metaTable)
-      .values({ key, value })
-      .onConflictDoUpdate({ target: metaTable.key, set: { value } })
-      .run();
-  };
-  upsertMeta("migrated_at", at);
-  upsertMeta("migrated_from", path.resolve(root));
+  upsertMeta(db, "migrated_at", at);
+  upsertMeta(db, "migrated_from", path.resolve(root));
 
-  return { migrated: true, campaigns: imported, reportEntries, unknownFiles };
+  return { migrated: true, campaigns: imported, resumedFrom, reportEntries, unknownFiles, at, runId };
 }

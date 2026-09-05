@@ -15,6 +15,13 @@
       "when": 1788621857760,
       "tag": "0001_search_fts",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788623923803,
+      "tag": "0002_played_pos_report_run",
+      "breakpoints": true
     }
   ]
 }

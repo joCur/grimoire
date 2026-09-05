@@ -30,31 +30,118 @@ export interface MarkdownSection {
   headingLine?: string;
   /** Lines BELOW the heading (the heading itself is not included). */
   lines: string[];
+  /** Index of the heading line in the body's line array; -1 for the preamble. */
+  startIndex: number;
+  /** Index one PAST the section's last line — the next heading, or the end. */
+  endIndex: number;
 }
 
-const HEADING = /^(#{1,6})\s*(.*?)\s*$/;
+/**
+ * An ATX heading, recognised the way the APP recognises one
+ * (app/src/lib/session.ts: `/^#{1,6}(\s|$)/`): one to six `#` followed by
+ * whitespace or the end of the line.
+ *
+ * The space is MANDATORY. Without it every hashtag line the format puts in a
+ * body — `#pause`, `#thread`, `#decision` (README, "Hashtags") — would read as
+ * a heading and cut a section in half.
+ *
+ * The `#` must also sit at the very START of the line: an indented `#` is not
+ * a heading in markdown (it is code), and the app's reader is the yardstick
+ * for what the DM actually saw. A trailing `\r` is tolerated so a CRLF file
+ * parses the same as an LF one — the line itself is never rewritten, so the
+ * `\r` survives into the stored body.
+ */
+const HEADING = /^(#{1,6})(?=[ \t\r]|$)[ \t]*(.*?)[ \t\r]*$/;
+
+/** A fenced code block's delimiter (``` or ~~~), optionally indented. */
+const FENCE = /^[ \t]{0,3}((?:`{3,})|(?:~{3,}))[ \t]*(.*?)[ \t\r]*$/;
+
+interface HeadingInfo {
+  level: number;
+  text: string;
+}
 
 /**
- * Split a markdown body into its top-level-and-deeper heading sections. The
- * first element is always the preamble (possibly empty) so callers can tell
- * "text before any heading" apart from a section.
+ * The body's lines with the heading lines marked. Fenced code blocks are
+ * tracked so a `# comment` inside a ``` block is never a section boundary —
+ * the migration writes the DB once and a wrong boundary there is silent
+ * content loss, which weighs more than the app's simpler reader.
  */
-export function splitSections(body: string): MarkdownSection[] {
-  const sections: MarkdownSection[] = [{ lines: [] }];
-  for (const line of body.split(/\r?\n/)) {
-    const m = HEADING.exec(line.trim());
-    if (m !== null && line.trim().startsWith("#")) {
-      sections.push({
-        heading: m[2] ?? "",
-        level: (m[1] ?? "#").length,
-        headingLine: line,
-        lines: [],
-      });
+function scanLines(lines: readonly string[]): (HeadingInfo | undefined)[] {
+  const out: (HeadingInfo | undefined)[] = [];
+  /** The open fence's marker, or undefined outside a code block. */
+  let fence: string | undefined;
+  for (const line of lines) {
+    const f = FENCE.exec(line);
+    if (f !== null) {
+      const marker = f[1] ?? "";
+      if (fence === undefined) {
+        fence = marker;
+        out.push(undefined);
+        continue;
+      }
+      // A closing fence is the same character, at least as long, and carries
+      // no info string.
+      if (marker[0] === fence[0] && marker.length >= fence.length && (f[2] ?? "") === "") {
+        fence = undefined;
+      }
+      out.push(undefined);
       continue;
     }
-    sections[sections.length - 1]!.lines.push(line);
+    if (fence !== undefined) {
+      out.push(undefined);
+      continue;
+    }
+    const m = HEADING.exec(line);
+    out.push(m === null ? undefined : { level: (m[1] ?? "#").length, text: m[2] ?? "" });
   }
+  return out;
+}
+
+/**
+ * Split a markdown body into its heading sections. The first element is
+ * always the preamble (possibly empty) so callers can tell "text before any
+ * heading" apart from a section.
+ *
+ * A section ends at the NEXT HEADING OF ANY LEVEL — the same boundary the
+ * app's log reader uses. `removeSection` uses the very same spans, which is
+ * what keeps "parsed into rows" and "removed from the body" in step.
+ */
+export function splitSections(body: string): MarkdownSection[] {
+  // Split on "\n" only, never on /\r?\n/: the lines are re-joined verbatim,
+  // so a stripped "\r" would be a byte lost from the DM's file.
+  const lines = body.split("\n");
+  const headings = scanLines(lines);
+  const sections: MarkdownSection[] = [{ lines: [], startIndex: -1, endIndex: 0 }];
+  lines.forEach((line, index) => {
+    const heading = headings[index];
+    if (heading !== undefined) {
+      sections[sections.length - 1]!.endIndex = index;
+      sections.push({
+        heading: heading.text,
+        level: heading.level,
+        headingLine: line,
+        lines: [],
+        startIndex: index,
+        endIndex: index + 1,
+      });
+      return;
+    }
+    const current = sections[sections.length - 1]!;
+    current.lines.push(line);
+    current.endIndex = index + 1;
+  });
   return sections;
+}
+
+function matchesSection(section: MarkdownSection, wanted: string, level?: number): boolean {
+  if (section.heading === undefined) return false;
+  if (level !== undefined && section.level !== level) return false;
+  return section.heading.trim().toLowerCase() === wanted;
+}
+
+function isBlank(line: string | undefined): boolean {
+  return line !== undefined && line.trim() === "";
 }
 
 /**
@@ -63,48 +150,54 @@ export function splitSections(body: string): MarkdownSection[] {
  * session's `## Log` (now `log_entries`) and an npc's `## Beziehungen` (now
  * `npc_relations`). Rendering puts them back from the rows.
  *
- * A section reaches to the next heading of the SAME OR SHALLOWER level, so a
- * `### ` subheading inside `## Log` goes with it. Matching is
- * case-insensitive and ignores surrounding whitespace; a missing section
- * returns the body unchanged.
+ * Three promises, all of them content-safety rules:
+ *
+ *   1. EXACTLY the span the parser read is removed — up to the next heading of
+ *      any level. A `### Nachtrag` under `## Log` was never parsed into rows,
+ *      so it STAYS in the body instead of disappearing with the section.
+ *   2. Only the FIRST matching section goes. A file with two `## Log`
+ *      headings has only its first one in the rows; removing the second too
+ *      would delete lines nobody stored.
+ *   3. Everything else stays BYTE-IDENTICAL. Only the seam of the cut is
+ *      smoothed (one blank line, not two); the rest of the body — including
+ *      the DM's own triple blank lines — is untouched.
+ *
+ * Matching is case-insensitive and ignores surrounding whitespace. `level`
+ * pins the heading depth (`## Log` is level 2, as in the app). A missing
+ * section returns the body completely unchanged.
  */
-export function removeSection(body: string, heading: string): string {
+export function removeSection(body: string, heading: string, level?: number): string {
   const wanted = heading.trim().toLowerCase();
-  const lines = body.split(/\r?\n/);
-  const out: string[] = [];
-  let skipping = false;
-  let skipLevel = 0;
-  for (const line of lines) {
-    const m = HEADING.exec(line.trim());
-    const isHeading = m !== null && line.trim().startsWith("#");
-    if (isHeading) {
-      const level = (m[1] ?? "#").length;
-      const text = (m[2] ?? "").trim().toLowerCase();
-      if (skipping && level <= skipLevel) skipping = false;
-      if (!skipping && text === wanted) {
-        skipping = true;
-        skipLevel = level;
-        continue;
-      }
-    }
-    if (!skipping) out.push(line);
+  const lines = body.split("\n");
+  const target = splitSections(body).find((s) => matchesSection(s, wanted, level));
+  if (target === undefined) return body;
+  const before = lines.slice(0, target.startIndex);
+  const after = lines.slice(target.endIndex);
+  // The cut usually leaves a blank line on both sides; keep one.
+  while (before.length > 0 && isBlank(before[before.length - 1]) && isBlank(after[0])) {
+    after.shift();
   }
-  // Collapse the blank-line pair the removal usually leaves behind, and never
-  // hand back a body that is nothing but whitespace.
-  const joined = out.join("\n").replace(/\n{3,}/g, "\n\n");
+  const joined = [...before, ...after].join("\n");
+  // Never hand back a body that is nothing but whitespace.
   return joined.trim() === "" ? "" : joined;
 }
 
-/** The lines of one named section, or undefined when the section is absent. */
-export function sectionLines(body: string, heading: string): string[] | undefined {
+/**
+ * The lines of one named section, or undefined when the section is absent.
+ * `level` pins the heading depth; the first match wins.
+ */
+export function sectionLines(
+  body: string,
+  heading: string,
+  level?: number,
+): string[] | undefined {
   const wanted = heading.trim().toLowerCase();
-  for (const section of splitSections(body)) {
-    if (section.heading !== undefined && section.heading.trim().toLowerCase() === wanted) {
-      return section.lines;
-    }
-  }
-  return undefined;
+  const target = splitSections(body).find((s) => matchesSection(s, wanted, level));
+  return target?.lines;
 }
+
+/** The heading level `## Log` and `## Beziehungen` live on — as in the app. */
+export const SECTION_LEVEL = 2;
 
 // --- structural vs. foreign lines --------------------------------------------
 
@@ -115,8 +208,7 @@ export function sectionLines(body: string, heading: string): string[] | undefine
  * are still kept verbatim in `raw` where a table has one).
  */
 export function isStructuralLine(line: string): boolean {
-  const t = line.trim();
-  return t === "" || /^#{1,6}(\s|$)/.test(t);
+  return line.trim() === "" || HEADING.test(line);
 }
 
 // --- session log --------------------------------------------------------------
@@ -142,7 +234,9 @@ export interface ImportedLogEntry {
  * make the migration disagree with what the DM has been looking at.
  */
 export function parseLogSection(body: string): ImportedLogEntry[] {
-  const lines = sectionLines(body, "Log");
+  // Level 2 exactly, like the app's `/^##\s*Log\s*$/i` (lib/session.ts): a
+  // `### Log` is not the section the live view has been writing to.
+  const lines = sectionLines(body, "Log", SECTION_LEVEL);
   if (lines === undefined) return [];
   const out: ImportedLogEntry[] = [];
   for (const rawLine of lines) {
@@ -232,7 +326,9 @@ export interface RelationParseResult {
  * reference that never existed.
  */
 export function parseRelationsSection(body: string): RelationParseResult {
-  const lines = sectionLines(body, "Beziehungen");
+  // Level 2 exactly — the same heading campaign-rename.ts rewrites
+  // (`/^##[ \t]+Beziehungen[ \t]*\r?$/`).
+  const lines = sectionLines(body, "Beziehungen", SECTION_LEVEL);
   const result: RelationParseResult = { relations: [], foreignLines: [] };
   if (lines === undefined) return result;
   const seen = new Set<string>();
@@ -279,8 +375,24 @@ export function parseRelationsSection(body: string): RelationParseResult {
  */
 const GLOSSARY_ARROW = /^[-*+]\s+(.+?)\s*(?:→|->|—>|=>)\s*(.+?)\s*$/;
 const GLOSSARY_COLON = /^[-*+]\s+([^:]+?)\s*:\s+(.+?)\s*$/;
-/** `**Begriff**` (optionally followed by the explanation on the same line). */
-const GLOSSARY_BOLD = /^\*\*(.+?)\*\*\s*[:—–-]?\s*(.*)$/;
+/**
+ * A `**Begriff**` term line. Deliberately narrow, because the wide version of
+ * this rule turned ordinary emphasis into invented terms: `**Wichtig:** Der
+ * Wärter lügt.` is a sentence in a section's prose, not a glossary entry.
+ *
+ * Accepted are only the two shapes that ARE a term line:
+ *
+ *   `**Begriff**`                 the whole line is the bold term (the
+ *                                 explanation follows on the next lines)
+ *   `**Begriff**: Erklärung`      a separator directly after the bold, then
+ *   `**Begriff** — Erklärung`     the explanation
+ *
+ * Anything else — bold followed by more prose without a separator, bold that
+ * is not at the start of the line, a bold term that itself ends in a colon —
+ * falls through and becomes part of the section's own explanation. Losing a
+ * term to prose is recoverable by reading; inventing one is not.
+ */
+const GLOSSARY_BOLD = /^\*\*([^*]+?)\*\*(?:[ \t]*[:—–-][ \t]*(.*?))?[ \t]*$/;
 
 export interface ImportedGlossaryEntry {
   term: string;
@@ -359,7 +471,9 @@ export function parseGlossaryBody(body: string): GlossaryParseResult {
         continue;
       }
       const bold = GLOSSARY_BOLD.exec(line);
-      if (bold !== null) {
+      // A bold "term" that ends in a colon is emphasis inside a sentence
+      // (`**Wichtig:**`), never a term the DM looks up.
+      if (bold !== null && !(bold[1] ?? "").trim().endsWith(":")) {
         flushBold();
         boldTerm = { term: bold[1] ?? "", lines: [(bold[2] ?? "").trim()] };
         continue;

@@ -14,6 +14,7 @@
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { eq } from "drizzle-orm";
 import { openDb } from "./db/client";
 import { runInitialMigration } from "./db/migrate-campaigns";
 import { migrationReport } from "./db/schema";
@@ -57,9 +58,28 @@ async function seed(args: string[]): Promise<number> {
         "no-campaigns": "no campaign directory found in the source",
       }[outcome.skipped ?? "no-campaigns"];
       console.log(`  nothing to do — ${why}`);
+      // The one skip a user may not have intended: content without any
+      // migration marker. Say what the options are instead of leaving them
+      // with a dead end.
+      if (outcome.skipped === "database-not-empty") {
+        console.log("");
+        console.log("  This database holds campaign rows but no migration marker, so seeding");
+        console.log("  it would mix two data sets. The file is left completely untouched.");
+        console.log("  Your options:");
+        console.log(`    · keep it — it already has content; nothing needs importing`);
+        console.log(`    · import into a FRESH database:`);
+        console.log(`        GRIMOIRE_DATA=<empty-dir> grimoire seed ${source}`);
+        console.log(`    · start over from the files — move the database aside first:`);
+        console.log(`        mv ${dbFile} ${dbFile}.bak && grimoire seed ${source}`);
+        console.log(`    · add to it anyway (rows are added, nothing deleted): --force`);
+      }
       return 0;
     }
-    console.log(`  imported: ${outcome.campaigns.join(", ")}`);
+    if (outcome.resumedFrom.length > 0) {
+      // Per-campaign markers: an earlier run had already committed these.
+      console.log(`  resumed — already migrated earlier: ${outcome.resumedFrom.join(", ")}`);
+    }
+    console.log(`  imported: ${outcome.campaigns.join(", ") || "(nothing left to do)"}`);
     if (outcome.reportEntries === 0) {
       console.log("  clean import — the migration report is empty");
       return 0;
@@ -68,7 +88,13 @@ async function seed(args: string[]): Promise<number> {
       `  ${outcome.reportEntries} report entr${outcome.reportEntries === 1 ? "y" : "ies"}, ` +
         `${outcome.unknownFiles} file(s) kept verbatim in unknown_files:`,
     );
-    for (const row of db.select().from(migrationReport).all()) {
+    // THIS run's entries only. The table is cumulative — printing all of it
+    // would present an earlier run's findings as if they just happened.
+    for (const row of db
+      .select()
+      .from(migrationReport)
+      .where(eq(migrationReport.runId, outcome.runId ?? ""))
+      .all()) {
       console.log(`   · [${row.campaignId}] ${row.path}: ${row.reason}`);
     }
     // Degradation is not a failure (the files are untouched and the content is

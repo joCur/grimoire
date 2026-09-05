@@ -6,6 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
+  isStructuralLine,
   logLineShortHash,
   parseGlossaryBody,
   parseInboxBody,
@@ -31,20 +32,95 @@ describe("splitSections / removeSection", () => {
     expect(removeSection(body, "B").trim()).toBe("## A\n\neins");
   });
 
-  test("a subheading belongs to the section it sits in", () => {
+  test("a `###` subsection is NOT parsed, so it is NOT removed either", () => {
+    // The review finding this pins: `sectionLines` stops at the next heading
+    // of ANY level, so the `### Nachtrag` lines never became rows. Removing
+    // them with the section deleted content that nothing had stored.
     const body = "## Log\n\n- 19:00 x\n\n### Nachtrag\n\ny\n\n## Threads\n\n- [ ] t\n";
-    const rest = removeSection(body, "Log");
-    expect(rest).not.toContain("Nachtrag");
+    expect(parseLogSection(body).map((e) => e.text)).toEqual(["x"]);
+    const rest = removeSection(body, "Log", 2);
+    expect(rest).toContain("### Nachtrag");
+    expect(rest).toContain("y");
     expect(rest).toContain("## Threads");
+    expect(rest).not.toContain("19:00");
   });
 
-  test("a missing section leaves the body alone", () => {
+  test("only the FIRST section of a name is removed — the second was never parsed", () => {
+    const body = "## Log\n\n- 19:00 a\n\n## Log\n\n- 20:00 b\n";
+    // Only the first section became rows …
+    expect(parseLogSection(body).map((e) => e.text)).toEqual(["a"]);
+    // … so only the first one may go.
+    const rest = removeSection(body, "Log", 2);
+    expect(rest).toContain("## Log");
+    expect(rest).toContain("- 20:00 b");
+    expect(rest).not.toContain("19:00");
+  });
+
+  test("only the SEAM is smoothed — the rest of the body stays byte-identical", () => {
+    const body = "Vorspann\n\n\n\nmit Absatz\n\n## Log\n\n- 19:00 a\n\n## Threads\n\n\nt\n";
+    const rest = removeSection(body, "Log", 2);
+    // The DM's own multiple blank lines survive verbatim …
+    expect(rest).toBe("Vorspann\n\n\n\nmit Absatz\n\n## Threads\n\n\nt\n");
+  });
+
+  test("a missing section leaves the body byte-identical", () => {
     expect(removeSection("nur Text\n", "Log")).toBe("nur Text\n");
     expect(sectionLines("nur Text\n", "Log")).toBeUndefined();
+    // Not even a body with odd whitespace is normalized when nothing matches.
+    const odd = "a\n\n\n\nb\n\n";
+    expect(removeSection(odd, "Log")).toBe(odd);
   });
 
   test("matching ignores case and surrounding whitespace", () => {
     expect(removeSection("##   log  \n\nx\n", "Log").trim()).toBe("");
+  });
+
+  test("a level restriction distinguishes `## Log` from `### Log`", () => {
+    const body = "## Notizen\n\n### Log\n\n- 19:00 a\n";
+    // The app reads `## Log` only (`/^##\s*Log\s*$/i`), so neither does this.
+    expect(parseLogSection(body)).toEqual([]);
+    expect(removeSection(body, "Log", 2)).toBe(body);
+    expect(sectionLines(body, "Log", 2)).toBeUndefined();
+    expect(sectionLines(body, "Log")).toEqual(["", "- 19:00 a", ""]);
+  });
+
+  test("a CRLF body keeps its carriage returns", () => {
+    const body = "## Log\r\n\r\n- 19:00 a\r\n\r\n## Threads\r\n\r\n- [ ] t\r\n";
+    expect(parseLogSection(body).map((e) => e.text)).toEqual(["a"]);
+    expect(removeSection(body, "Log", 2)).toBe("## Threads\r\n\r\n- [ ] t\r\n");
+  });
+});
+
+describe("heading recognition mirrors the app", () => {
+  test("a hashtag line is not a heading — it needs a space", () => {
+    // `#pause` is a hashtag the format puts on its own line (README).
+    const body = "## Log\n\n- 19:00 a\n#pause\n- 20:00 b\n";
+    expect(parseLogSection(body).map((e) => e.raw)).toEqual([
+      "- 19:00 a",
+      "#pause",
+      "- 20:00 b",
+    ]);
+    expect(splitSections(body)).toHaveLength(2); // preamble + `## Log`
+    expect(isStructuralLine("#pause")).toBe(false);
+    expect(isStructuralLine("## Log")).toBe(true);
+    expect(isStructuralLine("##")).toBe(true);
+  });
+
+  test("an indented `#` line is code, not a section boundary", () => {
+    const body = "## Log\n\n- 19:00 a\n    ## nicht wirklich\n";
+    expect(parseLogSection(body)).toHaveLength(2);
+    expect(splitSections(body)).toHaveLength(2);
+  });
+
+  test("a `#` line inside a code fence is not a section boundary", () => {
+    const body = "## Log\n\n- 19:00 a\n\n```sh\n# ein Kommentar\n```\n\n- 20:00 b\n";
+    // The fenced `#` must not cut the log in half — `- 20:00 b` is a log line.
+    expect(parseLogSection(body).map((e) => e.raw)).toContain("- 20:00 b");
+    expect(splitSections(body)).toHaveLength(2);
+  });
+
+  test("a seven-`#` line is not a heading", () => {
+    expect(splitSections("####### zu tief\n")).toHaveLength(1);
   });
 });
 
@@ -178,6 +254,28 @@ describe("parseGlossaryBody", () => {
     const result = parseGlossaryBody("# G\n\n**Vorlesetext**\n\nWas der DM laut liest.\n");
     expect(result.entries.map((e) => e.term)).toEqual(["Vorlesetext"]);
     expect(result.entries[0]?.explanation).toBe("Was der DM laut liest.");
+  });
+
+  test("a `**Begriff**: Erklärung` line is a term, on one line", () => {
+    const result = parseGlossaryBody("# G\n\n**Kutter**: kleines Segelschiff\n");
+    expect(result.entries).toEqual([
+      { term: "Kutter", explanation: "kleines Segelschiff", pos: 0 },
+    ]);
+  });
+
+  test("emphasis inside prose is NOT a term", () => {
+    // The review finding: `**Wichtig:** …` matched the bold rule and became a
+    // glossary term named "Wichtig:" — an entry the DM never wrote. Prose
+    // belongs to its section's explanation.
+    const result = parseGlossaryBody(
+      "## Ton\n\n**Wichtig:** Der Wärter lügt.\n**Nie** Hochmagie.\nEin **Kutter** ist klein.\n",
+    );
+    expect(result.entries.map((e) => e.term)).toEqual(["Ton"]);
+    const explanation = result.entries[0]?.explanation ?? "";
+    expect(explanation).toContain("**Wichtig:** Der Wärter lügt.");
+    expect(explanation).toContain("**Nie** Hochmagie.");
+    expect(explanation).toContain("Ein **Kutter** ist klein.");
+    expect(result.problems).toEqual([]);
   });
 
   test("the first of two identical terms wins, the second is reported", () => {
