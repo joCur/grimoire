@@ -18,7 +18,7 @@
 //   * its SITES are the DOCUMENTS those rows belong to, each with its own
 //     count — that is the "Referenzort" the DM can actually open.
 
-import { and, eq, or } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { ApiError } from "../campaign-fs";
 import type { GrimoireDb } from "../db/client";
 import {
@@ -48,7 +48,7 @@ export function isUsageKind(value: unknown): value is UsageKind {
  * labels (app/src/lib/rename.ts) — the wire keeps stable English keys.
  *
  *   sceneNpcs         scene frontmatter `npcs:` names the npc
- *   npcRelations      a `## Beziehungen` line names the npc (both directions)
+ *   npcRelations      another npc's `## Beziehungen` line names the npc
  *   sceneLocation     scene frontmatter `location:` names the location
  *   scenesPlayed      a session's `scenes_played:` names the scene
  *   logEntries        a log line's `(scene-id)` marker names the scene
@@ -182,12 +182,13 @@ function scenesWithNpc(db: GrimoireDb, campaign: string, npcId: string): UsageSi
 }
 
 /**
- * `## Beziehungen` lines that touch the npc, in BOTH directions: a line in
- * someone else's list naming this npc, and a line in this npc's OWN list.
- * Both are rows carrying the id, and both are rows the rename rewrites — the
- * referencing document is the npc whose list the line stands in.
+ * `## Beziehungen` lines that REFERENCE the npc — lines in someone else's
+ * list naming this npc (`otherNpcId`), which are exactly the rows the rename
+ * rewrites (rename.ts). The npc's OWN outgoing lines are deliberately not
+ * counted: they carry other ids, and its own document only moves. Counting
+ * them would make the preview promise more rewritten sites than there are.
  */
-function relationsTouchingNpc(db: GrimoireDb, campaign: string, npcId: string): UsageSite[] {
+function relationsPointingAtNpc(db: GrimoireDb, campaign: string, npcId: string): UsageSite[] {
   return db
     .select({ ownerId: npcRelations.npcId, name: npcs.name })
     .from(npcRelations)
@@ -195,12 +196,7 @@ function relationsTouchingNpc(db: GrimoireDb, campaign: string, npcId: string): 
       npcs,
       and(eq(npcs.campaignId, npcRelations.campaignId), eq(npcs.id, npcRelations.npcId)),
     )
-    .where(
-      and(
-        eq(npcRelations.campaignId, campaign),
-        or(eq(npcRelations.otherNpcId, npcId), eq(npcRelations.npcId, npcId)),
-      ),
-    )
+    .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.otherNpcId, npcId)))
     .orderBy(npcRelations.npcId, npcRelations.pos)
     .all()
     .map((row) => ({
@@ -232,7 +228,7 @@ function groupsFor(db: GrimoireDb, campaign: string, kind: UsageKind, id: string
 
   if (kind === "npc") {
     add("sceneNpcs", scenesWithNpc(db, campaign, id));
-    add("npcRelations", relationsTouchingNpc(db, campaign, id));
+    add("npcRelations", relationsPointingAtNpc(db, campaign, id));
   }
 
   if (kind === "location") {

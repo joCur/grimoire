@@ -393,12 +393,16 @@ api.post("/:campaign/rename", async (c) => {
 //   -> { kind, id, path, total, groups: [{ ref, count, sites: [{ kind, id, title,
 //        path, count }] }] }
 // The reference count of one entity, as queries over the reference tables
-// (store/usage.ts): scene `npcs`/`location`/`chapter`, `## Beziehungen` in
-// both directions, session `scenes_played`, log scene markers. A group counts
-// ROWS, its sites are the referencing DOCUMENTS. Same queries the rename's
-// `dryRun` answers with, so the preview counts what the cascade rewrites.
-// 400 unknown/missing kind or empty id, 404 unknown campaign or entity.
+// (store/usage.ts): scene `npcs`/`location`/`chapter`, another npc's
+// `## Beziehungen` line, session `scenes_played`, log scene markers. A group
+// counts ROWS, its sites are the referencing DOCUMENTS. Same queries the
+// rename's `dryRun` answers with, so the preview counts what the cascade
+// rewrites.
+// 404 unknown campaign or entity, 400 unknown/missing kind or empty id.
 api.get("/:campaign/usage", async (c) => {
+  // Campaign first, then the query — the order renameEntity uses, so an
+  // unknown campaign answers 404 whatever the query looks like (server.ts).
+  await requireCampaign(c.req.param("campaign"));
   const kind = c.req.query("kind");
   if (!isUsageKind(kind)) {
     throw new ApiError(400, `kind must be one of: ${USAGE_KINDS.join(", ")}`);

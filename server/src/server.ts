@@ -152,11 +152,12 @@
 //                                              sites: [{ kind, id, title, path, count }] }] } —
 //                                              where an entity is REFERENCED, as queries over
 //                                              the reference tables (scene npcs/location/
-//                                              chapter, `## Beziehungen` both ways, session
-//                                              scenes_played, log scene markers). A group
-//                                              counts ROWS, its sites are the referencing
-//                                              DOCUMENTS. 400 unknown kind/empty id,
-//                                              404 unknown entity (issue #60)
+//                                              chapter, INCOMING `## Beziehungen` lines,
+//                                              session scenes_played, log scene markers). A
+//                                              group counts ROWS, its sites are the referencing
+//                                              DOCUMENTS; an entity's own outgoing relations
+//                                              are not references TO it. 404 unknown campaign/
+//                                              entity, 400 unknown kind/empty id (issue #60)
 //   [x] POST /api/:campaign/review/seen        { path, line } -> FileResponse &
 //                                              { marked } — flags the log ROW whose short
 //                                              hash the line has (idempotent). marked=false

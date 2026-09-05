@@ -46,7 +46,7 @@ function group(report: UsageReport, ref: string) {
 }
 
 describe("usage per reference kind", () => {
-  test("npc: scene `npcs:` lists and `## Beziehungen` in both directions", async () => {
+  test("npc: scene `npcs:` lists and INCOMING `## Beziehungen` lines", async () => {
     const report = await usage("npc", "jorna");
 
     expect(report.kind).toBe("npc");
@@ -68,16 +68,17 @@ describe("usage per reference kind", () => {
       ],
     });
 
-    // BOTH directions: jorna's own line about fenn, and fenn's line about
-    // jorna — two rows carrying the id, in two documents.
-    const relations = group(report, "npcRelations");
-    expect(relations?.count).toBe(2);
-    expect(relations?.sites.map((s) => s.path).sort()).toEqual([
-      "npcs/fenn.md",
-      "npcs/jorna.md",
-    ]);
+    // ONE direction: fenn's line about jorna. Jorna's OWN line about fenn is
+    // not a reference TO jorna — it names fenn, and the rename leaves it
+    // alone (only `otherNpcId` is rewritten), so counting it would promise a
+    // rewritten site that does not exist.
+    expect(group(report, "npcRelations")).toEqual({
+      ref: "npcRelations",
+      count: 1,
+      sites: [{ kind: "npc", id: "fenn", title: "Fenn", path: "npcs/fenn.md", count: 1 }],
+    });
 
-    expect(report.total).toBe(3);
+    expect(report.total).toBe(2);
   });
 
   test("location: scene `location:` frontmatter", async () => {
@@ -180,6 +181,60 @@ describe("usage per reference kind", () => {
   });
 });
 
+describe("an npc's OWN relations are not usage", () => {
+  let root: string;
+  let restore: () => void;
+
+  afterEach(async () => {
+    restore?.();
+    if (root !== undefined) await removeTempRoot(root);
+  });
+
+  test("only outgoing `## Beziehungen` -> empty report, rename touches one file", async () => {
+    root = await tempCampaignRoot();
+    // A hermit: he names jorna, nobody names him, no scene lists him.
+    await writeFile(
+      path.join(root, "beispiel/npcs/kalle.md"),
+      [
+        "---",
+        "id: kalle",
+        "name: Kalle",
+        "chapter: 01-salzhafen",
+        "status: alive",
+        "---",
+        "",
+        "## Beziehungen",
+        "",
+        "- jorna: schuldet ihr noch Hafengeld",
+        "",
+      ].join("\n"),
+    );
+
+    restore = useCampaignRoot(root);
+    await seedStore(root);
+
+    // Nothing points AT him — his own line names jorna, and the rename would
+    // not rewrite it (it moves with his document).
+    const report = await usage("npc", "kalle");
+    expect(report.groups).toEqual([]);
+    expect(report.total).toBe(0);
+
+    // ...and the rename's preview agrees: only his own document changes.
+    const res = await app.request("/api/beispiel/rename", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "npc", oldId: "kalle", newId: "kalle-der-alte", dryRun: true }),
+    });
+    expect(res.status).toBe(200);
+    const plan = (await res.json()) as { changed: string[]; usage: UsageReport };
+    expect(plan.changed).toEqual(["npcs/kalle-der-alte.md"]);
+    expect(plan.usage.total).toBe(0);
+
+    // Jorna, meanwhile, gained an INCOMING line — fenn's and kalle's.
+    expect(group(await usage("npc", "jorna"), "npcRelations")?.count).toBe(2);
+  });
+});
+
 describe("usage errors", () => {
   test("404 for an entity that does not exist", async () => {
     expect((await usageRes("kind=npc&id=nobody")).status).toBe(404);
@@ -188,6 +243,12 @@ describe("usage errors", () => {
   test("404 for an unknown campaign", async () => {
     const res = await app.request("/api/keine/usage?kind=npc&id=jorna");
     expect(res.status).toBe(404);
+  });
+
+  test("the unknown campaign wins over a bad query — 404, not 400", async () => {
+    // Same order as renameEntity: requireCampaign first (server.ts).
+    expect((await app.request("/api/unbekannt/usage")).status).toBe(404);
+    expect((await app.request("/api/unbekannt/usage?kind=session&id=x")).status).toBe(404);
   });
 
   test("400 for an unknown or missing kind and for an empty id", async () => {

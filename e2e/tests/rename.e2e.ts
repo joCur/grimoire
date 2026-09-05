@@ -6,8 +6,9 @@
 // written) and shows what hangs off the id in German, and only the second
 // click commits. What this spec pins is that the preview's numbers describe
 // the cascade that then actually happens: the same reference kinds the
-// example campaign has (a scene's `npcs:` list and two `## Beziehungen`
-// lines) are counted first and rewritten after.
+// example campaign has (a scene's `npcs:` list and the INCOMING
+// `## Beziehungen` line) are counted first and rewritten after — the npc's
+// own outgoing line is not a reference to it and is not counted.
 
 import { expect, test } from "../support/test";
 
@@ -35,13 +36,13 @@ test("rename with usage preview: count first, then the cascade", async ({ page, 
   await dialog.getByRole("button", { name: "Vorschau" }).click();
 
   // The preview: what hangs off this id, in German — one scene naming the npc
-  // in its `npcs:` list and two `## Beziehungen` lines (both directions).
+  // in its `npcs:` list and fenn's `## Beziehungen` line about her.
   const summary = dialog.getByTestId("rename-usage");
-  await expect(summary).toContainText("3 Verwendungen");
+  await expect(summary).toContainText("2 Verwendungen");
   await expect(summary).toContainText("1 Szene");
-  await expect(summary).toContainText("2 Beziehungen");
+  await expect(summary).toContainText("1 Beziehung");
 
-  // …and which documents that means.
+  // …and which documents that means: those two plus her own, which moves.
   await expect(dialog).toContainText("betrifft 3 Dateien");
   await expect(dialog).toContainText(SCENE);
   await expect(dialog).toContainText("npcs/fenn.md");
@@ -71,6 +72,6 @@ test("rename with usage preview: count first, then the cascade", async ({ page, 
   const usage = await api.get<{ total: number }>(
     "beispiel/usage?kind=npc&id=hafenmeisterin",
   );
-  expect(usage.total).toBe(3);
+  expect(usage.total).toBe(2);
   expect((await api.fetch("beispiel/usage?kind=npc&id=jorna")).status).toBe(404);
 });

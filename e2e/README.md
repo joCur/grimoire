@@ -172,7 +172,8 @@ und Pfad 8 (Formular bei 390px) — beides steht in demselben Spec.
 Auf den Pfaden 2 und 7 liegt zusätzlich `rename.e2e.ts` (#30, erweitert um die
 Usage-Vorschau aus #60): „Umbenennen" in der Leseansicht, die zweistufige
 Bestätigung („Vorschau" ist ein `dryRun` und schreibt nichts), die deutsche
-Usage-Zusammenfassung („3 Verwendungen: 1 Szene, 2 Beziehungen") und danach die
+Usage-Zusammenfassung („2 Verwendungen: 1 Szene, 1 Beziehung" — die eigene
+ausgehende Beziehungszeile ist keine Referenz AUF die id) und danach die
 Kaskade selbst — Szenen-`npcs:`, die `## Beziehungen`-Gegenzeile, der Umzug der
 Leseansicht, und `GET /usage` auf der neuen id gegen 404 auf der alten.
 
