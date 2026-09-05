@@ -226,10 +226,20 @@ export interface CampaignTree {
   sessions: SessionSummary[];
 }
 
-/** GET /api/:campaign/file?path=… */
+/** GET /api/:campaign/file?path=… (and GET /api/:campaign/session) */
 export interface FileResponse extends ParsedFile {
   /** Full file contents including the frontmatter block. */
   raw: string;
+  /**
+   * SESSION FILES ONLY (issue #40): `started` as epoch milliseconds, read in
+   * the SERVER's timezone. The frontmatter value stays the zone-less string
+   * the format uses — this is the server's interpretation of it, so a client
+   * in a different timezone still computes the right session runtime.
+   * Undefined when there is no usable `started`.
+   */
+  startedMs?: number;
+  /** SESSION FILES ONLY: `ended` as epoch milliseconds (see startedMs). */
+  endedMs?: number;
 }
 
 /**

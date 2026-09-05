@@ -7,7 +7,14 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { getBuildId } from "../config";
-import { ApiError, buildTree, campaignDir, listCampaigns, readParsedFile } from "../campaign-fs";
+import {
+  ApiError,
+  buildTree,
+  campaignDir,
+  listCampaigns,
+  readActiveSession,
+  readParsedFile,
+} from "../campaign-fs";
 import { getCampaignVersion, searchCampaign } from "../search-index";
 import { isRenameKind, RENAME_KINDS, renameEntity } from "../campaign-rename";
 import {
@@ -108,6 +115,18 @@ api.get("/:campaign/file", async (c) => {
   return c.json(await readParsedFile(c.req.param("campaign"), rel));
 });
 
+// GET /api/:campaign/session -> FileResponse of the ACTIVE session (issue #40),
+// 404 when no session is running. "Active" = the last STARTED session file
+// without `ended` — today's or an older one, so a session that runs past
+// midnight stays active instead of vanishing at 00:00.
+//
+// This is the one place that decides what "the running session" is: the app
+// must never derive it from its own date (a browser in another timezone, or
+// simply a session past midnight, would get it wrong). Same shape as GET
+// /file plus `startedMs`/`endedMs` — the server's epoch reading of the
+// zone-less timestamps, which is what makes the live runtime correct.
+api.get("/:campaign/session", async (c) => c.json(await readActiveSession(c.req.param("campaign"))));
+
 // GET /api/:campaign/search?q=... -> { results: SearchResult[] } (max 20)
 // Fuzzy in-memory search (Fuse.js) over scenes/npcs/locations/chapters and
 // the campaign file;
@@ -196,12 +215,15 @@ api.post("/:campaign/session/start", async (c) =>
   c.json(await startSession(c.req.param("campaign"))),
 );
 
-// POST /api/:campaign/session/end -> FileResponse (404 without a session
-// today; idempotent — the first `ended` wins)
+// POST /api/:campaign/session/end -> FileResponse — ends the ACTIVE session
+// (issue #40: that may be yesterday's file when the session ran past
+// midnight). Idempotent — the first `ended` wins; 404 when there is no
+// session file to end at all.
 api.post("/:campaign/session/end", async (c) => c.json(await endSession(c.req.param("campaign"))));
 
 // POST /api/:campaign/log { text, sceneId? } -> FileResponse
-// Appends `- HH:MM (sceneId) text` to today's session; 404 without a session.
+// Appends `- HH:MM (sceneId) text` to the ACTIVE session (issue #40 — not
+// stubbornly to today's file); 404 when no session is running.
 api.post("/:campaign/log", async (c) => {
   const body = await jsonBody(c, ["text", "sceneId"]);
   const text = normalizeLineText(body.text);

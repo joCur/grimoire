@@ -21,9 +21,18 @@
 //                                              _campaign.md (id = directory name);
 //                                              409 when it exists — editing it is
 //                                              PATCH /frontmatter's job (issue #34)
+//   [x] GET  /api/:campaign/session            the ACTIVE session (issue #40): the last
+//                                              STARTED session file without `ended` —
+//                                              today's OR an older one, so a session past
+//                                              midnight stays active. Same shape as
+//                                              GET /file plus startedMs/endedMs (the
+//                                              server's epoch reading of the zone-less
+//                                              timestamps — the client must never guess
+//                                              the timezone); 404 when none runs
 //   [x] POST /api/:campaign/session/start      creates sessions/<today>.md
-//   [x] POST /api/:campaign/session/end        sets `ended`
+//   [x] POST /api/:campaign/session/end        sets `ended` in the ACTIVE session
 //   [x] POST /api/:campaign/log                { text, sceneId? } -> append with timestamp
+//                                              to the ACTIVE session (issue #40)
 //   [x] POST /api/:campaign/inbox              { text } -> append to inbox.md
 //   [x] GET  /api/:campaign/search?q=...       { results } — fuzzy search (Fuse.js, in-memory,
 //                                              scenes/npcs/locations/chapters/_campaign.md,

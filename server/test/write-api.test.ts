@@ -268,13 +268,10 @@ describe("POST /api/:campaign/session/start", () => {
 });
 
 describe("POST /api/:campaign/log", () => {
-  test("404 without a session today", async () => {
-    setNow(() => new Date(2026, 7, 21, 20, 0)); // a day with no session file
-    const res = await postJson("/api/beispiel/log", { text: "verloren" });
-    expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ error: expect.any(String) });
-  });
-
+  // NOTE (issue #40): a log line lands in the ACTIVE session — the last
+  // started file without `ended`, which is 2026-08-19 throughout this
+  // describe. "no session at all" is covered further down, once every
+  // session in the fixture is ended.
   test("appends `- HH:MM (sceneId) text` under ## Log", async () => {
     setNow(() => new Date(2026, 7, 19, 21, 12));
     const res = await postJson("/api/beispiel/log", {
@@ -307,15 +304,31 @@ describe("POST /api/:campaign/log", () => {
   });
 
   test("inserts before ## Threads when the section exists", async () => {
-    setNow(() => new Date(2026, 0, 15, 23, 0)); // the committed example session
-    const res = await postJson("/api/beispiel/log", { text: "Nachtrag nach dem Cliffhanger" });
-    expect(res.status).toBe(200);
-    const raw = await readFile(absOf("sessions/2026-01-15.md"), "utf8");
-    expect(raw).toContain(
-      "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread\n- 23:00 Nachtrag nach dem Cliffhanger\n\n## Threads\n",
+    // Own session file, shaped like the committed example (which is ended and
+    // therefore not the active session any more): started LATER than
+    // 2026-08-19, so this is the active one for the duration of the test, and
+    // removed again at the end so it does not become the active session of
+    // the describes below.
+    const rel = "sessions/2026-08-26.md";
+    await writeFile(
+      absOf(rel),
+      "---\nid: 2026-08-26\nstarted: 2026-08-26T19:30\nscenes_played: [lighthouse-arrival]\n---\n\n## Log\n\n- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread\n\n## Threads\n\n- [ ] Wer bezahlt die Schmuggler?\n",
+      "utf8",
     );
-    // Threads content untouched
-    expect(raw).toContain("- [ ] Wer bezahlt die Schmuggler?");
+    try {
+      setNow(() => new Date(2026, 7, 26, 23, 0));
+      const res = await postJson("/api/beispiel/log", { text: "Nachtrag nach dem Cliffhanger" });
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as FileResponse).path).toBe(rel);
+      const raw = await readFile(absOf(rel), "utf8");
+      expect(raw).toContain(
+        "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread\n- 23:00 Nachtrag nach dem Cliffhanger\n\n## Threads\n",
+      );
+      // Threads content untouched
+      expect(raw).toContain("- [ ] Wer bezahlt die Schmuggler?");
+    } finally {
+      await rm(absOf(rel), { force: true });
+    }
   });
 
   test("400 on empty or missing text", async () => {
@@ -406,6 +419,15 @@ describe("scenes_played maintenance (POST log with sceneId)", () => {
 });
 
 describe("POST /api/:campaign/session/end", () => {
+  // The scenes_played tests above left two later, still-open session files
+  // behind. Since issue #40 `end` targets the ACTIVE session (the newest one
+  // without `ended`), so they have to go for these tests to be about
+  // 2026-08-19 again.
+  beforeAll(async () => {
+    await rm(absOf("sessions/2026-08-23.md"), { force: true });
+    await rm(absOf("sessions/2026-08-24.md"), { force: true });
+  });
+
   test("sets ended via the raw-patch mechanism, log untouched", async () => {
     setNow(() => new Date(2026, 7, 19, 23, 45));
     const res = await postJson("/api/beispiel/session/end");
@@ -428,11 +450,16 @@ describe("POST /api/:campaign/session/end", () => {
     expect(file.frontmatter.ended).toBe("2026-08-19T23:45");
   });
 
-  test("404 without a session today", async () => {
+  // Every session in the fixture is ended now, so nothing is active: the
+  // write endpoints fall back to today's file, which does not exist.
+  test("404 when no session is active and today has no file", async () => {
     setNow(() => new Date(2026, 7, 22, 22, 0));
     const res = await postJson("/api/beispiel/session/end");
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: expect.any(String) });
+    const log = await postJson("/api/beispiel/log", { text: "verloren" });
+    expect(log.status).toBe(404);
+    expect(await log.json()).toEqual({ error: expect.any(String) });
   });
 });
 

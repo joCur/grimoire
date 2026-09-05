@@ -36,6 +36,7 @@ import {
   assertSafeRelativeMdPath,
   CAMPAIGN_FILE,
   campaignDir,
+  findActiveSessionRel,
   readParsedFile,
   resolveInsideCampaign,
   RESERVED_DIRS,
@@ -339,6 +340,17 @@ function todaySessionRel(): string {
 }
 
 /**
+ * The session file a log line or `ended` belongs to (issue #40): the RUNNING
+ * session — which may well be YESTERDAY's file when the session went past
+ * midnight. Falls back to today's file when nothing is running, so an already
+ * ended session keeps answering the way it did before (idempotent `end`,
+ * 404 when there is no file at all).
+ */
+async function writableSessionRel(campaign: string): Promise<string> {
+  return (await findActiveSessionRel(campaign)) ?? todaySessionRel();
+}
+
+/**
  * POST /api/:campaign/session/start — create today's session file.
  * Idempotent: if the file already exists it is returned untouched.
  */
@@ -366,14 +378,14 @@ export async function startSession(campaign: string): Promise<FileResponse> {
  */
 export async function endSession(campaign: string): Promise<FileResponse> {
   const dir = await campaignDir(campaign);
-  const rel = todaySessionRel();
+  const rel = await writableSessionRel(campaign);
   const abs = path.resolve(dir, rel);
   await withFileLock(abs, async () => {
     let raw: string;
     try {
       raw = await readFile(abs, "utf8");
     } catch {
-      throw new ApiError(404, "no session today");
+      throw new ApiError(404, "no active session");
     }
     const fm = currentFrontmatter(raw);
     if (fm.ended !== undefined && fm.ended !== null) return; // keep the first `ended`
@@ -424,14 +436,14 @@ export async function appendLogEntry(
   sceneId?: string,
 ): Promise<FileResponse> {
   const dir = await campaignDir(campaign);
-  const rel = todaySessionRel();
+  const rel = await writableSessionRel(campaign);
   const abs = path.resolve(dir, rel);
   await withFileLock(abs, async () => {
     let raw: string;
     try {
       raw = await readFile(abs, "utf8");
     } catch {
-      throw new ApiError(404, "no session today");
+      throw new ApiError(404, "no active session");
     }
     if (sceneId !== undefined) {
       const fm = currentFrontmatter(raw);

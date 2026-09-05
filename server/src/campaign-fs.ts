@@ -28,6 +28,7 @@ import {
   type SceneGroup,
   type SessionSummary,
 } from "@grimoire/shared";
+import { localDateTimeToMs } from "./clock";
 import { getCampaignRoot } from "./config";
 
 /**
@@ -260,7 +261,74 @@ export async function readParsedFile(campaign: string, rel: string): Promise<Fil
   if (!s.isFile()) throw new ApiError(404, "file not found");
   const raw = await readFile(abs, "utf8");
   const parsed = parseMarkdown(raw, rel, s.mtimeMs);
-  return { ...parsed, raw };
+  return { ...parsed, raw, ...sessionTimes(parsed) };
+}
+
+/**
+ * The epoch interpretation of a session file's `started`/`ended` (issue #40),
+ * added to every FileResponse of a session file — the GET, and every write
+ * endpoint that answers with the session (start/end/log), so the client's
+ * timer never loses it on a cache seed. Zone-less strings stay in the file;
+ * only the SERVER resolves them, because only the server knows the timezone
+ * those wall-clock digits were written in.
+ */
+function sessionTimes(parsed: ParsedFile): { startedMs?: number; endedMs?: number } {
+  if (parsed.kind !== "session") return {};
+  const startedMs = localDateTimeToMs(parsed.frontmatter.started);
+  const endedMs = localDateTimeToMs(parsed.frontmatter.ended);
+  return {
+    ...(startedMs === undefined ? {} : { startedMs }),
+    ...(endedMs === undefined ? {} : { endedMs }),
+  };
+}
+
+// --- the active session (issue #40) --------------------------------------------
+
+/**
+ * The active session out of a campaign's session summaries: the LAST STARTED
+ * one that has no `ended`. Deliberately not limited to today — a session that
+ * runs past midnight stays the active one, which is why the client asks the
+ * server instead of deriving today's file name itself.
+ *
+ * Order key: `started` (`yyyy-mm-ddTHH:MM` sorts chronologically as a string)
+ * with the id (a date) as the fallback for a session file whose `started` is
+ * missing or degraded. Pure and exported for the unit tests.
+ */
+export function pickActiveSession(sessions: SessionSummary[]): SessionSummary | undefined {
+  let best: SessionSummary | undefined;
+  let bestKey = "";
+  for (const session of sessions) {
+    if (session.ended !== undefined && session.ended !== "") continue;
+    const key = session.started !== undefined && session.started !== "" ? session.started : session.id;
+    if (best === undefined || cmp(key, bestKey) > 0) {
+      best = session;
+      bestKey = key;
+    }
+  }
+  return best;
+}
+
+/** All session summaries of a campaign; a missing sessions/ dir yields []. */
+async function sessionSummaries(campaignAbs: string): Promise<SessionSummary[]> {
+  const files = await parseMdFilesIn(path.join(campaignAbs, "sessions"), "sessions");
+  return files.map(sessionSummary);
+}
+
+/**
+ * Campaign-relative path of the active session file, or undefined when no
+ * session is running. Used by GET /session and by the write endpoints that
+ * must land in the RUNNING session rather than in today's file.
+ */
+export async function findActiveSessionRel(campaign: string): Promise<string | undefined> {
+  const dir = await campaignDir(campaign);
+  return pickActiveSession(await sessionSummaries(dir))?.path;
+}
+
+/** GET /api/:campaign/session — the active session file; 404 when none runs. */
+export async function readActiveSession(campaign: string): Promise<FileResponse> {
+  const rel = await findActiveSessionRel(campaign);
+  if (rel === undefined) throw new ApiError(404, "no active session");
+  return readParsedFile(campaign, rel);
 }
 
 // --- tree walker ---------------------------------------------------------------
