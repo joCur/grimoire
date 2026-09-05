@@ -1,20 +1,20 @@
 // Campaign metadata from the UI (issue #34, first small slice of the #15
 // territory): name + description of `_campaign.md`.
 //
-// Two write paths, one dialog:
-//
-//   file exists  -> PATCH /frontmatter with the mtime the dialog read, so an
-//                   external edit cannot be overwritten silently (409)
-//   file missing -> POST /campaign-meta, which creates it with the directory
-//                   name as `id` (the server never takes an id from us)
+// ONE write path since issue #62: PATCH /frontmatter with the guard token the
+// dialog read, so an edit that happened meanwhile cannot be overwritten
+// silently (409). The second path — POST /campaign-meta for a campaign that
+// had no `_campaign.md` yet — is gone with the endpoint: since the cutover
+// (#57) every campaign is a ROW, GET /file?path=_campaign.md always answers
+// with a document and a token, and there is no "create" case left to serve.
 //
 // Everything here is pure or a plain API call — no react, no query imports,
 // so the rules are unit-testable.
 
-import { createCampaignMeta, fetchFile, patchFrontmatter } from "@/api";
+import { fetchFile, patchFrontmatter } from "@/api";
 import { writeWithMtime, type MtimeWriteResult } from "@/lib/write-with-mtime";
 
-/** Campaign-relative path of the metadata file (server: CAMPAIGN_FILE). */
+/** Campaign-relative path of the metadata document. */
 export const CAMPAIGN_META_PATH = "_campaign.md";
 
 export interface CampaignMetaValues {
@@ -23,9 +23,9 @@ export interface CampaignMetaValues {
 }
 
 /**
- * The frontmatter patch for an existing file. A description that is blank
- * after trimming DELETES the key (`null`) instead of writing an empty
- * string — an empty value would show up as an empty subtitle line.
+ * The frontmatter patch. A description that is blank after trimming DELETES
+ * the key (`null`) instead of writing an empty string — an empty value would
+ * show up as an empty subtitle line.
  */
 export function campaignMetaPatch(values: CampaignMetaValues): Record<string, unknown> {
   const description = values.description.trim();
@@ -40,25 +40,23 @@ export function canSubmitCampaignMeta(values: CampaignMetaValues): boolean {
   return values.name.trim() !== "";
 }
 
-/**
- * The version the open dialog writes against. `mtimeMs === undefined` is the
- * create path (there is no `_campaign.md` yet).
- */
+/** The version the open dialog writes against. */
 export interface CampaignMetaBase {
-  mtimeMs: number | undefined;
+  mtimeMs: number;
 }
 
-/** What the file query knows: the file, „missing" (404), or nothing yet. */
-export type CampaignMetaAnswer = { mtimeMs: number } | "missing" | undefined;
+/** What the file query knows: the document, or nothing yet. */
+export type CampaignMetaAnswer = { mtimeMs: number } | undefined;
 
 /**
  * Decide the base version ONCE, at the first answer of the file query.
  *
  * The file query keeps refetching while the dialog is open — the 5s version
- * poll (issue #8) invalidates it — so reading its mtime at save time would let
- * an external edit of `_campaign.md` advance the base silently: the save would
- * overwrite that edit instead of answering 409. Same trap the body editor
- * avoids (see `shouldAdvanceBase` in file-body.ts), same answer: freeze it.
+ * poll (issue #8) invalidates it — so reading its token at save time would let
+ * a concurrent edit of the campaign document advance the base silently: the
+ * save would overwrite that edit instead of answering 409. Same trap the body
+ * editor avoids (see `shouldAdvanceBase` in file-body.ts), same answer: freeze
+ * it.
  *
  * `undefined` in, `undefined` out means "no answer yet, nothing to write
  * against". Once frozen the base never moves on its own — only the conflict
@@ -70,31 +68,39 @@ export function seedCampaignMetaBase(
 ): CampaignMetaBase | undefined {
   if (base !== undefined) return base;
   if (answer === undefined) return undefined;
-  return { mtimeMs: answer === "missing" ? undefined : answer.mtimeMs };
+  return { mtimeMs: answer.mtimeMs };
 }
 
 /**
- * Save name/description. `mtimeMs` is the mtime of the `_campaign.md` the
- * dialog is showing — `undefined` means there is no file yet, which is the
- * create path. A 409 from EITHER endpoint means nothing was written (the file
- * changed on disk, or it appeared while the dialog was open); the shared
- * protocol of write-with-mtime.ts re-reads it so the next attempt carries the
- * truth. Everything else throws.
+ * The name to PREFILL the dialog with. A stored name that is literally the id
+ * is what an UNNAMED campaign looks like — the server synthesizes the id as
+ * the display name so every surface has something to show (`GET /campaigns`
+ * and `GET /file` agree on that since #62). The dialog must not propose it as
+ * an authored value, so it starts empty with the id as the placeholder.
+ */
+export function prefillCampaignName(campaign: string, name: string | undefined): string {
+  if (name === undefined || name === campaign) return "";
+  return name;
+}
+
+/**
+ * Save name/description. `mtimeMs` is the guard token of the campaign
+ * document the dialog is showing. A 409 means nothing was written (it changed
+ * meanwhile); the shared protocol of write-with-mtime.ts re-reads it so the
+ * next attempt carries the truth. Everything else throws.
  */
 export function writeCampaignMeta(
   campaign: string,
   values: CampaignMetaValues,
-  mtimeMs: number | undefined,
+  mtimeMs: number,
 ): Promise<MtimeWriteResult> {
   return writeWithMtime(
     () =>
-      mtimeMs === undefined
-        ? createCampaignMeta(campaign, values.name.trim(), values.description.trim())
-        : patchFrontmatter(campaign, {
-            path: CAMPAIGN_META_PATH,
-            mtimeMs,
-            patch: campaignMetaPatch(values),
-          }),
+      patchFrontmatter(campaign, {
+        path: CAMPAIGN_META_PATH,
+        mtimeMs,
+        patch: campaignMetaPatch(values),
+      }),
     () => fetchFile(campaign, CAMPAIGN_META_PATH),
   );
 }

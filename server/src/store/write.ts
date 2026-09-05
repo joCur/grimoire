@@ -923,42 +923,6 @@ export async function writeGlossary(
   });
 }
 
-// --- POST /api/:campaign/campaign-meta ----------------------------------------
-
-/**
- * The DB analogue of "create `_campaign.md`" (issue #34): the campaign ROW
- * always exists now, so what is created is its NAME. CREATE ONLY, exactly as
- * before — a campaign that already carries a name answers 409 { path } and
- * is edited through PATCH /frontmatter, which has the guard token.
- */
-export async function createCampaignMeta(
-  campaign: string,
-  name: string,
-  description?: string,
-): Promise<FileResponse> {
-  return mutate(campaign, (tx) => {
-    const row = campaignRow(tx, campaign);
-    if (row === undefined) throw new ApiError(404, "campaign not found");
-    if (row.name !== "") {
-      throw new ApiError(409, "campaign file already exists — not overwriting", {
-        path: "_campaign.md",
-      });
-    }
-    const next: CampaignRow = {
-      ...row,
-      name,
-      description: description === undefined ? null : description,
-      rev: row.rev + 1,
-    };
-    tx.update(campaigns)
-      .set({ name: next.name, description: next.description, rev: next.rev })
-      .where(eq(campaigns.id, campaign))
-      .run();
-    indexCampaign(tx, next);
-    return renderCampaign(next);
-  });
-}
-
 // --- sessions -----------------------------------------------------------------
 
 function requireActive(tx: GrimoireDb, campaign: string): SessionRow {

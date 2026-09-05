@@ -203,14 +203,25 @@ function parsed(
 
 // --- per-kind rendering -----------------------------------------------------
 
+/**
+ * The campaign's display name: its stored name, or the id when there is none.
+ *
+ * `""` in the column means "no authored name" — the importer stored that for
+ * a campaign whose `_campaign.md` said nothing usable, and the parser's own
+ * rule for a missing `name` is the id fallback (shared/src/parse.ts). The
+ * fallback is applied HERE, once, and everything that shows a campaign name
+ * reads it through this function: the campaign document (`GET /file`) and the
+ * campaign list (`GET /campaigns`) disagreed about it before issue #62.
+ */
+export function campaignDisplayName(row: CampaignRow): string {
+  return row.name === "" ? row.id : row.name;
+}
+
 export function campaignFrontmatter(row: CampaignRow): Record<string, unknown> {
   return withExtra(
     compact([
       ["id", row.id],
-      // The parser falls a missing `name` back to the id; the migration
-      // stored "" for exactly that case (campaign-fs.ts campaignMeta), so
-      // the fallback is reapplied here instead of being baked in.
-      ["name", row.name === "" ? row.id : row.name],
+      ["name", campaignDisplayName(row)],
       ["description", row.description],
     ]),
     row.extra,

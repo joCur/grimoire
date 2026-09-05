@@ -3,23 +3,26 @@
 // where those two values are on screen.
 //
 // The dialog writes through the documented API: PATCH /frontmatter with the
-// mtime the open dialog was seeded with — frozen, not the live query value, or
-// the 5s version poll would hand it an external edit's mtime and turn the save
-// into a silent overwrite (409 → inline "Inzwischen geändert — neu laden",
-// the typed values stay, the next attempt writes on top of disk). Or POST
-// /campaign-meta when the campaign has no metadata file yet. On success the
-// campaigns/tree/search queries are invalidated — the switcher label and the
-// pool header read from the campaign list, so they must not keep the old name.
+// guard token the open dialog was seeded with — frozen, not the live query
+// value, or the 5s version poll would hand it a concurrent edit's token and
+// turn the save into a silent overwrite (409 → inline "Inzwischen geändert —
+// neu laden", the typed values stay, the next attempt writes on top of what is
+// stored now). That is the ONLY write path since issue #62: the create
+// endpoint it used for a campaign without `_campaign.md` is gone, because
+// every campaign has a row and therefore always has that document. On success
+// the campaigns/tree/search queries are invalidated — the switcher label and
+// the pool header read from the campaign list, so they must not keep the old
+// name.
 //
-// Prefilled from the AUTHORED values of GET /campaigns (which drops the
-// parser's id fallback), so an unnamed campaign starts with an empty field and
+// Prefilled from GET /campaigns, minus the server's id fallback
+// (`prefillCampaignName`): an unnamed campaign starts with an empty field and
 // the id only as a placeholder — the dialog never proposes the id as a name.
 
 import { useQuery } from "@tanstack/react-query";
 import { PenLine } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { ApiError, fetchCampaigns, fetchFile } from "@/api";
+import { fetchCampaigns, fetchFile } from "@/api";
 import { HeaderAction } from "@/components/HeaderAction";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +36,7 @@ import { findCampaign } from "@/lib/campaign";
 import {
   CAMPAIGN_META_PATH,
   canSubmitCampaignMeta,
+  prefillCampaignName,
   seedCampaignMetaBase,
   writeCampaignMeta,
   type CampaignMetaBase,
@@ -68,36 +72,35 @@ function CampaignMetaDialog({
   const entry = findCampaign(campaigns.data, campaign);
   const [edited, setEdited] = useState<Partial<CampaignMetaValues>>({});
   const values: CampaignMetaValues = {
-    name: entry?.name ?? "",
+    name: prefillCampaignName(campaign, entry?.name),
     description: entry?.description ?? "",
     ...edited,
   };
   const setValue = (key: keyof CampaignMetaValues, value: string) =>
     setEdited((prev) => ({ ...prev, [key]: value }));
 
-  // Where the base version comes from — and the answer to "is there a file at
-  // all?". A 404 is the normal "no metadata yet" case, not an error state.
+  // Where the base version comes from. The campaign document always exists
+  // (it is the campaign row), so an error here really is "not reachable".
   const file = useQuery({
     queryKey: ["file", campaign, CAMPAIGN_META_PATH],
     queryFn: () => fetchFile(campaign, CAMPAIGN_META_PATH),
     retry: false,
   });
-  const missing = file.isError && file.error instanceof ApiError && file.error.status === 404;
-  const unreachable = file.isError && !missing;
+  const unreachable = file.isError;
 
   // The version the save is checked against, frozen at the query's first
   // answer (seedCampaignMetaBase explains why): the 5s version poll refetches
-  // this file while the dialog stands, and following it would turn an external
-  // edit of _campaign.md into a silent overwrite instead of a 409. It moves
-  // only after a conflict, to the file the re-read brought.
+  // this document while the dialog stands, and following it would turn a
+  // concurrent edit into a silent overwrite instead of a 409. It moves only
+  // after a conflict, to the version the re-read brought.
   const [base, setBase] = useState<CampaignMetaBase>();
   useEffect(() => {
-    setBase((previous) => seedCampaignMetaBase(previous, missing ? "missing" : file.data));
-  }, [missing, file.data]);
+    setBase((previous) => seedCampaignMetaBase(previous, file.data));
+  }, [file.data]);
 
   const save = useMtimeWriteMutation<void>({
-    // No base yet (still loading, or the file is not readable) — nothing to
-    // write against, so the mutation cannot start.
+    // No base yet (still loading, or the document is not readable) — nothing
+    // to write against, so the mutation cannot start.
     write:
       base === undefined ? undefined : () => writeCampaignMeta(campaign, values, base.mtimeMs),
     fileKey: ["file", campaign, CAMPAIGN_META_PATH],
@@ -105,9 +108,9 @@ function CampaignMetaDialog({
     // sits in the tree/search surfaces.
     invalidateOnSuccess: [["campaigns"], ["tree", campaign], ["search", campaign]],
     onSaved: onClose,
-    // The file changed on disk (or appeared while the dialog was open): the
-    // typed values stay, only the version underneath them moves on, so the
-    // next „Speichern" writes on top of what is on disk now.
+    // The document changed meanwhile: the typed values stay, only the version
+    // underneath them moves on, so the next „Speichern" writes on top of what
+    // is stored now.
     onConflict: (reread) => {
       if (reread !== undefined) setBase({ mtimeMs: reread.mtimeMs });
     },
@@ -125,9 +128,8 @@ function CampaignMetaDialog({
       <DialogContent aria-describedby={undefined} className="max-w-[460px]">
         <DialogTitle>Kampagne bearbeiten</DialogTitle>
         <DialogDescription>
-          {missing
-            ? "Diese Kampagne hat noch keine _campaign.md — sie wird beim Speichern angelegt, mit dem Ordnernamen als id."
-            : "Name und Beschreibung stehen in _campaign.md. Der Ordnername bleibt die id — sie steckt in jeder Adresse und ändert sich hier nicht."}
+          Name und Beschreibung stehen in _campaign.md. Die id bleibt, wie sie ist — sie steckt
+          in jeder Adresse und ändert sich hier nicht.
         </DialogDescription>
 
         <form
@@ -161,9 +163,7 @@ function CampaignMetaDialog({
           </label>
 
           <p aria-live="polite" className="min-h-[17px] text-[12px] text-destructive">
-            {unreachable
-              ? "Kampagnendatei nicht ladbar — Server prüfen"
-              : (save.message ?? "")}
+            {unreachable ? "Kampagnendatei nicht ladbar — Server prüfen" : (save.message ?? "")}
           </p>
 
           <div className="flex items-center justify-end gap-2">
