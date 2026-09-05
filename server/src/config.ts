@@ -34,6 +34,27 @@ export function setCampaignRoot(dir: string): void {
   campaignRoot = path.resolve(dir);
 }
 
+/**
+ * Directory that holds the SQLite database (`grimoire.db` plus its `-wal` and
+ * `-shm` companions) — the Docker volume mount point (planning #52 section 5,
+ * ADR #13). Defaults to `./data` next to the server package so `bun run dev`
+ * and `bun test` work from the repo root as well as from server/.
+ * GRIMOIRE_DATA overrides it with normal CLI semantics (relative to cwd).
+ *
+ * Read from the env on every call — unlike the campaign root, nothing needs a
+ * test-only setter for it: tests pass an explicit path to `openDb`.
+ */
+export function getDataDir(): string {
+  return process.env.GRIMOIRE_DATA
+    ? path.resolve(process.cwd(), process.env.GRIMOIRE_DATA)
+    : path.resolve(PACKAGE_DIR, "../data");
+}
+
+/** Absolute path of the database file. */
+export function getDbFile(): string {
+  return path.join(getDataDir(), "grimoire.db");
+}
+
 export const PORT = Number(process.env.PORT ?? 3000);
 
 /**
