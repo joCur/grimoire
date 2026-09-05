@@ -143,3 +143,47 @@ Usermanagement sind die Trigger, bei denen der SQLite-Umzug hinter der
 API-Naht als eigenes ADR-Verfahren ansteht — dann mit Editing-UI als
 Sicherheitsnetz und Export/Import als Teil des Umzugs.
 Wiedervorlage: nach #15 v1.
+
+## 12. Release-Prozess: release-please, Versions-Tags, `:latest` nur bei Releases
+
+Deploys sollen bewusste Ereignisse mit Changelog sein, nicht ein Tag, das
+bei jedem Merge unter dem laufenden Betrieb mutiert (PO-Anforderung zu #47:
+gezielt einen bekannten guten Stand vor einer Session deployen, im Problemfall
+trivial zurückrollen).
+
+Mechanismus, gleichgezogen mit joCur/quorum (dort erprobt), abgespeckt auf
+ein Image und ein Compose-File:
+
+- **release-please** (`googleapis/release-please-action@v4`) läuft bei jedem
+  Push auf `main` und hält aus den Conventional Commits einen Release-PR.
+  Konfiguration liegt im Root (`release-please-config.json`,
+  `.release-please-manifest.json`, Startversion 0.1.0): ein Package `"."`,
+  `release-type: node`, `include-component-in-tag: false` und — die Falle aus
+  Quorum — ein **leerer `package-name`**, nicht ein leeres `component`;
+  sonst fällt die Komponente still auf den Paketnamen zurück und der
+  gemergte Release-PR wird nicht getaggt, was jeden folgenden Release
+  blockiert. Die Version wird in die Root-`package.json` geschrieben und in
+  die Workspace-Manifeste kopiert.
+- **Merge des Release-PRs** (mit PO-Approval wie jeder PR, siehe CLAUDE.md)
+  ist das einzige Release-Ereignis: Tag `vX.Y.Z`, GitHub-Release,
+  `CHANGELOG.md`.
+- **CI-Gate:** `require-green-ci` löst den Tag zum Commit auf, sucht dessen
+  `ci`-Push-Run und wartet mit `gh run watch --exit-status`. Ein fehlender
+  Lauf ist kein bestandener Lauf — dann wird nichts veröffentlicht.
+  release-please selbst bleibt ungegated: der Release-PR muss auch bei rotem
+  `main` gepflegt werden können, denn er ist das Werkzeug, mit dem der
+  Zustand gelesen und repariert wird.
+- **Geänderte `:latest`-Semantik:** `:latest` und die Versions-Tags entstehen
+  nur im Release-Workflow, mit Checkout **am Tag** (nicht am Branch-Head).
+  Normale main-Merges bauen in `ci.yml` weiterhin ein Image, aber nur unter
+  dem Commit-SHA. `:latest` heißt damit „letzter Release", nicht „letzter
+  Merge". Das Compose-File referenziert
+  `${GRIMOIRE_VERSION:-latest}`; empfohlen ist eine festgenagelte Version.
+- Die Build-Id für den Reload-Banner (#24, `GRIMOIRE_BUILD`) bleibt
+  erhalten: Release-Images brennen den Tag ein, CI-Images den SHA — in beiden
+  Fällen derselbe Wert in Bundle und Server, sonst zeigte jeder Deploy sein
+  eigenes Banner.
+
+Bewusst nicht dabei: Multi-Arch (amd64 genügt), Auto-Deploy (der PO pullt
+weiterhin selbst) und rückwirkende Changelog-Generierung für die Commits vor
+diesem Eintrag.

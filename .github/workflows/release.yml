@@ -1,0 +1,184 @@
+# Release (issue #47). release-please maintains a release PR from the
+# Conventional Commits on main. Merging that PR — like any PR, only after
+# PO approval — creates the `vX.Y.Z` tag, the GitHub release and CHANGELOG.md.
+#
+# Only that release builds the GHCR image with the version tags AND `:latest`
+# (checked out at the tag, not the branch head). Regular main merges build
+# only the SHA tag in ci.yml — `:latest` no longer moves on every merge
+# (DECISIONS #12).
+#
+# Nothing is published from a tree whose CI was not green: `require-green-ci`
+# resolves the tag to its commit and waits for that commit's `ci` push run.
+# release-please itself stays ungated — the release PR must remain
+# maintainable even while main is red, because it is the tool used to read
+# and repair that state.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      # "true" only in the run that merged the release PR; every other push
+      # to main leaves it empty and thereby stops the publish path.
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      # Configured via `release-please-config.json` and
+      # `.release-please-manifest.json` in the repo root (instead of a
+      # `release-type` input here), because the version has to go beyond the
+      # changelog: it is written into the root package.json and copied into
+      # every workspace manifest. The manifest is the state the next release
+      # counts from; the action advances it in the release commit.
+      #
+      # The repo releases as one unnamed unit, so the tag is a bare
+      # `vX.Y.Z`. Two settings produce that — and one of them is the trap
+      # that cost money in Quorum: it is `package-name` that must be empty,
+      # NOT `component`. release-please resolves the component as
+      # `component || <name from package.json>`, so an empty `component`
+      # silently falls back to the package name. Nothing shows while the
+      # release PR is being built; it surfaces only on merge, when the
+      # tagging phase compares the merged branch's component against the
+      # configured one, finds empty string vs. package name, does not tag —
+      # and an untagged merged release PR blocks every following release.
+      - uses: googleapis/release-please-action@v4
+        id: release
+
+  # The gate. Everything that leaves the repo hangs off it: a failure here
+  # is a release that stops after the tag — no image, and a red job saying
+  # why.
+  require-green-ci:
+    name: Require green CI for the released commit
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    # The release commit's CI run starts from the same push as this
+    # workflow, so this job usually waits for it. The limit sits well above
+    # a normal run (incl. E2E) and exists so a hung run fails the release
+    # instead of holding a runner for hours.
+    timeout-minutes: 45
+    permissions:
+      # Read workflow runs only; this job touches neither tree nor release.
+      contents: read
+      actions: read
+    steps:
+      - name: Verify the CI workflow succeeded for the tagged commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+
+          # The tag, not the branch head: another merge to main between the
+          # release commit and this job would otherwise let the release
+          # inherit a different commit's CI result. It is exactly the commit
+          # `publish-image` checks out.
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)
+          echo "Released commit: $sha"
+
+          # The ci runs for exactly this commit, newest last. Restricted to
+          # push events because that is what a commit on main produces; a
+          # pull_request run belongs to a merge ref and hence a different
+          # tree.
+          #
+          # Only the two scalars leave jq: commit subjects appear in this
+          # response, and a JSON blob passed through a shell variable trips
+          # over the control characters some of them contain.
+          run=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$sha&per_page=100" \
+            --jq '[.workflow_runs[] | select(.event == "push")]
+                  | sort_by(.run_number) | last | select(. != null)
+                  | "\(.id) \(.html_url)"')
+
+          if [ -z "$run" ]; then
+            echo "::error::No CI run exists for $sha. A missing result is not a passing one, so" \
+              "this release does not publish. Run the CI workflow for that commit and re-run" \
+              "this job."
+            exit 1
+          fi
+
+          # The newest run wins: a re-run after a fixed infrastructure
+          # failure is the answer that counts.
+          id=${run%% *}
+          echo "CI run: ${run#* }"
+
+          # Blocks until the run finishes and exits non-zero if it did not
+          # succeed — a still-running CI run is awaited instead of guessed
+          # at, an already-failed one stops the release immediately. `-R`
+          # because this job checks nothing out, so the CLI cannot infer the
+          # repository.
+          gh run watch "$id" -R "$GITHUB_REPOSITORY" --exit-status --interval 30 >/dev/null
+
+          conclusion=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id" --jq .conclusion)
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::CI for $sha concluded '$conclusion'. Nothing is published from a tree" \
+              "whose CI did not pass."
+            exit 1
+          fi
+          echo "CI succeeded for $sha — the release may publish."
+
+  publish-image:
+    name: Publish the release image
+    needs: [release-please, require-green-ci]
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      # A job block replaces the workflow block entirely: `packages: write`
+      # is what lets GITHUB_TOKEN push to GHCR; beyond reading the tree this
+      # job needs nothing.
+      contents: read
+      packages: write
+    steps:
+      # Explicitly the tagged commit, not the branch head: another merge to
+      # main in between would otherwise be built under this version number.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      # No repo secrets involved: GITHUB_TOKEN suffices for GHCR pushes to
+      # this repository's own package.
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # Build id in bundle AND server (issue #24) — the tag here instead
+          # of the SHA, so the reload-banner comparison between an old tab
+          # and the new server state sees the same value on both sides and a
+          # release is recognized as a new version.
+          build-args: |
+            GRIMOIRE_BUILD=${{ needs.release-please.outputs.tag_name }}
+          # Lowercase owner: GHCR repository names are case-sensitive, the
+          # GitHub account is capitalized.
+          # The version tag is what a deployment pins; `:latest` is created
+          # only here — no longer on every main merge.
+          # Both spellings of the version, so a deployment can pin either
+          # `v0.1.0` (what the tag/release is called) or `0.1.0`.
+          tags: |
+            ghcr.io/jocur/grimoire:${{ needs.release-please.outputs.tag_name }}
+            ghcr.io/jocur/grimoire:${{ needs.release-please.outputs.version }}
+            ghcr.io/jocur/grimoire:latest
+          # linux/amd64 only, which the runner builds natively. arm64 would
+          # mean emulation and builds measured in tens of minutes; there is
+          # no arm64 target.
+          platforms: linux/amd64
+          # Shared with ci.yml: the PR that led to the release commit has
+          # usually filled the scope already.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
