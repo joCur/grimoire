@@ -9,9 +9,24 @@
 // Every claim is checked twice: once in the UI and once in the file on disk
 // (the server is the truth, the app keeps no state of its own).
 
+import type { Page } from "@playwright/test";
+
 import { expect, test } from "../support/test";
 
 const NOTE = "Gruppe verhandelt mit Jorna am Fuß der Treppe #thread";
+
+/** The session chip in menu mode (on /live) — the ONE session control. */
+const sessionMenuChip = (page: Page) =>
+  page.getByRole("button", { name: /Session läuft/ }).first();
+
+/** The session chip in link mode (every other route, and the mobile row). */
+const sessionLinkChip = (page: Page) => page.getByRole("link", { name: /Session läuft/ }).first();
+
+/** Opens the session menu on /live and returns the requested entry. */
+async function sessionMenuItem(page: Page, name: string) {
+  await sessionMenuChip(page).click();
+  return page.getByRole("menuitem", { name });
+}
 
 test("session start, quick note, pause, end — log and file follow", async ({
   page,
@@ -26,12 +41,23 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
 
-  // Live topbar: the green pill and the active chapter.
-  await expect(page.getByText("Live", { exact: true })).toBeVisible();
-  await expect(page.getByText("Kapitel 1: Der Leuchtturm von Salzhafen")).toBeVisible();
+  // The topbar carries ONE session control: the chip, brass, with the running
+  // time as H:MM:SS. No "Live" label, no separate timer or buttons any more.
+  const chip = sessionMenuChip(page);
+  await expect(chip).toBeVisible();
+  await expect(chip).toContainText(/\d+:\d{2}:\d{2}/);
+  await expect(page.getByText("Live", { exact: true })).toHaveCount(0);
 
-  // Left nav of the active chapter, center column = the selected scene.
+  // The clock really ticks (1s), it is not a frozen render: two readings more
+  // than a second apart differ.
+  const firstReading = await chip.textContent();
+  await expect
+    .poll(() => chip.textContent(), { timeout: 5_000 })
+    .not.toBe(firstReading);
+
+  // Left nav of the active chapter — which now names the chapter itself.
   const nav = page.getByRole("navigation", { name: "Szenen der Session" });
+  await expect(nav).toContainText("Kapitel 1: Der Leuchtturm von Salzhafen");
   await expect(nav).toContainText("Geplant");
   await expect(nav).toContainText("Ankunft am Leuchtturm");
   await expect(nav).toContainText("Falls es schiefgeht");
@@ -41,8 +67,11 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // NPC card of the selected scene in the right aside — a BUTTON here, not a
   // link: in the live mode it opens the drawer (issue #40).
   await expect(page.getByRole("button", { name: /Hafenmeisterin Jorna/ })).toBeVisible();
-  // …and the location of the scene, as its own card next to the NPCs.
-  await expect(page.getByRole("button", { name: /Der Leuchtturm von Salzhafen/ })).toBeVisible();
+  // …and the location of the scene, as its own card next to the NPCs. Scoped
+  // to the aside: the campaign switcher in the topbar carries the same name
+  // now that the live route shares the global chrome.
+  const aside = page.getByRole("complementary");
+  await expect(aside.getByRole("button", { name: /Der Leuchtturm von Salzhafen/ })).toBeVisible();
 
   // Fresh session: the log is empty and says where entries come from.
   await expect(
@@ -53,8 +82,9 @@ test("session start, quick note, pause, end — log and file follow", async ({
     .poll(() => files.read(sessionPath))
     .toContain("scenes_played: []");
 
-  // …and while it is empty, it can be discarded (issue #40 AK7).
-  await expect(page.getByRole("button", { name: "Session verwerfen" })).toBeVisible();
+  // …and while it is empty, the session menu offers to discard it (#40 AK7).
+  await expect(await sessionMenuItem(page, "Session verwerfen")).toBeVisible();
+  await page.keyboard.press("Escape");
 
   // --- quick note ("Schnellnotiz") ------------------------------------------
   const quickNote = page.getByLabel("Schnellnotiz");
@@ -78,7 +108,10 @@ test("session start, quick note, pause, end — log and file follow", async ({
 
   // The session has content now — discarding it is no longer on offer; the
   // way out is "Session beenden".
-  await expect(page.getByRole("button", { name: "Session verwerfen" })).toHaveCount(0);
+  await sessionMenuChip(page).click();
+  await expect(page.getByRole("menuitem", { name: "Session verwerfen" })).toHaveCount(0);
+  await expect(page.getByRole("menuitem", { name: "Session beenden" })).toBeVisible();
+  await page.keyboard.press("Escape");
 
   // --- NPC drawer inside the live mode (issue #40) --------------------------
   // A card click must NOT navigate: the selected scene and a half-typed
@@ -109,7 +142,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await quickNote.fill("");
 
   // --- the location card opens in the same drawer ---------------------------
-  await page.getByRole("button", { name: /Der Leuchtturm von Salzhafen/ }).click();
+  await aside.getByRole("button", { name: /Der Leuchtturm von Salzhafen/ }).click();
   await expect(page.getByRole("dialog").getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
@@ -123,21 +156,22 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect(page).toHaveURL(/\/beispiel$/);
   // No "Session starten" anywhere while a session runs …
   await expect(page.getByRole("button", { name: "Session starten" })).toHaveCount(0);
-  // … but the live indicator with the running time, on this route too.
-  const backToLive = page.getByRole("link", { name: /Zur laufenden Session/ });
+  // … but the same chip, in link mode, with the running time — on this route
+  // too, and in the very same slot of the topbar.
+  const backToLive = sessionLinkChip(page);
   await expect(backToLive).toBeVisible();
-  await expect(backToLive).toContainText(/\d+:\d{2}/);
+  await expect(backToLive).toContainText(/\d+:\d{2}:\d{2}/);
   await backToLive.click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
   await expect(page.getByText(NOTE)).toBeVisible();
 
-  // --- pause ---------------------------------------------------------------
-  await page.getByRole("button", { name: "Pause" }).click();
+  // --- pause (from the session menu) ---------------------------------------
+  await (await sessionMenuItem(page, "Pause")).click();
   await expect(page.getByText("— Pause")).toBeVisible();
   await expect.poll(() => files.read(sessionPath)).toMatch(/- \d{2}:\d{2} — Pause/);
 
   // --- end -> review -------------------------------------------------------
-  await page.getByRole("button", { name: "Session beenden" }).click();
+  await (await sessionMenuItem(page, "Session beenden")).click();
   await expect(page).toHaveURL(/\/beispiel\/review$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fünf Minuten Ernte");
   await expect.poll(() => files.read(sessionPath)).toMatch(/^ended: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/m);
@@ -146,26 +180,22 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect(page.getByText("Gruppe verhandelt mit Jorna am Fuß der Treppe")).toBeVisible();
   await expect(page.getByText("#thread", { exact: true }).first()).toBeVisible();
 
-  // --- ended too early? fortsetzen (issue #40 review) ----------------------
+  // --- ended too early? fortsetzen in ONE click (PO feedback on #40) -------
   // "Session beenden" one scene too soon used to be a dead end until
-  // midnight: the Start button answered 200 with the ENDED file and nothing
-  // happened. Now the start says "already ended" and the button offers to
-  // resume — same file, so the evening's log stays in one piece.
+  // midnight. It then cost two clicks (start → "fortsetzen"); now the ended
+  // session is resumed by the same press — same file, so the evening's log
+  // stays in one piece, and no intermediate screen asks anything.
   await page.goto("/beispiel");
   const startButton = page.getByRole("button", { name: "Session starten" });
   await expect(startButton).toBeVisible();
   await startButton.click();
-
-  const resumeButton = page.getByRole("button", { name: "Session fortsetzen" });
-  await expect(resumeButton).toBeVisible();
-  await resumeButton.click();
 
   await expect(page).toHaveURL(/\/beispiel\/live$/);
   // The same session, not a fresh one: the note from before is still there …
   await expect(page.getByText(NOTE)).toBeVisible();
   // … and `ended` is gone from the file, so the session really runs again.
   await expect.poll(() => files.read(sessionPath)).not.toContain("ended:");
-  await expect(page.getByRole("button", { name: "Session beenden" })).toBeVisible();
+  await expect(sessionMenuChip(page)).toBeVisible();
 });
 
 test("session verwerfen — the mis-click's undo removes the empty file", async ({
@@ -181,7 +211,7 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   await expect.poll(() => files.exists(sessionPath)).toBe(true);
 
   // It asks first — the file is deleted, and that is what the dialog says.
-  await page.getByRole("button", { name: "Session verwerfen" }).click();
+  await (await sessionMenuItem(page, "Session verwerfen")).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Leere Session verwerfen?");
   await expect(dialog).toContainText("Die Datei wird gelöscht.");
@@ -191,14 +221,14 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   await expect(dialog).toBeHidden();
   expect(await files.exists(sessionPath)).toBe(true);
 
-  await page.getByRole("button", { name: "Session verwerfen" }).click();
+  await (await sessionMenuItem(page, "Session verwerfen")).click();
   await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
 
   // Back in the non-live state: the pool offers a start again …
   await expect(page).toHaveURL(/\/beispiel$/);
   await expect(page.getByRole("button", { name: "Session starten" })).toBeVisible();
-  // … no live indicator is left over …
-  await expect(page.getByRole("link", { name: /Zur laufenden Session/ })).toHaveCount(0);
+  // … no session chip is left over …
+  await expect(page.getByRole("link", { name: /Session läuft/ })).toHaveCount(0);
   // … and the file is gone from disk.
   await expect.poll(() => files.exists(sessionPath)).toBe(false);
 

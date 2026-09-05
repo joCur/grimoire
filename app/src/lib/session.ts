@@ -106,8 +106,15 @@ export interface SessionTimes {
   frontmatter?: Record<string, unknown>;
 }
 
-/** Elapsed time as `H:MM` (prototype format), clamped at `0:00`. */
+/**
+ * Elapsed time as `H:MM:SS`, clamped at `0:00:00`.
+ *
+ * The seconds are the point (PO feedback on issue #40): the session chip is
+ * the only proof in the chrome that the evening is still running, and a
+ * minutes-only readout that changed every ~15s looked frozen — the DM could
+ * not tell a live clock from a stale render.
+ */
 export function formatElapsed(startMs: number, nowMs: number): string {
-  const mins = Math.max(0, Math.floor((nowMs - startMs) / 60000));
-  return `${Math.floor(mins / 60)}:${pad(mins % 60)}`;
+  const secs = Math.max(0, Math.floor((nowMs - startMs) / 1000));
+  return `${Math.floor(secs / 3600)}:${pad(Math.floor(secs / 60) % 60)}:${pad(secs % 60)}`;
 }

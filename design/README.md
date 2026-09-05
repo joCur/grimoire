@@ -52,10 +52,35 @@ eingerückt, standardmäßig GEÖFFNET.
 
   Beim Wechsel zwischen ihnen erscheint und verschwindet nichts, nichts
   verschiebt sich; der einzige Unterschied ist die Markierung im Trio.
-  Ausnahme ist nur der Live-Modus, der seinen eigenen linken Block behält
-  (Live-Pille + Kapitel-Label) — diese Topbar gehört der laufenden Session.
-  Die rechte Seite bleibt ansichtsspezifisch (⌘K, Session-Button,
-  Live-Steuerung, Review-Fortschritt, Generator-Einstieg).
+  Das gilt seit der Chip-Konsolidierung (siehe nächster Punkt) auch für den
+  Live-Modus: er zeigt denselben Switcher an derselben Stelle, nur ohne das
+  Trio (dieser Modus gehört der laufenden Session). Die rechte Seite bleibt
+  ansichtsspezifisch (⌘K, Session-Button, Review-Fortschritt,
+  Generator-Einstieg).
+- EIN SESSION-CHIP statt Live-Steuerung (PO-Rückmeldung zu #40, Overflow
+  #50). Die laufende Session war über sechs Elemente verteilt — grüne
+  Live-Pille, separater Timer, Pause, „Session beenden", „Session
+  verwerfen", eigene mobile LiveBar — mit wechselnder Menge und Reihenfolge
+  je Route; bei mittleren Breiten lief die Leiste über. Jetzt: EIN Chip
+  direkt hinter dem Switcher, auf allen kampagnenbezogenen Routen an
+  derselben Stelle, `/live` eingeschlossen:
+
+      Grimoire │ Kampagne: <Name> ⌄ │ ● 0:12:33 │ Kapitel · NPCs · Orte
+
+  Messing (Akzent) IST der Zustand — kein „Live"-Label mehr; Laufzeit
+  H:MM:SS mit Sekundentick (der 15s-Tick auf Minuten wirkte eingefroren).
+  Außerhalb von `/live` führt der Klick zurück in die Session, in `/live`
+  öffnet er das Session-Menü (Pause · Session beenden · Session verwerfen,
+  letzteres nur bei leerer Session). Unter `md` sitzt derselbe Chip in einer
+  eigenen schmalen Zeile (Link-Modus — es gibt keinen mobilen Live-Modus).
+  Das Kapitel-Label der alten Live-Topbar steht jetzt über der Szenen-Nav
+  des Live-Modus. Abweichung vom Prototyp, der zwei Topbar-Layouts kennt:
+  Stabilität der Session-Bedienung gewinnt.
+- BEI KEINER BREITE ≥390px HORIZONTALER OVERFLOW (#50). Elastisch in der
+  Leiste ist der ⌘K-Chip (Label kürzt), der Kampagnenname kürzt mit
+  Ellipsis (unter `xl` härter), der Generator-Einstieg trägt unter `xl` nur
+  sein Icon (Name bleibt zugänglich). Die Topbar-E2E prüft mehrere mittlere
+  Breiten mit laufender Session.
 - KEINE BREADCRUMBS IN DER TOPBAR — nirgends. Die drei früheren
   (Szene, Liste, Generator) haben jeweils den Kampagnennamen wiederholt,
   mit der Navigation daneben konkurriert und auf einer Datei einen

@@ -16,33 +16,50 @@
 // (components/PageContext.tsx) — where it belongs, next to the title it
 // describes. The campaign name appears exactly ONCE in the chrome.
 //
-// The live mode is the one exception: it keeps its own left block (green Live
-// pill + chapter label), because that topbar belongs to the running session.
+// ONE SESSION CHIP (PO feedback on issue #40, overflow issue #50). The
+// running session used to be spread over six controls whose set and order
+// changed with the route: a green "Live" pill, a separate elapsed timer,
+// Pause, "Session beenden", "Session verwerfen", and a mobile LiveBar of its
+// own. At medium widths that row simply ran over. It is now a SINGLE chip
+// (SessionChip) in a fixed slot — right behind the campaign switcher, the
+// same place on EVERY campaign-scoped route, /live included:
 //
-// THE LIVE INDICATOR IS GLOBAL (issue #40). While a session runs, EVERY
-// campaign-scoped route shows the green pill with the running time — and off
-// the live route it is a LINK back into it. Below md, where the topbar is not
-// the chrome, the same indicator appears as its own slim row (LiveBar), so a
-// session is never invisible. Consequence: "Session starten" appears NOWHERE
-// while a session is running — there is nothing to start, only something to
-// return to. What "running" means is the server's answer (GET
-// /:campaign/session), not a date the app computes: a session that goes past
-// midnight stays the running one.
+//     Grimoire │ Kampagne: <name> ⌄ │ ● 0:12:33 │ Kapitel · NPCs · Orte
 //
-// The right side stays per-view and unchanged: the ⌘K search chip (opens the
-// palette; hidden without a campaign in the URL — "/" only ever shows the
-// empty state), the brass "Session starten" button on pool and scene views
-// (issue #9: starts today's session and enters /:campaign/live), the elapsed
-// timer plus Pause / "Session beenden" in the live mode (plus the quiet
-// "Session verwerfen" while that session is still empty — issue #40 AK7), the
-// harvest progress on the review (issue #10) with a quiet pool link into it
-// while today's session still has unharvested entries, and the "Generator" on
-// the pool (issue #12) with its run indicator (issue #19).
+// The chip is the state: brass/amber (the accent token) means "a session is
+// running", so there is no "Live" label left to read. It carries the running
+// time as H:MM:SS, ticking every second — the 15s tick of the minutes-only
+// readout looked frozen, which is the one thing a live clock must not do.
+// Off /live a click on it navigates back into the session; ON /live it opens
+// a small menu with the three session actions (Pause, beenden, verwerfen —
+// the last only while the session is still empty, issue #40 AK7). Below md,
+// where the topbar is not the chrome, the very same chip sits in its own slim
+// row (in link mode: there is no mobile live mode), so a session is never
+// invisible and never moves.
+//
+// Consequence: "Session starten" appears NOWHERE while a session is running —
+// there is nothing to start, only something to return to. What "running"
+// means is the server's answer (GET /:campaign/session), not a date the app
+// computes: a session that goes past midnight stays the running one.
+//
+// Deviation from design/ (which keeps a separate live topbar) per PO decision
+// — stability of the session control beats the prototype's two layouts. The
+// live chapter label moved into the live view's own scene nav, next to the
+// scenes it describes.
+//
+// The right side stays per-view: the ⌘K search chip (opens the palette;
+// hidden without a campaign in the URL — "/" only ever shows the empty
+// state), the brass "Session starten" button on pool and scene views (issue
+// #9: starts — or resumes, in ONE click — today's session and enters
+// /:campaign/live), the harvest progress on the review (issue #10) with a
+// quiet pool link into it while today's session still has unharvested
+// entries, and the "Generator" on the pool (issue #12) with its run
+// indicator (issue #19).
 
 import type { FileResponse } from "@grimoire/shared/types";
 import { isSessionEmpty } from "@grimoire/shared/session-state";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, Clock, Pause, Play, Search, Sparkles } from "lucide-react";
+import { Check, ChevronDown, Pause, Play, Search, Sparkles, Square, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, matchPath, useLocation, useNavigate } from "react-router";
 
@@ -55,7 +72,6 @@ import {
   DialogContent,
   DialogDescription,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -107,27 +123,17 @@ export function Topbar() {
   // the campaign-scoped views. Route-derived, so it never lags behind a query.
   const section = navSection({ isPool, listKind, filePath });
 
-  const tree = useQuery({
-    queryKey: ["tree", campaign],
-    queryFn: () => fetchTree(campaign),
-    enabled: isLive,
-  });
   // The running session — asked on EVERY campaign route now, not just /live:
   // one shared query key, so this is one request for topbar and live view.
   const session = useActiveSession(campaign, campaign !== "");
   const live = session.data ?? undefined;
 
-  // The live chapter label: the ACTIVE chapter (fallback: first) — the same
-  // rule the live nav uses.
-  const liveChapter =
-    tree.data?.chapters.find((c) => c.status === "active") ?? tree.data?.chapters[0];
-
   return (
     <>
-      {/* Below md the topbar is hidden — the live indicator must not be
-          (issue #40 AK2), so it gets its own slim row there. */}
-      {live !== undefined && campaign !== "" && !isLive && (
-        <LiveBar campaign={campaign} session={live} />
+      {/* Below md the topbar is hidden — the running session must not be
+          (issue #40 AK2), so the same chip gets its own slim row there. */}
+      {live !== undefined && campaign !== "" && (
+        <MobileSessionRow campaign={campaign} session={live} />
       )}
       {/* Below md the campaign-scoped views carry their own mobile chrome
           (start-surface wordmark, "‹ Pool" back rows — issue #11); the topbar
@@ -154,29 +160,13 @@ export function Topbar() {
             campaign name again and, on a file, a chapter path that was plain
             misleading for an NPC opened from the NPC list. Hierarchical context
             moved into the page header (components/PageContext.tsx). */}
-        {!isLive && campaign !== "" && <CampaignSwitcher campaign={campaign} />}
+        {campaign !== "" && <CampaignSwitcher campaign={campaign} />}
 
-        {isLive && live !== undefined && (
-          <div className="flex min-w-0 items-center gap-2.5 text-[13px] text-muted-foreground">
-            <LivePill />
-            {liveChapter !== undefined && (
-              <span className="hidden truncate md:inline">{liveChapter.title}</span>
-            )}
-          </div>
-        )}
-
-        {/* Off the live route the very same pill is the way BACK into the
-            running session — with the elapsed time, so the DM can see at a
-            glance that the clock is still ticking while looking something up. */}
-        {!isLive && live !== undefined && (
-          <Link
-            to={`/${campaign}/live`}
-            className="flex min-w-0 flex-none items-center gap-2 rounded-full px-1 text-[13px] text-muted-foreground hover:text-foreground"
-          >
-            <LivePill />
-            <SessionElapsed session={live} />
-            <span className="sr-only">Zur laufenden Session</span>
-          </Link>
+        {/* THE session control — same component, same slot, every route. Off
+            /live it is the way back into the session, on /live it opens the
+            session menu. */}
+        {live !== undefined && campaign !== "" && (
+          <SessionChip campaign={campaign} session={live} mode={isLive ? "menu" : "link"} />
         )}
 
         {/* Quiet campaign navigation (issue #34): the three campaign-wide entry
@@ -187,10 +177,11 @@ export function Topbar() {
             "Kapitel" is the pool — and the way BACK from everywhere: the
             campaign label next to it is the switcher trigger, not a link, and
             the wordmark is a detour via "/" (PO feedback on PR #35).
-            Not in the live mode: that topbar belongs to the running session.
-            Below lg the row is already carrying switcher, search and the session
-            controls, so the links step aside there — mobile has the start
-            surface's "Nachschlagen" list, and ⌘K finds both lists at any width. */}
+            Not in the live mode: that view belongs to the running session
+            (design/README.md). Below lg the row is already carrying switcher,
+            session chip and search, so the links step aside there — mobile has
+            the start surface's "Nachschlagen" list, and ⌘K finds both lists at
+            any width. */}
         {campaign !== "" && !isLive && (
           <nav
             // Deliberately NOT "Nachschlagen": that is the mobile start
@@ -232,11 +223,16 @@ export function Topbar() {
               type="button"
               variant="outline"
               onClick={() => setSearchOpen(true)}
-              className="hidden h-auto min-w-[200px] gap-2 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-card hover:text-soft sm:flex"
+              // THE elastic element of the topbar (issue #50): it wants
+              // 200px, gives way down to ~5rem at medium widths and never
+              // lets the row overflow. Its label truncates; the ⌘K hint and
+              // the icon stay, so the chip is still recognizable at its
+              // narrowest.
+              className="hidden h-auto min-w-[5rem] shrink basis-[200px] gap-2 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-card hover:text-soft sm:flex"
             >
-              <Search aria-hidden size={15} className="text-muted-foreground" />
-              <span className="flex-1 text-left">Suchen …</span>
-              <span className="rounded-[4px] border border-input px-[5px] py-px font-mono text-[11px] text-muted-foreground">
+              <Search aria-hidden size={15} className="flex-none text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-left">Suchen …</span>
+              <span className="flex-none rounded-[4px] border border-input px-[5px] py-px font-mono text-[11px] text-muted-foreground">
                 ⌘K
               </span>
             </Button>
@@ -274,65 +270,176 @@ export function Topbar() {
           </span>
         )}
 
-        {isLive && live !== undefined && <LiveControls campaign={campaign} session={live} />}
-
         {isReview && <ReviewProgress campaign={campaign} />}
       </header>
     </>
   );
 }
 
-/** The green "Live" pill of the prototype's live topbar. */
-function LivePill() {
-  return (
-    <span className="inline-flex flex-none items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--success)_35%,transparent)] px-2.5 py-[2px] text-[12px] text-success-text">
-      <span aria-hidden className="size-1.5 rounded-full bg-success" />
-      Live
-    </span>
-  );
-}
-
 /**
- * Elapsed session time as `H:MM`, ticking every ~15s (text only — nothing
- * animates). The start is the SERVER's epoch reading of `started`
- * (lib/session.ts): the file format is zone-less, so a browser in another
- * timezone than the server used to show a runtime that was hours off
- * (issue #40). Pauses are NOT deducted — that stays a non-goal.
+ * The running time of the session as `H:MM:SS`, re-rendered every second.
+ *
+ * The start is the SERVER's epoch reading of `started` (lib/session.ts): the
+ * file format is zone-less, so a browser in another timezone than the server
+ * used to show a runtime that was hours off (issue #40). Pauses are NOT
+ * deducted — that stays a non-goal. An ENDED session freezes at its `ended`
+ * (the chip is gone by then, but a resume race must not tick backwards).
  */
-function SessionElapsed({ session }: { session: FileResponse }) {
+function useElapsedLabel(session: FileResponse): string | undefined {
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
-    const timer = setInterval(() => setNowMs(Date.now()), 15_000);
+    const timer = setInterval(() => setNowMs(Date.now()), 1_000);
     return () => clearInterval(timer);
   }, []);
   const startedMs = sessionStartMs(session);
-  if (startedMs === undefined) return null;
-  const endedMs = sessionEndMs(session);
+  if (startedMs === undefined) return undefined;
+  return formatElapsed(startedMs, sessionEndMs(session) ?? nowMs);
+}
+
+/** The chip's own look — brass IS the state, so there is no label to read. */
+const SESSION_CHIP_CLASS =
+  "inline-flex min-h-8 flex-none items-center gap-2 rounded-full border border-[color-mix(in_srgb,var(--primary)_45%,transparent)] bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] px-3 py-[3px] text-[13px] text-primary hover:border-primary hover:bg-[color-mix(in_srgb,var(--primary)_16%,transparent)] hover:text-primary-hover";
+
+/** The brass dot: it pulses only where motion is welcome (quality floor). */
+function SessionDot() {
   return (
-    <span className="flex flex-none items-center gap-1.5">
-      <Clock aria-hidden size={14} className="flex-none" />
-      <span className="font-mono text-[13px]">{formatElapsed(startedMs, endedMs ?? nowMs)}</span>
-      <span className="sr-only">Laufzeit</span>
-    </span>
+    <span
+      aria-hidden
+      className="size-[7px] flex-none rounded-full bg-primary motion-safe:animate-pulse"
+    />
   );
 }
 
 /**
- * The mobile live row (issue #40 AK2): below md the topbar is not the chrome,
- * so the running session gets its own full-width row above the view — one tap
- * back into the session. Mobile is "nachschlagen und einwerfen" (UI-BRIEF §4),
- * and this is exactly the way back out of a lookup.
+ * THE session control (PO feedback on issue #40): one chip, one slot, two
+ * modes.
+ *
+ *   link — off /live: a click goes back into the running session. Nothing to
+ *          decide here, so nothing opens.
+ *   menu — on /live: the click opens the session actions (Pause, beenden,
+ *          and verwerfen while the session is still empty). They used to be
+ *          three separate topbar buttons, which is what made the row overflow
+ *          at medium widths (issue #50).
+ *
+ * The accessible name always carries the STATE plus the running time
+ * ("Session läuft, 0:12:33") — the colour alone is not information.
  */
-function LiveBar({ campaign, session }: { campaign: string; session: FileResponse }) {
+function SessionChip({
+  campaign,
+  session,
+  mode,
+}: {
+  campaign: string;
+  session: FileResponse;
+  mode: "link" | "menu";
+}) {
+  const elapsed = useElapsedLabel(session);
+  const label = elapsed === undefined ? "Session läuft" : `Session läuft, ${elapsed}`;
+
+  if (mode === "link") {
+    return (
+      <Link
+        to={`/${campaign}/live`}
+        aria-label={`${label} — zur laufenden Session`}
+        data-session-chip=""
+        className={SESSION_CHIP_CLASS}
+      >
+        <SessionDot />
+        <span className="font-mono tabular-nums">{elapsed ?? "läuft"}</span>
+      </Link>
+    );
+  }
+  return <SessionMenuChip campaign={campaign} session={session} label={label} elapsed={elapsed} />;
+}
+
+/**
+ * The chip in menu mode. The discard confirmation lives OUTSIDE the menu
+ * (Radix closes the menu on select), so its dialog state sits here.
+ */
+function SessionMenuChip({
+  campaign,
+  session,
+  label,
+  elapsed,
+}: {
+  campaign: string;
+  session: FileResponse;
+  label: string;
+  elapsed: string | undefined;
+}) {
+  const navigate = useNavigate();
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const pause = useSessionWrite(campaign, () => appendLog(campaign, "— Pause"));
+  // "Session beenden" leads into the review, not back to the pool
+  // (prototype: endSession → review) — the harvest is the next step.
+  const end = useSessionWrite(
+    campaign,
+    () => endSession(campaign),
+    () => void navigate(`/${campaign}/review`),
+  );
+  const busy = pause.isPending || end.isPending;
+
   return (
-    <Link
-      to={`/${campaign}/live`}
-      className="flex min-h-11 flex-none items-center gap-2.5 border-b border-border bg-panel-deep px-4 text-[13px] text-body-secondary md:hidden"
-    >
-      <LivePill />
-      <SessionElapsed session={session} />
-      <span className="ml-auto text-primary">Zur Session</span>
-    </Link>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label={`${label} — Session-Menü`}
+          disabled={busy}
+          data-session-chip=""
+          className={SESSION_CHIP_CLASS}
+        >
+          <SessionDot />
+          <span className="font-mono tabular-nums">{elapsed ?? "läuft"}</span>
+          <ChevronDown aria-hidden size={13} className="flex-none opacity-70" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-[210px] text-[13px]">
+          <DropdownMenuItem onSelect={() => pause.mutate()}>
+            <Pause aria-hidden size={14} className="flex-none text-muted-foreground" />
+            Pause
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => end.mutate()}>
+            <Square aria-hidden size={14} className="flex-none text-muted-foreground" />
+            Session beenden
+          </DropdownMenuItem>
+          {/* Only while the session is EMPTY (issue #40 AK7) — the mis-click's
+              undo, gone the moment the evening has content. */}
+          {isSessionEmpty(session.frontmatter, session.body) && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-muted-foreground"
+                onSelect={() => setDiscardOpen(true)}
+              >
+                <Trash2 aria-hidden size={14} className="flex-none" />
+                Session verwerfen
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {(pause.isError || end.isError) && (
+        <span className="flex-none text-[12.5px] text-destructive">
+          Session nicht geändert — Server prüfen.
+        </span>
+      )}
+      <DiscardSessionDialog campaign={campaign} open={discardOpen} onOpenChange={setDiscardOpen} />
+    </>
+  );
+}
+
+/**
+ * Below md the topbar is not the chrome (issue #40 AK2), so the session gets
+ * its own slim row — carrying the very SAME chip, in link mode: there is no
+ * mobile live mode (UI-BRIEF §4), so the way back into the session is the only
+ * action mobile needs. Mobile is "nachschlagen und einwerfen", and this is
+ * exactly the way back out of a lookup.
+ */
+function MobileSessionRow({ campaign, session }: { campaign: string; session: FileResponse }) {
+  return (
+    <div className="flex min-h-11 flex-none items-center gap-2.5 border-b border-border bg-panel-deep px-4 md:hidden">
+      <SessionChip campaign={campaign} session={session} mode="link" />
+      <span className="ml-auto text-[13px] text-body-secondary">Zur Session</span>
+    </div>
   );
 }
 
@@ -370,27 +477,29 @@ function TopbarNavLink({
 }
 
 /**
- * Starts (or re-enters) today's session and navigates to the live mode.
+ * Starts — or resumes — today's session and navigates to the live mode. ONE
+ * click, always (PO feedback on issue #40): the label is the intention, and
+ * "fortsetzen" must not cost a second press or an intermediate screen.
  *
  * A start can answer 409 (issue #40 review): today's session is already
- * ended, or an older one still runs. The ended case is answered right here —
- * the button becomes "Session fortsetzen" — because that is the accident this
- * button causes ("beenden" hit one evening too early). For the still-running
- * case the live view is the place that asks, so the click navigates there.
+ * ended, or an older one still runs. The ended case is answered inside the
+ * flow (use-session.ts: `enter` retries as a resume immediately) — that is
+ * the accident this button causes ("beenden" hit one evening too early). For
+ * the still-running case the live view is the place that asks, so the click
+ * navigates there.
  */
 function StartSessionButton({ campaign }: { campaign: string }) {
   const navigate = useNavigate();
   const toLive = () => void navigate(`/${campaign}/live`);
-  const { start, resume, conflict, failed } = useSessionStartFlow(campaign, toLive);
+  const { enter, entering, resume, conflict, failed } = useSessionStartFlow(campaign, toLive);
   const resuming = conflict === "session_ended";
   return (
     <Button
       type="button"
-      disabled={start.isPending || resume.isPending}
+      disabled={entering}
       onClick={() => {
-        if (resuming) resume.mutate();
-        else if (conflict === "session_running") toLive();
-        else start.mutate();
+        if (conflict === "session_running") toLive();
+        else enter();
       }}
       title={
         failed || resume.isError
@@ -409,83 +518,34 @@ function StartSessionButton({ campaign }: { campaign: string }) {
   );
 }
 
-/** Elapsed timer, Pause and "Session beenden" per the prototype's live
- * topbar. */
-function LiveControls({ campaign, session }: { campaign: string; session: FileResponse }) {
-  const navigate = useNavigate();
-  const pause = useSessionWrite(campaign, () => appendLog(campaign, "— Pause"));
-  // "Session beenden" leads into the review, not back to the pool
-  // (prototype: endSession → review) — the harvest is the next step.
-  const end = useSessionWrite(
-    campaign,
-    () => endSession(campaign),
-    () => void navigate(`/${campaign}/review`),
-  );
-
-  return (
-    <>
-      <div className="hidden flex-none text-soft sm:block">
-        <SessionElapsed session={session} />
-      </div>
-      <Button
-        type="button"
-        variant="outline"
-        disabled={pause.isPending}
-        onClick={() => pause.mutate()}
-        className="hidden h-auto gap-1.5 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-card hover:text-foreground sm:flex [&_svg]:size-[13px]"
-      >
-        <Pause aria-hidden />
-        Pause
-      </Button>
-      {/* Only while the session is EMPTY (issue #40 AK7) — the mis-click's
-          undo, gone the moment the evening has content. */}
-      {isSessionEmpty(session.frontmatter, session.body) && (
-        <DiscardSessionAction campaign={campaign} />
-      )}
-      <Button
-        type="button"
-        variant="outline"
-        disabled={end.isPending}
-        onClick={() => end.mutate()}
-        className="h-auto border-input bg-transparent px-3 py-1.5 text-[13px] font-normal text-soft hover:border-primary hover:bg-transparent hover:text-primary-hover"
-      >
-        Session beenden
-      </Button>
-    </>
-  );
-}
-
 /**
  * "Session verwerfen" (issue #40 AK7): deletes the session file of a session
  * that has nothing in it — the undo of a "Session starten" that was a
- * mis-click. Quiet by design (the smallest, dimmest control of the live
- * topbar): it sits next to "Session beenden", which stays THE way out of a
- * session that happened.
+ * mis-click. It lives in the session menu now (last entry, dimmed), below
+ * "Session beenden", which stays THE way out of a session that happened.
  *
  * It deletes a file, so it asks first. The confirmation names the consequence
  * instead of asking "sicher?" — that is the only thing worth reading here.
  * After the discard nothing is live any more, so the pool is where the DM
  * lands (the live route without a session would only show its empty state).
  */
-function DiscardSessionAction({ campaign }: { campaign: string }) {
+function DiscardSessionDialog({
+  campaign,
+  open,
+  onOpenChange,
+}: {
+  campaign: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
   const discard = useSessionDiscard(campaign, () => {
-    setOpen(false);
+    onOpenChange(false);
     void navigate(`/${campaign}`);
   });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          className="h-auto flex-none px-2 py-1.5 text-[12.5px] font-normal text-muted-foreground hover:bg-transparent hover:text-foreground"
-        >
-          Session verwerfen
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogTitle>Leere Session verwerfen?</DialogTitle>
         <DialogDescription>Die Datei wird gelöscht.</DialogDescription>
@@ -537,7 +597,9 @@ function GeneratorLink({ campaign }: { campaign: string }) {
       )}
     >
       <Sparkles aria-hidden />
-      Generator
+      {/* Below xl the row is tight (issue #50): the label steps aside and the
+          icon carries the entry — the accessible name stays either way. */}
+      <span className="max-xl:sr-only">Generator</span>
       {running && (
         <>
           {/* Pulses only where motion is welcome; otherwise a static dot
@@ -591,12 +653,22 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
         className={cn(
           buttonVariants({ variant: "ghost" }),
           // flex-none: the campaign context is the anchor of the topbar and
-          // must not shrink when the right-hand side fills up (an extra
-          // affordance there used to truncate the campaign NAME instead).
+          // its width must not depend on what the right-hand side happens to
+          // carry (the pool's Generator link used to make the name shorter
+          // there than on a list — the chrome has to be identical on every
+          // route). A very long name truncates at max-w-[280px] with an
+          // ellipsis instead of pushing the row over (issue #50); the elastic
+          // element of the row is the search chip below.
           "h-auto min-w-0 flex-none gap-[7px] rounded-md border border-transparent px-2.5 py-[5px] text-[13px] font-normal text-body-secondary hover:border-input hover:bg-transparent hover:text-foreground",
         )}
       >
-        <span className="max-w-[280px] truncate">Kampagne: {current}</span>
+        {/* Truncates with an ellipsis rather than pushing the row over
+            (issue #50) — and harder below xl, where the row also carries the
+            "Kapitel · NPCs · Orte" trio. The full name is one click away in
+            the menu below. */}
+        <span className="min-w-0 max-w-[9.5rem] truncate xl:max-w-[280px]">
+          Kampagne: {current}
+        </span>
         <ChevronDown aria-hidden size={14} className="flex-none text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-[290px]">

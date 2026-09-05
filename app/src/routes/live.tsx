@@ -133,6 +133,13 @@ function LiveDesktop({ campaign }: { campaign: string }) {
         aria-label="Szenen der Session"
         className="flex-none border-b border-border px-3 py-[18px] lg:w-[250px] lg:overflow-y-auto lg:border-b-0 lg:border-r"
       >
+        {/* The chapter the session plays. It used to sit in the topbar next to
+            the live pill; with the topbar consolidated to one session chip
+            (PO feedback on issue #40) it belongs here — next to the scenes it
+            describes. */}
+        {chapter !== undefined && (
+          <p className="px-2 pb-3 font-serif text-[14px] text-foreground">{chapter.title}</p>
+        )}
         <p className="px-2 pb-2 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
           Geplant
         </p>
@@ -365,33 +372,24 @@ function LogPanel({
 
 /**
  * Quiet empty state when the live route is opened while nothing is running —
- * and the ONE place the start's 409s become a question the DM can answer
- * (issue #40 review, finding 2). Before, "Session starten" on an evening that
- * was already ended answered 200 with the ended file, the cache seeded `null`
- * again and this very screen came back: a dead end until midnight.
+ * and the ONE place a start conflict becomes a question the DM can answer
+ * (issue #40 review, finding 2).
+ *
+ * Exactly ONE conflict is still a question here (PO feedback on issue #40):
+ * `session_running`, an OLDER session that was never ended — ending someone
+ * else's evening is not implied by "starten". The `session_ended` case is no
+ * longer a screen: "starten" and "fortsetzen" are the same intention, and the
+ * flow resumes in the same click (lib/use-session.ts `enter`).
  */
 function NoSessionYet({ campaign }: { campaign: string }) {
-  const { start, resume, conflict, conflictPath, failed } = useSessionStartFlow(campaign);
+  const { enter, entering, resume, conflict, conflictPath, failed } =
+    useSessionStartFlow(campaign);
   const end = useSessionWrite(campaign, () => endSession(campaign));
-  const busy = start.isPending || resume.isPending || end.isPending;
+  const busy = entering || end.isPending;
   return (
     <div className="flex h-full items-center justify-center px-7">
       <div className="max-w-[380px] text-center">
-        {conflict === "session_ended" ? (
-          <>
-            <p className="mb-4 text-[14px] leading-[1.6] text-muted-foreground">
-              Die heutige Session ist beendet — fortsetzen?
-            </p>
-            <Button
-              type="button"
-              disabled={busy}
-              onClick={() => resume.mutate()}
-              className="h-auto px-4 py-2 text-[13px] font-semibold"
-            >
-              Session fortsetzen
-            </Button>
-          </>
-        ) : conflict === "session_running" ? (
+        {conflict === "session_running" ? (
           <>
             <p className="mb-4 text-[14px] leading-[1.6] text-muted-foreground">
               Eine ältere Session läuft noch
@@ -413,10 +411,10 @@ function NoSessionYet({ campaign }: { campaign: string }) {
             <Button
               type="button"
               disabled={busy}
-              onClick={() => start.mutate()}
+              onClick={() => enter()}
               className="h-auto px-4 py-2 text-[13px] font-semibold"
             >
-              Session starten
+              {conflict === "session_ended" ? "Session fortsetzen" : "Session starten"}
             </Button>
           </>
         )}

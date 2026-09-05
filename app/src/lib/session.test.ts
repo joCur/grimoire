@@ -116,18 +116,20 @@ describe("sessionStartMs / sessionEndMs (issue #40)", () => {
 describe("formatElapsed", () => {
   const start = new Date(2026, 0, 15, 19, 30).getTime();
 
-  test("formats H:MM", () => {
-    expect(formatElapsed(start, start)).toBe("0:00");
-    expect(formatElapsed(start, start + 5 * 60_000)).toBe("0:05");
-    expect(formatElapsed(start, start + 95 * 60_000)).toBe("1:35");
-    expect(formatElapsed(start, start + 10 * 60 * 60_000)).toBe("10:00");
+  test("formats H:MM:SS", () => {
+    expect(formatElapsed(start, start)).toBe("0:00:00");
+    expect(formatElapsed(start, start + 5 * 60_000)).toBe("0:05:00");
+    expect(formatElapsed(start, start + 95 * 60_000)).toBe("1:35:00");
+    expect(formatElapsed(start, start + 10 * 60 * 60_000)).toBe("10:00:00");
   });
 
-  test("clamps negative differences to 0:00", () => {
-    expect(formatElapsed(start, start - 60_000)).toBe("0:00");
+  test("clamps negative differences to 0:00:00", () => {
+    expect(formatElapsed(start, start - 60_000)).toBe("0:00:00");
   });
 
-  test("floors partial minutes", () => {
-    expect(formatElapsed(start, start + 59_000)).toBe("0:00");
+  test("ticks in seconds", () => {
+    expect(formatElapsed(start, start + 1_000)).toBe("0:00:01");
+    expect(formatElapsed(start, start + 59_000)).toBe("0:00:59");
+    expect(formatElapsed(start, start + 61_500)).toBe("0:01:01");
   });
 });
