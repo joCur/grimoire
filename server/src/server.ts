@@ -60,16 +60,15 @@
 //                                              lives in yesterday's file, so the client
 //                                              must not guess it either); 404 only when the
 //                                              campaign has no session file at all
-//   [x] POST /api/:campaign/session/start      creates sessions/<today>.md; idempotent while
-//                                              today's session is the running one.
-//                                              409 { code: "session_running", path } when an
-//                                              OLDER session is still open, 409 { code:
-//                                              "session_ended", path } when today's is
-//                                              already ended (the app offers /resume)
-//   [x] POST /api/:campaign/session/resume     removes `ended` from the last started session
-//                                              — the explicit undo of an accidental
-//                                              "beenden"; 404 without any session, 409 when
-//                                              that session is still running
+//   [x] POST /api/:campaign/session/start      creates a NEW session: sessions/<today>.md,
+//                                              or <today>-2, -3 … when that day already has
+//                                              one (issue #58 — "beenden" is final, so a
+//                                              second evening on the same day is a second
+//                                              session with an empty log and a runtime at 0).
+//                                              Idempotent only while today's session is the
+//                                              RUNNING one. 409 { code: "session_running",
+//                                              path } when an OLDER session is still open
+//                                              (there is no `session_ended` any more)
 //   [x] POST /api/:campaign/session/end        sets `ended` in the ACTIVE session; idempotent
 //                                              (falls back to the last started session) and
 //                                              closes an open pause interval
@@ -77,8 +76,8 @@
 //                                              — the clock really stops (issue #40 AK8);
 //                                              idempotent, 404 when nothing runs
 //   [x] POST /api/:campaign/session/continue   closes that interval + `— Weiter`; idempotent.
-//                                              Distinct from /session/resume, which re-opens
-//                                              an ENDED session
+//                                              "Weiter" ends a PAUSE — an ended session is
+//                                              never re-opened (issue #58)
 //   [x] POST /api/:campaign/session/discard    deletes the ACTIVE session's file — allowed
 //                                              only while it is EMPTY (no log entry, no
 //                                              scenes_played); 409 { code:

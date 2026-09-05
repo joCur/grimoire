@@ -248,17 +248,14 @@ async function fetchSession(
 }
 
 /**
- * Start today's session. Idempotent while today's session is the running one;
- * 409 otherwise — `details.code` says which case (see sessionStartConflict):
- * an older session is still open, or today's is already ended.
+ * Start a NEW session (issue #58): "beenden" is final, so a start after an
+ * ended session creates the next one of the day (`<date>-2`, `-3` …) with an
+ * empty log. Idempotent only while today's session is the RUNNING one; the
+ * single 409 left is `session_running` — an OLDER session is still open (see
+ * sessionStartConflict).
  */
 export function startSession(campaign: string): Promise<FileResponse> {
   return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/start`);
-}
-
-/** Re-open the last started session (removes `ended`) — explicit "fortsetzen". */
-export function resumeSession(campaign: string): Promise<FileResponse> {
-  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/resume`);
 }
 
 /** Set `ended` in the ACTIVE session file (404 when there is none). */
@@ -276,9 +273,8 @@ export function pauseSession(campaign: string): Promise<FileResponse> {
 }
 
 /**
- * "Weiter" — close the open pause interval and log `— Weiter`. Named after
- * the endpoint, and deliberately not `resume…`: `resumeSession` above re-opens
- * an ENDED session, which is a different action.
+ * "Weiter" — close the open pause interval and log `— Weiter`. It ends a
+ * PAUSE; an ENDED session is never re-opened (issue #58).
  */
 export function continueSession(campaign: string): Promise<FileResponse> {
   return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/continue`);

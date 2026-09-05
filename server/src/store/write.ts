@@ -10,8 +10,9 @@
 //     mtime. That is what fixes issue #37: two writes inside the same second
 //     used to see the same mtime and both went through; two writes against
 //     the same `rev` cannot;
-//   * the session state machine keeps every one of its answers, codes
-//     included (`session_running`, `session_ended`, `session_not_empty`), and
+//   * the session state machine keeps its answers and codes
+//     (`session_running`, `session_not_empty` — `session_ended` is gone with
+//     the resume semantics, issue #58), and
 //     `clock.ts` is untouched — session ids, `started`/`ended` and log times
 //     stay zone-less local strings produced by the server;
 //   * append-only stays append-only: log lines and inbox entries grow by
@@ -71,6 +72,8 @@ import {
   relationRows,
   renderSessionRow,
   requireCampaign,
+  sessionIdDate,
+  sessionIdSeq,
   sessionRow,
 } from "./read";
 import { locatorFromPath, type Locator } from "./paths";
@@ -944,51 +947,56 @@ function bumpSessionRev(tx: GrimoireDb, campaign: string, row: SessionRow): void
 }
 
 /**
- * POST /api/:campaign/session/start — the same three answers as before
- * (campaign-write.ts): today's running session is returned untouched, an
- * OLDER running session is a 409 `session_running`, and an already ended
- * session of today is a 409 `session_ended` the app answers with /resume.
+ * The id for a NEW session on `date`: the plain date while that day has no
+ * session yet, `date-2`, `date-3`, … afterwards (issue #58). Readable and
+ * date-ordered like the former file name, and the plain-date rows written
+ * before this need no migration — they simply are their day's first.
+ */
+function nextSessionId(tx: GrimoireDb, campaign: string, date: string): string {
+  const taken = tx
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(eq(sessions.campaignId, campaign))
+    .all()
+    .filter((row) => sessionIdDate(row.id) === date);
+  if (taken.length === 0) return date;
+  const max = taken.reduce((acc, row) => Math.max(acc, sessionIdSeq(row.id)), 1);
+  // A gap (a discarded `-2`) is not re-used: an id must never come back with
+  // a different evening's log rows hanging off the same primary key.
+  return `${date}-${max + 1}`;
+}
+
+/**
+ * POST /api/:campaign/session/start — two answers (issue #58):
+ *
+ *   * a RUNNING session of today is returned untouched (the start button
+ *     stays idempotent while the evening runs);
+ *   * an OLDER running session is a 409 `session_running` — ending someone
+ *     else's evening is not implied by "starten";
+ *   * otherwise a NEW session is created, even when today already has ended
+ *     ones. "Beenden" is final since issue #58: the new row gets its own id,
+ *     an empty log and a runtime that starts at 0. The former 409
+ *     `session_ended` and POST /session/resume are gone with it.
  */
 export async function startSession(campaign: string): Promise<FileResponse> {
   return mutate(campaign, (tx) => {
     const d = now();
     const todayId = localDate(d);
     const active = pickSession(tx, campaign, false);
-    if (active !== undefined && active.id !== todayId) {
+    if (active !== undefined && sessionIdDate(active.id) !== todayId) {
       throw new ApiError(409, "another session is still running — end it first", {
         code: "session_running",
         path: `sessions/${active.id}.md`,
       });
     }
     if (active !== undefined) return renderSessionRow(tx, campaign, active);
-    if (sessionRow(tx, campaign, todayId) !== undefined) {
-      throw new ApiError(409, "today's session is already ended", {
-        code: "session_ended",
-        path: `sessions/${todayId}.md`,
-      });
-    }
+    const id = nextSessionId(tx, campaign, todayId);
     tx.insert(sessions)
-      .values({ campaignId: campaign, id: todayId, started: localDateTime(d) })
+      .values({ campaignId: campaign, id, started: localDateTime(d) })
       .run();
-    const row = sessionRow(tx, campaign, todayId);
+    const row = sessionRow(tx, campaign, id);
     if (row === undefined) throw new ApiError(500, "session could not be created");
     return renderSessionRow(tx, campaign, row);
-  });
-}
-
-/** POST /session/resume — remove `ended` from the last started session. */
-export async function resumeSession(campaign: string): Promise<FileResponse> {
-  return mutate(campaign, (tx) => {
-    const row = pickSession(tx, campaign, true);
-    if (row === undefined) throw new ApiError(404, "no session to resume");
-    if (!isEnded({ ended: row.ended })) {
-      throw new ApiError(409, "this session is still running", { path: `sessions/${row.id}.md` });
-    }
-    tx.update(sessions)
-      .set({ ended: null, rev: row.rev + 1 })
-      .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, row.id)))
-      .run();
-    return renderSessionRow(tx, campaign, { ...row, ended: null, rev: row.rev + 1 });
   });
 }
 

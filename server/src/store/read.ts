@@ -107,7 +107,9 @@ export async function campaignVersion(id: string): Promise<number> {
 /**
  * All campaigns with `name`/`description` and `lastSession` — the newest
  * session id, which is what lets the app re-open the last active campaign
- * (issue #14). Session ids are dates, so `max(id)` IS the newest.
+ * (issue #14). "Newest" is `started`, with the id's sequence number as the
+ * tie-break (compareSessionsNewestFirst) — since issue #58 a day can hold
+ * more than one session, so the plain id no longer sorts them.
  *
  * `name` is the campaign's DISPLAY name and therefore always there: an
  * unnamed campaign is shown under its id. This list and `GET /file?path=
@@ -124,13 +126,11 @@ export async function listCampaigns(): Promise<CampaignSummary[]> {
     if (row.description !== null && row.description.trim() !== "") {
       summary.description = row.description;
     }
-    const newest = db
-      .select({ id: sessions.id })
-      .from(sessions)
-      .where(eq(sessions.campaignId, row.id))
-      .orderBy(desc(sessions.id))
-      .limit(1)
-      .all()[0];
+    // Not `max(id)` any more: a day can hold several sessions since issue
+    // #58 (`…-2`, `…-3`), and `-10` sorts before `-2` as a string.
+    const newest = (
+      db.select().from(sessions).where(eq(sessions.campaignId, row.id)).all() as SessionRow[]
+    ).sort(compareSessionsNewestFirst)[0];
     if (newest !== undefined) summary.lastSession = newest.id;
     return summary;
   });
@@ -239,23 +239,22 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
     })
     .sort((a, b) => cmp(a.name, b.name));
 
+  // Newest first, by `started` with the id's sequence number as the tie-break
+  // — several sessions per day are possible since issue #58.
   const sessionList: SessionSummary[] = (
-    db
-      .select()
-      .from(sessions)
-      .where(eq(sessions.campaignId, campaign))
-      .orderBy(desc(sessions.id))
-      .all() as SessionRow[]
-  ).map((row) => {
-    const summary: SessionSummary = {
-      path: `sessions/${row.id}.md`,
-      id: row.id,
-      scenes_played: playedScenes(db, campaign, row.id),
-    };
-    if (row.started !== null) summary.started = row.started;
-    if (row.ended !== null) summary.ended = row.ended;
-    return summary;
-  });
+    db.select().from(sessions).where(eq(sessions.campaignId, campaign)).all() as SessionRow[]
+  )
+    .sort(compareSessionsNewestFirst)
+    .map((row) => {
+      const summary: SessionSummary = {
+        path: `sessions/${row.id}.md`,
+        id: row.id,
+        scenes_played: playedScenes(db, campaign, row.id),
+      };
+      if (row.started !== null) summary.started = row.started;
+      if (row.ended !== null) summary.ended = row.ended;
+      return summary;
+    });
 
   return {
     campaign,
@@ -326,31 +325,58 @@ export function sessionRow(
 }
 
 /**
+ * A session id is `yyyy-mm-dd` for the day's FIRST session and
+ * `yyyy-mm-dd-<n>` (n >= 2) for every further one (issue #58): the identity
+ * left the calendar day when "beenden" became final, but stays readable and
+ * needs no migration of the rows that were written as plain dates.
+ */
+const SESSION_ID = /^(\d{4}-\d{2}-\d{2})(?:-(\d+))?$/;
+
+/** The date part of a session id, or undefined for a degraded id. */
+export function sessionIdDate(id: string): string | undefined {
+  return SESSION_ID.exec(id)?.[1];
+}
+
+/** The sequence number inside its day: 1 for `yyyy-mm-dd`, n for `-n`. */
+export function sessionIdSeq(id: string): number {
+  const m = SESSION_ID.exec(id);
+  if (m === null) return 0;
+  return m[2] === undefined ? 1 : Number(m[2]);
+}
+
+/**
  * Chronological order key of a session in epoch milliseconds, or undefined
  * when the row says nothing usable about WHEN it started. Unchanged rule
- * (campaign-fs.ts `sessionOrderKey`): `started` first, the id (a date) as the
+ * (campaign-fs.ts `sessionOrderKey`): `started` first, the id's DATE as the
  * fallback, and a session with neither never wins anything.
  */
-const SESSION_ID_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
-
 export function sessionOrderKey(row: SessionRow): number | undefined {
   const started = localDateTimeToMs(row.started);
   if (started !== undefined) return started;
-  return SESSION_ID_DATE.test(row.id) ? localDateTimeToMs(row.id) : undefined;
+  const date = sessionIdDate(row.id);
+  return date === undefined ? undefined : localDateTimeToMs(date);
+}
+
+/**
+ * Newest-first comparator: `started` decides, the id's sequence number breaks
+ * the tie. Two sessions of the same evening can share a `started` to the
+ * minute (start, end, start again — issue #58), and "the last started one" has
+ * to be the SECOND of them, deterministically.
+ */
+export function compareSessionsNewestFirst(a: SessionRow, b: SessionRow): number {
+  const ka = sessionOrderKey(a) ?? -Infinity;
+  const kb = sessionOrderKey(b) ?? -Infinity;
+  if (ka !== kb) return kb - ka;
+  const da = sessionIdDate(a.id) ?? "";
+  const db_ = sessionIdDate(b.id) ?? "";
+  if (da !== db_) return db_ < da ? -1 : 1;
+  return sessionIdSeq(b.id) - sessionIdSeq(a.id);
 }
 
 function pickLatest(rows: SessionRow[]): SessionRow | undefined {
-  let best: SessionRow | undefined;
-  let bestKey = -Infinity;
-  for (const row of rows) {
-    const key = sessionOrderKey(row);
-    if (key === undefined) continue;
-    if (best === undefined || key > bestKey) {
-      best = row;
-      bestKey = key;
-    }
-  }
-  return best;
+  const candidates = rows.filter((row) => sessionOrderKey(row) !== undefined);
+  if (candidates.length === 0) return undefined;
+  return [...candidates].sort(compareSessionsNewestFirst)[0];
 }
 
 /**

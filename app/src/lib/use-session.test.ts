@@ -11,12 +11,15 @@ const conflict = (details: Record<string, unknown>) =>
   new ApiError(409, "conflict", { error: "…", ...details });
 
 describe("sessionStartConflict", () => {
-  test("recognizes the two documented codes", () => {
-    expect(sessionStartConflict(conflict({ code: "session_ended" }))).toBe("session_ended");
+  test("recognizes the one documented code", () => {
     expect(sessionStartConflict(conflict({ code: "session_running" }))).toBe("session_running");
   });
 
   test("anything else is a plain error, not a question", () => {
+    // `session_ended` is gone with the resume semantics (issue #58): a start
+    // after an ended session creates a new one, so this code never arrives —
+    // and if an OLD server sent it, it must not become a "fortsetzen" offer.
+    expect(sessionStartConflict(conflict({ code: "session_ended" }))).toBeUndefined();
     expect(sessionStartConflict(conflict({}))).toBeUndefined();
     expect(sessionStartConflict(conflict({ code: "whatever" }))).toBeUndefined();
     expect(sessionStartConflict(new ApiError(500, "boom"))).toBeUndefined();

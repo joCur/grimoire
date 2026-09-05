@@ -300,7 +300,7 @@ describe("writes land in the ACTIVE session, not in today's", () => {
   });
 });
 
-describe("start / resume — the state machine's edges (issue #40 review)", () => {
+describe("start — the state machine's edges (issues #40 review, #58)", () => {
   test("409 session_running instead of a second session next to an open one", async () => {
     // The older session was never ended (a forgotten evening). Starting today
     // used to create a second row, and ENDING that one resurrected the old
@@ -328,39 +328,75 @@ describe("start / resume — the state machine's edges (issue #40 review)", () =
     expect((await post("/api/beispiel/session/start")).status).toBe(409);
   });
 
-  test("409 session_ended on today's ended session, resume re-opens it", async () => {
+  test("a start after the end opens a SECOND session of the same day (#58)", async () => {
+    // "Beenden" is final: no `session_ended` 409, no resume — the next press
+    // is a new evening with its own id, an empty log and a runtime at 0.
     expect((await post("/api/beispiel/session/start")).status).toBe(200);
+    expect((await post("/api/beispiel/log", { text: "erste Runde" })).status).toBe(200);
     expect((await post("/api/beispiel/session/end")).status).toBe(200);
-    const again = await post("/api/beispiel/session/start");
-    expect(again.status).toBe(409);
-    expect(await again.json()).toEqual({
-      error: expect.any(String),
-      code: "session_ended",
-      path: "sessions/2026-08-19.md",
-    });
-    // Explicit "fortsetzen": `ended` is removed, the session runs again —
-    // same row, so the log of the evening stays in one piece.
+
     setNow(() => new Date(2026, 7, 19, 23, 30));
-    const resumed = await post("/api/beispiel/session/resume");
-    expect(resumed.status).toBe(200);
-    const file = (await resumed.json()) as FileResponse;
-    expect(file.path).toBe("sessions/2026-08-19.md");
+    const again = await post("/api/beispiel/session/start");
+    expect(again.status).toBe(200);
+    const file = (await again.json()) as FileResponse;
+    expect(file.path).toBe("sessions/2026-08-19-2.md");
+    expect(file.frontmatter.id).toBe("2026-08-19-2");
+    expect(file.frontmatter.started).toBe("2026-08-19T23:30");
     expect(file.frontmatter.ended).toBeUndefined();
-    expect(file.endedMs).toBeUndefined();
-    expect(file.raw).not.toContain("ended:");
-    // …and it is the active session again, so notes land in it.
-    expect((await app.request("/api/beispiel/session")).status).toBe(200);
-    expect((await post("/api/beispiel/log", { text: "weiter" })).status).toBe(200);
+    expect(file.body).not.toContain("erste Runde");
+    // The first session is untouched and still ended…
+    const first = await getFile("sessions/2026-08-19.md");
+    expect(first.frontmatter.ended).toBe("2026-08-19T21:05");
+    expect(first.body).toContain("erste Runde");
+    // …and the ACTIVE session — where notes land now — is the new one.
+    const active = (await (await app.request("/api/beispiel/session")).json()) as FileResponse;
+    expect(active.path).toBe("sessions/2026-08-19-2.md");
+    expect((await post("/api/beispiel/log", { text: "zweite Runde" })).status).toBe(200);
+    expect((await getFile("sessions/2026-08-19-2.md")).body).toContain("zweite Runde");
+    expect((await getFile("sessions/2026-08-19.md")).body).not.toContain("zweite Runde");
   });
 
-  test("resume needs an ENDED session: 409 while one runs", async () => {
+  test("a third session of the day counts on: -3, and the review takes the last", async () => {
+    for (const [n, hour] of [
+      [1, 18],
+      [2, 20],
+      [3, 22],
+    ] as const) {
+      setNow(() => new Date(2026, 7, 19, hour, 0));
+      const res = await post("/api/beispiel/session/start");
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as FileResponse).path).toBe(
+        n === 1 ? "sessions/2026-08-19.md" : `sessions/2026-08-19-${n}.md`,
+      );
+      expect((await post("/api/beispiel/session/end")).status).toBe(200);
+    }
+    // ?includeEnded=1 — the harvest's session — is the LAST STARTED one.
+    const last = await app.request("/api/beispiel/session?includeEnded=1");
+    expect(((await last.json()) as FileResponse).path).toBe("sessions/2026-08-19-3.md");
+  });
+
+  test("POST /session/resume is gone (404, no route)", async () => {
     expect((await post("/api/beispiel/session/start")).status).toBe(200);
-    const running = await post("/api/beispiel/session/resume");
-    expect(running.status).toBe(409);
-    expect(await running.json()).toEqual({
-      error: expect.any(String),
-      path: "sessions/2026-08-19.md",
-    });
+    expect((await post("/api/beispiel/session/end")).status).toBe(200);
+    expect((await post("/api/beispiel/session/resume")).status).toBe(404);
+  });
+
+  test("same-minute restarts still order by the id's sequence number", async () => {
+    // Start, end and start again inside ONE minute: `started` ties, so the
+    // sequence number has to decide which session is "the last started".
+    expect((await post("/api/beispiel/session/start")).status).toBe(200);
+    expect((await post("/api/beispiel/session/end")).status).toBe(200);
+    expect((await post("/api/beispiel/session/start")).status).toBe(200);
+    const active = (await (await app.request("/api/beispiel/session")).json()) as FileResponse;
+    expect(active.path).toBe("sessions/2026-08-19-2.md");
+    expect(active.frontmatter.started).toBe("2026-08-19T21:05");
+    const tree = (await (await app.request("/api/beispiel/tree")).json()) as {
+      sessions: Array<{ id: string }>;
+    };
+    expect(tree.sessions.slice(0, 2).map((s) => s.id)).toEqual([
+      "2026-08-19-2",
+      "2026-08-19",
+    ]);
   });
 });
 

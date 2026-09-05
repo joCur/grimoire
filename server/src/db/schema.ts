@@ -310,12 +310,20 @@ export const locations = sqliteTable(
  * One game session. `started`/`ended` keep the zone-less wall-clock strings
  * of the file format (rule 6); the epoch reading stays the server's job.
  * An `ended` that is NULL or blank means the session runs (session-state.ts).
+ *
+ * IDENTITY (issue #58): the id is `yyyy-mm-dd` for a day's FIRST session and
+ * `yyyy-mm-dd-<n>` (n >= 2) for every further one — "Session beenden" is
+ * final, so a second evening on the same day is a second session. The id
+ * stays readable and date-ordered, and the rows imported under the old
+ * one-file-per-day rule keep their plain-date id unchanged. `started` remains
+ * the ORDER key (store/read.ts compareSessionsNewestFirst); the sequence
+ * number only breaks a tie inside the same minute.
  */
 export const sessions = sqliteTable(
   "sessions",
   {
     campaignId: text("campaign_id").notNull(),
-    /** `yyyy-mm-dd` — the former file name. */
+    /** `yyyy-mm-dd`, or `yyyy-mm-dd-2`, `-3` … for further sessions of a day. */
     id: text("id").notNull(),
     started: text("started"),
     ended: text("ended"),

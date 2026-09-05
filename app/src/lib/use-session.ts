@@ -29,7 +29,6 @@ import {
   discardSession,
   fetchActiveSession,
   fetchLastStartedSession,
-  resumeSession,
   startSession,
 } from "@/api";
 
@@ -78,17 +77,17 @@ export function noSessionYet(error: unknown): boolean {
 }
 
 /**
- * The `code` of a `POST /session/start` 409 (server: campaign-write.ts):
- * `"session_running"` — an OLDER session is still open, `"session_ended"` —
- * today's session is already ended and can be resumed. Undefined for
+ * The `code` of a `POST /session/start` 409 (server: store/write.ts). Exactly
+ * ONE code is left since issue #58: `"session_running"` — an OLDER session is
+ * still open. An already ended session of today is no conflict at all any
+ * more; the start simply creates the next session of the day. Undefined for
  * anything else, so the caller can fall back to a plain error message.
  */
-export type SessionStartConflict = "session_running" | "session_ended";
+export type SessionStartConflict = "session_running";
 
 export function sessionStartConflict(error: unknown): SessionStartConflict | undefined {
   if (!(error instanceof ApiError) || error.status !== 409) return undefined;
-  const code = error.details.code;
-  return code === "session_running" || code === "session_ended" ? code : undefined;
+  return error.details.code === "session_running" ? "session_running" : undefined;
 }
 
 /** Campaign-relative path carried by a session 409, when the server sent one. */
@@ -99,7 +98,7 @@ export function conflictPath(error: unknown): string | undefined {
 }
 
 /**
- * Session write mutation (start/end/log/pause/resume): seeds the caches from
+ * Session write mutation (start/end/log/pause): seeds the caches from
  * the returned file.
  *
  * The file cache is keyed by `data.path` — the server decides which file the
@@ -153,45 +152,30 @@ export function useSessionDiscard(campaign: string, onDone?: () => void) {
 }
 
 /**
- * "Session starten" as the state machine actually is (issue #40 review,
- * finding 2): the start can come back with a 409 that is not an error but a
- * QUESTION, and both places that offer the button (topbar and live view) must
- * ask the same one.
+ * "Session starten" as the state machine actually is: ONE click starts a
+ * session and enters it, and exactly ONE 409 is a QUESTION rather than an
+ * error — `session_running`, an OLDER session that was never ended, because
+ * ending someone else's evening is not implied by "starten". Both places that
+ * offer the button (topbar and live view) ask that same question.
  *
- *   session_ended  — today's session is already ended. `resume` re-opens it
- *                    (removes `ended`), so an accidental "beenden" does not
- *                    cost the DM the rest of the evening — and the log stays
- *                    in one file instead of being split in two.
- *   session_running — an OLDER session was never ended. `end` closes it; the
- *                    start can then be pressed again.
+ * "Fortsetzen" is gone (issue #58): "Session beenden" is FINAL, so a start
+ * after an ended session creates a NEW session (own id, empty log, runtime at
+ * 0) instead of re-opening the last one.
  */
 export function useSessionStartFlow(campaign: string, onEnter?: (data: FileResponse) => void) {
   const start = useSessionWrite(campaign, () => startSession(campaign), onEnter);
-  const resume = useSessionWrite(campaign, () => resumeSession(campaign), onEnter);
   return {
     start,
-    resume,
-    /**
-     * ONE click into the session (PO feedback on issue #40): "starten" and
-     * "fortsetzen" are the same intention — get into tonight's session — so
-     * the `session_ended` 409 is answered right here instead of turning into
-     * a screen that asks the DM to press a second button. Only
-     * `session_running` (an OLDER session was never ended) stays a question,
-     * because ending someone else's evening is not implied by "starten".
-     */
+    /** ONE click into a session — always a start, never a resume. */
     enter: () => {
-      if (start.isPending || resume.isPending) return;
-      start.mutate(undefined, {
-        onError: (error) => {
-          if (sessionStartConflict(error) === "session_ended") resume.mutate();
-        },
-      });
+      if (start.isPending) return;
+      start.mutate();
     },
-    /** True while either half of `enter` is in flight. */
-    entering: start.isPending || resume.isPending,
-    /** The 409 the LAST start answered with, when it was one of the two. */
+    /** True while `enter` is in flight. */
+    entering: start.isPending,
+    /** The 409 the LAST start answered with, when it was the documented one. */
     conflict: sessionStartConflict(start.error),
-    /** The session file that 409 pointed at (the old or the ended one). */
+    /** The session that 409 pointed at (the older, still running one). */
     conflictPath: conflictPath(start.error),
     /** A start that failed for any OTHER reason — a real error message. */
     failed: start.isError && sessionStartConflict(start.error) === undefined,

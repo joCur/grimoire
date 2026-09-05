@@ -2,7 +2,10 @@
 //
 // start → quick note → log + scenes_played → NPC/location drawer → back into
 // the session via the global live indicator → pause (the clock stops) →
-// weiter (it ticks again) → end → review.
+// weiter (it ticks again) → end → review → and, since issue #58, the restart:
+// "beenden" is FINAL, so pressing "Session starten" again on the same day
+// opens a SECOND, separate session (own file `<date>-2`, empty log, timer at
+// 0) instead of re-opening the closed one. There is no "fortsetzen".
 //
 // Plus its undo at the very start: "Session verwerfen" deletes the file of a
 // session that has nothing in it (issue #40 AK7) — its own test below.
@@ -12,9 +15,18 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, test, todaySessionPath } from "../support/test";
+import { expect, test, todaySessionId, todaySessionPath } from "../support/test";
 
 const NOTE = "Gruppe verhandelt mit Jorna am Fuß der Treppe #thread";
+
+/**
+ * The path of the n-th session of today (issue #58): the plain date for the
+ * first, `<date>-2`, `-3` … for the ones that follow — "Session beenden" is
+ * final, so a second evening on the same day is a second session.
+ */
+function nthSessionPath(n: number): string {
+  return n === 1 ? todaySessionPath() : `sessions/${todaySessionId()}-${n}.md`;
+}
 
 /** The session chip in menu mode (on /live) — the ONE session control. */
 const sessionMenuChip = (page: Page) =>
@@ -241,22 +253,60 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect(page.getByText("Gruppe verhandelt mit Jorna am Fuß der Treppe")).toBeVisible();
   await expect(page.getByText("#thread", { exact: true }).first()).toBeVisible();
 
-  // --- ended too early? fortsetzen in ONE click (PO feedback on #40) -------
-  // "Session beenden" one scene too soon used to be a dead end until
-  // midnight. It then cost two clicks (start → "fortsetzen"); now the ended
-  // session is resumed by the same press — same file, so the evening's log
-  // stays in one piece, and no intermediate screen asks anything.
+  // --- beenden is FINAL, and a restart is a NEW session (issue #58) --------
+  // The chip offers a plain "Session starten" right after the end — no
+  // "fortsetzen" anywhere — and that press opens a SECOND session of the same
+  // day: own file (`<date>-2`), empty log, timer back at 0. The first
+  // session keeps its `ended`, its log and its pauses.
   await page.goto("/beispiel");
-  const startButton = page.getByRole("button", { name: "Session starten" });
-  await expect(startButton).toBeVisible();
-  await startButton.click();
+  const startAgain = page.getByRole("button", { name: "Session starten" });
+  await expect(startAgain).toBeVisible();
+  await expect(page.getByRole("button", { name: /fortsetzen/i })).toHaveCount(0);
+  await startAgain.click();
 
   await expect(page).toHaveURL(/\/beispiel\/live$/);
-  // The same session, not a fresh one: the note from before is still there …
-  await expect(page.getByText(NOTE)).toBeVisible();
-  // … and `ended` is gone from the file, so the session really runs again.
-  await expect.poll(() => api.raw(sessionPath)).not.toContain("ended:");
   await expect(sessionMenuChip(page)).toBeVisible();
+  // A fresh, empty session: nothing of the first evening is shown …
+  await expect(page.getByText(NOTE)).toHaveCount(0);
+  await expect(page.getByText("— Pause")).toHaveCount(0);
+  // … it lives in its OWN file …
+  const secondPath = nthSessionPath(2);
+  await expect.poll(() => api.exists(secondPath)).toBe(true);
+  const second = await api.raw(secondPath);
+  expect(second).toContain(`id: ${todaySessionId()}-2`);
+  expect(second).not.toContain("ended:");
+  expect(second).not.toContain("pauses:");
+  expect(second).not.toContain(NOTE);
+  // … and the first session is untouched: still ended, log and pauses intact.
+  const first = await api.raw(sessionPath);
+  expect(first).toMatch(/^ended: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/m);
+  expect(first).toContain(NOTE);
+  expect(first).toMatch(/pauses: \[\{from: [\d\-T:]+, to: [\d\-T:]+\}\]/);
+
+  // The two sessions stay separate under writing: a note now lands in the
+  // SECOND one only, and its own pause is its own.
+  const SECOND_NOTE = "Zweite Runde: die Gruppe bricht zum Leuchtturm auf #thread";
+  const secondNoteField = page.getByLabel("Schnellnotiz");
+  await secondNoteField.fill(SECOND_NOTE);
+  await secondNoteField.press("Enter");
+  await expect.poll(() => api.raw(secondPath)).toContain(SECOND_NOTE);
+  expect(await api.raw(sessionPath)).not.toContain(SECOND_NOTE);
+  await (await sessionMenuItem(page, "Pause")).click();
+  await expect.poll(() => api.raw(secondPath)).toMatch(/pauses: \[\{from: [\d\-T:]+\}\]/);
+  // The first session's pause list did not grow.
+  expect((await api.raw(sessionPath)).match(/from:/g)?.length).toBe(1);
+
+  // Ending the second one leads to the review of the SECOND session — the
+  // harvest works on the LAST STARTED session, which is this one.
+  await (await sessionMenuItem(page, "Session beenden")).click();
+  await expect(page).toHaveURL(/\/beispiel\/review$/);
+  await expect.poll(() => api.raw(secondPath)).toMatch(/^ended: /m);
+  await expect(
+    page.getByText("Zweite Runde: die Gruppe bricht zum Leuchtturm auf"),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Gruppe verhandelt mit Jorna am Fuß der Treppe"),
+  ).toHaveCount(0);
 });
 
 test("session verwerfen — the mis-click's undo removes the empty file", async ({

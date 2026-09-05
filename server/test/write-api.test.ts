@@ -27,9 +27,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { eq } from "drizzle-orm";
 import type { FileResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { setNow } from "../src/clock";
+import type { GrimoireDb } from "../src/db/client";
+import { sessions as sessionsTable } from "../src/db/schema";
 import {
   dropStore,
   removeTempRoot,
@@ -120,10 +123,12 @@ async function withFreshCampaign(fn: () => Promise<void>): Promise<void> {
   }
 }
 
+let db: GrimoireDb;
+
 beforeEach(async () => {
   // 2026-08-19 21:05 local time unless a test overrides it.
   setNow(() => new Date(2026, 7, 19, 21, 5));
-  await seedStore();
+  db = await seedStore();
 });
 
 afterEach(() => {
@@ -342,6 +347,21 @@ describe("POST /api/:campaign/session/start", () => {
     expect(again.mtimeMs).toBe(first.mtimeMs);
   });
 
+  test("after the end a start creates <date>-2 with an empty log (#58)", async () => {
+    await postOk("/api/beispiel/session/start");
+    await postOk("/api/beispiel/log", { text: "Runde eins" });
+    await postOk("/api/beispiel/session/end");
+    setNow(() => new Date(2026, 7, 19, 23, 30));
+    const second = await postOk("/api/beispiel/session/start");
+    expect(second.path).toBe("sessions/2026-08-19-2.md");
+    // Own id, own `started`, and the log skeleton is EMPTY — the runtime of
+    // the new session starts at 0 instead of inheriting the first evening's.
+    expect(second.raw).toBe(
+      "---\nid: 2026-08-19-2\nstarted: 2026-08-19T23:30\nscenes_played: []\n---\n\n## Log\n",
+    );
+    expect(second.mtimeMs).toBe(1);
+  });
+
   test("409 session_running when an OLDER session is still open", async () => {
     // A start on the NEXT day must not open a second session silently — the
     // app offers to end the old one (issue #40 review, finding 3).
@@ -402,9 +422,14 @@ describe("POST /api/:campaign/log", () => {
     // of the session's prose follows it (store/render.ts renderSessionBody).
     // The invariant that mattered survives — a note does not land in, or
     // clobber, the DM's own sections — so it is asserted on the fixture
-    // session, re-opened for the purpose.
-    const resumed = await postOk("/api/beispiel/session/resume");
-    expect(resumed.path).toBe("sessions/2026-01-15.md");
+    // session, made the running one for the purpose. That used to be POST
+    // /session/resume; the endpoint is gone (issue #58 — "beenden" is final),
+    // so the row is opened directly here: the SUBJECT of the case is the log
+    // append, not the state machine.
+    db.update(sessionsTable)
+      .set({ ended: null })
+      .where(eq(sessionsTable.id, "2026-01-15"))
+      .run();
     setNow(() => new Date(2026, 0, 15, 23, 0));
     const file = await postOk("/api/beispiel/log", { text: "Nachtrag nach dem Cliffhanger" });
     expect(file.path).toBe("sessions/2026-01-15.md");
@@ -529,7 +554,6 @@ describe("POST /api/:campaign/session/end", () => {
   test("404 for a campaign that has no session at all", async () => {
     await withFreshCampaign(async () => {
       expect((await postJson(`/api/${FRESH}/session/end`)).status).toBe(404);
-      expect((await postJson(`/api/${FRESH}/session/resume`)).status).toBe(404);
       expect((await postJson(`/api/${FRESH}/log`, { text: "x" })).status).toBe(404);
     });
   });
