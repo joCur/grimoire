@@ -38,13 +38,35 @@ test("session start, quick note, pause, end — log and file follow", async ({
   const sessionPath = files.todaySession();
   expect(await files.exists(sessionPath)).toBe(false);
 
-  await page.getByRole("button", { name: "Session starten" }).click();
+  // ONE session control across ALL states (PO requirement on issue #40): the
+  // offer to start and the running session are the SAME chip in the SAME
+  // slot — same height, same right edge, same vertical center. Only the
+  // content and the colour change; nothing in the chrome moves.
+  const startChip = page.getByRole("button", { name: "Session starten" });
+  const startBox = await startChip.boundingBox();
+
+  await startChip.click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
 
   // The topbar carries ONE session control: the chip, brass, with the running
   // time as H:MM:SS. No "Live" label, no separate timer or buttons any more.
   const chip = sessionMenuChip(page);
   await expect(chip).toBeVisible();
+
+  // Same element, same place: the chip that now ticks sits exactly where the
+  // start offer sat — same height, same right edge, same middle.
+  const runningBox = await chip.boundingBox();
+  expect(startBox).not.toBeNull();
+  expect(runningBox).not.toBeNull();
+  if (startBox !== null && runningBox !== null) {
+    expect(runningBox.height).toBe(startBox.height);
+    expect(Math.round(runningBox.x + runningBox.width)).toBe(
+      Math.round(startBox.x + startBox.width),
+    );
+    expect(Math.round(runningBox.y + runningBox.height / 2)).toBe(
+      Math.round(startBox.y + startBox.height / 2),
+    );
+  }
   await expect(chip).toContainText(/\d+:\d{2}:\d{2}/);
   await expect(page.getByText("Live", { exact: true })).toHaveCount(0);
 
@@ -236,4 +258,25 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
   await expect.poll(() => files.exists(sessionPath)).toBe(true);
+});
+
+// The third state of the ONE session control (PO requirement on issue #40): an
+// unreachable session lookup. It used to be a bare sentence next to the chrome
+// while the start button stood there offering something that could not work;
+// now it is the SAME chip, dimmed, inert, saying so.
+test("an unreachable session lookup dims the chip instead of offering a start", async ({
+  page,
+}) => {
+  await page.route("**/api/beispiel/session**", (route) =>
+    route.fulfill({ status: 500, contentType: "application/json", body: "{}" }),
+  );
+
+  await page.goto("/beispiel");
+
+  const unknown = page.getByRole("status", { name: /Session-Status unbekannt/ });
+  await expect(unknown).toBeVisible();
+  await expect(unknown).toContainText("Status unbekannt");
+  // Nothing to press, and above all no start that could not work.
+  await expect(page.getByRole("button", { name: "Session starten" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /Session läuft/ })).toHaveCount(0);
 });

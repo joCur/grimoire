@@ -47,14 +47,22 @@
 // live chapter label moved into the live view's own scene nav, next to the
 // scenes it describes.
 //
+// ONE CHIP FOR EVERY SESSION STATE (PO requirement on issue #40). The chip
+// is not only the running session's control — it is THE session control, in
+// the same slot, with the same geometry, in every state: it offers "Session
+// starten" (or "fortsetzen") while nothing runs, shows the ticking clock
+// while one does, and reads "Status unbekannt", dimmed and inert, when the
+// session lookup failed. The separate brass start button and the bare
+// "Session-Status unbekannt" sentence are gone; only content and colour
+// change, so nothing in the chrome moves when the state does.
+//
 // The right side stays per-view: the ⌘K search chip (opens the palette;
 // hidden without a campaign in the URL — "/" only ever shows the empty
-// state), the brass "Session starten" button on pool and scene views (issue
-// #9: starts — or resumes, in ONE click — today's session and enters
-// /:campaign/live), the harvest progress on the review (issue #10) with a
-// quiet pool link into it while today's session still has unharvested
-// entries, and the "Generator" on the pool (issue #12) with its run
-// indicator (issue #19).
+// state), the session chip (issue #9: one click starts — or resumes —
+// today's session and enters /:campaign/live), the harvest progress on the
+// review (issue #10) with a quiet pool link into it while today's session
+// still has unharvested entries, and the "Generator" on the pool (issue #12)
+// with its run indicator (issue #19).
 
 import type { FileResponse } from "@grimoire/shared/types";
 import { isSessionEmpty } from "@grimoire/shared/session-state";
@@ -245,30 +253,21 @@ export function Topbar() {
             of issue #19. */}
         {isPool && <GeneratorLink campaign={campaign} />}
 
-        {/* The Start button appears for EXACTLY one server answer: `null` —
-            "no session is running" (issue #40 review, finding 6). Not while
-            the query is still pending (it would flash into a running
-            session), and not when it FAILED: a broken query used to look
-            exactly like "nothing running", so the topbar offered a start that
-            could not work while the live pill was gone at the same time. */}
-        {(isPool || isScene) && session.data === null && (
-          <StartSessionButton campaign={campaign} />
-        )}
-
-        {/* THE session control, in the SAME slot the start button occupies:
-            one place in the chrome means "session", whether it offers to start
-            one or shows the running one (PO feedback). Off /live it is the way
-            back into the session, on /live it opens the session menu. */}
-        {live !== undefined && campaign !== "" && (
-          <SessionChip campaign={campaign} session={live} mode={isLive ? "menu" : "link"} />
-        )}
-
-        {/* An unreachable session query is its own state — say so instead of
-            pretending either "live" or "nothing running". */}
-        {(isPool || isScene || isLive) && session.isError && (
-          <span className="flex-none text-[12.5px] text-muted-foreground">
-            Session-Status unbekannt — Server prüfen.
-          </span>
+        {/* THE session control: ONE chip in ONE slot for EVERY state (PO
+            feedback on issue #40) — start offer, running session, unknown
+            status. Same position, same geometry; only content and colour
+            change. */}
+        {campaign !== "" && (
+          <SessionChip
+            campaign={campaign}
+            session={live}
+            state={sessionChipState({
+              session,
+              offersStart: isPool || isScene,
+              showsError: isPool || isScene || isLive,
+            })}
+            mode={isLive ? "menu" : "link"}
+          />
         )}
 
         {isReview && <ReviewProgress campaign={campaign} />}
@@ -297,9 +296,60 @@ function useElapsedLabel(session: FileResponse): string | undefined {
   return formatElapsed(startedMs, sessionEndMs(session) ?? nowMs);
 }
 
-/** The chip's own look — brass IS the state, so there is no label to read. */
-const SESSION_CHIP_CLASS =
-  "inline-flex min-h-8 flex-none items-center gap-2 rounded-full border border-[color-mix(in_srgb,var(--primary)_45%,transparent)] bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] px-3 py-[3px] text-[13px] text-primary hover:border-primary hover:bg-[color-mix(in_srgb,var(--primary)_16%,transparent)] hover:text-primary-hover";
+/**
+ * The chip's GEOMETRY — identical in every state (PO requirement on issue
+ * #40): same slot, same height, same radius, same paddings, same font size.
+ * Only the colours below and the content inside change, so the switch from
+ * "Session starten" to the running clock never makes the topbar jump. From
+ * lg up a minimum width holds the states at a comparable size; below that the
+ * row is too tight to reserve width (issue #50), and the clock's tabular
+ * numbers alone keep a second's tick from re-flowing anything.
+ */
+const SESSION_CHIP_BASE =
+  "inline-flex min-h-8 flex-none items-center justify-center gap-2 rounded-full border px-3 py-[3px] text-[13px] lg:min-w-[8.5rem] focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none";
+
+/** Tone per state — the colour IS the state, never the only information. */
+const SESSION_CHIP_TONE = {
+  // The invitation: the brass accent the separate start button used to carry.
+  start:
+    "border-primary bg-primary font-semibold text-primary-foreground hover:bg-primary-hover hover:border-primary-hover",
+  // A session is running: brass, but quiet — nothing to decide, just present.
+  running:
+    "border-[color-mix(in_srgb,var(--primary)_45%,transparent)] bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] text-primary hover:border-primary hover:bg-[color-mix(in_srgb,var(--primary)_16%,transparent)] hover:text-primary-hover",
+  // The query failed: dimmed and inert — it is neither live nor an offer.
+  error: "border-input bg-transparent text-muted-foreground",
+} as const;
+
+/** Which of the chip's states the session query puts it in. */
+type SessionChipState = "hidden" | "start" | "running" | "error";
+
+/**
+ * The chip's state, straight from the server's answer — and from nothing else
+ * (issue #40 review, finding 6):
+ *
+ *   running — a session file came back, ended or not decided by the server.
+ *   start   — EXACTLY the answer `null` ("nothing running"). Never while the
+ *             query is pending (the chip would flash an offer into a running
+ *             session) and never when it failed.
+ *   error   — the query failed. A broken lookup used to look exactly like
+ *             "nothing running", so the chrome offered a start that could not
+ *             work.
+ *   hidden  — pending, or a route that offers neither.
+ */
+function sessionChipState({
+  session,
+  offersStart,
+  showsError,
+}: {
+  session: { data: FileResponse | null | undefined; isError: boolean };
+  offersStart: boolean;
+  showsError: boolean;
+}): SessionChipState {
+  if (session.data !== undefined && session.data !== null) return "running";
+  if (session.isError) return showsError ? "error" : "hidden";
+  if (session.data === null) return offersStart ? "start" : "hidden";
+  return "hidden";
+}
 
 /** The brass dot: it pulses only where motion is welcome (quality floor). */
 function SessionDot() {
@@ -312,20 +362,57 @@ function SessionDot() {
 }
 
 /**
- * THE session control (PO feedback on issue #40): one chip, one slot, two
- * modes.
+ * THE session control (PO feedback on issue #40): ONE chip, one slot, every
+ * state. It used to be two different elements in the same place — a filled
+ * "Session starten" button and, once a session ran, a pill of another shape —
+ * plus a bare sentence for a failed lookup. Now the element stays; only what
+ * it says and which colour it wears change:
  *
- *   link — off /live: a click goes back into the running session. Nothing to
- *          decide here, so nothing opens.
- *   menu — on /live: the click opens the session actions (Pause, beenden,
- *          and verwerfen while the session is still empty). They used to be
- *          three separate topbar buttons, which is what made the row overflow
- *          at medium widths (issue #50).
+ *   start   — "Session starten" ("Session fortsetzen" once today's session is
+ *             ended). One click starts or resumes and enters /live.
+ *   running — dot + H:MM:SS. Off /live a click goes back into the session;
+ *             ON /live it opens the session actions (Pause, beenden, and
+ *             verwerfen while the session is still empty) — three separate
+ *             topbar buttons before, which is what made the row overflow at
+ *             medium widths (issue #50).
+ *   error   — "Status unbekannt", dimmed and inert. Neither live nor an
+ *             offer, and it no longer costs the row a second element.
  *
  * The accessible name always carries the STATE plus the running time
  * ("Session läuft, 0:12:33") — the colour alone is not information.
  */
 function SessionChip({
+  campaign,
+  session,
+  state,
+  mode,
+}: {
+  campaign: string;
+  session: FileResponse | undefined;
+  state: SessionChipState;
+  mode: "link" | "menu";
+}) {
+  if (state === "hidden") return null;
+  if (state === "error") {
+    return (
+      <span
+        role="status"
+        aria-label="Session-Status unbekannt — Server prüfen"
+        data-session-chip="error"
+        className={cn(SESSION_CHIP_BASE, SESSION_CHIP_TONE.error)}
+      >
+        Status unbekannt
+      </span>
+    );
+  }
+  if (state === "start" || session === undefined) {
+    return <SessionStartChip campaign={campaign} />;
+  }
+  return <SessionRunningChip campaign={campaign} session={session} mode={mode} />;
+}
+
+/** The running states of the chip — link off /live, menu on it. */
+function SessionRunningChip({
   campaign,
   session,
   mode,
@@ -342,8 +429,8 @@ function SessionChip({
       <Link
         to={`/${campaign}/live`}
         aria-label={`${label} — zur laufenden Session`}
-        data-session-chip=""
-        className={SESSION_CHIP_CLASS}
+        data-session-chip="running"
+        className={cn(SESSION_CHIP_BASE, SESSION_CHIP_TONE.running)}
       >
         <SessionDot />
         <span className="font-mono tabular-nums">{elapsed ?? "läuft"}</span>
@@ -351,6 +438,56 @@ function SessionChip({
     );
   }
   return <SessionMenuChip campaign={campaign} session={session} label={label} elapsed={elapsed} />;
+}
+
+/**
+ * The chip in its start state: starts — or resumes — today's session and
+ * navigates to the live mode. ONE click, always (PO feedback on issue #40):
+ * the label is the intention, and "fortsetzen" must not cost a second press
+ * or an intermediate screen.
+ *
+ * A start can answer 409 (issue #40 review): today's session is already
+ * ended, or an older one still runs. The ended case is answered inside the
+ * flow (use-session.ts: `enter` retries as a resume immediately) — that is
+ * the accident this chip causes ("beenden" hit one evening too early). For
+ * the still-running case the live view is the place that asks, so the click
+ * navigates there.
+ */
+function SessionStartChip({ campaign }: { campaign: string }) {
+  const navigate = useNavigate();
+  const toLive = () => void navigate(`/${campaign}/live`);
+  const { enter, entering, resume, conflict, failed } = useSessionStartFlow(campaign, toLive);
+  const resuming = conflict === "session_ended";
+  const label = resuming ? "Session fortsetzen" : "Session starten";
+  return (
+    <button
+      type="button"
+      disabled={entering}
+      aria-label={label}
+      data-session-chip="start"
+      onClick={() => {
+        if (conflict === "session_running") toLive();
+        else enter();
+      }}
+      title={
+        failed || resume.isError
+          ? "Session nicht gestartet — Server prüfen"
+          : conflict === "session_running"
+            ? "Eine ältere Session läuft noch — im Live-Modus beenden"
+            : resuming
+              ? "Die heutige Session ist beendet — fortsetzen"
+              : undefined
+      }
+      className={cn(
+        SESSION_CHIP_BASE,
+        SESSION_CHIP_TONE.start,
+        "disabled:pointer-events-none disabled:opacity-60",
+      )}
+    >
+      <Play aria-hidden size={13} className="flex-none fill-current" />
+      {label}
+    </button>
+  );
 }
 
 /**
@@ -386,8 +523,8 @@ function SessionMenuChip({
         <DropdownMenuTrigger
           aria-label={`${label} — Session-Menü`}
           disabled={busy}
-          data-session-chip=""
-          className={SESSION_CHIP_CLASS}
+          data-session-chip="running"
+          className={cn(SESSION_CHIP_BASE, SESSION_CHIP_TONE.running)}
         >
           <SessionDot />
           <span className="font-mono tabular-nums">{elapsed ?? "läuft"}</span>
@@ -438,7 +575,7 @@ function SessionMenuChip({
 function MobileSessionRow({ campaign, session }: { campaign: string; session: FileResponse }) {
   return (
     <div className="flex min-h-11 flex-none items-center gap-2.5 border-b border-border bg-panel-deep px-4 md:hidden">
-      <SessionChip campaign={campaign} session={session} mode="link" />
+      <SessionChip campaign={campaign} session={session} state="running" mode="link" />
       <span className="ml-auto text-[13px] text-body-secondary">Zur Session</span>
     </div>
   );
@@ -474,48 +611,6 @@ function TopbarNavLink({
     >
       {label}
     </Link>
-  );
-}
-
-/**
- * Starts — or resumes — today's session and navigates to the live mode. ONE
- * click, always (PO feedback on issue #40): the label is the intention, and
- * "fortsetzen" must not cost a second press or an intermediate screen.
- *
- * A start can answer 409 (issue #40 review): today's session is already
- * ended, or an older one still runs. The ended case is answered inside the
- * flow (use-session.ts: `enter` retries as a resume immediately) — that is
- * the accident this button causes ("beenden" hit one evening too early). For
- * the still-running case the live view is the place that asks, so the click
- * navigates there.
- */
-function StartSessionButton({ campaign }: { campaign: string }) {
-  const navigate = useNavigate();
-  const toLive = () => void navigate(`/${campaign}/live`);
-  const { enter, entering, resume, conflict, failed } = useSessionStartFlow(campaign, toLive);
-  const resuming = conflict === "session_ended";
-  return (
-    <Button
-      type="button"
-      disabled={entering}
-      onClick={() => {
-        if (conflict === "session_running") toLive();
-        else enter();
-      }}
-      title={
-        failed || resume.isError
-          ? "Session nicht gestartet — Server prüfen"
-          : conflict === "session_running"
-            ? "Eine ältere Session läuft noch — im Live-Modus beenden"
-            : resuming
-              ? "Die heutige Session ist beendet — fortsetzen"
-              : undefined
-      }
-      className="h-auto gap-2 px-4 py-2 text-[13px] font-semibold [&_svg]:size-[13px]"
-    >
-      <Play aria-hidden className="fill-current" />
-      {resuming ? "Session fortsetzen" : "Session starten"}
-    </Button>
   );
 }
 

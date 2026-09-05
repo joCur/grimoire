@@ -76,6 +76,20 @@ eingerückt, standardmäßig GEÖFFNET.
   Das Kapitel-Label der alten Live-Topbar steht jetzt über der Szenen-Nav
   des Live-Modus. Abweichung vom Prototyp, der zwei Topbar-Layouts kennt:
   Stabilität der Session-Bedienung gewinnt.
+- DERSELBE CHIP IN JEDEM ZUSTAND (PO-Rückmeldung zu #40). Der Chip ist nicht
+  nur die Anzeige der laufenden Session, er IST die Session-Bedienung — ein
+  Element, ein Slot, gleiche Höhe, Form, Paddings und Schriftgröße; nur
+  Inhalt und Farbe wechseln:
+  „Session starten" (bzw. „Session fortsetzen", wenn die heutige Session
+  beendet ist) als Messing-Aufforderung · ● H:MM:SS in gedämpftem Messing,
+  solange eine Session läuft · „Status unbekannt", gedimmt und nicht
+  klickbar, wenn die Session-Abfrage fehlschlägt. Der separate Start-Button
+  und die eigene Textzeile „Session-Status unbekannt" entfallen. Ab `lg`
+  hält eine Mindestbreite die Zustände auf vergleichbarer Größe, darunter
+  ist die Leiste dafür zu eng (#50); die Laufzeit nutzt Tabellenziffern,
+  damit der Sekundentick nichts verschiebt. Der Start erscheint nur bei der
+  ausdrücklichen Server-Antwort „nichts läuft" — nie während der Abfrage
+  und nie nach einem Fehler.
 - BEI KEINER BREITE ≥390px HORIZONTALER OVERFLOW (#50). Elastisch in der
   Leiste ist der ⌘K-Chip (Label kürzt), der Kampagnenname kürzt mit
   Ellipsis (unter `xl` härter), der Generator-Einstieg trägt unter `xl` nur
