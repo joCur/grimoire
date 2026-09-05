@@ -84,6 +84,25 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   deploybar; der PO pullt bewusst (nie direkt vor einer Session),
   SHA-Tags erlauben Rollback.
 
+## Commit- & Release-Konventionen (DECISIONS #12)
+
+- **Conventional Commits sind Pflicht**, sie erzeugen den Changelog:
+  `feat: …` (Minor), `fix: …` (Patch), `docs:`/`chore:`/`refactor:`/`test:`/
+  `ci:` (kein Release-Bump). Breaking Change = `feat!: …` oder ein
+  `BREAKING CHANGE:`-Footer im Body. Scope optional, aber üblich:
+  `feat(app): …`, `fix(server): …`. Die Ticketnummer gehört in den
+  Betreff-Suffix: `feat(app): Szenen-Editor (#43)`.
+- Das gilt auch für den **PR-Titel**: Squash-Merges übernehmen ihn als
+  Commit-Betreff auf `main`, ein unkonventioneller Titel fällt aus dem
+  Changelog.
+- **release-please** hält aus diesen Commits einen Release-PR
+  („chore(main): release X.Y.Z"). Erst dessen Merge — mit PO-Approval wie
+  jeder PR — erzeugt Tag `vX.Y.Z`, GitHub-Release, `CHANGELOG.md` und das
+  GHCR-Image mit Versions-Tag und `:latest`. Manuell wird nie getaggt und
+  `CHANGELOG.md`/`.release-please-manifest.json` nie von Hand editiert.
+- **`:latest` heißt „letzter Release", nicht „letzter Merge".** Normale
+  main-Merges bauen nur ein Image unter dem Commit-SHA.
+
 ## Kritische Pfade (E2E-Pflicht, echte Suite ohne Mocks)
 
 Playwright gegen den echten Stack (realer Server auf Kampagnen-Kopie,

@@ -8,8 +8,10 @@ Images in einem Volume. Zugriffsschutz ist Deployment-Sache, nicht App-Sache
 ## 1. Bauen und starten
 
 > Am schnellsten: die `docker-compose.yml` im Repo-Root auf den Server
-> kopieren, `.env` mit `OPENROUTER_API_KEY=…` daneben legen,
-> `docker compose up -d`. Alles Folgende ist der manuelle Weg.
+> kopieren, `.env` mit `OPENROUTER_API_KEY=…` (und optional
+> `GRIMOIRE_VERSION=v0.1.0`) daneben legen, `docker compose up -d`.
+> Versionswahl, Update und Rollback: Abschnitt 1a. Alles Folgende ist der
+> manuelle Weg.
 
 
 ```bash
@@ -45,22 +47,24 @@ Es gibt keinen Zustand im Container — alles steht im Volume.
 
 ### Alternative: fertiges Image aus GHCR ziehen
 
-Die CI-Pipeline (`.github/workflows/ci.yml`) baut bei jedem Push auf `main`
-dasselbe Dockerfile und pusht das Ergebnis in die GitHub Container Registry —
-getaggt mit `latest` und mit dem Commit-SHA. Das Produktivsystem muss dann
-nicht mehr selbst bauen:
+Das Produktivsystem muss nicht selbst bauen — Images liegen in der GitHub
+Container Registry. Welcher Tag was bedeutet (Issue #47, DECISIONS #12):
+
+| Tag | Woher | Wofür |
+| --- | ----- | ----- |
+| `v0.1.0` (auch `0.1.0`) | Release-Workflow beim Merge des Release-PRs | **das, worauf ein Produktivsystem festnagelt** |
+| `latest` | derselbe Release-Workflow | jeweils letzter Release — mutiert **nicht** mehr bei jedem main-Merge |
+| `<commit-sha>` | CI bei jedem Push auf `main` | Vorschau/Debug eines noch nicht releasten Stands |
 
 ```bash
-docker pull ghcr.io/jocur/grimoire:latest
-# oder festgenagelt auf einen Commit (empfohlen für Rollbacks):
-docker pull ghcr.io/jocur/grimoire:<commit-sha>
+docker pull ghcr.io/jocur/grimoire:v0.1.0
 
 docker run -d --name grimoire \
   --restart unless-stopped \
   -p 127.0.0.1:3000:3000 \
   -v /srv/grimoire/campaigns:/campaigns \
   --env-file /srv/grimoire/.env \
-  ghcr.io/jocur/grimoire:latest
+  ghcr.io/jocur/grimoire:v0.1.0
 ```
 
 Das Package ist bei GHCR standardmäßig **privat**, ein `docker pull` ohne
@@ -77,9 +81,51 @@ Anmeldung schlägt deshalb zunächst fehl. Zwei Wege:
   echo <PAT> | docker login ghcr.io -u jocur --password-stdin
   ```
 
-**Update** in dieser Variante: `docker pull …:latest`, dann Container
-ersetzen (`docker rm -f grimoire` + `run`). Rollback = derselbe `run` mit dem
-SHA-Tag des vorherigen Commits.
+## 1a. Versionswahl, Update, Rollback
+
+Releases entstehen nicht automatisch bei jedem Merge: release-please hält aus
+den Conventional Commits auf `main` einen Release-PR („chore(main): release
+X.Y.Z"). Erst dessen Merge (mit PO-Approval wie jeder PR) erzeugt Tag
+`vX.Y.Z`, GitHub-Release mit Changelog **und** die Image-Tags oben — und nur
+dann, wenn der `ci`-Lauf genau dieses Commits grün war (`require-green-ci` in
+`.github/workflows/release.yml`).
+
+Das Compose-File referenziert deshalb
+`ghcr.io/jocur/grimoire:${GRIMOIRE_VERSION:-latest}`. Empfehlung für den
+Produktivbetrieb: in `.env` eine Version festnageln.
+
+```bash
+# /srv/grimoire/.env
+GRIMOIRE_VERSION=v0.1.0
+```
+
+**Update** (bewusst, nie direkt vor einer Session):
+
+```bash
+# 1. Changelog des neuen Releases lesen (GitHub → Releases)
+# 2. GRIMOIRE_VERSION in .env auf den neuen Tag setzen
+docker compose pull
+docker compose up -d
+```
+
+Ohne `GRIMOIRE_VERSION` zieht `docker compose pull` den jeweils letzten
+Release über `latest` — bequem, aber man weiß hinterher nicht, welcher Stand
+läuft. Welcher es war, sagt notfalls
+`docker inspect --format '{{index .Config.Env}}' grimoire | tr ' ' '\n' | grep GRIMOIRE_BUILD`
+(Build-Id = Release-Tag).
+
+**Rollback** ist derselbe Handgriff rückwärts — kein Zustand im Container,
+alles steht im Volume:
+
+```bash
+# GRIMOIRE_VERSION zurück auf den letzten guten Tag
+docker compose up -d
+```
+
+Manuell (ohne Compose): `docker rm -f grimoire`, dann derselbe `docker run`
+wie oben mit `ghcr.io/jocur/grimoire:<alter-tag>`. SHA-Tags funktionieren dafür weiter,
+sind aber Debug-Werkzeug — für Rollbacks sind die Versions-Tags die
+Referenz, weil zu ihnen ein Changelog gehört.
 
 ## 2. Konfiguration (Env-Variablen)
 
@@ -88,7 +134,8 @@ SHA-Tag des vorherigen Commits.
 | `CAMPAIGN_ROOT`     | `/campaigns` | Ordner mit den Kampagnen-Verzeichnissen (im Image gesetzt)     |
 | `PORT`              | `3000`       | HTTP-Port im Container                                        |
 | `APP_DIST`          | `../app/dist` (relativ zum `server/`-Paket) | Pfad des Frontend-Builds; im Image bereits richtig |
-| `GRIMOIRE_BUILD`    | `dev`        | Build-Id (Commit-SHA); die CI brennt sie als Build-Arg in Bundle **und** Server ein |
+| `GRIMOIRE_BUILD`    | `dev`        | Build-Id; als Build-Arg in Bundle **und** Server eingebrannt — Release-Tag (`v0.1.0`) bei Release-Images, Commit-SHA bei CI-Images aus `main` |
+| `GRIMOIRE_VERSION`  | `latest`     | **nur im Compose-File**, kein App-Setting: der Image-Tag, den `docker compose` zieht (Abschnitt 1a) |
 
 ### Generator (LLM-Provider)
 

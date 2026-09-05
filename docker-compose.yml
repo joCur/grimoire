@@ -1,5 +1,6 @@
 # Grimoire — Produktiv-Setup (Details: docs/DEPLOYMENT.md).
-# Kopieren, .env daneben legen (OPENROUTER_API_KEY=…), dann:
+# Kopieren, .env daneben legen (OPENROUTER_API_KEY=…, optional
+# GRIMOIRE_VERSION=v0.1.0), dann:
 #   docker compose up -d
 #
 # Zugriffsschutz ist Deployment-Sache (DECISIONS #3): der Port bindet nur an
@@ -7,7 +8,10 @@
 
 services:
   grimoire:
-    image: ghcr.io/jocur/grimoire:latest
+    # Version festnageln über .env: GRIMOIRE_VERSION=v0.1.0 (Tags der
+    # GitHub-Releases). Ohne Angabe `latest` — das ist seit Issue #47 der
+    # jeweils letzte Release, NICHT mehr der letzte main-Merge.
+    image: ghcr.io/jocur/grimoire:${GRIMOIRE_VERSION:-latest}
     container_name: grimoire
     restart: unless-stopped
     ports:

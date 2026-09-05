@@ -1,5 +1,6 @@
 {
   "name": "grimoire",
+  "version": "0.1.0",
   "private": true,
   "workspaces": ["shared", "server", "app", "e2e"],
   "scripts": {
