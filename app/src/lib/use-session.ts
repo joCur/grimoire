@@ -26,6 +26,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   ApiError,
+  discardSession,
   fetchActiveSession,
   fetchLastStartedSession,
   resumeSession,
@@ -122,6 +123,31 @@ export function useSessionWrite<TVars = void>(
       queryClient.setQueryData(activeSessionKey(campaign), isEnded(data.frontmatter) ? null : data);
       queryClient.setQueryData(lastStartedSessionKey(campaign), data);
       onSuccess?.(data);
+    },
+  });
+}
+
+/**
+ * "Session verwerfen" (issue #40 AK7): the active session's file is DELETED.
+ * Offered only while `isSessionEmpty` holds — the same shared predicate the
+ * server enforces, so the action never leads into a 409.
+ *
+ * The cache cannot be seeded from a response here (there is no file any
+ * more): the active session becomes `null` immediately, and the review's
+ * session is INVALIDATED rather than nulled — after the discard the last
+ * started session is an older, ended one, and only the server knows which.
+ * The deleted file's own cache entry is removed so a stale copy cannot be
+ * rendered from it.
+ */
+export function useSessionDiscard(campaign: string, onDone?: () => void) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => discardSession(campaign),
+    onSuccess: (data) => {
+      queryClient.removeQueries({ queryKey: ["file", campaign, data.path] });
+      queryClient.setQueryData(activeSessionKey(campaign), null);
+      void queryClient.invalidateQueries({ queryKey: lastStartedSessionKey(campaign) });
+      onDone?.();
     },
   });
 }

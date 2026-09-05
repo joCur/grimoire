@@ -33,12 +33,14 @@
 // palette; hidden without a campaign in the URL — "/" only ever shows the
 // empty state), the brass "Session starten" button on pool and scene views
 // (issue #9: starts today's session and enters /:campaign/live), the elapsed
-// timer plus Pause / "Session beenden" in the live mode, the harvest progress
-// on the review (issue #10) with a quiet pool link into it while today's
-// session still has unharvested entries, and the quiet "Generator" button on
+// timer plus Pause / "Session beenden" in the live mode (plus the quiet
+// "Session verwerfen" while that session is still empty — issue #40 AK7), the
+// harvest progress on the review (issue #10) with a quiet pool link into it
+// while today's session still has unharvested entries, and the "Generator" on
 // the pool (issue #12) with its run indicator (issue #19).
 
 import type { FileResponse } from "@grimoire/shared/types";
+import { isSessionEmpty } from "@grimoire/shared/session-state";
 import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, Clock, Pause, Play, Search, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -47,6 +49,14 @@ import { Link, matchPath, useLocation, useNavigate } from "react-router";
 import { appendLog, endSession, fetchCampaigns, fetchTree } from "@/api";
 import { CommandPalette } from "@/components/CommandPalette";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,7 +71,12 @@ import { navSection } from "@/lib/topbar-nav";
 import { useGenerateJob } from "@/lib/use-generate-job";
 import { cn } from "@/lib/utils";
 import { useReviewEntries } from "@/lib/use-review";
-import { useActiveSession, useSessionStartFlow, useSessionWrite } from "@/lib/use-session";
+import {
+  useActiveSession,
+  useSessionDiscard,
+  useSessionStartFlow,
+  useSessionWrite,
+} from "@/lib/use-session";
 
 export function Topbar() {
   const { pathname } = useLocation();
@@ -422,6 +437,11 @@ function LiveControls({ campaign, session }: { campaign: string; session: FileRe
         <Pause aria-hidden />
         Pause
       </Button>
+      {/* Only while the session is EMPTY (issue #40 AK7) — the mis-click's
+          undo, gone the moment the evening has content. */}
+      {isSessionEmpty(session.frontmatter, session.body) && (
+        <DiscardSessionAction campaign={campaign} />
+      )}
       <Button
         type="button"
         variant="outline"
@@ -432,6 +452,69 @@ function LiveControls({ campaign, session }: { campaign: string; session: FileRe
         Session beenden
       </Button>
     </>
+  );
+}
+
+/**
+ * "Session verwerfen" (issue #40 AK7): deletes the session file of a session
+ * that has nothing in it — the undo of a "Session starten" that was a
+ * mis-click. Quiet by design (the smallest, dimmest control of the live
+ * topbar): it sits next to "Session beenden", which stays THE way out of a
+ * session that happened.
+ *
+ * It deletes a file, so it asks first. The confirmation names the consequence
+ * instead of asking "sicher?" — that is the only thing worth reading here.
+ * After the discard nothing is live any more, so the pool is where the DM
+ * lands (the live route without a session would only show its empty state).
+ */
+function DiscardSessionAction({ campaign }: { campaign: string }) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const discard = useSessionDiscard(campaign, () => {
+    setOpen(false);
+    void navigate(`/${campaign}`);
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-auto flex-none px-2 py-1.5 text-[12.5px] font-normal text-muted-foreground hover:bg-transparent hover:text-foreground"
+        >
+          Session verwerfen
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogTitle>Leere Session verwerfen?</DialogTitle>
+        <DialogDescription>Die Datei wird gelöscht.</DialogDescription>
+        {discard.isError && (
+          <p className="mt-3 text-[12.5px] text-destructive">
+            Session nicht verworfen — Server prüfen und neu laden.
+          </p>
+        )}
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <DialogClose asChild>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
+            >
+              Abbrechen
+            </Button>
+          </DialogClose>
+          <Button
+            type="button"
+            disabled={discard.isPending}
+            onClick={() => discard.mutate()}
+            className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
+          >
+            Verwerfen
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

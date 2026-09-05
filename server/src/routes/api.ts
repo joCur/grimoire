@@ -23,6 +23,7 @@ import {
   appendThreadToChapter,
   createCampaignMeta,
   createNpcStub,
+  discardSession,
   endSession,
   markInboxLineDone,
   markLogLineSeen,
@@ -253,6 +254,15 @@ api.post("/:campaign/session/resume", async (c) =>
 // returned with its existing `ended`; 404 when there is no session file at
 // all.
 api.post("/:campaign/session/end", async (c) => c.json(await endSession(c.req.param("campaign"))));
+
+// POST /api/:campaign/session/discard -> { path } — DELETES the active
+// session's file (issue #40 AK7), the undo of a mis-clicked "Session
+// starten". Allowed ONLY while that session is empty (no log entry, no
+// `scenes_played`); otherwise 409 { code: "session_not_empty", path } — a
+// session with content is ended, never deleted. 404 when nothing is running.
+api.post("/:campaign/session/discard", async (c) =>
+  c.json(await discardSession(c.req.param("campaign"))),
+);
 
 // POST /api/:campaign/log { text, sceneId? } -> FileResponse
 // Appends `- HH:MM (sceneId) text` to the ACTIVE session (issue #40 — not

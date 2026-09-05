@@ -26,11 +26,17 @@
 //   4. Node APIs only (node:fs/promises, node:path) — DECISIONS #5/#7.
 
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
 import { CORE_SCHEMA, dump } from "js-yaml";
-import { isEnded, kindFromPath, parseMarkdown, type FileResponse } from "@grimoire/shared";
+import {
+  isEnded,
+  isSessionEmpty,
+  kindFromPath,
+  parseMarkdown,
+  type FileResponse,
+} from "@grimoire/shared";
 import {
   ApiError,
   assertSafeRelativeMdPath,
@@ -438,6 +444,49 @@ export async function endSession(campaign: string): Promise<FileResponse> {
     await atomicWrite(abs, applyFrontmatterPatch(raw, { ended: localDateTime(now()) }));
   });
   return readParsedFile(campaign, rel);
+}
+
+/**
+ * POST /api/:campaign/session/discard — DELETE the active session file
+ * (issue #40 AK7). The one write in this layer that removes a file, and it is
+ * allowed for exactly one shape: a session with no log entry and no
+ * `scenes_played` (shared `isSessionEmpty` — the app offers the action for the
+ * same predicate, so the button never leads into a 409).
+ *
+ * Why delete at all: "Session starten" mis-clicked leaves a file that shows up
+ * as the last started session forever — the review harvests it, and today's
+ * real session cannot start next to it (409 session_running). Ending it would
+ * only turn the litter into ended litter.
+ *
+ * Why never more than that: session logs are append-only (DECISIONS #4). A
+ * session with content is ENDED, not deleted — 409 with a message that says
+ * so. 404 when nothing is running.
+ *
+ * The unlink is the atomic step (no temp file, no partial state); the watcher
+ * picks the removal up and bumps the campaign version like any other change.
+ */
+export async function discardSession(campaign: string): Promise<{ path: string }> {
+  const dir = await campaignDir(campaign);
+  const rel = await findActiveSessionRel(campaign);
+  if (rel === undefined) throw new ApiError(404, "no active session");
+  const abs = path.resolve(dir, rel);
+  await withFileLock(abs, async () => {
+    let raw: string;
+    try {
+      raw = await readFile(abs, "utf8");
+    } catch {
+      throw new ApiError(404, "no active session");
+    }
+    const body = splitFrontmatterBlock(raw)?.body ?? raw;
+    if (!isSessionEmpty(currentFrontmatter(raw), body)) {
+      throw new ApiError(409, "this session has content — end it instead of discarding it", {
+        code: "session_not_empty",
+        path: rel,
+      });
+    }
+    await unlink(abs);
+  });
+  return { path: rel };
 }
 
 /**

@@ -224,6 +224,16 @@ export function endSession(campaign: string): Promise<FileResponse> {
 }
 
 /**
+ * DELETE the active session's file — the undo of a mis-clicked "Session
+ * starten" (issue #40 AK7). Only an EMPTY session may be discarded; the
+ * server answers 409 (`code: "session_not_empty"`) otherwise and 404 when
+ * nothing is running. Returns the path of the file that is gone.
+ */
+export function discardSession(campaign: string): Promise<{ path: string }> {
+  return postJson<{ path: string }>(`/${encodeURIComponent(campaign)}/session/discard`);
+}
+
+/**
  * Append a line to the campaign's inbox.md (mobile capture, issue #11);
  * the server creates the file on the first entry.
  */

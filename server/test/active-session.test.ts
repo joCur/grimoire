@@ -320,6 +320,76 @@ describe("start / resume — the state machine's edges (issue #40 review)", () =
   });
 });
 
+describe("POST /session/discard — the mis-click's undo (AK7)", () => {
+  test("an EMPTY session is deleted, and nothing is live afterwards", async () => {
+    expect((await post("/api/beispiel/session/start")).status).toBe(200);
+    expect(await exists("sessions/2026-08-19.md")).toBe(true);
+
+    const res = await post("/api/beispiel/session/discard");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ path: "sessions/2026-08-19.md" });
+    expect(await exists("sessions/2026-08-19.md")).toBe(false);
+    // …and the session state machine is back where it was: nothing running,
+    // and "Session starten" works again instead of a 409.
+    expect((await app.request("/api/beispiel/session")).status).toBe(404);
+    expect((await post("/api/beispiel/session/start")).status).toBe(200);
+  });
+
+  test("a session with a LOG ENTRY is refused — 409, file untouched", async () => {
+    await post("/api/beispiel/session/start");
+    expect((await post("/api/beispiel/log", { text: "Ankunft im Hafen" })).status).toBe(200);
+    const before = await readFile(absOf("sessions/2026-08-19.md"), "utf8");
+
+    const res = await post("/api/beispiel/session/discard");
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: expect.any(String),
+      code: "session_not_empty",
+      path: "sessions/2026-08-19.md",
+    });
+    expect(await readFile(absOf("sessions/2026-08-19.md"), "utf8")).toBe(before);
+    // Still the running session — the refusal changed nothing at all.
+    expect((await app.request("/api/beispiel/session")).status).toBe(200);
+  });
+
+  test("a session with SCENES_PLAYED is refused even with an empty log", async () => {
+    // Written directly: `scenes_played` set, `## Log` without entries — the
+    // shape a hand-edited or externally maintained session file can have.
+    await session(
+      "2026-08-19",
+      "started: 2026-08-19T21:05\nscenes_played: [lighthouse-arrival]\n",
+    );
+    const res = await post("/api/beispiel/session/discard");
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { code: string }).code).toBe("session_not_empty");
+    expect(await exists("sessions/2026-08-19.md")).toBe(true);
+  });
+
+  test("404 without a running session — an ENDED one is never deleted", async () => {
+    // The committed fixture has only ended sessions.
+    const res = await post("/api/beispiel/session/discard");
+    expect(res.status).toBe(404);
+    expect(await exists("sessions/2026-01-15.md")).toBe(true);
+    // …not even when that ended session is empty.
+    await session("2026-08-19", "started: 2026-08-19T21:05\nended: 2026-08-19T21:06\n");
+    expect((await post("/api/beispiel/session/discard")).status).toBe(404);
+    expect(await exists("sessions/2026-08-19.md")).toBe(true);
+  });
+
+  test("discards YESTERDAY's empty session past midnight (the ACTIVE one)", async () => {
+    await session("2026-08-18", "started: 2026-08-18T23:50\nscenes_played: []\n");
+    setNow(() => new Date(2026, 7, 19, 0, 20));
+    const res = await post("/api/beispiel/session/discard");
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { path: string }).path).toBe("sessions/2026-08-18.md");
+    expect(await exists("sessions/2026-08-18.md")).toBe(false);
+  });
+
+  test("404 for an unknown campaign", async () => {
+    expect((await post("/api/nope/session/discard")).status).toBe(404);
+  });
+});
+
 describe("the review's session — GET /session?includeEnded=1", () => {
   test("finds the session that was ended AFTER midnight (harvest, finding 1)", async () => {
     // The evening of the 18th ran into the 19th and was ended at 01:40 in

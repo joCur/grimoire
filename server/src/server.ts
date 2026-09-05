@@ -47,6 +47,11 @@
 //                                              that session is still running
 //   [x] POST /api/:campaign/session/end        sets `ended` in the ACTIVE session; idempotent
 //                                              (falls back to the last started session)
+//   [x] POST /api/:campaign/session/discard    deletes the ACTIVE session's file — allowed
+//                                              only while it is EMPTY (no log entry, no
+//                                              scenes_played); 409 { code:
+//                                              "session_not_empty" } otherwise, 404 when
+//                                              nothing is running
 //   [x] POST /api/:campaign/log                { text, sceneId? } -> append with timestamp
 //                                              to the ACTIVE session (issue #40); STRICT —
 //                                              404 when no session is running

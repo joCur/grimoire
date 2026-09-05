@@ -24,3 +24,30 @@ export function isEndedValue(value: unknown): boolean {
 export function isEnded(frontmatter: Record<string, unknown> | undefined): boolean {
   return frontmatter !== undefined && isEndedValue(frontmatter.ended);
 }
+
+/**
+ * True when a session file holds NOTHING the DM would miss (issue #40 AK7):
+ * no log entry and no played scene. Only such a session may be DISCARDED
+ * (POST /session/discard deletes the file); everything else is ended, not
+ * deleted.
+ *
+ * Shared for the same reason `isEnded` is: the server decides whether the
+ * delete is allowed, and the app decides whether to offer it at all — one
+ * predicate, so the button is never there for a 409.
+ *
+ * "Empty body" is read generously: headings (`## Log` and friends) and blank
+ * lines are the skeleton `startSession` writes, anything else — a log line,
+ * a hand-typed note, a `## Threads` entry — is content.
+ */
+export function isSessionEmpty(
+  frontmatter: Record<string, unknown> | undefined,
+  body: string,
+): boolean {
+  const played = frontmatter?.scenes_played;
+  if (Array.isArray(played) ? played.length > 0 : played !== undefined && played !== null) {
+    return false;
+  }
+  return body
+    .split(/\r?\n/)
+    .every((line) => line.trim() === "" || /^#{1,6}(\s|$)/.test(line.trim()));
+}

@@ -3,6 +3,9 @@
 // start → quick note → log + scenes_played → NPC/location drawer → back into
 // the session via the global live indicator → pause → end → review.
 //
+// Plus its undo at the very start: "Session verwerfen" deletes the file of a
+// session that has nothing in it (issue #40 AK7) — its own test below.
+//
 // Every claim is checked twice: once in the UI and once in the file on disk
 // (the server is the truth, the app keeps no state of its own).
 
@@ -50,6 +53,9 @@ test("session start, quick note, pause, end — log and file follow", async ({
     .poll(() => files.read(sessionPath))
     .toContain("scenes_played: []");
 
+  // …and while it is empty, it can be discarded (issue #40 AK7).
+  await expect(page.getByRole("button", { name: "Session verwerfen" })).toBeVisible();
+
   // --- quick note ("Schnellnotiz") ------------------------------------------
   const quickNote = page.getByLabel("Schnellnotiz");
   await quickNote.fill(NOTE);
@@ -69,6 +75,10 @@ test("session start, quick note, pause, end — log and file follow", async ({
 
   // The played checkmark comes from scenes_played — never faked client-side.
   await expect(nav.getByText("gespielt")).toBeAttached();
+
+  // The session has content now — discarding it is no longer on offer; the
+  // way out is "Session beenden".
+  await expect(page.getByRole("button", { name: "Session verwerfen" })).toHaveCount(0);
 
   // --- NPC drawer inside the live mode (issue #40) --------------------------
   // A card click must NOT navigate: the selected scene and a half-typed
@@ -156,4 +166,44 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // … and `ended` is gone from the file, so the session really runs again.
   await expect.poll(() => files.read(sessionPath)).not.toContain("ended:");
   await expect(page.getByRole("button", { name: "Session beenden" })).toBeVisible();
+});
+
+test("session verwerfen — the mis-click's undo removes the empty file", async ({
+  page,
+  files,
+}) => {
+  await page.goto("/beispiel");
+  const sessionPath = files.todaySession();
+
+  // "Session starten" hit by accident.
+  await page.getByRole("button", { name: "Session starten" }).click();
+  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  await expect.poll(() => files.exists(sessionPath)).toBe(true);
+
+  // It asks first — the file is deleted, and that is what the dialog says.
+  await page.getByRole("button", { name: "Session verwerfen" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Leere Session verwerfen?");
+  await expect(dialog).toContainText("Die Datei wird gelöscht.");
+
+  // Abbrechen changes nothing at all.
+  await dialog.getByRole("button", { name: "Abbrechen" }).click();
+  await expect(dialog).toBeHidden();
+  expect(await files.exists(sessionPath)).toBe(true);
+
+  await page.getByRole("button", { name: "Session verwerfen" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
+
+  // Back in the non-live state: the pool offers a start again …
+  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page.getByRole("button", { name: "Session starten" })).toBeVisible();
+  // … no live indicator is left over …
+  await expect(page.getByRole("link", { name: /Zur laufenden Session/ })).toHaveCount(0);
+  // … and the file is gone from disk.
+  await expect.poll(() => files.exists(sessionPath)).toBe(false);
+
+  // And the start really works again (it is not blocked by a stale session).
+  await page.getByRole("button", { name: "Session starten" }).click();
+  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  await expect.poll(() => files.exists(sessionPath)).toBe(true);
 });
