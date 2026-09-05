@@ -5,7 +5,7 @@
 # This workflow is the ONLY writer of the GHCR package (issue #66): it builds
 # the image with the version tags AND `:latest`, checked out at the tag rather
 # than the branch head. A regular main merge publishes nothing at all — ci.yml
-# only checks (DECISIONS #12).
+# builds the image to check it, but never pushes (DECISIONS #12).
 #
 # Nothing is published from a tree whose CI was not green: `require-green-ci`
 # resolves the tag to its commit and waits for that commit's `ci` push run.
@@ -178,8 +178,8 @@ jobs:
           # mean emulation and builds measured in tens of minutes; there is
           # no arm64 target.
           platforms: linux/amd64
-          # Since #66 this is the only Docker build in the repo, so the cache
-          # is warmed by the previous release and nothing else — base layers
-          # and dependency install survive between releases.
+          # Shared with ci.yml's `image-build` job, which builds the same
+          # Dockerfile on every PR and main push: base layers and the
+          # dependency install are usually already warm when a release runs.
           cache-from: type=gha
           cache-to: type=gha,mode=max

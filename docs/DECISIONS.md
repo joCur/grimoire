@@ -226,11 +226,11 @@ Bewusst nicht dabei: Multi-Arch (amd64 genügt), Auto-Deploy (der PO pullt
 weiterhin selbst) und rückwirkende Changelog-Generierung für die Commits vor
 diesem Eintrag.
 
-### Nachtrag 2026-09-06 (#66): CI publiziert nicht mehr
+### Nachtrag 2026-09-06 (#66): CI baut zur Prüfung, publiziert nie
 
-Ursprünglich baute `ci.yml` bei jedem main-Merge zusätzlich ein Image unter
-dem Commit-SHA. Das ist entfallen — **der Release-Workflow ist der einzige
-Schreiber der GHCR-Registry.**
+Ursprünglich baute `ci.yml` bei jedem main-Merge ein Image unter dem
+Commit-SHA und **pushte** es. Das Pushen ist entfallen — **der
+Release-Workflow ist der einzige Schreiber der GHCR-Registry.**
 
 - Ein SHA-Push bei jedem Merge hielt das Paket dauerhaft „gerade
   aktualisiert" und verwässerte damit genau die Release-Semantik, für die
@@ -242,10 +242,17 @@ Schreiber der GHCR-Registry.**
 - Das CI-Gate bleibt unverändert wirksam: `require-green-ci` verlangt den
   grünen `ci`-Push-Run des getaggten Commits, bevor `publish-image` läuft.
   CI prüft, Release publiziert.
-- Preis, bewusst akzeptiert: ein Fehler **im Dockerfile selbst** fällt erst
-  im Release-Lauf auf (Tag existiert, `publish-image` rot) statt beim Merge.
-  Das ist ein Nachbessern per Patch-Release, kein Produktionsvorfall — der
-  laufende Host zieht nur bewusst.
+- **Gebaut wird trotzdem:** `ci.yml` hat einen Job `image-build`
+  (`docker/build-push-action` mit `push: false`, ohne Registry-Login und
+  ohne `packages: write` — er *kann* nicht publizieren). Er läuft auf PRs
+  und main-Pushes, hängt nur an `test` und nutzt denselben GHA-Cache wie der
+  Release-Build. Damit fällt ein Fehler **im Dockerfile selbst** im Review
+  auf und nicht erst im Release-Lauf, wo der Tag schon existiert; der
+  Release-Build findet den Cache zusätzlich warm vor. Preis: ein paar
+  Runner-Minuten pro PR — deutlich billiger als ein Patch-Release, das nur
+  ein kaputtes Image reparieren soll. `GRIMOIRE_BUILD` bekommt hier den
+  Commit-SHA als Wegwerf-Wert; die echte Build-Id brennt nur der
+  Release-Build ein.
 
 ## 13. SQLite ist die Quelle der Wahrheit
 

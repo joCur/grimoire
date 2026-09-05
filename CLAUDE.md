@@ -126,7 +126,7 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   `CHANGELOG.md`/`.release-please-manifest.json` nie von Hand editiert.
 - **`:latest` heißt „letzter Release", nicht „letzter Merge".** Der
   Release-Workflow ist der einzige Schreiber der GHCR-Registry; `ci.yml`
-  prüft nur und pusht kein Image (#66).
+  baut das Image zur Prüfung (`push: false`), pusht es aber nie (#66).
 
 ## Kritische Pfade (E2E-Pflicht, echte Suite ohne Mocks)
 

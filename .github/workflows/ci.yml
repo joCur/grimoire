@@ -1,7 +1,7 @@
-# CI (issue #16). This workflow only CHECKS — it publishes nothing. GHCR is
+# CI (issue #16). This workflow BUILDS to check and PUBLISHES nothing. GHCR is
 # written by .github/workflows/release.yml alone (issue #66, ADR #12): CI's
 # green result is the gate that release checks (`require-green-ci`), and the
-# image is built at the version tag.
+# published image is built at the version tag.
 #
 #   test          — every PR and every main push: install, typecheck all
 #                   workspaces, tests, app build (runtime: Bun)
@@ -11,6 +11,9 @@
 #   e2e           — after `test`: the real-stack Playwright suite over the
 #                   critical paths (CLAUDE.md) — built app, real server,
 #                   stub LLM
+#   image-build   — after `test`: the Dockerfile, built with `push: false`,
+#                   so a broken image surfaces at PR time instead of in the
+#                   release run. Nothing leaves the runner but the GHA cache.
 #
 # Docs: docs/DEPLOYMENT.md (section 1) describes pulling the published image.
 name: CI
@@ -137,3 +140,41 @@ jobs:
             e2e/playwright-report
             e2e/test-results
           retention-days: 7
+
+  # Proves the Dockerfile still builds — and stops there. `push: false`, no
+  # registry login, no `packages` permission: this job CANNOT publish, which
+  # is the whole point of ADR #12's addendum (CI builds to check, publishes
+  # never). It runs on PRs and on main pushes alike, so a Dockerfile breakage
+  # is caught in review rather than after the release tag already exists.
+  #
+  # `needs: test` only: the image is about the build, not about browser
+  # behaviour, so waiting for E2E would just delay the signal.
+  image-build:
+    name: Build the image (never pushed)
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      # Read the tree, nothing else — deliberately without `packages: write`.
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          # Same build arg as the release build (issue #24), but the value is
+          # throwaway: nothing here is deployed, so the commit SHA is enough
+          # to prove the arg is wired through bundle and server.
+          build-args: |
+            GRIMOIRE_BUILD=${{ github.sha }}
+          # Matches the release build so this is the same work, not a
+          # different one.
+          platforms: linux/amd64
+          # The shared GHA cache the release build reads: base layers and the
+          # dependency install stay warm between a merge and the next release.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
