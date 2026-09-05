@@ -502,8 +502,13 @@ export function readByLocator(
     }
     case "inbox": {
       const rows = inboxRows(db, campaign);
-      // The inbox has no row of its own to carry a `rev`, so the campaign's
-      // version counter is its token — monotonic, and bumped by every write.
+      // Neither the inbox nor the glossary is a single row that could carry a
+      // `rev`, so the campaign's version counter is their guard token. It is
+      // monotonic and changes on EVERY write of the campaign, which makes it
+      // stricter than necessary — an unrelated log line can cost a pending
+      // glossary edit one reload. That is the safe direction (the strict
+      // answer is "re-read", never "overwrite"), and a content hash would be
+      // the unsafe one: two different edits can produce the same hash.
       if (rows.length === 0) throw new ApiError(404, "file not found");
       return renderInbox(campaign, rows, campaignRowValue.version);
     }
