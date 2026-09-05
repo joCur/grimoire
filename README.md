@@ -42,7 +42,7 @@ campaigns/                 # ECHTE Kampagnendaten — in .gitignore, bleiben lok
         <scene>.md
     npcs/<id>.md
     locations/<id>.md
-    sessions/<yyyy-mm-dd>.md   # von der App verwaltet
+    sessions/<id>.md           # von der App verwaltet, id ist opak
     inbox.md                   # Ideen-Eingang, append-only
     glossary.md                # Übersetzungs-Glossar für den Generator
 ```
@@ -143,7 +143,7 @@ Abschnitte frei; empfohlen: `## Beim ersten Betreten` (mit `[!readaloud]`),
 
 ```yaml
 ---
-id: 2026-08-19
+id: 019a4f3c-6d21-7b8e-9c04-5f1ab2d7e380   # opak, nur Adresse — nichts liest sie
 started: 2026-08-19T19:32:41
 ended: 2026-08-19T23:10:08      # gesetzt bei "Session beenden"
 pauses: [{from: 2026-08-19T21:40:12, to: 2026-08-19T21:58:03}]   # Pausen, App-verwaltet
@@ -152,6 +152,10 @@ reviewed: [a1b2c3d4]            # Kurzhashes gesichteter Log-Zeilen (Review-Schr
 ---
 ```
 
+- `id`: eine opake Zufalls-id (UUID). Sie ist nur die Adresse der Datei;
+  Reihenfolge, Datum und jede Anzeige kommen aus `started`. Ältere Dateien
+  tragen ein Datum als id (`2026-08-19`, `2026-08-19-2`) — bleibt gültig,
+  wird aber nicht mehr ausgewertet.
 - `## Log`: append-only, Format `- HH:MM (scene-id) Text #hashtags`
   — Zeitstempel und Szenen-Kontext setzt die App automatisch.
 - `## Threads`: Checkliste offener Fäden, im Review-Schritt befüllt.

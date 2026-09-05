@@ -3,8 +3,15 @@ import type { CampaignSummary, CampaignTree, SceneSummary } from "@grimoire/shar
 
 import { locationName, pickLastCampaign, sceneTitle } from "./campaign";
 
-const c = (id: string, lastSession?: string): CampaignSummary =>
-  lastSession === undefined ? { id } : { id, lastSession };
+/**
+ * A campaign whose newest session STARTED at `lastSessionStarted`. The
+ * session's own id is opaque noise since issue #58 and deliberately random
+ * here — nothing in the order may read it.
+ */
+const c = (id: string, lastSessionStarted?: string): CampaignSummary =>
+  lastSessionStarted === undefined
+    ? { id }
+    : { id, lastSession: crypto.randomUUID(), lastSessionStarted };
 
 describe("pickLastCampaign", () => {
   test("no campaign at all → undefined (empty state)", () => {
@@ -12,58 +19,69 @@ describe("pickLastCampaign", () => {
   });
 
   test("exactly one campaign always wins — with or without sessions", () => {
-    expect(pickLastCampaign([c("beispiel", "2026-01-15")])).toBe("beispiel");
+    expect(pickLastCampaign([c("beispiel", "2026-01-15T19:30:00")])).toBe("beispiel");
     expect(pickLastCampaign([c("beispiel")])).toBe("beispiel");
   });
 
   test("newest session wins over the alphabetically first id", () => {
-    expect(pickLastCampaign([c("alpha", "2026-01-15"), c("zeta", "2026-06-01")])).toBe("zeta");
-    expect(pickLastCampaign([c("zeta", "2026-06-01"), c("alpha", "2026-01-15")])).toBe("zeta");
+    expect(
+      pickLastCampaign([c("alpha", "2026-01-15T19:30:00"), c("zeta", "2026-06-01T18:00:00")]),
+    ).toBe("zeta");
+    expect(
+      pickLastCampaign([c("zeta", "2026-06-01T18:00:00"), c("alpha", "2026-01-15T19:30:00")]),
+    ).toBe("zeta");
   });
 
   test("campaigns without a session rank behind every campaign with one", () => {
-    expect(pickLastCampaign([c("alpha"), c("zeta", "2020-01-01")])).toBe("zeta");
-    expect(pickLastCampaign([c("zeta", "2020-01-01"), c("alpha")])).toBe("zeta");
+    expect(pickLastCampaign([c("alpha"), c("zeta", "2020-01-01T20:00:00")])).toBe("zeta");
+    expect(pickLastCampaign([c("zeta", "2020-01-01T20:00:00"), c("alpha")])).toBe("zeta");
   });
 
-  test("tie on the session id → alphabetically first", () => {
-    expect(pickLastCampaign([c("zeta", "2026-03-09"), c("alpha", "2026-03-09")])).toBe("alpha");
+  test("tie on the session start → alphabetically first", () => {
+    expect(
+      pickLastCampaign([c("zeta", "2026-03-09T19:00:00"), c("alpha", "2026-03-09T19:00:00")]),
+    ).toBe("alpha");
   });
 
   test("nobody has a session → alphabetically first", () => {
     expect(pickLastCampaign([c("zeta"), c("beta"), c("alpha")])).toBe("alpha");
   });
 
-  test("degrades on unexpected values: empty lastSession counts as none", () => {
-    expect(pickLastCampaign([c("alpha", ""), c("zeta", "2026-01-15")])).toBe("zeta");
+  test("degrades on unexpected values: empty lastSessionStarted counts as none", () => {
+    expect(pickLastCampaign([c("alpha", ""), c("zeta", "2026-01-15T19:30:00")])).toBe("zeta");
     expect(pickLastCampaign([c("zeta", ""), c("alpha", "")])).toBe("alpha");
   });
 
-  test("the day's TENTH session beats its second (numeric sequence, #58)", () => {
-    // `2026-09-06-10` < `2026-09-06-2` as a STRING — the campaign whose last
-    // session is the tenth of that day is the more recently active one.
+  test("two sessions of the SAME DAY order by their TIME, not by their id (#58)", () => {
+    // The ids say nothing about the order — the evening's second session
+    // simply started later. (Under the old scheme this was `-2` vs `-10` and
+    // the app had to know that `-10` is the newer one.)
     expect(
-      pickLastCampaign([c("alpha", "2026-09-06-2"), c("zeta", "2026-09-06-10")]),
+      pickLastCampaign([c("alpha", "2026-09-06T18:00:00"), c("zeta", "2026-09-06T22:15:00")]),
     ).toBe("zeta");
     expect(
-      pickLastCampaign([c("zeta", "2026-09-06-10"), c("alpha", "2026-09-06-2")]),
+      pickLastCampaign([c("zeta", "2026-09-06T22:15:00"), c("alpha", "2026-09-06T18:00:00")]),
     ).toBe("zeta");
-    // …and the plain date is that day's FIRST, so any `-n` beats it.
-    expect(pickLastCampaign([c("alpha", "2026-09-06"), c("zeta", "2026-09-06-2")])).toBe(
-      "zeta",
-    );
   });
 
-  test("a later day wins over a high sequence on an earlier one", () => {
-    expect(pickLastCampaign([c("alpha", "2026-09-06-10"), c("zeta", "2026-09-07")])).toBe(
-      "zeta",
-    );
+  test("a later day wins over a late hour on an earlier one", () => {
+    expect(
+      pickLastCampaign([c("alpha", "2026-09-06T23:50:00"), c("zeta", "2026-09-07T09:00:00")]),
+    ).toBe("zeta");
   });
 
-  test("an unparsable session id ranks behind every real one, never crashes", () => {
-    expect(pickLastCampaign([c("alpha", "kaputt"), c("zeta", "2020-01-01")])).toBe("zeta");
-    // …but still ahead of a campaign with no session at all, and stable.
-    expect(pickLastCampaign([c("zeta", "kaputt"), c("alpha")])).toBe("zeta");
+  test("an unparsable `started` ranks behind every real one, never crashes", () => {
+    expect(pickLastCampaign([c("alpha", "gestern"), c("zeta", "2020-01-01T20:00:00")])).toBe(
+      "zeta",
+    );
+    // …and two unreadable ones stay stable: the alphabetically first id.
+    expect(pickLastCampaign([c("zeta", "gestern"), c("alpha", "gestern")])).toBe("alpha");
+  });
+
+  test("a minute-precise `started` from an older file still orders", () => {
+    expect(
+      pickLastCampaign([c("alpha", "2026-09-06T18:00"), c("zeta", "2026-09-06T20:00")]),
+    ).toBe("zeta");
   });
 });
 

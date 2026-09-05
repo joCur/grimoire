@@ -60,13 +60,15 @@
 //                                              lives in yesterday's file, so the client
 //                                              must not guess it either); 404 only when the
 //                                              campaign has no session file at all
-//   [x] POST /api/:campaign/session/start      creates a NEW session: sessions/<today>.md,
-//                                              or <today>-2, -3 … when that day already has
-//                                              one (issue #58 — "beenden" is final, so a
-//                                              second evening on the same day is a second
-//                                              session with an empty log and a runtime at 0).
+//   [x] POST /api/:campaign/session/start      creates a NEW session: sessions/<id>.md with
+//                                              an OPAQUE RANDOM id (issue #58 — "beenden" is
+//                                              final, so a second evening on the same day is
+//                                              simply a second session with an empty log and
+//                                              a runtime at 0; nothing reads the id, order and
+//                                              every label come from `started`).
 //                                              Idempotent only while today's session is the
-//                                              RUNNING one. 409 { code: "session_running",
+//                                              RUNNING one ("today" = the date part of its
+//                                              `started`). 409 { code: "session_running",
 //                                              path } when an OLDER session is still open
 //                                              (there is no `session_ended` any more)
 //   [x] POST /api/:campaign/session/end        sets `ended` in the ACTIVE session; idempotent

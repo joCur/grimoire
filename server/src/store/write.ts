@@ -48,7 +48,6 @@ import {
   inboxEntries,
   locations,
   logEntries,
-  meta,
   npcRelations,
   npcs,
   packJson,
@@ -73,8 +72,6 @@ import {
   relationRows,
   renderSessionRow,
   requireCampaign,
-  sessionIdDate,
-  sessionIdSeq,
   sessionRow,
 } from "./read";
 import { locatorFromPath, type Locator } from "./paths";
@@ -947,49 +944,53 @@ function bumpSessionRev(tx: GrimoireDb, campaign: string, row: SessionRow): void
     .run();
 }
 
-/** `meta` key holding the highest session sequence ever handed out on a day. */
-function sessionSeqKey(campaign: string, date: string): string {
-  return `session_seq:${campaign}:${date}`;
+/**
+ * The id for a NEW session: an OPAQUE RANDOM string, `crypto.randomUUID()`.
+ * See db/schema.ts (`sessions`) for the reasoning — in short, nobody reads a
+ * session id, so it needs no shape, and a random one needs no coordination:
+ * the former `yyyy-mm-dd-<n>` scheme had to persist a per-day high-water mark
+ * in `meta` so a discarded session's id could not be re-issued onto another
+ * evening's log rows. A random id is unique whether or not the row it named
+ * still exists.
+ *
+ * `crypto` is the WHATWG global (Node ≥ 19 and Bun) — no import, no npm
+ * dependency, no hand-rolled base32 encoder (DECISIONS: Node portability).
+ */
+function newSessionId(): string {
+  return crypto.randomUUID();
 }
 
 /**
- * The id for a NEW session on `date`: the plain date while that day has no
- * session yet, `date-2`, `date-3`, … afterwards (issue #58). Readable and
- * date-ordered like the former file name, and the plain-date rows written
- * before this need no migration — they simply are their day's first.
- *
- * An id, once handed out, NEVER comes back — not even after the session it
- * named was discarded. The existing rows alone cannot promise that: discarding
- * the trailing `-2` deletes the only trace of it, and the next start would
- * re-issue `-2` with a different evening's log rows hanging off the same
- * primary key (and off any link a DM had already written down). So the day's
- * high-water mark is PERSISTED in `meta` under `session_seq:<campaign>:<date>`
- * and only ever grows. The mark is written in the same transaction as the
- * insert; the max over the day's existing rows stays part of the decision so
- * rows that predate the mark (migrated campaigns, a hand-edited database) are
- * still respected.
+ * The CALENDAR DAY of a session's `started`, or undefined when the value says
+ * nothing usable. Just the date part of the zone-less wall-clock string the
+ * format carries — no timezone arithmetic, because the string already is the
+ * server's local reading (clock.ts).
  */
-function nextSessionId(tx: GrimoireDb, campaign: string, date: string): string {
-  const taken = tx
-    .select({ id: sessions.id })
+function startedDate(started: string | null): string | undefined {
+  return /^(\d{4}-\d{2}-\d{2})/.exec(started ?? "")?.[1];
+}
+
+/**
+ * The `createdAt` for a new session row: the ORDER tie-break behind `started`
+ * (db/schema.ts), in epoch milliseconds and STRICTLY greater than every
+ * createdAt the campaign already holds.
+ *
+ * Two reasons it is not simply `Date.now()`. It must be monotonic — "start,
+ * beenden, wieder starten" inside one millisecond has to order, and so does a
+ * clock that jumped backwards (NTP, DST on a machine that stores UTC wrong).
+ * And it must NOT come from `clock.ts now()`: that one is overridable, which
+ * is the point for `started` (a session can be started "yesterday" in a test)
+ * and exactly wrong here — a frozen clock would hand every row of a test the
+ * same tie-break and the order would depend on the query's row order again.
+ */
+function nextCreatedAt(tx: GrimoireDb, campaign: string): number {
+  const highest = tx
+    .select({ createdAt: sessions.createdAt })
     .from(sessions)
     .where(eq(sessions.campaignId, campaign))
     .all()
-    .filter((row) => sessionIdDate(row.id) === date);
-  const key = sessionSeqKey(campaign, date);
-  const stored = tx.select().from(meta).where(eq(meta.key, key)).all()[0]?.value;
-  const mark = Number(stored);
-  const highWater = Number.isFinite(mark) && mark > 0 ? Math.floor(mark) : 0;
-  const seq = Math.max(
-    highWater,
-    taken.reduce((acc, row) => Math.max(acc, sessionIdSeq(row.id)), 0),
-  );
-  const next = seq + 1;
-  tx.insert(meta)
-    .values({ key, value: String(next) })
-    .onConflictDoUpdate({ target: meta.key, set: { value: String(next) } })
-    .run();
-  return next === 1 ? date : `${date}-${next}`;
+    .reduce((acc, row) => Math.max(acc, row.createdAt), 0);
+  return Math.max(Date.now(), highest + 1);
 }
 
 /**
@@ -1007,27 +1008,35 @@ function nextSessionId(tx: GrimoireDb, campaign: string, date: string): string {
 export async function startSession(campaign: string): Promise<FileResponse> {
   return mutate(campaign, (tx) => {
     const d = now();
-    const todayId = localDate(d);
+    const today = localDate(d);
     const active = pickSession(tx, campaign, false);
-    // DEGRADE, accepted (issue #58 review, finding 4): a running session whose
-    // id does not parse as a date (hand-edited row) has no `sessionIdDate`, so
-    // it can never equal today and every start answers 409 `session_running`.
-    // That is the safe direction — the alternative would silently open a
-    // second live session next to it — and it is not a dead end: the 409
-    // carries the running session's path, and the app's answer to this code
-    // (routes/live.tsx `NoSessionYet`) is the "Alte Session beenden" button,
-    // which goes through `endSession` and does NOT look at the id at all. End
-    // it once and starting works again.
-    if (active !== undefined && sessionIdDate(active.id) !== todayId) {
+    // "Is the running session TODAY's?" is answered by `started`, not by the
+    // id — the id is opaque since the PO decision on issue #58 and says
+    // nothing about a day.
+    //
+    // The old degrade of this check (issue #58 review, finding 4) is GONE with
+    // it: an id that did not parse as a date could never be "today", so a
+    // hand-edited row answered every start with a 409 the DM had to clear by
+    // hand. A row whose `started` is unreadable is not the "running session"
+    // in the first place — it has no place in the chronology (store/read.ts
+    // `sessionOrderKey`) — so `pickSession` never returns it here and the next
+    // start simply opens a new session. `startedDate` therefore only ever
+    // decides between today and an EARLIER day.
+    if (active !== undefined && startedDate(active.started) !== today) {
       throw new ApiError(409, "another session is still running — end it first", {
         code: "session_running",
         path: `sessions/${active.id}.md`,
       });
     }
     if (active !== undefined) return renderSessionRow(tx, campaign, active);
-    const id = nextSessionId(tx, campaign, todayId);
+    const id = newSessionId();
     tx.insert(sessions)
-      .values({ campaignId: campaign, id, started: localDateTimeSeconds(d) })
+      .values({
+        campaignId: campaign,
+        id,
+        started: localDateTimeSeconds(d),
+        createdAt: nextCreatedAt(tx, campaign),
+      })
       .run();
     const row = sessionRow(tx, campaign, id);
     if (row === undefined) throw new ApiError(500, "session could not be created");

@@ -117,6 +117,12 @@ export interface SessionRow {
   id: string;
   started: string | null;
   ended: string | null;
+  /**
+   * Insertion time of the row in epoch MILLISECONDS — the tie-break behind
+   * `started` (db/schema.ts). Database bookkeeping, never file content: it is
+   * deliberately absent from `sessionFrontmatter`.
+   */
+  createdAt: number;
   body: string;
   extra: string;
   rev: number;

@@ -43,6 +43,7 @@ describe("GET /api/campaigns", () => {
       expect(body).toContainEqual({
         id: "beispiel",
         lastSession: "2026-01-15",
+        lastSessionStarted: "2026-01-15T19:30",
         name: "Der Leuchtturm von Salzhafen",
         description: expect.any(String),
       });
@@ -54,9 +55,12 @@ describe("GET /api/campaigns", () => {
       }
     });
 
-    test("lastSession is the newest session id of the example campaign", async () => {
+    test("lastSession/lastSessionStarted name the newest session of the example", async () => {
       const beispiel = (await campaigns()).find((c) => c.id === "beispiel");
       expect(beispiel?.lastSession).toBe("2026-01-15");
+      // `lastSessionStarted` is the ORDERABLE half (issue #58): the id is
+      // opaque for every session written since, so the app sorts by this.
+      expect(beispiel?.lastSessionStarted).toBe("2026-01-15T19:30");
     });
 
     test("name/description come from examples/beispiel/_campaign.md", async () => {

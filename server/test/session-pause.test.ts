@@ -30,10 +30,18 @@ import {
   useCampaignRoot,
 } from "./support/store";
 
+/**
+ * Path of the HAND-WRITTEN session file some cases seed. Its id is a DATE —
+ * the shape every campaign written before issue #58 carries, and still a
+ * perfectly valid id (a session id is an opaque string now, so nothing parses
+ * it). Sessions the API starts get a random id instead: see `startedPath`.
+ */
 const REL = "sessions/2026-08-19.md";
 
 let tmpRoot: string | undefined;
 let restoreRoot: (() => void) | undefined;
+/** Path of the session `beforeEach` started — this case's opaque id. */
+let startedPath: string;
 
 async function post(url: string, body?: unknown): Promise<Response> {
   return app.request(url, {
@@ -88,7 +96,7 @@ beforeEach(async () => {
   // the case moves it.
   setNow(() => new Date(2026, 7, 19, 21, 0));
   await seedStore();
-  expect((await post("/api/beispiel/session/start")).status).toBe(200);
+  startedPath = (await ok("/api/beispiel/session/start")).path;
   setNow(() => new Date(2026, 7, 19, 21, 5));
 });
 
@@ -105,7 +113,7 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
   test("pause opens an interval and logs `— Pause`; continue closes it and logs `— Weiter`", async () => {
     setNow(() => new Date(2026, 7, 19, 21, 40, 12));
     const paused = await ok("/api/beispiel/session/pause");
-    expect(paused.path).toBe(REL);
+    expect(paused.path).toBe(startedPath);
     expect(paused.frontmatter.pauses).toEqual([{ from: "2026-08-19T21:40:12" }]);
     // Nothing counted yet, but the clock is standing since 21:40:12.
     expect(paused.pausedMs).toBeUndefined();

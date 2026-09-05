@@ -1,8 +1,9 @@
 // Small lookups against the campaign tree (display-name resolution) and the
 // campaign list (which campaign "/" opens).
 
-import { compareSessionIdsNewestFirst } from "@grimoire/shared/session-id";
 import type { CampaignSummary, CampaignTree } from "@grimoire/shared/types";
+
+import { parseLocalDateTime } from "@/lib/session";
 
 /**
  * Resolve a location id to its display name via the tree; free strings
@@ -65,19 +66,24 @@ export function findCampaign(
  * behind all that have one, and ties fall back to the alphabetically first
  * id.
  *
- * A session id is NOT comparable as a string since issue #58: a day can hold
- * several sessions (`2026-09-06`, `-2`, … `-10`), and `…-10` is the newest but
- * the smallest string. The comparison therefore goes through the shared
- * `compareSessionIdsNewestFirst` (date part, then NUMERIC sequence), the same
- * rule the server sorts its session list by. A missing or empty `lastSession`
- * is "no session at all" and sorts behind every campaign that has one.
+ * A session ID says NOTHING about time since the PO decision on issue #58 —
+ * it is an opaque random string, so sorting by it would sort noise. The order
+ * therefore reads `lastSessionStarted`, the newest session's `started` as the
+ * server computed it (CampaignSummary), and compares the two as timestamps.
+ * A missing, empty or unparsable value is "no session at all" and sorts behind
+ * every campaign that has one; ties fall back to the id.
  */
+function startedMs(campaign: CampaignSummary): number | undefined {
+  return parseLocalDateTime(campaign.lastSessionStarted);
+}
+
 function byLastActive(a: CampaignSummary, b: CampaignSummary): number {
-  const sessionA = typeof a.lastSession === "string" ? a.lastSession.trim() : "";
-  const sessionB = typeof b.lastSession === "string" ? b.lastSession.trim() : "";
-  if (sessionA === "" !== (sessionB === "")) return sessionA === "" ? 1 : -1;
-  if (sessionA !== "" && sessionA !== sessionB) {
-    return compareSessionIdsNewestFirst(sessionA, sessionB);
+  const ma = startedMs(a);
+  const mb = startedMs(b);
+  if (ma === undefined || mb === undefined) {
+    if (ma !== mb) return ma === undefined ? 1 : -1;
+  } else if (ma !== mb) {
+    return mb - ma;
   }
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }

@@ -4,29 +4,25 @@
 // the session via the global live indicator → pause (the clock stops) →
 // weiter (it ticks again) → end → review → and, since issue #58, the restart:
 // "beenden" is FINAL, so pressing "Session starten" again on the same day
-// opens a SECOND, separate session (own file `<date>-2`, empty log, timer at
-// 0) instead of re-opening the closed one. There is no "fortsetzen".
+// opens a SECOND, separate session (own file under its own id, empty log,
+// timer at 0) instead of re-opening the closed one. There is no "fortsetzen".
 //
 // Plus its undo at the very start: "Session verwerfen" deletes the file of a
 // session that has nothing in it (issue #40 AK7) — its own test below.
 //
 // Every claim is checked twice: once in the UI and once in the stored file
 // (the server is the truth, the app keeps no state of its own).
+//
+// A session id is an OPAQUE random string since the PO decision on issue #58,
+// so this spec never spells one out: every session path comes from the server
+// (`api.sessionPath()`). That is also the honest test — the app itself never
+// derives the file its notes land in either.
 
 import type { Page } from "@playwright/test";
 
-import { expect, test, todaySessionId, todaySessionPath } from "../support/test";
+import { expect, test } from "../support/test";
 
 const NOTE = "Gruppe verhandelt mit Jorna am Fuß der Treppe #thread";
-
-/**
- * The path of the n-th session of today (issue #58): the plain date for the
- * first, `<date>-2`, `-3` … for the ones that follow — "Session beenden" is
- * final, so a second evening on the same day is a second session.
- */
-function nthSessionPath(n: number): string {
-  return n === 1 ? todaySessionPath() : `sessions/${todaySessionId()}-${n}.md`;
-}
 
 /** The session chip in menu mode (on /live) — the ONE session control. */
 const sessionMenuChip = (page: Page) =>
@@ -51,9 +47,8 @@ test("session start, quick note, pause, end — log and file follow", async ({
 }) => {
   await page.goto("/beispiel");
 
-  // No session stored yet — the session file is created by the button.
-  const sessionPath = todaySessionPath();
-  expect(await api.exists(sessionPath)).toBe(false);
+  // No session running yet — the session file is created by the button.
+  expect(await api.sessionPath()).toBeUndefined();
 
   // ONE session control across ALL states (PO requirement on issue #40): the
   // offer to start and the running session are the SAME chip in the SAME
@@ -64,6 +59,11 @@ test("session start, quick note, pause, end — log and file follow", async ({
 
   await startChip.click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
+
+  // WHICH file the session lives in is the server's answer — the id is opaque
+  // (issue #58) and carries no date to reconstruct.
+  const sessionPath = (await api.sessionPath()) ?? "";
+  expect(sessionPath).toMatch(/^sessions\/.+\.md$/);
 
   // The topbar carries ONE session control: the chip, brass, with the running
   // time as H:MM:SS. No "Live" label, no separate timer or buttons any more.
@@ -276,11 +276,11 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // A fresh, empty session: nothing of the first evening is shown …
   await expect(page.getByText(NOTE)).toHaveCount(0);
   await expect(page.getByText("— Pause")).toHaveCount(0);
-  // … it lives in its OWN file …
-  const secondPath = nthSessionPath(2);
-  await expect.poll(() => api.exists(secondPath)).toBe(true);
+  // … it lives in its OWN file, under a DIFFERENT opaque id …
+  const secondPath = (await api.sessionPath()) ?? "";
+  expect(secondPath).toMatch(/^sessions\/.+\.md$/);
+  expect(secondPath).not.toBe(sessionPath);
   const second = await api.raw(secondPath);
-  expect(second).toContain(`id: ${todaySessionId()}-2`);
   expect(second).not.toContain("ended:");
   expect(second).not.toContain("pauses:");
   expect(second).not.toContain(NOTE);
@@ -321,12 +321,12 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   api,
 }) => {
   await page.goto("/beispiel");
-  const sessionPath = todaySessionPath();
 
   // "Session starten" hit by accident.
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
-  await expect.poll(() => api.exists(sessionPath)).toBe(true);
+  const sessionPath = (await api.sessionPath()) ?? "";
+  expect(await api.exists(sessionPath)).toBe(true);
 
   // It asks first — the file is deleted, and that is what the dialog says.
   await (await sessionMenuItem(page, "Session verwerfen")).click();
@@ -351,11 +351,15 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   await expect.poll(() => api.exists(sessionPath)).toBe(false);
 
   // And the start really works again (it is not blocked by a stale session).
-  // The new session gets the NEXT id, not the discarded one back (#58 review):
-  // an id, once handed out, never names a second evening.
+  // The new session gets a FRESH id, never the discarded one back (#58): an
+  // id, once handed out, must not name a second evening — with random ids
+  // that holds without any bookkeeping.
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
-  await expect.poll(() => api.exists(nthSessionPath(2))).toBe(true);
+  const restarted = (await api.sessionPath()) ?? "";
+  expect(restarted).toMatch(/^sessions\/.+\.md$/);
+  expect(restarted).not.toBe(sessionPath);
+  expect(await api.exists(restarted)).toBe(true);
   expect(await api.exists(sessionPath)).toBe(false);
 });
 

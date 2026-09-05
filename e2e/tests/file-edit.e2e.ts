@@ -387,6 +387,12 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   // maintenance action (ADR #4).
   await page.goto("/beispiel/file/sessions/2026-01-15.md");
   await expect(page.getByRole("article")).toContainText("Spuren gefunden");
+  // A session's heading is its DATE, derived from `started` — the id is opaque
+  // since issue #58 and is never shown. (This fixture still carries the old
+  // date-shaped id, which must make no difference to the heading.)
+  await expect(page.getByRole("article").getByRole("heading", { level: 1 })).toHaveText(
+    "Session vom 15.01.2026",
+  );
   await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
 
   await page.goto("/beispiel/file/inbox.md");

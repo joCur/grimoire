@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 
 import { entityHeaderKind, npcStatusLabel } from "@/lib/entity";
 import { fmQuickstats, fmString } from "@/lib/frontmatter";
+import { sessionDateLabel } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/markdown/Markdown";
 
@@ -69,8 +70,12 @@ export function EntityArticle({
   const fm = file.frontmatter;
   // npc/location files carry `name`, chapter/campaign files `title` — either
   // may be missing (degrade), then the path is the honest fallback.
-  const name = fmString(fm.name) ?? fmString(fm.title) ?? file.path;
-  const title = fmString(fm.title) ?? fmString(fm.name) ?? file.path;
+  // A SESSION has no `title` and its id is opaque noise since issue #58, so
+  // the heading is derived from `started` ("Session vom 15.01.2026") instead
+  // of falling through to the path.
+  const fallback = file.kind === "session" ? sessionDateLabel(fm) : file.path;
+  const name = fmString(fm.name) ?? fmString(fm.title) ?? fallback;
+  const title = fmString(fm.title) ?? fmString(fm.name) ?? fallback;
 
   return (
     <article className="w-full min-w-0">

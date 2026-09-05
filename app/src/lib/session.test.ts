@@ -9,6 +9,7 @@ import {
   sessionEndMs,
   sessionIsPaused,
   sessionPausedMs,
+  sessionDateLabel,
   sessionPausedSinceMs,
   sessionStartMs,
 } from "./session";
@@ -254,5 +255,27 @@ describe("sessionPausedMs / sessionPausedSinceMs — the frontmatter fallback", 
     expect(sessionPausedMs({ frontmatter: {} })).toBe(0);
     expect(sessionIsPaused({ frontmatter: {} })).toBe(false);
     expect(sessionPausedSinceMs({})).toBeUndefined();
+  });
+});
+
+describe("sessionDateLabel", () => {
+  test("the heading of a session is its `started` date, German format", () => {
+    expect(sessionDateLabel({ started: "2026-01-15T19:30:00" })).toBe("Session vom 15.01.2026");
+    // Minute-precise (pre-#58 files) and date-only (the midnight degradation)
+    // read the same — only the date part is used.
+    expect(sessionDateLabel({ started: "2026-01-15T19:30" })).toBe("Session vom 15.01.2026");
+    expect(sessionDateLabel({ started: "2026-01-15" })).toBe("Session vom 15.01.2026");
+  });
+
+  test("a session close to midnight keeps ITS day (no timezone re-reading)", () => {
+    expect(sessionDateLabel({ started: "2026-01-15T23:59:59" })).toBe("Session vom 15.01.2026");
+  });
+
+  test("the opaque id is never the label — no `started`, no date", () => {
+    const id = "019a4f3c-6d21-7b8e-9c04-5f1ab2d7e380";
+    expect(sessionDateLabel({ id })).toBe("Session");
+    expect(sessionDateLabel({ id, started: "gestern abend" })).toBe("Session");
+    expect(sessionDateLabel({ started: 20260115 })).toBe("Session");
+    expect(sessionDateLabel(undefined)).toBe("Session");
   });
 });
