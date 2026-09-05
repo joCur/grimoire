@@ -1,9 +1,16 @@
-// The mtime protocol of ADR #4, in one place (issue #38).
+// The conflict protocol of ADR #4, in one place (issue #38).
 //
-// Every write the app does carries the mtime of the FileResponse the DM was
-// looking at, so an external edit answers 409 instead of being overwritten
-// silently. The 409 is not an error the user has to fix: nothing was written,
-// so the file is re-read once and the NEXT attempt carries the fresh mtime.
+// Every write the app does carries the guard token of the FileResponse the DM
+// was looking at, so a competing write answers 409 instead of being
+// overwritten silently. The 409 is not an error the user has to fix: nothing
+// was written, so the file is re-read once and the NEXT attempt carries the
+// fresh token.
+//
+// The wire field is still called `mtimeMs`, but since the SQLite cutover
+// (issue #57) it carries the row's VERSION, not a file mtime — an opaque
+// token, which is all this module ever treated it as. The upgrade is real
+// though: two writes inside the same second used to share an mtime and both
+// went through (issue #37); two writes cannot share a row version.
 //
 // Three write paths share exactly that shape — the status regler (#28), the
 // campaign metadata dialog (#34) and the body editor (#15). What differs is
@@ -14,13 +21,18 @@ import type { FileResponse } from "@grimoire/shared/types";
 
 import { ApiError } from "@/api";
 
-/** True for the server's mtime conflict (409) — the file changed on disk. */
+/** True for the server's write conflict (409) — someone else wrote first. */
 export function isStaleFileError(error: unknown): boolean {
   return error instanceof ApiError && error.status === 409;
 }
 
-/** Shown inline (no toast) after a conflict; the next attempt uses the fresh mtime. */
-export const STALE_FILE_MESSAGE = "Datei extern geändert — neu laden";
+/**
+ * Shown inline (no toast) after a conflict; the next attempt uses the fresh
+ * token. The wording no longer says "extern": after the cutover the other
+ * writer is another tab, the generator or a second request — not an editor
+ * on the file system, which does not exist any more.
+ */
+export const STALE_FILE_MESSAGE = "Inzwischen geändert — neu laden";
 
 /**
  * Shown inline when a write failed for any reason OTHER than a conflict — the

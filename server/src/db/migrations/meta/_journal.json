@@ -22,6 +22,13 @@
       "when": 1788623923803,
       "tag": "0002_played_pos_report_run",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1788639452705,
+      "tag": "0003_doc_revs_chapter_declared",
+      "breakpoints": true
     }
   ]
 }

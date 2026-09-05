@@ -12,6 +12,7 @@ import {
   parseInboxBody,
   parseLogSection,
   parseRelationsSection,
+  removeRelationLines,
   removeSection,
   sectionLines,
   splitSections,
@@ -218,6 +219,43 @@ describe("parseRelationsSection", () => {
   });
 });
 
+describe("removeRelationLines", () => {
+  test("only the parsed lines go — the section and its prose stay put", () => {
+    const body =
+      "## Will\n\nRaus.\n\n## Beziehungen\n\n- fenn: eins\nEin Satz.\n- fenn: zwei\n\n## Notizen\n\nx\n";
+    const out = removeRelationLines(body);
+    expect(out).not.toContain("- fenn: eins"); // became a row
+    expect(out).toContain("Ein Satz."); // no row, no colon
+    expect(out).toContain("- fenn: zwei"); // no row, duplicate counterpart
+    // heading kept, in place, exactly once — the renderer splices the rows
+    // back into it (store/render.ts renderNpcBody)
+    expect(out.match(/^## Beziehungen$/gm)).toHaveLength(1);
+    expect(out.indexOf("## Will")).toBeLessThan(out.indexOf("## Beziehungen"));
+    expect(out.indexOf("## Beziehungen")).toBeLessThan(out.indexOf("## Notizen"));
+    // everything outside the section is untouched
+    expect(out).toContain("## Will\n\nRaus.\n");
+    expect(out.endsWith("## Notizen\n\nx\n")).toBe(true);
+  });
+
+  test("a section that is only relations goes completely", () => {
+    const body = "## Will\n\nRaus.\n\n## Beziehungen\n\n- fenn: eins\n";
+    expect(removeRelationLines(body)).toBe("## Will\n\nRaus.\n");
+  });
+
+  test("a `###` subsection under the heading is not swallowed", () => {
+    const body = "## Beziehungen\n\n- fenn: eins\n\n### Nachtrag\n\nbleibt\n";
+    const out = removeRelationLines(body);
+    expect(out).toContain("### Nachtrag");
+    expect(out).toContain("bleibt");
+    expect(out).not.toContain("- fenn: eins");
+  });
+
+  test("no section: the body comes back unchanged", () => {
+    const body = "## Will\n\nx\n";
+    expect(removeRelationLines(body)).toBe(body);
+  });
+});
+
 describe("parseGlossaryBody", () => {
   test("all three term spellings become rows", () => {
     const result = parseGlossaryBody(
@@ -289,10 +327,19 @@ describe("parseGlossaryBody", () => {
     const result = parseGlossaryBody("Freitext ohne Überschrift\n\n# G\n\n- a → b\n");
     expect(result.entries.map((e) => e.term)).toEqual(["a"]);
     expect(result.problems.join(" ")).toContain("vor der ersten Überschrift");
+    // …and it is handed back verbatim so the caller can keep it (#57 review).
+    expect(result.preamble).toBe("Freitext ohne Überschrift");
+  });
+
+  test("a duplicate term is named, so a save can refuse instead of dropping it", () => {
+    const result = parseGlossaryBody("- a → eins\n- a → zwei\n");
+    expect(result.entries.map((e) => e.explanation)).toEqual(["eins"]);
+    expect(result.duplicates).toEqual(["a"]);
   });
 
   test("an empty glossary is empty, not broken", () => {
-    expect(parseGlossaryBody("")).toEqual({ entries: [], problems: [] });
-    expect(parseGlossaryBody("\n\n")).toEqual({ entries: [], problems: [] });
+    const empty = { entries: [], problems: [], preamble: "", duplicates: [] };
+    expect(parseGlossaryBody("")).toEqual(empty);
+    expect(parseGlossaryBody("\n\n")).toEqual(empty);
   });
 });

@@ -7,16 +7,19 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { getBuildId } from "../config";
+import { ApiError } from "../campaign-fs";
 import {
-  ApiError,
   buildTree,
-  campaignDir,
+  campaignVersion,
   listCampaigns,
   readActiveSession,
+  readGlossary,
+  readMigrationReport,
   readParsedFile,
-} from "../campaign-fs";
-import { getCampaignVersion, searchCampaign } from "../search-index";
-import { isRenameKind, RENAME_KINDS, renameEntity } from "../campaign-rename";
+  requireCampaign,
+} from "../store/read";
+import { searchCampaign } from "../store/search";
+import { isRenameKind, RENAME_KINDS, renameEntity } from "../store/rename";
 import {
   appendInboxEntry,
   appendLogEntry,
@@ -33,7 +36,8 @@ import {
   resumeSession,
   startSession,
   writeFileBody,
-} from "../campaign-write";
+  writeGlossary,
+} from "../store/write";
 import {
   applyGenerated,
   assertGenerateTarget,
@@ -148,28 +152,47 @@ api.get("/:campaign/session", async (c) =>
 );
 
 // GET /api/:campaign/search?q=... -> { results: SearchResult[] } (max 20)
-// Fuzzy in-memory search (Fuse.js) over scenes/npcs/locations/chapters and
-// the campaign file;
-// the index builds lazily per campaign and the file watcher invalidates it.
+// Full-text search over the FTS5 index (issue #57): scenes, npcs, locations,
+// chapters, the campaign document and the GLOSSARY, ranked by bm25 with the
+// column weights of the index migration. Every token is a prefix term, so a
+// half-typed palette query still matches, and the tokenizer folds diacritics
+// ("leucht" finds "Leuchtturm"). Response shape unchanged.
 api.get("/:campaign/search", async (c) => {
   const q = c.req.query("q")?.trim();
   if (q === undefined || q === "") throw new ApiError(400, "missing q query parameter");
   const campaign = c.req.param("campaign");
-  await campaignDir(campaign); // 400 unsafe id, 404 unknown campaign
+  await requireCampaign(campaign); // 400 unsafe id, 404 unknown campaign
   return c.json({ results: await searchCampaign(campaign, q) });
 });
 
-// GET /api/:campaign/version -> { version, build } — `version` is bumped by
-// the file watcher on every markdown change; the app polls this and refetches
-// when it changes (polling instead of SSE, DECISIONS #9). `build` rides along
-// on that existing poll (issue #24): the app compares it with its own build id
-// and offers a reload when a deploy left it with a stale bundle. No extra
-// request, no extra polling loop.
+// GET /api/:campaign/version -> { version, build } — `version` is
+// `campaigns.version`, bumped by every write in the SAME transaction as the
+// change it belongs to (issue #57: with the database as the only truth there
+// is no external editor left to watch, so the chokidar watcher is gone). The
+// app polls this and refetches when it changes (DECISIONS #9). `build` rides
+// along on that existing poll (issue #24): the app compares it with its own
+// build id and offers a reload when a deploy left it with a stale bundle.
 api.get("/:campaign/version", async (c) => {
   const campaign = c.req.param("campaign");
-  await campaignDir(campaign);
-  return c.json({ version: getCampaignVersion(campaign), build: getBuildId() });
+  return c.json({ version: await campaignVersion(campaign), build: getBuildId() });
 });
+
+// GET /api/:campaign/glossary -> { entries: [{ term, explanation }] }
+// The glossary is a structured TABLE since the migration (planning F6): term
+// → explanation instead of one markdown blob. The generic reading view still
+// renders it as markdown (GET /file?path=glossary.md, rendered from these
+// rows), but this is the shape anything that wants the TERMS should read —
+// the generator knowledge base of issue #53 builds on exactly this.
+api.get("/:campaign/glossary", async (c) => c.json(await readGlossary(c.req.param("campaign"))));
+
+// GET /api/:campaign/migration-report -> { entries: [{ path, reason, at }] }
+// What the one-time markdown migration had to degrade (planning section 3).
+// An EMPTY list is the success criterion of a clean import; the app shows a
+// quiet hint while there is anything in here, because it is a reading task
+// for the DM — not an error.
+api.get("/:campaign/migration-report", async (c) =>
+  c.json({ entries: await readMigrationReport(c.req.param("campaign")) }),
+);
 
 // --- write endpoints (issue #5) ---------------------------------------------------
 
@@ -308,12 +331,35 @@ api.post("/:campaign/inbox", async (c) => {
   return c.json(await appendInboxEntry(c.req.param("campaign"), text));
 });
 
+// PUT /api/:campaign/glossary { entries: [{ term, explanation }] }
+//   -> { entries }
+// Replaces the WHOLE list: the glossary is a short, hand-curated table and is
+// edited as a whole, so there is nothing an entry-level guard would protect.
+// Duplicate terms follow the import's rule — the first one wins.
+api.put("/:campaign/glossary", async (c) => {
+  const body = await jsonBody(c, ["entries"]);
+  const raw = body.entries;
+  if (!Array.isArray(raw)) throw new ApiError(400, "entries must be an array");
+  const entries: Array<{ term: string; explanation: string }> = [];
+  for (const item of raw) {
+    if (!isPlainObject(item)) throw new ApiError(400, "each entry must be an object");
+    if (typeof item.term !== "string" || item.term.trim() === "") {
+      throw new ApiError(400, "each entry needs a non-empty term");
+    }
+    if (item.explanation !== undefined && typeof item.explanation !== "string") {
+      throw new ApiError(400, "explanation must be a string");
+    }
+    entries.push({ term: item.term, explanation: item.explanation ?? "" });
+  }
+  return c.json(await writeGlossary(c.req.param("campaign"), entries));
+});
+
 // --- rename with reference cascade (issue #30) --------------------------------------
 
 // POST /api/:campaign/rename { kind, oldId, newId, dryRun? }
 //   -> { renamed: { from, to }, changed: string[] }
-// Renames the entity's file (a DIRECTORY for kind "chapter") and patches
-// every reference site of the format contract — see campaign-rename.ts for
+// Renames the entity id (a database UPDATE with a cascade) and patches
+// every reference site of the format contract — see store/rename.ts for
 // the list, the plan/execute split and the write order. Prose mentions are
 // deliberately left alone.
 // 400 unknown kind / invalid or unchanged newId, 404 unknown id,

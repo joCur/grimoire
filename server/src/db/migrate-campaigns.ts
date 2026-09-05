@@ -35,6 +35,7 @@ import {
   parseInboxBody,
   parseLogSection,
   parseRelationsSection,
+  removeRelationLines,
   removeSection,
   SECTION_LEVEL,
 } from "./import-markdown";
@@ -58,7 +59,7 @@ import {
   sessions as sessionsTable,
   unknownFiles as unknownTable,
 } from "./schema";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 /** Directories under a campaign that are NOT chapters (mirror of campaign-fs). */
 const RESERVED_DIRS = new Set(["npcs", "locations", "sessions"]);
@@ -592,9 +593,10 @@ function importCampaign(
         voice: asOptionalString(p.frontmatter.voice) ?? null,
         appearance: asOptionalString(p.frontmatter.appearance) ?? null,
         // `## Beziehungen` becomes rows, so it must not also stay as prose.
-        // Only the span that was PARSED goes (see removeSection): a `###`
-        // subsection under it stays in the body rather than vanishing.
-        body: removeSection(p.body, "Beziehungen", SECTION_LEVEL),
+        // Only the LINES that were parsed go (see removeRelationLines): a
+        // `###` subsection under it, and any line that became no row, stay in
+        // the body rather than vanishing.
+        body: removeRelationLines(p.body),
         extra: packJson({
           ...splitFrontmatter(p.frontmatter, [
             "id",
@@ -894,6 +896,14 @@ function importCampaign(
         "",
         entry.explanation,
       );
+    }
+    // Prose above the first heading belongs to no term — it is REPORTED and
+    // kept, so a later save of the rendered glossary cannot delete it.
+    if (result.preamble !== "") {
+      tx.update(campaignsTable)
+        .set({ glossaryIntro: result.preamble })
+        .where(eq(campaignsTable.id, campaignId))
+        .run();
     }
     for (const problem of result.problems) degrade(glossaryFile.file, problem);
     const glossaryExtra = splitFrontmatter(glossaryFile.frontmatter, ["id"]);

@@ -2,15 +2,26 @@
 // see CLAUDE.md.
 //
 // Mobile is search, reading view and inbox (UI-BRIEF) — exactly that, checked
-// at 390×844 (iPhone size), including the file on disk.
+// at 390×844 (iPhone size), including what the server stored.
 
 import { expect, test } from "../support/test";
+
+/** A session that started YESTERDAY and was never ended. */
+const OPEN_SESSION = (() => {
+  const d = new Date(Date.now() - 24 * 3600_000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const id = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return {
+    path: `sessions/${id}.md`,
+    content: `---\nid: ${id}\nstarted: ${id}T22:30\nscenes_played: []\n---\n\n## Log\n`,
+  };
+})();
 
 test.use({ viewport: { width: 390, height: 844 } });
 
 const IDEA = "Nachtmarkt im Hafen als Aufhänger #thread";
 
-test("mobile start surface: search, inbox capture, lookup lists", async ({ page, files }) => {
+test("mobile start surface: search, inbox capture, lookup lists", async ({ page, api }) => {
   await page.goto("/beispiel");
 
   // The desktop topbar is desktop chrome — below md the surface carries its
@@ -36,10 +47,10 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
 
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
   await expect(inbox).toHaveValue("");
-  await expect.poll(() => files.read("inbox.md")).toContain(`- ${IDEA}`);
+  await expect.poll(() => api.raw("inbox.md")).toContain(`- ${IDEA}`);
   // Append-only: the line that was already there survives.
   await expect
-    .poll(() => files.read("inbox.md"))
+    .poll(() => api.raw("inbox.md"))
     .toContain("- 2026-01-10 Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug");
 
   // --- search and reading view ---------------------------------------------
@@ -60,34 +71,29 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
 
 // Issue #40 AK2: a running session must be visible on EVERY route, mobile
 // included — where the topbar is not the chrome, the indicator is its own row.
-test("mobile: a running session shows its own live row with the way back", async ({
-  page,
-  files,
-}) => {
-  // A session that started YESTERDAY and was never ended — the case the
-  // client could not see before (it derived today's file name itself).
-  const yesterday = new Date(Date.now() - 24 * 3600_000);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const id = `${yesterday.getFullYear()}-${pad(yesterday.getMonth() + 1)}-${pad(yesterday.getDate())}`;
-  await files.write(
-    `sessions/${id}.md`,
-    `---\nid: ${id}\nstarted: ${id}T22:30\nscenes_played: []\n---\n\n## Log\n`,
-  );
+test.describe("with a session open since yesterday", () => {
+  test.use({ seed: { files: { [OPEN_SESSION.path]: OPEN_SESSION.content } } });
 
-  await page.goto("/beispiel");
-  // The same chip the desktop topbar carries (PO feedback on issue #40) — in
-  // link mode, in the mobile row: one tap back into the session.
-  const row = page.getByRole("link", { name: /Session läuft/ });
-  await expect(row).toBeVisible();
-  // The runtime is computed from the SERVER's reading of `started`, so it is
-  // a real elapsed time (well over an hour by now), not 0:00:00.
-  await expect(row).toContainText(/\d+:\d{2}:\d{2}/);
-  await row.click();
-  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  test("mobile: a running session shows its own live row with the way back", async ({
+    page,
+  }) => {
+    // The session the client could not see before (it derived today's file name
+    // itself) — imported from the seeded tree.
+    await page.goto("/beispiel");
+    // The same chip the desktop topbar carries (PO feedback on issue #40) — in
+    // link mode, in the mobile row: one tap back into the session.
+    const row = page.getByRole("link", { name: /Session läuft/ });
+    await expect(row).toBeVisible();
+    // The runtime is computed from the SERVER's reading of `started`, so it is
+    // a real elapsed time (well over an hour by now), not 0:00:00.
+    await expect(row).toContainText(/\d+:\d{2}:\d{2}/);
+    await row.click();
+    await expect(page).toHaveURL(/\/beispiel\/live$/);
+  });
 });
 
 test("mobile: the reference scene's reading view stays readable", async ({ page }) => {
-  await page.goto("/beispiel/file/01-salzhafen/hafen/ankunft-leuchtturm.md");
+  await page.goto("/beispiel/file/01-salzhafen/hafen/lighthouse-arrival.md");
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await expect(page.locator("[data-callout='readaloud']")).toBeVisible();

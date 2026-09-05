@@ -92,6 +92,66 @@ export function fetchVersion(campaign: string): Promise<VersionResponse> {
   return getJson<VersionResponse>(`/${encodeURIComponent(campaign)}/version`);
 }
 
+/** One entry of the translation glossary (server: the `glossary` table). */
+export interface GlossaryEntry {
+  term: string;
+  explanation: string;
+}
+
+export interface GlossaryResponse {
+  entries: GlossaryEntry[];
+}
+
+/**
+ * The campaign's glossary as a LIST of terms (issue #57): since the SQLite
+ * migration it is a table, not a markdown blob. The reading view still opens
+ * `glossary.md` as a document — that rendering comes from these same rows —
+ * but anything that wants the terms themselves reads this.
+ */
+export function fetchGlossary(campaign: string): Promise<GlossaryResponse> {
+  return getJson<GlossaryResponse>(`/${encodeURIComponent(campaign)}/glossary`);
+}
+
+/** Replace the whole glossary (the list is short and is edited as a whole). */
+export function putGlossary(
+  campaign: string,
+  entries: GlossaryEntry[],
+): Promise<GlossaryResponse> {
+  const url = `/${encodeURIComponent(campaign)}/glossary`;
+  return fetch(`/api${url}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ entries }),
+  }).then(async (response) => {
+    if (!response.ok) throw await failure(`PUT /api${url}`, response);
+    return (await response.json()) as GlossaryResponse;
+  });
+}
+
+/** One incident of the one-time markdown → database migration (issue #57). */
+export interface MigrationReportEntry {
+  /** Campaign-relative path the incident happened in; "" when campaign-wide. */
+  path: string;
+  /** Human-readable German reason — written to be READ by the DM. */
+  reason: string;
+  at: string;
+}
+
+export interface MigrationReportResponse {
+  entries: MigrationReportEntry[];
+}
+
+/**
+ * What the one-time migration had to degrade. An EMPTY list is the normal
+ * state and the success criterion of a clean import — the UI shows nothing
+ * then. A non-empty one is a reading task, not an error: the affected files
+ * are still in the database verbatim, and the original markdown tree was
+ * never touched.
+ */
+export function fetchMigrationReport(campaign: string): Promise<MigrationReportResponse> {
+  return getJson<MigrationReportResponse>(`/${encodeURIComponent(campaign)}/migration-report`);
+}
+
 // --- write endpoints (session/log, issue #9) --------------------------------
 
 /**

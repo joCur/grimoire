@@ -13,6 +13,7 @@ import { Link, useParams } from "react-router";
 
 import { fetchFile, fetchTree } from "@/api";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
+import { MigrationNotice } from "@/components/MigrationNotice";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { locationName } from "@/lib/campaign";
@@ -61,6 +62,9 @@ export function PoolRoute() {
         )}
         {data && (
           <>
+            {/* Quiet, collapsed, and only when the one-time markdown import
+                actually degraded something (issue #57). */}
+            <MigrationNotice campaign={campaign} />
             <div className="mb-5">
               <div className="flex flex-wrap items-baseline gap-3">
                 <h1 className="font-serif text-[28px] leading-[1.25] font-semibold text-foreground">

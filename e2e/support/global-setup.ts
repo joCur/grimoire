@@ -3,12 +3,14 @@
 //   1. build the app once (the server serves the real Vite bundle via
 //      APP_DIST, exactly like the container does — docs/DEPLOYMENT.md)
 //   2. create a per-run temp directory with a PRISTINE copy of
-//      examples/beispiel; every test copies its own campaign root from it, so
-//      examples/ itself is never touched
+//      examples/beispiel — the markdown tree every test's first-run import
+//      reads, so examples/ itself is never touched (and since the cutover
+//      nothing writes into a campaign tree at all)
 //   3. start the stub LLM as a managed process and publish its port
 //
 // The per-test server processes are started by the fixtures (support/test.ts)
-// — one per test, on its own port, against its own campaign copy.
+// — one per test, on its own port, on its own EMPTY database, which that boot
+// seeds by importing the pristine tree (the real first-run import).
 //
 // Values travel to the workers through process.env: Playwright spawns the
 // worker processes AFTER this function returned, so they inherit them.
@@ -85,11 +87,11 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   });
   await waitForHttp(`http://127.0.0.1:${port}/health`, stub, "stub-llm", 15_000);
   process.env[ENV.stubPort] = String(port);
-  console.log(`e2e: stub LLM on http://127.0.0.1:${port}/v1, campaign copies in ${dir}`);
+  console.log(`e2e: stub LLM on http://127.0.0.1:${port}/v1, per-test data in ${dir}`);
 
   return async () => {
     await stub.stop();
-    // E2E_KEEP=1 keeps the campaign copies for a post-mortem look.
+    // E2E_KEEP=1 keeps the databases and campaign copies for a post-mortem.
     if (process.env.E2E_KEEP !== "1") await rm(dir, { recursive: true, force: true });
   };
 }

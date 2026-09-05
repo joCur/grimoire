@@ -183,6 +183,60 @@ export function removeSection(body: string, heading: string, level?: number): st
 }
 
 /**
+ * The body with only the PARSED RELATION LINES of `## Beziehungen` removed —
+ * the content-safe counterpart of `removeSection` for npc bodies.
+ *
+ * `parseRelationsSection` turns `- <npc-id>: <Text>` lines into rows, but a
+ * section may also hold prose, a `- note without a colon` or a SECOND line
+ * for an npc id that already has a row (the composite key allows only one).
+ * Those `foreignLines` become no row, so cutting the whole section would
+ * delete them. They stay exactly where they are, under their own heading;
+ * `renderNpcBody` splices the rows back INTO that section.
+ *
+ * When nothing but relation lines was in the section, the section goes
+ * completely (`removeSection`) — the renderer puts it back from the rows.
+ */
+export function removeRelationLines(body: string): string {
+  const lines = body.split("\n");
+  const target = splitSections(body).find((s) =>
+    matchesSection(s, "beziehungen", SECTION_LEVEL),
+  );
+  if (target === undefined) return body;
+
+  const kept: string[] = [];
+  const seen = new Set<string>();
+  for (const rawLine of target.lines) {
+    const line = rawLine.trim();
+    if (line === "") {
+      kept.push(rawLine);
+      continue;
+    }
+    const m = RELATION_LINE.exec(line);
+    const otherNpcId = m === null ? "" : (m[1] ?? "").trim();
+    if (m !== null && otherNpcId !== "" && !seen.has(otherNpcId)) {
+      seen.add(otherNpcId); // became a row — the renderer brings it back
+      continue;
+    }
+    kept.push(rawLine);
+  }
+
+  // Nothing survived but blank lines: the whole section became rows.
+  if (kept.every((line) => line.trim() === "")) {
+    return removeSection(body, "Beziehungen", SECTION_LEVEL);
+  }
+
+  // Rebuild: heading, one blank line, the surviving lines, and the untouched
+  // rest of the body behind its own blank line.
+  let first = 0;
+  let last = kept.length;
+  while (first < last && kept[first]!.trim() === "") first += 1;
+  while (last > first && kept[last - 1]!.trim() === "") last -= 1;
+  const before = lines.slice(0, target.startIndex + 1); // heading included
+  const after = lines.slice(target.endIndex);
+  return [...before, "", ...kept.slice(first, last), "", ...after].join("\n");
+}
+
+/**
  * The lines of one named section, or undefined when the section is absent.
  * `level` pins the heading depth; the first match wins.
  */
@@ -408,6 +462,21 @@ export interface GlossaryParseResult {
    * verbatim in `unknown_files` (planning section 2).
    */
   problems: string[];
+  /**
+   * The prose ABOVE the first heading, which belongs to no term (rule 3
+   * below). It is reported, and it is also handed back here verbatim so a
+   * caller can KEEP it: the write path stores it in `campaigns.glossary_intro`
+   * and the renderer puts it back in front of the term list. Without that a
+   * save of the rendered glossary would delete it.
+   */
+  preamble: string;
+  /**
+   * Terms that appeared more than once. The first entry wins (see rule 4),
+   * so the later explanation is not in `entries` — the migration degrades it
+   * to a report line, while the WRITE path refuses the save (400) instead of
+   * dropping what the DM just typed.
+   */
+  duplicates: string[];
 }
 
 /**
@@ -430,7 +499,12 @@ export interface GlossaryParseResult {
  *      (planning: "Duplikat-Begriff: erster gewinnt, zweiter in den Report").
  */
 export function parseGlossaryBody(body: string): GlossaryParseResult {
-  const result: GlossaryParseResult = { entries: [], problems: [] };
+  const result: GlossaryParseResult = {
+    entries: [],
+    problems: [],
+    preamble: "",
+    duplicates: [],
+  };
   const byTerm = new Map<string, ImportedGlossaryEntry>();
 
   const add = (term: string, explanation: string): void => {
@@ -438,6 +512,7 @@ export function parseGlossaryBody(body: string): GlossaryParseResult {
     if (key === "") return;
     const existing = byTerm.get(key);
     if (existing !== undefined) {
+      result.duplicates.push(key);
       result.problems.push(
         `Glossar-Begriff „${key}" kommt mehrfach vor — der erste Eintrag gewinnt, ` +
           `die Erklärung „${explanation.trim()}" wurde nicht übernommen.`,
@@ -494,6 +569,8 @@ export function parseGlossaryBody(body: string): GlossaryParseResult {
     const rest = leftover.join("\n").trim();
     if (rest === "") continue;
     if (section.heading === undefined) {
+      // Kept verbatim (see `preamble`) — reported, never dropped.
+      result.preamble = rest;
       result.problems.push(
         "Glossar-Text vor der ersten Überschrift konnte keinem Begriff zugeordnet werden: " +
           `„${rest.split(/\r?\n/)[0] ?? ""}…"`,

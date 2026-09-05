@@ -5,18 +5,26 @@
 // of the callout renderer.
 //
 // All six callout kinds appear: readaloud/check/secret/note in
-// ankunft-leuchtturm, check/note/outcome in von-schmugglern-erwischt — and
+// lighthouse-arrival, check/note/outcome in smuggler-captured — and
 // [!loot], which examples/ does not contain, through an extra file this test
 // seeds into ITS OWN campaign copy (examples/ stays untouched).
 
-import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { FIXTURES_DIR } from "../support/paths";
 import { expect, test } from "../support/test";
 
-const ARRIVAL = "/beispiel/file/01-salzhafen/hafen/ankunft-leuchtturm.md";
-const CAPTURED = "/beispiel/file/01-salzhafen/hafen/von-schmugglern-erwischt.md";
+/** The scene with the [!loot] callout — seeded, examples/ has none. */
+const LOOT_SCENE = {
+  // The path segment is the scene's ID from the fixture's frontmatter
+  // (`loot-check`), like every scene path since issue #57.
+  path: "01-salzhafen/hafen/loot-check.md",
+  content: readFileSync(path.join(FIXTURES_DIR, "loot-scene.md"), "utf8"),
+};
+
+const ARRIVAL = "/beispiel/file/01-salzhafen/hafen/lighthouse-arrival.md";
+const CAPTURED = "/beispiel/file/01-salzhafen/hafen/smuggler-captured.md";
 
 test("reference scene 1: read-aloud, check, secret, note and the NPC card", async ({ page }) => {
   await page.goto(ARRIVAL);
@@ -131,26 +139,27 @@ test("reference scene 2: contingency header, collapsible If-sections, consequenc
   await expect(aside).toContainText("leise, höflich");
 });
 
-test("the loot callout renders, an unknown kind degrades to a blockquote", async ({
-  page,
-  files,
-}) => {
-  // [!loot] is missing from the reference scenes and examples/ must not be
-  // reformatted — so the sixth kind is checked on a file this test seeds into
-  // its own campaign copy.
-  const rel = "01-salzhafen/hafen/beutezug.md";
-  await files.write(rel, await readFile(path.join(FIXTURES_DIR, "loot-scene.md"), "utf8"));
+test.describe("with a seeded loot scene", () => {
+  test.use({ seed: { files: { [LOOT_SCENE.path]: LOOT_SCENE.content } } });
 
-  await page.goto(`/beispiel/file/${rel}`);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Beutezug in der Räucherkammer",
-  );
+  test("the loot callout renders, an unknown kind degrades to a blockquote", async ({
+    page,
+  }) => {
+    // [!loot] is missing from the reference scenes and examples/ must not be
+    // reformatted — so the sixth kind is checked on a scene this test seeds into
+    // the markdown tree its own database is imported from. Its path segment is
+    // the scene's ID (`beutezug`), like every scene path since issue #57.
+    await page.goto(`/beispiel/file/${LOOT_SCENE.path}`);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Beutezug in der Räucherkammer",
+    );
 
-  const loot = page.locator("[data-callout='loot']");
-  await expect(loot).toContainText("Beute");
-  await expect(loot).toContainText("Zwei Ballen Schmuggeltabak");
+    const loot = page.locator("[data-callout='loot']");
+    await expect(loot).toContainText("Beute");
+    await expect(loot).toContainText("Zwei Ballen Schmuggeltabak");
 
-  // Unknown kinds stay a plain blockquote — the format degrades, never errors.
-  await expect(page.locator("[data-callout='erfunden']")).toHaveCount(0);
-  await expect(page.locator("blockquote")).toContainText("[!erfunden] Unbekannte Callout-Sorte");
+    // Unknown kinds stay a plain blockquote — the format degrades, never errors.
+    await expect(page.locator("[data-callout='erfunden']")).toHaveCount(0);
+    await expect(page.locator("blockquote")).toContainText("[!erfunden] Unbekannte Callout-Sorte");
+  });
 });

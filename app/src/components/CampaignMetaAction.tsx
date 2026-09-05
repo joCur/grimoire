@@ -5,7 +5,7 @@
 // The dialog writes through the documented API: PATCH /frontmatter with the
 // mtime the open dialog was seeded with — frozen, not the live query value, or
 // the 5s version poll would hand it an external edit's mtime and turn the save
-// into a silent overwrite (409 → inline "Datei extern geändert — neu laden",
+// into a silent overwrite (409 → inline "Inzwischen geändert — neu laden",
 // the typed values stay, the next attempt writes on top of disk). Or POST
 // /campaign-meta when the campaign has no metadata file yet. On success the
 // campaigns/tree/search queries are invalidated — the switcher label and the

@@ -7,12 +7,12 @@
 // Plus its undo at the very start: "Session verwerfen" deletes the file of a
 // session that has nothing in it (issue #40 AK7) — its own test below.
 //
-// Every claim is checked twice: once in the UI and once in the file on disk
+// Every claim is checked twice: once in the UI and once in the stored file
 // (the server is the truth, the app keeps no state of its own).
 
 import type { Page } from "@playwright/test";
 
-import { expect, test } from "../support/test";
+import { expect, test, todaySessionPath } from "../support/test";
 
 const NOTE = "Gruppe verhandelt mit Jorna am Fuß der Treppe #thread";
 
@@ -35,13 +35,13 @@ async function sessionMenuItem(page: Page, name: string) {
 
 test("session start, quick note, pause, end — log and file follow", async ({
   page,
-  files,
+  api,
 }) => {
   await page.goto("/beispiel");
 
-  // Nothing on disk yet — the session file is created by the button.
-  const sessionPath = files.todaySession();
-  expect(await files.exists(sessionPath)).toBe(false);
+  // No session stored yet — the session file is created by the button.
+  const sessionPath = todaySessionPath();
+  expect(await api.exists(sessionPath)).toBe(false);
 
   // ONE session control across ALL states (PO requirement on issue #40): the
   // offer to start and the running session are the SAME chip in the SAME
@@ -106,7 +106,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   ).toBeVisible();
 
   await expect
-    .poll(() => files.read(sessionPath))
+    .poll(() => api.raw(sessionPath))
     .toContain("scenes_played: []");
 
   // …and while it is empty, the session menu offers to discard it (#40 AK7).
@@ -125,10 +125,10 @@ test("session start, quick note, pause, end — log and file follow", async ({
 
   // …and the file gained the line plus the played scene id.
   await expect
-    .poll(() => files.read(sessionPath))
+    .poll(() => api.raw(sessionPath))
     .toMatch(/- \d{2}:\d{2} \(lighthouse-arrival\) Gruppe verhandelt mit Jorna am Fuß der Treppe #thread/);
-  await expect.poll(() => files.read(sessionPath)).toContain("scenes_played:");
-  await expect.poll(() => files.read(sessionPath)).toContain("lighthouse-arrival");
+  await expect.poll(() => api.raw(sessionPath)).toContain("scenes_played:");
+  await expect.poll(() => api.raw(sessionPath)).toContain("lighthouse-arrival");
 
   // The played checkmark comes from scenes_played — never faked client-side.
   await expect(nav.getByText("gespielt")).toBeAttached();
@@ -195,9 +195,9 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // --- pause: the clock really STOPS (issue #40 AK8) ------------------------
   await (await sessionMenuItem(page, "Pause")).click();
   await expect(page.getByText("— Pause")).toBeVisible();
-  await expect.poll(() => files.read(sessionPath)).toMatch(/- \d{2}:\d{2} — Pause/);
+  await expect.poll(() => api.raw(sessionPath)).toMatch(/- \d{2}:\d{2} — Pause/);
   // The interval is in the file, still open (no `to` yet) …
-  await expect.poll(() => files.read(sessionPath)).toMatch(/pauses: \[\{from: [\d\-T:]+\}\]/);
+  await expect.poll(() => api.raw(sessionPath)).toMatch(/pauses: \[\{from: [\d\-T:]+\}\]/);
 
   // … the chip is the same chip, dimmed, and says so.
   const pausedChip = page.getByRole("button", { name: /Session pausiert/ }).first();
@@ -214,9 +214,9 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // --- weiter: the same menu entry, the other direction ---------------------
   await (await sessionMenuItem(page, "Weiter")).click();
   await expect(page.getByText("— Weiter")).toBeVisible();
-  // The interval is closed on disk (`to` written) …
+  // The interval is closed in the file (`to` written) …
   await expect
-    .poll(() => files.read(sessionPath))
+    .poll(() => api.raw(sessionPath))
     .toMatch(/pauses: \[\{from: [\d\-T:]+, to: [\d\-T:]+\}\]/);
   // … the chip is brass again, and the clock ticks once more.
   const runningAgain = sessionMenuChip(page);
@@ -227,7 +227,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
     .not.toBe(resumed);
 
   // Both log lines are in the file — the readable chronicle of the evening.
-  const withPause = await files.read(sessionPath);
+  const withPause = await api.raw(sessionPath);
   expect(withPause).toMatch(/- \d{2}:\d{2} — Pause/);
   expect(withPause).toMatch(/- \d{2}:\d{2} — Weiter/);
 
@@ -235,7 +235,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await (await sessionMenuItem(page, "Session beenden")).click();
   await expect(page).toHaveURL(/\/beispiel\/review$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fünf Minuten Ernte");
-  await expect.poll(() => files.read(sessionPath)).toMatch(/^ended: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/m);
+  await expect.poll(() => api.raw(sessionPath)).toMatch(/^ended: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/m);
 
   // The harvest card for the tagged note is waiting there.
   await expect(page.getByText("Gruppe verhandelt mit Jorna am Fuß der Treppe")).toBeVisible();
@@ -255,21 +255,21 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // The same session, not a fresh one: the note from before is still there …
   await expect(page.getByText(NOTE)).toBeVisible();
   // … and `ended` is gone from the file, so the session really runs again.
-  await expect.poll(() => files.read(sessionPath)).not.toContain("ended:");
+  await expect.poll(() => api.raw(sessionPath)).not.toContain("ended:");
   await expect(sessionMenuChip(page)).toBeVisible();
 });
 
 test("session verwerfen — the mis-click's undo removes the empty file", async ({
   page,
-  files,
+  api,
 }) => {
   await page.goto("/beispiel");
-  const sessionPath = files.todaySession();
+  const sessionPath = todaySessionPath();
 
   // "Session starten" hit by accident.
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
-  await expect.poll(() => files.exists(sessionPath)).toBe(true);
+  await expect.poll(() => api.exists(sessionPath)).toBe(true);
 
   // It asks first — the file is deleted, and that is what the dialog says.
   await (await sessionMenuItem(page, "Session verwerfen")).click();
@@ -280,7 +280,7 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   // Abbrechen changes nothing at all.
   await dialog.getByRole("button", { name: "Abbrechen" }).click();
   await expect(dialog).toBeHidden();
-  expect(await files.exists(sessionPath)).toBe(true);
+  expect(await api.exists(sessionPath)).toBe(true);
 
   await (await sessionMenuItem(page, "Session verwerfen")).click();
   await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
@@ -290,13 +290,13 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   await expect(page.getByRole("button", { name: "Session starten" })).toBeVisible();
   // … no session chip is left over …
   await expect(page.getByRole("link", { name: /Session läuft/ })).toHaveCount(0);
-  // … and the file is gone from disk.
-  await expect.poll(() => files.exists(sessionPath)).toBe(false);
+  // … and the session file is gone.
+  await expect.poll(() => api.exists(sessionPath)).toBe(false);
 
   // And the start really works again (it is not blocked by a stale session).
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
-  await expect.poll(() => files.exists(sessionPath)).toBe(true);
+  await expect.poll(() => api.exists(sessionPath)).toBe(true);
 });
 
 // The third state of the ONE session control (PO requirement on issue #40): an

@@ -34,8 +34,18 @@ export const TRIGGER = {
 
 /** Title of the generated scene draft — asserted in the specs. */
 export const SCENE_TITLE = "Nachtwache am Kai";
-/** File name (inside the target chapter) of the generated scene draft. */
+/**
+ * File name the model puts the scene draft under, inside the target chapter —
+ * what the review shows and what the apply request sends.
+ */
 export const SCENE_SLUG = "nachtwache-am-kai";
+/**
+ * The draft's `id`, deliberately DIFFERENT from the file name above: since the
+ * cutover (issue #57) a scene's address is `<chapter>/<id>.md`, so this is the
+ * path the draft ends up under once it is applied — the model's file name
+ * decides nothing (server/src/generator.ts, draftAddress).
+ */
+export const SCENE_ID = "night-watch-quay";
 /** The npc stub the scene reply ships (does not exist in examples/beispiel). */
 export const NPC_STUB_ID = "grella";
 export const NPC_STUB_NAME = "Grella";
@@ -45,7 +55,7 @@ export const LOCATION_STUB_NAME = "Nordbucht";
 
 function sceneDraft(chapter: string): string {
   return `---
-id: night-watch-quay
+id: ${SCENE_ID}
 title: ${SCENE_TITLE}
 type: planned
 chapter: ${chapter}
@@ -127,7 +137,7 @@ export function invalidSceneReply(chapter: string): unknown {
       {
         path: `${chapter}/${SCENE_SLUG}.md`,
         content: `---
-id: night-watch-quay
+id: ${SCENE_ID}
 title: ${SCENE_TITLE}
 type: planned
 chapter: ${chapter}

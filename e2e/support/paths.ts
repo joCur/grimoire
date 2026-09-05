@@ -59,7 +59,11 @@ export function stubLlmBaseUrl(): string {
   return `http://127.0.0.1:${port}/v1`;
 }
 
-/** The pristine campaign copy every test copies from. */
+/**
+ * The pristine campaign ROOT (<pristine>/beispiel/…) the tests' first-run
+ * import reads. Nothing ever writes into it — a test that needs extra
+ * markdown gets its own copy (support/test.ts, the `seed` fixture).
+ */
 export function pristineDir(): string {
   return path.join(runDir(), "pristine");
 }

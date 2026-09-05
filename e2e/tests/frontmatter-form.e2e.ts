@@ -21,8 +21,10 @@
 //      is typed does not vanish without a question — neither on Esc nor in an
 //      unfinished quickstat row.
 //
-// Every assertion reads the file back from the test's own campaign copy —
-// what the UI shows and what is on disk are checked separately.
+// Every assertion reads the file back through the API — what the UI shows and
+// what the database holds are checked separately. Since the cutover (issue
+// #57) there is no file behind it: „extern geändert" now means a SECOND
+// WRITER through the same API, which is what bumps the row's guard token.
 //
 // One caveat the assertions live with: PATCH /frontmatter re-emits the whole
 // YAML block, so the SURFACE formatting of untouched keys may normalize
@@ -33,20 +35,20 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, test, type CampaignFiles } from "../support/test";
+import { expect, test, type Api } from "../support/test";
 
-const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm.md";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
 const SCENE_URL = `/beispiel/file/${SCENE}`;
 const NPC = "npcs/jorna.md";
-const STALE_MESSAGE = "Datei extern geändert — neu laden";
+const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 
 /**
  * The frontmatter block including both fences and the newline after the
  * closing one, and the body behind it — the two halves every assertion here
  * looks at separately.
  */
-async function split(files: CampaignFiles, rel: string) {
-  const raw = await files.read(rel);
+async function split(api: Api, rel: string) {
+  const raw = await api.raw(rel);
   const match = /^---\n[\s\S]*?\n---\n/.exec(raw);
   expect(match, "the fixture file has no frontmatter block").not.toBeNull();
   const frontmatter = match?.[0] ?? "";
@@ -75,15 +77,13 @@ async function openProperties(page: Page) {
 
 test("scene properties: chips, reference and status land in the file — nothing else moves", async ({
   page,
-  files,
+  api,
 }) => {
-  const pristine = await split(files, SCENE);
-  // A key the form does not know, put there by hand BEFORE the dialog opens:
-  // the patch must not carry it, so it has to come out of the save verbatim.
-  await files.write(
-    SCENE,
-    pristine.raw.replace("status: ready\n", "status: ready\nx-custom: bleibt\n"),
-  );
+  const pristine = await split(api, SCENE);
+  // A key the form does not know, written BEFORE the dialog opens: the patch
+  // must not carry it, so it has to come out of the save verbatim. (A patch is
+  // the only way to put it there now — nobody hand-edits a row.)
+  await api.patchFrontmatter(SCENE, { "x-custom": "bleibt" });
 
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
@@ -155,8 +155,8 @@ test("scene properties: chips, reference and status land in the file — nothing
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Entwurf" })).toBeVisible();
 
   // On disk: the three changed keys …
-  await expect.poll(() => files.read(SCENE)).toContain("status: draft");
-  const after = await split(files, SCENE);
+  await expect.poll(() => api.raw(SCENE)).toContain("status: draft");
+  const after = await split(api, SCENE);
   expect(after.frontmatter).toContain("tags: [social, travel, stealth, nachtszene]");
   expect(after.frontmatter).toContain("location: bucht");
   expect(after.frontmatter).toContain("status: draft");
@@ -172,19 +172,15 @@ test("scene properties: chips, reference and status land in the file — nothing
   expect(after.body).toBe(pristine.body);
 });
 
-test("externally changed file: the save reports the conflict, the second one writes", async ({
+test("a second writer: the save reports the conflict, the second click writes", async ({
   page,
-  files,
+  api,
 }) => {
-  const before = await split(files, SCENE);
+  const before = await split(api, SCENE);
   // The external editor changed the title AND the body while the dialog was
   // open — both have to survive the DM's save, because neither is in the patch.
   const externalTitle = "Ankunft am Leuchtturm (von Hand)";
-  const externalFrontmatter = before.frontmatter.replace(
-    "title: Ankunft am Leuchtturm\n",
-    `title: ${externalTitle}\n`,
-  );
-  const externalBody = "\n## Flow\n\nVon Hand im externen Editor geändert.\n";
+  const externalBody = "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n";
 
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
@@ -195,10 +191,12 @@ test("externally changed file: the save reports the conflict, the second one wri
   await tags.press("Enter");
   await expect(dialog.getByRole("button", { name: "konflikt entfernen" })).toBeVisible();
 
-  // The file moves under the open dialog. No race to win: the dialog holds
-  // the mtime it opened with until a conflict tells it otherwise, so the
-  // version poll cannot make this write succeed silently.
-  await files.write(SCENE, `${externalFrontmatter}${externalBody}`);
+  // A second writer changes title AND body under the open dialog, through the
+  // same API with a FRESH token. No race to win: the dialog holds the token it
+  // opened with until a conflict tells it otherwise, so the version poll
+  // cannot make this write succeed silently.
+  await api.patchFrontmatter(SCENE, { title: externalTitle });
+  await api.writeBody(SCENE, externalBody);
 
   const save = dialog.getByRole("button", { name: "Speichern" });
   await save.click();
@@ -209,7 +207,7 @@ test("externally changed file: the save reports the conflict, the second one wri
   await expect(dialog.getByRole("button", { name: "konflikt entfernen" })).toBeVisible();
   await expect(dialog.getByLabel("Titel")).toHaveValue("Ankunft am Leuchtturm");
   // Nothing was written: the external content stands, untouched.
-  const conflicted = await split(files, SCENE);
+  const conflicted = await split(api, SCENE);
   expect(conflicted.frontmatter).not.toContain("konflikt");
   expect(conflicted.frontmatter).toContain(`title: ${externalTitle}`);
   expect(conflicted.body).toBe(externalBody);
@@ -221,8 +219,8 @@ test("externally changed file: the save reports the conflict, the second one wri
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(dialog.getByText(STALE_MESSAGE)).toHaveCount(0);
 
-  await expect.poll(() => files.read(SCENE)).toContain("konflikt");
-  const after = await split(files, SCENE);
+  await expect.poll(() => api.raw(SCENE)).toContain("konflikt");
+  const after = await split(api, SCENE);
   expect(after.frontmatter).toContain("tags: [social, travel, konflikt]");
   expect(after.frontmatter).toContain(`title: ${externalTitle}`);
   expect(after.body).toBe(externalBody);
@@ -234,9 +232,9 @@ test("externally changed file: the save reports the conflict, the second one wri
 
 test("clearing a field deletes the key instead of writing an empty value", async ({
   page,
-  files,
+  api,
 }) => {
-  const before = await split(files, SCENE);
+  const before = await split(api, SCENE);
   expect(before.frontmatter).toContain("location: leuchtturm");
   expect(before.frontmatter).toContain("handouts:");
 
@@ -263,7 +261,7 @@ test("clearing a field deletes the key instead of writing an empty value", async
   // On disk both keys are GONE, not emptied: no `location:` and no
   // `handouts: []` left behind. (The dialog closes only after the write
   // answered, so the file is settled here.)
-  const after = await split(files, SCENE);
+  const after = await split(api, SCENE);
   expect(after.frontmatter).not.toMatch(/^location:/m);
   expect(after.frontmatter).not.toMatch(/^handouts:/m);
   // Everything else stands, the body byte-identical.
@@ -275,9 +273,9 @@ test("clearing a field deletes the key instead of writing an empty value", async
 
 test("NPC properties: role, status and a quickstat round-trip into the header", async ({
   page,
-  files,
+  api,
 }) => {
-  const before = await split(files, NPC);
+  const before = await split(api, NPC);
   const role = "Auftraggeberin, seit dem Herbst auch im Rat";
 
   await page.goto(`/beispiel/file/${NPC}`);
@@ -328,8 +326,8 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
   await expect(article).toContainText("knapp, wetterrau, duzt jeden");
   await expect(article).toContainText("Statblock: Roll20: Jorna");
 
-  await expect.poll(() => files.read(NPC)).toContain("status: missing");
-  const after = await split(files, NPC);
+  await expect.poll(() => api.raw(NPC)).toContain("status: missing");
+  const after = await split(api, NPC);
   expect(after.frontmatter).toContain(`role: ${role}`);
   // A DM-typed „+1" stays the STRING it was typed as (YAML would read it as
   // 1); the numbers already in the file stay numbers.
@@ -342,8 +340,8 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
   expect(after.body).toBe(before.body);
 });
 
-test("Abbrechen and Esc ask before they throw typed values away", async ({ page, files }) => {
-  const before = await split(files, SCENE);
+test("Abbrechen and Esc ask before they throw typed values away", async ({ page, api }) => {
+  const before = await split(api, SCENE);
 
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
@@ -372,14 +370,14 @@ test("Abbrechen and Esc ask before they throw typed values away", async ({ page,
 
   // The reading view is as it was, and nothing reached the disk.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
-  expect(await files.read(SCENE)).toBe(before.raw);
+  expect(await api.raw(SCENE)).toBe(before.raw);
 });
 
 test("navigating away closes the dialog — no diff of file A lands in file B", async ({
   page,
-  files,
+  api,
 }) => {
-  const scene = await split(files, SCENE);
+  const scene = await split(api, SCENE);
   const role = "Auftraggeberin, nach der ⌘K-Navigation gespeichert";
 
   await page.goto(SCENE_URL);
@@ -415,8 +413,8 @@ test("navigating away closes the dialog — no diff of file A lands in file B", 
   await npcDialog.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  await expect.poll(() => files.read(NPC)).toContain(`role: ${role}`);
-  expect(await files.read(SCENE)).toBe(scene.raw);
+  await expect.poll(() => api.raw(NPC)).toContain(`role: ${role}`);
+  expect(await api.raw(SCENE)).toBe(scene.raw);
 });
 
 test("Ort and Kapitel have the form too — campaign file, session and inbox do not", async ({
@@ -424,7 +422,7 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
 }) => {
   // The four kinds with typed frontmatter offer it …
   const withForm: [string, string, string][] = [
-    ["01-salzhafen/hafen/von-schmugglern-erwischt.md", "Von den Schmugglern erwischt", "Szene"],
+    ["01-salzhafen/hafen/smuggler-captured.md", "Von den Schmugglern erwischt", "Szene"],
     ["npcs/fenn.md", "Fenn", "NPC"],
     ["locations/leuchtturm.md", "Der Leuchtturm von Salzhafen", "Ort"],
     ["01-salzhafen/_chapter.md", "Kapitel 1: Der Leuchtturm von Salzhafen", "Kapitel"],
@@ -471,8 +469,8 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
 test.describe("at 390px", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test("the properties dialog opens, edits and saves at phone size", async ({ page, files }) => {
-    const before = await split(files, SCENE);
+  test("the properties dialog opens, edits and saves at phone size", async ({ page, api }) => {
+    const before = await split(api, SCENE);
     const title = "Ankunft am Leuchtturm bei Nacht";
 
     await page.goto(SCENE_URL);
@@ -493,8 +491,8 @@ test.describe("at 390px", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
 
-    await expect.poll(() => files.read(SCENE)).toContain(`title: ${title}`);
-    const after = await split(files, SCENE);
+    await expect.poll(() => api.raw(SCENE)).toContain(`title: ${title}`);
+    const after = await split(api, SCENE);
     expect(after.frontmatter).toContain("status: ready");
     expect(after.body).toBe(before.body);
   });
