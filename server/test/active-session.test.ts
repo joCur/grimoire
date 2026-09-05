@@ -375,6 +375,49 @@ describe("start — the state machine's edges (issues #40 review, #58)", () => {
     expect(((await last.json()) as FileResponse).path).toBe("sessions/2026-08-19-3.md");
   });
 
+  test("a discarded id never comes back — end, start, discard, start gives -3", async () => {
+    // The high-water mark (meta `session_seq:<campaign>:<date>`, #58 review):
+    // discarding the trailing `-2` deletes its row, and without a persisted
+    // mark the next start would re-issue `-2` — a second evening's log rows
+    // under an id a DM may already have written down.
+    expect((await post("/api/beispiel/session/start")).status).toBe(200);
+    expect((await post("/api/beispiel/session/end")).status).toBe(200);
+    const second = await post("/api/beispiel/session/start");
+    expect(((await second.json()) as FileResponse).path).toBe("sessions/2026-08-19-2.md");
+    expect((await post("/api/beispiel/session/discard")).status).toBe(200);
+    expect(await fileStatus("sessions/2026-08-19-2.md")).toBe(404);
+
+    const third = await post("/api/beispiel/session/start");
+    expect(third.status).toBe(200);
+    expect(((await third.json()) as FileResponse).path).toBe("sessions/2026-08-19-3.md");
+  });
+
+  test("a degraded running id blocks the start with 409 — ending it resolves it", async () => {
+    // Accepted degrade (#58 review, finding 4): an id that is not a date can
+    // never be "today", so every start is a 409 `session_running`. What has to
+    // hold is the way out the app offers for exactly this code: end it once.
+    expect((await post("/api/beispiel/session/start")).status).toBe(200);
+    db.update(sessionsTable)
+      .set({ id: "kaputt" })
+      .where(eq(sessionsTable.id, "2026-08-19"))
+      .run();
+    const blocked = await post("/api/beispiel/session/start");
+    expect(blocked.status).toBe(409);
+    expect(await blocked.json()).toEqual({
+      error: expect.any(String),
+      code: "session_running",
+      path: "sessions/kaputt.md",
+    });
+    // "Alte Session beenden" does not look at the id at all…
+    expect((await post("/api/beispiel/session/end")).status).toBe(200);
+    // …and the next start opens a session normally. It counts on to `-2`:
+    // the plain date was handed out before the row was renamed, and the
+    // high-water mark does not forget that.
+    const after = await post("/api/beispiel/session/start");
+    expect(after.status).toBe(200);
+    expect(((await after.json()) as FileResponse).path).toBe("sessions/2026-08-19-2.md");
+  });
+
   test("POST /session/resume is gone (404, no route)", async () => {
     expect((await post("/api/beispiel/session/start")).status).toBe(200);
     expect((await post("/api/beispiel/session/end")).status).toBe(200);

@@ -344,9 +344,12 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   await expect.poll(() => api.exists(sessionPath)).toBe(false);
 
   // And the start really works again (it is not blocked by a stale session).
+  // The new session gets the NEXT id, not the discarded one back (#58 review):
+  // an id, once handed out, never names a second evening.
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
-  await expect.poll(() => api.exists(sessionPath)).toBe(true);
+  await expect.poll(() => api.exists(nthSessionPath(2))).toBe(true);
+  expect(await api.exists(sessionPath)).toBe(false);
 });
 
 // The third state of the ONE session control (PO requirement on issue #40): an

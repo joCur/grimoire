@@ -15,7 +15,10 @@
 
 import { and, asc, desc, eq } from "drizzle-orm";
 import {
+  compareSessionIdsNewestFirst,
   isEnded,
+  sessionIdDate,
+  sessionIdSeq,
   type CampaignSummary,
   type CampaignTree,
   type ChapterNode,
@@ -127,10 +130,16 @@ export async function listCampaigns(): Promise<CampaignSummary[]> {
       summary.description = row.description;
     }
     // Not `max(id)` any more: a day can hold several sessions since issue
-    // #58 (`…-2`, `…-3`), and `-10` sorts before `-2` as a string.
-    const newest = (
-      db.select().from(sessions).where(eq(sessions.campaignId, row.id)).all() as SessionRow[]
-    ).sort(compareSessionsNewestFirst)[0];
+    // #58 (`…-2`, `…-3`), and `-10` sorts before `-2` as a string. The sort
+    // needs exactly `id` and `started` (compareSessionsNewestFirst reads
+    // nothing else), so the list must NOT pull whole session rows — a campaign
+    // with 80 evenings would drag 80 log bodies through this loop for one id.
+    const newest = db
+      .select({ id: sessions.id, started: sessions.started })
+      .from(sessions)
+      .where(eq(sessions.campaignId, row.id))
+      .all()
+      .sort(compareSessionsNewestFirst)[0];
     if (newest !== undefined) summary.lastSession = newest.id;
     return summary;
   });
@@ -324,33 +333,24 @@ export function sessionRow(
     .all()[0] as SessionRow | undefined;
 }
 
-/**
- * A session id is `yyyy-mm-dd` for the day's FIRST session and
- * `yyyy-mm-dd-<n>` (n >= 2) for every further one (issue #58): the identity
- * left the calendar day when "beenden" became final, but stays readable and
- * needs no migration of the rows that were written as plain dates.
- */
-const SESSION_ID = /^(\d{4}-\d{2}-\d{2})(?:-(\d+))?$/;
+// The session id shape (`yyyy-mm-dd`, `yyyy-mm-dd-<n>`) lives in
+// @grimoire/shared/session-id — the app has to order the same ids and must not
+// re-derive the rule (a string compare would put `-10` before `-2`).
+export { compareSessionIdsNewestFirst, sessionIdDate, sessionIdSeq };
 
-/** The date part of a session id, or undefined for a degraded id. */
-export function sessionIdDate(id: string): string | undefined {
-  return SESSION_ID.exec(id)?.[1];
-}
-
-/** The sequence number inside its day: 1 for `yyyy-mm-dd`, n for `-n`. */
-export function sessionIdSeq(id: string): number {
-  const m = SESSION_ID.exec(id);
-  if (m === null) return 0;
-  return m[2] === undefined ? 1 : Number(m[2]);
-}
+/** The only two session columns the ordering rule below looks at. */
+export type SessionOrderFields = Pick<SessionRow, "id" | "started">;
 
 /**
  * Chronological order key of a session in epoch milliseconds, or undefined
  * when the row says nothing usable about WHEN it started. Unchanged rule
  * (campaign-fs.ts `sessionOrderKey`): `started` first, the id's DATE as the
  * fallback, and a session with neither never wins anything.
+ *
+ * Takes only the two columns it reads, so callers that need nothing else of a
+ * session (the campaign list) can select just those two.
  */
-export function sessionOrderKey(row: SessionRow): number | undefined {
+export function sessionOrderKey(row: SessionOrderFields): number | undefined {
   const started = localDateTimeToMs(row.started);
   if (started !== undefined) return started;
   const date = sessionIdDate(row.id);
@@ -363,14 +363,14 @@ export function sessionOrderKey(row: SessionRow): number | undefined {
  * minute (start, end, start again — issue #58), and "the last started one" has
  * to be the SECOND of them, deterministically.
  */
-export function compareSessionsNewestFirst(a: SessionRow, b: SessionRow): number {
+export function compareSessionsNewestFirst(
+  a: SessionOrderFields,
+  b: SessionOrderFields,
+): number {
   const ka = sessionOrderKey(a) ?? -Infinity;
   const kb = sessionOrderKey(b) ?? -Infinity;
   if (ka !== kb) return kb - ka;
-  const da = sessionIdDate(a.id) ?? "";
-  const db_ = sessionIdDate(b.id) ?? "";
-  if (da !== db_) return db_ < da ? -1 : 1;
-  return sessionIdSeq(b.id) - sessionIdSeq(a.id);
+  return compareSessionIdsNewestFirst(a.id, b.id);
 }
 
 function pickLatest(rows: SessionRow[]): SessionRow | undefined {

@@ -1,6 +1,7 @@
 // Small lookups against the campaign tree (display-name resolution) and the
 // campaign list (which campaign "/" opens).
 
+import { compareSessionIdsNewestFirst } from "@grimoire/shared/session-id";
 import type { CampaignSummary, CampaignTree } from "@grimoire/shared/types";
 
 /**
@@ -62,14 +63,22 @@ export function findCampaign(
  * Order of the campaign list for "last active first" (issue #14): the
  * campaign with the newest session wins, campaigns without a session rank
  * behind all that have one, and ties fall back to the alphabetically first
- * id. Session ids are dates (`yyyy-mm-dd`), so plain string compare is date
- * compare; a missing (or empty) `lastSession` is the smallest value and thus
- * sorts last.
+ * id.
+ *
+ * A session id is NOT comparable as a string since issue #58: a day can hold
+ * several sessions (`2026-09-06`, `-2`, … `-10`), and `…-10` is the newest but
+ * the smallest string. The comparison therefore goes through the shared
+ * `compareSessionIdsNewestFirst` (date part, then NUMERIC sequence), the same
+ * rule the server sorts its session list by. A missing or empty `lastSession`
+ * is "no session at all" and sorts behind every campaign that has one.
  */
 function byLastActive(a: CampaignSummary, b: CampaignSummary): number {
-  const sessionA = typeof a.lastSession === "string" ? a.lastSession : "";
-  const sessionB = typeof b.lastSession === "string" ? b.lastSession : "";
-  if (sessionA !== sessionB) return sessionA > sessionB ? -1 : 1;
+  const sessionA = typeof a.lastSession === "string" ? a.lastSession.trim() : "";
+  const sessionB = typeof b.lastSession === "string" ? b.lastSession.trim() : "";
+  if (sessionA === "" !== (sessionB === "")) return sessionA === "" ? 1 : -1;
+  if (sessionA !== "" && sessionA !== sessionB) {
+    return compareSessionIdsNewestFirst(sessionA, sessionB);
+  }
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 

@@ -617,6 +617,11 @@ export const migrationReport = sqliteTable("migration_report", {
  *                     written inside that campaign's own transaction. This is
  *                     what lets a run interrupted between two campaigns
  *                     resume instead of dead-ending on "content, no marker".
+ *   `session_seq:<campaign>:<date>`
+ *                   — highest session sequence number ever handed out on that
+ *                     calendar day (issue #58 review). A HIGH-WATER MARK: it
+ *                     only grows, so a discarded session's id is never
+ *                     re-issued (store/write.ts `nextSessionId`).
  */
 export const meta = sqliteTable("meta", {
   key: text("key").primaryKey(),

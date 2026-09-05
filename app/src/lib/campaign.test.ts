@@ -38,6 +38,33 @@ describe("pickLastCampaign", () => {
     expect(pickLastCampaign([c("alpha", ""), c("zeta", "2026-01-15")])).toBe("zeta");
     expect(pickLastCampaign([c("zeta", ""), c("alpha", "")])).toBe("alpha");
   });
+
+  test("the day's TENTH session beats its second (numeric sequence, #58)", () => {
+    // `2026-09-06-10` < `2026-09-06-2` as a STRING — the campaign whose last
+    // session is the tenth of that day is the more recently active one.
+    expect(
+      pickLastCampaign([c("alpha", "2026-09-06-2"), c("zeta", "2026-09-06-10")]),
+    ).toBe("zeta");
+    expect(
+      pickLastCampaign([c("zeta", "2026-09-06-10"), c("alpha", "2026-09-06-2")]),
+    ).toBe("zeta");
+    // …and the plain date is that day's FIRST, so any `-n` beats it.
+    expect(pickLastCampaign([c("alpha", "2026-09-06"), c("zeta", "2026-09-06-2")])).toBe(
+      "zeta",
+    );
+  });
+
+  test("a later day wins over a high sequence on an earlier one", () => {
+    expect(pickLastCampaign([c("alpha", "2026-09-06-10"), c("zeta", "2026-09-07")])).toBe(
+      "zeta",
+    );
+  });
+
+  test("an unparsable session id ranks behind every real one, never crashes", () => {
+    expect(pickLastCampaign([c("alpha", "kaputt"), c("zeta", "2020-01-01")])).toBe("zeta");
+    // …but still ahead of a campaign with no session at all, and stable.
+    expect(pickLastCampaign([c("zeta", "kaputt"), c("alpha")])).toBe("zeta");
+  });
 });
 
 const scene = (id: string, title: string): SceneSummary => ({

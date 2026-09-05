@@ -48,6 +48,7 @@ import {
   inboxEntries,
   locations,
   logEntries,
+  meta,
   npcRelations,
   npcs,
   packJson,
@@ -946,11 +947,27 @@ function bumpSessionRev(tx: GrimoireDb, campaign: string, row: SessionRow): void
     .run();
 }
 
+/** `meta` key holding the highest session sequence ever handed out on a day. */
+function sessionSeqKey(campaign: string, date: string): string {
+  return `session_seq:${campaign}:${date}`;
+}
+
 /**
  * The id for a NEW session on `date`: the plain date while that day has no
  * session yet, `date-2`, `date-3`, … afterwards (issue #58). Readable and
  * date-ordered like the former file name, and the plain-date rows written
  * before this need no migration — they simply are their day's first.
+ *
+ * An id, once handed out, NEVER comes back — not even after the session it
+ * named was discarded. The existing rows alone cannot promise that: discarding
+ * the trailing `-2` deletes the only trace of it, and the next start would
+ * re-issue `-2` with a different evening's log rows hanging off the same
+ * primary key (and off any link a DM had already written down). So the day's
+ * high-water mark is PERSISTED in `meta` under `session_seq:<campaign>:<date>`
+ * and only ever grows. The mark is written in the same transaction as the
+ * insert; the max over the day's existing rows stays part of the decision so
+ * rows that predate the mark (migrated campaigns, a hand-edited database) are
+ * still respected.
  */
 function nextSessionId(tx: GrimoireDb, campaign: string, date: string): string {
   const taken = tx
@@ -959,11 +976,20 @@ function nextSessionId(tx: GrimoireDb, campaign: string, date: string): string {
     .where(eq(sessions.campaignId, campaign))
     .all()
     .filter((row) => sessionIdDate(row.id) === date);
-  if (taken.length === 0) return date;
-  const max = taken.reduce((acc, row) => Math.max(acc, sessionIdSeq(row.id)), 1);
-  // A gap (a discarded `-2`) is not re-used: an id must never come back with
-  // a different evening's log rows hanging off the same primary key.
-  return `${date}-${max + 1}`;
+  const key = sessionSeqKey(campaign, date);
+  const stored = tx.select().from(meta).where(eq(meta.key, key)).all()[0]?.value;
+  const mark = Number(stored);
+  const highWater = Number.isFinite(mark) && mark > 0 ? Math.floor(mark) : 0;
+  const seq = Math.max(
+    highWater,
+    taken.reduce((acc, row) => Math.max(acc, sessionIdSeq(row.id)), 0),
+  );
+  const next = seq + 1;
+  tx.insert(meta)
+    .values({ key, value: String(next) })
+    .onConflictDoUpdate({ target: meta.key, set: { value: String(next) } })
+    .run();
+  return next === 1 ? date : `${date}-${next}`;
 }
 
 /**
@@ -983,6 +1009,15 @@ export async function startSession(campaign: string): Promise<FileResponse> {
     const d = now();
     const todayId = localDate(d);
     const active = pickSession(tx, campaign, false);
+    // DEGRADE, accepted (issue #58 review, finding 4): a running session whose
+    // id does not parse as a date (hand-edited row) has no `sessionIdDate`, so
+    // it can never equal today and every start answers 409 `session_running`.
+    // That is the safe direction — the alternative would silently open a
+    // second live session next to it — and it is not a dead end: the 409
+    // carries the running session's path, and the app's answer to this code
+    // (routes/live.tsx `NoSessionYet`) is the "Alte Session beenden" button,
+    // which goes through `endSession` and does NOT look at the id at all. End
+    // it once and starting works again.
     if (active !== undefined && sessionIdDate(active.id) !== todayId) {
       throw new ApiError(409, "another session is still running — end it first", {
         code: "session_running",
