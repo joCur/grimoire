@@ -2,7 +2,7 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "moduleResolution": "bundler",
-    "types": ["node"]
+    "types": ["node", "bun"]
   },
   "include": ["fixtures", "support", "tests", "playwright.config.ts"]
 }

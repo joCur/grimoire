@@ -1,19 +1,21 @@
 // Critical path 9: editing a file's markdown body in the app — open → change
-// the body → save → rendered; 409 on an external change means reload instead
-// of a silent overwrite; see CLAUDE.md.
+// the body → save → rendered; 409 on a CONCURRENT SECOND WRITE means reload
+// instead of a silent overwrite; see CLAUDE.md.
 //
-// The write goes through the documented API with its mtime check (PUT /file,
-// CLAUDE.md), and the frontmatter block must come out byte-identical — so
-// every assertion here reads the file back from disk and compares the block
-// against the one that was there before.
+// Since the cutover (issue #57) the database is the only truth, so "someone
+// changed the file outside" can no longer happen — the conflict this path is
+// about is a second write through the API while the editor stands open.
+// Everything else is unchanged: the write goes through PUT /file with its
+// guard token, the frontmatter block must come out byte-identical, and every
+// assertion reads the file back — through the API instead of from disk.
 //
 // Unlike the status control (critical path 7) the conflict is DETERMINISTIC:
-// the editor freezes the mtime it was seeded from, on purpose, so the ~5s
-// version poll cannot heal the staleness while the DM types. No retry loop.
+// the editor freezes the guard token it was seeded from, on purpose, so the
+// ~5s version poll cannot heal the staleness while the DM types. No retry loop.
 //
 // The other half of that freeze is what must NOT become a conflict: the status
 // regler right next to the editor writes a new version of the same body, and
-// the DM's own click may not answer their save with „Datei extern geändert".
+// the DM's own click may not answer their save with „Inzwischen geändert".
 // Two more ways to lose text are covered here as well — a navigation must not
 // leave edit mode armed, and a failing background refetch must not tear the
 // open editor down.
@@ -26,12 +28,12 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, test, type CampaignFiles } from "../support/test";
+import { expect, test, type Api } from "../support/test";
 
-const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm.md";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
 const SCENE_URL = `/beispiel/file/${SCENE}`;
 const NPC = "npcs/jorna.md";
-const STALE_MESSAGE = "Datei extern geändert — neu laden";
+const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 /** aria-label of the raw-markdown textarea (FileBodyEditor). */
 const TEXTAREA = "Markdown-Text der Datei";
 
@@ -46,8 +48,8 @@ function frontmatterBlock(raw: string): string {
 }
 
 /** Read the file and hand back its frontmatter block and the rest. */
-async function split(files: CampaignFiles, rel: string) {
-  const raw = await files.read(rel);
+async function split(api: Api, rel: string) {
+  const raw = await api.raw(rel);
   const frontmatter = frontmatterBlock(raw);
   return { raw, frontmatter, body: raw.slice(frontmatter.length) };
 }
@@ -70,9 +72,9 @@ async function openRawEditor(page: Page): Promise<void> {
 
 test("editing the body: save writes the file and the reading view shows it", async ({
   page,
-  files,
+  api,
 }) => {
-  const before = await split(files, SCENE);
+  const before = await split(api, SCENE);
   const added = "Am Fuß der Treppe liegt eine angelaufene Messingpfeife im Sand.";
 
   await page.goto(SCENE_URL);
@@ -112,17 +114,17 @@ test("editing the body: save writes the file and the reading view shows it", asy
   );
 
   // On disk: frontmatter block byte-identical, body exactly what was typed.
-  await expect.poll(() => files.read(SCENE)).toContain(added);
-  const after = await split(files, SCENE);
+  await expect.poll(() => api.raw(SCENE)).toContain(added);
+  const after = await split(api, SCENE);
   expect(after.frontmatter).toBe(before.frontmatter);
   expect(after.body).toBe(`${before.body}\n${added}\n`);
 });
 
 test("the preview toggle renders the draft through the real markdown pipeline", async ({
   page,
-  files,
+  api,
 }) => {
-  const before = await split(files, SCENE);
+  const before = await split(api, SCENE);
   const loot = "> [!loot] Eine angelaufene Messingpfeife, Gravur: „Nordbucht“.";
 
   await page.goto(SCENE_URL);
@@ -165,31 +167,32 @@ test("the preview toggle renders the draft through the real markdown pipeline", 
   await expect(page.locator("[data-callout='loot']")).toContainText(
     "Eine angelaufene Messingpfeife",
   );
-  const after = await split(files, SCENE);
+  const after = await split(api, SCENE);
   expect(after.frontmatter).toBe(before.frontmatter);
   expect(after.body).toContain(loot);
 });
 
-test("externally changed file: the save reports the conflict, the second one works", async ({
+test("a concurrent second write: the save reports the conflict, the second one works", async ({
   page,
-  files,
+  api,
 }) => {
-  const before = await split(files, SCENE);
+  const before = await split(api, SCENE);
   const mine = "Von der DM im Editor der App ergänzt.";
-  // Same frontmatter, different body — only the mtime moves, and that is what
-  // the server compares against. The "saved it in the external editor while
-  // the app was open" case.
-  const externalBody = "\n## Flow\n\nVon Hand im externen Editor geändert.\n";
+  // Same frontmatter, different body — only the row's guard token moves, and
+  // that is what the server compares against.
+  const otherBody = "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n";
 
   await page.goto(SCENE_URL);
   await openRawEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toHaveValue(before.body);
 
-  // The file moves under the open editor. No race to win: the editor holds the
-  // mtime it started from until a conflict tells it otherwise, so the version
-  // poll cannot make this write succeed silently.
-  await files.write(SCENE, `${before.frontmatter}${externalBody}`);
+  // A SECOND WRITE lands while the editor stands open: the same PUT /file the
+  // app uses, with a token fetched a moment ago, so it succeeds and bumps the
+  // row. No race to win — the editor holds the token it started from until a
+  // conflict tells it otherwise, so the version poll cannot make the app's
+  // write succeed silently.
+  await api.writeBody(SCENE, otherBody);
   await textarea.fill(`${before.body}\n${mine}\n`);
   await page.getByRole("button", { name: "Speichern" }).click();
 
@@ -197,30 +200,30 @@ test("externally changed file: the save reports the conflict, the second one wor
   await expect(page.getByText(STALE_MESSAGE)).toBeVisible();
   // The editor stays open and the typed text survives — that is the point.
   await expect(textarea).toHaveValue(`${before.body}\n${mine}\n`);
-  // Nothing was written: the external content stands, untouched.
-  const conflicted = await split(files, SCENE);
-  expect(conflicted.body).toBe(externalBody);
+  // Nothing was written: the other writer's body stands, untouched.
+  const conflicted = await split(api, SCENE);
+  expect(conflicted.body).toBe(otherBody);
   expect(conflicted.frontmatter).toBe(before.frontmatter);
 
   // The editor re-read the file, so the SAME click works now — deliberately
-  // on top of the external body: the DM saw the message and decided.
+  // on top of the other writer's body: the DM saw the message and decided.
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(textarea).toHaveCount(0);
   await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(mine);
 
-  await expect.poll(() => files.read(SCENE)).toContain(mine);
-  const after = await split(files, SCENE);
+  await expect.poll(() => api.raw(SCENE)).toContain(mine);
+  const after = await split(api, SCENE);
   expect(after.frontmatter).toBe(before.frontmatter);
   expect(after.body).toBe(`${before.body}\n${mine}\n`);
-  expect(after.body).not.toContain("Von Hand im externen Editor");
+  expect(after.body).not.toContain("Von einem zweiten Schreiber");
 });
 
 test("the status regler next to the editor is no conflict for the own save", async ({
   page,
-  files,
+  api,
 }) => {
-  const before = await split(files, SCENE);
+  const before = await split(api, SCENE);
   const mine = "Während des Statuswechsels geschrieben.";
 
   await page.goto(SCENE_URL);
@@ -235,23 +238,23 @@ test("the status regler next to the editor is no conflict for the own save", asy
   await trigger.click();
   await page.getByRole("menuitemradio", { name: "gespielt" }).click();
   await expect(trigger).toHaveText(/gespielt/);
-  await expect.poll(() => files.read(SCENE)).toContain("status: played");
+  await expect.poll(() => api.raw(SCENE)).toContain("status: played");
 
-  // The DM's OWN change must not come back as „Datei extern geändert": a new
+  // The DM's OWN change must not come back as „Inzwischen geändert": a new
   // version with an identical body is adopted, a changed body still 409s.
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(textarea).toHaveCount(0);
   await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(mine);
 
-  await expect.poll(() => files.read(SCENE)).toContain(mine);
-  const after = await split(files, SCENE);
+  await expect.poll(() => api.raw(SCENE)).toContain(mine);
+  const after = await split(api, SCENE);
   expect(after.body).toBe(`${before.body}\n${mine}\n`);
   expect(after.frontmatter).toContain("status: played");
 });
 
-test("navigating away ends edit mode — coming back never re-opens it", async ({ page, files }) => {
-  const before = await split(files, SCENE);
+test("navigating away ends edit mode — coming back never re-opens it", async ({ page, api }) => {
+  const before = await split(api, SCENE);
 
   await page.goto(SCENE_URL);
   await openRawEditor(page);
@@ -264,18 +267,18 @@ test("navigating away ends edit mode — coming back never re-opens it", async (
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
   await expect(textarea).toHaveCount(0);
 
-  // Back on the scene: the reading view. An editor seeded from disk would look
+  // Back on the scene: the reading view. An editor seeded from the server would
   // exactly like the one the DM left — with their paragraph silently missing.
   await page.goBack();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await expect(textarea).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Bearbeiten" })).toBeVisible();
   await expect(page.locator("[data-callout='readaloud']")).toBeVisible();
-  expect(await files.read(SCENE)).toBe(before.raw);
+  expect(await api.raw(SCENE)).toBe(before.raw);
 });
 
-test("a failing background refetch leaves the open editor standing", async ({ page, files }) => {
-  const before = await split(files, SCENE);
+test("a failing background refetch leaves the open editor standing", async ({ page, api }) => {
+  const before = await split(api, SCENE);
   const draft = `${before.body}\nGeschrieben, während der Server weg war.\n`;
 
   await page.goto(SCENE_URL);
@@ -290,12 +293,14 @@ test("a failing background refetch leaves the open editor standing", async ({ pa
   // endpoint, and its failures say nothing about the scene's query.
   let aborted = 0;
   await page.route("**/api/beispiel/file?**", (route) => {
-    if (route.request().url().includes("ankunft-leuchtturm")) aborted++;
+    if (route.request().url().includes("lighthouse-arrival")) aborted++;
     void route.abort();
   });
-  // The version poll (~5s) notices the change on disk and refetches, so the
-  // file query runs into the abort (retry: 1 -> two attempts, then 'error').
-  await files.write(SCENE, `${before.frontmatter}\n## Flow\n\nVon außen geändert.\n`);
+  // The version poll (~5s) notices the second writer's change and refetches,
+  // so the file query runs into the abort (retry: 1 -> two attempts, then
+  // 'error'). The write goes through the API: only the app's own READ of this
+  // file is blocked, the server stays reachable.
+  await api.writeBody(SCENE, "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n");
   await expect.poll(() => aborted, { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
 
   // The cached file is still there, so the PAGE must not swap itself for its
@@ -307,8 +312,8 @@ test("a failing background refetch leaves the open editor standing", async ({ pa
   await expect(textarea).toHaveValue(draft);
 });
 
-test("Abbrechen asks before it throws work away", async ({ page, files }) => {
-  const before = await split(files, SCENE);
+test("Abbrechen asks before it throws work away", async ({ page, api }) => {
+  const before = await split(api, SCENE);
 
   await page.goto(SCENE_URL);
 
@@ -341,11 +346,11 @@ test("Abbrechen asks before it throws work away", async ({ page, files }) => {
   );
   await expect(page.getByRole("article")).not.toContainText("nie gespeichert wird");
   // Nothing reached the disk.
-  expect(await files.read(SCENE)).toBe(before.raw);
+  expect(await api.raw(SCENE)).toBe(before.raw);
 });
 
-test("the NPC reading view edits its body the same way", async ({ page, files }) => {
-  const before = await split(files, NPC);
+test("the NPC reading view edits its body the same way", async ({ page, api }) => {
+  const before = await split(api, NPC);
   const added = "- metta: schuldet Jorna einen Gefallen aus dem letzten Herbst";
 
   await page.goto(`/beispiel/file/${NPC}`);
@@ -362,12 +367,12 @@ test("the NPC reading view edits its body the same way", async ({ page, files })
   await expect(page.getByRole("article")).toContainText("knapp, wetterrau, duzt jeden");
   await expect(page.getByRole("article")).toContainText("schuldet Jorna einen Gefallen");
 
-  await expect.poll(() => files.read(NPC)).toContain(added);
-  const after = await split(files, NPC);
+  await expect.poll(() => api.raw(NPC)).toContain(added);
+  const after = await split(api, NPC);
   expect(after.frontmatter).toBe(before.frontmatter);
 });
 
-test("location and chapter offer the editor, session and inbox do not", async ({ page, files }) => {
+test("location and chapter offer the editor, session and inbox do not", async ({ page, api }) => {
   // The kinds whose prose the DM maintains offer the body editor …
   for (const rel of ["locations/leuchtturm.md", "01-salzhafen/_chapter.md"]) {
     await page.goto(`/beispiel/file/${rel}`);
@@ -391,12 +396,12 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   // And the rule belongs to the ENDPOINT, not to the hidden button: a
   // hand-made PUT on an append-only file is refused, nothing is written.
   for (const rel of ["sessions/2026-01-15.md", "inbox.md"]) {
-    const rawBefore = await files.read(rel);
+    const rawBefore = await api.raw(rel);
     const res = await page.request.put("/api/beispiel/file", {
       data: { path: rel, mtimeMs: Date.now(), body: "\nAlles neu.\n" },
     });
     expect(res.status()).toBe(400);
-    expect(await files.read(rel)).toBe(rawBefore);
+    expect(await api.raw(rel)).toBe(rawBefore);
   }
 });
 

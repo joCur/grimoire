@@ -10,7 +10,7 @@
 // pool's own footer line is gone), and the campaign's name/description are
 // editable from the header.
 
-import { expect, test } from "../support/test";
+import { expect, test, todaySessionId } from "../support/test";
 
 /** A location file for the `hafen` group directory of the fixture campaign. */
 const HAFEN_LOCATION = `---
@@ -23,6 +23,15 @@ chapter: 01-salzhafen
 
 Möwen, Salz und Teer; an der Kaimauer liegen drei Kutter.
 `;
+
+/** Today's session, started at 19:30 and never ended. */
+const RUNNING_SESSION = (() => {
+  const id = todaySessionId();
+  return {
+    path: `sessions/${id}.md`,
+    content: `---\nid: ${id}\nstarted: ${id}T19:30\nscenes_played: []\n---\n\n## Log\n`,
+  };
+})();
 
 test("\"/\" redirects into the campaign and the pool shows chapter and scenes", async ({
   page,
@@ -74,21 +83,23 @@ test("\"/\" redirects into the campaign and the pool shows chapter and scenes", 
 
   // Opening a row is the pool's job — the reading view takes over from here.
   await planned.click();
-  await expect(page).toHaveURL(/\/beispiel\/file\/01-salzhafen\/hafen\/ankunft-leuchtturm\.md$/);
+  await expect(page).toHaveURL(/\/beispiel\/file\/01-salzhafen\/hafen\/lighthouse-arrival\.md$/);
 });
 
-test("a group header shows the location NAME once the location file exists", async ({
-  page,
-  files,
-}) => {
-  // Same group directory as above, but now with a location file behind it —
-  // this is the pair the display-name rule of issue #34 is about.
-  await files.write("locations/hafen.md", HAFEN_LOCATION);
+test.describe("with a location for the group directory", () => {
+  test.use({ seed: { files: { "locations/hafen.md": HAFEN_LOCATION } } });
 
-  await page.goto("/beispiel");
-  await expect(page.getByText("Hafenviertel von Salzhafen", { exact: true })).toBeVisible();
-  // The slug itself is no longer on screen anywhere.
-  await expect(page.getByText("hafen", { exact: true })).toHaveCount(0);
+  test("a group header shows the location NAME once the location file exists", async ({
+    page,
+  }) => {
+    // Same group directory as above, but now with a location file behind it —
+    // this is the pair the display-name rule of issue #34 is about (seeded into
+    // the tree this test's database is imported from).
+    await page.goto("/beispiel");
+    await expect(page.getByText("Hafenviertel von Salzhafen", { exact: true })).toBeVisible();
+    // The slug itself is no longer on screen anywhere.
+    await expect(page.getByText("hafen", { exact: true })).toHaveCount(0);
+  });
 });
 
 test("the topbar trio navigates without anything in the left block moving", async ({ page }) => {
@@ -155,7 +166,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   // --- file views: same chrome, section marking follows the entity ----------
   // A scene belongs to Kapitel; its hierarchy lives in the page's context
   // line, not in the topbar.
-  await page.goto("/beispiel/file/01-salzhafen/hafen/ankunft-leuchtturm.md");
+  await page.goto("/beispiel/file/01-salzhafen/hafen/lighthouse-arrival.md");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await expect(current).toHaveText("Kapitel");
   await assertChromeIsStable(onPool);
@@ -201,52 +212,47 @@ test("the topbar trio navigates without anything in the left block moving", asyn
  * With the session consolidated into ONE chip (PO feedback on issue #40) the
  * row fits; this test is the guard that keeps it fitting.
  */
-test("the topbar does not overflow at medium widths while a session runs", async ({
-  page,
-  files,
-}) => {
-  const today = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const id = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
-  await files.write(
-    `sessions/${id}.md`,
-    `---\nid: ${id}\nstarted: ${id}T19:30\nscenes_played: []\n---\n\n## Log\n`,
-  );
+test.describe("with a session running since 19:30", () => {
+  test.use({ seed: { files: { [RUNNING_SESSION.path]: RUNNING_SESSION.content } } });
 
-  const overflow = () =>
-    page.evaluate(() => {
-      const header = document.querySelector("header");
-      const doc = document.documentElement;
-      return {
-        page: doc.scrollWidth - doc.clientWidth,
-        header: header === null ? 0 : header.scrollWidth - header.clientWidth,
-      };
-    });
+  test("the topbar does not overflow at medium widths while a session runs", async ({
+    page,
+  }) => {
+    const overflow = () =>
+      page.evaluate(() => {
+        const header = document.querySelector("header");
+        const doc = document.documentElement;
+        return {
+          page: doc.scrollWidth - doc.clientWidth,
+          header: header === null ? 0 : header.scrollWidth - header.clientWidth,
+        };
+      });
 
-  // The pool carries the fullest topbar there is: switcher, session chip,
-  // search, Generator — plus the review link once something is harvestable.
-  for (const width of [640, 768, 900, 1024, 1100]) {
-    await page.setViewportSize({ width, height: 800 });
-    await page.goto("/beispiel");
-    await expect(page.getByRole("link", { name: /Session läuft/ })).toBeVisible();
-    expect(await overflow(), `pool at ${width}px`).toEqual({ page: 0, header: 0 });
+    // The pool carries the fullest topbar there is: switcher, session chip,
+    // search, Generator — plus the review link once something is harvestable.
+    for (const width of [640, 768, 900, 1024, 1100]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/beispiel");
+      await expect(page.getByRole("link", { name: /Session läuft/ })).toBeVisible();
+      expect(await overflow(), `pool at ${width}px`).toEqual({ page: 0, header: 0 });
 
-    // …and the live route, whose chip is the menu trigger — from md up,
-    // where the topbar IS the chrome; below that the mobile row's link chip
-    // is the one on screen.
-    await page.goto("/beispiel/live");
-    await expect(
-      width >= 768
-        ? page.getByRole("button", { name: /Session läuft/ })
-        : page.getByRole("link", { name: /Session läuft/ }),
-    ).toBeVisible();
-    expect(await overflow(), `live at ${width}px`).toEqual({ page: 0, header: 0 });
-  }
+      // …and the live route, whose chip is the menu trigger — from md up,
+      // where the topbar IS the chrome; below that the mobile row's link chip
+      // is the one on screen.
+      await page.goto("/beispiel/live");
+      await expect(
+        width >= 768
+          ? page.getByRole("button", { name: /Session läuft/ })
+          : page.getByRole("link", { name: /Session läuft/ }),
+      ).toBeVisible();
+      expect(await overflow(), `live at ${width}px`).toEqual({ page: 0, header: 0 });
+    }
+  });
 });
 
 test("editing the campaign metadata updates header, switcher and the file", async ({
   page,
-  files,
+  api,
 }) => {
   await page.goto("/beispiel");
 
@@ -275,43 +281,51 @@ test("editing the campaign metadata updates header, switcher and the file", asyn
   ).toBeVisible();
 
   // On disk: the frontmatter changed, the body did not.
-  const raw = await files.read("_campaign.md");
+  const raw = await api.raw("_campaign.md");
   expect(raw).toContain("name: Salzhafen, zweite Fassung");
   expect(raw).toContain("description: Jetzt mit mehr Schmuggel und weniger Möwen.");
   expect(raw).toContain("Kampagnenweite Notizen:");
   expect(raw).not.toContain("Eine Küstenkampagne");
 });
 
-test("the metadata dialog creates _campaign.md when the campaign has none", async ({
-  page,
-  files,
-}) => {
-  // The one gap PATCH /frontmatter cannot close: no file, hence no mtime.
-  await files.remove("_campaign.md");
+test.describe("imported without a _campaign.md", () => {
+  test.use({ seed: { remove: ["_campaign.md"] } });
 
-  await page.goto("/beispiel");
-  // Without the file the header degrades to the directory name.
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("beispiel");
+  test("a campaign imported without _campaign.md still names itself and is editable", async ({
+    page,
+    api,
+  }) => {
+    // Before the cutover this was the one gap PATCH /frontmatter could not
+    // close (no file, hence no mtime) and the dialog offered to CREATE the
+    // file. Since issue #57 the import gives every campaign directory a row,
+    // whose name falls back to the id — so there is nothing to create, and the
+    // ordinary patch path covers this case too.
+    await page.goto("/beispiel");
+    // Without metadata the header degrades to the directory name.
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("beispiel");
+    const imported = await api.file("_campaign.md");
+    expect(imported.frontmatter).toEqual({ id: "beispiel", name: "beispiel" });
+    expect(imported.body).toBe("");
 
-  await page.getByRole("button", { name: "Bearbeiten" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("noch keine _campaign.md");
-  // Nothing to prefill — the id is only the placeholder, never a proposal.
-  await expect(dialog.getByLabel("Name", { exact: true })).toHaveValue("");
+    await page.getByRole("button", { name: "Bearbeiten" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText("Kampagne bearbeiten");
+    await expect(dialog.getByLabel("Beschreibung")).toHaveValue("");
 
-  await dialog.getByLabel("Name", { exact: true }).fill("Salzhafen von vorn");
-  await dialog.getByLabel("Beschreibung").fill("Frisch angelegt aus der App.");
-  await dialog.getByRole("button", { name: "Speichern" }).click();
+    await dialog.getByLabel("Name", { exact: true }).fill("Salzhafen von vorn");
+    await dialog.getByLabel("Beschreibung").fill("Frisch angelegt aus der App.");
+    await dialog.getByRole("button", { name: "Speichern" }).click();
 
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Salzhafen von vorn");
-  // The id is the DIRECTORY name — the server sets it, never the client.
-  const raw = await files.read("_campaign.md");
-  expect(raw).toContain("id: beispiel");
-  expect(raw).toContain("name: Salzhafen von vorn");
-  expect(raw).toContain("description: Frisch angelegt aus der App.");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Salzhafen von vorn");
+    // The id stays the DIRECTORY name — the server sets it, never the client.
+    const raw = await api.raw("_campaign.md");
+    expect(raw).toContain("id: beispiel");
+    expect(raw).toContain("name: Salzhafen von vorn");
+    expect(raw).toContain("description: Frisch angelegt aus der App.");
+  });
 });
 
-test("the campaign reading view carries the same edit action", async ({ page, files }) => {
+test("the campaign reading view carries the same edit action", async ({ page, api }) => {
   await page.goto("/beispiel/file/_campaign.md");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
@@ -323,11 +337,11 @@ test("the campaign reading view carries the same edit action", async ({ page, fi
   await dialog.getByRole("button", { name: "Speichern" }).click();
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Aus der Leseansicht");
-  await expect.poll(() => files.read("_campaign.md")).toContain("name: Aus der Leseansicht");
+  await expect.poll(() => api.raw("_campaign.md")).toContain("name: Aus der Leseansicht");
 });
 // The dialog's 409 path is the SAME write flow as the status control's
 // (lib/campaign-meta.ts mirrors lib/scene-status.ts: conflict -> inline
-// "Datei extern geändert — neu laden" + refetch, nothing written). Critical
+// "Inzwischen geändert — neu laden" + refetch, nothing written). Critical
 // path 7 covers that mechanism against the real server; the dialog's own
 // branch is unit-tested in app/src/lib/campaign-meta.test.ts. Reproducing it
 // here would need the same "beat the 5s version poll" loop — and a retry that

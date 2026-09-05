@@ -4,7 +4,7 @@
 // fallback („Roh"). `tests/file-edit.e2e.ts` owns that fallback and the whole
 // save/409/discard machinery seen from it; this spec owns the composer.
 //
-// What has to hold, and why every test below reads the file back from disk:
+// What has to hold, and why every test below reads the file back through the API:
 //
 //   * OPENING AND CLOSING A FILE MUST NOT COST A BYTE. The composer parses the
 //     body and serializes it again, so the round trip is the one thing that
@@ -29,15 +29,15 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, test, type CampaignFiles } from "../support/test";
+import { expect, test, type Api } from "../support/test";
 
 /** Six blocks, one per type the reading view knows — the composer's reference. */
-const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm.md";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
 const SCENE_URL = `/beispiel/file/${SCENE}`;
 /** The reference scene WITH two `## If:` sections and their children. */
-const IF_SCENE = "01-salzhafen/hafen/von-schmugglern-erwischt.md";
+const IF_SCENE = "01-salzhafen/hafen/smuggler-captured.md";
 const IF_SCENE_URL = `/beispiel/file/${IF_SCENE}`;
-const STALE_MESSAGE = "Datei extern geändert — neu laden";
+const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 
 /** The cards of SCENE, in document order, as the composer names them. */
 const SCENE_BLOCKS = [
@@ -60,8 +60,8 @@ function frontmatterBlock(raw: string): string {
 }
 
 /** Read the file and hand back its frontmatter block and the rest. */
-async function split(files: CampaignFiles, rel: string) {
-  const raw = await files.read(rel);
+async function split(api: Api, rel: string) {
+  const raw = await api.raw(rel);
   const frontmatter = frontmatterBlock(raw);
   return { raw, frontmatter, body: raw.slice(frontmatter.length) };
 }
@@ -129,9 +129,9 @@ function calloutOrder(page: Page): Promise<string[]> {
 
 test("Bearbeiten opens the block composer — one card per block, no textarea", async ({
   page,
-  files,
+  api,
 }) => {
-  const before = await split(files, SCENE);
+  const before = await split(api, SCENE);
 
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
@@ -170,18 +170,18 @@ test("Bearbeiten opens the block composer — one card per block, no textarea", 
   // The header keeps standing around it (as in „Roh"): title, status regler.
   await expect(page.getByRole("button", { name: "Status ändern, aktuell bereit" })).toBeVisible();
 
-  // Nothing typed, so nothing to save — and nothing on disk moved.
+  // Nothing typed, so nothing to save — and nothing stored moved.
   await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
-  expect(await files.read(SCENE)).toBe(before.raw);
+  expect(await api.raw(SCENE)).toBe(before.raw);
 });
 
 // --- b: the round trip is a no-op -------------------------------------------
 
 test("Blöcke → Roh → Blöcke is not a change — Speichern stays disabled", async ({
   page,
-  files,
+  api,
 }) => {
-  const before = await split(files, SCENE);
+  const before = await split(api, SCENE);
 
   await page.goto(SCENE_URL);
   await page.getByRole("button", { name: "Bearbeiten" }).click();
@@ -205,13 +205,13 @@ test("Blöcke → Roh → Blöcke is not a change — Speichern stays disabled",
   await expect(save).toBeDisabled();
 
   // One draft, two surfaces: the detour cannot have written anything.
-  expect(await files.read(SCENE)).toBe(before.raw);
+  expect(await api.raw(SCENE)).toBe(before.raw);
 });
 
 // --- c: editing one block -----------------------------------------------------
 
-test("editing a Vorlesetext card writes THAT block and nothing else", async ({ page, files }) => {
-  const before = await split(files, SCENE);
+test("editing a Vorlesetext card writes THAT block and nothing else", async ({ page, api }) => {
+  const before = await split(api, SCENE);
   const added = "Eine angelaufene Messingpfeife liegt im Sand am Fuß der Treppe.";
 
   await page.goto(SCENE_URL);
@@ -243,8 +243,8 @@ test("editing a Vorlesetext card writes THAT block and nothing else", async ({ p
 
   // On disk: the readaloud block gained ONE quoted line, and that is the whole
   // diff — asserted as the full file, so a reflowed neighbour would fail here.
-  await expect.poll(() => files.read(SCENE)).toContain(added);
-  const after = await split(files, SCENE);
+  await expect.poll(() => api.raw(SCENE)).toContain(added);
+  const after = await split(api, SCENE);
   expect(after.frontmatter).toBe(before.frontmatter);
   const readaloudBefore = blockOf(before.raw, "> [!readaloud]");
   expect(after.raw).toBe(
@@ -260,9 +260,9 @@ test("editing a Vorlesetext card writes THAT block and nothing else", async ({ p
 
 test("the + slot at the end creates a Beute block through the type picker", async ({
   page,
-  files,
+  api,
 }) => {
-  const before = await split(files, SCENE);
+  const before = await split(api, SCENE);
   const lootText = "Zwei Ballen Schmuggeltabak und ein Frachtbrief ohne Absender.";
 
   await page.goto(SCENE_URL);
@@ -306,15 +306,15 @@ test("the + slot at the end creates a Beute block through the type picker", asyn
 
   // On disk: the markers the DM never typed, one blank line of separation, and
   // the file's single trailing newline — everything before it untouched.
-  await expect.poll(() => files.read(SCENE)).toContain("[!loot]");
-  const after = await split(files, SCENE);
+  await expect.poll(() => api.raw(SCENE)).toContain("[!loot]");
+  const after = await split(api, SCENE);
   expect(after.raw).toBe(`${before.raw}\n> [!loot] ${lootText}\n`);
 });
 
 // --- e: moving blocks ---------------------------------------------------------
 
-test("⌄/⌃ reorder the blocks — the file follows, both blocks verbatim", async ({ page, files }) => {
-  const before = await split(files, SCENE);
+test("⌄/⌃ reorder the blocks — the file follows, both blocks verbatim", async ({ page, api }) => {
+  const before = await split(api, SCENE);
 
   await page.goto(SCENE_URL);
   await page.getByRole("button", { name: "Bearbeiten" }).click();
@@ -340,11 +340,11 @@ test("⌄/⌃ reorder the blocks — the file follows, both blocks verbatim", as
   await expect(composer(page)).toHaveCount(0);
   expect(await calloutOrder(page)).toEqual(["readaloud", "secret", "check", "note"]);
 
-  // … and on disk the two blocks swapped places without either of them being
+  // … and in the stored file the two blocks swapped places without either being
   // re-rendered: the separator between them stayed where it was, too.
   const check = blockOf(before.raw, "> [!check]");
   const secret = blockOf(before.raw, "> [!secret]");
-  const after = await split(files, SCENE);
+  const after = await split(api, SCENE);
   expect(after.frontmatter).toBe(before.frontmatter);
   expect(after.raw).toBe(before.raw.replace(`${check}\n\n${secret}`, `${secret}\n\n${check}`));
   expect(blockOf(after.raw, "> [!check]")).toBe(check);
@@ -355,9 +355,9 @@ test("⌄/⌃ reorder the blocks — the file follows, both blocks verbatim", as
 
 test("a child of the first If-section edits without touching the two headings", async ({
   page,
-  files,
+  api,
 }) => {
-  const before = await split(files, IF_SCENE);
+  const before = await split(api, IF_SCENE);
   const added = "Fenn stellt einen gelangweilten Posten vor die Tür.";
 
   await page.goto(IF_SCENE_URL);
@@ -409,8 +409,8 @@ test("a child of the first If-section edits without touching the two headings", 
 
   // On disk: BOTH `## If:` heading lines byte-identical (the section keeps its
   // own source when only a child changes), and the child is the only diff.
-  await expect.poll(() => files.read(IF_SCENE)).toContain(added);
-  const after = await split(files, IF_SCENE);
+  await expect.poll(() => api.raw(IF_SCENE)).toContain(added);
+  const after = await split(api, IF_SCENE);
   expect(after.frontmatter).toBe(before.frontmatter);
   expect(blockOf(after.raw, "## If: sie geben zu")).toBe("## If: sie geben zu, für Jorna zu arbeiten");
   expect(blockOf(after.raw, "## If: sie lügen")).toBe(
@@ -428,9 +428,9 @@ test("a child of the first If-section edits without touching the two headings", 
 
 test("a ## heading typed into an If-child blocks the save until it is cleared", async ({
   page,
-  files,
+  api,
 }) => {
-  const before = await split(files, IF_SCENE);
+  const before = await split(api, IF_SCENE);
   const paragraph = blockOf(before.raw, "Fenn lässt sie in die alte");
 
   await page.goto(IF_SCENE_URL);
@@ -454,7 +454,7 @@ test("a ## heading typed into an If-child blocks the save until it is cleared", 
   const save = page.getByRole("button", { name: "Speichern" });
   await expect(save).toBeDisabled();
   // The draft is allowed to be in this state, the FILE is not.
-  expect(await files.read(IF_SCENE)).toBe(before.raw);
+  expect(await api.raw(IF_SCENE)).toBe(before.raw);
 
   // One character deeper and the heading stays inside the branch: the hint
   // goes, the note goes, the save works.
@@ -467,8 +467,8 @@ test("a ## heading typed into an If-child blocks the save until it is cleared", 
   // On disk: the new heading sits between the two `## If:` lines, i.e. INSIDE
   // the first section — which is what the composer showed all along.
   await expect(composer(page)).toHaveCount(0);
-  await expect.poll(() => files.read(IF_SCENE)).toContain("### Boom");
-  const after = await split(files, IF_SCENE);
+  await expect.poll(() => api.raw(IF_SCENE)).toContain("### Boom");
+  const after = await split(api, IF_SCENE);
   expect(after.frontmatter).toBe(before.frontmatter);
   expect(after.raw).toBe(before.raw.replace(paragraph, `${paragraph}\n### Boom`));
   expect(after.raw.indexOf("### Boom")).toBeGreaterThan(
@@ -489,13 +489,13 @@ test("a ## heading typed into an If-child blocks the save until it is cleared", 
 
 test("409 with a block form open: the message, the form and the typed text stay", async ({
   page,
-  files,
+  api,
 }) => {
-  const before = await split(files, SCENE);
+  const before = await split(api, SCENE);
   const mine = "Im Blockformular getippt, während die Datei sich bewegte.";
-  // Same frontmatter, different body — only the mtime moves, and that is what
-  // the server compares against.
-  const externalBody = "\n## Flow\n\nVon Hand im externen Editor geändert.\n";
+  // Same frontmatter, different body — only the row's guard token moves, and
+  // that is what the server compares against.
+  const externalBody = "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n";
 
   await page.goto(SCENE_URL);
   await page.getByRole("button", { name: "Bearbeiten" }).click();
@@ -505,9 +505,10 @@ test("409 with a block form open: the message, the form and the typed text stay"
   const field = page.getByRole("textbox", { name: "Inhalt: Notiz", exact: true });
   const original = await field.inputValue();
 
-  // The file moves under the open composer. No race to win: the editor holds
-  // the mtime it was seeded from until a conflict tells it otherwise.
-  await files.write(SCENE, `${before.frontmatter}${externalBody}`);
+  // A SECOND WRITER moves the row under the open composer, through the same
+  // API with a fresh token. No race to win: the editor holds the token it was
+  // seeded from until a conflict tells it otherwise.
+  await api.writeBody(SCENE, externalBody);
   await field.fill(`${original}\n${mine}`);
   await page.getByRole("button", { name: "Speichern" }).click();
 
@@ -518,8 +519,8 @@ test("409 with a block form open: the message, the form and the typed text stay"
   await expect(note.collapse).toHaveAttribute("aria-expanded", "true");
   await expect(field).toHaveValue(`${original}\n${mine}`);
   expect(await blockNames(page)).toEqual(SCENE_BLOCKS);
-  // Nothing was written: the external content stands, untouched.
-  expect(await files.read(SCENE)).toBe(`${before.frontmatter}${externalBody}`);
+  // Nothing was written: the other writer's content stands, untouched.
+  expect(await api.raw(SCENE)).toBe(`${before.frontmatter}${externalBody}`);
 
   // The editor re-read the file, so the SAME click works now — deliberately on
   // top of the external body: the DM saw the message and decided.
@@ -528,21 +529,21 @@ test("409 with a block form open: the message, the form and the typed text stay"
   await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
   await expect(page.locator("[data-callout='note']")).toContainText(mine);
 
-  await expect.poll(() => files.read(SCENE)).toContain(mine);
-  const after = await split(files, SCENE);
+  await expect.poll(() => api.raw(SCENE)).toContain(mine);
+  const after = await split(api, SCENE);
   expect(after.frontmatter).toBe(before.frontmatter);
   const noteBefore = blockOf(before.raw, "> [!note]");
   expect(after.raw).toBe(before.raw.replace(`${noteBefore}\n`, `${noteBefore}\n> ${mine}\n`));
-  expect(after.raw).not.toContain("Von Hand im externen Editor");
+  expect(after.raw).not.toContain("Von einem zweiten Schreiber");
 });
 
 // --- h: the discard guard -----------------------------------------------------
 
 test("Abbrechen after a block edit asks first — Verwerfen leaves the file alone", async ({
   page,
-  files,
+  api,
 }) => {
-  const before = await split(files, SCENE);
+  const before = await split(api, SCENE);
 
   await page.goto(SCENE_URL);
   await page.getByRole("button", { name: "Bearbeiten" }).click();
@@ -570,17 +571,21 @@ test("Abbrechen after a block edit asks first — Verwerfen leaves the file alon
   );
   await expect(page.getByRole("article")).not.toContainText("nie gespeichert wird");
   // Nothing reached the disk.
-  expect(await files.read(SCENE)).toBe(before.raw);
+  expect(await api.raw(SCENE)).toBe(before.raw);
 });
 
 // --- j: the format degrades ---------------------------------------------------
 
 /**
  * A scene with two constructs the composer does not model: an UNKNOWN callout
- * kind and a markdown table. Seeded per test (examples/ must not be touched —
- * CLAUDE.md), and written out here verbatim because the assertions are about
- * these exact bytes.
+ * kind and a markdown table. Seeded into the markdown tree this test's
+ * database is imported from (examples/ must not be touched — CLAUDE.md), and
+ * written out here verbatim because the assertions are about these exact
+ * bytes.
  */
+/** Its path segment is the scene's ID, like every scene path since #57. */
+const ODD_SCENE_PATH = "01-salzhafen/hafen/seltsame-mechanik.md";
+
 const ODD_SCENE = `---
 id: seltsame-mechanik
 title: Seltsame Mechanik
@@ -605,67 +610,70 @@ Die Gruppe würfelt auf der Tabelle unten.
 | 4-6  | ein leeres Fass |
 `;
 
-test("unknown callouts and tables become cards — and survive a neighbour's save", async ({
-  page,
-  files,
-}) => {
-  const rel = "01-salzhafen/hafen/seltsame-mechanik.md";
-  await files.write(rel, ODD_SCENE);
-  const before = await split(files, rel);
-  const added = "Bei einem Patt würfelt die Gruppe erneut.";
+test.describe("with a scene of unknown constructs", () => {
+  test.use({ seed: { files: { [ODD_SCENE_PATH]: ODD_SCENE } } });
 
-  await page.goto(`/beispiel/file/${rel}`);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Seltsame Mechanik");
-  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  test("unknown callouts and tables become cards — and survive a neighbour's save", async ({
+    page,
+    api,
+  }) => {
+    const rel = ODD_SCENE_PATH;
+    const before = await split(api, rel);
+    const added = "Bei einem Patt würfelt die Gruppe erneut.";
 
-  // No error, no validation: the unknown callout is a „Roh-Block" (with its
-  // kind spelled out next to the label) and the table is a „Text" card.
-  expect(await blockNames(page)).toEqual([
-    "Überschrift 1",
-    "Text 2",
-    "Roh-Block 3",
-    "Text 4",
-  ]);
-  await expect(composer(page)).toContainText("[!weird]");
-  await expect(composer(page)).toContainText("| Wurf | Ergebnis");
+    await page.goto(`/beispiel/file/${rel}`);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Seltsame Mechanik");
+    await page.getByRole("button", { name: "Bearbeiten" }).click();
 
-  // The raw card keeps its markers IN the form — it is handed over verbatim.
-  const raw = card(page, "Roh-Block 3");
-  await raw.edit.click();
-  await expect(page.getByRole("textbox", { name: "Inhalt: Roh-Block", exact: true })).toHaveValue(
-    "> [!weird] bla",
-  );
-  await raw.collapse.click();
+    // No error, no validation: the unknown callout is a „Roh-Block" (with its
+    // kind spelled out next to the label) and the table is a „Text" card.
+    expect(await blockNames(page)).toEqual([
+      "Überschrift 1",
+      "Text 2",
+      "Roh-Block 3",
+      "Text 4",
+    ]);
+    await expect(composer(page)).toContainText("[!weird]");
+    await expect(composer(page)).toContainText("| Wurf | Ergebnis");
 
-  // Now edit the NEIGHBOUR and save.
-  const paragraph = card(page, "Text 2");
-  await paragraph.edit.click();
-  const field = page.getByRole("textbox", { name: "Inhalt: Text", exact: true });
-  await expect(field).toHaveValue("Die Gruppe würfelt auf der Tabelle unten.");
-  await field.fill(`${await field.inputValue()}\n${added}`);
-  await page.getByRole("button", { name: "Speichern" }).click();
+    // The raw card keeps its markers IN the form — it is handed over verbatim.
+    const raw = card(page, "Roh-Block 3");
+    await raw.edit.click();
+    await expect(page.getByRole("textbox", { name: "Inhalt: Roh-Block", exact: true })).toHaveValue(
+      "> [!weird] bla",
+    );
+    await raw.collapse.click();
 
-  // The reading view degrades exactly as before: the unknown kind stays a
-  // plain blockquote, and the table stays literal text (the pipeline has no
-  // remark-gfm — which is exactly why those bytes must survive verbatim).
-  await expect(composer(page)).toHaveCount(0);
-  await expect(page.locator("[data-callout]")).toHaveCount(0);
-  await expect(page.locator("blockquote")).toContainText("[!weird] bla");
-  await expect(page.getByRole("article")).toContainText("ein leeres Fass");
-  await expect(page.getByRole("article")).toContainText(added);
+    // Now edit the NEIGHBOUR and save.
+    const paragraph = card(page, "Text 2");
+    await paragraph.edit.click();
+    const field = page.getByRole("textbox", { name: "Inhalt: Text", exact: true });
+    await expect(field).toHaveValue("Die Gruppe würfelt auf der Tabelle unten.");
+    await field.fill(`${await field.inputValue()}\n${added}`);
+    await page.getByRole("button", { name: "Speichern" }).click();
 
-  // On disk: both unmodelled constructs byte-identical, one paragraph longer.
-  await expect.poll(() => files.read(rel)).toContain(added);
-  const after = await split(files, rel);
-  expect(after.frontmatter).toBe(before.frontmatter);
-  expect(blockOf(after.raw, "> [!weird]")).toBe("> [!weird] bla");
-  expect(blockOf(after.raw, "| Wurf")).toBe(blockOf(before.raw, "| Wurf"));
-  expect(after.raw).toBe(
-    before.raw.replace(
-      "Die Gruppe würfelt auf der Tabelle unten.",
-      `Die Gruppe würfelt auf der Tabelle unten.\n${added}`,
-    ),
-  );
+    // The reading view degrades exactly as before: the unknown kind stays a
+    // plain blockquote, and the table stays literal text (the pipeline has no
+    // remark-gfm — which is exactly why those bytes must survive verbatim).
+    await expect(composer(page)).toHaveCount(0);
+    await expect(page.locator("[data-callout]")).toHaveCount(0);
+    await expect(page.locator("blockquote")).toContainText("[!weird] bla");
+    await expect(page.getByRole("article")).toContainText("ein leeres Fass");
+    await expect(page.getByRole("article")).toContainText(added);
+
+    // On disk: both unmodelled constructs byte-identical, one paragraph longer.
+    await expect.poll(() => api.raw(rel)).toContain(added);
+    const after = await split(api, rel);
+    expect(after.frontmatter).toBe(before.frontmatter);
+    expect(blockOf(after.raw, "> [!weird]")).toBe("> [!weird] bla");
+    expect(blockOf(after.raw, "| Wurf")).toBe(blockOf(before.raw, "| Wurf"));
+    expect(after.raw).toBe(
+      before.raw.replace(
+        "Die Gruppe würfelt auf der Tabelle unten.",
+        `Die Gruppe würfelt auf der Tabelle unten.\n${added}`,
+      ),
+    );
+  });
 });
 
 // --- i: the phone -------------------------------------------------------------
@@ -678,8 +686,8 @@ test("unknown callouts and tables become cards — and survive a neighbour's sav
 test.describe("at 390px", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test("the composer opens, edits and saves at phone size", async ({ page, files }) => {
-    const before = await split(files, SCENE);
+  test("the composer opens, edits and saves at phone size", async ({ page, api }) => {
+    const before = await split(api, SCENE);
     const added = "Jorna hebt die Laterne, als sie die Gruppe erkennt.";
 
     await page.goto(SCENE_URL);
@@ -719,7 +727,7 @@ test.describe("at 390px", () => {
     await expect(page.getByRole("article")).toContainText(added);
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
 
-    const after = await split(files, SCENE);
+    const after = await split(api, SCENE);
     expect(after.frontmatter).toBe(before.frontmatter);
     const paragraphBefore = blockOf(before.raw, "Die Gruppe erreicht");
     expect(after.raw).toBe(
