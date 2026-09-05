@@ -2,7 +2,10 @@
 // `## Will` section) and quickstats, exactly those three per UI-BRIEF.
 // Two densities per the design prototype: the scene aside ("full", with id
 // badge and labeled rows) and the live aside ("compact", inline "Will:").
-// The whole card links to the NPC reading view (issue #26).
+// The whole card links to the NPC reading view (issue #26) — UNLESS the caller
+// passes `onOpen`: in the live mode (issue #40) the card must not navigate
+// away from the running session, it opens the detail drawer instead. Same
+// card, same hover, only the element differs (link vs. button).
 //
 // Degradation (issue #26): a referenced id WITHOUT a file used to render
 // nothing at all — the DM saw a bare slug in the scene and no explanation.
@@ -12,10 +15,9 @@
 // here), and while the query is still running nothing is claimed at all.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ReactNode } from "react";
-import { Link } from "react-router";
 
 import { ApiError, fetchFile } from "@/api";
+import { EntityCardShell } from "@/components/EntityCardShell";
 import { Button } from "@/components/ui/button";
 import { fmQuickstats, fmString } from "@/lib/frontmatter";
 import { firstParagraphOfSection } from "@/lib/md-section";
@@ -31,10 +33,16 @@ export function NpcCard({
   campaign,
   id,
   compact = false,
+  onOpen,
 }: {
   campaign: string;
   id: string;
   compact?: boolean;
+  /**
+   * When given, the card is a BUTTON that hands the npc's campaign-relative
+   * path to the caller instead of navigating (live mode drawer, issue #40).
+   */
+  onOpen?: (path: string) => void;
 }) {
   const path = npcPath(id);
   const queryClient = useQueryClient();
@@ -93,7 +101,7 @@ export function NpcCard({
 
   if (compact) {
     return (
-      <CardLink campaign={campaign} id={id} className="p-3.5">
+      <EntityCardShell campaign={campaign} path={path} onOpen={onOpen} className="p-3.5">
         <p className="mb-px font-serif text-[15px] font-semibold text-foreground">{name}</p>
         {role !== undefined && (
           <p className="mb-[9px] text-[12px] text-muted-foreground">{role}</p>
@@ -118,12 +126,12 @@ export function NpcCard({
             ))}
           </div>
         )}
-      </CardLink>
+      </EntityCardShell>
     );
   }
 
   return (
-    <CardLink campaign={campaign} id={id} className="p-4">
+    <EntityCardShell campaign={campaign} path={path} onOpen={onOpen} className="p-4">
       <div className="mb-[2px] flex items-baseline gap-2">
         <span className="font-serif text-[16px] font-semibold text-foreground">{name}</span>
         <span className="font-mono text-[10.5px] text-faint">{npcId}</span>
@@ -157,33 +165,7 @@ export function NpcCard({
           ))}
         </div>
       )}
-    </CardLink>
-  );
-}
-
-/** The card body as one link into the NPC reading view — quiet hover per the
- * app's style, keyboard-focusable by being a link (global focus outline). */
-function CardLink({
-  campaign,
-  id,
-  className,
-  children,
-}: {
-  campaign: string;
-  id: string;
-  className?: string;
-  children: ReactNode;
-}) {
-  return (
-    <Link
-      to={`/${campaign}/file/${npcPath(id)}`}
-      className={cn(
-        "block rounded-lg border border-border bg-card transition-colors hover:border-border-hover",
-        className,
-      )}
-    >
-      {children}
-    </Link>
+    </EntityCardShell>
   );
 }
 
