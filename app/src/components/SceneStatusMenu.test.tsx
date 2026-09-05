@@ -63,9 +63,9 @@ describe("SceneStatusMenu", () => {
   });
 
   test("the conflict line is a quiet inline message, not a toast", () => {
-    const html = render({ message: "Datei extern geändert — neu laden" });
+    const html = render({ message: "Inzwischen geändert — neu laden" });
     expect(html).toContain('aria-live="polite"');
-    expect(html).toContain("Datei extern geändert — neu laden");
+    expect(html).toContain("Inzwischen geändert — neu laden");
   });
 
   test("both densities render the same options", () => {

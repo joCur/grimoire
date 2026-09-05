@@ -203,6 +203,55 @@ test("foreign keys cascade on update and delete", async () => {
   }
 });
 
+// The rename endpoint (store/rename.ts since issue #57) updates a COMPOSITE
+// primary key and lets the database drag the child rows along. A single-column
+// cascade (above) does not prove that: the child FK spans two columns, and a
+// backend that quietly ignored the composite case would corrupt a rename
+// instead of failing loudly. Hence its own smoke case on both runtimes.
+test("a composite primary key cascades on update", async () => {
+  const { db, close } = await openDb(":memory:");
+  try {
+    db.insert(campaigns).values({ id: "beispiel", name: "Beispiel" }).run();
+    db.run(
+      sql`insert into scenes (campaign_id, id, chapter_id, group_slug, title, pos) values ('beispiel', 'alt', '01', 'hafen', 'Szene', 0)`,
+    );
+    db.run(
+      sql`insert into scene_tags (campaign_id, scene_id, tag, pos) values ('beispiel', 'alt', 'social', 0)`,
+    );
+
+    db.run(sql`update scenes set id = 'neu' where campaign_id = 'beispiel' and id = 'alt'`);
+    const tags = db.all<{ scene_id: string }>(sql`select scene_id from scene_tags`);
+    assert.deepEqual(tags, [{ scene_id: "neu" }], "the tag row must follow the scene's new id");
+  } finally {
+    close();
+  }
+});
+
+// The search endpoint builds QUOTED prefix terms (`"tok"*`), because quoting
+// is what keeps a query full of FTS5 operators from turning into syntax
+// (store/search.ts ftsQuery). That is a different parser path than the bare
+// `leucht*` above, so both runtimes get to prove it.
+test("a quoted prefix term matches and operator-looking input stays text", async () => {
+  const { db, close } = await openDb(":memory:");
+  try {
+    db.run(sql`
+      insert into search_fts (title, ref, tags, body, campaign_id, kind, entity_id)
+      values ('Der Leuchtturm', 'leuchtturm', '', 'Verlassen in Eile.', 'beispiel', 'location', 'leuchtturm')
+    `);
+    const hits = db.all<{ entity_id: string }>(
+      sql`select entity_id from search_fts where search_fts match '"leucht"*'`,
+    );
+    assert.deepEqual(hits.map((r) => r.entity_id), ["leuchtturm"]);
+
+    // A term that would be an operator unquoted must simply not match —
+    // never raise a syntax error.
+    const noise = db.all(sql`select entity_id from search_fts where search_fts match '"AND"* "NEAR"*'`);
+    assert.equal(noise.length, 0);
+  } finally {
+    close();
+  }
+});
+
 test("an on-disk database gets WAL and survives a reopen", async () => {
   const { mkdtemp, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");

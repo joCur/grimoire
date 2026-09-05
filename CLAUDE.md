@@ -41,10 +41,14 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 ## Arbeitsweise
 
 - Vertikale Scheiben, eine pro Auftrag. Nicht mehrere Views gleichzeitig.
-- Gegen echte Daten entwickeln: Server im Dev-Modus auf `examples/`
-  zeigen lassen (Default von `CAMPAIGN_ROOT`), keine erfundenen
-  Mock-Objekte. `campaigns/` existiert nur lokal beim Nutzer und darf
-  in Code, Tests und Doku nie vorausgesetzt werden.
+- Gegen echte Daten entwickeln: keine erfundenen Mock-Objekte. Seit dem
+  SQLite-Cutover (ADR #13) ist die Datenbank die Wahrheit — der Dev-Start
+  legt `GRIMOIRE_DATA/grimoire.db` an und übernimmt beim ersten Mal die
+  Kampagnen aus `CAMPAIGN_ROOT` (Default `examples/`); dasselbe macht
+  `bun run --filter @grimoire/server seed`. Tests bekommen pro Fall eine
+  frische In-Memory-DB, geseedet über denselben Importer
+  (`server/test/support/store.ts`). `campaigns/` existiert nur lokal beim
+  Nutzer und darf in Code, Tests und Doku nie vorausgesetzt werden.
 - Der Callout-Renderer (`[!readaloud]`, `[!check]`, `[!secret]`,
   `[!outcome]`, `[!loot]`, `[!note]`) ist die zentrale Komponente —
   Änderungen daran immer gegen
@@ -120,8 +124,9 @@ Stub-HTTP-Server — der Provider-Pfad läuft real). Die Pfade:
 7. Frontmatter-Patch/Status-Regler inkl. 409-Konflikt
 8. Mobil-Startfläche + Inbox-Einwurf bei 390px
 9. Datei bearbeiten: öffnen → Body ändern → speichern → gerendert
-   sichtbar; 409 bei externer Änderung → neu laden statt still
-   überschreiben
+   sichtbar; 409 bei konkurrierendem Zweit-Write → neu laden statt still
+   überschreiben (seit ADR #13 gibt es keine externe Dateiänderung mehr —
+   der Guard ist die Zeilenversion `rev`)
 
 Regel für neue Features: Jedes ready-Ticket benennt die berührten
 kritischen Pfade; wer einen berührt oder schafft, erweitert die

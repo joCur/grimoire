@@ -62,6 +62,10 @@ jobs:
         run: bun run --filter '@grimoire/app' build
 
   # The database foundation on the OTHER runtime (issue #54 AK5, ADR #13).
+  # Grown with the cutover (issue #57): besides FTS5, transactions, UPSERT and
+  # the PRAGMAs, the smoke file now also pins the two mechanisms the store
+  # layer newly leans on — a COMPOSITE primary-key update cascading into its
+  # child rows (the rename) and quoted FTS5 prefix terms (the search).
   # `test` above already exercises it on Bun, where the driver falls back to
   # `bun:sqlite`; this job runs the same smoke file on Node, where the PRIMARY
   # backend `node:sqlite` is used. Deliberately slim — only that one file, no
@@ -95,8 +99,10 @@ jobs:
         run: bun run --filter '@grimoire/server' test:db-smoke:node
 
   # The critical paths of CLAUDE.md, end to end against the real stack: the
-  # suite builds the app itself, starts one server process per test on a copy
-  # of examples/beispiel and points it at the local stub LLM (e2e/README.md).
+  # suite builds the app itself, starts one server process per test on its own
+  # freshly seeded database (imported from a copy of examples/beispiel through
+  # the real first-run migration) and points it at the local stub LLM
+  # (e2e/README.md).
   # Nothing is mocked in the browser, so this job is the last gate before an
   # image is built.
   e2e:

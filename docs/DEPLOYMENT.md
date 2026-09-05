@@ -1,9 +1,16 @@
 # Grimoire — Deployment & Betrieb
 
 Ein Container, ein Prozess: der Hono-Server liefert `/api` **und** den
-gebauten Frontend-Bundle aus `app/dist`. Kampagnendaten liegen außerhalb des
-Images in einem Volume. Zugriffsschutz ist Deployment-Sache, nicht App-Sache
-— Standard ist Tailscale (siehe DECISIONS #3 und #5).
+gebauten Frontend-Bundle aus `app/dist`. Die Kampagnendaten liegen außerhalb
+des Images in einem Volume. Zugriffsschutz ist Deployment-Sache, nicht
+App-Sache — Standard ist Tailscale (siehe DECISIONS #3 und #5).
+
+> **Seit der SQLite-Umstellung (ADR #13):** die Kampagnen-Wahrheit ist **eine
+> SQLite-Datei** — `GRIMOIRE_DATA/grimoire.db`, Default `/data` im Container.
+> `CAMPAIGN_ROOT` ist nur noch die **Quelle der Erstmigration**: beim ersten
+> Start mit leerer Datenbank werden die Markdown-Kampagnen einmal übernommen,
+> danach fasst der Server den Ordner nie wieder an. Zu sichern ist damit das
+> `GRIMOIRE_DATA`-Volume — Abschnitt 2a.
 
 ## 1. Bauen und starten
 
@@ -20,6 +27,7 @@ docker build -t grimoire .
 docker run -d --name grimoire \
   --restart unless-stopped \
   -p 127.0.0.1:3000:3000 \
+  -v /srv/grimoire/data:/data \
   -v /srv/grimoire/campaigns:/campaigns \
   -e ANTHROPIC_API_KEY=sk-ant-… \
   grimoire
@@ -27,23 +35,29 @@ docker run -d --name grimoire \
 
 - `-p 127.0.0.1:3000:3000` bindet den Port bewusst nur auf Loopback; nach
   außen geht es über Tailscale (Abschnitt 3).
-- Das Volume enthält **direkt die Kampagnen-Ordner**, also
+- `/data` ist der **Zustand**: dort liegt `grimoire.db` (plus `-wal`/`-shm`).
+  Das ist das Volume, das gesichert wird (Abschnitt 2a).
+- `/campaigns` enthält **direkt die Kampagnen-Ordner**, also
   `/campaigns/<kampagne>/…` — dieselbe Struktur wie `examples/` (README.md).
+  Es wird **nur beim ersten Start** gelesen (Erstmigration, Abschnitt 2b) und
+  danach nie wieder; nach der Migration kann der Mount auch wegfallen.
 - Schreibrechte: der Container läuft als `uid 1000` (`bun`). Bei einem
-  Bind-Mount einmalig `sudo chown -R 1000:1000 /srv/grimoire/campaigns`,
-  sonst schlagen Session-Log, Inbox und Generator-Drafts fehl.
+  Bind-Mount einmalig `sudo chown -R 1000:1000 /srv/grimoire/data`, sonst
+  kann die Datenbank nicht angelegt werden. `/campaigns` braucht nur
+  **Leserechte**.
 
 **Ohne Volume** startet der Container nicht leer: das Image bringt
-`examples/` als Demo-Kampagne unter `/campaigns` mit. Ein gemountetes Volume
-überdeckt sie einfach — die Demo-Dateien bleiben im Image und sind dann nicht
-sichtbar. Praktisch für einen Smoke-Test:
+`examples/` als Demo-Kampagne unter `/campaigns` mit, die beim ersten Start in
+eine (dann container-interne, flüchtige) Datenbank übernommen wird.
+Praktisch für einen Smoke-Test:
 
 ```bash
 docker run --rm -p 3000:3000 grimoire   # zeigt die Beispielkampagne
 ```
 
 **Update:** neu bauen, Container ersetzen (`docker rm -f grimoire` + `run`).
-Es gibt keinen Zustand im Container — alles steht im Volume.
+Der Container selbst hat keinen Zustand — der steht im `/data`-Volume, und
+ein Start auf einer schon migrierten Datenbank ist ein No-op.
 
 ### Alternative: fertiges Image aus GHCR ziehen
 
@@ -131,11 +145,103 @@ Referenz, weil zu ihnen ein Changelog gehört.
 
 | Variable            | Default      | Bedeutung                                                     |
 | ------------------- | ------------ | ------------------------------------------------------------- |
-| `CAMPAIGN_ROOT`     | `/campaigns` | Ordner mit den Kampagnen-Verzeichnissen (im Image gesetzt)     |
+| `GRIMOIRE_DATA`     | `/data` (im Image; sonst `./data` neben dem `server/`-Paket) | Verzeichnis der SQLite-Datenbank `grimoire.db` — **der Zustand des Deployments** (Abschnitt 2a) |
+| `CAMPAIGN_ROOT`     | `/campaigns` | Ordner mit den Markdown-Kampagnen. Nur **Quelle der Erstmigration** (Abschnitt 2b) — im laufenden Betrieb ungenutzt |
 | `PORT`              | `3000`       | HTTP-Port im Container                                        |
 | `APP_DIST`          | `../app/dist` (relativ zum `server/`-Paket) | Pfad des Frontend-Builds; im Image bereits richtig |
 | `GRIMOIRE_BUILD`    | `dev`        | Build-Id; als Build-Arg in Bundle **und** Server eingebrannt — Release-Tag (`v0.1.0`) bei Release-Images, Commit-SHA bei CI-Images aus `main` |
 | `GRIMOIRE_VERSION`  | `latest`     | **nur im Compose-File**, kein App-Setting: der Image-Tag, den `docker compose` zieht (Abschnitt 1a) |
+
+## 2a. Datenbank, Volume und Sicherung
+
+Die gesamte Kampagnen-Wahrheit ist **eine Datei**:
+
+```
+$GRIMOIRE_DATA/
+  grimoire.db        ← Kampagnen, Szenen, NPCs, Orte, Sessions, Log,
+  grimoire.db-wal      Inbox, Glossar, Generator-Jobs, Suchindex
+  grimoire.db-shm
+```
+
+- `-wal` und `-shm` **gehören zum Datenbestand**. Wer nur `grimoire.db`
+  kopiert, während der Server läuft, kopiert einen unvollständigen Stand.
+- Schema-Migrationen laufen beim Start automatisch (in einer Transaktion,
+  Buchführung in `__drizzle_migrations`). Ein **Downgrade** wird nicht
+  unterstützt: der Rückweg bei Problemen ist die eigene Volume-Sicherung plus
+  Image-Rollback auf den alten Tag (DECISIONS #12).
+- **WAL auf Bind-Mounts:** WAL braucht funktionierendes `mmap`/Locking im
+  gemounteten Dateisystem. Lokale Bind-Mounts und Docker-Volumes sind
+  unproblematisch; **Netzwerk-Dateisysteme (NFS, SMB/CIFS) sind es nicht** —
+  dort gehört die Datenbank auf lokalen Speicher, nicht auf die Freigabe.
+
+### Sicherung — Sache des Stack-Owners
+
+Grimoire hat **bewusst kein eigenes Backup-System** (Planung #52, F3): kein
+`grimoire backup`, keine Auto-Backups vor Migrations-Boots. Es gibt eine
+Datei in einem Volume, und die sichert der Betreiber mit seinen Bordmitteln.
+Zwei Wege, die konsistent sind:
+
+```bash
+# a) im Betrieb, ohne Downtime — ein konsistenter Einzeldatei-Snapshot:
+sqlite3 /srv/grimoire/data/grimoire.db "VACUUM INTO '/backup/grimoire-$(date +%F).db'"
+
+# b) oder Container stoppen und das Verzeichnis komplett sichern:
+docker compose stop
+tar czf /backup/grimoire-$(date +%F).tar.gz -C /srv/grimoire data
+docker compose start
+```
+
+Ein `cp grimoire.db` im laufenden Betrieb ist **kein** Backup — nimm `VACUUM
+INTO` oder stoppe den Container. Der Wiederherstellungsweg ist derselbe
+rückwärts: Container stoppen, Datei(en) zurücklegen, Container starten.
+
+Zusätzliche Beruhigung für den Umstieg: der ursprüngliche Markdown-Baum wird
+von der Migration **nie gelöscht, verschoben oder markiert** — er bleibt als
+lesbarer Vor-Migrations-Stand liegen (Planung #52, F-neu-1).
+
+## 2b. Erstmigration (Markdown → Datenbank)
+
+Beim Start prüft der Server die Datenbank und migriert **nur dann**, wenn sie
+noch leer bzw. unmarkiert ist:
+
+1. Datenbank öffnen/anlegen, Schema-Migrationen laufen lassen.
+2. Ist `meta['migrated_at']` gesetzt **oder** enthält die Datenbank schon
+   Kampagnen? → fertig, `CAMPAIGN_ROOT` wird gar nicht gelesen.
+3. Sonst: jede Kampagne aus `CAMPAIGN_ROOT` übernehmen — **eine Transaktion
+   pro Kampagne**, also entweder vollständig oder nicht. Ein Lauf, der
+   zwischen zwei Kampagnen abbricht, wird beim nächsten Start fortgesetzt.
+
+Was der Importer nicht in Zeilen übersetzen konnte, geht **nicht verloren**:
+die Datei liegt wörtlich in `unknown_files`, und für jeden Vorfall gibt es
+eine Zeile in `migration_report` — abrufbar über
+`GET /api/<kampagne>/migration-report` und in der App als leiser,
+zugeklappter Hinweis auf der Kampagnenseite. **Ein leerer Report ist das
+Erfolgskriterium eines saubereren Imports.**
+
+**Empfohlener Ablauf für eine echte Kampagne** (Planung #52, Risiko R3):
+
+```bash
+# 1. Probelauf auf einer KOPIE, in ein leeres Datenverzeichnis:
+mkdir -p /tmp/grimoire-probe
+docker run --rm \
+  -v /tmp/grimoire-probe:/data \
+  -v /srv/grimoire/campaigns:/campaigns:ro \
+  ghcr.io/jocur/grimoire:v0.1.0 \
+  bun run server/src/cli.ts seed /campaigns
+
+# 2. Report lesen — der seed-Befehl druckt jede Degradation dieses Laufs.
+#    Nichts? Dann ist der Import sauber.
+# 3. Erst danach den echten Container mit dem echten /data-Volume starten.
+```
+
+`grimoire seed [dir]` führt **denselben** Migrationscode aus wie der Boot —
+es gibt keinen zweiten Importer, der auseinanderlaufen könnte. Auch er
+überschreibt nie: eine Datenbank mit Inhalt bleibt unangetastet (`--force`
+existiert nur für Wegwerf-Datenbanken).
+
+**Nach der Migration** ist `CAMPAIGN_ROOT` überflüssig. Der Mount kann
+bleiben (kostet nichts, ist der Vor-Migrations-Stand) oder wegfallen — der
+Server liest ihn nicht mehr.
 
 ### Generator (LLM-Provider)
 

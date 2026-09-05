@@ -141,7 +141,7 @@ describe("shouldAdvanceBase", () => {
   test("a body-neutral new version is adopted — the DM's own status patch", () => {
     // The status regler stays usable next to the open editor (issue #28): its
     // PATCH bumps the mtime and leaves the body alone, so the next „Speichern"
-    // must not answer with „Datei extern geändert".
+    // must not answer with „Inzwischen geändert".
     expect(shouldAdvanceBase(base, fileAt(222, base.body))).toBe(true);
   });
 

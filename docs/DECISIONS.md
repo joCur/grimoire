@@ -190,11 +190,30 @@ diesem Eintrag.
 
 ## 13. SQLite ist die Quelle der Wahrheit (ENTWURF — finalisiert in Scheibe 4)
 
-> **Status: Entwurf.** Eingecheckt mit Scheibe 1 der Migration (#54), damit
-> Schema und Werkzeug nicht ohne festgehaltene Begründung im Repo liegen.
-> Finalisiert wird dieser Eintrag in Scheibe 4 (#52), wenn der Cutover
-> abgeschlossen ist. Bis dahin gilt **ADR #1 für den laufenden Betrieb**: die
-> Lauf-API liest weiterhin Dateien.
+> **Status: Entwurf, aber ab Scheibe 2 (#57) wirksam.** Eingecheckt mit
+> Scheibe 1 (#54), damit Schema und Werkzeug nicht ohne festgehaltene
+> Begründung im Repo liegen. **Seit dem Cutover (#57) liest und schreibt die
+> Lauf-API ausschließlich die Datenbank** — ADR #1 („Markdown-Dateien sind die
+> Datenbank") gilt damit nur noch für das Body-Vokabular und für das
+> Import-Format, nicht mehr für die Speicherung. Formal finalisiert wird
+> dieser Eintrag in Scheibe 4 (#52), wenn Generator-Jobs persistent sind und
+> die letzten Dateileser aus dem Baum verschwinden.
+>
+> Was Scheibe 2 konkret eingelöst hat: alle Read-/Write-Endpoints als Queries
+> (`server/src/store/`), `rev` als 409-Guard (löst #37), FTS5 statt Fuse.js,
+> `GET/PUT /:campaign/glossary` auf der Glossar-Tabelle,
+> `GET /:campaign/migration-report` samt leisem UI-Hinweis, Boot =
+> Schema-Migrator + Erstmigration, chokidar-Watcher entfernt (die
+> Versions-Zählung kommt aus `campaigns.version`).
+>
+> Zwei Abweichungen von der Planung, hier festgehalten, weil sie Verhalten
+> ändern: (a) **eine Szene wird über ihre `id` adressiert**, nicht mehr über
+> ihren früheren Dateinamen (`scenes.file_slug` entfällt laut Planung, also
+> existiert der Dateiname nirgends mehr — der Pfad lautet
+> `<kapitel>/<ort>/<id>.md`); (b) **`POST /rename` ist mit dem Cutover auf die
+> Datenbank umgestellt** statt erst in Scheibe 3 — der Datei-Kaskade hätte
+> sonst niemand mehr zugesehen. Scheibe 3 behält `GET /usage` und die
+> Rename-Vorschau auf Usage-Zahlen.
 
 **Löst ADR #11 ab** (und damit die dort formulierte Reihenfolge „Markdown
 bleibt vorerst Source of Truth"). Die dort benannten Trigger sind eingetreten:

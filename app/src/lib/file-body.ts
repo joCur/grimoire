@@ -56,7 +56,7 @@ export function hasBodyChanges(original: string, draft: string): boolean {
  * new version is a foreign EDIT — the status regler stays usable while the
  * editor is open (issue #28) and its PATCH bumps the mtime without touching a
  * byte of the body. Inheriting exactly those keeps the DM's own status change
- * from answering the next „Speichern" with „Datei extern geändert".
+ * from answering the next „Speichern" with „Inzwischen geändert".
  *
  * The rule is therefore: same path, different version, IDENTICAL body. A write
  * that changed only frontmatter (from anywhere) is folded in as well, which is

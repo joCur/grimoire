@@ -14,8 +14,9 @@ import { ReviewRoute } from "@/routes/review";
 import { SceneRoute } from "@/routes/scene";
 
 // Shared layout of all campaign-scoped views: mounts the version polling
-// exactly once per campaign (issue #8 client side) — when the server's file
-// watcher bumps the counter, the campaign's queries refetch quietly.
+// exactly once per campaign (issue #8 client side) — when the server bumps
+// the counter (which it does in the same transaction as every write since
+// issue #57), the campaign's queries refetch quietly.
 function CampaignScope() {
   const { campaign = "" } = useParams();
   useCampaignVersion(campaign);

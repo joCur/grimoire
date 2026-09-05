@@ -17,9 +17,16 @@ services:
     ports:
       - "127.0.0.1:3000:3000" # nie 0.0.0.0 — Zugriff läuft über Tailscale
     volumes:
-      # Kampagnendaten liegen AUSSERHALB des Containers. Der Container läuft
-      # als uid 1000 — einmalig: chown -R 1000:1000 ./campaigns
-      # Ohne existierendes Verzeichnis zeigt der Container die Demo-Kampagne.
+      # DIE Kampagnen-Wahrheit: die SQLite-Datei (grimoire.db + -wal/-shm).
+      # Das ist der Zustand des Deployments — dieses Volume ist das, was
+      # gesichert werden muss (docs/DEPLOYMENT.md Abschnitt 2a).
+      # Der Container läuft als uid 1000 — einmalig: chown -R 1000:1000 ./data
+      - ./data:/data
+      # Nur noch QUELLE der Erstmigration (ADR #13): beim ersten Start mit
+      # leerer Datenbank werden diese Markdown-Kampagnen einmal übernommen;
+      # danach wird der Ordner nie wieder gelesen und bleibt unangetastet
+      # liegen — der lesbare Vor-Migrations-Stand. Ohne existierendes
+      # Verzeichnis übernimmt der Container die Demo-Kampagne aus dem Image.
       - ./campaigns:/campaigns
     environment:
       # Generator (optional): ohne Key antwortet nur /generate mit 503,

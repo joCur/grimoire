@@ -21,7 +21,7 @@
 // action own the structured fields.
 //
 // Losing work is the one real risk here, so:
-//   * a conflict (409) keeps the draft and only says „Datei extern geändert" —
+//   * a conflict (409) keeps the draft and only says „Inzwischen geändert" —
 //     the next „Speichern" carries the mtime the re-read brought and works,
 //   * a failed write keeps the draft as well,
 //   * „Abbrechen" with unsaved changes asks first (Dialog, never window.confirm),
