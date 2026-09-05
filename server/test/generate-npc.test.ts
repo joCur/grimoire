@@ -1,7 +1,9 @@
 // NPC generator tests (issue #21). Same harness as the scene pipeline tests
-// (generator.test.ts): a TEMP COPY of the example campaign (examples/ is the
-// committed format reference and must never be mutated) and a FakeProvider
-// with scripted raw replies instead of a real LLM.
+// (generator.test.ts): a database seeded from the example campaign — once for
+// the whole file, because cases build on what an earlier one applied — and a
+// FakeProvider with scripted raw replies instead of a real LLM. Since the
+// cutover (issue #57) an applied draft is a ROW, so "was it written?" is
+// asked through the API.
 //
 // What is asserted here is what the ticket is about: the NPC run uses the
 // SAME mechanics as the scene run (correction turns, truncation fail-fast,
@@ -9,15 +11,16 @@
 // assets, its own context (no chapter) and its own validation rules.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { cp, mkdtemp, readFile, rm, stat } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import type { GenerateJob, GenerateNpcResult, GenerateUsage } from "@grimoire/shared";
+import type {
+  FileResponse,
+  GenerateJob,
+  GenerateNpcResult,
+  GenerateUsage,
+} from "@grimoire/shared";
 import { app } from "../src/server";
-import { getCampaignRoot, setCampaignRoot } from "../src/config";
 import { clearJobsForTests } from "../src/generate-jobs";
 import { setProviderForTests } from "../src/generator";
+import { dropStore, seedStore } from "./support/store";
 import type {
   CompletionResult,
   CorrectionTurn,
@@ -26,32 +29,25 @@ import type {
   TokenUsage,
 } from "../src/llm-provider";
 
-const EXAMPLES = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../../examples");
-
-let tmpRoot = "";
-let originalRoot = "";
-
-const absOf = (rel: string) => path.join(tmpRoot, "beispiel", rel);
-
+/** Whether an entity is there: its address resolves through GET /file. */
 async function exists(rel: string): Promise<boolean> {
-  try {
-    await stat(absOf(rel));
-    return true;
-  } catch {
-    return false;
-  }
+  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  return res.status === 200;
+}
+
+/** GET /file of an applied draft. */
+async function read(rel: string): Promise<FileResponse> {
+  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  expect(res.status).toBe(200);
+  return (await res.json()) as FileResponse;
 }
 
 beforeAll(async () => {
-  originalRoot = getCampaignRoot();
-  tmpRoot = await mkdtemp(path.join(os.tmpdir(), "grimoire-npc-generator-"));
-  await cp(path.join(EXAMPLES, "beispiel"), path.join(tmpRoot, "beispiel"), { recursive: true });
-  setCampaignRoot(tmpRoot);
+  await seedStore();
 });
 
-afterAll(async () => {
-  setCampaignRoot(originalRoot);
-  await rm(tmpRoot, { recursive: true, force: true });
+afterAll(() => {
+  dropStore();
 });
 
 afterEach(() => {
@@ -458,8 +454,8 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(fake.calls).toHaveLength(0);
     // no job was created for a request error
     expect(await fetchJob()).toBeNull();
-    // and the existing file is untouched
-    expect(await readFile(absOf("npcs/fenn.md"), "utf8")).toContain("id: fenn");
+    // and the existing npc is untouched
+    expect((await read("npcs/fenn.md")).frontmatter.id).toBe("fenn");
   });
 
   test("an id the MODEL picks that collides is a correction turn, then a 422", async () => {
@@ -695,16 +691,21 @@ describe("apply an npc draft", () => {
     const res = await runAndApply("apply-happy");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ written: ["npcs/apply-happy.md"] });
-    expect(await exists("npcs/apply-happy.md")).toBe(true);
-    const written = await readFile(absOf("npcs/apply-happy.md"), "utf8");
-    expect(written).toBe(npcMarkdown({ id: "apply-happy" }));
-    // the draft is on disk — nothing left to restore
+    // the draft is stored — nothing left to restore
     expect(await fetchJob()).toBeNull();
 
-    // …and the written file is a real npc file for the rest of the API
-    const file = await app.request("/api/beispiel/file?path=npcs/apply-happy.md");
-    expect(file.status).toBe(200);
-    expect((await file.json()) as { kind: string }).toMatchObject({ kind: "npc" });
+    // …and it is a real npc for the rest of the API: every reviewed field
+    // came through, the quoted quickstats included, and `## Beziehungen`
+    // (which became relation ROWS) is rendered back into the body
+    const written = await read("npcs/apply-happy.md");
+    expect(written.kind).toBe("npc");
+    expect(written.frontmatter.id).toBe("apply-happy");
+    expect(written.frontmatter.name).toBe("Grella");
+    expect(written.frontmatter.status).toBe("alive");
+    expect(written.frontmatter.quickstats).toEqual({ insight: "+3", deception: "+5" });
+    expect(written.frontmatter.statblock).toBe("Roll20: Grella");
+    expect(written.body).toContain("> [!secret] Kennt ein zweites Versteck unter dem Kai.");
+    expect(written.body).toContain("- jorna: schuldet ihr einen Gefallen");
   });
 
   test("a stale jobId leaves the job alone", async () => {
@@ -723,7 +724,7 @@ describe("apply an npc draft", () => {
     expect((await generateNpc(npcBody)).status).toBe(422);
 
     // …and a client that posts the draft anyway gets a 409 with the path
-    const before = await readFile(absOf("npcs/apply-happy.md"), "utf8");
+    const before = await read("npcs/apply-happy.md");
     const res = await postJson("/api/beispiel/generate/apply", {
       npc: { path: "npcs/apply-happy.md", markdown: npcMarkdown({ id: "apply-happy" }) },
     });
@@ -732,7 +733,9 @@ describe("apply an npc draft", () => {
       error: "target files already exist",
       conflicts: ["npcs/apply-happy.md"],
     });
-    expect(await readFile(absOf("npcs/apply-happy.md"), "utf8")).toBe(before);
+    const after = await read("npcs/apply-happy.md");
+    expect(after.raw).toBe(before.raw);
+    expect(after.mtimeMs).toBe(before.mtimeMs); // the row's rev never moved
   });
 
   test("400 re-validation: path, id, status, frontmatter — nothing written", async () => {

@@ -1,6 +1,9 @@
-// Generator pipeline tests (issue #6). Like the write-API tests they run
-// against a TEMP COPY of the example campaign (examples/ is the committed
-// format reference and must never be mutated).
+// Generator pipeline tests (issue #6). Since the cutover (issue #57) they run
+// against a DATABASE seeded from the example campaign, and the apply step
+// writes ROWS — so "was it written?" is asked through the API, never off disk.
+// The database is seeded ONCE for the whole file (not per case): several
+// cases build on what an earlier one applied (a conflict needs an existing
+// entity), exactly as the shared temp copy used to allow.
 //
 // No real LLM and no ANTHROPIC_API_KEY: a FakeProvider with scripted raw
 // replies is injected via setProviderForTests(). It records every call, so
@@ -19,14 +22,10 @@
 // makes "running" observable without a single timer.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { cp, mkdtemp, readFile, rm, stat } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import type { GenerateJob, GenerateResult, GenerateUsage } from "@grimoire/shared";
+import type { FileResponse, GenerateJob, GenerateResult, GenerateUsage } from "@grimoire/shared";
 import { app } from "../src/server";
-import { getCampaignRoot, setCampaignRoot } from "../src/config";
 import { clearJobsForTests } from "../src/generate-jobs";
+import { dropStore, seedStore } from "./support/store";
 import {
   DEFAULT_CORRECTION_TURNS,
   MAX_CORRECTION_TURNS,
@@ -43,32 +42,29 @@ import type {
   TokenUsage,
 } from "../src/llm-provider";
 
-const EXAMPLES = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../../examples");
-
-let tmpRoot = "";
-let originalRoot = "";
-
-const absOf = (rel: string) => path.join(tmpRoot, "beispiel", rel);
-
+/**
+ * Whether an entity is there: the address resolves through GET /file. That
+ * is the successor of the `stat()` this file used — a draft that was applied
+ * is a ROW, and the only thing that matters is that the app can open it.
+ */
 async function exists(rel: string): Promise<boolean> {
-  try {
-    await stat(absOf(rel));
-    return true;
-  } catch {
-    return false;
-  }
+  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  return res.status === 200;
+}
+
+/** GET /file of an applied draft. */
+async function read(rel: string): Promise<FileResponse> {
+  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  expect(res.status).toBe(200);
+  return (await res.json()) as FileResponse;
 }
 
 beforeAll(async () => {
-  originalRoot = getCampaignRoot();
-  tmpRoot = await mkdtemp(path.join(os.tmpdir(), "grimoire-generator-"));
-  await cp(path.join(EXAMPLES, "beispiel"), path.join(tmpRoot, "beispiel"), { recursive: true });
-  setCampaignRoot(tmpRoot);
+  await seedStore();
 });
 
-afterAll(async () => {
-  setCampaignRoot(originalRoot);
-  await rm(tmpRoot, { recursive: true, force: true });
+afterAll(() => {
+  dropStore();
 });
 
 afterEach(() => {
@@ -169,6 +165,15 @@ function sceneMarkdown(over: { status?: string; npcs?: string; callout?: string 
     "> [!check] Wisdom (Perception) DC 12, um Grella zu bemerken.",
     "",
   ].join("\n");
+}
+
+/**
+ * The same scene under its own ID. Needed wherever a case applies a SECOND
+ * scene: the id is the primary key since the cutover, so reusing
+ * `treffen-am-kai` would be a conflict rather than a fresh draft.
+ */
+function sceneWithId(id: string): string {
+  return sceneMarkdown().replace("id: treffen-am-kai", `id: ${id}`);
 }
 
 /**
@@ -800,8 +805,8 @@ describe("POST /api/:campaign/generate", () => {
     expect(req.context.npcs.map((n) => n.id).sort()).toEqual(["fenn", "jorna"]);
     expect(req.glossary).toContain("Leuchtturmwärter");
 
-    // still a preview: neither the directory nor the scene exist
-    expect(await exists(chapter)).toBe(false);
+    // still a preview: neither the chapter nor the scene exist
+    expect(await exists(`${chapter}/_chapter.md`)).toBe(false);
     expect(await exists(scenePath)).toBe(false);
   });
 
@@ -812,16 +817,11 @@ describe("POST /api/:campaign/generate", () => {
       (await generate({ ...generateBody, chapter: "npcs", newChapter: true }))
         .status,
     ).toBe(404);
-    // an existing NON-directory of that name is not a chapter either
-    expect(
-      (
-        await generate({
-          ...generateBody,
-          chapter: "glossary.md",
-          newChapter: true,
-        })
-      ).status,
-    ).toBe(404);
+    // The file era also refused `chapter: "glossary.md"` here, because a
+    // FILE of that name existed where the directory would go. There is no
+    // file tree left to collide with, so that case is gone — what still
+    // guards the chapter id is the reserved-name check above and the
+    // traversal check below.
     // traversal stays a 400, and the flag itself is type-checked
     expect(
       (await generate({ ...generateBody, chapter: "..", newChapter: true }))
@@ -872,30 +872,39 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ written: [SCENE_PATH, "npcs/grella.md"] });
 
-    // exact bytes on disk, status draft included
-    const scene = await readFile(absOf(SCENE_PATH), "utf8");
-    expect(scene).toBe(sceneMarkdown());
-    expect(scene).toContain("\nstatus: draft\n");
-    expect(await readFile(absOf("npcs/grella.md"), "utf8")).toBe(STUB_MARKDOWN);
+    // the drafts are entities now — every field the review showed survived
+    // the insert, `status: draft` included (that is what the app filters on)
+    const scene = await read(SCENE_PATH);
+    expect(scene.kind).toBe("scene");
+    expect(scene.frontmatter.id).toBe("treffen-am-kai");
+    expect(scene.frontmatter.title).toBe("Treffen am Kai");
+    expect(scene.frontmatter.status).toBe("draft");
+    expect(scene.frontmatter.npcs).toEqual(["fenn", "grella"]);
+    expect(scene.frontmatter.tags).toEqual(["social"]);
+    expect(scene.body).toContain("> [!readaloud] Nebel liegt über dem Kai");
+    expect(scene.body).toContain("> [!check] Wisdom (Perception) DC 12");
 
-    // and the read API sees them
-    const get = await app.request(
-      `/api/beispiel/file?path=${encodeURIComponent(SCENE_PATH)}`,
-    );
-    expect(get.status).toBe(200);
-    const file = (await get.json()) as { kind: string; frontmatter: Record<string, unknown> };
-    expect(file.kind).toBe("scene");
-    expect(file.frontmatter.status).toBe("draft");
+    const stub = await read("npcs/grella.md");
+    expect(stub.kind).toBe("npc");
+    expect(stub.frontmatter.name).toBe("Grella");
+    expect(stub.frontmatter.status).toBe("alive");
+    expect(stub.body).toContain("## Will");
   });
 
   test("409 lists all conflicting paths and writes nothing", async () => {
-    const existing = "01-salzhafen/hafen/ankunft-leuchtturm.md";
-    const before = await readFile(absOf(existing), "utf8");
+    // The conflict is decided by ID now (draftTargetExists), so the existing
+    // scene is named by its address — `<chapter>/<group>/<id>.md`.
+    const existing = "01-salzhafen/hafen/lighthouse-arrival.md";
+    const before = await read(existing);
     const fresh = "01-salzhafen/hafen/ganz-neu.md";
+    // The free draft needs its own ID, not just its own file name: two
+    // entities cannot share an id, so an id already in use would make this
+    // one a conflict as well.
+    const freshMarkdown = sceneWithId("ganz-neu");
     const res = await postJson("/api/beispiel/generate/apply", {
       scenes: [
-        { path: existing, markdown: sceneMarkdown() },
-        { path: fresh, markdown: sceneMarkdown() },
+        { path: existing, markdown: sceneWithId("lighthouse-arrival") },
+        { path: fresh, markdown: freshMarkdown },
         { path: SCENE_PATH, markdown: sceneMarkdown() }, // written by the previous test
       ],
       stubs: [{ kind: "npc", id: "grella", markdown: STUB_MARKDOWN }], // also exists now
@@ -905,7 +914,9 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect(body.conflicts).toEqual([existing, SCENE_PATH, "npcs/grella.md"]);
     // nothing written, nothing overwritten
     expect(await exists(fresh)).toBe(false);
-    expect(await readFile(absOf(existing), "utf8")).toBe(before);
+    const after = await read(existing);
+    expect(after.raw).toBe(before.raw);
+    expect(after.mtimeMs).toBe(before.mtimeMs); // the row's rev never moved
   });
 
   test("400 on path traversal and unsafe targets — nothing written", async () => {
@@ -1031,7 +1042,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     const chapterRel = `${chapter}/_chapter.md`;
 
     let res = await postJson("/api/beispiel/generate/apply", {
-      scenes: [{ path: scenePath, markdown: sceneMarkdown() }],
+      scenes: [{ path: scenePath, markdown: sceneWithId("erste-szene") }],
       chapter,
       chapterTitle: "Kapitel 3: Die Schmugglerbucht",
     });
@@ -1039,36 +1050,35 @@ describe("POST /api/:campaign/generate/apply", () => {
     // the chapter file comes first — the drafts live inside it
     expect(await res.json()).toEqual({ written: [chapterRel, scenePath] });
 
-    const written = await readFile(absOf(chapterRel), "utf8");
-    expect(written).toBe(
-      `---\nid: ${chapter}\ntitle: 'Kapitel 3: Die Schmugglerbucht'\nstatus: planned\n---\n`,
-    );
-    // and the read API sees it as a chapter with its title
-    const get = await app.request(`/api/beispiel/file?path=${encodeURIComponent(chapterRel)}`);
-    expect(get.status).toBe(200);
-    const file = (await get.json()) as { frontmatter: Record<string, unknown> };
-    expect(file.frontmatter.title).toBe("Kapitel 3: Die Schmugglerbucht");
-    expect(file.frontmatter.status).toBe("planned");
+    // the chapter row carries the title the app sent, and the `planned`
+    // status the generator gives a chapter it created (never `active`)
+    const written = await read(chapterRel);
+    expect(written.kind).toBe("chapter");
+    expect(written.frontmatter.id).toBe(chapter);
+    expect(written.frontmatter.title).toBe("Kapitel 3: Die Schmugglerbucht");
+    expect(written.frontmatter.status).toBe("planned");
 
     // second apply into the SAME chapter: the existing _chapter.md is left
     // untouched (not a conflict, not rewritten) — only the new scene lands
     const second = `${chapter}/zweite-szene.md`;
     res = await postJson("/api/beispiel/generate/apply", {
-      scenes: [{ path: second, markdown: sceneMarkdown() }],
+      scenes: [{ path: second, markdown: sceneWithId("zweite-szene") }],
       chapter,
       chapterTitle: "Ein anderer Titel",
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ written: [second] });
-    expect(await readFile(absOf(chapterRel), "utf8")).toBe(written);
+    const again = await read(chapterRel);
+    expect(again.frontmatter.title).toBe(written.frontmatter.title);
+    expect(again.mtimeMs).toBe(written.mtimeMs); // not even a rev bump
   });
 
   test("new-chapter batch stays all-or-nothing: a scene conflict writes no _chapter.md", async () => {
     const chapter = "04-konflikt";
-    const existing = "01-salzhafen/hafen/ankunft-leuchtturm.md";
+    const existing = "01-salzhafen/hafen/lighthouse-arrival.md";
     const res = await postJson("/api/beispiel/generate/apply", {
       scenes: [
-        { path: `${chapter}/neu.md`, markdown: sceneMarkdown() },
+        { path: `${chapter}/neu.md`, markdown: sceneWithId("konflikt-neu") },
         { path: existing, markdown: sceneMarkdown() },
       ],
       chapter,
@@ -1077,7 +1087,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect(res.status).toBe(409);
     expect(((await res.json()) as { conflicts: string[] }).conflicts).toEqual([existing]);
     expect(await exists(`${chapter}/_chapter.md`)).toBe(false);
-    expect(await exists(chapter)).toBe(false);
+    expect(await exists(`${chapter}/neu.md`)).toBe(false);
   });
 
   test("400 on half or unusable chapter arguments — nothing written", async () => {
@@ -1307,7 +1317,9 @@ describe("generate jobs", () => {
 
     // a stale id (a newer run started meanwhile) must not drop this job
     let res = await postJson("/api/beispiel/generate/apply", {
-      scenes: [{ path: "01-salzhafen/hafen/job-apply-stale.md", markdown: sceneMarkdown() }],
+      scenes: [
+        { path: "01-salzhafen/hafen/job-apply-stale.md", markdown: sceneWithId("job-apply-stale") },
+      ],
       jobId: "00000000-0000-0000-0000-000000000000",
     });
     expect(res.status).toBe(200);

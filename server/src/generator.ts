@@ -1245,40 +1245,60 @@ export async function applyGenerated(
   const chapterFile = await newChapterTarget(campaign, chapter, chapterTitle);
   if (chapterFile !== null) targets.unshift(chapterFile);
 
+  const drafts = targets.map((t) => {
+    const parsed = parseMarkdown(t.markdown, t.rel, 0);
+    // The ADDRESS the entity will have (store/paths) — for a scene that is
+    // `<chapter>/<group>/<id>.md`, derived from the FRONTMATTER id, because
+    // that is the key `insertDraft` writes under. The model's file name is
+    // not part of the addressing any more, so it must not decide anything
+    // here either: checking the path-derived id while inserting the
+    // frontmatter id would let a colliding draft past the 409 and into a
+    // primary-key violation.
+    return {
+      rel: t.rel,
+      address: draftAddress(t.rel, parsed.frontmatter),
+      frontmatter: parsed.frontmatter,
+      body: parsed.body,
+    };
+  });
+
   const seen = new Set<string>();
-  for (const t of targets) {
-    if (seen.has(t.rel)) throw new ApiError(400, `duplicate target path: ${t.rel}`);
-    seen.add(t.rel);
+  for (const draft of drafts) {
+    if (seen.has(draft.address)) throw new ApiError(400, `duplicate target path: ${draft.rel}`);
+    seen.add(draft.address);
   }
 
   // Validate ALL, then write: collect every conflict before a single row is
   // inserted. `draftTargetExists` asks by ID, which is the key now — so a
   // draft that would collide with an existing entity is caught even when the
-  // model chose a different file name for it.
+  // model chose a different file name for it. The conflict is REPORTED under
+  // the path the client sent, which is the draft it has to fix.
   const conflicts: string[] = [];
-  for (const t of targets) {
-    if (await draftTargetExists(campaign, t.rel)) conflicts.push(t.rel);
+  for (const draft of drafts) {
+    if (await draftTargetExists(campaign, draft.address)) conflicts.push(draft.rel);
   }
   if (conflicts.length > 0) {
     throw new ApiError(409, "target files already exist", { conflicts });
   }
 
-  const drafts = targets.map((t) => {
-    const parsed = parseMarkdown(t.markdown, t.rel, 0);
-    return { rel: t.rel, frontmatter: parsed.frontmatter, body: parsed.body };
-  });
-  await applyDrafts(campaign, drafts);
-  // The written paths are the ADDRESSES the entities now have (store/paths):
-  // for a scene that is `<chapter>/<group>/<id>.md`, which is where the app
-  // opens it — the model's file name is not part of the addressing any more.
-  const written = drafts.map((draft) => {
-    const kind = kindFromPath(draft.rel);
-    if (kind !== "scene") return draft.rel;
-    const segments = draft.rel.split("/");
-    const chapterId = segments[0] ?? "";
-    const groupSlug = segments.length === 3 ? (segments[1] ?? "") : "";
-    const id = typeof draft.frontmatter.id === "string" ? draft.frontmatter.id : "";
-    return id === "" ? draft.rel : scenePath(chapterId, groupSlug, id);
-  });
-  return { written };
+  await applyDrafts(
+    campaign,
+    drafts.map((draft) => ({ rel: draft.rel, frontmatter: draft.frontmatter, body: draft.body })),
+  );
+  return { written: drafts.map((draft) => draft.address) };
+}
+
+/**
+ * Where a draft will live: its path, with the id segment taken from the
+ * frontmatter when there is one. Only scenes can actually differ (an npc or
+ * location draft is validated against its file name, a chapter's id IS the
+ * first segment), but the rule is stated once for all of them.
+ */
+function draftAddress(rel: string, frontmatter: Record<string, unknown>): string {
+  const id = typeof frontmatter.id === "string" ? frontmatter.id.trim() : "";
+  if (id === "" || kindFromPath(rel) !== "scene") return rel;
+  const segments = rel.split("/");
+  const chapterId = segments[0] ?? "";
+  const groupSlug = segments.length === 3 ? (segments[1] ?? "") : "";
+  return scenePath(chapterId, groupSlug, id);
 }

@@ -1,47 +1,35 @@
-// Rename-cascade tests (issue #30). Like the other write tests these run
-// against a TEMP COPY of the example campaign — examples/ is the committed
-// format reference and must never be mutated. The copy is re-made before
-// EVERY test: a rename moves files around, so tests must not inherit each
-// other's filesystem.
+// Rename-cascade tests (issue #30, ported to the database in issue #57).
 //
-// The recurring assertion is BYTE-EXACTNESS (issue #30 AK5, "nur
-// Referenzstellen ändern sich"): every affected file is compared against the
-// ORIGINAL example file with nothing but the id token substituted — quoting,
-// spacing, comments and prose included.
+// The rename is a primary-key UPDATE with a cascade now (store/rename.ts), so
+// the assertions changed their MEDIUM but not their subject: every reference
+// site is read back THROUGH THE API — the scene's `npcs` list, the
+// counterpart's `## Beziehungen` line, the scene's `location`, the session's
+// `scenes_played` and its log markers, the `chapter` fields of npcs,
+// locations and scenes. That is the contract the app sees; the bytes of a
+// file are not a thing any more.
+//
+// What byte-exactness became: the surrounding VALUES must survive a rename
+// untouched (a display name that happens to contain the old id, quickstats,
+// the `roll20-page`, the log's timestamps and hashtags). Those are asserted
+// individually, because that is what "nur Referenzstellen ändern sich"
+// (AK5) means once the values live in columns.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { cp, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import type { CampaignTree } from "@grimoire/shared";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import type { CampaignTree, FileResponse } from "@grimoire/shared";
 import { app } from "../src/server";
-import { getCampaignRoot, setCampaignRoot } from "../src/config";
+import { dropStore, seedStore } from "./support/store";
 
-const EXAMPLES = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../../examples");
+beforeEach(async () => {
+  await seedStore();
+});
 
-let tmpRoot = "";
-let originalRoot = "";
+afterEach(() => {
+  dropStore();
+});
 
-const absOf = (rel: string) => path.join(tmpRoot, "beispiel", rel);
-const read = (rel: string) => readFile(absOf(rel), "utf8");
-const exists = async (rel: string) => {
-  try {
-    await stat(absOf(rel));
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-/** Original bytes of an example file (the untouched reference). */
-const original = (rel: string) => readFile(path.join(EXAMPLES, "beispiel", rel), "utf8");
-
-/** Everything after the frontmatter block's closing delimiter. */
-function bodyOf(raw: string): string {
-  const at = raw.indexOf("\n---\n");
-  return at === -1 ? raw : raw.slice(at + "\n---\n".length);
-}
+const SCENE_A = "01-salzhafen/hafen/lighthouse-arrival.md";
+const SCENE_B = "01-salzhafen/hafen/smuggler-captured.md";
+const SESSION = "sessions/2026-01-15.md";
 
 interface RenameResponse {
   renamed: { from: string; to: string };
@@ -63,133 +51,115 @@ async function renameOk(body: unknown): Promise<RenameResponse> {
   return (await res.json()) as RenameResponse;
 }
 
-/** mtimes of every markdown file of the campaign, by campaign-relative path. */
-async function mtimes(rel = ""): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
-  const dir = absOf(rel);
-  for (const e of await readdir(dir, { withFileTypes: true })) {
-    if (e.name.startsWith(".")) continue;
-    const childRel = rel === "" ? e.name : `${rel}/${e.name}`;
-    if (e.isDirectory()) {
-      for (const [k, v] of await mtimes(childRel)) out.set(k, v);
-    } else if (e.name.endsWith(".md")) {
-      out.set(childRel, (await stat(absOf(childRel))).mtimeMs);
-    }
-  }
-  return out;
+/** GET /file — the way the app sees an entity. */
+async function read(rel: string): Promise<FileResponse> {
+  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  expect(res.status).toBe(200);
+  return (await res.json()) as FileResponse;
 }
 
-beforeAll(async () => {
-  originalRoot = getCampaignRoot();
-  tmpRoot = await mkdtemp(path.join(os.tmpdir(), "grimoire-rename-"));
-  setCampaignRoot(tmpRoot);
-});
+/** Whether an address resolves at all (404 = the entity is not there). */
+async function exists(rel: string): Promise<boolean> {
+  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  return res.status === 200;
+}
 
-afterAll(async () => {
-  setCampaignRoot(originalRoot);
-  await rm(tmpRoot, { recursive: true, force: true });
-});
+async function tree(): Promise<CampaignTree> {
+  const res = await app.request("/api/beispiel/tree");
+  expect(res.status).toBe(200);
+  return (await res.json()) as CampaignTree;
+}
 
-beforeEach(async () => {
-  await rm(path.join(tmpRoot, "beispiel"), { recursive: true, force: true });
-  await cp(path.join(EXAMPLES, "beispiel"), path.join(tmpRoot, "beispiel"), { recursive: true });
-});
-
-const SCENE_A = "01-salzhafen/hafen/ankunft-leuchtturm.md";
-const SCENE_B = "01-salzhafen/hafen/von-schmugglern-erwischt.md";
-const SESSION = "sessions/2026-01-15.md";
+/**
+ * The campaign's version counter — the successor of the mtime snapshot the
+ * file version compared: a rename bumps it in its own transaction, so an
+ * UNCHANGED counter is the proof that nothing was written.
+ */
+async function version(): Promise<number> {
+  const res = await app.request("/api/beispiel/version");
+  expect(res.status).toBe(200);
+  return ((await res.json()) as { version: number }).version;
+}
 
 describe("POST /api/:campaign/rename — npc", () => {
-  test("cascade: file, own id, scene npcs arrays and the Beziehungen line", async () => {
-    const fennBefore = await original("npcs/fenn.md");
-    const sceneABodyBefore = bodyOf(await original(SCENE_A));
-
+  test("cascade: own id, scene npcs list and the Beziehungen counterpart", async () => {
     const result = await renameOk({ kind: "npc", oldId: "jorna", newId: "hafenmeisterin" });
 
     expect(result.renamed).toEqual({ from: "npcs/jorna.md", to: "npcs/hafenmeisterin.md" });
-    // von-schmugglern-erwischt.md mentions "Jorna" in a `## If:` heading —
+    // von-schmugglern-erwischt mentions "Jorna" in a `## If:` heading —
     // prose, so it is NOT in the plan.
     expect(result.changed).toEqual([
-      "01-salzhafen/hafen/ankunft-leuchtturm.md",
+      SCENE_A,
       "npcs/fenn.md",
       "npcs/hafenmeisterin.md",
     ]);
 
-    // the file moved and is byte-identical apart from its own `id:` value —
-    // the display name is not an id, the quickstats keep their `+2`
+    // the npc is addressed by its new id, and everything that is NOT an id
+    // survived: the display name still says Jorna, the quickstats are intact
     expect(await exists("npcs/jorna.md")).toBe(false);
     const renamed = await read("npcs/hafenmeisterin.md");
-    expect(renamed).toBe((await original("npcs/jorna.md")).replace("id: jorna", "id: hafenmeisterin"));
-    expect(renamed).toContain("name: Hafenmeisterin Jorna\n");
-    expect(renamed).toContain("quickstats: { insight: +2, passive-perception: 12 }\n");
+    expect(renamed.frontmatter.id).toBe("hafenmeisterin");
+    expect(renamed.frontmatter.name).toBe("Hafenmeisterin Jorna");
+    expect(renamed.frontmatter.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
 
-    // fenn.md: the Beziehungen line, and ONLY the id token in it
-    const fennAfter = await read("npcs/fenn.md");
-    expect(fennAfter).toBe(fennBefore.replace("- jorna:", "- hafenmeisterin:"));
-    expect(fennAfter).toContain("- hafenmeisterin: alte Bekannte; er weicht ihrem Blick aus\n");
+    // fenn's `## Beziehungen` names the counterpart by ID — it followed
+    const fenn = await read("npcs/fenn.md");
+    expect(fenn.body).toContain("- hafenmeisterin: alte Bekannte; er weicht ihrem Blick aus");
+    expect(fenn.body).not.toContain("- jorna:");
 
-    // the scene: the npcs member is rewritten, everything else — including the
-    // quoted handout and the whole body — stays byte-identical
+    // the scene: the npcs member is rewritten, nothing else about it moves
     const sceneA = await read(SCENE_A);
-    expect(sceneA).toBe((await original(SCENE_A)).replace("npcs: [jorna]", "npcs: [hafenmeisterin]"));
-    expect(sceneA).toContain('handouts: ["Karte von Salzhafen"]\n');
-    expect(bodyOf(sceneA)).toBe(sceneABodyBefore);
+    expect(sceneA.frontmatter.npcs).toEqual(["hafenmeisterin"]);
+    expect(sceneA.frontmatter.handouts).toEqual(["Karte von Salzhafen"]);
+    expect(sceneA.frontmatter.location).toBe("leuchtturm");
     // the other scene never referenced jorna in frontmatter — untouched
-    expect(await read(SCENE_B)).toBe(await original(SCENE_B));
+    expect((await read(SCENE_B)).frontmatter.npcs).toEqual(["fenn"]);
   });
 
   test("prose mentions stay untouched", async () => {
     await renameOk({ kind: "npc", oldId: "fenn", newId: "schmugglerkapitaen" });
     const sceneB = await read(SCENE_B);
     // frontmatter reference rewritten …
-    expect(sceneB).toContain("schmugglerkapitaen");
-    // … while the prose keeps saying "Fenn" (and the glossary too)
-    expect(sceneB).toContain("Fenn");
-    expect(await read("glossary.md")).toBe(await original("glossary.md"));
+    expect(sceneB.frontmatter.npcs).toEqual(["schmugglerkapitaen"]);
+    // … while the prose keeps saying "Fenn"
+    expect(sceneB.body).toContain("Fenn");
+    // and the glossary, which is prose about the WORLD, is not a reference site
+    expect((await read("glossary.md")).body).toContain("lighthouse keeper → Leuchtturmwärter");
   });
 
   test("unknown npc id -> 404, nothing written", async () => {
-    const before = await mtimes();
+    const before = await version();
     const res = await rename({ kind: "npc", oldId: "nobody", newId: "somebody" });
     expect(res.status).toBe(404);
-    expect(await mtimes()).toEqual(before);
+    expect(await version()).toBe(before);
   });
 });
 
 describe("POST /api/:campaign/rename — location", () => {
-  test("cascade: file, own id and scene `location` fields", async () => {
+  test("cascade: own id and scene `location` fields", async () => {
     const result = await renameOk({ kind: "location", oldId: "leuchtturm", newId: "salzturm" });
     expect(result.renamed).toEqual({
       from: "locations/leuchtturm.md",
       to: "locations/salzturm.md",
     });
-    expect(result.changed).toEqual([
-      "01-salzhafen/hafen/ankunft-leuchtturm.md",
-      "locations/salzturm.md",
-    ]);
+    expect(result.changed).toEqual([SCENE_A, "locations/salzturm.md"]);
 
+    expect(await exists("locations/leuchtturm.md")).toBe(false);
     const moved = await read("locations/salzturm.md");
-    // only the id line differs — the display name still says "Leuchtturm",
-    // and the quoted roll20-page keeps its quotes
-    expect(moved).toBe(
-      (await original("locations/leuchtturm.md")).replace("id: leuchtturm", "id: salzturm"),
-    );
-    expect(moved).toContain('roll20-page: "Leuchtturm"\n');
+    expect(moved.frontmatter.id).toBe("salzturm");
+    // only the id changed — the display name still says "Leuchtturm", and so
+    // does the roll20 page (a label, not a reference)
+    expect(moved.frontmatter.name).toBe("Der Leuchtturm von Salzhafen");
+    expect(moved.frontmatter["roll20-page"]).toBe("Leuchtturm");
 
-    const sceneA = await read(SCENE_A);
-    expect(sceneA).toBe(
-      (await original(SCENE_A)).replace("location: leuchtturm", "location: salzturm"),
-    );
-    // the scene's FILE NAME still mentions the old location — file names are
-    // not references (the group directory `hafen/` likewise stays put).
+    expect((await read(SCENE_A)).frontmatter.location).toBe("salzturm");
+    // the scene keeps its own address — a location rename never moves scenes
     expect(await exists(SCENE_A)).toBe(true);
   });
 });
 
 describe("POST /api/:campaign/rename — scene", () => {
-  test("cascade: file, scenes_played and the log marker; log otherwise byte-identical", async () => {
-    const sessionBefore = await original(SESSION);
-
+  test("cascade: own address, scenes_played and the log markers", async () => {
     const result = await renameOk({
       kind: "scene",
       oldId: "lighthouse-arrival",
@@ -201,79 +171,92 @@ describe("POST /api/:campaign/rename — scene", () => {
     });
     expect(result.changed).toEqual([
       "01-salzhafen/hafen/ankunft-am-leuchtturm.md",
-      "sessions/2026-01-15.md",
+      SESSION,
     ]);
 
-    // the scene file moved inside its own chapter/group, only its id changed
+    // the scene is addressed by its new id inside the SAME chapter/group —
+    // its path segment IS the id since the cutover (store/paths)
     expect(await exists(SCENE_A)).toBe(false);
     const moved = await read("01-salzhafen/hafen/ankunft-am-leuchtturm.md");
-    expect(moved).toBe(
-      (await original(SCENE_A)).replace("id: lighthouse-arrival", "id: ankunft-am-leuchtturm"),
-    );
+    expect(moved.frontmatter.id).toBe("ankunft-am-leuchtturm");
+    expect(moved.frontmatter.title).toBe("Ankunft am Leuchtturm");
 
-    // session: scenes_played member plus the two log markers — and NOTHING
+    // the session: `scenes_played` plus the two log markers — and NOTHING
     // else, timestamps, em-dashes, quotes and hashtags included
     const session = await read(SESSION);
-    expect(session).toBe(
-      sessionBefore.replaceAll("lighthouse-arrival", "ankunft-am-leuchtturm"),
+    expect(session.frontmatter.scenes_played).toEqual(["ankunft-am-leuchtturm"]);
+    expect(session.body).toContain(
+      "- 19:52 (ankunft-am-leuchtturm) Spuren gefunden, Gruppe will sofort zur Bucht #decision",
     );
-    // the untimed lines and the hashtags survived verbatim
-    expect(session).toContain("- 20:30 — Pause\n");
-    expect(session).toContain(
-      '- 21:10 (ankunft-am-leuchtturm) Improvisiert: Fischerin "Old Metta" am Steg #npc\n',
+    expect(session.body).toContain(
+      '- 21:10 (ankunft-am-leuchtturm) Improvisiert: Fischerin "Old Metta" am Steg #npc',
     );
+    // the untimed lines survived verbatim
+    expect(session.body).toContain("- 20:30 — Pause");
+    expect(session.body).toContain("- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread");
+    expect(session.body).not.toContain("lighthouse-arrival");
+
+    // the tree names the scene by its new id, under its new path
+    const chapter = (await tree()).chapters[0]!;
+    expect(chapter.groups[0]!.scenes.map((s) => s.id)).toEqual([
+      "ankunft-am-leuchtturm",
+      "smuggler-captured",
+    ]);
   });
 
   test("a scene named in prose only (contingency note) is not rewritten", async () => {
+    const before = (await read(SCENE_A)).body;
     await renameOk({ kind: "scene", oldId: "smuggler-captured", newId: "in-der-bucht-erwischt" });
-    // the note in ankunft-leuchtturm.md references the contingency as text
-    expect(await read(SCENE_A)).toBe(await original(SCENE_A));
+    // the note in the other scene references the contingency as TEXT
+    expect((await read(SCENE_A)).body).toBe(before);
     expect(await exists("01-salzhafen/hafen/in-der-bucht-erwischt.md")).toBe(true);
   });
 });
 
 describe("POST /api/:campaign/rename — chapter", () => {
-  test("renames the DIRECTORY, patches _chapter.md id and every `chapter:` field", async () => {
+  test("moves every scene's address and patches every `chapter:` field", async () => {
     const result = await renameOk({ kind: "chapter", oldId: "01-salzhafen", newId: "01-salzbucht" });
-    expect(result.renamed).toEqual({ from: "01-salzhafen", to: "01-salzbucht" });
+    // a chapter is addressed by its `_chapter.md` — there is no directory to
+    // rename any more, so the plan speaks in documents throughout
+    expect(result.renamed).toEqual({
+      from: "01-salzhafen/_chapter.md",
+      to: "01-salzbucht/_chapter.md",
+    });
     expect(result.changed).toEqual([
       "01-salzbucht/_chapter.md",
-      "01-salzbucht/hafen/ankunft-leuchtturm.md",
-      "01-salzbucht/hafen/von-schmugglern-erwischt.md",
+      "01-salzbucht/hafen/lighthouse-arrival.md",
+      "01-salzbucht/hafen/smuggler-captured.md",
       "locations/leuchtturm.md",
       "npcs/fenn.md",
       "npcs/jorna.md",
     ]);
 
-    expect(await exists("01-salzhafen")).toBe(false);
-    // every touched file differs from the original in the chapter id ONLY
-    // (the _chapter.md keeps its quoted title, the npc its quickstats)
-    const swap = (raw: string) => raw.replaceAll("01-salzhafen", "01-salzbucht");
-    expect(await read("01-salzbucht/_chapter.md")).toBe(
-      swap(await original("01-salzhafen/_chapter.md")),
+    expect(await exists("01-salzhafen/_chapter.md")).toBe(false);
+    const chapterFile = await read("01-salzbucht/_chapter.md");
+    expect(chapterFile.frontmatter.id).toBe("01-salzbucht");
+    // the title mentions the OLD name in prose — it is a title, not a reference
+    expect(chapterFile.frontmatter.title).toBe("Kapitel 1: Der Leuchtturm von Salzhafen");
+    expect(chapterFile.frontmatter.status).toBe("active");
+
+    // every entity that names the chapter follows
+    expect((await read("01-salzbucht/hafen/lighthouse-arrival.md")).frontmatter.chapter).toBe(
+      "01-salzbucht",
     );
-    expect(await read("01-salzbucht/hafen/ankunft-leuchtturm.md")).toBe(
-      swap(await original(SCENE_A)),
+    expect((await read("01-salzbucht/hafen/smuggler-captured.md")).frontmatter.chapter).toBe(
+      "01-salzbucht",
     );
-    expect(await read("01-salzbucht/hafen/von-schmugglern-erwischt.md")).toBe(
-      swap(await original(SCENE_B)),
-    );
-    expect(await read("npcs/jorna.md")).toBe(swap(await original("npcs/jorna.md")));
-    expect(await read("npcs/fenn.md")).toBe(swap(await original("npcs/fenn.md")));
-    expect(await read("locations/leuchtturm.md")).toBe(
-      swap(await original("locations/leuchtturm.md")),
-    );
+    expect((await read("npcs/jorna.md")).frontmatter.chapter).toBe("01-salzbucht");
+    expect((await read("npcs/fenn.md")).frontmatter.chapter).toBe("01-salzbucht");
+    expect((await read("locations/leuchtturm.md")).frontmatter.chapter).toBe("01-salzbucht");
 
     // the tree sees the new chapter with its scenes under the new paths
-    const res = await app.request("/api/beispiel/tree");
-    expect(res.status).toBe(200);
-    const tree = (await res.json()) as CampaignTree;
-    expect(tree.chapters.map((ch) => ch.id)).toEqual(["01-salzbucht"]);
-    const chapter = tree.chapters[0]!;
+    const campaignTree = await tree();
+    expect(campaignTree.chapters.map((ch) => ch.id)).toEqual(["01-salzbucht"]);
+    const chapter = campaignTree.chapters[0]!;
     expect(chapter.path).toBe("01-salzbucht/_chapter.md");
     expect(chapter.groups.flatMap((g) => g.scenes.map((s) => s.path))).toEqual([
-      "01-salzbucht/hafen/ankunft-leuchtturm.md",
-      "01-salzbucht/hafen/von-schmugglern-erwischt.md",
+      "01-salzbucht/hafen/lighthouse-arrival.md",
+      "01-salzbucht/hafen/smuggler-captured.md",
     ]);
     // scene ids are untouched by a chapter rename
     expect(chapter.groups[0]!.scenes.map((s) => s.id)).toEqual([
@@ -282,65 +265,22 @@ describe("POST /api/:campaign/rename — chapter", () => {
     ]);
   });
 
-  test("a reserved directory is not a chapter -> 404", async () => {
+  test("a reserved name is not a chapter -> 404", async () => {
     const res = await rename({ kind: "chapter", oldId: "npcs", newId: "leute" });
     expect(res.status).toBe(404);
     expect(await exists("npcs/jorna.md")).toBe(true);
   });
 });
 
-describe("POST /api/:campaign/rename — YAML shapes", () => {
-  const EXTRA = "01-salzhafen/hafen/block-shapes.md";
-  const BLOCK = `---
-id: block-shapes
-title: Blockformen
-chapter: 01-salzhafen
-location: "leuchtturm"   # zitiert, mit Kommentar
-npcs:
-  - jorna
-  - 'fenn'
-tags: [social]
----
-
-## Flow
-
-Jorna steht am Steg.
-`;
-
-  test("block sequences, quoted values and trailing comments survive verbatim", async () => {
-    await writeFile(absOf(EXTRA), BLOCK, "utf8");
-
-    await renameOk({ kind: "npc", oldId: "jorna", newId: "hafenmeisterin" });
-    expect(await read(EXTRA)).toBe(BLOCK.replace("  - jorna", "  - hafenmeisterin"));
-
-    await renameOk({ kind: "location", oldId: "leuchtturm", newId: "salzturm" });
-    expect(await read(EXTRA)).toBe(
-      BLOCK.replace("  - jorna", "  - hafenmeisterin").replace(
-        'location: "leuchtturm"',
-        'location: "salzturm"',
-      ),
-    );
-  });
-
-  test("an exotic YAML shape falls back to the raw patch — reference still fixed", async () => {
-    await writeFile(
-      absOf(EXTRA),
-      `---\nid: folded-shape\ntitle: Gefaltet\nlocation: >-\n  leuchtturm\n---\n\n## Flow\n\nText.\n`,
-      "utf8",
-    );
-    const result = await renameOk({ kind: "location", oldId: "leuchtturm", newId: "salzturm" });
-    expect(result.changed).toContain(EXTRA);
-    const after = await read(EXTRA);
-    // the YAML block was re-emitted (documented fallback), the reference is
-    // correct and the body is byte-identical
-    expect(after).toContain("location: salzturm");
-    expect(bodyOf(after)).toBe("\n## Flow\n\nText.\n");
-  });
-});
+// The "YAML shapes" block of the file era is gone: block sequences, quoted
+// scalars and trailing comments were properties of the TEXT a rename had to
+// patch. References are columns now (schema.ts), so there is no YAML shape
+// left for a rename to preserve or to re-emit — what a value looks like when
+// it is rendered back is store/render.ts's contract and is tested there.
 
 describe("POST /api/:campaign/rename — dry run", () => {
   test("returns the same plan and writes nothing", async () => {
-    const before = await mtimes();
+    const before = await version();
     const res = await rename({
       kind: "npc",
       oldId: "jorna",
@@ -351,13 +291,9 @@ describe("POST /api/:campaign/rename — dry run", () => {
     const plan = (await res.json()) as RenameResponse;
     expect(plan.dryRun).toBe(true);
     expect(plan.renamed).toEqual({ from: "npcs/jorna.md", to: "npcs/hafenmeisterin.md" });
-    expect(plan.changed).toEqual([
-      "01-salzhafen/hafen/ankunft-leuchtturm.md",
-      "npcs/fenn.md",
-      "npcs/hafenmeisterin.md",
-    ]);
+    expect(plan.changed).toEqual([SCENE_A, "npcs/fenn.md", "npcs/hafenmeisterin.md"]);
 
-    expect(await mtimes()).toEqual(before);
+    expect(await version()).toBe(before);
     expect(await exists("npcs/jorna.md")).toBe(true);
     expect(await exists("npcs/hafenmeisterin.md")).toBe(false);
 
@@ -371,30 +307,53 @@ describe("POST /api/:campaign/rename — dry run", () => {
 
 describe("POST /api/:campaign/rename — validation", () => {
   test("collision -> 409 with the target path, nothing written", async () => {
-    const before = await mtimes();
+    const before = await version();
     const res = await rename({ kind: "npc", oldId: "jorna", newId: "fenn" });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ path: "npcs/fenn.md" });
-    expect(await mtimes()).toEqual(before);
+    expect(await version()).toBe(before);
+    expect(await exists("npcs/jorna.md")).toBe(true);
   });
 
-  test("chapter collision against an existing directory -> 409", async () => {
-    await cp(absOf("01-salzhafen"), absOf("02-tiefwasser"), { recursive: true });
+  test("chapter collision against an existing chapter -> 409", async () => {
+    // A second chapter, created the way the app creates one (the generator's
+    // new-chapter flow) — the example campaign has only one.
+    const created = await app.request("/api/beispiel/generate/apply", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenes: [
+          {
+            path: "02-tiefwasser/erste-szene.md",
+            markdown:
+              "---\nid: tiefwasser-ankunft\ntitle: Ankunft in Tiefwasser\ntype: planned\n" +
+              "chapter: 02-tiefwasser\nnpcs: []\nhandouts: []\ntags: []\nstatus: draft\n---\n\n" +
+              "## Flow\n\nDie Gruppe erreicht Tiefwasser.\n",
+          },
+        ],
+        chapter: "02-tiefwasser",
+        chapterTitle: "Kapitel 2: Tiefwasser",
+      }),
+    });
+    expect(created.status).toBe(200);
+
     const res = await rename({ kind: "chapter", oldId: "01-salzhafen", newId: "02-tiefwasser" });
     expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ path: "02-tiefwasser" });
+    expect(await res.json()).toMatchObject({ path: "02-tiefwasser/_chapter.md" });
     expect(await exists("01-salzhafen/_chapter.md")).toBe(true);
   });
 
   test("same id -> 400, nothing written", async () => {
-    const before = await mtimes();
+    const before = await version();
     const res = await rename({ kind: "npc", oldId: "jorna", newId: "jorna" });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("nothing to rename");
-    expect(await mtimes()).toEqual(before);
+    expect(await version()).toBe(before);
   });
 
   test("unknown kind -> 400", async () => {
+    // Sessions have no id to rename (their id IS their date) — the kind list
+    // is npc/location/scene/chapter.
     const res = await rename({ kind: "session", oldId: "2026-01-15", newId: "2026-01-16" });
     expect(res.status).toBe(400);
   });
@@ -431,4 +390,7 @@ describe("POST /api/:campaign/rename — validation", () => {
     });
     expect(res.status).toBe(404);
   });
+
+  // The file era's "ambiguous id — N files claim it" case is gone: an id is
+  // the primary key of its table now, so two rows can never claim one id.
 });
