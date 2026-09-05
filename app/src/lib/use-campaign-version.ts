@@ -47,7 +47,10 @@ export function useCampaignVersion(campaign: string): void {
     if (previous === null || previous.campaign !== campaign) return;
     if (previous.version === data.version) return;
     // Something changed on disk — refetch everything read from this campaign.
-    for (const key of ["tree", "file", "search"]) {
+    // "active-session" rides along (issue #40): a session ended in another
+    // tab, a hand-edited `ended`, or simply midnight passing must reach the
+    // global live indicator without a reload.
+    for (const key of ["tree", "file", "search", "active-session"]) {
       void queryClient.invalidateQueries({ queryKey: [key, campaign] });
     }
     // …plus the campaign list, which carries name/description from

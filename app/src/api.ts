@@ -169,12 +169,30 @@ export function createCampaignMeta(
   });
 }
 
+/**
+ * The ACTIVE session (issue #40), or null when none is running — the server's
+ * 404 is the normal "no session" answer, never an error state in the UI.
+ *
+ * The app must NOT derive the session file from its own date: a session that
+ * runs past midnight lives in yesterday's file, and a browser in another
+ * timezone than the server would guess wrong. The response carries
+ * `startedMs`/`endedMs` (epoch, resolved by the server), which is what makes
+ * the live runtime correct.
+ */
+export async function fetchActiveSession(campaign: string): Promise<FileResponse | null> {
+  const path = `/${encodeURIComponent(campaign)}/session`;
+  const response = await fetch(`/api${path}`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw await failure(`GET /api${path}`, response);
+  return (await response.json()) as FileResponse;
+}
+
 /** Create today's session file (idempotent — an existing one is returned). */
 export function startSession(campaign: string): Promise<FileResponse> {
   return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/start`);
 }
 
-/** Set `ended` in today's session file (404 without a session today). */
+/** Set `ended` in the ACTIVE session file (404 when there is none). */
 export function endSession(campaign: string): Promise<FileResponse> {
   return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/end`);
 }
@@ -188,7 +206,8 @@ export function appendInbox(campaign: string, text: string): Promise<FileRespons
 }
 
 /**
- * Append a log line to today's session (404 without a session today).
+ * Append a log line to the ACTIVE session (404 when none runs) — which may be
+ * yesterday's file when the session ran past midnight; the server picks it.
  * With a sceneId the server also maintains `scenes_played`.
  */
 export function appendLog(

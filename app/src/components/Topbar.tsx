@@ -19,6 +19,16 @@
 // The live mode is the one exception: it keeps its own left block (green Live
 // pill + chapter label), because that topbar belongs to the running session.
 //
+// THE LIVE INDICATOR IS GLOBAL (issue #40). While a session runs, EVERY
+// campaign-scoped route shows the green pill with the running time — and off
+// the live route it is a LINK back into it. Below md, where the topbar is not
+// the chrome, the same indicator appears as its own slim row (LiveBar), so a
+// session is never invisible. Consequence: "Session starten" appears NOWHERE
+// while a session is running — there is nothing to start, only something to
+// return to. What "running" means is the server's answer (GET
+// /:campaign/session), not a date the app computes: a session that goes past
+// midnight stays the running one.
+//
 // The right side stays per-view and unchanged: the ⌘K search chip (opens the
 // palette; hidden without a campaign in the URL — "/" only ever shows the
 // empty state), the brass "Session starten" button on pool and scene views
@@ -46,12 +56,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { IconLogo } from "@/icons";
 import { campaignDescription, campaignLabel } from "@/lib/campaign";
-import { formatElapsed, parseLocalDateTime } from "@/lib/session";
+import { formatElapsed, sessionEndMs, sessionStartMs } from "@/lib/session";
 import { navSection } from "@/lib/topbar-nav";
 import { useGenerateJob } from "@/lib/use-generate-job";
 import { cn } from "@/lib/utils";
 import { useReviewEntries } from "@/lib/use-review";
-import { useSessionFile, useSessionWrite } from "@/lib/use-session";
+import { useActiveSession, useSessionWrite } from "@/lib/use-session";
 
 export function Topbar() {
   const { pathname } = useLocation();
@@ -87,7 +97,10 @@ export function Topbar() {
     queryFn: () => fetchTree(campaign),
     enabled: isLive,
   });
-  const session = useSessionFile(campaign, isLive);
+  // The running session — asked on EVERY campaign route now, not just /live:
+  // one shared query key, so this is one request for topbar and live view.
+  const session = useActiveSession(campaign, campaign !== "");
+  const live = session.data ?? undefined;
 
   // The live chapter label: the ACTIVE chapter (fallback: first) — the same
   // rule the live nav uses.
@@ -95,127 +108,202 @@ export function Topbar() {
     tree.data?.chapters.find((c) => c.status === "active") ?? tree.data?.chapters[0];
 
   return (
-    // Below md the campaign-scoped views carry their own mobile chrome
-    // (start-surface wordmark, "‹ Pool" back rows — issue #11); the topbar
-    // is desktop chrome there. Without a campaign in the URL ("/" with no
-    // campaign at all) it stays visible on every width, so the empty state
-    // is not a bare page.
-    <header
-      className={cn(
-        "flex h-14 flex-none items-center gap-3.5 border-b border-border px-6",
-        campaign !== "" && "max-md:hidden",
+    <>
+      {/* Below md the topbar is hidden — the live indicator must not be
+          (issue #40 AK2), so it gets its own slim row there. */}
+      {live !== undefined && campaign !== "" && !isLive && (
+        <LiveBar campaign={campaign} session={live} />
       )}
-    >
-      <Link
-        to="/"
-        className="-ml-1.5 flex flex-none items-center gap-[9px] rounded-md px-1.5 py-1 font-serif text-[17px] font-semibold tracking-[.01em] text-foreground hover:text-primary-hover"
+      {/* Below md the campaign-scoped views carry their own mobile chrome
+          (start-surface wordmark, "‹ Pool" back rows — issue #11); the topbar
+          is desktop chrome there. Without a campaign in the URL ("/" with no
+          campaign at all) it stays visible on every width, so the empty state
+          is not a bare page. */}
+      <header
+        className={cn(
+          "flex h-14 flex-none items-center gap-3.5 border-b border-border px-6",
+          campaign !== "" && "max-md:hidden",
+        )}
       >
-        <IconLogo size={19} className="text-primary" />
-        Grimoire
-      </Link>
-
-      {/* ONE campaign context for every campaign-scoped view: the switcher
-          trigger, always the same element in the same place. It replaced three
-          different breadcrumbs (scene, list, generator) that each spelled the
-          campaign name again and, on a file, a chapter path that was plain
-          misleading for an NPC opened from the NPC list. Hierarchical context
-          moved into the page header (components/PageContext.tsx). */}
-      {!isLive && campaign !== "" && <CampaignSwitcher campaign={campaign} />}
-
-      {isLive && session.data !== undefined && (
-        <div className="flex min-w-0 items-center gap-2.5 text-[13px] text-muted-foreground">
-          <span className="inline-flex flex-none items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--success)_35%,transparent)] px-2.5 py-[2px] text-[12px] text-success-text">
-            <span aria-hidden className="size-1.5 rounded-full bg-success" />
-            Live
-          </span>
-          {liveChapter !== undefined && (
-            <span className="hidden truncate md:inline">{liveChapter.title}</span>
-          )}
-        </div>
-      )}
-
-      {/* Quiet campaign navigation (issue #34): the three campaign-wide entry
-          points, reachable without scrolling, from every campaign view. The
-          design prototype does not cover this navigation — the pool's
-          "NPCs · Orte" footer of issue #26 was a team interim solution and is
-          gone; these links fill the gap per PO decision (design/README.md).
-          "Kapitel" is the pool — and the way BACK from everywhere: the
-          campaign label next to it is the switcher trigger, not a link, and
-          the wordmark is a detour via "/" (PO feedback on PR #35).
-          Not in the live mode: that topbar belongs to the running session.
-          Below lg the row is already carrying switcher, search and the session
-          controls, so the links step aside there — mobile has the start
-          surface's "Nachschlagen" list, and ⌘K finds both lists at any width. */}
-      {campaign !== "" && !isLive && (
-        <nav
-          // Deliberately NOT "Nachschlagen": that is the mobile start
-          // surface's nav, and on the pool both live in the DOM at once
-          // (responsive swap) — two navs with one name is a worse tree.
-          aria-label="Kapitel, NPCs und Orte"
-          className="flex flex-none items-center gap-1 border-l border-border pl-3 text-[13px] max-lg:hidden"
+        <Link
+          to="/"
+          className="-ml-1.5 flex flex-none items-center gap-[9px] rounded-md px-1.5 py-1 font-serif text-[17px] font-semibold tracking-[.01em] text-foreground hover:text-primary-hover"
         >
-          {/* The section of the current view carries aria-current and the
-              stronger tone (lib/topbar-nav.ts). It is the ONLY thing that
-              differs between the campaign-scoped views, so it is a full step
-              of contrast, not a hint. Generator and review belong to no
-              section and mark nothing. */}
-          <TopbarNavLink
-            to={`/${campaign}`}
-            label="Kapitel"
-            active={section === "chapters"}
-          />
-          <TopbarNavLink
-            to={`/${campaign}/list/npcs`}
-            label="NPCs"
-            active={section === "npcs"}
-          />
-          <TopbarNavLink
-            to={`/${campaign}/list/locations`}
-            label="Orte"
-            active={section === "locations"}
-          />
-        </nav>
-      )}
+          <IconLogo size={19} className="text-primary" />
+          Grimoire
+        </Link>
 
-      <div className="flex-1" />
+        {/* ONE campaign context for every campaign-scoped view: the switcher
+            trigger, always the same element in the same place. It replaced three
+            different breadcrumbs (scene, list, generator) that each spelled the
+            campaign name again and, on a file, a chapter path that was plain
+            misleading for an NPC opened from the NPC list. Hierarchical context
+            moved into the page header (components/PageContext.tsx). */}
+        {!isLive && campaign !== "" && <CampaignSwitcher campaign={campaign} />}
 
-      {/* Only on campaign-scoped views — "/" has no search context (palette
-          and shortcut are not mounted there at all). */}
-      {campaign !== "" && (
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setSearchOpen(true)}
-            className="hidden h-auto min-w-[200px] gap-2 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-card hover:text-soft sm:flex"
+        {isLive && live !== undefined && (
+          <div className="flex min-w-0 items-center gap-2.5 text-[13px] text-muted-foreground">
+            <LivePill />
+            {liveChapter !== undefined && (
+              <span className="hidden truncate md:inline">{liveChapter.title}</span>
+            )}
+          </div>
+        )}
+
+        {/* Off the live route the very same pill is the way BACK into the
+            running session — with the elapsed time, so the DM can see at a
+            glance that the clock is still ticking while looking something up. */}
+        {!isLive && live !== undefined && (
+          <Link
+            to={`/${campaign}/live`}
+            className="flex min-w-0 flex-none items-center gap-2 rounded-full px-1 text-[13px] text-muted-foreground hover:text-foreground"
           >
-            <Search aria-hidden size={15} className="text-muted-foreground" />
-            <span className="flex-1 text-left">Suchen …</span>
-            <span className="rounded-[4px] border border-input px-[5px] py-px font-mono text-[11px] text-muted-foreground">
-              ⌘K
-            </span>
-          </Button>
-          <CommandPalette campaign={campaign} open={searchOpen} onOpenChange={setSearchOpen} />
-        </>
-      )}
+            <LivePill />
+            <SessionElapsed session={live} />
+            <span className="sr-only">Zur laufenden Session</span>
+          </Link>
+        )}
 
-      {/* Quiet review affordance — only while today's session still has
-          unharvested entries (issue #10); otherwise nothing is shown. */}
-      {isPool && <PoolReviewLink campaign={campaign} />}
+        {/* Quiet campaign navigation (issue #34): the three campaign-wide entry
+            points, reachable without scrolling, from every campaign view. The
+            design prototype does not cover this navigation — the pool's
+            "NPCs · Orte" footer of issue #26 was a team interim solution and is
+            gone; these links fill the gap per PO decision (design/README.md).
+            "Kapitel" is the pool — and the way BACK from everywhere: the
+            campaign label next to it is the switcher trigger, not a link, and
+            the wordmark is a detour via "/" (PO feedback on PR #35).
+            Not in the live mode: that topbar belongs to the running session.
+            Below lg the row is already carrying switcher, search and the session
+            controls, so the links step aside there — mobile has the start
+            surface's "Nachschlagen" list, and ⌘K finds both lists at any width. */}
+        {campaign !== "" && !isLive && (
+          <nav
+            // Deliberately NOT "Nachschlagen": that is the mobile start
+            // surface's nav, and on the pool both live in the DOM at once
+            // (responsive swap) — two navs with one name is a worse tree.
+            aria-label="Kapitel, NPCs und Orte"
+            className="flex flex-none items-center gap-1 border-l border-border pl-3 text-[13px] max-lg:hidden"
+          >
+            {/* The section of the current view carries aria-current and the
+                stronger tone (lib/topbar-nav.ts). It is the ONLY thing that
+                differs between the campaign-scoped views, so it is a full step
+                of contrast, not a hint. Generator and review belong to no
+                section and mark nothing. */}
+            <TopbarNavLink
+              to={`/${campaign}`}
+              label="Kapitel"
+              active={section === "chapters"}
+            />
+            <TopbarNavLink
+              to={`/${campaign}/list/npcs`}
+              label="NPCs"
+              active={section === "npcs"}
+            />
+            <TopbarNavLink
+              to={`/${campaign}/list/locations`}
+              label="Orte"
+              active={section === "locations"}
+            />
+          </nav>
+        )}
 
-      {/* Quiet entry into the generator (issue #12) — pool only, next to the
-          brass session button per the prototype. Carries the run indicator
-          of issue #19. */}
-      {isPool && <GeneratorLink campaign={campaign} />}
+        <div className="flex-1" />
 
-      {(isPool || isScene) && <StartSessionButton campaign={campaign} />}
+        {/* Only on campaign-scoped views — "/" has no search context (palette
+            and shortcut are not mounted there at all). */}
+        {campaign !== "" && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSearchOpen(true)}
+              className="hidden h-auto min-w-[200px] gap-2 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-card hover:text-soft sm:flex"
+            >
+              <Search aria-hidden size={15} className="text-muted-foreground" />
+              <span className="flex-1 text-left">Suchen …</span>
+              <span className="rounded-[4px] border border-input px-[5px] py-px font-mono text-[11px] text-muted-foreground">
+                ⌘K
+              </span>
+            </Button>
+            <CommandPalette campaign={campaign} open={searchOpen} onOpenChange={setSearchOpen} />
+          </>
+        )}
 
-      {isLive && session.data !== undefined && (
-        <LiveControls campaign={campaign} session={session.data} />
-      )}
+        {/* Quiet review affordance — only while today's session still has
+            unharvested entries (issue #10); otherwise nothing is shown. */}
+        {isPool && <PoolReviewLink campaign={campaign} />}
 
-      {isReview && <ReviewProgress campaign={campaign} />}
-    </header>
+        {/* Quiet entry into the generator (issue #12) — pool only, next to the
+            brass session button per the prototype. Carries the run indicator
+            of issue #19. */}
+        {isPool && <GeneratorLink campaign={campaign} />}
+
+        {/* Nothing to start while a session runs (issue #40) — and nothing to
+            start before the session query answered either, so the button never
+            flashes into a running session. */}
+        {(isPool || isScene) && live === undefined && !session.isPending && (
+          <StartSessionButton campaign={campaign} />
+        )}
+
+        {isLive && live !== undefined && <LiveControls campaign={campaign} session={live} />}
+
+        {isReview && <ReviewProgress campaign={campaign} />}
+      </header>
+    </>
+  );
+}
+
+/** The green "Live" pill of the prototype's live topbar. */
+function LivePill() {
+  return (
+    <span className="inline-flex flex-none items-center gap-1.5 rounded-full border border-[color-mix(in_srgb,var(--success)_35%,transparent)] px-2.5 py-[2px] text-[12px] text-success-text">
+      <span aria-hidden className="size-1.5 rounded-full bg-success" />
+      Live
+    </span>
+  );
+}
+
+/**
+ * Elapsed session time as `H:MM`, ticking every ~15s (text only — nothing
+ * animates). The start is the SERVER's epoch reading of `started`
+ * (lib/session.ts): the file format is zone-less, so a browser in another
+ * timezone than the server used to show a runtime that was hours off
+ * (issue #40). Pauses are NOT deducted — that stays a non-goal.
+ */
+function SessionElapsed({ session }: { session: FileResponse }) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, []);
+  const startedMs = sessionStartMs(session);
+  if (startedMs === undefined) return null;
+  const endedMs = sessionEndMs(session);
+  return (
+    <span className="flex flex-none items-center gap-1.5">
+      <Clock aria-hidden size={14} className="flex-none" />
+      <span className="font-mono text-[13px]">{formatElapsed(startedMs, endedMs ?? nowMs)}</span>
+      <span className="sr-only">Laufzeit</span>
+    </span>
+  );
+}
+
+/**
+ * The mobile live row (issue #40 AK2): below md the topbar is not the chrome,
+ * so the running session gets its own full-width row above the view — one tap
+ * back into the session. Mobile is "nachschlagen und einwerfen" (UI-BRIEF §4),
+ * and this is exactly the way back out of a lookup.
+ */
+function LiveBar({ campaign, session }: { campaign: string; session: FileResponse }) {
+  return (
+    <Link
+      to={`/${campaign}/live`}
+      className="flex min-h-11 flex-none items-center gap-2.5 border-b border-border bg-panel-deep px-4 text-[13px] text-body-secondary md:hidden"
+    >
+      <LivePill />
+      <SessionElapsed session={session} />
+      <span className="ml-auto text-primary">Zur Session</span>
+    </Link>
   );
 }
 
@@ -274,21 +362,10 @@ function StartSessionButton({ campaign }: { campaign: string }) {
   );
 }
 
-/** Elapsed timer (ticks ~15s, text only — nothing animates), Pause and
- * "Session beenden" per the prototype's live topbar. */
+/** Elapsed timer, Pause and "Session beenden" per the prototype's live
+ * topbar. */
 function LiveControls({ campaign, session }: { campaign: string; session: FileResponse }) {
   const navigate = useNavigate();
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNowMs(Date.now()), 15_000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const startedMs = parseLocalDateTime(session.frontmatter.started);
-  const endedMs = parseLocalDateTime(session.frontmatter.ended);
-  const elapsed =
-    startedMs === undefined ? undefined : formatElapsed(startedMs, endedMs ?? nowMs);
-
   const pause = useSessionWrite(campaign, () => appendLog(campaign, "— Pause"));
   // "Session beenden" leads into the review, not back to the pool
   // (prototype: endSession → review) — the harvest is the next step.
@@ -300,12 +377,9 @@ function LiveControls({ campaign, session }: { campaign: string; session: FileRe
 
   return (
     <>
-      {elapsed !== undefined && (
-        <div className="hidden flex-none items-center gap-2 text-soft sm:flex">
-          <Clock aria-hidden size={15} className="flex-none" />
-          <span className="font-mono text-[14px]">{elapsed}</span>
-        </div>
-      )}
+      <div className="hidden flex-none text-soft sm:block">
+        <SessionElapsed session={session} />
+      </div>
       <Button
         type="button"
         variant="outline"

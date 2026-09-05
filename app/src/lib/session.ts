@@ -1,7 +1,12 @@
-// Session-file helpers for the live mode: today's path (matching the
-// server's LOCAL-date convention, server/src/clock.ts), the log-line parser
-// and the elapsed-timer format. Pure functions — unit-tested, no react or
-// query imports here.
+// Session-file helpers for the live mode: the log-line parser, the elapsed
+// timer and the epoch readings of `started`/`ended`. Pure functions —
+// unit-tested, no react or query imports here.
+//
+// `todaySessionRel` is what is LEFT of the client-side date guessing (issue
+// #40): the review works on today's file, but WHICH session is running is the
+// server's answer (GET /:campaign/session, lib/use-session.ts) — a session
+// past midnight lives in yesterday's file, and a browser in another timezone
+// than the server would get both the file and the runtime wrong.
 
 export interface LogEntry {
   /** `HH:MM` — undefined for degraded raw lines. */
@@ -55,21 +60,54 @@ export function parseLogEntries(body: string): LogEntry[] {
 }
 
 /**
- * Parse `yyyy-mm-ddTHH:MM(:ss)?` as LOCAL time — the format the write API
- * produces for `started`/`ended`. Undefined when the value does not parse.
+ * Parse `yyyy-mm-ddTHH:MM(:ss)?` as the BROWSER's local time — the fallback
+ * reading of `started`/`ended` for a server that does not ship the epoch
+ * values (see sessionStartMs). Undefined when the value does not parse.
+ *
+ * A DATE-ONLY `yyyy-mm-dd` is read as 00:00: a session started at exactly
+ * midnight is written as `…T00:00`, and the YAML normalization cannot tell
+ * that apart from a date-only value (shared/src/parse.ts) — so requiring a
+ * time part made the timer disappear silently at midnight (issue #40).
  */
 export function parseLocalDateTime(value: unknown): number | undefined {
   if (typeof value !== "string") return undefined;
-  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})/.exec(value.trim());
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{1,2}):(\d{2}))?/.exec(value.trim());
   if (m === null) return undefined;
   const ms = new Date(
     Number(m[1]),
     Number(m[2]) - 1,
     Number(m[3]),
-    Number(m[4]),
-    Number(m[5]),
+    Number(m[4] ?? 0),
+    Number(m[5] ?? 0),
   ).getTime();
   return Number.isNaN(ms) ? undefined : ms;
+}
+
+/**
+ * Start / end of a session as epoch milliseconds (issue #40).
+ *
+ * The SERVER's reading wins (`startedMs`/`endedMs` of the FileResponse): the
+ * file format is zone-less on purpose, and only the server knows the timezone
+ * those wall-clock digits were written in — computing them in the browser
+ * gave a runtime that was hours off whenever the two differ. The local parse
+ * stays as the fallback for a response without the epoch fields.
+ */
+export function sessionStartMs(session: SessionTimes | undefined): number | undefined {
+  if (session === undefined) return undefined;
+  return session.startedMs ?? parseLocalDateTime(session.frontmatter?.started);
+}
+
+/** End of a session as epoch milliseconds — see sessionStartMs. */
+export function sessionEndMs(session: SessionTimes | undefined): number | undefined {
+  if (session === undefined) return undefined;
+  return session.endedMs ?? parseLocalDateTime(session.frontmatter?.ended);
+}
+
+/** The bit of a session FileResponse the two helpers above need. */
+export interface SessionTimes {
+  startedMs?: number;
+  endedMs?: number;
+  frontmatter?: Record<string, unknown>;
 }
 
 /** Elapsed time as `H:MM` (prototype format), clamped at `0:00`. */
