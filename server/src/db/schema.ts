@@ -38,6 +38,7 @@ import {
   primaryKey,
   sqliteTable,
   text,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
 /** JSON object column holding preserved-but-unknown frontmatter keys. */
@@ -507,6 +508,11 @@ export const glossary = sqliteTable(
  * result/error/edit payloads stay JSON: they are the API's own shapes
  * (`GenerateResult`, `GenerateJobError`, `draftEdits`) and nothing queries
  * inside them.
+ *
+ * "At most one per campaign" is a CONSTRAINT, not a convention: the unique
+ * index on `campaign_id` makes every read a single lookup (no ordering
+ * question) and turns a bug that inserted a second row into an error at the
+ * insert instead of a job that randomly shadows another one.
  */
 export const generateJobs = sqliteTable(
   "generate_jobs",
@@ -529,6 +535,7 @@ export const generateJobs = sqliteTable(
     error: text("error"),
     draftEdits: text("draft_edits").notNull().default("{}"),
   },
+  (t) => [uniqueIndex("generate_jobs_campaign_unique").on(t.campaignId)],
 );
 
 // --- migration bookkeeping --------------------------------------------------

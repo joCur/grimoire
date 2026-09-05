@@ -29,6 +29,13 @@
       "when": 1788639452705,
       "tag": "0003_doc_revs_chapter_declared",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788645978142,
+      "tag": "0004_generate_jobs_campaign_unique",
+      "breakpoints": true
     }
   ]
 }

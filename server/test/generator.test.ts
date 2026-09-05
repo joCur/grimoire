@@ -28,7 +28,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import type { FileResponse, GenerateJob, GenerateResult, GenerateUsage } from "@grimoire/shared";
 import { app } from "../src/server";
-import { clearJobsForTests } from "../src/generate-jobs";
+import { eq } from "drizzle-orm";
+import { clearJobsForTests, UNREADABLE_PAYLOAD_MESSAGE } from "../src/generate-jobs";
+import { generateJobs } from "../src/db/schema";
 import { failInterruptedJobs, RESTART_FAILURE_MESSAGE } from "../src/db/job-boot";
 import { getDb } from "../src/store/handle";
 import { dropStore, seedStore } from "./support/store";
@@ -1488,6 +1490,120 @@ describe("generate jobs", () => {
     const res = await app.request("/api/beispiel/generate/job");
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "no generate job for this campaign" });
+  });
+
+  // --- a row that cannot be read (issue #62 review) -------------------------
+
+  test("a done job with an unreadable result is served as FAILED and can be discarded", async () => {
+    useFake([jobReply("01-salzhafen/hafen/job-unreadable.md")]);
+    await generate(generateBody);
+    const before = (await fetchJob())!;
+    expect(before.status).toBe("done");
+
+    // Whatever broke the column (a truncated write, a hand-edited database):
+    // the payload no longer parses.
+    const db = await getDb();
+    db.update(generateJobs).set({ result: "{not json" }).where(eq(generateJobs.id, before.id)).run();
+
+    const job = (await fetchJob())!;
+    expect(job.id).toBe(before.id);
+    // NOT "done with no result" — that would render a review with no drafts
+    // and no way out; it is a failure with a message the DM can act on.
+    expect(job.status).toBe("failed");
+    expect(job.result).toBeUndefined();
+    expect(job.error!.body.error).toBe(UNREADABLE_PAYLOAD_MESSAGE);
+
+    // …and the promise of that message holds: discarding works.
+    expect((await app.request("/api/beispiel/generate/job", { method: "DELETE" })).status).toBe(200);
+    expect(await fetchJob()).toBeNull();
+  });
+
+  test("a failed job with an unreadable error body still carries a message", async () => {
+    useFake([jobReply("01-salzhafen/hafen/job-unreadable-error.md")]);
+    await generate(generateBody);
+    const before = (await fetchJob())!;
+    const db = await getDb();
+    db.update(generateJobs)
+      .set({ status: "failed", result: null, error: "" })
+      .where(eq(generateJobs.id, before.id))
+      .run();
+
+    const job = (await fetchJob())!;
+    expect(job.status).toBe("failed");
+    expect(job.error!.status).toBe(500);
+    expect(job.error!.body.error).toBe(UNREADABLE_PAYLOAD_MESSAGE);
+  });
+
+  // --- the invariant is a constraint (issue #62 review) ---------------------
+
+  test("a second job row for the same campaign is rejected by the database", async () => {
+    useFake([jobReply("01-salzhafen/hafen/job-unique.md")]);
+    await generate(generateBody);
+    const db = await getDb();
+
+    expect(() =>
+      db
+        .insert(generateJobs)
+        .values({
+          id: "second-row",
+          campaignId: "beispiel",
+          kind: "scene",
+          status: "running",
+          startedAt: new Date().toISOString(),
+          draftEdits: "{}",
+        })
+        .run(),
+    ).toThrow(/constraint/i);
+  });
+
+  // --- apply and job cleanup commit together (issue #62 review) ------------
+
+  test("apply discards the job in the SAME commit as the drafts", async () => {
+    const scenePath = "01-salzhafen/hafen/job-atomic.md";
+    useFake([jobReply(scenePath)]);
+    await generate(generateBody);
+    const job = (await fetchJob())!;
+
+    const res = await postJson("/api/beispiel/generate/apply", {
+      scenes: job.result!.scenes,
+      stubs: [],
+      jobId: job.id,
+    });
+    expect(res.status).toBe(200);
+    // Both halves of the commit are visible…
+    expect(await exists(scenePath)).toBe(true);
+    expect(await fetchJob()).toBeNull();
+    // …and no leftover row is there for a restart to revive.
+    const db = await getDb();
+    expect(
+      db.select().from(generateJobs).where(eq(generateJobs.campaignId, "beispiel")).all(),
+    ).toHaveLength(0);
+    expect(await restartServer()).toBe(0);
+  });
+
+  test("a 409 apply rolls back BOTH halves — job kept, nothing written", async () => {
+    const taken = "01-salzhafen/hafen/job-atomic.md"; // written by the test above
+    const fresh = "01-salzhafen/hafen/job-atomic-fresh.md";
+    useFake([
+      reply({
+        scenes: [
+          { path: taken, content: sceneWithId(fileStem(taken)) },
+          { path: fresh, content: sceneWithId(fileStem(fresh)) },
+        ],
+        npc_stubs: [],
+      }),
+    ]);
+    await generate(generateBody);
+    const job = (await fetchJob())!;
+
+    const res = await postJson("/api/beispiel/generate/apply", {
+      scenes: job.result!.scenes,
+      stubs: [],
+      jobId: job.id,
+    });
+    expect(res.status).toBe(409);
+    expect((await fetchJob())!.id).toBe(job.id);
+    expect(await exists(fresh)).toBe(false);
   });
 
   test("jobs are per campaign — an unknown campaign simply has none", async () => {

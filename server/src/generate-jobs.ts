@@ -120,6 +120,11 @@ type JobRow = typeof generateJobs.$inferSelect;
  * degrades to "absent" instead of failing the request: the row is a cache of
  * a run, and an unreadable result must not make the job unreachable — the DM
  * can still see it, discard it and start again.
+ *
+ * "Can still discard it" is only true because `toJob` turns such a row into a
+ * FAILED job (see UNREADABLE_PAYLOAD_MESSAGE): the review blocks and the
+ * "Verwerfen" button of a done job hang off result/npcResult, so a done row
+ * with no readable payload would render as a dead end with no way out.
  */
 function unpackPayload<T>(value: string | null): T | undefined {
   if (value === null || value === "") return undefined;
@@ -140,9 +145,32 @@ function unpackEdits(value: string): Map<string, string> {
   return edits;
 }
 
+/**
+ * What the DM reads when a finished job's payload column is unreadable (a
+ * truncated write, a hand-edited database). The wording is the one the
+ * failure block already renders, and it names the only way forward.
+ */
+export const UNREADABLE_PAYLOAD_MESSAGE =
+  "Das Ergebnis dieses Durchlaufs ist nicht mehr lesbar. Verwirf den Job und starte ihn neu.";
+
 function toJob(row: JobRow): Job {
-  const status: Job["status"] =
+  let status: Job["status"] =
     row.status === "done" || row.status === "failed" ? row.status : "running";
+  const result = unpackPayload<GenerateResult>(row.result);
+  const npcResult = unpackPayload<GenerateNpcResult>(row.npcResult);
+  let error = unpackPayload<GenerateJobError>(row.error);
+
+  // A finished job with nothing readable to show is degraded to `failed` with
+  // an error body: `done` without a result would render review blocks that
+  // are gated on it — no drafts, no "Verwerfen", nothing the DM can do — and
+  // `failed` without a body would render an empty failure. As a failed job
+  // with a message the existing block appears, and discarding works.
+  const nothingToShow = result === undefined && npcResult === undefined;
+  if ((status === "done" && nothingToShow) || (status === "failed" && error === undefined)) {
+    status = "failed";
+    error = { status: 500, body: { error: UNREADABLE_PAYLOAD_MESSAGE } };
+  }
+
   return {
     id: row.id,
     campaign: row.campaignId,
@@ -151,18 +179,9 @@ function toJob(row: JobRow): Job {
     status,
     startedAt: row.startedAt,
     ...(row.finishedAt === null ? {} : { finishedAt: row.finishedAt }),
-    ...(() => {
-      const result = unpackPayload<GenerateResult>(row.result);
-      return result === undefined ? {} : { result };
-    })(),
-    ...(() => {
-      const npcResult = unpackPayload<GenerateNpcResult>(row.npcResult);
-      return npcResult === undefined ? {} : { npcResult };
-    })(),
-    ...(() => {
-      const error = unpackPayload<GenerateJobError>(row.error);
-      return error === undefined ? {} : { error };
-    })(),
+    ...(result === undefined ? {} : { result }),
+    ...(npcResult === undefined ? {} : { npcResult }),
+    ...(error === undefined ? {} : { error }),
     draftEdits: unpackEdits(row.draftEdits),
   };
 }
@@ -266,7 +285,16 @@ export async function startJob(input: JobInput): Promise<Job> {
       );
       await finish(job, { status: "done", result: JSON.stringify(result) });
     } catch (err) {
-      await finish(job, { status: "failed", error: JSON.stringify(shapeError(err)) });
+      // The last line of defense must not throw itself: `finish` touches the
+      // database, and a database that is gone (a shutdown mid-run) would turn
+      // the failure path into an unhandled rejection — killing the process on
+      // Node's default. Logged instead; the row stays `running` and the next
+      // boot turns it into a failed job, which is the same answer.
+      try {
+        await finish(job, { status: "failed", error: JSON.stringify(shapeError(err)) });
+      } catch (finishErr) {
+        console.error("could not record the failed generate job", finishErr);
+      }
     }
   })();
 
@@ -313,18 +341,10 @@ export async function deleteJob(campaign: string): Promise<boolean> {
   return true;
 }
 
-/**
- * Discard the job iff it is the one the client means. Used by apply: the
- * drafts are stored, so the job has done its work — but only that job,
- * never a newer run that started meanwhile.
- */
-export async function deleteJobIfCurrent(campaign: string, jobId: string): Promise<boolean> {
-  const db = await getDb();
-  const row = jobRow(db, campaign);
-  if (row === undefined || row.id !== jobId) return false;
-  db.delete(generateJobs).where(eq(generateJobs.id, jobId)).run();
-  return true;
-}
+// Discarding the job an apply came from is NOT here: it belongs to the same
+// transaction as the writes, so it lives in store/write.ts `applyDrafts`
+// (issue #62). A separate "delete if current" call after the write left a
+// window in which a crash kept a done job whose drafts were already stored.
 
 // --- review edits ------------------------------------------------------------
 

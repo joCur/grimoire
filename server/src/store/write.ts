@@ -42,6 +42,7 @@ import {
 import {
   campaigns,
   chapters,
+  generateJobs,
   glossary,
   inboxEntries,
   locations,
@@ -476,6 +477,10 @@ function patchLocator(
       rejectIdPatch(patch, row.id);
       const fm = applyPatch(renderCampaign(row).frontmatter, patch);
       const name = asStr(fm.name);
+      // Accepted by design: a name that EQUALS the id is stored as "" — the
+      // empty name means "fall back to the id" everywhere it is rendered
+      // (./render, ./read), so the round trip shows the same name back and
+      // the row carries no redundant copy of its own key.
       const next: CampaignRow = {
         ...row,
         name: name === row.id ? "" : name,
@@ -1540,8 +1545,21 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
  * transaction there is no window, and a constraint that fires anyway is
  * translated back to the documented answer instead of escaping as a 500 —
  * either way the transaction rolls back, so a partial apply is impossible.
+ *
+ * `jobId` (issue #62) discards the generate job the drafts came from IN THE
+ * SAME COMMIT. It used to be a second statement after the write: a crash in
+ * between left a `done` job whose drafts were already stored, so the next
+ * start offered a review that could only ever answer 409 — and a failing
+ * delete turned a successful write into a 500. Both are gone now: the job row
+ * disappears exactly when the drafts appear, or neither does. A stale id (a
+ * newer run started meanwhile) matches nothing and is ignored, which is the
+ * documented behaviour.
  */
-export async function applyDrafts(campaign: string, drafts: EntityDraft[]): Promise<void> {
+export async function applyDrafts(
+  campaign: string,
+  drafts: EntityDraft[],
+  jobId?: string,
+): Promise<void> {
   try {
     await mutate(campaign, (tx) => {
       const conflicts = drafts
@@ -1551,6 +1569,11 @@ export async function applyDrafts(campaign: string, drafts: EntityDraft[]): Prom
         throw new ApiError(409, "target files already exist", { conflicts });
       }
       for (const draft of drafts) insertDraft(tx, campaign, draft);
+      if (jobId !== undefined) {
+        tx.delete(generateJobs)
+          .where(and(eq(generateJobs.id, jobId), eq(generateJobs.campaignId, campaign)))
+          .run();
+      }
     });
   } catch (error) {
     if (error instanceof ApiError) throw error;

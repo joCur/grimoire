@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `generate_jobs_campaign_unique` ON `generate_jobs` (`campaign_id`);

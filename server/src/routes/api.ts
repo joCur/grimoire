@@ -46,7 +46,6 @@ import {
 } from "../generator";
 import {
   deleteJob,
-  deleteJobIfCurrent,
   getJob,
   serializeJob,
   setDraftEdit,
@@ -592,9 +591,11 @@ api.put("/:campaign/generate/job/drafts", async (c) => {
 // when it is missing, in the same all-or-nothing batch (the app's "Neues
 // Kapitel" flow).
 // `jobId` (issue #19) ties the apply to the background job it came from: a
-// SUCCESSFUL apply discards that job — the drafts are on disk, there is
+// SUCCESSFUL apply discards that job — the drafts are stored, there is
 // nothing left to restore. A stale id (a newer run started meanwhile) is
-// ignored rather than dropping the wrong job.
+// ignored rather than dropping the wrong job. Since issue #62 that discard is
+// part of the write TRANSACTION (store/write.ts applyDrafts), so drafts and
+// job can never disagree after a crash.
 // `npc` is the NPC generator's one draft (issue #21) — deliberately the SAME
 // endpoint: it needs exactly the same all-or-nothing write, the same 409 and
 // the same job cleanup, and re-validates server-side just like a scene.
@@ -605,7 +606,6 @@ api.post("/:campaign/generate/apply", async (c) => {
   if (jobId !== undefined && typeof jobId !== "string") {
     throw new ApiError(400, "jobId must be a string");
   }
-  const written = await applyGenerated(campaign, body);
-  if (typeof jobId === "string") await deleteJobIfCurrent(campaign, jobId);
+  const written = await applyGenerated(campaign, body, jobId);
   return c.json(written);
 });

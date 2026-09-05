@@ -100,8 +100,8 @@ benannt:
   Import-Quelle.
 - **Bun-spezifisches Risiko?** Hono läuft unverändert auf Node; die einzige
   registrierte Bun-Kopplung ist `bun:sqlite` als Fallback hinter
-  `server/src/db/driver.ts` — primär läuft `node:sqlite`, `better-sqlite3`
-  bleibt der dokumentierte Notausgang (#13).
+  `server/src/db/driver.ts` — primär läuft `node:sqlite`; `better-sqlite3`
+  wäre der Ersatz, wenn beide ausfallen, ist aber nicht implementiert (#13).
   Runtime-Wechsel = Deployment-Änderung, kein Code-Umbau, solange keine
   weiteren Bun-only-APIs benutzt werden. Diese Regel gilt: **Bun-only-APIs
   nur mit Eintrag hier.**
@@ -335,8 +335,10 @@ Konsequenz, gekapselt in `server/src/db/driver.ts`:
   Zeilenbehandlung. **`test/db-smoke.test.ts` beweist FTS5, Transaktionen und
   UPSERT auf beiden Laufzeiten**; der CI-Job `db-smoke-node` fährt dieselbe
   Datei auf Node. Driftet ein Treiber, ist das das Frühwarnsignal.
-- `better-sqlite3` bleibt der dokumentierte, nicht gebaute Notausgang, falls
-  einer der beiden eingebauten Treiber ausfällt.
+- Fällt einer der beiden eingebauten Treiber aus, wäre `better-sqlite3` der
+  Ersatz — hinter derselben Schnittstelle, aber **nicht implementiert**: im
+  Code existiert er nicht, es ist eine Option für diesen Fall, kein
+  vorhandener Notausgang.
 
 **Nachtrag zu ADR #10 (eingelöst in #62):** Generator-Jobs sind persistent
 (`generate_jobs`); der dort akzeptierte Verlust bei Neustart entfällt für
