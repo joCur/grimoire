@@ -162,13 +162,6 @@ export function Topbar() {
             moved into the page header (components/PageContext.tsx). */}
         {campaign !== "" && <CampaignSwitcher campaign={campaign} />}
 
-        {/* THE session control — same component, same slot, every route. Off
-            /live it is the way back into the session, on /live it opens the
-            session menu. */}
-        {live !== undefined && campaign !== "" && (
-          <SessionChip campaign={campaign} session={live} mode={isLive ? "menu" : "link"} />
-        )}
-
         {/* Quiet campaign navigation (issue #34): the three campaign-wide entry
             points, reachable without scrolling, from every campaign view. The
             design prototype does not cover this navigation — the pool's
@@ -260,6 +253,14 @@ export function Topbar() {
             could not work while the live pill was gone at the same time. */}
         {(isPool || isScene) && session.data === null && (
           <StartSessionButton campaign={campaign} />
+        )}
+
+        {/* THE session control, in the SAME slot the start button occupies:
+            one place in the chrome means "session", whether it offers to start
+            one or shows the running one (PO feedback). Off /live it is the way
+            back into the session, on /live it opens the session menu. */}
+        {live !== undefined && campaign !== "" && (
+          <SessionChip campaign={campaign} session={live} mode={isLive ? "menu" : "link"} />
         )}
 
         {/* An unreachable session query is its own state — say so instead of
