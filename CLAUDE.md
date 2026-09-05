@@ -103,9 +103,10 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Jedes Ticket: eigener Worktree + Feature-Branch (`<nr>-<slug>`),
   Ergebnis als PR. Merge-Voraussetzungen: CI grün (Tests, Typecheck,
   Build, E2E), Lead-Klickpfad, UND PO-Approval auf dem PR.
-- `:latest` baut weiter bei jedem Merge — main ist per Definition
-  deploybar; der PO pullt bewusst (nie direkt vor einer Session),
-  SHA-Tags erlauben Rollback.
+- main ist per Definition deploybar, veröffentlicht aber nichts: Images
+  entstehen nur beim Release (DECISIONS #12). Der PO pullt bewusst einen
+  Versions-Tag (nie direkt vor einer Session); Rollback = älterer
+  Versions-Tag.
 
 ## Commit- & Release-Konventionen (DECISIONS #12)
 
@@ -123,8 +124,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   jeder PR — erzeugt Tag `vX.Y.Z`, GitHub-Release, `CHANGELOG.md` und das
   GHCR-Image mit Versions-Tag und `:latest`. Manuell wird nie getaggt und
   `CHANGELOG.md`/`.release-please-manifest.json` nie von Hand editiert.
-- **`:latest` heißt „letzter Release", nicht „letzter Merge".** Normale
-  main-Merges bauen nur ein Image unter dem Commit-SHA.
+- **`:latest` heißt „letzter Release", nicht „letzter Merge".** Der
+  Release-Workflow ist der einzige Schreiber der GHCR-Registry; `ci.yml`
+  prüft nur und pusht kein Image (#66).
 
 ## Kritische Pfade (E2E-Pflicht, echte Suite ohne Mocks)
 

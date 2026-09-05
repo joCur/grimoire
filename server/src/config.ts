@@ -58,9 +58,9 @@ export function getDbFile(): string {
 export const PORT = Number(process.env.PORT ?? 3000);
 
 /**
- * Build id of this server — the commit the image was built from
+ * Build id of this server — the release tag the image was built from
  * (GRIMOIRE_BUILD, baked in by the Dockerfile via a build arg; see
- * .github/workflows/ci.yml). Outside an image it is "dev".
+ * .github/workflows/release.yml). Outside an image it is "dev".
  *
  * The app compares it with its own build id and offers a reload when the two
  * differ (issue #24: an old SPA bundle in an open tab talking to a new

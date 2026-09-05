@@ -62,13 +62,17 @@ ein Start auf einer schon migrierten Datenbank ist ein No-op.
 ### Alternative: fertiges Image aus GHCR ziehen
 
 Das Produktivsystem muss nicht selbst bauen — Images liegen in der GitHub
-Container Registry. Welcher Tag was bedeutet (Issue #47, DECISIONS #12):
+Container Registry. Der Release-Workflow ist der **einzige** Schreiber dieser
+Registry — ein main-Merge veröffentlicht nichts (Issues #47/#66,
+DECISIONS #12). Es gibt daher genau zwei Tag-Sorten:
 
 | Tag | Woher | Wofür |
 | --- | ----- | ----- |
 | `v0.1.0` (auch `0.1.0`) | Release-Workflow beim Merge des Release-PRs | **das, worauf ein Produktivsystem festnagelt** |
-| `latest` | derselbe Release-Workflow | jeweils letzter Release — mutiert **nicht** mehr bei jedem main-Merge |
-| `<commit-sha>` | CI bei jedem Push auf `main` | Vorschau/Debug eines noch nicht releasten Stands |
+| `latest` | derselbe Release-Workflow | jeweils letzter Release — mutiert **nicht** bei main-Merges |
+
+Einen noch nicht releasten Stand gibt es nicht als Image: dafür baut man
+lokal (Abschnitt 1).
 
 ```bash
 docker pull ghcr.io/jocur/grimoire:v0.1.0
@@ -137,9 +141,9 @@ docker compose up -d
 ```
 
 Manuell (ohne Compose): `docker rm -f grimoire`, dann derselbe `docker run`
-wie oben mit `ghcr.io/jocur/grimoire:<alter-tag>`. SHA-Tags funktionieren dafür weiter,
-sind aber Debug-Werkzeug — für Rollbacks sind die Versions-Tags die
-Referenz, weil zu ihnen ein Changelog gehört.
+wie oben mit `ghcr.io/jocur/grimoire:<alter-versions-tag>`. Versions-Tags sind
+die einzige Rollback-Referenz — zu ihnen gehört ein Changelog, und alte
+Releases bleiben in GHCR liegen.
 
 ## 2. Konfiguration (Env-Variablen)
 
@@ -149,7 +153,7 @@ Referenz, weil zu ihnen ein Changelog gehört.
 | `CAMPAIGN_ROOT`     | `/campaigns` | Ordner mit den Markdown-Kampagnen. Nur **Quelle der Erstmigration** (Abschnitt 2b) — im laufenden Betrieb ungenutzt |
 | `PORT`              | `3000`       | HTTP-Port im Container                                        |
 | `APP_DIST`          | `../app/dist` (relativ zum `server/`-Paket) | Pfad des Frontend-Builds; im Image bereits richtig |
-| `GRIMOIRE_BUILD`    | `dev`        | Build-Id; als Build-Arg in Bundle **und** Server eingebrannt — Release-Tag (`v0.1.0`) bei Release-Images, Commit-SHA bei CI-Images aus `main` |
+| `GRIMOIRE_BUILD`    | `dev`        | Build-Id; als Build-Arg in Bundle **und** Server eingebrannt — bei GHCR-Images der Release-Tag (`v0.1.0`), bei lokalen Builds das, was man als `--build-arg` mitgibt (sonst `dev`) |
 | `GRIMOIRE_VERSION`  | `latest`     | **nur im Compose-File**, kein App-Setting: der Image-Tag, den `docker compose` zieht (Abschnitt 1a) |
 
 ## 2a. Datenbank, Volume und Sicherung

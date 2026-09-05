@@ -215,18 +215,37 @@ ein Image und ein Compose-File:
   Zustand gelesen und repariert wird.
 - **Geänderte `:latest`-Semantik:** `:latest` und die Versions-Tags entstehen
   nur im Release-Workflow, mit Checkout **am Tag** (nicht am Branch-Head).
-  Normale main-Merges bauen in `ci.yml` weiterhin ein Image, aber nur unter
-  dem Commit-SHA. `:latest` heißt damit „letzter Release", nicht „letzter
-  Merge". Das Compose-File referenziert
-  `${GRIMOIRE_VERSION:-latest}`; empfohlen ist eine festgenagelte Version.
+  `:latest` heißt damit „letzter Release", nicht „letzter Merge". Das
+  Compose-File referenziert `${GRIMOIRE_VERSION:-latest}`; empfohlen ist eine
+  festgenagelte Version.
 - Die Build-Id für den Reload-Banner (#24, `GRIMOIRE_BUILD`) bleibt
-  erhalten: Release-Images brennen den Tag ein, CI-Images den SHA — in beiden
-  Fällen derselbe Wert in Bundle und Server, sonst zeigte jeder Deploy sein
-  eigenes Banner.
+  erhalten: das Release-Image brennt den Tag ein — derselbe Wert in Bundle
+  und Server, sonst zeigte jeder Deploy sein eigenes Banner.
 
 Bewusst nicht dabei: Multi-Arch (amd64 genügt), Auto-Deploy (der PO pullt
 weiterhin selbst) und rückwirkende Changelog-Generierung für die Commits vor
 diesem Eintrag.
+
+### Nachtrag 2026-09-06 (#66): CI publiziert nicht mehr
+
+Ursprünglich baute `ci.yml` bei jedem main-Merge zusätzlich ein Image unter
+dem Commit-SHA. Das ist entfallen — **der Release-Workflow ist der einzige
+Schreiber der GHCR-Registry.**
+
+- Ein SHA-Push bei jedem Merge hielt das Paket dauerhaft „gerade
+  aktualisiert" und verwässerte damit genau die Release-Semantik, für die
+  dieser Eintrag existiert: Publikation ist ein bewusstes, mit Changelog
+  belegtes Ereignis.
+- Rollback läuft über die **Versions-Tags** — zu ihnen gehört ein Changelog,
+  zu einem SHA nicht. Die SHA-Images waren als „Vorschau/Debug" gedacht und
+  wurden nie so genutzt.
+- Das CI-Gate bleibt unverändert wirksam: `require-green-ci` verlangt den
+  grünen `ci`-Push-Run des getaggten Commits, bevor `publish-image` läuft.
+  CI prüft, Release publiziert.
+- Preis, bewusst akzeptiert: ein Fehler **im Dockerfile selbst** fällt erst
+  im Release-Lauf auf (Tag existiert, `publish-image` rot) statt beim Merge.
+  Das ist ein Nachbessern per Patch-Release, kein Produktionsvorfall — der
+  laufende Host zieht nur bewusst.
 
 ## 13. SQLite ist die Quelle der Wahrheit
 
@@ -307,7 +326,7 @@ ein Spiegel erzeugt, wird nicht gebaut.
   `server/src/db/schema.ts` ist die eine Typquelle; Migrationen sind
   generierte, **committete** SQL-Dateien und werden beim Boot in einer
   Transaktion angewandt. Downgrade wird nicht unterstützt; Rückweg ist
-  Volume-Sicherung plus Image-Rollback per SHA-Tag (#12).
+  Volume-Sicherung plus Image-Rollback auf einen älteren Versions-Tag (#12).
 - **FTS5 statt Fuse.js** für die Suche, als handgeschriebene
   Custom-Migration (Tokenizer `unicode61 remove_diacritics 2`, Ranking
   `bm25(search_fts, 10, 6, 4, 1)`), explizit aus der Store-Schicht gepflegt.

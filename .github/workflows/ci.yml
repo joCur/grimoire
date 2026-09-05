@@ -1,6 +1,7 @@
-# CI (issue #16). All jobs in one workflow on purpose: the image is only ever
-# built from a commit whose checks passed, and `needs:` expresses that inside
-# one run instead of chaining workflow_run across two files.
+# CI (issue #16). This workflow only CHECKS — it publishes nothing. GHCR is
+# written by .github/workflows/release.yml alone (issue #66, ADR #12): CI's
+# green result is the gate that release checks (`require-green-ci`), and the
+# image is built at the version tag.
 #
 #   test          — every PR and every main push: install, typecheck all
 #                   workspaces, tests, app build (runtime: Bun)
@@ -10,10 +11,6 @@
 #   e2e           — after `test`: the real-stack Playwright suite over the
 #                   critical paths (CLAUDE.md) — built app, real server,
 #                   stub LLM
-#   image         — main only, after the checks: build the Dockerfile, push to
-#                   GHCR under the commit SHA. The `:latest` and version tags
-#                   come from .github/workflows/release.yml, only on an actual
-#                   release.
 #
 # Docs: docs/DEPLOYMENT.md (section 1) describes pulling the published image.
 name: CI
@@ -21,15 +18,16 @@ name: CI
 on:
   # Feature work is always reviewed as a PR (CLAUDE.md, "Branch- & PR-Prozess"),
   # so a per-branch push run only ever duplicated the pull_request run — same
-  # commit, same three jobs, twice. Pushes are watched on main only: that is
-  # where the image job belongs (see its `if` below, which now matches the only
-  # ref a push event can carry).
+  # commit, same three jobs, twice. Pushes are watched on main only, and that
+  # run is load-bearing: `require-green-ci` in release.yml looks for the PUSH
+  # run of the released commit, so every commit on main needs one.
   push:
     branches: [main]
   pull_request:
 
 # Superseded runs of the same branch are pointless — except on main, where a
-# cancelled run would also drop the image push for that commit.
+# cancelled run would leave the commit without the green push run a release
+# needs (release.yml treats a missing result as a failing one).
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
@@ -103,8 +101,8 @@ jobs:
   # freshly seeded database (imported from a copy of examples/beispiel through
   # the real first-run migration) and points it at the local stub LLM
   # (e2e/README.md).
-  # Nothing is mocked in the browser, so this job is the last gate before an
-  # image is built.
+  # Nothing is mocked in the browser, so this job is the strongest signal in
+  # the gate a release hangs off.
   e2e:
     needs: test
     runs-on: ubuntu-latest
@@ -139,45 +137,3 @@ jobs:
             e2e/playwright-report
             e2e/test-results
           retention-days: 7
-
-  image:
-    needs: [test, db-smoke-node, e2e]
-    # Still needed after narrowing the push trigger: a pull_request run carries
-    # `refs/pull/<n>/merge`, so this keeps the image a main-only artifact. With
-    # pushes limited to main, the two now agree instead of overlapping.
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      # No repo secrets involved: GITHUB_TOKEN is enough for GHCR pushes to
-      # this repository's own package.
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          # Burns the commit into bundle AND server (issue #24): a tab still
-          # running an older bundle then sees the reload banner instead of
-          # crashing against the new API.
-          build-args: |
-            GRIMOIRE_BUILD=${{ github.sha }}
-          # Lowercase owner: GHCR repository names are case-sensitive.
-          # SHA tag only. `:latest` is built by the release workflow and by
-          # nothing else (issue #47, DECISIONS #12) — a main merge must not
-          # move the tag a production host pulls by default.
-          tags: |
-            ghcr.io/jocur/grimoire:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
