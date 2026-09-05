@@ -50,6 +50,7 @@ import {
 import { getDb } from "./handle";
 import { locatorFromPath, scenePath, type Locator } from "./paths";
 import {
+  campaignDisplayName,
   renderCampaign,
   renderChapter,
   renderGlossary,
@@ -104,18 +105,22 @@ export async function campaignVersion(id: string): Promise<number> {
 // --- GET /api/campaigns ------------------------------------------------------
 
 /**
- * All campaigns with the additive `name`/`description` and `lastSession` —
- * the newest session id, which is what lets the app re-open the last active
- * campaign (issue #14). Session ids are dates, so `max(id)` IS the newest.
+ * All campaigns with `name`/`description` and `lastSession` — the newest
+ * session id, which is what lets the app re-open the last active campaign
+ * (issue #14). Session ids are dates, so `max(id)` IS the newest.
+ *
+ * `name` is the campaign's DISPLAY name and therefore always there: an
+ * unnamed campaign is shown under its id. This list and `GET /file?path=
+ * _campaign.md` used to disagree about that — the document synthesized the id
+ * fallback and the list omitted the key — so the same campaign had two
+ * different names depending on which endpoint you asked (issue #62). Both go
+ * through `campaignDisplayName` now.
  */
 export async function listCampaigns(): Promise<CampaignSummary[]> {
   const db = await getDb();
   const rows = db.select().from(campaigns).orderBy(asc(campaigns.id)).all() as CampaignRow[];
   return rows.map((row) => {
-    const summary: CampaignSummary = { id: row.id };
-    // An empty `name` means the campaign file said nothing usable; clients
-    // then fall back to the id (which stays the key in every URL).
-    if (row.name !== "") summary.name = row.name;
+    const summary: CampaignSummary = { id: row.id, name: campaignDisplayName(row) };
     if (row.description !== null && row.description.trim() !== "") {
       summary.description = row.description;
     }

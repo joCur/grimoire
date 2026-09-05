@@ -76,9 +76,9 @@ tests/*.e2e.ts           ein Spec pro kritischem Pfad (Zuordnung unten)
 ```
 
 **Isolation:** Jeder Test bekommt seine eigene Datenbank *und* seinen eigenen
-Server-Prozess auf eigenem Port (Bereich ab 3200, pro Worker getrennt). Damit
-ist auch der In-Memory-Zustand des Servers (Generator-Job) frisch, und
-Zusicherungen sehen genau die Zeilen, die dieser Test geschrieben hat.
+Server-Prozess auf eigenem Port (Bereich ab 3200, pro Worker getrennt).
+Zusicherungen sehen damit genau die Zeilen, die dieser Test geschrieben hat —
+inklusive des Generator-Jobs, der seit #23 selbst eine Zeile ist.
 `examples/` wird nur kopiert, nie verändert. Boot plus Import kosten ~0,2 s.
 
 **Die zwei Zusicherungs-Helfer:**
@@ -117,6 +117,10 @@ keinen Zustand und kann mehrere Worker parallel bedienen:
 
 - `chapter: <id>` im Kontext-Block → Szenen-Lauf für genau dieses Kapitel
 - kein `chapter` → NPC-Lauf, `vorgegebene id: <id>` fixiert den Dateinamen
+- `E2E_SLOW` im Quelltext → der Stub antwortet **nie** (die Verbindung stirbt
+  mit dem Server-Prozess, der gefragt hat). Das ist die einzige Möglichkeit,
+  einen Job anzusehen, während er wirklich `running` ist — der Neustart-Fall
+  aus #23.
 - `E2E_INVALID` im Quelltext → Antwort, die die Validierung reißt (auch im
   Korrektur-Turn, der Lauf endet also in einem 422)
 - `E2E_TRUNCATED` im Quelltext → `finish_reason: "length"`
@@ -146,10 +150,18 @@ mehrere Schreibwege auf ihm liegen:
 | 3 ⌘K-Suche         | `tests/search.e2e.ts`                                          |
 | 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`                                   |
 | 5 Ernte            | `tests/review-harvest.e2e.ts`                                  |
-| 6 Generator        | `tests/generator.e2e.ts`                                       |
+| 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-restart.e2e.ts`      |
 | 7 Frontmatter/409  | `tests/status-control.e2e.ts`, `tests/frontmatter-form.e2e.ts`, `tests/rename.e2e.ts` |
 | 8 Mobil            | `tests/mobile.e2e.ts`                                          |
 | 9 Datei bearbeiten | `tests/block-composer.e2e.ts`, `tests/file-edit.e2e.ts`        |
+
+`tests/generator-restart.e2e.ts` ist die Neustart-Hälfte von Pfad 6 (#23) und
+braucht darum, wie der Migrations-Spec unten, zwei Server hintereinander auf
+DEMSELBEN Datenverzeichnis: der erste startet einen Lauf bzw. bringt ihn zu
+Ende, der zweite ist der Neustart. Ein **fertiger** Job ist danach vollständig
+da (Ergebnis, Review-Edits) und wird übernommen; ein **laufender** steht als
+`failed` mit „Server wurde während des Laufs neu gestartet — Job neu starten"
+statt als endloser Spinner.
 
 Dazu ein Spec, der auf keinem der neun Pfade liegt, sondern auf der Naht
 darunter: `tests/first-migration.e2e.ts` (Issue #57 AK4) bootet zwei Server

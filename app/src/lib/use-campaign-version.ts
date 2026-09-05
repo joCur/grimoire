@@ -1,6 +1,7 @@
 // Client half of issue #8: poll GET /api/:campaign/version and invalidate
-// the campaign's read queries when the counter changes (the server's file
-// watcher bumps it on every markdown change). No UI — data just refreshes.
+// the campaign's read queries when the counter changes (every server-side
+// write bumps it in its own transaction — there is no file watcher any more,
+// DECISIONS #9/#13). No UI — data just refreshes.
 //
 // The same response carries the server's build id (issue #24), so this one
 // poll doubles as the version handshake: every tick hands the id to

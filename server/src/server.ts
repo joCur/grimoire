@@ -29,10 +29,22 @@
 //                                              BODY of an existing file (issue #15); the
 //                                              frontmatter block is kept byte-identically,
 //                                              same mtime guard as PATCH above (409)
-//   [x] POST /api/:campaign/campaign-meta      { name, description? } -> create
-//                                              _campaign.md (id = directory name);
-//                                              409 when it exists — editing it is
-//                                              PATCH /frontmatter's job (issue #34)
+//   [—] POST /api/:campaign/campaign-meta      REMOVED with issue #62. It existed
+//                                              for the one gap PATCH /frontmatter
+//                                              could not close: a campaign whose
+//                                              `_campaign.md` did not exist yet had
+//                                              no file and therefore no guard token
+//                                              to PATCH against. Since the cutover
+//                                              (#57) the import always creates a
+//                                              campaign ROW, GET /file?path=
+//                                              _campaign.md therefore always
+//                                              answers 200 with a `rev`, and the
+//                                              app's create branch became
+//                                              unreachable (observed in #59). The
+//                                              name is now written the same way
+//                                              every other field is: PATCH
+//                                              /frontmatter with the row's guard
+//                                              token — one write path, one 409 rule
 //   [x] GET  /api/:campaign/session            the ACTIVE session (issue #40): the last
 //                                              STARTED session file that is not ended —
 //                                              today's OR an older one, so a session past
@@ -180,9 +192,13 @@
 // (`rawReply`, capped) and the run's `usage` — since issue #19 inside the
 // job's `error` body instead of as the POST's response.
 //
-// Generate jobs live in memory only (./generate-jobs): a restart loses them,
-// deliberately — the campaign files stay the only truth on disk. The app
-// reports a vanished job instead of waiting forever.
+// Generate jobs are ROWS since issue #23 (`generate_jobs`, ./generate-jobs):
+// a finished run survives a restart whole — result, error body and review
+// edits — and is still applyable afterwards. A run that was IN FLIGHT cannot
+// survive (its provider call died with the process), so the boot rewrites
+// every leftover `running` row into a `failed` one carrying the German
+// sentence of db/job-boot.ts. The app renders that field, so an interrupted
+// run says "Job neu starten" instead of spinning forever.
 //
 // Everything that is NOT under /api is served from the frontend build
 // (app/dist) with an index.html fallback for client-side routes — see
@@ -233,6 +249,15 @@ if (import.meta.main) {
     console.log(
       `Database in use (${info?.backend ?? "unknown backend"}); no import needed ` +
         `(${info?.migration.skipped ?? "already migrated"}). CAMPAIGN_ROOT is not read.`,
+    );
+  }
+  // Issue #23: jobs are rows now, so a restart no longer loses a finished
+  // generation — but a run that was in flight died with the old process and
+  // is reported as failed. Say so, it explains the app's message.
+  if (info !== undefined && info.interruptedJobs > 0) {
+    console.log(
+      `${info.interruptedJobs} generate job(s) were running at the last shutdown — ` +
+        "marked as failed (restart the run).",
     );
   }
 

@@ -113,31 +113,37 @@ describe("GET /api/campaigns", () => {
 
     test("newest session id wins; no sessions → no lastSession field", async () => {
       const body = await campaigns();
+      // `name` is the DISPLAY name and is always there since issue #62: a
+      // campaign with no authored name is listed under its id, exactly as the
+      // campaign DOCUMENT renders it (GET /file?path=_campaign.md).
       expect(body).toEqual([
-        { id: "kaputte-meta" },
+        { id: "kaputte-meta", name: "kaputte-meta" },
         { id: "krude-meta", name: "Krude Kampagne" },
-        { id: "leere-sessions" },
-        { id: "meta-ohne-name" },
+        { id: "leere-sessions", name: "leere-sessions" },
+        { id: "meta-ohne-name", name: "meta-ohne-name" },
         { id: "mit-meta", name: "Tyranny of Dragons", description: "Drachen, überall." },
-        { id: "mit-sessions", lastSession: "2026-03-09" },
-        { id: "ohne-sessions" },
+        { id: "mit-sessions", name: "mit-sessions", lastSession: "2026-03-09" },
+        { id: "ohne-sessions", name: "ohne-sessions" },
       ]);
     });
 
     test("_campaign.md degrades: broken YAML, missing name, non-string values", async () => {
       const byId = new Map((await campaigns()).map((c) => [c.id, c]));
       // Broken frontmatter → the campaign ROW still exists (a directory is a
-      // campaign), but with no fields at all: never an error, and never the
-      // parser's file-stem fallback ("_campaign"). The file itself is kept
-      // verbatim in unknown_files — see db-migration.test.ts.
-      expect(byId.get("kaputte-meta")).toEqual({ id: "kaputte-meta" });
-      // File present but without `name` → the id stays the label (the
-      // parser's name→id fallback is not an authored display name).
-      expect(byId.get("meta-ohne-name")).toEqual({ id: "meta-ohne-name" });
+      // campaign) and nothing was READ from the file: no description, and
+      // never the parser's file-stem fallback ("_campaign") as the name — the
+      // id is. The file itself is kept verbatim in unknown_files (see
+      // db-migration.test.ts).
+      expect(byId.get("kaputte-meta")).toEqual({ id: "kaputte-meta", name: "kaputte-meta" });
+      // File present but without `name` → the id is the display name.
+      expect(byId.get("meta-ohne-name")).toEqual({
+        id: "meta-ohne-name",
+        name: "meta-ohne-name",
+      });
       // Non-string description is dropped, the valid name survives.
       expect(byId.get("krude-meta")).toEqual({ id: "krude-meta", name: "Krude Kampagne" });
-      // No file at all → unchanged behaviour.
-      expect(byId.get("ohne-sessions")).toEqual({ id: "ohne-sessions" });
+      // No file at all → the id, same as everywhere else.
+      expect(byId.get("ohne-sessions")).toEqual({ id: "ohne-sessions", name: "ohne-sessions" });
     });
   });
 });

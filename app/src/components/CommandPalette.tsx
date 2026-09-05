@@ -4,7 +4,7 @@
 // primitives (focus trap, Esc, outside-click, aria-modal) with a manual
 // combobox/listbox pattern for the results — cmdk was skipped because the
 // server does all filtering/ranking; client-side re-filtering would fight
-// the Fuse.js scores.
+// the server's bm25 ordering (FTS5 since the cutover, #57).
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";

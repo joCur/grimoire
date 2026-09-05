@@ -153,23 +153,27 @@ export interface ParsedFile<F = Record<string, unknown>> {
 // --- API response shapes (see endpoint list in server/src/server.ts) -------
 
 export interface CampaignSummary {
-  /** Directory name under CAMPAIGN_ROOT. */
+  /** The campaign's id — the key in every URL. */
   id: string;
   /**
-   * Id of the campaign's newest session file (`sessions/<id>.md` without the
+   * Id of the campaign's newest session (`sessions/<id>.md` without the
    * extension, i.e. `yyyy-mm-dd`). Session ids are dates, so their string
    * order IS their date order and the newest one is the lexicographically
-   * largest. Absent when the campaign has no readable session — the client
-   * uses it to pick the last active campaign (issue #14).
+   * largest. Absent when the campaign has no session — the client uses it to
+   * pick the last active campaign (issue #14).
    */
   lastSession?: string;
   /**
-   * Display name from `<campaign>/_campaign.md` (additive, issue #17).
-   * Absent when the file is missing, unreadable or carries no usable `name`
-   * — clients fall back to `id` (which stays the key in every URL).
+   * Display name (issue #17). Always present since issue #62: a campaign
+   * without an authored name is shown under its ID, exactly as the campaign
+   * DOCUMENT renders it (`GET /file?path=_campaign.md`) — the two endpoints
+   * used to disagree. Optional in the type so an older payload still parses.
    */
   name?: string;
-  /** One-line description from the same file; absent under the same rules. */
+  /**
+   * One-line description of the campaign; absent when there is none (unlike
+   * `name` there is nothing sensible to synthesize).
+   */
   description?: string;
 }
 
@@ -405,9 +409,12 @@ export interface GenerateJobError {
  * `202 { jobId }` and the result waits here until it is applied, discarded
  * or replaced by the next run.
  *
- * In-memory on the server ON PURPOSE (issue #19 non-goal): a restart loses
- * jobs, and the client says so instead of waiting forever. The campaign
- * files stay the only truth on disk.
+ * A ROW on the server since issue #23 (`generate_jobs`), so the run outlives
+ * the process too: `done` and `failed` come back after a restart whole —
+ * result, error body and `draftEdits` — and stay applyable. Only a `running`
+ * job cannot survive, because its provider call died with the process: the
+ * boot rewrites it to `failed` with a German message saying to start the run
+ * again, which the client shows instead of polling forever.
  */
 export interface GenerateJob {
   /** crypto.randomUUID — the client sends it back on apply. */

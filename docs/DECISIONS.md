@@ -5,6 +5,13 @@ unten anfügen, alte nicht löschen — bei Änderung Status auf `ersetzt durch 
 
 ## 1. Source of Truth: Markdown + Frontmatter auf dem Dateisystem
 
+> **Status: ersetzt durch #13.** Die Speicherung ist eine SQLite-Datenbank.
+> Was von diesem Eintrag GILT: „Format degradiert statt zu validieren" ist
+> unverändert Grundregel (im Renderer wie im Import), und das
+> Markdown-Body-Vokabular aus README.md bleibt normativ. Was NICHT mehr gilt:
+> Dateien als Speicher, externe Editierbarkeit als Datenpfad und
+> Git-Versionierung der Inhalte.
+
 Menschenlesbar, mit jedem Editor bearbeitbar, Git-versionierbar.
 Die App ist ein Frontend über diesem Datenmodell, keine Datenbank-App.
 Format degradiert statt zu validieren (unbekannte Callouts/Überschriften
@@ -35,6 +42,12 @@ Schreibzugriffe laufen über den Server, kein persistenter Browser-State.
   ist bewusst KEIN Ziel von v1.
 - Konfliktschutz: Patch nur bei unverändertem mtime, sonst 409.
 
+> **Teilweise überholt (#11, #13/#15):** Bearbeitet wird in der App; ein
+> externer Editor ist kein Datenpfad mehr, weil die Datenbank die Wahrheit
+> ist. Was GILT: das Append-only von Session-Log und Inbox (samt der einen
+> Ausnahme, dem Abhaken erledigter Inbox-Zeilen) und die Konfliktregel —
+> nur heißt der Guard jetzt `rev`, die Zeilenversion, statt der Dateizeit.
+
 ## 5. Tech-Stack
 
 **Frontend:** Vite + React 19 + Tailwind v4 + shadcn/ui.
@@ -44,9 +57,12 @@ Markdown-Rendering: react-markdown + eigenes Remark-Plugin für
 `[!callout]`-Blöcke und `## If:`-Überschriften.
 Kein Electron/Tauri — Web-App hinter Tailscale reicht.
 
-**Backend:** Bun + Hono. Bibliotheken: gray-matter (Frontmatter),
-chokidar (Datei-Watcher für externe Edits), Fuse.js (Suche im Speicher —
-kein SQLite nötig bei ein paar hundert Dateien).
+**Backend:** Bun + Hono. Bibliotheken ursprünglich: gray-matter
+(Frontmatter), chokidar (Datei-Watcher für externe Edits), Fuse.js (Suche im
+Speicher — kein SQLite nötig bei ein paar hundert Dateien).
+**Seit #13:** Drizzle über SQLite (`server/src/db/`), Suche als FTS5-Index;
+chokidar und Fuse.js sind entfernt, gray-matter lebt nur noch im
+Import-/Parser-Pfad (`@grimoire/shared`).
 Hono statt Express/Fastify: minimal, typsicher, läuft auf Bun UND Node
 (Runtime-Wechsel bleibt möglich, siehe #7).
 
@@ -55,7 +71,8 @@ game-icons.net (CC BY) für thematische Marker (Entitäts- und
 Callout-Typen). Benötigte SVGs als eigene Komponenten einchecken.
 
 **Deployment:** ein Docker-Container (Bun-Image), Volume auf
-`campaigns/`, erreichbar nur über Tailscale.
+`GRIMOIRE_DATA` (seit #13; vorher `campaigns/`), erreichbar nur über
+Tailscale. Details: docs/DEPLOYMENT.md.
 
 ## 6. LLM-Generator
 
@@ -77,11 +94,14 @@ benannt:
   Geräten" ab, ohne App-Code (#3 bleibt gültig). Falls doch in-App:
   Hono bringt Middleware für Basic Auth, JWT und Sessions mit; das ist
   ein Middleware-Layer, kein Rewrite.
-- **Mehr Daten / komplexere Queries?** Fuse.js → SQLite (bun:sqlite ist
-  eingebaut). Das Dateisystem bleibt Source of Truth, SQLite wäre nur
-  Index/Cache.
-- **Bun-spezifisches Risiko?** Hono läuft unverändert auf Node; einzige
-  Bun-Kopplung wäre bun:sqlite (dann better-sqlite3 als Node-Ersatz).
+- **Mehr Daten / komplexere Queries?** *Eingetreten und entschieden in
+  #13* — allerdings anders als hier vermutet: SQLite ist nicht Index/Cache
+  geworden, sondern die Quelle der Wahrheit; das Dateisystem ist nur noch
+  Import-Quelle.
+- **Bun-spezifisches Risiko?** Hono läuft unverändert auf Node; die einzige
+  registrierte Bun-Kopplung ist `bun:sqlite` als Fallback hinter
+  `server/src/db/driver.ts` — primär läuft `node:sqlite`; `better-sqlite3`
+  wäre der Ersatz, wenn beide ausfallen, ist aber nicht implementiert (#13).
   Runtime-Wechsel = Deployment-Änderung, kein Code-Umbau, solange keine
   weiteren Bun-only-APIs benutzt werden. Diese Regel gilt: **Bun-only-APIs
   nur mit Eintrag hier.**
@@ -102,10 +122,13 @@ Laufzeit-APIs.
 
 ## 9. Client-Aktualisierung: Polling statt SSE
 
-Externe Edits (Editor, git pull, Generator) sollen in der App sichtbar
-werden, ohne manuell neu zu laden. Mechanismus: chokidar beobachtet
-CAMPAIGN_ROOT und invalidiert pro Kampagne den In-Memory-Suchindex und
-einen Versionszähler; die App pollt `GET /api/:campaign/version` und
+Änderungen sollen in der App sichtbar werden, ohne manuell neu zu laden.
+Mechanismus ursprünglich: chokidar beobachtet CAMPAIGN_ROOT und invalidiert
+pro Kampagne den In-Memory-Suchindex und einen Versionszähler.
+**Seit #13 ohne Watcher:** es gibt keinen externen Schreiber mehr, also wird
+`campaigns.version` von jedem Write in DERSELBEN Transaktion hochgezählt —
+ein Poll kann keine erhöhte Version ohne die zugehörige Änderung sehen.
+Unverändert: die App pollt `GET /api/:campaign/version` und
 invalidiert ihre Queries, wenn sich der Wert ändert. Das Poll-Intervall
 ist rein clientseitig. SSE/WebSockets erwogen und zurückgestellt: für
 einen Einzelnutzer (#3) reicht Polling, und SSE ist später ohne
@@ -126,7 +149,24 @@ möglich sein. Job-Store in-memory (Kampagnendateien bleiben die einzige
 Platten-Wahrheit, #1); Verlust bei Server-Neustart ist der akzeptierte
 Trade-off und wird der UI sauber gemeldet.
 
+**Nachtrag (#23, erledigt in #62):** Der letzte Satz gilt nicht mehr. Jobs
+sind Zeilen in `generate_jobs` (#13), denn mit der Datenbank als Wahrheit gibt
+es einen naheliegenden Ort dafür — und der Verlust, den das Job-Modell
+verhindern sollte, trat genau hier noch auf: ein Deploy in der Minute zwischen
+„fertig" und „Übernehmen" warf ein fertiges Ergebnis weg. Seither überlebt ein
+**fertiger** Job (`done`/`failed`) einen Neustart vollständig — Ergebnis,
+Fehlerbody und die Review-Edits — und bleibt übernehmbar. Ein **laufender**
+Job kann es nicht, weil sein Provider-Call mit dem Prozess starb: der Boot
+schreibt jede übrig gebliebene `running`-Zeile auf `failed` mit der Meldung
+„Server wurde während des Laufs neu gestartet — Job neu starten"
+(`server/src/db/job-boot.ts`), statt die App ins endlose Pollen zu schicken.
+
 ## 11. App-first: Bearbeitung in der App ist das Ziel, der Editor Ausweichlösung
+
+> **Status: ersetzt durch #13.** Die Speicherformat-Konsequenz unten („Markdown
+> bleibt vorerst Source of Truth") ist eingelöst und aufgehoben: die benannten
+> Trigger sind eingetreten, die Migration ist durch. Die Haltung „alles aus der
+> App heraus" bleibt Produktziel — sie ist der Grund für #13.
 
 Revidiert die Gewichtung aus #4: Externes Editieren (VS Code o. ä.) ist
 Übergangs-Ventil, nicht Produktziel. Zielbild des PO: alle Pflege-
@@ -188,23 +228,33 @@ Bewusst nicht dabei: Multi-Arch (amd64 genügt), Auto-Deploy (der PO pullt
 weiterhin selbst) und rückwirkende Changelog-Generierung für die Commits vor
 diesem Eintrag.
 
-## 13. SQLite ist die Quelle der Wahrheit (ENTWURF — finalisiert in Scheibe 4)
+## 13. SQLite ist die Quelle der Wahrheit
 
-> **Status: Entwurf, aber ab Scheibe 2 (#57) wirksam.** Eingecheckt mit
-> Scheibe 1 (#54), damit Schema und Werkzeug nicht ohne festgehaltene
-> Begründung im Repo liegen. **Seit dem Cutover (#57) liest und schreibt die
-> Lauf-API ausschließlich die Datenbank** — ADR #1 („Markdown-Dateien sind die
-> Datenbank") gilt damit nur noch für das Body-Vokabular und für das
-> Import-Format, nicht mehr für die Speicherung. Formal finalisiert wird
-> dieser Eintrag in Scheibe 4 (#52), wenn Generator-Jobs persistent sind und
-> die letzten Dateileser aus dem Baum verschwinden.
+> **Status: final** (#62). Als Entwurf mit Scheibe 1 (#54) eingecheckt, damit
+> Schema und Werkzeug nicht ohne festgehaltene Begründung im Repo liegen;
+> wirksam seit dem Cutover in Scheibe 2 (#57); mit Scheibe 4 (#62) ist die
+> Migration abgeschlossen und dieser Eintrag maßgeblich.
 >
-> Was Scheibe 2 konkret eingelöst hat: alle Read-/Write-Endpoints als Queries
-> (`server/src/store/`), `rev` als 409-Guard (löst #37), FTS5 statt Fuse.js,
-> `GET/PUT /:campaign/glossary` auf der Glossar-Tabelle,
-> `GET /:campaign/migration-report` samt leisem UI-Hinweis, Boot =
-> Schema-Migrator + Erstmigration, chokidar-Watcher entfernt (die
-> Versions-Zählung kommt aus `campaigns.version`).
+> Was die vier Scheiben eingelöst haben:
+>
+> - **#54** — Drizzle-Schema als eine Typquelle, committete Migrationen,
+>   FTS5-Custom-Migration, die Einmal-Migration Dateibaum → DB (voller Import,
+>   Degradation statt Fehler), `grimoire seed`, Bun+Node-Treiber-Smoke.
+> - **#57 (Cutover)** — alle Read-/Write-Endpoints als Queries
+>   (`server/src/store/`), `rev` als 409-Guard (löst #37), FTS5 statt Fuse.js,
+>   `GET/PUT /:campaign/glossary` auf der Glossar-Tabelle,
+>   `GET /:campaign/migration-report` samt leisem UI-Hinweis, Boot =
+>   Schema-Migrator + Erstmigration, chokidar-Watcher entfernt (die
+>   Versions-Zählung kommt aus `campaigns.version`).
+> - **#60** — `GET /usage` als Referenzzählung, Rename-Vorschau auf diesen
+>   Zahlen.
+> - **#62** — Generator-Jobs persistent (Nachtrag zu #10), die letzten
+>   Dateileser entfernt (`CAMPAIGN_ROOT` liest nur noch
+>   `db/migrate-campaigns.ts`), `POST /campaign-meta` entfernt (der Totpfad
+>   nach dem Cutover: die Kampagnen-Zeile existiert immer, also gibt es keinen
+>   Anlege-Fall mehr — Name und Beschreibung laufen über PATCH /frontmatter),
+>   `name` in Kampagnenliste und Kampagnen-Dokument vereinheitlicht, Doku
+>   nachgezogen.
 >
 > Zwei Abweichungen von der Planung, hier festgehalten, weil sie Verhalten
 > ändern: (a) **eine Szene wird über ihre `id` adressiert**, nicht mehr über
@@ -212,8 +262,7 @@ diesem Eintrag.
 > existiert der Dateiname nirgends mehr — der Pfad lautet
 > `<kapitel>/<ort>/<id>.md`); (b) **`POST /rename` ist mit dem Cutover auf die
 > Datenbank umgestellt** statt erst in Scheibe 3 — der Datei-Kaskade hätte
-> sonst niemand mehr zugesehen. Scheibe 3 behält `GET /usage` und die
-> Rename-Vorschau auf Usage-Zahlen.
+> sonst niemand mehr zugesehen.
 
 **Löst ADR #11 ab** (und damit die dort formulierte Reihenfolge „Markdown
 bleibt vorerst Source of Truth"). Die dort benannten Trigger sind eingetreten:
@@ -286,12 +335,15 @@ Konsequenz, gekapselt in `server/src/db/driver.ts`:
   Zeilenbehandlung. **`test/db-smoke.test.ts` beweist FTS5, Transaktionen und
   UPSERT auf beiden Laufzeiten**; der CI-Job `db-smoke-node` fährt dieselbe
   Datei auf Node. Driftet ein Treiber, ist das das Frühwarnsignal.
-- `better-sqlite3` bleibt der dokumentierte, nicht gebaute Notausgang, falls
-  einer der beiden eingebauten Treiber ausfällt.
+- Fällt einer der beiden eingebauten Treiber aus, wäre `better-sqlite3` der
+  Ersatz — hinter derselben Schnittstelle, aber **nicht implementiert**: im
+  Code existiert er nicht, es ist eine Option für diesen Fall, kein
+  vorhandener Notausgang.
 
-**Nachtrag zu ADR #10:** Generator-Jobs werden persistent (`generate_jobs`);
-der dort akzeptierte Verlust bei Neustart entfällt, laufende Jobs werden beim
-Boot auf `failed` gesetzt (Scheibe 4, #23).
+**Nachtrag zu ADR #10 (eingelöst in #62):** Generator-Jobs sind persistent
+(`generate_jobs`); der dort akzeptierte Verlust bei Neustart entfällt für
+fertige Jobs, laufende werden beim Boot auf `failed` mit einer klaren deutschen
+Meldung gesetzt. Wortlaut und Begründung stehen im Nachtrag unter #10.
 
 **Bewusst nicht Teil der Entscheidung:** Export/Import jenseits der
 Erstmigration, Trigram-Tokenizer für tippfehlertolerante Suche, Auto-Backups,

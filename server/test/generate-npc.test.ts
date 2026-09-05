@@ -50,9 +50,9 @@ afterAll(() => {
   dropStore();
 });
 
-afterEach(() => {
+afterEach(async () => {
   setProviderForTests(null);
-  clearJobsForTests();
+  await clearJobsForTests();
   delete process.env.LLM_CORRECTION_TURNS;
 });
 
@@ -611,7 +611,7 @@ describe("npc generate jobs", () => {
     });
     open.open();
     await waitForJob();
-    clearJobsForTests();
+    await clearJobsForTests();
 
     // …and the other way round: npc job running -> scene start is a 409
     const open2 = gate();

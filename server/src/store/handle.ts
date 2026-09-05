@@ -5,14 +5,15 @@
 // CAMPAIGN_ROOT is touched exactly once — by the one-time migration this
 // module kicks off on the first access (planning section 3).
 //
-// The handle is opened LAZILY rather than at module import, for the same
-// reason the watcher used to be: importing the app for in-process tests must
-// stay free of side effects. The first request opens the file, runs the
-// schema migrator (client.ts) and then the initial import; every later call
-// gets the memoized handle.
+// The handle is opened LAZILY rather than at module import, so that importing
+// the app for in-process tests stays free of side effects (no database file
+// appearing next to the repository). The first access opens the file, runs the
+// schema migrator (client.ts), then the initial import, then the job cleanup
+// of issue #23; every later call gets the memoized handle.
 
 import { getCampaignRoot, getDbFile } from "../config";
 import { openDb, type GrimoireDb, type OpenDb } from "../db/client";
+import { failInterruptedJobs } from "../db/job-boot";
 import { runInitialMigration, type MigrationOutcome } from "../db/migrate-campaigns";
 
 /** What `initStore` was called with — reported on boot. */
@@ -23,6 +24,11 @@ export interface StoreInfo {
   backend: string;
   /** Outcome of the one-time migration attempt of this boot. */
   migration: MigrationOutcome;
+  /**
+   * How many generator jobs this boot found `running` and had to fail
+   * (issue #23) — the runs the previous process took down with it.
+   */
+  interruptedJobs: number;
 }
 
 let opened: OpenDb | null = null;
@@ -50,8 +56,13 @@ export async function initStore(
     // non-empty database is left alone (migrate-campaigns.ts rule 2), so
     // running this on every boot is the documented behaviour, not a risk.
     const migration = await runInitialMigration(handle.db, root);
+    // A generator job cannot outlive the process that ran it (issue #23): the
+    // provider call is gone, so a `running` row left behind by a restart or a
+    // crash is failed here — with a German sentence the app shows — instead of
+    // being polled forever. Finished jobs are untouched and stay applyable.
+    const interruptedJobs = failInterruptedJobs(handle.db);
     opened = handle;
-    info = { file, backend: handle.client.backend, migration };
+    info = { file, backend: handle.client.backend, migration, interruptedJobs };
     return handle.db;
   })();
   try {

@@ -62,6 +62,15 @@ async function patchOk(body: unknown): Promise<FileResponse> {
   return (await res.json()) as FileResponse;
 }
 
+/** PATCH /frontmatter of any campaign (patchReq is bound to `beispiel`). */
+async function patchJson(url: string, body: unknown): Promise<Response> {
+  return app.request(url, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 async function putFile(body: unknown): Promise<Response> {
   return app.request("/api/beispiel/file", {
     method: "PUT",
@@ -564,17 +573,27 @@ describe("POST /api/:campaign/inbox", () => {
   });
 });
 
-// The meta dialog of issue #34 edits an EXISTING campaign name through
-// PATCH /frontmatter (covered above). This endpoint only closes the gap where
-// there is no NAME yet: after the cutover the campaign ROW always exists, so
-// "the file does not exist" became "the row has no name" — hence a second
-// campaign whose directory had no `_campaign.md`.
-describe("POST /api/:campaign/campaign-meta", () => {
-  test("sets name and description on a campaign that has none", async () => {
+// The metadata dialog of issue #34 writes name/description through PATCH
+// /frontmatter — the ONE write path since issue #62. The endpoint that used to
+// close the "there is no `_campaign.md` yet" gap (POST /campaign-meta) is gone
+// with that gap: after the cutover the campaign ROW always exists, GET /file
+// always answers with a document and a guard token, and naming a campaign that
+// has no name is an ordinary patch.
+describe("naming a campaign that has none (issue #62)", () => {
+  test("PATCH /frontmatter sets name and description on an unnamed campaign", async () => {
     await withFreshCampaign(async () => {
-      const res = await postJson(`/api/${FRESH}/campaign-meta`, {
-        name: "Die Aschekönige",
-        description: "Eine Wüstenkampagne um verschüttete Städte.",
+      // Unnamed: the document exists and shows the ID as its display name,
+      // which is exactly what GET /campaigns says too (both synthesize).
+      const before = await getFile("_campaign.md", FRESH);
+      expect(before.frontmatter).toEqual({ id: FRESH, name: FRESH });
+
+      const res = await patchJson(`/api/${FRESH}/frontmatter`, {
+        path: "_campaign.md",
+        mtimeMs: before.mtimeMs,
+        patch: {
+          name: "Die Aschekönige",
+          description: "Eine Wüstenkampagne um verschüttete Städte.",
+        },
       });
       expect(res.status).toBe(200);
       const file = (await res.json()) as FileResponse;
@@ -597,11 +616,13 @@ describe("POST /api/:campaign/campaign-meta", () => {
     });
   });
 
-  test("a blank description writes no key at all", async () => {
+  test("a blank description is DELETED with null, not written as an empty key", async () => {
     await withFreshCampaign(async () => {
-      const res = await postJson(`/api/${FRESH}/campaign-meta`, {
-        name: "Nur ein Name",
-        description: "   ",
+      const before = await getFile("_campaign.md", FRESH);
+      const res = await patchJson(`/api/${FRESH}/frontmatter`, {
+        path: "_campaign.md",
+        mtimeMs: before.mtimeMs,
+        patch: { name: "Nur ein Name", description: null },
       });
       expect(res.status).toBe(200);
       const file = (await res.json()) as FileResponse;
@@ -610,32 +631,19 @@ describe("POST /api/:campaign/campaign-meta", () => {
     });
   });
 
-  test("409 when a name already exists — the existing one is never touched", async () => {
+  test("a stale token is a 409 — the existing name is never touched", async () => {
     const before = await getFile("_campaign.md");
-    const res = await postJson("/api/beispiel/campaign-meta", { name: "Überschrieben" });
+    const res = await patchJson("/api/beispiel/frontmatter", {
+      path: "_campaign.md",
+      mtimeMs: before.mtimeMs - 1,
+      patch: { name: "Überschrieben" },
+    });
     expect(res.status).toBe(409);
-    expect((await res.json()) as { path: string }).toMatchObject({ path: "_campaign.md" });
     expect(await getFile("_campaign.md")).toEqual(before);
   });
 
-  test("400 on a missing, blank or non-string name and a non-string description", async () => {
-    await withFreshCampaign(async () => {
-      expect((await postJson(`/api/${FRESH}/campaign-meta`, {})).status).toBe(400);
-      expect((await postJson(`/api/${FRESH}/campaign-meta`, { name: "  " })).status).toBe(400);
-      expect((await postJson(`/api/${FRESH}/campaign-meta`, { name: 42 })).status).toBe(400);
-      expect(
-        (await postJson(`/api/${FRESH}/campaign-meta`, { name: "Ok", description: 7 })).status,
-      ).toBe(400);
-      expect(
-        (await postJson(`/api/${FRESH}/campaign-meta`, { name: "Ok", id: "gehackt" })).status,
-      ).toBe(400);
-      // None of the rejected requests named the campaign — so this still works.
-      expect((await postJson(`/api/${FRESH}/campaign-meta`, { name: "Danach" })).status).toBe(200);
-    });
-  });
-
-  test("404 for an unknown campaign", async () => {
-    expect((await postJson("/api/nope/campaign-meta", { name: "x" })).status).toBe(404);
+  test("the create endpoint is gone — 404, no route", async () => {
+    expect((await postJson("/api/beispiel/campaign-meta", { name: "x" })).status).toBe(404);
   });
 });
 

@@ -5,6 +5,7 @@ import { ApiError } from "@/api";
 import {
   campaignMetaPatch,
   canSubmitCampaignMeta,
+  prefillCampaignName,
   seedCampaignMetaBase,
   writeCampaignMeta,
 } from "./campaign-meta";
@@ -103,23 +104,26 @@ describe("seedCampaignMetaBase", () => {
     expect(seedCampaignMetaBase(undefined, { mtimeMs: 42 })).toEqual({ mtimeMs: 42 });
   });
 
-  test("a missing file is the create path — a base without a version", () => {
-    expect(seedCampaignMetaBase(undefined, "missing")).toEqual({ mtimeMs: undefined });
-  });
-
   test("a later poll does NOT advance the base (that would overwrite the foreign edit)", () => {
     const frozen = { mtimeMs: 42 };
-    // The 5s version poll refetches _campaign.md while the dialog stands; an
-    // external edit must answer 409 on save, so the base stays where it was.
+    // The 5s version poll refetches _campaign.md while the dialog stands; a
+    // concurrent edit must answer 409 on save, so the base stays where it was.
     expect(seedCampaignMetaBase(frozen, { mtimeMs: 99 })).toBe(frozen);
-    // …and a file appearing under an open create dialog does not either.
-    const created = { mtimeMs: undefined };
-    expect(seedCampaignMetaBase(created, { mtimeMs: 7 })).toBe(created);
+  });
+});
+
+describe("prefillCampaignName", () => {
+  test("a name that IS the id is the server's fallback, not an authored value", () => {
+    // The dialog must not propose the id as a name (issue #62: both endpoints
+    // synthesize it now) — the field starts empty, the id is the placeholder.
+    expect(prefillCampaignName("beispiel", "beispiel")).toBe("");
+    expect(prefillCampaignName("beispiel", undefined)).toBe("");
+    expect(prefillCampaignName("beispiel", "Salzhafen")).toBe("Salzhafen");
   });
 });
 
 describe("writeCampaignMeta", () => {
-  test("with an mtime it PATCHes the frontmatter of the existing file", async () => {
+  test("it PATCHes the frontmatter with the guard token the dialog holds", async () => {
     const calls = answerWith(200, FILE);
     const result = await writeCampaignMeta(
       "beispiel",
@@ -137,16 +141,6 @@ describe("writeCampaignMeta", () => {
     });
   });
 
-  test("without an mtime it creates the file (no metadata yet)", async () => {
-    const calls = answerWith(200, FILE);
-    const result = await writeCampaignMeta("beispiel", { name: "Frisch", description: "" }, undefined);
-    expect(result).toEqual({ ok: true, file: FILE });
-    expect(calls[0]?.method).toBe("POST");
-    expect(calls[0]?.url).toBe("/api/beispiel/campaign-meta");
-    // A blank description is not sent at all — the server writes no key.
-    expect(calls[0]?.body).toEqual({ name: "Frisch" });
-  });
-
   test("409 means nothing was written; the file is re-read for the next attempt", async () => {
     const calls = answerOnce(
       { status: 409, body: { error: "file changed on disk", mtimeMs: 99 } },
@@ -157,15 +151,6 @@ describe("writeCampaignMeta", () => {
     expect(result.file?.mtimeMs).toBe(99);
     expect(calls[1]?.method).toBe("GET");
     expect(calls[1]?.url).toBe("/api/beispiel/file?path=_campaign.md");
-  });
-
-  test("409 on the create path too — the file appeared while the dialog was open", async () => {
-    answerOnce(
-      { status: 409, body: { error: "campaign file already exists", path: "_campaign.md" } },
-      { status: 200, body: FILE },
-    );
-    const result = await writeCampaignMeta("beispiel", { name: "X", description: "" }, undefined);
-    expect(result).toEqual({ ok: false, file: FILE });
   });
 
   test("a failed reload after the conflict keeps the conflict, not a crash", async () => {

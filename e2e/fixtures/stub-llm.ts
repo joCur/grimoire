@@ -29,10 +29,13 @@
 //   - TRIGGER.invalid in the source text   -> a reply that fails validation
 //     (also for the replayed correction turn, so the run ends in a 422)
 //   - TRIGGER.truncated in the source text -> finish_reason "length"
+//   - TRIGGER.slow in the source text      -> the reply is HELD (SLOW_REPLY_MS)
+//     so a spec can observe a job while it is really running (issue #23)
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 import {
+  SLOW_REPLY_MS,
   TRIGGER,
   invalidNpcReply,
   invalidSceneReply,
@@ -70,6 +73,8 @@ export interface StubDecision {
   /** The endpoint reports the reply as cut off. */
   truncated: boolean;
   kind: "scene" | "npc";
+  /** Milliseconds to hold the reply before sending it (TRIGGER.slow). */
+  delayMs: number;
 }
 
 /** The whole stub logic: prompt in, canned reply out. Exported for reuse. */
@@ -79,18 +84,21 @@ export function decide(messages: ChatMessage[]): StubDecision {
   const invalid = source.includes(TRIGGER.invalid);
   const truncated = source.includes(TRIGGER.truncated);
   const chapter = matchLine(prompt, "chapter");
+  const delayMs = source.includes(TRIGGER.slow) ? SLOW_REPLY_MS : 0;
 
   if (chapter === undefined) {
     const pinned = matchLine(prompt, "vorgegebene id");
     return {
       kind: "npc",
       truncated,
+      delayMs,
       reply: invalid ? invalidNpcReply(pinned) : npcReply(pinned),
     };
   }
   return {
     kind: "scene",
     truncated,
+    delayMs,
     reply: invalid ? invalidSceneReply(chapter) : sceneReply(chapter),
   };
 }
@@ -134,6 +142,18 @@ export function startStubLlm(port = 0): Promise<{ port: number; close: () => Pro
         const body = JSON.parse(await readBody(req)) as { messages?: ChatMessage[] };
         const decision = decide(body.messages ?? []);
         console.log(`stub-llm: ${decision.kind} run${decision.truncated ? " (truncated)" : ""}`);
+        if (decision.delayMs > 0) {
+          // Held on purpose (TRIGGER.slow): the caller is a background job a
+          // spec wants to catch WHILE it runs, and the provider has no client
+          // timeout — so the reply simply never comes. The socket dies with
+          // the server process that asked, which is exactly the restart the
+          // spec is testing (issue #23).
+          console.log(`stub-llm: holding the reply (${decision.delayMs}ms budget)`);
+          const held = setTimeout(() => res.destroy(), decision.delayMs);
+          held.unref?.();
+          req.on("close", () => clearTimeout(held));
+          return;
+        }
         json(res, 200, {
           id: "chatcmpl-stub",
           object: "chat.completion",

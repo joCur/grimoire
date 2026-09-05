@@ -58,8 +58,10 @@ export function startProcess({ command, args, cwd, env, label }: StartOptions): 
           resolve();
           return;
         }
-        // SIGTERM first (the watcher and the http server shut down on it),
-        // SIGKILL as the backstop so a hung process never blocks the run.
+        // SIGTERM first (the http server shuts down on it), SIGKILL as the
+        // backstop so a hung process never blocks the run. Specs that restart
+        // a server rely on this being a HARD stop: whatever was in flight —
+        // a generator job, for instance — really dies here.
         const hard = setTimeout(() => child.kill("SIGKILL"), 2000);
         child.once("exit", () => {
           clearTimeout(hard);

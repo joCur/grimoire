@@ -1214,6 +1214,11 @@ async function newChapterTarget(
  * `npc` is the NPC generator's single draft (issue #21) — the same endpoint on
  * purpose: conflict handling, atomic writes and the job cleanup are identical,
  * and a second apply endpoint would only duplicate them.
+ *
+ * `jobId` is the background job the drafts came from (issue #19): a
+ * successful apply discards it — in the SAME transaction as the writes (issue
+ * #62), so a crash can never leave a finished job behind whose drafts are
+ * already stored. A stale id is ignored rather than dropping the wrong job.
  */
 export async function applyGenerated(
   campaign: string,
@@ -1224,6 +1229,7 @@ export async function applyGenerated(
     chapter?: unknown;
     chapterTitle?: unknown;
   },
+  jobId?: string,
 ): Promise<{ written: string[] }> {
   await requireCampaign(campaign);
   const { scenes, stubs, npc, chapter, chapterTitle } = body;
@@ -1277,7 +1283,7 @@ export async function applyGenerated(
   // an existing entity is caught even when the model chose a different file
   // name for it; the conflict is REPORTED under the path the client sent,
   // which is the draft it has to fix.
-  await applyDrafts(campaign, drafts);
+  await applyDrafts(campaign, drafts, jobId);
   return { written: drafts.map((draft) => draft.address) };
 }
 

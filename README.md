@@ -1,11 +1,35 @@
 # Grimoire — Datenformat & Konventionen
 
-Source of Truth ist dieser Ordner: Markdown-Dateien mit YAML-Frontmatter.
+> **Status (ab ADR #13):** Source of Truth ist eine **SQLite-Datenbank**
+> (`GRIMOIRE_DATA/grimoire.db`), nicht mehr der Dateibaum. Dieses Dokument
+> hat deshalb zwei Hälften, und die Trennung ist wichtig:
+>
+> - **Import-Format (historisch)** — Ordnerstruktur, Dateinamen und die
+>   Frontmatter-Blöcke der Entitäten. Genau dieses Format liest die
+>   **Einmal-Migration** (`CAMPAIGN_ROOT`, siehe `docs/DEPLOYMENT.md`) und der
+>   Seed für Dev/E2E; `examples/` ist seine Referenz. Danach fasst der Server
+>   den Dateibaum nicht mehr an. Nichts Neues wird in diesem Format
+>   geschrieben — die Beschreibung bleibt, weil ein Import jederzeit wieder
+>   laufen kann und weil `examples/` weiter das committete Beispiel ist.
+> - **Body-Vokabular — normativ.** Callouts (`> [!readaloud]` &c.), die
+>   `## If:`-Abschnitte und die Log-/Inbox-Hashtags gelten unverändert: sie
+>   sind der Inhalt der `body`-Spalten, das was der Renderer versteht und was
+>   der Generator produzieren muss. Die Frontmatter-KEYS bleiben ebenso
+>   verbindlich — sie sind die Spalten des Schemas
+>   (`server/src/db/schema.ts`) und die Felder von `GET /file`.
+>
+> Wo unten „Datei" steht, ist heute ein **Dokument** gemeint: eine Zeile, die
+> die API unter demselben Pfad adressiert (`GET /api/:campaign/file?path=…`
+> liefert sie als Frontmatter + Body, gerendert aus den Spalten).
+
 Alle **Keys sind Englisch** (stabil, maschinenlesbar), alle **Inhalte Deutsch**.
 Grundprinzip: Das Format degradiert, es validiert nicht — unbekannte
 Überschriften und Callouts werden als normaler Text gerendert, nichts bricht.
+Das gilt für den Import genauso wie für die Anzeige: was die Migration nicht
+versteht, landet verbatim in `unknown_files` samt Eintrag im
+Migrations-Report — nichts geht verloren, nichts bricht ab.
 
-## Ordnerstruktur
+## Ordnerstruktur (Import-Format, historisch)
 
 ```
 examples/                  # generische Beispielkampagne — committet, Format-Referenz
@@ -23,10 +47,13 @@ campaigns/                 # ECHTE Kampagnendaten — in .gitignore, bleiben lok
     glossary.md                # Übersetzungs-Glossar für den Generator
 ```
 
-## Entität: Kampagne (optional)
+## Entität: Kampagne
 
 `_campaign.md` im Kampagnen-Root — Gegenstück zur `_chapter.md`-Konvention.
-Fehlt die Datei, zeigt die UI den Ordnernamen; nichts bricht.
+Beim Import optional; fehlt sie, heißt die Kampagne wie ihr Ordner. Das
+Dokument selbst existiert danach immer (die Kampagnen-Zeile IST es), und ohne
+eigenen Namen ist der Anzeigename die id — in der Kampagnenliste und im
+Dokument gleich.
 
 ```yaml
 ---
@@ -166,13 +193,20 @@ reviewed: [a1b2c3d4]            # Kurzhashes gesichteter Log-Zeilen (Review-Schr
 `inbox.md` — append-only, gleiche Hashtag-Konventionen wie das Session-Log,
 aber sessionunabhängig. Wird im Review-Schritt zusammen mit dem Log gezeigt.
 
-## Schreibregeln (App vs. Editor)
+## Schreibregeln
 
-- App schreibt: Session-Logs, Inbox, Status-/Frontmatter-Patches,
-  Review-Aktionen (NPC-Stubs, Thread-Übernahme), Generator-Drafts.
-- Editor (VS Code Remote o. ä.) schreibt: alle Inhalte.
-- Konfliktschutz: App patcht nur bei unverändertem mtime seit dem Lesen,
-  sonst „Datei extern geändert — neu laden".
+- Geschrieben wird ausschließlich über die API (`server/src/server.ts` führt
+  die Endpoints auf): Session-Logs, Inbox, Frontmatter-Patches, Body-Edits,
+  Review-Aktionen, Generator-Drafts, Rename.
+- Ein externer Editor auf dem Dateibaum wirkt **nicht** mehr: die Datenbank
+  ist die Wahrheit, die Altdateien bleiben unangetastet liegen und werden
+  ignoriert (ADR #13).
+- Konfliktschutz: jeder Patch trägt das Guard-Token mit, das der Lesevorgang
+  geliefert hat (`mtimeMs` im Wire-Format, intern die Zeilenversion `rev`).
+  Passt es nicht mehr, antwortet der Server 409 und die App sagt „Inzwischen
+  geändert — neu laden" statt still zu überschreiben.
+- Append-only bleibt Regel für Session-Log und Inbox (ADR #4); die eine
+  dokumentierte Ausnahme ist das Abhaken erledigter Inbox-Zeilen.
 
 ## Generator
 
