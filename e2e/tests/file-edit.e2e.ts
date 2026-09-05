@@ -17,6 +17,14 @@
 // Two more ways to lose text are covered here as well — a navigation must not
 // leave edit mode armed, and a failing background refetch must not tear the
 // open editor down.
+//
+// Since issue #43 „Bearbeiten" opens the BLOCK COMPOSER, so this spec covers
+// the „Roh" half of edit mode: the textarea, its „Vorschau" and the whole
+// save/409/discard machinery as seen from the fallback surface. The composer
+// itself — and the fact that it is the default — is
+// `tests/block-composer.e2e.ts`, on the same critical path.
+
+import type { Page } from "@playwright/test";
 
 import { expect, test, type CampaignFiles } from "../support/test";
 
@@ -44,6 +52,22 @@ async function split(files: CampaignFiles, rel: string) {
   return { raw, frontmatter, body: raw.slice(frontmatter.length) };
 }
 
+/**
+ * Enter edit mode and switch to the raw markdown surface.
+ *
+ * „Bearbeiten" opens the block composer since issue #43, so everything the
+ * fallback surface owns costs one more click: the „Roh" side of the mode
+ * toggle. Switching is lossless by construction (the draft round-trips through
+ * serializeBlocks/parseBlocks), which is why the textarea below is still
+ * seeded with the file's body byte for byte and „Speichern" is still disabled
+ * right after opening.
+ */
+async function openRawEditor(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  // exact: the composer's per-card controls are named „Roh-Block 1 …".
+  await page.getByRole("button", { name: "Roh", exact: true }).click();
+}
+
 test("editing the body: save writes the file and the reading view shows it", async ({
   page,
   files,
@@ -54,8 +78,9 @@ test("editing the body: save writes the file and the reading view shows it", asy
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
 
-  // The trigger sits in the header action row, next to „Umbenennen".
-  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  // The trigger sits in the header action row, next to „Umbenennen"; „Roh" is
+  // the fallback surface this spec is about.
+  await openRawEditor(page);
 
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toBeVisible();
@@ -103,7 +128,7 @@ test("the preview toggle renders the draft through the real markdown pipeline", 
   await page.goto(SCENE_URL);
   // The rendered body is on screen before edit mode …
   await expect(page.locator("[data-callout='readaloud']")).toHaveCount(1);
-  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  await openRawEditor(page);
 
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toBeVisible();
@@ -127,7 +152,10 @@ test("the preview toggle renders the draft through the real markdown pipeline", 
   // Still edit mode: the save buttons stand, only the surface swapped.
   await expect(page.getByRole("button", { name: "Abbrechen" })).toBeVisible();
 
-  // Back to the text, unchanged by the round trip …
+  // Back to the text, unchanged by the round trip. This „Bearbeiten" is the
+  // „Roh" surface's own toggle (Vorschau ⇄ Bearbeiten), not the header trigger
+  // — that one is gone while edit mode runs, and „Blöcke" is a button of its
+  // own, so the name stays unambiguous.
   await page.getByRole("button", { name: "Bearbeiten" }).click();
   await expect(textarea).toHaveValue(`${before.body}\n${loot}\n`);
 
@@ -154,7 +182,7 @@ test("externally changed file: the save reports the conflict, the second one wor
   const externalBody = "\n## Flow\n\nVon Hand im externen Editor geändert.\n";
 
   await page.goto(SCENE_URL);
-  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  await openRawEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toHaveValue(before.body);
 
@@ -196,7 +224,7 @@ test("the status regler next to the editor is no conflict for the own save", asy
   const mine = "Während des Statuswechsels geschrieben.";
 
   await page.goto(SCENE_URL);
-  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  await openRawEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toHaveValue(before.body);
   await textarea.fill(`${before.body}\n${mine}\n`);
@@ -226,7 +254,7 @@ test("navigating away ends edit mode — coming back never re-opens it", async (
   const before = await split(files, SCENE);
 
   await page.goto(SCENE_URL);
-  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  await openRawEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await textarea.fill(`${before.body}\nEin Satz, der die Navigation nicht überlebt.\n`);
 
@@ -251,7 +279,7 @@ test("a failing background refetch leaves the open editor standing", async ({ pa
   const draft = `${before.body}\nGeschrieben, während der Server weg war.\n`;
 
   await page.goto(SCENE_URL);
-  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  await openRawEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toHaveValue(before.body);
   await textarea.fill(draft);
@@ -284,8 +312,9 @@ test("Abbrechen asks before it throws work away", async ({ page, files }) => {
 
   await page.goto(SCENE_URL);
 
-  // Without changes there is nothing to lose: no dialog, straight out.
-  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  // Without changes there is nothing to lose: no dialog, straight out — the
+  // detour through „Roh" and back is no change either (lossless round trip).
+  await openRawEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toBeVisible();
   await page.getByRole("button", { name: "Abbrechen" }).click();
@@ -293,7 +322,7 @@ test("Abbrechen asks before it throws work away", async ({ page, files }) => {
   await expect(textarea).toHaveCount(0);
 
   // With changes it asks — and „Weiter bearbeiten" keeps the text.
-  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  await openRawEditor(page);
   await textarea.fill(`${before.body}\nEin Satz, der nie gespeichert wird.\n`);
   await page.getByRole("button", { name: "Abbrechen" }).click();
   const dialog = page.getByRole("dialog");
@@ -322,7 +351,7 @@ test("the NPC reading view edits its body the same way", async ({ page, files })
   await page.goto(`/beispiel/file/${NPC}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
 
-  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  await openRawEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toHaveValue(before.body);
   await textarea.fill(before.body.replace("## Notizen", `${added}\n\n## Notizen`));
@@ -342,7 +371,7 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   // The kinds whose prose the DM maintains offer the body editor …
   for (const rel of ["locations/leuchtturm.md", "01-salzhafen/_chapter.md"]) {
     await page.goto(`/beispiel/file/${rel}`);
-    await page.getByRole("button", { name: "Bearbeiten" }).click();
+    await openRawEditor(page);
     await expect(page.getByRole("textbox", { name: TEXTAREA })).toBeVisible();
     // Clean exit — no dialog, nothing written.
     await page.getByRole("button", { name: "Abbrechen" }).click();

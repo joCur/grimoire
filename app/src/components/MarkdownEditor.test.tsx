@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { MarkdownEditor, MarkdownEditorSurface, MarkdownEditorToggle } from "./MarkdownEditor";
+import { EditorShell, MarkdownEditorSurface, MarkdownEditorToggle } from "./MarkdownEditor";
 
 const BODY = "## Flow\n\nDer Leuchtturm ist dunkel.\n";
 
@@ -74,36 +74,58 @@ describe("MarkdownEditorSurface", () => {
   });
 });
 
-describe("MarkdownEditor", () => {
-  const editor = (props: Partial<Parameters<typeof MarkdownEditor>[0]> = {}) =>
+describe("EditorShell", () => {
+  // The frame the callers compose themselves: the reading view puts its mode
+  // switch and its Speichern/Abbrechen in here (FileBodyEditor), the generator
+  // its chips and its own actions. The shell owns the toolbar row, nothing else.
+  const shell = (editing: boolean) =>
     renderToStaticMarkup(
-      <MarkdownEditor
-        value={BODY}
-        onChange={() => {}}
-        editing
-        onToggleEditing={() => {}}
-        id="file-body-scene"
-        label="Markdown-Text der Datei"
+      <EditorShell
+        controls={
+          <MarkdownEditorToggle
+            editing={editing}
+            onToggleEditing={() => {}}
+            controlsId="file-body-scene"
+          />
+        }
         actions={<button type="button">Speichern</button>}
-        {...props}
-      />,
+      >
+        <MarkdownEditorSurface
+          value={BODY}
+          onChange={() => {}}
+          editing={editing}
+          id="file-body-scene"
+          label="Markdown-Text der Datei"
+        />
+      </EditorShell>,
     );
 
   test("toolbar, caller actions and the textarea are one block", () => {
-    const html = editor();
+    const html = shell(true);
     expect(html).toContain("Vorschau");
     expect(html).toContain("Speichern");
     expect(html).toContain('id="file-body-scene"');
     expect(html).toContain('aria-controls="file-body-scene"');
   });
 
-  test("the toggle flips the block to the rendered preview", () => {
-    const html = editor({ editing: false });
+  test("the toggle flips the surface to the rendered preview", () => {
+    const html = shell(false);
     expect(html).toContain("Bearbeiten");
     expect(html).not.toContain("<textarea");
     expect(html).toContain('class="md-body"');
     // The actions stay reachable in preview mode — saving must not need a
     // detour back into the textarea.
     expect(html).toContain("Speichern");
+  });
+
+  test("a shell without actions renders no action slot at all", () => {
+    const html = renderToStaticMarkup(
+      <EditorShell controls={<span>Blöcke</span>}>
+        <p>Blockliste</p>
+      </EditorShell>,
+    );
+    expect(html).toContain("Blöcke");
+    expect(html).toContain("Blockliste");
+    expect(html).not.toContain("ml-auto");
   });
 });
