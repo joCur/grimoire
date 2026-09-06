@@ -1073,6 +1073,24 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect(await exists("01-salzhafen/doppelt")).toBe(false);
   });
 
+  /**
+   * The last segment of a scene path IS the id whenever the properties carry
+   * none (issue #79 review) — so a path segment that is not a slug has to be
+   * rejected at the door, or the insert stores a row whose id ("foo.md")
+   * contradicts the address contract and nothing can open it again.
+   */
+  test("400 for a scene path whose last segment is not a slug", async () => {
+    const noId = sceneMarkdown().replace("id: treffen-am-kai\n", "");
+    for (const path of ["01-salzhafen/foo.md", "01-salzhafen/hafen/foo.md", "01-salzhafen/Foo"]) {
+      const res = await postJson("/api/beispiel/generate/apply", {
+        scenes: [{ path, markdown: noId }],
+      });
+      expect(res.status).toBe(400);
+      expect(await exists(path)).toBe(false);
+      expect(await exists(path.replace(/\.md$/, ""))).toBe(false);
+    }
+  });
+
   test("404 for an unknown campaign", async () => {
     const res = await postJson("/api/nope/generate/apply", {
       scenes: [{ path: SCENE_PATH, markdown: sceneMarkdown() }],
@@ -1124,7 +1142,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     const existing = "01-salzhafen/hafen/lighthouse-arrival";
     const res = await postJson("/api/beispiel/generate/apply", {
       scenes: [
-        { path: `${chapter}/neu.md`, markdown: sceneWithId("konflikt-neu") },
+        { path: `${chapter}/neu`, markdown: sceneWithId("konflikt-neu") },
         { path: existing, markdown: sceneMarkdown() },
       ],
       chapter,
@@ -1133,20 +1151,20 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect(res.status).toBe(409);
     expect(((await res.json()) as { conflicts: string[] }).conflicts).toEqual([existing]);
     expect(await exists(`${chapter}/_chapter`)).toBe(false);
-    expect(await exists(`${chapter}/neu.md`)).toBe(false);
+    expect(await exists(`${chapter}/neu`)).toBe(false);
   });
 
   test("400 on half or unusable chapter arguments — nothing written", async () => {
     const md = sceneMarkdown();
     const bad = [
       // the two belong together
-      { scenes: [{ path: "05-halb/neu.md", markdown: md }], chapter: "05-halb" },
-      { scenes: [{ path: "05-halb/neu.md", markdown: md }], chapterTitle: "Halb" },
+      { scenes: [{ path: "05-halb/neu", markdown: md }], chapter: "05-halb" },
+      { scenes: [{ path: "05-halb/neu", markdown: md }], chapterTitle: "Halb" },
       // empty / whitespace-only title
-      { scenes: [{ path: "05-halb/neu.md", markdown: md }], chapter: "05-halb", chapterTitle: "  " },
+      { scenes: [{ path: "05-halb/neu", markdown: md }], chapter: "05-halb", chapterTitle: "  " },
       // unsafe chapter ids
-      { scenes: [{ path: "05-halb/neu.md", markdown: md }], chapter: "..", chapterTitle: "X" },
-      { scenes: [{ path: "05-halb/neu.md", markdown: md }], chapter: "a/b", chapterTitle: "X" },
+      { scenes: [{ path: "05-halb/neu", markdown: md }], chapter: "..", chapterTitle: "X" },
+      { scenes: [{ path: "05-halb/neu", markdown: md }], chapter: "a/b", chapterTitle: "X" },
       // nothing to apply — a chapter alone is not a draft
       { chapter: "05-halb", chapterTitle: "Halb" },
     ];
@@ -1157,13 +1175,13 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect(
       (
         await postJson("/api/beispiel/generate/apply", {
-          scenes: [{ path: "05-halb/neu.md", markdown: md }],
+          scenes: [{ path: "05-halb/neu", markdown: md }],
           chapter: "npcs",
           chapterTitle: "X",
         })
       ).status,
     ).toBe(404);
-    expect(await exists("05-halb/neu.md")).toBe(false);
+    expect(await exists("05-halb/neu")).toBe(false);
     expect(await exists("05-halb/_chapter")).toBe(false);
   });
 });
@@ -1536,6 +1554,67 @@ describe("generate jobs", () => {
     expect(job.status).toBe("failed");
     expect(job.error!.status).toBe(500);
     expect(job.error!.body.error).toBe(UNREADABLE_PAYLOAD_MESSAGE);
+  });
+
+  // --- a row written BEFORE the address upgrade (issue #79 review) ---------
+
+  test("a persisted job with legacy .md draft paths is normalized on the way out", async () => {
+    // The row an old process left behind: paths WITH the file suffix, in the
+    // result AND as the draftEdits key. Written directly — no old build to
+    // run — which is exactly the situation after the deploy.
+    const legacyScene = "01-salzhafen/hafen/legacy-scene.md";
+    const legacyNpc = "npcs/legacy-npc.md";
+    const npcMarkdown = [
+      "---",
+      "id: legacy-npc",
+      "name: Legacy Npc",
+      "status: alive",
+      "---",
+      "",
+      "## Notizen",
+      "",
+    ].join("\n");
+    const db = await getDb();
+    db.insert(generateJobs)
+      .values({
+        id: "legacy-row",
+        campaignId: "beispiel",
+        kind: "npc",
+        status: "done",
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        result: JSON.stringify({
+          scenes: [{ path: legacyScene, markdown: sceneWithId("legacy-scene"), properties: {} }],
+          stubs: [],
+          warnings: [],
+        }),
+        npcResult: JSON.stringify({
+          npc: { path: legacyNpc, markdown: npcMarkdown, properties: { id: "legacy-npc" } },
+          warnings: [],
+        }),
+        draftEdits: JSON.stringify({ [legacyNpc]: npcMarkdown }),
+      })
+      .run();
+
+    const job = (await fetchJob())!;
+    expect(job.npcResult!.npc.path).toBe("npcs/legacy-npc");
+    expect(job.result!.scenes[0]!.path).toBe("01-salzhafen/hafen/legacy-scene");
+    expect(Object.keys(job.draftEdits)).toEqual(["npcs/legacy-npc"]);
+
+    // …and the edit store accepts the normalized path (it used to 400 on
+    // both spellings: the stored one is unknown, the new one had no draft).
+    expect(
+      (await putDraft("beispiel", { path: "npcs/legacy-npc", markdown: npcMarkdown })).status,
+    ).toBe(200);
+
+    // The point of all of it: "Übernehmen" works, under the new address.
+    const res = await postJson("/api/beispiel/generate/apply", {
+      npc: job.npcResult!.npc,
+      jobId: job.id,
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ written: ["npcs/legacy-npc"] });
+    expect(await exists("npcs/legacy-npc")).toBe(true);
   });
 
   // --- the invariant is a constraint (issue #62 review) ---------------------

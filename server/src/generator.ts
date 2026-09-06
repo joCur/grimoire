@@ -1093,6 +1093,14 @@ function applySceneTarget(item: unknown, index: number): ApplyTarget {
       `${label}.path must be "<chapter>/<scene>" or "<chapter>/<location-slug>/<scene>"`,
     );
   }
+  // The last segment is the SCENE ID whenever the properties carry none
+  // (`draftAddress` only overrides it when there is one, and `insertDraft`
+  // falls back to the locator id). So it has to obey the same address
+  // contract as an explicit `id` does — otherwise `01-x/foo.md` inserts a
+  // row whose id contradicts the addressing and cannot be opened again.
+  if (!DRAFT_ID_PATTERN.test(segments[segments.length - 1]!)) {
+    throw new ApiError(400, `${label}.path: "${segments[segments.length - 1]!}" is not a scene id`);
+  }
   // Re-validation (apply is a separate request — never trust the client):
   // the properties must still parse and the draft must still be a draft.
   const { parsed, error } = parseWithProperties(markdown, rel);

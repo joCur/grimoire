@@ -421,7 +421,7 @@ describe("POST /api/:campaign/rename — validation", () => {
       body: JSON.stringify({
         scenes: [
           {
-            path: "02-tiefwasser/erste-szene.md",
+            path: "02-tiefwasser/erste-szene",
             markdown:
               "---\nid: tiefwasser-ankunft\ntitle: Ankunft in Tiefwasser\ntype: planned\n" +
               "chapter: 02-tiefwasser\nnpcs: []\nhandouts: []\ntags: []\nstatus: draft\n---\n\n" +
