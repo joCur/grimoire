@@ -58,7 +58,7 @@ const revColumn = () => integer("rev").notNull().default(1);
 
 /**
  * One campaign. `id` is what used to be the directory name under
- * CAMPAIGN_ROOT and stays the key in every URL.
+ * the import source tree and stays the key in every URL.
  *
  * `version` replaces the chokidar-fed in-memory counter behind
  * `GET /api/:campaign/version` (DECISIONS #9): with the database as the only
@@ -649,7 +649,7 @@ export const migrationReport = sqliteTable("migration_report", {
  * Key/value bookkeeping of the database itself. Known keys:
  *   `migrated_at`   — ISO timestamp of the one-time migration. Its PRESENCE
  *                     is what makes the migration idempotent.
- *   `migrated_from` — the CAMPAIGN_ROOT the import read.
+ *   `migrated_from` — the source directory the import read.
  *   `migrated_campaign:<id>`
  *                   — ISO timestamp of ONE campaign's committed import,
  *                     written inside that campaign's own transaction. This is

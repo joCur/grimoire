@@ -69,7 +69,7 @@ afterEach(async () => {
  * A content hash of a whole directory tree: every file's relative path, its
  * size and its bytes, in sorted order. Two trees with the same digest are
  * byte-identical in structure AND content — which is exactly the promise
- * "CAMPAIGN_ROOT bleibt unangetastet" (AK4).
+ * "der Quellbaum bleibt unangetastet" (AK4).
  */
 async function hashTree(root: string): Promise<string> {
   const digest = createHash("sha256");
@@ -814,7 +814,7 @@ describe("AK3 — a second run does nothing", () => {
   });
 });
 
-// --- AK4: CAMPAIGN_ROOT stays byte-identical --------------------------------
+// --- AK4: the source tree stays byte-identical ------------------------------
 
 describe("AK4 — the file tree is left untouched", () => {
   test("the campaign root is byte-identical before and after the migration", async () => {

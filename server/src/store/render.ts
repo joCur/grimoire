@@ -1,24 +1,22 @@
-// Rows → the API's file shapes (issue #57).
+// Rows → the API's document shapes (issues #57/#79).
 //
-// Every read endpoint still answers `ParsedFile`/`FileResponse`: a path, a
-// properties mapping, a markdown body, and the concurrency token the client
-// sends back. Nothing about that contract changes with the cutover — only
-// where the values come from.
+// Every read endpoint answers `ParsedFile`/`FileResponse`: an address, a
+// `properties` mapping, a markdown body, and the concurrency token the client
+// sends back.
 //
 // Three rules hold this together:
 //
-//   1. THE FRONTMATTER IS RECONSTRUCTED IN CONTRACT ORDER, then the preserved
-//      unknown keys from `extra`. Same keys the parser produced, same
-//      fallbacks (`title`/`name` fall back to the id — shared/parse.ts), so
-//      the app cannot tell the difference.
+//   1. `properties` IS REBUILT IN CONTRACT ORDER, then the preserved unknown
+//      keys from `extra`. Same keys the parser produced, same fallbacks
+//      (`title`/`name` fall back to the id — shared/parse.ts), so the app
+//      cannot tell the difference.
 //   2. `raw` IS A DETERMINISTIC RENDERING, not a stored byte sequence
 //      (planning section 4). It is the editor's display value; no byte
 //      guarantees are made or needed.
 //   3. THE GUARD TOKEN `rev` IS THE ROW'S VERSION COUNTER (planning
-//      section 4).
-//      The app has always treated it as an opaque guard token, so the wire
-//      name stays and the semantics get stronger: a rev cannot collide
-//      inside one second, which is exactly the bug of issue #37.
+//      section 4). The app has always treated it as opaque, and the row
+//      version makes the semantics stronger than a file time: it cannot
+//      collide inside one second, which is exactly the bug of issue #37.
 //
 // Sections that became rows are rendered BACK from those rows: a session's
 // `## Log`, an npc's `## Beziehungen`, the inbox list, the glossary. That is

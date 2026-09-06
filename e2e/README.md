@@ -27,15 +27,18 @@ Kampagnen-Markdown-Dateien mehr. Für die Suite heißt das:
 - **Zusicherungen laufen über die API** (`api`-Helfer, s. u.) — es gibt keine
   Datei mehr, die man zurücklesen könnte. Der frühere `files`-Helfer ist weg;
   eine Fixture, die von „der Datei auf der Platte" erzählt, wäre eine Lüge.
-- **Ein Szenen-Pfadsegment ist die `id`**, nicht der frühere Dateiname:
-  `01-salzhafen/hafen/lighthouse-arrival.md` und `.../smuggler-captured.md`.
-- **`mtimeMs` auf der Leitung ist die Zeilenversion `rev`** — ein opakes
-  Wächter-Token. Ein veraltetes antwortet weiter mit 409.
+- **Adressen tragen keine Dateiendung** (Issue #79) und ein Szenen-Segment
+  ist die `id`, nicht der frühere Dateiname:
+  `01-salzhafen/hafen/lighthouse-arrival` und `.../smuggler-captured`.
+  Die Schlüssel des `seed`-Fixtures sind ebenfalls Adressen — das `.md` für
+  den Importer hängt die Fixture selbst an.
+- **Das Wächter-Token heißt `rev`** (die Zeilenversion) und die Felder eines
+  Dokuments `properties`. Ein veraltetes `rev` antwortet weiter mit 409.
 - **„Extern geändert" gibt es nicht mehr.** Kritischer Pfad 9 prüft darum den
   ZWEITEN SCHREIBER: während der Editor offen steht, schreibt der Test über
   die API (`api.writeBody`), danach speichert die UI — und muss den Konflikt
   zeigen und neu laden statt still zu überschreiben. Genauso in
-  `status-control`, `frontmatter-form` und `block-composer`.
+  `status-control`, `properties-form` und `block-composer`.
 
 ## Lokal ausführen
 
@@ -88,7 +91,7 @@ inklusive des Generator-Jobs, der seit #23 selbst eine Zeile ist.
 - `api` — getippte Aufrufe gegen den Server dieses Tests: `api.raw(rel)` (die
   serialisierte Datei — der Nachfolger von `files.read`), `api.file`,
   `api.exists`, `api.get`/`api.send` und die beiden Schreibwege
-  `api.writeBody` / `api.patchFrontmatter`, die sich frisch ein Token holen
+  `api.writeBody` / `api.patchProperties`, die sich frisch ein Token holen
   und damit den „zweiten Schreiber" spielen.
 - `db` — liest `grimoire.db` dieses Tests über den Treiber des Servers
   (`server/src/db/driver.ts`, keine zweite SQLite-Abhängigkeit). Nur für
@@ -154,7 +157,7 @@ mehrere Schreibwege auf ihm liegen:
 | 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`                                   |
 | 5 Ernte            | `tests/review-harvest.e2e.ts`                                  |
 | 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-restart.e2e.ts`      |
-| 7 Frontmatter/409  | `tests/status-control.e2e.ts`, `tests/frontmatter-form.e2e.ts`, `tests/rename.e2e.ts` |
+| 7 Eigenschaften/409 | `tests/status-control.e2e.ts`, `tests/properties-form.e2e.ts`, `tests/rename.e2e.ts` |
 | 8 Mobil            | `tests/mobile.e2e.ts`                                          |
 | 9 Datei bearbeiten | `tests/block-composer.e2e.ts`, `tests/file-edit.e2e.ts`        |
 
@@ -178,7 +181,7 @@ darum `startGrimoireServer`/`seedCampaigns` direkt statt der
 
 Auf Pfad 7 teilen sich zwei Specs die Arbeit: `status-control.e2e.ts` deckt den
 Status-Regler ab (ein Schlüssel, Konflikt über das Poll-Fenster),
-`frontmatter-form.e2e.ts` den „Eigenschaften"-Dialog von #42 (alle Felder einer
+`properties-form.e2e.ts` den „Eigenschaften"-Dialog von #42 (alle Felder einer
 Entitätsart, Chips/Referenzen/Select, Leeren löscht den Schlüssel, und der
 deterministische 409, weil der Dialog sein Wächter-Token beim Öffnen
 einfriert). Der

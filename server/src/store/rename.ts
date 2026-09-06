@@ -2,7 +2,7 @@
 //
 // SCOPE NOTE: the planning puts the rename rebuild in Scheibe 3 (#29/#30).
 // It could not stay behind, though — the moment the read/write endpoints stop
-// touching CAMPAIGN_ROOT, the file-tree cascade of `campaign-rename.ts` is
+// reading the markdown tree, the file-tree cascade of `campaign-rename.ts` is
 // renaming files nobody reads any more. So the endpoint moves with the
 // cutover, at exactly the size the cutover needs: the id update plus the
 // reference cascade, with the response shape (`{ renamed, changed }`) and the

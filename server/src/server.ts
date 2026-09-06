@@ -4,13 +4,24 @@
 // on Node >= 20 the same app runs via @hono/node-server instead:
 //   import { serve } from "@hono/node-server"; serve({ fetch: app.fetch, port: PORT });
 //
+// WHAT `path` MEANS (issue #79): an ADDRESS, not a file name — no `.md`, no
+// extension at all. The complete schema is in ./store/paths.ts:
+//
+//   _campaign · inbox · glossary · <chapter>/_chapter ·
+//   <chapter>/<scene-id> · <chapter>/<group>/<scene-id> ·
+//   npcs/<id> · locations/<id> · sessions/<id>
+//
+// The wire vocabulary follows from that: a document's fields are
+// `properties`, its optimistic-concurrency token is `rev` (the row version).
+// Neither `frontmatter` nor `mtimeMs` exists above the importer any more.
+//
 // Planned API — the living checklist (conventions: /README.md). Tick an
 // endpoint here when it is implemented:
 //
 //   [x] GET  /api/campaigns                    campaign list (directories + lastSession +
 //                                              name/description from _campaign)
 //   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (properties parsed)
-//   [x] GET  /api/:campaign/file?path=...      one file (raw + parsed + rev). glossary
+//   [x] GET  /api/:campaign/file?path=...      one document (raw + parsed + rev). glossary
 //                                              answers 200 with an EMPTY body when the
 //                                              campaign has no terms — it is an empty
 //                                              document, not a missing one (#57 review:
@@ -20,7 +31,7 @@
 //                                              reasoning, it had been left behind.
 //                                              `rev` of glossary/inbox is that
 //                                              DOCUMENT's own counter, not campaigns.version
-//   [x] PATCH /api/:campaign/properties       { path, rev, patch } — only if
+//   [x] PATCH /api/:campaign/properties        { path, rev, patch } — only if
 //                                              rev is unchanged, otherwise 409.
 //                                              A scene's `chapter` may be SET (400 when
 //                                              the chapter does not exist — a scene must
@@ -28,14 +39,15 @@
 //                                              null, which drops the key and leaves the
 //                                              scene's address alone
 //   [x] PUT  /api/:campaign/file               { path, rev, body } — write the markdown
-//                                              BODY of an existing file (issue #15); the
-//                                              properties block is kept byte-identically,
-//                                              same rev guard as PATCH above (409)
+//                                              BODY of an existing document (issue #15);
+//                                              its properties are untouched (they are
+//                                              PATCH /properties' job), same rev guard
+//                                              as PATCH above (409)
 //   [—] POST /api/:campaign/campaign-meta      REMOVED with issue #62. It existed
 //                                              for the one gap PATCH /properties
 //                                              could not close: a campaign whose
 //                                              `_campaign` did not exist yet had
-//                                              no file and therefore no guard token
+//                                              no row and therefore no guard token
 //                                              to PATCH against. Since the cutover
 //                                              (#57) the import always creates a
 //                                              campaign ROW, GET /file?path=
@@ -62,7 +74,7 @@
 //                                              lives in yesterday's file, so the client
 //                                              must not guess it either); 404 only when the
 //                                              campaign has no session file at all
-//   [x] POST /api/:campaign/session/start      creates a NEW session: sessions/<id> with
+//   [x] POST /api/:campaign/session/start      creates a NEW session at sessions/<id>, with
 //                                              an OPAQUE RANDOM id (issue #58 — "beenden" is
 //                                              final, so a second evening on the same day is
 //                                              simply a second session with an empty log and
@@ -92,7 +104,7 @@
 //                                              404 when no session is running, 400 when
 //                                              sceneId is not a kebab slug (it is a PARSE
 //                                              COLUMN of `- HH:MM (id) text`)
-//   [x] POST /api/:campaign/inbox              { text } -> append to inbox
+//   [x] POST /api/:campaign/inbox              { text } -> append to the inbox list
 //   [x] GET  /api/:campaign/search?q=...       { results } — full-text search (FTS5, bm25,
 //                                              prefix terms, diacritics folded;
 //                                              scenes/npcs/locations/chapters/campaign/

@@ -123,7 +123,8 @@ Laufzeit-APIs.
 ## 9. Client-Aktualisierung: Polling statt SSE
 
 Änderungen sollen in der App sichtbar werden, ohne manuell neu zu laden.
-Mechanismus ursprünglich: chokidar beobachtet CAMPAIGN_ROOT und invalidiert
+Mechanismus ursprünglich: chokidar beobachtet den Kampagnen-Dateibaum
+(`CAMPAIGN_ROOT`, seit #79 auch als Einstellung weg) und invalidiert
 pro Kampagne den In-Memory-Suchindex und einen Versionszähler.
 **Seit #13 ohne Watcher:** es gibt keinen externen Schreiber mehr, also wird
 `campaigns.version` von jedem Write in DERSELBEN Transaktion hochgezählt —
@@ -278,15 +279,16 @@ Release-Workflow ist der einzige Schreiber der GHCR-Registry.**
 >   Dateileser entfernt (`CAMPAIGN_ROOT` liest nur noch
 >   `db/migrate-campaigns.ts`), `POST /campaign-meta` entfernt (der Totpfad
 >   nach dem Cutover: die Kampagnen-Zeile existiert immer, also gibt es keinen
->   Anlege-Fall mehr — Name und Beschreibung laufen über PATCH /frontmatter),
+>   Anlege-Fall mehr — Name und Beschreibung laufen über PATCH /frontmatter,
+>   heute `PATCH /properties`, siehe Nachtrag #79),
 >   `name` in Kampagnenliste und Kampagnen-Dokument vereinheitlicht, Doku
 >   nachgezogen.
 >
 > Zwei Abweichungen von der Planung, hier festgehalten, weil sie Verhalten
 > ändern: (a) **eine Szene wird über ihre `id` adressiert**, nicht mehr über
 > ihren früheren Dateinamen (`scenes.file_slug` entfällt laut Planung, also
-> existiert der Dateiname nirgends mehr — der Pfad lautet
-> `<kapitel>/<ort>/<id>.md`); (b) **`POST /rename` ist mit dem Cutover auf die
+> existiert der Dateiname nirgends mehr — die Adresse lautet
+> `<kapitel>/<ort>/<id>`, seit #79 ohne Endung); (b) **`POST /rename` ist mit dem Cutover auf die
 > Datenbank umgestellt** statt erst in Scheibe 3 — der Datei-Kaskade hätte
 > sonst niemand mehr zugesehen.
 
@@ -301,8 +303,9 @@ Wahrheit für Kampagneninhalte. Kein Spiegel auf das Dateisystem, kein
 Auto-Export, kein Zwei-Wege-Abgleich — die Klasse von Konfliktproblemen, die
 ein Spiegel erzeugt, wird nicht gebaut.
 
-- **Markdown bleibt an genau zwei Stellen:** (a) als Quelle der EINMALIGEN
-  Migration aus dem Dateibaum, (b) als Inhaltsformat der `body`-Spalten. Das
+- **Markdown bleibt an genau zwei Stellen:** (a) als Quelle des Importers
+  (seit #79 nur noch `grimoire seed`), (b) als Inhaltsformat der
+  `body`-Spalten. Das
   Body-Vokabular aus README.md (Callouts, `## If:`, Hashtags) bleibt
   normativ; das Datenformat-Kapitel wird zum „Import-Format (historisch)".
 - **Ein Body = ein Markdown-Feld,** in der UI als Markdown editierbar
@@ -310,8 +313,9 @@ ein Spiegel erzeugt, wird nicht gebaut.
   Später-Option; das Schema verbaut sie nicht.
 - **Das Glossar ist eine strukturierte Tabelle** (Begriff → Erklärung), kein
   Markdown-Blob. Der Ausbau zur Generator-Wissensbasis ist Folge-Feature #53.
-- **Altdateien werden nie gelöscht, verschoben oder markiert.** Nach der
-  Migration fasst der Server `CAMPAIGN_ROOT` nicht mehr an. Der komplette,
+- **Altdateien werden nie gelöscht, verschoben oder markiert.** Der Server
+  liest überhaupt keinen Kampagnen-Dateibaum (seit #79 auch nicht beim
+  Boot; nur `grimoire seed` liest einen, wenn man ihm einen nennt). Der komplette,
   menschenlesbare Vor-Migrations-Stand bleibt damit liegen — das ist die
   Abfederung der Einbahnstraße, zusammen mit „manueller Export" als bekanntem
   Später-Pfad.
@@ -340,8 +344,8 @@ ein Spiegel erzeugt, wird nicht gebaut.
 - **`rev` ersetzt `mtimeMs`** als 409-Guard (Zeilenversion statt Dateizeit —
   löst #37). **PRAGMAs:** `journal_mode=WAL`, `foreign_keys=ON`,
   `busy_timeout=5000`. **`GRIMOIRE_DATA`** (Default `./data`) hält
-  `grimoire.db` samt `-wal`/`-shm`; `CAMPAIGN_ROOT` ist nur noch Quelle der
-  Einmal-Migration bzw. des Dev-Seeds.
+  `grimoire.db` samt `-wal`/`-shm` — seit #79 die einzige Dateneinstellung
+  überhaupt (siehe Nachtrag unten).
 
 **Treiber — Abweichung von der Planung, hier als Bun-Kopplung registriert
 (Pflicht aus #7):** Die Planung ging davon aus, dass `node:sqlite` auf beiden
@@ -365,6 +369,34 @@ Konsequenz, gekapselt in `server/src/db/driver.ts`:
   Ersatz — hinter derselben Schnittstelle, aber **nicht implementiert**: im
   Code existiert er nicht, es ist eine Option für diesen Fall, kein
   vorhandener Notausgang.
+
+**Nachtrag (#79 — die Datei-Ära ist restlos raus):** Die drei Stellen, an
+denen ADR #13 die Dateiwelt noch durchgelassen hat, sind geschlossen. Die
+Entscheidung selbst bleibt; das hier ist ihre Vollendung.
+
+- **Kein Import mehr im Produktivpfad.** Eine frische Instanz startet **leer**
+  — der Boot öffnet die Datenbank und wendet die Schema-Migrationen an, sonst
+  nichts. `CAMPAIGN_ROOT` gibt es nicht mehr (weg aus Config, Dockerfile,
+  Compose und DEPLOYMENT.md), `GET /api/:campaign/migration-report` und der
+  App-Hinweis dazu sind entfernt. Markdown einlesen ist ausschließlich das
+  **Dev-/E2E-Werkzeug `grimoire seed [dir]`** (Default `examples/`, Report auf
+  stdout), das denselben Importer fährt — Planung F5 bleibt: kein zweites
+  Fixture-Format. Der Kaltstart einer echten Kampagne ist #56.
+- **Adressen tragen keine Dateiendung.** `_campaign`, `inbox`, `glossary`,
+  `<kapitel>/_chapter`, `<kapitel>/[<gruppe>/]<szenen-id>`, `npcs/<id>`,
+  `locations/<id>`, `sessions/<id>` — das Schema steht abschließend in
+  `server/src/store/paths.ts` und gilt in API, App-Routen, Cache-Keys, Links,
+  Usage-/Rename-Antworten und E2E. **Keine Alt-Kompatibilität** (PO: keine
+  gespeicherten URLs); eine `.md`-Adresse benennt einfach nichts. Damit fällt
+  auch die Endungsregel des Wächters: `assertSafeAddress` weist Traversal,
+  absolute Pfade und versteckte Segmente weiter mit 400 ab, aber eine Adresse
+  ohne Zeile ist ein ehrliches 404 statt „only .md files are served".
+- **Wire und Code sprechen `properties`/`rev`.** `frontmatter` → `properties`,
+  `mtimeMs` → `rev`, `PATCH /frontmatter` → `PATCH /properties`; dazu die
+  Code-Namen (`patchProperties`, `PropertiesAction`, `writeWithRev`, …).
+  `frontmatter`/`mtime` existieren nur noch in `server/src/db/` (dem Importer,
+  wo ein Frontmatter-Block wirklich das Thema ist) und als echte Datei-`mtime`
+  im Static-Serving (ETag/Last-Modified eines gebauten Assets).
 
 **Nachtrag zu ADR #10 (eingelöst in #62):** Generator-Jobs sind persistent
 (`generate_jobs`); der dort akzeptierte Verlust bei Neustart entfällt für

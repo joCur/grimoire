@@ -51,7 +51,7 @@ globale Suche prominent (Cmd/Ctrl-K). Von hier: Szene öffnen,
 Session starten, Generator aufrufen.
 
 ### 2. Szene (Lesen)
-Job: eine Szene vollständig erfassen. Frontmatter als kompakte Kopfzeile
+Job: eine Szene vollständig erfassen. Eigenschaften als kompakte Kopfzeile
 (Typ, Trigger, Ort, Tags), NPC-Karten der Szene rechts (voice, Will,
 Quickstats — genau diese drei), Body mit gerendertem Flow, einklappbaren
 `If:`-Verzweigungen und den Callout-Blöcken. Read-Aloud siehe Signatur.

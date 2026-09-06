@@ -15,13 +15,31 @@
 > - **Body-Vokabular — normativ.** Callouts (`> [!readaloud]` &c.), die
 >   `## If:`-Abschnitte und die Log-/Inbox-Hashtags gelten unverändert: sie
 >   sind der Inhalt der `body`-Spalten, das was der Renderer versteht und was
->   der Generator produzieren muss. Die Frontmatter-KEYS bleiben ebenso
->   verbindlich — sie sind die Spalten des Schemas
->   (`server/src/db/schema.ts`) und die Felder von `GET /file`.
+>   der Generator produzieren muss. Die KEYS des Frontmatter-Blocks bleiben
+>   ebenso verbindlich — sie sind die Spalten des Schemas
+>   (`server/src/db/schema.ts`) und heißen auf der Leitung `properties`.
 >
 > Wo unten „Datei" steht, ist heute ein **Dokument** gemeint: eine Zeile, die
-> die API unter demselben Pfad adressiert (`GET /api/:campaign/file?path=…`
-> liefert sie als Frontmatter + Body, gerendert aus den Spalten).
+> die API unter einer **Adresse** anspricht (`GET /api/:campaign/file?path=…`
+> liefert sie als `properties` + `body`, gerendert aus den Spalten).
+>
+> **Adressen tragen keine Dateiendung** (Issue #79). Das vollständige Schema
+> — verbindlich, dokumentiert in `server/src/store/paths.ts`:
+>
+> | Adresse | Dokument |
+> | ------- | -------- |
+> | `_campaign` | die Kampagne |
+> | `inbox` | die Inbox-Liste |
+> | `glossary` | das Glossar |
+> | `<kapitel>/_chapter` | ein Kapitel |
+> | `<kapitel>/<szenen-id>` | eine Szene |
+> | `<kapitel>/<gruppe>/<szenen-id>` | eine Szene in einer Ort-Gruppe |
+> | `npcs/<id>` | ein NPC |
+> | `locations/<id>` | ein Ort |
+> | `sessions/<id>` | eine Session |
+>
+> Die Dateinamen unten sind also die des **Import-Formats**; die Adresse einer
+> Szene ist ihre `id`, nicht ihr früherer Dateiname.
 
 Alle **Keys sind Englisch** (stabil, maschinenlesbar), alle **Inhalte Deutsch**.
 Grundprinzip: Das Format degradiert, es validiert nicht — unbekannte
@@ -221,9 +239,9 @@ reviewed: [a1b2c3d4]            # Kurzhashes gesichteter Log-Zeilen (Review-Schr
 ### Review-Aktionen (App-verwaltet)
 
 - „Als Faden übernehmen" → append `- [ ] <Text>` unter `## Offene Fäden`
-  der `_chapter.md` des aktiven Kapitels (Abschnitt wird angelegt, wenn er
-  fehlt).
-- „NPC-Stub anlegen" → erzeugt `npcs/<slug>.md` mit Minimal-Frontmatter
+  von `<kapitel>/_chapter` des aktiven Kapitels (Abschnitt wird angelegt, wenn
+  er fehlt).
+- „NPC-Stub anlegen" → erzeugt `npcs/<slug>` mit Minimal-Eigenschaften
   (`status: alive` — wer am Tisch auftaucht, lebt; Ausnahmen stellt der
   DM um) und dem Log-Text unter `## Notizen`. Existiert der
   Slug, meldet die App einen Konflikt statt zu überschreiben.
@@ -238,19 +256,19 @@ reviewed: [a1b2c3d4]            # Kurzhashes gesichteter Log-Zeilen (Review-Schr
 
 ## Inbox
 
-`inbox.md` — append-only, gleiche Hashtag-Konventionen wie das Session-Log,
+`inbox` — append-only, gleiche Hashtag-Konventionen wie das Session-Log,
 aber sessionunabhängig. Wird im Review-Schritt zusammen mit dem Log gezeigt.
 
 ## Schreibregeln
 
 - Geschrieben wird ausschließlich über die API (`server/src/server.ts` führt
-  die Endpoints auf): Session-Logs, Inbox, Frontmatter-Patches, Body-Edits,
+  die Endpoints auf): Session-Logs, Inbox, `PATCH /properties`, Body-Edits,
   Review-Aktionen, Generator-Drafts, Rename.
 - Ein externer Editor auf dem Dateibaum wirkt **nicht** mehr: die Datenbank
   ist die Wahrheit, die Altdateien bleiben unangetastet liegen und werden
   ignoriert (ADR #13).
 - Konfliktschutz: jeder Patch trägt das Guard-Token mit, das der Lesevorgang
-  geliefert hat (`mtimeMs` im Wire-Format, intern die Zeilenversion `rev`).
+  geliefert hat (`rev`, die Zeilenversion).
   Passt es nicht mehr, antwortet der Server 409 und die App sagt „Inzwischen
   geändert — neu laden" statt still zu überschreiben.
 - Append-only bleibt Regel für Session-Log und Inbox (ADR #4); die eine

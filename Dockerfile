@@ -92,7 +92,7 @@ USER bun
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD ["bun", "-e", "const url = 'http://127.0.0.1:' + (process.env.PORT || 3000) + '/api/campaigns'; const r = await fetch(url); process.exit(r.ok ? 0 : 1)"]
 
-# The database boot (migrator + one-time import) and the static routes are
-# wired up only when server.ts is the process entrypoint (import.meta.main) —
+# The database boot (schema migrator) and the static routes are wired up only
+# when server.ts is the process entrypoint (import.meta.main) —
 # `bun run <file>` is exactly that.
 CMD ["bun", "run", "server/src/server.ts"]

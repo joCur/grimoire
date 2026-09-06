@@ -103,20 +103,20 @@ eingerückt, standardmäßig GEÖFFNET.
 - SEITEN-KONTEXT LEBT IN DER SEITE. Die Hierarchie steht als leise
   Kontextzeile über dem Titel, direkt bei dem, was sie beschreibt:
   Szene → `<Kapiteltitel> › <Gruppe>` (Kapitel verlinkt auf den Pool,
-  Gruppe wie ein Pool-Gruppenkopf aufgelöst), `_chapter.md` → nur das
+  Gruppe wie ein Pool-Gruppenkopf aufgelöst), `<kapitel>/_chapter` → nur das
   Kapitel, NPC → „NPCs", Ort → „Orte" (jeweils auf ihre Liste). Kampagnen-
   Datei, Sessions, Inbox, Glossar bekommen keine Zeile. Desktop-Pendant
   der mobilen „‹ Pool"-Zeile (die bleibt unter `md`).
 - KAMPAGNENNAME GENAU EINMAL im Chrome: im Switcher. Nie in Krümeln, nie
   in Kontextzeilen.
 - Anzeigenamen statt ids: Pool-Gruppenköpfe zeigen den Ortsnamen, wenn
-  `locations/<slug>.md` existiert (sonst den Slug unverändert — Gruppen-
+  `locations/<slug>` existiert (sonst den Slug unverändert — Gruppen-
   Ordner sind lose Konvention), der Review-Quellchip den Szenentitel
   („Log · Ankunft am Leuchtturm", Fallback id). Sichtbare ids bleiben nur
   in Identifikations-Kontexten, dort mono: Rename-Dialog, NPC-Stub-
   Platzhalter, id-Badge der NPC-Karte, Pfad-Vorschauen im Generator.
 - „Bearbeiten" am Pool-Kopf und im Kampagnen-Lesekopf: Dialog mit Name +
-  Beschreibung (schreibt `_campaign.md`, mtime-sicher). Auch nicht im
+  Beschreibung (schreibt `_campaign`, `rev`-sicher). Auch nicht im
   Prototyp — erste kleine Scheibe des #15-Territoriums, per PO-Entscheid
   (#34).
 
