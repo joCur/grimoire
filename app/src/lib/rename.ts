@@ -112,6 +112,9 @@ const USAGE_REF_LABEL: Record<UsageRef, [string, string]> = {
   chapterScenes: ["Szene", "Szenen"],
   chapterNpcs: ["NPC", "NPCs"],
   chapterLocations: ["Ort", "Orte"],
+  // Issue #68: a body text that says `[[<id>]]`. „Textstelle" is what the DM
+  // sees on the page — a name in running prose, not a frontmatter field.
+  bodyRefs: ["Textstelle", "Textstellen"],
 };
 
 /** „4 Log-Zeilen" — one group as a German phrase. */

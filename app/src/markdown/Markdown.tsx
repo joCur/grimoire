@@ -6,10 +6,14 @@
 // italic condition — over 18px-indented content, no box.
 
 import { ChevronDown } from "lucide-react";
+import type { ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 
+import { expandEntityRefs } from "@grimoire/shared/refs";
+
 import { Callout } from "./Callout";
-import { remarkGrimoire } from "./remark-grimoire";
+import { EntityRef, useEntityRefs } from "./entity-refs";
+import { ENTITY_REF_ATTR, remarkGrimoire } from "./remark-grimoire";
 
 const components: Components = {
   section(props) {
@@ -19,12 +23,19 @@ const components: Components = {
     if (typeof kind === "string") {
       const copyText = attrs["data-copy-text"];
       return (
-        <Callout kind={kind} copyText={typeof copyText === "string" ? copyText : undefined}>
+        <CalloutSection kind={kind} copyText={typeof copyText === "string" ? copyText : undefined}>
           {children}
-        </Callout>
+        </CalloutSection>
       );
     }
     return <section {...rest}>{children}</section>;
+  },
+  // `[[slug]]` (issue #68): the plugin marked it, the tree resolves it.
+  span(props) {
+    const { node: _node, children, ...rest } = props;
+    const slug = (rest as Record<string, unknown>)[ENTITY_REF_ATTR];
+    if (typeof slug !== "string") return <span {...rest}>{children}</span>;
+    return <EntityRef slug={slug} fallback={children} />;
   },
   details(props) {
     const { node: _node, children, ...rest } = props;
@@ -56,6 +67,33 @@ const components: Components = {
     );
   },
 };
+
+/**
+ * A callout, with the read-aloud CLIPBOARD text resolved (issue #68): the
+ * plugin computes `data-copy-text` from the raw mdast, so a `[[slug]]` in a
+ * read-aloud would otherwise land in the Roll20 chat as brackets. What the DM
+ * copies has to be what the DM reads.
+ */
+function CalloutSection({
+  kind,
+  copyText,
+  children,
+}: {
+  kind: string;
+  copyText?: string;
+  children: ReactNode;
+}) {
+  const { resolve } = useEntityRefs();
+  const text =
+    copyText === undefined
+      ? undefined
+      : expandEntityRefs(copyText, (slug) => resolve(slug)?.name);
+  return (
+    <Callout kind={kind} copyText={text}>
+      {children}
+    </Callout>
+  );
+}
 
 const remarkPlugins = [remarkGrimoire];
 

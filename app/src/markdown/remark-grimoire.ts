@@ -13,10 +13,18 @@
 //    its `<summary>` label. Branches are OPEN by default (design reference) —
 //    the DM collapses what does not apply.
 //
-// Both transforms only annotate/regroup mdast nodes; the React side maps the
-// resulting elements to components (see Markdown.tsx).
+// 3. `[[slug]]` entity references (issue #68): every text node is split and
+//    the reference becomes a `<span data-entity-ref="slug">` carrying the
+//    literal `[[slug]]` as its text. RESOLUTION IS NOT THIS PLUGIN'S JOB —
+//    the name lives in the campaign tree, which only React has (EntityRef in
+//    Markdown.tsx). The literal text inside the span is therefore also the
+//    degradation: a span whose slug nothing resolves renders exactly what the
+//    DM typed.
+//
+// All three transforms only annotate/regroup mdast nodes; the React side maps
+// the resulting elements to components (see Markdown.tsx).
 
-import type { Blockquote, Heading, Root, RootContent } from "mdast";
+import type { Blockquote, Heading, Parent, PhrasingContent, Root, RootContent } from "mdast";
 import { toString as mdastToString } from "mdast-util-to-string";
 import { visit } from "unist-util-visit";
 
@@ -29,6 +37,12 @@ import {
   ifSectionCondition,
   isCalloutKind,
 } from "@/markdown/grammar";
+// `[[slug]]` is the format too — the server expands the same references for
+// the search index and the generator is told to emit them (@grimoire/shared).
+import { entityRefSource, splitEntityRefs } from "@grimoire/shared/refs";
+
+/** The attribute the React side reads to resolve a reference. */
+export const ENTITY_REF_ATTR = "data-entity-ref";
 
 /**
  * Plain text of a callout body (clipboard payload for the Roll20 chat):
@@ -129,12 +143,60 @@ function transformIfSections(tree: Root): void {
   tree.children = result;
 }
 
-/** The Grimoire remark plugin: callouts + `## If:` sections. */
+/**
+ * Split every text node on `[[slug]]` references (issue #68).
+ *
+ * Walked by hand instead of with `visit`, for two reasons that both matter:
+ *
+ *   * a text node is REPLACED BY SEVERAL nodes, which needs the parent's
+ *     children array, and
+ *   * text inside a LINK is skipped — a resolved reference renders as an
+ *     anchor, and an anchor inside an anchor is not a document. `inlineCode`
+ *     and `code` are skipped for free: their content is not a text node.
+ */
+function transformEntityRefs(node: Parent, insideLink: boolean): void {
+  const next: RootContent[] = [];
+  let changed = false;
+
+  for (const child of node.children) {
+    if (child.type === "text" && !insideLink) {
+      const pieces = splitEntityRefs(child.value);
+      if (pieces.length > 1 || pieces[0]?.type === "ref") {
+        changed = true;
+        for (const piece of pieces) {
+          if (piece.type === "text") {
+            next.push({ type: "text", value: piece.value });
+            continue;
+          }
+          next.push({
+            type: "entityRef",
+            data: { hName: "span", hProperties: { [ENTITY_REF_ATTR]: piece.slug } },
+            // The literal source IS the fallback rendering (see the header).
+            children: [{ type: "text", value: entityRefSource(piece.slug) }],
+          } as unknown as PhrasingContent as RootContent);
+        }
+        continue;
+      }
+    }
+    if ("children" in child && Array.isArray(child.children)) {
+      transformEntityRefs(child as Parent, insideLink || child.type === "link");
+    }
+    next.push(child);
+  }
+
+  if (changed) node.children = next as Parent["children"];
+}
+
+/** The Grimoire remark plugin: callouts, `## If:` sections, `[[refs]]`. */
 export function remarkGrimoire() {
   return (tree: Root): void => {
     // If-sections first, so callouts inside a section are still transformed
     // by the subsequent full-tree visit.
     transformIfSections(tree);
     transformCallouts(tree);
+    // References LAST: the callout pass reads the raw first text node of a
+    // blockquote to find its `[!kind]` marker, and a marker line that also
+    // carries a reference must still be a callout.
+    transformEntityRefs(tree, false);
   };
 }

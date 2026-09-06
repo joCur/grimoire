@@ -13,13 +13,13 @@ status: draft
 
 ## Flow
 
-Entwaffnet und gefesselt werden die Charaktere vor Fenn gebracht, den
-Anführer der Schmuggler. Er befragt jeden einzeln: Wer schickt euch?
+Entwaffnet und gefesselt werden die Charaktere vor [[fenn]] gebracht,
+den Anführer der Schmuggler. Er befragt jeden einzeln: Wer schickt euch?
 Wie viel wisst ihr?
 
-## If: sie geben zu, für Jorna zu arbeiten
+## If: sie geben zu, für [[jorna]] zu arbeiten
 
-Fenn lässt sie in die alte Räucherkammer sperren — er will erst mit
+[[fenn]] lässt sie in die alte Räucherkammer sperren — er will erst mit
 seinem Auftraggeber sprechen, bevor er entscheidet. Die Gruppe hat bis
 zum Morgengrauen Zeit zu entkommen.
 
@@ -32,12 +32,12 @@ zum Morgengrauen Zeit zu entkommen.
 
 ## If: sie lügen (Schiffbrüchige, verirrte Reisende ...)
 
-> [!check] Charisma (Deception) jedes Charakters vs. Fenns
+> [!check] Charisma (Deception) jedes Charakters vs. [[fenn]]s
 > Wisdom (Insight) +2. Advantage/Disadvantage nach Plausibilität,
 > für jeden Charakter einzeln.
 
 - **Geglaubt** → sie werden zum Dorf eskortiert und beobachtet
 - **Nicht geglaubt** → Räucherkammer wie oben
 
-> [!outcome] Fenn kennt nach dieser Szene die Gesichter der Gruppe —
+> [!outcome] [[fenn]] kennt nach dieser Szene die Gesichter der Gruppe —
 > egal wie sie ausgeht.

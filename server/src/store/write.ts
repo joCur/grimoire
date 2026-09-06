@@ -60,6 +60,7 @@ import {
 
 } from "../db/schema";
 import { indexEntity } from "./fts";
+import { expandBodyRefs, referrersOf } from "./refs";
 import { getDb } from "./handle";
 import {
   campaignRow,
@@ -179,6 +180,34 @@ function applyPatch(
 
 // --- FTS helpers per kind ----------------------------------------------------
 
+/**
+ * Re-index everything whose BODY references `slug` (issue #68).
+ *
+ * The indexed text of a referring entity contains the referenced entity's
+ * DISPLAY NAME (store/refs.ts explains why), so a name or id change makes
+ * other entities' index rows stale. Every write of a referenceable entity
+ * therefore ends here.
+ *
+ * The `cascading` latch stops the obvious infinite loop: re-indexing a
+ * referrer is a write of a referenceable entity too, and two entities that
+ * mention each other would ping-pong forever. One level is all this needs —
+ * the referrer's own name did not change. Safe as a module flag because a
+ * transaction is strictly synchronous (see `mutate`).
+ */
+let cascading = false;
+
+function reindexReferrers(tx: GrimoireDb, campaign: string, slug: string): void {
+  if (cascading) return;
+  cascading = true;
+  try {
+    for (const referrer of referrersOf(tx, campaign, slug)) {
+      reindexEntity(tx, campaign, referrer.kind, referrer.id);
+    }
+  } finally {
+    cascading = false;
+  }
+}
+
 function indexScene(tx: GrimoireDb, campaign: string, row: SceneRow, tags: string[]): void {
   indexEntity(tx, campaign, {
     kind: "scene",
@@ -186,8 +215,9 @@ function indexScene(tx: GrimoireDb, campaign: string, row: SceneRow, tags: strin
     title: row.title === "" ? row.id : row.title,
     ref: row.id,
     tags: tags.join(" "),
-    body: row.body,
+    body: expandBodyRefs(tx, campaign, row.body),
   });
+  reindexReferrers(tx, campaign, row.id);
 }
 
 /**
@@ -209,8 +239,9 @@ function indexNpc(
     title: row.name === "" ? row.id : row.name,
     ref: row.id,
     tags: row.role ?? "",
-    body: renderNpcBody(row, relations),
+    body: expandBodyRefs(tx, campaign, renderNpcBody(row, relations)),
   });
+  reindexReferrers(tx, campaign, row.id);
 }
 
 function indexLocation(tx: GrimoireDb, campaign: string, row: LocationRow): void {
@@ -220,10 +251,13 @@ function indexLocation(tx: GrimoireDb, campaign: string, row: LocationRow): void
     title: row.name === "" ? row.id : row.name,
     ref: row.id,
     tags: "",
-    body: row.body,
+    body: expandBodyRefs(tx, campaign, row.body),
   });
+  reindexReferrers(tx, campaign, row.id);
 }
 
+// A chapter is NOT referenceable (@grimoire/shared/refs), so nothing has to be
+// re-indexed for it — but its body may CONTAIN references like any other.
 function indexChapter(tx: GrimoireDb, campaign: string, row: ChapterRow): void {
   indexEntity(tx, campaign, {
     kind: "chapter",
@@ -231,7 +265,7 @@ function indexChapter(tx: GrimoireDb, campaign: string, row: ChapterRow): void {
     title: row.title === "" ? row.id : row.title,
     ref: row.id,
     tags: "",
-    body: row.body,
+    body: expandBodyRefs(tx, campaign, row.body),
   });
 }
 
@@ -242,7 +276,7 @@ function indexCampaign(tx: GrimoireDb, row: CampaignRow): void {
     title: row.name === "" ? row.id : row.name,
     ref: row.id,
     tags: "",
-    body: row.body,
+    body: expandBodyRefs(tx, row.id, row.body),
   });
 }
 

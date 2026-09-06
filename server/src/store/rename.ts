@@ -34,6 +34,7 @@ import {
   sessionScenesPlayed,
 } from "../db/schema";
 import { dropEntity } from "./fts";
+import { rewriteBodyRefs } from "./refs";
 import { getDb } from "./handle";
 import { requireCampaign } from "./read";
 import {
@@ -259,6 +260,16 @@ function updateSoftReferences(
           ),
         )
         .run();
+    }
+  }
+  if (kind !== "chapter") {
+    // BODY REFERENCES (issue #68): `[[oldId]]` in prose is a soft reference
+    // like any other and has to follow the id — the renderer resolves the
+    // CURRENT name from the slug, so a slug left behind goes silently back to
+    // plain text. Every rewritten body is re-indexed (its indexed text
+    // carries the referenced display name, store/refs.ts).
+    for (const referrer of rewriteBodyRefs(tx, campaign, oldId, newId)) {
+      reindexEntity(tx, campaign, referrer.kind, referrer.id);
     }
   }
   if (kind === "chapter") {

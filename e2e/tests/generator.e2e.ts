@@ -70,6 +70,11 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   await expect(card.locator("[data-callout='readaloud']")).toContainText("Die Flut zieht sich");
   await expect(card.locator("[data-callout='loot']")).toContainText("Beute");
   await expect(card.locator("details[data-if-section]")).toHaveCount(2);
+  // Issue #68: the draft's prose uses `[[slug]]` and the review resolves it —
+  // `[[fenn]]` becomes the NPC's current name as a link, while `[[grella]]`
+  // (only a STUB in this reply, no entity yet) stays visible as source text.
+  await expect(card.getByRole("link", { name: "NPC: Fenn" }).first()).toHaveText("Fenn");
+  await expect(card).toContainText("[[grella]]");
 
   // Nothing is stored before "Übernehmen" — under neither name.
   expect(await api.exists(`01-salzhafen/${SCENE_SLUG}.md`)).toBe(false);

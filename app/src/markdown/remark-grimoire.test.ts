@@ -8,7 +8,7 @@ import { toString as mdastToString } from "mdast-util-to-string";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 
-import { remarkGrimoire } from "./remark-grimoire";
+import { ENTITY_REF_ATTR, remarkGrimoire } from "./remark-grimoire";
 
 function run(markdown: string): Root {
   const processor = unified().use(remarkParse).use(remarkGrimoire);
@@ -172,5 +172,65 @@ describe("reference fixtures", () => {
     const node = tree.children[0] as Blockquote;
     expect(dataOf(node).hName).toBe("section");
     expect(node.children).toHaveLength(0);
+  });
+});
+
+describe("entity references (issue #68)", () => {
+  /** The `[[…]]` nodes of a tree, flattened, with their slug and text. */
+  function refs(node: unknown): Array<{ slug: unknown; text: string }> {
+    const found: Array<{ slug: unknown; text: string }> = [];
+    const walk = (n: unknown): void => {
+      const typed = n as { type?: string; children?: unknown[] };
+      if (typed.type === "entityRef") {
+        found.push({
+          slug: dataOf(n as RootContent).hProperties?.[ENTITY_REF_ATTR],
+          text: mdastToString(n as RootContent),
+        });
+        return;
+      }
+      for (const child of typed.children ?? []) walk(child);
+    };
+    walk(node);
+    return found;
+  }
+
+  test("a reference becomes a marked node carrying the slug", () => {
+    const tree = run("Am Kai wartet [[jorna]]s Boot.");
+    expect(refs(tree)).toEqual([{ slug: "jorna", text: "[[jorna]]" }]);
+    // The literal source is the node's own text — that IS the unresolved
+    // rendering, so a body never loses what the DM typed.
+    expect(mdastToString(tree)).toBe("Am Kai wartet [[jorna]]s Boot.");
+  });
+
+  test("references inside a callout and inside an if-section are found", () => {
+    expect(refs(run("> [!note] [[jorna]] wartet."))).toEqual([
+      { slug: "jorna", text: "[[jorna]]" },
+    ]);
+    expect(refs(run("## If: sie lügen\n\nDann holt [[fenn]] sie.")).map((r) => r.slug)).toEqual([
+      "fenn",
+    ]);
+  });
+
+  test("the callout marker still wins when its line also carries a reference", () => {
+    const tree = run("> [!check] Insight gegen [[fenn]].");
+    expect(dataOf(tree.children[0]).hProperties?.["data-callout"]).toBe("check");
+    expect(refs(tree).map((r) => r.slug)).toEqual(["fenn"]);
+  });
+
+  test("references inside a link or inline code are left alone", () => {
+    expect(refs(run("[text [[jorna]]](https://example.org)"))).toEqual([]);
+    expect(refs(run("`[[jorna]]`"))).toEqual([]);
+  });
+
+  test("only kebab-case slugs are references — the rest stays text", () => {
+    expect(refs(run("[[Jorna]] [[a b]] [[]] [[jorna|Jorna]]"))).toEqual([]);
+  });
+
+  test("several references in one paragraph, in order", () => {
+    expect(refs(run("[[jorna]], [[fenn]] und [[alte-mole]]")).map((r) => r.slug)).toEqual([
+      "jorna",
+      "fenn",
+      "alte-mole",
+    ]);
   });
 });

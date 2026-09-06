@@ -102,6 +102,27 @@ status: draft | ready | played | dropped
 | `> [!loot]`      | Beute / Gegenstände                                          |
 | `> [!note]`      | Freitext-Marginal des DM                                     |
 
+### Referenzen im Fließtext: `[[slug]]`
+
+`[[jorna]]` in einem Body-Text ist eine Referenz auf eine Entität. Sie gilt in
+jedem Body (Szene, NPC, Ort, Kapitel) und in jedem Callout.
+
+- **Gespeichert wird immer der slug**, nie der Name. Den aktuellen Anzeigenamen
+  setzt erst die Anzeige ein — nach einer Umbenennung stimmt der Text also
+  überall, ohne dass eine Datei angefasst wird.
+- Referenzierbar sind **NPC, Ort und Szene**. Kollidieren slugs über Arten
+  hinweg, gewinnt **NPC > Ort > Szene**. Kapitel sind nicht referenzierbar.
+- In den Klammern steht **nur der slug** in kebab-case (`[[alte-mole]]`); es
+  gibt **keinen Anzeigetext** (`[[jorna|Jorna]]` ist normaler Text). Endungen
+  stehen außerhalb: `[[jorna]]s Boot` → „Jornas Boot".
+- **Degradation**: Ein slug, den keine Entität hat, bleibt als `[[slug]]`
+  sichtbar stehen — kein Fehler, und er wird lebendig, sobald die Entität
+  existiert.
+- Klick: in der Leseansicht ein Link zur Entität, im Live-Modus öffnet er die
+  Detail-Schublade, ohne die Session zu verlassen.
+- Bestehende Prosa bleibt unverändert — Namen im Text sind weiterhin erlaubt,
+  nur eben nicht mitwandernd.
+
 ## Entität: NPC
 
 ```yaml
