@@ -17,7 +17,7 @@
 
 import type { SceneSummary } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
-import { Bookmark, Check, GitFork } from "lucide-react";
+import { Bookmark, Check, ChevronDown, GitFork } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
@@ -28,7 +28,9 @@ import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/components/NpcCard";
 import { SceneArticle } from "@/components/SceneArticle";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { fmStringArray } from "@/lib/frontmatter";
+import { isSceneDone } from "@/lib/scene-status";
 import { parseLogEntries } from "@/lib/session";
 import { EntityRefDrawerTarget } from "@/markdown/entity-refs";
 import { cn } from "@/lib/utils";
@@ -60,7 +62,8 @@ function MobileLiveNote({ campaign }: { campaign: string }) {
   const chapters = tree.data?.chapters ?? [];
   const chapter = chapters.find((ch) => ch.status === "active") ?? chapters[0];
   const scenes = chapter?.groups.flatMap((g) => g.scenes) ?? [];
-  const scene = scenes.find((s) => s.type !== "contingency") ?? scenes[0];
+  const openScenes = scenes.filter((s) => s.type !== "contingency" && !isSceneDone(s.status));
+  const scene = openScenes[0] ?? scenes.find((s) => s.type !== "contingency") ?? scenes[0];
 
   return (
     <>
@@ -94,12 +97,21 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   const chapters = tree.data?.chapters ?? [];
   const chapter = chapters.find((ch) => ch.status === "active") ?? chapters[0];
   const scenes = chapter?.groups.flatMap((g) => g.scenes) ?? [];
-  const planned = scenes.filter((s) => s.type !== "contingency");
+  // The scene STATUS splits the plan (issue #73): `played`/`dropped` scenes
+  // drop out of "Geplant" into the collapsed "Gespielt" group below. The
+  // session checkmark is a different thing and stays on top of both (AK2).
+  const nonContingency = scenes.filter((s) => s.type !== "contingency");
+  const planned = nonContingency.filter((s) => !isSceneDone(s.status));
+  const done = nonContingency.filter((s) => isSceneDone(s.status));
   const contingencies = scenes.filter((s) => s.type === "contingency");
 
-  // Selected scene = client state (path); default: first planned scene.
+  // Selected scene = client state (path); default: FIRST PLANNED scene, never
+  // a played one (AK3). With everything played the fallbacks keep the view
+  // usable instead of blanking it: a done scene, else any scene, else the
+  // empty note in the center column.
   const [selectedPath, setSelectedPath] = useState<string>();
-  const selected = scenes.find((s) => s.path === selectedPath) ?? planned[0] ?? scenes[0];
+  const selected =
+    scenes.find((s) => s.path === selectedPath) ?? planned[0] ?? done[0] ?? scenes[0];
 
   // Which entity file the drawer shows — undefined = closed. Sitting HERE
   // (not inside the aside) is what keeps scene selection and note draft
@@ -165,7 +177,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
             <p className="px-2 pb-2 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
               Falls es schiefgeht
             </p>
-            <div className="flex flex-col gap-0.5">
+            <div className="mb-6 flex flex-col gap-0.5">
               {contingencies.map((scene) => (
                 <SceneNavRow
                   key={scene.path}
@@ -177,6 +189,14 @@ function LiveDesktop({ campaign }: { campaign: string }) {
               ))}
             </div>
           </>
+        )}
+        {done.length > 0 && (
+          <PlayedGroup
+            scenes={done}
+            selectedPath={selected?.path}
+            playedIds={playedIds}
+            onPick={setSelectedPath}
+          />
         )}
       </nav>
 
@@ -247,17 +267,69 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   );
 }
 
+/**
+ * The scenes whose STATUS says they are behind us (issue #73): dimmed, in a
+ * group that starts collapsed. Collapsed/open is view state only — deliberately
+ * NOT persisted (AK1, and no localStorage for data either way). Selecting and
+ * opening a scene in here works exactly as above.
+ */
+function PlayedGroup({
+  scenes,
+  selectedPath,
+  playedIds,
+  onPick,
+}: {
+  scenes: SceneSummary[];
+  selectedPath: string | undefined;
+  playedIds: string[];
+  onPick: (path: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="group flex w-full items-center gap-1.5 rounded-md px-2 pb-2 text-left text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground hover:text-body-secondary">
+        <ChevronDown
+          aria-hidden
+          size={13}
+          className="flex-none -rotate-90 transition-transform group-data-[state=open]:rotate-0"
+        />
+        <span>Gespielt</span>
+        <span className="font-normal tracking-normal normal-case text-faint">
+          ({scenes.length})
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div role="group" aria-label="Gespielt" className="flex flex-col gap-0.5">
+          {scenes.map((scene) => (
+            <SceneNavRow
+              key={scene.path}
+              scene={scene}
+              active={scene.path === selectedPath}
+              played={playedIds.includes(scene.id)}
+              dimmed
+              onPick={() => onPick(scene.path)}
+            />
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 /** Left-nav row per the prototype: icon, brass left edge + darker bg when
- * active, played checkmark from scenes_played. */
+ * active, played checkmark from scenes_played. `dimmed` is the "Gespielt"
+ * group's quieter treatment (issue #73) — an active row stays readable. */
 function SceneNavRow({
   scene,
   active,
   played,
+  dimmed = false,
   onPick,
 }: {
   scene: SceneSummary;
   active: boolean;
   played: boolean;
+  dimmed?: boolean;
   onPick: () => void;
 }) {
   const Icon = scene.type === "contingency" ? GitFork : Bookmark;
@@ -270,7 +342,9 @@ function SceneNavRow({
         "flex w-full items-center gap-[9px] rounded-r-md border-l-2 px-2.5 py-[9px] text-left text-[13.5px]",
         active
           ? "border-l-primary bg-secondary text-foreground"
-          : "border-l-transparent text-body-secondary hover:bg-divider",
+          : dimmed
+            ? "border-l-transparent text-faint hover:bg-divider hover:text-body-secondary"
+            : "border-l-transparent text-body-secondary hover:bg-divider",
       )}
     >
       <Icon

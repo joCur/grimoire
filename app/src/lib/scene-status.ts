@@ -40,6 +40,19 @@ export function sceneStatusMeta(status: string): { label: string; dot: string; t
 export const SCENE_STATUS_OPTIONS: ReadonlyArray<{ value: SceneStatus; label: string }> =
   SCENE_STATUSES.map((value) => ({ value, label: SCENE_STATUS_META[value].label }));
 
+/**
+ * Statuses that take a scene out of the evening's plan: `played` ("gespielt")
+ * and `dropped` ("verworfen"). The live nav groups these away (issue #73);
+ * everything else — including an unknown value, which degrades to plain text —
+ * counts as still planned.
+ */
+const DONE_STATUSES: ReadonlySet<string> = new Set<SceneStatus>(["played", "dropped"]);
+
+/** True when the scene's status says it is behind us (played or dropped). */
+export function isSceneDone(status: string): boolean {
+  return DONE_STATUSES.has(status);
+}
+
 /** Body of the status write — the mtime comes from the FileResponse on screen. */
 export interface FrontmatterPatchBody {
   path: string;
