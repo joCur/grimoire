@@ -1,36 +1,58 @@
 // Test setup for the database-backed API (issue #57).
 //
 // Every test case gets its OWN in-memory database, seeded through the real
-// one-time migration from a campaign tree — `examples/` by default, which is
+// markdown importer from a campaign tree — `examples/` by default, which is
 // what makes the committed example campaign the fixture of the whole suite
 // (CLAUDE.md, "Arbeitsweise"; planning decision F5) without a second data
 // format anywhere.
 //
-// Why in-memory: it is the same driver, the same schema migrations and the
-// same importer as production (store/handle.ts calls exactly this), it needs
-// no cleanup, and it makes each case independent — the server process used to
-// be stateless because the files were the state, and the equivalent now is a
-// fresh database per case.
+// Since issue #79 the seeding is EXPLICIT: the boot imports nothing, so a
+// test that wants content runs the importer itself — exactly what `grimoire
+// seed` does. Why in-memory: same driver, same schema migrations, same
+// importer as production, no cleanup, and each case is independent.
 
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GrimoireDb } from "../../src/db/client";
-import { getCampaignRoot, setCampaignRoot } from "../../src/config";
+import { runInitialMigration } from "../../src/db/migrate-campaigns";
 import { closeStore, initStore } from "../../src/store/handle";
+import { backfillReferences } from "../../src/store/ref-backfill";
 
 /** The committed example campaign — read-only for the suite. */
 export const EXAMPLES = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../../../examples");
 
 /**
- * A fresh in-memory database, seeded from `root` (default: the current
- * CAMPAIGN_ROOT, i.e. `examples/`). Call it in `beforeEach` — it closes any
- * database a previous case left open.
+ * A fresh in-memory database, seeded from `root` (default: `examples/`) with
+ * the real importer — the same call `grimoire seed` makes. Call it in
+ * `beforeEach`; it closes any database a previous case left open.
  */
 export async function seedStore(root?: string): Promise<GrimoireDb> {
   closeStore();
-  return initStore({ file: ":memory:", campaignRoot: root ?? getCampaignRoot() });
+  const db = await initStore({ file: ":memory:" });
+  await runInitialMigration(db, root ?? EXAMPLES);
+  // The importer's own consistency pass, exactly as `grimoire seed` runs it
+  // (src/cli.ts): a referenced npc is never missing, only empty (issue #70).
+  seedBackfilled = backfillReferences(db).created;
+  return db;
+}
+
+let seedBackfilled: string[] = [];
+
+/**
+ * `<campaign>/<npc-id>` per empty npc row the LAST `seedStore` created for a
+ * dangling reference. The boot no longer imports, so this is where that pass
+ * is observed now (it used to be reported through `storeInfo`).
+ */
+export function lastSeedBackfill(): string[] {
+  return seedBackfilled;
+}
+
+/** A fresh, EMPTY in-memory database — the production boot's starting point. */
+export async function emptyStore(): Promise<GrimoireDb> {
+  closeStore();
+  return initStore({ file: ":memory:" });
 }
 
 /** Close the database of the current case. Call it in `afterEach`. */
@@ -41,8 +63,8 @@ export function dropStore(): void {
 /**
  * A temp copy of `examples/` as a CAMPAIGN ROOT, for cases that need to seed
  * from a modified tree (a broken file, a second campaign, a missing
- * `_campaign.md`). The server never writes into it — after the cutover the
- * tree is only ever the migration's source.
+ * `_campaign.md`). The server never writes into it — the tree is only ever
+ * the importer's source.
  */
 export async function tempCampaignRoot(): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "grimoire-root-"));
@@ -53,14 +75,4 @@ export async function tempCampaignRoot(): Promise<string> {
 /** Drop a temp root created above. */
 export async function removeTempRoot(dir: string): Promise<void> {
   await rm(dir, { recursive: true, force: true });
-}
-
-/**
- * Point the app at `root` for the duration of one case and hand back the
- * restore function. Pairs with `seedStore(root)`.
- */
-export function useCampaignRoot(root: string): () => void {
-  const previous = getCampaignRoot();
-  setCampaignRoot(root);
-  return () => setCampaignRoot(previous);
 }

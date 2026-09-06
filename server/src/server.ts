@@ -100,9 +100,12 @@
 //   [x] GET  /api/:campaign/glossary           { entries: [{ term, explanation }] } — the
 //                                              glossary TABLE (issue #57, planning F6)
 //   [x] PUT  /api/:campaign/glossary           { entries } -> { entries }; replaces the list
-//   [x] GET  /api/:campaign/migration-report   { entries: [{ path, reason, at }] } — what the
-//                                              one-time markdown import had to degrade;
-//                                              empty = clean import (issue #57)
+//   [—] GET  /api/:campaign/migration-report   REMOVED with issue #79. The markdown import
+//                                              left the production path (no boot import any
+//                                              more): it is the dev/E2E tool `grimoire seed`,
+//                                              which prints its own report on stdout. The
+//                                              `migration_report` table stays as the
+//                                              importer's bookkeeping (server/src/db/)
 //   [x] GET  /api/:campaign/version            { version, build } — version is
 //                                              `campaigns.version`, bumped by every write in
 //                                              the same transaction (the chokidar watcher is
@@ -215,7 +218,7 @@
 
 import { existsSync } from "node:fs";
 import { Hono } from "hono";
-import { getAppDistDir, getCampaignRoot, getDbFile, PORT } from "./config";
+import { getAppDistDir, getDbFile, PORT } from "./config";
 import { api } from "./routes/api";
 import { mountStaticApp } from "./static-files";
 import { initStore } from "./store/handle";
@@ -233,31 +236,17 @@ app.route("/api", api);
 // two calls itself.
 if (import.meta.main) {
   console.log(`Grimoire server — database: ${getDbFile()}, port: ${PORT}`);
-  // Opens the database, applies the schema migrations and runs the one-time
-  // import from CAMPAIGN_ROOT when (and only when) the database is still
-  // empty — see store/handle.ts and db/migrate-campaigns.ts. Awaited before
-  // the first request so a boot that cannot open its database fails loudly
-  // instead of on the first query.
+  // Opens the database and applies the schema migrations — see
+  // store/handle.ts. NOTHING is imported (issue #79 AK6): a fresh instance
+  // starts empty. Awaited before the first request so a boot that cannot open
+  // its database fails loudly instead of on the first query.
   const store = await initStore();
   void store;
   const info = (await import("./store/handle")).storeInfo();
-  if (info?.migration.migrated === true) {
-    console.log(
-      `First-run import from ${getCampaignRoot()}: ` +
-        `${info.migration.campaigns.join(", ") || "(nothing)"}` +
-        (info.migration.reportEntries > 0
-          ? ` — ${info.migration.reportEntries} migration-report entr${info.migration.reportEntries === 1 ? "y" : "ies"} to read (GET /api/:campaign/migration-report)`
-          : " — clean import"),
-    );
-  } else {
-    console.log(
-      `Database in use (${info?.backend ?? "unknown backend"}); no import needed ` +
-        `(${info?.migration.skipped ?? "already migrated"}). CAMPAIGN_ROOT is not read.`,
-    );
-  }
+  console.log(`Database ready (${info?.backend ?? "unknown backend"}).`);
   // Issue #70: a boot that CHANGED data says so. The pass creates an empty
-  // npc row for every dangling npc reference of the migrated stock and is a
-  // no-op from the second boot on (store/ref-backfill.ts).
+  // npc row for every dangling npc reference and is a no-op from the second
+  // boot on (store/ref-backfill.ts).
   if (info !== undefined && info.backfilledNpcs.length > 0) {
     console.log(
       `${info.backfilledNpcs.length} referenced npc(s) had no entry and got an empty one: ` +

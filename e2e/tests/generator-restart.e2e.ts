@@ -22,7 +22,7 @@ import path from "node:path";
 
 import { SCENE_ID, SCENE_SLUG, SCENE_TITLE, TRIGGER } from "../fixtures/replies";
 import { pristineDir, runDir } from "../support/paths";
-import { apiFor, expect, startGrimoireServer, test, type Api } from "../support/test";
+import { apiFor, expect, seedCampaigns, startGrimoireServer, test, type Api } from "../support/test";
 
 /** Where an applied scene draft lives: `<chapter>/<id>.md` (issue #57). */
 const SCENE_PATH = `01-salzhafen/${SCENE_ID}.md`;
@@ -61,6 +61,10 @@ async function ownDataDir(testId: string, workerIndex: number): Promise<string> 
 
 test("a run interrupted by a restart is reported as failed, not left spinning", async ({}, testInfo) => {
   const dataDir = await ownDataDir(testInfo.testId, testInfo.workerIndex);
+
+  // The boot imports nothing since issue #79 — the fixture campaign is put in
+  // by the seed CLI, once, before either boot.
+  await seedCampaigns(pristineDir(), dataDir);
 
   // --- boot 1: start a run the stub will never answer -----------------------
   const first = await startGrimoireServer(pristineDir(), dataDir, testInfo.workerIndex);

@@ -20,7 +20,6 @@ import {
   removeTempRoot,
   seedStore,
   tempCampaignRoot,
-  useCampaignRoot,
 } from "./support/store";
 
 async function getFile(rel: string): Promise<FileResponse> {
@@ -250,7 +249,6 @@ describe("PATCH /frontmatter — a scene's `chapter`", () => {
 
   test("an existing chapter moves the scene, and the tree follows", async () => {
     const root = await tempCampaignRoot();
-    const restore = useCampaignRoot(root);
     try {
       await mkdir(path.join(root, "beispiel", "02-nordbucht"), { recursive: true });
       await writeFile(
@@ -272,7 +270,6 @@ describe("PATCH /frontmatter — a scene's `chapter`", () => {
       const moved = chapters.find((c) => c.id === "02-nordbucht");
       expect(moved?.groups[0]?.scenes.map((s) => s.id)).toEqual(["lighthouse-arrival"]);
     } finally {
-      restore();
       await removeTempRoot(root);
     }
   });

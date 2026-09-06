@@ -27,7 +27,6 @@ import {
   removeTempRoot,
   seedStore,
   tempCampaignRoot,
-  useCampaignRoot,
 } from "./support/store";
 
 /**
@@ -39,7 +38,6 @@ import {
 const REL = "sessions/2026-08-19.md";
 
 let tmpRoot: string | undefined;
-let restoreRoot: (() => void) | undefined;
 /** Path of the session `beforeEach` started — this case's opaque id. */
 let startedPath: string;
 
@@ -87,7 +85,6 @@ async function seedWithSessionFile(tail: string): Promise<void> {
     `---\nid: 2026-08-19\nstarted: 2026-08-19T21:00\n${tail}---\n\n## Log\n`,
     "utf8",
   );
-  restoreRoot = useCampaignRoot(tmpRoot);
   await seedStore(tmpRoot);
 }
 
@@ -103,8 +100,6 @@ beforeEach(async () => {
 afterEach(async () => {
   dropStore();
   setNow(null);
-  restoreRoot?.();
-  restoreRoot = undefined;
   if (tmpRoot !== undefined) await removeTempRoot(tmpRoot);
   tmpRoot = undefined;
 });

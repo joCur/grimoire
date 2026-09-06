@@ -13,6 +13,7 @@ import path from "node:path";
 import { Hono } from "hono";
 import { api } from "../src/routes/api";
 import { mountStaticApp, resolveStaticPath } from "../src/static-files";
+import { dropStore, seedStore } from "./support/store";
 
 const INDEX_HTML = '<!doctype html>\n<html lang="de"><body><div id="root"></div></body></html>\n';
 const APP_JS = 'console.log("grimoire");\n';
@@ -21,6 +22,9 @@ let dist = "";
 let app: Hono;
 
 beforeAll(async () => {
+  // The boot imports nothing since issue #79 — the campaign the /api
+  // assertion below asks for is seeded explicitly.
+  await seedStore();
   dist = await mkdtemp(path.join(os.tmpdir(), "grimoire-dist-"));
   await mkdir(path.join(dist, "assets"), { recursive: true });
   await writeFile(path.join(dist, "index.html"), INDEX_HTML);
@@ -36,6 +40,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  dropStore();
   if (dist !== "") await rm(dist, { recursive: true, force: true });
 });
 

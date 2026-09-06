@@ -1,9 +1,10 @@
 // The suite's own `test` — every test gets:
 //
-//   - its OWN database: a fresh, empty GRIMOIRE_DATA directory. The server
-//     boots on it, applies the schema migrations and imports the campaign
-//     from CAMPAIGN_ROOT — the real first-run import IS the seeding path
-//     (planning #52 decision F5: no second data format for fixtures)
+//   - its OWN database: a fresh, empty GRIMOIRE_DATA directory, seeded by
+//     `grimoire seed <tree>` BEFORE the server starts. Since issue #79 the
+//     boot imports nothing, so the CLI is the seeding path — still the real
+//     importer, still the example campaign as the only fixture format
+//     (planning #52 decision F5)
 //   - its OWN server process on its own port, serving the built app and /api,
 //     with LLM_PROVIDER=openai pointing at the run's stub endpoint
 //   - `baseURL` wired to that server, so page.goto("/") hits it
@@ -16,8 +17,8 @@
 // old `files.read`) or, where a spec really means storage, through `db`.
 //
 // The markdown tree is therefore only an INPUT, read exactly once per test —
-// at the server's first boot. A test that needs content the example campaign
-// does not have seeds it into its own copy of that tree BEFORE the boot:
+// by that seed run. A test that needs content the example campaign does not
+// have seeds it into its own copy of that tree BEFORE the seed:
 //
 //   test.use({ seed: { files: { "locations/hafen.md": "…" } } });
 //   test.use({ seed: { remove: ["_campaign.md"] } });
@@ -28,14 +29,16 @@
 // One server per test instead of one per worker: the server holds state the
 // tests care about (the in-memory generate job) and half the paths write to
 // the database — a fresh process on a fresh database is the only isolation
-// that needs no cleanup discipline. Boot plus import costs ~0.2s.
+// that needs no cleanup discipline. Seed plus boot costs ~0.4s.
 //
 // Ports are deterministic per worker (base + slot) instead of "ask the OS for
 // a free one": with several workers, two simultaneous lookups can hand out the
 // same port. A busy port is retried on the next slot.
 
+import { execFile } from "node:child_process";
 import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import { test as base, expect } from "@playwright/test";
 
@@ -44,6 +47,7 @@ import {
   APP_DIST,
   BUN,
   CAMPAIGN,
+  CLI_ENTRY,
   SERVER_ENTRY,
   REPO_ROOT,
   pristineDir,
@@ -51,6 +55,8 @@ import {
   stubLlmBaseUrl,
 } from "./paths";
 import { startProcess, waitForHttp, type ManagedProcess } from "./procs";
+
+const run = promisify(execFile);
 
 /** First port of the E2E range; each worker owns PORTS_PER_WORKER of them. */
 const PORT_BASE = 3200;
@@ -66,7 +72,7 @@ export interface ServerHandle {
   dataDir: string;
   /** The database file this server booted on. */
   dbFile: string;
-  /** The markdown tree the first-run import read (an INPUT, never written). */
+  /** The markdown tree `grimoire seed` read (an INPUT, never written). */
   campaignRoot: string;
 }
 
@@ -74,7 +80,7 @@ export interface ServerHandle {
 export interface Seed {
   /** campaign-relative path -> content (parent directories are created). */
   files?: Record<string, string>;
-  /** campaign-relative paths to delete before the import runs. */
+  /** campaign-relative paths to delete before the seed runs. */
   remove?: string[];
 }
 
@@ -149,11 +155,32 @@ interface Fixtures {
 }
 
 /**
- * Start ONE real server process: `campaignRoot` is read only by the first-run
- * import of this boot, `dataDir` is the GRIMOIRE_DATA it lives in.
+ * Import a markdown tree into `dataDir`'s database with the real CLI —
+ * `grimoire seed <tree>`, the documented dev/E2E tool (issue #79 AK6). The
+ * server no longer imports anything at boot, so this is what puts the fixture
+ * campaign into a test's database.
+ */
+export async function seedCampaigns(campaignRoot: string, dataDir: string): Promise<string> {
+  try {
+    const { stdout } = await run(BUN, [CLI_ENTRY, "seed", campaignRoot], {
+      cwd: REPO_ROOT,
+      env: { ...process.env, GRIMOIRE_DATA: dataDir },
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    return stdout;
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`e2e: grimoire seed ${campaignRoot} failed\n${detail}`);
+  }
+}
+
+/**
+ * Start ONE real server process on `dataDir` (GRIMOIRE_DATA). `campaignRoot`
+ * is recorded on the handle only — nothing reads it at boot any more; seed
+ * with `seedCampaigns` first when the test needs content.
  *
- * Exported because the migration spec needs two boots of its own on the SAME
- * data directory — something the per-test `server` fixture cannot express.
+ * Exported because the seed spec needs boots of its own on data directories
+ * the per-test `server` fixture cannot express.
  */
 export async function startGrimoireServer(
   campaignRoot: string,
@@ -170,9 +197,7 @@ export async function startGrimoireServer(
       label: `server:${port}`,
       env: {
         PORT: String(port),
-        // Read ONCE, by the first-run import of this boot.
-        CAMPAIGN_ROOT: campaignRoot,
-        // The only truth from then on.
+        // The only truth — the boot imports nothing (issue #79).
         GRIMOIRE_DATA: dataDir,
         APP_DIST,
         // The provider path runs for real — only the endpoint is canned.
@@ -309,11 +334,11 @@ export function dbFor(client: SqliteClient): Db {
 }
 
 export const test = base.extend<Fixtures>({
-  // Extra markdown the first-run import should see. Set per file or per
+  // Extra markdown the seed run should see. Set per file or per
   // describe block with test.use({ seed: … }).
   seed: [{}, { option: true }],
 
-  // The markdown tree the boot imports. Without a seed this is the run's
+  // The markdown tree `grimoire seed` reads. Without a seed this is the run's
   // pristine copy, shared and never written — examples/ itself is read-only
   // for the suite anyway (CLAUDE.md: the format is a contract).
   campaignRoot: async ({ seed }, use, testInfo) => {
@@ -338,7 +363,8 @@ export const test = base.extend<Fixtures>({
     if (process.env.E2E_KEEP !== "1") await rm(dir, { recursive: true, force: true });
   },
 
-  // An EMPTY data directory: the boot creates grimoire.db in it and imports.
+  // An EMPTY data directory: `grimoire seed` creates grimoire.db in it (see
+  // the `server` fixture), the boot then finds it ready.
   dataDir: async ({}, use, testInfo) => {
     const dir = path.join(runDir(), `w${testInfo.workerIndex}`, testInfo.testId, "data");
     await rm(dir, { recursive: true, force: true });
@@ -348,6 +374,7 @@ export const test = base.extend<Fixtures>({
   },
 
   server: async ({ campaignRoot, dataDir }, use, testInfo) => {
+    await seedCampaigns(campaignRoot, dataDir);
     const { handle, proc } = await startGrimoireServer(
       campaignRoot,
       dataDir,

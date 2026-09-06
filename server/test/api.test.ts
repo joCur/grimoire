@@ -1,5 +1,5 @@
 // Read-API tests against the DATABASE (issue #57), seeded through the real
-// one-time migration from the example campaign — examples/ is the committed
+// markdown importer from the example campaign — examples/ is the committed
 // format reference and stays the fixture of the whole suite (see
 // test/support/store.ts). The Hono app runs in-process via app.request() —
 // no live port needed.
@@ -19,7 +19,7 @@ import os from "node:os";
 import path from "node:path";
 import type { CampaignSummary, CampaignTree, FileResponse } from "@grimoire/shared";
 import { app } from "../src/server";
-import { dropStore, seedStore, useCampaignRoot } from "./support/store";
+import { dropStore, emptyStore, seedStore } from "./support/store";
 
 describe("GET /api/campaigns", () => {
   const campaigns = async (): Promise<CampaignSummary[]> => {
@@ -72,7 +72,6 @@ describe("GET /api/campaigns", () => {
 
   describe("in a temp root", () => {
     let tmpRoot: string;
-    let restoreRoot: () => void;
 
     beforeAll(async () => {
       tmpRoot = await mkdtemp(path.join(os.tmpdir(), "grimoire-campaigns-"));
@@ -106,13 +105,11 @@ describe("GET /api/campaigns", () => {
     });
 
     beforeEach(async () => {
-      restoreRoot = useCampaignRoot(tmpRoot);
       await seedStore(tmpRoot);
     });
 
     afterEach(() => {
       dropStore();
-      restoreRoot();
     });
 
     test("newest session id wins; no sessions → no lastSession field", async () => {
@@ -326,5 +323,35 @@ describe("GET /api/:campaign/file", () => {
     expect((await app.request("/api/beispiel/file?path=01-salzhafen")).status).toBe(400);
     expect((await app.request("/api/beispiel/file?path=notes.txt")).status).toBe(400);
     expect((await app.request("/api/beispiel/file?path=.hidden.md")).status).toBe(400);
+  });
+});
+
+// --- the empty boot (issue #79 AK6) ------------------------------------------
+// The production boot imports NOTHING: a fresh instance is empty, and the
+// markdown importer is the dev/E2E tool `grimoire seed`. Nothing 500s on the
+// way there — an empty campaign list and 404s are the honest answers.
+describe("a fresh database (no import at boot)", () => {
+  beforeEach(async () => {
+    await emptyStore();
+  });
+  afterEach(() => {
+    dropStore();
+  });
+
+  test("GET /api/campaigns answers an empty list", async () => {
+    const res = await app.request("/api/campaigns");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([]);
+  });
+
+  test("every campaign-scoped endpoint answers 404", async () => {
+    for (const p of [
+      "/api/beispiel/tree",
+      "/api/beispiel/version",
+      "/api/beispiel/file?path=_campaign.md",
+      "/api/beispiel/session",
+    ]) {
+      expect((await app.request(p)).status).toBe(404);
+    }
   });
 });

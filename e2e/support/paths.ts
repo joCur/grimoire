@@ -23,6 +23,13 @@ export const APP_DIST = path.join(REPO_ROOT, "app", "dist");
 /** Server entrypoint, started per test as its own process. */
 export const SERVER_ENTRY = path.join(REPO_ROOT, "server", "src", "server.ts");
 
+/**
+ * The `grimoire` CLI entrypoint. Since issue #79 the server boots EMPTY, so
+ * the suite seeds each test's database with `grimoire seed <tree>` — the
+ * documented dev/E2E tool — before the server process starts.
+ */
+export const CLI_ENTRY = path.join(REPO_ROOT, "server", "src", "cli.ts");
+
 /** The standalone stub LLM script (started once per run). */
 export const STUB_LLM_ENTRY = path.join(E2E_DIR, "fixtures", "stub-llm.ts");
 
@@ -60,9 +67,9 @@ export function stubLlmBaseUrl(): string {
 }
 
 /**
- * The pristine campaign ROOT (<pristine>/beispiel/…) the tests' first-run
- * import reads. Nothing ever writes into it — a test that needs extra
- * markdown gets its own copy (support/test.ts, the `seed` fixture).
+ * The pristine campaign ROOT (<pristine>/beispiel/…) `grimoire seed` reads.
+ * Nothing ever writes into it — a test that needs extra markdown gets its own
+ * copy (support/test.ts, the `seed` fixture).
  */
 export function pristineDir(): string {
   return path.join(runDir(), "pristine");

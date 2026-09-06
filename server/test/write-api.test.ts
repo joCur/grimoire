@@ -38,7 +38,6 @@ import {
   removeTempRoot,
   seedStore,
   tempCampaignRoot,
-  useCampaignRoot,
 } from "./support/store";
 
 async function getFile(rel: string, campaign = "beispiel"): Promise<FileResponse> {
@@ -112,13 +111,11 @@ const FRESH = "frischling";
 
 async function withFreshCampaign(fn: () => Promise<void>): Promise<void> {
   const root = await tempCampaignRoot();
-  const restore = useCampaignRoot(root);
   try {
     await mkdir(path.join(root, FRESH), { recursive: true });
     await seedStore(root);
     await fn();
   } finally {
-    restore();
     await removeTempRoot(root);
   }
 }

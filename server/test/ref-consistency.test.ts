@@ -12,14 +12,14 @@ import path from "node:path";
 import type { CampaignTree, FileResponse } from "@grimoire/shared";
 import { sceneNpcs } from "../src/db/schema";
 import { app } from "../src/server";
-import { getDb, storeInfo } from "../src/store/handle";
+import { getDb } from "../src/store/handle";
 import { applyDrafts } from "../src/store/write";
 import {
   dropStore,
+  lastSeedBackfill,
   removeTempRoot,
   seedStore,
   tempCampaignRoot,
-  useCampaignRoot,
 } from "./support/store";
 
 const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
@@ -157,23 +157,21 @@ describe("a reference creates the entry it names", () => {
   });
 });
 
-describe("the boot pass for migrated stock", () => {
+describe("the seed pass for imported stock", () => {
   test("a dangling npc reference from the file era gets an empty entry", async () => {
     const root = await tempCampaignRoot();
-    const restore = useCampaignRoot(root);
     try {
       const scene = path.join(root, "beispiel", "01-salzhafen", "hafen", "ankunft-leuchtturm.md");
       const raw = await readFile(scene, "utf8");
       await writeFile(scene, raw.replace("npcs: [jorna]", "npcs: [jorna, alte-fischerin]"));
       await seedStore(root);
 
-      // The pass reports what it created, so a boot that changes data says so.
-      expect(storeInfo()?.backfilledNpcs).toEqual(["beispiel/alte-fischerin"]);
+      // The pass reports what it created, so a run that changes data says so.
+      expect(lastSeedBackfill()).toEqual(["beispiel/alte-fischerin"]);
       const created = await getFile("npcs/alte-fischerin.md");
       expect(created.frontmatter.name).toBe("alte-fischerin");
       expect((await tree()).npcs.some((n) => n.id === "alte-fischerin")).toBe(true);
     } finally {
-      restore();
       await removeTempRoot(root);
     }
   });
@@ -182,7 +180,7 @@ describe("the boot pass for migrated stock", () => {
     // `location: bucht` in the examples has no locations row and must KEEP
     // none: in that one field a slug is indistinguishable from free text, so
     // a blanket pass would invent Orte the DM never wrote.
-    expect(storeInfo()?.backfilledNpcs).toEqual([]);
+    expect(lastSeedBackfill()).toEqual([]);
     expect(await fileStatus("locations/bucht.md")).toBe(404);
   });
 });
@@ -423,7 +421,6 @@ describe("a patch never drops what the migration preserved", () => {
     // it. The first patch used to delete it — silently, against the
     // round-trip rule (schema.ts rule 1).
     const root = await tempCampaignRoot();
-    const restore = useCampaignRoot(root);
     try {
       const npc = path.join(root, "beispiel", "npcs", "fenn.md");
       const raw = await readFile(npc, "utf8");
@@ -440,7 +437,6 @@ describe("a patch never drops what the migration preserved", () => {
       // …and it is still there on the next read, not only in the answer.
       expect((await getFile(NPC)).frontmatter.quickstats).toEqual(["ac 12", "hp 9"]);
     } finally {
-      restore();
       await removeTempRoot(root);
     }
   });

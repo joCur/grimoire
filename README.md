@@ -5,12 +5,13 @@
 > hat deshalb zwei Hälften, und die Trennung ist wichtig:
 >
 > - **Import-Format (historisch)** — Ordnerstruktur, Dateinamen und die
->   Frontmatter-Blöcke der Entitäten. Genau dieses Format liest die
->   **Einmal-Migration** (`CAMPAIGN_ROOT`, siehe `docs/DEPLOYMENT.md`) und der
->   Seed für Dev/E2E; `examples/` ist seine Referenz. Danach fasst der Server
->   den Dateibaum nicht mehr an. Nichts Neues wird in diesem Format
->   geschrieben — die Beschreibung bleibt, weil ein Import jederzeit wieder
->   laufen kann und weil `examples/` weiter das committete Beispiel ist.
+>   Frontmatter-Blöcke der Entitäten. Genau dieses Format liest das
+>   **Dev-/E2E-Werkzeug `grimoire seed`** (siehe `docs/DEPLOYMENT.md`
+>   Abschnitt 2b); `examples/` ist seine Referenz und damit die Fixture-Quelle
+>   von Tests und E2E. Der **Server importiert nichts** — eine frische Instanz
+>   startet leer (Issue #79). Nichts Neues wird in diesem Format geschrieben —
+>   die Beschreibung bleibt, weil `seed` jederzeit wieder laufen kann und weil
+>   `examples/` weiter das committete Beispiel ist.
 > - **Body-Vokabular — normativ.** Callouts (`> [!readaloud]` &c.), die
 >   `## If:`-Abschnitte und die Log-/Inbox-Hashtags gelten unverändert: sie
 >   sind der Inhalt der `body`-Spalten, das was der Renderer versteht und was

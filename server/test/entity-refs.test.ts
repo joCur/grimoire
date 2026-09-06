@@ -20,7 +20,6 @@ import {
   removeTempRoot,
   seedStore,
   tempCampaignRoot,
-  useCampaignRoot,
 } from "./support/store";
 
 /** A scene of the example campaign we overwrite with reference prose. */
@@ -265,7 +264,6 @@ describe("the import expands references (second pass)", () => {
     // examples/ itself carries no reference (the format contract stays
     // untouched), so the scene comes from a temp copy of the tree.
     const root = await tempCampaignRoot();
-    const restore = useCampaignRoot(root);
     try {
       await writeFile(
         path.join(root, "beispiel", "01-salzhafen", "hafen", "imported-ref.md"),
@@ -290,7 +288,6 @@ describe("the import expands references (second pass)", () => {
         (await search("Hafenmeisterin")).some((r) => r.kind === "scene" && r.id === "imported-ref"),
       ).toBe(true);
     } finally {
-      restore();
       await removeTempRoot(root);
     }
   });

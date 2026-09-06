@@ -14,7 +14,6 @@ import {
   listCampaigns,
   readActiveSession,
   readGlossary,
-  readMigrationReport,
   readParsedFile,
   requireCampaign,
 } from "../store/read";
@@ -183,14 +182,11 @@ api.get("/:campaign/version", async (c) => {
 // the generator knowledge base of issue #53 builds on exactly this.
 api.get("/:campaign/glossary", async (c) => c.json(await readGlossary(c.req.param("campaign"))));
 
-// GET /api/:campaign/migration-report -> { entries: [{ path, reason, at }] }
-// What the one-time markdown migration had to degrade (planning section 3).
-// An EMPTY list is the success criterion of a clean import; the app shows a
-// quiet hint while there is anything in here, because it is a reading task
-// for the DM — not an error.
-api.get("/:campaign/migration-report", async (c) =>
-  c.json({ entries: await readMigrationReport(c.req.param("campaign")) }),
-);
+// GET /api/:campaign/migration-report is GONE (issue #79 AK6). The markdown
+// import is no longer part of the production path — it is the dev/E2E tool
+// `grimoire seed`, which prints its own report — so there is nothing for the
+// app to surface any more. The `migration_report` table stays: it is the
+// importer's own bookkeeping (server/src/db/).
 
 // --- write endpoints (issue #5) ---------------------------------------------------
 

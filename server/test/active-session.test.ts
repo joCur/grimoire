@@ -33,12 +33,10 @@ import {
   removeTempRoot,
   seedStore,
   tempCampaignRoot,
-  useCampaignRoot,
 } from "./support/store";
 
 let db: GrimoireDb;
 let tmpRoot: string | undefined;
-let restoreRoot: (() => void) | undefined;
 
 async function post(url: string, body?: unknown): Promise<Response> {
   return app.request(url, {
@@ -75,7 +73,6 @@ async function seedWithFiles(files: Record<string, string | null>): Promise<void
     await mkdir(path.dirname(abs), { recursive: true });
     await writeFile(abs, content, "utf8");
   }
-  restoreRoot = useCampaignRoot(tmpRoot);
   db = await seedStore(tmpRoot);
 }
 
@@ -132,8 +129,6 @@ beforeEach(async () => {
 afterEach(async () => {
   dropStore();
   setNow(null);
-  restoreRoot?.();
-  restoreRoot = undefined;
   if (tmpRoot !== undefined) await removeTempRoot(tmpRoot);
   tmpRoot = undefined;
 });

@@ -1,38 +1,16 @@
 // Server configuration.
 //
-// CAMPAIGN_ROOT defaults to ../examples relative to the server PACKAGE dir
-// (not process.cwd()), so `bun test` / `bun run dev` work from the repo root
-// as well as from server/. An explicit CAMPAIGN_ROOT env value keeps normal
-// CLI semantics: absolute paths are used as-is, relative ones resolve against
-// the current working directory.
-//
-// The root is read through getCampaignRoot() instead of a top-level constant
-// so tests can point the app at a temp copy of the example campaign without
-// re-importing modules (see setCampaignRoot).
+// The database is the only data source the server knows (ADR #13). There is no
+// campaign-root setting any more: the markdown importer survives ONLY as the
+// dev/E2E tool `grimoire seed` (src/cli.ts), which takes its source directory
+// as an argument. A fresh instance therefore starts EMPTY — the cold start is
+// issue #56's subject, not a boot-time import (issue #79 AK6).
 
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 /** Absolute path of the server package directory (the parent of src/). */
 const PACKAGE_DIR = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
-
-let campaignRoot = process.env.CAMPAIGN_ROOT
-  ? path.resolve(process.cwd(), process.env.CAMPAIGN_ROOT)
-  : path.resolve(PACKAGE_DIR, "../examples");
-
-/** Absolute path of the directory that holds the campaign directories. */
-export function getCampaignRoot(): string {
-  return campaignRoot;
-}
-
-/**
- * Test-only override: point the app at a different campaign root (e.g. a temp
- * copy of examples/). Production code never calls this — the root comes from
- * the CAMPAIGN_ROOT env var, evaluated once at startup.
- */
-export function setCampaignRoot(dir: string): void {
-  campaignRoot = path.resolve(dir);
-}
 
 /**
  * Directory that holds the SQLite database (`grimoire.db` plus its `-wal` and
@@ -41,8 +19,8 @@ export function setCampaignRoot(dir: string): void {
  * and `bun test` work from the repo root as well as from server/.
  * GRIMOIRE_DATA overrides it with normal CLI semantics (relative to cwd).
  *
- * Read from the env on every call — unlike the campaign root, nothing needs a
- * test-only setter for it: tests pass an explicit path to `openDb`.
+ * Read from the env on every call, so tests can point it somewhere temporary
+ * without a setter; they usually pass an explicit path to `openDb` instead.
  */
 export function getDataDir(): string {
   return process.env.GRIMOIRE_DATA
@@ -64,9 +42,9 @@ export const PORT = Number(process.env.PORT ?? 3000);
  *
  * The app compares it with its own build id and offers a reload when the two
  * differ (issue #24: an old SPA bundle in an open tab talking to a new
- * server). Read from the env on every call — like getAppDistDir() and unlike
- * the campaign root — so tests can set GRIMOIRE_BUILD without a test-only
- * setter; the cost is one env lookup per version poll.
+ * server). Read from the env on every call — like getAppDistDir() — so tests
+ * can set GRIMOIRE_BUILD without a test-only setter; the cost is one env
+ * lookup per version poll.
  */
 export function getBuildId(): string {
   return process.env.GRIMOIRE_BUILD?.trim() || "dev";

@@ -17,7 +17,6 @@ import {
   removeTempRoot,
   seedStore,
   tempCampaignRoot,
-  useCampaignRoot,
 } from "./support/store";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -183,10 +182,8 @@ describe("usage per reference kind", () => {
 
 describe("an npc's OWN relations are not usage", () => {
   let root: string;
-  let restore: () => void;
 
   afterEach(async () => {
-    restore?.();
     if (root !== undefined) await removeTempRoot(root);
   });
 
@@ -209,8 +206,6 @@ describe("an npc's OWN relations are not usage", () => {
         "",
       ].join("\n"),
     );
-
-    restore = useCampaignRoot(root);
     await seedStore(root);
 
     // Nothing points AT him — his own line names jorna, and the rename would
@@ -261,10 +256,8 @@ describe("usage errors", () => {
 
 describe("rows vs documents", () => {
   let root: string;
-  let restore: () => void;
 
   afterEach(async () => {
-    restore?.();
     if (root !== undefined) await removeTempRoot(root);
   });
 
@@ -296,8 +289,6 @@ describe("rows vs documents", () => {
         "",
       ].join("\n"),
     );
-
-    restore = useCampaignRoot(root);
     await seedStore(root);
 
     const report = await usage("scene", "lighthouse-arrival");

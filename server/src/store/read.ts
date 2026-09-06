@@ -36,7 +36,6 @@ import {
   inboxEntries,
   locations,
   logEntries,
-  migrationReport,
   npcRelations,
   npcs,
   sceneNpcs,
@@ -574,35 +573,6 @@ export async function readParsedFile(campaign: string, rel: string): Promise<Fil
   assertSafeRelativeMdPath(rel); // 400 unsafe id/path
   const db = await getDb();
   return readByLocator(db, row, locatorFromPath(rel));
-}
-
-// --- GET /api/:campaign/migration-report -------------------------------------
-
-export interface MigrationReportEntry {
-  path: string;
-  reason: string;
-  at: string;
-}
-
-/**
- * Everything the one-time migration had to degrade, oldest first (planning
- * section 3). An EMPTY list is the success criterion of a clean import; a
- * non-empty one is a reading task for the DM, which is why the app shows a
- * quiet hint when there is anything here.
- */
-export async function readMigrationReport(campaign: string): Promise<MigrationReportEntry[]> {
-  await requireCampaign(campaign);
-  const db = await getDb();
-  return db
-    .select({
-      path: migrationReport.path,
-      reason: migrationReport.reason,
-      at: migrationReport.at,
-    })
-    .from(migrationReport)
-    .where(eq(migrationReport.campaignId, campaign))
-    .orderBy(asc(migrationReport.id))
-    .all();
 }
 
 // --- GET /api/:campaign/glossary ---------------------------------------------

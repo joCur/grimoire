@@ -28,7 +28,6 @@ import {
   removeTempRoot,
   seedStore,
   tempCampaignRoot,
-  useCampaignRoot,
 } from "./support/store";
 
 async function postJson(url: string, body?: unknown): Promise<Response> {
@@ -436,14 +435,12 @@ describe("POST /api/:campaign/review/inbox-done", () => {
     // inbox rows. GET answers 200 with an empty document (#70), but there is
     // still no such LINE to check off — hence 404 here.
     const root = await tempCampaignRoot();
-    const restore = useCampaignRoot(root);
     try {
       await mkdir(path.join(root, "frischling"), { recursive: true });
       await seedStore(root);
       const res = await postJson("/api/frischling/review/inbox-done", { line: "- egal" });
       expect(res.status).toBe(404);
     } finally {
-      restore();
       await removeTempRoot(root);
     }
   });

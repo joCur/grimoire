@@ -3,14 +3,15 @@
 //   1. build the app once (the server serves the real Vite bundle via
 //      APP_DIST, exactly like the container does — docs/DEPLOYMENT.md)
 //   2. create a per-run temp directory with a PRISTINE copy of
-//      examples/beispiel — the markdown tree every test's first-run import
+//      examples/beispiel — the markdown tree every test's `grimoire seed` run
 //      reads, so examples/ itself is never touched (and since the cutover
 //      nothing writes into a campaign tree at all)
 //   3. start the stub LLM as a managed process and publish its port
 //
 // The per-test server processes are started by the fixtures (support/test.ts)
-// — one per test, on its own port, on its own EMPTY database, which that boot
-// seeds by importing the pristine tree (the real first-run import).
+// — one per test, on its own port, on its own database, which the fixture
+// seeds with `grimoire seed <pristine tree>` BEFORE the boot (the boot itself
+// imports nothing since issue #79).
 //
 // Values travel to the workers through process.env: Playwright spawns the
 // worker processes AFTER this function returned, so they inherit them.

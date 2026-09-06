@@ -129,30 +129,6 @@ export function putGlossary(
   });
 }
 
-/** One incident of the one-time markdown → database migration (issue #57). */
-export interface MigrationReportEntry {
-  /** Campaign-relative path the incident happened in; "" when campaign-wide. */
-  path: string;
-  /** Human-readable German reason — written to be READ by the DM. */
-  reason: string;
-  at: string;
-}
-
-export interface MigrationReportResponse {
-  entries: MigrationReportEntry[];
-}
-
-/**
- * What the one-time migration had to degrade. An EMPTY list is the normal
- * state and the success criterion of a clean import — the UI shows nothing
- * then. A non-empty one is a reading task, not an error: the affected files
- * are still in the database verbatim, and the original markdown tree was
- * never touched.
- */
-export function fetchMigrationReport(campaign: string): Promise<MigrationReportResponse> {
-  return getJson<MigrationReportResponse>(`/${encodeURIComponent(campaign)}/migration-report`);
-}
-
 // --- write endpoints (session/log, issue #9) --------------------------------
 
 /**
