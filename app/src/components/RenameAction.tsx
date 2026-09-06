@@ -137,7 +137,7 @@ function RenameDialog({
       <DialogContent aria-describedby={undefined} className="max-w-[460px]">
         <DialogTitle>{renameKindLabel(target.kind)} umbenennen</DialogTitle>
         <DialogDescription>
-          Die neue id zieht alle Referenzen mit: Frontmatter, Session-Log und
+          Die neue id zieht alle Referenzen mit: Eigenschaften, Session-Log und
           Beziehungslisten. Erwähnungen im Fließtext bleiben unverändert.
         </DialogDescription>
 

@@ -405,7 +405,7 @@ Freitext ganz oben, der zu keinem Begriff gehört.
     // 1. broken YAML -> unknown_files, verbatim.
     expect(reasonFor("01-kapitel/ort/kaputt.md").join(" ")).toContain("kaputtes YAML");
     // 2. missing frontmatter -> unknown_files, verbatim.
-    expect(reasonFor("01-kapitel/ort/nackt.md").join(" ")).toContain("ohne Frontmatter");
+    expect(reasonFor("01-kapitel/ort/nackt.md").join(" ")).toContain("ohne Eigenschaften-Block");
     // 3. id collision -> the first file wins.
     expect(reasonFor("01-kapitel/zzz-kollision.md").join(" ")).toContain("doppelt");
     // 4. broken pauses -> dropped, but reported.

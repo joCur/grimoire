@@ -208,7 +208,7 @@ export function FileBodyEditor({
       </EditorShell>
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <p className="text-[12px] text-faint">
-          Nur der Textkörper — Frontmatter bleibt unverändert.
+          Nur der Textkörper — die Eigenschaften bleiben unverändert.
         </p>
         {/* A write error wins the line; without one it says why „Speichern"
             is dead, because a disabled button next to a card-level hint is
