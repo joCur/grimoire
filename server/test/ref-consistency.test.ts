@@ -37,10 +37,10 @@ async function fileStatus(rel: string, campaign = "beispiel"): Promise<number> {
 
 async function patchFm(rel: string, patch: Record<string, unknown>): Promise<FileResponse> {
   const before = await getFile(rel);
-  const res = await app.request("/api/beispiel/frontmatter", {
+  const res = await app.request("/api/beispiel/properties", {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: rel, mtimeMs: before.mtimeMs, patch }),
+    body: JSON.stringify({ path: rel, rev: before.rev, patch }),
   });
   expect(res.status).toBe(200);
   return (await res.json()) as FileResponse;
@@ -51,7 +51,7 @@ async function putBody(rel: string, body: string): Promise<FileResponse> {
   const res = await app.request("/api/beispiel/file", {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: rel, mtimeMs: before.mtimeMs, body }),
+    body: JSON.stringify({ path: rel, rev: before.rev, body }),
   });
   expect(res.status).toBe(200);
   return (await res.json()) as FileResponse;
@@ -80,21 +80,21 @@ describe("a reference creates the entry it names", () => {
     expect(created.kind).toBe("npc");
     // Nothing but the id: the id IS the display name until somebody types
     // one, and the status is the neutral default.
-    expect(created.frontmatter.id).toBe("holm");
-    expect(created.frontmatter.name).toBe("holm");
-    expect(created.frontmatter.status).toBe("unknown");
+    expect(created.properties.id).toBe("holm");
+    expect(created.properties.name).toBe("holm");
+    expect(created.properties.status).toBe("unknown");
     expect(created.body.trim()).toBe("");
     // It is a normal entry: in the tree, patchable, and its own rev token.
     expect((await tree()).npcs.some((n) => n.id === "holm")).toBe(true);
     const named = await patchFm("npcs/holm.md", { name: "Holm", role: "Netzflicker" });
-    expect(named.frontmatter.name).toBe("Holm");
+    expect(named.properties.name).toBe("Holm");
   });
 
   test("a scene's location, when it is a slug", async () => {
     expect(await fileStatus("locations/bucht.md")).toBe(404);
     await patchFm(SCENE, { location: "bucht" });
     const created = await getFile("locations/bucht.md");
-    expect(created.frontmatter.name).toBe("bucht");
+    expect(created.properties.name).toBe("bucht");
     expect((await tree()).locations.some((l) => l.id === "bucht")).toBe(true);
   });
 
@@ -102,7 +102,7 @@ describe("a reference creates the entry it names", () => {
     // The format allows a free string there (README). Spaces or capitals make
     // it unmistakably text, and text must not become an entity.
     await patchFm(SCENE, { location: "Der alte Hafen" });
-    expect((await getFile(SCENE)).frontmatter.location).toBe("Der alte Hafen");
+    expect((await getFile(SCENE)).properties.location).toBe("Der alte Hafen");
     expect((await tree()).locations.some((l) => l.name === "Der alte Hafen")).toBe(false);
     await patchFm(SCENE, { location: "Nordbucht" });
     expect((await tree()).locations.some((l) => l.id === "Nordbucht")).toBe(false);
@@ -114,12 +114,12 @@ describe("a reference creates the entry it names", () => {
     // a dangling OLD slug exactly as it stood, and the hint lied about the
     // stock most likely to have one. `bucht` is such a slug in the examples.
     const scene = "01-salzhafen/hafen/smuggler-captured.md";
-    expect((await getFile(scene)).frontmatter.location).toBe("bucht");
+    expect((await getFile(scene)).properties.location).toBe("bucht");
     expect(await fileStatus("locations/bucht.md")).toBe(404);
 
     await patchFm(scene, { status: "played" });
 
-    expect((await getFile("locations/bucht.md")).frontmatter.name).toBe("bucht");
+    expect((await getFile("locations/bucht.md")).properties.name).toBe("bucht");
     expect((await tree()).locations.some((l) => l.id === "bucht")).toBe(true);
   });
 
@@ -150,7 +150,7 @@ describe("a reference creates the entry it names", () => {
       ),
     );
     const created = await getFile("npcs/holm.md");
-    expect(created.frontmatter.name).toBe("holm");
+    expect(created.properties.name).toBe("holm");
     // The relation itself is unchanged — one-sided, as authored.
     expect((await getFile(NPC)).body).toContain("- holm: schuldet ihm Geld");
     expect((await getFile("npcs/holm.md")).body).not.toContain("Beziehungen");
@@ -169,7 +169,7 @@ describe("the seed pass for imported stock", () => {
       // The pass reports what it created, so a run that changes data says so.
       expect(lastSeedBackfill()).toEqual(["beispiel/alte-fischerin"]);
       const created = await getFile("npcs/alte-fischerin.md");
-      expect(created.frontmatter.name).toBe("alte-fischerin");
+      expect(created.properties.name).toBe("alte-fischerin");
       expect((await tree()).npcs.some((n) => n.id === "alte-fischerin")).toBe(true);
     } finally {
       await removeTempRoot(root);
@@ -194,7 +194,7 @@ describe("the generator's apply step", () => {
       {
         rel: "01-salzhafen/hafen/neue-szene.md",
         address: "01-salzhafen/hafen/neue-szene.md",
-        frontmatter: {
+        properties: {
           id: "neue-szene",
           title: "Neue Szene",
           npcs: ["holm"],
@@ -206,16 +206,16 @@ describe("the generator's apply step", () => {
       {
         rel: "npcs/holm.md",
         address: "npcs/holm.md",
-        frontmatter: { id: "holm", name: "Holm", status: "alive" },
+        properties: { id: "holm", name: "Holm", status: "alive" },
         body: "\n## Will\n\nSeine Netze zurück.\n",
       },
     ]);
     const npc = await getFile("npcs/holm.md");
-    expect(npc.frontmatter.name).toBe("Holm");
-    expect(npc.frontmatter.status).toBe("alive");
+    expect(npc.properties.name).toBe("Holm");
+    expect(npc.properties.status).toBe("alive");
     expect(npc.body).toContain("Seine Netze zurück.");
     // The scene's location got its empty row too.
-    expect((await getFile("locations/bucht.md")).frontmatter.name).toBe("bucht");
+    expect((await getFile("locations/bucht.md")).properties.name).toBe("bucht");
   });
 
   test("a row that holds CONTENT is still a 409 conflict", async () => {
@@ -225,7 +225,7 @@ describe("the generator's apply step", () => {
         {
           rel: "npcs/fenn.md",
           address: "npcs/fenn.md",
-          frontmatter: { id: "fenn", name: "Anders" },
+          properties: { id: "fenn", name: "Anders" },
           body: "\n## Will\n\nAnderes.\n",
         },
       ]),
@@ -259,7 +259,7 @@ describe("the rename cascade", () => {
     });
     expect(res.status).toBe(200);
     // One entry left, not a constraint error and not a duplicate.
-    expect((await getFile(SCENE)).frontmatter.npcs).toEqual(["holm"]);
+    expect((await getFile(SCENE)).properties.npcs).toEqual(["holm"]);
   });
 });
 
@@ -276,14 +276,14 @@ describe("the audit of the #70 rules", () => {
         {
           rel: "npcs/holm.md",
           address: "npcs/holm.md",
-          frontmatter: { id: "holm", name: "Holm", status: "alive" },
+          properties: { id: "holm", name: "Holm", status: "alive" },
           body: "\n## Will\n\nEtwas.\n",
         },
       ]),
     ).rejects.toThrow(/already exist/);
     const untouched = await getFile("npcs/holm.md");
-    expect(untouched.frontmatter.status).toBe("dead");
-    expect(untouched.frontmatter.name).toBe("holm");
+    expect(untouched.properties.status).toBe("dead");
+    expect(untouched.properties.name).toBe("holm");
   });
 
   test("TWO drafts for one target are a 409, not last-write-win", async () => {
@@ -296,13 +296,13 @@ describe("the audit of the #70 rules", () => {
         {
           rel: "npcs/holm.md",
           address: "npcs/holm.md",
-          frontmatter: { id: "holm", name: "Holm" },
+          properties: { id: "holm", name: "Holm" },
           body: "\n## Will\n\nDas erste.\n",
         },
         {
           rel: "npcs/holm-2.md",
           address: "npcs/holm.md",
-          frontmatter: { id: "holm", name: "Holm anders" },
+          properties: { id: "holm", name: "Holm anders" },
           body: "\n## Will\n\nDas zweite.\n",
         },
       ]);
@@ -318,19 +318,19 @@ describe("the audit of the #70 rules", () => {
 
   test("`npcs` takes ids, not names — a new free-text entry is a 400", async () => {
     const before = await getFile(SCENE);
-    const res = await app.request("/api/beispiel/frontmatter", {
+    const res = await app.request("/api/beispiel/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         path: SCENE,
-        mtimeMs: before.mtimeMs,
+        rev: before.rev,
         patch: { npcs: ["jorna", "Alte Fischerin"] },
       }),
     });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toMatch(/npc ids, not names/);
     // The scene is unchanged — no half-written list.
-    expect((await getFile(SCENE)).frontmatter.npcs).toEqual(before.frontmatter.npcs);
+    expect((await getFile(SCENE)).properties.npcs).toEqual(before.properties.npcs);
   });
 
   test("…but STORED free text stays savable (the migration imports what is there)", async () => {
@@ -348,7 +348,7 @@ describe("the audit of the #70 rules", () => {
       .run();
 
     const patched = await patchFm(SCENE, { status: "played" });
-    expect(patched.frontmatter.npcs).toContain("Alte Fischerin");
+    expect(patched.properties.npcs).toContain("Alte Fischerin");
     // And it got no entry — free text is no reference.
     expect(await fileStatus("npcs/Alte Fischerin.md")).toBe(404);
   });
@@ -358,21 +358,21 @@ describe("the audit of the #70 rules", () => {
     // the properties dialog promised "wird angelegt" for both. Chapters are
     // the one kind that is NOT created by naming it (ADR #14).
     const before = await getFile(NPC);
-    const res = await app.request("/api/beispiel/frontmatter", {
+    const res = await app.request("/api/beispiel/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         path: NPC,
-        mtimeMs: before.mtimeMs,
+        rev: before.rev,
         patch: { chapter: "99-nirgendwo" },
       }),
     });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toMatch(/unknown chapter/);
-    expect((await getFile(NPC)).frontmatter.chapter).toBe(before.frontmatter.chapter);
+    expect((await getFile(NPC)).properties.chapter).toBe(before.properties.chapter);
 
     // An existing chapter is stored as before.
-    expect((await patchFm(NPC, { chapter: "01-salzhafen" })).frontmatter.chapter).toBe(
+    expect((await patchFm(NPC, { chapter: "01-salzhafen" })).properties.chapter).toBe(
       "01-salzhafen",
     );
   });
@@ -382,7 +382,7 @@ describe("the audit of the #70 rules", () => {
     // listing `holm` creates the empty row, and the old target check turned
     // exactly that into a 409 for a target with nothing to lose.
     await patchFm(SCENE, { npcs: ["jorna", "holm"] });
-    expect((await getFile("npcs/holm.md")).frontmatter.name).toBe("holm");
+    expect((await getFile("npcs/holm.md")).properties.name).toBe("holm");
 
     const res = await app.request("/api/beispiel/rename", {
       method: "POST",
@@ -391,8 +391,8 @@ describe("the audit of the #70 rules", () => {
     });
     expect(res.status).toBe(200);
     // One reference left, and it is jorna's content that lives under the id.
-    expect((await getFile(SCENE)).frontmatter.npcs).toEqual(["holm"]);
-    expect((await getFile("npcs/holm.md")).frontmatter.name).toBe("Hafenmeisterin Jorna");
+    expect((await getFile(SCENE)).properties.npcs).toEqual(["holm"]);
+    expect((await getFile("npcs/holm.md")).properties.name).toBe("Hafenmeisterin Jorna");
     expect(await fileStatus("npcs/jorna.md")).toBe(404);
   });
 
@@ -403,7 +403,7 @@ describe("the audit of the #70 rules", () => {
       body: JSON.stringify({ kind: "npc", oldId: "jorna", newId: "fenn" }),
     });
     expect(res.status).toBe(409);
-    expect((await getFile(NPC)).frontmatter.name).toBe("Fenn");
+    expect((await getFile(NPC)).properties.name).toBe("Fenn");
   });
 });
 
@@ -415,7 +415,7 @@ describe("empty is not missing", () => {
 });
 
 describe("a patch never drops what the migration preserved", () => {
-  test("a misshapen quickstats survives a frontmatter patch", async () => {
+  test("a misshapen quickstats survives a properties patch", async () => {
     // The migration keeps a `quickstats:` the column cannot hold (a list
     // where the format wants a mapping) in `extra`, and the renderer shows
     // it. The first patch used to delete it — silently, against the
@@ -430,12 +430,12 @@ describe("a patch never drops what the migration preserved", () => {
       );
       await seedStore(root);
 
-      expect((await getFile(NPC)).frontmatter.quickstats).toEqual(["ac 12", "hp 9"]);
+      expect((await getFile(NPC)).properties.quickstats).toEqual(["ac 12", "hp 9"]);
       const patched = await patchFm(NPC, { role: "Anders" });
-      expect(patched.frontmatter.role).toBe("Anders");
-      expect(patched.frontmatter.quickstats).toEqual(["ac 12", "hp 9"]);
+      expect(patched.properties.role).toBe("Anders");
+      expect(patched.properties.quickstats).toEqual(["ac 12", "hp 9"]);
       // …and it is still there on the next read, not only in the answer.
-      expect((await getFile(NPC)).frontmatter.quickstats).toEqual(["ac 12", "hp 9"]);
+      expect((await getFile(NPC)).properties.quickstats).toEqual(["ac 12", "hp 9"]);
     } finally {
       await removeTempRoot(root);
     }

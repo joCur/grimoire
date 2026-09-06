@@ -5,8 +5,8 @@
 // no live port needed.
 //
 // What the cutover changed for these tests, and nothing else:
-//   - `mtimeMs` is the row's `rev` (an opaque guard token that starts at 1),
-//     not a filesystem mtime — so there is nothing left to `stat`.
+//   - `rev` is the ROW VERSION (an opaque guard token that starts at 1),
+//     not a filesystem rev — so there is nothing left to `stat`.
 //   - a scene's path segment is its ID, not its former file name
 //     (store/paths.ts): ankunft-leuchtturm.md is addressed as
 //     01-salzhafen/hafen/lighthouse-arrival.md.
@@ -130,7 +130,7 @@ describe("GET /api/campaigns", () => {
 
     test("_campaign.md degrades: broken YAML, missing name, non-string values", async () => {
       const byId = new Map((await campaigns()).map((c) => [c.id, c]));
-      // Broken frontmatter → the campaign ROW still exists (a directory is a
+      // Broken properties → the campaign ROW still exists (a directory is a
       // campaign) and nothing was READ from the file: no description, and
       // never the parser's file-stem fallback ("_campaign") as the name — the
       // id is. The file itself is kept verbatim in unknown_files (see
@@ -238,23 +238,23 @@ describe("GET /api/:campaign/file", () => {
     dropStore();
   });
 
-  test("returns raw + parsed + the rev as mtimeMs", async () => {
+  test("returns raw + parsed + the rev as rev", async () => {
     const rel = "01-salzhafen/hafen/lighthouse-arrival.md";
     const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as FileResponse;
     expect(body.path).toBe(rel);
     expect(body.kind).toBe("scene");
-    expect(body.frontmatter.id).toBe("lighthouse-arrival");
-    expect(body.frontmatter.status).toBe("ready");
+    expect(body.properties.id).toBe("lighthouse-arrival");
+    expect(body.properties.status).toBe("ready");
     expect(body.raw.startsWith("---")).toBe(true);
     expect(body.body).toContain("## Flow");
     expect(body.body).not.toContain("id: lighthouse-arrival");
-    // `mtimeMs` is the row's `rev` now (store/render.ts rule 3): an opaque
+    // `rev` is the ROW VERSION (store/render.ts rule 3): an opaque
     // guard token the client only ever sends back. A freshly imported row is
     // at 1 — that it INCREASES per write is pinned in write-api.test.ts.
-    expect(typeof body.mtimeMs).toBe("number");
-    expect(body.mtimeMs).toBe(1);
+    expect(typeof body.rev).toBe("number");
+    expect(body.rev).toBe(1);
   });
 
   test("serves _campaign.md as kind campaign (no new endpoint needed)", async () => {
@@ -262,8 +262,8 @@ describe("GET /api/:campaign/file", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as FileResponse;
     expect(body.kind).toBe("campaign");
-    expect(body.frontmatter.id).toBe("beispiel");
-    expect(body.frontmatter.name).toBe("Der Leuchtturm von Salzhafen");
+    expect(body.properties.id).toBe("beispiel");
+    expect(body.properties.name).toBe("Der Leuchtturm von Salzhafen");
     expect(body.raw.startsWith("---")).toBe(true);
   });
 

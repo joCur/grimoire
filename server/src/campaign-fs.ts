@@ -20,7 +20,7 @@
 
 /**
  * Error with an HTTP status; route handlers map it to a JSON error body.
- * `extra` is merged into the body next to `error` (e.g. the current mtimeMs
+ * `extra` is merged into the body next to `error` (e.g. the current rev
  * on a 409 conflict).
  */
 export class ApiError extends Error {

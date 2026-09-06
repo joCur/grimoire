@@ -1,5 +1,5 @@
 // The block model of the Block-Composer (issue #43, phase 1): parse a markdown
-// BODY (frontmatter already stripped — same string as ParsedFile.body) into a
+// BODY (properties already stripped — same string as ParsedFile.body) into a
 // flat-ish list of editable blocks and serialize it back.
 //
 // THE invariant, enforced by blocks.test.ts against every file in examples/:
@@ -69,7 +69,7 @@ interface BlockCommon {
   /**
    * Whitespace-only run that PRECEDED the block. The parser sets it on the
    * first block only (a body handed over by gray-matter starts with the blank
-   * line after the frontmatter fence), which is why insertBlock/removeBlock/
+   * line after the properties fence), which is why insertBlock/removeBlock/
    * moveBlock hand it along when the head of the list changes.
    */
   lead?: string;
@@ -338,7 +338,7 @@ export function parseBlocks(body: string): SceneBlock[] {
   const lines = splitLines(body);
 
   // Whitespace before the first block. gray-matter hands over the blank line
-  // that followed the frontmatter fence, so this is the normal case.
+  // that followed the properties fence, so this is the normal case.
   let start = 0;
   let lead = "";
   while (start < lines.length && isBlank(lineAt(lines, start).text)) {
@@ -562,7 +562,7 @@ export function serializeBlocks(blocks: SceneBlock[]): string {
  * there (same rule as the list operations below):
  *
  *   * `lead` (for the first block: the blank line gray-matter left behind the
- *     frontmatter fence) moves forward to whatever is first now,
+ *     properties fence) moves forward to whatever is first now,
  *   * a dropped unit at the END of the list gives its gap — the file's own
  *     terminator — to the unit that is last now, so emptying the last block
  *     leaves `A\n` and not `A\n\n`.
@@ -611,7 +611,7 @@ function flatten(blocks: SceneBlock[], units: Unit[]): void {
  * is a property of the file, not of the block that happens to be new.
  *
  * `lead` counts as evidence like everything else: in a CRLF file whose body
- * starts with the blank line after the frontmatter fence and holds a single
+ * starts with the blank line after the properties fence and holds a single
  * block, that blank line is the ONLY place a "\r\n" can be seen.
  */
 function dominantEol(units: Unit[]): string {
@@ -727,7 +727,7 @@ export function withChildren(block: IfSectionBlock, children: SceneBlock[]): IfS
 //
 // Whitespace is POSITIONAL, not part of the block: `lead` is the whitespace in
 // front of the list (for a body from gray-matter: the blank line after the
-// frontmatter fence), the last gap is the file's terminator ("\n", or "" for a
+// properties fence), the last gap is the file's terminator ("\n", or "" for a
 // file without a final newline) and the gaps in between are separators.
 //
 // So a structural change permutes the block bodies and leaves that scaffolding

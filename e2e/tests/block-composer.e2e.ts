@@ -50,20 +50,20 @@ const SCENE_BLOCKS = [
 ];
 
 /**
- * The frontmatter block including both fences and the newline after the
+ * The properties block including both fences and the newline after the
  * closing one — what PUT /file promises to leave alone.
  */
-function frontmatterBlock(raw: string): string {
+function propertiesBlock(raw: string): string {
   const match = /^---\n[\s\S]*?\n---\n/.exec(raw);
-  expect(match, "the fixture file has no frontmatter block").not.toBeNull();
+  expect(match, "the fixture file has no properties block").not.toBeNull();
   return match?.[0] ?? "";
 }
 
-/** Read the file and hand back its frontmatter block and the rest. */
+/** Read the file and hand back its properties block and the rest. */
 async function split(api: Api, rel: string) {
   const raw = await api.raw(rel);
-  const frontmatter = frontmatterBlock(raw);
-  return { raw, frontmatter, body: raw.slice(frontmatter.length) };
+  const properties = propertiesBlock(raw);
+  return { raw, properties, body: raw.slice(properties.length) };
 }
 
 /**
@@ -245,7 +245,7 @@ test("editing a Vorlesetext card writes THAT block and nothing else", async ({ p
   // diff — asserted as the full file, so a reflowed neighbour would fail here.
   await expect.poll(() => api.raw(SCENE)).toContain(added);
   const after = await split(api, SCENE);
-  expect(after.frontmatter).toBe(before.frontmatter);
+  expect(after.properties).toBe(before.properties);
   const readaloudBefore = blockOf(before.raw, "> [!readaloud]");
   expect(after.raw).toBe(
     before.raw.replace(`${readaloudBefore}\n`, `${readaloudBefore}\n> ${added}\n`),
@@ -345,7 +345,7 @@ test("⌄/⌃ reorder the blocks — the file follows, both blocks verbatim", as
   const check = blockOf(before.raw, "> [!check]");
   const secret = blockOf(before.raw, "> [!secret]");
   const after = await split(api, SCENE);
-  expect(after.frontmatter).toBe(before.frontmatter);
+  expect(after.properties).toBe(before.properties);
   expect(after.raw).toBe(before.raw.replace(`${check}\n\n${secret}`, `${secret}\n\n${check}`));
   expect(blockOf(after.raw, "> [!check]")).toBe(check);
   expect(blockOf(after.raw, "> [!secret]")).toBe(secret);
@@ -411,7 +411,7 @@ test("a child of the first If-section edits without touching the two headings", 
   // own source when only a child changes), and the child is the only diff.
   await expect.poll(() => api.raw(IF_SCENE)).toContain(added);
   const after = await split(api, IF_SCENE);
-  expect(after.frontmatter).toBe(before.frontmatter);
+  expect(after.properties).toBe(before.properties);
   expect(blockOf(after.raw, "## If: sie geben zu")).toBe("## If: sie geben zu, für Jorna zu arbeiten");
   expect(blockOf(after.raw, "## If: sie lügen")).toBe(
     blockOf(before.raw, "## If: sie lügen"),
@@ -469,7 +469,7 @@ test("a ## heading typed into an If-child blocks the save until it is cleared", 
   await expect(composer(page)).toHaveCount(0);
   await expect.poll(() => api.raw(IF_SCENE)).toContain("### Boom");
   const after = await split(api, IF_SCENE);
-  expect(after.frontmatter).toBe(before.frontmatter);
+  expect(after.properties).toBe(before.properties);
   expect(after.raw).toBe(before.raw.replace(paragraph, `${paragraph}\n### Boom`));
   expect(after.raw.indexOf("### Boom")).toBeGreaterThan(
     after.raw.indexOf("## If: sie geben zu"),
@@ -493,7 +493,7 @@ test("409 with a block form open: the message, the form and the typed text stay"
 }) => {
   const before = await split(api, SCENE);
   const mine = "Im Blockformular getippt, während die Datei sich bewegte.";
-  // Same frontmatter, different body — only the row's guard token moves, and
+  // Same properties, different body — only the row's guard token moves, and
   // that is what the server compares against.
   const externalBody = "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n";
 
@@ -520,7 +520,7 @@ test("409 with a block form open: the message, the form and the typed text stay"
   await expect(field).toHaveValue(`${original}\n${mine}`);
   expect(await blockNames(page)).toEqual(SCENE_BLOCKS);
   // Nothing was written: the other writer's content stands, untouched.
-  expect(await api.raw(SCENE)).toBe(`${before.frontmatter}${externalBody}`);
+  expect(await api.raw(SCENE)).toBe(`${before.properties}${externalBody}`);
 
   // The editor re-read the file, so the SAME click works now — deliberately on
   // top of the external body: the DM saw the message and decided.
@@ -531,7 +531,7 @@ test("409 with a block form open: the message, the form and the typed text stay"
 
   await expect.poll(() => api.raw(SCENE)).toContain(mine);
   const after = await split(api, SCENE);
-  expect(after.frontmatter).toBe(before.frontmatter);
+  expect(after.properties).toBe(before.properties);
   const noteBefore = blockOf(before.raw, "> [!note]");
   expect(after.raw).toBe(before.raw.replace(`${noteBefore}\n`, `${noteBefore}\n> ${mine}\n`));
   expect(after.raw).not.toContain("Von einem zweiten Schreiber");
@@ -664,7 +664,7 @@ test.describe("with a scene of unknown constructs", () => {
     // On disk: both unmodelled constructs byte-identical, one paragraph longer.
     await expect.poll(() => api.raw(rel)).toContain(added);
     const after = await split(api, rel);
-    expect(after.frontmatter).toBe(before.frontmatter);
+    expect(after.properties).toBe(before.properties);
     expect(blockOf(after.raw, "> [!weird]")).toBe("> [!weird] bla");
     expect(blockOf(after.raw, "| Wurf")).toBe(blockOf(before.raw, "| Wurf"));
     expect(after.raw).toBe(
@@ -728,7 +728,7 @@ test.describe("at 390px", () => {
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
 
     const after = await split(api, SCENE);
-    expect(after.frontmatter).toBe(before.frontmatter);
+    expect(after.properties).toBe(before.properties);
     const paragraphBefore = blockOf(before.raw, "Die Gruppe erreicht");
     expect(after.raw).toBe(
       before.raw.replace(paragraphBefore, `${paragraphBefore}\n${added}`),

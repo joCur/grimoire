@@ -3,9 +3,9 @@
 // the bare dot+label of a pool row; both keep the quiet look and only grow a
 // small chevron on hover/focus.
 //
-// The write needs the mtime of the file it is changing. The reading view has
-// the FileResponse on screen and hands its mtime down; a pool row has only
-// the tree (which carries no mtime), so the control fetches the file LAZILY
+// The write needs the rev of the file it is changing. The reading view has
+// the FileResponse on screen and hands its rev down; a pool row has only
+// the tree (which carries no rev), so the control fetches the file LAZILY
 // when the menu opens — one GET, shared with the file query cache.
 //
 // While a write runs the trigger shows the TARGET value dimmed. That is a
@@ -36,7 +36,7 @@ export function SceneStatusControl({
   campaign,
   path,
   status,
-  mtimeMs,
+  rev,
   variant,
 }: {
   campaign: string;
@@ -44,20 +44,20 @@ export function SceneStatusControl({
   /** The status as it stands in the file/tree — unknown values pass through. */
   status: string;
   /** From the loaded FileResponse; undefined means "fetch it when opening". */
-  mtimeMs?: number | undefined;
+  rev?: number | undefined;
   variant: SceneStatusVariant;
 }) {
   const [open, setOpen] = useState(false);
-  // Lazy mtime for the pool rows: only ever requested once the menu opens,
+  // Lazy rev for the pool rows: only ever requested once the menu opens,
   // and served from the cache when the file was read before.
   const file = useQuery({
     queryKey: ["file", campaign, path],
     queryFn: () => fetchFile(campaign, path),
-    enabled: open && mtimeMs === undefined && campaign !== "" && path !== "",
+    enabled: open && rev === undefined && campaign !== "" && path !== "",
     retry: false,
   });
-  const knownMtime = mtimeMs ?? file.data?.mtimeMs;
-  const { setStatus, pendingStatus, message } = useSceneStatusMutation(campaign, path, knownMtime);
+  const knownRev = rev ?? file.data?.rev;
+  const { setStatus, pendingStatus, message } = useSceneStatusMutation(campaign, path, knownRev);
 
   return (
     <SceneStatusMenu

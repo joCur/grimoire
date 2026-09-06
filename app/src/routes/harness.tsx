@@ -8,11 +8,11 @@ import smugglersRaw from "../../../examples/beispiel/01-salzhafen/hafen/von-schm
 
 import { Markdown } from "@/markdown/Markdown";
 
-/** Splits a raw file into its frontmatter block and the markdown body. */
-function splitFrontmatter(raw: string): { frontmatter: string; body: string } {
+/** Splits a raw file into its properties block and the markdown body. */
+function splitProperties(raw: string): { properties: string; body: string } {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
-  if (!match) return { frontmatter: "", body: raw };
-  return { frontmatter: match[1] ?? "", body: raw.slice(match[0].length) };
+  if (!match) return { properties: "", body: raw };
+  return { properties: match[1] ?? "", body: raw.slice(match[0].length) };
 }
 
 // Extra snippet exercising the degrade paths that the fixtures do not cover.
@@ -28,17 +28,17 @@ Text nach der Verzweigung, außerhalb des details-Elements.
 `;
 
 function Fixture({ name, raw }: { name: string; raw: string }) {
-  const { frontmatter, body } = splitFrontmatter(raw);
+  const { properties, body } = splitProperties(raw);
   return (
     <section className="space-y-3 border-t pt-6">
       <h2 className="font-mono text-sm text-muted-foreground">{name}</h2>
-      {frontmatter && (
+      {properties && (
         <details>
           <summary className="cursor-pointer text-sm text-muted-foreground">
-            Frontmatter anzeigen
+            Properties anzeigen
           </summary>
           <pre className="mt-2 overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">
-            {frontmatter}
+            {properties}
           </pre>
         </details>
       )}

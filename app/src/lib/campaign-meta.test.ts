@@ -65,9 +65,9 @@ function answerOnce(
 const FILE: FileResponse = {
   path: "_campaign.md",
   kind: "campaign",
-  frontmatter: { id: "beispiel", name: "Neuer Name" },
+  properties: { id: "beispiel", name: "Neuer Name" },
   body: "",
-  mtimeMs: 42,
+  rev: 42,
   raw: "---\nid: beispiel\nname: Neuer Name\n---\n",
 };
 
@@ -101,14 +101,14 @@ describe("seedCampaignMetaBase", () => {
   });
 
   test("the first answer freezes the version the dialog writes against", () => {
-    expect(seedCampaignMetaBase(undefined, { mtimeMs: 42 })).toEqual({ mtimeMs: 42 });
+    expect(seedCampaignMetaBase(undefined, { rev: 42 })).toEqual({ rev: 42 });
   });
 
   test("a later poll does NOT advance the base (that would overwrite the foreign edit)", () => {
-    const frozen = { mtimeMs: 42 };
+    const frozen = { rev: 42 };
     // The 5s version poll refetches _campaign.md while the dialog stands; a
     // concurrent edit must answer 409 on save, so the base stays where it was.
-    expect(seedCampaignMetaBase(frozen, { mtimeMs: 99 })).toBe(frozen);
+    expect(seedCampaignMetaBase(frozen, { rev: 99 })).toBe(frozen);
   });
 });
 
@@ -123,7 +123,7 @@ describe("prefillCampaignName", () => {
 });
 
 describe("writeCampaignMeta", () => {
-  test("it PATCHes the frontmatter with the guard token the dialog holds", async () => {
+  test("it PATCHes the properties with the guard token the dialog holds", async () => {
     const calls = answerWith(200, FILE);
     const result = await writeCampaignMeta(
       "beispiel",
@@ -133,22 +133,22 @@ describe("writeCampaignMeta", () => {
     expect(result).toEqual({ ok: true, file: FILE });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("PATCH");
-    expect(calls[0]?.url).toBe("/api/beispiel/frontmatter");
+    expect(calls[0]?.url).toBe("/api/beispiel/properties");
     expect(calls[0]?.body).toEqual({
       path: "_campaign.md",
-      mtimeMs: 42,
+      rev: 42,
       patch: { name: "Neuer Name", description: "Neue Zeile" },
     });
   });
 
   test("409 means nothing was written; the file is re-read for the next attempt", async () => {
     const calls = answerOnce(
-      { status: 409, body: { error: "file changed on disk", mtimeMs: 99 } },
-      { status: 200, body: { ...FILE, mtimeMs: 99 } },
+      { status: 409, body: { error: "file changed on disk", rev: 99 } },
+      { status: 200, body: { ...FILE, rev: 99 } },
     );
     const result = await writeCampaignMeta("beispiel", { name: "X", description: "" }, 42);
     expect(result.ok).toBe(false);
-    expect(result.file?.mtimeMs).toBe(99);
+    expect(result.file?.rev).toBe(99);
     expect(calls[1]?.method).toBe("GET");
     expect(calls[1]?.url).toBe("/api/beispiel/file?path=_campaign.md");
   });

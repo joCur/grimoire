@@ -381,20 +381,20 @@ function fileStem(rel: string): string {
 }
 
 /**
- * "Frontmatter parseable" through the shared parser: the parser never
+ * "Properties parseable" through the shared parser: the parser never
  * throws, it DEGRADES — a missing or broken block leaves the whole raw text
  * as the body. So: parseable iff the content opens a block and the parser
  * actually split it off.
  */
-function parseWithFrontmatter(
+function parseWithProperties(
   content: string,
   rel: string,
 ): { parsed: ParsedFile; error?: string } {
   const parsed = parseMarkdown(content, rel, 0);
   if (!content.startsWith("---\n") && !content.startsWith("---\r\n")) {
-    return { parsed, error: "missing frontmatter block" };
+    return { parsed, error: "missing properties block" };
   }
-  if (parsed.body === content) return { parsed, error: "frontmatter is not parseable YAML" };
+  if (parsed.body === content) return { parsed, error: "properties is not parseable YAML" };
   return { parsed };
 }
 
@@ -499,25 +499,25 @@ function validateStub(
     errors.push(`${label}: path must be "${dirName}/<kebab-case-id>.md"`);
     return null;
   }
-  const { parsed, error } = parseWithFrontmatter(entry.content, entry.path);
+  const { parsed, error } = parseWithProperties(entry.content, entry.path);
   if (error !== undefined) {
     errors.push(`${label}: ${error}`);
     return null;
   }
   const id = fileStem(entry.path);
-  const fmId = parsed.frontmatter.id;
+  const fmId = parsed.properties.id;
   if (typeof fmId === "string" && fmId !== id) {
-    errors.push(`${label}: frontmatter id "${fmId}" does not match the filename`);
+    errors.push(`${label}: properties id "${fmId}" does not match the filename`);
     return null;
   }
   // A status error does not stop the mapping: the stub still resolves the
   // scene's reference, so the correction turn gets the ONE real error
   // instead of a cascade of "npc does not exist".
-  for (const msg of stubStatusErrors(kind, parsed.frontmatter)) errors.push(`${label}: ${msg}`);
+  for (const msg of stubStatusErrors(kind, parsed.properties)) errors.push(`${label}: ${msg}`);
   return {
     kind,
     id,
-    name: typeof parsed.frontmatter.name === "string" ? parsed.frontmatter.name : id,
+    name: typeof parsed.properties.name === "string" ? parsed.properties.name : id,
     markdown: entry.content,
   };
 }
@@ -568,12 +568,12 @@ export function validateReply(
     if (seenPaths.has(entry.path)) errors.push(`${label}: duplicate path`);
     seenPaths.add(entry.path);
 
-    const { parsed, error } = parseWithFrontmatter(entry.content, entry.path);
+    const { parsed, error } = parseWithProperties(entry.content, entry.path);
     if (error !== undefined) {
       errors.push(`${label}: ${error}`);
       continue;
     }
-    const fm = parsed.frontmatter;
+    const fm = parsed.properties;
 
     if (!(SCENE_TYPES as readonly string[]).includes(String(fm.type))) {
       errors.push(`${label}: "type" must be one of ${SCENE_TYPES.join(", ")}`);
@@ -609,7 +609,7 @@ export function validateReply(
       );
     }
 
-    scenes.push({ path: entry.path, markdown: entry.content, frontmatter: fm });
+    scenes.push({ path: entry.path, markdown: entry.content, properties: fm });
   }
 
   if (errors.length > 0) return { ok: false, errors };
@@ -770,7 +770,7 @@ function parseRawNpcReply(raw: string, errors: string[]): RawNpcReply | null {
  * the error list for the correction turn.
  *
  * The rules, all from the format contract (README "Entität: NPC"):
- * target path `npcs/<kebab-id>.md`, parseable frontmatter whose `id` matches
+ * target path `npcs/<kebab-id>.md`, parseable properties whose `id` matches
  * the file name, a `name`, a valid NpcStatus (`alive` unless the source says
  * otherwise), no invented `chapter`, quoted quickstats, relationships only to
  * npcs that exist, only `[!secret]` inside `## Weiß`, only known callouts, and
@@ -803,18 +803,18 @@ export function validateNpcReply(
     );
   }
 
-  const { parsed, error } = parseWithFrontmatter(entry.content, entry.path);
+  const { parsed, error } = parseWithProperties(entry.content, entry.path);
   if (error !== undefined) {
     errors.push(`${label}: ${error}`);
     return { ok: false, errors };
   }
-  const fm = parsed.frontmatter;
+  const fm = parsed.properties;
 
   // `name` is NOT checked: the shared parser degrades a missing display name
   // to the id (README/parse.ts), so there is nothing mechanical left to
   // complain about — the prompt asks for one, the format survives without it.
   if (fm.id !== id) {
-    errors.push(`${label}: frontmatter id "${String(fm.id)}" passt nicht zum Dateinamen`);
+    errors.push(`${label}: properties id "${String(fm.id)}" passt nicht zum Dateinamen`);
   }
   if (Object.hasOwn(fm, "chapter")) {
     errors.push(`${label}: kein "chapter" — der NPC-Lauf kennt kein Ziel-Kapitel`);
@@ -839,7 +839,7 @@ export function validateNpcReply(
   return {
     ok: true,
     result: {
-      npc: { path: entry.path, markdown: entry.content, frontmatter: fm },
+      npc: { path: entry.path, markdown: entry.content, properties: fm },
       warnings: reply.warnings,
     },
   };
@@ -1054,7 +1054,7 @@ export async function runGenerateNpc(
 
 // --- POST /api/:campaign/generate/apply -----------------------------------------
 
-const SCENE_ITEM_KEYS = new Set(["path", "markdown", "frontmatter"]);
+const SCENE_ITEM_KEYS = new Set(["path", "markdown", "properties"]);
 const STUB_ITEM_KEYS = new Set(["kind", "id", "name", "markdown"]);
 /** Same three keys as a scene draft — the client may pass the draft verbatim. */
 const NPC_ITEM_KEYS = SCENE_ITEM_KEYS;
@@ -1095,10 +1095,10 @@ function applySceneTarget(item: unknown, index: number): ApplyTarget {
     );
   }
   // Re-validation (apply is a separate request — never trust the client):
-  // the frontmatter must still parse and the draft must still be a draft.
-  const { parsed, error } = parseWithFrontmatter(markdown, rel);
+  // the properties must still parse and the draft must still be a draft.
+  const { parsed, error } = parseWithProperties(markdown, rel);
   if (error !== undefined) throw new ApiError(400, `${label}: ${error}`);
-  if (parsed.frontmatter.status !== "draft") {
+  if (parsed.properties.status !== "draft") {
     throw new ApiError(400, `${label}: "status" must be "draft"`);
   }
   return { rel, markdown };
@@ -1108,7 +1108,7 @@ function applySceneTarget(item: unknown, index: number): ApplyTarget {
  * Deep-validate the `npc` item of the apply body -> write target (issue #21).
  * Re-validated on the way in, exactly like a scene draft and for the same
  * reason (apply is a separate request — never trust the client): the target
- * path, parseable frontmatter, the id matching the file name and a valid
+ * path, parseable properties, the id matching the file name and a valid
  * NpcStatus. The rules that shape the MODEL's reply (relationship targets,
  * `[!secret]`-only inside `## Weiß`) are deliberately not re-run here — from
  * here on the DM is the author of the markdown, and their raw edit must not
@@ -1128,13 +1128,13 @@ function applyNpcTarget(item: unknown): ApplyTarget {
     throw new ApiError(400, `${label}.path must be "npcs/<kebab-case-id>.md"`);
   }
   assertSafeRelativeMdPath(rel); // defense in depth — the pattern rules escapes out
-  const { parsed, error } = parseWithFrontmatter(markdown, rel);
+  const { parsed, error } = parseWithProperties(markdown, rel);
   if (error !== undefined) throw new ApiError(400, `${label}: ${error}`);
   const id = fileStem(rel);
-  if (parsed.frontmatter.id !== id) {
-    throw new ApiError(400, `${label}: frontmatter id does not match the filename`);
+  if (parsed.properties.id !== id) {
+    throw new ApiError(400, `${label}: properties id does not match the filename`);
   }
-  const statusError = npcStatusErrors(parsed.frontmatter, "NPC-Dateien")[0];
+  const statusError = npcStatusErrors(parsed.properties, "NPC-Dateien")[0];
   if (statusError !== undefined) throw new ApiError(400, `${label}: ${statusError}`);
   return { rel, markdown };
 }
@@ -1160,11 +1160,11 @@ function applyStubTarget(item: unknown, index: number): ApplyTarget {
   }
   const rel = `${kind}s/${id}.md`;
   assertSafeRelativeMdPath(rel); // defense in depth — the slug check above rules escapes out
-  const { parsed, error } = parseWithFrontmatter(markdown, rel);
+  const { parsed, error } = parseWithProperties(markdown, rel);
   if (error !== undefined) throw new ApiError(400, `${label}: ${error}`);
   // Re-validation, same as for scenes: a client payload must not sneak a
   // stub status past the reply validation (issue #27).
-  const statusError = stubStatusErrors(kind, parsed.frontmatter)[0];
+  const statusError = stubStatusErrors(kind, parsed.properties)[0];
   if (statusError !== undefined) throw new ApiError(400, `${label}: ${statusError}`);
   return { rel, markdown };
 }
@@ -1174,7 +1174,7 @@ function applyStubTarget(item: unknown, index: number): ApplyTarget {
  * drafts go into a chapter that does not exist yet". Returns the
  * `<chapter>/_chapter.md` target to create in the same batch, or null when
  * the file is already there (idempotent — an existing chapter is not a
- * conflict). Minimal frontmatter per the examples convention
+ * conflict). Minimal properties per the examples convention
  * (id/title/status: planned — a generator-created chapter is upcoming,
  * never the active one); the body stays empty and degrades.
  */
@@ -1253,18 +1253,18 @@ export async function applyGenerated(
 
   const drafts = targets.map((t) => {
     const parsed = parseMarkdown(t.markdown, t.rel, 0);
-    assertDraftId(parsed.frontmatter.id, t.rel);
+    assertDraftId(parsed.properties.id, t.rel);
     // The ADDRESS the entity will have (store/paths) — for a scene that is
     // `<chapter>/<group>/<id>.md`, derived from the FRONTMATTER id, because
     // that is the key `insertDraft` writes under. The model's file name is
     // not part of the addressing any more, so it must not decide anything
     // here either: checking the path-derived id while inserting the
-    // frontmatter id would let a colliding draft past the 409 and into a
+    // properties id would let a colliding draft past the 409 and into a
     // primary-key violation.
     return {
       rel: t.rel,
-      address: draftAddress(t.rel, parsed.frontmatter),
-      frontmatter: parsed.frontmatter,
+      address: draftAddress(t.rel, parsed.properties),
+      properties: parsed.properties,
       body: parsed.body,
     };
   });
@@ -1296,7 +1296,7 @@ const DRAFT_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
  * was taken on trust: `id: ""` inserted a row nothing can address, and
  * `id: "a/b"` inserted one whose address parses as a different path — both
  * unreachable through `GET /file`, i.e. content written and lost in the same
- * request. A frontmatter that HAS an `id` must therefore carry a usable one;
+ * request. A properties that HAS an `id` must therefore carry a usable one;
  * a draft without the key keeps falling back to its file name, which the
  * path validation already constrains.
  *
@@ -1316,12 +1316,12 @@ function assertDraftId(id: unknown, rel: string): void {
 
 /**
  * Where a draft will live: its path, with the id segment taken from the
- * frontmatter when there is one. Only scenes can actually differ (an npc or
+ * properties when there is one. Only scenes can actually differ (an npc or
  * location draft is validated against its file name, a chapter's id IS the
  * first segment), but the rule is stated once for all of them.
  */
-function draftAddress(rel: string, frontmatter: Record<string, unknown>): string {
-  const id = typeof frontmatter.id === "string" ? frontmatter.id.trim() : "";
+function draftAddress(rel: string, properties: Record<string, unknown>): string {
+  const id = typeof properties.id === "string" ? properties.id.trim() : "";
   if (id === "" || kindFromPath(rel) !== "scene") return rel;
   const segments = rel.split("/");
   const chapterId = segments[0] ?? "";

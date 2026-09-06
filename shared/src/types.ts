@@ -4,7 +4,7 @@
 //
 // Design rule (README): the format DEGRADES, it does not validate. Every
 // enum-ish field is typed as its known literals *or* any string, unknown
-// frontmatter keys are preserved, and nothing in shared/ ever throws on
+// properties keys are preserved, and nothing in shared/ ever throws on
 // odd input.
 
 import type { SessionPause } from "./session-state";
@@ -34,7 +34,7 @@ export type CalloutKind = (typeof CALLOUT_KINDS)[number];
 type OrString<T extends string> = T | (string & {});
 
 /** `id` is the stable reference key and must never change once assigned. */
-export interface SceneFrontmatter {
+export interface SceneProperties {
   id: string;
   title: string;
   type?: OrString<SceneType>;
@@ -52,7 +52,7 @@ export interface SceneFrontmatter {
   [key: string]: unknown;
 }
 
-export interface NpcFrontmatter {
+export interface NpcProperties {
   id: string;
   name: string;
   /** One-liner. */
@@ -69,7 +69,7 @@ export interface NpcFrontmatter {
   [key: string]: unknown;
 }
 
-export interface LocationFrontmatter {
+export interface LocationProperties {
   id: string;
   name: string;
   chapter?: string;
@@ -79,12 +79,12 @@ export interface LocationFrontmatter {
 }
 
 /**
- * Frontmatter of a campaign's `_campaign.md` (README, "Entität: Kampagne
+ * Properties of a campaign's `_campaign.md` (README, "Entität: Kampagne
  * (optional)"). The file is optional — without it the UI shows the directory
  * name. `id` is the directory name, `name` the display name; further keys
  * (e.g. `system`) are preserved verbatim.
  */
-export interface CampaignFrontmatter {
+export interface CampaignProperties {
   id: string;
   name: string;
   /** One-liner shown next to the name (switcher meta, pool subtitle). */
@@ -92,8 +92,8 @@ export interface CampaignFrontmatter {
   [key: string]: unknown;
 }
 
-/** Frontmatter of a chapter's `_chapter.md`. */
-export interface ChapterFrontmatter {
+/** Properties of a chapter's `_chapter.md`. */
+export interface ChapterProperties {
   id: string;
   title: string;
   status?: string;
@@ -107,7 +107,7 @@ export interface ChapterFrontmatter {
  * Timestamps are strings — YAML would otherwise parse bare ISO dates as
  * Date objects; the parser normalizes them back to strings.
  */
-export interface SessionFrontmatter {
+export interface SessionProperties {
   id: string;
   started?: string;
   ended?: string;
@@ -145,11 +145,11 @@ export type EntityKind =
 export interface ParsedFile<F = Record<string, unknown>> {
   path: string;
   kind: EntityKind;
-  frontmatter: F;
-  /** Markdown body without the frontmatter block. */
+  properties: F;
+  /** Markdown body without the properties block. */
   body: string;
   /** Optimistic-concurrency token: PATCH sends it back, server 409s on mismatch. */
-  mtimeMs: number;
+  rev: number;
 }
 
 // --- API response shapes (see endpoint list in server/src/server.ts) -------
@@ -252,11 +252,11 @@ export interface CampaignTree {
 
 /** GET /api/:campaign/file?path=… (and GET /api/:campaign/session) */
 export interface FileResponse extends ParsedFile {
-  /** Full file contents including the frontmatter block. */
+  /** Full file contents including the properties block. */
   raw: string;
   /**
    * SESSION FILES ONLY (issue #40): `started` as epoch milliseconds, read in
-   * the SERVER's timezone. The frontmatter value stays the zone-less string
+   * the SERVER's timezone. The properties value stays the zone-less string
    * the format uses — this is the server's interpretation of it, so a client
    * in a different timezone still computes the right session runtime.
    * Undefined when there is no usable `started`.
@@ -310,10 +310,10 @@ export interface SearchResponse {
 export interface GeneratedSceneDraft {
   /** Campaign-relative target path, e.g. "01-salzhafen/hafen/captured.md". */
   path: string;
-  /** The complete markdown file including the frontmatter block. */
+  /** The complete markdown file including the properties block. */
   markdown: string;
-  /** The parsed frontmatter (always `status: draft`), for the review UI. */
-  frontmatter: Record<string, unknown>;
+  /** The parsed properties (always `status: draft`), for the review UI. */
+  properties: Record<string, unknown>;
 }
 
 /**
@@ -325,7 +325,7 @@ export interface GeneratedStub {
   kind: "npc" | "location";
   id: string;
   name: string;
-  /** The complete stub markdown file including the frontmatter block. */
+  /** The complete stub markdown file including the properties block. */
   markdown: string;
 }
 
@@ -344,7 +344,7 @@ export interface GenerateUsage {
 }
 
 /**
- * The generator's review preview. Mechanically validated (frontmatter
+ * The generator's review preview. Mechanically validated (properties
  * parses, status is draft, references resolve, only known callouts);
  * `warnings` are the LLM's own review notes for the DM. Carried by a
  * finished job (see GenerateJob) — POST /generate itself only starts one.
@@ -361,16 +361,16 @@ export interface GenerateResult {
  * One generated NPC file draft (issue #21). Same "nothing is on disk yet"
  * rule as a scene draft: writing happens only via POST
  * /api/:campaign/generate/apply. The path is always `npcs/<id>.md` and the
- * frontmatter id matches that filename — the server validates both before
+ * properties id matches that filename — the server validates both before
  * the draft ever reaches the review.
  */
 export interface GeneratedNpcDraft {
   /** Campaign-relative target path, always "npcs/<kebab-id>.md". */
   path: string;
-  /** The complete markdown file including the frontmatter block. */
+  /** The complete markdown file including the properties block. */
   markdown: string;
-  /** The parsed frontmatter (id/name/status guaranteed), for the review UI. */
-  frontmatter: Record<string, unknown>;
+  /** The parsed properties (id/name/status guaranteed), for the review UI. */
+  properties: Record<string, unknown>;
 }
 
 /**

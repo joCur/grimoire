@@ -9,8 +9,8 @@
 //
 //   [x] GET  /api/campaigns                    campaign list (directories + lastSession +
 //                                              name/description from _campaign.md)
-//   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (frontmatter parsed)
-//   [x] GET  /api/:campaign/file?path=...      one file (raw + parsed + mtime). glossary.md
+//   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (properties parsed)
+//   [x] GET  /api/:campaign/file?path=...      one file (raw + parsed + rev). glossary.md
 //                                              answers 200 with an EMPTY body when the
 //                                              campaign has no terms — it is an empty
 //                                              document, not a missing one (#57 review:
@@ -18,21 +18,21 @@
 //                                              emptied unreachable from the editor).
 //                                              inbox.md does the same since #70 — same
 //                                              reasoning, it had been left behind.
-//                                              `mtimeMs` of glossary.md/inbox.md is that
+//                                              `rev` of glossary.md/inbox.md is that
 //                                              DOCUMENT's own counter, not campaigns.version
-//   [x] PATCH /api/:campaign/frontmatter       { path, mtimeMs, patch } — only if
-//                                              mtimeMs is unchanged, otherwise 409.
+//   [x] PATCH /api/:campaign/properties       { path, rev, patch } — only if
+//                                              rev is unchanged, otherwise 409.
 //                                              A scene's `chapter` may be SET (400 when
 //                                              the chapter does not exist — a scene must
 //                                              never fall out of the tree) or DELETED with
 //                                              null, which drops the key and leaves the
 //                                              scene's address alone
-//   [x] PUT  /api/:campaign/file               { path, mtimeMs, body } — write the markdown
+//   [x] PUT  /api/:campaign/file               { path, rev, body } — write the markdown
 //                                              BODY of an existing file (issue #15); the
-//                                              frontmatter block is kept byte-identically,
-//                                              same mtime guard as PATCH above (409)
+//                                              properties block is kept byte-identically,
+//                                              same rev guard as PATCH above (409)
 //   [—] POST /api/:campaign/campaign-meta      REMOVED with issue #62. It existed
-//                                              for the one gap PATCH /frontmatter
+//                                              for the one gap PATCH /properties
 //                                              could not close: a campaign whose
 //                                              `_campaign.md` did not exist yet had
 //                                              no file and therefore no guard token
@@ -45,7 +45,7 @@
 //                                              unreachable (observed in #59). The
 //                                              name is now written the same way
 //                                              every other field is: PATCH
-//                                              /frontmatter with the row's guard
+//                                              /properties with the row's guard
 //                                              token — one write path, one 409 rule
 //   [x] GET  /api/:campaign/session            the ACTIVE session (issue #40): the last
 //                                              STARTED session file that is not ended —
@@ -190,7 +190,7 @@
 //   [x] POST /api/:campaign/review/inbox-done  { line } -> rewrite the inbox line to `- [x] …`
 //                                              (documented append-only exception)
 //
-// Validation after generate: frontmatter parseable, status==draft, references
+// Validation after generate: properties parseable, status==draft, references
 // exist or ship as stubs, only known callouts. Errors -> correction turn to
 // the LLM (LLM_CORRECTION_TURNS, default 1, max 2 — issue #19), see
 // generator/README.md; exhausted retries -> 422. A reply the model TRUNCATED

@@ -18,7 +18,7 @@
 //      whitespace scaffolding in place). Nothing in the composer builds a block
 //      by hand, so no edit can be swallowed by a stale `source`.
 //   3. VALIDATION. composerIssues names, per block, what a save would silently
-//      break — the seam the frontmatter form already uses (issue #42): the
+//      break — the seam the properties form already uses (issue #42): the
 //      card says it, „Speichern" waits, and nothing the DM typed is rewritten.
 //
 // Deliberately NOT here: cross-section moves (a block cannot be dragged out of
@@ -242,7 +242,7 @@ const SECTION_ESCAPE =
 /**
  * What is WRONG in the block list right now, per block id — the line the card
  * shows under itself and the reason „Speichern" stays disabled. Same seam as
- * the frontmatter form's frontmatterFormIssues (issue #42): the state is
+ * the properties form's propertiesFormIssues (issue #42): the state is
  * allowed to exist while the DM is typing, it just cannot be written.
  *
  * One rule, and it is the one the composer cannot survive silently: a child of

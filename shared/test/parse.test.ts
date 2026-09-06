@@ -12,10 +12,10 @@ import {
   sessionSummary,
 } from "../src/parse";
 import type {
-  CampaignFrontmatter,
-  NpcFrontmatter,
-  SceneFrontmatter,
-  SessionFrontmatter,
+  CampaignProperties,
+  NpcProperties,
+  SceneProperties,
+  SessionProperties,
 } from "../src/types";
 
 const FIXTURES = join(import.meta.dir, "..", "..", "examples", "beispiel");
@@ -76,15 +76,15 @@ describe("kindFromPath", () => {
 
 describe("parseMarkdown: scene fixture (ankunft-leuchtturm.md)", () => {
   const f = loadFixture("01-salzhafen/hafen/ankunft-leuchtturm.md");
-  const fm = f.frontmatter as SceneFrontmatter;
+  const fm = f.properties as SceneProperties;
 
-  test("kind, path and mtime are carried through", () => {
+  test("kind, path and rev are carried through", () => {
     expect(f.kind).toBe("scene");
     expect(f.path).toBe("01-salzhafen/hafen/ankunft-leuchtturm.md");
-    expect(f.mtimeMs).toBe(1234);
+    expect(f.rev).toBe(1234);
   });
 
-  test("frontmatter is fully typed-parsed", () => {
+  test("properties is fully typed-parsed", () => {
     expect(fm.id).toBe("lighthouse-arrival");
     expect(fm.title).toBe("Ankunft am Leuchtturm");
     expect(fm.type).toBe("planned");
@@ -96,7 +96,7 @@ describe("parseMarkdown: scene fixture (ankunft-leuchtturm.md)", () => {
     expect(fm.status).toBe("ready");
   });
 
-  test("body excludes the frontmatter block but keeps the markdown", () => {
+  test("body excludes the properties block but keeps the markdown", () => {
     expect(f.body).not.toContain("id: lighthouse-arrival");
     expect(f.body).toContain("## Flow");
     expect(f.body).toContain("> [!readaloud]");
@@ -105,7 +105,7 @@ describe("parseMarkdown: scene fixture (ankunft-leuchtturm.md)", () => {
 
 describe("parseMarkdown: session fixture (2026-01-15.md) — YAML date footgun", () => {
   const f = loadFixture("sessions/2026-01-15.md");
-  const fm = f.frontmatter as SessionFrontmatter;
+  const fm = f.properties as SessionProperties;
 
   test("id is the string '2026-01-15', not a Date", () => {
     expect(typeof fm.id).toBe("string");
@@ -127,7 +127,7 @@ describe("parseMarkdown: session fixture (2026-01-15.md) — YAML date footgun",
 describe("parseMarkdown: remaining fixtures", () => {
   test("npc fixture (fenn.md) incl. free-form quickstats", () => {
     const f = loadFixture("npcs/fenn.md");
-    const fm = f.frontmatter as NpcFrontmatter;
+    const fm = f.properties as NpcProperties;
     expect(f.kind).toBe("npc");
     expect(fm.id).toBe("fenn");
     expect(fm.name).toBe("Fenn");
@@ -139,21 +139,21 @@ describe("parseMarkdown: remaining fixtures", () => {
   test("location fixture (leuchtturm.md) keeps quoted roll20-page key", () => {
     const f = loadFixture("locations/leuchtturm.md");
     expect(f.kind).toBe("location");
-    expect(f.frontmatter["roll20-page"]).toBe("Leuchtturm");
-    expect(f.frontmatter.name).toBe("Der Leuchtturm von Salzhafen");
+    expect(f.properties["roll20-page"]).toBe("Leuchtturm");
+    expect(f.properties.name).toBe("Der Leuchtturm von Salzhafen");
   });
 
   test("chapter fixture (_chapter.md)", () => {
     const f = loadFixture("01-salzhafen/_chapter.md");
     expect(f.kind).toBe("chapter");
-    expect(f.frontmatter.id).toBe("01-salzhafen");
-    expect(f.frontmatter.title).toBe("Kapitel 1: Der Leuchtturm von Salzhafen");
-    expect(f.frontmatter.status).toBe("active");
+    expect(f.properties.id).toBe("01-salzhafen");
+    expect(f.properties.title).toBe("Kapitel 1: Der Leuchtturm von Salzhafen");
+    expect(f.properties.status).toBe("active");
   });
 
   test("campaign fixture (_campaign.md)", () => {
     const f = loadFixture("_campaign.md");
-    const fm = f.frontmatter as CampaignFrontmatter;
+    const fm = f.properties as CampaignProperties;
     expect(f.kind).toBe("campaign");
     expect(fm.id).toBe("beispiel");
     expect(fm.name).toBe("Der Leuchtturm von Salzhafen");
@@ -165,16 +165,16 @@ describe("parseMarkdown: remaining fixtures", () => {
   test("inbox and glossary fixtures", () => {
     const inbox = loadFixture("inbox.md");
     expect(inbox.kind).toBe("inbox");
-    expect(inbox.frontmatter.id).toBe("inbox");
+    expect(inbox.properties.id).toBe("inbox");
     const glossary = loadFixture("glossary.md");
     expect(glossary.kind).toBe("glossary");
-    expect(glossary.frontmatter.id).toBe("glossary");
+    expect(glossary.properties.id).toBe("glossary");
     expect(glossary.body).toContain("lighthouse keeper → Leuchtturmwärter");
   });
 
   test("contingency scene fixture (von-schmugglern-erwischt.md)", () => {
     const f = loadFixture("01-salzhafen/hafen/von-schmugglern-erwischt.md");
-    const fm = f.frontmatter as SceneFrontmatter;
+    const fm = f.properties as SceneProperties;
     expect(fm.type).toBe("contingency");
     expect(fm.trigger).toContain("Auskundschaften");
     expect(fm.handouts).toEqual([]);
@@ -185,78 +185,78 @@ describe("parseMarkdown: remaining fixtures", () => {
 // --- degradation semantics ------------------------------------------------------
 
 describe("parseMarkdown: degradation (never throws)", () => {
-  test("invalid YAML -> frontmatter {} except id fallback, entire raw as body", () => {
+  test("invalid YAML -> properties {} except id fallback, entire raw as body", () => {
     const raw = "---\nfoo: [unclosed\n---\n\n## Flow\n\nText.";
     const f = parseMarkdown(raw, "01-salzhafen/hafen/kaputt.md", 1);
-    expect(f.frontmatter.id).toBe("kaputt"); // filename fallback
-    expect(f.frontmatter.foo).toBeUndefined();
-    expect(f.body).toBe(raw); // entire raw content, frontmatter block included
+    expect(f.properties.id).toBe("kaputt"); // filename fallback
+    expect(f.properties.foo).toBeUndefined();
+    expect(f.body).toBe(raw); // entire raw content, properties block included
   });
 
   test("unclosed quote in YAML does not throw either", () => {
     const raw = '---\nname: "unclosed\n---\nbody';
     const f = parseMarkdown(raw, "npcs/tab.md", 1);
-    expect(f.frontmatter.name).toBe("tab"); // name fallback to id (filename)
+    expect(f.properties.name).toBe("tab"); // name fallback to id (filename)
     expect(f.body).toBe(raw);
   });
 
-  test("non-mapping frontmatter (bare string) degrades like broken YAML", () => {
+  test("non-mapping properties (bare string) degrades like broken YAML", () => {
     const raw = "---\njust a string\n---\nbody";
     const f = parseMarkdown(raw, "npcs/weird.md", 1);
-    expect(f.frontmatter.id).toBe("weird");
+    expect(f.properties.id).toBe("weird");
     expect(f.body).toBe(raw);
   });
 
-  test("file without frontmatter: whole content is body, id from filename", () => {
-    const raw = "# Nur Text\n\nKein Frontmatter.";
+  test("file without properties: whole content is body, id from filename", () => {
+    const raw = "# Nur Text\n\nKein Properties.";
     const f = parseMarkdown(raw, "01-salzhafen/hafen/roh.md", 1);
-    expect(f.frontmatter.id).toBe("roh");
+    expect(f.properties.id).toBe("roh");
     expect(f.body).toBe(raw);
   });
 
-  test("unknown frontmatter keys are preserved verbatim", () => {
+  test("unknown properties keys are preserved verbatim", () => {
     const raw = "---\nid: x\nmood: grim\ncustom-list: [a, b]\n---\nbody";
     const f = parseMarkdown(raw, "01-salzhafen/x.md", 1);
-    expect(f.frontmatter.mood).toBe("grim");
-    expect(f.frontmatter["custom-list"]).toEqual(["a", "b"]);
+    expect(f.properties.mood).toBe("grim");
+    expect(f.properties["custom-list"]).toEqual(["a", "b"]);
   });
 
   test("dates are normalized recursively, incl. arrays and nested objects", () => {
     const raw =
       "---\nid: x\nwhen: 2026-08-19\nexact: 2026-08-19T19:32:07\ndates: [2026-01-01, 2026-01-02T08:05:00]\nnested: { at: 2026-03-04 }\n---\n";
     const f = parseMarkdown(raw, "sessions/x.md", 1);
-    expect(f.frontmatter.when).toBe("2026-08-19");
+    expect(f.properties.when).toBe("2026-08-19");
     // Non-zero SECONDS survive (issue #40 AK8: the session's `pauses` are
     // second-precise); a `:00` still normalizes away.
-    expect(f.frontmatter.exact).toBe("2026-08-19T19:32:07");
-    expect(f.frontmatter.dates).toEqual(["2026-01-01", "2026-01-02T08:05"]);
-    expect(f.frontmatter.nested).toEqual({ at: "2026-03-04" });
+    expect(f.properties.exact).toBe("2026-08-19T19:32:07");
+    expect(f.properties.dates).toEqual(["2026-01-01", "2026-01-02T08:05"]);
+    expect(f.properties.nested).toEqual({ at: "2026-03-04" });
   });
 
   test("id fallback from filename; title/name fall back to the id", () => {
     const scene = parseMarkdown("---\nstatus: draft\n---\nbody", "01-x/hafen/meine-szene.md", 1);
-    expect(scene.frontmatter.id).toBe("meine-szene");
-    expect(scene.frontmatter.title).toBe("meine-szene");
+    expect(scene.properties.id).toBe("meine-szene");
+    expect(scene.properties.title).toBe("meine-szene");
 
     const npc = parseMarkdown("---\nrole: Wache\n---\n", "npcs/wache.md", 1);
-    expect(npc.frontmatter.id).toBe("wache");
-    expect(npc.frontmatter.name).toBe("wache");
+    expect(npc.properties.id).toBe("wache");
+    expect(npc.properties.name).toBe("wache");
 
     const withId = parseMarkdown("---\nid: real-id\n---\n", "locations/ort.md", 1);
-    expect(withId.frontmatter.name).toBe("real-id");
+    expect(withId.properties.name).toBe("real-id");
 
     // A campaign file follows the npc/location rule: no `name` -> the id.
     const campaign = parseMarkdown("---\nid: beispiel\n---\n", "_campaign.md", 1);
     expect(campaign.kind).toBe("campaign");
-    expect(campaign.frontmatter.name).toBe("beispiel");
+    expect(campaign.properties.name).toBe("beispiel");
   });
 
-  test("broken campaign frontmatter degrades instead of throwing", () => {
+  test("broken campaign properties degrades instead of throwing", () => {
     const raw = "---\nname: [unclosed\n---\n\nNotizen.";
     const f = parseMarkdown(raw, "_campaign.md", 1);
     expect(f.kind).toBe("campaign");
-    expect(f.frontmatter.id).toBe("_campaign"); // file-stem fallback
-    expect(f.frontmatter.description).toBeUndefined();
+    expect(f.properties.id).toBe("_campaign"); // file-stem fallback
+    expect(f.properties.description).toBeUndefined();
     expect(f.body).toBe(raw);
   });
 
@@ -266,16 +266,16 @@ describe("parseMarkdown: degradation (never throws)", () => {
       "_campaign.md",
       1,
     );
-    expect(f.frontmatter.system).toBe("D&D 5e");
+    expect(f.properties.system).toBe("D&D 5e");
   });
 
   test("repeated parsing of the same string is stable (gray-matter cache safety)", () => {
     const raw = readFileSync(join(FIXTURES, "sessions/2026-01-15.md"), "utf8");
     const a = parseMarkdown(raw, "sessions/2026-01-15.md", 1);
-    (a.frontmatter as Record<string, unknown>).tampered = true;
+    (a.properties as Record<string, unknown>).tampered = true;
     const b = parseMarkdown(raw, "sessions/2026-01-15.md", 2);
-    expect(b.frontmatter.tampered).toBeUndefined();
-    expect(b.frontmatter.started).toBe("2026-01-15T19:30");
+    expect(b.properties.tampered).toBeUndefined();
+    expect(b.properties.started).toBe("2026-01-15T19:30");
   });
 });
 
@@ -302,7 +302,7 @@ describe("summary builders against real fixtures", () => {
     expect(s.trigger).toBe("Charaktere werden beim Auskundschaften der Bucht entdeckt");
   });
 
-  test("sceneSummary trigger is undefined when the frontmatter has none", () => {
+  test("sceneSummary trigger is undefined when the properties has none", () => {
     const s = sceneSummary(parseMarkdown("---\nid: s\n---\n", "01-x/s.md", 1));
     expect(s.trigger).toBeUndefined();
   });

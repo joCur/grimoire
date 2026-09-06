@@ -272,7 +272,7 @@ function SceneRow({
           ) : null}
         </span>
       </Link>
-      {/* No mtime in the tree — the control fetches the file when it opens. */}
+      {/* No rev in the tree — the control fetches the file when it opens. */}
       <SceneStatusControl
         campaign={campaign}
         path={scene.path}

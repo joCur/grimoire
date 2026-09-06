@@ -416,8 +416,8 @@ describe("POST /api/:campaign/generate", () => {
     expect(result.scenes).toHaveLength(1);
     expect(result.scenes[0]!.path).toBe(SCENE_PATH);
     expect(result.scenes[0]!.markdown).toBe(sceneMarkdown());
-    expect(result.scenes[0]!.frontmatter.status).toBe("draft");
-    expect(result.scenes[0]!.frontmatter.npcs).toEqual(["fenn", "grella"]);
+    expect(result.scenes[0]!.properties.status).toBe("draft");
+    expect(result.scenes[0]!.properties.npcs).toEqual(["fenn", "grella"]);
     expect(result.stubs).toEqual([
       { kind: "npc", id: "grella", name: "Grella", markdown: STUB_MARKDOWN },
     ]);
@@ -871,7 +871,7 @@ describe("POST /api/:campaign/generate", () => {
 
 describe("POST /api/:campaign/generate/apply", () => {
   test("writes the reviewed drafts — GenerateResult pieces pass through verbatim", async () => {
-    // What the client sends is what /generate returned (frontmatter/name
+    // What the client sends is what /generate returned (properties/name
     // keys included) — the endpoint accepts the documented shapes as-is.
     const fake = useFake([reply()]);
     const gen = await generate(generateBody);
@@ -889,18 +889,18 @@ describe("POST /api/:campaign/generate/apply", () => {
     // the insert, `status: draft` included (that is what the app filters on)
     const scene = await read(SCENE_PATH);
     expect(scene.kind).toBe("scene");
-    expect(scene.frontmatter.id).toBe("treffen-am-kai");
-    expect(scene.frontmatter.title).toBe("Treffen am Kai");
-    expect(scene.frontmatter.status).toBe("draft");
-    expect(scene.frontmatter.npcs).toEqual(["fenn", "grella"]);
-    expect(scene.frontmatter.tags).toEqual(["social"]);
+    expect(scene.properties.id).toBe("treffen-am-kai");
+    expect(scene.properties.title).toBe("Treffen am Kai");
+    expect(scene.properties.status).toBe("draft");
+    expect(scene.properties.npcs).toEqual(["fenn", "grella"]);
+    expect(scene.properties.tags).toEqual(["social"]);
     expect(scene.body).toContain("> [!readaloud] Nebel liegt über dem Kai");
     expect(scene.body).toContain("> [!check] Wisdom (Perception) DC 12");
 
     const stub = await read("npcs/grella.md");
     expect(stub.kind).toBe("npc");
-    expect(stub.frontmatter.name).toBe("Grella");
-    expect(stub.frontmatter.status).toBe("alive");
+    expect(stub.properties.name).toBe("Grella");
+    expect(stub.properties.status).toBe("alive");
     expect(stub.body).toContain("## Will");
   });
 
@@ -929,7 +929,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect(await exists(fresh)).toBe(false);
     const after = await read(existing);
     expect(after.raw).toBe(before.raw);
-    expect(after.mtimeMs).toBe(before.mtimeMs); // the row's rev never moved
+    expect(after.rev).toBe(before.rev); // the row's rev never moved
   });
 
   test("422 when a draft's `id` cannot be addressed — nothing written", async () => {
@@ -959,7 +959,7 @@ describe("POST /api/:campaign/generate/apply", () => {
       scenes: [{ path: rel, markdown: sceneMarkdown().replace("id: treffen-am-kai", 'id: ""') }],
     });
     expect(res.status).toBe(200);
-    expect((await read(rel)).frontmatter.id).toBe("leere-id");
+    expect((await read(rel)).properties.id).toBe("leere-id");
   });
 
   test("400 on path traversal and unsafe targets — nothing written", async () => {
@@ -982,7 +982,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect(await exists("01-salzhafen/a/b/zu-tief.md")).toBe(false);
   });
 
-  test("400 re-validation: broken frontmatter or status != draft", async () => {
+  test("400 re-validation: broken properties or status != draft", async () => {
     const rel = "01-salzhafen/hafen/nicht-draft.md";
     // status was flipped after review — apply must not trust the client
     let res = await postJson("/api/beispiel/generate/apply", {
@@ -997,7 +997,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     });
     expect(res.status).toBe(400);
 
-    // no frontmatter block at all
+    // no properties block at all
     res = await postJson("/api/beispiel/generate/apply", {
       scenes: [{ path: rel, markdown: "## Nur Text\n" }],
     });
@@ -1097,9 +1097,9 @@ describe("POST /api/:campaign/generate/apply", () => {
     // status the generator gives a chapter it created (never `active`)
     const written = await read(chapterRel);
     expect(written.kind).toBe("chapter");
-    expect(written.frontmatter.id).toBe(chapter);
-    expect(written.frontmatter.title).toBe("Kapitel 3: Die Schmugglerbucht");
-    expect(written.frontmatter.status).toBe("planned");
+    expect(written.properties.id).toBe(chapter);
+    expect(written.properties.title).toBe("Kapitel 3: Die Schmugglerbucht");
+    expect(written.properties.status).toBe("planned");
 
     // second apply into the SAME chapter: the existing _chapter.md is left
     // untouched (not a conflict, not rewritten) — only the new scene lands
@@ -1112,8 +1112,8 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ written: [second] });
     const again = await read(chapterRel);
-    expect(again.frontmatter.title).toBe(written.frontmatter.title);
-    expect(again.mtimeMs).toBe(written.mtimeMs); // not even a rev bump
+    expect(again.properties.title).toBe(written.properties.title);
+    expect(again.rev).toBe(written.rev); // not even a rev bump
   });
 
   test("new-chapter batch stays all-or-nothing: a scene conflict writes no _chapter.md", async () => {

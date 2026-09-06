@@ -61,7 +61,7 @@ test("rename with usage preview: count first, then the cascade", async ({ page, 
   expect(await api.exists(NPC)).toBe(false);
   expect(await api.exists(RENAMED)).toBe(true);
   const scene = await api.file(SCENE);
-  expect(scene.frontmatter.npcs).toEqual(["hafenmeisterin"]);
+  expect(scene.properties.npcs).toEqual(["hafenmeisterin"]);
   expect(await api.raw("npcs/fenn.md")).toContain("- hafenmeisterin:");
   // The prose of the other scene still says "Jorna" — a mention is not a
   // reference (README).

@@ -15,11 +15,11 @@
 // an npc/location live here, right above the title they belong to.
 //
 // „Bearbeiten" in the header (issue #15) turns the body into the raw markdown
-// editor — header, chips and status regler keep standing, the frontmatter is
+// editor — header, chips and status regler keep standing, the properties is
 // not part of it. The route owns only the "which path is being edited" bit;
 // the write, the 409 and the discard guard live in FileBodyEditor.
 //
-// „Eigenschaften" next to it (issue #42) is the frontmatter half: a form over
+// „Eigenschaften" next to it (issue #42) is the properties half: a form over
 // all typed fields of the kind. It stays available while the body editor runs —
 // its patch never touches the body, and the editor adopts a body-neutral new
 // version instead of turning it into a conflict (shouldAdvanceBase).
@@ -32,7 +32,7 @@ import { fetchFile, fetchTree } from "@/api";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
 import { EntityArticle } from "@/components/EntityArticle";
 import { FileBodyEditAction, FileBodyEditor } from "@/components/FileBodyEditor";
-import { FrontmatterAction } from "@/components/FrontmatterAction";
+import { PropertiesAction } from "@/components/PropertiesAction";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/components/NpcCard";
 import { PageContext } from "@/components/PageContext";
@@ -41,7 +41,7 @@ import { SceneArticle } from "@/components/SceneArticle";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { entityHeaderKind } from "@/lib/entity";
 import { canEditFileBody } from "@/lib/file-body";
-import { fmString, fmStringArray } from "@/lib/frontmatter";
+import { fmString, fmStringArray } from "@/lib/properties";
 import { pageContextCrumbs } from "@/lib/page-context";
 import { renameTargetFor } from "@/lib/rename";
 
@@ -89,8 +89,8 @@ export function SceneRoute() {
   }
 
   const isScene = entityHeaderKind(data.kind) === "scene";
-  // The aside belongs to scenes: only they reference npcs in frontmatter.
-  const npcs = isScene ? fmStringArray(data.frontmatter.npcs) : [];
+  // The aside belongs to scenes: only they reference npcs in properties.
+  const npcs = isScene ? fmStringArray(data.properties.npcs) : [];
   // „Umbenennen" (issue #30) — offered for the kinds that HAVE a renameable
   // id (npc, location, scene, chapter); undefined for sessions, inbox,
   // glossary and the campaign file, where the action renders nothing.
@@ -115,11 +115,11 @@ export function SceneRoute() {
       onClose={() => setEditingPath(undefined)}
     />
   ) : undefined;
-  // „Eigenschaften" (issue #42) — the frontmatter form of the kinds that have
+  // „Eigenschaften" (issue #42) — the properties form of the kinds that have
   // typed fields (scene, npc, location, chapter); it renders nothing for the
   // rest. The tree feeds its reference fields (npc/location/chapter ids).
   const propertiesAction = (
-    <FrontmatterAction campaign={campaign} file={data} tree={tree.data} />
+    <PropertiesAction campaign={campaign} file={data} tree={tree.data} />
   );
   const articleActions = (
     <>
@@ -150,15 +150,15 @@ export function SceneRoute() {
               variant="scene"
               actions={articleActions}
               body={bodyEditor}
-              // Issue #28: the status display IS the control here. The mtime
+              // Issue #28: the status display IS the control here. The rev
               // comes from the FileResponse on screen, so the patch carries
               // exactly the version the DM was looking at.
               statusControl={
                 <SceneStatusControl
                   campaign={campaign}
                   path={data.path}
-                  status={fmString(data.frontmatter.status) ?? "draft"}
-                  mtimeMs={data.mtimeMs}
+                  status={fmString(data.properties.status) ?? "draft"}
+                  rev={data.rev}
                   variant="pill"
                 />
               }

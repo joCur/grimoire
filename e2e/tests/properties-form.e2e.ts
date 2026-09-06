@@ -1,4 +1,4 @@
-// Critical path 7: the frontmatter patch from the app, here through the
+// Critical path 7: the properties patch from the app, here through the
 // „Eigenschaften" form of issue #42 — one dialog per entity kind over ALL
 // typed fields, including the 409 conflict. It also touches path 2 (the
 // reading view must show the new values the moment the dialog closes) and
@@ -13,7 +13,7 @@
 //      `x-custom`), a key it knows but the DM did not touch, and the whole
 //      markdown body have to come out of a save untouched.
 //   2. The conflict is DETERMINISTIC here, unlike the status regler: the
-//      dialog freezes the mtime it opened with on purpose, so the ~5s version
+//      dialog freezes the rev it opened with on purpose, so the ~5s version
 //      poll cannot heal the staleness while the DM types. No retry loop.
 //   3. Everything the save uses is frozen at open, so the dialog belongs to
 //      ONE path: a navigation under the open modal (⌘K works over it) has to
@@ -26,7 +26,7 @@
 // #57) there is no file behind it: „extern geändert" now means a SECOND
 // WRITER through the same API, which is what bumps the row's guard token.
 //
-// One caveat the assertions live with: PATCH /frontmatter re-emits the whole
+// One caveat the assertions live with: PATCH /properties re-emits the whole
 // YAML block, so the SURFACE formatting of untouched keys may normalize
 // (`handouts: ["Karte"]` -> `[Karte]`, `statblock: "Roll20: Jorna"` ->
 // `'Roll20: Jorna'`) — documented in server/src/campaign-write.ts. The VALUES
@@ -43,16 +43,16 @@ const NPC = "npcs/jorna.md";
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 
 /**
- * The frontmatter block including both fences and the newline after the
+ * The properties block including both fences and the newline after the
  * closing one, and the body behind it — the two halves every assertion here
  * looks at separately.
  */
 async function split(api: Api, rel: string) {
   const raw = await api.raw(rel);
   const match = /^---\n[\s\S]*?\n---\n/.exec(raw);
-  expect(match, "the fixture file has no frontmatter block").not.toBeNull();
-  const frontmatter = match?.[0] ?? "";
-  return { raw, frontmatter, body: raw.slice(frontmatter.length) };
+  expect(match, "the fixture file has no properties block").not.toBeNull();
+  const properties = match?.[0] ?? "";
+  return { raw, properties, body: raw.slice(properties.length) };
 }
 
 /**
@@ -83,7 +83,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   // A key the form does not know, written BEFORE the dialog opens: the patch
   // must not carry it, so it has to come out of the save verbatim. (A patch is
   // the only way to put it there now — nobody hand-edits a row.)
-  await api.patchFrontmatter(SCENE, { "x-custom": "bleibt" });
+  await api.patchProperties(SCENE, { "x-custom": "bleibt" });
 
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
@@ -166,19 +166,19 @@ test("scene properties: chips, reference and status land in the file — nothing
   // On disk: the three changed keys …
   await expect.poll(() => api.raw(SCENE)).toContain("status: draft");
   const after = await split(api, SCENE);
-  expect(after.frontmatter).toContain("tags: [social, travel, stealth, nachtszene]");
-  expect(after.frontmatter).toContain("location: bucht");
+  expect(after.properties).toContain("tags: [social, travel, stealth, nachtszene]");
+  expect(after.properties).toContain("location: bucht");
   // …and the referenced Ort now has its own (empty) entry — issue #70.
   expect(await api.exists("locations/bucht.md")).toBe(true);
-  expect(after.frontmatter).toContain("status: draft");
+  expect(after.properties).toContain("status: draft");
   // … the untouched ones with their values, the unknown one byte-identically …
-  expect(after.frontmatter).toContain("x-custom: bleibt");
-  expect(after.frontmatter).toContain("id: lighthouse-arrival");
-  expect(after.frontmatter).toContain("title: Ankunft am Leuchtturm\n");
-  expect(after.frontmatter).toContain("type: planned");
-  expect(after.frontmatter).toContain("chapter: 01-salzhafen");
-  expect(after.frontmatter).toContain("npcs: [jorna]");
-  expect(after.frontmatter).toContain("Karte von Salzhafen");
+  expect(after.properties).toContain("x-custom: bleibt");
+  expect(after.properties).toContain("id: lighthouse-arrival");
+  expect(after.properties).toContain("title: Ankunft am Leuchtturm\n");
+  expect(after.properties).toContain("type: planned");
+  expect(after.properties).toContain("chapter: 01-salzhafen");
+  expect(after.properties).toContain("npcs: [jorna]");
+  expect(after.properties).toContain("Karte von Salzhafen");
   // … and the body untouched, byte for byte.
   expect(after.body).toBe(pristine.body);
 });
@@ -206,7 +206,7 @@ test("a second writer: the save reports the conflict, the second click writes", 
   // same API with a FRESH token. No race to win: the dialog holds the token it
   // opened with until a conflict tells it otherwise, so the version poll
   // cannot make this write succeed silently.
-  await api.patchFrontmatter(SCENE, { title: externalTitle });
+  await api.patchProperties(SCENE, { title: externalTitle });
   await api.writeBody(SCENE, externalBody);
 
   const save = dialog.getByRole("button", { name: "Speichern" });
@@ -219,8 +219,8 @@ test("a second writer: the save reports the conflict, the second click writes", 
   await expect(dialog.getByLabel("Titel")).toHaveValue("Ankunft am Leuchtturm");
   // Nothing was written: the external content stands, untouched.
   const conflicted = await split(api, SCENE);
-  expect(conflicted.frontmatter).not.toContain("konflikt");
-  expect(conflicted.frontmatter).toContain(`title: ${externalTitle}`);
+  expect(conflicted.properties).not.toContain("konflikt");
+  expect(conflicted.properties).toContain(`title: ${externalTitle}`);
   expect(conflicted.body).toBe(externalBody);
 
   // The dialog re-read the file, so the SAME click works now — and it is a
@@ -232,8 +232,8 @@ test("a second writer: the save reports the conflict, the second click writes", 
 
   await expect.poll(() => api.raw(SCENE)).toContain("konflikt");
   const after = await split(api, SCENE);
-  expect(after.frontmatter).toContain("tags: [social, travel, konflikt]");
-  expect(after.frontmatter).toContain(`title: ${externalTitle}`);
+  expect(after.properties).toContain("tags: [social, travel, konflikt]");
+  expect(after.properties).toContain(`title: ${externalTitle}`);
   expect(after.body).toBe(externalBody);
   // And the reading view shows the file as it now is — external title
   // included, since the patch response is the whole file.
@@ -246,8 +246,8 @@ test("clearing a field deletes the key instead of writing an empty value", async
   api,
 }) => {
   const before = await split(api, SCENE);
-  expect(before.frontmatter).toContain("location: leuchtturm");
-  expect(before.frontmatter).toContain("handouts:");
+  expect(before.properties).toContain("location: leuchtturm");
+  expect(before.properties).toContain("handouts:");
 
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
@@ -273,12 +273,12 @@ test("clearing a field deletes the key instead of writing an empty value", async
   // `handouts: []` left behind. (The dialog closes only after the write
   // answered, so the file is settled here.)
   const after = await split(api, SCENE);
-  expect(after.frontmatter).not.toMatch(/^location:/m);
-  expect(after.frontmatter).not.toMatch(/^handouts:/m);
+  expect(after.properties).not.toMatch(/^location:/m);
+  expect(after.properties).not.toMatch(/^handouts:/m);
   // Everything else stands, the body byte-identical.
-  expect(after.frontmatter).toContain("tags: [social, travel]");
-  expect(after.frontmatter).toContain("status: ready");
-  expect(after.frontmatter).toContain("npcs: [jorna]");
+  expect(after.properties).toContain("tags: [social, travel]");
+  expect(after.properties).toContain("status: ready");
+  expect(after.properties).toContain("npcs: [jorna]");
   expect(after.body).toBe(before.body);
 });
 
@@ -339,15 +339,15 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
 
   await expect.poll(() => api.raw(NPC)).toContain("status: missing");
   const after = await split(api, NPC);
-  expect(after.frontmatter).toContain(`role: ${role}`);
+  expect(after.properties).toContain(`role: ${role}`);
   // A DM-typed „+1" stays the STRING it was typed as (YAML would read it as
   // 1); the numbers already in the file stay numbers.
-  expect(after.frontmatter).toContain(
+  expect(after.properties).toContain(
     "quickstats: {insight: 2, passive-perception: 12, deception: '+1'}",
   );
-  expect(after.frontmatter).toContain("id: jorna");
-  expect(after.frontmatter).toContain("name: Hafenmeisterin Jorna");
-  expect(after.frontmatter).toContain("voice: knapp, wetterrau, duzt jeden");
+  expect(after.properties).toContain("id: jorna");
+  expect(after.properties).toContain("name: Hafenmeisterin Jorna");
+  expect(after.properties).toContain("voice: knapp, wetterrau, duzt jeden");
   expect(after.body).toBe(before.body);
 });
 
@@ -407,7 +407,7 @@ test("navigating away closes the dialog — no diff of file A lands in file B", 
   await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/jorna\.md$/);
 
   // The dialog is gone with its file — it may not stand over another file's
-  // reading view, holding the frozen values (and the mtime) of the one it left.
+  // reading view, holding the frozen values (and the rev) of the one it left.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
@@ -431,7 +431,7 @@ test("navigating away closes the dialog — no diff of file A lands in file B", 
 test("Ort and Kapitel have the form too — campaign file, session and inbox do not", async ({
   page,
 }) => {
-  // The four kinds with typed frontmatter offer it …
+  // The four kinds with typed properties offer it …
   const withForm: [string, string, string][] = [
     ["01-salzhafen/hafen/smuggler-captured.md", "Von den Schmugglern erwischt", "Szene"],
     ["npcs/fenn.md", "Fenn", "NPC"],
@@ -449,7 +449,7 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
   }
 
   // … the app-managed and append-only files do not (ADR #4), and neither does
-  // the glossary, which has no typed frontmatter to offer. Asserted only after
+  // the glossary, which has no typed properties to offer. Asserted only after
   // the content is on screen, so this cannot pass on a still-loading page.
   const withoutForm: [string, string][] = [
     ["sessions/2026-01-15.md", "Spuren gefunden"],
@@ -463,7 +463,7 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
   }
 
   // The campaign file keeps its ONE dialog (issue #34): its name/description
-  // ARE its frontmatter, so a second form next to it would be two ways to
+  // ARE its properties, so a second form next to it would be two ways to
   // write the same two keys.
   await page.goto("/beispiel/file/_campaign.md");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
@@ -504,7 +504,7 @@ test.describe("at 390px", () => {
 
     await expect.poll(() => api.raw(SCENE)).toContain(`title: ${title}`);
     const after = await split(api, SCENE);
-    expect(after.frontmatter).toContain("status: ready");
+    expect(after.properties).toContain("status: ready");
     expect(after.body).toBe(before.body);
   });
 });

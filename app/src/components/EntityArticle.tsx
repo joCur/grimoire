@@ -11,7 +11,7 @@ import type { FileResponse } from "@grimoire/shared/types";
 import type { ReactNode } from "react";
 
 import { entityHeaderKind, npcStatusLabel } from "@/lib/entity";
-import { fmQuickstats, fmString } from "@/lib/frontmatter";
+import { fmQuickstats, fmString } from "@/lib/properties";
 import { sessionDateLabel } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/markdown/Markdown";
@@ -67,7 +67,7 @@ export function EntityArticle({
   body?: ReactNode;
 }) {
   const header = entityHeaderKind(file.kind);
-  const fm = file.frontmatter;
+  const fm = file.properties;
   // npc/location files carry `name`, chapter/campaign files `title` — either
   // may be missing (degrade), then the path is the honest fallback.
   // A SESSION has no `title` and its id is opaque noise since issue #58, so
@@ -103,7 +103,7 @@ function NpcHeader({
   name: string;
   actions?: ReactNode;
 }) {
-  const fm = file.frontmatter;
+  const fm = file.properties;
   const role = fmString(fm.role);
   const status = fmString(fm.status);
   const voice = fmString(fm.voice);
@@ -161,7 +161,7 @@ function LocationHeader({
   name: string;
   actions?: ReactNode;
 }) {
-  const page = fmString(file.frontmatter["roll20-page"]);
+  const page = fmString(file.properties["roll20-page"]);
   return (
     <header className="mb-7 border-b border-border pb-5">
       <div className="flex flex-wrap items-start justify-between gap-3">

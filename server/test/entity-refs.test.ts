@@ -33,10 +33,10 @@ afterEach(() => {
   dropStore();
 });
 
-async function readFile(rel: string): Promise<{ mtimeMs: number; body: string }> {
+async function readFile(rel: string): Promise<{ rev: number; body: string }> {
   const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as { mtimeMs: number; body: string };
+  return (await res.json()) as { rev: number; body: string };
 }
 
 async function writeBody(rel: string, body: string): Promise<void> {
@@ -44,17 +44,17 @@ async function writeBody(rel: string, body: string): Promise<void> {
   const res = await app.request("/api/beispiel/file", {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: rel, mtimeMs: file.mtimeMs, body }),
+    body: JSON.stringify({ path: rel, rev: file.rev, body }),
   });
   expect(res.status).toBe(200);
 }
 
 async function patch(rel: string, p: Record<string, unknown>): Promise<void> {
   const file = await readFile(rel);
-  const res = await app.request("/api/beispiel/frontmatter", {
+  const res = await app.request("/api/beispiel/properties", {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: rel, mtimeMs: file.mtimeMs, patch: p }),
+    body: JSON.stringify({ path: rel, rev: file.rev, patch: p }),
   });
   expect(res.status).toBe(200);
 }

@@ -13,16 +13,16 @@
 // consequence is "the session can be ended normally" instead of a zombie file
 // that is neither active nor endable.
 
-/** True when a frontmatter `ended` value marks the session as finished. */
+/** True when a properties `ended` value marks the session as finished. */
 export function isEndedValue(value: unknown): boolean {
   if (value === undefined || value === null) return false;
   if (typeof value === "string") return value.trim() !== "";
   return true; // a YAML date or any other non-empty scalar
 }
 
-/** True when this session file's frontmatter marks the session as finished. */
-export function isEnded(frontmatter: Record<string, unknown> | undefined): boolean {
-  return frontmatter !== undefined && isEndedValue(frontmatter.ended);
+/** True when this session file's properties marks the session as finished. */
+export function isEnded(properties: Record<string, unknown> | undefined): boolean {
+  return properties !== undefined && isEndedValue(properties.ended);
 }
 
 /**
@@ -54,7 +54,7 @@ function isTimestampish(value: unknown): value is string {
 }
 
 /**
- * The USABLE `pauses` entries of a session's frontmatter, in file order —
+ * The USABLE `pauses` entries of a session's properties, in file order —
  * shared so the server's runtime arithmetic and the client's fallback read
  * the same list out of the same hand-editable field.
  *
@@ -67,8 +67,8 @@ function isTimestampish(value: unknown): value is string {
  *     well: treating it as an OPEN interval would stop the session clock
  *     forever on a typo, which is worse than ignoring a broken pause.
  */
-export function sessionPauses(frontmatter: Record<string, unknown> | undefined): SessionPause[] {
-  const raw = frontmatter?.pauses;
+export function sessionPauses(properties: Record<string, unknown> | undefined): SessionPause[] {
+  const raw = properties?.pauses;
   if (raw === undefined || raw === null) return [];
   const list = Array.isArray(raw) ? raw : [raw];
   const out: SessionPause[] = [];
@@ -88,22 +88,22 @@ export function sessionPauses(frontmatter: Record<string, unknown> | undefined):
 
 /** The open (still running) pause of a session, if any — the LAST one wins. */
 export function openPause(
-  frontmatter: Record<string, unknown> | undefined,
+  properties: Record<string, unknown> | undefined,
 ): SessionPause | undefined {
-  const open = sessionPauses(frontmatter).filter((p) => p.to === undefined);
+  const open = sessionPauses(properties).filter((p) => p.to === undefined);
   return open[open.length - 1];
 }
 
 /** True while the session is paused (an open `pauses` interval, AK8). */
-export function isPaused(frontmatter: Record<string, unknown> | undefined): boolean {
-  return openPause(frontmatter) !== undefined;
+export function isPaused(properties: Record<string, unknown> | undefined): boolean {
+  return openPause(properties) !== undefined;
 }
 
 export function isSessionEmpty(
-  frontmatter: Record<string, unknown> | undefined,
+  properties: Record<string, unknown> | undefined,
   body: string,
 ): boolean {
-  const played = frontmatter?.scenes_played;
+  const played = properties?.scenes_played;
   if (Array.isArray(played) ? played.length > 0 : played !== undefined && played !== null) {
     return false;
   }

@@ -280,7 +280,7 @@ test("editing the campaign metadata updates header, switcher and the file", asyn
     page.getByRole("button", { name: "Kampagne: Salzhafen, zweite Fassung" }),
   ).toBeVisible();
 
-  // On disk: the frontmatter changed, the body did not.
+  // On disk: the properties changed, the body did not.
   const raw = await api.raw("_campaign.md");
   expect(raw).toContain("name: Salzhafen, zweite Fassung");
   expect(raw).toContain("description: Jetzt mit mehr Schmuggel und weniger Möwen.");
@@ -295,8 +295,8 @@ test.describe("imported without a _campaign.md", () => {
     page,
     api,
   }) => {
-    // Before the cutover this was the one gap PATCH /frontmatter could not
-    // close (no file, hence no mtime) and the dialog offered to CREATE the
+    // Before the cutover this was the one gap PATCH /properties could not
+    // close (no file, hence no rev) and the dialog offered to CREATE the
     // file. Since issue #57 the import gives every campaign directory a row,
     // whose name falls back to the id — so there is nothing to create, and the
     // ordinary patch path covers this case too.
@@ -304,7 +304,7 @@ test.describe("imported without a _campaign.md", () => {
     // Without metadata the header degrades to the directory name.
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("beispiel");
     const imported = await api.file("_campaign.md");
-    expect(imported.frontmatter).toEqual({ id: "beispiel", name: "beispiel" });
+    expect(imported.properties).toEqual({ id: "beispiel", name: "beispiel" });
     expect(imported.body).toBe("");
 
     await page.getByRole("button", { name: "Bearbeiten" }).click();

@@ -9,25 +9,25 @@ import type { CampaignTree, EntityKind, FileResponse } from "@grimoire/shared/ty
 
 import { ApiError } from "@/api";
 import {
-  canSubmitFrontmatter,
+  canSubmitProperties,
   commitPendingText,
-  frontmatterFieldsFor,
-  frontmatterFormIssues,
-  frontmatterFormValues,
-  frontmatterKindLabel,
-  frontmatterPatch,
-  hasFrontmatterChanges,
+  propertiesFieldsFor,
+  propertiesFormIssues,
+  propertiesFormValues,
+  propertiesKindLabel,
+  propertiesPatch,
+  hasPropertiesChanges,
   referenceLabel,
   referenceOptions,
   selectOptions,
-  writeFrontmatterForm,
+  writePropertiesForm,
   type FormValues,
-  type FrontmatterField,
-} from "./frontmatter-form";
+  type PropertiesField,
+} from "./properties-form";
 
 /** The fields of a kind, or [] — every test starts from the real list. */
-function fields(kind: EntityKind): readonly FrontmatterField[] {
-  return frontmatterFieldsFor(kind) ?? [];
+function fields(kind: EntityKind): readonly PropertiesField[] {
+  return propertiesFieldsFor(kind) ?? [];
 }
 
 function keys(kind: EntityKind): string[] {
@@ -61,8 +61,8 @@ const NPC_FM: Record<string, unknown> = {
   appearance: "salzverkrustete Lederjacke",
 };
 
-describe("frontmatterFieldsFor", () => {
-  test("the scene fields are SceneFrontmatter without the id", () => {
+describe("propertiesFieldsFor", () => {
+  test("the scene fields are SceneProperties without the id", () => {
     expect(keys("scene")).toEqual([
       "title",
       "type",
@@ -100,8 +100,8 @@ describe("frontmatterFieldsFor", () => {
 
   test("the kinds without a typed form get no form at all", () => {
     for (const kind of ["campaign", "session", "inbox", "glossary", "unknown"] as const) {
-      expect(frontmatterFieldsFor(kind)).toBe(undefined);
-      expect(frontmatterKindLabel(kind)).toBe(undefined);
+      expect(propertiesFieldsFor(kind)).toBe(undefined);
+      expect(propertiesKindLabel(kind)).toBe(undefined);
     }
   });
 
@@ -122,9 +122,9 @@ describe("frontmatterFieldsFor", () => {
   });
 });
 
-describe("frontmatterFormValues", () => {
+describe("propertiesFormValues", () => {
   test("a scene starts with exactly what stands in the file", () => {
-    expect(frontmatterFormValues(fields("scene"), SCENE_FM)).toEqual({
+    expect(propertiesFormValues(fields("scene"), SCENE_FM)).toEqual({
       title: { kind: "text", text: "Von den Schmugglern erwischt" },
       type: { kind: "text", text: "contingency" },
       trigger: {
@@ -141,7 +141,7 @@ describe("frontmatterFormValues", () => {
   });
 
   test("quickstats become editable key/value rows, numbers as their text", () => {
-    const values = frontmatterFormValues(fields("npc"), NPC_FM);
+    const values = propertiesFormValues(fields("npc"), NPC_FM);
     expect(values.quickstats).toEqual({
       kind: "pairs",
       entries: [
@@ -153,7 +153,7 @@ describe("frontmatterFormValues", () => {
   });
 
   test("missing keys are empty fields, odd values degrade instead of throwing", () => {
-    const values = frontmatterFormValues(fields("location"), {
+    const values = propertiesFormValues(fields("location"), {
       id: "leuchtturm",
       name: "Leuchtturm",
       "roll20-page": 12,
@@ -164,39 +164,39 @@ describe("frontmatterFormValues", () => {
   });
 });
 
-describe("frontmatterPatch", () => {
+describe("propertiesPatch", () => {
   const sceneFields = fields("scene");
   const npcFields = fields("npc");
 
   /** The values of a file, with single fields overridden. */
   function edited(
-    fieldList: readonly FrontmatterField[],
-    frontmatter: Record<string, unknown>,
+    fieldList: readonly PropertiesField[],
+    properties: Record<string, unknown>,
     changes: FormValues,
   ): { initial: FormValues; current: FormValues } {
-    const initial = frontmatterFormValues(fieldList, frontmatter);
+    const initial = propertiesFormValues(fieldList, properties);
     return { initial, current: { ...initial, ...changes } };
   }
 
   test("an untouched form patches nothing at all", () => {
-    const initial = frontmatterFormValues(sceneFields, SCENE_FM);
-    expect(frontmatterPatch(sceneFields, initial, initial)).toEqual({});
+    const initial = propertiesFormValues(sceneFields, SCENE_FM);
+    expect(propertiesPatch(sceneFields, initial, initial)).toEqual({});
     // `handouts: []` stays exactly that — an empty list is not a change.
-    expect(frontmatterPatch(sceneFields, initial, { ...initial })).toEqual({});
+    expect(propertiesPatch(sceneFields, initial, { ...initial })).toEqual({});
   });
 
   test("only the changed field is sent (everything else survives on disk)", () => {
     const { initial, current } = edited(sceneFields, SCENE_FM, {
       status: { kind: "text", text: "played" },
     });
-    expect(frontmatterPatch(sceneFields, initial, current)).toEqual({ status: "played" });
+    expect(propertiesPatch(sceneFields, initial, current)).toEqual({ status: "played" });
   });
 
-  test("unknown frontmatter keys are never part of the patch", () => {
+  test("unknown properties keys are never part of the patch", () => {
     const withExtras = { ...SCENE_FM, "prep-time": "20min", weather: ["Regen"] };
-    const initial = frontmatterFormValues(sceneFields, withExtras);
+    const initial = propertiesFormValues(sceneFields, withExtras);
     const current = { ...initial, title: { kind: "text" as const, text: "Neuer Titel" } };
-    const patch = frontmatterPatch(sceneFields, initial, current);
+    const patch = propertiesPatch(sceneFields, initial, current);
     expect(patch).toEqual({ title: "Neuer Titel" });
     expect(Object.keys(patch)).not.toContain("prep-time");
     expect(Object.keys(patch)).not.toContain("weather");
@@ -207,7 +207,7 @@ describe("frontmatterPatch", () => {
       title: { kind: "text", text: "  Von den Schmugglern erwischt  " },
       tags: { kind: "list", items: ["social ", " escape"] },
     });
-    expect(frontmatterPatch(sceneFields, initial, current)).toEqual({});
+    expect(propertiesPatch(sceneFields, initial, current)).toEqual({});
   });
 
   test("clearing a field DELETES the key — text, list and pairs alike", () => {
@@ -215,19 +215,19 @@ describe("frontmatterPatch", () => {
       trigger: { kind: "text", text: "   " },
       tags: { kind: "list", items: [] },
     });
-    expect(frontmatterPatch(sceneFields, scene.initial, scene.current)).toEqual({
+    expect(propertiesPatch(sceneFields, scene.initial, scene.current)).toEqual({
       trigger: null,
       tags: null,
     });
     const npc = edited(npcFields, NPC_FM, { quickstats: { kind: "pairs", entries: [] } });
-    expect(frontmatterPatch(npcFields, npc.initial, npc.current)).toEqual({ quickstats: null });
+    expect(propertiesPatch(npcFields, npc.initial, npc.current)).toEqual({ quickstats: null });
   });
 
   test("a list keeps its order and drops blank entries", () => {
     const { initial, current } = edited(sceneFields, SCENE_FM, {
       npcs: { kind: "list", items: ["jorna", "  ", "fenn"] },
     });
-    expect(frontmatterPatch(sceneFields, initial, current)).toEqual({ npcs: ["jorna", "fenn"] });
+    expect(propertiesPatch(sceneFields, initial, current)).toEqual({ npcs: ["jorna", "fenn"] });
   });
 
   test("an unknown reference id is saved verbatim (the file may follow later)", () => {
@@ -235,7 +235,7 @@ describe("frontmatterPatch", () => {
       location: { kind: "text", text: "nordbucht" },
       npcs: { kind: "list", items: ["fenn", "kapitaen-torv"] },
     });
-    expect(frontmatterPatch(sceneFields, initial, current)).toEqual({
+    expect(propertiesPatch(sceneFields, initial, current)).toEqual({
       location: "nordbucht",
       npcs: ["fenn", "kapitaen-torv"],
     });
@@ -249,13 +249,13 @@ describe("frontmatterPatch", () => {
           { key: "wis", value: "3" },
           { key: "insight", value: "+2" },
           // A row that cannot be written (no name). It is not IN the patch —
-          // and it never gets there, because frontmatterFormIssues blocks the
+          // and it never gets there, because propertiesFormIssues blocks the
           // save while it stands (see „unfinished quickstat rows" below).
           { key: "", value: "wird nicht geschrieben" },
         ],
       },
     });
-    expect(frontmatterPatch(npcFields, initial, current)).toEqual({
+    expect(propertiesPatch(npcFields, initial, current)).toEqual({
       quickstats: { wis: 3, insight: "+2" },
     });
   });
@@ -271,7 +271,7 @@ describe("frontmatterPatch", () => {
         ],
       },
     });
-    expect(frontmatterPatch(npcFields, initial, current)).toEqual({
+    expect(propertiesPatch(npcFields, initial, current)).toEqual({
       quickstats: { wis: 2, "passive-perception": 13 },
     });
   });
@@ -287,7 +287,7 @@ describe("frontmatterPatch", () => {
         ],
       },
     });
-    expect(frontmatterPatch(npcFields, initial, current)).toEqual({ quickstats: null });
+    expect(propertiesPatch(npcFields, initial, current)).toEqual({ quickstats: null });
   });
 
   test("an unknown status value survives an edit of another field (degrade)", () => {
@@ -295,22 +295,22 @@ describe("frontmatterPatch", () => {
     const { initial, current } = edited(sceneFields, odd, {
       title: { kind: "text", text: "Anderer Titel" },
     });
-    expect(frontmatterPatch(sceneFields, initial, current)).toEqual({ title: "Anderer Titel" });
+    expect(propertiesPatch(sceneFields, initial, current)).toEqual({ title: "Anderer Titel" });
   });
 });
 
-describe("canSubmitFrontmatter", () => {
+describe("canSubmitProperties", () => {
   test("a blank title/name is not a save", () => {
     const sceneFields = fields("scene");
-    const values = frontmatterFormValues(sceneFields, SCENE_FM);
-    expect(canSubmitFrontmatter(sceneFields, values)).toBe(true);
+    const values = propertiesFormValues(sceneFields, SCENE_FM);
+    expect(canSubmitProperties(sceneFields, values)).toBe(true);
     expect(
-      canSubmitFrontmatter(sceneFields, { ...values, title: { kind: "text", text: "  " } }),
+      canSubmitProperties(sceneFields, { ...values, title: { kind: "text", text: "  " } }),
     ).toBe(false);
     const npcFields = fields("npc");
     expect(
-      canSubmitFrontmatter(npcFields, {
-        ...frontmatterFormValues(npcFields, NPC_FM),
+      canSubmitProperties(npcFields, {
+        ...propertiesFormValues(npcFields, NPC_FM),
         name: { kind: "text", text: "" },
       }),
     ).toBe(false);
@@ -319,18 +319,18 @@ describe("canSubmitFrontmatter", () => {
 
 describe("unfinished quickstat rows block the save", () => {
   const npcFields = fields("npc");
-  const values = frontmatterFormValues(npcFields, NPC_FM);
+  const values = propertiesFormValues(npcFields, NPC_FM);
   const withStats = (entries: { key: string; value: string }[]): FormValues => ({
     ...values,
     quickstats: { kind: "pairs", entries },
   });
 
   test("a file's own rows are fine — nothing to complain about", () => {
-    expect(frontmatterFormIssues(npcFields, values)).toEqual({});
+    expect(propertiesFormIssues(npcFields, values)).toEqual({});
     // An empty row (the „Zeile hinzufügen" state) and a name whose value was
     // cleared (= delete this key) are both legitimate.
     expect(
-      frontmatterFormIssues(
+      propertiesFormIssues(
         npcFields,
         withStats([
           { key: "insight", value: "2" },
@@ -342,7 +342,7 @@ describe("unfinished quickstat rows block the save", () => {
   });
 
   test("a value without a name is named out loud instead of being dropped", () => {
-    const issues = frontmatterFormIssues(
+    const issues = propertiesFormIssues(
       npcFields,
       withStats([
         { key: "insight", value: "2" },
@@ -353,7 +353,7 @@ describe("unfinished quickstat rows block the save", () => {
   });
 
   test("the same name twice is refused — YAML would swallow the first value", () => {
-    const issues = frontmatterFormIssues(
+    const issues = propertiesFormIssues(
       npcFields,
       withStats([
         { key: "insight", value: "2" },
@@ -365,9 +365,9 @@ describe("unfinished quickstat rows block the save", () => {
     );
   });
 
-  test("a scene's own frontmatter is fine as it stands", () => {
+  test("a scene's own properties is fine as it stands", () => {
     const sceneFields = fields("scene");
-    expect(frontmatterFormIssues(sceneFields, frontmatterFormValues(sceneFields, SCENE_FM))).toEqual(
+    expect(propertiesFormIssues(sceneFields, propertiesFormValues(sceneFields, SCENE_FM))).toEqual(
       {},
     );
   });
@@ -375,7 +375,7 @@ describe("unfinished quickstat rows block the save", () => {
 
 describe("the npcs list holds ids, not names (#70 audit)", () => {
   const sceneFields = fields("scene");
-  const initial = frontmatterFormValues(sceneFields, SCENE_FM);
+  const initial = propertiesFormValues(sceneFields, SCENE_FM);
   const withNpcs = (items: string[]): FormValues => ({
     ...initial,
     npcs: { kind: "list", items },
@@ -384,36 +384,36 @@ describe("the npcs list holds ids, not names (#70 audit)", () => {
   test("a new free-text entry blocks the save and says the rule", () => {
     // The server refuses it with a 400 — saying it here makes that a line
     // under the field instead of a failed save.
-    const issues = frontmatterFormIssues(sceneFields, withNpcs(["fenn", "Alte Fischerin"]), initial);
+    const issues = propertiesFormIssues(sceneFields, withNpcs(["fenn", "Alte Fischerin"]), initial);
     expect(issues.npcs).toBe(
       '„Alte Fischerin" ist keine id — nur Kleinbuchstaben, Ziffern und Bindestriche.',
     );
   });
 
   test("ids are fine, known or not — an unknown one is created on save", () => {
-    expect(frontmatterFormIssues(sceneFields, withNpcs(["fenn", "holm"]), initial)).toEqual({});
+    expect(propertiesFormIssues(sceneFields, withNpcs(["fenn", "holm"]), initial)).toEqual({});
   });
 
   test("free text the FILE already carries is exempt — such a scene stays savable", () => {
     // A campaign migrated from the file era can hold anything in that list
     // (no foreign keys, schema.ts rule 1), and an unrelated save re-sends it.
     const stored = withNpcs(["fenn", "Alte Fischerin"]);
-    expect(frontmatterFormIssues(sceneFields, stored, stored)).toEqual({});
+    expect(propertiesFormIssues(sceneFields, stored, stored)).toEqual({});
     // …and an untouched form with such a value is not "dirty" either.
-    expect(hasFrontmatterChanges(sceneFields, stored, stored)).toBe(false);
+    expect(hasPropertiesChanges(sceneFields, stored, stored)).toBe(false);
   });
 });
 
-describe("hasFrontmatterChanges", () => {
+describe("hasPropertiesChanges", () => {
   const sceneFields = fields("scene");
   const npcFields = fields("npc");
-  const initial = frontmatterFormValues(sceneFields, SCENE_FM);
+  const initial = propertiesFormValues(sceneFields, SCENE_FM);
 
   test("an untouched form has nothing to discard", () => {
-    expect(hasFrontmatterChanges(sceneFields, initial, initial)).toBe(false);
+    expect(hasPropertiesChanges(sceneFields, initial, initial)).toBe(false);
     // Whitespace is not work either (same rule the patch uses).
     expect(
-      hasFrontmatterChanges(sceneFields, initial, {
+      hasPropertiesChanges(sceneFields, initial, {
         ...initial,
         title: { kind: "text", text: `  ${SCENE_FM.title as string}  ` },
       }),
@@ -422,34 +422,34 @@ describe("hasFrontmatterChanges", () => {
 
   test("a changed field is work — and so is an unfinished quickstat row", () => {
     expect(
-      hasFrontmatterChanges(sceneFields, initial, {
+      hasPropertiesChanges(sceneFields, initial, {
         ...initial,
         status: { kind: "text", text: "played" },
       }),
     ).toBe(true);
     // The invalid row produces no patch at all, so the guard has to ask the
     // issues as well — otherwise Esc would throw it away silently.
-    const npcInitial = frontmatterFormValues(npcFields, NPC_FM);
+    const npcInitial = propertiesFormValues(npcFields, NPC_FM);
     const stats = npcInitial.quickstats;
     if (stats?.kind !== "pairs") throw new Error("quickstats is not a pairs field");
     const nameless: FormValues = {
       ...npcInitial,
       quickstats: { kind: "pairs", entries: [...stats.entries, { key: "", value: "+1" }] },
     };
-    expect(frontmatterPatch(npcFields, npcInitial, nameless)).toEqual({});
-    expect(hasFrontmatterChanges(npcFields, npcInitial, nameless)).toBe(true);
+    expect(propertiesPatch(npcFields, npcInitial, nameless)).toEqual({});
+    expect(hasPropertiesChanges(npcFields, npcInitial, nameless)).toBe(true);
   });
 });
 
 describe("commitPendingText", () => {
   const sceneFields = fields("scene");
-  const values = frontmatterFormValues(sceneFields, SCENE_FM);
+  const values = propertiesFormValues(sceneFields, SCENE_FM);
 
   test("text still standing in a chip input is folded into its list", () => {
     const committed = commitPendingText(sceneFields, values, { tags: "combat" });
     expect(committed.tags).toEqual({ kind: "list", items: ["social", "escape", "combat"] });
     // …and the patch sees it, so „Speichern" straight after typing works.
-    expect(frontmatterPatch(sceneFields, values, committed)).toEqual({
+    expect(propertiesPatch(sceneFields, values, committed)).toEqual({
       tags: ["social", "escape", "combat"],
     });
   });
@@ -573,42 +573,42 @@ function answer(
 const FILE: FileResponse = {
   path: "npcs/fenn.md",
   kind: "npc",
-  frontmatter: NPC_FM,
+  properties: NPC_FM,
   body: "",
-  mtimeMs: 42,
+  rev: 42,
   raw: "",
 };
 
-describe("writeFrontmatterForm", () => {
-  test("PATCHes the file with the mtime the dialog was seeded with", async () => {
+describe("writePropertiesForm", () => {
+  test("PATCHes the file with the rev the dialog was seeded with", async () => {
     const calls = answer({ status: 200, body: FILE });
-    const result = await writeFrontmatterForm("beispiel", "npcs/fenn.md", 42, { role: "Kundschafter" });
+    const result = await writePropertiesForm("beispiel", "npcs/fenn.md", 42, { role: "Kundschafter" });
     expect(result).toEqual({ ok: true, file: FILE });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("PATCH");
-    expect(calls[0]?.url).toBe("/api/beispiel/frontmatter");
+    expect(calls[0]?.url).toBe("/api/beispiel/properties");
     expect(calls[0]?.body).toEqual({
       path: "npcs/fenn.md",
-      mtimeMs: 42,
+      rev: 42,
       patch: { role: "Kundschafter" },
     });
   });
 
   test("409 means nothing was written; the file is re-read for the next attempt", async () => {
     const calls = answer(
-      { status: 409, body: { error: "file changed on disk", mtimeMs: 99 } },
-      { status: 200, body: { ...FILE, mtimeMs: 99 } },
+      { status: 409, body: { error: "file changed on disk", rev: 99 } },
+      { status: 200, body: { ...FILE, rev: 99 } },
     );
-    const result = await writeFrontmatterForm("beispiel", "npcs/fenn.md", 42, { role: "X" });
+    const result = await writePropertiesForm("beispiel", "npcs/fenn.md", 42, { role: "X" });
     expect(result.ok).toBe(false);
-    expect(result.file?.mtimeMs).toBe(99);
+    expect(result.file?.rev).toBe(99);
     expect(calls[1]?.method).toBe("GET");
     expect(calls[1]?.url).toBe("/api/beispiel/file?path=npcs%2Ffenn.md");
   });
 
   test("a failed reload after the conflict keeps the conflict, not a crash", async () => {
     answer({ status: 409, body: { error: "file changed on disk" } });
-    expect(await writeFrontmatterForm("beispiel", "npcs/fenn.md", 42, { role: "X" })).toEqual({
+    expect(await writePropertiesForm("beispiel", "npcs/fenn.md", 42, { role: "X" })).toEqual({
       ok: false,
     });
   });
@@ -616,7 +616,7 @@ describe("writeFrontmatterForm", () => {
   test("every other failure throws (the dialog shows the error line)", async () => {
     answer({ status: 500, body: { error: "boom" } });
     await expect(
-      writeFrontmatterForm("beispiel", "npcs/fenn.md", 42, { role: "X" }),
+      writePropertiesForm("beispiel", "npcs/fenn.md", 42, { role: "X" }),
     ).rejects.toBeInstanceOf(ApiError);
   });
 });

@@ -32,7 +32,7 @@ describe("isEndedValue", () => {
 });
 
 describe("isEnded", () => {
-  test("reads the `ended` key of a session frontmatter", () => {
+  test("reads the `ended` key of a session properties", () => {
     expect(isEnded({ started: "2026-08-19T21:05" })).toBe(false);
     expect(isEnded({ ended: "" })).toBe(false);
     expect(isEnded({ ended: "2026-08-19T23:45" })).toBe(true);

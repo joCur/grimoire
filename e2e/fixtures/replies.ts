@@ -5,7 +5,7 @@
 // are written to pass the CURRENT mechanical validation of
 // server/src/generator.ts:
 //
-//   scenes         path inside the target chapter, parseable frontmatter,
+//   scenes         path inside the target chapter, parseable properties,
 //                  type planned|contingency, status draft, only known
 //                  callouts, npc/location references either existing in the
 //                  campaign or shipped as a stub in the same reply
@@ -13,7 +13,7 @@
 //                  says otherwise)
 //   location_stubs locations/<kebab-id>.md WITHOUT any status (locations have
 //                  none — issue #27)
-//   npc run        npcs/<kebab-id>.md, frontmatter id == file name, no
+//   npc run        npcs/<kebab-id>.md, properties id == file name, no
 //                  `chapter`, quickstats values QUOTED ("+2" — YAML would eat
 //                  the plus otherwise), `## Weiß` only [!secret],
 //                  `## Beziehungen` only npc ids that exist, `## Notizen`

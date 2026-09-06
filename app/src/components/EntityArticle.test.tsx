@@ -10,10 +10,10 @@ import { EntityArticle } from "./EntityArticle";
 
 function file(
   kind: EntityKind,
-  frontmatter: Record<string, unknown>,
+  properties: Record<string, unknown>,
   body = "",
 ): FileResponse {
-  return { path: `npcs/x.md`, kind, frontmatter, body, mtimeMs: 1, raw: "" };
+  return { path: `npcs/x.md`, kind, properties, body, rev: 1, raw: "" };
 }
 
 function render(f: FileResponse): string {

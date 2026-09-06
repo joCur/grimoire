@@ -18,7 +18,7 @@ export class ApiError extends Error {
    * The server's JSON error body when there was one — the endpoints answer
    * `{ error, … }` and put the interesting parts next to it (`conflicts` on
    * 409, `validationErrors`/`rawReply`/`usage` on the generator's 422,
-   * `mtimeMs` on a frontmatter conflict).
+   * `rev` on a properties conflict).
    */
   readonly details: Record<string, unknown>;
 
@@ -132,18 +132,18 @@ export function putGlossary(
 // --- write endpoints (session/log, issue #9) --------------------------------
 
 /**
- * Set/delete frontmatter keys of one file (issue #5 endpoint, used by the
+ * Set/delete properties keys of one file (issue #5 endpoint, used by the
  * scene-status control of issue #28). `patch` is flat: a value sets the key,
- * `null` deletes it. `mtimeMs` is the optimistic-concurrency token and must be
+ * `null` deletes it. `rev` is the optimistic-concurrency token and must be
  * the one from the FileResponse the UI is showing — when the file changed on
- * disk since, the server answers 409 with the current `mtimeMs` in
+ * disk since, the server answers 409 with the current `rev` in
  * `ApiError.details` and writes nothing.
  */
-export async function patchFrontmatter(
+export async function patchProperties(
   campaign: string,
-  input: { path: string; mtimeMs: number; patch: Record<string, unknown> },
+  input: { path: string; rev: number; patch: Record<string, unknown> },
 ): Promise<FileResponse> {
-  const path = `/${encodeURIComponent(campaign)}/frontmatter`;
+  const path = `/${encodeURIComponent(campaign)}/properties`;
   const response = await fetch(`/api${path}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
@@ -154,24 +154,24 @@ export async function patchFrontmatter(
 }
 
 /**
- * Replace the markdown BODY of one file, frontmatter untouched (issue #15 —
+ * Replace the markdown BODY of one file, properties untouched (issue #15 —
  * the reading view's edit mode). `body` is what GET /file hands out: the file
- * without its frontmatter block. `mtimeMs` is the same optimistic-concurrency
+ * without its properties block. `rev` is the same optimistic-concurrency
  * token as above and must come from the FileResponse the editor was seeded
- * from — on a mismatch the server answers 409 with the current `mtimeMs` in
+ * from — on a mismatch the server answers 409 with the current `rev` in
  * `ApiError.details` and writes nothing.
  */
 export async function putFileBody(
   campaign: string,
   path: string,
   body: string,
-  mtimeMs: number,
+  rev: number,
 ): Promise<FileResponse> {
   const url = `/${encodeURIComponent(campaign)}/file`;
   const response = await fetch(`/api${url}`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path, mtimeMs, body }),
+    body: JSON.stringify({ path, rev, body }),
   });
   if (!response.ok) throw await failure(`PUT /api${url}`, response);
   return (await response.json()) as FileResponse;
@@ -426,7 +426,7 @@ export function fetchUsage(
 
 /**
  * Rename an entity id and let the server drag all references along
- * (frontmatter npcs/location/chapter, session scenes_played, `## Beziehungen`
+ * (properties npcs/location/chapter, session scenes_played, `## Beziehungen`
  * entries, log scene markers — prose is deliberately left alone).
  *
  * `dryRun: true` returns the very same plan without writing a byte: same code
@@ -599,7 +599,7 @@ export function applyDrafts(
 /**
  * Write the reviewed NPC draft (issue #21) — the same apply endpoint as the
  * scene drafts: it re-validates server-side (path, id, status, parseable
- * frontmatter), answers 409 with `details.conflicts` when the file already
+ * properties), answers 409 with `details.conflicts` when the file already
  * exists (nothing written), and drops the job the draft came from.
  */
 export function applyNpcDraft(

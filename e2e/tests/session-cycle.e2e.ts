@@ -449,7 +449,7 @@ test.describe("played/dropped scenes in the live nav (issue #73)", () => {
 
     // The status is set through the documented API — the same patch the status
     // control writes (critical path 7), here as the precondition.
-    await api.patchFrontmatter(SEEDED, { status: "played" });
+    await api.patchProperties(SEEDED, { status: "played" });
     await page.reload();
 
     // AK1: it is gone from "Geplant" — the group it now lives in starts
@@ -502,7 +502,7 @@ test.describe("played/dropped scenes in the live nav (issue #73)", () => {
     // Degrade: with EVERY scene played the view stays usable — the planned
     // list says so, the group holds both, and the center column still renders
     // a scene instead of blanking (or crashing on an empty selection).
-    await api.patchFrontmatter(ARRIVAL, { status: "dropped" });
+    await api.patchProperties(ARRIVAL, { status: "dropped" });
     await page.reload();
     await expect(nav).toContainText("Keine geplanten Szenen in diesem Kapitel.");
     await expect(nav.getByRole("button", { name: /^Gespielt/ })).toContainText("(2)");

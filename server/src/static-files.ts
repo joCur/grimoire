@@ -82,9 +82,9 @@ export function resolveStaticPath(distDir: string, pathname: string): string | n
   return abs;
 }
 
-/** Weak validator from size + mtime — enough for `no-cache` revalidation. */
-function etagOf(size: number, mtimeMs: number): string {
-  return `"${size.toString(16)}-${Math.floor(mtimeMs).toString(16)}"`;
+/** Weak validator from size + rev — enough for `no-cache` revalidation. */
+function etagOf(size: number, rev: number): string {
+  return `"${size.toString(16)}-${Math.floor(rev).toString(16)}"`;
 }
 
 /**

@@ -1,4 +1,4 @@
-// Critical path 7: frontmatter patch via the status control, including the
+// Critical path 7: properties patch via the status control, including the
 // 409 conflict; see CLAUDE.md.
 //
 // The patch goes through the documented API with its guard token (CLAUDE.md);

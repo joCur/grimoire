@@ -20,7 +20,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchFile } from "@/api";
 import { EntityCardShell } from "@/components/EntityCardShell";
 import { isEntityId } from "@/lib/entity";
-import { fmQuickstats, fmString } from "@/lib/frontmatter";
+import { fmQuickstats, fmString } from "@/lib/properties";
 import { firstParagraphOfSection } from "@/lib/md-section";
 
 /** Campaign-relative path of an npc file — the reference key is the id. */
@@ -78,7 +78,7 @@ export function NpcCard({
   }
   if (data === undefined) return null;
 
-  const fm = data.frontmatter;
+  const fm = data.properties;
   const name = fmString(fm.name) ?? id;
   const npcId = fmString(fm.id) ?? id;
   const role = fmString(fm.role);

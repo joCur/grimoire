@@ -2,7 +2,7 @@
 //
 // A composer that rewrites a hand-edited file on open is worse than no
 // composer, so the central test is not a unit test at all — it reads EVERY
-// markdown file in examples/, strips the frontmatter exactly the way the app
+// markdown file in examples/, strips the properties exactly the way the app
 // receives it (ParsedFile.body via @grimoire/shared) and demands
 // `serializeBlocks(parseBlocks(body)) === body`, byte for byte. Blank-line
 // runs, `>` styles, wrapping, the trailing newline: nothing may move.
@@ -118,7 +118,7 @@ describe("structure of the reference scenes", () => {
     if (heading?.type !== "heading") throw new Error("expected a heading");
     expect(heading.depth).toBe(2);
     expect(heading.text).toBe("Flow");
-    // gray-matter hands over the blank line after the frontmatter fence.
+    // gray-matter hands over the blank line after the properties fence.
     expect(heading.lead).toBe("\n");
 
     const readaloud = blocks[2];
@@ -414,7 +414,7 @@ describe("an emptied block writes nothing at all", () => {
     const head = blocks[0];
     if (head?.type !== "text") throw new Error("expected a text block");
     const next = blocks.map((block) => (block === head ? withBlockText(head, "") : block));
-    // The blank line after the frontmatter fence is the POSITION's, not the
+    // The blank line after the properties fence is the POSITION's, not the
     // block's — it stays in front of whatever is first now.
     expect(serializeBlocks(next)).toBe("\nB\n");
   });

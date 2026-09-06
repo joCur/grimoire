@@ -261,7 +261,7 @@ describe("a block that would break the file", () => {
     expect(html).toContain("beendet den Falls-Abschnitt");
     // Exactly once — one card owns the problem.
     expect(occurrences(html, "beendet den Falls-Abschnitt")).toBe(1);
-    // …and it is announced, like the frontmatter form's field errors.
+    // …and it is announced, like the properties form's field errors.
     expect(html).toContain('aria-live="polite"');
   });
 

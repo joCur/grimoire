@@ -7,7 +7,7 @@
 //     store.ts). No file is written any more, so the old "the bytes on disk
 //     are X" assertions are re-expressed against the API's own answer — which
 //     is what the app sees and therefore what the contract is about.
-//   * `mtimeMs` IS THE ROW'S `rev` — a small integer that starts at 1 and
+//   * `rev` IS THE ROW VERSION — a small integer that starts at 1 and
 //     grows by one per write, and still a deliberately opaque guard token.
 //     "nothing was written" is now "the rev did not move".
 //   * A SCENE'S PATH SEGMENT IS ITS ID (store/paths.ts), so the reference
@@ -51,7 +51,7 @@ async function fileStatus(rel: string, campaign = "beispiel"): Promise<number> {
 }
 
 async function patchReq(body: unknown): Promise<Response> {
-  return app.request("/api/beispiel/frontmatter", {
+  return app.request("/api/beispiel/properties", {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -64,7 +64,7 @@ async function patchOk(body: unknown): Promise<FileResponse> {
   return (await res.json()) as FileResponse;
 }
 
-/** PATCH /frontmatter of any campaign (patchReq is bound to `beispiel`). */
+/** PATCH /properties of any campaign (patchReq is bound to `beispiel`). */
 async function patchJson(url: string, body: unknown): Promise<Response> {
   return app.request(url, {
     method: "PATCH",
@@ -133,19 +133,19 @@ afterEach(() => {
   dropStore();
 });
 
-describe("PATCH /api/:campaign/frontmatter", () => {
+describe("PATCH /api/:campaign/properties", () => {
   const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
 
   test("happy path: only named keys change, key order stable, body untouched", async () => {
     const before = await getFile(SCENE);
 
-    const after = await patchOk({ path: SCENE, mtimeMs: before.mtimeMs, patch: { status: "played" } });
-    expect(after.frontmatter.status).toBe("played");
+    const after = await patchOk({ path: SCENE, rev: before.rev, patch: { status: "played" } });
+    expect(after.properties.status).toBe("played");
 
     // Key order: the contract order of the kind, nothing added or removed.
     // In the file tree this was "the file's own order"; the columns produce it
     // now (store/render.ts rule 1), which is the same order the fixture had.
-    expect(Object.keys(after.frontmatter)).toEqual([
+    expect(Object.keys(after.properties)).toEqual([
       "id",
       "title",
       "type",
@@ -156,30 +156,30 @@ describe("PATCH /api/:campaign/frontmatter", () => {
       "tags",
       "status",
     ]);
-    expect(after.frontmatter.id).toBe("lighthouse-arrival");
-    expect(after.frontmatter.npcs).toEqual(["jorna"]);
+    expect(after.properties.id).toBe("lighthouse-arrival");
+    expect(after.properties.npcs).toEqual(["jorna"]);
     // The body is not a patch's business — unchanged, character for character.
     expect(after.body).toBe(before.body);
     expect(after.raw).toBe(before.raw.replace("status: ready", "status: played"));
     // Fresh guard token (exactly one write) and a subsequent GET sees both.
-    expect(after.mtimeMs).toBe(before.mtimeMs + 1);
+    expect(after.rev).toBe(before.rev + 1);
     const again = await getFile(SCENE);
-    expect(again.frontmatter.status).toBe("played");
-    expect(again.mtimeMs).toBe(after.mtimeMs);
+    expect(again.properties.status).toBe("played");
+    expect(again.rev).toBe(after.rev);
   });
 
   test("new keys are appended after the existing ones", async () => {
     const before = await getFile(SCENE);
     const after = await patchOk({
       path: SCENE,
-      mtimeMs: before.mtimeMs,
+      rev: before.rev,
       patch: { review_note: "nochmal lesen" },
     });
     // A key the schema has no column for is preserved in `extra` and rendered
     // AFTER the contract keys — the successor of "appended to the block".
-    const keys = Object.keys(after.frontmatter);
+    const keys = Object.keys(after.properties);
     expect(keys[keys.length - 1]).toBe("review_note");
-    expect(after.frontmatter.review_note).toBe("nochmal lesen");
+    expect(after.properties.review_note).toBe("nochmal lesen");
     expect(after.raw).toContain("review_note: nochmal lesen\n");
   });
 
@@ -189,18 +189,18 @@ describe("PATCH /api/:campaign/frontmatter", () => {
     // key to delete has to be created here rather than inherited.
     const withKey = await patchOk({
       path: SCENE,
-      mtimeMs: before.mtimeMs,
+      rev: before.rev,
       patch: { review_note: "nochmal lesen" },
     });
     const after = await patchOk({
       path: SCENE,
-      mtimeMs: withKey.mtimeMs,
+      rev: withKey.rev,
       patch: { review_note: null },
     });
-    expect(Object.keys(after.frontmatter)).not.toContain("review_note");
+    expect(Object.keys(after.properties)).not.toContain("review_note");
     expect(after.raw).not.toContain("review_note");
     // …and nothing else moved: this is the untouched fixture again.
-    expect(after.frontmatter).toEqual(before.frontmatter);
+    expect(after.properties).toEqual(before.properties);
     expect(after.body).toBe(before.body);
   });
 
@@ -208,35 +208,35 @@ describe("PATCH /api/:campaign/frontmatter", () => {
     // Replaces the old "a file without `id` on disk does not gain one": in the
     // database the id IS the primary key, always present and never patchable,
     // so the degrade case it guarded cannot exist. What CAN happen is a form
-    // sending the whole frontmatter back, `id` included — and that must not
+    // sending the whole properties back, `id` included — and that must not
     // orphan every reference to the entity (issues #29/#30).
     const before = await getFile(SCENE);
-    const res = await patchReq({ path: SCENE, mtimeMs: before.mtimeMs, patch: { id: "neu" } });
+    const res = await patchReq({ path: SCENE, rev: before.rev, patch: { id: "neu" } });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("id is the primary key");
     // Refused means refused: the row did not move.
-    expect((await getFile(SCENE)).mtimeMs).toBe(before.mtimeMs);
+    expect((await getFile(SCENE)).rev).toBe(before.rev);
     // An id patch that changes NOTHING is a no-op, not an error — that is what
     // "send the form back unchanged" looks like.
     const same = await patchOk({
       path: SCENE,
-      mtimeMs: before.mtimeMs,
+      rev: before.rev,
       patch: { id: "lighthouse-arrival", status: "played" },
     });
-    expect(same.frontmatter.id).toBe("lighthouse-arrival");
-    expect(same.frontmatter.status).toBe("played");
+    expect(same.properties.id).toBe("lighthouse-arrival");
+    expect(same.properties.status).toBe("played");
   });
 
-  // DELETED: "a file without a frontmatter block gets one, body untouched" —
-  // a row always renders its frontmatter (store/render.ts), so the case it
-  // described has no counterpart. The 400 for the two frontmatter-less kinds
+  // DELETED: "a file without a properties block gets one, body untouched" —
+  // a row always renders its properties (store/render.ts), so the case it
+  // described has no counterpart. The 400 for the two properties-less kinds
   // below is what guards this corner now.
   test("400 for inbox.md and glossary.md — lists of rows, not entities", async () => {
     for (const rel of ["inbox.md", "glossary.md"]) {
       const before = await getFile(rel);
-      const res = await patchReq({ path: rel, mtimeMs: before.mtimeMs, patch: { status: "x" } });
+      const res = await patchReq({ path: rel, rev: before.rev, patch: { status: "x" } });
       expect(res.status).toBe(400);
-      expect(((await res.json()) as { error: string }).error).toContain("no frontmatter");
+      expect(((await res.json()) as { error: string }).error).toContain("no properties");
       expect(await getFile(rel)).toEqual(before);
     }
   });
@@ -247,12 +247,12 @@ describe("PATCH /api/:campaign/frontmatter", () => {
     expect(before.kind).toBe("campaign");
     const after = await patchOk({
       path: rel,
-      mtimeMs: before.mtimeMs,
+      rev: before.rev,
       patch: { description: "Neue Kurzbeschreibung." },
     });
-    expect(after.frontmatter.description).toBe("Neue Kurzbeschreibung.");
-    expect(after.frontmatter.name).toBe("Der Leuchtturm von Salzhafen");
-    expect(Object.keys(after.frontmatter)).toEqual(["id", "name", "description"]); // order stable
+    expect(after.properties.description).toBe("Neue Kurzbeschreibung.");
+    expect(after.properties.name).toBe("Der Leuchtturm von Salzhafen");
+    expect(Object.keys(after.properties)).toEqual(["id", "name", "description"]); // order stable
     expect(after.raw).toContain("description: Neue Kurzbeschreibung.\n");
     // the list endpoint picks the new value up right away
     const list = (await (await app.request("/api/campaigns")).json()) as Array<{
@@ -266,13 +266,13 @@ describe("PATCH /api/:campaign/frontmatter", () => {
     const before = await getFile(SCENE);
     const res = await patchReq({
       path: SCENE,
-      mtimeMs: before.mtimeMs - 1,
+      rev: before.rev - 1,
       patch: { status: "ready" },
     });
     expect(res.status).toBe(409);
-    const body = (await res.json()) as { error: string; mtimeMs: number };
+    const body = (await res.json()) as { error: string; rev: number };
     expect(typeof body.error).toBe("string");
-    expect(body.mtimeMs).toBe(before.mtimeMs);
+    expect(body.rev).toBe(before.rev);
     // and nothing was written — same row, same token
     expect(await getFile(SCENE)).toEqual(before);
   });
@@ -281,17 +281,17 @@ describe("PATCH /api/:campaign/frontmatter", () => {
     const before = await getFile(SCENE);
     const bad = [
       {}, // missing everything
-      { path: SCENE, mtimeMs: before.mtimeMs }, // missing patch
-      { path: SCENE, mtimeMs: "later", patch: {} }, // mtimeMs not a number
-      { path: SCENE, mtimeMs: before.mtimeMs, patch: ["status"] }, // patch not an object
-      { path: SCENE, mtimeMs: before.mtimeMs, patch: {}, extra: 1 }, // unknown key
-      { path: 42, mtimeMs: before.mtimeMs, patch: {} }, // path not a string
+      { path: SCENE, rev: before.rev }, // missing patch
+      { path: SCENE, rev: "later", patch: {} }, // rev not a number
+      { path: SCENE, rev: before.rev, patch: ["status"] }, // patch not an object
+      { path: SCENE, rev: before.rev, patch: {}, extra: 1 }, // unknown key
+      { path: 42, rev: before.rev, patch: {} }, // path not a string
     ];
     for (const b of bad) {
       expect((await patchReq(b)).status).toBe(400);
     }
     // non-JSON body
-    const res = await app.request("/api/beispiel/frontmatter", {
+    const res = await app.request("/api/beispiel/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: "no json",
@@ -303,16 +303,16 @@ describe("PATCH /api/:campaign/frontmatter", () => {
 
   test("path safety and missing rows behave like the read API", async () => {
     expect(
-      (await patchReq({ path: "../../etc/passwd.md", mtimeMs: 1, patch: {} })).status,
+      (await patchReq({ path: "../../etc/passwd.md", rev: 1, patch: {} })).status,
     ).toBe(400);
-    expect((await patchReq({ path: "notes.txt", mtimeMs: 1, patch: {} })).status).toBe(400);
+    expect((await patchReq({ path: "notes.txt", rev: 1, patch: {} })).status).toBe(400);
     expect(
-      (await patchReq({ path: "01-salzhafen/nope.md", mtimeMs: 1, patch: {} })).status,
+      (await patchReq({ path: "01-salzhafen/nope.md", rev: 1, patch: {} })).status,
     ).toBe(404);
     // A path naming the WRONG chapter for an existing scene id is a stale
     // link: 404, exactly as GET answers it (store/read.ts readByLocator).
     expect(
-      (await patchReq({ path: "02-nebel/lighthouse-arrival.md", mtimeMs: 1, patch: {} })).status,
+      (await patchReq({ path: "02-nebel/lighthouse-arrival.md", rev: 1, patch: {} })).status,
     ).toBe(404);
   });
 });
@@ -324,26 +324,26 @@ describe("POST /api/:campaign/session/start", () => {
     // The id is an OPAQUE random string since issue #58 (a UUID): the file's
     // address and nothing else. What is asserted about it is that it IS the
     // address and that it carries no calendar date.
-    const id = String(file.frontmatter.id);
+    const id = String(file.properties.id);
     expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(file.path).toBe(`sessions/${id}.md`);
-    expect(file.frontmatter.started).toBe("2026-08-19T21:05:00");
-    expect(file.frontmatter.scenes_played).toEqual([]);
+    expect(file.properties.started).toBe("2026-08-19T21:05:00");
+    expect(file.properties.scenes_played).toEqual([]);
     // The rendered skeleton is the one the format prescribes — the `## Log`
     // section is rendered from (still zero) log rows.
     expect(file.raw).toBe(
       `---\nid: ${id}\nstarted: 2026-08-19T21:05:00\nscenes_played: []\n---\n\n## Log\n`,
     );
     // A fresh row starts at rev 1, and the GET agrees.
-    expect(file.mtimeMs).toBe(1);
-    expect((await getFile(file.path)).mtimeMs).toBe(1);
+    expect(file.rev).toBe(1);
+    expect((await getFile(file.path)).rev).toBe(1);
   });
 
   test("two starts hand out two DIFFERENT ids", async () => {
     const first = await postOk("/api/beispiel/session/start");
     await postOk("/api/beispiel/session/end");
     const second = await postOk("/api/beispiel/session/start");
-    expect(second.frontmatter.id).not.toBe(first.frontmatter.id);
+    expect(second.properties.id).not.toBe(first.properties.id);
   });
 
   // Issue #58 bug: `started` used to be minute-precise, so it rounded DOWN to
@@ -352,7 +352,7 @@ describe("POST /api/:campaign/session/start", () => {
   test("`started` keeps the seconds, so a fresh session starts at 0", async () => {
     setNow(() => new Date(2026, 7, 19, 21, 5, 50));
     const file = await postOk("/api/beispiel/session/start");
-    expect(file.frontmatter.started).toBe("2026-08-19T21:05:50");
+    expect(file.properties.started).toBe("2026-08-19T21:05:50");
     // The seconds survive the YAML rendering the editor is shown, too.
     expect(file.raw).toContain("started: 2026-08-19T21:05:50\n");
     // …and what the app actually clocks — startedMs vs. the same instant — is
@@ -373,9 +373,9 @@ describe("POST /api/:campaign/session/start", () => {
     const first = await postOk("/api/beispiel/session/start");
     setNow(() => new Date(2026, 7, 19, 21, 30));
     const again = await postOk("/api/beispiel/session/start");
-    expect(again.frontmatter.started).toBe("2026-08-19T21:05:00"); // NOT 21:30
+    expect(again.properties.started).toBe("2026-08-19T21:05:00"); // NOT 21:30
     // Idempotent all the way down: no write happened, so the token stands.
-    expect(again.mtimeMs).toBe(first.mtimeMs);
+    expect(again.rev).toBe(first.rev);
   });
 
   test("after the end a start creates a SECOND session with an empty log (#58)", async () => {
@@ -389,9 +389,9 @@ describe("POST /api/:campaign/session/start", () => {
     // Own id, own `started`, and the log skeleton is EMPTY — the runtime of
     // the new session starts at 0 instead of inheriting the first evening's.
     expect(second.raw).toBe(
-      `---\nid: ${String(second.frontmatter.id)}\nstarted: 2026-08-19T23:30:00\nscenes_played: []\n---\n\n## Log\n`,
+      `---\nid: ${String(second.properties.id)}\nstarted: 2026-08-19T23:30:00\nscenes_played: []\n---\n\n## Log\n`,
     );
-    expect(second.mtimeMs).toBe(1);
+    expect(second.rev).toBe(1);
   });
 
   test("409 session_running when an OLDER session is still open", async () => {
@@ -494,7 +494,7 @@ describe("scenes_played maintenance (POST log with sceneId)", () => {
       text: "Ankunft",
       sceneId: "lighthouse-arrival",
     });
-    expect(file.frontmatter.scenes_played).toEqual(["lighthouse-arrival"]);
+    expect(file.properties.scenes_played).toEqual(["lighthouse-arrival"]);
     expect(file.raw).toContain("scenes_played: [lighthouse-arrival]\n");
     // The played scene is a row, and rendering it back did not disturb the log
     expect(file.body).toBe("\n## Log\n\n- 21:05 (lighthouse-arrival) Ankunft\n");
@@ -508,7 +508,7 @@ describe("scenes_played maintenance (POST log with sceneId)", () => {
       text: "Immer noch da",
       sceneId: "lighthouse-arrival",
     });
-    expect(file.frontmatter.scenes_played).toEqual(["lighthouse-arrival"]);
+    expect(file.properties.scenes_played).toEqual(["lighthouse-arrival"]);
     // The log, however, grows — both lines are there, in order.
     expect(file.body.endsWith("- 21:05 (lighthouse-arrival) Ankunft\n- 21:10 (lighthouse-arrival) Immer noch da\n")).toBe(
       true,
@@ -527,7 +527,7 @@ describe("scenes_played maintenance (POST log with sceneId)", () => {
       text: "Zurück am Turm",
       sceneId: "lighthouse-arrival",
     });
-    expect(file.frontmatter.scenes_played).toEqual(["lighthouse-arrival", "smuggler-captured"]);
+    expect(file.properties.scenes_played).toEqual(["lighthouse-arrival", "smuggler-captured"]);
     expect(file.raw).toContain("scenes_played: [lighthouse-arrival, smuggler-captured]\n");
   });
 
@@ -536,7 +536,7 @@ describe("scenes_played maintenance (POST log with sceneId)", () => {
     await postOk("/api/beispiel/log", { text: "Ankunft", sceneId: "lighthouse-arrival" });
     setNow(() => new Date(2026, 7, 19, 21, 15));
     const file = await postOk("/api/beispiel/log", { text: "Pause" });
-    expect(file.frontmatter.scenes_played).toEqual(["lighthouse-arrival"]);
+    expect(file.properties.scenes_played).toEqual(["lighthouse-arrival"]);
     expect(file.body.endsWith("- 21:15 Pause\n")).toBe(true);
   });
 
@@ -553,9 +553,9 @@ describe("POST /api/:campaign/session/end", () => {
     await postOk("/api/beispiel/log", { text: "Zeile eins Zeile zwei" });
     setNow(() => new Date(2026, 7, 19, 23, 45));
     const file = await postOk("/api/beispiel/session/end");
-    expect(file.frontmatter.ended).toBe("2026-08-19T23:45:00");
-    expect(Object.keys(file.frontmatter)).toEqual(["id", "started", "ended", "scenes_played"]);
-    expect(file.frontmatter.started).toBe("2026-08-19T21:05:00");
+    expect(file.properties.ended).toBe("2026-08-19T23:45:00");
+    expect(Object.keys(file.properties)).toEqual(["id", "started", "ended", "scenes_played"]);
+    expect(file.properties.started).toBe("2026-08-19T21:05:00");
     // the log line appended earlier survives verbatim
     expect(file.body.endsWith("- 21:25 Zeile eins Zeile zwei\n")).toBe(true);
   });
@@ -566,9 +566,9 @@ describe("POST /api/:campaign/session/end", () => {
     const first = await postOk("/api/beispiel/session/end");
     setNow(() => new Date(2026, 7, 19, 23, 59));
     const second = await postOk("/api/beispiel/session/end");
-    expect(second.frontmatter.ended).toBe("2026-08-19T23:45:00");
+    expect(second.properties.ended).toBe("2026-08-19T23:45:00");
     // Idempotent means no write: the guard token stands still.
-    expect(second.mtimeMs).toBe(first.mtimeMs);
+    expect(second.rev).toBe(first.rev);
   });
 
   test("end stays idempotent across days, log is refused (issue #40 review)", async () => {
@@ -581,7 +581,7 @@ describe("POST /api/:campaign/session/end", () => {
     setNow(() => new Date(2026, 7, 22, 22, 0));
     const file = await postOk("/api/beispiel/session/end");
     expect(file.path).toBe(started.path);
-    expect(file.frontmatter.ended).toBe("2026-08-19T23:45:00");
+    expect(file.properties.ended).toBe("2026-08-19T23:45:00");
     // A log line, however, is STRICTLY the running session's business: a note
     // typed after the end used to land in the closed log with a 200.
     const log = await postJson("/api/beispiel/log", { text: "verloren" });
@@ -607,7 +607,7 @@ describe("POST /api/:campaign/inbox", () => {
     // visible in a subsequent GET with the fresh token
     const file = await getFile("inbox.md");
     expect(file.body).toBe(after.body);
-    expect(file.mtimeMs).toBe(after.mtimeMs);
+    expect(file.rev).toBe(after.rev);
   });
 
   test("creates the inbox with a # Inbox heading when there is none", async () => {
@@ -637,22 +637,22 @@ describe("POST /api/:campaign/inbox", () => {
 });
 
 // The metadata dialog of issue #34 writes name/description through PATCH
-// /frontmatter — the ONE write path since issue #62. The endpoint that used to
+// /properties — the ONE write path since issue #62. The endpoint that used to
 // close the "there is no `_campaign.md` yet" gap (POST /campaign-meta) is gone
 // with that gap: after the cutover the campaign ROW always exists, GET /file
 // always answers with a document and a guard token, and naming a campaign that
 // has no name is an ordinary patch.
 describe("naming a campaign that has none (issue #62)", () => {
-  test("PATCH /frontmatter sets name and description on an unnamed campaign", async () => {
+  test("PATCH /properties sets name and description on an unnamed campaign", async () => {
     await withFreshCampaign(async () => {
       // Unnamed: the document exists and shows the ID as its display name,
       // which is exactly what GET /campaigns says too (both synthesize).
       const before = await getFile("_campaign.md", FRESH);
-      expect(before.frontmatter).toEqual({ id: FRESH, name: FRESH });
+      expect(before.properties).toEqual({ id: FRESH, name: FRESH });
 
-      const res = await patchJson(`/api/${FRESH}/frontmatter`, {
+      const res = await patchJson(`/api/${FRESH}/properties`, {
         path: "_campaign.md",
-        mtimeMs: before.mtimeMs,
+        rev: before.rev,
         patch: {
           name: "Die Aschekönige",
           description: "Eine Wüstenkampagne um verschüttete Städte.",
@@ -662,7 +662,7 @@ describe("naming a campaign that has none (issue #62)", () => {
       const file = (await res.json()) as FileResponse;
       expect(file.path).toBe("_campaign.md");
       expect(file.kind).toBe("campaign");
-      expect(file.frontmatter.name).toBe("Die Aschekönige");
+      expect(file.properties.name).toBe("Die Aschekönige");
       // The id is the CAMPAIGN key — never client input.
       expect(file.raw).toBe(
         "---\nid: frischling\nname: Die Aschekönige\ndescription: Eine Wüstenkampagne um verschüttete Städte.\n---\n",
@@ -682,23 +682,23 @@ describe("naming a campaign that has none (issue #62)", () => {
   test("a blank description is DELETED with null, not written as an empty key", async () => {
     await withFreshCampaign(async () => {
       const before = await getFile("_campaign.md", FRESH);
-      const res = await patchJson(`/api/${FRESH}/frontmatter`, {
+      const res = await patchJson(`/api/${FRESH}/properties`, {
         path: "_campaign.md",
-        mtimeMs: before.mtimeMs,
+        rev: before.rev,
         patch: { name: "Nur ein Name", description: null },
       });
       expect(res.status).toBe(200);
       const file = (await res.json()) as FileResponse;
-      expect(Object.keys(file.frontmatter)).toEqual(["id", "name"]);
+      expect(Object.keys(file.properties)).toEqual(["id", "name"]);
       expect(file.raw).toBe("---\nid: frischling\nname: Nur ein Name\n---\n");
     });
   });
 
   test("a stale token is a 409 — the existing name is never touched", async () => {
     const before = await getFile("_campaign.md");
-    const res = await patchJson("/api/beispiel/frontmatter", {
+    const res = await patchJson("/api/beispiel/properties", {
       path: "_campaign.md",
-      mtimeMs: before.mtimeMs - 1,
+      rev: before.rev - 1,
       patch: { name: "Überschrieben" },
     });
     expect(res.status).toBe(409);
@@ -712,8 +712,8 @@ describe("naming a campaign that has none (issue #62)", () => {
 
 // Body writes (issue #15): content editing in the app. The invariant under
 // test everywhere here is that a body write is ONLY a body write — the
-// frontmatter of the row comes back unchanged, key for key and value for
-// value ("the frontmatter block stays byte-identical" of the file version).
+// properties of the row comes back unchanged, key for key and value for
+// value ("the properties block stays byte-identical" of the file version).
 describe("PUT /api/:campaign/file", () => {
   const REFERENCE = "01-salzhafen/hafen/smuggler-captured.md";
   const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
@@ -729,58 +729,58 @@ describe("PUT /api/:campaign/file", () => {
     expect(before.body).toContain("> [!check] Charisma (Deception)");
     expect(before.body).toContain("## If: sie lügen");
 
-    const after = await putOk({ path: REFERENCE, mtimeMs: before.mtimeMs, body: before.body });
+    const after = await putOk({ path: REFERENCE, rev: before.rev, body: before.body });
     expect(after.body).toBe(before.body);
-    expect(after.frontmatter).toEqual(before.frontmatter);
+    expect(after.properties).toEqual(before.properties);
     expect(after.raw).toBe(before.raw);
-    // The file writer could skip an identical write and keep the mtime; a row
+    // The file writer could skip an identical write and keep the rev; a row
     // write is a write, so the rev moves — the token is opaque and monotonic,
     // never a content hash.
-    expect(after.mtimeMs).toBe(before.mtimeMs + 1);
-    expect((await getFile(REFERENCE)).mtimeMs).toBe(after.mtimeMs);
+    expect(after.rev).toBe(before.rev + 1);
+    expect((await getFile(REFERENCE)).rev).toBe(after.rev);
   });
 
   test("unknown callouts and headings survive a write verbatim", async () => {
     const before = await getFile(REFERENCE);
     const body = "\n## Völlig Eigenes\n\n> [!wetter] Nebel über der Bucht\n\n### Unter-Titel\n";
-    const after = await putOk({ path: REFERENCE, mtimeMs: before.mtimeMs, body });
+    const after = await putOk({ path: REFERENCE, rev: before.rev, body });
     expect(after.body).toBe(body);
     // and back again, character for character
-    const back = await putOk({ path: REFERENCE, mtimeMs: after.mtimeMs, body: before.body });
+    const back = await putOk({ path: REFERENCE, rev: after.rev, body: before.body });
     expect(back.raw).toBe(before.raw);
   });
 
-  test("happy path: new body, frontmatter untouched", async () => {
+  test("happy path: new body, properties untouched", async () => {
     const before = await getFile(SCENE);
     const body = "\n## Flow\n\nKomplett neu geschrieben.\n";
 
-    const after = await putOk({ path: SCENE, mtimeMs: before.mtimeMs, body });
+    const after = await putOk({ path: SCENE, rev: before.rev, body });
     expect(after.path).toBe(SCENE);
     expect(after.kind).toBe("scene");
     expect(after.body).toBe(body);
-    // frontmatter untouched — same keys, same values, same order
-    expect(after.frontmatter).toEqual(before.frontmatter);
-    expect(Object.keys(after.frontmatter)).toEqual(Object.keys(before.frontmatter));
+    // properties untouched — same keys, same values, same order
+    expect(after.properties).toEqual(before.properties);
+    expect(Object.keys(after.properties)).toEqual(Object.keys(before.properties));
     expect(fmBlock(after.raw)).toBe(fmBlock(before.raw));
     expect(after.raw).toBe(fmBlock(before.raw) + body);
     // fresh token, and a GET sees the write
-    expect(after.mtimeMs).toBe(before.mtimeMs + 1);
+    expect(after.rev).toBe(before.rev + 1);
     expect((await getFile(SCENE)).body).toBe(body);
   });
 
   test("a body without a trailing newline gets exactly one", async () => {
     const before = await getFile(SCENE);
-    const after = await putOk({ path: SCENE, mtimeMs: before.mtimeMs, body: "\nOhne Newline" });
+    const after = await putOk({ path: SCENE, rev: before.rev, body: "\nOhne Newline" });
     expect(after.body).toBe("\nOhne Newline\n");
     expect(after.raw.endsWith("\nOhne Newline\n")).toBe(true);
     expect(after.raw.endsWith("\n\n")).toBe(false);
   });
 
-  test("an empty body leaves the frontmatter alone", async () => {
+  test("an empty body leaves the properties alone", async () => {
     const before = await getFile(SCENE);
-    const after = await putOk({ path: SCENE, mtimeMs: before.mtimeMs, body: "" });
+    const after = await putOk({ path: SCENE, rev: before.rev, body: "" });
     expect(after.body).toBe("");
-    expect(after.frontmatter).toEqual(before.frontmatter);
+    expect(after.properties).toEqual(before.properties);
     expect(after.raw).toBe(fmBlock(before.raw));
   });
 
@@ -792,7 +792,7 @@ describe("PUT /api/:campaign/file", () => {
     const before = await getFile("glossary.md");
     expect(before.body).toContain("- lighthouse keeper → Leuchtturmwärter");
     const body = "\n- tide pool → Gezeitentümpel\n- harbour master → Hafenmeisterin\n";
-    const after = await putOk({ path: "glossary.md", mtimeMs: before.mtimeMs, body });
+    const after = await putOk({ path: "glossary.md", rev: before.rev, body });
     expect(after.body).toBe(body);
     // …and the structured endpoint sees the same list, in the same order.
     const glossary = (await (await app.request("/api/beispiel/glossary")).json()) as {
@@ -808,22 +808,22 @@ describe("PUT /api/:campaign/file", () => {
 
   test("409 on a stale token carries the current one and writes nothing", async () => {
     const before = await getFile(SCENE);
-    const res = await putFile({ path: SCENE, mtimeMs: before.mtimeMs - 1, body: "\nZu spät\n" });
+    const res = await putFile({ path: SCENE, rev: before.rev - 1, body: "\nZu spät\n" });
     expect(res.status).toBe(409);
-    const body = (await res.json()) as { error: string; mtimeMs: number };
+    const body = (await res.json()) as { error: string; rev: number };
     expect(typeof body.error).toBe("string");
-    expect(body.mtimeMs).toBe(before.mtimeMs);
+    expect(body.rev).toBe(before.rev);
     expect(await getFile(SCENE)).toEqual(before);
   });
 
-  // DELETED, all four of them: "a file without a frontmatter block: the body
-  // IS the file", "400 for a file whose frontmatter block is not valid YAML",
-  // the three degenerate-frontmatter cases (stray space behind the fence,
+  // DELETED, all four of them: "a file without a properties block: the body
+  // IS the file", "400 for a file whose properties block is not valid YAML",
+  // the three degenerate-properties cases (stray space behind the fence,
   // unclosed block, BOM) and "a file the parser reads as pure body stays
   // writable". Every one of those guarded the RAW SPLIT of a markdown file:
-  // the writer had to reattach a frontmatter block it could not always find,
+  // the writer had to reattach a properties block it could not always find,
   // and refused rather than delete it. There is no split any more — the
-  // frontmatter is columns and the body is a column — so the failure mode is
+  // properties is columns and the body is a column — so the failure mode is
   // gone with it. What a malformed file can still do is fail the one-time
   // migration's parse, which is `unknown_files` plus a `migration_report`
   // entry (covered by test/db-migration.test.ts).
@@ -834,7 +834,7 @@ describe("PUT /api/:campaign/file", () => {
     // in the endpoint, not only in the UI that hides the button.
     for (const rel of ["sessions/2026-01-15.md", "inbox.md"]) {
       const before = await getFile(rel);
-      const res = await putFile({ path: rel, mtimeMs: before.mtimeMs, body: "\nAlles neu.\n" });
+      const res = await putFile({ path: rel, rev: before.rev, body: "\nAlles neu.\n" });
       expect(res.status).toBe(400);
       expect(await getFile(rel)).toEqual(before);
     }
@@ -844,13 +844,13 @@ describe("PUT /api/:campaign/file", () => {
     const before = await getFile(SCENE);
     const bad = [
       {}, // missing everything
-      { path: SCENE, mtimeMs: before.mtimeMs }, // missing body
-      { path: SCENE, mtimeMs: "später", body: "x" }, // mtimeMs not a number
-      { path: SCENE, mtimeMs: before.mtimeMs, body: 42 }, // body not a string
-      { path: SCENE, mtimeMs: before.mtimeMs, body: ["x"] }, // body not a string
-      { path: SCENE, mtimeMs: before.mtimeMs, body: null }, // body not a string
-      { path: SCENE, mtimeMs: before.mtimeMs, body: "x", patch: {} }, // unknown key
-      { path: 42, mtimeMs: before.mtimeMs, body: "x" }, // path not a string
+      { path: SCENE, rev: before.rev }, // missing body
+      { path: SCENE, rev: "später", body: "x" }, // rev not a number
+      { path: SCENE, rev: before.rev, body: 42 }, // body not a string
+      { path: SCENE, rev: before.rev, body: ["x"] }, // body not a string
+      { path: SCENE, rev: before.rev, body: null }, // body not a string
+      { path: SCENE, rev: before.rev, body: "x", patch: {} }, // unknown key
+      { path: 42, rev: before.rev, body: "x" }, // path not a string
     ];
     for (const b of bad) {
       expect((await putFile(b)).status).toBe(400);
@@ -866,20 +866,20 @@ describe("PUT /api/:campaign/file", () => {
   });
 
   test("path safety and missing rows behave like the read API", async () => {
-    expect((await putFile({ path: "../../etc/passwd.md", mtimeMs: 1, body: "x" })).status).toBe(
+    expect((await putFile({ path: "../../etc/passwd.md", rev: 1, body: "x" })).status).toBe(
       400,
     );
-    expect((await putFile({ path: "notes.txt", mtimeMs: 1, body: "x" })).status).toBe(400);
-    expect((await putFile({ path: "01-salzhafen/nope.md", mtimeMs: 1, body: "x" })).status).toBe(
+    expect((await putFile({ path: "notes.txt", rev: 1, body: "x" })).status).toBe(400);
+    expect((await putFile({ path: "01-salzhafen/nope.md", rev: 1, body: "x" })).status).toBe(
       404,
     );
     expect(
-      (await putFile({ path: "01-salzhafen/hafen/../hafen/x.md", mtimeMs: 1, body: "x" })).status,
+      (await putFile({ path: "01-salzhafen/hafen/../hafen/x.md", rev: 1, body: "x" })).status,
     ).toBe(400);
     // A stale link — right scene id, wrong chapter — is 404 on write just as
     // it is on read (store/read.ts readByLocator).
     expect(
-      (await putFile({ path: "02-nebel/lighthouse-arrival.md", mtimeMs: 1, body: "x" })).status,
+      (await putFile({ path: "02-nebel/lighthouse-arrival.md", rev: 1, body: "x" })).status,
     ).toBe(404);
   });
 
@@ -887,7 +887,7 @@ describe("PUT /api/:campaign/file", () => {
     const res = await app.request("/api/nope/file", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: "a.md", mtimeMs: 1, body: "x" }),
+      body: JSON.stringify({ path: "a.md", rev: 1, body: "x" }),
     });
     expect(res.status).toBe(404);
   });

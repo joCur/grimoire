@@ -1,13 +1,13 @@
 // React-query half of the body editor (issue #15) — the mirror of
 // use-scene-status.ts, one field further down the file.
 //
-// The cache/409 mechanics are the shared envelope in use-mtime-write.ts, the
-// "is there an mtime to write against at all?" gate is `withMtime`. What is
+// The cache/409 mechanics are the shared envelope in use-rev-write.ts, the
+// "is there a rev to write against at all?" gate is `withRev`. What is
 // specific here: a body write feeds the tree AND the search index, a conflict
-// keeps the editor open with the DM's text, and `mtimeMs` must be the version
+// keeps the editor open with the DM's text, and `rev` must be the version
 // the editor's text was SEEDED from — not whatever the file query holds right
 // now. The 5s version poll (issue #8) refetches this file while the editor is
-// open, and taking the poll's mtime would make an external edit invisible: the
+// open, and taking the poll's rev would make an external edit invisible: the
 // save would silently overwrite it instead of answering 409. Hence
 // `onConflict`, which hands the caller the re-read file so it can move its
 // base version exactly once, knowingly.
@@ -15,15 +15,15 @@
 import type { FileResponse } from "@grimoire/shared/types";
 
 import { writeFileBody } from "@/lib/file-body";
-import { useMtimeWriteMutation } from "@/lib/use-mtime-write";
-import { withMtime } from "@/lib/write-with-mtime";
+import { useRevWriteMutation } from "@/lib/use-rev-write";
+import { withRev } from "@/lib/write-with-rev";
 
 export interface FileBodyMutation {
   /** Start a write; ignored while another one is in flight. */
   save: (body: string) => void;
   /** True while the write runs — the button reads „Speichere …". */
   isSaving: boolean;
-  /** Quiet inline message: mtime conflict, or a failed write. */
+  /** Quiet inline message: rev conflict, or a failed write. */
   message?: string | undefined;
 }
 
@@ -36,7 +36,7 @@ export interface FileBodyMutation {
 export function useFileBodyMutation(
   campaign: string,
   path: string,
-  mtimeMs: number | undefined,
+  rev: number | undefined,
   {
     onSaved,
     onConflict,
@@ -45,8 +45,8 @@ export function useFileBodyMutation(
     onConflict: (file: FileResponse | undefined) => void;
   },
 ): FileBodyMutation {
-  const { write, isPending, message } = useMtimeWriteMutation<string>({
-    write: withMtime(mtimeMs, (body, mtime) => writeFileBody(campaign, path, body, mtime)),
+  const { write, isPending, message } = useRevWriteMutation<string>({
+    write: withRev(rev, (body, rev) => writeFileBody(campaign, path, body, rev)),
     fileKey: ["file", campaign, path],
     // The body feeds the tree's counts/titles and the search index, so
     // neither the campaign's lists nor ⌘K may keep the old text.

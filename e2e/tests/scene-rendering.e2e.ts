@@ -17,7 +17,7 @@ import { expect, test } from "../support/test";
 
 /** The scene with the [!loot] callout — seeded, examples/ has none. */
 const LOOT_SCENE = {
-  // The path segment is the scene's ID from the fixture's frontmatter
+  // The path segment is the scene's ID from the fixture's properties
   // (`loot-check`), like every scene path since issue #57.
   path: "01-salzhafen/hafen/loot-check.md",
   content: readFileSync(path.join(FIXTURES_DIR, "loot-scene.md"), "utf8"),
@@ -47,7 +47,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   const article = page.getByRole("article");
   await expect(article.getByText("Geplante Szene")).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
-  // Chip row from the frontmatter (the scene's location, resolved to its name).
+  // Chip row from the properties (the scene's location, resolved to its name).
   await expect(article.getByText("Der Leuchtturm von Salzhafen", { exact: true })).toBeVisible();
   await expect(article.getByText("#social", { exact: true })).toBeVisible();
   await expect(article.getByText("Handout: Karte von Salzhafen")).toBeVisible();
@@ -145,7 +145,7 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
   // — the id as the name, nothing else. No "NPC-Eintrag fehlt", no
   // "Stub anlegen" detour, and the card opens the (equally thin) page.
   expect(await api.exists("npcs/holm.md")).toBe(false);
-  await api.patchFrontmatter("01-salzhafen/hafen/lighthouse-arrival.md", {
+  await api.patchProperties("01-salzhafen/hafen/lighthouse-arrival.md", {
     npcs: ["jorna", "holm"],
   });
   expect(await api.exists("npcs/holm.md")).toBe(true);
@@ -168,10 +168,10 @@ test("a scene location that is a slug becomes an entry; free text stays text", a
   api,
 }) => {
   // The one ambiguous field of the format (README): an id OR a string.
-  await api.patchFrontmatter("01-salzhafen/hafen/smuggler-captured.md", { location: "nordbucht" });
+  await api.patchProperties("01-salzhafen/hafen/smuggler-captured.md", { location: "nordbucht" });
   expect(await api.exists("locations/nordbucht.md")).toBe(true);
 
-  await api.patchFrontmatter("01-salzhafen/hafen/smuggler-captured.md", {
+  await api.patchProperties("01-salzhafen/hafen/smuggler-captured.md", {
     location: "Der alte Hafen",
   });
   expect(await api.exists("locations/der-alte-hafen.md")).toBe(false);

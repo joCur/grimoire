@@ -73,7 +73,7 @@ function logLines(file: FileResponse): string[] {
 
 /**
  * Seed from a temp copy of examples/ that holds a hand-written session file —
- * the only remaining way a session can carry frontmatter the API would never
+ * the only remaining way a session can carry properties the API would never
  * write itself (the migration is the single reader of the tree now).
  */
 async function seedWithSessionFile(tail: string): Promise<void> {
@@ -109,7 +109,7 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
     setNow(() => new Date(2026, 7, 19, 21, 40, 12));
     const paused = await ok("/api/beispiel/session/pause");
     expect(paused.path).toBe(startedPath);
-    expect(paused.frontmatter.pauses).toEqual([{ from: "2026-08-19T21:40:12" }]);
+    expect(paused.properties.pauses).toEqual([{ from: "2026-08-19T21:40:12" }]);
     // Nothing counted yet, but the clock is standing since 21:40:12.
     expect(paused.pausedMs).toBeUndefined();
     expect(paused.pausedSinceMs).toBe(new Date(2026, 7, 19, 21, 40, 12).getTime());
@@ -117,7 +117,7 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
 
     setNow(() => new Date(2026, 7, 19, 21, 58, 3));
     const running = await ok("/api/beispiel/session/continue");
-    expect(running.frontmatter.pauses).toEqual([
+    expect(running.properties.pauses).toEqual([
       { from: "2026-08-19T21:40:12", to: "2026-08-19T21:58:03" },
     ]);
     expect(running.pausedSinceMs).toBeUndefined();
@@ -127,7 +127,7 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
     expect(running.raw).toContain("2026-08-19T21:40:12");
     // …and the state is in the database, not in the response: a plain GET
     // answers with the same intervals.
-    expect((await session()).frontmatter.pauses).toEqual(running.frontmatter.pauses);
+    expect((await session()).properties.pauses).toEqual(running.properties.pauses);
   });
 
   test("several pauses add up; the log stays append-only", async () => {
@@ -140,7 +140,7 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
     setNow(() => new Date(2026, 7, 19, 22, 5, 30));
     const file = await ok("/api/beispiel/session/continue");
     expect(file.pausedMs).toBe((10 * 60 + 5 * 60 + 30) * 1000);
-    expect((file.frontmatter.pauses as unknown[]).length).toBe(2);
+    expect((file.properties.pauses as unknown[]).length).toBe(2);
     expect(logLines(file)).toEqual([
       "- 21:10 — Pause",
       "- 21:20 — Weiter",
@@ -156,14 +156,14 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
     const again = await ok("/api/beispiel/session/pause");
     // The pause is unchanged — same `from` (second-precise as written, no
     // YAML roundtrip to drop the `:00` any more) and no second entry.
-    expect(again.frontmatter.pauses).toEqual([{ from: "2026-08-19T21:30:00" }]);
+    expect(again.properties.pauses).toEqual([{ from: "2026-08-19T21:30:00" }]);
     expect(logLines(again)).toEqual(["- 21:30 — Pause"]);
 
     setNow(() => new Date(2026, 7, 19, 21, 35, 0));
     await ok("/api/beispiel/session/continue");
     setNow(() => new Date(2026, 7, 19, 21, 36, 0));
     const stillRunning = await ok("/api/beispiel/session/continue");
-    expect(stillRunning.frontmatter.pauses).toEqual([
+    expect(stillRunning.properties.pauses).toEqual([
       { from: "2026-08-19T21:30:00", to: "2026-08-19T21:35:00" },
     ]);
     expect(logLines(stillRunning)).toEqual(["- 21:30 — Pause", "- 21:35 — Weiter"]);
@@ -174,8 +174,8 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
     await ok("/api/beispiel/session/pause");
     setNow(() => new Date(2026, 7, 19, 23, 0, 0));
     const ended = await ok("/api/beispiel/session/end");
-    expect(ended.frontmatter.ended).toBe("2026-08-19T23:00:00");
-    expect(ended.frontmatter.pauses).toEqual([
+    expect(ended.properties.ended).toBe("2026-08-19T23:00:00");
+    expect(ended.properties.pauses).toEqual([
       { from: "2026-08-19T22:50:00", to: "2026-08-19T23:00:00" },
     ]);
     expect(ended.pausedSinceMs).toBeUndefined();
@@ -202,7 +202,7 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
     // second is dropped there), the new one is written second-precise.
     setNow(() => new Date(2026, 7, 19, 21, 40, 0));
     const paused = await ok("/api/beispiel/session/pause");
-    expect(paused.frontmatter.pauses).toEqual([
+    expect(paused.properties.pauses).toEqual([
       { from: "2026-08-19T21:30", to: "2026-08-19T21:33" },
       { from: "2026-08-19T21:40:00" },
     ]);

@@ -121,7 +121,7 @@ test("a renamed display name reaches the prose without touching the body", async
   ).toBeVisible();
 
   // The NAME changes, the body does not.
-  await api.patchFrontmatter("npcs/jorna.md", { name: NEW_NAME });
+  await api.patchProperties("npcs/jorna.md", { name: NEW_NAME });
   const stored = await api.file(SCENE.path);
   expect(stored.body).toContain("[[jorna]]");
   expect(stored.body).not.toContain(NEW_NAME);

@@ -19,7 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { fetchFile } from "@/api";
 import { EntityCardShell } from "@/components/EntityCardShell";
-import { fmString } from "@/lib/frontmatter";
+import { fmString } from "@/lib/properties";
 import { firstParagraphOfSection } from "@/lib/md-section";
 
 /**
@@ -63,7 +63,7 @@ export function LocationCard({
   }
   if (data === undefined) return null;
 
-  const fm = data.frontmatter;
+  const fm = data.properties;
   const name = fmString(fm.name) ?? id;
   const mood = firstParagraphOfSection(data.body, "Atmosphäre");
   const page = fmString(fm["roll20-page"]);

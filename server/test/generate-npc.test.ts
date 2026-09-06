@@ -251,11 +251,11 @@ describe("POST /api/:campaign/generate/npc", () => {
 
     expect(result.npc.path).toBe("npcs/grella.md");
     expect(result.npc.markdown).toBe(npcMarkdown());
-    expect(result.npc.frontmatter.id).toBe("grella");
-    expect(result.npc.frontmatter.name).toBe("Grella");
-    expect(result.npc.frontmatter.status).toBe("alive");
+    expect(result.npc.properties.id).toBe("grella");
+    expect(result.npc.properties.name).toBe("Grella");
+    expect(result.npc.properties.status).toBe("alive");
     // quoted quickstats survive as strings — the plus is the whole point
-    expect(result.npc.frontmatter.quickstats).toEqual({ insight: "+3", deception: "+5" });
+    expect(result.npc.properties.quickstats).toEqual({ insight: "+3", deception: "+5" });
     expect(result.warnings).toEqual(["Quelltext nennt keinen Status — alive gesetzt"]);
     expect(result.usage).toBeUndefined();
 
@@ -415,7 +415,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     ]);
     const res = await generateNpc(npcBody);
     expect(res.status).toBe(200);
-    expect(((await res.json()) as GenerateNpcResult).npc.frontmatter.name).toBe("namenlos");
+    expect(((await res.json()) as GenerateNpcResult).npc.properties.name).toBe("namenlos");
     expect(fake.calls).toHaveLength(1);
   });
 
@@ -455,7 +455,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     // no job was created for a request error
     expect(await fetchJob()).toBeNull();
     // and the existing npc is untouched
-    expect((await read("npcs/fenn.md")).frontmatter.id).toBe("fenn");
+    expect((await read("npcs/fenn.md")).properties.id).toBe("fenn");
   });
 
   test("an id the MODEL picks that collides is a correction turn, then a 422", async () => {
@@ -699,11 +699,11 @@ describe("apply an npc draft", () => {
     // (which became relation ROWS) is rendered back into the body
     const written = await read("npcs/apply-happy.md");
     expect(written.kind).toBe("npc");
-    expect(written.frontmatter.id).toBe("apply-happy");
-    expect(written.frontmatter.name).toBe("Grella");
-    expect(written.frontmatter.status).toBe("alive");
-    expect(written.frontmatter.quickstats).toEqual({ insight: "+3", deception: "+5" });
-    expect(written.frontmatter.statblock).toBe("Roll20: Grella");
+    expect(written.properties.id).toBe("apply-happy");
+    expect(written.properties.name).toBe("Grella");
+    expect(written.properties.status).toBe("alive");
+    expect(written.properties.quickstats).toEqual({ insight: "+3", deception: "+5" });
+    expect(written.properties.statblock).toBe("Roll20: Grella");
     expect(written.body).toContain("> [!secret] Kennt ein zweites Versteck unter dem Kai.");
     expect(written.body).toContain("- jorna: schuldet ihr einen Gefallen");
   });
@@ -735,16 +735,16 @@ describe("apply an npc draft", () => {
     });
     const after = await read("npcs/apply-happy.md");
     expect(after.raw).toBe(before.raw);
-    expect(after.mtimeMs).toBe(before.mtimeMs); // the row's rev never moved
+    expect(after.rev).toBe(before.rev); // the row's rev never moved
   });
 
-  test("400 re-validation: path, id, status, frontmatter — nothing written", async () => {
+  test("400 re-validation: path, id, status, properties — nothing written", async () => {
     const cases: Array<[string, unknown]> = [
       ["path outside npcs/", { path: "locations/x.md", markdown: npcMarkdown({ id: "x" }) }],
       ["path traversal", { path: "npcs/../../etc/x.md", markdown: npcMarkdown({ id: "x" }) }],
       ["uppercase id", { path: "npcs/Grella.md", markdown: npcMarkdown({ id: "Grella" }) }],
       ["id mismatch", { path: "npcs/anders.md", markdown: npcMarkdown({ id: "grella" }) }],
-      ["no frontmatter", { path: "npcs/anders.md", markdown: "## Will\n\nnur Text\n" }],
+      ["no properties", { path: "npcs/anders.md", markdown: "## Will\n\nnur Text\n" }],
       [
         "invalid status",
         { path: "npcs/anders.md", markdown: npcMarkdown({ id: "anders", status: "draft" }) },

@@ -12,7 +12,7 @@
 //      points at ITS list — not at some chapter that happens to mention it,
 //      which was misleading for an NPC opened from the NPC list.
 //
-// The scene's chapter comes from the PATH, not from `chapter` frontmatter: the
+// The scene's chapter comes from the PATH, not from `chapter` properties: the
 // directory is the filesystem truth and always there, while the key may be
 // missing or stale (the format degrades). The tree turns the id into the title.
 

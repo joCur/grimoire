@@ -77,17 +77,17 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
 
   // --- a scene body, callouts and If-sections included ----------------------
   const scene = await api.file(SCENE);
-  expect(scene.frontmatter.id).toBe("lighthouse-arrival");
-  expect(scene.frontmatter.status).toBe("ready");
+  expect(scene.properties.id).toBe("lighthouse-arrival");
+  expect(scene.properties.status).toBe("ready");
   expect(scene.body).toContain("> [!readaloud]");
   expect(scene.body).toContain("Der Turm ragt schwarz gegen den Abendhimmel auf.");
   expect(scene.raw.startsWith("---\n")).toBe(true);
 
-  // --- an npc: typed frontmatter (voice, quickstats) and its prose ----------
+  // --- an npc: typed properties (voice, quickstats) and its prose ----------
   const npc = await api.file("npcs/jorna.md");
-  expect(npc.frontmatter.name).toBe("Hafenmeisterin Jorna");
-  expect(npc.frontmatter.voice).toBe("knapp, wetterrau, duzt jeden");
-  expect(npc.frontmatter.quickstats).toMatchObject({ insight: 2, "passive-perception": 12 });
+  expect(npc.properties.name).toBe("Hafenmeisterin Jorna");
+  expect(npc.properties.voice).toBe("knapp, wetterrau, duzt jeden");
+  expect(npc.properties.quickstats).toMatchObject({ insight: 2, "passive-perception": 12 });
   expect(npc.body).toContain("Das Leuchtfeuer muss wieder brennen");
   expect(npc.body).toContain("- fenn: kennt ihn von früher");
 

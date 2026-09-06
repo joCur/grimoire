@@ -1,5 +1,5 @@
 // Unit tests for the generator view's derivations (issue #12): the
-// new-chapter id (numeric prefix + kebab slug), the client-side frontmatter
+// new-chapter id (numeric prefix + kebab slug), the client-side properties
 // split the review preview needs, the German labels — and (issue #19) which
 // state the server's job puts the view in.
 
@@ -165,7 +165,7 @@ describe("chapterIdValue", () => {
 describe("markdownBody", () => {
   const file = ["---", "id: kai", "title: Am Kai", "---", "", "## Flow", "", "Text.", ""].join("\n");
 
-  test("splits the frontmatter block off", () => {
+  test("splits the properties block off", () => {
     expect(markdownBody(file)).toBe("## Flow\n\nText.\n");
   });
 

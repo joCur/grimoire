@@ -5,10 +5,10 @@
 //
 //   * the response of every write is still the `FileResponse` of the row it
 //     touched, rendered by ./render;
-//   * optimistic concurrency still answers `409 { error, mtimeMs }` — only
-//     the token behind `mtimeMs` is now the row's `rev` instead of a file
-//     mtime. That is what fixes issue #37: two writes inside the same second
-//     used to see the same mtime and both went through; two writes against
+//   * optimistic concurrency still answers `409 { error, rev }` — only
+//     the token behind `rev` is now the row's `rev` instead of a file
+//     rev. That is what fixes issue #37: two writes inside the same second
+//     used to see the same rev and both went through; two writes against
 //     the same `rev` cannot;
 //   * the session state machine keeps its answers and codes
 //     (`session_running`, `session_not_empty` — `session_ended` is gone with
@@ -119,14 +119,14 @@ async function mutate<T>(campaign: string, fn: (db: GrimoireDb) => T): Promise<T
 /** The optimistic-concurrency check: the row's `rev` must be the one read. */
 function guardRev(current: number, sent: number, what: string): void {
   if (current !== sent) {
-    throw new ApiError(409, `${what} — reload before saving`, { mtimeMs: current });
+    throw new ApiError(409, `${what} — reload before saving`, { rev: current });
   }
 }
 
 /** Keys that would hit Object.prototype machinery instead of data. */
 const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
-// --- defensive coercions (frontmatter is hand-edited) ------------------------
+// --- defensive coercions (properties is hand-edited) ------------------------
 
 function asOptStr(value: unknown): string | null {
   if (value === undefined || value === null) return null;
@@ -152,13 +152,13 @@ function asMap(value: unknown): Record<string, unknown> {
 }
 
 /**
- * The frontmatter minus the keys a table has columns for — the `extra` half.
+ * The properties minus the keys a table has columns for — the `extra` half.
  *
  * `keepAnyway` is the exception, and it exists for ONE case: a contract key
  * whose COLUMN cannot hold the authored value. The migration preserves a
  * misshapen `quickstats:` (a string where the format wants a mapping) in
  * `extra`, the renderer shows it because the column is empty — and the first
- * `PATCH /frontmatter` used to drop it here, silently, against the round-trip
+ * `PATCH /properties` used to drop it here, silently, against the round-trip
  * rule (schema.ts rule 1). Naming the key keeps it where it is readable.
  */
 function extraOf(
@@ -181,7 +181,7 @@ function misshapenQuickstats(value: unknown): readonly string[] {
 }
 
 /**
- * Apply a flat frontmatter patch to a rendered frontmatter mapping (`null`
+ * Apply a flat properties patch to a rendered properties mapping (`null`
  * deletes a key) — the same semantics the raw-text patcher had, minus the
  * YAML round trip: the columns are the values now.
  */
@@ -241,7 +241,7 @@ function indexScene(tx: GrimoireDb, campaign: string, row: SceneRow, tags: strin
 }
 
 /**
- * ONE rule for the npc index (they disagreed before: a frontmatter patch
+ * ONE rule for the npc index (they disagreed before: a properties patch
  * indexed the STRIPPED body, a body save the full one — so a search for a
  * relationship note stopped matching after an unrelated status change):
  * the indexed text is the npc's FULL document text, `## Beziehungen`
@@ -427,7 +427,7 @@ function nextPos(rows: Array<{ pos: number }>): number {
 // format's one ambiguous field, and it is why there is no blanket backfill of
 // existing data (see `backfillReferencedNpcs`).
 //
-// ONLY NEW references are created on a frontmatter patch: an unrelated
+// ONLY NEW references are created on a properties patch: an unrelated
 // `PATCH { status }` re-sends the scene's existing `location`, and
 // materialising THAT would retroactively turn every legacy free-text place
 // name into an entity nobody authored.
@@ -700,7 +700,7 @@ export function reindexEntity(
   if (row !== undefined) indexScene(tx, campaign, row, refTags(tx, campaign, id));
 }
 
-// --- PATCH /api/:campaign/frontmatter ----------------------------------------
+// --- PATCH /api/:campaign/properties ----------------------------------------
 
 /** Contract keys per kind — everything else lands in `extra`. */
 const SCENE_KEYS = [
@@ -745,7 +745,7 @@ function rejectIdPatch(patch: Record<string, unknown>, current: string): void {
   throw new ApiError(400, "id is the primary key — use POST /rename to change it");
 }
 
-export async function patchFrontmatter(
+export async function patchProperties(
   campaign: string,
   rel: string,
   rev: number,
@@ -769,7 +769,7 @@ function patchLocator(
       if (row === undefined) throw new ApiError(404, "file not found");
       guardRev(row.rev, rev, "campaign changed");
       rejectIdPatch(patch, row.id);
-      const fm = applyPatch(renderCampaign(row).frontmatter, patch);
+      const fm = applyPatch(renderCampaign(row).properties, patch);
       const name = asStr(fm.name);
       // Accepted by design: a name that EQUALS the id is stored as "" — the
       // empty name means "fall back to the id" everywhere it is rendered
@@ -794,7 +794,7 @@ function patchLocator(
       if (row === undefined) throw new ApiError(404, "file not found");
       guardRev(row.rev, rev, "chapter changed");
       rejectIdPatch(patch, row.id);
-      const fm = applyPatch(renderChapter(row).frontmatter, patch);
+      const fm = applyPatch(renderChapter(row).properties, patch);
       const next: ChapterRow = {
         ...row,
         title: asStr(fm.title, row.id),
@@ -815,7 +815,7 @@ function patchLocator(
       rejectIdPatch(patch, row.id);
       const npcsBefore = refNpcs(tx, campaign, row.id);
       const before = renderScene(row, npcsBefore, refTags(tx, campaign, row.id));
-      const fm = applyPatch(before.frontmatter, patch);
+      const fm = applyPatch(before.properties, patch);
       const npcRefs = asStrArray(fm.npcs);
       const tags = asStrArray(fm.tags);
       // The chapter a scene belongs to is part of its ADDRESS (the path), so
@@ -874,7 +874,7 @@ function patchLocator(
       if (row === undefined) throw new ApiError(404, "file not found");
       guardRev(row.rev, rev, "npc changed");
       rejectIdPatch(patch, row.id);
-      const fm = applyPatch(renderNpc(row, relationRows(tx, campaign, row.id)).frontmatter, patch);
+      const fm = applyPatch(renderNpc(row, relationRows(tx, campaign, row.id)).properties, patch);
       const quickstats = asMap(fm.quickstats);
       const npcChapter = asOptStr(fm.chapter);
       assertChapterRef(tx, campaign, npcChapter, row.chapterId);
@@ -915,7 +915,7 @@ function patchLocator(
       if (row === undefined) throw new ApiError(404, "file not found");
       guardRev(row.rev, rev, "location changed");
       rejectIdPatch(patch, row.id);
-      const fm = applyPatch(renderLocation(row).frontmatter, patch);
+      const fm = applyPatch(renderLocation(row).properties, patch);
       const locationChapter = asOptStr(fm.chapter);
       assertChapterRef(tx, campaign, locationChapter, row.chapterId);
       const next: LocationRow = {
@@ -944,17 +944,17 @@ function patchLocator(
       if (row === undefined) throw new ApiError(404, "file not found");
       guardRev(row.rev, rev, "session changed");
       rejectIdPatch(patch, row.id);
-      const fm = applyPatch(renderSessionRow(tx, campaign, row).frontmatter, patch);
+      const fm = applyPatch(renderSessionRow(tx, campaign, row).properties, patch);
       patchSessionRow(tx, campaign, row, fm);
       const updated = sessionRow(tx, campaign, row.id);
       return renderSessionRow(tx, campaign, updated ?? row);
     }
     case "inbox":
     case "glossary":
-      // Neither is an entity with frontmatter any more: both are lists of
+      // Neither is an entity with properties any more: both are lists of
       // rows (schema.ts). The file used to carry a decorative `id:` and
       // nothing else, so there is nothing a patch could mean here.
-      throw new ApiError(400, "this file has no frontmatter — it is a list of entries");
+      throw new ApiError(400, "this file has no properties — it is a list of entries");
   }
 }
 
@@ -979,7 +979,7 @@ function refTags(tx: GrimoireDb, campaign: string, sceneId: string): string[] {
 }
 
 /**
- * Write a patched session frontmatter back onto the row and its child tables.
+ * Write a patched session properties back onto the row and its child tables.
  * `pauses` and `scenes_played` are lists in the format and tables here;
  * `reviewed` is a hash list in the format and a flag on the log row.
  */
@@ -1219,7 +1219,7 @@ export async function writeGlossary(
   return mutate(campaign, (tx) => {
     writeGlossaryRows(tx, campaign, entries);
     // Same document, same guard token: an editor holding `glossary.md` must
-    // see a changed `mtimeMs` after this.
+    // see a changed `rev` after this.
     tx.update(campaigns)
       .set({ glossaryRev: sql`${campaigns.glossaryRev} + 1` })
       .where(eq(campaigns.id, campaign))
@@ -1591,7 +1591,7 @@ export async function markInboxLineDone(campaign: string, line: string): Promise
 
 /**
  * POST /api/:campaign/review/seen — mark one log line as reviewed. The
- * `reviewed` frontmatter hash list became a flag on the log row (schema.ts),
+ * `reviewed` properties hash list became a flag on the log row (schema.ts),
  * and the hash is still the id the app speaks: the line is hashed exactly as
  * sent and the row with that hash gets the flag.
  *
@@ -1774,11 +1774,11 @@ export interface EntityDraft {
   rel: string;
   /**
    * The ADDRESS the row will actually have — `rel` with the id segment taken
-   * from the frontmatter (generator.ts `draftAddress`). The conflict check
+   * from the properties (generator.ts `draftAddress`). The conflict check
    * asks about this, `rel` is only what a 409 reports back to the client.
    */
   address: string;
-  frontmatter: Record<string, unknown>;
+  properties: Record<string, unknown>;
   body: string;
 }
 
@@ -1789,7 +1789,7 @@ export interface EntityDraft {
  */
 export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft): void {
   const locator = locatorFromPath(draft.rel);
-  const fm = draft.frontmatter;
+  const fm = draft.properties;
   switch (locator.kind) {
     case "scene": {
       const id = asStr(fm.id, locator.id);
@@ -2011,7 +2011,7 @@ export async function applyDrafts(
  * The `rel`s of every draft whose ADDRESS another draft in the batch claims
  * too — `rel` because that is what the review shows, `address` because that
  * is the row the write lands in (`rel` can differ from it when the draft's
- * frontmatter carries another id).
+ * properties carries another id).
  */
 function duplicateDraftRels(drafts: EntityDraft[]): string[] {
   const seen = new Map<string, number>();

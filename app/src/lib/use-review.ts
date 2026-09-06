@@ -10,7 +10,7 @@ import { useMemo } from "react";
 
 import { fetchFile, fetchTree } from "@/api";
 import { sceneTitle } from "@/lib/campaign";
-import { fmStringArray } from "@/lib/frontmatter";
+import { fmStringArray } from "@/lib/properties";
 import { useActedKeys } from "@/lib/review-memory";
 import {
   firstReviewTag,
@@ -146,8 +146,8 @@ export function useReviewEntries(
   });
 
   const reviewed = useMemo(
-    () => new Set(fmStringArray(session.data?.frontmatter.reviewed)),
-    [session.data?.frontmatter.reviewed],
+    () => new Set(fmStringArray(session.data?.properties.reviewed)),
+    [session.data?.properties.reviewed],
   );
 
   const treeData = tree.data;

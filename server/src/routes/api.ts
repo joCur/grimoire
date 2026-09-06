@@ -30,7 +30,7 @@ import {
   endSession,
   markInboxLineDone,
   markLogLineSeen,
-  patchFrontmatter,
+  patchProperties,
   pauseSession,
   startSession,
   writeFileBody,
@@ -190,51 +190,51 @@ api.get("/:campaign/glossary", async (c) => c.json(await readGlossary(c.req.para
 
 // --- write endpoints (issue #5) ---------------------------------------------------
 
-// PATCH /api/:campaign/frontmatter { path, mtimeMs, patch } -> FileResponse
-// patch is a flat object of frontmatter keys to set; null deletes a key.
-// 409 { error, mtimeMs } when the file changed on disk since it was read.
-api.patch("/:campaign/frontmatter", async (c) => {
-  const body = await jsonBody(c, ["path", "mtimeMs", "patch"]);
+// PATCH /api/:campaign/properties { path, rev, patch } -> FileResponse
+// patch is a flat object of properties keys to set; null deletes a key.
+// 409 { error, rev } when the file changed on disk since it was read.
+api.patch("/:campaign/properties", async (c) => {
+  const body = await jsonBody(c, ["path", "rev", "patch"]);
   const rel = body.path;
-  const mtimeMs = body.mtimeMs;
+  const rev = body.rev;
   const patch = body.patch;
   if (typeof rel !== "string") throw new ApiError(400, "path must be a string");
-  if (typeof mtimeMs !== "number" || !Number.isFinite(mtimeMs)) {
-    throw new ApiError(400, "mtimeMs must be a number");
+  if (typeof rev !== "number" || !Number.isFinite(rev)) {
+    throw new ApiError(400, "rev must be a number");
   }
   if (!isPlainObject(patch)) throw new ApiError(400, "patch must be an object");
-  return c.json(await patchFrontmatter(c.req.param("campaign"), rel, mtimeMs, patch));
+  return c.json(await patchProperties(c.req.param("campaign"), rel, rev, patch));
 });
 
-// PUT /api/:campaign/file { path, mtimeMs, body } -> FileResponse
+// PUT /api/:campaign/file { path, rev, body } -> FileResponse
 // Writes the markdown BODY of an existing file — `body` is the markdown
-// WITHOUT the frontmatter block, exactly what GET /file returns as `body`.
-// The frontmatter block on disk stays byte-identical (keys are PATCH
-// /frontmatter's job). Same mtime guard: 409 { error, mtimeMs } when the file
+// WITHOUT the properties block, exactly what GET /file returns as `body`.
+// The properties block on disk stays byte-identical (keys are PATCH
+// /properties's job). Same rev guard: 409 { error, rev } when the file
 // changed on disk since it was read; 404 for a file that does not exist; 400
 // for the append-only kinds (sessions/*.md, inbox.md — DECISIONS #4) and for a
-// file whose frontmatter block cannot be split off safely.
+// file whose properties block cannot be split off safely.
 api.put("/:campaign/file", async (c) => {
-  const body = await jsonBody(c, ["path", "mtimeMs", "body"]);
+  const body = await jsonBody(c, ["path", "rev", "body"]);
   const rel = body.path;
-  const mtimeMs = body.mtimeMs;
+  const rev = body.rev;
   const markdown = body.body;
   if (typeof rel !== "string") throw new ApiError(400, "path must be a string");
-  if (typeof mtimeMs !== "number" || !Number.isFinite(mtimeMs)) {
-    throw new ApiError(400, "mtimeMs must be a number");
+  if (typeof rev !== "number" || !Number.isFinite(rev)) {
+    throw new ApiError(400, "rev must be a number");
   }
   if (typeof markdown !== "string") throw new ApiError(400, "body must be a string");
-  return c.json(await writeFileBody(c.req.param("campaign"), rel, mtimeMs, markdown));
+  return c.json(await writeFileBody(c.req.param("campaign"), rel, rev, markdown));
 });
 
 // POST /api/:campaign/campaign-meta is GONE (issue #62). It was the create
-// half of the metadata dialog (issue #34), for the case PATCH /frontmatter
+// half of the metadata dialog (issue #34), for the case PATCH /properties
 // cannot serve: no `_campaign.md`, hence no guard token to write against.
 // Since the cutover every campaign HAS a row, so GET /file?path=_campaign.md
 // always answers 200 with a `rev` and there is no create case left — the
 // endpoint had become unreachable from the app (#59). Name and description
-// are written like every other frontmatter field now, through PATCH
-// /frontmatter and its 409.
+// are written like every other properties field now, through PATCH
+// /properties and its 409.
 
 // POST /api/:campaign/session/start -> FileResponse
 // Creates a NEW session — `sessions/<today>.md`, or `<today>-2`, `-3` … when
@@ -261,7 +261,7 @@ api.post("/:campaign/session/end", async (c) => c.json(await endSession(c.req.pa
 
 // POST /api/:campaign/session/pause -> FileResponse — really STOPS the clock
 // (issue #40 AK8): opens a `{ from: … }` interval in the session's `pauses`
-// frontmatter AND appends the `— Pause` log line in the same write. Idempotent
+// properties AND appends the `— Pause` log line in the same write. Idempotent
 // (already paused -> 200, file unchanged); 404 when no session is running.
 api.post("/:campaign/session/pause", async (c) =>
   c.json(await pauseSession(c.req.param("campaign"))),
@@ -403,7 +403,7 @@ function rawLine(v: unknown, what: string): string {
 
 // POST /api/:campaign/review/seen { path, line } -> FileResponse
 // Adds the short hash (first 8 hex chars of SHA-256) of the RAW log line to
-// the session's `reviewed` frontmatter list iff absent. Idempotent; the line
+// the session's `reviewed` properties list iff absent. Idempotent; the line
 // is hashed exactly as sent — it is never written anywhere.
 api.post("/:campaign/review/seen", async (c) => {
   const body = await jsonBody(c, ["path", "line"]);
@@ -576,7 +576,7 @@ api.put("/:campaign/generate/job/drafts", async (c) => {
 // { scenes?, stubs?, npc?, chapter?, chapterTitle?, jobId? } -> { written }
 // Writes the reviewed drafts — synchronous on purpose: this is a short file
 // write, and the DM waits for its result. Re-validates server-side
-// (frontmatter parses, status draft, safe paths); 409 { conflicts } when any
+// (properties parses, status draft, safe paths); 409 { conflicts } when any
 // target file exists — then nothing is written at all. chapter +
 // chapterTitle (both or neither) additionally create `<chapter>/_chapter.md`
 // when it is missing, in the same all-or-nothing batch (the app's "Neues

@@ -189,7 +189,7 @@ describe("AK1 — examples/beispiel imports completely and cleanly", () => {
     expect(relations[0]?.note).toBe("kennt ihn von früher — er fuhr einst ehrlich zur See");
     expect(relations[0]?.pos).toBe(0);
 
-    // locations — including the hyphenated frontmatter key.
+    // locations — including the hyphenated properties key.
     const leuchtturm = db.select().from(locations).all()[0];
     expect(leuchtturm?.id).toBe("leuchtturm");
     expect(leuchtturm?.roll20Page).toBe("Leuchtturm");
@@ -317,7 +317,7 @@ Diese Szene hat kaputtes YAML.
 
   const NO_FRONTMATTER = `# Einfach nur Text
 
-Kein Frontmatter, keine id — trotzdem darf nichts verloren gehen.
+Kein Properties, keine id — trotzdem darf nichts verloren gehen.
 `;
 
   const COLLIDING = `---
@@ -404,7 +404,7 @@ Freitext ganz oben, der zu keinem Begriff gehört.
 
     // 1. broken YAML -> unknown_files, verbatim.
     expect(reasonFor("01-kapitel/ort/kaputt.md").join(" ")).toContain("kaputtes YAML");
-    // 2. missing frontmatter -> unknown_files, verbatim.
+    // 2. missing properties -> unknown_files, verbatim.
     expect(reasonFor("01-kapitel/ort/nackt.md").join(" ")).toContain("ohne Eigenschaften-Block");
     // 3. id collision -> the first file wins.
     expect(reasonFor("01-kapitel/zzz-kollision.md").join(" ")).toContain("doppelt");
@@ -508,7 +508,7 @@ describe("no silent content loss", () => {
     return id;
   }
 
-  test("an inbox.md the APP wrote — no frontmatter — is imported, not degraded", async () => {
+  test("an inbox.md the APP wrote — no properties — is imported, not degraded", async () => {
     // campaign-write.ts `appendInboxEntry` creates exactly this file when a
     // campaign has no inbox yet. Degrading it hid every ingested idea.
     const id = await campaignWith({
@@ -538,7 +538,7 @@ describe("no silent content loss", () => {
     expect(db.select().from(unknownFiles).where(eq(unknownFiles.campaignId, id)).all()).toEqual([]);
   });
 
-  test("a glossary without frontmatter is imported too", async () => {
+  test("a glossary without properties is imported too", async () => {
     const id = await campaignWith({
       "_campaign.md": "---\nid: review\n---\n",
       "glossary.md": "# Glossar\n\n- cove -> Bucht\n",
@@ -553,7 +553,7 @@ describe("no silent content loss", () => {
     );
   });
 
-  test("an inbox with a BROKEN frontmatter block still degrades verbatim", async () => {
+  test("an inbox with a BROKEN properties block still degrades verbatim", async () => {
     const broken = "---\nid: [unclosed\n---\n\n- eine Idee\n";
     const id = await campaignWith({
       "_campaign.md": "---\nid: review\n---\n",
@@ -843,8 +843,8 @@ describe("AK4 — the file tree is left untouched", () => {
     // And not even an mtime moved — the importer only ever reads. (A marker
     // file, the thing the PO explicitly ruled out, would show up in the tree
     // hash above; this catches an in-place rewrite of identical bytes.)
-    for (const [rel, mtime] of mtimesBefore) {
-      expect((await stat(path.join(tmpRoot, rel))).mtimeMs).toBe(mtime);
+    for (const [rel, mtimeMs] of mtimesBefore) {
+      expect((await stat(path.join(tmpRoot, rel))).mtimeMs).toBe(mtimeMs);
     }
   });
 });

@@ -1,7 +1,7 @@
-// Issue #28: the status write. What matters is the payload (the mtime must be
+// Issue #28: the status write. What matters is the payload (the rev must be
 // the one of the file the DM was looking at) and the 409 path — the server
 // wrote NOTHING then, so the UI must re-read the file and let the next
-// attempt carry the fresh mtime.
+// attempt carry the fresh rev.
 
 import type { FileResponse } from "@grimoire/shared/types";
 import { afterEach, describe, expect, test } from "bun:test";
@@ -17,14 +17,14 @@ import {
 
 const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm.md";
 
-function fileAt(mtimeMs: number, status: string): FileResponse {
+function fileAt(rev: number, status: string): FileResponse {
   return {
     path: SCENE,
     kind: "scene",
-    frontmatter: { id: "arrival", title: "Ankunft", status },
+    properties: { id: "arrival", title: "Ankunft", status },
     body: "",
     raw: `---\nid: arrival\nstatus: ${status}\n---\n`,
-    mtimeMs,
+    rev,
   };
 }
 
@@ -60,64 +60,64 @@ afterEach(() => {
 });
 
 describe("sceneStatusPatchBody", () => {
-  test("patches only `status`, with the mtime of the loaded file", () => {
+  test("patches only `status`, with the rev of the loaded file", () => {
     expect(sceneStatusPatchBody(SCENE, 1_700_000_000_123, "ready")).toEqual({
       path: SCENE,
-      mtimeMs: 1_700_000_000_123,
+      rev: 1_700_000_000_123,
       patch: { status: "ready" },
     });
   });
 
-  test("nothing else of the frontmatter is touched", () => {
+  test("nothing else of the properties is touched", () => {
     const body = sceneStatusPatchBody(SCENE, 1, "played");
     expect(Object.keys(body.patch)).toEqual(["status"]);
   });
 });
 
 describe("writeSceneStatus", () => {
-  test("PATCHes the frontmatter endpoint and returns the server's file", async () => {
+  test("PATCHes the properties endpoint and returns the server's file", async () => {
     const calls = mockFetch([{ status: 200, body: fileAt(222, "ready") }]);
     const result = await writeSceneStatus("beispiel", SCENE, 111, "ready");
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("PATCH");
-    expect(calls[0]?.url).toBe("/api/beispiel/frontmatter");
-    expect(calls[0]?.body).toEqual({ path: SCENE, mtimeMs: 111, patch: { status: "ready" } });
+    expect(calls[0]?.url).toBe("/api/beispiel/properties");
+    expect(calls[0]?.body).toEqual({ path: SCENE, rev: 111, patch: { status: "ready" } });
     expect(result.ok).toBe(true);
-    expect(result.file?.mtimeMs).toBe(222);
+    expect(result.file?.rev).toBe(222);
   });
 
-  test("409: nothing written, the file is re-read for the fresh mtime", async () => {
+  test("409: nothing written, the file is re-read for the fresh rev", async () => {
     const calls = mockFetch([
-      { status: 409, body: { error: "file changed on disk", mtimeMs: 999 } },
+      { status: 409, body: { error: "file changed on disk", rev: 999 } },
       { status: 200, body: fileAt(999, "draft") },
     ]);
     const result = await writeSceneStatus("beispiel", SCENE, 111, "ready");
 
     expect(result.ok).toBe(false);
-    expect(result.file?.mtimeMs).toBe(999);
+    expect(result.file?.rev).toBe(999);
     expect(calls[1]?.method).toBe("GET");
     expect(calls[1]?.url).toBe(`/api/beispiel/file?path=${encodeURIComponent(SCENE)}`);
   });
 
-  test("the attempt after a conflict carries the mtime the reload brought", async () => {
+  test("the attempt after a conflict carries the rev the reload brought", async () => {
     mockFetch([
-      { status: 409, body: { error: "file changed on disk", mtimeMs: 999 } },
+      { status: 409, body: { error: "file changed on disk", rev: 999 } },
       { status: 200, body: fileAt(999, "draft") },
     ]);
     const conflict = await writeSceneStatus("beispiel", SCENE, 111, "ready");
-    const fresh = conflict.file?.mtimeMs;
+    const fresh = conflict.file?.rev;
 
     const calls = mockFetch([{ status: 200, body: fileAt(1000, "ready") }]);
     const retry = await writeSceneStatus("beispiel", SCENE, fresh ?? 0, "ready");
 
-    expect(calls[0]?.body).toEqual({ path: SCENE, mtimeMs: 999, patch: { status: "ready" } });
+    expect(calls[0]?.body).toEqual({ path: SCENE, rev: 999, patch: { status: "ready" } });
     expect(retry.ok).toBe(true);
   });
 
   test("409 plus a failed reload: still a conflict, no file to seed", async () => {
     mockFetch([
-      { status: 409, body: { error: "file changed on disk", mtimeMs: 999 } },
+      { status: 409, body: { error: "file changed on disk", rev: 999 } },
       { status: 500, body: { error: "boom" } },
     ]);
     expect(await writeSceneStatus("beispiel", SCENE, 111, "ready")).toEqual({ ok: false });

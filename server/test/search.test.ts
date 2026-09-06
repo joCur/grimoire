@@ -35,10 +35,10 @@ async function search(q: string): Promise<SearchResult[]> {
 }
 
 /** GET /file, for the write cases below (they need the guard token). */
-async function readFile(rel: string): Promise<{ mtimeMs: number; body: string }> {
+async function readFile(rel: string): Promise<{ rev: number; body: string }> {
   const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as { mtimeMs: number; body: string };
+  return (await res.json()) as { rev: number; body: string };
 }
 
 // --- the query builder and the score transform ------------------------------
@@ -217,7 +217,7 @@ describe("the index follows every write", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         path: rel,
-        mtimeMs: file.mtimeMs,
+        rev: file.rev,
         body: `${file.body}\n## Nachtwache\n\nJemand hält Wache am Turm.\n`,
       }),
     });
@@ -227,17 +227,17 @@ describe("the index follows every write", () => {
     expect(results.some((r) => r.kind === "scene" && r.id === "lighthouse-arrival")).toBe(true);
   });
 
-  test("a frontmatter patch re-indexes title and tags", async () => {
+  test("a properties patch re-indexes title and tags", async () => {
     const rel = "npcs/fenn.md";
     expect(await search("bucht-kapitaen")).toEqual([]);
 
     const file = await readFile(rel);
-    const res = await app.request("/api/beispiel/frontmatter", {
+    const res = await app.request("/api/beispiel/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         path: rel,
-        mtimeMs: file.mtimeMs,
+        rev: file.rev,
         patch: { name: "Bucht-Kapitaen Fenn" },
       }),
     });
@@ -270,10 +270,10 @@ describe("the index follows every write", () => {
     // means search kept offering the OLD name and never the new one.
     const file = await readFile("npcs/fenn.md");
     // make the name the id's spelled-out fallback, as an authored file may
-    const patch = await app.request("/api/beispiel/frontmatter", {
+    const patch = await app.request("/api/beispiel/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: "npcs/fenn.md", mtimeMs: file.mtimeMs, patch: { name: "fenn" } }),
+      body: JSON.stringify({ path: "npcs/fenn.md", rev: file.rev, patch: { name: "fenn" } }),
     });
     expect(patch.status).toBe(200);
 
@@ -290,16 +290,16 @@ describe("the index follows every write", () => {
     expect((await search("fenn")).some((r) => r.title === "fenn")).toBe(false);
   });
 
-  test("a frontmatter patch does not un-index an npc's relationship note", async () => {
+  test("a properties patch does not un-index an npc's relationship note", async () => {
     // The two npc writers indexed different text (patch: the stripped body,
     // body save: the full one), so an unrelated status change dropped
     // `## Beziehungen` out of the index. ONE rule now: the full document.
     expect((await search("Blick")).some((r) => r.id === "fenn")).toBe(true);
     const file = await readFile("npcs/fenn.md");
-    const res = await app.request("/api/beispiel/frontmatter", {
+    const res = await app.request("/api/beispiel/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: "npcs/fenn.md", mtimeMs: file.mtimeMs, patch: { status: "dead" } }),
+      body: JSON.stringify({ path: "npcs/fenn.md", rev: file.rev, patch: { status: "dead" } }),
     });
     expect(res.status).toBe(200);
     expect((await search("Blick")).some((r) => r.id === "fenn")).toBe(true);

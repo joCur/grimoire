@@ -5,7 +5,8 @@
 // `FileResponse` — and so is every ordering rule the file-tree reader had
 // (chapters by their migration order, npcs/locations by name, sessions newest
 // first, scene groups by slug). What changed is that the orderings are now
-// SQL instead of a directory walk, and that `mtimeMs` is the row's `rev`.
+// SQL instead of a directory walk, and that the guard token `rev` is the
+// row's own version counter.
 //
 // The active-session logic is the one piece of behaviour worth calling out:
 // it is the SAME definition as before (the last STARTED session that is not

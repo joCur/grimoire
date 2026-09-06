@@ -484,7 +484,7 @@ function importCampaign(
       );
       continue;
     }
-    parsed.push({ file, cls, frontmatter: p.frontmatter, body: p.body });
+    parsed.push({ file, cls, frontmatter: p.properties, body: p.body });
   }
 
   const find = (kind: FileClass["kind"]): Parsed[] => parsed.filter((p) => p.cls.kind === kind);

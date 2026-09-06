@@ -19,19 +19,19 @@ import {
   usageTotalLabel,
 } from "@/lib/rename";
 
-function file(path: string, kind: EntityKind, frontmatter: Record<string, unknown> = {}) {
-  return { path, kind, frontmatter };
+function file(path: string, kind: EntityKind, properties: Record<string, unknown> = {}) {
+  return { path, kind, properties };
 }
 
 describe("renameTargetFor", () => {
-  test("npc/location/scene use the frontmatter id", () => {
+  test("npc/location/scene use the properties id", () => {
     expect(renameTargetFor(file("npcs/jorna.md", "npc", { id: "jorna" }))).toEqual({
       kind: "npc",
       oldId: "jorna",
     });
     expect(renameTargetFor(file("locations/leuchtturm.md", "location", { id: "leuchtturm" })))
       .toEqual({ kind: "location", oldId: "leuchtturm" });
-    // the scene id is NOT the file name — the frontmatter wins
+    // the scene id is NOT the file name — the properties wins
     expect(
       renameTargetFor(
         file("01-salzhafen/hafen/ankunft-leuchtturm.md", "scene", { id: "lighthouse-arrival" }),

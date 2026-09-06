@@ -88,11 +88,11 @@ export interface Seed {
 export interface ApiFile {
   path: string;
   kind: string;
-  frontmatter: Record<string, unknown>;
+  properties: Record<string, unknown>;
   body: string;
   /** The row version (`rev`) — an opaque guard token since the cutover. */
-  mtimeMs: number;
-  /** The file as the server serializes it: frontmatter block plus body. */
+  rev: number;
+  /** The file as the server serializes it: properties block plus body. */
   raw: string;
 }
 
@@ -131,8 +131,8 @@ export interface Api {
    * changed the file outside" cannot happen any more.
    */
   writeBody(rel: string, body: string): Promise<number>;
-  /** PATCH /frontmatter with a fresh guard token; returns the new token. */
-  patchFrontmatter(rel: string, patch: Record<string, unknown>): Promise<number>;
+  /** PATCH /properties with a fresh guard token; returns the new token. */
+  patchProperties(rel: string, patch: Record<string, unknown>): Promise<number>;
 }
 
 /** Read access to the test's database, with the server's own driver. */
@@ -300,19 +300,19 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
       const current = await api.file(rel);
       const written = await api.send<ApiFile>("PUT", `${campaign}/file`, {
         path: rel,
-        mtimeMs: current.mtimeMs,
+        rev: current.rev,
         body,
       });
-      return written.mtimeMs;
+      return written.rev;
     },
-    async patchFrontmatter(rel, patch) {
+    async patchProperties(rel, patch) {
       const current = await api.file(rel);
-      const written = await api.send<ApiFile>("PATCH", `${campaign}/frontmatter`, {
+      const written = await api.send<ApiFile>("PATCH", `${campaign}/properties`, {
         path: rel,
-        mtimeMs: current.mtimeMs,
+        rev: current.rev,
         patch,
       });
-      return written.mtimeMs;
+      return written.rev;
     },
   };
   return api;

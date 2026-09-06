@@ -8,9 +8,9 @@
 //
 // Two behaviour notes the cutover forced, both pinned below:
 //
-//   * `reviewed` is no longer a frontmatter list that GROWS IN SEEN ORDER.
-//     It is a flag on the log row, and the frontmatter renders the flagged
-//     rows in LOG ORDER (store/render.ts sessionFrontmatter) — a stable
+//   * `reviewed` is no longer a properties list that GROWS IN SEEN ORDER.
+//     It is a flag on the log row, and the properties renders the flagged
+//     rows in LOG ORDER (store/render.ts sessionProperties) — a stable
 //     reading order instead of a click order.
 //   * A `review/seen` hash matching no log line changes NOTHING and answers
 //     `marked: false`. The file version appended the hash regardless and left
@@ -55,7 +55,7 @@ async function putBody(rel: string, body: string): Promise<FileResponse> {
   const res = await app.request("/api/beispiel/file", {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: rel, mtimeMs: before.mtimeMs, body }),
+    body: JSON.stringify({ path: rel, rev: before.rev, body }),
   });
   expect(res.status).toBe(200);
   return (await res.json()) as FileResponse;
@@ -82,11 +82,11 @@ describe("POST /api/:campaign/review/seen", () => {
   test("adds the short hash once; Log unchanged; key rendered last", async () => {
     const before = await getFile(SESSION);
     const file = await postOk("/api/beispiel/review/seen", { path: SESSION, line: LINE });
-    expect(file.frontmatter.reviewed).toEqual([sha8(LINE)]);
+    expect(file.properties.reviewed).toEqual([sha8(LINE)]);
 
     // `reviewed` is rendered after the session's own keys — the position the
     // degrade path used to append it to.
-    expect(Object.keys(file.frontmatter)).toEqual([
+    expect(Object.keys(file.properties)).toEqual([
       "id",
       "started",
       "ended",
@@ -111,9 +111,9 @@ describe("POST /api/:campaign/review/seen", () => {
   test("idempotent: the same line does not add a second entry", async () => {
     const first = await postOk("/api/beispiel/review/seen", { path: SESSION, line: LINE });
     const again = await postOk("/api/beispiel/review/seen", { path: SESSION, line: LINE });
-    expect(again.frontmatter.reviewed).toEqual([sha8(LINE)]);
+    expect(again.properties.reviewed).toEqual([sha8(LINE)]);
     // Nothing to write means nothing written: the session's guard token stands.
-    expect(again.mtimeMs).toBe(first.mtimeMs);
+    expect(again.rev).toBe(first.rev);
     expect(again.body).toBe(first.body);
   });
 
@@ -122,16 +122,16 @@ describe("POST /api/:campaign/review/seen", () => {
     // they arrived; the flag on the row has no click order to remember, and
     // the log's own order is the one the review reads in.
     const second = await postOk("/api/beispiel/review/seen", { path: SESSION, line: LINE2 });
-    expect(second.frontmatter.reviewed).toEqual([sha8(LINE2)]);
+    expect(second.properties.reviewed).toEqual([sha8(LINE2)]);
     const both = await postOk("/api/beispiel/review/seen", { path: SESSION, line: LINE });
-    expect(both.frontmatter.reviewed).toEqual([sha8(LINE), sha8(LINE2)]);
+    expect(both.properties.reviewed).toEqual([sha8(LINE), sha8(LINE2)]);
     expect(both.raw).toContain(`reviewed: [${sha8(LINE)}, ${sha8(LINE2)}]\n`);
   });
 
   test("a line that is not in the log changes nothing and says so", async () => {
     // NEW with the cutover: the hash addresses a ROW. A line the session does
     // not have (a stale review view, a hand-edited log) can therefore not be
-    // flagged — and instead of an orphan frontmatter entry nothing happens.
+    // flagged — and instead of an orphan properties entry nothing happens.
     // It is not SILENT though: `marked: false` is the answer saying "no row
     // hashes to what you sent", which a bare 200 would hide.
     const before = await getFile(SESSION);
@@ -140,7 +140,7 @@ describe("POST /api/:campaign/review/seen", () => {
       line: "- 23:59 gibt es in diesem Log nicht",
     })) as FileResponse & { marked?: boolean };
     expect(after.marked).toBe(false);
-    expect(after.frontmatter.reviewed).toBeUndefined();
+    expect(after.properties.reviewed).toBeUndefined();
     const { marked: _marked, ...file } = after;
     expect(file).toEqual(before);
   });
@@ -206,7 +206,7 @@ describe("POST /api/:campaign/review/thread", () => {
     // The section is the last one in the fixture -> pure append.
     expect(file.body).toBe(`${before.body}- [ ] Lichter in der Bucht untersuchen\n`);
     expect(file.kind).toBe("chapter");
-    expect(file.frontmatter).toEqual(before.frontmatter);
+    expect(file.properties).toEqual(before.properties);
   });
 
   test("inserts before the next heading when the section is not last", async () => {
@@ -245,7 +245,7 @@ describe("POST /api/:campaign/review/thread", () => {
   });
 
   test("404 when the chapter does not exist or is not a chapter", async () => {
-    // Replaces "creates _chapter.md with minimal frontmatter when missing":
+    // Replaces "creates _chapter.md with minimal properties when missing":
     // the endpoint used to invent a chapter file for any directory it found,
     // and a chapter ROW is not something a review action may create out of a
     // typo (the generator's new-chapter flow does that, deliberately). So an
@@ -295,12 +295,12 @@ describe("POST /api/:campaign/review/npc-stub", () => {
     // status is the column default — the log line said nothing about it, so
     // the entry must not claim "alive" (issue #70; the route always
     // documented "unknown", the insert said otherwise).
-    expect(file.frontmatter.status).toBe("unknown");
+    expect(file.properties.status).toBe("unknown");
     expect(file.raw).toBe(
       "---\nid: old-metta\nname: Old Metta\nstatus: unknown\n---\n\n## Notizen\n\n- Fischerin am Steg, kennt die Gezeiten #npc\n",
     );
     // A fresh row starts at rev 1 — the token the app sends with its first edit.
-    expect(file.mtimeMs).toBe(1);
+    expect(file.rev).toBe(1);
     expect(await getFile("npcs/old-metta.md")).toEqual(file);
   });
 
@@ -330,26 +330,26 @@ describe("POST /api/:campaign/review/npc-stub", () => {
   test("an EMPTY entry — one a reference created — is filled in", async () => {
     // `holm` gets its row from the scene that names it (#70); the review is
     // the first thing that knows a name and a note for it.
-    const res = await app.request("/api/beispiel/frontmatter", {
+    const res = await app.request("/api/beispiel/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         path: SCENE,
-        mtimeMs: (await getFile(SCENE)).mtimeMs,
+        rev: (await getFile(SCENE)).rev,
         patch: { npcs: ["jorna", "holm"] },
       }),
     });
     expect(res.status).toBe(200);
     const empty = await getFile("npcs/holm.md");
-    expect(empty.frontmatter.name).toBe("holm");
+    expect(empty.properties.name).toBe("holm");
     const filled = await postOk("/api/beispiel/review/npc-stub", {
       id: "holm",
       name: "Holm",
       note: "war am Steg #npc",
     });
-    expect(filled.frontmatter.name).toBe("Holm");
+    expect(filled.properties.name).toBe("Holm");
     expect(filled.body).toContain("- war am Steg #npc");
-    expect(filled.mtimeMs).toBe(empty.mtimeMs + 1);
+    expect(filled.rev).toBe(empty.rev + 1);
   });
 
   test("400 unless id is a kebab-case slug", async () => {

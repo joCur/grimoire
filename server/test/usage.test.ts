@@ -80,7 +80,7 @@ describe("usage per reference kind", () => {
     expect(report.total).toBe(2);
   });
 
-  test("location: scene `location:` frontmatter", async () => {
+  test("location: scene `location:` properties", async () => {
     const report = await usage("location", "leuchtturm");
 
     expect(group(report, "sceneLocation")).toEqual({

@@ -12,7 +12,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { CampaignMetaAction } from "./CampaignMetaAction";
 import { FileBodyEditAction } from "./FileBodyEditor";
-import { FrontmatterAction } from "./FrontmatterAction";
+import { PropertiesAction } from "./PropertiesAction";
 import { HeaderAction } from "./HeaderAction";
 import { RenameAction } from "./RenameAction";
 
@@ -71,14 +71,14 @@ describe("the three call sites", () => {
     const npc: FileResponse = {
       path: "npcs/jorna.md",
       kind: "npc",
-      frontmatter: { id: "jorna", name: "Jorna" },
+      properties: { id: "jorna", name: "Jorna" },
       body: "",
-      mtimeMs: 1,
+      rev: 1,
       raw: "",
     };
     expect(
       renderToStaticMarkup(
-        <FrontmatterAction campaign="beispiel" file={npc} tree={undefined} />,
+        <PropertiesAction campaign="beispiel" file={npc} tree={undefined} />,
       ),
     ).toBe(
       renderToStaticMarkup(
@@ -87,19 +87,19 @@ describe("the three call sites", () => {
     );
   });
 
-  test("no Eigenschaften where there is no typed frontmatter (session, inbox, campaign)", () => {
+  test("no Eigenschaften where there is no typed properties (session, inbox, campaign)", () => {
     for (const kind of ["session", "inbox", "campaign", "glossary"] as const) {
       const file: FileResponse = {
         path: "x.md",
         kind,
-        frontmatter: {},
+        properties: {},
         body: "",
-        mtimeMs: 1,
+        rev: 1,
         raw: "",
       };
       expect(
         renderToStaticMarkup(
-          <FrontmatterAction campaign="beispiel" file={file} tree={undefined} />,
+          <PropertiesAction campaign="beispiel" file={file} tree={undefined} />,
         ),
       ).toBe("");
     }

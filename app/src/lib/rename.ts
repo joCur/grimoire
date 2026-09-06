@@ -10,7 +10,7 @@
 import type { EntityKind } from "@grimoire/shared/types";
 
 import { ApiError, type RenameKind, type UsageGroup, type UsageRef, type UsageReport } from "@/api";
-import { fmString } from "@/lib/frontmatter";
+import { fmString } from "@/lib/properties";
 import { isNpcSlug } from "@/lib/review";
 
 export type { RenameKind };
@@ -37,13 +37,13 @@ function fileStem(path: string): string {
  *
  * For a chapter the id is the FIRST PATH SEGMENT of its `_chapter.md` (the
  * former directory name, and the chapter row's id). For every other kind it
- * is the frontmatter id (which the parser already falls back to the file
+ * is the properties id (which the parser already falls back to the file
  * stem).
  */
 export function renameTargetFor(file: {
   path: string;
   kind: EntityKind;
-  frontmatter: Record<string, unknown>;
+  properties: Record<string, unknown>;
 }): RenameTarget | undefined {
   if (file.kind === "chapter") {
     const dir = file.path.slice(0, file.path.lastIndexOf("/"));
@@ -52,7 +52,7 @@ export function renameTargetFor(file: {
     return dir === "" || dir.includes("/") ? undefined : { kind: "chapter", oldId: dir };
   }
   if (file.kind !== "npc" && file.kind !== "location" && file.kind !== "scene") return undefined;
-  const oldId = fmString(file.frontmatter.id) ?? fileStem(file.path);
+  const oldId = fmString(file.properties.id) ?? fileStem(file.path);
   return oldId === "" ? undefined : { kind: file.kind, oldId };
 }
 
@@ -113,7 +113,7 @@ const USAGE_REF_LABEL: Record<UsageRef, [string, string]> = {
   chapterNpcs: ["NPC", "NPCs"],
   chapterLocations: ["Ort", "Orte"],
   // Issue #68: a body text that says `[[<id>]]`. „Textstelle" is what the DM
-  // sees on the page — a name in running prose, not a frontmatter field.
+  // sees on the page — a name in running prose, not a properties field.
   bodyRefs: ["Textstelle", "Textstellen"],
 };
 
