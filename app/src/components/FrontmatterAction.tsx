@@ -149,7 +149,9 @@ function FrontmatterDialog({
   // What is unfinished, per field — an unnamed or a doubled quickstat row.
   // Saving over one of those would lose what the DM typed, so it blocks the
   // save and says why under the field itself.
-  const issues = frontmatterFormIssues(fields, effective);
+  // `initial` exempts what the file already holds: free text a migrated
+  // campaign carries in `npcs` must not block a save of another field (#70).
+  const issues = frontmatterFormIssues(fields, effective, initial);
   const canSubmit =
     canSubmitFrontmatter(fields, effective) &&
     Object.keys(issues).length === 0 &&

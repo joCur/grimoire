@@ -159,7 +159,10 @@ Szenentext oder `#npc`-Lognotiz.
 > normale, dünne Karten und sind normal befüllbar. Ausnahme und Grenze:
 > `location:` darf auch freier Text sein; ein Wert, der KEIN Kebab-Slug ist
 > (Leerzeichen, Großschreibung), bleibt reiner Text und bekommt keinen
-> Eintrag.
+> Eintrag. `npcs:` hat diese Freitext-Hälfte NICHT — dort steht eine id,
+> ein neuer Eintrag ohne Slug-Form wird mit 400 abgelehnt (Bestand, den die
+> Migration mitgebracht hat, bleibt lesbar und speicherbar). `chapter:` legt
+> nichts an: ein unbekanntes Kapitel ist 400, bei Szene, NPC und Ort gleich.
 
 ## Entität: Ort
 

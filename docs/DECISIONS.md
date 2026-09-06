@@ -424,3 +424,37 @@ die Validierung des Generators lockern (sie schützt vor halluzinierten ids),
 `[[slug]]`-Referenzen in Prosa anlegen (die Kind-Zuordnung ist mehrdeutig) und
 Kapitel-ids anlegen (eine Szene unter einem unbekannten Kapitel fällt aus dem
 Baum, deshalb bleibt es 400).
+
+### Nachschärfungen aus dem Audit (#70, gleiche Scheibe)
+
+Das Review der ersten Umsetzung hat sechs Stellen gefunden, an denen die Regel
+oben nicht durchgezogen war — die App versprach etwas, was der Server nicht
+tat, oder umgekehrt. Verbindlich ist ab jetzt:
+
+- **Status zählt als Inhalt.** Eine per Referenz entstandene Zeile, deren
+  `status` der DM auf z. B. `dead` gestellt hat, ist NICHT mehr leer: Der
+  Generator-Apply antwortet dort wieder mit `409 { conflicts }`, `npc-stub`
+  gibt sie unverändert zurück. Leer ist nur der Spaltendefault.
+- **`location:` wird bei JEDEM Patch sichergestellt**, nicht nur bei einer
+  Änderung. Der Eigenschaften-Dialog verspricht „wird beim Speichern
+  angelegt"; mit der alten „nur NEUE Referenzen"-Regel blieb ein hängender
+  Alt-Slug beim Speichern genau so hängen. Die Freitext-Grenze bleibt
+  unverändert. Für `npcs:` gilt weiter „nur neue" (siehe nächster Punkt).
+- **`npcs:` nimmt ids, keine Namen.** Ein NEUER Eintrag ohne Slug-Form wird
+  mit 400 abgelehnt (`npcs` hat, anders als `location`, keine Freitext-Hälfte:
+  jeder Eintrag wird eine Karte und eine Referenz). Bereits GESPEICHERTE
+  Werte sind ausgenommen — die Migration importiert, was da ist, und eine
+  Alt-Szene muss speicherbar bleiben. Die Karte einer solchen Alt-Referenz
+  sagt „keine NPC-id, deshalb kein Eintrag" statt „Server prüfen".
+- **`chapter:` ist überall 400.** Ein unbekanntes Kapitel wurde bei einer
+  Szene abgelehnt, bei NPC und Ort still gespeichert; jetzt gilt für alle drei
+  dasselbe (nur bei geändertem Wert, wegen Bestandsdaten), und der Hinweis im
+  Dialog sagt „Kapitel muss existieren" statt „wird angelegt".
+- **Zwei Drafts auf dieselbe Adresse sind 409** (`{ conflicts }`) statt
+  last-write-win: seit eine leere Zeile kein Konflikt mehr ist, hat der
+  zweite Draft den ersten befüllt, und das Review meldete einen sauberen
+  Apply für weggeworfenen Inhalt.
+- **Rename merged in eine LEERE Zielzeile** statt 409. Genau dieser Zustand
+  entsteht jetzt regulär (eine Szene listet alte und neue id → die neue hat
+  eine leere Zeile), und der Merge der Referenzlisten war sonst toter Code.
+  Eine Zielzeile mit Inhalt bleibt 409 — Rename überschreibt nichts.

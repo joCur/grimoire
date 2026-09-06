@@ -19,6 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { fetchFile } from "@/api";
 import { EntityCardShell } from "@/components/EntityCardShell";
+import { isEntityId } from "@/lib/entity";
 import { fmQuickstats, fmString } from "@/lib/frontmatter";
 import { firstParagraphOfSection } from "@/lib/md-section";
 
@@ -43,11 +44,27 @@ export function NpcCard({
   onOpen?: (path: string) => void;
 }) {
   const path = npcPath(id);
+  // A NON-SLUG entry is no id and therefore no entry (#70 audit): `npcs:`
+  // holds ids, and the server now refuses new free text there. What can still
+  // stand in the list is what a migrated file era campaign brought along —
+  // and asking for `npcs/Alte Fischerin.md` answers 404, which this card
+  // reported as "Server prüfen", blaming the server for data it was handed.
+  // It is not asked at all now, and the line says what is actually the case.
+  const isId = isEntityId(id);
   const { data, isPending, isError } = useQuery({
     queryKey: ["file", campaign, path],
     queryFn: () => fetchFile(campaign, path),
     retry: false,
+    enabled: isId,
   });
+
+  if (!isId) {
+    return (
+      <p className="text-[12px] leading-[1.5] text-muted-foreground">
+        <span className="font-mono">{id}</span> — keine NPC-id, deshalb kein Eintrag.
+      </p>
+    );
+  }
 
   // Nothing decided yet — never claim anything while loading.
   if (isPending) return null;

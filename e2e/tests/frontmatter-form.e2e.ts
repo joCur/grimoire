@@ -142,6 +142,14 @@ test("scene properties: chips, reference and status land in the file — nothing
   await expect(referenceHint(dialog, "Neu — wird beim Speichern angelegt.")).toBeVisible();
   await expect(referenceHint(dialog, "Der Leuchtturm von Salzhafen")).toHaveCount(0);
 
+  // A CHAPTER is the one reference that is NOT created by naming it (ADR #14 —
+  // the server answers 400), so the hint must not promise it. Typed and taken
+  // back, so the save below stays the one this spec is about.
+  const chapter = dialog.getByLabel("Kapitel");
+  await chapter.fill("99-nirgendwo");
+  await expect(referenceHint(dialog, "Unbekannt — Kapitel muss existieren.")).toBeVisible();
+  await chapter.fill("01-salzhafen");
+
   await dialog.getByLabel("Status").selectOption("draft");
   await expect(save).toBeEnabled();
   await save.click();

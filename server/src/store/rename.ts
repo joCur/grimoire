@@ -47,7 +47,7 @@ import {
   type UsageKind,
   type UsageReport,
 } from "./usage";
-import { reindexEntity } from "./write";
+import { isEmptyEntity, reindexEntity } from "./write";
 import { chapterPath, locationPath, npcPath, scenePath } from "./paths";
 
 /**
@@ -222,11 +222,17 @@ function updateSoftReferences(
   ownsRefSlug: boolean,
 ): void {
   if (kind === "npc") {
-    // MERGE, don't collide (#70): a scene that lists BOTH ids — legal while a
-    // reference could dangle — has a `scene_npcs` primary key
-    // (campaign, scene, npc) that the plain UPDATE would violate. That was an
-    // unhandled constraint error, i.e. a 500 out of a rename the preview had
-    // just called safe. The old row goes, the existing one stays.
+    // MERGE, don't collide (#70): a scene that lists BOTH ids has a
+    // `scene_npcs` primary key (campaign, scene, npc) that the plain UPDATE
+    // would violate — an unhandled constraint error, i.e. a 500 out of a
+    // rename the preview had just called safe. The old row goes, the existing
+    // one stays.
+    //
+    // This is the LIVE path of the empty-target merge above: while a
+    // reference could dangle, the second id had no row at all; now it has an
+    // empty one, `renameEntity` drops that instead of answering 409, and the
+    // two reference lists are joined here. A migrated database can still hold
+    // the dangling variant, which lands in the same code.
     for (const row of tx
       .select({ sceneId: sceneNpcs.sceneId })
       .from(sceneNpcs)
@@ -354,7 +360,21 @@ export async function renameEntity(
   if (!entityExists(db, campaign, kind, oldId)) {
     throw new ApiError(404, `${kind} "${oldId}" not found`);
   }
-  if (entityExists(db, campaign, kind, newId)) {
+  // MERGE INTO AN EMPTY TARGET (#70 audit). An npc/location row that holds
+  // nothing but its id was not authored — a reference put it there — and
+  // since referencing creates, it is the target a rename runs into: a scene
+  // that lists the old AND the new id is exactly what the merge in
+  // `updateSoftReferences` handles, and that state now always comes with an
+  // empty row for the new id. Every other #70 path fills such a row instead
+  // of colliding with it (the generator's apply step, `review/npc-stub`), so
+  // the rename does too. A target with CONTENT is still a 409: a rename must
+  // never overwrite what somebody wrote.
+  const targetExists = entityExists(db, campaign, kind, newId);
+  const mergeInto =
+    targetExists &&
+    (kind === "npc" || kind === "location") &&
+    isEmptyEntity(db, campaign, kind, newId);
+  if (targetExists && !mergeInto) {
     throw new ApiError(409, "target already exists — not overwriting", {
       path: pathOf(db, campaign, kind, newId),
     });
@@ -394,6 +414,15 @@ export async function renameEntity(
     // Asked BEFORE the id moves: after the update the old slug has no row of
     // this kind any more, and the answer would flip to "nothing owns it".
     const ownsRefSlug = kind !== "chapter" && refOwnerKind(tx, campaign, oldId) === kind;
+    if (mergeInto) {
+      // The empty target row makes way for the renamed one — otherwise the id
+      // update below violates the primary key. It carries no content by
+      // definition (`isEmptyEntity`), and its own index row goes with it.
+      tx.delete(table)
+        .where(and(eq(table.campaignId, campaign), eq(table.id, newId)))
+        .run();
+      dropEntity(tx, campaign, kind, newId);
+    }
     tx.update(table)
       .set({ id: newId })
       .where(and(eq(table.campaignId, campaign), eq(table.id, oldId)))

@@ -378,6 +378,32 @@ function chapterIdExists(tx: GrimoireDb, campaign: string, id: string): boolean 
   return chapterRowOf(tx, campaign, id) !== undefined;
 }
 
+/**
+ * A `chapter:` a patch DECLARES has to exist — 400 otherwise.
+ *
+ * Chapters are the one reference kind that is deliberately NOT created by
+ * naming it (ADR #14): for a scene the chapter is part of the ADDRESS, and a
+ * scene under an unknown chapter has no node to hang in. An npc's and a
+ * location's `chapter:` is only a soft grouping, and it used to be stored
+ * unchecked — so the same typo produced a 400 in one dialog and a silent
+ * dangling id in the next, and the properties form promised "wird angelegt"
+ * for all three. One rule for all three kinds now, and the form says it.
+ *
+ * Only a CHANGED value is checked: the migration imports what a file era
+ * campaign holds, and an unrelated `PATCH { status }` re-sends the stored
+ * chapter — refusing that would make legacy stock unsavable.
+ */
+function assertChapterRef(
+  tx: GrimoireDb,
+  campaign: string,
+  declared: string | null,
+  current: string | null,
+): void {
+  if (declared === null || declared === current) return;
+  if (chapterIdExists(tx, campaign, declared)) return;
+  throw new ApiError(400, `unknown chapter: ${declared} — create the chapter first`);
+}
+
 function nextPos(rows: Array<{ pos: number }>): number {
   return rows.reduce((max, row) => Math.max(max, row.pos), -1) + 1;
 }
@@ -405,6 +431,12 @@ function nextPos(rows: Array<{ pos: number }>): number {
 // `PATCH { status }` re-sends the scene's existing `location`, and
 // materialising THAT would retroactively turn every legacy free-text place
 // name into an entity nobody authored.
+
+/**
+ * The `npcs.status` column default (schema.ts) — "nothing is claimed". Named
+ * here because emptiness is defined against it (`isEmptyNpcRow`).
+ */
+const NPC_DEFAULT_STATUS = "unknown";
 
 /** An empty row for `id`, unless the id is no slug or already has a row. */
 function ensureNpcRow(tx: GrimoireDb, campaign: string, id: string): boolean {
@@ -439,10 +471,17 @@ function ensureLocationRow(tx: GrimoireDb, campaign: string, id: string): boolea
  * collide with itself and answer the documented `409 { conflicts }` for a
  * target that has no content to lose. An empty row is therefore not a
  * conflict: the generated entity FILLS it.
+ *
+ * `status` COUNTS as information. An entry the DM only ever set to `dead` is
+ * still a statement about that npc — the one field the live view acts on — so
+ * an apply must not overwrite it silently; it answers the documented 409 like
+ * any other filled row. Only the column DEFAULT is emptiness, and that is
+ * exactly what `ensureNpcRow` leaves behind.
  */
 function isEmptyNpcRow(row: NpcRow): boolean {
   return (
     row.name === "" &&
+    row.status === NPC_DEFAULT_STATUS &&
     row.role === null &&
     row.chapterId === null &&
     row.statblock === null &&
@@ -462,6 +501,26 @@ function isEmptyLocationRow(row: LocationRow): boolean {
     row.body.trim() === "" &&
     isEmptyJsonObject(row.extra)
   );
+}
+
+/**
+ * "This id has a row, and the row holds NOTHING" — for the rename cascade,
+ * which merges into such a row instead of refusing (rename.ts). Only the two
+ * kinds a reference can create have an empty state at all: a scene or a
+ * chapter is never put there by naming it.
+ */
+export function isEmptyEntity(
+  db: GrimoireDb,
+  campaign: string,
+  kind: "npc" | "location",
+  id: string,
+): boolean {
+  if (kind === "npc") {
+    const row = npcRowOf(db, campaign, id);
+    return row !== undefined && isEmptyNpcRow(row);
+  }
+  const row = locationRowOf(db, campaign, id);
+  return row !== undefined && isEmptyLocationRow(row);
 }
 
 function isEmptyJsonObject(packed: string): boolean {
@@ -516,13 +575,43 @@ export function backfillReferencedNpcs(tx: GrimoireDb, campaign: string): string
 
 // --- scene reference tables ---------------------------------------------------
 
+/**
+ * `npcs:` HOLDS IDS, NOT NAMES (issue #70 audit).
+ *
+ * Unlike `location`, this list has no free-text half: the README calls it a
+ * list of npc ids, the reading view resolves every entry to a card, and the
+ * reference pass creates the row an entry names. A non-slug entry ("Alte
+ * Fischerin") was storable, got no row — `ensureNpcRow` skips it — and then
+ * rendered as a card that says "NPC nicht ladbar, Server prüfen", i.e. the
+ * app blamed the server for a value it had accepted. So a NEW entry that is
+ * no slug is rejected where the other slug rules live: 400, with the rule in
+ * the message, and the chips input says the same thing before the save.
+ *
+ * `known` is what the scene ALREADY stores, and it is exempt: the migration
+ * imports whatever a file era campaign holds (schema.ts rule 1, no foreign
+ * keys), and refusing that on the way out would make a legacy scene
+ * unsavable — an unrelated `PATCH { status }` re-sends the whole list. Old
+ * free text stays until somebody removes it; nothing new joins it.
+ */
+function assertNpcRefSlugs(npcRefs: string[], known: readonly string[]): void {
+  for (const id of npcRefs) {
+    if (id === "" || known.includes(id) || ENTITY_SLUG.test(id)) continue;
+    throw new ApiError(
+      400,
+      `npcs holds npc ids, not names: "${id}" is no kebab-case slug (a-z, 0-9, single dashes)`,
+    );
+  }
+}
+
 function replaceSceneRefs(
   tx: GrimoireDb,
   campaign: string,
   sceneId: string,
   npcRefs: string[],
   tags: string[],
+  known: readonly string[] = [],
 ): void {
+  assertNpcRefSlugs(npcRefs, known);
   tx.delete(sceneNpcs)
     .where(and(eq(sceneNpcs.campaignId, campaign), eq(sceneNpcs.sceneId, sceneId)))
     .run();
@@ -735,9 +824,7 @@ function patchLocator(
       // in and would drop out of the tree). `{ chapter: null }` deletes the
       // KEY, as it always could, and leaves the address alone.
       const declared = asOptStr(fm.chapter);
-      if (declared !== null && declared !== row.chapterId && !chapterIdExists(tx, campaign, declared)) {
-        throw new ApiError(400, `unknown chapter: ${declared} — create the chapter first`);
-      }
+      assertChapterRef(tx, campaign, declared, row.chapterId);
       const next: SceneRow = {
         ...row,
         title: asStr(fm.title, row.id),
@@ -771,10 +858,14 @@ function patchLocator(
       for (const npcId of npcRefs) {
         if (!npcsBefore.includes(npcId)) ensureNpcRow(tx, campaign, npcId);
       }
-      if (next.location !== null && next.location !== row.location) {
-        ensureLocationRow(tx, campaign, next.location);
-      }
-      replaceSceneRefs(tx, campaign, row.id, npcRefs, tags);
+      // `location`, in contrast, is ensured on EVERY patch, changed or not.
+      // The properties dialog promises "wird beim Speichern angelegt" for a
+      // slug-shaped value, and with the change-guard a save left a dangling
+      // OLD slug exactly as it was — the hint lied about the stock the DM is
+      // most likely to look at. Idempotent and cheap (one lookup), and it
+      // creates nothing the field does not already name.
+      if (next.location !== null) ensureLocationRow(tx, campaign, next.location);
+      replaceSceneRefs(tx, campaign, row.id, npcRefs, tags, npcsBefore);
       indexScene(tx, campaign, next, tags);
       return renderScene(next, refNpcs(tx, campaign, row.id), refTags(tx, campaign, row.id));
     }
@@ -785,12 +876,14 @@ function patchLocator(
       rejectIdPatch(patch, row.id);
       const fm = applyPatch(renderNpc(row, relationRows(tx, campaign, row.id)).frontmatter, patch);
       const quickstats = asMap(fm.quickstats);
+      const npcChapter = asOptStr(fm.chapter);
+      assertChapterRef(tx, campaign, npcChapter, row.chapterId);
       const next: NpcRow = {
         ...row,
         name: asStr(fm.name, row.id),
         role: asOptStr(fm.role),
-        chapterId: asOptStr(fm.chapter),
-        status: asStr(fm.status, "unknown"),
+        chapterId: npcChapter,
+        status: asStr(fm.status, NPC_DEFAULT_STATUS),
         statblock: asOptStr(fm.statblock),
         quickstats: packJson(quickstats),
         voice: asOptStr(fm.voice),
@@ -823,10 +916,12 @@ function patchLocator(
       guardRev(row.rev, rev, "location changed");
       rejectIdPatch(patch, row.id);
       const fm = applyPatch(renderLocation(row).frontmatter, patch);
+      const locationChapter = asOptStr(fm.chapter);
+      assertChapterRef(tx, campaign, locationChapter, row.chapterId);
       const next: LocationRow = {
         ...row,
         name: asStr(fm.name, row.id),
-        chapterId: asOptStr(fm.chapter),
+        chapterId: locationChapter,
         roll20Page: asOptStr(fm["roll20-page"]),
         extra: extraOf(fm, LOCATION_KEYS),
         rev: row.rev + 1,
@@ -1753,7 +1848,7 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
         name: asStr(fm.name, id),
         role: asOptStr(fm.role),
         chapterId: asOptStr(fm.chapter),
-        status: asStr(fm.status, "unknown"),
+        status: asStr(fm.status, NPC_DEFAULT_STATUS),
         statblock: asOptStr(fm.statblock),
         quickstats: packJson(asMap(fm.quickstats)),
         voice: asOptStr(fm.voice),
@@ -1877,6 +1972,17 @@ export async function applyDrafts(
 ): Promise<void> {
   try {
     await mutate(campaign, (tx) => {
+      // TWO drafts for ONE address are a conflict too (#70 audit). Since an
+      // empty npc/location row stopped being a conflict, the second draft no
+      // longer hit the primary key: it FILLED the row the first had just
+      // written, last write wins, and the review reported a clean apply for
+      // content it had silently dropped. The batch is the model's output —
+      // one hallucinated duplicate id is exactly the case — so the answer is
+      // the documented one, and it names both offenders.
+      const duplicates = duplicateDraftRels(drafts);
+      if (duplicates.length > 0) {
+        throw new ApiError(409, "two drafts for the same target", { conflicts: duplicates });
+      }
       const conflicts = drafts
         .filter((draft) => draftTargetExistsIn(tx, campaign, draft.address))
         .map((draft) => draft.rel);
@@ -1899,6 +2005,23 @@ export async function applyDrafts(
     }
     throw error;
   }
+}
+
+/**
+ * The `rel`s of every draft whose ADDRESS another draft in the batch claims
+ * too — `rel` because that is what the review shows, `address` because that
+ * is the row the write lands in (`rel` can differ from it when the draft's
+ * frontmatter carries another id).
+ */
+function duplicateDraftRels(drafts: EntityDraft[]): string[] {
+  const seen = new Map<string, number>();
+  for (const draft of drafts) {
+    seen.set(draft.address, (seen.get(draft.address) ?? 0) + 1);
+  }
+  return drafts
+    .filter((draft) => (seen.get(draft.address) ?? 0) > 1)
+    .map((draft) => draft.rel)
+    .sort();
 }
 
 /** A UNIQUE/PRIMARY KEY violation from either SQLite backend (ADR #13). */

@@ -78,6 +78,15 @@ describe("reference fields", () => {
     expect(html).not.toContain("angelegt");
   });
 
+  test("an unknown CHAPTER is not promised — chapters are never auto-created", () => {
+    // ADR #14: a scene under an unknown chapter falls out of the tree, so the
+    // server answers 400 for every kind that names one. The hint promised the
+    // entry anyway and the save then failed with the server's message.
+    const html = render(sceneField("chapter"), { kind: "text", text: "99-nirgendwo" });
+    expect(html).toContain("Unbekannt — Kapitel muss existieren.");
+    expect(html).not.toContain("angelegt");
+  });
+
   test("npcs are chips: each id removable, the add-input suggests the known ones", () => {
     const html = render(sceneField("npcs"), { kind: "list", items: ["fenn", "kapitaen-torv"] });
     expect(html).toContain("fenn");

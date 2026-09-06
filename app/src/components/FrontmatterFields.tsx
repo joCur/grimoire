@@ -21,6 +21,7 @@ import type { KeyboardEvent, ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { INPUT_CLASS } from "@/components/ui/field";
+import { isEntityId } from "@/lib/entity";
 import {
   referenceLabel,
   referenceOptions,
@@ -193,7 +194,7 @@ export function FrontmatterFieldControl({
         className={cn(INPUT_CLASS, isReference && "font-mono text-[13px]")}
       />
       {isReference && <ReferenceOptions id={`${id}-options`} options={options} />}
-      {isReference && <ReferenceHint options={options} value={value.text} />}
+      {isReference && <ReferenceHint field={field} options={options} value={value.text} />}
     </FieldRow>
   );
 }
@@ -218,25 +219,40 @@ function ReferenceOptions({ id, options }: { id: string; options: readonly Field
  * save creates the entry, so the DM should know that before clicking, and a
  * typo is visible as "a new entry called that" instead of a silent nothing.
  *
- * The exception is the format's one ambiguous field: a value that is no
- * kebab-case slug (spaces, capitals) is free text — `location: Der alte
- * Hafen` stays text and gets no entry. Saying so is the whole documentation
- * of that boundary the DM ever sees.
+ * Two exceptions, and both are about telling the truth about the save:
+ *
+ *   * the format's one ambiguous field: a value that is no kebab-case slug
+ *     (spaces, capitals) is free text — `location: Der alte Hafen` stays text
+ *     and gets no entry. Saying so is the whole documentation of that boundary
+ *     the DM ever sees.
+ *   * CHAPTERS are not created by naming them (ADR #14, #70 audit): a scene
+ *     under an unknown chapter would fall out of the tree, so the server
+ *     answers 400 for every kind. This line used to promise the entry anyway
+ *     — the save then failed with the server's message. It now says what
+ *     actually happens.
  */
-function ReferenceHint({ options, value }: { options: readonly FieldOption[]; value: string }) {
+function ReferenceHint({
+  field,
+  options,
+  value,
+}: {
+  field: FrontmatterField;
+  options: readonly FieldOption[];
+  value: string;
+}) {
   const id = value.trim();
   if (id === "") return null;
   const name = referenceLabel(options, id);
   if (name !== undefined) return <p className="text-[11.5px] text-faint">{name}</p>;
   if (options.some((option) => option.value === id)) return null;
-  if (!ENTITY_SLUG.test(id)) {
+  if (field.source === "chapters") {
+    return <p className="text-[11.5px] text-faint">Unbekannt — Kapitel muss existieren.</p>;
+  }
+  if (!isEntityId(id)) {
     return <p className="text-[11.5px] text-faint">Freier Text — kein Eintrag.</p>;
   }
   return <p className="text-[11.5px] text-faint">Neu — wird beim Speichern angelegt.</p>;
 }
-
-/** Entity ids are kebab slugs (server store/write.ts `ENTITY_SLUG`). */
-const ENTITY_SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /** Chips for a string list (`tags`, `handouts`) or an id list (`npcs`). */
 function ChipsField({
