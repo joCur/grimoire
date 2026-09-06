@@ -79,6 +79,27 @@ describe("roundtrip over examples/", () => {
       expect(parseBlocks(exampleBody(rel)).length).toBeGreaterThan(0);
     }
   });
+
+  test("`[[slug]]` references survive the roundtrip untouched (issue #68)", () => {
+    // The composer needs NO special case for references — they are ordinary
+    // text — but „ordinary text" is a claim, and this is what pins it: the
+    // brackets must come back out of the editor exactly as they went in, in
+    // prose, in a callout, in an if-section and in a heading.
+    const body = [
+      "## Flow",
+      "",
+      "Am Kai wartet [[jorna]]s Boot, [[leuchtturm]] liegt dunkel.",
+      "",
+      "> [!readaloud] [[jorna]] sieht euch nicht an.",
+      "",
+      "## If: sie fragen nach [[fenn]]",
+      "",
+      "Dann schweigt [[jorna]] — und [[niemand]] hilft ihnen.",
+      "",
+    ].join("\n");
+    expect(serializeBlocks(parseBlocks(body))).toBe(body);
+    expect(blockText(parseBlocks(body)[1]!)).toContain("[[jorna]]s Boot");
+  });
 });
 
 describe("structure of the reference scenes", () => {

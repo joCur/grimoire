@@ -52,6 +52,11 @@ Danach genau diese Abschnitte, in dieser Reihenfolge:
 
 ## Regeln
 
+0. **Referenzen im Fließtext**: Nennt der Text in `## Will` oder `## Weiß`
+   eine Figur oder einen Ort mit id aus der Kontextliste, schreibe `[[id]]`
+   statt des Namens (`[[jorna]] zahlt gut`) — die App setzt beim Anzeigen den
+   aktuellen Namen ein. Kein Anzeigetext in den Klammern, Endungen außerhalb
+   (`[[jorna]]s Kai`). In `## Beziehungen` bleibt die nackte id ohne Klammern.
 1. **id**: kebab-case, kurz, stabil gedacht (`fenn`, nicht
    `der-schmuggler-aus-der-nordbucht`). Der Dateiname ist die id:
    `path` = `npcs/<id>.md`, und `id` im Frontmatter ist identisch dazu.

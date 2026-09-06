@@ -21,6 +21,12 @@
 //
 // When a validation rule changes, THIS file is the place to follow along —
 // the specs assert on the titles/ids defined here.
+//
+// The prose uses `[[slug]]` ENTITY REFERENCES (issue #68), because that is
+// what the prompt asks a well-behaved model for: `[[fenn]]` (exists in the
+// campaign), `[[grella]]` (shipped as a stub in the same reply, so it stays
+// literal text until the stub is applied) and `[[smuggler-captured]]` (a
+// scene — the third referenceable kind).
 
 /** Trigger tokens a test puts into the source text to steer the stub. */
 export const TRIGGER = {
@@ -78,8 +84,8 @@ status: draft
 ## Flow
 
 Die Gruppe beobachtet den Kai, während die Flut fällt. Zwei Laternen
-wandern über die Mole — Fenns Leute räumen eine Ladung fort, bevor der
-Morgen kommt.
+wandern über die Mole — [[fenn]]s Leute räumen eine Ladung fort, bevor
+der Morgen kommt.
 
 > [!readaloud] Die Flut zieht sich zurück und lässt schwarzen Schlick
 > zurück. Zwei Laternen schwanken über die Mole, und irgendwo unter
@@ -92,17 +98,17 @@ Morgen kommt.
 > Frachtbrief mit dem Siegel des Auftraggebers.
 
 > [!note] Wenn die Gruppe die Wache alarmiert → Kontingenz
-> \`smuggler-captured\`.
+> [[smuggler-captured]].
 
 ## If: die Gruppe bleibt unentdeckt
 
-Sie können den Frachtbrief an sich nehmen und Grella folgen, die die
-Ladung ins Dorf bringt.
+Sie können den Frachtbrief an sich nehmen und [[grella]] folgen, die
+die Ladung ins Dorf bringt.
 
 ## If: die Gruppe wird entdeckt
 
-Fenn ruft seine Leute zurück und stellt sich selbst auf die Mole — er
-will reden, nicht kämpfen.
+[[fenn]] ruft seine Leute zurück und stellt sich selbst auf die Mole —
+er will reden, nicht kämpfen.
 `;
 }
 
@@ -114,7 +120,8 @@ status: alive
 
 ## Will
 
-Ihren Anteil an der Ladung, ohne dafür in den Kerker zu gehen.
+Ihren Anteil an der Ladung, ohne dafür in den Kerker zu gehen — und
+zwar von [[fenn]] persönlich.
 `;
 
 const locationStub = `---
@@ -188,7 +195,7 @@ appearance: geflickter Ölmantel, Hände voller Angelschnüre
 ## Will
 
 Dass die Boote wieder sicher rausfahren können — er hat seit drei
-Nächten keinen Fang verkauft.
+Nächten keinen Fang verkauft und traut [[fenn]] nicht.
 
 ## Weiß
 

@@ -30,6 +30,7 @@ import { SceneArticle } from "@/components/SceneArticle";
 import { Button } from "@/components/ui/button";
 import { fmStringArray } from "@/lib/frontmatter";
 import { parseLogEntries } from "@/lib/session";
+import { EntityRefDrawerTarget } from "@/markdown/entity-refs";
 import { cn } from "@/lib/utils";
 import { useActiveSession, useSessionStartFlow, useSessionWrite } from "@/lib/use-session";
 
@@ -186,7 +187,13 @@ function LiveDesktop({ campaign }: { campaign: string }) {
               Keine Szene im aktiven Kapitel — Szenen im Pool anlegen.
             </p>
           ) : (
-            <LiveScene campaign={campaign} path={selected.path} />
+            // A `[[slug]]` in the scene text behaves like the aside cards
+            // here: the click opens the DRAWER instead of navigating away
+            // (issue #68) — the selected scene and the half-typed
+            // Schnellnotiz survive it.
+            <EntityRefDrawerTarget onOpen={setDrawerPath}>
+              <LiveScene campaign={campaign} path={selected.path} />
+            </EntityRefDrawerTarget>
           )}
         </div>
       </main>
@@ -227,11 +234,15 @@ function LiveDesktop({ campaign }: { campaign: string }) {
         <LogPanel campaign={campaign} body={session.data.body} activeSceneId={selected?.id} />
       </aside>
 
-      <LiveEntityDrawer
-        campaign={campaign}
-        path={drawerPath}
-        onClose={() => setDrawerPath(undefined)}
-      />
+      {/* A reference INSIDE the drawer switches the drawer, it does not
+          navigate either — same rule, one level deeper. */}
+      <EntityRefDrawerTarget onOpen={setDrawerPath}>
+        <LiveEntityDrawer
+          campaign={campaign}
+          path={drawerPath}
+          onClose={() => setDrawerPath(undefined)}
+        />
+      </EntityRefDrawerTarget>
     </div>
   );
 }

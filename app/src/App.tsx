@@ -4,6 +4,7 @@ import { Topbar } from "@/components/Topbar";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { ReviewMemoryProvider } from "@/lib/review-memory";
 import { useCampaignVersion } from "@/lib/use-campaign-version";
+import { EntityRefProvider } from "@/markdown/entity-refs";
 import { BrowseRoute } from "@/routes/browse";
 import { GenerateRoute } from "@/routes/generate";
 import { HarnessRoute } from "@/routes/harness";
@@ -20,7 +21,14 @@ import { SceneRoute } from "@/routes/scene";
 function CampaignScope() {
   const { campaign = "" } = useParams();
   useCampaignVersion(campaign);
-  return <Outlet />;
+  // `[[slug]]` references resolve against the campaign tree (issue #68) —
+  // mounted here so EVERY view's markdown bodies resolve the same way, off
+  // the tree query the views already share.
+  return (
+    <EntityRefProvider campaign={campaign}>
+      <Outlet />
+    </EntityRefProvider>
+  );
 }
 
 // App shell per the design reference: constant topbar, the view below is

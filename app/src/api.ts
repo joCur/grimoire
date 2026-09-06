@@ -390,11 +390,13 @@ export type UsageRef =
   | "logEntries"
   | "chapterScenes"
   | "chapterNpcs"
-  | "chapterLocations";
+  | "chapterLocations"
+  /** A body text says `[[<id>]]` (issue #68). */
+  | "bodyRefs";
 
 /** One referencing document, with how many of its rows point at the entity. */
 export interface UsageSite {
-  kind: "scene" | "npc" | "location" | "session" | "chapter";
+  kind: "scene" | "npc" | "location" | "session" | "chapter" | "campaign";
   id: string;
   title: string;
   path: string;

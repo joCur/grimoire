@@ -41,6 +41,18 @@ Antworte ausschließlich mit dem JSON-Objekt — kein Text davor oder danach.
    Kontextliste. Erwähnt der Quelltext eine Figur/einen Ort ohne id,
    lege einen Stub in `npc_stubs`/`location_stubs` an (mit dem, was der
    Quelltext hergibt) und referenziere dessen neue id.
+4b. **Referenzen IM TEXT**: Nennt der Fließtext einen NPC, einen Ort oder eine
+   andere Szene, die eine id hat, schreibe `[[id]]` statt des Namens —
+   `[[jorna]] wartet am Kai`, nicht `Jorna wartet am Kai`. Die App setzt beim
+   Anzeigen den aktuellen Namen ein, deshalb bleibt der Text nach einer
+   Umbenennung richtig. Regeln:
+   - nur ids aus der Kontextliste oder ids von Stubs derselben Antwort,
+   - nur die id in den Klammern, kein Anzeigetext (`[[jorna|Jorna]]` ist
+     falsch); Endungen stehen AUSSERHALB: `[[jorna]]s Boot`,
+   - beim ERSTEN Auftreten im Fließtext genügt die Referenz; Namen von
+     Figuren ohne id bleiben normaler Text,
+   - in `## Beziehungen` von NPC-Stubs bleibt die nackte id (kein `[[…]]`),
+     das ist ein eigenes Format.
 5. **Übersetzung**: Nutze das mitgelieferte Glossar strikt. Regelbegriffe
    (Checks, Skills, Conditions, advantage/disadvantage, DCs) bleiben
    Englisch. Read-Alouds: atmosphärisch, „ihr"-Anrede, Präsens.
@@ -93,5 +105,6 @@ der Bucht entdeckt`, `npcs: [fenn]`, einem `## Flow`-Abschnitt
 Räucherkammer mit Fluchtoptionen und `[!note]` zum losen Bodenbrett;
 Lügen → `[!check]` mit dem Contested Check und beiden Ausgängen) sowie
 einem `[!outcome]` (Fenn kennt die Gesichter der Gruppe). Keine Stubs
-(beide NPCs existieren). — Die Referenz-Zieldatei liegt dem Prompt als
+(beide NPCs existieren). Im Fließtext stehen die beiden als `[[fenn]]`
+und `[[jorna]]`. — Die Referenz-Zieldatei liegt dem Prompt als
 `example-output.md` bei.

@@ -34,6 +34,7 @@ import {
   sessionScenesPlayed,
 } from "../db/schema";
 import { dropEntity } from "./fts";
+import { refOwnerKind, rewriteBodyRefs } from "./refs";
 import { getDb } from "./handle";
 import { requireCampaign } from "./read";
 import {
@@ -204,13 +205,21 @@ function patchLogMarkers(raw: string, oldId: string, newId: string): string {
   return changed ? lines.join("\n") : raw;
 }
 
-/** The soft-reference updates of one rename (the hard ones cascade). */
+/**
+ * The soft-reference updates of one rename (the hard ones cascade).
+ *
+ * `ownsRefSlug` is decided BEFORE the id update (the row that answers it is
+ * gone afterwards): does `[[oldId]]` in prose actually mean THIS entity? See
+ * store/refs.ts `refOwnerKind` — with a same-named npc around, a scene rename
+ * must leave the prose alone.
+ */
 function updateSoftReferences(
   tx: GrimoireDb,
   campaign: string,
   kind: RenameKind,
   oldId: string,
   newId: string,
+  ownsRefSlug: boolean,
 ): void {
   if (kind === "npc") {
     tx.update(sceneNpcs)
@@ -259,6 +268,16 @@ function updateSoftReferences(
           ),
         )
         .run();
+    }
+  }
+  if (kind !== "chapter" && ownsRefSlug) {
+    // BODY REFERENCES (issue #68): `[[oldId]]` in prose is a soft reference
+    // like any other and has to follow the id — the renderer resolves the
+    // CURRENT name from the slug, so a slug left behind goes silently back to
+    // plain text. Every rewritten body is re-indexed (its indexed text
+    // carries the referenced display name, store/refs.ts).
+    for (const referrer of rewriteBodyRefs(tx, campaign, oldId, newId)) {
+      reindexEntity(tx, campaign, referrer.kind, referrer.id);
     }
   }
   if (kind === "chapter") {
@@ -336,6 +355,9 @@ export async function renameEntity(
   db.transaction((handle) => {
     const tx = handle as unknown as GrimoireDb;
     const table = entityTable(kind);
+    // Asked BEFORE the id moves: after the update the old slug has no row of
+    // this kind any more, and the answer would flip to "nothing owns it".
+    const ownsRefSlug = kind !== "chapter" && refOwnerKind(tx, campaign, oldId) === kind;
     tx.update(table)
       .set({ id: newId })
       .where(and(eq(table.campaignId, campaign), eq(table.id, oldId)))
@@ -346,7 +368,7 @@ export async function renameEntity(
     // fallback out (`name: jorna`) would keep pointing at a reference that
     // no longer exists, in the tree and in search alike.
     carryFallbackName(tx, campaign, kind, oldId, newId);
-    updateSoftReferences(tx, campaign, kind, oldId, newId);
+    updateSoftReferences(tx, campaign, kind, oldId, newId, ownsRefSlug);
     // The index row is REPLACED, not patched: its `title` has to follow too
     // (see fts.ts). Dropping the old id first is what keeps the contract of
     // one row per (campaign, kind, entity_id).

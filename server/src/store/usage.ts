@@ -22,6 +22,7 @@ import { and, eq } from "drizzle-orm";
 import { ApiError } from "../campaign-fs";
 import type { GrimoireDb } from "../db/client";
 import {
+  campaigns,
   chapters,
   locations,
   logEntries,
@@ -33,7 +34,15 @@ import {
 } from "../db/schema";
 import { getDb } from "./handle";
 import { requireCampaign } from "./read";
-import { chapterPath, locationPath, npcPath, scenePath, sessionPath } from "./paths";
+import { referrersOf, refOwnerKind } from "./refs";
+import {
+  CAMPAIGN_PATH,
+  chapterPath,
+  locationPath,
+  npcPath,
+  scenePath,
+  sessionPath,
+} from "./paths";
 
 /** The entity kinds that have an id others can reference. */
 export const USAGE_KINDS = ["npc", "location", "scene", "chapter"] as const;
@@ -55,6 +64,7 @@ export function isUsageKind(value: unknown): value is UsageKind {
  *   chapterScenes     a scene belongs to the chapter
  *   chapterNpcs       an npc is introduced in the chapter
  *   chapterLocations  a location belongs to the chapter
+ *   bodyRefs          a body text says `[[<id>]]` (issue #68)
  */
 export const USAGE_REFS = [
   "sceneNpcs",
@@ -65,13 +75,14 @@ export const USAGE_REFS = [
   "chapterScenes",
   "chapterNpcs",
   "chapterLocations",
+  "bodyRefs",
 ] as const;
 export type UsageRef = (typeof USAGE_REFS)[number];
 
 /** One referencing DOCUMENT, with how many of its rows point at the entity. */
 export interface UsageSite {
   /** What the referencing document is. */
-  kind: "scene" | "npc" | "location" | "session" | "chapter";
+  kind: "scene" | "npc" | "location" | "session" | "chapter" | "campaign";
   id: string;
   /** Display title (falls back to the id, as everywhere else). */
   title: string;
@@ -218,6 +229,90 @@ function sessionSites(rows: { sessionId: string }[]): UsageSite[] {
   }));
 }
 
+/**
+ * Documents whose BODY TEXT references the entity as `[[<id>]]` (issue #68).
+ * One site per document — the ROW is the document here, so a scene that names
+ * the npc three times counts once: there is no row per mention to count.
+ *
+ * These are real reference sites: the rename cascade rewrites them
+ * (store/refs.ts `rewriteBodyRefs`), so they belong in the preview like any
+ * other soft reference — and only those, which is why the caller checks the
+ * slug's OWNER first: prose that resolves to a same-named npc is not this
+ * scene's usage, and the cascade will not rewrite it either.
+ */
+function bodyRefSites(db: GrimoireDb, campaign: string, id: string): UsageSite[] {
+  const sites: UsageSite[] = [];
+  for (const referrer of referrersOf(db, campaign, id)) {
+    if (referrer.kind === "scene") {
+      const row = db
+        .select(SCENE_SITE_COLS)
+        .from(scenes)
+        .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, referrer.id)))
+        .all()[0];
+      if (row !== undefined) sites.push(sceneSite(row));
+      continue;
+    }
+    if (referrer.kind === "npc") {
+      const row = db
+        .select({ name: npcs.name })
+        .from(npcs)
+        .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, referrer.id)))
+        .all()[0];
+      sites.push({
+        kind: "npc",
+        id: referrer.id,
+        title: row?.name === undefined || row.name === "" ? referrer.id : row.name,
+        path: npcPath(referrer.id),
+        count: 1,
+      });
+      continue;
+    }
+    if (referrer.kind === "location") {
+      const row = db
+        .select({ name: locations.name })
+        .from(locations)
+        .where(and(eq(locations.campaignId, campaign), eq(locations.id, referrer.id)))
+        .all()[0];
+      sites.push({
+        kind: "location",
+        id: referrer.id,
+        title: row?.name === undefined || row.name === "" ? referrer.id : row.name,
+        path: locationPath(referrer.id),
+        count: 1,
+      });
+      continue;
+    }
+    if (referrer.kind === "campaign") {
+      const row = db
+        .select({ name: campaigns.name })
+        .from(campaigns)
+        .where(eq(campaigns.id, campaign))
+        .all()[0];
+      sites.push({
+        kind: "campaign",
+        id: campaign,
+        title: row?.name === undefined || row.name === "" ? campaign : row.name,
+        path: CAMPAIGN_PATH,
+        count: 1,
+      });
+      continue;
+    }
+    const row = db
+      .select({ title: chapters.title })
+      .from(chapters)
+      .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, referrer.id)))
+      .all()[0];
+    sites.push({
+      kind: "chapter",
+      id: referrer.id,
+      title: row?.title === undefined || row.title === "" ? referrer.id : row.title,
+      path: chapterPath(referrer.id),
+      count: 1,
+    });
+  }
+  return sites;
+}
+
 /** The reference groups of one entity — the single source of both features. */
 function groupsFor(db: GrimoireDb, campaign: string, kind: UsageKind, id: string): UsageGroup[] {
   const groups: UsageGroup[] = [];
@@ -314,6 +409,15 @@ function groupsFor(db: GrimoireDb, campaign: string, kind: UsageKind, id: string
           count: 1,
         })),
     );
+  }
+
+  // Body references exist for every referenceable kind (not for chapters —
+  // `[[chapter]]` is not part of the syntax, see @grimoire/shared/refs) — and
+  // only for the kind that actually OWNS the slug: with an npc `jorna` in the
+  // campaign, `[[jorna]]` on the page is the npc, so the same-named scene
+  // must not count (nor rewrite) that sentence.
+  if (kind !== "chapter" && refOwnerKind(db, campaign, id) === kind) {
+    add("bodyRefs", bodyRefSites(db, campaign, id));
   }
 
   return groups;

@@ -60,6 +60,7 @@ import {
   unknownFiles as unknownTable,
 } from "./schema";
 import { eq, sql } from "drizzle-orm";
+import { expandIndexedRefs } from "../store/refs";
 
 /** Directories under a campaign that are NOT chapters (mirror of campaign-fs). */
 const RESERVED_DIRS = new Set(["npcs", "locations", "sessions"]);
@@ -921,6 +922,13 @@ function importCampaign(
   for (const dup of inboxFiles.slice(1)) {
     degrade(dup.file, "Zweite inbox.md — nur die erste wurde übernommen.");
   }
+
+  // 7b. `[[slug]]` body references (issue #68): the SECOND pass over the
+  //     search index, once every row of this campaign exists. Bodies are
+  //     indexed with their references replaced by the referenced display name
+  //     (store/refs.ts), and while importing, half the entities a body points
+  //     at have no row yet — so the expansion cannot happen inline.
+  expandIndexedRefs(tx, campaignId);
 
   // 8. everything that degraded, kept verbatim. De-duplicated by path: a file
   //    can collect several report entries but is stored once.
