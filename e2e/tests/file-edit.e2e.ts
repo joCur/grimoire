@@ -89,7 +89,7 @@ test("editing the body: save writes the file and the reading view shows it", asy
   // Seeded with the body — WITHOUT the frontmatter, which this editor never
   // touches (and says so).
   await expect(textarea).toHaveValue(before.body);
-  await expect(page.getByText("Nur der Textkörper — Frontmatter bleibt unverändert.")).toBeVisible();
+  await expect(page.getByText("Nur der Textkörper — die Eigenschaften bleiben unverändert.")).toBeVisible();
   // The header keeps standing: title, chips and the status regler stay put.
   await expect(page.getByRole("button", { name: "Status ändern, aktuell bereit" })).toBeVisible();
   // While the editor runs the header trigger is gone — the toolbar toggle owns

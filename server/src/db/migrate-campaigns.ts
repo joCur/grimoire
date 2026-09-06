@@ -478,8 +478,8 @@ function importCampaign(
       degrade(
         file,
         hasFrontmatterBlock(file.raw)
-          ? "Frontmatter konnte nicht gelesen werden (kaputtes YAML) — Datei unverändert übernommen."
-          : "Datei ohne Frontmatter — Datei unverändert übernommen.",
+          ? "Der Eigenschaften-Block konnte nicht gelesen werden (kaputtes YAML) — Datei unverändert übernommen."
+          : "Datei ohne Eigenschaften-Block — Datei unverändert übernommen.",
       );
       continue;
     }
@@ -866,7 +866,7 @@ function importCampaign(
     if (Object.keys(inboxExtra).length > 0) {
       degrade(
         inbox.file,
-        `Frontmatter-Schlüssel der Inbox haben in der Datenbank keinen Platz: ` +
+        `Felder der Inbox haben in der Datenbank keinen Platz: ` +
           `${Object.keys(inboxExtra).join(", ")} (Datei unverändert übernommen).`,
       );
     }
@@ -910,7 +910,7 @@ function importCampaign(
     if (Object.keys(glossaryExtra).length > 0) {
       degrade(
         glossaryFile.file,
-        `Frontmatter-Schlüssel des Glossars haben in der Datenbank keinen Platz: ` +
+        `Felder des Glossars haben in der Datenbank keinen Platz: ` +
           `${Object.keys(glossaryExtra).join(", ")} (Datei unverändert übernommen).`,
       );
     }
