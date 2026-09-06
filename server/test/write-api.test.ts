@@ -615,10 +615,11 @@ describe("POST /api/:campaign/inbox", () => {
 
   test("creates the inbox with a # Inbox heading when there is none", async () => {
     // The "missing inbox.md" case of the file version: a campaign whose
-    // migration produced no inbox rows at all answers 404 on GET, and the
-    // first entry brings the heading the format opened the file with.
+    // migration produced no inbox rows at all. It is an EMPTY document, not
+    // a missing one (#70) — GET answers 200 — and the first entry brings the
+    // heading the format opened the file with.
     await withFreshCampaign(async () => {
-      expect(await fileStatus("inbox.md", FRESH)).toBe(404);
+      expect(await fileStatus("inbox.md", FRESH)).toBe(200);
       const res = await postJson(`/api/${FRESH}/inbox`, { text: "Erste Idee" });
       expect(res.status).toBe(200);
       const file = (await res.json()) as FileResponse;

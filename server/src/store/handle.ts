@@ -15,6 +15,7 @@ import { getCampaignRoot, getDbFile } from "../config";
 import { openDb, type GrimoireDb, type OpenDb } from "../db/client";
 import { failInterruptedJobs } from "../db/job-boot";
 import { runInitialMigration, type MigrationOutcome } from "../db/migrate-campaigns";
+import { backfillReferences } from "./ref-backfill";
 
 /** What `initStore` was called with — reported on boot. */
 export interface StoreInfo {
@@ -29,6 +30,12 @@ export interface StoreInfo {
    * (issue #23) — the runs the previous process took down with it.
    */
   interruptedJobs: number;
+  /**
+   * `<campaign>/<npc-id>` per empty npc row this boot created for a dangling
+   * reference (issue #70, store/ref-backfill.ts). Empty on every boot after
+   * the first — the pass only inserts what has no row.
+   */
+  backfilledNpcs: string[];
 }
 
 let opened: OpenDb | null = null;
@@ -61,8 +68,17 @@ export async function initStore(
     // crash is failed here — with a German sentence the app shows — instead of
     // being polled forever. Finished jobs are untouched and stay applyable.
     const interruptedJobs = failInterruptedJobs(handle.db);
+    // Issue #70: a referenced entity is never missing, only empty. Every
+    // write path holds that now; this pass holds it for the migrated stock.
+    const refBackfill = backfillReferences(handle.db);
     opened = handle;
-    info = { file, backend: handle.client.backend, migration, interruptedJobs };
+    info = {
+      file,
+      backend: handle.client.backend,
+      migration,
+      interruptedJobs,
+      backfilledNpcs: refBackfill.created,
+    };
     return handle.db;
   })();
   try {

@@ -31,7 +31,7 @@ import {
 } from "@grimoire/shared/types";
 
 import { fetchFile, patchFrontmatter } from "@/api";
-import { npcStatusLabel } from "@/lib/entity";
+import { isEntityId, npcStatusLabel } from "@/lib/entity";
 import { fmQuickstats, fmStringArray } from "@/lib/frontmatter";
 import { SCENE_STATUS_OPTIONS } from "@/lib/scene-status";
 import { writeWithMtime, type MtimeWriteResult } from "@/lib/write-with-mtime";
@@ -119,7 +119,15 @@ const SCENE_FIELDS: readonly FrontmatterField[] = [
     source: "locations",
     hint: "id aus Orte oder freier Text.",
   },
-  { key: "npcs", label: "NPCs", control: "references", source: "npcs" },
+  {
+    key: "npcs",
+    label: "NPCs",
+    control: "references",
+    source: "npcs",
+    // Unlike `location` this list has no free-text half: every entry is an id
+    // that gets a card and, on save, an entry (#70).
+    hint: "Nur ids — unbekannte werden beim Speichern angelegt.",
+  },
   {
     key: "handouts",
     label: "Handouts",
@@ -401,8 +409,10 @@ export function frontmatterPatch(
  * What is WRONG in the form right now, per field key — the German line the
  * control shows under itself, and the reason „Speichern" stays disabled.
  *
- * Only the pairs control can get into such a state, and both cases are ones
- * where writing (or not writing) silently would lose something the DM typed:
+ * Two controls can get into such a state.
+ *
+ * The pairs control, in both cases where writing (or not writing) silently
+ * would lose something the DM typed:
  *
  *   * a row with a value but no name — it cannot be written at all, so it is
  *     said out loud instead of vanishing on save,
@@ -411,15 +421,36 @@ export function frontmatterPatch(
  *
  * A row that is completely empty (or holds only a name, which means „delete
  * this key") is fine and produces nothing here.
+ *
+ * And an ID LIST (`npcs`, issue #70 audit): that list holds ids, not names —
+ * every entry becomes a card and a reference the save creates — so the server
+ * refuses a non-slug entry with a 400. Saying it here makes that a line under
+ * the field before the click. `initial` is what the file already holds and is
+ * EXEMPT: a campaign migrated from the file era may carry free text there, and
+ * such a scene has to stay savable (the server exempts the same values).
  */
 export function frontmatterFormIssues(
   fields: readonly FrontmatterField[],
   values: FormValues,
+  initial?: FormValues,
 ): Record<string, string> {
   const issues: Record<string, string> = {};
   for (const field of fields) {
     const value = values[field.key];
-    if (value === undefined || value.kind !== "pairs") continue;
+    if (value === undefined) continue;
+    if (field.control === "references" && value.kind === "list") {
+      const stored = initial?.[field.key];
+      const known = stored !== undefined && stored.kind === "list" ? stored.items : [];
+      const offender = value.items.find(
+        (item) => !known.includes(item) && !isEntityId(item),
+      );
+      if (offender !== undefined) {
+        issues[field.key] =
+          `„${offender}" ist keine id — nur Kleinbuchstaben, Ziffern und Bindestriche.`;
+      }
+      continue;
+    }
+    if (value.kind !== "pairs") continue;
     const seen = new Set<string>();
     let nameless = false;
     let duplicate: string | undefined;
@@ -452,7 +483,9 @@ export function hasFrontmatterChanges(
   current: FormValues,
 ): boolean {
   if (Object.keys(frontmatterPatch(fields, initial, current)).length > 0) return true;
-  return Object.keys(frontmatterFormIssues(fields, current)).length > 0;
+  // With `initial`, so that free text a MIGRATED file already carries in
+  // `npcs` is not read as unsaved work by the discard guard.
+  return Object.keys(frontmatterFormIssues(fields, current, initial)).length > 0;
 }
 
 /** Blank required field = not a save (the entity would lose its name). */

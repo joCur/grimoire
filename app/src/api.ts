@@ -344,10 +344,12 @@ export function adoptThread(
 }
 
 /**
- * Create `npcs/<id>.md` (status: alive, note under `## Notizen`).
- * Never overwrites: an existing slug is an ApiError with status 409.
+ * Create the npc entry for `id` (status: unknown, note under `## Notizen`) —
+ * or answer with the entry the id already has (issue #70). Idempotent: the
+ * goal is "this id has an entry", so an existing one is LINKED, never
+ * overwritten, and an empty one (a reference created it) is filled in.
  */
-export function createNpcStub(
+export function ensureNpc(
   campaign: string,
   id: string,
   name?: string,

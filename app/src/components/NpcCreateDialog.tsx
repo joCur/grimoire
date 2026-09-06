@@ -1,9 +1,13 @@
-// "NPC-Stub anlegen" (issue #10): a stub needs an id the DM chooses — the
-// ids are the stable reference keys of the format (README), so the review
-// proposes a kebab-case slug derived from the log text and lets it be
-// edited. Optional display name; the entry text becomes the `## Notizen`
-// line. A 409 from the server (slug exists) is shown inline — the dialog
-// stays open so the id can be corrected.
+// "NPC anlegen" (issue #10, simplified by #70): the entry needs an id the DM
+// chooses — a log line is prose, and ids are the stable reference keys of the
+// format (README) — so the review proposes a kebab-case slug derived from the
+// text and lets it be edited. Optional display name; the entry text becomes
+// the `## Notizen` line.
+//
+// The id that ALREADY has an entry is no longer an error (#70): the call is
+// idempotent, so the review links to what is there instead of making the DM
+// correct an id that was right. Only a server that cannot answer is shown
+// inline.
 
 import { useState } from "react";
 
@@ -18,22 +22,22 @@ import {
 import { deriveNpcSlug, isNpcSlug, npcNameFromText } from "@/lib/review";
 import type { ReviewEntry } from "@/lib/use-review";
 
-interface NpcStubDialogProps {
+interface NpcCreateDialogProps {
   entry: ReviewEntry;
   pending: boolean;
-  /** Inline error (e.g. "npcs/fenn.md existiert schon"). */
+  /** Inline error (a server that did not answer). */
   error?: string | undefined;
   onClose: () => void;
   onSubmit: (values: { id: string; name?: string }) => void;
 }
 
-export function NpcStubDialog({
+export function NpcCreateDialog({
   entry,
   pending,
   error,
   onClose,
   onSubmit,
-}: NpcStubDialogProps) {
+}: NpcCreateDialogProps) {
   const [id, setId] = useState(() => deriveNpcSlug(entry.text));
   const [name, setName] = useState(() => npcNameFromText(entry.text) ?? "");
 
@@ -50,9 +54,10 @@ export function NpcStubDialog({
       }}
     >
       <DialogContent aria-describedby={undefined}>
-        <DialogTitle>NPC-Stub anlegen</DialogTitle>
+        <DialogTitle>NPC anlegen</DialogTitle>
         <DialogDescription>
-          Legt npcs/&lt;id&gt;.md mit status: unknown an; der Eintrag landet unter ## Notizen.
+          Legt den NPC-Eintrag mit status: unknown an; der Text landet unter ## Notizen. Gibt es
+          die id schon, wird auf den bestehenden Eintrag verwiesen.
         </DialogDescription>
 
         <form

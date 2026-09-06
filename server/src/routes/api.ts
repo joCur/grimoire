@@ -428,8 +428,10 @@ api.post("/:campaign/review/thread", async (c) => {
 });
 
 // POST /api/:campaign/review/npc-stub { id, name?, note? } -> FileResponse
-// Creates npcs/<id>.md (status: unknown); 409 { error, path } when the slug
-// already exists — never overwrites.
+// Creates the npc entry (status: unknown) — or, when the id already has one,
+// answers with THAT entry (issue #70): the caller's goal is "this id has an
+// entry", so the call is idempotent. An entry that holds content is never
+// overwritten; an EMPTY one (a reference created it) is filled in.
 api.post("/:campaign/review/npc-stub", async (c) => {
   const body = await jsonBody(c, ["id", "name", "note"]);
   if (typeof body.id !== "string") throw new ApiError(400, "id must be a string");

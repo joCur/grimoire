@@ -1,41 +1,37 @@
-// Render test for the visible degradation of a missing npc file (issue #26).
-// MissingNpcCard is the pure half of NpcCard — the query and the stub
-// mutation stay in the card, so this needs no DOM and no query client.
+// The one thing the NPC card decides WITHOUT the server (issue #70 audit).
+//
+// `npcs:` holds ids. A non-slug entry is no id and therefore no entry — the
+// server refuses new ones, and what can still stand in the list is what a
+// migrated file era campaign brought along. Asking for `npcs/Alte
+// Fischerin.md` answers 404, which the card reported as "NPC nicht ladbar,
+// Server prüfen": it blamed the server for data it had been handed. The card
+// does not ask at all now and says what is actually the case.
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { MissingNpcCard } from "./NpcCard";
+import { NpcCard } from "./NpcCard";
 
-function render(props: Partial<Parameters<typeof MissingNpcCard>[0]> = {}): string {
+function render(id: string): string {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return renderToStaticMarkup(
-    <MissingNpcCard id="alte-fischerin" pending={false} onCreate={() => {}} {...props} />,
+    <QueryClientProvider client={client}>
+      <NpcCard campaign="beispiel" id={id} />
+    </QueryClientProvider>,
   );
 }
 
-describe("MissingNpcCard", () => {
-  test("shows the mono slug, the reason and the one action", () => {
-    const html = render();
-    expect(html).toContain("alte-fischerin");
-    expect(html).toContain("font-mono");
-    expect(html).toContain("NPC-Eintrag fehlt");
-    expect(html).toContain("Stub anlegen");
+describe("NpcCard — a reference that is no id", () => {
+  test("free text says so, and does not blame the server", () => {
+    const html = render("Alte Fischerin");
+    expect(html).toContain("Alte Fischerin");
+    expect(html).toContain("keine NPC-id, deshalb kein Eintrag.");
+    expect(html).not.toContain("Server prüfen");
   });
 
-  test("the action is disabled while the stub is being written", () => {
-    // The attribute, not the `disabled:` utility classes on the button.
-    expect(render({ pending: true })).toContain('disabled=""');
-    expect(render({ pending: false })).not.toContain('disabled=""');
-  });
-
-  test("a failed write shows a quiet error line", () => {
-    const html = render({ error: "Stub nicht angelegt — Server prüfen." });
-    expect(html).toContain("Stub nicht angelegt");
-    expect(html).toContain('aria-live="polite"');
-  });
-
-  test("compact (live aside) and full (scene aside) both render the action", () => {
-    expect(render({ compact: true })).toContain("Stub anlegen");
-    expect(render({ compact: false })).toContain("Stub anlegen");
+  test("an id claims nothing while the query runs", () => {
+    // Loading is silence — never a card, never a failure line.
+    expect(render("fenn")).toBe("");
   });
 });

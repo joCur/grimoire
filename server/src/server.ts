@@ -16,6 +16,8 @@
 //                                              document, not a missing one (#57 review:
 //                                              the 404 made a glossary the DM had just
 //                                              emptied unreachable from the editor).
+//                                              inbox.md does the same since #70 — same
+//                                              reasoning, it had been left behind.
 //                                              `mtimeMs` of glossary.md/inbox.md is that
 //                                              DOCUMENT's own counter, not campaigns.version
 //   [x] PATCH /api/:campaign/frontmatter       { path, mtimeMs, patch } — only if
@@ -180,7 +182,8 @@
 //   [x] POST /api/:campaign/review/thread      { chapter, text } -> append `- [ ] text` under
 //                                              ## Offene Fäden of <chapter>/_chapter.md
 //   [x] POST /api/:campaign/review/npc-stub    { id, name?, note? } -> create npcs/<id>.md
-//                                              (status: unknown); 409 when the slug exists
+//                                              (status: unknown), or answer with the entry the
+//                                              id already has — idempotent since #70
 //   [x] POST /api/:campaign/review/inbox-done  { line } -> rewrite the inbox line to `- [x] …`
 //                                              (documented append-only exception)
 //
@@ -250,6 +253,15 @@ if (import.meta.main) {
     console.log(
       `Database in use (${info?.backend ?? "unknown backend"}); no import needed ` +
         `(${info?.migration.skipped ?? "already migrated"}). CAMPAIGN_ROOT is not read.`,
+    );
+  }
+  // Issue #70: a boot that CHANGED data says so. The pass creates an empty
+  // npc row for every dangling npc reference of the migrated stock and is a
+  // no-op from the second boot on (store/ref-backfill.ts).
+  if (info !== undefined && info.backfilledNpcs.length > 0) {
+    console.log(
+      `${info.backfilledNpcs.length} referenced npc(s) had no entry and got an empty one: ` +
+        info.backfilledNpcs.join(", "),
     );
   }
   // Issue #23: jobs are rows now, so a restart no longer loses a finished

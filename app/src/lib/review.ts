@@ -6,6 +6,8 @@
 // Everything degrades (README): unparsable input yields empty results or
 // passes through unchanged, never an error.
 
+import { isEntityId } from "@/lib/entity";
+
 /**
  * The log/inbox hashtags the review harvests (README, "Hashtags im Log").
  * `#date` is deliberately NOT one of them — in-game dates are no harvest.
@@ -161,9 +163,9 @@ export function parseChecklist(body: string, heading: string): ChecklistItem[] {
 
 // --- npc slug ----------------------------------------------------------------
 
-/** Mirrors the server's NPC_SLUG (campaign-write.ts) — kebab-case ids. */
+/** An npc id is an entity id — one slug rule for the whole app (lib/entity). */
 export function isNpcSlug(id: string): boolean {
-  return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(id);
+  return isEntityId(id);
 }
 
 const QUOTED = /["“„»'‚]([^"“”„«»'‚‘]{2,40})["”“«'‘]/u;

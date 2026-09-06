@@ -365,11 +365,42 @@ describe("unfinished quickstat rows block the save", () => {
     );
   });
 
-  test("only pairs fields can be in this state (a scene has none at all)", () => {
+  test("a scene's own frontmatter is fine as it stands", () => {
     const sceneFields = fields("scene");
     expect(frontmatterFormIssues(sceneFields, frontmatterFormValues(sceneFields, SCENE_FM))).toEqual(
       {},
     );
+  });
+});
+
+describe("the npcs list holds ids, not names (#70 audit)", () => {
+  const sceneFields = fields("scene");
+  const initial = frontmatterFormValues(sceneFields, SCENE_FM);
+  const withNpcs = (items: string[]): FormValues => ({
+    ...initial,
+    npcs: { kind: "list", items },
+  });
+
+  test("a new free-text entry blocks the save and says the rule", () => {
+    // The server refuses it with a 400 — saying it here makes that a line
+    // under the field instead of a failed save.
+    const issues = frontmatterFormIssues(sceneFields, withNpcs(["fenn", "Alte Fischerin"]), initial);
+    expect(issues.npcs).toBe(
+      '„Alte Fischerin" ist keine id — nur Kleinbuchstaben, Ziffern und Bindestriche.',
+    );
+  });
+
+  test("ids are fine, known or not — an unknown one is created on save", () => {
+    expect(frontmatterFormIssues(sceneFields, withNpcs(["fenn", "holm"]), initial)).toEqual({});
+  });
+
+  test("free text the FILE already carries is exempt — such a scene stays savable", () => {
+    // A campaign migrated from the file era can hold anything in that list
+    // (no foreign keys, schema.ts rule 1), and an unrelated save re-sends it.
+    const stored = withNpcs(["fenn", "Alte Fischerin"]);
+    expect(frontmatterFormIssues(sceneFields, stored, stored)).toEqual({});
+    // …and an untouched form with such a value is not "dirty" either.
+    expect(hasFrontmatterChanges(sceneFields, stored, stored)).toBe(false);
   });
 });
 

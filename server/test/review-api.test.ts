@@ -283,6 +283,8 @@ describe("POST /api/:campaign/review/thread", () => {
 });
 
 describe("POST /api/:campaign/review/npc-stub", () => {
+  const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
+
   test("creates the npc with the documented shape", async () => {
     const file = await postOk("/api/beispiel/review/npc-stub", {
       id: "old-metta",
@@ -291,9 +293,12 @@ describe("POST /api/:campaign/review/npc-stub", () => {
     });
     expect(file.path).toBe("npcs/old-metta.md");
     expect(file.kind).toBe("npc");
-    expect(file.frontmatter.status).toBe("alive");
+    // status is the column default — the log line said nothing about it, so
+    // the entry must not claim "alive" (issue #70; the route always
+    // documented "unknown", the insert said otherwise).
+    expect(file.frontmatter.status).toBe("unknown");
     expect(file.raw).toBe(
-      "---\nid: old-metta\nname: Old Metta\nstatus: alive\n---\n\n## Notizen\n\n- Fischerin am Steg, kennt die Gezeiten #npc\n",
+      "---\nid: old-metta\nname: Old Metta\nstatus: unknown\n---\n\n## Notizen\n\n- Fischerin am Steg, kennt die Gezeiten #npc\n",
     );
     // A fresh row starts at rev 1 — the token the app sends with its first edit.
     expect(file.mtimeMs).toBe(1);
@@ -302,20 +307,50 @@ describe("POST /api/:campaign/review/npc-stub", () => {
 
   test("name defaults to the id; without a note the section stays empty", async () => {
     const file = await postOk("/api/beispiel/review/npc-stub", { id: "kai" });
-    expect(file.raw).toBe("---\nid: kai\nname: kai\nstatus: alive\n---\n\n## Notizen\n");
+    expect(file.raw).toBe("---\nid: kai\nname: kai\nstatus: unknown\n---\n\n## Notizen\n");
   });
 
-  test("409 with { error, path } for an existing slug — the npc is untouched", async () => {
+  test("an existing entry is ANSWERED, not overwritten and not refused", async () => {
+    // Create-or-link (issue #70): the caller wants this id to have an entry.
+    // An entry with content comes back untouched — the old 409 made the
+    // review correct an id that was right.
     const before = await getFile("npcs/fenn.md");
-    const res = await postJson("/api/beispiel/review/npc-stub", { id: "fenn", note: "doppelt" });
-    expect(res.status).toBe(409);
-    const body = (await res.json()) as { error: string; path: string };
-    expect(typeof body.error).toBe("string");
-    expect(body.path).toBe("npcs/fenn.md");
+    const linked = await postOk("/api/beispiel/review/npc-stub", {
+      id: "fenn",
+      name: "Anders",
+      note: "doppelt",
+    });
+    expect(linked).toEqual(before);
     expect(await getFile("npcs/fenn.md")).toEqual(before);
-    // and a stub created in this run conflicts just the same
-    expect((await postJson("/api/beispiel/review/npc-stub", { id: "old-metta" })).status).toBe(200);
-    expect((await postJson("/api/beispiel/review/npc-stub", { id: "old-metta" })).status).toBe(409);
+    // and a stub created in this run is linked the same way
+    const first = await postOk("/api/beispiel/review/npc-stub", { id: "old-metta" });
+    const second = await postOk("/api/beispiel/review/npc-stub", { id: "old-metta" });
+    expect(second.raw).toBe(first.raw);
+  });
+
+  test("an EMPTY entry — one a reference created — is filled in", async () => {
+    // `holm` gets its row from the scene that names it (#70); the review is
+    // the first thing that knows a name and a note for it.
+    const res = await app.request("/api/beispiel/frontmatter", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        path: SCENE,
+        mtimeMs: (await getFile(SCENE)).mtimeMs,
+        patch: { npcs: ["jorna", "holm"] },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const empty = await getFile("npcs/holm.md");
+    expect(empty.frontmatter.name).toBe("holm");
+    const filled = await postOk("/api/beispiel/review/npc-stub", {
+      id: "holm",
+      name: "Holm",
+      note: "war am Steg #npc",
+    });
+    expect(filled.frontmatter.name).toBe("Holm");
+    expect(filled.body).toContain("- war am Steg #npc");
+    expect(filled.mtimeMs).toBe(empty.mtimeMs + 1);
   });
 
   test("400 unless id is a kebab-case slug", async () => {
@@ -398,7 +433,8 @@ describe("POST /api/:campaign/review/inbox-done", () => {
 
   test("404 when the campaign has no inbox at all", async () => {
     // The "inbox.md is missing" case: a campaign whose migration produced no
-    // inbox rows. GET answers 404 for it, and so does this endpoint.
+    // inbox rows. GET answers 200 with an empty document (#70), but there is
+    // still no such LINE to check off — hence 404 here.
     const root = await tempCampaignRoot();
     const restore = useCampaignRoot(root);
     try {

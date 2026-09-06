@@ -7,22 +7,21 @@
 // away from the running session, it opens the detail drawer instead. Same
 // card, same hover, only the element differs (link vs. button).
 //
-// Degradation (issue #26): a referenced id WITHOUT a file used to render
-// nothing at all — the DM saw a bare slug in the scene and no explanation.
-// Now the 404 shows a quiet placeholder with "Stub anlegen" (POST
-// /review/npc-stub), so the gap is visible and closable from where it hurts.
-// Any OTHER failure stays a quiet one-liner (server down — nothing to fix
-// here), and while the query is still running nothing is claimed at all.
+// Degradation (issue #26, revised by #70): a referenced npc used to be able
+// to have NO file — the card showed "NPC-Eintrag fehlt" plus a "Stub
+// anlegen" button. In the database a reference CREATES the entry it names
+// (server store/write.ts), so an npc in a scene always has a row; it may be
+// empty, and then this card is simply thin — name (the id, until somebody
+// types one) and nothing else. What is left is the honest failure line for a
+// server that cannot answer, and silence while the query runs.
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
-import { ApiError, fetchFile } from "@/api";
+import { fetchFile } from "@/api";
 import { EntityCardShell } from "@/components/EntityCardShell";
-import { Button } from "@/components/ui/button";
+import { isEntityId } from "@/lib/entity";
 import { fmQuickstats, fmString } from "@/lib/frontmatter";
 import { firstParagraphOfSection } from "@/lib/md-section";
-import { ensureNpcStub } from "@/lib/npc-stub";
-import { cn } from "@/lib/utils";
 
 /** Campaign-relative path of an npc file — the reference key is the id. */
 function npcPath(id: string): string {
@@ -45,48 +44,36 @@ export function NpcCard({
   onOpen?: (path: string) => void;
 }) {
   const path = npcPath(id);
-  const queryClient = useQueryClient();
-  const { data, isPending, isError, error } = useQuery({
+  // A NON-SLUG entry is no id and therefore no entry (#70 audit): `npcs:`
+  // holds ids, and the server now refuses new free text there. What can still
+  // stand in the list is what a migrated file era campaign brought along —
+  // and asking for `npcs/Alte Fischerin.md` answers 404, which this card
+  // reported as "Server prüfen", blaming the server for data it was handed.
+  // It is not asked at all now, and the line says what is actually the case.
+  const isId = isEntityId(id);
+  const { data, isPending, isError } = useQuery({
     queryKey: ["file", campaign, path],
     queryFn: () => fetchFile(campaign, path),
     retry: false,
+    enabled: isId,
   });
 
-  const stub = useMutation({
-    // 409 (the file exists now) counts as success — see lib/npc-stub.ts.
-    mutationFn: () => ensureNpcStub(campaign, id),
-    onSuccess: (file) => {
-      // The endpoint returns the fresh file: seed, then invalidate on top.
-      if (file !== undefined) queryClient.setQueryData(["file", campaign, file.path], file);
-      void queryClient.invalidateQueries({ queryKey: ["file", campaign, path] });
-      // A new npc file changes the tree (lists, search) as well.
-      void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
-    },
-  });
+  if (!isId) {
+    return (
+      <p className="text-[12px] leading-[1.5] text-muted-foreground">
+        <span className="font-mono">{id}</span> — keine NPC-id, deshalb kein Eintrag.
+      </p>
+    );
+  }
 
-  // Nothing decided yet — never claim a missing file while loading.
+  // Nothing decided yet — never claim anything while loading.
   if (isPending) return null;
 
   if (isError) {
-    const missing = error instanceof ApiError && error.status === 404;
-    if (!missing) {
-      return (
-        <p className="text-[12px] leading-[1.5] text-muted-foreground">
-          <span className="font-mono">{id}</span> — NPC nicht ladbar, Server prüfen.
-        </p>
-      );
-    }
     return (
-      <MissingNpcCard
-        id={id}
-        compact={compact}
-        pending={stub.isPending}
-        error={stub.isError ? "Stub nicht angelegt — Server prüfen." : undefined}
-        onCreate={() => {
-          stub.reset();
-          stub.mutate();
-        }}
-      />
+      <p className="text-[12px] leading-[1.5] text-muted-foreground">
+        <span className="font-mono">{id}</span> — NPC nicht ladbar, Server prüfen.
+      </p>
     );
   }
   if (data === undefined) return null;
@@ -166,52 +153,5 @@ export function NpcCard({
         </div>
       )}
     </EntityCardShell>
-  );
-}
-
-/**
- * The visible degradation of a referenced npc id without a file: mono slug,
- * the reason, and the one action that fixes it. Exported for the render test
- * — it is pure, the query/mutation lives in NpcCard.
- */
-export function MissingNpcCard({
-  id,
-  compact = false,
-  pending,
-  error,
-  onCreate,
-}: {
-  id: string;
-  compact?: boolean;
-  pending: boolean;
-  error?: string | undefined;
-  onCreate: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-lg border border-dashed border-input bg-transparent",
-        compact ? "p-3.5" : "p-4",
-      )}
-    >
-      <p className="font-mono text-[12.5px] text-soft">{id}</p>
-      <p className="mt-1 mb-2.5 text-[12.5px] leading-[1.5] text-muted-foreground">
-        NPC-Eintrag fehlt
-      </p>
-      <Button
-        type="button"
-        variant="outline"
-        disabled={pending}
-        onClick={onCreate}
-        className="h-auto border-input bg-transparent px-2.5 py-1 text-[12px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
-      >
-        Stub anlegen
-      </Button>
-      {error !== undefined && (
-        <p className="mt-2 text-[12px] text-destructive" aria-live="polite">
-          {error}
-        </p>
-      )}
-    </div>
   );
 }

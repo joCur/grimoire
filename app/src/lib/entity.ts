@@ -32,6 +32,19 @@ export function entityHeaderKind(kind: EntityKind): EntityHeaderKind {
 }
 
 /**
+ * Entity ids are kebab slugs — the server's `ENTITY_SLUG` (store/write.ts),
+ * spelled out ONCE for the app. Three places ask the question and each used to
+ * carry its own copy: the properties form (does an unknown value become an
+ * entry or stay free text?), its `npcs` list (is this an id at all?) and the
+ * review's #npc lines.
+ */
+const ENTITY_SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+export function isEntityId(value: string): boolean {
+  return ENTITY_SLUG.test(value);
+}
+
+/**
  * German labels for the known npc `status` values (shared NPC_STATUSES).
  * The format degrades: an unknown value is shown verbatim instead of being
  * swallowed or corrected — the file stays the truth.

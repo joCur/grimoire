@@ -374,3 +374,87 @@ Meldung gesetzt. Wortlaut und Begründung stehen im Nachtrag unter #10.
 **Bewusst nicht Teil der Entscheidung:** Export/Import jenseits der
 Erstmigration, Trigram-Tokenizer für tippfehlertolerante Suche, Auto-Backups,
 Mehrnutzer-Betrieb (dafür gelten weiter #3 und die Neubewertung aus #7).
+
+## 14. Referenzieren legt an — ein referenzierter Eintrag fehlt nie
+
+> **Status: final** (#70, PO-Entscheidung im Ticket vorab). Folgt aus #13/#52
+> („ein NPC ohne Infos ist eine Zeile mit id und Name") und präzisiert Regel 3
+> in `server/src/db/schema.ts`.
+
+**Entscheidung:** Wer über einen Schreibweg der App oder über
+`POST /generate/apply` eine unbekannte id referenziert, erzeugt sie. In
+derselben Transaktion entsteht eine LEERE Zeile (id, `name` leer → die id ist
+der Anzeigename, Status = Spaltendefault). Betroffen: `npcs:` einer Szene,
+`location:` einer Szene, sofern der Wert ein Slug ist, und die Gegenseite
+einer `## Beziehungen`-Zeile.
+
+- **„Fehlt"-Platzhalter entfallen.** `MissingNpcCard` („NPC-Eintrag fehlt" +
+  „Stub anlegen") und `MissingLocationCard` („Ortseintrag fehlt") sind
+  gelöscht. Ein leerer Eintrag rendert als normale, dünn befüllte Karte bzw.
+  Seite und ist normal editierbar — das ist die Abwesenheit von Information,
+  keine Störung.
+- **`POST /review/npc-stub` ist idempotent** („anlegen oder verlinken"): kein
+  Eintrag → anlegen; LEERER Eintrag → befüllen; befüllter Eintrag → unverändert
+  zurückgeben. Das alte `409` ließ den DM eine id korrigieren, die richtig war.
+  Der Status ist der Default `unknown` (die Zeile schrieb vorher `alive`,
+  gegen ihre eigene Doku).
+- **Die Grenze, bewusst gezogen:** `location:` darf laut README freier Text
+  sein. Ein Wert, der KEIN Kebab-Slug ist (Leerzeichen, Großschreibung),
+  bleibt reiner Text und bekommt keinen Eintrag. Ein slug-FÖRMIGER freier Text
+  (`location: hafen`) ist von einer Referenz nicht unterscheidbar und wird als
+  Referenz behandelt — das ist der Preis des einen mehrdeutigen Feldes, und der
+  Grund für den nächsten Punkt.
+- **Bestandsdaten: Boot-Pass nur für NPCs.** Beim Boot legt ein idempotenter
+  Pass leere Zeilen für alle noch hängenden `scene_npcs.npc_id` und
+  `npc_relations.other_npc_id` an (`store/ref-backfill.ts`) und meldet sie im
+  Boot-Log. `scenes.location` bleibt bewusst AUSSEN: ein pauschaler Lauf würde
+  aus slug-förmigem Freitext Orte erfinden, die der DM nie geschrieben hat, in
+  eine Liste, die er ansehen muss, ohne Rückweg im Werkzeug. Dort greift die
+  Lazy-Regel — der nächste Schreibvorgang, der das Feld anfasst, legt an, denn
+  dann hat ein Mensch den Wert gerade getippt.
+- **Keine Foreign Keys** auf diesen Spalten. Sie halten Freitext und
+  Importbestand legal; die Konsistenz kommt aus den Schreibwegen, nicht aus
+  einem Constraint, der einen legalen Import scheitern lassen würde.
+- **Leer ist nicht fehlt, auch beim Lesen:** eine leere Inbox antwortet 200 mit
+  einem leeren Dokument (wie das Glossar seit #57), nicht 404.
+
+**Bewusst NICHT Teil der Entscheidung** (PO-Liste, siehe Ticket #70): die
+Gegenseite einer Beziehung automatisch anlegen (das wäre erfundener Inhalt),
+die Validierung des Generators lockern (sie schützt vor halluzinierten ids),
+`[[slug]]`-Referenzen in Prosa anlegen (die Kind-Zuordnung ist mehrdeutig) und
+Kapitel-ids anlegen (eine Szene unter einem unbekannten Kapitel fällt aus dem
+Baum, deshalb bleibt es 400).
+
+### Nachschärfungen aus dem Audit (#70, gleiche Scheibe)
+
+Das Review der ersten Umsetzung hat sechs Stellen gefunden, an denen die Regel
+oben nicht durchgezogen war — die App versprach etwas, was der Server nicht
+tat, oder umgekehrt. Verbindlich ist ab jetzt:
+
+- **Status zählt als Inhalt.** Eine per Referenz entstandene Zeile, deren
+  `status` der DM auf z. B. `dead` gestellt hat, ist NICHT mehr leer: Der
+  Generator-Apply antwortet dort wieder mit `409 { conflicts }`, `npc-stub`
+  gibt sie unverändert zurück. Leer ist nur der Spaltendefault.
+- **`location:` wird bei JEDEM Patch sichergestellt**, nicht nur bei einer
+  Änderung. Der Eigenschaften-Dialog verspricht „wird beim Speichern
+  angelegt"; mit der alten „nur NEUE Referenzen"-Regel blieb ein hängender
+  Alt-Slug beim Speichern genau so hängen. Die Freitext-Grenze bleibt
+  unverändert. Für `npcs:` gilt weiter „nur neue" (siehe nächster Punkt).
+- **`npcs:` nimmt ids, keine Namen.** Ein NEUER Eintrag ohne Slug-Form wird
+  mit 400 abgelehnt (`npcs` hat, anders als `location`, keine Freitext-Hälfte:
+  jeder Eintrag wird eine Karte und eine Referenz). Bereits GESPEICHERTE
+  Werte sind ausgenommen — die Migration importiert, was da ist, und eine
+  Alt-Szene muss speicherbar bleiben. Die Karte einer solchen Alt-Referenz
+  sagt „keine NPC-id, deshalb kein Eintrag" statt „Server prüfen".
+- **`chapter:` ist überall 400.** Ein unbekanntes Kapitel wurde bei einer
+  Szene abgelehnt, bei NPC und Ort still gespeichert; jetzt gilt für alle drei
+  dasselbe (nur bei geändertem Wert, wegen Bestandsdaten), und der Hinweis im
+  Dialog sagt „Kapitel muss existieren" statt „wird angelegt".
+- **Zwei Drafts auf dieselbe Adresse sind 409** (`{ conflicts }`) statt
+  last-write-win: seit eine leere Zeile kein Konflikt mehr ist, hat der
+  zweite Draft den ersten befüllt, und das Review meldete einen sauberen
+  Apply für weggeworfenen Inhalt.
+- **Rename merged in eine LEERE Zielzeile** statt 409. Genau dieser Zustand
+  entsteht jetzt regulär (eine Szene listet alte und neue id → die neue hat
+  eine leere Zeile), und der Merge der Referenzlisten war sonst toter Code.
+  Eine Zielzeile mit Inhalt bleibt 409 — Rename überschreibt nichts.

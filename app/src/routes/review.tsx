@@ -18,16 +18,15 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
 import {
-  ApiError,
   adoptThread,
-  createNpcStub,
+  ensureNpc,
   fetchFile,
   fetchTree,
   markInboxLineDone,
   markLogLineSeen,
 } from "@/api";
 import { MobileBackRow } from "@/components/MobileBackRow";
-import { NpcStubDialog } from "@/components/NpcStubDialog";
+import { NpcCreateDialog } from "@/components/NpcCreateDialog";
 import { Button } from "@/components/ui/button";
 import { parseChecklist } from "@/lib/review";
 import type { ReviewActionKind } from "@/lib/review-memory";
@@ -51,7 +50,7 @@ function doneLabel(action: ActionKind | undefined): string {
     case "thread":
       return "Als Faden übernommen";
     case "npc":
-      return "NPC-Stub angelegt";
+      return "NPC angelegt";
     case "dismiss":
       return "Verworfen";
     default:
@@ -103,7 +102,7 @@ export function ReviewRoute() {
         written.push(await adoptThread(campaign, chapter.id, entry.text));
       } else if (action === "npc") {
         if (npc === undefined) throw new Error("keine id");
-        written.push(await createNpcStub(campaign, npc.id, npc.name, entry.text));
+        written.push(await ensureNpc(campaign, npc.id, npc.name, entry.text));
       }
       // Only after the harvest succeeded is the source marked done.
       if (entry.source === "log") {
@@ -137,11 +136,12 @@ export function ReviewRoute() {
   });
 
   const busyKey = act.isPending ? act.variables?.entry.key : undefined;
+  // No 409 case any more (issue #70): an id that already has an entry is
+  // LINKED, not refused, so the only thing left to report is a server that
+  // did not answer.
   const npcError =
     act.isError && act.variables?.action === "npc"
-      ? act.error instanceof ApiError && act.error.status === 409
-        ? `npcs/${act.variables.npc?.id ?? ""}.md existiert schon`
-        : "NPC-Stub nicht angelegt — Server prüfen."
+      ? "NPC nicht angelegt — Server prüfen."
       : undefined;
   const cardError = (entry: ReviewEntry) =>
     act.isError && act.variables?.action !== "npc" && act.variables?.entry.key === entry.key
@@ -269,7 +269,7 @@ export function ReviewRoute() {
       </div>
 
       {npcEntry !== undefined && (
-        <NpcStubDialog
+        <NpcCreateDialog
           key={npcEntry.key}
           entry={npcEntry}
           pending={act.isPending}
@@ -362,7 +362,7 @@ function EntryCard({
                 onClick={onNpc}
                 className="h-auto rounded-md border-[color-mix(in_srgb,var(--primary)_40%,transparent)] bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-3 py-1.5 text-[12.5px] font-normal text-primary-hover hover:bg-[color-mix(in_srgb,var(--primary)_20%,transparent)] hover:text-primary-hover"
               >
-                NPC-Stub anlegen
+                NPC anlegen
               </Button>
             )}
             <Button
