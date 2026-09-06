@@ -106,7 +106,7 @@ export interface GlossaryResponse {
 /**
  * The campaign's glossary as a LIST of terms (issue #57): since the SQLite
  * migration it is a table, not a markdown blob. The reading view still opens
- * `glossary.md` as a document — that rendering comes from these same rows —
+ * `glossary` as a document — that rendering comes from these same rows —
  * but anything that wants the terms themselves reads this.
  */
 export function fetchGlossary(campaign: string): Promise<GlossaryResponse> {
@@ -267,7 +267,7 @@ export function discardSession(campaign: string): Promise<{ path: string }> {
 }
 
 /**
- * Append a line to the campaign's inbox.md (mobile capture, issue #11);
+ * Append a line to the campaign's inbox (mobile capture, issue #11);
  * the server creates the file on the first entry.
  */
 export function appendInbox(campaign: string, text: string): Promise<FileResponse> {
@@ -305,7 +305,7 @@ export function markLogLineSeen(
 }
 
 /**
- * Append `- [ ] text` under `## Offene Fäden` of the chapter's _chapter.md
+ * Append `- [ ] text` under `## Offene Fäden` of the chapter's _chapter
  * (section created when missing). Returns the chapter file.
  */
 export function adoptThread(
@@ -341,7 +341,7 @@ export function ensureNpc(
 /**
  * Rewrite an inbox line to `- [x] …` (the one documented exception to the
  * inbox's append-only rule). Idempotent; the line must match byte for byte.
- * Returns inbox.md.
+ * Returns inbox.
  */
 export function markInboxLineDone(campaign: string, line: string): Promise<FileResponse> {
   return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/review/inbox-done`, { line });
@@ -569,7 +569,7 @@ export async function putDraftEdit(
 /**
  * Write the reviewed drafts (all or nothing): the possibly edited scene
  * markdown plus the accepted stubs. With `chapter` + `chapterTitle` the
- * server also creates `<chapter>/_chapter.md` when it is missing.
+ * server also creates `<chapter>/_chapter` when it is missing.
  * ApiError 409 carries the existing paths in `details.conflicts` — nothing
  * was written then.
  *

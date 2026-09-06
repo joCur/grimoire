@@ -8,7 +8,7 @@
 // turn the save into a silent overwrite (409 → inline "Inzwischen geändert —
 // neu laden", the typed values stay, the next attempt writes on top of what is
 // stored now). That is the ONLY write path since issue #62: the create
-// endpoint it used for a campaign without `_campaign.md` is gone, because
+// endpoint it used for a campaign without `_campaign` is gone, because
 // every campaign has a row and therefore always has that document. On success
 // the campaigns/tree/search queries are invalidated — the switcher label and
 // the pool header read from the campaign list, so they must not keep the old
@@ -128,7 +128,7 @@ function CampaignMetaDialog({
       <DialogContent aria-describedby={undefined} className="max-w-[460px]">
         <DialogTitle>Kampagne bearbeiten</DialogTitle>
         <DialogDescription>
-          Name und Beschreibung stehen in _campaign.md. Die id bleibt, wie sie ist — sie steckt
+          Name und Beschreibung stehen in _campaign. Die id bleibt, wie sie ist — sie steckt
           in jeder Adresse und ändert sich hier nicht.
         </DialogDescription>
 

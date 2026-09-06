@@ -1,11 +1,11 @@
 // Campaign metadata from the UI (issue #34, first small slice of the #15
-// territory): name + description of `_campaign.md`.
+// territory): name + description of `_campaign`.
 //
 // ONE write path since issue #62: PATCH /properties with the guard token the
 // dialog read, so an edit that happened meanwhile cannot be overwritten
 // silently (409). The second path — POST /campaign-meta for a campaign that
-// had no `_campaign.md` yet — is gone with the endpoint: since the cutover
-// (#57) every campaign is a ROW, GET /file?path=_campaign.md always answers
+// had no `_campaign` yet — is gone with the endpoint: since the cutover
+// (#57) every campaign is a ROW, GET /file?path=_campaign always answers
 // with a document and a token, and there is no "create" case left to serve.
 //
 // Everything here is pure or a plain API call — no react, no query imports,
@@ -15,7 +15,7 @@ import { fetchFile, patchProperties } from "@/api";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
 /** Campaign-relative path of the metadata document. */
-export const CAMPAIGN_META_PATH = "_campaign.md";
+export const CAMPAIGN_META_PATH = "_campaign";
 
 export interface CampaignMetaValues {
   name: string;

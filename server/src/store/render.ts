@@ -214,7 +214,7 @@ function parsed(
  * The campaign's display name: its stored name, or the id when there is none.
  *
  * `""` in the column means "no authored name" — the importer stored that for
- * a campaign whose `_campaign.md` said nothing usable, and the parser's own
+ * a campaign whose `_campaign` said nothing usable, and the parser's own
  * rule for a missing `name` is the id fallback (shared/src/parse.ts). The
  * fallback is applied HERE, once, and everything that shows a campaign name
  * reads it through this function: the campaign document (`GET /file`) and the
@@ -489,7 +489,7 @@ export function renderInboxBody(rows: InboxRow[]): string {
 
 export function renderInbox(campaignId: string, rows: InboxRow[], rev: number): FileResponse {
   // The parser gave a properties-less inbox the file stem as its id; the
-  // format's own `inbox.md` carries exactly that.
+  // format's own `inbox` carries exactly that.
   return parsed(INBOX_PATH, "inbox", { id: "inbox" }, renderInboxBody(rows), rev);
 }
 

@@ -76,9 +76,9 @@ async function version(): Promise<number> {
   return ((await res.json()) as { version: number }).version;
 }
 
-const NPC = "npcs/fenn.md";
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
-const GLOSSARY = "glossary.md";
+const NPC = "npcs/fenn";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+const GLOSSARY = "glossary";
 
 beforeEach(async () => {
   setNow(() => new Date(2026, 7, 19, 21, 5));
@@ -136,7 +136,7 @@ describe("PUT /file — an npc's `## Beziehungen` keeps what became no row", () 
   });
 });
 
-describe("glossary.md — nothing unassignable is dropped, and it stays reachable", () => {
+describe("glossary — nothing unassignable is dropped, and it stays reachable", () => {
   test("prose above the first heading survives a save", async () => {
     const before = await getFile(GLOSSARY);
     const body =
@@ -208,11 +208,11 @@ describe("guard tokens of the two list documents", () => {
   });
 
   test("the inbox token moves on inbox writes only", async () => {
-    const before = await getFile("inbox.md");
+    const before = await getFile("inbox");
     expect((await postJson("/api/beispiel/session/start")).status).toBe(200);
-    expect(await getFile("inbox.md")).toEqual(before);
+    expect(await getFile("inbox")).toEqual(before);
     expect((await postJson("/api/beispiel/inbox", { text: "Neu" })).status).toBe(200);
-    expect((await getFile("inbox.md")).rev).toBe(before.rev + 1);
+    expect((await getFile("inbox")).rev).toBe(before.rev + 1);
   });
 });
 
@@ -265,7 +265,7 @@ describe("PATCH /properties — a scene's `chapter`", () => {
         patch: { chapter: "02-nordbucht" },
       });
       expect(after.properties.chapter).toBe("02-nordbucht");
-      expect(after.path).toBe("02-nordbucht/hafen/lighthouse-arrival.md");
+      expect(after.path).toBe("02-nordbucht/hafen/lighthouse-arrival");
       const chapters = (await tree()).chapters;
       const moved = chapters.find((c) => c.id === "02-nordbucht");
       expect(moved?.groups[0]?.scenes.map((s) => s.id)).toEqual(["lighthouse-arrival"]);
@@ -283,7 +283,7 @@ describe("applyDrafts — the conflict check is IN the insert transaction", () =
     properties: Record<string, unknown>;
     body: string;
   } {
-    const rel = `01-salzhafen/hafen/${id}.md`;
+    const rel = `01-salzhafen/hafen/${id}`;
     return {
       rel,
       address: rel,
@@ -305,7 +305,7 @@ describe("applyDrafts — the conflict check is IN the insert transaction", () =
     expect(thrown).toBeInstanceOf(ApiError);
     const api = thrown as ApiError;
     expect(api.status).toBe(409);
-    expect(api.extra?.conflicts).toEqual(["01-salzhafen/hafen/lighthouse-arrival.md"]);
+    expect(api.extra?.conflicts).toEqual(["01-salzhafen/hafen/lighthouse-arrival"]);
   });
 
   test("all or nothing: a conflict late in the batch writes none of it", async () => {

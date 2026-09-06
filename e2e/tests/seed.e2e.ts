@@ -48,7 +48,7 @@ interface GlossaryResponse {
   entries: { term: string; explanation: string }[];
 }
 
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
 
 const COUNTS =
   "SELECT (SELECT count(*) FROM campaigns) AS campaigns, " +
@@ -68,12 +68,12 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   const scenes = tree.chapters.flatMap((c) => c.groups.flatMap((g) => g.scenes));
   // The scene's path segment is its ID since the cutover.
   expect(scenes.map((s) => s.path).sort()).toEqual([
-    "01-salzhafen/hafen/lighthouse-arrival.md",
-    "01-salzhafen/hafen/smuggler-captured.md",
+    "01-salzhafen/hafen/lighthouse-arrival",
+    "01-salzhafen/hafen/smuggler-captured",
   ]);
   expect(tree.npcs.map((n) => n.id).sort()).toEqual(["fenn", "jorna"]);
-  expect(tree.locations.map((l) => l.path)).toEqual(["locations/leuchtturm.md"]);
-  expect(tree.sessions.map((s) => s.path)).toEqual(["sessions/2026-01-15.md"]);
+  expect(tree.locations.map((l) => l.path)).toEqual(["locations/leuchtturm"]);
+  expect(tree.sessions.map((s) => s.path)).toEqual(["sessions/2026-01-15"]);
 
   // --- a scene body, callouts and If-sections included ----------------------
   const scene = await api.file(SCENE);
@@ -84,7 +84,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(scene.raw.startsWith("---\n")).toBe(true);
 
   // --- an npc: typed properties (voice, quickstats) and its prose ----------
-  const npc = await api.file("npcs/jorna.md");
+  const npc = await api.file("npcs/jorna");
   expect(npc.properties.name).toBe("Hafenmeisterin Jorna");
   expect(npc.properties.voice).toBe("knapp, wetterrau, duzt jeden");
   expect(npc.properties.quickstats).toMatchObject({ insight: 2, "passive-perception": 12 });
@@ -92,11 +92,11 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(npc.body).toContain("- fenn: kennt ihn von früher");
 
   // --- the session ----------------------------------------------------------
-  const session = await api.file("sessions/2026-01-15.md");
+  const session = await api.file("sessions/2026-01-15");
   expect(session.body).toContain("Spuren gefunden");
 
   // --- the inbox ------------------------------------------------------------
-  const inbox = await api.file("inbox.md");
+  const inbox = await api.file("inbox");
   expect(inbox.body).toContain("Der Dorfschmied repariert");
 
   // --- the glossary: its own TABLE since #57 (planning F6) ------------------

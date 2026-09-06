@@ -11,17 +11,24 @@ import type { EntityKind } from "./types";
 
 /**
  * Detect the entity kind purely from the campaign-relative path, per the
- * folder conventions in README.md:
+ * layout in README.md:
  *
- *   npcs/<id>.md            -> npc
- *   locations/<id>.md       -> location
- *   sessions/<date>.md      -> session
- *   _campaign.md            -> campaign  (campaign root only)
- *   inbox.md                -> inbox
- *   glossary.md             -> glossary
- *   **\/_chapter.md         -> chapter
- *   <chapter>/**\/*.md      -> scene   (any other .md at depth >= 2)
- *   everything else         -> unknown
+ *   npcs/<id>            -> npc
+ *   locations/<id>       -> location
+ *   sessions/<id>        -> session
+ *   _campaign            -> campaign  (campaign root only)
+ *   inbox                -> inbox
+ *   glossary             -> glossary
+ *   **\/_chapter         -> chapter
+ *   <chapter>/**\/<id>   -> scene   (anything else at depth >= 2)
+ *   everything else      -> unknown
+ *
+ * Both spellings work, and on purpose: the API's ADDRESSES carry no extension
+ * since issue #79 (store/paths.ts), while the markdown IMPORTER hands in file
+ * paths that still end in `.md` (server/src/db/). A trailing `.md` is
+ * therefore stripped; any OTHER extension left on the last segment means
+ * "not one of ours" and answers `unknown`, so `map.png` and `notes.txt` are
+ * still not scenes.
  */
 export function kindFromPath(path: string): EntityKind {
   // Normalize: forward slashes, no leading "./" or "/".
@@ -29,15 +36,16 @@ export function kindFromPath(path: string): EntityKind {
   const segments = normalized.split("/").filter((s) => s.length > 0);
   if (segments.length === 0) return "unknown";
 
-  const basename = segments[segments.length - 1]!;
-  if (!basename.endsWith(".md")) return "unknown";
+  const last = segments[segments.length - 1]!;
+  const name = last.endsWith(".md") ? last.slice(0, -".md".length) : last;
+  if (name === "" || name.includes(".")) return "unknown";
 
   if (segments.length === 1) {
-    // Campaign metadata lives in the campaign ROOT only (issue #17); deeper
-    // `_campaign.md` files keep whatever kind their depth gives them.
-    if (basename === "_campaign.md") return "campaign";
-    if (basename === "inbox.md") return "inbox";
-    if (basename === "glossary.md") return "glossary";
+    // Campaign metadata lives in the campaign ROOT only (issue #17); a deeper
+    // `_campaign` keeps whatever kind its depth gives it.
+    if (name === "_campaign") return "campaign";
+    if (name === "inbox") return "inbox";
+    if (name === "glossary") return "glossary";
     return "unknown";
   }
 
@@ -47,9 +55,9 @@ export function kindFromPath(path: string): EntityKind {
     if (segments[0] === "sessions") return "session";
   }
 
-  if (basename === "_chapter.md") return "chapter";
+  if (name === "_chapter") return "chapter";
 
-  // Any other markdown file at depth >= 2 lives inside a chapter directory
-  // (directly or in a location-slug subfolder) and is a scene.
+  // Anything else at depth >= 2 lives inside a chapter directory (directly or
+  // in a location-slug subfolder) and is a scene.
   return "scene";
 }

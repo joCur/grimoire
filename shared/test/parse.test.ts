@@ -70,6 +70,25 @@ describe("kindFromPath", () => {
     expect(kindFromPath("./npcs/fenn.md")).toBe("npc");
     expect(kindFromPath("01-salzhafen\\hafen\\szene.md")).toBe("scene");
   });
+
+  // The API's ADDRESSES carry no extension since issue #79, while the
+  // importer still hands in `.md` file paths. Both spellings answer the same
+  // kind, and any OTHER extension is still "not one of ours".
+  test("addresses without the .md extension answer the same kind", () => {
+    expect(kindFromPath("npcs/fenn")).toBe("npc");
+    expect(kindFromPath("locations/leuchtturm")).toBe("location");
+    expect(kindFromPath("sessions/2026-01-15")).toBe("session");
+    expect(kindFromPath("_campaign")).toBe("campaign");
+    expect(kindFromPath("inbox")).toBe("inbox");
+    expect(kindFromPath("glossary")).toBe("glossary");
+    expect(kindFromPath("01-salzhafen/_chapter")).toBe("chapter");
+    expect(kindFromPath("01-salzhafen/prolog")).toBe("scene");
+    expect(kindFromPath("01-salzhafen/hafen/ankunft-leuchtturm")).toBe("scene");
+    // Not addresses at all.
+    expect(kindFromPath("notes")).toBe("unknown");
+    expect(kindFromPath("01-salzhafen/hafen/map.png")).toBe("unknown");
+    expect(kindFromPath("01-salzhafen/hafen/notizen.txt")).toBe("unknown");
+  });
 });
 
 // --- parseMarkdown against real fixtures ---------------------------------------

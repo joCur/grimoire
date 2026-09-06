@@ -9,11 +9,11 @@
 //                  type planned|contingency, status draft, only known
 //                  callouts, npc/location references either existing in the
 //                  campaign or shipped as a stub in the same reply
-//   npc_stubs      npcs/<kebab-id>.md WITH a status (alive unless the source
+//   npc_stubs      npcs/<kebab-id> WITH a status (alive unless the source
 //                  says otherwise)
-//   location_stubs locations/<kebab-id>.md WITHOUT any status (locations have
+//   location_stubs locations/<kebab-id> WITHOUT any status (locations have
 //                  none — issue #27)
-//   npc run        npcs/<kebab-id>.md, properties id == file name, no
+//   npc run        npcs/<kebab-id>, properties id == file name, no
 //                  `chapter`, quickstats values QUOTED ("+2" — YAML would eat
 //                  the plus otherwise), `## Weiß` only [!secret],
 //                  `## Beziehungen` only npc ids that exist, `## Notizen`
@@ -56,7 +56,7 @@ export const SCENE_TITLE = "Nachtwache am Kai";
 export const SCENE_SLUG = "nachtwache-am-kai";
 /**
  * The draft's `id`, deliberately DIFFERENT from the file name above: since the
- * cutover (issue #57) a scene's address is `<chapter>/<id>.md`, so this is the
+ * cutover (issue #57) a scene's address is `<chapter>/<id>`, so this is the
  * path the draft ends up under once it is applied — the model's file name
  * decides nothing (server/src/generator.ts, draftAddress).
  */
@@ -135,9 +135,9 @@ Die flache Bucht nördlich des Hafens — bei Ebbe zu Fuß erreichbar.
 /** The good scene reply for the chapter the prompt names. */
 export function sceneReply(chapter: string): unknown {
   return {
-    scenes: [{ path: `${chapter}/${SCENE_SLUG}.md`, content: sceneDraft(chapter) }],
-    npc_stubs: [{ path: `npcs/${NPC_STUB_ID}.md`, content: npcStub }],
-    location_stubs: [{ path: `locations/${LOCATION_STUB_ID}.md`, content: locationStub }],
+    scenes: [{ path: `${chapter}/${SCENE_SLUG}`, content: sceneDraft(chapter) }],
+    npc_stubs: [{ path: `npcs/${NPC_STUB_ID}`, content: npcStub }],
+    location_stubs: [{ path: `locations/${LOCATION_STUB_ID}`, content: locationStub }],
     warnings: ["Der Frachtbrief ist erfunden — im Quelltext steht kein Siegel."],
   };
 }
@@ -151,7 +151,7 @@ export function invalidSceneReply(chapter: string): unknown {
   return {
     scenes: [
       {
-        path: `${chapter}/${SCENE_SLUG}.md`,
+        path: `${chapter}/${SCENE_SLUG}`,
         content: `---
 id: ${SCENE_ID}
 title: ${SCENE_TITLE}
@@ -215,7 +215,7 @@ Nächten keinen Fang verkauft und traut [[fenn]] nicht.
 /** The good NPC reply; `id` is the DM's pin when there was one. */
 export function npcReply(id: string = NPC_DEFAULT_ID): unknown {
   return {
-    npc: { path: `npcs/${id}.md`, content: npcFile(id) },
+    npc: { path: `npcs/${id}`, content: npcFile(id) },
     warnings: [],
   };
 }
@@ -227,7 +227,7 @@ export function npcReply(id: string = NPC_DEFAULT_ID): unknown {
 export function invalidNpcReply(id: string = NPC_DEFAULT_ID): unknown {
   return {
     npc: {
-      path: `npcs/${id}.md`,
+      path: `npcs/${id}`,
       content: `---
 id: ${id}
 name: ${NPC_DEFAULT_NAME}

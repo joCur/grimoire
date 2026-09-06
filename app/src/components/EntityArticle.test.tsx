@@ -13,7 +13,7 @@ function file(
   properties: Record<string, unknown>,
   body = "",
 ): FileResponse {
-  return { path: `npcs/x.md`, kind, properties, body, rev: 1, raw: "" };
+  return { path: `npcs/x`, kind, properties, body, rev: 1, raw: "" };
 }
 
 function render(f: FileResponse): string {
@@ -91,7 +91,7 @@ describe("EntityArticle — npc", () => {
 
   test("a nameless npc file falls back to the path", () => {
     const html = render(file("npc", {}, ""));
-    expect(html).toContain("npcs/x.md");
+    expect(html).toContain("npcs/x");
   });
 });
 

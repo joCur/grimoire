@@ -32,7 +32,7 @@ export interface NavView {
  *
  * The pool and the scene list are Kapitel; a file's section comes from its
  * kind (the shared path table — the format contract in code exactly once):
- * scenes and `_chapter.md` are Kapitel, npc/location files their own lists.
+ * scenes and `_chapter` are Kapitel, npc/location files their own lists.
  */
 export function navSection(view: NavView): NavSection | undefined {
   if (view.isPool) return "chapters";

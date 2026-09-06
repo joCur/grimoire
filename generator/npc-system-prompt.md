@@ -13,7 +13,7 @@ Gib ausschließlich einen JSON-Block zurück, kein Markdown drumherum:
 ```json
 {
   "npc": {
-    "path": "npcs/<id>.md",
+    "path": "npcs/<id>",
     "content": "<vollständige Markdown-Datei inkl. Frontmatter>"
   },
   "warnings": ["<alles, was der DM prüfen sollte>"]
@@ -59,7 +59,7 @@ Danach genau diese Abschnitte, in dieser Reihenfolge:
    (`[[jorna]]s Kai`). In `## Beziehungen` bleibt die nackte id ohne Klammern.
 1. **id**: kebab-case, kurz, stabil gedacht (`fenn`, nicht
    `der-schmuggler-aus-der-nordbucht`). Der Dateiname ist die id:
-   `path` = `npcs/<id>.md`, und `id` im Frontmatter ist identisch dazu.
+   `path` = `npcs/<id>`, und `id` im Frontmatter ist identisch dazu.
    Die id darf **keine** der ids aus der Kontextliste sein — bestehende
    NPC-Dateien werden nie überschrieben. Ist im Kontext eine
    `vorgegebene id` genannt, benutze genau diese.
@@ -108,9 +108,9 @@ locations: bucht (Die Schmugglerbucht)
 
 ### Erwartete Ausgabe
 
-`npcs/fenn.md` mit `status: alive`, `role` als Einzeiler,
+`npcs/fenn` mit `status: alive`, `role` als Einzeiler,
 `statblock: "Roll20: Fenn"`, quickstats als Strings, `## Will` (Auftrag ohne
 Tote — der wunde Punkt), `## Weiß` mit einem `[!secret]` (Name des
 Auftraggebers, Bedingung fürs Reden), `## Beziehungen` mit genau
 `- jorna: …` (id existiert im Kontext) und leerem `## Notizen`.
-Die Referenz-Zieldatei liegt dem Prompt als `npc-example-output.md` bei.
+Das Referenz-Dokument liegt dem Prompt als `npc-example-output.md` bei.

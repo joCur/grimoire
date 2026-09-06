@@ -20,8 +20,12 @@
 // by that seed run. A test that needs content the example campaign does not
 // have seeds it into its own copy of that tree BEFORE the seed:
 //
-//   test.use({ seed: { files: { "locations/hafen.md": "…" } } });
-//   test.use({ seed: { remove: ["_campaign.md"] } });
+//   test.use({ seed: { files: { "locations/hafen": "…" } } });
+//   test.use({ seed: { remove: ["_campaign"] } });
+//
+// Those keys are ADDRESSES, like everything else in the suite (issue #79);
+// the fixture appends the importer's `.md` when it writes into the tree, so
+// no spec has to know that the SOURCE of the seed is still a file.
 //
 // Without a seed the pristine copy from the global setup is used directly (it
 // is never written to), so most tests copy nothing at all.
@@ -78,9 +82,9 @@ export interface ServerHandle {
 
 /** What a test adds to its own copy of the markdown tree before the boot. */
 export interface Seed {
-  /** campaign-relative path -> content (parent directories are created). */
+  /** campaign-relative ADDRESS -> content (parent directories are created). */
   files?: Record<string, string>;
-  /** campaign-relative paths to delete before the seed runs. */
+  /** campaign-relative ADDRESSES to delete before the seed runs. */
   remove?: string[];
 }
 
@@ -226,7 +230,7 @@ export async function startGrimoireServer(
 }
 
 /**
- * `sessions/<today>.md` — for session files a spec SEEDS itself.
+ * `sessions/<today>` — for session files a spec SEEDS itself.
  *
  * NOT the path of a session the app starts: those ids are opaque random
  * strings since issue #58 and only the server knows them (`api.sessionPath`).
@@ -234,10 +238,10 @@ export async function startGrimoireServer(
  * before the cutover carries — so seeding one is also the compatibility case.
  */
 export function todaySessionPath(d = new Date()): string {
-  return `sessions/${todaySessionId(d)}.md`;
+  return `sessions/${todaySessionId(d)}`;
 }
 
-/** The date-shaped id of a seeded session file for that day (see above). */
+/** The date-shaped id of a seeded session for that day (see above). */
 export function todaySessionId(d = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -353,9 +357,15 @@ export const test = base.extend<Fixtures>({
     await mkdir(dir, { recursive: true });
     await cp(pristineDir(), dir, { recursive: true });
     const campaignDir = path.join(dir, CAMPAIGN);
-    for (const rel of remove) await rm(path.join(campaignDir, rel), { force: true });
+    // Addresses in, files out: the importer reads `.md` files, the suite
+    // speaks addresses (issue #79).
+    const asFile = (address: string) =>
+      address.endsWith(".md") ? address : `${address}.md`;
+    for (const rel of remove) {
+      await rm(path.join(campaignDir, asFile(rel)), { force: true });
+    }
     for (const [rel, content] of Object.entries(files)) {
-      const abs = path.join(campaignDir, rel);
+      const abs = path.join(campaignDir, asFile(rel));
       await mkdir(path.dirname(abs), { recursive: true });
       await writeFile(abs, content, "utf8");
     }

@@ -23,7 +23,7 @@ import {
 } from "./support/store";
 
 /** A scene of the example campaign we overwrite with reference prose. */
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
 
 beforeEach(async () => {
   await seedStore();
@@ -130,7 +130,7 @@ describe("the index resolves references", () => {
     await writeBody(SCENE, "## Flow\n\nAm Kai wartet [[jorna]]s Boot.\n");
     expect(findsScene(await search("Salzhand"))).toBe(false);
 
-    await patch("npcs/jorna.md", { name: "Jorna Salzhand" });
+    await patch("npcs/jorna", { name: "Jorna Salzhand" });
 
     // The scene's own row never changed — only what its indexed text says.
     expect((await readFile(SCENE)).body).toContain("[[jorna]]");
@@ -142,9 +142,9 @@ describe("the index resolves references", () => {
     // Two entities that mention each other: the cascade latch (write.ts) is
     // what keeps this from ping-ponging forever.
     await writeBody(SCENE, "## Flow\n\n[[jorna]] und [[fenn]].\n");
-    await writeBody("npcs/jorna.md", "## Will\n\nDass [[fenn]] verschwindet.\n");
-    await writeBody("npcs/fenn.md", "## Will\n\nDass [[jorna]] schweigt.\n");
-    await patch("npcs/fenn.md", { name: "Fenn Silberring" });
+    await writeBody("npcs/jorna", "## Will\n\nDass [[fenn]] verschwindet.\n");
+    await writeBody("npcs/fenn", "## Will\n\nDass [[jorna]] schweigt.\n");
+    await patch("npcs/fenn", { name: "Fenn Silberring" });
     expect((await search("Silberring")).some((r) => r.id === "jorna")).toBe(true);
   });
 });
@@ -152,8 +152,8 @@ describe("the index resolves references", () => {
 describe("referrersOf and the rename cascade", () => {
   test("finds every body kind that mentions the slug", async () => {
     await writeBody(SCENE, "## Flow\n\n[[jorna]] wartet.\n");
-    await writeBody("locations/leuchtturm.md", "[[jorna]] hat den Schlüssel.\n");
-    await writeBody("01-salzhafen/_chapter.md", "## Ziel\n\n[[jorna]] zahlt.\n");
+    await writeBody("locations/leuchtturm", "[[jorna]] hat den Schlüssel.\n");
+    await writeBody("01-salzhafen/_chapter", "## Ziel\n\n[[jorna]] zahlt.\n");
     const db = await getDb();
     expect(referrersOf(db, "beispiel", "jorna")).toEqual([
       { kind: "scene", id: "lighthouse-arrival" },
@@ -206,7 +206,7 @@ describe("referrersOf and the rename cascade", () => {
     // npc > location > scene), so `[[jorna]]` in prose is the NPC.
     await rename({ kind: "scene", oldId: "lighthouse-arrival", newId: "jorna" });
     const prose = "## Flow\n\nAm Kai wartet [[jorna]]s Boot.\n";
-    await writeBody("locations/leuchtturm.md", prose);
+    await writeBody("locations/leuchtturm", prose);
 
     // The USAGE report follows the same rule: the sentence is the npc's.
     const sceneUsage = await usageOf("scene", "jorna");
@@ -216,20 +216,20 @@ describe("referrersOf and the rename cascade", () => {
 
     // Renaming the SHADOWED scene must not touch that prose.
     await rename({ kind: "scene", oldId: "jorna", newId: "jorna-szene" });
-    expect((await readFile("locations/leuchtturm.md")).body).toBe(prose);
+    expect((await readFile("locations/leuchtturm")).body).toBe(prose);
 
     // Renaming the OWNER still does.
     await rename({ kind: "npc", oldId: "jorna", newId: "jorna-npc" });
-    expect((await readFile("locations/leuchtturm.md")).body).toContain("[[jorna-npc]]s Boot");
+    expect((await readFile("locations/leuchtturm")).body).toContain("[[jorna-npc]]s Boot");
   });
 
   test("the campaign body is a full reference site (name and id rename)", async () => {
-    await writeBody("_campaign.md", "Notiz: [[jorna]] ist bestechlich.\n");
+    await writeBody("_campaign", "Notiz: [[jorna]] ist bestechlich.\n");
     const db = await getDb();
     expect(referrersOf(db, "beispiel", "jorna")).toEqual([{ kind: "campaign", id: "beispiel" }]);
 
     // A NAME change re-indexes the campaign row like any other referrer.
-    await patch("npcs/jorna.md", { name: "Jorna Salzhand" });
+    await patch("npcs/jorna", { name: "Jorna Salzhand" });
     expect((await search("Salzhand")).some((r) => r.kind === "campaign")).toBe(true);
 
     // …and an ID rename drags the slug in the note along, counted in the
@@ -237,8 +237,8 @@ describe("referrersOf and the rename cascade", () => {
     const usage = await usageOf("npc", "jorna");
     expect(usage.groups.find((g) => g.ref === "bodyRefs")?.count).toBe(1);
     const plan = await rename({ kind: "npc", oldId: "jorna", newId: "jorna-b" });
-    expect(plan.changed).toContain("_campaign.md");
-    expect((await readFile("_campaign.md")).body).toContain("[[jorna-b]]");
+    expect(plan.changed).toContain("_campaign");
+    expect((await readFile("_campaign")).body).toContain("[[jorna-b]]");
   });
 
   test("a dry run rewrites nothing but reports the site", async () => {

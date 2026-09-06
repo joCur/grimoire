@@ -37,9 +37,9 @@ import type { Locator, Page } from "@playwright/test";
 
 import { expect, test, type Api } from "../support/test";
 
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
 const SCENE_URL = `/beispiel/file/${SCENE}`;
-const NPC = "npcs/jorna.md";
+const NPC = "npcs/jorna";
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 
 /**
@@ -169,7 +169,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   expect(after.properties).toContain("tags: [social, travel, stealth, nachtszene]");
   expect(after.properties).toContain("location: bucht");
   // …and the referenced Ort now has its own (empty) entry — issue #70.
-  expect(await api.exists("locations/bucht.md")).toBe(true);
+  expect(await api.exists("locations/bucht")).toBe(true);
   expect(after.properties).toContain("status: draft");
   // … the untouched ones with their values, the unknown one byte-identically …
   expect(after.properties).toContain("x-custom: bleibt");
@@ -404,7 +404,7 @@ test("navigating away closes the dialog — no diff of file A lands in file B", 
   await expect(search).toBeFocused();
   await search.fill("Hafenmeisterin");
   await page.getByRole("option").filter({ hasText: "Hafenmeisterin Jorna" }).first().click();
-  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/jorna\.md$/);
+  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/jorna$/);
 
   // The dialog is gone with its file — it may not stand over another file's
   // reading view, holding the frozen values (and the rev) of the one it left.
@@ -433,10 +433,10 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
 }) => {
   // The four kinds with typed properties offer it …
   const withForm: [string, string, string][] = [
-    ["01-salzhafen/hafen/smuggler-captured.md", "Von den Schmugglern erwischt", "Szene"],
-    ["npcs/fenn.md", "Fenn", "NPC"],
-    ["locations/leuchtturm.md", "Der Leuchtturm von Salzhafen", "Ort"],
-    ["01-salzhafen/_chapter.md", "Kapitel 1: Der Leuchtturm von Salzhafen", "Kapitel"],
+    ["01-salzhafen/hafen/smuggler-captured", "Von den Schmugglern erwischt", "Szene"],
+    ["npcs/fenn", "Fenn", "NPC"],
+    ["locations/leuchtturm", "Der Leuchtturm von Salzhafen", "Ort"],
+    ["01-salzhafen/_chapter", "Kapitel 1: Der Leuchtturm von Salzhafen", "Kapitel"],
   ];
   for (const [rel, heading, kindLabel] of withForm) {
     await page.goto(`/beispiel/file/${rel}`);
@@ -452,9 +452,9 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
   // the glossary, which has no typed properties to offer. Asserted only after
   // the content is on screen, so this cannot pass on a still-loading page.
   const withoutForm: [string, string][] = [
-    ["sessions/2026-01-15.md", "Spuren gefunden"],
-    ["inbox.md", "Der Dorfschmied repariert"],
-    ["glossary.md", "Übersetzungs-Glossar"],
+    ["sessions/2026-01-15", "Spuren gefunden"],
+    ["inbox", "Der Dorfschmied repariert"],
+    ["glossary", "Übersetzungs-Glossar"],
   ];
   for (const [rel, marker] of withoutForm) {
     await page.goto(`/beispiel/file/${rel}`);
@@ -465,7 +465,7 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
   // The campaign file keeps its ONE dialog (issue #34): its name/description
   // ARE its properties, so a second form next to it would be two ways to
   // write the same two keys.
-  await page.goto("/beispiel/file/_campaign.md");
+  await page.goto("/beispiel/file/_campaign");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );

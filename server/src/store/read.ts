@@ -27,7 +27,7 @@ import {
   type SceneSummary,
   type SessionSummary,
 } from "@grimoire/shared";
-import { ApiError, assertSafeCampaignId, assertSafeRelativeMdPath } from "../campaign-fs";
+import { ApiError, assertSafeCampaignId, assertSafeAddress } from "../campaign-fs";
 import { localDateTimeToMs } from "../clock";
 import type { GrimoireDb } from "../db/client";
 import {
@@ -48,7 +48,15 @@ import {
 
 } from "../db/schema";
 import { getDb } from "./handle";
-import { locatorFromPath, scenePath, type Locator } from "./paths";
+import {
+  chapterPath,
+  locationPath,
+  locatorFromPath,
+  npcPath,
+  scenePath,
+  sessionPath,
+  type Locator,
+} from "./paths";
 import {
   campaignDisplayName,
   renderCampaign,
@@ -116,7 +124,7 @@ export async function campaignVersion(id: string): Promise<number> {
  *
  * `name` is the campaign's DISPLAY name and therefore always there: an
  * unnamed campaign is shown under its id. This list and `GET /file?path=
- * _campaign.md` used to disagree about that — the document synthesized the id
+ * _campaign` used to disagree about that — the document synthesized the id
  * fallback and the list omitted the key — so the same campaign had two
  * different names depending on which endpoint you asked (issue #62). Both go
  * through `campaignDisplayName` now.
@@ -214,10 +222,10 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
       id: chapter.id,
       title: chapter.title === "" ? chapter.id : chapter.title,
       groups,
-      // `_chapter.md` was optional in the file tree, but a chapter ROW always
-      // exists — so the path is always there now. The app only uses it to
-      // open the chapter document, which is exactly what it addresses.
-      path: `${chapter.id}/_chapter.md`,
+      // `_chapter` was optional in the file tree, but a chapter ROW always
+      // exists — so the address is always there now. The app only uses it to
+      // open the chapter document, which is exactly what it names.
+      path: chapterPath(chapter.id),
     };
     if (chapter.status !== null) node.status = chapter.status;
     return node;
@@ -228,7 +236,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
   )
     .map((row) => {
       const summary: NpcSummary = {
-        path: `npcs/${row.id}.md`,
+        path: npcPath(row.id),
         id: row.id,
         name: row.name === "" ? row.id : row.name,
         status: row.status === "" ? "unknown" : row.status,
@@ -244,7 +252,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
   )
     .map((row) => {
       const summary: LocationSummary = {
-        path: `locations/${row.id}.md`,
+        path: locationPath(row.id),
         id: row.id,
         name: row.name === "" ? row.id : row.name,
       };
@@ -262,7 +270,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
     .sort(compareSessionsNewestFirst)
     .map((row) => {
       const summary: SessionSummary = {
-        path: `sessions/${row.id}.md`,
+        path: sessionPath(row.id),
         id: row.id,
         scenes_played: playedScenes(db, campaign, row.id),
       };
@@ -568,10 +576,10 @@ export function readByLocator(
   }
 }
 
-/** GET /api/:campaign/file?path=… */
+/** GET /api/:campaign/file?path=<address> */
 export async function readParsedFile(campaign: string, rel: string): Promise<FileResponse> {
   const row = await requireCampaign(campaign);
-  assertSafeRelativeMdPath(rel); // 400 unsafe id/path
+  assertSafeAddress(rel); // 400 unsafe id/address
   const db = await getDb();
   return readByLocator(db, row, locatorFromPath(rel));
 }
@@ -597,7 +605,7 @@ export async function readGlossary(campaign: string): Promise<{ entries: Glossar
 
 /**
  * The glossary as the generator's context block — the `EN → DE` lines the
- * prompt documents. Replaces reading `glossary.md` off disk (generator.ts).
+ * prompt documents. Replaces reading a glossary file off disk (generator.ts).
  */
 export async function glossaryText(campaign: string): Promise<string | undefined> {
   const db = await getDb();

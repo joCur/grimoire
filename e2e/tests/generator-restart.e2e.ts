@@ -24,9 +24,9 @@ import { SCENE_ID, SCENE_SLUG, SCENE_TITLE, TRIGGER } from "../fixtures/replies"
 import { pristineDir, runDir } from "../support/paths";
 import { apiFor, expect, seedCampaigns, startGrimoireServer, test, type Api } from "../support/test";
 
-/** Where an applied scene draft lives: `<chapter>/<id>.md` (issue #57). */
-const SCENE_PATH = `01-salzhafen/${SCENE_ID}.md`;
-const DRAFT_PATH = `01-salzhafen/${SCENE_SLUG}.md`;
+/** Where an applied scene draft lives: `<chapter>/<id>` (issue #57). */
+const SCENE_PATH = `01-salzhafen/${SCENE_ID}`;
+const DRAFT_PATH = `01-salzhafen/${SCENE_SLUG}`;
 
 const SOURCE = `The party watches the quay at low tide. Two lanterns move along the
 mole while Fenn's crew shifts a cargo before dawn.`;
@@ -56,15 +56,14 @@ async function ownDataDir(testId: string, workerIndex: number): Promise<string> 
   const dir = path.join(runDir(), `w${workerIndex}`, testId, "data");
   await rm(dir, { recursive: true, force: true });
   await mkdir(dir, { recursive: true });
+  // The boot imports nothing since issue #79 — the fixture campaign is put in
+  // by the seed CLI, once, before either boot of this spec.
+  await seedCampaigns(pristineDir(), dir);
   return dir;
 }
 
 test("a run interrupted by a restart is reported as failed, not left spinning", async ({}, testInfo) => {
   const dataDir = await ownDataDir(testInfo.testId, testInfo.workerIndex);
-
-  // The boot imports nothing since issue #79 — the fixture campaign is put in
-  // by the seed CLI, once, before either boot.
-  await seedCampaigns(pristineDir(), dataDir);
 
   // --- boot 1: start a run the stub will never answer -----------------------
   const first = await startGrimoireServer(pristineDir(), dataDir, testInfo.workerIndex);

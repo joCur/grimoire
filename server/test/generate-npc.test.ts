@@ -170,7 +170,7 @@ function npcReply(
 ): string {
   const body = {
     npc: {
-      path: over.path ?? "npcs/grella.md",
+      path: over.path ?? "npcs/grella",
       content: over.content ?? npcMarkdown(),
     },
     warnings: over.warnings ?? ["Quelltext nennt keinen Status — alive gesetzt"],
@@ -180,7 +180,7 @@ function npcReply(
 
 /** A reply for a specific id (so a test that WRITES does not collide later). */
 function replyFor(id: string, over: Parameters<typeof npcMarkdown>[0] = {}): string {
-  return npcReply({ path: `npcs/${id}.md`, content: npcMarkdown({ id, ...over }) });
+  return npcReply({ path: `npcs/${id}`, content: npcMarkdown({ id, ...over }) });
 }
 
 async function postJson(url: string, body?: unknown): Promise<Response> {
@@ -249,7 +249,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(res.status).toBe(200);
     const result = (await res.json()) as GenerateNpcResult;
 
-    expect(result.npc.path).toBe("npcs/grella.md");
+    expect(result.npc.path).toBe("npcs/grella");
     expect(result.npc.markdown).toBe(npcMarkdown());
     expect(result.npc.properties.id).toBe("grella");
     expect(result.npc.properties.name).toBe("Grella");
@@ -276,7 +276,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(req.sourceText).toBe(npcBody.sourceText);
 
     // review preview only — NOTHING on disk
-    expect(await exists("npcs/grella.md")).toBe(false);
+    expect(await exists("npcs/grella")).toBe(false);
   });
 
   test("a pinned id travels in the context and decides the file name", async () => {
@@ -289,7 +289,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     const res = await generateNpc({ ...npcBody, id: "krieger-ohne-namen" });
     expect(res.status).toBe(200);
     const result = (await res.json()) as GenerateNpcResult;
-    expect(result.npc.path).toBe("npcs/krieger-ohne-namen.md");
+    expect(result.npc.path).toBe("npcs/krieger-ohne-namen");
   });
 
   test("a pinned id the model ignores is a correction turn", async () => {
@@ -300,7 +300,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(fake.calls).toHaveLength(2);
     expect(fake.calls[0]!.req.context.targetId).toBe("die-graue");
     expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad);
-    expect(fake.calls[1]!.corrections[0]!.correction).toContain('"npcs/die-graue.md"');
+    expect(fake.calls[1]!.corrections[0]!.correction).toContain('"npcs/die-graue"');
     // the correction turn names the NPC file, not "alle Szenen und Stubs"
     expect(fake.calls[1]!.corrections[0]!.correction).toContain("vollständige NPC-Datei");
   });
@@ -321,7 +321,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(correction).toContain("weglassen statt erfinden");
     // ONE error, not a cascade
     expect(correction.match(/^- /gm)).toHaveLength(1);
-    expect(await exists("npcs/grella.md")).toBe(false);
+    expect(await exists("npcs/grella")).toBe(false);
   });
 
   test("a relationship line that is not `- <npc-id>: text` is an error", async () => {
@@ -397,21 +397,21 @@ describe("POST /api/:campaign/generate/npc", () => {
   test("a mismatched id and a broken path are errors", async () => {
     expect(
       await firstValidationError([
-        npcReply({ path: "npcs/grella.md", content: npcMarkdown({ id: "andere" }) }),
+        npcReply({ path: "npcs/grella", content: npcMarkdown({ id: "andere" }) }),
       ]),
     ).toContain("passt nicht zum Dateinamen");
 
     // not under npcs/, not kebab, not a .md file
-    for (const badPath of ["locations/grella.md", "npcs/Grella.md", "npcs/grella.txt"]) {
+    for (const badPath of ["locations/grella", "npcs/Grella", "npcs/grella.txt"]) {
       expect(await firstValidationError([npcReply({ path: badPath })])).toContain(
-        'path muss "npcs/<kebab-id>.md" sein',
+        'path muss "npcs/<kebab-id>" sein',
       );
     }
   });
 
   test("a missing name degrades to the id — the shared parser fills it", async () => {
     const fake = useFake([
-      npcReply({ path: "npcs/namenlos.md", content: npcMarkdown({ id: "namenlos", name: null }) }),
+      npcReply({ path: "npcs/namenlos", content: npcMarkdown({ id: "namenlos", name: null }) }),
     ]);
     const res = await generateNpc(npcBody);
     expect(res.status).toBe(200);
@@ -424,7 +424,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(await firstValidationError(['{"warnings": []}'])).toContain('"npc" must be an object');
     expect(await firstValidationError(["[1, 2]"])).toContain("must be a JSON object");
     expect(
-      await firstValidationError([JSON.stringify({ npc: { path: "npcs/x.md" } })]),
+      await firstValidationError([JSON.stringify({ npc: { path: "npcs/x" } })]),
     ).toContain('"npc" must be an object');
   });
 
@@ -434,7 +434,7 @@ describe("POST /api/:campaign/generate/npc", () => {
         "I need to be careful about characters inside string values — the markdown",
         "content contains quotes and newlines that must be escaped properly.",
         "",
-        JSON.stringify({ npc: { path: "npcs/grella.md", content: npcMarkdown() }, warnings: [] }),
+        JSON.stringify({ npc: { path: "npcs/grella", content: npcMarkdown() }, warnings: [] }),
       ].join("\n"),
     ]);
     expect((await generateNpc(npcBody)).status).toBe(200);
@@ -449,13 +449,13 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
       error: "npc file already exists",
-      path: "npcs/fenn.md",
+      path: "npcs/fenn",
     });
     expect(fake.calls).toHaveLength(0);
     // no job was created for a request error
     expect(await fetchJob()).toBeNull();
     // and the existing npc is untouched
-    expect((await read("npcs/fenn.md")).properties.id).toBe("fenn");
+    expect((await read("npcs/fenn")).properties.id).toBe("fenn");
   });
 
   test("an id the MODEL picks that collides is a correction turn, then a 422", async () => {
@@ -476,7 +476,7 @@ describe("POST /api/:campaign/generate/npc", () => {
   // --- run accounting: identical to the scene pipeline ---------------------------
 
   test("a truncated reply aborts after ONE call with the LLM_MAX_TOKENS message", async () => {
-    const cut = '{"npc":{"path":"npcs/grella.md","content":"---\\nid: gre';
+    const cut = '{"npc":{"path":"npcs/grella","content":"---\\nid: gre';
     const fake = useFake([{ text: cut, truncated: true, usage: usage(9000, 8000) }, npcReply()], 8000);
     const res = await generateNpc(npcBody);
     expect(res.status).toBe(422);
@@ -495,7 +495,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(body.validationErrors).toBeUndefined();
     // THE point: no correction turn, the second reply is unused
     expect(fake.calls).toHaveLength(1);
-    expect(await exists("npcs/grella.md")).toBe(false);
+    expect(await exists("npcs/grella")).toBe(false);
   });
 
   test("usage is summed over the correction turn", async () => {
@@ -583,10 +583,10 @@ describe("npc generate jobs", () => {
     const done = await waitForJob();
     expect(done.kind).toBe("npc");
     expect(done.status).toBe("done");
-    expect(done.npcResult!.npc.path).toBe("npcs/job-kind.md");
+    expect(done.npcResult!.npc.path).toBe("npcs/job-kind");
     // the scene field stays absent — a consumer reads one OR the other
     expect(done.result).toBeUndefined();
-    expect(await exists("npcs/job-kind.md")).toBe(false);
+    expect(await exists("npcs/job-kind")).toBe(false);
   });
 
   test("ONE generator job per campaign — a scene run blocks an npc start and back", async () => {
@@ -662,12 +662,12 @@ describe("npc generate jobs", () => {
         body: JSON.stringify(body),
       });
 
-    expect((await put({ path: "npcs/fremd.md", markdown: edited })).status).toBe(400);
-    const res = await put({ path: "npcs/job-drafts.md", markdown: edited });
+    expect((await put({ path: "npcs/fremd", markdown: edited })).status).toBe(400);
+    const res = await put({ path: "npcs/job-drafts", markdown: edited });
     expect(res.status).toBe(200);
 
     const job = await fetchJob();
-    expect(job!.draftEdits).toEqual({ "npcs/job-drafts.md": edited });
+    expect(job!.draftEdits).toEqual({ "npcs/job-drafts": edited });
     // the result itself is untouched — the edit sits next to it
     expect(job!.npcResult!.npc.markdown).not.toBe(edited);
   });
@@ -687,17 +687,17 @@ describe("apply an npc draft", () => {
     });
   }
 
-  test("writes npcs/<id>.md and discards the job", async () => {
+  test("writes npcs/<id> and discards the job", async () => {
     const res = await runAndApply("apply-happy");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ written: ["npcs/apply-happy.md"] });
+    expect(await res.json()).toEqual({ written: ["npcs/apply-happy"] });
     // the draft is stored — nothing left to restore
     expect(await fetchJob()).toBeNull();
 
     // …and it is a real npc for the rest of the API: every reviewed field
     // came through, the quoted quickstats included, and `## Beziehungen`
     // (which became relation ROWS) is rendered back into the body
-    const written = await read("npcs/apply-happy.md");
+    const written = await read("npcs/apply-happy");
     expect(written.kind).toBe("npc");
     expect(written.properties.id).toBe("apply-happy");
     expect(written.properties.name).toBe("Grella");
@@ -724,45 +724,45 @@ describe("apply an npc draft", () => {
     expect((await generateNpc(npcBody)).status).toBe(422);
 
     // …and a client that posts the draft anyway gets a 409 with the path
-    const before = await read("npcs/apply-happy.md");
+    const before = await read("npcs/apply-happy");
     const res = await postJson("/api/beispiel/generate/apply", {
-      npc: { path: "npcs/apply-happy.md", markdown: npcMarkdown({ id: "apply-happy" }) },
+      npc: { path: "npcs/apply-happy", markdown: npcMarkdown({ id: "apply-happy" }) },
     });
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
       error: "target files already exist",
-      conflicts: ["npcs/apply-happy.md"],
+      conflicts: ["npcs/apply-happy"],
     });
-    const after = await read("npcs/apply-happy.md");
+    const after = await read("npcs/apply-happy");
     expect(after.raw).toBe(before.raw);
     expect(after.rev).toBe(before.rev); // the row's rev never moved
   });
 
   test("400 re-validation: path, id, status, properties — nothing written", async () => {
     const cases: Array<[string, unknown]> = [
-      ["path outside npcs/", { path: "locations/x.md", markdown: npcMarkdown({ id: "x" }) }],
-      ["path traversal", { path: "npcs/../../etc/x.md", markdown: npcMarkdown({ id: "x" }) }],
-      ["uppercase id", { path: "npcs/Grella.md", markdown: npcMarkdown({ id: "Grella" }) }],
-      ["id mismatch", { path: "npcs/anders.md", markdown: npcMarkdown({ id: "grella" }) }],
-      ["no properties", { path: "npcs/anders.md", markdown: "## Will\n\nnur Text\n" }],
+      ["path outside npcs/", { path: "locations/x", markdown: npcMarkdown({ id: "x" }) }],
+      ["path traversal", { path: "npcs/../../etc/x", markdown: npcMarkdown({ id: "x" }) }],
+      ["uppercase id", { path: "npcs/Grella", markdown: npcMarkdown({ id: "Grella" }) }],
+      ["id mismatch", { path: "npcs/anders", markdown: npcMarkdown({ id: "grella" }) }],
+      ["no properties", { path: "npcs/anders", markdown: "## Will\n\nnur Text\n" }],
       [
         "invalid status",
-        { path: "npcs/anders.md", markdown: npcMarkdown({ id: "anders", status: "draft" }) },
+        { path: "npcs/anders", markdown: npcMarkdown({ id: "anders", status: "draft" }) },
       ],
       [
         "missing status",
-        { path: "npcs/anders.md", markdown: npcMarkdown({ id: "anders", status: null }) },
+        { path: "npcs/anders", markdown: npcMarkdown({ id: "anders", status: null }) },
       ],
-      ["empty markdown", { path: "npcs/anders.md", markdown: "" }],
-      ["unknown key", { path: "npcs/anders.md", markdown: npcMarkdown(), extra: 1 }],
-      ["not an object", "npcs/anders.md"],
+      ["empty markdown", { path: "npcs/anders", markdown: "" }],
+      ["unknown key", { path: "npcs/anders", markdown: npcMarkdown(), extra: 1 }],
+      ["not an object", "npcs/anders"],
     ];
     for (const [what, npc] of cases) {
       const res = await postJson("/api/beispiel/generate/apply", { npc });
       expect(res.status, what).toBe(400);
     }
-    expect(await exists("npcs/anders.md")).toBe(false);
-    expect(await exists("npcs/Grella.md")).toBe(false);
+    expect(await exists("npcs/anders")).toBe(false);
+    expect(await exists("npcs/Grella")).toBe(false);
   });
 
   test("an empty body is still 'nothing to apply'", async () => {

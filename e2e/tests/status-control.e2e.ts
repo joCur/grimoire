@@ -7,7 +7,7 @@
 
 import { expect, test } from "../support/test";
 
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
 const SCENE_URL = `/beispiel/file/${SCENE}`;
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 

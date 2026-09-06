@@ -16,10 +16,10 @@ const tree: CampaignTree = {
   campaign: "beispiel",
   chapters: [],
   npcs: [
-    { path: "npcs/fenn.md", id: "fenn", name: "Fenn", status: "alive" },
-    { path: "npcs/jorna.md", id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
+    { path: "npcs/fenn", id: "fenn", name: "Fenn", status: "alive" },
+    { path: "npcs/jorna", id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
   ],
-  locations: [{ path: "locations/leuchtturm.md", id: "leuchtturm", name: "Der Leuchtturm" }],
+  locations: [{ path: "locations/leuchtturm", id: "leuchtturm", name: "Der Leuchtturm" }],
   sessions: [],
 };
 

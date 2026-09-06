@@ -11,10 +11,10 @@ Gib ausschließlich einen JSON-Block zurück, kein Markdown drumherum:
 ```json
 {
   "scenes": [
-    { "path": "<chapter>/<location-slug>/<id>.md", "content": "<vollständige Markdown-Datei inkl. Frontmatter>" }
+    { "path": "<chapter>/<location-slug>/<id>", "content": "<vollständiges Dokument inkl. Frontmatter-Block>" }
   ],
   "npc_stubs": [
-    { "path": "npcs/<id>.md", "content": "<NPC-Stub im NPC-Format>", "reason": "im Quelltext erwähnt, existiert noch nicht" }
+    { "path": "npcs/<id>", "content": "<NPC-Stub im NPC-Format>", "reason": "im Quelltext erwähnt, existiert noch nicht" }
   ],
   "location_stubs": [],
   "warnings": ["<alles, was der DM prüfen sollte>"]
@@ -98,7 +98,7 @@ chapter: 01-salzhafen
 
 ### Erwartete Ausgabe
 
-Eine Szene `01-salzhafen/hafen/smuggler-captured.md` mit
+Eine Szene `01-salzhafen/hafen/smuggler-captured` mit
 `type: contingency`, `trigger: Charaktere werden beim Auskundschaften
 der Bucht entdeckt`, `npcs: [fenn]`, einem `## Flow`-Abschnitt
 (Vorführung und Befragung), zwei `## If:`-Abschnitten (Zugeben →
@@ -106,5 +106,5 @@ Räucherkammer mit Fluchtoptionen und `[!note]` zum losen Bodenbrett;
 Lügen → `[!check]` mit dem Contested Check und beiden Ausgängen) sowie
 einem `[!outcome]` (Fenn kennt die Gesichter der Gruppe). Keine Stubs
 (beide NPCs existieren). Im Fließtext stehen die beiden als `[[fenn]]`
-und `[[jorna]]`. — Die Referenz-Zieldatei liegt dem Prompt als
+und `[[jorna]]`. — Das Referenz-Dokument liegt dem Prompt als
 `example-output.md` bei.

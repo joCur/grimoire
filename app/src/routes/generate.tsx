@@ -122,12 +122,12 @@ export function GenerateRoute() {
     queryFn: () => fetchTree(campaign),
     enabled: campaign !== "",
   });
-  // Only for the context hint: the server sends glossary.md along with the
+  // Only for the context hint: the server sends glossary along with the
   // prompt when it exists (generator/README.md step 1). A missing file is a
   // 404 and means "no glossary" — not an error worth retrying.
   const glossary = useQuery({
-    queryKey: ["file", campaign, "glossary.md"],
-    queryFn: () => fetchFile(campaign, "glossary.md"),
+    queryKey: ["file", campaign, "glossary"],
+    queryFn: () => fetchFile(campaign, "glossary"),
     enabled: campaign !== "",
     retry: false,
   });
@@ -158,7 +158,7 @@ export function GenerateRoute() {
   const newIdError = chapterIdError(newIdInput);
   // A typed id may name a chapter that is already there: then this is NOT a
   // new chapter — the drafts go into the existing directory and its
-  // _chapter.md stays untouched (#12 semantics), so neither the newChapter
+  // _chapter stays untouched (#12 semantics), so neither the newChapter
   // flag nor a chapterTitle travels.
   const newIdExists = newIdError === undefined && chapterIds.includes(newIdInput);
   const creatingChapter = target.kind === "new" && !newIdExists;
@@ -258,9 +258,9 @@ export function GenerateRoute() {
       return applyDrafts(campaign, {
         scenes: scenes.map((s) => ({ path: s.path, markdown: edits[s.path] ?? s.markdown })),
         stubs: acceptedStubs,
-        // The new chapter's _chapter.md is created in the same batch — only
+        // The new chapter's _chapter is created in the same batch — only
         // for a chapter that really is new: for an existing id the pair
-        // stays out of the body so apply cannot touch its _chapter.md.
+        // stays out of the body so apply cannot touch its _chapter.
         ...(creatingChapter && chapterId !== undefined
           ? { chapter: chapterId, chapterTitle: newTitle.trim() }
           : {}),
@@ -416,7 +416,7 @@ export function GenerateRoute() {
                   {npcIdMessage ??
                     (trimmedNpcId === ""
                       ? "leer lassen — dann wählt das Modell die id"
-                      : `wird angelegt als: npcs/${trimmedNpcId}.md`)}
+                      : `wird angelegt als: npcs/${trimmedNpcId}`)}
                 </p>
               </>
             )}
@@ -1172,7 +1172,7 @@ function StubRow({
   decision: StubDecision | undefined;
   onDecide: (decision: StubDecision | undefined) => void;
 }) {
-  const path = `${stub.kind}s/${stub.id}.md`;
+  const path = `${stub.kind}s/${stub.id}`;
   return (
     <div
       className={cn(

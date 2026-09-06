@@ -50,7 +50,7 @@ describe("usage per reference kind", () => {
 
     expect(report.kind).toBe("npc");
     expect(report.id).toBe("jorna");
-    expect(report.path).toBe("npcs/jorna.md");
+    expect(report.path).toBe("npcs/jorna");
 
     // `npcs: [jorna]` of the arrival scene.
     expect(group(report, "sceneNpcs")).toEqual({
@@ -61,7 +61,7 @@ describe("usage per reference kind", () => {
           kind: "scene",
           id: "lighthouse-arrival",
           title: "Ankunft am Leuchtturm",
-          path: "01-salzhafen/hafen/lighthouse-arrival.md",
+          path: "01-salzhafen/hafen/lighthouse-arrival",
           count: 1,
         },
       ],
@@ -74,7 +74,7 @@ describe("usage per reference kind", () => {
     expect(group(report, "npcRelations")).toEqual({
       ref: "npcRelations",
       count: 1,
-      sites: [{ kind: "npc", id: "fenn", title: "Fenn", path: "npcs/fenn.md", count: 1 }],
+      sites: [{ kind: "npc", id: "fenn", title: "Fenn", path: "npcs/fenn", count: 1 }],
     });
 
     expect(report.total).toBe(2);
@@ -91,7 +91,7 @@ describe("usage per reference kind", () => {
           kind: "scene",
           id: "lighthouse-arrival",
           title: "Ankunft am Leuchtturm",
-          path: "01-salzhafen/hafen/lighthouse-arrival.md",
+          path: "01-salzhafen/hafen/lighthouse-arrival",
           count: 1,
         },
       ],
@@ -110,7 +110,7 @@ describe("usage per reference kind", () => {
           kind: "session",
           id: "2026-01-15",
           title: "2026-01-15",
-          path: "sessions/2026-01-15.md",
+          path: "sessions/2026-01-15",
           count: 1,
         },
       ],
@@ -125,7 +125,7 @@ describe("usage per reference kind", () => {
         kind: "session",
         id: "2026-01-15",
         title: "2026-01-15",
-        path: "sessions/2026-01-15.md",
+        path: "sessions/2026-01-15",
         count: 2,
       },
     ]);
@@ -143,8 +143,8 @@ describe("usage per reference kind", () => {
     ]);
     expect(group(report, "chapterNpcs")?.count).toBe(2);
     expect(group(report, "chapterNpcs")?.sites.map((s) => s.path).sort()).toEqual([
-      "npcs/fenn.md",
-      "npcs/jorna.md",
+      "npcs/fenn",
+      "npcs/jorna",
     ]);
     expect(group(report, "chapterLocations")).toEqual({
       ref: "chapterLocations",
@@ -154,7 +154,7 @@ describe("usage per reference kind", () => {
           kind: "location",
           id: "leuchtturm",
           title: "Der Leuchtturm von Salzhafen",
-          path: "locations/leuchtturm.md",
+          path: "locations/leuchtturm",
           count: 1,
         },
       ],
@@ -167,12 +167,12 @@ describe("usage per reference kind", () => {
     const report = await usage("scene", "smuggler-captured");
     expect(report.groups).toEqual([]);
     expect(report.total).toBe(0);
-    expect(report.path).toBe("01-salzhafen/hafen/smuggler-captured.md");
+    expect(report.path).toBe("01-salzhafen/hafen/smuggler-captured");
   });
 
   test("a free-string location is not an entity — 404, not an empty report", async () => {
     // `location: bucht` is legal (README: an id OR free text) but has no
-    // locations/bucht.md, so there is nothing to report ON. The scenes that
+    // locations/bucht, so there is nothing to report ON. The scenes that
     // carry it stay countable through their chapter.
     expect((await usageRes("kind=location&id=bucht")).status).toBe(404);
     const report = await usage("chapter", "01-salzhafen");
@@ -222,7 +222,7 @@ describe("an npc's OWN relations are not usage", () => {
     });
     expect(res.status).toBe(200);
     const plan = (await res.json()) as { changed: string[]; usage: UsageReport };
-    expect(plan.changed).toEqual(["npcs/kalle-der-alte.md"]);
+    expect(plan.changed).toEqual(["npcs/kalle-der-alte"]);
     expect(plan.usage.total).toBe(0);
 
     // Jorna, meanwhile, gained an INCOMING line — fenn's and kalle's.
@@ -300,14 +300,14 @@ describe("rows vs documents", () => {
         kind: "session",
         id: "2026-01-15",
         title: "2026-01-15",
-        path: "sessions/2026-01-15.md",
+        path: "sessions/2026-01-15",
         count: 2,
       },
       {
         kind: "session",
         id: "2026-01-22",
         title: "2026-01-22",
-        path: "sessions/2026-01-22.md",
+        path: "sessions/2026-01-22",
         count: 1,
       },
     ]);

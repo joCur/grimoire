@@ -32,10 +32,10 @@ import type { Locator, Page } from "@playwright/test";
 import { expect, test, type Api } from "../support/test";
 
 /** Six blocks, one per type the reading view knows — the composer's reference. */
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
 const SCENE_URL = `/beispiel/file/${SCENE}`;
 /** The reference scene WITH two `## If:` sections and their children. */
-const IF_SCENE = "01-salzhafen/hafen/smuggler-captured.md";
+const IF_SCENE = "01-salzhafen/hafen/smuggler-captured";
 const IF_SCENE_URL = `/beispiel/file/${IF_SCENE}`;
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 
@@ -584,7 +584,7 @@ test("Abbrechen after a block edit asks first — Verwerfen leaves the file alon
  * bytes.
  */
 /** Its path segment is the scene's ID, like every scene path since #57. */
-const ODD_SCENE_PATH = "01-salzhafen/hafen/seltsame-mechanik.md";
+const ODD_SCENE_PATH = "01-salzhafen/hafen/seltsame-mechanik";
 
 const ODD_SCENE = `---
 id: seltsame-mechanik

@@ -30,9 +30,9 @@ import type { Page } from "@playwright/test";
 
 import { expect, test, type Api } from "../support/test";
 
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
 const SCENE_URL = `/beispiel/file/${SCENE}`;
-const NPC = "npcs/jorna.md";
+const NPC = "npcs/jorna";
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 /** aria-label of the raw-markdown textarea (FileBodyEditor). */
 const TEXTAREA = "Markdown-Text von";
@@ -374,7 +374,7 @@ test("the NPC reading view edits its body the same way", async ({ page, api }) =
 
 test("location and chapter offer the editor, session and inbox do not", async ({ page, api }) => {
   // The kinds whose prose the DM maintains offer the body editor …
-  for (const rel of ["locations/leuchtturm.md", "01-salzhafen/_chapter.md"]) {
+  for (const rel of ["locations/leuchtturm", "01-salzhafen/_chapter"]) {
     await page.goto(`/beispiel/file/${rel}`);
     await openRawEditor(page);
     await expect(page.getByRole("textbox", { name: TEXTAREA })).toBeVisible();
@@ -385,7 +385,7 @@ test("location and chapter offer the editor, session and inbox do not", async ({
 
   // … the append-only logs do not: a free-hand rewrite of a log is not a
   // maintenance action (ADR #4).
-  await page.goto("/beispiel/file/sessions/2026-01-15.md");
+  await page.goto("/beispiel/file/sessions/2026-01-15");
   await expect(page.getByRole("article")).toContainText("Spuren gefunden");
   // A session's heading is its DATE, derived from `started` — the id is opaque
   // since issue #58 and is never shown. (This fixture still carries the old
@@ -395,13 +395,13 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   );
   await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
 
-  await page.goto("/beispiel/file/inbox.md");
+  await page.goto("/beispiel/file/inbox");
   await expect(page.getByRole("article")).toContainText("Der Dorfschmied repariert");
   await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
 
   // And the rule belongs to the ENDPOINT, not to the hidden button: a
   // hand-made PUT on an append-only file is refused, nothing is written.
-  for (const rel of ["sessions/2026-01-15.md", "inbox.md"]) {
+  for (const rel of ["sessions/2026-01-15", "inbox"]) {
     const rawBefore = await api.raw(rel);
     const res = await page.request.put("/api/beispiel/file", {
       data: { path: rel, rev: Date.now(), body: "\nAlles neu.\n" },
@@ -411,8 +411,8 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   }
 });
 
-test("_campaign.md keeps its ONE Bearbeiten — the metadata dialog", async ({ page }) => {
-  await page.goto("/beispiel/file/_campaign.md");
+test("_campaign keeps its ONE Bearbeiten — the metadata dialog", async ({ page }) => {
+  await page.goto("/beispiel/file/_campaign");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
@@ -428,11 +428,11 @@ test("_campaign.md keeps its ONE Bearbeiten — the metadata dialog", async ({ p
 
 test("the glossary stays saveable while a session writes next to it", async ({ page, api }) => {
   // Critical path 9 for the campaign's list document, and the regression of a
-  // cutover bug: `glossary.md` was guarded by `campaigns.version`, which EVERY
+  // cutover bug: `glossary` was guarded by `campaigns.version`, which EVERY
   // write bumps. A quick note during a running session therefore answered the
   // DM's open glossary edit with „Inzwischen geändert" — un-saveable exactly
   // while the campaign is in use. Each document carries its own token now.
-  await page.goto("/beispiel/file/glossary.md");
+  await page.goto("/beispiel/file/glossary");
   await expect(page.getByRole("article")).toContainText("Leuchtturmwärter");
 
   await openRawEditor(page);
@@ -453,7 +453,7 @@ test("the glossary stays saveable while a session writes next to it", async ({ p
   await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
   await expect(textarea).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText("Gezeitentümpel");
-  await expect.poll(() => api.raw("glossary.md")).toContain(added);
+  await expect.poll(() => api.raw("glossary")).toContain(added);
   // The structured endpoint agrees — the body was decomposed into rows.
   const glossary = await api.get<{ entries: Array<{ term: string }> }>("beispiel/glossary");
   expect(glossary.entries.map((e) => e.term)).toContain("tide pool");
@@ -461,7 +461,7 @@ test("the glossary stays saveable while a session writes next to it", async ({ p
   // A REAL second writer still conflicts — the token did not become toothless.
   await openRawEditor(page);
   await expect(page.getByRole("textbox", { name: TEXTAREA })).toBeVisible();
-  await api.writeBody("glossary.md", "\n- harbour master → Hafenmeisterin\n");
+  await api.writeBody("glossary", "\n- harbour master → Hafenmeisterin\n");
   await page.getByRole("textbox", { name: TEXTAREA }).fill("\n- ganz was anderes → nope\n");
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByText(STALE_MESSAGE)).toBeVisible();

@@ -8,17 +8,17 @@
 // endpoint here when it is implemented:
 //
 //   [x] GET  /api/campaigns                    campaign list (directories + lastSession +
-//                                              name/description from _campaign.md)
+//                                              name/description from _campaign)
 //   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (properties parsed)
-//   [x] GET  /api/:campaign/file?path=...      one file (raw + parsed + rev). glossary.md
+//   [x] GET  /api/:campaign/file?path=...      one file (raw + parsed + rev). glossary
 //                                              answers 200 with an EMPTY body when the
 //                                              campaign has no terms — it is an empty
 //                                              document, not a missing one (#57 review:
 //                                              the 404 made a glossary the DM had just
 //                                              emptied unreachable from the editor).
-//                                              inbox.md does the same since #70 — same
+//                                              inbox does the same since #70 — same
 //                                              reasoning, it had been left behind.
-//                                              `rev` of glossary.md/inbox.md is that
+//                                              `rev` of glossary/inbox is that
 //                                              DOCUMENT's own counter, not campaigns.version
 //   [x] PATCH /api/:campaign/properties       { path, rev, patch } — only if
 //                                              rev is unchanged, otherwise 409.
@@ -34,12 +34,12 @@
 //   [—] POST /api/:campaign/campaign-meta      REMOVED with issue #62. It existed
 //                                              for the one gap PATCH /properties
 //                                              could not close: a campaign whose
-//                                              `_campaign.md` did not exist yet had
+//                                              `_campaign` did not exist yet had
 //                                              no file and therefore no guard token
 //                                              to PATCH against. Since the cutover
 //                                              (#57) the import always creates a
 //                                              campaign ROW, GET /file?path=
-//                                              _campaign.md therefore always
+//                                              _campaign therefore always
 //                                              answers 200 with a `rev`, and the
 //                                              app's create branch became
 //                                              unreachable (observed in #59). The
@@ -62,7 +62,7 @@
 //                                              lives in yesterday's file, so the client
 //                                              must not guess it either); 404 only when the
 //                                              campaign has no session file at all
-//   [x] POST /api/:campaign/session/start      creates a NEW session: sessions/<id>.md with
+//   [x] POST /api/:campaign/session/start      creates a NEW session: sessions/<id> with
 //                                              an OPAQUE RANDOM id (issue #58 — "beenden" is
 //                                              final, so a second evening on the same day is
 //                                              simply a second session with an empty log and
@@ -92,7 +92,7 @@
 //                                              404 when no session is running, 400 when
 //                                              sceneId is not a kebab slug (it is a PARSE
 //                                              COLUMN of `- HH:MM (id) text`)
-//   [x] POST /api/:campaign/inbox              { text } -> append to inbox.md
+//   [x] POST /api/:campaign/inbox              { text } -> append to inbox
 //   [x] GET  /api/:campaign/search?q=...       { results } — full-text search (FTS5, bm25,
 //                                              prefix terms, diacritics folded;
 //                                              scenes/npcs/locations/chapters/campaign/
@@ -142,7 +142,7 @@
 //                                              written; 422 when a draft's `id` is not an
 //                                              addressable slug).
 //                                              chapter + chapterTitle create
-//                                              <chapter>/_chapter.md when missing, in the
+//                                              <chapter>/_chapter when missing, in the
 //                                              same batch; `npc` is the NPC run's single
 //                                              draft (issue #21); jobId discards that job
 //                                              after a successful write.
@@ -155,7 +155,7 @@
 //                                              and the search index. Prose is NOT touched.
 //                                              CHANGED with the cutover (#57): `from`/`to`
 //                                              are DOCUMENT paths for every kind, so a
-//                                              chapter reads `<id>/_chapter.md` where the
+//                                              chapter reads `<id>/_chapter` where the
 //                                              file version named the bare DIRECTORY —
 //                                              there is no directory to rename any more
 //                                              (store/paths.ts). A display name that was
@@ -183,8 +183,8 @@
 //                                              sent: nothing was changed, and the answer
 //                                              says so instead of hiding it behind a 200
 //   [x] POST /api/:campaign/review/thread      { chapter, text } -> append `- [ ] text` under
-//                                              ## Offene Fäden of <chapter>/_chapter.md
-//   [x] POST /api/:campaign/review/npc-stub    { id, name?, note? } -> create npcs/<id>.md
+//                                              ## Offene Fäden of <chapter>/_chapter
+//   [x] POST /api/:campaign/review/npc-stub    { id, name?, note? } -> create npcs/<id>
 //                                              (status: unknown), or answer with the entry the
 //                                              id already has — idempotent since #70
 //   [x] POST /api/:campaign/review/inbox-done  { line } -> rewrite the inbox line to `- [x] …`

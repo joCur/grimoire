@@ -75,7 +75,7 @@ afterEach(() => {
 });
 
 describe("POST /api/:campaign/review/seen", () => {
-  const SESSION = "sessions/2026-01-15.md";
+  const SESSION = "sessions/2026-01-15";
   const LINE = "- 19:52 (lighthouse-arrival) Spuren gefunden, Gruppe will sofort zur Bucht #decision";
   const LINE2 = '- 21:10 (lighthouse-arrival) Improvisiert: Fischerin "Old Metta" am Steg #npc';
 
@@ -158,8 +158,8 @@ describe("POST /api/:campaign/review/seen", () => {
     expect(again.marked).toBe(true);
   });
 
-  test("400 unless path is a sessions/*.md file", async () => {
-    for (const p of ["npcs/fenn.md", "inbox.md", "sessions/x/y.md", "sessions/2026-01-15.txt"]) {
+  test("400 unless path is a sessions/<id> address", async () => {
+    for (const p of ["npcs/fenn", "inbox", "sessions/x/y"]) {
       const res = await postJson("/api/beispiel/review/seen", { path: p, line: LINE });
       expect(res.status).toBe(400);
     }
@@ -167,7 +167,7 @@ describe("POST /api/:campaign/review/seen", () => {
 
   test("404 for a session that does not exist", async () => {
     const res = await postJson("/api/beispiel/review/seen", {
-      path: "sessions/1999-01-01.md",
+      path: "sessions/1999-01-01",
       line: LINE,
     });
     expect(res.status).toBe(404);
@@ -195,7 +195,7 @@ describe("POST /api/:campaign/review/seen", () => {
 // instead of on file bytes, and the three insertion cases below are the same
 // three it always had.
 describe("POST /api/:campaign/review/thread", () => {
-  const CHAPTER = "01-salzhafen/_chapter.md";
+  const CHAPTER = "01-salzhafen/_chapter";
 
   test("appends to an existing ## Offene Fäden section (append-only)", async () => {
     const before = await getFile(CHAPTER);
@@ -245,7 +245,7 @@ describe("POST /api/:campaign/review/thread", () => {
   });
 
   test("404 when the chapter does not exist or is not a chapter", async () => {
-    // Replaces "creates _chapter.md with minimal properties when missing":
+    // Replaces "creates _chapter with minimal properties when missing":
     // the endpoint used to invent a chapter file for any directory it found,
     // and a chapter ROW is not something a review action may create out of a
     // typo (the generator's new-chapter flow does that, deliberately). So an
@@ -282,7 +282,7 @@ describe("POST /api/:campaign/review/thread", () => {
 });
 
 describe("POST /api/:campaign/review/npc-stub", () => {
-  const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
+  const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
 
   test("creates the npc with the documented shape", async () => {
     const file = await postOk("/api/beispiel/review/npc-stub", {
@@ -290,7 +290,7 @@ describe("POST /api/:campaign/review/npc-stub", () => {
       name: "Old Metta",
       note: "Fischerin am Steg, kennt die Gezeiten #npc",
     });
-    expect(file.path).toBe("npcs/old-metta.md");
+    expect(file.path).toBe("npcs/old-metta");
     expect(file.kind).toBe("npc");
     // status is the column default — the log line said nothing about it, so
     // the entry must not claim "alive" (issue #70; the route always
@@ -301,7 +301,7 @@ describe("POST /api/:campaign/review/npc-stub", () => {
     );
     // A fresh row starts at rev 1 — the token the app sends with its first edit.
     expect(file.rev).toBe(1);
-    expect(await getFile("npcs/old-metta.md")).toEqual(file);
+    expect(await getFile("npcs/old-metta")).toEqual(file);
   });
 
   test("name defaults to the id; without a note the section stays empty", async () => {
@@ -313,14 +313,14 @@ describe("POST /api/:campaign/review/npc-stub", () => {
     // Create-or-link (issue #70): the caller wants this id to have an entry.
     // An entry with content comes back untouched — the old 409 made the
     // review correct an id that was right.
-    const before = await getFile("npcs/fenn.md");
+    const before = await getFile("npcs/fenn");
     const linked = await postOk("/api/beispiel/review/npc-stub", {
       id: "fenn",
       name: "Anders",
       note: "doppelt",
     });
     expect(linked).toEqual(before);
-    expect(await getFile("npcs/fenn.md")).toEqual(before);
+    expect(await getFile("npcs/fenn")).toEqual(before);
     // and a stub created in this run is linked the same way
     const first = await postOk("/api/beispiel/review/npc-stub", { id: "old-metta" });
     const second = await postOk("/api/beispiel/review/npc-stub", { id: "old-metta" });
@@ -340,7 +340,7 @@ describe("POST /api/:campaign/review/npc-stub", () => {
       }),
     });
     expect(res.status).toBe(200);
-    const empty = await getFile("npcs/holm.md");
+    const empty = await getFile("npcs/holm");
     expect(empty.properties.name).toBe("holm");
     const filled = await postOk("/api/beispiel/review/npc-stub", {
       id: "holm",
@@ -373,7 +373,7 @@ describe("POST /api/:campaign/review/inbox-done", () => {
     "- 2026-01-10 Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread";
 
   test("rewrites ONLY the matching line — every other line unchanged", async () => {
-    const beforeLines = (await getFile("inbox.md")).body.split("\n");
+    const beforeLines = (await getFile("inbox")).body.split("\n");
     const idx = beforeLines.indexOf(DONE_TARGET);
     expect(idx).toBeGreaterThan(-1);
 
@@ -431,7 +431,7 @@ describe("POST /api/:campaign/review/inbox-done", () => {
   });
 
   test("404 when the campaign has no inbox at all", async () => {
-    // The "inbox.md is missing" case: a campaign whose migration produced no
+    // The "inbox is missing" case: a campaign whose migration produced no
     // inbox rows. GET answers 200 with an empty document (#70), but there is
     // still no such LINE to check off — hence 404 here.
     const root = await tempCampaignRoot();
@@ -447,7 +447,7 @@ describe("POST /api/:campaign/review/inbox-done", () => {
 
   test("404 for an unknown campaign on all four endpoints", async () => {
     expect(
-      (await postJson("/api/nope/review/seen", { path: "sessions/x.md", line: "- x" })).status,
+      (await postJson("/api/nope/review/seen", { path: "sessions/x", line: "- x" })).status,
     ).toBe(404);
     expect((await postJson("/api/nope/review/thread", { chapter: "a", text: "x" })).status).toBe(
       404,

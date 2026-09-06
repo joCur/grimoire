@@ -54,7 +54,7 @@ describe("the three call sites", () => {
       renderToStaticMarkup(
         <RenameAction
           campaign="beispiel"
-          currentPath="npcs/jorna.md"
+          currentPath="npcs/jorna"
           target={{ kind: "npc", oldId: "jorna" }}
         />,
       ),
@@ -69,7 +69,7 @@ describe("the three call sites", () => {
 
   test("Eigenschaften (issue #42) is the shared trigger with its own glyph", () => {
     const npc: FileResponse = {
-      path: "npcs/jorna.md",
+      path: "npcs/jorna",
       kind: "npc",
       properties: { id: "jorna", name: "Jorna" },
       body: "",
@@ -90,7 +90,7 @@ describe("the three call sites", () => {
   test("no Eigenschaften where there is no typed properties (session, inbox, campaign)", () => {
     for (const kind of ["session", "inbox", "campaign", "glossary"] as const) {
       const file: FileResponse = {
-        path: "x.md",
+        path: "x",
         kind,
         properties: {},
         body: "",

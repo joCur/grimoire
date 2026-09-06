@@ -31,7 +31,7 @@ import {
   isSessionEmpty,
   type FileResponse,
 } from "@grimoire/shared";
-import { ApiError, assertSafeRelativeMdPath } from "../campaign-fs";
+import { ApiError, assertSafeAddress } from "../campaign-fs";
 import { localDate, localDateTimeSeconds, localTime, now } from "../clock";
 import type { GrimoireDb } from "../db/client";
 import {
@@ -75,7 +75,7 @@ import {
   requireCampaign,
   sessionRow,
 } from "./read";
-import { locatorFromPath, type Locator } from "./paths";
+import { locatorFromPath, sessionPath, type Locator } from "./paths";
 import {
   renderCampaign,
   renderChapter,
@@ -666,7 +666,7 @@ function replaceRelations(tx: GrimoireDb, campaign: string, npcId: string, body:
  * which must refresh the index row's `title` too, not only its id.
  *
  * `campaign` is a kind here because the campaign FILE is a referring body
- * like any other (store/refs.ts `REF_BODY_KINDS`): a note in `_campaign.md`
+ * like any other (store/refs.ts `REF_BODY_KINDS`): a note in `_campaign`
  * that says `[[jorna]]` has the resolved name in its index row, so it goes
  * stale with everybody else's.
  */
@@ -751,7 +751,7 @@ export async function patchProperties(
   rev: number,
   patch: Record<string, unknown>,
 ): Promise<FileResponse> {
-  assertSafeRelativeMdPath(rel);
+  assertSafeAddress(rel);
   const locator = locatorFromPath(rel);
   return mutate(campaign, (tx) => patchLocator(tx, campaign, locator, rev, patch));
 }
@@ -1070,7 +1070,7 @@ export async function writeFileBody(
   rev: number,
   markdown: string,
 ): Promise<FileResponse> {
-  assertSafeRelativeMdPath(rel);
+  assertSafeAddress(rel);
   const locator = locatorFromPath(rel);
   if (locator.kind === "session" || locator.kind === "inbox") {
     throw new ApiError(400, "this file is append-only — use the log/inbox endpoints");
@@ -1218,7 +1218,7 @@ export async function writeGlossary(
 ): Promise<{ entries: Array<{ term: string; explanation: string }> }> {
   return mutate(campaign, (tx) => {
     writeGlossaryRows(tx, campaign, entries);
-    // Same document, same guard token: an editor holding `glossary.md` must
+    // Same document, same guard token: an editor holding `glossary` must
     // see a changed `rev` after this.
     tx.update(campaigns)
       .set({ glossaryRev: sql`${campaigns.glossaryRev} + 1` })
@@ -1329,7 +1329,7 @@ export async function startSession(campaign: string): Promise<FileResponse> {
     if (active !== undefined && startedDate(active.started) !== today) {
       throw new ApiError(409, "another session is still running — end it first", {
         code: "session_running",
-        path: `sessions/${active.id}.md`,
+        path: sessionPath(active.id),
       });
     }
     if (active !== undefined) return renderSessionRow(tx, campaign, active);
@@ -1469,13 +1469,13 @@ export async function discardSession(campaign: string): Promise<{ path: string }
     if (!empty) {
       throw new ApiError(409, "this session has content — end it instead of discarding it", {
         code: "session_not_empty",
-        path: `sessions/${row.id}.md`,
+        path: sessionPath(row.id),
       });
     }
     tx.delete(sessions)
       .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, row.id)))
       .run();
-    return { path: `sessions/${row.id}.md` };
+    return { path: sessionPath(row.id) };
   });
 }
 
@@ -1609,12 +1609,12 @@ export async function markLogLineSeen(
   rel: string,
   line: string,
 ): Promise<FileResponse & { marked: boolean }> {
-  assertSafeRelativeMdPath(rel);
+  assertSafeAddress(rel);
   const segments = rel.split("/");
   if (segments.length !== 2 || segments[0] !== "sessions") {
-    throw new ApiError(400, "path must be a sessions/*.md file");
+    throw new ApiError(400, "path must be a sessions/<id> address");
   }
-  const sessionId = (segments[1] ?? "").slice(0, -".md".length);
+  const sessionId = segments[1] ?? "";
   const hash = logLineShortHash(line);
   return mutate(campaign, (tx) => {
     const row = sessionRow(tx, campaign, sessionId);

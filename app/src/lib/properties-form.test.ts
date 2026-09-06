@@ -34,7 +34,7 @@ function keys(kind: EntityKind): string[] {
   return fields(kind).map((field) => field.key);
 }
 
-/** examples/beispiel/01-salzhafen/hafen/von-schmugglern-erwischt.md */
+/** examples/beispiel/01-salzhafen/hafen/von-schmugglern-erwischt */
 const SCENE_FM: Record<string, unknown> = {
   id: "smuggler-captured",
   title: "Von den Schmugglern erwischt",
@@ -48,7 +48,7 @@ const SCENE_FM: Record<string, unknown> = {
   status: "ready",
 };
 
-/** examples/beispiel/npcs/fenn.md — quickstats arrive as YAML numbers. */
+/** examples/beispiel/npcs/fenn — quickstats arrive as YAML numbers. */
 const NPC_FM: Record<string, unknown> = {
   id: "fenn",
   name: "Fenn",
@@ -468,11 +468,11 @@ describe("reference and select options", () => {
       { id: "01-salzhafen", title: "Kapitel 1: Der Leuchtturm", groups: [] },
     ],
     npcs: [
-      { path: "npcs/fenn.md", id: "fenn", name: "Fenn", status: "alive" },
-      { path: "npcs/jorna.md", id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
+      { path: "npcs/fenn", id: "fenn", name: "Fenn", status: "alive" },
+      { path: "npcs/jorna", id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
     ],
     locations: [
-      { path: "locations/leuchtturm.md", id: "leuchtturm", name: "Der Leuchtturm" },
+      { path: "locations/leuchtturm", id: "leuchtturm", name: "Der Leuchtturm" },
     ],
     sessions: [],
   };
@@ -571,7 +571,7 @@ function answer(
 }
 
 const FILE: FileResponse = {
-  path: "npcs/fenn.md",
+  path: "npcs/fenn",
   kind: "npc",
   properties: NPC_FM,
   body: "",
@@ -582,13 +582,13 @@ const FILE: FileResponse = {
 describe("writePropertiesForm", () => {
   test("PATCHes the file with the rev the dialog was seeded with", async () => {
     const calls = answer({ status: 200, body: FILE });
-    const result = await writePropertiesForm("beispiel", "npcs/fenn.md", 42, { role: "Kundschafter" });
+    const result = await writePropertiesForm("beispiel", "npcs/fenn", 42, { role: "Kundschafter" });
     expect(result).toEqual({ ok: true, file: FILE });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("PATCH");
     expect(calls[0]?.url).toBe("/api/beispiel/properties");
     expect(calls[0]?.body).toEqual({
-      path: "npcs/fenn.md",
+      path: "npcs/fenn",
       rev: 42,
       patch: { role: "Kundschafter" },
     });
@@ -599,16 +599,16 @@ describe("writePropertiesForm", () => {
       { status: 409, body: { error: "file changed on disk", rev: 99 } },
       { status: 200, body: { ...FILE, rev: 99 } },
     );
-    const result = await writePropertiesForm("beispiel", "npcs/fenn.md", 42, { role: "X" });
+    const result = await writePropertiesForm("beispiel", "npcs/fenn", 42, { role: "X" });
     expect(result.ok).toBe(false);
     expect(result.file?.rev).toBe(99);
     expect(calls[1]?.method).toBe("GET");
-    expect(calls[1]?.url).toBe("/api/beispiel/file?path=npcs%2Ffenn.md");
+    expect(calls[1]?.url).toBe("/api/beispiel/file?path=npcs%2Ffenn");
   });
 
   test("a failed reload after the conflict keeps the conflict, not a crash", async () => {
     answer({ status: 409, body: { error: "file changed on disk" } });
-    expect(await writePropertiesForm("beispiel", "npcs/fenn.md", 42, { role: "X" })).toEqual({
+    expect(await writePropertiesForm("beispiel", "npcs/fenn", 42, { role: "X" })).toEqual({
       ok: false,
     });
   });
@@ -616,7 +616,7 @@ describe("writePropertiesForm", () => {
   test("every other failure throws (the dialog shows the error line)", async () => {
     answer({ status: 500, body: { error: "boom" } });
     await expect(
-      writePropertiesForm("beispiel", "npcs/fenn.md", 42, { role: "X" }),
+      writePropertiesForm("beispiel", "npcs/fenn", 42, { role: "X" }),
     ).rejects.toBeInstanceOf(ApiError);
   });
 });

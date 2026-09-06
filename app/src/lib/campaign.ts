@@ -37,7 +37,7 @@ export function sceneTitle(
 }
 
 /**
- * The campaign's display label: the `name` from its optional `_campaign.md`
+ * The campaign's display label: the `name` from its optional `_campaign`
  * (issue #17), else the id — which is the directory name and stays the key in
  * every URL. Never returns an empty string.
  */

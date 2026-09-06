@@ -125,7 +125,7 @@ function referenceSites(usage: UsageReport, oldId: string, newId: string): strin
 }
 
 /**
- * A display name that was literally the OLD ID follows the id. `npcs/jorna.md`
+ * A display name that was literally the OLD ID follows the id. `npcs/jorna`
  * with `name: jorna` is a file that never had a real name — the id was the
  * fallback, spelled out — and leaving it behind means the tree and the search
  * title keep naming a reference that does not exist any more. Files with no

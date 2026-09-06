@@ -63,7 +63,7 @@ export function dropStore(): void {
 /**
  * A temp copy of `examples/` as a CAMPAIGN ROOT, for cases that need to seed
  * from a modified tree (a broken file, a second campaign, a missing
- * `_campaign.md`). The server never writes into it — the tree is only ever
+ * `_campaign`). The server never writes into it — the tree is only ever
  * the importer's source.
  */
 export async function tempCampaignRoot(): Promise<string> {

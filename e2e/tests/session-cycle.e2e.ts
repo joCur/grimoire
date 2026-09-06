@@ -67,7 +67,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // WHICH file the session lives in is the server's answer — the id is opaque
   // (issue #58) and carries no date to reconstruct.
   const sessionPath = (await api.sessionPath()) ?? "";
-  expect(sessionPath).toMatch(/^sessions\/.+\.md$/);
+  expect(sessionPath).toMatch(/^sessions\/.+$/);
 
   // The topbar carries ONE session control: the chip, brass, with the running
   // time as H:MM:SS. No "Live" label, no separate timer or buttons any more.
@@ -173,7 +173,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // The full file, not the card excerpt — and the way out into the full view.
   await expect(drawer.getByRole("link", { name: "Eintrag öffnen" })).toHaveAttribute(
     "href",
-    "/beispiel/file/npcs/jorna.md",
+    "/beispiel/file/npcs/jorna",
   );
   // Still in the live mode, session still running.
   await expect(page).toHaveURL(/\/beispiel\/live$/);
@@ -282,7 +282,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect(page.getByText("— Pause")).toHaveCount(0);
   // … it lives in its OWN file, under a DIFFERENT opaque id …
   const secondPath = (await api.sessionPath()) ?? "";
-  expect(secondPath).toMatch(/^sessions\/.+\.md$/);
+  expect(secondPath).toMatch(/^sessions\/.+$/);
   expect(secondPath).not.toBe(sessionPath);
   const second = await api.raw(secondPath);
   expect(second).not.toContain("ended:");
@@ -361,7 +361,7 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
   const restarted = (await api.sessionPath()) ?? "";
-  expect(restarted).toMatch(/^sessions\/.+\.md$/);
+  expect(restarted).toMatch(/^sessions\/.+$/);
   expect(restarted).not.toBe(sessionPath);
   expect(await api.exists(restarted)).toBe(true);
   expect(await api.exists(sessionPath)).toBe(false);
@@ -395,13 +395,13 @@ test("an unreachable session lookup dims the chip instead of offering a start", 
 test.describe("played/dropped scenes in the live nav (issue #73)", () => {
   // Stored paths come from the scene ID, not from the markdown file name (the
   // import derives them) — so the seed key and the API path differ.
-  const SEED_FILE = "01-salzhafen/hafen/zweites-gespraech.md";
-  const ARRIVAL = "01-salzhafen/hafen/lighthouse-arrival.md";
+  const SEED_FILE = "01-salzhafen/hafen/zweites-gespraech";
+  const ARRIVAL = "01-salzhafen/hafen/lighthouse-arrival";
   // The seeded scene sorts BEFORE the example's own one in the nav
   // ("harbor-office-talk" < "lighthouse-arrival"), which is exactly what AK3
   // needs: the scene that gets played is the FIRST row, so a default selection
   // that ignored the status would land on it.
-  const SEEDED = "01-salzhafen/hafen/harbor-office-talk.md";
+  const SEEDED = "01-salzhafen/hafen/harbor-office-talk";
 
   test.use({
     seed: {

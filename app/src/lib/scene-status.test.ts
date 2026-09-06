@@ -15,7 +15,7 @@ import {
   writeSceneStatus,
 } from "./scene-status";
 
-const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm.md";
+const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm";
 
 function fileAt(rev: number, status: string): FileResponse {
   return {

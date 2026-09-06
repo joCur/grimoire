@@ -177,7 +177,7 @@ api.get("/:campaign/version", async (c) => {
 // GET /api/:campaign/glossary -> { entries: [{ term, explanation }] }
 // The glossary is a structured TABLE since the migration (planning F6): term
 // → explanation instead of one markdown blob. The generic reading view still
-// renders it as markdown (GET /file?path=glossary.md, rendered from these
+// renders it as markdown (GET /file?path=glossary, rendered from these
 // rows), but this is the shape anything that wants the TERMS should read —
 // the generator knowledge base of issue #53 builds on exactly this.
 api.get("/:campaign/glossary", async (c) => c.json(await readGlossary(c.req.param("campaign"))));
@@ -212,7 +212,7 @@ api.patch("/:campaign/properties", async (c) => {
 // The properties block on disk stays byte-identical (keys are PATCH
 // /properties's job). Same rev guard: 409 { error, rev } when the file
 // changed on disk since it was read; 404 for a file that does not exist; 400
-// for the append-only kinds (sessions/*.md, inbox.md — DECISIONS #4) and for a
+// for the append-only kinds (sessions/*, inbox — DECISIONS #4) and for a
 // file whose properties block cannot be split off safely.
 api.put("/:campaign/file", async (c) => {
   const body = await jsonBody(c, ["path", "rev", "body"]);
@@ -229,15 +229,15 @@ api.put("/:campaign/file", async (c) => {
 
 // POST /api/:campaign/campaign-meta is GONE (issue #62). It was the create
 // half of the metadata dialog (issue #34), for the case PATCH /properties
-// cannot serve: no `_campaign.md`, hence no guard token to write against.
-// Since the cutover every campaign HAS a row, so GET /file?path=_campaign.md
+// cannot serve: no `_campaign`, hence no guard token to write against.
+// Since the cutover every campaign HAS a row, so GET /file?path=_campaign
 // always answers 200 with a `rev` and there is no create case left — the
 // endpoint had become unreachable from the app (#59). Name and description
 // are written like every other properties field now, through PATCH
 // /properties and its 409.
 
 // POST /api/:campaign/session/start -> FileResponse
-// Creates a NEW session — `sessions/<today>.md`, or `<today>-2`, `-3` … when
+// Creates a NEW session — `sessions/<today>`, or `<today>-2`, `-3` … when
 // that day already has sessions (issue #58: "beenden" is FINAL, so a second
 // evening on the same day is a second session with its own empty log and a
 // runtime starting at 0). Idempotent only while TODAY's session is the
@@ -300,7 +300,7 @@ api.post("/:campaign/log", async (c) => {
   return c.json(await appendLogEntry(c.req.param("campaign"), text, sceneId));
 });
 
-// POST /api/:campaign/inbox { text } -> FileResponse (creates inbox.md)
+// POST /api/:campaign/inbox { text } -> FileResponse (creates inbox)
 api.post("/:campaign/inbox", async (c) => {
   const body = await jsonBody(c, ["text"]);
   const text = normalizeLineText(body.text);
@@ -413,7 +413,7 @@ api.post("/:campaign/review/seen", async (c) => {
 });
 
 // POST /api/:campaign/review/thread { chapter, text } -> FileResponse
-// Appends `- [ ] text` under ## Offene Fäden of <chapter>/_chapter.md
+// Appends `- [ ] text` under ## Offene Fäden of <chapter>/_chapter
 // (section/file created when missing; 404 when the chapter dir is missing).
 api.post("/:campaign/review/thread", async (c) => {
   const body = await jsonBody(c, ["chapter", "text"]);
@@ -578,7 +578,7 @@ api.put("/:campaign/generate/job/drafts", async (c) => {
 // write, and the DM waits for its result. Re-validates server-side
 // (properties parses, status draft, safe paths); 409 { conflicts } when any
 // target file exists — then nothing is written at all. chapter +
-// chapterTitle (both or neither) additionally create `<chapter>/_chapter.md`
+// chapterTitle (both or neither) additionally create `<chapter>/_chapter`
 // when it is missing, in the same all-or-nothing batch (the app's "Neues
 // Kapitel" flow).
 // `jobId` (issue #19) ties the apply to the background job it came from: a

@@ -49,12 +49,12 @@ import {
   type GeneratedStub,
   type ParsedFile,
 } from "@grimoire/shared";
-import { ApiError, assertSafeRelativeMdPath } from "./campaign-fs";
+import { ApiError, assertSafeAddress } from "./campaign-fs";
 // The generator reads its context and writes its drafts through the store
 // (issue #57) — the campaign file tree is not a data source any more.
 import { buildTree, glossaryText, requireCampaign } from "./store/read";
 import { applyDrafts, chapterExists, draftTargetExists } from "./store/write";
-import { scenePath } from "./store/paths";
+import { chapterPath, locationPath, npcPath, scenePath } from "./store/paths";
 import {
   createProvider,
   type CompletionResult,
@@ -221,7 +221,7 @@ export async function assertGenerateTarget(
 /**
  * The id of an existing npc file, for the collision check of an NPC run
  * (issue #21) — a request-level 409 before a single token is spent.
- * `assertSafeRelativeMdPath` is not enough here: the id must be a kebab slug,
+ * `assertSafeAddress` is not enough here: the id must be a kebab slug,
  * because it becomes the file name AND the reference key.
  */
 export const NPC_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
@@ -237,7 +237,7 @@ export async function assertNpcGenerateTarget(campaign: string, npcId?: string):
   await requireCampaign(campaign); // 400 unsafe id, 404 unknown campaign
   if (npcId === undefined) return;
   if (!NPC_ID_PATTERN.test(npcId)) throw new ApiError(400, "invalid npc id");
-  const rel = `npcs/${npcId}.md`;
+  const rel = npcPath(npcId);
   if (await draftTargetExists(campaign, rel)) {
     throw new ApiError(409, "npc file already exists", { path: rel });
   }
@@ -257,7 +257,7 @@ async function collectNpcContext(campaign: string, npcId?: string): Promise<Camp
  * Collect the prompt context of a scene run. Runs the same target checks
  * again (they are cheap and the pipeline must never depend on a caller having
  * done them); the chapter contributes only its id to the context, so nothing
- * else changes when its directory (and _chapter.md) are still missing.
+ * else changes when the chapter (and its `_chapter`) is still missing.
  */
 async function collectSceneContext(
   campaign: string,
@@ -374,10 +374,9 @@ function unknownCallouts(body: string): string[] {
   return unknown;
 }
 
-/** Filename of a campaign-relative path, without the `.md` extension. */
-function fileStem(rel: string): string {
-  const base = rel.slice(rel.lastIndexOf("/") + 1);
-  return base.endsWith(".md") ? base.slice(0, -3) : base;
+/** Last segment of a campaign-relative address — the entity's id. */
+function addressId(rel: string): string {
+  return rel.slice(rel.lastIndexOf("/") + 1);
 }
 
 /**
@@ -495,8 +494,8 @@ function validateStub(
 ): GeneratedStub | null {
   const dirName = kind === "npc" ? "npcs" : "locations";
   const label = `${kind} stub "${entry.path}"`;
-  if (!new RegExp(`^${dirName}/[a-z0-9][a-z0-9-]*\\.md$`).test(entry.path)) {
-    errors.push(`${label}: path must be "${dirName}/<kebab-case-id>.md"`);
+  if (!new RegExp(`^${dirName}/[a-z0-9][a-z0-9-]*$`).test(entry.path)) {
+    errors.push(`${label}: path must be "${dirName}/<kebab-case-id>"`);
     return null;
   }
   const { parsed, error } = parseWithProperties(entry.content, entry.path);
@@ -504,10 +503,10 @@ function validateStub(
     errors.push(`${label}: ${error}`);
     return null;
   }
-  const id = fileStem(entry.path);
+  const id = addressId(entry.path);
   const fmId = parsed.properties.id;
   if (typeof fmId === "string" && fmId !== id) {
-    errors.push(`${label}: properties id "${fmId}" does not match the filename`);
+    errors.push(`${label}: properties id "${fmId}" does not match the address`);
     return null;
   }
   // A status error does not stop the mapping: the stub still resolves the
@@ -554,7 +553,7 @@ export function validateReply(
     const label = `scene "${entry.path}"`;
 
     try {
-      assertSafeRelativeMdPath(entry.path);
+      assertSafeAddress(entry.path);
     } catch {
       errors.push(`${label}: invalid path`);
       continue;
@@ -562,7 +561,7 @@ export function validateReply(
     const segments = entry.path.split("/");
     if (segments[0] !== ctx.chapter || segments.length < 2 || segments.length > 3) {
       errors.push(
-        `${label}: path must be "${ctx.chapter}/<scene>.md" or "${ctx.chapter}/<location-slug>/<scene>.md"`,
+        `${label}: path must be "${ctx.chapter}/<scene>" or "${ctx.chapter}/<location-slug>/<scene>"`,
       );
     }
     if (seenPaths.has(entry.path)) errors.push(`${label}: duplicate path`);
@@ -625,7 +624,7 @@ interface RawNpcReply {
 }
 
 /** The only legal target of an NPC run — the id IS the file name. */
-const NPC_PATH_PATTERN = /^npcs\/[a-z0-9][a-z0-9-]*\.md$/;
+const NPC_PATH_PATTERN = /^npcs\/[a-z0-9][a-z0-9-]*$/;
 
 /** The sections of the NPC format that carry rules (README "Entität: NPC"). */
 const KNOWLEDGE_SECTION = "Weiß";
@@ -770,7 +769,7 @@ function parseRawNpcReply(raw: string, errors: string[]): RawNpcReply | null {
  * the error list for the correction turn.
  *
  * The rules, all from the format contract (README "Entität: NPC"):
- * target path `npcs/<kebab-id>.md`, parseable properties whose `id` matches
+ * target address `npcs/<kebab-id>`, parseable properties whose `id` matches
  * the file name, a `name`, a valid NpcStatus (`alive` unless the source says
  * otherwise), no invented `chapter`, quoted quickstats, relationships only to
  * npcs that exist, only `[!secret]` inside `## Weiß`, only known callouts, and
@@ -790,11 +789,11 @@ export function validateNpcReply(
   const label = `npc "${entry.path}"`;
   // Without a usable path nothing else can be judged (the id comes from it).
   if (!NPC_PATH_PATTERN.test(entry.path)) {
-    return { ok: false, errors: [`${label}: path muss "npcs/<kebab-id>.md" sein`] };
+    return { ok: false, errors: [`${label}: path muss "npcs/<kebab-id>" sein`] };
   }
-  const id = fileStem(entry.path);
+  const id = addressId(entry.path);
   if (pinnedId !== undefined && id !== pinnedId) {
-    errors.push(`${label}: die id ist vorgegeben — die Datei muss "npcs/${pinnedId}.md" heißen`);
+    errors.push(`${label}: die id ist vorgegeben — der path muss "npcs/${pinnedId}" sein`);
   }
   if (ctx.npcIds.has(id)) {
     errors.push(
@@ -1086,12 +1085,12 @@ function applySceneTarget(item: unknown, index: number): ApplyTarget {
   if (typeof markdown !== "string" || markdown === "") {
     throw new ApiError(400, `${label}.markdown must be a non-empty string`);
   }
-  assertSafeRelativeMdPath(rel); // 400 on traversal/absolute/non-md
+  assertSafeAddress(rel); // 400 on traversal/absolute/hidden
   const segments = rel.split("/");
   if (segments.length < 2 || segments.length > 3 || RESERVED_DIRS.has(segments[0]!)) {
     throw new ApiError(
       400,
-      `${label}.path must be "<chapter>/<scene>.md" or "<chapter>/<location-slug>/<scene>.md"`,
+      `${label}.path must be "<chapter>/<scene>" or "<chapter>/<location-slug>/<scene>"`,
     );
   }
   // Re-validation (apply is a separate request — never trust the client):
@@ -1125,14 +1124,14 @@ function applyNpcTarget(item: unknown): ApplyTarget {
     throw new ApiError(400, `${label}.markdown must be a non-empty string`);
   }
   if (!NPC_PATH_PATTERN.test(rel)) {
-    throw new ApiError(400, `${label}.path must be "npcs/<kebab-case-id>.md"`);
+    throw new ApiError(400, `${label}.path must be "npcs/<kebab-case-id>"`);
   }
-  assertSafeRelativeMdPath(rel); // defense in depth — the pattern rules escapes out
+  assertSafeAddress(rel); // defense in depth — the pattern rules escapes out
   const { parsed, error } = parseWithProperties(markdown, rel);
   if (error !== undefined) throw new ApiError(400, `${label}: ${error}`);
-  const id = fileStem(rel);
+  const id = addressId(rel);
   if (parsed.properties.id !== id) {
-    throw new ApiError(400, `${label}: properties id does not match the filename`);
+    throw new ApiError(400, `${label}: properties id does not match the address`);
   }
   const statusError = npcStatusErrors(parsed.properties, "NPC-Dateien")[0];
   if (statusError !== undefined) throw new ApiError(400, `${label}: ${statusError}`);
@@ -1158,8 +1157,8 @@ function applyStubTarget(item: unknown, index: number): ApplyTarget {
   if (typeof markdown !== "string" || markdown === "") {
     throw new ApiError(400, `${label}.markdown must be a non-empty string`);
   }
-  const rel = `${kind}s/${id}.md`;
-  assertSafeRelativeMdPath(rel); // defense in depth — the slug check above rules escapes out
+  const rel = kind === "npc" ? npcPath(id) : locationPath(id);
+  assertSafeAddress(rel); // defense in depth — the slug check above rules escapes out
   const { parsed, error } = parseWithProperties(markdown, rel);
   if (error !== undefined) throw new ApiError(400, `${label}: ${error}`);
   // Re-validation, same as for scenes: a client payload must not sneak a
@@ -1172,8 +1171,8 @@ function applyStubTarget(item: unknown, index: number): ApplyTarget {
 /**
  * The new-chapter flow (issue #12): `chapter` + `chapterTitle` mean "the
  * drafts go into a chapter that does not exist yet". Returns the
- * `<chapter>/_chapter.md` target to create in the same batch, or null when
- * the file is already there (idempotent — an existing chapter is not a
+ * `<chapter>/_chapter` target to create in the same batch, or null when the
+ * chapter is already there (idempotent — an existing chapter is not a
  * conflict). Minimal properties per the examples convention
  * (id/title/status: planned — a generator-created chapter is upcoming,
  * never the active one); the body stays empty and degrades.
@@ -1190,7 +1189,7 @@ async function newChapterTarget(
   const title = chapterTitle.replace(/\s*\r?\n\s*/g, " ").trim();
   if (title === "") throw new ApiError(400, "chapterTitle must be a non-empty string");
   assertSafeChapterId(chapter); // 400 unsafe id, 404 reserved dirs
-  const rel = `${chapter}/_chapter.md`;
+  const rel = chapterPath(chapter);
   // An existing chapter is not a conflict — idempotent, as before.
   if (await chapterExists(campaign, chapter)) return null;
   const yaml = dump(
@@ -1207,7 +1206,7 @@ async function newChapterTarget(
  * which is what "all or nothing" now means literally. Returns the written
  * campaign-relative paths.
  *
- * `chapter`/`chapterTitle` (both or neither) add the chapter's `_chapter.md`
+ * `chapter`/`chapterTitle` (both or neither) add the chapter's `_chapter`
  * to the SAME all-or-nothing batch when it does not exist yet — the app's
  * "Neues Kapitel" flow.
  *
@@ -1255,8 +1254,8 @@ export async function applyGenerated(
     const parsed = parseMarkdown(t.markdown, t.rel, 0);
     assertDraftId(parsed.properties.id, t.rel);
     // The ADDRESS the entity will have (store/paths) — for a scene that is
-    // `<chapter>/<group>/<id>.md`, derived from the FRONTMATTER id, because
-    // that is the key `insertDraft` writes under. The model's file name is
+    // `<chapter>/<group>/<id>`, derived from the PROPERTIES id, because
+    // that is the key `insertDraft` writes under. The model's last segment is
     // not part of the addressing any more, so it must not decide anything
     // here either: checking the path-derived id while inserting the
     // properties id would let a colliding draft past the 409 and into a
@@ -1297,8 +1296,8 @@ const DRAFT_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
  * `id: "a/b"` inserted one whose address parses as a different path — both
  * unreachable through `GET /file`, i.e. content written and lost in the same
  * request. A properties that HAS an `id` must therefore carry a usable one;
- * a draft without the key keeps falling back to its file name, which the
- * path validation already constrains.
+ * a draft without the key keeps falling back to its address segment, which
+ * the address validation already constrains.
  *
  * 422 like the generator's other content rejections: the payload is
  * well-formed, its CONTENT is unusable.
@@ -1315,9 +1314,9 @@ function assertDraftId(id: unknown, rel: string): void {
 }
 
 /**
- * Where a draft will live: its path, with the id segment taken from the
+ * Where a draft will live: its address, with the id segment taken from the
  * properties when there is one. Only scenes can actually differ (an npc or
- * location draft is validated against its file name, a chapter's id IS the
+ * location draft is validated against its own segment, a chapter's id IS the
  * first segment), but the rule is stated once for all of them.
  */
 function draftAddress(rel: string, properties: Record<string, unknown>): string {

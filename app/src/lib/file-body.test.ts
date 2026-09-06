@@ -9,7 +9,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { ApiError } from "@/api";
 import { canEditFileBody, hasBodyChanges, shouldAdvanceBase, writeFileBody } from "./file-body";
 
-const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm.md";
+const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm";
 
 function fileAt(rev: number, body: string): FileResponse {
   return {
@@ -154,7 +154,7 @@ describe("shouldAdvanceBase", () => {
   });
 
   test("another file is never adopted", () => {
-    expect(shouldAdvanceBase(base, { ...fileAt(222, base.body), path: "npcs/jorna.md" })).toBe(
+    expect(shouldAdvanceBase(base, { ...fileAt(222, base.body), path: "npcs/jorna" })).toBe(
       false,
     );
   });
@@ -172,7 +172,7 @@ describe("canEditFileBody", () => {
   });
 
   test("append-only files and the campaign metadata file are not", () => {
-    // Logs/inbox are append-only by design; `_campaign.md` has its own
+    // Logs/inbox are append-only by design; `_campaign` has its own
     // „Bearbeiten" for name/description (issue #34).
     expect(canEditFileBody("session")).toBe(false);
     expect(canEditFileBody("inbox")).toBe(false);

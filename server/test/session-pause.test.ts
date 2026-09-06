@@ -35,7 +35,7 @@ import {
  * perfectly valid id (a session id is an opaque string now, so nothing parses
  * it). Sessions the API starts get a random id instead: see `startedPath`.
  */
-const REL = "sessions/2026-08-19.md";
+const REL = "sessions/2026-08-19";
 
 let tmpRoot: string | undefined;
 /** Path of the session `beforeEach` started — this case's opaque id. */
@@ -78,7 +78,7 @@ function logLines(file: FileResponse): string[] {
  */
 async function seedWithSessionFile(tail: string): Promise<void> {
   tmpRoot = await tempCampaignRoot();
-  const abs = path.join(tmpRoot, "beispiel", REL);
+  const abs = path.join(tmpRoot, "beispiel", `${REL}.md`);
   await mkdir(path.dirname(abs), { recursive: true });
   await writeFile(
     abs,

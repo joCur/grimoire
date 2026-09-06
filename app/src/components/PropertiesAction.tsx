@@ -72,7 +72,7 @@ export function PropertiesAction({
 }) {
   // Open-BY-FILE, not a boolean: navigating away closes the dialog instead of
   // leaving it standing over another file's reading view. Campaign AND path,
-  // because two campaigns can hold the same relative path (`npcs/jorna.md`).
+  // because two campaigns can hold the same relative path (`npcs/jorna`).
   const fileKey = `${campaign}/${file.path}`;
   const [openFile, setOpenFile] = useState<string>();
   const open = openFile === fileKey;

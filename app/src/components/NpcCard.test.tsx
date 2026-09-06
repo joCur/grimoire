@@ -3,7 +3,7 @@
 // `npcs:` holds ids. A non-slug entry is no id and therefore no entry — the
 // server refuses new ones, and what can still stand in the list is what a
 // migrated file era campaign brought along. Asking for `npcs/Alte
-// Fischerin.md` answers 404, which the card reported as "NPC nicht ladbar,
+// Fischerin` answers 404, which the card reported as "NPC nicht ladbar,
 // Server prüfen": it blamed the server for data it had been handed. The card
 // does not ask at all now and says what is actually the case.
 

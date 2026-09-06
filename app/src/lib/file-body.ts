@@ -21,7 +21,7 @@ import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
  *                    free-hand rewrite of a log is not a maintenance action.
  *   campaign         no — its header already carries „Bearbeiten" for name and
  *                    description (issue #34); one label, one meaning.
- *   everything else  yes: scene, npc, location, chapter (_chapter.md),
+ *   everything else  yes: scene, npc, location, chapter (_chapter),
  *                    glossary and whatever else the route is pointed at.
  */
 export function canEditFileBody(kind: EntityKind): boolean {

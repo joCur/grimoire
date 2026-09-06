@@ -227,7 +227,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
               </p>
               {knownLocation !== undefined ? (
                 // The tree knows the REAL path of the file — the card must not
-                // re-derive `locations/<id>.md` (finding 10).
+                // re-derive `locations/<id>` (finding 10).
                 <LocationCard
                   campaign={campaign}
                   id={knownLocation.id}

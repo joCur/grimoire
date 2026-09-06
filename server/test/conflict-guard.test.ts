@@ -33,7 +33,7 @@ import { app } from "../src/server";
 import { setNow } from "../src/clock";
 import { dropStore, seedStore } from "./support/store";
 
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
 
 async function getFile(rel: string): Promise<FileResponse> {
   const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);

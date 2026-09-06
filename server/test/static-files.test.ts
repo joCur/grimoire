@@ -69,10 +69,10 @@ describe("index.html", () => {
     }
   });
 
-  test("a file-like client route keeps working (/…/file/<scene>.md)", async () => {
+  test("a file-like client route keeps working (/…/file/<scene>)", async () => {
     // The scene route carries a campaign-relative .md path in the URL; that
     // must not be mistaken for a missing build artefact.
-    const res = await app.request("/beispiel/file/01-salzhafen/hafen/ankunft-leuchtturm.md");
+    const res = await app.request("/beispiel/file/01-salzhafen/hafen/ankunft-leuchtturm");
     expect(res.status).toBe(200);
     expect(await res.text()).toBe(INDEX_HTML);
   });

@@ -65,7 +65,11 @@ async function getFile(rel: string): Promise<FileResponse> {
 async function seedWithFiles(files: Record<string, string | null>): Promise<void> {
   tmpRoot = await tempCampaignRoot();
   for (const [rel, content] of Object.entries(files)) {
-    const abs = path.join(tmpRoot, "beispiel", rel);
+    // Keys are ADDRESSES (issue #79); the importer's source is still a
+    // file, so the `.md` is added here. A key ending in "/" names a
+    // DIRECTORY (only ever used to remove one).
+    const isDir = rel.endsWith("/");
+    const abs = path.join(tmpRoot, "beispiel", isDir ? rel.slice(0, -1) : `${rel}.md`);
     if (content === null) {
       await rm(abs, { recursive: true, force: true });
       continue;
@@ -279,7 +283,7 @@ describe("GET /api/:campaign/session", () => {
     expect(file.path).toBe(started);
     // The id is OPAQUE (issue #58): an address, nothing to read. What has to
     // hold is that it is addressable and says nothing about the calendar.
-    expect(file.path).toMatch(/^sessions\/[\w-]+\.md$/);
+    expect(file.path).toMatch(/^sessions\/[\w-]+$/);
     expect(file.path).not.toContain("2026-08-19");
     expect(file.kind).toBe("session");
     expect(file.properties.started).toBe("2026-08-19T21:05:00");
@@ -313,7 +317,7 @@ describe("GET /api/:campaign/session", () => {
     // degrade with it: the live timer used to vanish silently here because
     // the client demanded a time part.
     await seedWithFiles({
-      "sessions/2026-08-19.md": sessionFile(
+      "sessions/2026-08-19": sessionFile(
         "2026-08-19",
         "started: 2026-08-19T00:00:00\nscenes_played: []\n",
       ),
@@ -326,13 +330,13 @@ describe("GET /api/:campaign/session", () => {
   });
 
   test("an ended session carries endedMs too (GET /file, same shape)", async () => {
-    const file = await getFile("sessions/2026-01-15.md");
+    const file = await getFile("sessions/2026-01-15");
     expect(file.startedMs).toBe(new Date(2026, 0, 15, 19, 30).getTime());
     expect(file.endedMs).toBe(new Date(2026, 0, 15, 22, 45).getTime());
   });
 
   test("a non-session file carries no session times", async () => {
-    const file = await getFile("npcs/jorna.md");
+    const file = await getFile("npcs/jorna");
     expect(file.startedMs).toBeUndefined();
     expect(file.endedMs).toBeUndefined();
   });
@@ -417,7 +421,7 @@ describe("start — the state machine's edges (issues #40 review, #58)", () => {
     // Two sessions on the SAME DAY are two different opaque ids, and both are
     // addressable — that is the whole contract on the id (issue #58).
     expect(file.path).not.toBe(firstPath);
-    expect(file.path).toBe(`sessions/${String(file.properties.id)}.md`);
+    expect(file.path).toBe(`sessions/${String(file.properties.id)}`);
     expect(file.properties.started).toBe("2026-08-19T23:30:00");
     expect(file.properties.ended).toBeUndefined();
     expect(file.body).not.toContain("erste Runde");
@@ -548,7 +552,7 @@ describe("POST /session/discard — the mis-click's undo (AK7)", () => {
     // entries. Only the migration can produce that shape now — the API
     // always writes a log line together with a played scene.
     await seedWithFiles({
-      "sessions/2026-08-19.md": sessionFile(
+      "sessions/2026-08-19": sessionFile(
         "2026-08-19",
         "started: 2026-08-19T21:05\nscenes_played: [lighthouse-arrival]\n",
       ),
@@ -556,14 +560,14 @@ describe("POST /session/discard — the mis-click's undo (AK7)", () => {
     const res = await post("/api/beispiel/session/discard");
     expect(res.status).toBe(409);
     expect(((await res.json()) as { code: string }).code).toBe("session_not_empty");
-    expect(await fileStatus("sessions/2026-08-19.md")).toBe(200);
+    expect(await fileStatus("sessions/2026-08-19")).toBe(200);
   });
 
   test("404 without a running session — an ENDED one is never deleted", async () => {
     // The committed fixture has only ended sessions.
     const res = await post("/api/beispiel/session/discard");
     expect(res.status).toBe(404);
-    expect(await fileStatus("sessions/2026-01-15.md")).toBe(200);
+    expect(await fileStatus("sessions/2026-01-15")).toBe(200);
     // …not even when that ended session is empty.
     const started = await startSession();
     expect((await post("/api/beispiel/session/end")).status).toBe(200);
@@ -606,7 +610,7 @@ describe("the review's session — GET /session?includeEnded=1", () => {
   });
 
   test("404 with no session at all, with and without includeEnded", async () => {
-    await seedWithFiles({ sessions: null });
+    await seedWithFiles({ "sessions/": null });
     expect((await app.request("/api/beispiel/session?includeEnded=1")).status).toBe(404);
     expect((await app.request("/api/beispiel/session?includeEnded=0")).status).toBe(404);
   });
@@ -632,11 +636,11 @@ describe("degraded session files never hijack the active session", () => {
 
   test("a non-date id with a parseable `started` still counts", async () => {
     await seedWithFiles({
-      "sessions/notizen.md": sessionFile("notizen", "started: 2026-08-19T20:00\nscenes_played: []\n"),
+      "sessions/notizen": sessionFile("notizen", "started: 2026-08-19T20:00\nscenes_played: []\n"),
     });
     const res = await app.request("/api/beispiel/session");
     expect(res.status).toBe(200);
-    expect(((await res.json()) as FileResponse).path).toBe("sessions/notizen.md");
+    expect(((await res.json()) as FileResponse).path).toBe("sessions/notizen");
   });
 
   // Sessions written before issue #58 have a MINUTE-precise `started`. The
@@ -644,7 +648,7 @@ describe("degraded session files never hijack the active session", () => {
   // working — verbatim string, a startedMs on the minute, endable.
   test("a pre-#58 minute-precise `started` stays valid", async () => {
     await seedWithFiles({
-      "sessions/2026-08-19.md": sessionFile(
+      "sessions/2026-08-19": sessionFile(
         "2026-08-19",
         "started: 2026-08-19T20:00\nscenes_played: []\n",
       ),
@@ -667,20 +671,20 @@ describe("degraded session files never hijack the active session", () => {
   // with the opaque ids a start hands out today.
   test("legacy date ids and a new opaque id live side by side", async () => {
     await seedWithFiles({
-      "sessions/2026-08-19.md": sessionFile(
+      "sessions/2026-08-19": sessionFile(
         "2026-08-19",
         "started: 2026-08-19T18:00\nended: 2026-08-19T19:30\nscenes_played: []\n",
       ),
-      "sessions/2026-08-19-2.md": sessionFile(
+      "sessions/2026-08-19-2": sessionFile(
         "2026-08-19-2",
         "started: 2026-08-19T19:45\nended: 2026-08-19T20:30\nscenes_played: []\n",
       ),
     });
     // Both old files are readable under their own path…
-    expect(await fileStatus("sessions/2026-08-19.md")).toBe(200);
-    expect(await fileStatus("sessions/2026-08-19-2.md")).toBe(200);
+    expect(await fileStatus("sessions/2026-08-19")).toBe(200);
+    expect(await fileStatus("sessions/2026-08-19-2")).toBe(200);
     // …and the harvest's "last started" is the `-2` one, by `started`.
-    expect(await activePath(true)).toBe("sessions/2026-08-19-2.md");
+    expect(await activePath(true)).toBe("sessions/2026-08-19-2");
 
     // A start next to them gets an opaque id and wins on `started` (21:05).
     const fresh = await startSession();
@@ -691,21 +695,21 @@ describe("degraded session files never hijack the active session", () => {
     };
     expect(tree.sessions.slice(0, 3).map((s) => s.path)).toEqual([
       fresh,
-      "sessions/2026-08-19-2.md",
-      "sessions/2026-08-19.md",
+      "sessions/2026-08-19-2",
+      "sessions/2026-08-19",
     ]);
   });
 
   test("a blank `ended` means RUNNING and can be ended normally (finding 5)", async () => {
     await seedWithFiles({
-      "sessions/2026-08-19.md": sessionFile(
+      "sessions/2026-08-19": sessionFile(
         "2026-08-19",
         'started: 2026-08-19T20:00\nended: ""\nscenes_played: []\n',
       ),
     });
     const res = await app.request("/api/beispiel/session");
     expect(res.status).toBe(200);
-    expect(((await res.json()) as FileResponse).path).toBe("sessions/2026-08-19.md");
+    expect(((await res.json()) as FileResponse).path).toBe("sessions/2026-08-19");
     setNow(() => new Date(2026, 7, 19, 23, 50));
     const ended = await post("/api/beispiel/session/end");
     expect(ended.status).toBe(200);

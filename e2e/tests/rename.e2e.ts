@@ -12,9 +12,9 @@
 
 import { expect, test } from "../support/test";
 
-const NPC = "npcs/jorna.md";
-const RENAMED = "npcs/hafenmeisterin.md";
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
+const NPC = "npcs/jorna";
+const RENAMED = "npcs/hafenmeisterin";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
 
 test("rename with usage preview: count first, then the cascade", async ({ page, api }) => {
   await page.goto(`/beispiel/file/${NPC}`);
@@ -45,7 +45,7 @@ test("rename with usage preview: count first, then the cascade", async ({ page, 
   // …and which documents that means: those two plus her own, which moves.
   await expect(dialog).toContainText("betrifft 3 Einträge");
   await expect(dialog).toContainText(SCENE);
-  await expect(dialog).toContainText("npcs/fenn.md");
+  await expect(dialog).toContainText("npcs/fenn");
 
   // Nothing has been written yet: the preview is a dry run.
   expect(await api.exists(NPC)).toBe(true);
@@ -62,10 +62,10 @@ test("rename with usage preview: count first, then the cascade", async ({ page, 
   expect(await api.exists(RENAMED)).toBe(true);
   const scene = await api.file(SCENE);
   expect(scene.properties.npcs).toEqual(["hafenmeisterin"]);
-  expect(await api.raw("npcs/fenn.md")).toContain("- hafenmeisterin:");
+  expect(await api.raw("npcs/fenn")).toContain("- hafenmeisterin:");
   // The prose of the other scene still says "Jorna" — a mention is not a
   // reference (README).
-  expect(await api.raw("01-salzhafen/hafen/smuggler-captured.md")).toContain("Jorna");
+  expect(await api.raw("01-salzhafen/hafen/smuggler-captured")).toContain("Jorna");
 
   // The endpoint behind the preview agrees, for the new id: the rows moved,
   // and nothing points at the old one any more.

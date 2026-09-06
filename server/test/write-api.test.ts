@@ -11,7 +11,7 @@
 //     grows by one per write, and still a deliberately opaque guard token.
 //     "nothing was written" is now "the rev did not move".
 //   * A SCENE'S PATH SEGMENT IS ITS ID (store/paths.ts), so the reference
-//     scenes are addressed as `01-salzhafen/hafen/lighthouse-arrival.md` and
+//     scenes are addressed as `01-salzhafen/hafen/lighthouse-arrival` and
 //     `.../smuggler-captured.md` instead of by their former file names.
 //   * `raw` IS A DETERMINISTIC RENDERING (YAML block + body), not stored
 //     bytes. Byte assertions about `raw` are still meaningful — the rendering
@@ -134,7 +134,7 @@ afterEach(() => {
 });
 
 describe("PATCH /api/:campaign/properties", () => {
-  const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
+  const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
 
   test("happy path: only named keys change, key order stable, body untouched", async () => {
     const before = await getFile(SCENE);
@@ -231,8 +231,8 @@ describe("PATCH /api/:campaign/properties", () => {
   // a row always renders its properties (store/render.ts), so the case it
   // described has no counterpart. The 400 for the two properties-less kinds
   // below is what guards this corner now.
-  test("400 for inbox.md and glossary.md — lists of rows, not entities", async () => {
-    for (const rel of ["inbox.md", "glossary.md"]) {
+  test("400 for inbox and glossary — lists of rows, not entities", async () => {
+    for (const rel of ["inbox", "glossary"]) {
       const before = await getFile(rel);
       const res = await patchReq({ path: rel, rev: before.rev, patch: { status: "x" } });
       expect(res.status).toBe(400);
@@ -241,8 +241,8 @@ describe("PATCH /api/:campaign/properties", () => {
     }
   });
 
-  test("_campaign.md is patchable through the same endpoint (issue #17)", async () => {
-    const rel = "_campaign.md";
+  test("_campaign is patchable through the same endpoint (issue #17)", async () => {
+    const rel = "_campaign";
     const before = await getFile(rel);
     expect(before.kind).toBe("campaign");
     const after = await patchOk({
@@ -305,9 +305,11 @@ describe("PATCH /api/:campaign/properties", () => {
     expect(
       (await patchReq({ path: "../../etc/passwd.md", rev: 1, patch: {} })).status,
     ).toBe(400);
-    expect((await patchReq({ path: "notes.txt", rev: 1, patch: {} })).status).toBe(400);
+    // No extension rule any more (issue #79): an address the schema does not
+    // describe is simply not there.
+    expect((await patchReq({ path: "notes.txt", rev: 1, patch: {} })).status).toBe(404);
     expect(
-      (await patchReq({ path: "01-salzhafen/nope.md", rev: 1, patch: {} })).status,
+      (await patchReq({ path: "01-salzhafen/nope", rev: 1, patch: {} })).status,
     ).toBe(404);
     // A path naming the WRONG chapter for an existing scene id is a stale
     // link: 404, exactly as GET answers it (store/read.ts readByLocator).
@@ -326,7 +328,7 @@ describe("POST /api/:campaign/session/start", () => {
     // address and that it carries no calendar date.
     const id = String(file.properties.id);
     expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
-    expect(file.path).toBe(`sessions/${id}.md`);
+    expect(file.path).toBe(`sessions/${id}`);
     expect(file.properties.started).toBe("2026-08-19T21:05:00");
     expect(file.properties.scenes_played).toEqual([]);
     // The rendered skeleton is the one the format prescribes — the `## Log`
@@ -470,7 +472,7 @@ describe("POST /api/:campaign/log", () => {
       .run();
     setNow(() => new Date(2026, 0, 15, 23, 0));
     const file = await postOk("/api/beispiel/log", { text: "Nachtrag nach dem Cliffhanger" });
-    expect(file.path).toBe("sessions/2026-01-15.md");
+    expect(file.path).toBe("sessions/2026-01-15");
     expect(file.body).toContain(
       "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread\n- 23:00 Nachtrag nach dem Cliffhanger\n\n## Threads\n",
     );
@@ -599,24 +601,24 @@ describe("POST /api/:campaign/session/end", () => {
 
 describe("POST /api/:campaign/inbox", () => {
   test("appends `- text` to the existing inbox", async () => {
-    const before = await getFile("inbox.md");
+    const before = await getFile("inbox");
     const after = await postOk("/api/beispiel/inbox", { text: "Schmied beobachten #thread" });
     // Append-only: the existing rendering is a PREFIX of the new one.
     expect(after.body.startsWith(before.body.replace(/\n$/, ""))).toBe(true);
     expect(after.body.endsWith("- Schmied beobachten #thread\n")).toBe(true);
     // visible in a subsequent GET with the fresh token
-    const file = await getFile("inbox.md");
+    const file = await getFile("inbox");
     expect(file.body).toBe(after.body);
     expect(file.rev).toBe(after.rev);
   });
 
   test("creates the inbox with a # Inbox heading when there is none", async () => {
-    // The "missing inbox.md" case of the file version: a campaign whose
+    // The "missing inbox" case of the file version: a campaign whose
     // migration produced no inbox rows at all. It is an EMPTY document, not
     // a missing one (#70) — GET answers 200 — and the first entry brings the
     // heading the format opened the file with.
     await withFreshCampaign(async () => {
-      expect(await fileStatus("inbox.md", FRESH)).toBe(200);
+      expect(await fileStatus("inbox", FRESH)).toBe(200);
       const res = await postJson(`/api/${FRESH}/inbox`, { text: "Erste Idee" });
       expect(res.status).toBe(200);
       const file = (await res.json()) as FileResponse;
@@ -638,7 +640,7 @@ describe("POST /api/:campaign/inbox", () => {
 
 // The metadata dialog of issue #34 writes name/description through PATCH
 // /properties — the ONE write path since issue #62. The endpoint that used to
-// close the "there is no `_campaign.md` yet" gap (POST /campaign-meta) is gone
+// close the "there is no `_campaign` yet" gap (POST /campaign-meta) is gone
 // with that gap: after the cutover the campaign ROW always exists, GET /file
 // always answers with a document and a guard token, and naming a campaign that
 // has no name is an ordinary patch.
@@ -647,11 +649,11 @@ describe("naming a campaign that has none (issue #62)", () => {
     await withFreshCampaign(async () => {
       // Unnamed: the document exists and shows the ID as its display name,
       // which is exactly what GET /campaigns says too (both synthesize).
-      const before = await getFile("_campaign.md", FRESH);
+      const before = await getFile("_campaign", FRESH);
       expect(before.properties).toEqual({ id: FRESH, name: FRESH });
 
       const res = await patchJson(`/api/${FRESH}/properties`, {
-        path: "_campaign.md",
+        path: "_campaign",
         rev: before.rev,
         patch: {
           name: "Die Aschekönige",
@@ -660,7 +662,7 @@ describe("naming a campaign that has none (issue #62)", () => {
       });
       expect(res.status).toBe(200);
       const file = (await res.json()) as FileResponse;
-      expect(file.path).toBe("_campaign.md");
+      expect(file.path).toBe("_campaign");
       expect(file.kind).toBe("campaign");
       expect(file.properties.name).toBe("Die Aschekönige");
       // The id is the CAMPAIGN key — never client input.
@@ -681,9 +683,9 @@ describe("naming a campaign that has none (issue #62)", () => {
 
   test("a blank description is DELETED with null, not written as an empty key", async () => {
     await withFreshCampaign(async () => {
-      const before = await getFile("_campaign.md", FRESH);
+      const before = await getFile("_campaign", FRESH);
       const res = await patchJson(`/api/${FRESH}/properties`, {
-        path: "_campaign.md",
+        path: "_campaign",
         rev: before.rev,
         patch: { name: "Nur ein Name", description: null },
       });
@@ -695,14 +697,14 @@ describe("naming a campaign that has none (issue #62)", () => {
   });
 
   test("a stale token is a 409 — the existing name is never touched", async () => {
-    const before = await getFile("_campaign.md");
+    const before = await getFile("_campaign");
     const res = await patchJson("/api/beispiel/properties", {
-      path: "_campaign.md",
+      path: "_campaign",
       rev: before.rev - 1,
       patch: { name: "Überschrieben" },
     });
     expect(res.status).toBe(409);
-    expect(await getFile("_campaign.md")).toEqual(before);
+    expect(await getFile("_campaign")).toEqual(before);
   });
 
   test("the create endpoint is gone — 404, no route", async () => {
@@ -715,8 +717,8 @@ describe("naming a campaign that has none (issue #62)", () => {
 // properties of the row comes back unchanged, key for key and value for
 // value ("the properties block stays byte-identical" of the file version).
 describe("PUT /api/:campaign/file", () => {
-  const REFERENCE = "01-salzhafen/hafen/smuggler-captured.md";
-  const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
+  const REFERENCE = "01-salzhafen/hafen/smuggler-captured";
+  const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
 
   /** The rendered prefix up to and including the YAML block's closing `---\n`. */
   function fmBlock(raw: string): string {
@@ -784,15 +786,15 @@ describe("PUT /api/:campaign/file", () => {
     expect(after.raw).toBe(fmBlock(before.raw));
   });
 
-  test("glossary.md: the edited markdown is parsed back into rows", async () => {
+  test("glossary: the edited markdown is parsed back into rows", async () => {
     // NEW with the cutover (planning F6): the glossary is a TABLE, so a body
     // write is the one PUT that decomposes what it is given — through the same
     // parser the migration used, so a hand-edited file and a DM's edit in the
     // app produce the same rows.
-    const before = await getFile("glossary.md");
+    const before = await getFile("glossary");
     expect(before.body).toContain("- lighthouse keeper → Leuchtturmwärter");
     const body = "\n- tide pool → Gezeitentümpel\n- harbour master → Hafenmeisterin\n";
-    const after = await putOk({ path: "glossary.md", rev: before.rev, body });
+    const after = await putOk({ path: "glossary", rev: before.rev, body });
     expect(after.body).toBe(body);
     // …and the structured endpoint sees the same list, in the same order.
     const glossary = (await (await app.request("/api/beispiel/glossary")).json()) as {
@@ -832,7 +834,7 @@ describe("PUT /api/:campaign/file", () => {
     // DECISIONS #4: they grow by ROWS through POST /log and POST /inbox; a
     // free-hand body rewrite is not a maintenance action, and the rule lives
     // in the endpoint, not only in the UI that hides the button.
-    for (const rel of ["sessions/2026-01-15.md", "inbox.md"]) {
+    for (const rel of ["sessions/2026-01-15", "inbox"]) {
       const before = await getFile(rel);
       const res = await putFile({ path: rel, rev: before.rev, body: "\nAlles neu.\n" });
       expect(res.status).toBe(400);
@@ -869,12 +871,13 @@ describe("PUT /api/:campaign/file", () => {
     expect((await putFile({ path: "../../etc/passwd.md", rev: 1, body: "x" })).status).toBe(
       400,
     );
-    expect((await putFile({ path: "notes.txt", rev: 1, body: "x" })).status).toBe(400);
-    expect((await putFile({ path: "01-salzhafen/nope.md", rev: 1, body: "x" })).status).toBe(
+    // No extension rule any more (issue #79) — 404, not 400.
+    expect((await putFile({ path: "notes.txt", rev: 1, body: "x" })).status).toBe(404);
+    expect((await putFile({ path: "01-salzhafen/nope", rev: 1, body: "x" })).status).toBe(
       404,
     );
     expect(
-      (await putFile({ path: "01-salzhafen/hafen/../hafen/x.md", rev: 1, body: "x" })).status,
+      (await putFile({ path: "01-salzhafen/hafen/../hafen/x", rev: 1, body: "x" })).status,
     ).toBe(400);
     // A stale link — right scene id, wrong chapter — is 404 on write just as
     // it is on read (store/read.ts readByLocator).

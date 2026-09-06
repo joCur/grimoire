@@ -301,7 +301,7 @@ describe("jobErrorBody", () => {
   test("hands back the error body of a failed job unchanged", () => {
     const body = {
       error: "generation failed mechanical validation after retries",
-      validationErrors: ['scene "x.md": "status" must be "draft"'],
+      validationErrors: ['scene "x": "status" must be "draft"'],
       rawReply: "…",
       usage: { inputTokens: 1, outputTokens: 2, attempts: 2 },
     };

@@ -79,7 +79,7 @@ export interface LocationProperties {
 }
 
 /**
- * Properties of a campaign's `_campaign.md` (README, "Entität: Kampagne
+ * Properties of a campaign's `_campaign` (README, "Entität: Kampagne
  * (optional)"). The file is optional — without it the UI shows the directory
  * name. `id` is the directory name, `name` the display name; further keys
  * (e.g. `system`) are preserved verbatim.
@@ -92,7 +92,7 @@ export interface CampaignProperties {
   [key: string]: unknown;
 }
 
-/** Properties of a chapter's `_chapter.md`. */
+/** Properties of a chapter's `_chapter`. */
 export interface ChapterProperties {
   id: string;
   title: string;
@@ -101,7 +101,7 @@ export interface ChapterProperties {
 }
 
 /**
- * Session files are app-managed (`sessions/<id>.md`, where `<id>` is an
+ * Session files are app-managed (`sessions/<id>`, where `<id>` is an
  * opaque random string since issue #58 — everything displayable about a
  * session comes from `started`).
  * Timestamps are strings — YAML would otherwise parse bare ISO dates as
@@ -158,7 +158,7 @@ export interface CampaignSummary {
   /** The campaign's id — the key in every URL. */
   id: string;
   /**
-   * Id of the campaign's newest session (`sessions/<id>.md` without the
+   * Id of the campaign's newest session (`sessions/<id>` without the
    * extension). OPAQUE since the PO decision on issue #58: an address, not a
    * date, and NOT comparable — order by `lastSessionStarted` instead. Absent
    * when the campaign has no session.
@@ -176,7 +176,7 @@ export interface CampaignSummary {
   /**
    * Display name (issue #17). Always present since issue #62: a campaign
    * without an authored name is shown under its ID, exactly as the campaign
-   * DOCUMENT renders it (`GET /file?path=_campaign.md`) — the two endpoints
+   * DOCUMENT renders it (`GET /file?path=_campaign`) — the two endpoints
    * used to disagree. Optional in the type so an older payload still parses.
    */
   name?: string;
@@ -209,10 +209,10 @@ export interface SceneGroup {
 export interface ChapterNode {
   /** Directory name, e.g. "01-salzhafen". */
   id: string;
-  /** From _chapter.md; falls back to the directory name. */
+  /** From _chapter; falls back to the directory name. */
   title: string;
   status?: string;
-  /** Path of _chapter.md, if present. */
+  /** Path of _chapter, if present. */
   path?: string;
   groups: SceneGroup[];
 }
@@ -308,7 +308,7 @@ export interface SearchResponse {
  * writing happens only via POST /api/:campaign/generate/apply.
  */
 export interface GeneratedSceneDraft {
-  /** Campaign-relative target path, e.g. "01-salzhafen/hafen/captured.md". */
+  /** Campaign-relative target path, e.g. "01-salzhafen/hafen/captured". */
   path: string;
   /** The complete markdown file including the properties block. */
   markdown: string;
@@ -319,7 +319,7 @@ export interface GeneratedSceneDraft {
 /**
  * A stub for an npc/location the source text mentions but the campaign does
  * not know yet. The review UI accepts/rejects stubs individually; the target
- * path on apply is derived as `npcs/<id>.md` / `locations/<id>.md`.
+ * path on apply is derived as `npcs/<id>` / `locations/<id>`.
  */
 export interface GeneratedStub {
   kind: "npc" | "location";
@@ -360,12 +360,12 @@ export interface GenerateResult {
 /**
  * One generated NPC file draft (issue #21). Same "nothing is on disk yet"
  * rule as a scene draft: writing happens only via POST
- * /api/:campaign/generate/apply. The path is always `npcs/<id>.md` and the
+ * /api/:campaign/generate/apply. The path is always `npcs/<id>` and the
  * properties id matches that filename — the server validates both before
  * the draft ever reaches the review.
  */
 export interface GeneratedNpcDraft {
-  /** Campaign-relative target path, always "npcs/<kebab-id>.md". */
+  /** Campaign-relative target path, always "npcs/<kebab-id>". */
   path: string;
   /** The complete markdown file including the properties block. */
   markdown: string;

@@ -11,7 +11,7 @@ import { isStaleFileError, withRev, writeWithRev } from "./write-with-rev";
 
 function fileAt(rev: number): FileResponse {
   return {
-    path: "01-salzhafen/hafen/ankunft-leuchtturm.md",
+    path: "01-salzhafen/hafen/ankunft-leuchtturm",
     kind: "scene",
     properties: { id: "arrival", status: "ready" },
     body: "Text",

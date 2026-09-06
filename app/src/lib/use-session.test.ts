@@ -30,8 +30,8 @@ describe("sessionStartConflict", () => {
 
 describe("conflictPath", () => {
   test("returns the session the conflict points at, or undefined", () => {
-    expect(conflictPath(conflict({ path: "sessions/2026-08-18.md" }))).toBe(
-      "sessions/2026-08-18.md",
+    expect(conflictPath(conflict({ path: "sessions/2026-08-18" }))).toBe(
+      "sessions/2026-08-18",
     );
     expect(conflictPath(conflict({ path: 42 }))).toBeUndefined();
     expect(conflictPath(new Error("nope"))).toBeUndefined();

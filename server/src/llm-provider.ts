@@ -19,7 +19,7 @@
 export interface GenerateRequest {
   systemPrompt: string; // generator/system-prompt.md (npc run: npc-system-prompt.md)
   fewShotTarget: string; // generator/example-output.md (npc run: npc-example-output.md)
-  glossary: string; // <campaign>/glossary.md body ("" when missing)
+  glossary: string; // <campaign>/glossary body ("" when missing)
   context: {
     /** Target chapter of a scene run; absent for an NPC run (issue #21). */
     chapter?: string;

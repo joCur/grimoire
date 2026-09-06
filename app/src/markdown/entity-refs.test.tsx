@@ -21,7 +21,7 @@ const TREE: CampaignTree = {
           slug: "hafen",
           scenes: [
             {
-              path: "01-salzhafen/hafen/lighthouse-arrival.md",
+              path: "01-salzhafen/hafen/lighthouse-arrival",
               id: "lighthouse-arrival",
               title: "Ankunft am Leuchtturm",
               type: "planned",
@@ -31,7 +31,7 @@ const TREE: CampaignTree = {
             },
             // Same slug as the npc below — the collision case.
             {
-              path: "01-salzhafen/hafen/jorna.md",
+              path: "01-salzhafen/hafen/jorna",
               id: "jorna",
               title: "Szene namens jorna",
               type: "planned",
@@ -45,14 +45,14 @@ const TREE: CampaignTree = {
     },
   ],
   npcs: [
-    { path: "npcs/jorna.md", id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
+    { path: "npcs/jorna", id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
     // No display name at all — the id is the honest fallback.
-    { path: "npcs/namenlos.md", id: "namenlos", name: "", status: "alive" },
+    { path: "npcs/namenlos", id: "namenlos", name: "", status: "alive" },
   ],
   locations: [
-    { path: "locations/leuchtturm.md", id: "leuchtturm", name: "Der Leuchtturm" },
+    { path: "locations/leuchtturm", id: "leuchtturm", name: "Der Leuchtturm" },
     // Collides with the scene id above; the location must win over a scene.
-    { path: "locations/lighthouse-arrival.md", id: "lighthouse-arrival", name: "Ort-Dublette" },
+    { path: "locations/lighthouse-arrival", id: "lighthouse-arrival", name: "Ort-Dublette" },
   ],
   sessions: [],
 };
@@ -65,7 +65,7 @@ describe("entityRefIndex", () => {
       kind: "location",
       slug: "leuchtturm",
       name: "Der Leuchtturm",
-      path: "locations/leuchtturm.md",
+      path: "locations/leuchtturm",
     });
   });
 
@@ -81,7 +81,7 @@ describe("entityRefIndex", () => {
       kind: "scene",
       slug: "lighthouse-arrival",
       name: "Ankunft am Leuchtturm",
-      path: "01-salzhafen/hafen/lighthouse-arrival.md",
+      path: "01-salzhafen/hafen/lighthouse-arrival",
     });
   });
 
@@ -106,7 +106,7 @@ describe("rendered references", () => {
 
   test("resolved: the current name as a link into the entity view", () => {
     const html = render("Am Kai wartet [[jorna]]s Boot.");
-    expect(html).toContain('href="/beispiel/file/npcs/jorna.md"');
+    expect(html).toContain('href="/beispiel/file/npcs/jorna"');
     expect(html).toContain("Hafenmeisterin Jorna");
     // The suffix stays outside the reference.
     expect(html).toContain("s Boot.");
@@ -139,7 +139,7 @@ describe("rendered references", () => {
     expect(summary).not.toContain("<a ");
     expect(summary).not.toContain("<button");
     // The section BODY still gets the interactive reference.
-    expect(html).toContain('href="/beispiel/file/npcs/jorna.md"');
+    expect(html).toContain('href="/beispiel/file/npcs/jorna"');
   });
 
   test("a reference in inline code is neither resolved nor linked", () => {

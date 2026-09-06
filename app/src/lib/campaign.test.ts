@@ -86,7 +86,7 @@ describe("pickLastCampaign", () => {
 });
 
 const scene = (id: string, title: string): SceneSummary => ({
-  path: `01-salzhafen/hafen/${id}.md`,
+  path: `01-salzhafen/hafen/${id}`,
   id,
   title,
   type: "planned",
@@ -110,7 +110,7 @@ const tree: CampaignTree = {
   ],
   npcs: [],
   locations: [
-    { path: "locations/leuchtturm.md", id: "leuchtturm", name: "Der Leuchtturm von Salzhafen" },
+    { path: "locations/leuchtturm", id: "leuchtturm", name: "Der Leuchtturm von Salzhafen" },
   ],
   sessions: [],
 };

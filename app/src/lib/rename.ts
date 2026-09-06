@@ -24,10 +24,10 @@ export interface RenameTarget {
 /** Reserved campaign directories; the server refuses them as an id. */
 const RESERVED_IDS = new Set(["npcs", "locations", "sessions"]);
 
-/** File name without directories and `.md` — the id a file degrades to. */
+/** Last address segment — the id a document degrades to. */
 function fileStem(path: string): string {
   const base = path.slice(path.lastIndexOf("/") + 1);
-  return base.endsWith(".md") ? base.slice(0, -3) : base;
+  return base;
 }
 
 /**
@@ -35,7 +35,7 @@ function fileStem(path: string): string {
  * file has no renameable id: sessions (their id is the date), the campaign
  * file, inbox, glossary, and anything unknown.
  *
- * For a chapter the id is the FIRST PATH SEGMENT of its `_chapter.md` (the
+ * For a chapter the id is the FIRST PATH SEGMENT of its `_chapter` (the
  * former directory name, and the chapter row's id). For every other kind it
  * is the properties id (which the parser already falls back to the file
  * stem).
@@ -47,7 +47,7 @@ export function renameTargetFor(file: {
 }): RenameTarget | undefined {
   if (file.kind === "chapter") {
     const dir = file.path.slice(0, file.path.lastIndexOf("/"));
-    // A `_chapter.md` always lives INSIDE its chapter directory; anything
+    // A `_chapter` always lives INSIDE its chapter directory; anything
     // else is not a chapter we can rename.
     return dir === "" || dir.includes("/") ? undefined : { kind: "chapter", oldId: dir };
   }
@@ -142,7 +142,7 @@ export function usageTotalLabel(total: number): string {
  * moved along with the rename.
  *
  * The server names `from`/`to` in DOCUMENTS for every kind since the SQLite
- * cutover (#57) — a chapter rename reports `<id>/_chapter.md`, not the bare
+ * cutover (#57) — a chapter rename reports `<id>/_chapter`, not the bare
  * directory — so the file on screen is usually `from` itself. The prefix
  * branch stays for the case where the view sits on something UNDER the
  * renamed address; it costs nothing and is the safe direction.
