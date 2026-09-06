@@ -28,7 +28,7 @@ Möwen, Salz und Teer; an der Kaimauer liegen drei Kutter.
 const RUNNING_SESSION = (() => {
   const id = todaySessionId();
   return {
-    path: `sessions/${id}.md`,
+    path: `sessions/${id}`,
     content: `---\nid: ${id}\nstarted: ${id}T19:30\nscenes_played: []\n---\n\n## Log\n`,
   };
 })();
@@ -41,7 +41,7 @@ test("\"/\" redirects into the campaign and the pool shows chapter and scenes", 
   // The redirect target comes from the server (lastSession per campaign).
   await expect(page).toHaveURL(/\/beispiel$/);
 
-  // Campaign header from _campaign.md (issue #17).
+  // Campaign header from _campaign (issue #17).
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
@@ -57,13 +57,13 @@ test("\"/\" redirects into the campaign and the pool shows chapter and scenes", 
   await expect(chapter).toBeVisible();
   await expect(chapter).toContainText("aktiv");
   await expect(chapter).toContainText("2 Szenen");
-  // Open by default (status: active) — the goal comes from _chapter.md.
+  // Open by default (status: active) — the goal comes from _chapter.
   await expect(
     page.getByText("Ziel: Herausfinden, warum das Leuchtfeuer seit drei Nächten erloschen ist."),
   ).toBeVisible();
 
   // Planned scene in its location group, with the status control's label.
-  // The fixture has NO `locations/hafen.md` — group directories are a loose
+  // The fixture has NO `locations/hafen` — group directories are a loose
   // convention, so the header shows the raw slug (issue #34, fallback).
   await expect(page.getByText("hafen", { exact: true })).toBeVisible();
   const planned = page.getByRole("link", { name: /Ankunft am Leuchtturm/ });
@@ -83,11 +83,11 @@ test("\"/\" redirects into the campaign and the pool shows chapter and scenes", 
 
   // Opening a row is the pool's job — the reading view takes over from here.
   await planned.click();
-  await expect(page).toHaveURL(/\/beispiel\/file\/01-salzhafen\/hafen\/lighthouse-arrival\.md$/);
+  await expect(page).toHaveURL(/\/beispiel\/file\/01-salzhafen\/hafen\/lighthouse-arrival$/);
 });
 
 test.describe("with a location for the group directory", () => {
-  test.use({ seed: { files: { "locations/hafen.md": HAFEN_LOCATION } } });
+  test.use({ seed: { files: { "locations/hafen": HAFEN_LOCATION } } });
 
   test("a group header shows the location NAME once the location file exists", async ({
     page,
@@ -166,7 +166,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   // --- file views: same chrome, section marking follows the entity ----------
   // A scene belongs to Kapitel; its hierarchy lives in the page's context
   // line, not in the topbar.
-  await page.goto("/beispiel/file/01-salzhafen/hafen/lighthouse-arrival.md");
+  await page.goto("/beispiel/file/01-salzhafen/hafen/lighthouse-arrival");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await expect(current).toHaveText("Kapitel");
   await assertChromeIsStable(onPool);
@@ -174,7 +174,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   // An NPC belongs to NPCs — whichever chapter happens to mention it. The old
   // breadcrumb claimed a chapter path here, which was plain misleading for an
   // NPC opened from the NPC list.
-  await page.goto("/beispiel/file/npcs/fenn.md");
+  await page.goto("/beispiel/file/npcs/fenn");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fenn");
   await expect(current).toHaveText("NPCs");
   await assertChromeIsStable(onPool);
@@ -280,31 +280,31 @@ test("editing the campaign metadata updates header, switcher and the file", asyn
     page.getByRole("button", { name: "Kampagne: Salzhafen, zweite Fassung" }),
   ).toBeVisible();
 
-  // On disk: the frontmatter changed, the body did not.
-  const raw = await api.raw("_campaign.md");
+  // On disk: the properties changed, the body did not.
+  const raw = await api.raw("_campaign");
   expect(raw).toContain("name: Salzhafen, zweite Fassung");
   expect(raw).toContain("description: Jetzt mit mehr Schmuggel und weniger Möwen.");
   expect(raw).toContain("Kampagnenweite Notizen:");
   expect(raw).not.toContain("Eine Küstenkampagne");
 });
 
-test.describe("imported without a _campaign.md", () => {
-  test.use({ seed: { remove: ["_campaign.md"] } });
+test.describe("imported without a _campaign", () => {
+  test.use({ seed: { remove: ["_campaign"] } });
 
-  test("a campaign imported without _campaign.md still names itself and is editable", async ({
+  test("a campaign imported without _campaign still names itself and is editable", async ({
     page,
     api,
   }) => {
-    // Before the cutover this was the one gap PATCH /frontmatter could not
-    // close (no file, hence no mtime) and the dialog offered to CREATE the
+    // Before the cutover this was the one gap PATCH /properties could not
+    // close (no file, hence no rev) and the dialog offered to CREATE the
     // file. Since issue #57 the import gives every campaign directory a row,
     // whose name falls back to the id — so there is nothing to create, and the
     // ordinary patch path covers this case too.
     await page.goto("/beispiel");
     // Without metadata the header degrades to the directory name.
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("beispiel");
-    const imported = await api.file("_campaign.md");
-    expect(imported.frontmatter).toEqual({ id: "beispiel", name: "beispiel" });
+    const imported = await api.file("_campaign");
+    expect(imported.properties).toEqual({ id: "beispiel", name: "beispiel" });
     expect(imported.body).toBe("");
 
     await page.getByRole("button", { name: "Bearbeiten" }).click();
@@ -318,7 +318,7 @@ test.describe("imported without a _campaign.md", () => {
 
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Salzhafen von vorn");
     // The id stays the DIRECTORY name — the server sets it, never the client.
-    const raw = await api.raw("_campaign.md");
+    const raw = await api.raw("_campaign");
     expect(raw).toContain("id: beispiel");
     expect(raw).toContain("name: Salzhafen von vorn");
     expect(raw).toContain("description: Frisch angelegt aus der App.");
@@ -326,7 +326,7 @@ test.describe("imported without a _campaign.md", () => {
 });
 
 test("the campaign reading view carries the same edit action", async ({ page, api }) => {
-  await page.goto("/beispiel/file/_campaign.md");
+  await page.goto("/beispiel/file/_campaign");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
@@ -337,7 +337,7 @@ test("the campaign reading view carries the same edit action", async ({ page, ap
   await dialog.getByRole("button", { name: "Speichern" }).click();
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Aus der Leseansicht");
-  await expect.poll(() => api.raw("_campaign.md")).toContain("name: Aus der Leseansicht");
+  await expect.poll(() => api.raw("_campaign")).toContain("name: Aus der Leseansicht");
 });
 // The dialog's 409 path is the SAME write flow as the status control's
 // (lib/campaign-meta.ts mirrors lib/scene-status.ts: conflict -> inline

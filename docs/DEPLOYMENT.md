@@ -7,9 +7,10 @@ App-Sache — Standard ist Tailscale (siehe DECISIONS #3 und #5).
 
 > **Seit der SQLite-Umstellung (ADR #13):** die Kampagnen-Wahrheit ist **eine
 > SQLite-Datei** — `GRIMOIRE_DATA/grimoire.db`, Default `/data` im Container.
-> `CAMPAIGN_ROOT` ist nur noch die **Quelle der Erstmigration**: beim ersten
-> Start mit leerer Datenbank werden die Markdown-Kampagnen einmal übernommen,
-> danach fasst der Server den Ordner nie wieder an. Zu sichern ist damit das
+> Das ist die **einzige** Datenquelle: seit Issue #79 importiert der Server
+> beim Start nichts mehr, eine frische Instanz startet **leer** (der
+> Kaltstart-Weg kommt mit #56). Markdown einlesen ist ausschließlich das
+> Dev-/E2E-Werkzeug `grimoire seed` (Abschnitt 2b). Zu sichern ist das
 > `GRIMOIRE_DATA`-Volume — Abschnitt 2a.
 
 ## 1. Bauen und starten
@@ -28,7 +29,6 @@ docker run -d --name grimoire \
   --restart unless-stopped \
   -p 127.0.0.1:3000:3000 \
   -v /srv/grimoire/data:/data \
-  -v /srv/grimoire/campaigns:/campaigns \
   -e ANTHROPIC_API_KEY=sk-ant-… \
   grimoire
 ```
@@ -36,28 +36,24 @@ docker run -d --name grimoire \
 - `-p 127.0.0.1:3000:3000` bindet den Port bewusst nur auf Loopback; nach
   außen geht es über Tailscale (Abschnitt 3).
 - `/data` ist der **Zustand**: dort liegt `grimoire.db` (plus `-wal`/`-shm`).
-  Das ist das Volume, das gesichert wird (Abschnitt 2a).
-- `/campaigns` enthält **direkt die Kampagnen-Ordner**, also
-  `/campaigns/<kampagne>/…` — dieselbe Struktur wie `examples/` (README.md).
-  Es wird **nur beim ersten Start** gelesen (Erstmigration, Abschnitt 2b) und
-  danach nie wieder; nach der Migration kann der Mount auch wegfallen.
+  Das ist das Volume, das gesichert wird (Abschnitt 2a). Es ist der **einzige**
+  Datenmount — einen Kampagnen-Ordner liest der Server nicht mehr.
 - Schreibrechte: der Container läuft als `uid 1000` (`bun`). Bei einem
   Bind-Mount einmalig `sudo chown -R 1000:1000 /srv/grimoire/data`, sonst
-  kann die Datenbank nicht angelegt werden. `/campaigns` braucht nur
-  **Leserechte**.
+  kann die Datenbank nicht angelegt werden.
 
-**Ohne Volume** startet der Container nicht leer: das Image bringt
-`examples/` als Demo-Kampagne unter `/campaigns` mit, die beim ersten Start in
-eine (dann container-interne, flüchtige) Datenbank übernommen wird.
-Praktisch für einen Smoke-Test:
+**Eine frische Instanz startet leer** (Issue #79): der Server importiert beim
+Start nichts. Für einen Smoke-Test mit Inhalt einmal die Beispielkampagne aus
+dem Image einlesen — das Dev-Werkzeug `grimoire seed` (Abschnitt 2b):
 
 ```bash
-docker run --rm -p 3000:3000 grimoire   # zeigt die Beispielkampagne
+docker run --rm -p 3000:3000 grimoire   # leere Instanz
+docker run --rm -v /tmp/probe:/data ghcr.io/jocur/grimoire:latest \
+  bun run server/src/cli.ts seed /examples   # Beispielkampagne einlesen
 ```
 
 **Update:** neu bauen, Container ersetzen (`docker rm -f grimoire` + `run`).
-Der Container selbst hat keinen Zustand — der steht im `/data`-Volume, und
-ein Start auf einer schon migrierten Datenbank ist ein No-op.
+Der Container selbst hat keinen Zustand — der steht im `/data`-Volume.
 
 ### Alternative: fertiges Image aus GHCR ziehen
 
@@ -80,7 +76,7 @@ docker pull ghcr.io/jocur/grimoire:v0.1.0
 docker run -d --name grimoire \
   --restart unless-stopped \
   -p 127.0.0.1:3000:3000 \
-  -v /srv/grimoire/campaigns:/campaigns \
+  -v /srv/grimoire/data:/data \
   --env-file /srv/grimoire/.env \
   ghcr.io/jocur/grimoire:v0.1.0
 ```
@@ -150,7 +146,6 @@ Releases bleiben in GHCR liegen.
 | Variable            | Default      | Bedeutung                                                     |
 | ------------------- | ------------ | ------------------------------------------------------------- |
 | `GRIMOIRE_DATA`     | `/data` (im Image; sonst `./data` neben dem `server/`-Paket) | Verzeichnis der SQLite-Datenbank `grimoire.db` — **der Zustand des Deployments** (Abschnitt 2a) |
-| `CAMPAIGN_ROOT`     | `/campaigns` | Ordner mit den Markdown-Kampagnen. Nur **Quelle der Erstmigration** (Abschnitt 2b) — im laufenden Betrieb ungenutzt |
 | `PORT`              | `3000`       | HTTP-Port im Container                                        |
 | `APP_DIST`          | `../app/dist` (relativ zum `server/`-Paket) | Pfad des Frontend-Builds; im Image bereits richtig |
 | `GRIMOIRE_BUILD`    | `dev`        | Build-Id; als Build-Arg in Bundle **und** Server eingebrannt — bei GHCR-Images der Release-Tag (`v0.1.0`), bei lokalen Builds das, was man als `--build-arg` mitgibt (sonst `dev`) |
@@ -199,53 +194,45 @@ Ein `cp grimoire.db` im laufenden Betrieb ist **kein** Backup — nimm `VACUUM
 INTO` oder stoppe den Container. Der Wiederherstellungsweg ist derselbe
 rückwärts: Container stoppen, Datei(en) zurücklegen, Container starten.
 
-Zusätzliche Beruhigung für den Umstieg: der ursprüngliche Markdown-Baum wird
-von der Migration **nie gelöscht, verschoben oder markiert** — er bleibt als
-lesbarer Vor-Migrations-Stand liegen (Planung #52, F-neu-1).
+## 2b. `grimoire seed` — Markdown einlesen (Dev-/E2E-Werkzeug)
 
-## 2b. Erstmigration (Markdown → Datenbank)
+Der Produktivpfad importiert **nichts**: beim Start werden Datenbank und
+Schema-Migrationen angelegt, sonst passiert nichts (Issue #79). Eine frische
+Instanz ist leer.
 
-Beim Start prüft der Server die Datenbank und migriert **nur dann**, wenn sie
-noch leer bzw. unmarkiert ist:
-
-1. Datenbank öffnen/anlegen, Schema-Migrationen laufen lassen.
-2. Ist `meta['migrated_at']` gesetzt **oder** enthält die Datenbank schon
-   Kampagnen? → fertig, `CAMPAIGN_ROOT` wird gar nicht gelesen.
-3. Sonst: jede Kampagne aus `CAMPAIGN_ROOT` übernehmen — **eine Transaktion
-   pro Kampagne**, also entweder vollständig oder nicht. Ein Lauf, der
-   zwischen zwei Kampagnen abbricht, wird beim nächsten Start fortgesetzt.
-
-Was der Importer nicht in Zeilen übersetzen konnte, geht **nicht verloren**:
-die Datei liegt wörtlich in `unknown_files`, und für jeden Vorfall gibt es
-eine Zeile in `migration_report` — abrufbar über
-`GET /api/<kampagne>/migration-report` und in der App als leiser,
-zugeklappter Hinweis auf der Kampagnenseite. **Ein leerer Report ist das
-Erfolgskriterium eines saubereren Imports.**
-
-**Empfohlener Ablauf für eine echte Kampagne** (Planung #52, Risiko R3):
+Markdown-Kampagnen in eine Datenbank einzulesen ist ein **eigenes Kommando**,
+gedacht für Entwicklung, die E2E-Suite und einmalige Übernahmen:
 
 ```bash
-# 1. Probelauf auf einer KOPIE, in ein leeres Datenverzeichnis:
+GRIMOIRE_DATA=/srv/grimoire/data bun run server/src/cli.ts seed /pfad/zum/baum
+```
+
+- Der Baum enthält **direkt die Kampagnen-Ordner** (`<baum>/<kampagne>/…`) —
+  dieselbe Struktur wie `examples/` (README.md); ohne Argument ist `examples/`
+  der Default.
+- **Eine Transaktion pro Kampagne**, also entweder vollständig oder nicht. Ein
+  Lauf, der zwischen zwei Kampagnen abbricht, wird beim nächsten Lauf
+  fortgesetzt.
+- Der Befehl **überschreibt nie**: eine Datenbank mit Inhalt bleibt
+  unangetastet (`--force` existiert nur für Wegwerf-Datenbanken). Der
+  Markdown-Baum selbst wird nur gelesen.
+- Was er nicht in Zeilen übersetzen konnte, geht **nicht verloren**: die Datei
+  liegt wörtlich in `unknown_files`, und jeder Vorfall wird als Zeile in
+  `migration_report` festgehalten **und auf stdout gedruckt** — das ist der
+  Report. **Keine Zeile = sauberer Import.** (Ein API-Endpoint dafür gibt es
+  seit #79 nicht mehr: der Report gehört dem Werkzeug.)
+
+Ein Probelauf auf einer Kopie, in ein leeres Datenverzeichnis, ist damit
+billig:
+
+```bash
 mkdir -p /tmp/grimoire-probe
 docker run --rm \
   -v /tmp/grimoire-probe:/data \
   -v /srv/grimoire/campaigns:/campaigns:ro \
   ghcr.io/jocur/grimoire:v0.1.0 \
   bun run server/src/cli.ts seed /campaigns
-
-# 2. Report lesen — der seed-Befehl druckt jede Degradation dieses Laufs.
-#    Nichts? Dann ist der Import sauber.
-# 3. Erst danach den echten Container mit dem echten /data-Volume starten.
 ```
-
-`grimoire seed [dir]` führt **denselben** Migrationscode aus wie der Boot —
-es gibt keinen zweiten Importer, der auseinanderlaufen könnte. Auch er
-überschreibt nie: eine Datenbank mit Inhalt bleibt unangetastet (`--force`
-existiert nur für Wegwerf-Datenbanken).
-
-**Nach der Migration** ist `CAMPAIGN_ROOT` überflüssig. Der Mount kann
-bleiben (kostet nichts, ist der Vor-Migrations-Stand) oder wegfallen — der
-Server liest ihn nicht mehr.
 
 ### Generator (LLM-Provider)
 
@@ -377,15 +364,15 @@ Verzeichnis kopieren) und die Wiederherstellung.
 Was hier früher stand, galt für die Markdown-Ära: „Backup ist Dateikopie",
 Git-Historie pro Szene, `rsync` über `campaigns/`. Seit ADR #13 ist das nicht
 mehr die Sicherung, sondern höchstens ein Archiv des Vor-Migrations-Stands —
-`campaigns/` wird nach der Erstmigration nicht mehr beschrieben und nicht mehr
-gelesen. Wer diesen Ordner weiter versioniert, sichert damit **keine** laufende
-Kampagne.
+`campaigns/` wird vom Server überhaupt nicht mehr gelesen (nur noch von
+`grimoire seed`, wenn man es ihm ausdrücklich übergibt). Wer diesen Ordner
+weiter versioniert, sichert damit **keine** laufende Kampagne.
 
 ## 5. Betrieb & Fehlersuche
 
 - Logs: `docker logs -f grimoire`. Beim Start erscheinen der Pfad der
-  Datenbank, der Port, eine Zeile zur Erstmigration (bzw. „no import needed …
-  CAMPAIGN_ROOT is not read") und `Serving app build from /app/app/dist`. Steht dort
+  Datenbank, der Port, `Database ready (…)` und `Serving app build from
+  /app/app/dist`. Steht dort
   stattdessen `No app build at …`, fehlt `app/dist` im Image (Build-Stage
   fehlgeschlagen) und der Container liefert nur die API.
 - Healthcheck: eingebaut (`GET /api/campaigns`), sichtbar über

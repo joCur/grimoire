@@ -15,7 +15,7 @@ import { Bookmark, GitFork, MapPin } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { locationName } from "@/lib/campaign";
-import { fmString, fmStringArray } from "@/lib/frontmatter";
+import { fmString, fmStringArray } from "@/lib/properties";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/markdown/Markdown";
 
@@ -40,7 +40,7 @@ export function SceneArticle({
   body?: ReactNode;
 }) {
   const live = variant === "live";
-  const fm = file.frontmatter;
+  const fm = file.properties;
   // npc/location files opened as a file view carry `name` instead of `title`.
   const title = fmString(fm.title) ?? fmString(fm.name) ?? file.path;
   // Everything that is not explicitly a contingency reads as a planned

@@ -1,4 +1,4 @@
-// NPC card fed from npcs/<id>.md — voice, "Will" (first paragraph of the
+// NPC card fed from npcs/<id> — voice, "Will" (first paragraph of the
 // `## Will` section) and quickstats, exactly those three per UI-BRIEF.
 // Two densities per the design prototype: the scene aside ("full", with id
 // badge and labeled rows) and the live aside ("compact", inline "Will:").
@@ -20,12 +20,12 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchFile } from "@/api";
 import { EntityCardShell } from "@/components/EntityCardShell";
 import { isEntityId } from "@/lib/entity";
-import { fmQuickstats, fmString } from "@/lib/frontmatter";
+import { fmQuickstats, fmString } from "@/lib/properties";
 import { firstParagraphOfSection } from "@/lib/md-section";
 
 /** Campaign-relative path of an npc file — the reference key is the id. */
 function npcPath(id: string): string {
-  return `npcs/${id}.md`;
+  return `npcs/${id}`;
 }
 
 export function NpcCard({
@@ -47,7 +47,7 @@ export function NpcCard({
   // A NON-SLUG entry is no id and therefore no entry (#70 audit): `npcs:`
   // holds ids, and the server now refuses new free text there. What can still
   // stand in the list is what a migrated file era campaign brought along —
-  // and asking for `npcs/Alte Fischerin.md` answers 404, which this card
+  // and asking for `npcs/Alte Fischerin` answers 404, which this card
   // reported as "Server prüfen", blaming the server for data it was handed.
   // It is not asked at all now, and the line says what is actually the case.
   const isId = isEntityId(id);
@@ -78,7 +78,7 @@ export function NpcCard({
   }
   if (data === undefined) return null;
 
-  const fm = data.frontmatter;
+  const fm = data.properties;
   const name = fmString(fm.name) ?? id;
   const npcId = fmString(fm.id) ?? id;
   const role = fmString(fm.role);

@@ -10,7 +10,7 @@
 import type { EntityKind } from "@grimoire/shared/types";
 
 import { ApiError, type RenameKind, type UsageGroup, type UsageRef, type UsageReport } from "@/api";
-import { fmString } from "@/lib/frontmatter";
+import { fmString } from "@/lib/properties";
 import { isNpcSlug } from "@/lib/review";
 
 export type { RenameKind };
@@ -24,10 +24,10 @@ export interface RenameTarget {
 /** Reserved campaign directories; the server refuses them as an id. */
 const RESERVED_IDS = new Set(["npcs", "locations", "sessions"]);
 
-/** File name without directories and `.md` — the id a file degrades to. */
+/** Last address segment — the id a document degrades to. */
 function fileStem(path: string): string {
   const base = path.slice(path.lastIndexOf("/") + 1);
-  return base.endsWith(".md") ? base.slice(0, -3) : base;
+  return base;
 }
 
 /**
@@ -35,24 +35,24 @@ function fileStem(path: string): string {
  * file has no renameable id: sessions (their id is the date), the campaign
  * file, inbox, glossary, and anything unknown.
  *
- * For a chapter the id is the FIRST PATH SEGMENT of its `_chapter.md` (the
+ * For a chapter the id is the FIRST PATH SEGMENT of its `_chapter` (the
  * former directory name, and the chapter row's id). For every other kind it
- * is the frontmatter id (which the parser already falls back to the file
+ * is the properties id (which the parser already falls back to the file
  * stem).
  */
 export function renameTargetFor(file: {
   path: string;
   kind: EntityKind;
-  frontmatter: Record<string, unknown>;
+  properties: Record<string, unknown>;
 }): RenameTarget | undefined {
   if (file.kind === "chapter") {
     const dir = file.path.slice(0, file.path.lastIndexOf("/"));
-    // A `_chapter.md` always lives INSIDE its chapter directory; anything
+    // A `_chapter` always lives INSIDE its chapter directory; anything
     // else is not a chapter we can rename.
     return dir === "" || dir.includes("/") ? undefined : { kind: "chapter", oldId: dir };
   }
   if (file.kind !== "npc" && file.kind !== "location" && file.kind !== "scene") return undefined;
-  const oldId = fmString(file.frontmatter.id) ?? fileStem(file.path);
+  const oldId = fmString(file.properties.id) ?? fileStem(file.path);
   return oldId === "" ? undefined : { kind: file.kind, oldId };
 }
 
@@ -113,7 +113,7 @@ const USAGE_REF_LABEL: Record<UsageRef, [string, string]> = {
   chapterNpcs: ["NPC", "NPCs"],
   chapterLocations: ["Ort", "Orte"],
   // Issue #68: a body text that says `[[<id>]]`. „Textstelle" is what the DM
-  // sees on the page — a name in running prose, not a frontmatter field.
+  // sees on the page — a name in running prose, not a properties field.
   bodyRefs: ["Textstelle", "Textstellen"],
 };
 
@@ -142,7 +142,7 @@ export function usageTotalLabel(total: number): string {
  * moved along with the rename.
  *
  * The server names `from`/`to` in DOCUMENTS for every kind since the SQLite
- * cutover (#57) — a chapter rename reports `<id>/_chapter.md`, not the bare
+ * cutover (#57) — a chapter rename reports `<id>/_chapter`, not the bare
  * directory — so the file on screen is usually `from` itself. The prefix
  * branch stays for the case where the view sits on something UNDER the
  * renamed address; it costs nothing and is the safe direction.

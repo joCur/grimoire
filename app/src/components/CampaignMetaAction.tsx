@@ -2,13 +2,13 @@
 // on the pool header and in the campaign file's reading view, the two places
 // where those two values are on screen.
 //
-// The dialog writes through the documented API: PATCH /frontmatter with the
+// The dialog writes through the documented API: PATCH /properties with the
 // guard token the open dialog was seeded with — frozen, not the live query
 // value, or the 5s version poll would hand it a concurrent edit's token and
 // turn the save into a silent overwrite (409 → inline "Inzwischen geändert —
 // neu laden", the typed values stay, the next attempt writes on top of what is
 // stored now). That is the ONLY write path since issue #62: the create
-// endpoint it used for a campaign without `_campaign.md` is gone, because
+// endpoint it used for a campaign without `_campaign` is gone, because
 // every campaign has a row and therefore always has that document. On success
 // the campaigns/tree/search queries are invalidated — the switcher label and
 // the pool header read from the campaign list, so they must not keep the old
@@ -42,7 +42,7 @@ import {
   type CampaignMetaBase,
   type CampaignMetaValues,
 } from "@/lib/campaign-meta";
-import { useMtimeWriteMutation } from "@/lib/use-mtime-write";
+import { useRevWriteMutation } from "@/lib/use-rev-write";
 
 /** The quiet trigger; the dialog itself mounts only while it is open. */
 export function CampaignMetaAction({ campaign }: { campaign: string }) {
@@ -98,11 +98,11 @@ function CampaignMetaDialog({
     setBase((previous) => seedCampaignMetaBase(previous, file.data));
   }, [file.data]);
 
-  const save = useMtimeWriteMutation<void>({
+  const save = useRevWriteMutation<void>({
     // No base yet (still loading, or the document is not readable) — nothing
     // to write against, so the mutation cannot start.
     write:
-      base === undefined ? undefined : () => writeCampaignMeta(campaign, values, base.mtimeMs),
+      base === undefined ? undefined : () => writeCampaignMeta(campaign, values, base.rev),
     fileKey: ["file", campaign, CAMPAIGN_META_PATH],
     // The switcher and the pool header read the campaign list; the file also
     // sits in the tree/search surfaces.
@@ -112,7 +112,7 @@ function CampaignMetaDialog({
     // underneath them moves on, so the next „Speichern" writes on top of what
     // is stored now.
     onConflict: (reread) => {
-      if (reread !== undefined) setBase({ mtimeMs: reread.mtimeMs });
+      if (reread !== undefined) setBase({ rev: reread.rev });
     },
   });
 
@@ -128,7 +128,7 @@ function CampaignMetaDialog({
       <DialogContent aria-describedby={undefined} className="max-w-[460px]">
         <DialogTitle>Kampagne bearbeiten</DialogTitle>
         <DialogDescription>
-          Name und Beschreibung stehen in _campaign.md. Die id bleibt, wie sie ist — sie steckt
+          Name und Beschreibung stehen in _campaign. Die id bleibt, wie sie ist — sie steckt
           in jeder Adresse und ändert sich hier nicht.
         </DialogDescription>
 

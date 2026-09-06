@@ -34,13 +34,13 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   „aufräumen"; das Format ist Vertrag.
 - `campaigns/` — echte Kampagnendaten als Markdown-Baum, in `.gitignore`
   (Nutzungsdaten, ggf. urheberrechtlich geschütztes Quellmaterial). Seit
-  ADR #13 nur noch **Quelle der Erstmigration**: Pfad aus `CAMPAIGN_ROOT`,
-  nach dem Import fasst der Server ihn nicht mehr an. Im Code nie fest
-  verdrahten.
+  Issue #79 liest der Server **keinen** Kampagnen-Dateibaum mehr — nur
+  `grimoire seed <dir>` tut es, wenn man es ihm ausdrücklich sagt. Im Code
+  nie fest verdrahten.
 - `GRIMOIRE_DATA` (Default `./data`, gitignored) — hier liegt
   `grimoire.db` samt `-wal`/`-shm`: die eigentlichen Daten. Kein Code liest
   Kampagneninhalte von woanders.
-- `shared/` — Entitäts-Typen und Frontmatter-Parser (`@grimoire/shared`),
+- `shared/` — Entitäts-Typen und Markdown-Parser (`@grimoire/shared`),
   von Server und App gemeinsam genutzt. Das Datenformat ist hier genau
   einmal in Code beschrieben (Spiegel von README.md — beides synchron halten);
   die Speicherform steht genau einmal in `server/src/db/schema.ts`.
@@ -60,10 +60,10 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 
 - Vertikale Scheiben, eine pro Auftrag. Nicht mehrere Views gleichzeitig.
 - Gegen echte Daten entwickeln: keine erfundenen Mock-Objekte. Seit dem
-  SQLite-Cutover (ADR #13) ist die Datenbank die Wahrheit — der Dev-Start
-  legt `GRIMOIRE_DATA/grimoire.db` an und übernimmt beim ersten Mal die
-  Kampagnen aus `CAMPAIGN_ROOT` (Default `examples/`); dasselbe macht
-  `bun run --filter @grimoire/server seed`. Tests bekommen pro Fall eine
+  SQLite-Cutover (ADR #13) ist die Datenbank die Wahrheit, und seit Issue #79
+  startet der Server **leer**: einmal
+  `bun run --filter @grimoire/server seed` (liest `examples/`) füllt
+  `GRIMOIRE_DATA/grimoire.db`. Tests bekommen pro Fall eine
   frische In-Memory-DB, geseedet über denselben Importer
   (`server/test/support/store.ts`). `campaigns/` existiert nur lokal beim
   Nutzer und darf in Code, Tests und Doku nie vorausgesetzt werden.
@@ -75,8 +75,13 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Format degradiert: unbekannte Callouts/Überschriften als normalen Text
   rendern, niemals Fehler werfen.
 - Schreibzugriffe der App nur über die dokumentierte API; Patches tragen das
-  Guard-Token des Lesevorgangs mit (`mtimeMs` auf der Leitung, intern die
-  Zeilenversion `rev`) — 409 bei Konflikt, nie stilles Überschreiben.
+  Guard-Token des Lesevorgangs mit (`rev`, die Zeilenversion) — 409 bei
+  Konflikt, nie stilles Überschreiben.
+- Adressen tragen keine Dateiendung (`npcs/jorna`, `<kapitel>/<szenen-id>`,
+  `sessions/<id>`, `_campaign`, `glossary`); das Schema steht in
+  `server/src/store/paths.ts`. Auf der Leitung heißen die Felder eines
+  Dokuments `properties` — `frontmatter`/`mtime` gibt es nur noch im
+  Markdown-Importer unter `server/src/db/` (Issue #79).
 - Sprache der UI: Deutsch. Code, Kommentare, Commits: Englisch.
 
 ## Backlog-Prozess
@@ -144,7 +149,7 @@ Die Pfade:
 6. Generator-Zyklus (Stub-LLM): Job → Review → Übernehmen → draft im
    Pool; plus 409-/Fehlerpfad und Server-Neustart (fertiger Job übersteht
    ihn und bleibt übernehmbar, laufender wird als `failed` gemeldet)
-7. Frontmatter-Patch/Status-Regler inkl. 409-Konflikt
+7. Eigenschaften-Patch (`PATCH /properties`)/Status-Regler inkl. 409-Konflikt
 8. Mobil-Startfläche + Inbox-Einwurf bei 390px
 9. Datei bearbeiten: öffnen → Body ändern → speichern → gerendert
    sichtbar; 409 bei konkurrierendem Zweit-Write → neu laden statt still

@@ -14,7 +14,6 @@ import {
   listCampaigns,
   readActiveSession,
   readGlossary,
-  readMigrationReport,
   readParsedFile,
   requireCampaign,
 } from "../store/read";
@@ -31,7 +30,7 @@ import {
   endSession,
   markInboxLineDone,
   markLogLineSeen,
-  patchFrontmatter,
+  patchProperties,
   pauseSession,
   startSession,
   writeFileBody,
@@ -178,70 +177,67 @@ api.get("/:campaign/version", async (c) => {
 // GET /api/:campaign/glossary -> { entries: [{ term, explanation }] }
 // The glossary is a structured TABLE since the migration (planning F6): term
 // → explanation instead of one markdown blob. The generic reading view still
-// renders it as markdown (GET /file?path=glossary.md, rendered from these
+// renders it as markdown (GET /file?path=glossary, rendered from these
 // rows), but this is the shape anything that wants the TERMS should read —
 // the generator knowledge base of issue #53 builds on exactly this.
 api.get("/:campaign/glossary", async (c) => c.json(await readGlossary(c.req.param("campaign"))));
 
-// GET /api/:campaign/migration-report -> { entries: [{ path, reason, at }] }
-// What the one-time markdown migration had to degrade (planning section 3).
-// An EMPTY list is the success criterion of a clean import; the app shows a
-// quiet hint while there is anything in here, because it is a reading task
-// for the DM — not an error.
-api.get("/:campaign/migration-report", async (c) =>
-  c.json({ entries: await readMigrationReport(c.req.param("campaign")) }),
-);
+// GET /api/:campaign/migration-report is GONE (issue #79 AK6). The markdown
+// import is no longer part of the production path — it is the dev/E2E tool
+// `grimoire seed`, which prints its own report — so there is nothing for the
+// app to surface any more. The `migration_report` table stays: it is the
+// importer's own bookkeeping (server/src/db/).
 
 // --- write endpoints (issue #5) ---------------------------------------------------
 
-// PATCH /api/:campaign/frontmatter { path, mtimeMs, patch } -> FileResponse
-// patch is a flat object of frontmatter keys to set; null deletes a key.
-// 409 { error, mtimeMs } when the file changed on disk since it was read.
-api.patch("/:campaign/frontmatter", async (c) => {
-  const body = await jsonBody(c, ["path", "mtimeMs", "patch"]);
+// PATCH /api/:campaign/properties { path, rev, patch } -> FileResponse
+// patch is a flat object of properties keys to set; null deletes a key.
+// 409 { error, rev } when the file changed on disk since it was read.
+api.patch("/:campaign/properties", async (c) => {
+  const body = await jsonBody(c, ["path", "rev", "patch"]);
   const rel = body.path;
-  const mtimeMs = body.mtimeMs;
+  const rev = body.rev;
   const patch = body.patch;
   if (typeof rel !== "string") throw new ApiError(400, "path must be a string");
-  if (typeof mtimeMs !== "number" || !Number.isFinite(mtimeMs)) {
-    throw new ApiError(400, "mtimeMs must be a number");
+  if (typeof rev !== "number" || !Number.isFinite(rev)) {
+    throw new ApiError(400, "rev must be a number");
   }
   if (!isPlainObject(patch)) throw new ApiError(400, "patch must be an object");
-  return c.json(await patchFrontmatter(c.req.param("campaign"), rel, mtimeMs, patch));
+  return c.json(await patchProperties(c.req.param("campaign"), rel, rev, patch));
 });
 
-// PUT /api/:campaign/file { path, mtimeMs, body } -> FileResponse
+// PUT /api/:campaign/file { path, rev, body } -> FileResponse
 // Writes the markdown BODY of an existing file — `body` is the markdown
-// WITHOUT the frontmatter block, exactly what GET /file returns as `body`.
-// The frontmatter block on disk stays byte-identical (keys are PATCH
-// /frontmatter's job). Same mtime guard: 409 { error, mtimeMs } when the file
+// WITHOUT the properties block, exactly what GET /file returns as `body`.
+// The properties block on disk stays byte-identical (keys are PATCH
+// /properties's job). Same rev guard: 409 { error, rev } when the file
 // changed on disk since it was read; 404 for a file that does not exist; 400
-// for the append-only kinds (sessions/*.md, inbox.md — DECISIONS #4) and for a
-// file whose frontmatter block cannot be split off safely.
+// for the append-only kinds (sessions/*, inbox — DECISIONS #4) and for a
+// file whose properties block cannot be split off safely.
 api.put("/:campaign/file", async (c) => {
-  const body = await jsonBody(c, ["path", "mtimeMs", "body"]);
+  const body = await jsonBody(c, ["path", "rev", "body"]);
   const rel = body.path;
-  const mtimeMs = body.mtimeMs;
+  const rev = body.rev;
   const markdown = body.body;
   if (typeof rel !== "string") throw new ApiError(400, "path must be a string");
-  if (typeof mtimeMs !== "number" || !Number.isFinite(mtimeMs)) {
-    throw new ApiError(400, "mtimeMs must be a number");
+  if (typeof rev !== "number" || !Number.isFinite(rev)) {
+    throw new ApiError(400, "rev must be a number");
   }
   if (typeof markdown !== "string") throw new ApiError(400, "body must be a string");
-  return c.json(await writeFileBody(c.req.param("campaign"), rel, mtimeMs, markdown));
+  return c.json(await writeFileBody(c.req.param("campaign"), rel, rev, markdown));
 });
 
 // POST /api/:campaign/campaign-meta is GONE (issue #62). It was the create
-// half of the metadata dialog (issue #34), for the case PATCH /frontmatter
-// cannot serve: no `_campaign.md`, hence no guard token to write against.
-// Since the cutover every campaign HAS a row, so GET /file?path=_campaign.md
+// half of the metadata dialog (issue #34), for the case PATCH /properties
+// cannot serve: no `_campaign`, hence no guard token to write against.
+// Since the cutover every campaign HAS a row, so GET /file?path=_campaign
 // always answers 200 with a `rev` and there is no create case left — the
 // endpoint had become unreachable from the app (#59). Name and description
-// are written like every other frontmatter field now, through PATCH
-// /frontmatter and its 409.
+// are written like every other properties field now, through PATCH
+// /properties and its 409.
 
 // POST /api/:campaign/session/start -> FileResponse
-// Creates a NEW session — `sessions/<today>.md`, or `<today>-2`, `-3` … when
+// Creates a NEW session — `sessions/<today>`, or `<today>-2`, `-3` … when
 // that day already has sessions (issue #58: "beenden" is FINAL, so a second
 // evening on the same day is a second session with its own empty log and a
 // runtime starting at 0). Idempotent only while TODAY's session is the
@@ -265,7 +261,7 @@ api.post("/:campaign/session/end", async (c) => c.json(await endSession(c.req.pa
 
 // POST /api/:campaign/session/pause -> FileResponse — really STOPS the clock
 // (issue #40 AK8): opens a `{ from: … }` interval in the session's `pauses`
-// frontmatter AND appends the `— Pause` log line in the same write. Idempotent
+// properties AND appends the `— Pause` log line in the same write. Idempotent
 // (already paused -> 200, file unchanged); 404 when no session is running.
 api.post("/:campaign/session/pause", async (c) =>
   c.json(await pauseSession(c.req.param("campaign"))),
@@ -304,7 +300,7 @@ api.post("/:campaign/log", async (c) => {
   return c.json(await appendLogEntry(c.req.param("campaign"), text, sceneId));
 });
 
-// POST /api/:campaign/inbox { text } -> FileResponse (creates inbox.md)
+// POST /api/:campaign/inbox { text } -> FileResponse (creates inbox)
 api.post("/:campaign/inbox", async (c) => {
   const body = await jsonBody(c, ["text"]);
   const text = normalizeLineText(body.text);
@@ -407,7 +403,7 @@ function rawLine(v: unknown, what: string): string {
 
 // POST /api/:campaign/review/seen { path, line } -> FileResponse
 // Adds the short hash (first 8 hex chars of SHA-256) of the RAW log line to
-// the session's `reviewed` frontmatter list iff absent. Idempotent; the line
+// the session's `reviewed` properties list iff absent. Idempotent; the line
 // is hashed exactly as sent — it is never written anywhere.
 api.post("/:campaign/review/seen", async (c) => {
   const body = await jsonBody(c, ["path", "line"]);
@@ -417,7 +413,7 @@ api.post("/:campaign/review/seen", async (c) => {
 });
 
 // POST /api/:campaign/review/thread { chapter, text } -> FileResponse
-// Appends `- [ ] text` under ## Offene Fäden of <chapter>/_chapter.md
+// Appends `- [ ] text` under ## Offene Fäden of <chapter>/_chapter
 // (section/file created when missing; 404 when the chapter dir is missing).
 api.post("/:campaign/review/thread", async (c) => {
   const body = await jsonBody(c, ["chapter", "text"]);
@@ -580,9 +576,9 @@ api.put("/:campaign/generate/job/drafts", async (c) => {
 // { scenes?, stubs?, npc?, chapter?, chapterTitle?, jobId? } -> { written }
 // Writes the reviewed drafts — synchronous on purpose: this is a short file
 // write, and the DM waits for its result. Re-validates server-side
-// (frontmatter parses, status draft, safe paths); 409 { conflicts } when any
+// (properties parses, status draft, safe paths); 409 { conflicts } when any
 // target file exists — then nothing is written at all. chapter +
-// chapterTitle (both or neither) additionally create `<chapter>/_chapter.md`
+// chapterTitle (both or neither) additionally create `<chapter>/_chapter`
 // when it is missing, in the same all-or-nothing batch (the app's "Neues
 // Kapitel" flow).
 // `jobId` (issue #19) ties the apply to the background job it came from: a

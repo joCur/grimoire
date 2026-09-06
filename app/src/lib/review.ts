@@ -79,7 +79,7 @@ const CHECKBOX = /^\[([ xX])\]\s*/;
 const LEADING_DATE = /^(\d{4}-\d{2}-\d{2})\s+/;
 
 /**
- * All top-level `- ` list lines of inbox.md (frontmatter-stripped body), in
+ * All top-level `- ` list lines of inbox (properties-stripped body), in
  * file order. Indented lines are skipped: the write API only accepts lines
  * starting with `- `. Nothing is filtered here — see harvestInboxEntries.
  */

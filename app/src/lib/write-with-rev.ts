@@ -6,10 +6,10 @@
 // was written, so the file is re-read once and the NEXT attempt carries the
 // fresh token.
 //
-// The wire field is still called `mtimeMs`, but since the SQLite cutover
-// (issue #57) it carries the row's VERSION, not a file mtime — an opaque
+// The wire field is still called `rev`, but since the SQLite cutover
+// (issue #57) it carries the row's VERSION, not a file rev — an opaque
 // token, which is all this module ever treated it as. The upgrade is real
-// though: two writes inside the same second used to share an mtime and both
+// though: two writes inside the same second used to share a rev and both
 // went through (issue #37); two writes cannot share a row version.
 //
 // Three write paths share exactly that shape — the status regler (#28), the
@@ -41,26 +41,26 @@ export const STALE_FILE_MESSAGE = "Inzwischen geändert — neu laden";
  */
 export const WRITE_FAILED_MESSAGE = "Nicht gespeichert — Server prüfen";
 
-export type MtimeWriteResult =
+export type RevWriteResult =
   /** Written: the server's fresh file, ready to seed into the query cache. */
   | { ok: true; file: FileResponse }
   /**
    * NOT written — the file changed on disk (or appeared while a dialog was
-   * open). `file` is the re-read file when the reload succeeded (its mtime
+   * open). `file` is the re-read file when the reload succeeded (its rev
    * makes the next attempt work); undefined when even the reload failed.
    */
   | { ok: false; file?: FileResponse };
 
 /**
- * Run one mtime-checked write. `write` is the API call including the mtime;
+ * Run one rev-checked write. `write` is the API call including the rev;
  * `reread` fetches the file the write was aimed at and is only used after a
  * 409. Every failure that is NOT a conflict throws — the caller's inline error
  * line belongs to those.
  */
-export async function writeWithMtime(
+export async function writeWithRev(
   write: () => Promise<FileResponse>,
   reread: () => Promise<FileResponse>,
-): Promise<MtimeWriteResult> {
+): Promise<RevWriteResult> {
   try {
     return { ok: true, file: await write() };
   } catch (error) {
@@ -77,7 +77,7 @@ export async function writeWithMtime(
 }
 
 /**
- * Bind a write to the version it is checked against — the "is there an mtime
+ * Bind a write to the version it is checked against — the "is there a rev
  * at all?" dance, once.
  *
  * Two paths (the status regler, the body editor) can only write when the file
@@ -88,10 +88,10 @@ export async function writeWithMtime(
  * narrowed number is handed to `write` as an argument, so the narrowing
  * survives the closure.
  */
-export function withMtime<TVariables>(
-  mtimeMs: number | undefined,
-  write: (variables: TVariables, mtimeMs: number) => Promise<MtimeWriteResult>,
-): ((variables: TVariables) => Promise<MtimeWriteResult>) | undefined {
-  if (mtimeMs === undefined) return undefined;
-  return (variables: TVariables) => write(variables, mtimeMs);
+export function withRev<TVariables>(
+  rev: number | undefined,
+  write: (variables: TVariables, rev: number) => Promise<RevWriteResult>,
+): ((variables: TVariables) => Promise<RevWriteResult>) | undefined {
+  if (rev === undefined) return undefined;
+  return (variables: TVariables) => write(variables, rev);
 }

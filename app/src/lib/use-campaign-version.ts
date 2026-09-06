@@ -56,7 +56,7 @@ export function useCampaignVersion(campaign: string): void {
       void queryClient.invalidateQueries({ queryKey: [key, campaign] });
     }
     // …plus the campaign list, which carries name/description from
-    // `_campaign.md` (issue #17) and is keyed without a campaign segment.
+    // `_campaign` (issue #17) and is keyed without a campaign segment.
     void queryClient.invalidateQueries({ queryKey: ["campaigns"] });
   }, [data, campaign, queryClient]);
 }

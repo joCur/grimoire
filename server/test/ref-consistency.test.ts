@@ -12,18 +12,18 @@ import path from "node:path";
 import type { CampaignTree, FileResponse } from "@grimoire/shared";
 import { sceneNpcs } from "../src/db/schema";
 import { app } from "../src/server";
-import { getDb, storeInfo } from "../src/store/handle";
+import { getDb } from "../src/store/handle";
 import { applyDrafts } from "../src/store/write";
 import {
   dropStore,
+  lastSeedBackfill,
   removeTempRoot,
   seedStore,
   tempCampaignRoot,
-  useCampaignRoot,
 } from "./support/store";
 
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
-const NPC = "npcs/fenn.md";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+const NPC = "npcs/fenn";
 
 async function getFile(rel: string, campaign = "beispiel"): Promise<FileResponse> {
   const res = await app.request(`/api/${campaign}/file?path=${encodeURIComponent(rel)}`);
@@ -37,10 +37,10 @@ async function fileStatus(rel: string, campaign = "beispiel"): Promise<number> {
 
 async function patchFm(rel: string, patch: Record<string, unknown>): Promise<FileResponse> {
   const before = await getFile(rel);
-  const res = await app.request("/api/beispiel/frontmatter", {
+  const res = await app.request("/api/beispiel/properties", {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: rel, mtimeMs: before.mtimeMs, patch }),
+    body: JSON.stringify({ path: rel, rev: before.rev, patch }),
   });
   expect(res.status).toBe(200);
   return (await res.json()) as FileResponse;
@@ -51,7 +51,7 @@ async function putBody(rel: string, body: string): Promise<FileResponse> {
   const res = await app.request("/api/beispiel/file", {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: rel, mtimeMs: before.mtimeMs, body }),
+    body: JSON.stringify({ path: rel, rev: before.rev, body }),
   });
   expect(res.status).toBe(200);
   return (await res.json()) as FileResponse;
@@ -73,28 +73,28 @@ afterEach(() => {
 
 describe("a reference creates the entry it names", () => {
   test("a scene's npcs list: the new id has an EMPTY entry, not a hole", async () => {
-    expect(await fileStatus("npcs/holm.md")).toBe(404);
+    expect(await fileStatus("npcs/holm")).toBe(404);
     await patchFm(SCENE, { npcs: ["jorna", "holm"] });
 
-    const created = await getFile("npcs/holm.md");
+    const created = await getFile("npcs/holm");
     expect(created.kind).toBe("npc");
     // Nothing but the id: the id IS the display name until somebody types
     // one, and the status is the neutral default.
-    expect(created.frontmatter.id).toBe("holm");
-    expect(created.frontmatter.name).toBe("holm");
-    expect(created.frontmatter.status).toBe("unknown");
+    expect(created.properties.id).toBe("holm");
+    expect(created.properties.name).toBe("holm");
+    expect(created.properties.status).toBe("unknown");
     expect(created.body.trim()).toBe("");
     // It is a normal entry: in the tree, patchable, and its own rev token.
     expect((await tree()).npcs.some((n) => n.id === "holm")).toBe(true);
-    const named = await patchFm("npcs/holm.md", { name: "Holm", role: "Netzflicker" });
-    expect(named.frontmatter.name).toBe("Holm");
+    const named = await patchFm("npcs/holm", { name: "Holm", role: "Netzflicker" });
+    expect(named.properties.name).toBe("Holm");
   });
 
   test("a scene's location, when it is a slug", async () => {
-    expect(await fileStatus("locations/bucht.md")).toBe(404);
+    expect(await fileStatus("locations/bucht")).toBe(404);
     await patchFm(SCENE, { location: "bucht" });
-    const created = await getFile("locations/bucht.md");
-    expect(created.frontmatter.name).toBe("bucht");
+    const created = await getFile("locations/bucht");
+    expect(created.properties.name).toBe("bucht");
     expect((await tree()).locations.some((l) => l.id === "bucht")).toBe(true);
   });
 
@@ -102,7 +102,7 @@ describe("a reference creates the entry it names", () => {
     // The format allows a free string there (README). Spaces or capitals make
     // it unmistakably text, and text must not become an entity.
     await patchFm(SCENE, { location: "Der alte Hafen" });
-    expect((await getFile(SCENE)).frontmatter.location).toBe("Der alte Hafen");
+    expect((await getFile(SCENE)).properties.location).toBe("Der alte Hafen");
     expect((await tree()).locations.some((l) => l.name === "Der alte Hafen")).toBe(false);
     await patchFm(SCENE, { location: "Nordbucht" });
     expect((await tree()).locations.some((l) => l.id === "Nordbucht")).toBe(false);
@@ -113,18 +113,18 @@ describe("a reference creates the entry it names", () => {
     // slug-shaped value. With the old "only NEW references" guard a save left
     // a dangling OLD slug exactly as it stood, and the hint lied about the
     // stock most likely to have one. `bucht` is such a slug in the examples.
-    const scene = "01-salzhafen/hafen/smuggler-captured.md";
-    expect((await getFile(scene)).frontmatter.location).toBe("bucht");
-    expect(await fileStatus("locations/bucht.md")).toBe(404);
+    const scene = "01-salzhafen/hafen/smuggler-captured";
+    expect((await getFile(scene)).properties.location).toBe("bucht");
+    expect(await fileStatus("locations/bucht")).toBe(404);
 
     await patchFm(scene, { status: "played" });
 
-    expect((await getFile("locations/bucht.md")).frontmatter.name).toBe("bucht");
+    expect((await getFile("locations/bucht")).properties.name).toBe("bucht");
     expect((await tree()).locations.some((l) => l.id === "bucht")).toBe(true);
   });
 
   test("…while free text stays free text, however often it is patched", async () => {
-    const scene = "01-salzhafen/hafen/smuggler-captured.md";
+    const scene = "01-salzhafen/hafen/smuggler-captured";
     await patchFm(scene, { location: "Der alte Hafen" });
     const before = (await tree()).locations.map((l) => l.id);
     await patchFm(scene, { status: "played" });
@@ -135,7 +135,7 @@ describe("a reference creates the entry it names", () => {
     // The npc half keeps the "only NEW references" rule: the list may hold
     // imported values, and a `PATCH { status }` re-sends all of them.
     const before = (await tree()).npcs.map((n) => n.id);
-    await patchFm("01-salzhafen/hafen/smuggler-captured.md", { status: "played" });
+    await patchFm("01-salzhafen/hafen/smuggler-captured", { status: "played" });
     expect((await tree()).npcs.map((n) => n.id)).toEqual(before);
   });
 
@@ -149,31 +149,29 @@ describe("a reference creates the entry it names", () => {
         "- jorna: alte Bekannte; er weicht ihrem Blick aus\n- holm: schuldet ihm Geld",
       ),
     );
-    const created = await getFile("npcs/holm.md");
-    expect(created.frontmatter.name).toBe("holm");
+    const created = await getFile("npcs/holm");
+    expect(created.properties.name).toBe("holm");
     // The relation itself is unchanged — one-sided, as authored.
     expect((await getFile(NPC)).body).toContain("- holm: schuldet ihm Geld");
-    expect((await getFile("npcs/holm.md")).body).not.toContain("Beziehungen");
+    expect((await getFile("npcs/holm")).body).not.toContain("Beziehungen");
   });
 });
 
-describe("the boot pass for migrated stock", () => {
+describe("the seed pass for imported stock", () => {
   test("a dangling npc reference from the file era gets an empty entry", async () => {
     const root = await tempCampaignRoot();
-    const restore = useCampaignRoot(root);
     try {
       const scene = path.join(root, "beispiel", "01-salzhafen", "hafen", "ankunft-leuchtturm.md");
       const raw = await readFile(scene, "utf8");
       await writeFile(scene, raw.replace("npcs: [jorna]", "npcs: [jorna, alte-fischerin]"));
       await seedStore(root);
 
-      // The pass reports what it created, so a boot that changes data says so.
-      expect(storeInfo()?.backfilledNpcs).toEqual(["beispiel/alte-fischerin"]);
-      const created = await getFile("npcs/alte-fischerin.md");
-      expect(created.frontmatter.name).toBe("alte-fischerin");
+      // The pass reports what it created, so a run that changes data says so.
+      expect(lastSeedBackfill()).toEqual(["beispiel/alte-fischerin"]);
+      const created = await getFile("npcs/alte-fischerin");
+      expect(created.properties.name).toBe("alte-fischerin");
       expect((await tree()).npcs.some((n) => n.id === "alte-fischerin")).toBe(true);
     } finally {
-      restore();
       await removeTempRoot(root);
     }
   });
@@ -182,8 +180,8 @@ describe("the boot pass for migrated stock", () => {
     // `location: bucht` in the examples has no locations row and must KEEP
     // none: in that one field a slug is indistinguishable from free text, so
     // a blanket pass would invent Orte the DM never wrote.
-    expect(storeInfo()?.backfilledNpcs).toEqual([]);
-    expect(await fileStatus("locations/bucht.md")).toBe(404);
+    expect(lastSeedBackfill()).toEqual([]);
+    expect(await fileStatus("locations/bucht")).toBe(404);
   });
 });
 
@@ -194,9 +192,9 @@ describe("the generator's apply step", () => {
     // with a row put there by itself. An empty row is not a conflict.
     await applyDrafts("beispiel", [
       {
-        rel: "01-salzhafen/hafen/neue-szene.md",
-        address: "01-salzhafen/hafen/neue-szene.md",
-        frontmatter: {
+        rel: "01-salzhafen/hafen/neue-szene",
+        address: "01-salzhafen/hafen/neue-szene",
+        properties: {
           id: "neue-szene",
           title: "Neue Szene",
           npcs: ["holm"],
@@ -206,18 +204,18 @@ describe("the generator's apply step", () => {
         body: "\n## Was passiert\n\nEtwas.\n",
       },
       {
-        rel: "npcs/holm.md",
-        address: "npcs/holm.md",
-        frontmatter: { id: "holm", name: "Holm", status: "alive" },
+        rel: "npcs/holm",
+        address: "npcs/holm",
+        properties: { id: "holm", name: "Holm", status: "alive" },
         body: "\n## Will\n\nSeine Netze zurück.\n",
       },
     ]);
-    const npc = await getFile("npcs/holm.md");
-    expect(npc.frontmatter.name).toBe("Holm");
-    expect(npc.frontmatter.status).toBe("alive");
+    const npc = await getFile("npcs/holm");
+    expect(npc.properties.name).toBe("Holm");
+    expect(npc.properties.status).toBe("alive");
     expect(npc.body).toContain("Seine Netze zurück.");
     // The scene's location got its empty row too.
-    expect((await getFile("locations/bucht.md")).frontmatter.name).toBe("bucht");
+    expect((await getFile("locations/bucht")).properties.name).toBe("bucht");
   });
 
   test("a row that holds CONTENT is still a 409 conflict", async () => {
@@ -225,9 +223,9 @@ describe("the generator's apply step", () => {
     await expect(
       applyDrafts("beispiel", [
         {
-          rel: "npcs/fenn.md",
-          address: "npcs/fenn.md",
-          frontmatter: { id: "fenn", name: "Anders" },
+          rel: "npcs/fenn",
+          address: "npcs/fenn",
+          properties: { id: "fenn", name: "Anders" },
           body: "\n## Will\n\nAnderes.\n",
         },
       ]),
@@ -261,7 +259,7 @@ describe("the rename cascade", () => {
     });
     expect(res.status).toBe(200);
     // One entry left, not a constraint error and not a duplicate.
-    expect((await getFile(SCENE)).frontmatter.npcs).toEqual(["holm"]);
+    expect((await getFile(SCENE)).properties.npcs).toEqual(["holm"]);
   });
 });
 
@@ -271,21 +269,21 @@ describe("the audit of the #70 rules", () => {
     // is the one thing the live view acts on, and an apply that overwrites it
     // silently loses the only statement the entry ever made.
     await patchFm(SCENE, { npcs: ["jorna", "holm"] });
-    await patchFm("npcs/holm.md", { status: "dead" });
+    await patchFm("npcs/holm", { status: "dead" });
 
     await expect(
       applyDrafts("beispiel", [
         {
-          rel: "npcs/holm.md",
-          address: "npcs/holm.md",
-          frontmatter: { id: "holm", name: "Holm", status: "alive" },
+          rel: "npcs/holm",
+          address: "npcs/holm",
+          properties: { id: "holm", name: "Holm", status: "alive" },
           body: "\n## Will\n\nEtwas.\n",
         },
       ]),
     ).rejects.toThrow(/already exist/);
-    const untouched = await getFile("npcs/holm.md");
-    expect(untouched.frontmatter.status).toBe("dead");
-    expect(untouched.frontmatter.name).toBe("holm");
+    const untouched = await getFile("npcs/holm");
+    expect(untouched.properties.status).toBe("dead");
+    expect(untouched.properties.name).toBe("holm");
   });
 
   test("TWO drafts for one target are a 409, not last-write-win", async () => {
@@ -296,15 +294,15 @@ describe("the audit of the #70 rules", () => {
     try {
       await applyDrafts("beispiel", [
         {
-          rel: "npcs/holm.md",
-          address: "npcs/holm.md",
-          frontmatter: { id: "holm", name: "Holm" },
+          rel: "npcs/holm",
+          address: "npcs/holm",
+          properties: { id: "holm", name: "Holm" },
           body: "\n## Will\n\nDas erste.\n",
         },
         {
-          rel: "npcs/holm-2.md",
-          address: "npcs/holm.md",
-          frontmatter: { id: "holm", name: "Holm anders" },
+          rel: "npcs/holm-2",
+          address: "npcs/holm",
+          properties: { id: "holm", name: "Holm anders" },
           body: "\n## Will\n\nDas zweite.\n",
         },
       ]);
@@ -313,26 +311,26 @@ describe("the audit of the #70 rules", () => {
       expect((error as Error).message).toMatch(/same target/);
       conflicts = (error as { extra?: { conflicts?: unknown } }).extra?.conflicts;
     }
-    expect(conflicts).toEqual(["npcs/holm-2.md", "npcs/holm.md"]);
+    expect(conflicts).toEqual(["npcs/holm", "npcs/holm-2"]);
     // Nothing was written: the transaction rolled back.
-    expect(await fileStatus("npcs/holm.md")).toBe(404);
+    expect(await fileStatus("npcs/holm")).toBe(404);
   });
 
   test("`npcs` takes ids, not names — a new free-text entry is a 400", async () => {
     const before = await getFile(SCENE);
-    const res = await app.request("/api/beispiel/frontmatter", {
+    const res = await app.request("/api/beispiel/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         path: SCENE,
-        mtimeMs: before.mtimeMs,
+        rev: before.rev,
         patch: { npcs: ["jorna", "Alte Fischerin"] },
       }),
     });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toMatch(/npc ids, not names/);
     // The scene is unchanged — no half-written list.
-    expect((await getFile(SCENE)).frontmatter.npcs).toEqual(before.frontmatter.npcs);
+    expect((await getFile(SCENE)).properties.npcs).toEqual(before.properties.npcs);
   });
 
   test("…but STORED free text stays savable (the migration imports what is there)", async () => {
@@ -350,7 +348,7 @@ describe("the audit of the #70 rules", () => {
       .run();
 
     const patched = await patchFm(SCENE, { status: "played" });
-    expect(patched.frontmatter.npcs).toContain("Alte Fischerin");
+    expect(patched.properties.npcs).toContain("Alte Fischerin");
     // And it got no entry — free text is no reference.
     expect(await fileStatus("npcs/Alte Fischerin.md")).toBe(404);
   });
@@ -360,21 +358,21 @@ describe("the audit of the #70 rules", () => {
     // the properties dialog promised "wird angelegt" for both. Chapters are
     // the one kind that is NOT created by naming it (ADR #14).
     const before = await getFile(NPC);
-    const res = await app.request("/api/beispiel/frontmatter", {
+    const res = await app.request("/api/beispiel/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         path: NPC,
-        mtimeMs: before.mtimeMs,
+        rev: before.rev,
         patch: { chapter: "99-nirgendwo" },
       }),
     });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toMatch(/unknown chapter/);
-    expect((await getFile(NPC)).frontmatter.chapter).toBe(before.frontmatter.chapter);
+    expect((await getFile(NPC)).properties.chapter).toBe(before.properties.chapter);
 
     // An existing chapter is stored as before.
-    expect((await patchFm(NPC, { chapter: "01-salzhafen" })).frontmatter.chapter).toBe(
+    expect((await patchFm(NPC, { chapter: "01-salzhafen" })).properties.chapter).toBe(
       "01-salzhafen",
     );
   });
@@ -384,7 +382,7 @@ describe("the audit of the #70 rules", () => {
     // listing `holm` creates the empty row, and the old target check turned
     // exactly that into a 409 for a target with nothing to lose.
     await patchFm(SCENE, { npcs: ["jorna", "holm"] });
-    expect((await getFile("npcs/holm.md")).frontmatter.name).toBe("holm");
+    expect((await getFile("npcs/holm")).properties.name).toBe("holm");
 
     const res = await app.request("/api/beispiel/rename", {
       method: "POST",
@@ -393,9 +391,9 @@ describe("the audit of the #70 rules", () => {
     });
     expect(res.status).toBe(200);
     // One reference left, and it is jorna's content that lives under the id.
-    expect((await getFile(SCENE)).frontmatter.npcs).toEqual(["holm"]);
-    expect((await getFile("npcs/holm.md")).frontmatter.name).toBe("Hafenmeisterin Jorna");
-    expect(await fileStatus("npcs/jorna.md")).toBe(404);
+    expect((await getFile(SCENE)).properties.npcs).toEqual(["holm"]);
+    expect((await getFile("npcs/holm")).properties.name).toBe("Hafenmeisterin Jorna");
+    expect(await fileStatus("npcs/jorna")).toBe(404);
   });
 
   test("a rename onto a row with CONTENT is still a 409", async () => {
@@ -405,25 +403,24 @@ describe("the audit of the #70 rules", () => {
       body: JSON.stringify({ kind: "npc", oldId: "jorna", newId: "fenn" }),
     });
     expect(res.status).toBe(409);
-    expect((await getFile(NPC)).frontmatter.name).toBe("Fenn");
+    expect((await getFile(NPC)).properties.name).toBe("Fenn");
   });
 });
 
 describe("empty is not missing", () => {
   test("an empty inbox is an empty document (200), not a missing one", async () => {
-    const inbox = await getFile("inbox.md");
+    const inbox = await getFile("inbox");
     expect(inbox.kind).toBe("inbox");
   });
 });
 
 describe("a patch never drops what the migration preserved", () => {
-  test("a misshapen quickstats survives a frontmatter patch", async () => {
+  test("a misshapen quickstats survives a properties patch", async () => {
     // The migration keeps a `quickstats:` the column cannot hold (a list
     // where the format wants a mapping) in `extra`, and the renderer shows
     // it. The first patch used to delete it — silently, against the
     // round-trip rule (schema.ts rule 1).
     const root = await tempCampaignRoot();
-    const restore = useCampaignRoot(root);
     try {
       const npc = path.join(root, "beispiel", "npcs", "fenn.md");
       const raw = await readFile(npc, "utf8");
@@ -433,14 +430,13 @@ describe("a patch never drops what the migration preserved", () => {
       );
       await seedStore(root);
 
-      expect((await getFile(NPC)).frontmatter.quickstats).toEqual(["ac 12", "hp 9"]);
+      expect((await getFile(NPC)).properties.quickstats).toEqual(["ac 12", "hp 9"]);
       const patched = await patchFm(NPC, { role: "Anders" });
-      expect(patched.frontmatter.role).toBe("Anders");
-      expect(patched.frontmatter.quickstats).toEqual(["ac 12", "hp 9"]);
+      expect(patched.properties.role).toBe("Anders");
+      expect(patched.properties.quickstats).toEqual(["ac 12", "hp 9"]);
       // …and it is still there on the next read, not only in the answer.
-      expect((await getFile(NPC)).frontmatter.quickstats).toEqual(["ac 12", "hp 9"]);
+      expect((await getFile(NPC)).properties.quickstats).toEqual(["ac 12", "hp 9"]);
     } finally {
-      restore();
       await removeTempRoot(root);
     }
   });

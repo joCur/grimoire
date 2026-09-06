@@ -1,5 +1,5 @@
 // The controls of the „Eigenschaften" form (issue #42) — one row per
-// frontmatter field, chosen by the field's control. Kept apart from the dialog
+// properties field, chosen by the field's control. Kept apart from the dialog
 // so the dialog stays the save/409 shell and this file stays plain rendering:
 // every row gets its value and gives back a new one, no queries, no writes.
 //
@@ -28,8 +28,8 @@ import {
   selectOptions,
   type FieldOption,
   type FieldValue,
-  type FrontmatterField,
-} from "@/lib/frontmatter-form";
+  type PropertiesField,
+} from "@/lib/properties-form";
 import { cn } from "@/lib/utils";
 
 /** Stable per-field DOM id — one dialog is on screen at a time. */
@@ -44,10 +44,10 @@ function FieldRow({
   issue,
   children,
 }: {
-  field: FrontmatterField;
+  field: PropertiesField;
   /** Set when ONE input carries the field; unset for the group controls. */
   labelFor?: string;
-  /** What blocks the save in THIS field (frontmatterFormIssues), in German. */
+  /** What blocks the save in THIS field (propertiesFormIssues), in German. */
   issue?: string;
   children: ReactNode;
 }) {
@@ -81,7 +81,7 @@ function FieldRow({
  * One field of the form. `pending` is the text still standing in a chip input
  * — it lives in the dialog so „Speichern" can fold it in instead of losing it.
  */
-export function FrontmatterFieldControl({
+export function PropertiesFieldControl({
   field,
   value,
   initialValue,
@@ -91,7 +91,7 @@ export function FrontmatterFieldControl({
   onChange,
   onPendingChange,
 }: {
-  field: FrontmatterField;
+  field: PropertiesField;
   value: FieldValue;
   /**
    * What the field held when the dialog OPENED. A select derives its extra
@@ -236,7 +236,7 @@ function ReferenceHint({
   options,
   value,
 }: {
-  field: FrontmatterField;
+  field: PropertiesField;
   options: readonly FieldOption[];
   value: string;
 }) {
@@ -264,7 +264,7 @@ function ChipsField({
   onChange,
   onPendingChange,
 }: {
-  field: FrontmatterField;
+  field: PropertiesField;
   items: readonly string[];
   options: readonly FieldOption[];
   pending: string;
@@ -349,7 +349,7 @@ function ChipsField({
 
 /**
  * Free key/value rows (`quickstats`) — a row without a value deletes its key,
- * a row without a name blocks the save (frontmatterFormIssues) instead of
+ * a row without a name blocks the save (propertiesFormIssues) instead of
  * disappearing quietly.
  */
 function PairsField({
@@ -358,7 +358,7 @@ function PairsField({
   issue,
   onChange,
 }: {
-  field: FrontmatterField;
+  field: PropertiesField;
   entries: readonly { key: string; value: string }[];
   issue?: string;
   onChange: (entries: { key: string; value: string }[]) => void;

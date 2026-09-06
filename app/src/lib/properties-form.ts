@@ -1,4 +1,4 @@
-// „Eigenschaften" — editing ALL frontmatter fields of one file from the app
+// „Eigenschaften" — editing ALL properties fields of one file from the app
 // (issue #42, slice 2a of #15). This module is the pure half: which fields a
 // kind has, what the open form starts with, and the PATCH body a save sends.
 // No react, no query imports, so every rule here is unit-testable.
@@ -8,7 +8,7 @@
 //   1. The FIELD LIST comes from the entity types in @grimoire/shared — one
 //      list per kind, `id` deliberately absent (the rename cascade of issue
 //      #30 owns it) and the kind itself as well (it is derived from the path).
-//   2. Only what the DM CHANGED is patched. PATCH /frontmatter re-emits the
+//   2. Only what the DM CHANGED is patched. PATCH /properties re-emits the
 //      whole YAML block from the parsed file, so every key we do not send
 //      keeps its value — unknown keys of a hand-edited file included. Sending
 //      an unchanged field would be a no-op at best and a type/format change at
@@ -30,14 +30,14 @@ import {
   type EntityKind,
 } from "@grimoire/shared/types";
 
-import { fetchFile, patchFrontmatter } from "@/api";
+import { fetchFile, patchProperties } from "@/api";
 import { isEntityId, npcStatusLabel } from "@/lib/entity";
-import { fmQuickstats, fmStringArray } from "@/lib/frontmatter";
+import { fmQuickstats, fmStringArray } from "@/lib/properties";
 import { SCENE_STATUS_OPTIONS } from "@/lib/scene-status";
-import { writeWithMtime, type MtimeWriteResult } from "@/lib/write-with-mtime";
+import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
-/** The kinds whose frontmatter the form knows (README entity sections). */
-export type FrontmatterKind = "scene" | "npc" | "location" | "chapter";
+/** The kinds whose properties the form knows (README entity sections). */
+export type PropertiesKind = "scene" | "npc" | "location" | "chapter";
 
 /**
  * How one field is edited:
@@ -68,8 +68,8 @@ export interface FieldOption {
   label: string;
 }
 
-export interface FrontmatterField {
-  /** The frontmatter key, verbatim (`roll20-page` included). */
+export interface PropertiesField {
+  /** The properties key, verbatim (`roll20-page` included). */
   key: string;
   /** German label above the control. */
   label: string;
@@ -101,8 +101,8 @@ const NPC_STATUS_OPTIONS: readonly FieldOption[] = NPC_STATUSES.map((value) => (
   label: npcStatusLabel(value),
 }));
 
-/** SceneFrontmatter without `id` (README, „Entität: Szene"). */
-const SCENE_FIELDS: readonly FrontmatterField[] = [
+/** SceneProperties without `id` (README, „Entität: Szene"). */
+const SCENE_FIELDS: readonly PropertiesField[] = [
   { key: "title", label: "Titel", control: "text", required: true },
   { key: "type", label: "Typ", control: "select", options: SCENE_TYPE_OPTIONS },
   {
@@ -143,8 +143,8 @@ const SCENE_FIELDS: readonly FrontmatterField[] = [
   { key: "status", label: "Status", control: "select", options: SCENE_STATUS_OPTIONS },
 ];
 
-/** NpcFrontmatter without `id` (README, „Entität: NPC"). */
-const NPC_FIELDS: readonly FrontmatterField[] = [
+/** NpcProperties without `id` (README, „Entität: NPC"). */
+const NPC_FIELDS: readonly PropertiesField[] = [
   { key: "name", label: "Name", control: "text", required: true },
   { key: "role", label: "Rolle", control: "text", hint: "Ein Einzeiler." },
   {
@@ -172,8 +172,8 @@ const NPC_FIELDS: readonly FrontmatterField[] = [
   { key: "appearance", label: "Erscheinung", control: "textarea", hint: "Ein bis zwei Merkmale." },
 ];
 
-/** LocationFrontmatter without `id` (README, „Entität: Ort"). */
-const LOCATION_FIELDS: readonly FrontmatterField[] = [
+/** LocationProperties without `id` (README, „Entität: Ort"). */
+const LOCATION_FIELDS: readonly PropertiesField[] = [
   { key: "name", label: "Name", control: "text", required: true },
   { key: "chapter", label: "Kapitel", control: "reference", source: "chapters" },
   {
@@ -184,8 +184,8 @@ const LOCATION_FIELDS: readonly FrontmatterField[] = [
   },
 ];
 
-/** ChapterFrontmatter without `id` (the id is the chapter DIRECTORY). */
-const CHAPTER_FIELDS: readonly FrontmatterField[] = [
+/** ChapterProperties without `id` (the id is the chapter DIRECTORY). */
+const CHAPTER_FIELDS: readonly PropertiesField[] = [
   { key: "title", label: "Titel", control: "text", required: true },
   {
     key: "status",
@@ -196,7 +196,7 @@ const CHAPTER_FIELDS: readonly FrontmatterField[] = [
   },
 ];
 
-const FIELDS_BY_KIND: Record<FrontmatterKind, readonly FrontmatterField[]> = {
+const FIELDS_BY_KIND: Record<PropertiesKind, readonly PropertiesField[]> = {
   scene: SCENE_FIELDS,
   npc: NPC_FIELDS,
   location: LOCATION_FIELDS,
@@ -209,9 +209,9 @@ const FIELDS_BY_KIND: Record<FrontmatterKind, readonly FrontmatterField[]> = {
  *
  *   campaign          has its own metadata dialog (issue #34)
  *   session / inbox   app-managed, append-only (ADR #4)
- *   glossary/unknown  no typed frontmatter to offer
+ *   glossary/unknown  no typed properties to offer
  */
-export function frontmatterFieldsFor(kind: EntityKind): readonly FrontmatterField[] | undefined {
+export function propertiesFieldsFor(kind: EntityKind): readonly PropertiesField[] | undefined {
   switch (kind) {
     case "scene":
     case "npc":
@@ -224,7 +224,7 @@ export function frontmatterFieldsFor(kind: EntityKind): readonly FrontmatterFiel
 }
 
 /** German label of the kind for the dialog title („NPC-Eigenschaften"). */
-export function frontmatterKindLabel(kind: EntityKind): string | undefined {
+export function propertiesKindLabel(kind: EntityKind): string | undefined {
   switch (kind) {
     case "scene":
       return "Szene";
@@ -263,7 +263,7 @@ export function fieldValueKind(control: FieldControl): FieldValue["kind"] {
 }
 
 /**
- * A scalar frontmatter value as editable text. Numbers and booleans are shown
+ * A scalar properties value as editable text. Numbers and booleans are shown
  * verbatim instead of being dropped (degrade — a hand-edited `roll20-page: 12`
  * is text to the DM); anything structural becomes an empty field, and since an
  * untouched field is never patched, nothing is lost by that.
@@ -275,13 +275,13 @@ function scalarText(value: unknown): string {
 }
 
 /** What the form starts with — the file's current values, field by field. */
-export function frontmatterFormValues(
-  fields: readonly FrontmatterField[],
-  frontmatter: Record<string, unknown>,
+export function propertiesFormValues(
+  fields: readonly PropertiesField[],
+  properties: Record<string, unknown>,
 ): FormValues {
   const values: FormValues = {};
   for (const field of fields) {
-    const raw = frontmatter[field.key];
+    const raw = properties[field.key];
     switch (fieldValueKind(field.control)) {
       case "list":
         values[field.key] = { kind: "list", items: fmStringArray(raw) };
@@ -318,7 +318,7 @@ function normalize(value: FieldValue): FieldValue {
         kind: "pairs",
         // A row without a VALUE is a deleted key, never `key: ''` (rule 3) —
         // and a row without a KEY cannot be written at all. The latter is not
-        // silently dropped, though: frontmatterFormIssues blocks the save
+        // silently dropped, though: propertiesFormIssues blocks the save
         // while such a row still holds text (see there).
         entries: value.entries
           .map((entry) => ({ key: entry.key.trim(), value: entry.value.trim() }))
@@ -382,13 +382,13 @@ function patchValue(value: FieldValue): unknown {
 }
 
 /**
- * The PATCH /frontmatter patch: ONLY the fields whose value actually moved.
+ * The PATCH /properties patch: ONLY the fields whose value actually moved.
  * A field that ended up empty is sent as `null` (the server deletes the key),
  * everything else as its value. Keys the form does not know are never in here,
  * so a hand-edited file keeps them.
  */
-export function frontmatterPatch(
-  fields: readonly FrontmatterField[],
+export function propertiesPatch(
+  fields: readonly PropertiesField[],
   initial: FormValues,
   current: FormValues,
 ): Record<string, unknown> {
@@ -429,8 +429,8 @@ export function frontmatterPatch(
  * EXEMPT: a campaign migrated from the file era may carry free text there, and
  * such a scene has to stay savable (the server exempts the same values).
  */
-export function frontmatterFormIssues(
-  fields: readonly FrontmatterField[],
+export function propertiesFormIssues(
+  fields: readonly PropertiesField[],
   values: FormValues,
   initial?: FormValues,
 ): Record<string, string> {
@@ -477,20 +477,20 @@ export function frontmatterFormIssues(
  * the discard guard asks. An unfinished pairs row counts: it is exactly the
  * work that must not disappear on a stray Esc.
  */
-export function hasFrontmatterChanges(
-  fields: readonly FrontmatterField[],
+export function hasPropertiesChanges(
+  fields: readonly PropertiesField[],
   initial: FormValues,
   current: FormValues,
 ): boolean {
-  if (Object.keys(frontmatterPatch(fields, initial, current)).length > 0) return true;
+  if (Object.keys(propertiesPatch(fields, initial, current)).length > 0) return true;
   // With `initial`, so that free text a MIGRATED file already carries in
   // `npcs` is not read as unsaved work by the discard guard.
-  return Object.keys(frontmatterFormIssues(fields, current, initial)).length > 0;
+  return Object.keys(propertiesFormIssues(fields, current, initial)).length > 0;
 }
 
 /** Blank required field = not a save (the entity would lose its name). */
-export function canSubmitFrontmatter(
-  fields: readonly FrontmatterField[],
+export function canSubmitProperties(
+  fields: readonly PropertiesField[],
   values: FormValues,
 ): boolean {
   for (const field of fields) {
@@ -508,7 +508,7 @@ export function canSubmitFrontmatter(
  * is computed instead of being lost with the closing dialog.
  */
 export function commitPendingText(
-  fields: readonly FrontmatterField[],
+  fields: readonly PropertiesField[],
   values: FormValues,
   pending: Record<string, string>,
 ): FormValues {
@@ -587,17 +587,17 @@ export function selectOptions(
 
 /**
  * Save the patch. The 409 handling — nothing was written, the file is re-read
- * once so the next „Speichern" carries the fresh mtime — is the shared
- * protocol of write-with-mtime.ts. Every other failure throws.
+ * once so the next „Speichern" carries the fresh rev — is the shared
+ * protocol of write-with-rev.ts. Every other failure throws.
  */
-export function writeFrontmatterForm(
+export function writePropertiesForm(
   campaign: string,
   path: string,
-  mtimeMs: number,
+  rev: number,
   patch: Record<string, unknown>,
-): Promise<MtimeWriteResult> {
-  return writeWithMtime(
-    () => patchFrontmatter(campaign, { path, mtimeMs, patch }),
+): Promise<RevWriteResult> {
+  return writeWithRev(
+    () => patchProperties(campaign, { path, rev, patch }),
     () => fetchFile(campaign, path),
   );
 }

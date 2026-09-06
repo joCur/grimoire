@@ -1,5 +1,5 @@
 // Display metadata of the current campaign (issue #17): the `name` and
-// `description` from its optional `_campaign.md`, served additively by
+// `description` from its optional `_campaign`, served additively by
 // GET /api/campaigns.
 //
 // Every surface that shows a campaign label (topbar switcher + breadcrumbs,

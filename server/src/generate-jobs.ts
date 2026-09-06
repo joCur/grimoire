@@ -140,9 +140,42 @@ function unpackEdits(value: string): Map<string, string> {
   const parsed = unpackPayload<Record<string, unknown>>(value);
   if (parsed === undefined) return edits;
   for (const [key, markdown] of Object.entries(parsed)) {
-    if (typeof markdown === "string") edits.set(key, markdown);
+    if (typeof markdown === "string") edits.set(draftAddress(key), markdown);
   }
   return edits;
+}
+
+/**
+ * Entity ADDRESSES carry no file extension since issue #79, but a job row
+ * written before that upgrade stored the draft paths the model produced —
+ * `npcs/x.md`, `01-salzhafen/hafen/y.md`. Those rows outlive the deploy (that
+ * is the whole point of persisting them), and a `.md` path is no longer a
+ * legal address: the NPC apply pattern rejects it outright (400 on
+ * "Übernehmen"), and a scene path would insert a row whose id nothing can
+ * address.
+ *
+ * So a persisted job is normalized ONCE, on the way out of the row: the
+ * suffix is stripped from every draft path and from the `draftEdits` keys
+ * (which are those same paths). Review, `PUT …/job/drafts` and apply then all
+ * see the new scheme, and a fresh row — where nothing ends in `.md` — passes
+ * through untouched.
+ */
+function draftAddress(path: string): string {
+  return path.endsWith(".md") ? path.slice(0, -3) : path;
+}
+
+/** Rewrite the draft paths of a persisted payload in place (see draftAddress). */
+function normalizeDraftPaths(result?: GenerateResult, npcResult?: GenerateNpcResult): void {
+  const scenes = result?.scenes;
+  if (Array.isArray(scenes)) {
+    for (const scene of scenes) {
+      if (typeof scene?.path === "string") scene.path = draftAddress(scene.path);
+    }
+  }
+  const npc = npcResult?.npc;
+  if (npc !== undefined && npc !== null && typeof npc.path === "string") {
+    npc.path = draftAddress(npc.path);
+  }
 }
 
 /**
@@ -159,6 +192,7 @@ function toJob(row: JobRow): Job {
   const result = unpackPayload<GenerateResult>(row.result);
   const npcResult = unpackPayload<GenerateNpcResult>(row.npcResult);
   let error = unpackPayload<GenerateJobError>(row.error);
+  normalizeDraftPaths(result, npcResult);
 
   // A finished job with nothing readable to show is degraded to `failed` with
   // an error body: `done` without a result would render review blocks that

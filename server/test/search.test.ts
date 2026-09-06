@@ -35,10 +35,10 @@ async function search(q: string): Promise<SearchResult[]> {
 }
 
 /** GET /file, for the write cases below (they need the guard token). */
-async function readFile(rel: string): Promise<{ mtimeMs: number; body: string }> {
+async function readFile(rel: string): Promise<{ rev: number; body: string }> {
   const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as { mtimeMs: number; body: string };
+  return (await res.json()) as { rev: number; body: string };
 }
 
 // --- the query builder and the score transform ------------------------------
@@ -131,7 +131,7 @@ describe("reference queries (issue #57 AK5)", () => {
       kind: "npc",
       id: "jorna",
       title: "Hafenmeisterin Jorna",
-      path: "npcs/jorna.md",
+      path: "npcs/jorna",
     });
     // the scene that has her in `npcs:` and in its prose is found too, below her
     expect(results.some((r) => r.kind === "scene" && r.id === "lighthouse-arrival")).toBe(true);
@@ -145,23 +145,23 @@ describe("reference queries (issue #57 AK5)", () => {
     expect(byKind.get("chapter")).toMatchObject({
       id: "01-salzhafen",
       title: "Kapitel 1: Der Leuchtturm von Salzhafen",
-      path: "01-salzhafen/_chapter.md",
+      path: "01-salzhafen/_chapter",
     });
     expect(byKind.get("location")).toMatchObject({
       id: "leuchtturm",
       title: "Der Leuchtturm von Salzhafen",
-      path: "locations/leuchtturm.md",
+      path: "locations/leuchtturm",
     });
     expect(byKind.get("campaign")).toMatchObject({
       id: "beispiel",
       title: "Der Leuchtturm von Salzhafen",
-      path: "_campaign.md",
+      path: "_campaign",
     });
     // and the scene, whose path is derived from its ID now (store/paths)
     expect(results.find((r) => r.kind === "scene" && r.id === "lighthouse-arrival")).toMatchObject({
       id: "lighthouse-arrival",
       title: "Ankunft am Leuchtturm",
-      path: "01-salzhafen/hafen/lighthouse-arrival.md",
+      path: "01-salzhafen/hafen/lighthouse-arrival",
     });
   });
 
@@ -192,7 +192,7 @@ describe("reference queries (issue #57 AK5)", () => {
     expect(entry).toMatchObject({
       id: "lighthouse keeper",
       title: "lighthouse keeper",
-      path: "glossary.md",
+      path: "glossary",
     });
     // the explanation is the body, so it is searchable from the German side
     expect(
@@ -208,7 +208,7 @@ describe("the index follows every write", () => {
     // The guarantee that replaced invalidateCampaign(): the write and the
     // index row are one transaction, so there is no window in which the DM
     // cannot find what they just typed.
-    const rel = "01-salzhafen/hafen/lighthouse-arrival.md";
+    const rel = "01-salzhafen/hafen/lighthouse-arrival";
     expect(await search("nachtwache")).toEqual([]);
 
     const file = await readFile(rel);
@@ -217,7 +217,7 @@ describe("the index follows every write", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         path: rel,
-        mtimeMs: file.mtimeMs,
+        rev: file.rev,
         body: `${file.body}\n## Nachtwache\n\nJemand hält Wache am Turm.\n`,
       }),
     });
@@ -227,17 +227,17 @@ describe("the index follows every write", () => {
     expect(results.some((r) => r.kind === "scene" && r.id === "lighthouse-arrival")).toBe(true);
   });
 
-  test("a frontmatter patch re-indexes title and tags", async () => {
-    const rel = "npcs/fenn.md";
+  test("a properties patch re-indexes title and tags", async () => {
+    const rel = "npcs/fenn";
     expect(await search("bucht-kapitaen")).toEqual([]);
 
     const file = await readFile(rel);
-    const res = await app.request("/api/beispiel/frontmatter", {
+    const res = await app.request("/api/beispiel/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         path: rel,
-        mtimeMs: file.mtimeMs,
+        rev: file.rev,
         patch: { name: "Bucht-Kapitaen Fenn" },
       }),
     });
@@ -268,12 +268,12 @@ describe("the index follows every write", () => {
     // The bug: the rename patched `entity_id`/`ref` of the index row and left
     // `title` behind. For a display name that was the id's fallback that
     // means search kept offering the OLD name and never the new one.
-    const file = await readFile("npcs/fenn.md");
+    const file = await readFile("npcs/fenn");
     // make the name the id's spelled-out fallback, as an authored file may
-    const patch = await app.request("/api/beispiel/frontmatter", {
+    const patch = await app.request("/api/beispiel/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: "npcs/fenn.md", mtimeMs: file.mtimeMs, patch: { name: "fenn" } }),
+      body: JSON.stringify({ path: "npcs/fenn", rev: file.rev, patch: { name: "fenn" } }),
     });
     expect(patch.status).toBe(200);
 
@@ -290,16 +290,16 @@ describe("the index follows every write", () => {
     expect((await search("fenn")).some((r) => r.title === "fenn")).toBe(false);
   });
 
-  test("a frontmatter patch does not un-index an npc's relationship note", async () => {
+  test("a properties patch does not un-index an npc's relationship note", async () => {
     // The two npc writers indexed different text (patch: the stripped body,
     // body save: the full one), so an unrelated status change dropped
     // `## Beziehungen` out of the index. ONE rule now: the full document.
     expect((await search("Blick")).some((r) => r.id === "fenn")).toBe(true);
-    const file = await readFile("npcs/fenn.md");
-    const res = await app.request("/api/beispiel/frontmatter", {
+    const file = await readFile("npcs/fenn");
+    const res = await app.request("/api/beispiel/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: "npcs/fenn.md", mtimeMs: file.mtimeMs, patch: { status: "dead" } }),
+      body: JSON.stringify({ path: "npcs/fenn", rev: file.rev, patch: { status: "dead" } }),
     });
     expect(res.status).toBe(200);
     expect((await search("Blick")).some((r) => r.id === "fenn")).toBe(true);

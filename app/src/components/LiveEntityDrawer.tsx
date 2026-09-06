@@ -19,7 +19,7 @@ import { Link } from "react-router";
 import { fetchFile } from "@/api";
 import { EntityArticle } from "@/components/EntityArticle";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { fmString } from "@/lib/frontmatter";
+import { fmString } from "@/lib/properties";
 
 export function LiveEntityDrawer({
   campaign,
@@ -58,7 +58,7 @@ function DrawerBody({ campaign, path }: { campaign: string; path: string }) {
   const name =
     data === undefined
       ? path
-      : (fmString(data.frontmatter.name) ?? fmString(data.frontmatter.title) ?? path);
+      : (fmString(data.properties.name) ?? fmString(data.properties.title) ?? path);
 
   return (
     <>

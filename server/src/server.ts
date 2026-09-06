@@ -4,48 +4,60 @@
 // on Node >= 20 the same app runs via @hono/node-server instead:
 //   import { serve } from "@hono/node-server"; serve({ fetch: app.fetch, port: PORT });
 //
+// WHAT `path` MEANS (issue #79): an ADDRESS, not a file name — no `.md`, no
+// extension at all. The complete schema is in ./store/paths.ts:
+//
+//   _campaign · inbox · glossary · <chapter>/_chapter ·
+//   <chapter>/<scene-id> · <chapter>/<group>/<scene-id> ·
+//   npcs/<id> · locations/<id> · sessions/<id>
+//
+// The wire vocabulary follows from that: a document's fields are
+// `properties`, its optimistic-concurrency token is `rev` (the row version).
+// Neither `frontmatter` nor `mtimeMs` exists above the importer any more.
+//
 // Planned API — the living checklist (conventions: /README.md). Tick an
 // endpoint here when it is implemented:
 //
 //   [x] GET  /api/campaigns                    campaign list (directories + lastSession +
-//                                              name/description from _campaign.md)
-//   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (frontmatter parsed)
-//   [x] GET  /api/:campaign/file?path=...      one file (raw + parsed + mtime). glossary.md
+//                                              name/description from _campaign)
+//   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (properties parsed)
+//   [x] GET  /api/:campaign/file?path=...      one document (raw + parsed + rev). glossary
 //                                              answers 200 with an EMPTY body when the
 //                                              campaign has no terms — it is an empty
 //                                              document, not a missing one (#57 review:
 //                                              the 404 made a glossary the DM had just
 //                                              emptied unreachable from the editor).
-//                                              inbox.md does the same since #70 — same
+//                                              inbox does the same since #70 — same
 //                                              reasoning, it had been left behind.
-//                                              `mtimeMs` of glossary.md/inbox.md is that
+//                                              `rev` of glossary/inbox is that
 //                                              DOCUMENT's own counter, not campaigns.version
-//   [x] PATCH /api/:campaign/frontmatter       { path, mtimeMs, patch } — only if
-//                                              mtimeMs is unchanged, otherwise 409.
+//   [x] PATCH /api/:campaign/properties        { path, rev, patch } — only if
+//                                              rev is unchanged, otherwise 409.
 //                                              A scene's `chapter` may be SET (400 when
 //                                              the chapter does not exist — a scene must
 //                                              never fall out of the tree) or DELETED with
 //                                              null, which drops the key and leaves the
 //                                              scene's address alone
-//   [x] PUT  /api/:campaign/file               { path, mtimeMs, body } — write the markdown
-//                                              BODY of an existing file (issue #15); the
-//                                              frontmatter block is kept byte-identically,
-//                                              same mtime guard as PATCH above (409)
+//   [x] PUT  /api/:campaign/file               { path, rev, body } — write the markdown
+//                                              BODY of an existing document (issue #15);
+//                                              its properties are untouched (they are
+//                                              PATCH /properties' job), same rev guard
+//                                              as PATCH above (409)
 //   [—] POST /api/:campaign/campaign-meta      REMOVED with issue #62. It existed
-//                                              for the one gap PATCH /frontmatter
+//                                              for the one gap PATCH /properties
 //                                              could not close: a campaign whose
-//                                              `_campaign.md` did not exist yet had
-//                                              no file and therefore no guard token
+//                                              `_campaign` did not exist yet had
+//                                              no row and therefore no guard token
 //                                              to PATCH against. Since the cutover
 //                                              (#57) the import always creates a
 //                                              campaign ROW, GET /file?path=
-//                                              _campaign.md therefore always
+//                                              _campaign therefore always
 //                                              answers 200 with a `rev`, and the
 //                                              app's create branch became
 //                                              unreachable (observed in #59). The
 //                                              name is now written the same way
 //                                              every other field is: PATCH
-//                                              /frontmatter with the row's guard
+//                                              /properties with the row's guard
 //                                              token — one write path, one 409 rule
 //   [x] GET  /api/:campaign/session            the ACTIVE session (issue #40): the last
 //                                              STARTED session file that is not ended —
@@ -62,7 +74,7 @@
 //                                              lives in yesterday's file, so the client
 //                                              must not guess it either); 404 only when the
 //                                              campaign has no session file at all
-//   [x] POST /api/:campaign/session/start      creates a NEW session: sessions/<id>.md with
+//   [x] POST /api/:campaign/session/start      creates a NEW session at sessions/<id>, with
 //                                              an OPAQUE RANDOM id (issue #58 — "beenden" is
 //                                              final, so a second evening on the same day is
 //                                              simply a second session with an empty log and
@@ -92,7 +104,7 @@
 //                                              404 when no session is running, 400 when
 //                                              sceneId is not a kebab slug (it is a PARSE
 //                                              COLUMN of `- HH:MM (id) text`)
-//   [x] POST /api/:campaign/inbox              { text } -> append to inbox.md
+//   [x] POST /api/:campaign/inbox              { text } -> append to the inbox list
 //   [x] GET  /api/:campaign/search?q=...       { results } — full-text search (FTS5, bm25,
 //                                              prefix terms, diacritics folded;
 //                                              scenes/npcs/locations/chapters/campaign/
@@ -100,9 +112,12 @@
 //   [x] GET  /api/:campaign/glossary           { entries: [{ term, explanation }] } — the
 //                                              glossary TABLE (issue #57, planning F6)
 //   [x] PUT  /api/:campaign/glossary           { entries } -> { entries }; replaces the list
-//   [x] GET  /api/:campaign/migration-report   { entries: [{ path, reason, at }] } — what the
-//                                              one-time markdown import had to degrade;
-//                                              empty = clean import (issue #57)
+//   [—] GET  /api/:campaign/migration-report   REMOVED with issue #79. The markdown import
+//                                              left the production path (no boot import any
+//                                              more): it is the dev/E2E tool `grimoire seed`,
+//                                              which prints its own report on stdout. The
+//                                              `migration_report` table stays as the
+//                                              importer's bookkeeping (server/src/db/)
 //   [x] GET  /api/:campaign/version            { version, build } — version is
 //                                              `campaigns.version`, bumped by every write in
 //                                              the same transaction (the chokidar watcher is
@@ -139,7 +154,7 @@
 //                                              written; 422 when a draft's `id` is not an
 //                                              addressable slug).
 //                                              chapter + chapterTitle create
-//                                              <chapter>/_chapter.md when missing, in the
+//                                              <chapter>/_chapter when missing, in the
 //                                              same batch; `npc` is the NPC run's single
 //                                              draft (issue #21); jobId discards that job
 //                                              after a successful write.
@@ -152,7 +167,7 @@
 //                                              and the search index. Prose is NOT touched.
 //                                              CHANGED with the cutover (#57): `from`/`to`
 //                                              are DOCUMENT paths for every kind, so a
-//                                              chapter reads `<id>/_chapter.md` where the
+//                                              chapter reads `<id>/_chapter` where the
 //                                              file version named the bare DIRECTORY —
 //                                              there is no directory to rename any more
 //                                              (store/paths.ts). A display name that was
@@ -180,14 +195,14 @@
 //                                              sent: nothing was changed, and the answer
 //                                              says so instead of hiding it behind a 200
 //   [x] POST /api/:campaign/review/thread      { chapter, text } -> append `- [ ] text` under
-//                                              ## Offene Fäden of <chapter>/_chapter.md
-//   [x] POST /api/:campaign/review/npc-stub    { id, name?, note? } -> create npcs/<id>.md
+//                                              ## Offene Fäden of <chapter>/_chapter
+//   [x] POST /api/:campaign/review/npc-stub    { id, name?, note? } -> create npcs/<id>
 //                                              (status: unknown), or answer with the entry the
 //                                              id already has — idempotent since #70
 //   [x] POST /api/:campaign/review/inbox-done  { line } -> rewrite the inbox line to `- [x] …`
 //                                              (documented append-only exception)
 //
-// Validation after generate: frontmatter parseable, status==draft, references
+// Validation after generate: properties parseable, status==draft, references
 // exist or ship as stubs, only known callouts. Errors -> correction turn to
 // the LLM (LLM_CORRECTION_TURNS, default 1, max 2 — issue #19), see
 // generator/README.md; exhausted retries -> 422. A reply the model TRUNCATED
@@ -215,7 +230,7 @@
 
 import { existsSync } from "node:fs";
 import { Hono } from "hono";
-import { getAppDistDir, getCampaignRoot, getDbFile, PORT } from "./config";
+import { getAppDistDir, getDbFile, PORT } from "./config";
 import { api } from "./routes/api";
 import { mountStaticApp } from "./static-files";
 import { initStore } from "./store/handle";
@@ -233,31 +248,17 @@ app.route("/api", api);
 // two calls itself.
 if (import.meta.main) {
   console.log(`Grimoire server — database: ${getDbFile()}, port: ${PORT}`);
-  // Opens the database, applies the schema migrations and runs the one-time
-  // import from CAMPAIGN_ROOT when (and only when) the database is still
-  // empty — see store/handle.ts and db/migrate-campaigns.ts. Awaited before
-  // the first request so a boot that cannot open its database fails loudly
-  // instead of on the first query.
+  // Opens the database and applies the schema migrations — see
+  // store/handle.ts. NOTHING is imported (issue #79 AK6): a fresh instance
+  // starts empty. Awaited before the first request so a boot that cannot open
+  // its database fails loudly instead of on the first query.
   const store = await initStore();
   void store;
   const info = (await import("./store/handle")).storeInfo();
-  if (info?.migration.migrated === true) {
-    console.log(
-      `First-run import from ${getCampaignRoot()}: ` +
-        `${info.migration.campaigns.join(", ") || "(nothing)"}` +
-        (info.migration.reportEntries > 0
-          ? ` — ${info.migration.reportEntries} migration-report entr${info.migration.reportEntries === 1 ? "y" : "ies"} to read (GET /api/:campaign/migration-report)`
-          : " — clean import"),
-    );
-  } else {
-    console.log(
-      `Database in use (${info?.backend ?? "unknown backend"}); no import needed ` +
-        `(${info?.migration.skipped ?? "already migrated"}). CAMPAIGN_ROOT is not read.`,
-    );
-  }
+  console.log(`Database ready (${info?.backend ?? "unknown backend"}).`);
   // Issue #70: a boot that CHANGED data says so. The pass creates an empty
-  // npc row for every dangling npc reference of the migrated stock and is a
-  // no-op from the second boot on (store/ref-backfill.ts).
+  // npc row for every dangling npc reference and is a no-op from the second
+  // boot on (store/ref-backfill.ts).
   if (info !== undefined && info.backfilledNpcs.length > 0) {
     console.log(
       `${info.backfilledNpcs.length} referenced npc(s) had no entry and got an empty one: ` +

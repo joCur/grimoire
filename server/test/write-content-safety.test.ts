@@ -20,7 +20,6 @@ import {
   removeTempRoot,
   seedStore,
   tempCampaignRoot,
-  useCampaignRoot,
 } from "./support/store";
 
 async function getFile(rel: string): Promise<FileResponse> {
@@ -44,7 +43,7 @@ async function putOk(body: unknown): Promise<FileResponse> {
 }
 
 async function patchReq(body: unknown): Promise<Response> {
-  return app.request("/api/beispiel/frontmatter", {
+  return app.request("/api/beispiel/properties", {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -77,9 +76,9 @@ async function version(): Promise<number> {
   return ((await res.json()) as { version: number }).version;
 }
 
-const NPC = "npcs/fenn.md";
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
-const GLOSSARY = "glossary.md";
+const NPC = "npcs/fenn";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+const GLOSSARY = "glossary";
 
 beforeEach(async () => {
   setNow(() => new Date(2026, 7, 19, 21, 5));
@@ -103,7 +102,7 @@ describe("PUT /file — an npc's `## Beziehungen` keeps what became no row", () 
       "\n## Beziehungen\n\n- jorna: alte Bekannte\n" +
       "Beide kennen sich aus der Zeit vor dem Leuchtturm.\n" +
       "- jorna: und schuldet ihr Geld\n\n## Notizen\n";
-    const after = await putOk({ path: NPC, mtimeMs: before.mtimeMs, body });
+    const after = await putOk({ path: NPC, rev: before.rev, body });
 
     // the relation is a row and comes back rendered …
     expect(after.body).toContain("- jorna: alte Bekannte");
@@ -120,43 +119,43 @@ describe("PUT /file — an npc's `## Beziehungen` keeps what became no row", () 
     const before = await getFile(NPC);
     const body =
       "\n## Beziehungen\n\n- jorna: alte Bekannte\nEin Satz, der keine Beziehung ist.\n";
-    const first = await putOk({ path: NPC, mtimeMs: before.mtimeMs, body });
-    const second = await putOk({ path: NPC, mtimeMs: first.mtimeMs, body: first.body });
+    const first = await putOk({ path: NPC, rev: before.rev, body });
+    const second = await putOk({ path: NPC, rev: first.rev, body: first.body });
     expect(second.body).toBe(first.body);
-    const third = await putOk({ path: NPC, mtimeMs: second.mtimeMs, body: second.body });
+    const third = await putOk({ path: NPC, rev: second.rev, body: second.body });
     expect(third.body).toBe(first.body);
   });
 
   test("a section that is ONLY relations still renders once, at the end", async () => {
     const before = await getFile(NPC);
     const body = "\n## Will\n\nRaus aus dem Geschäft.\n\n## Beziehungen\n\n- jorna: Ex-Kollegin\n";
-    const after = await putOk({ path: NPC, mtimeMs: before.mtimeMs, body });
+    const after = await putOk({ path: NPC, rev: before.rev, body });
     expect(after.body.match(/^## Beziehungen$/gm)).toHaveLength(1);
     expect(after.body).toContain("- jorna: Ex-Kollegin");
     expect(after.body).toContain("Raus aus dem Geschäft.");
   });
 });
 
-describe("glossary.md — nothing unassignable is dropped, and it stays reachable", () => {
+describe("glossary — nothing unassignable is dropped, and it stays reachable", () => {
   test("prose above the first heading survives a save", async () => {
     const before = await getFile(GLOSSARY);
     const body =
       "\nDieser Text steht über allem und gehört zu keinem Begriff.\n\n" +
       "- tide pool → Gezeitentümpel\n";
-    const after = await putOk({ path: GLOSSARY, mtimeMs: before.mtimeMs, body });
+    const after = await putOk({ path: GLOSSARY, rev: before.rev, body });
     expect(after.body).toContain("Dieser Text steht über allem und gehört zu keinem Begriff.");
     expect(after.body).toContain("- tide pool → Gezeitentümpel");
     // and a GET says the same — it is stored, not just echoed back
     const read = await getFile(GLOSSARY);
     expect(read.body).toBe(after.body);
     // saving the rendering back keeps it
-    const again = await putOk({ path: GLOSSARY, mtimeMs: read.mtimeMs, body: read.body });
+    const again = await putOk({ path: GLOSSARY, rev: read.rev, body: read.body });
     expect(again.body).toBe(read.body);
   });
 
   test("an empty glossary is an empty document (200), still editable", async () => {
     const before = await getFile(GLOSSARY);
-    const emptied = await putOk({ path: GLOSSARY, mtimeMs: before.mtimeMs, body: "" });
+    const emptied = await putOk({ path: GLOSSARY, rev: before.rev, body: "" });
     expect(emptied.body).toBe("");
     // The 404 this used to answer made the file the editor was in unreachable.
     const read = await getFile(GLOSSARY);
@@ -165,7 +164,7 @@ describe("glossary.md — nothing unassignable is dropped, and it stays reachabl
     // …and the DM can type the glossary back in.
     const refilled = await putOk({
       path: GLOSSARY,
-      mtimeMs: read.mtimeMs,
+      rev: read.rev,
       body: "\n- tide pool → Gezeitentümpel\n",
     });
     expect(refilled.body).toContain("- tide pool → Gezeitentümpel");
@@ -175,7 +174,7 @@ describe("glossary.md — nothing unassignable is dropped, and it stays reachabl
     const before = await getFile(GLOSSARY);
     const res = await putFile({
       path: GLOSSARY,
-      mtimeMs: before.mtimeMs,
+      rev: before.rev,
       body: "\n- tide pool → Gezeitentümpel\n- tide pool → Tidenbecken\n",
     });
     expect(res.status).toBe(400);
@@ -198,49 +197,49 @@ describe("guard tokens of the two list documents", () => {
 
     const saved = await putOk({
       path: GLOSSARY,
-      mtimeMs: glossary.mtimeMs,
+      rev: glossary.rev,
       body: "\n- tide pool → Gezeitentümpel\n",
     });
     expect(saved.body).toContain("Gezeitentümpel");
     // its own writes DO move the token
-    expect(saved.mtimeMs).toBe(glossary.mtimeMs + 1);
-    const stale = await putFile({ path: GLOSSARY, mtimeMs: glossary.mtimeMs, body: "" });
+    expect(saved.rev).toBe(glossary.rev + 1);
+    const stale = await putFile({ path: GLOSSARY, rev: glossary.rev, body: "" });
     expect(stale.status).toBe(409);
   });
 
   test("the inbox token moves on inbox writes only", async () => {
-    const before = await getFile("inbox.md");
+    const before = await getFile("inbox");
     expect((await postJson("/api/beispiel/session/start")).status).toBe(200);
-    expect(await getFile("inbox.md")).toEqual(before);
+    expect(await getFile("inbox")).toEqual(before);
     expect((await postJson("/api/beispiel/inbox", { text: "Neu" })).status).toBe(200);
-    expect((await getFile("inbox.md")).mtimeMs).toBe(before.mtimeMs + 1);
+    expect((await getFile("inbox")).rev).toBe(before.rev + 1);
   });
 });
 
-describe("PATCH /frontmatter — a scene's `chapter`", () => {
+describe("PATCH /properties — a scene's `chapter`", () => {
   test("null deletes the key and the scene keeps its place in the tree", async () => {
     const before = await getFile(SCENE);
-    expect(before.frontmatter.chapter).toBe("01-salzhafen");
+    expect(before.properties.chapter).toBe("01-salzhafen");
 
     const after = await patchOk({
       path: SCENE,
-      mtimeMs: before.mtimeMs,
+      rev: before.rev,
       patch: { chapter: null },
     });
-    expect("chapter" in after.frontmatter).toBe(false);
+    expect("chapter" in after.properties).toBe(false);
     // The address is untouched — a deleted KEY must never move a scene, let
     // alone drop it out of the tree.
     expect(after.path).toBe(SCENE);
     const chapter = (await tree()).chapters[0]!;
     expect(chapter.groups[0]!.scenes.map((s) => s.id)).toContain("lighthouse-arrival");
-    expect((await getFile(SCENE)).frontmatter.chapter).toBeUndefined();
+    expect((await getFile(SCENE)).properties.chapter).toBeUndefined();
   });
 
   test("a chapter that does not exist -> 400, nothing written", async () => {
     const before = await getFile(SCENE);
     const res = await patchReq({
       path: SCENE,
-      mtimeMs: before.mtimeMs,
+      rev: before.rev,
       patch: { chapter: "99-gibt-es-nicht" },
     });
     expect(res.status).toBe(400);
@@ -250,7 +249,6 @@ describe("PATCH /frontmatter — a scene's `chapter`", () => {
 
   test("an existing chapter moves the scene, and the tree follows", async () => {
     const root = await tempCampaignRoot();
-    const restore = useCampaignRoot(root);
     try {
       await mkdir(path.join(root, "beispiel", "02-nordbucht"), { recursive: true });
       await writeFile(
@@ -263,34 +261,33 @@ describe("PATCH /frontmatter — a scene's `chapter`", () => {
       const before = await getFile(SCENE);
       const after = await patchOk({
         path: SCENE,
-        mtimeMs: before.mtimeMs,
+        rev: before.rev,
         patch: { chapter: "02-nordbucht" },
       });
-      expect(after.frontmatter.chapter).toBe("02-nordbucht");
-      expect(after.path).toBe("02-nordbucht/hafen/lighthouse-arrival.md");
+      expect(after.properties.chapter).toBe("02-nordbucht");
+      expect(after.path).toBe("02-nordbucht/hafen/lighthouse-arrival");
       const chapters = (await tree()).chapters;
       const moved = chapters.find((c) => c.id === "02-nordbucht");
       expect(moved?.groups[0]?.scenes.map((s) => s.id)).toEqual(["lighthouse-arrival"]);
     } finally {
-      restore();
       await removeTempRoot(root);
     }
   });
 });
 
 describe("applyDrafts — the conflict check is IN the insert transaction", () => {
-  /** The frontmatter/body of a scene draft, as the generator hands it over. */
+  /** The properties/body of a scene draft, as the generator hands it over. */
   function draft(id: string): {
     rel: string;
     address: string;
-    frontmatter: Record<string, unknown>;
+    properties: Record<string, unknown>;
     body: string;
   } {
-    const rel = `01-salzhafen/hafen/${id}.md`;
+    const rel = `01-salzhafen/hafen/${id}`;
     return {
       rel,
       address: rel,
-      frontmatter: { id, title: id, type: "planned", chapter: "01-salzhafen", status: "draft" },
+      properties: { id, title: id, type: "planned", chapter: "01-salzhafen", status: "draft" },
       body: "\n## Flow\n\nNeu.\n",
     };
   }
@@ -308,7 +305,7 @@ describe("applyDrafts — the conflict check is IN the insert transaction", () =
     expect(thrown).toBeInstanceOf(ApiError);
     const api = thrown as ApiError;
     expect(api.status).toBe(409);
-    expect(api.extra?.conflicts).toEqual(["01-salzhafen/hafen/lighthouse-arrival.md"]);
+    expect(api.extra?.conflicts).toEqual(["01-salzhafen/hafen/lighthouse-arrival"]);
   });
 
   test("all or nothing: a conflict late in the batch writes none of it", async () => {

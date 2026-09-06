@@ -1,6 +1,6 @@
 // Scene status (issue #28): the German labels/colors the pool and the reading
-// view share, the patch payload for PATCH /frontmatter, and the write itself
-// (the mtime conflict is the shared protocol in write-with-mtime.ts).
+// view share, the patch payload for PATCH /properties, and the write itself
+// (the rev conflict is the shared protocol in write-with-rev.ts).
 //
 // Degrade rule (README): an unknown status value is shown VERBATIM — the file
 // stays the truth. The menu only ever offers the known quartet, and picking
@@ -8,8 +8,8 @@
 
 import { SCENE_STATUSES, type SceneStatus } from "@grimoire/shared/types";
 
-import { fetchFile, patchFrontmatter } from "@/api";
-import { writeWithMtime, type MtimeWriteResult } from "@/lib/write-with-mtime";
+import { fetchFile, patchProperties } from "@/api";
+import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
 /** German labels + dot/text colors per design/README.md ("bereit · Entwurf · gespielt"). */
 const SCENE_STATUS_META: Record<SceneStatus, { label: string; dot: string; text: string }> = {
@@ -53,35 +53,35 @@ export function isSceneDone(status: string): boolean {
   return DONE_STATUSES.has(status);
 }
 
-/** Body of the status write — the mtime comes from the FileResponse on screen. */
-export interface FrontmatterPatchBody {
+/** Body of the status write — the rev comes from the FileResponse on screen. */
+export interface PropertiesPatchBody {
   path: string;
-  mtimeMs: number;
+  rev: number;
   patch: Record<string, unknown>;
 }
 
-/** Builds the PATCH /frontmatter payload for one status change. */
+/** Builds the PATCH /properties payload for one status change. */
 export function sceneStatusPatchBody(
   path: string,
-  mtimeMs: number,
+  rev: number,
   status: SceneStatus,
-): FrontmatterPatchBody {
-  return { path, mtimeMs, patch: { status } };
+): PropertiesPatchBody {
+  return { path, rev, patch: { status } };
 }
 
 /**
- * Write `status` into the file's frontmatter. The 409 handling — nothing
- * written, re-read once so the next attempt carries the fresh mtime — is the
- * shared protocol of write-with-mtime.ts. Every other failure throws.
+ * Write `status` into the file's properties. The 409 handling — nothing
+ * written, re-read once so the next attempt carries the fresh rev — is the
+ * shared protocol of write-with-rev.ts. Every other failure throws.
  */
 export function writeSceneStatus(
   campaign: string,
   path: string,
-  mtimeMs: number,
+  rev: number,
   status: SceneStatus,
-): Promise<MtimeWriteResult> {
-  return writeWithMtime(
-    () => patchFrontmatter(campaign, sceneStatusPatchBody(path, mtimeMs, status)),
+): Promise<RevWriteResult> {
+  return writeWithRev(
+    () => patchProperties(campaign, sceneStatusPatchBody(path, rev, status)),
     () => fetchFile(campaign, path),
   );
 }

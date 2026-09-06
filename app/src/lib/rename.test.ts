@@ -19,44 +19,44 @@ import {
   usageTotalLabel,
 } from "@/lib/rename";
 
-function file(path: string, kind: EntityKind, frontmatter: Record<string, unknown> = {}) {
-  return { path, kind, frontmatter };
+function file(path: string, kind: EntityKind, properties: Record<string, unknown> = {}) {
+  return { path, kind, properties };
 }
 
 describe("renameTargetFor", () => {
-  test("npc/location/scene use the frontmatter id", () => {
-    expect(renameTargetFor(file("npcs/jorna.md", "npc", { id: "jorna" }))).toEqual({
+  test("npc/location/scene use the properties id", () => {
+    expect(renameTargetFor(file("npcs/jorna", "npc", { id: "jorna" }))).toEqual({
       kind: "npc",
       oldId: "jorna",
     });
-    expect(renameTargetFor(file("locations/leuchtturm.md", "location", { id: "leuchtturm" })))
+    expect(renameTargetFor(file("locations/leuchtturm", "location", { id: "leuchtturm" })))
       .toEqual({ kind: "location", oldId: "leuchtturm" });
-    // the scene id is NOT the file name — the frontmatter wins
+    // the scene id is NOT the file name — the properties wins
     expect(
       renameTargetFor(
-        file("01-salzhafen/hafen/ankunft-leuchtturm.md", "scene", { id: "lighthouse-arrival" }),
+        file("01-salzhafen/hafen/ankunft-leuchtturm", "scene", { id: "lighthouse-arrival" }),
       ),
     ).toEqual({ kind: "scene", oldId: "lighthouse-arrival" });
   });
 
   test("a missing id degrades to the file stem", () => {
-    expect(renameTargetFor(file("npcs/fenn.md", "npc"))).toEqual({ kind: "npc", oldId: "fenn" });
+    expect(renameTargetFor(file("npcs/fenn", "npc"))).toEqual({ kind: "npc", oldId: "fenn" });
   });
 
-  test("a chapter is renamed by its DIRECTORY, not by _chapter.md", () => {
-    expect(renameTargetFor(file("01-salzhafen/_chapter.md", "chapter", { id: "01-salzhafen" })))
+  test("a chapter is renamed by its DIRECTORY, not by _chapter", () => {
+    expect(renameTargetFor(file("01-salzhafen/_chapter", "chapter", { id: "01-salzhafen" })))
       .toEqual({ kind: "chapter", oldId: "01-salzhafen" });
-    // a _chapter.md one level deeper is not a chapter we can rename
-    expect(renameTargetFor(file("01-salzhafen/hafen/_chapter.md", "chapter"))).toBeUndefined();
+    // a _chapter one level deeper is not a chapter we can rename
+    expect(renameTargetFor(file("01-salzhafen/hafen/_chapter", "chapter"))).toBeUndefined();
   });
 
   test("kinds without a renameable id offer nothing", () => {
     for (const [path, kind] of [
-      ["sessions/2026-01-15.md", "session"],
-      ["inbox.md", "inbox"],
-      ["glossary.md", "glossary"],
-      ["_campaign.md", "campaign"],
-      ["weird.md", "unknown"],
+      ["sessions/2026-01-15", "session"],
+      ["inbox", "inbox"],
+      ["glossary", "glossary"],
+      ["_campaign", "campaign"],
+      ["weird", "unknown"],
     ] as Array<[string, EntityKind]>) {
       expect(renameTargetFor(file(path, kind, { id: "x" }))).toBeUndefined();
     }
@@ -100,33 +100,33 @@ describe("changedCountLabel", () => {
 
 describe("renamedPath", () => {
   test("the renamed file itself", () => {
-    expect(renamedPath("npcs/jorna.md", { from: "npcs/jorna.md", to: "npcs/x.md" })).toBe(
-      "npcs/x.md",
+    expect(renamedPath("npcs/jorna", { from: "npcs/jorna", to: "npcs/x" })).toBe(
+      "npcs/x",
     );
   });
 
   test("a file inside a renamed chapter directory follows along", () => {
-    expect(renamedPath("01-salzhafen/_chapter.md", { from: "01-salzhafen", to: "01-salzbucht" }))
-      .toBe("01-salzbucht/_chapter.md");
+    expect(renamedPath("01-salzhafen/_chapter", { from: "01-salzhafen", to: "01-salzbucht" }))
+      .toBe("01-salzbucht/_chapter");
     expect(
-      renamedPath("01-salzhafen/hafen/ankunft-leuchtturm.md", {
+      renamedPath("01-salzhafen/hafen/ankunft-leuchtturm", {
         from: "01-salzhafen",
         to: "01-salzbucht",
       }),
-    ).toBe("01-salzbucht/hafen/ankunft-leuchtturm.md");
+    ).toBe("01-salzbucht/hafen/ankunft-leuchtturm");
   });
 
   test("an unrelated path stays put", () => {
-    expect(renamedPath("npcs/fenn.md", { from: "npcs/jorna.md", to: "npcs/x.md" })).toBe(
-      "npcs/fenn.md",
+    expect(renamedPath("npcs/fenn", { from: "npcs/jorna", to: "npcs/x" })).toBe(
+      "npcs/fenn",
     );
   });
 });
 
 describe("renameErrorMessage", () => {
   test("409 names the blocking path", () => {
-    const error = new ApiError(409, "target already exists", { path: "npcs/fenn.md" });
-    expect(renameErrorMessage(error)).toBe("npcs/fenn.md existiert schon — andere id wählen.");
+    const error = new ApiError(409, "target already exists", { path: "npcs/fenn" });
+    expect(renameErrorMessage(error)).toBe("npcs/fenn existiert schon — andere id wählen.");
   });
 
   test("409 without a path is the ambiguous-id case", () => {
@@ -160,7 +160,7 @@ function report(groups: UsageGroup[]): UsageReport {
   return {
     kind: "npc",
     id: "jorna",
-    path: "npcs/jorna.md",
+    path: "npcs/jorna",
     total: groups.reduce((sum, g) => sum + g.count, 0),
     groups,
   };

@@ -31,7 +31,7 @@ export function MobileStart({ campaign }: { campaign: string }) {
     queryFn: () => fetchTree(campaign),
     enabled: campaign !== "",
   });
-  // Display name from _campaign.md (issue #17), id as the fallback.
+  // Display name from _campaign (issue #17), id as the fallback.
   const { label: campaignName } = useCampaignMeta(campaign);
   const sceneCount = tree?.chapters.reduce(
     (n, ch) => n + ch.groups.reduce((m, g) => m + g.scenes.length, 0),

@@ -577,7 +577,7 @@ function SessionMenuChip({
           </DropdownMenuItem>
           {/* Only while the session is EMPTY (issue #40 AK7) — the mis-click's
               undo, gone the moment the evening has content. */}
-          {isSessionEmpty(session.frontmatter, session.body) && (
+          {isSessionEmpty(session.properties, session.body) && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem

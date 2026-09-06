@@ -1,23 +1,22 @@
-// Rows → the API's file shapes (issue #57).
+// Rows → the API's document shapes (issues #57/#79).
 //
-// Every read endpoint still answers `ParsedFile`/`FileResponse`: a path, a
-// frontmatter mapping, a markdown body, and the concurrency token the client
-// sends back. Nothing about that contract changes with the cutover — only
-// where the values come from.
+// Every read endpoint answers `ParsedFile`/`FileResponse`: an address, a
+// `properties` mapping, a markdown body, and the concurrency token the client
+// sends back.
 //
 // Three rules hold this together:
 //
-//   1. THE FRONTMATTER IS RECONSTRUCTED IN CONTRACT ORDER, then the preserved
-//      unknown keys from `extra`. Same keys the parser produced, same
-//      fallbacks (`title`/`name` fall back to the id — shared/parse.ts), so
-//      the app cannot tell the difference.
+//   1. `properties` IS REBUILT IN CONTRACT ORDER, then the preserved unknown
+//      keys from `extra`. Same keys the parser produced, same fallbacks
+//      (`title`/`name` fall back to the id — shared/parse.ts), so the app
+//      cannot tell the difference.
 //   2. `raw` IS A DETERMINISTIC RENDERING, not a stored byte sequence
 //      (planning section 4). It is the editor's display value; no byte
 //      guarantees are made or needed.
-//   3. `mtimeMs` IS THE ROW'S `rev` (planning section 4: `mtimeMs := rev`).
-//      The app has always treated it as an opaque guard token, so the wire
-//      name stays and the semantics get stronger: a rev cannot collide
-//      inside one second, which is exactly the bug of issue #37.
+//   3. THE GUARD TOKEN `rev` IS THE ROW'S VERSION COUNTER (planning
+//      section 4). The app has always treated it as opaque, and the row
+//      version makes the semantics stronger than a file time: it cannot
+//      collide inside one second, which is exactly the bug of issue #37.
 //
 // Sections that became rows are rendered BACK from those rows: a session's
 // `## Log`, an npc's `## Beziehungen`, the inbox list, the glossary. That is
@@ -70,7 +69,7 @@ export interface SceneRow {
   campaignId: string;
   id: string;
   chapterId: string | null;
-  /** 1 when the frontmatter declares `chapter:` (schema.ts). */
+  /** 1 when the properties declares `chapter:` (schema.ts). */
   chapterDeclared: number;
   groupSlug: string;
   title: string;
@@ -120,7 +119,7 @@ export interface SessionRow {
   /**
    * Insertion time of the row in epoch MILLISECONDS — the tie-break behind
    * `started` (db/schema.ts). Database bookkeeping, never file content: it is
-   * deliberately absent from `sessionFrontmatter`.
+   * deliberately absent from `sessionProperties`.
    */
   createdAt: number;
   body: string;
@@ -158,7 +157,7 @@ export interface GlossaryRow {
   rev: number;
 }
 
-// --- frontmatter assembly ---------------------------------------------------
+// --- properties assembly ---------------------------------------------------
 
 /** Drop `undefined`/`null` values so absent columns produce absent keys. */
 function compact(entries: Array<[string, unknown]>): Record<string, unknown> {
@@ -188,23 +187,23 @@ function withExtra(
 }
 
 /** `raw` of a file: the YAML block plus the body (rule 2 above). */
-export function renderRaw(frontmatter: Record<string, unknown>, body: string): string {
-  if (Object.keys(frontmatter).length === 0) return body;
+export function renderRaw(properties: Record<string, unknown>, body: string): string {
+  if (Object.keys(properties).length === 0) return body;
   // Same dump options as the write layer used for files: flowLevel 1 keeps
   // nested collections inline ([a, b]) and CORE_SCHEMA leaves timestamp-like
   // strings unquoted.
-  const yaml = dump(frontmatter, { schema: CORE_SCHEMA, flowLevel: 1, lineWidth: -1 });
+  const yaml = dump(properties, { schema: CORE_SCHEMA, flowLevel: 1, lineWidth: -1 });
   return `---\n${yaml}---\n${body}`;
 }
 
 function parsed(
   path: string,
   kind: ParsedFile["kind"],
-  frontmatter: Record<string, unknown>,
+  properties: Record<string, unknown>,
   body: string,
   rev: number,
 ): FileResponse {
-  return { path, kind, frontmatter, body, mtimeMs: rev, raw: renderRaw(frontmatter, body) };
+  return { path, kind, properties, body, rev: rev, raw: renderRaw(properties, body) };
 }
 
 // --- per-kind rendering -----------------------------------------------------
@@ -213,7 +212,7 @@ function parsed(
  * The campaign's display name: its stored name, or the id when there is none.
  *
  * `""` in the column means "no authored name" — the importer stored that for
- * a campaign whose `_campaign.md` said nothing usable, and the parser's own
+ * a campaign whose `_campaign` said nothing usable, and the parser's own
  * rule for a missing `name` is the id fallback (shared/src/parse.ts). The
  * fallback is applied HERE, once, and everything that shows a campaign name
  * reads it through this function: the campaign document (`GET /file`) and the
@@ -223,7 +222,7 @@ export function campaignDisplayName(row: CampaignRow): string {
   return row.name === "" ? row.id : row.name;
 }
 
-export function campaignFrontmatter(row: CampaignRow): Record<string, unknown> {
+export function campaignProperties(row: CampaignRow): Record<string, unknown> {
   return withExtra(
     compact([
       ["id", row.id],
@@ -235,10 +234,10 @@ export function campaignFrontmatter(row: CampaignRow): Record<string, unknown> {
 }
 
 export function renderCampaign(row: CampaignRow): FileResponse {
-  return parsed(CAMPAIGN_PATH, "campaign", campaignFrontmatter(row), row.body, row.rev);
+  return parsed(CAMPAIGN_PATH, "campaign", campaignProperties(row), row.body, row.rev);
 }
 
-export function chapterFrontmatter(row: ChapterRow): Record<string, unknown> {
+export function chapterProperties(row: ChapterRow): Record<string, unknown> {
   return withExtra(
     compact([
       ["id", row.id],
@@ -250,10 +249,10 @@ export function chapterFrontmatter(row: ChapterRow): Record<string, unknown> {
 }
 
 export function renderChapter(row: ChapterRow): FileResponse {
-  return parsed(chapterPath(row.id), "chapter", chapterFrontmatter(row), row.body, row.rev);
+  return parsed(chapterPath(row.id), "chapter", chapterProperties(row), row.body, row.rev);
 }
 
-export function sceneFrontmatter(
+export function sceneProperties(
   row: SceneRow,
   npcs: string[],
   tags: string[],
@@ -268,7 +267,7 @@ export function sceneFrontmatter(
       ["type", row.type === "" ? "planned" : row.type],
       ["trigger", row.trigger],
       // The ADDRESS keeps the chapter either way; the key is only rendered
-      // while the frontmatter declares it (schema.ts `chapter_declared`), so
+      // while the properties declares it (schema.ts `chapter_declared`), so
       // `PATCH { chapter: null }` can delete it as it always could.
       ["chapter", row.chapterDeclared === 0 ? null : row.chapterId],
       ["location", row.location],
@@ -287,7 +286,7 @@ export function renderScene(row: SceneRow, npcs: string[], tags: string[]): File
   return parsed(
     scenePath(row.chapterId ?? "", row.groupSlug, row.id),
     "scene",
-    sceneFrontmatter(row, npcs, tags),
+    sceneProperties(row, npcs, tags),
     row.body,
     row.rev,
   );
@@ -339,7 +338,7 @@ export function renderNpcBody(
   return `${base}${base === "" ? "" : "\n"}${section}`;
 }
 
-export function npcFrontmatter(row: NpcRow): Record<string, unknown> {
+export function npcProperties(row: NpcRow): Record<string, unknown> {
   const quickstats = unpackJson(row.quickstats);
   return withExtra(
     compact([
@@ -361,10 +360,10 @@ export function renderNpc(
   row: NpcRow,
   relations: Array<{ otherNpcId: string; note: string }>,
 ): FileResponse {
-  return parsed(npcPath(row.id), "npc", npcFrontmatter(row), renderNpcBody(row, relations), row.rev);
+  return parsed(npcPath(row.id), "npc", npcProperties(row), renderNpcBody(row, relations), row.rev);
 }
 
-export function locationFrontmatter(row: LocationRow): Record<string, unknown> {
+export function locationProperties(row: LocationRow): Record<string, unknown> {
   return withExtra(
     compact([
       ["id", row.id],
@@ -377,12 +376,12 @@ export function locationFrontmatter(row: LocationRow): Record<string, unknown> {
 }
 
 export function renderLocation(row: LocationRow): FileResponse {
-  return parsed(locationPath(row.id), "location", locationFrontmatter(row), row.body, row.rev);
+  return parsed(locationPath(row.id), "location", locationProperties(row), row.body, row.rev);
 }
 
 // --- sessions ---------------------------------------------------------------
 
-export function sessionFrontmatter(
+export function sessionProperties(
   row: SessionRow,
   pauses: PauseRow[],
   log: LogRow[],
@@ -460,10 +459,10 @@ export function renderSession(
   log: LogRow[],
   played: string[],
 ): FileResponse {
-  const frontmatter = sessionFrontmatter(row, pauses, log, played);
+  const properties = sessionProperties(row, pauses, log, played);
   const body = renderSessionBody(row, log);
   return {
-    ...parsed(sessionPath(row.id), "session", frontmatter, body, row.rev),
+    ...parsed(sessionPath(row.id), "session", properties, body, row.rev),
     ...sessionTimes(row, pauses),
   };
 }
@@ -487,8 +486,8 @@ export function renderInboxBody(rows: InboxRow[]): string {
 }
 
 export function renderInbox(campaignId: string, rows: InboxRow[], rev: number): FileResponse {
-  // The parser gave a frontmatter-less inbox the file stem as its id; the
-  // format's own `inbox.md` carries exactly that.
+  // The parser gave a properties-less inbox the file stem as its id; the
+  // format's own `inbox` carries exactly that.
   return parsed(INBOX_PATH, "inbox", { id: "inbox" }, renderInboxBody(rows), rev);
 }
 

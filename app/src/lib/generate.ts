@@ -9,7 +9,7 @@
 //     needs a client-side check (chapterIdError) and the rule for when the
 //     suggestion still follows the title (chapterIdValue).
 //   - the review preview renders the body of a draft the user may have
-//     edited as raw markdown, so the frontmatter block has to be split off
+//     edited as raw markdown, so the properties block has to be split off
 //     client-side (same rule as the server's parser: it degrades, it never
 //     throws).
 //   - German count labels for the context hint and the apply button.
@@ -146,7 +146,7 @@ export function chapterIdValue(
 }
 
 /**
- * Body of a complete markdown file (frontmatter block stripped) — the same
+ * Body of a complete markdown file (properties block stripped) — the same
  * shape the server's parser returns, so the review preview can run the
  * normal markdown pipeline over an edited draft. Degrades: without a
  * parseable block the whole text IS the body.

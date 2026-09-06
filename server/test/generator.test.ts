@@ -152,7 +152,7 @@ const usage = (inputTokens: number, outputTokens: number): TokenUsage => ({
 
 // --- fixtures -------------------------------------------------------------------
 
-const SCENE_PATH = "01-salzhafen/hafen/treffen-am-kai.md";
+const SCENE_PATH = "01-salzhafen/hafen/treffen-am-kai";
 
 function sceneMarkdown(over: { status?: string; npcs?: string; callout?: string } = {}): string {
   return [
@@ -213,7 +213,7 @@ function npcStub(over: { id?: string; name?: string; status?: string | null } = 
 
 const STUB_MARKDOWN = npcStub();
 
-const LOCATION_STUB_PATH = "locations/raeucherkammer.md";
+const LOCATION_STUB_PATH = "locations/raeucherkammer";
 
 /** A location stub — correct form carries NO status key at all (issue #27). */
 function locationStub(over: { status?: string } = {}): string {
@@ -244,7 +244,7 @@ function replyJson(over: ReplyOver = {}): string {
   const body = {
     scenes: over.scenes ?? [{ path: SCENE_PATH, content: sceneMarkdown() }],
     npc_stubs: over.npc_stubs ?? [
-      { path: "npcs/grella.md", content: STUB_MARKDOWN, reason: "im Quelltext erwähnt" },
+      { path: "npcs/grella", content: STUB_MARKDOWN, reason: "im Quelltext erwähnt" },
     ],
     location_stubs: over.location_stubs ?? [],
     warnings: over.warnings ?? ["Quelltext nennt keinen DC — DC 12 gesetzt"],
@@ -397,7 +397,7 @@ describe("extractJsonReply", () => {
   });
 
   test("a truncated object fails extraction (all three stages)", () => {
-    const cut = '{\n  "scenes": [\n    { "path": "01-salzhafen/kai.md", "content": "---\\nid: k';
+    const cut = '{\n  "scenes": [\n    { "path": "01-salzhafen/kai", "content": "---\\nid: k';
     expect(extractJsonReply(cut)).toBeNull();
     // …also when the model prefixed it with prose and opened a fence
     expect(extractJsonReply(`Los geht's:\n\n\`\`\`json\n${cut}`)).toBeNull();
@@ -416,8 +416,8 @@ describe("POST /api/:campaign/generate", () => {
     expect(result.scenes).toHaveLength(1);
     expect(result.scenes[0]!.path).toBe(SCENE_PATH);
     expect(result.scenes[0]!.markdown).toBe(sceneMarkdown());
-    expect(result.scenes[0]!.frontmatter.status).toBe("draft");
-    expect(result.scenes[0]!.frontmatter.npcs).toEqual(["fenn", "grella"]);
+    expect(result.scenes[0]!.properties.status).toBe("draft");
+    expect(result.scenes[0]!.properties.npcs).toEqual(["fenn", "grella"]);
     expect(result.stubs).toEqual([
       { kind: "npc", id: "grella", name: "Grella", markdown: STUB_MARKDOWN },
     ]);
@@ -441,7 +441,7 @@ describe("POST /api/:campaign/generate", () => {
 
     // review preview only — NOTHING on disk
     expect(await exists(SCENE_PATH)).toBe(false);
-    expect(await exists("npcs/grella.md")).toBe(false);
+    expect(await exists("npcs/grella")).toBe(false);
   });
 
   test("unknown npc without stub triggers a correction turn, then succeeds", async () => {
@@ -477,7 +477,7 @@ describe("POST /api/:campaign/generate", () => {
 
   test("npc stub with the SCENE status draft triggers a correction turn, then succeeds", async () => {
     const bad = reply({
-      npc_stubs: [{ path: "npcs/grella.md", content: npcStub({ status: "draft" }) }],
+      npc_stubs: [{ path: "npcs/grella", content: npcStub({ status: "draft" }) }],
     });
     const fake = useFake([bad, reply()]);
     const res = await generate(generateBody);
@@ -486,7 +486,7 @@ describe("POST /api/:campaign/generate", () => {
     expect(fake.calls).toHaveLength(2);
     expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad);
     const correction = fake.calls[1]!.corrections[0]!.correction;
-    expect(correction).toContain('npc stub "npcs/grella.md"');
+    expect(correction).toContain('npc stub "npcs/grella"');
     expect(correction).toContain("alive, dead, missing, unknown");
     expect(correction).toContain('"alive"');
     // the draft status is the ONLY error — the stub still resolves the
@@ -498,12 +498,12 @@ describe("POST /api/:campaign/generate", () => {
     expect(result.stubs).toEqual([
       { kind: "npc", id: "grella", name: "Grella", markdown: STUB_MARKDOWN },
     ]);
-    expect(await exists("npcs/grella.md")).toBe(false);
+    expect(await exists("npcs/grella")).toBe(false);
   });
 
   test("npc stub without any status triggers a correction turn", async () => {
     const bad = reply({
-      npc_stubs: [{ path: "npcs/grella.md", content: npcStub({ status: null }) }],
+      npc_stubs: [{ path: "npcs/grella", content: npcStub({ status: null }) }],
     });
     const fake = useFake([bad, reply()]);
     expect((await generate(generateBody)).status).toBe(200);
@@ -528,7 +528,7 @@ describe("POST /api/:campaign/generate", () => {
   test("prompt-conform stubs pass in ONE call: npc dead/alive, location without status", async () => {
     const fake = useFake([
       reply({
-        npc_stubs: [{ path: "npcs/grella.md", content: npcStub({ status: "dead" }) }],
+        npc_stubs: [{ path: "npcs/grella", content: npcStub({ status: "dead" }) }],
         location_stubs: [{ path: LOCATION_STUB_PATH, content: locationStub() }],
       }),
     ]);
@@ -584,7 +584,7 @@ describe("POST /api/:campaign/generate", () => {
   // --- truncation fail-fast (issue #18) ---------------------------------------
 
   test("a truncated reply aborts after ONE call with the LLM_MAX_TOKENS message", async () => {
-    const cut = '{"scenes":[{"path":"01-salzhafen/hafen/treffen-am-kai.md","content":"---\\nid: tre';
+    const cut = '{"scenes":[{"path":"01-salzhafen/hafen/treffen-am-kai","content":"---\\nid: tre';
     const fake = useFake([{ text: cut, truncated: true, usage: usage(9000, 8000) }, reply()], 8000);
     const res = await generate(generateBody);
     expect(res.status).toBe(422);
@@ -787,7 +787,7 @@ describe("POST /api/:campaign/generate", () => {
 
   test("newChapter: true generates into a chapter directory that does not exist yet", async () => {
     const chapter = "02-schmugglerbucht";
-    const scenePath = `${chapter}/erste-szene.md`;
+    const scenePath = `${chapter}/erste-szene`;
     const fake = useFake([
       reply({
         scenes: [
@@ -819,7 +819,7 @@ describe("POST /api/:campaign/generate", () => {
     expect(req.glossary).toContain("Leuchtturmwärter");
 
     // still a preview: neither the chapter nor the scene exist
-    expect(await exists(`${chapter}/_chapter.md`)).toBe(false);
+    expect(await exists(`${chapter}/_chapter`)).toBe(false);
     expect(await exists(scenePath)).toBe(false);
   });
 
@@ -830,7 +830,7 @@ describe("POST /api/:campaign/generate", () => {
       (await generate({ ...generateBody, chapter: "npcs", newChapter: true }))
         .status,
     ).toBe(404);
-    // The file era also refused `chapter: "glossary.md"` here, because a
+    // The file era also refused `chapter: "glossary"` here, because a
     // FILE of that name existed where the directory would go. There is no
     // file tree left to collide with, so that case is gone — what still
     // guards the chapter id is the reserved-name check above and the
@@ -871,7 +871,7 @@ describe("POST /api/:campaign/generate", () => {
 
 describe("POST /api/:campaign/generate/apply", () => {
   test("writes the reviewed drafts — GenerateResult pieces pass through verbatim", async () => {
-    // What the client sends is what /generate returned (frontmatter/name
+    // What the client sends is what /generate returned (properties/name
     // keys included) — the endpoint accepts the documented shapes as-is.
     const fake = useFake([reply()]);
     const gen = await generate(generateBody);
@@ -883,33 +883,33 @@ describe("POST /api/:campaign/generate/apply", () => {
       stubs: result.stubs,
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ written: [SCENE_PATH, "npcs/grella.md"] });
+    expect(await res.json()).toEqual({ written: [SCENE_PATH, "npcs/grella"] });
 
     // the drafts are entities now — every field the review showed survived
     // the insert, `status: draft` included (that is what the app filters on)
     const scene = await read(SCENE_PATH);
     expect(scene.kind).toBe("scene");
-    expect(scene.frontmatter.id).toBe("treffen-am-kai");
-    expect(scene.frontmatter.title).toBe("Treffen am Kai");
-    expect(scene.frontmatter.status).toBe("draft");
-    expect(scene.frontmatter.npcs).toEqual(["fenn", "grella"]);
-    expect(scene.frontmatter.tags).toEqual(["social"]);
+    expect(scene.properties.id).toBe("treffen-am-kai");
+    expect(scene.properties.title).toBe("Treffen am Kai");
+    expect(scene.properties.status).toBe("draft");
+    expect(scene.properties.npcs).toEqual(["fenn", "grella"]);
+    expect(scene.properties.tags).toEqual(["social"]);
     expect(scene.body).toContain("> [!readaloud] Nebel liegt über dem Kai");
     expect(scene.body).toContain("> [!check] Wisdom (Perception) DC 12");
 
-    const stub = await read("npcs/grella.md");
+    const stub = await read("npcs/grella");
     expect(stub.kind).toBe("npc");
-    expect(stub.frontmatter.name).toBe("Grella");
-    expect(stub.frontmatter.status).toBe("alive");
+    expect(stub.properties.name).toBe("Grella");
+    expect(stub.properties.status).toBe("alive");
     expect(stub.body).toContain("## Will");
   });
 
   test("409 lists all conflicting paths and writes nothing", async () => {
     // The conflict is decided by ID now (draftTargetExists), so the existing
-    // scene is named by its address — `<chapter>/<group>/<id>.md`.
-    const existing = "01-salzhafen/hafen/lighthouse-arrival.md";
+    // scene is named by its address — `<chapter>/<group>/<id>`.
+    const existing = "01-salzhafen/hafen/lighthouse-arrival";
     const before = await read(existing);
-    const fresh = "01-salzhafen/hafen/ganz-neu.md";
+    const fresh = "01-salzhafen/hafen/ganz-neu";
     // The free draft needs its own ID, not just its own file name: two
     // entities cannot share an id, so an id already in use would make this
     // one a conflict as well.
@@ -924,12 +924,12 @@ describe("POST /api/:campaign/generate/apply", () => {
     });
     expect(res.status).toBe(409);
     const body = (await res.json()) as { error: string; conflicts: string[] };
-    expect(body.conflicts).toEqual([existing, SCENE_PATH, "npcs/grella.md"]);
+    expect(body.conflicts).toEqual([existing, SCENE_PATH, "npcs/grella"]);
     // nothing written, nothing overwritten
     expect(await exists(fresh)).toBe(false);
     const after = await read(existing);
     expect(after.raw).toBe(before.raw);
-    expect(after.mtimeMs).toBe(before.mtimeMs); // the row's rev never moved
+    expect(after.rev).toBe(before.rev); // the row's rev never moved
   });
 
   test("422 when a draft's `id` cannot be addressed — nothing written", async () => {
@@ -939,7 +939,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     // the same request. Refused now, with the reason in the message.
     const bad = ["a/b", "Gross", "trailing-", "../evil", "mit leerzeichen"];
     for (const [index, id] of bad.entries()) {
-      const rel = `01-salzhafen/hafen/unaddressable-${index}.md`;
+      const rel = `01-salzhafen/hafen/unaddressable-${index}`;
       const res = await postJson("/api/beispiel/generate/apply", {
         scenes: [{ path: rel, markdown: sceneWithId(id) }],
       });
@@ -954,24 +954,27 @@ describe("POST /api/:campaign/generate/apply", () => {
     // a missing or empty id back to the file stem, which is the only stable
     // identity such a draft has. So this is addressable and applies — the
     // guard above is about ids that are present and unusable.
-    const rel = "01-salzhafen/hafen/leere-id.md";
+    const rel = "01-salzhafen/hafen/leere-id";
     const res = await postJson("/api/beispiel/generate/apply", {
       scenes: [{ path: rel, markdown: sceneMarkdown().replace("id: treffen-am-kai", 'id: ""') }],
     });
     expect(res.status).toBe(200);
-    expect((await read(rel)).frontmatter.id).toBe("leere-id");
+    expect((await read(rel)).properties.id).toBe("leere-id");
   });
 
+  // There is no extension rule any more (issue #79): an address carries
+  // none, and what a draft is ADDRESSED as comes from its `id` anyway
+  // (assertDraftId). So the cases below are the ones that are still unsafe:
+  // traversal, absolute, a reserved directory, the wrong depth.
   test("400 on path traversal and unsafe targets — nothing written", async () => {
     const md = sceneMarkdown();
     const bad = [
       { scenes: [{ path: "../evil.md", markdown: md }] },
-      { scenes: [{ path: "01-salzhafen/../../evil.md", markdown: md }] },
+      { scenes: [{ path: "01-salzhafen/../../evil", markdown: md }] },
       { scenes: [{ path: "/etc/evil.md", markdown: md }] },
-      { scenes: [{ path: "01-salzhafen/evil.txt", markdown: md }] }, // not .md
       { scenes: [{ path: "toplevel.md", markdown: md }] }, // not inside a chapter
-      { scenes: [{ path: "npcs/evil.md", markdown: md }] }, // reserved dir as scene
-      { scenes: [{ path: "01-salzhafen/a/b/zu-tief.md", markdown: md }] }, // too deep
+      { scenes: [{ path: "npcs/evil", markdown: md }] }, // reserved dir as scene
+      { scenes: [{ path: "01-salzhafen/a/b/zu-tief", markdown: md }] }, // too deep
       { stubs: [{ kind: "npc", id: "../evil", markdown: STUB_MARKDOWN }] },
       { stubs: [{ kind: "monster", id: "grim", markdown: STUB_MARKDOWN }] },
     ];
@@ -979,11 +982,11 @@ describe("POST /api/:campaign/generate/apply", () => {
       expect((await postJson("/api/beispiel/generate/apply", b)).status).toBe(400);
     }
     expect(await exists("../evil.md")).toBe(false);
-    expect(await exists("01-salzhafen/a/b/zu-tief.md")).toBe(false);
+    expect(await exists("01-salzhafen/a/b/zu-tief")).toBe(false);
   });
 
-  test("400 re-validation: broken frontmatter or status != draft", async () => {
-    const rel = "01-salzhafen/hafen/nicht-draft.md";
+  test("400 re-validation: broken properties or status != draft", async () => {
+    const rel = "01-salzhafen/hafen/nicht-draft";
     // status was flipped after review — apply must not trust the client
     let res = await postJson("/api/beispiel/generate/apply", {
       scenes: [{ path: rel, markdown: sceneMarkdown({ status: "ready" }) }],
@@ -997,7 +1000,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     });
     expect(res.status).toBe(400);
 
-    // no frontmatter block at all
+    // no properties block at all
     res = await postJson("/api/beispiel/generate/apply", {
       scenes: [{ path: rel, markdown: "## Nur Text\n" }],
     });
@@ -1029,8 +1032,8 @@ describe("POST /api/:campaign/generate/apply", () => {
       expect(res.status).toBe(400);
       expect(((await res.json()) as { error: string }).error).toContain(expected);
     }
-    expect(await exists("npcs/brix.md")).toBe(false);
-    expect(await exists("locations/raeucherkammer.md")).toBe(false);
+    expect(await exists("npcs/brix")).toBe(false);
+    expect(await exists("locations/raeucherkammer")).toBe(false);
 
     // the prompt-conform forms write fine
     const ok = await postJson("/api/beispiel/generate/apply", {
@@ -1041,7 +1044,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     });
     expect(ok.status).toBe(200);
     expect(await ok.json()).toEqual({
-      written: ["npcs/brix.md", "locations/raeucherkammer.md"],
+      written: ["npcs/brix", "locations/raeucherkammer"],
     });
   });
 
@@ -1059,15 +1062,33 @@ describe("POST /api/:campaign/generate/apply", () => {
       {
         // duplicate targets
         scenes: [
-          { path: "01-salzhafen/doppelt.md", markdown: sceneMarkdown() },
-          { path: "01-salzhafen/doppelt.md", markdown: sceneMarkdown() },
+          { path: "01-salzhafen/doppelt", markdown: sceneMarkdown() },
+          { path: "01-salzhafen/doppelt", markdown: sceneMarkdown() },
         ],
       },
     ];
     for (const b of bad) {
       expect((await postJson("/api/beispiel/generate/apply", b)).status).toBe(400);
     }
-    expect(await exists("01-salzhafen/doppelt.md")).toBe(false);
+    expect(await exists("01-salzhafen/doppelt")).toBe(false);
+  });
+
+  /**
+   * The last segment of a scene path IS the id whenever the properties carry
+   * none (issue #79 review) — so a path segment that is not a slug has to be
+   * rejected at the door, or the insert stores a row whose id ("foo.md")
+   * contradicts the address contract and nothing can open it again.
+   */
+  test("400 for a scene path whose last segment is not a slug", async () => {
+    const noId = sceneMarkdown().replace("id: treffen-am-kai\n", "");
+    for (const path of ["01-salzhafen/foo.md", "01-salzhafen/hafen/foo.md", "01-salzhafen/Foo"]) {
+      const res = await postJson("/api/beispiel/generate/apply", {
+        scenes: [{ path, markdown: noId }],
+      });
+      expect(res.status).toBe(400);
+      expect(await exists(path)).toBe(false);
+      expect(await exists(path.replace(/\.md$/, ""))).toBe(false);
+    }
   });
 
   test("404 for an unknown campaign", async () => {
@@ -1079,10 +1100,10 @@ describe("POST /api/:campaign/generate/apply", () => {
 
   // --- new-chapter flow (issue #12) ------------------------------------------
 
-  test("chapter + chapterTitle create _chapter.md once — and never twice", async () => {
+  test("chapter + chapterTitle create _chapter once — and never twice", async () => {
     const chapter = "03-neues-kapitel";
-    const scenePath = `${chapter}/erste-szene.md`;
-    const chapterRel = `${chapter}/_chapter.md`;
+    const scenePath = `${chapter}/erste-szene`;
+    const chapterRel = `${chapter}/_chapter`;
 
     let res = await postJson("/api/beispiel/generate/apply", {
       scenes: [{ path: scenePath, markdown: sceneWithId("erste-szene") }],
@@ -1097,13 +1118,13 @@ describe("POST /api/:campaign/generate/apply", () => {
     // status the generator gives a chapter it created (never `active`)
     const written = await read(chapterRel);
     expect(written.kind).toBe("chapter");
-    expect(written.frontmatter.id).toBe(chapter);
-    expect(written.frontmatter.title).toBe("Kapitel 3: Die Schmugglerbucht");
-    expect(written.frontmatter.status).toBe("planned");
+    expect(written.properties.id).toBe(chapter);
+    expect(written.properties.title).toBe("Kapitel 3: Die Schmugglerbucht");
+    expect(written.properties.status).toBe("planned");
 
-    // second apply into the SAME chapter: the existing _chapter.md is left
+    // second apply into the SAME chapter: the existing _chapter is left
     // untouched (not a conflict, not rewritten) — only the new scene lands
-    const second = `${chapter}/zweite-szene.md`;
+    const second = `${chapter}/zweite-szene`;
     res = await postJson("/api/beispiel/generate/apply", {
       scenes: [{ path: second, markdown: sceneWithId("zweite-szene") }],
       chapter,
@@ -1112,16 +1133,16 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ written: [second] });
     const again = await read(chapterRel);
-    expect(again.frontmatter.title).toBe(written.frontmatter.title);
-    expect(again.mtimeMs).toBe(written.mtimeMs); // not even a rev bump
+    expect(again.properties.title).toBe(written.properties.title);
+    expect(again.rev).toBe(written.rev); // not even a rev bump
   });
 
-  test("new-chapter batch stays all-or-nothing: a scene conflict writes no _chapter.md", async () => {
+  test("new-chapter batch stays all-or-nothing: a scene conflict writes no _chapter", async () => {
     const chapter = "04-konflikt";
-    const existing = "01-salzhafen/hafen/lighthouse-arrival.md";
+    const existing = "01-salzhafen/hafen/lighthouse-arrival";
     const res = await postJson("/api/beispiel/generate/apply", {
       scenes: [
-        { path: `${chapter}/neu.md`, markdown: sceneWithId("konflikt-neu") },
+        { path: `${chapter}/neu`, markdown: sceneWithId("konflikt-neu") },
         { path: existing, markdown: sceneMarkdown() },
       ],
       chapter,
@@ -1129,21 +1150,21 @@ describe("POST /api/:campaign/generate/apply", () => {
     });
     expect(res.status).toBe(409);
     expect(((await res.json()) as { conflicts: string[] }).conflicts).toEqual([existing]);
-    expect(await exists(`${chapter}/_chapter.md`)).toBe(false);
-    expect(await exists(`${chapter}/neu.md`)).toBe(false);
+    expect(await exists(`${chapter}/_chapter`)).toBe(false);
+    expect(await exists(`${chapter}/neu`)).toBe(false);
   });
 
   test("400 on half or unusable chapter arguments — nothing written", async () => {
     const md = sceneMarkdown();
     const bad = [
       // the two belong together
-      { scenes: [{ path: "05-halb/neu.md", markdown: md }], chapter: "05-halb" },
-      { scenes: [{ path: "05-halb/neu.md", markdown: md }], chapterTitle: "Halb" },
+      { scenes: [{ path: "05-halb/neu", markdown: md }], chapter: "05-halb" },
+      { scenes: [{ path: "05-halb/neu", markdown: md }], chapterTitle: "Halb" },
       // empty / whitespace-only title
-      { scenes: [{ path: "05-halb/neu.md", markdown: md }], chapter: "05-halb", chapterTitle: "  " },
+      { scenes: [{ path: "05-halb/neu", markdown: md }], chapter: "05-halb", chapterTitle: "  " },
       // unsafe chapter ids
-      { scenes: [{ path: "05-halb/neu.md", markdown: md }], chapter: "..", chapterTitle: "X" },
-      { scenes: [{ path: "05-halb/neu.md", markdown: md }], chapter: "a/b", chapterTitle: "X" },
+      { scenes: [{ path: "05-halb/neu", markdown: md }], chapter: "..", chapterTitle: "X" },
+      { scenes: [{ path: "05-halb/neu", markdown: md }], chapter: "a/b", chapterTitle: "X" },
       // nothing to apply — a chapter alone is not a draft
       { chapter: "05-halb", chapterTitle: "Halb" },
     ];
@@ -1154,21 +1175,21 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect(
       (
         await postJson("/api/beispiel/generate/apply", {
-          scenes: [{ path: "05-halb/neu.md", markdown: md }],
+          scenes: [{ path: "05-halb/neu", markdown: md }],
           chapter: "npcs",
           chapterTitle: "X",
         })
       ).status,
     ).toBe(404);
-    expect(await exists("05-halb/neu.md")).toBe(false);
-    expect(await exists("05-halb/_chapter.md")).toBe(false);
+    expect(await exists("05-halb/neu")).toBe(false);
+    expect(await exists("05-halb/_chapter")).toBe(false);
   });
 });
 
 // --- background jobs (issue #19) --------------------------------------------
 
 describe("generate jobs", () => {
-  /** A reply into a fresh path, without stubs (npcs/grella.md exists by now). */
+  /** A reply into a fresh path, without stubs (npcs/grella exists by now). */
   function jobReply(scenePath: string): string {
     return reply({
       scenes: [
@@ -1176,18 +1197,19 @@ describe("generate jobs", () => {
           path: scenePath,
           content: sceneMarkdown({ npcs: "fenn" }).replace(
             "id: treffen-am-kai",
-            `id: ${fileStem(scenePath)}`,
+            `id: ${addressId(scenePath)}`,
           ),
         },
       ],
       npc_stubs: [],
     });
   }
-  const fileStem = (rel: string) => rel.slice(rel.lastIndexOf("/") + 1, -3);
+  /** Last segment of an address — the entity id (issue #79: no extension). */
+  const addressId = (rel: string) => rel.slice(rel.lastIndexOf("/") + 1);
 
   test("202 { jobId }, status running, then done — the result waits in the store", async () => {
     const open = gate();
-    const scenePath = "01-salzhafen/hafen/job-lifecycle.md";
+    const scenePath = "01-salzhafen/hafen/job-lifecycle";
     const fake = useFake([jobReply(scenePath)], undefined, open.promise);
 
     const res = await postJson("/api/beispiel/generate", generateBody);
@@ -1226,7 +1248,7 @@ describe("generate jobs", () => {
 
   test("a second start while one runs answers 409 with the running jobId", async () => {
     const open = gate();
-    useFake([jobReply("01-salzhafen/hafen/job-parallel.md")], undefined, open.promise);
+    useFake([jobReply("01-salzhafen/hafen/job-parallel")], undefined, open.promise);
 
     const first = await postJson("/api/beispiel/generate", generateBody);
     expect(first.status).toBe(202);
@@ -1267,7 +1289,7 @@ describe("generate jobs", () => {
   });
 
   test("a truncated run keeps the fail-fast 422 body (issue #18 through the job)", async () => {
-    const cut = '{"scenes":[{"path":"01-salzhafen/hafen/x.md","content":"---\\nid: x';
+    const cut = '{"scenes":[{"path":"01-salzhafen/hafen/x","content":"---\\nid: x';
     const fake = useFake([{ text: cut, truncated: true, usage: usage(9000, 8000) }], 8000);
     expect((await postJson("/api/beispiel/generate", generateBody)).status).toBe(202);
 
@@ -1281,7 +1303,7 @@ describe("generate jobs", () => {
   });
 
   test("DELETE discards the job — also a finished one; 404 afterwards", async () => {
-    useFake([jobReply("01-salzhafen/hafen/job-delete.md")]);
+    useFake([jobReply("01-salzhafen/hafen/job-delete")]);
     await generate(generateBody);
     expect((await fetchJob())!.status).toBe("done");
 
@@ -1297,7 +1319,7 @@ describe("generate jobs", () => {
 
   test("DELETE of a RUNNING job abandons it — its result never lands", async () => {
     const open = gate();
-    useFake([jobReply("01-salzhafen/hafen/job-abandon.md")], undefined, open.promise);
+    useFake([jobReply("01-salzhafen/hafen/job-abandon")], undefined, open.promise);
     expect((await postJson("/api/beispiel/generate", generateBody)).status).toBe(202);
     expect((await fetchJob())!.status).toBe("running");
 
@@ -1311,7 +1333,7 @@ describe("generate jobs", () => {
   });
 
   test("PUT drafts: 404 without a job, 400 for an unknown path, and edits survive", async () => {
-    const scenePath = "01-salzhafen/hafen/job-drafts.md";
+    const scenePath = "01-salzhafen/hafen/job-drafts";
     const edited = `${sceneMarkdown({ npcs: "fenn" })}\nHandgeschriebene Ergänzung.\n`;
 
     // no job at all
@@ -1322,7 +1344,7 @@ describe("generate jobs", () => {
     await generate(generateBody);
 
     // a path that is not part of the result
-    res = await putDraft("beispiel", { path: "01-salzhafen/hafen/fremd.md", markdown: edited });
+    res = await putDraft("beispiel", { path: "01-salzhafen/hafen/fremd", markdown: edited });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("unknown draft path");
 
@@ -1353,7 +1375,7 @@ describe("generate jobs", () => {
   });
 
   test("apply with jobId discards the job; a stale id leaves it alone", async () => {
-    const scenePath = "01-salzhafen/hafen/job-apply.md";
+    const scenePath = "01-salzhafen/hafen/job-apply";
     useFake([jobReply(scenePath)]);
     await generate(generateBody);
     const job = await fetchJob();
@@ -1361,7 +1383,7 @@ describe("generate jobs", () => {
     // a stale id (a newer run started meanwhile) must not drop this job
     let res = await postJson("/api/beispiel/generate/apply", {
       scenes: [
-        { path: "01-salzhafen/hafen/job-apply-stale.md", markdown: sceneWithId("job-apply-stale") },
+        { path: "01-salzhafen/hafen/job-apply-stale", markdown: sceneWithId("job-apply-stale") },
       ],
       jobId: "00000000-0000-0000-0000-000000000000",
     });
@@ -1381,7 +1403,7 @@ describe("generate jobs", () => {
   });
 
   test("a FAILED apply keeps the job — the review must stay restorable", async () => {
-    const scenePath = "01-salzhafen/hafen/job-apply.md"; // written by the test above
+    const scenePath = "01-salzhafen/hafen/job-apply"; // written by the test above
     useFake([jobReply(scenePath)]);
     await generate(generateBody);
     const job = await fetchJob();
@@ -1397,17 +1419,17 @@ describe("generate jobs", () => {
 
   test("400 for a jobId that is not a string", async () => {
     const res = await postJson("/api/beispiel/generate/apply", {
-      scenes: [{ path: "01-salzhafen/hafen/job-badid.md", markdown: sceneMarkdown() }],
+      scenes: [{ path: "01-salzhafen/hafen/job-badid", markdown: sceneMarkdown() }],
       jobId: 7,
     });
     expect(res.status).toBe(400);
-    expect(await exists("01-salzhafen/hafen/job-badid.md")).toBe(false);
+    expect(await exists("01-salzhafen/hafen/job-badid")).toBe(false);
   });
 
   test("a new start replaces a finished job", async () => {
     useFake([
-      jobReply("01-salzhafen/hafen/job-first.md"),
-      jobReply("01-salzhafen/hafen/job-second.md"),
+      jobReply("01-salzhafen/hafen/job-first"),
+      jobReply("01-salzhafen/hafen/job-second"),
     ]);
     await generate(generateBody);
     const first = await fetchJob();
@@ -1417,13 +1439,13 @@ describe("generate jobs", () => {
     const second = await fetchJob();
     expect(second!.status).toBe("done");
     expect(second!.id).not.toBe(first!.id);
-    expect(second!.result!.scenes[0]!.path).toBe("01-salzhafen/hafen/job-second.md");
+    expect(second!.result!.scenes[0]!.path).toBe("01-salzhafen/hafen/job-second");
   });
 
   // --- surviving a restart (issue #23) --------------------------------------
 
   test("a FINISHED job survives a restart whole — result, edits, applyable", async () => {
-    const scenePath = "01-salzhafen/hafen/job-restart.md";
+    const scenePath = "01-salzhafen/hafen/job-restart";
     const edited = `${sceneMarkdown({ npcs: "fenn" })}\nNach dem Neustart noch da.\n`;
     useFake([jobReply(scenePath)]);
     await generate(generateBody);
@@ -1457,7 +1479,7 @@ describe("generate jobs", () => {
 
   test("a RUNNING job cannot survive — the boot fails it with a German message", async () => {
     const open = gate();
-    useFake([jobReply("01-salzhafen/hafen/job-interrupted.md")], undefined, open.promise);
+    useFake([jobReply("01-salzhafen/hafen/job-interrupted")], undefined, open.promise);
     expect((await postJson("/api/beispiel/generate", generateBody)).status).toBe(202);
     const started = (await fetchJob())!;
     expect(started.status).toBe("running");
@@ -1480,7 +1502,7 @@ describe("generate jobs", () => {
   });
 
   test("a discarded job stays gone across a restart — GET answers 404", async () => {
-    useFake([jobReply("01-salzhafen/hafen/job-discarded.md")]);
+    useFake([jobReply("01-salzhafen/hafen/job-discarded")]);
     await generate(generateBody);
     expect(
       (await app.request("/api/beispiel/generate/job", { method: "DELETE" })).status,
@@ -1495,7 +1517,7 @@ describe("generate jobs", () => {
   // --- a row that cannot be read (issue #62 review) -------------------------
 
   test("a done job with an unreadable result is served as FAILED and can be discarded", async () => {
-    useFake([jobReply("01-salzhafen/hafen/job-unreadable.md")]);
+    useFake([jobReply("01-salzhafen/hafen/job-unreadable")]);
     await generate(generateBody);
     const before = (await fetchJob())!;
     expect(before.status).toBe("done");
@@ -1519,7 +1541,7 @@ describe("generate jobs", () => {
   });
 
   test("a failed job with an unreadable error body still carries a message", async () => {
-    useFake([jobReply("01-salzhafen/hafen/job-unreadable-error.md")]);
+    useFake([jobReply("01-salzhafen/hafen/job-unreadable-error")]);
     await generate(generateBody);
     const before = (await fetchJob())!;
     const db = await getDb();
@@ -1534,10 +1556,71 @@ describe("generate jobs", () => {
     expect(job.error!.body.error).toBe(UNREADABLE_PAYLOAD_MESSAGE);
   });
 
+  // --- a row written BEFORE the address upgrade (issue #79 review) ---------
+
+  test("a persisted job with legacy .md draft paths is normalized on the way out", async () => {
+    // The row an old process left behind: paths WITH the file suffix, in the
+    // result AND as the draftEdits key. Written directly — no old build to
+    // run — which is exactly the situation after the deploy.
+    const legacyScene = "01-salzhafen/hafen/legacy-scene.md";
+    const legacyNpc = "npcs/legacy-npc.md";
+    const npcMarkdown = [
+      "---",
+      "id: legacy-npc",
+      "name: Legacy Npc",
+      "status: alive",
+      "---",
+      "",
+      "## Notizen",
+      "",
+    ].join("\n");
+    const db = await getDb();
+    db.insert(generateJobs)
+      .values({
+        id: "legacy-row",
+        campaignId: "beispiel",
+        kind: "npc",
+        status: "done",
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        result: JSON.stringify({
+          scenes: [{ path: legacyScene, markdown: sceneWithId("legacy-scene"), properties: {} }],
+          stubs: [],
+          warnings: [],
+        }),
+        npcResult: JSON.stringify({
+          npc: { path: legacyNpc, markdown: npcMarkdown, properties: { id: "legacy-npc" } },
+          warnings: [],
+        }),
+        draftEdits: JSON.stringify({ [legacyNpc]: npcMarkdown }),
+      })
+      .run();
+
+    const job = (await fetchJob())!;
+    expect(job.npcResult!.npc.path).toBe("npcs/legacy-npc");
+    expect(job.result!.scenes[0]!.path).toBe("01-salzhafen/hafen/legacy-scene");
+    expect(Object.keys(job.draftEdits)).toEqual(["npcs/legacy-npc"]);
+
+    // …and the edit store accepts the normalized path (it used to 400 on
+    // both spellings: the stored one is unknown, the new one had no draft).
+    expect(
+      (await putDraft("beispiel", { path: "npcs/legacy-npc", markdown: npcMarkdown })).status,
+    ).toBe(200);
+
+    // The point of all of it: "Übernehmen" works, under the new address.
+    const res = await postJson("/api/beispiel/generate/apply", {
+      npc: job.npcResult!.npc,
+      jobId: job.id,
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ written: ["npcs/legacy-npc"] });
+    expect(await exists("npcs/legacy-npc")).toBe(true);
+  });
+
   // --- the invariant is a constraint (issue #62 review) ---------------------
 
   test("a second job row for the same campaign is rejected by the database", async () => {
-    useFake([jobReply("01-salzhafen/hafen/job-unique.md")]);
+    useFake([jobReply("01-salzhafen/hafen/job-unique")]);
     await generate(generateBody);
     const db = await getDb();
 
@@ -1559,7 +1642,7 @@ describe("generate jobs", () => {
   // --- apply and job cleanup commit together (issue #62 review) ------------
 
   test("apply discards the job in the SAME commit as the drafts", async () => {
-    const scenePath = "01-salzhafen/hafen/job-atomic.md";
+    const scenePath = "01-salzhafen/hafen/job-atomic";
     useFake([jobReply(scenePath)]);
     await generate(generateBody);
     const job = (await fetchJob())!;
@@ -1582,13 +1665,13 @@ describe("generate jobs", () => {
   });
 
   test("a 409 apply rolls back BOTH halves — job kept, nothing written", async () => {
-    const taken = "01-salzhafen/hafen/job-atomic.md"; // written by the test above
-    const fresh = "01-salzhafen/hafen/job-atomic-fresh.md";
+    const taken = "01-salzhafen/hafen/job-atomic"; // written by the test above
+    const fresh = "01-salzhafen/hafen/job-atomic-fresh";
     useFake([
       reply({
         scenes: [
-          { path: taken, content: sceneWithId(fileStem(taken)) },
-          { path: fresh, content: sceneWithId(fileStem(fresh)) },
+          { path: taken, content: sceneWithId(addressId(taken)) },
+          { path: fresh, content: sceneWithId(addressId(fresh)) },
         ],
         npc_stubs: [],
       }),
@@ -1608,7 +1691,7 @@ describe("generate jobs", () => {
 
   test("jobs are per campaign — an unknown campaign simply has none", async () => {
     expect(await fetchJob("nope")).toBeNull();
-    useFake([jobReply("01-salzhafen/hafen/job-scope.md")]);
+    useFake([jobReply("01-salzhafen/hafen/job-scope")]);
     await generate(generateBody);
     expect((await fetchJob("beispiel"))!.status).toBe("done");
     expect(await fetchJob("nope")).toBeNull();

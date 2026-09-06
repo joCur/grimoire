@@ -2,7 +2,7 @@
 # Operations doc: docs/DEPLOYMENT.md. Deployment shape per DECISIONS #3/#5.
 #
 #   docker build -t grimoire .
-#   docker run -d -p 3000:3000 -v /srv/grimoire/campaigns:/campaigns grimoire
+#   docker run -d -p 3000:3000 -v /srv/grimoire/data:/data grimoire
 #
 # No TypeScript build step for server/ and shared/ (DECISIONS #8): Bun runs
 # the sources directly. The only build output is the Vite bundle in app/dist,
@@ -67,24 +67,19 @@ COPY server/src ./server/src
 COPY generator ./generator
 COPY --from=build /app/app/dist ./app/dist
 
-# The demo campaign ships in the image at the default CAMPAIGN_ROOT, so a
-# container started WITHOUT a volume is not empty. A mounted volume on
-# /campaigns simply shadows it (see docs/DEPLOYMENT.md). Owned by the bun user
-# because the API writes into the campaign root (session logs, inbox, drafts).
-COPY --chown=bun:bun examples /campaigns
+# The example campaign ships in the image as the source `grimoire seed` reads
+# — a dev/E2E tool, never part of the boot (issue #79 AK6). A fresh container
+# starts EMPTY; the cold start is issue #56's subject.
+COPY --chown=bun:bun examples /examples
 
-# CAMPAIGN_ROOT is set explicitly: the dev default (../examples, relative to
-# the server package) does not apply to this layout. Since the SQLite cutover
-# (issue #57, ADR #13) it is only the SOURCE of the one-time import — the
-# running server reads and writes GRIMOIRE_DATA/grimoire.db and never touches
-# the tree again.
-ENV CAMPAIGN_ROOT=/campaigns \
-    GRIMOIRE_DATA=/data \
+# GRIMOIRE_DATA is the only data setting left: the server reads and writes
+# GRIMOIRE_DATA/grimoire.db and knows no campaign tree (ADR #13, issue #79).
+ENV GRIMOIRE_DATA=/data \
     PORT=3000
 
 # The database directory — this is the state of the deployment and the volume
 # that must be mounted (docs/DEPLOYMENT.md, section 2a). Created here so the
-# first boot without a mount still works (in-image demo).
+# first boot without a mount still works.
 RUN mkdir -p /data && chown bun:bun /data
 VOLUME ["/data"]
 # ANTHROPIC_API_KEY is optional — without it the read/write API works and only
@@ -97,7 +92,7 @@ USER bun
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD ["bun", "-e", "const url = 'http://127.0.0.1:' + (process.env.PORT || 3000) + '/api/campaigns'; const r = await fetch(url); process.exit(r.ok ? 0 : 1)"]
 
-# The database boot (migrator + one-time import) and the static routes are
-# wired up only when server.ts is the process entrypoint (import.meta.main) —
+# The database boot (schema migrator) and the static routes are wired up only
+# when server.ts is the process entrypoint (import.meta.main) —
 # `bun run <file>` is exactly that.
 CMD ["bun", "run", "server/src/server.ts"]

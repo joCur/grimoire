@@ -1,13 +1,13 @@
-// The react-query envelope around an mtime-checked write (issue #38) — the
-// companion of write-with-mtime.ts, and the one place that knows how a write
+// The react-query envelope around a rev-checked write (issue #38) — the
+// companion of write-with-rev.ts, and the one place that knows how a write
 // touches the cache.
 //
-// The server file is the truth: the write sends the mtime of the FileResponse
+// The server file is the truth: the write sends the rev of the FileResponse
 // the UI is showing and seeds the RETURNED file into the cache — the cache is
 // never written with a guessed value, and never invalidated for a file the
 // server just handed us. A 409 means nothing was written: the quiet inline
 // message appears, the re-read file is seeded, and the next attempt carries
-// the fresh mtime.
+// the fresh rev.
 //
 // Everything that legitimately differs per path is a parameter: the write
 // itself, the file query key to seed, WHICH queries a successful write
@@ -20,10 +20,10 @@ import { useRef, useState } from "react";
 import {
   STALE_FILE_MESSAGE,
   WRITE_FAILED_MESSAGE,
-  type MtimeWriteResult,
-} from "@/lib/write-with-mtime";
+  type RevWriteResult,
+} from "@/lib/write-with-rev";
 
-export interface MtimeWriteMutation<TVariables> {
+export interface RevWriteMutation<TVariables> {
   /** Start a write; ignored while another one is in flight. */
   write: (variables: TVariables) => void;
   /** True while the write runs — the button reads „Speichere …". */
@@ -33,17 +33,17 @@ export interface MtimeWriteMutation<TVariables> {
    * that shows its target value while the write runs (display only).
    */
   pendingVariables?: TVariables | undefined;
-  /** Quiet inline message: mtime conflict, or a failed write. */
+  /** Quiet inline message: rev conflict, or a failed write. */
   message?: string | undefined;
 }
 
-export interface MtimeWriteOptions<TVariables> {
+export interface RevWriteOptions<TVariables> {
   /**
-   * The domain write — a `writeWithMtime` call with its payload built.
-   * `undefined` means there is nothing to write against yet (no mtime, see
-   * `withMtime`): `write()` then does nothing at all.
+   * The domain write — a `writeWithRev` call with its payload built.
+   * `undefined` means there is nothing to write against yet (no rev, see
+   * `withRev`): `write()` then does nothing at all.
    */
-  write: ((variables: TVariables) => Promise<MtimeWriteResult>) | undefined;
+  write: ((variables: TVariables) => Promise<RevWriteResult>) | undefined;
   /**
    * Query key of the written file. Whatever came back — the written file, or
    * the re-read one after a conflict — is seeded here. NOT invalidated: both
@@ -69,14 +69,14 @@ export interface MtimeWriteOptions<TVariables> {
   onConflict?: (file: FileResponse | undefined) => void;
 }
 
-export function useMtimeWriteMutation<TVariables>({
+export function useRevWriteMutation<TVariables>({
   write,
   fileKey,
   invalidateOnSuccess = [],
   errorMessage = WRITE_FAILED_MESSAGE,
   onSaved,
   onConflict,
-}: MtimeWriteOptions<TVariables>): MtimeWriteMutation<TVariables> {
+}: RevWriteOptions<TVariables>): RevWriteMutation<TVariables> {
   const queryClient = useQueryClient();
   const [message, setMessage] = useState<string>();
   // `mutation.isPending` is the render-time snapshot, so two calls in the same

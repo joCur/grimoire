@@ -93,29 +93,29 @@ describe("sessionStartMs / sessionEndMs (issue #40)", () => {
     const session = {
       startedMs: serverMs,
       endedMs: serverMs + 3 * 3_600_000,
-      frontmatter: { started: "2026-01-15T19:30", ended: "2026-01-15T22:30" },
+      properties: { started: "2026-01-15T19:30", ended: "2026-01-15T22:30" },
     };
     expect(sessionStartMs(session)).toBe(serverMs);
     expect(sessionEndMs(session)).toBe(serverMs + 3 * 3_600_000);
   });
 
   test("falls back to the local parse when the server sends no epoch fields", () => {
-    const session = { frontmatter: { started: "2026-01-15T19:30" } };
+    const session = { properties: { started: "2026-01-15T19:30" } };
     expect(sessionStartMs(session)).toBe(new Date(2026, 0, 15, 19, 30).getTime());
     expect(sessionEndMs(session)).toBeUndefined();
   });
 
   test("a midnight start still yields a time — the timer must not vanish", () => {
-    // The frontmatter string degraded to a plain date (shared/src/parse.ts).
-    expect(sessionStartMs({ frontmatter: { started: "2026-01-15" } })).toBe(
+    // The properties string degraded to a plain date (shared/src/parse.ts).
+    expect(sessionStartMs({ properties: { started: "2026-01-15" } })).toBe(
       new Date(2026, 0, 15, 0, 0).getTime(),
     );
   });
 
-  test("no session, no frontmatter, no usable value -> undefined", () => {
+  test("no session, no properties, no usable value -> undefined", () => {
     expect(sessionStartMs(undefined)).toBeUndefined();
     expect(sessionStartMs({})).toBeUndefined();
-    expect(sessionStartMs({ frontmatter: {} })).toBeUndefined();
+    expect(sessionStartMs({ properties: {} })).toBeUndefined();
   });
 });
 
@@ -141,7 +141,7 @@ describe("formatElapsed", () => {
 });
 
 // The runtime with pauses deducted (issue #40 AK8). Every epoch value the
-// server ships is used as-is; the frontmatter fallback is only for a response
+// server ships is used as-is; the properties fallback is only for a response
 // without them.
 describe("sessionElapsedMs (pauses deducted)", () => {
   const started = new Date(2026, 0, 15, 19, 0).getTime();
@@ -196,7 +196,7 @@ describe("sessionElapsedMs (pauses deducted)", () => {
 
   test("no usable `started` -> no runtime at all", () => {
     expect(sessionElapsedMs(undefined, now)).toBeUndefined();
-    expect(sessionElapsedMs({ frontmatter: {} }, now)).toBeUndefined();
+    expect(sessionElapsedMs({ properties: {} }, now)).toBeUndefined();
     expect(sessionElapsedLabel({}, now)).toBeUndefined();
   });
 
@@ -209,10 +209,10 @@ describe("sessionElapsedMs (pauses deducted)", () => {
   });
 });
 
-describe("sessionPausedMs / sessionPausedSinceMs — the frontmatter fallback", () => {
+describe("sessionPausedMs / sessionPausedSinceMs — the properties fallback", () => {
   test("sums the closed intervals of `pauses` when the server sent no epochs", () => {
     const session = {
-      frontmatter: {
+      properties: {
         started: "2026-01-15T19:00",
         pauses: [
           { from: "2026-01-15T19:10:00", to: "2026-01-15T19:20:30" },
@@ -227,7 +227,7 @@ describe("sessionPausedMs / sessionPausedSinceMs — the frontmatter fallback", 
 
   test("an open interval freezes the clock; degraded entries are ignored", () => {
     const session = {
-      frontmatter: {
+      properties: {
         started: "2026-01-15T19:00",
         pauses: ["kaputt", { from: "gestern" }, { from: "2026-01-15T19:30:00" }],
       },
@@ -238,11 +238,11 @@ describe("sessionPausedMs / sessionPausedSinceMs — the frontmatter fallback", 
     expect(sessionElapsedLabel(session, new Date(2026, 0, 15, 21, 0).getTime())).toBe("0:30:00");
   });
 
-  test("the SERVER's values win over the frontmatter", () => {
+  test("the SERVER's values win over the properties", () => {
     const session = {
       startedMs: new Date(2026, 0, 15, 19, 0).getTime(),
       pausedMs: 60_000,
-      frontmatter: {
+      properties: {
         started: "2026-01-15T19:00",
         pauses: [{ from: "2026-01-15T19:10", to: "2026-01-15T19:50" }],
       },
@@ -252,8 +252,8 @@ describe("sessionPausedMs / sessionPausedSinceMs — the frontmatter fallback", 
 
   test("no pauses at all -> 0 and not paused", () => {
     expect(sessionPausedMs(undefined)).toBe(0);
-    expect(sessionPausedMs({ frontmatter: {} })).toBe(0);
-    expect(sessionIsPaused({ frontmatter: {} })).toBe(false);
+    expect(sessionPausedMs({ properties: {} })).toBe(0);
+    expect(sessionIsPaused({ properties: {} })).toBe(false);
     expect(sessionPausedSinceMs({})).toBeUndefined();
   });
 });

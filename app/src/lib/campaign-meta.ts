@@ -1,21 +1,21 @@
 // Campaign metadata from the UI (issue #34, first small slice of the #15
-// territory): name + description of `_campaign.md`.
+// territory): name + description of `_campaign`.
 //
-// ONE write path since issue #62: PATCH /frontmatter with the guard token the
+// ONE write path since issue #62: PATCH /properties with the guard token the
 // dialog read, so an edit that happened meanwhile cannot be overwritten
 // silently (409). The second path — POST /campaign-meta for a campaign that
-// had no `_campaign.md` yet — is gone with the endpoint: since the cutover
-// (#57) every campaign is a ROW, GET /file?path=_campaign.md always answers
+// had no `_campaign` yet — is gone with the endpoint: since the cutover
+// (#57) every campaign is a ROW, GET /file?path=_campaign always answers
 // with a document and a token, and there is no "create" case left to serve.
 //
 // Everything here is pure or a plain API call — no react, no query imports,
 // so the rules are unit-testable.
 
-import { fetchFile, patchFrontmatter } from "@/api";
-import { writeWithMtime, type MtimeWriteResult } from "@/lib/write-with-mtime";
+import { fetchFile, patchProperties } from "@/api";
+import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
 /** Campaign-relative path of the metadata document. */
-export const CAMPAIGN_META_PATH = "_campaign.md";
+export const CAMPAIGN_META_PATH = "_campaign";
 
 export interface CampaignMetaValues {
   name: string;
@@ -23,7 +23,7 @@ export interface CampaignMetaValues {
 }
 
 /**
- * The frontmatter patch. A description that is blank after trimming DELETES
+ * The properties patch. A description that is blank after trimming DELETES
  * the key (`null`) instead of writing an empty string — an empty value would
  * show up as an empty subtitle line.
  */
@@ -42,11 +42,11 @@ export function canSubmitCampaignMeta(values: CampaignMetaValues): boolean {
 
 /** The version the open dialog writes against. */
 export interface CampaignMetaBase {
-  mtimeMs: number;
+  rev: number;
 }
 
 /** What the file query knows: the document, or nothing yet. */
-export type CampaignMetaAnswer = { mtimeMs: number } | undefined;
+export type CampaignMetaAnswer = { rev: number } | undefined;
 
 /**
  * Decide the base version ONCE, at the first answer of the file query.
@@ -68,7 +68,7 @@ export function seedCampaignMetaBase(
 ): CampaignMetaBase | undefined {
   if (base !== undefined) return base;
   if (answer === undefined) return undefined;
-  return { mtimeMs: answer.mtimeMs };
+  return { rev: answer.rev };
 }
 
 /**
@@ -84,21 +84,21 @@ export function prefillCampaignName(campaign: string, name: string | undefined):
 }
 
 /**
- * Save name/description. `mtimeMs` is the guard token of the campaign
+ * Save name/description. `rev` is the guard token of the campaign
  * document the dialog is showing. A 409 means nothing was written (it changed
- * meanwhile); the shared protocol of write-with-mtime.ts re-reads it so the
+ * meanwhile); the shared protocol of write-with-rev.ts re-reads it so the
  * next attempt carries the truth. Everything else throws.
  */
 export function writeCampaignMeta(
   campaign: string,
   values: CampaignMetaValues,
-  mtimeMs: number,
-): Promise<MtimeWriteResult> {
-  return writeWithMtime(
+  rev: number,
+): Promise<RevWriteResult> {
+  return writeWithRev(
     () =>
-      patchFrontmatter(campaign, {
+      patchProperties(campaign, {
         path: CAMPAIGN_META_PATH,
-        mtimeMs,
+        rev,
         patch: campaignMetaPatch(values),
       }),
     () => fetchFile(campaign, CAMPAIGN_META_PATH),

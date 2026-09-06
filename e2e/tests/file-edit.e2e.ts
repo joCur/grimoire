@@ -6,7 +6,7 @@
 // changed the file outside" can no longer happen — the conflict this path is
 // about is a second write through the API while the editor stands open.
 // Everything else is unchanged: the write goes through PUT /file with its
-// guard token, the frontmatter block must come out byte-identical, and every
+// guard token, the properties block must come out byte-identical, and every
 // assertion reads the file back — through the API instead of from disk.
 //
 // Unlike the status control (critical path 7) the conflict is DETERMINISTIC:
@@ -30,28 +30,28 @@ import type { Page } from "@playwright/test";
 
 import { expect, test, type Api } from "../support/test";
 
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
 const SCENE_URL = `/beispiel/file/${SCENE}`;
-const NPC = "npcs/jorna.md";
+const NPC = "npcs/jorna";
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 /** aria-label of the raw-markdown textarea (FileBodyEditor). */
 const TEXTAREA = "Markdown-Text von";
 
 /**
- * The frontmatter block including both fences and the newline after the
+ * The properties block including both fences and the newline after the
  * closing one — what PUT /file promises to leave alone.
  */
-function frontmatterBlock(raw: string): string {
+function propertiesBlock(raw: string): string {
   const match = /^---\n[\s\S]*?\n---\n/.exec(raw);
-  expect(match, "the fixture file has no frontmatter block").not.toBeNull();
+  expect(match, "the fixture file has no properties block").not.toBeNull();
   return match?.[0] ?? "";
 }
 
-/** Read the file and hand back its frontmatter block and the rest. */
+/** Read the file and hand back its properties block and the rest. */
 async function split(api: Api, rel: string) {
   const raw = await api.raw(rel);
-  const frontmatter = frontmatterBlock(raw);
-  return { raw, frontmatter, body: raw.slice(frontmatter.length) };
+  const properties = propertiesBlock(raw);
+  return { raw, properties, body: raw.slice(properties.length) };
 }
 
 /**
@@ -86,7 +86,7 @@ test("editing the body: save writes the file and the reading view shows it", asy
 
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toBeVisible();
-  // Seeded with the body — WITHOUT the frontmatter, which this editor never
+  // Seeded with the body — WITHOUT the properties, which this editor never
   // touches (and says so).
   await expect(textarea).toHaveValue(before.body);
   await expect(page.getByText("Nur der Textkörper — die Eigenschaften bleiben unverändert.")).toBeVisible();
@@ -113,10 +113,10 @@ test("editing the body: save writes the file and the reading view shows it", asy
     "Der Turm ragt schwarz gegen den Abendhimmel auf.",
   );
 
-  // On disk: frontmatter block byte-identical, body exactly what was typed.
+  // On disk: properties block byte-identical, body exactly what was typed.
   await expect.poll(() => api.raw(SCENE)).toContain(added);
   const after = await split(api, SCENE);
-  expect(after.frontmatter).toBe(before.frontmatter);
+  expect(after.properties).toBe(before.properties);
   expect(after.body).toBe(`${before.body}\n${added}\n`);
 });
 
@@ -168,7 +168,7 @@ test("the preview toggle renders the draft through the real markdown pipeline", 
     "Eine angelaufene Messingpfeife",
   );
   const after = await split(api, SCENE);
-  expect(after.frontmatter).toBe(before.frontmatter);
+  expect(after.properties).toBe(before.properties);
   expect(after.body).toContain(loot);
 });
 
@@ -178,7 +178,7 @@ test("a concurrent second write: the save reports the conflict, the second one w
 }) => {
   const before = await split(api, SCENE);
   const mine = "Von der DM im Editor der App ergänzt.";
-  // Same frontmatter, different body — only the row's guard token moves, and
+  // Same properties, different body — only the row's guard token moves, and
   // that is what the server compares against.
   const otherBody = "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n";
 
@@ -203,7 +203,7 @@ test("a concurrent second write: the save reports the conflict, the second one w
   // Nothing was written: the other writer's body stands, untouched.
   const conflicted = await split(api, SCENE);
   expect(conflicted.body).toBe(otherBody);
-  expect(conflicted.frontmatter).toBe(before.frontmatter);
+  expect(conflicted.properties).toBe(before.properties);
 
   // The editor re-read the file, so the SAME click works now — deliberately
   // on top of the other writer's body: the DM saw the message and decided.
@@ -214,7 +214,7 @@ test("a concurrent second write: the save reports the conflict, the second one w
 
   await expect.poll(() => api.raw(SCENE)).toContain(mine);
   const after = await split(api, SCENE);
-  expect(after.frontmatter).toBe(before.frontmatter);
+  expect(after.properties).toBe(before.properties);
   expect(after.body).toBe(`${before.body}\n${mine}\n`);
   expect(after.body).not.toContain("Von einem zweiten Schreiber");
 });
@@ -233,7 +233,7 @@ test("the status regler next to the editor is no conflict for the own save", asy
   await textarea.fill(`${before.body}\n${mine}\n`);
 
   // The pill stays usable while the editor runs (issue #28) — and its PATCH
-  // bumps the file's mtime without touching one byte of the body.
+  // bumps the file's rev without touching one byte of the body.
   const trigger = page.getByRole("button", { name: /^Status ändern, aktuell/ });
   await trigger.click();
   await page.getByRole("menuitemradio", { name: "gespielt" }).click();
@@ -250,7 +250,7 @@ test("the status regler next to the editor is no conflict for the own save", asy
   await expect.poll(() => api.raw(SCENE)).toContain(mine);
   const after = await split(api, SCENE);
   expect(after.body).toBe(`${before.body}\n${mine}\n`);
-  expect(after.frontmatter).toContain("status: played");
+  expect(after.properties).toContain("status: played");
 });
 
 test("navigating away ends edit mode — coming back never re-opens it", async ({ page, api }) => {
@@ -369,12 +369,12 @@ test("the NPC reading view edits its body the same way", async ({ page, api }) =
 
   await expect.poll(() => api.raw(NPC)).toContain(added);
   const after = await split(api, NPC);
-  expect(after.frontmatter).toBe(before.frontmatter);
+  expect(after.properties).toBe(before.properties);
 });
 
 test("location and chapter offer the editor, session and inbox do not", async ({ page, api }) => {
   // The kinds whose prose the DM maintains offer the body editor …
-  for (const rel of ["locations/leuchtturm.md", "01-salzhafen/_chapter.md"]) {
+  for (const rel of ["locations/leuchtturm", "01-salzhafen/_chapter"]) {
     await page.goto(`/beispiel/file/${rel}`);
     await openRawEditor(page);
     await expect(page.getByRole("textbox", { name: TEXTAREA })).toBeVisible();
@@ -385,7 +385,7 @@ test("location and chapter offer the editor, session and inbox do not", async ({
 
   // … the append-only logs do not: a free-hand rewrite of a log is not a
   // maintenance action (ADR #4).
-  await page.goto("/beispiel/file/sessions/2026-01-15.md");
+  await page.goto("/beispiel/file/sessions/2026-01-15");
   await expect(page.getByRole("article")).toContainText("Spuren gefunden");
   // A session's heading is its DATE, derived from `started` — the id is opaque
   // since issue #58 and is never shown. (This fixture still carries the old
@@ -395,24 +395,24 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   );
   await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
 
-  await page.goto("/beispiel/file/inbox.md");
+  await page.goto("/beispiel/file/inbox");
   await expect(page.getByRole("article")).toContainText("Der Dorfschmied repariert");
   await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
 
   // And the rule belongs to the ENDPOINT, not to the hidden button: a
   // hand-made PUT on an append-only file is refused, nothing is written.
-  for (const rel of ["sessions/2026-01-15.md", "inbox.md"]) {
+  for (const rel of ["sessions/2026-01-15", "inbox"]) {
     const rawBefore = await api.raw(rel);
     const res = await page.request.put("/api/beispiel/file", {
-      data: { path: rel, mtimeMs: Date.now(), body: "\nAlles neu.\n" },
+      data: { path: rel, rev: Date.now(), body: "\nAlles neu.\n" },
     });
     expect(res.status()).toBe(400);
     expect(await api.raw(rel)).toBe(rawBefore);
   }
 });
 
-test("_campaign.md keeps its ONE Bearbeiten — the metadata dialog", async ({ page }) => {
-  await page.goto("/beispiel/file/_campaign.md");
+test("_campaign keeps its ONE Bearbeiten — the metadata dialog", async ({ page }) => {
+  await page.goto("/beispiel/file/_campaign");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
@@ -428,11 +428,11 @@ test("_campaign.md keeps its ONE Bearbeiten — the metadata dialog", async ({ p
 
 test("the glossary stays saveable while a session writes next to it", async ({ page, api }) => {
   // Critical path 9 for the campaign's list document, and the regression of a
-  // cutover bug: `glossary.md` was guarded by `campaigns.version`, which EVERY
+  // cutover bug: `glossary` was guarded by `campaigns.version`, which EVERY
   // write bumps. A quick note during a running session therefore answered the
   // DM's open glossary edit with „Inzwischen geändert" — un-saveable exactly
   // while the campaign is in use. Each document carries its own token now.
-  await page.goto("/beispiel/file/glossary.md");
+  await page.goto("/beispiel/file/glossary");
   await expect(page.getByRole("article")).toContainText("Leuchtturmwärter");
 
   await openRawEditor(page);
@@ -453,7 +453,7 @@ test("the glossary stays saveable while a session writes next to it", async ({ p
   await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
   await expect(textarea).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText("Gezeitentümpel");
-  await expect.poll(() => api.raw("glossary.md")).toContain(added);
+  await expect.poll(() => api.raw("glossary")).toContain(added);
   // The structured endpoint agrees — the body was decomposed into rows.
   const glossary = await api.get<{ entries: Array<{ term: string }> }>("beispiel/glossary");
   expect(glossary.entries.map((e) => e.term)).toContain("tide pool");
@@ -461,7 +461,7 @@ test("the glossary stays saveable while a session writes next to it", async ({ p
   // A REAL second writer still conflicts — the token did not become toothless.
   await openRawEditor(page);
   await expect(page.getByRole("textbox", { name: TEXTAREA })).toBeVisible();
-  await api.writeBody("glossary.md", "\n- harbour master → Hafenmeisterin\n");
+  await api.writeBody("glossary", "\n- harbour master → Hafenmeisterin\n");
   await page.getByRole("textbox", { name: TEXTAREA }).fill("\n- ganz was anderes → nope\n");
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByText(STALE_MESSAGE)).toBeVisible();

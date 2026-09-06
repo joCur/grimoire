@@ -56,9 +56,9 @@ export function isUsageKind(value: unknown): value is UsageKind {
  * The kinds of reference, one per query below. The app maps these to German
  * labels (app/src/lib/rename.ts) — the wire keeps stable English keys.
  *
- *   sceneNpcs         scene frontmatter `npcs:` names the npc
+ *   sceneNpcs         scene properties `npcs:` names the npc
  *   npcRelations      another npc's `## Beziehungen` line names the npc
- *   sceneLocation     scene frontmatter `location:` names the location
+ *   sceneLocation     scene properties `location:` names the location
  *   scenesPlayed      a session's `scenes_played:` names the scene
  *   logEntries        a log line's `(scene-id)` marker names the scene
  *   chapterScenes     a scene belongs to the chapter

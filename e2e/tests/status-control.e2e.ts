@@ -1,4 +1,4 @@
-// Critical path 7: frontmatter patch via the status control, including the
+// Critical path 7: properties patch via the status control, including the
 // 409 conflict; see CLAUDE.md.
 //
 // The patch goes through the documented API with its guard token (CLAUDE.md);
@@ -7,7 +7,7 @@
 
 import { expect, test } from "../support/test";
 
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival.md";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
 const SCENE_URL = `/beispiel/file/${SCENE}`;
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 

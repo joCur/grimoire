@@ -1,4 +1,4 @@
-// Defensive accessors for hand-edited frontmatter (Record<string, unknown>).
+// Defensive accessors for hand-edited properties (Record<string, unknown>).
 // Mirrors the degrade rule: wrong-typed values yield undefined/empty, never
 // an error.
 

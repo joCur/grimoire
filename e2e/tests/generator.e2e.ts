@@ -5,7 +5,7 @@
 //
 // One thing the cutover (issue #57) changed here: the draft is REVIEWED under
 // the file name the model chose (`SCENE_SLUG`) but STORED under its id
-// (`SCENE_ID`), because a scene's address is `<chapter>/<id>.md` now. So the
+// (`SCENE_ID`), because a scene's address is `<chapter>/<id>` now. So the
 // review assertions use the slug and everything after „Übernehmen" the id.
 //
 // Nothing about it is mocked except the model itself: the app starts a real
@@ -27,8 +27,8 @@ import {
 } from "../fixtures/replies";
 import { expect, test } from "../support/test";
 
-/** Where the applied scene draft LIVES: `<chapter>/<id>.md` (issue #57). */
-const SCENE_PATH = `01-salzhafen/${SCENE_ID}.md`;
+/** Where the applied scene draft LIVES: `<chapter>/<id>` (issue #57). */
+const SCENE_PATH = `01-salzhafen/${SCENE_ID}`;
 
 const SOURCE = `The party watches the quay at low tide. Two lanterns move along the
 mole while Fenn's crew shifts a cargo before dawn.`;
@@ -64,7 +64,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   await expect(page.getByText("Der Frachtbrief ist erfunden", { exact: false })).toBeVisible();
 
   // The draft card: title, target path, status pill, rendered body.
-  const card = page.locator("div").filter({ hasText: `01-salzhafen/${SCENE_SLUG}.md` }).last();
+  const card = page.locator("div").filter({ hasText: `01-salzhafen/${SCENE_SLUG}` }).last();
   await expect(page.getByRole("heading", { level: 2, name: SCENE_TITLE })).toBeVisible();
   await expect(card).toContainText("draft");
   await expect(card.locator("[data-callout='readaloud']")).toContainText("Die Flut zieht sich");
@@ -77,7 +77,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   await expect(card).toContainText("[[grella]]");
 
   // Nothing is stored before "Übernehmen" — under neither name.
-  expect(await api.exists(`01-salzhafen/${SCENE_SLUG}.md`)).toBe(false);
+  expect(await api.exists(`01-salzhafen/${SCENE_SLUG}`)).toBe(false);
   expect(await api.exists(SCENE_PATH)).toBe(false);
 
   // Stubs are decided one by one. An undecided row is the innermost div that
@@ -92,8 +92,8 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
     await row.getByRole("button", { name: "Annehmen" }).click();
   };
   await expect(page.getByText("Stubs — einzeln entscheiden")).toBeVisible();
-  await acceptStub(`npcs/${NPC_STUB_ID}.md`, NPC_STUB_NAME);
-  await acceptStub(`locations/${LOCATION_STUB_ID}.md`, LOCATION_STUB_NAME);
+  await acceptStub(`npcs/${NPC_STUB_ID}`, NPC_STUB_NAME);
+  await acceptStub(`locations/${LOCATION_STUB_ID}`, LOCATION_STUB_NAME);
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
 
   await page.getByRole("button", { name: /^Übernehmen \(1 Szene · 2 Stubs\)$/ }).click();
@@ -108,12 +108,12 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   expect(scene).toContain("status: draft");
   expect(scene).toContain(`title: ${SCENE_TITLE}`);
   expect(scene).toContain("> [!loot]");
-  const npcFile = await api.raw(`npcs/${NPC_STUB_ID}.md`);
+  const npcFile = await api.raw(`npcs/${NPC_STUB_ID}`);
   expect(npcFile).toContain("status: alive");
-  const locationFile = await api.raw(`locations/${LOCATION_STUB_ID}.md`);
+  const locationFile = await api.raw(`locations/${LOCATION_STUB_ID}`);
   expect(locationFile).not.toContain("status:");
   // The model's file name addresses nothing.
-  expect(await api.exists(`01-salzhafen/${SCENE_SLUG}.md`)).toBe(false);
+  expect(await api.exists(`01-salzhafen/${SCENE_SLUG}`)).toBe(false);
 
   // Back in the pool the draft shows up with the German status label.
   await page.getByRole("button", { name: "Zum Pool" }).click();
@@ -133,7 +133,7 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
 
   await page.getByLabel("Quelltext", { exact: true }).fill(NPC_SOURCE);
   await page.getByLabel("id (optional)").fill("brakk");
-  await expect(page.getByText("wird angelegt als: npcs/brakk.md")).toBeVisible();
+  await expect(page.getByText("wird angelegt als: npcs/brakk")).toBeVisible();
 
   await page.getByRole("button", { name: "NPC generieren", exact: true }).click();
 
@@ -141,7 +141,7 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
     timeout: 30_000,
   });
   await expect(page.getByText("1 NPC · noch nichts geschrieben")).toBeVisible();
-  const card = page.locator("div").filter({ hasText: "npcs/brakk.md" }).last();
+  const card = page.locator("div").filter({ hasText: "npcs/brakk" }).last();
   await expect(page.getByRole("heading", { level: 2, name: NPC_DEFAULT_NAME })).toBeVisible();
   await expect(card).toContainText("lebendig");
   await expect(card).toContainText(NPC_ROLE);
@@ -149,11 +149,11 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   await expect(card).toContainText("insight +1");
   await expect(card.locator("[data-callout='secret']")).toContainText("Hat gesehen");
 
-  expect(await api.exists("npcs/brakk.md")).toBe(false);
+  expect(await api.exists("npcs/brakk")).toBe(false);
   await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
 
   await expect(page.getByText("Geschrieben — NPC-Eintrag angelegt")).toBeVisible();
-  const npc = await api.raw("npcs/brakk.md");
+  const npc = await api.raw("npcs/brakk");
   expect(npc).toContain("id: brakk");
   expect(npc).toContain("status: alive");
   // Quoted quickstats stay STRINGS; the YAML the store emits quotes them in
@@ -162,7 +162,7 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
 
   // "NPC ansehen" opens the file that now exists.
   await page.getByRole("button", { name: "NPC ansehen" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/brakk\.md$/);
+  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/brakk$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_DEFAULT_NAME);
 });
 
@@ -191,7 +191,7 @@ test("failure path: an invalid model reply shows the 422 block with the raw repl
   await expect(page.locator("pre")).toContainText("night-watch-quay");
 
   // Nothing was written, and the form is usable again.
-  expect(await api.exists(`01-salzhafen/${SCENE_SLUG}.md`)).toBe(false);
+  expect(await api.exists(`01-salzhafen/${SCENE_SLUG}`)).toBe(false);
   expect(await api.exists(SCENE_PATH)).toBe(false);
   await expect(page.getByRole("button", { name: "Entwürfe generieren" })).toBeEnabled();
 });

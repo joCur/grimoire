@@ -33,12 +33,13 @@ import {
 const EXAMPLES = new URL("../../../examples/", import.meta.url);
 
 function exampleBlocks(rel: string): SceneBlock[] {
-  const raw = readFileSync(new URL(rel, EXAMPLES), "utf8");
+  // `rel` is an ADDRESS (issue #79); the committed fixture is still a file.
+  const raw = readFileSync(new URL(`${rel}.md`, EXAMPLES), "utf8");
   return parseBlocks(parseMarkdown(raw, rel, 0).body);
 }
 
-const ARRIVAL = "beispiel/01-salzhafen/hafen/ankunft-leuchtturm.md";
-const SMUGGLERS = "beispiel/01-salzhafen/hafen/von-schmugglern-erwischt.md";
+const ARRIVAL = "beispiel/01-salzhafen/hafen/ankunft-leuchtturm";
+const SMUGGLERS = "beispiel/01-salzhafen/hafen/von-schmugglern-erwischt";
 
 function composer(blocks: SceneBlock[], issues: Record<string, string> = {}): string {
   return renderToStaticMarkup(
@@ -46,7 +47,7 @@ function composer(blocks: SceneBlock[], issues: Record<string, string> = {}): st
       blocks={blocks}
       onChange={() => {}}
       idPrefix="body-scene"
-      label="szene.md"
+      label="szene"
       issues={issues}
     />,
   );
@@ -261,7 +262,7 @@ describe("a block that would break the file", () => {
     expect(html).toContain("beendet den Falls-Abschnitt");
     // Exactly once — one card owns the problem.
     expect(occurrences(html, "beendet den Falls-Abschnitt")).toBe(1);
-    // …and it is announced, like the frontmatter form's field errors.
+    // …and it is announced, like the properties form's field errors.
     expect(html).toContain('aria-live="polite"');
   });
 

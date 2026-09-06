@@ -40,8 +40,8 @@ const CONTENT_TYPES: Record<string, string> = {
  * Extensions that must never fall back to index.html: a missing .js/.css/font
  * is a build problem, and answering it with HTML only produces a confusing
  * MIME error in the browser. `.html` is NOT in this set (a missing page is a
- * client route), and neither are data paths like `.md` — the app has SPA
- * routes such as `/:campaign/file/<chapter>/<scene>.md`.
+ * client route). Document addresses carry no extension at all since issue #79
+ * (`/:campaign/file/<chapter>/<scene>`), so they never come near this set.
  */
 const HARD_404_EXTENSIONS = new Set(
   Object.keys(CONTENT_TYPES).filter((ext) => ext !== ".html" && ext !== ".txt"),
@@ -82,9 +82,9 @@ export function resolveStaticPath(distDir: string, pathname: string): string | n
   return abs;
 }
 
-/** Weak validator from size + mtime — enough for `no-cache` revalidation. */
-function etagOf(size: number, mtimeMs: number): string {
-  return `"${size.toString(16)}-${Math.floor(mtimeMs).toString(16)}"`;
+/** Weak validator from size + rev — enough for `no-cache` revalidation. */
+function etagOf(size: number, rev: number): string {
+  return `"${size.toString(16)}-${Math.floor(rev).toString(16)}"`;
 }
 
 /**

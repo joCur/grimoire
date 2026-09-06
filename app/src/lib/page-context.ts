@@ -12,7 +12,7 @@
 //      points at ITS list — not at some chapter that happens to mention it,
 //      which was misleading for an NPC opened from the NPC list.
 //
-// The scene's chapter comes from the PATH, not from `chapter` frontmatter: the
+// The scene's chapter comes from the PATH, not from `chapter` properties: the
 // directory is the filesystem truth and always there, while the key may be
 // missing or stale (the format degrades). The tree turns the id into the title.
 
@@ -34,7 +34,7 @@ export interface ContextCrumb {
  *
  * Scene: `<chapter title> › <group>`, the chapter linking to the pool. The
  * group part is the scene's directory resolved like a pool group header (the
- * location's name when `locations/<slug>.md` exists, otherwise the slug as
+ * location's name when `locations/<slug>` exists, otherwise the slug as
  * written — never prettified), and is absent for a scene that sits directly
  * in the chapter directory.
  * Chapter file: just the chapter, unlinked — it IS the chapter.
@@ -62,7 +62,7 @@ export function pageContextCrumbs(
       // chapter would need a pool-side anchor plus reduced-motion handling —
       // its own slice; the accordion already opens the active chapter.
       const crumbs: ContextCrumb[] = [{ label: title, to: `/${campaign}` }];
-      // `<chapter>/<group>/<scene>.md` — three segments means a group dir.
+      // `<chapter>/<group>/<scene>` — three segments means a group dir.
       const group = segments.length === 3 ? (segments[1] ?? "") : "";
       if (group !== "") crumbs.push({ label: locationName(tree, group) ?? group });
       return crumbs;

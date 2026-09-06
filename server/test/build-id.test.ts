@@ -3,23 +3,20 @@
 // In-process via app.request(), against the example campaign.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
-import { getBuildId, getCampaignRoot, setCampaignRoot } from "../src/config";
+import { getBuildId } from "../src/config";
 import { app } from "../src/server";
+import { dropStore, seedStore } from "./support/store";
 
-const EXAMPLES = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../../examples");
-
-let originalRoot: string;
 const originalEnv = process.env.GRIMOIRE_BUILD;
 
-beforeAll(() => {
-  originalRoot = getCampaignRoot();
-  setCampaignRoot(EXAMPLES);
+// The boot imports nothing since issue #79, so the campaign this spec asks
+// for is seeded explicitly — the same call `grimoire seed` makes.
+beforeAll(async () => {
+  await seedStore();
 });
 
 afterAll(() => {
-  setCampaignRoot(originalRoot);
+  dropStore();
 });
 
 afterEach(() => {

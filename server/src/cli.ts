@@ -3,10 +3,11 @@
 //
 //   grimoire seed [dir]      import a markdown campaign tree into the database
 //
-// `seed` runs EXACTLY the code the boot path will run (Scheibe 2) — there is
-// no separate seed importer to keep in sync (planning #52, PO decision F5).
-// Its default source is `examples/`, which is what makes the example campaign
-// the dev and E2E fixture without a second data format.
+// `seed` is the ONLY way markdown gets into a database (issue #79 AK6): the
+// server boots empty and imports nothing. There is still exactly one importer
+// — this command drives it (planning #52, PO decision F5). Its default source
+// is `examples/`, which is what makes the example campaign the dev and E2E
+// fixture without a second data format.
 //
 // Deliberately thin: argument parsing, a readable report, an exit code. The
 // migration itself refuses to overwrite anything (see migrate-campaigns.ts),
@@ -18,6 +19,7 @@ import { eq } from "drizzle-orm";
 import { openDb } from "./db/client";
 import { runInitialMigration } from "./db/migrate-campaigns";
 import { migrationReport } from "./db/schema";
+import { backfillReferences } from "./store/ref-backfill";
 import { getDbFile } from "./config";
 
 const PACKAGE_DIR = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -74,6 +76,16 @@ async function seed(args: string[]): Promise<number> {
         console.log(`    · add to it anyway (rows are added, nothing deleted): --force`);
       }
       return 0;
+    }
+    // The consistency pass the boot used to run right after the import
+    // (issue #70): a referenced npc is never missing, only empty. It belongs
+    // to the IMPORT, so it moved here with it (issue #79 AK6).
+    const backfilled = backfillReferences(db).created;
+    if (backfilled.length > 0) {
+      console.log(
+        `  ${backfilled.length} referenced npc(s) had no entry and got an empty one: ` +
+          backfilled.join(", "),
+      );
     }
     if (outcome.resumedFrom.length > 0) {
       // Per-campaign markers: an earlier run had already committed these.

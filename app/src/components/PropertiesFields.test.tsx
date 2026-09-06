@@ -8,23 +8,23 @@ import type { CampaignTree } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { frontmatterFieldsFor, type FieldValue, type FrontmatterField } from "@/lib/frontmatter-form";
+import { propertiesFieldsFor, type FieldValue, type PropertiesField } from "@/lib/properties-form";
 
-import { FrontmatterFieldControl } from "./FrontmatterFields";
+import { PropertiesFieldControl } from "./PropertiesFields";
 
 const tree: CampaignTree = {
   campaign: "beispiel",
   chapters: [],
   npcs: [
-    { path: "npcs/fenn.md", id: "fenn", name: "Fenn", status: "alive" },
-    { path: "npcs/jorna.md", id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
+    { path: "npcs/fenn", id: "fenn", name: "Fenn", status: "alive" },
+    { path: "npcs/jorna", id: "jorna", name: "Hafenmeisterin Jorna", status: "alive" },
   ],
-  locations: [{ path: "locations/leuchtturm.md", id: "leuchtturm", name: "Der Leuchtturm" }],
+  locations: [{ path: "locations/leuchtturm", id: "leuchtturm", name: "Der Leuchtturm" }],
   sessions: [],
 };
 
-function fieldOf(kind: "scene" | "npc", key: string): FrontmatterField {
-  const field = (frontmatterFieldsFor(kind) ?? []).find((f) => f.key === key);
+function fieldOf(kind: "scene" | "npc", key: string): PropertiesField {
+  const field = (propertiesFieldsFor(kind) ?? []).find((f) => f.key === key);
   if (field === undefined) throw new Error(`no ${kind} field ${key}`);
   return field;
 }
@@ -32,13 +32,13 @@ function fieldOf(kind: "scene" | "npc", key: string): FrontmatterField {
 const sceneField = (key: string) => fieldOf("scene", key);
 
 function render(
-  field: FrontmatterField,
+  field: PropertiesField,
   value: FieldValue,
   pending = "",
   extra: { initialValue?: FieldValue; issue?: string } = {},
 ): string {
   return renderToStaticMarkup(
-    <FrontmatterFieldControl
+    <PropertiesFieldControl
       field={field}
       value={value}
       initialValue={extra.initialValue}

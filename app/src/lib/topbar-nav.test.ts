@@ -19,22 +19,22 @@ describe("navSection", () => {
   });
 
   test("a scene file belongs under Kapitel — grouped or directly in the chapter", () => {
-    expect(navSection(file("01-salzhafen/hafen/ankunft-leuchtturm.md"))).toBe("chapters");
-    expect(navSection(file("01-salzhafen/prolog.md"))).toBe("chapters");
-    expect(navSection(file("01-salzhafen/_chapter.md"))).toBe("chapters");
+    expect(navSection(file("01-salzhafen/hafen/ankunft-leuchtturm"))).toBe("chapters");
+    expect(navSection(file("01-salzhafen/prolog"))).toBe("chapters");
+    expect(navSection(file("01-salzhafen/_chapter"))).toBe("chapters");
   });
 
   test("an NPC file is NPCs and a location file is Orte, whatever mentions them", () => {
-    expect(navSection(file("npcs/fenn.md"))).toBe("npcs");
-    expect(navSection(file("locations/leuchtturm.md"))).toBe("locations");
+    expect(navSection(file("npcs/fenn"))).toBe("npcs");
+    expect(navSection(file("locations/leuchtturm"))).toBe("locations");
   });
 
   test("views that belong to no section are marked nowhere", () => {
     expect(navSection({ isPool: false })).toBeUndefined(); // generator, review
-    expect(navSection(file("_campaign.md"))).toBeUndefined();
-    expect(navSection(file("sessions/2026-01-15.md"))).toBeUndefined();
-    expect(navSection(file("inbox.md"))).toBeUndefined();
-    expect(navSection(file("glossary.md"))).toBeUndefined();
+    expect(navSection(file("_campaign"))).toBeUndefined();
+    expect(navSection(file("sessions/2026-01-15"))).toBeUndefined();
+    expect(navSection(file("inbox"))).toBeUndefined();
+    expect(navSection(file("glossary"))).toBeUndefined();
   });
 
   test("degrades: an unknown list kind or an unusable path marks nothing", () => {

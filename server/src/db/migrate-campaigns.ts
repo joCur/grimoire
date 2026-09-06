@@ -7,7 +7,7 @@
 // The four rules that make it safe to run on a DM's real campaign:
 //
 //   1. IT NEVER TOUCHES THE FILES. No delete, no move, no marker file, not
-//      even an mtime change (PO decision F-neu-1). CAMPAIGN_ROOT is left
+//      even an mtime change (PO decision F-neu-1). The source tree is left
 //      exactly as it was and is simply ignored afterwards — it stays the
 //      readable pre-migration snapshot, which is the whole fallback story
 //      (planning risk R1).
@@ -484,7 +484,7 @@ function importCampaign(
       );
       continue;
     }
-    parsed.push({ file, cls, frontmatter: p.frontmatter, body: p.body });
+    parsed.push({ file, cls, frontmatter: p.properties, body: p.body });
   }
 
   const find = (kind: FileClass["kind"]): Parsed[] => parsed.filter((p) => p.cls.kind === kind);

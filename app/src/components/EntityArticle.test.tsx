@@ -10,10 +10,10 @@ import { EntityArticle } from "./EntityArticle";
 
 function file(
   kind: EntityKind,
-  frontmatter: Record<string, unknown>,
+  properties: Record<string, unknown>,
   body = "",
 ): FileResponse {
-  return { path: `npcs/x.md`, kind, frontmatter, body, mtimeMs: 1, raw: "" };
+  return { path: `npcs/x`, kind, properties, body, rev: 1, raw: "" };
 }
 
 function render(f: FileResponse): string {
@@ -91,7 +91,7 @@ describe("EntityArticle — npc", () => {
 
   test("a nameless npc file falls back to the path", () => {
     const html = render(file("npc", {}, ""));
-    expect(html).toContain("npcs/x.md");
+    expect(html).toContain("npcs/x");
   });
 });
 

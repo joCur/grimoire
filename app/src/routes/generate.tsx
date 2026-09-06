@@ -74,7 +74,7 @@ import { MobileBackRow } from "@/components/MobileBackRow";
 import { Button } from "@/components/ui/button";
 import { locationName } from "@/lib/campaign";
 import { npcStatusLabel } from "@/lib/entity";
-import { fmQuickstats, fmString, fmStringArray } from "@/lib/frontmatter";
+import { fmQuickstats, fmString, fmStringArray } from "@/lib/properties";
 import {
   applySummary,
   chapterIdError,
@@ -122,12 +122,12 @@ export function GenerateRoute() {
     queryFn: () => fetchTree(campaign),
     enabled: campaign !== "",
   });
-  // Only for the context hint: the server sends glossary.md along with the
+  // Only for the context hint: the server sends glossary along with the
   // prompt when it exists (generator/README.md step 1). A missing file is a
   // 404 and means "no glossary" — not an error worth retrying.
   const glossary = useQuery({
-    queryKey: ["file", campaign, "glossary.md"],
-    queryFn: () => fetchFile(campaign, "glossary.md"),
+    queryKey: ["file", campaign, "glossary"],
+    queryFn: () => fetchFile(campaign, "glossary"),
     enabled: campaign !== "",
     retry: false,
   });
@@ -158,7 +158,7 @@ export function GenerateRoute() {
   const newIdError = chapterIdError(newIdInput);
   // A typed id may name a chapter that is already there: then this is NOT a
   // new chapter — the drafts go into the existing directory and its
-  // _chapter.md stays untouched (#12 semantics), so neither the newChapter
+  // _chapter stays untouched (#12 semantics), so neither the newChapter
   // flag nor a chapterTitle travels.
   const newIdExists = newIdError === undefined && chapterIds.includes(newIdInput);
   const creatingChapter = target.kind === "new" && !newIdExists;
@@ -258,9 +258,9 @@ export function GenerateRoute() {
       return applyDrafts(campaign, {
         scenes: scenes.map((s) => ({ path: s.path, markdown: edits[s.path] ?? s.markdown })),
         stubs: acceptedStubs,
-        // The new chapter's _chapter.md is created in the same batch — only
+        // The new chapter's _chapter is created in the same batch — only
         // for a chapter that really is new: for an existing id the pair
-        // stays out of the body so apply cannot touch its _chapter.md.
+        // stays out of the body so apply cannot touch its _chapter.
         ...(creatingChapter && chapterId !== undefined
           ? { chapter: chapterId, chapterTitle: newTitle.trim() }
           : {}),
@@ -416,7 +416,7 @@ export function GenerateRoute() {
                   {npcIdMessage ??
                     (trimmedNpcId === ""
                       ? "leer lassen — dann wählt das Modell die id"
-                      : `wird angelegt als: npcs/${trimmedNpcId}.md`)}
+                      : `wird angelegt als: npcs/${trimmedNpcId}`)}
                 </p>
               </>
             )}
@@ -704,7 +704,7 @@ export function GenerateRoute() {
               <SceneCard
                 key={scene.path}
                 path={scene.path}
-                frontmatter={scene.frontmatter}
+                properties={scene.properties}
                 markdown={edits[scene.path] ?? scene.markdown}
                 tree={tree.data}
                 editing={editing[scene.path] === true}
@@ -945,7 +945,7 @@ export function GenerateRoute() {
 function stubReason(scenes: GenerateResult["scenes"]): string {
   const first = scenes[0];
   if (first === undefined) return "aus diesem Lauf";
-  const title = fmString(first.frontmatter.title) ?? first.path;
+  const title = fmString(first.properties.title) ?? first.path;
   return scenes.length === 1 ? `aus ${title}` : `aus ${title} u. a.`;
 }
 
@@ -986,14 +986,14 @@ function Working() {
 
 /**
  * One draft as a card: title/pill/edit toggle, mono target path, the chip row
- * from the frontmatter, then either the rendered body (same markdown pipeline
+ * from the properties, then either the rendered body (same markdown pipeline
  * as a real scene) or the raw markdown in a mono textarea. Title and chips
- * come from the frontmatter the SERVER parsed — raw edits show up in the
+ * come from the properties the SERVER parsed — raw edits show up in the
  * preview and on apply, not in the card's header.
  */
 function SceneCard({
   path,
-  frontmatter,
+  properties,
   markdown,
   tree,
   editing,
@@ -1001,18 +1001,18 @@ function SceneCard({
   onChange,
 }: {
   path: string;
-  frontmatter: Record<string, unknown>;
+  properties: Record<string, unknown>;
   markdown: string;
   tree: CampaignTree | undefined;
   editing: boolean;
   onToggleEditing: () => void;
   onChange: (markdown: string) => void;
 }) {
-  const title = fmString(frontmatter.title) ?? path;
-  const status = fmString(frontmatter.status) ?? "draft";
-  const isContingency = fmString(frontmatter.type) === "contingency";
-  const location = locationName(tree, fmString(frontmatter.location));
-  const tags = fmStringArray(frontmatter.tags);
+  const title = fmString(properties.title) ?? path;
+  const status = fmString(properties.status) ?? "draft";
+  const isContingency = fmString(properties.type) === "contingency";
+  const location = locationName(tree, fmString(properties.location));
+  const tags = fmStringArray(properties.tags);
   const textareaId = `gen-raw-${path.replace(/[^a-zA-Z0-9-]/g, "-")}`;
 
   return (
@@ -1093,7 +1093,7 @@ function NpcDraftCard({
   onToggleEditing: () => void;
   onChange: (markdown: string) => void;
 }) {
-  const fm = draft.frontmatter;
+  const fm = draft.properties;
   const name = fmString(fm.name) ?? draft.path;
   const status = fmString(fm.status);
   const role = fmString(fm.role);
@@ -1172,7 +1172,7 @@ function StubRow({
   decision: StubDecision | undefined;
   onDecide: (decision: StubDecision | undefined) => void;
 }) {
-  const path = `${stub.kind}s/${stub.id}.md`;
+  const path = `${stub.kind}s/${stub.id}`;
   return (
     <div
       className={cn(

@@ -24,7 +24,15 @@ import { sql } from "drizzle-orm";
 import type { EntityKind, SearchResult } from "@grimoire/shared";
 import { requireCampaign } from "./read";
 import { getDb } from "./handle";
-import { chapterPath, locationPath, npcPath, scenePath, sessionPath } from "./paths";
+import {
+  CAMPAIGN_PATH,
+  chapterPath,
+  GLOSSARY_PATH,
+  locationPath,
+  npcPath,
+  scenePath,
+  sessionPath,
+} from "./paths";
 import type { GrimoireDb } from "../db/client";
 import { eq, and } from "drizzle-orm";
 import { scenes } from "../db/schema";
@@ -109,9 +117,9 @@ function pathForHit(db: GrimoireDb, campaign: string, kind: string, id: string):
     case "session":
       return sessionPath(id);
     case "campaign":
-      return "_campaign.md";
+      return CAMPAIGN_PATH;
     case "glossary":
-      return "glossary.md";
+      return GLOSSARY_PATH;
     default:
       return id;
   }

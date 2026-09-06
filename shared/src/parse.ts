@@ -1,9 +1,9 @@
-// Frontmatter parser for the Grimoire markdown data format.
+// Properties parser for the Grimoire markdown data format.
 // Mirror of the format contract in /README.md — keep both in sync.
 //
 // Design rule (README / DECISIONS #1): the format DEGRADES, it does not
 // validate. Nothing in this module ever throws on odd input — broken YAML
-// becomes an empty frontmatter with the full file as body, wrong-typed
+// becomes an empty properties with the full file as body, wrong-typed
 // values are coerced defensively, unknown keys pass through verbatim.
 
 import matter from "gray-matter";
@@ -88,17 +88,17 @@ function fileStem(path: string): string {
 /**
  * Parse one markdown file into a ParsedFile. Never throws:
  *
- * - Invalid/unparseable YAML (or frontmatter that is valid YAML but not a
- *   mapping) degrades to frontmatter `{}` with the ENTIRE raw content as body.
- * - Unknown frontmatter keys are preserved verbatim.
+ * - Invalid/unparseable YAML (or a block that is valid YAML but not a
+ *   mapping) degrades to properties `{}` with the ENTIRE raw content as body.
+ * - Unknown properties keys are preserved verbatim.
  * - Date values are normalized back to strings (see normalizeDates).
  * - Missing `id` falls back to the filename without `.md` — the file name
- *   is the only stable identity a frontmatter-less file has, and for
+ *   is the only stable identity a properties-less file has, and for
  *   sessions/inbox/glossary it matches the convention anyway.
  * - Missing display name falls back to the id (`title` for scene/chapter,
  *   `name` for npc/location/campaign).
  */
-export function parseMarkdown(raw: string, path: string, mtimeMs: number): ParsedFile {
+export function parseMarkdown(raw: string, path: string, rev: number): ParsedFile {
   const kind = kindFromPath(path);
 
   let data: unknown = {};
@@ -109,43 +109,43 @@ export function parseMarkdown(raw: string, path: string, mtimeMs: number): Parse
       data = parsed.data;
       body = parsed.content;
     }
-    // Non-mapping frontmatter (e.g. a bare string) degrades like broken
-    // YAML: empty frontmatter, full raw as body.
+    // Non-mapping properties (e.g. a bare string) degrades like broken
+    // YAML: empty properties, full raw as body.
   } catch {
-    // Broken YAML: empty frontmatter, full raw as body.
+    // Broken YAML: empty properties, full raw as body.
   }
 
-  const frontmatter = normalizeDates(data) as Record<string, unknown>;
+  const properties = normalizeDates(data) as Record<string, unknown>;
 
-  if (typeof frontmatter.id !== "string" || frontmatter.id === "") {
-    frontmatter.id =
-      frontmatter.id !== undefined && frontmatter.id !== null && frontmatter.id !== ""
-        ? String(frontmatter.id)
+  if (typeof properties.id !== "string" || properties.id === "") {
+    properties.id =
+      properties.id !== undefined && properties.id !== null && properties.id !== ""
+        ? String(properties.id)
         : fileStem(path);
   }
 
   if (kind === "scene" || kind === "chapter") {
-    if (typeof frontmatter.title !== "string" || frontmatter.title === "") {
-      frontmatter.title =
-        frontmatter.title !== undefined && frontmatter.title !== null && frontmatter.title !== ""
-          ? String(frontmatter.title)
-          : frontmatter.id;
+    if (typeof properties.title !== "string" || properties.title === "") {
+      properties.title =
+        properties.title !== undefined && properties.title !== null && properties.title !== ""
+          ? String(properties.title)
+          : properties.id;
     }
   }
   if (kind === "npc" || kind === "location" || kind === "campaign") {
-    if (typeof frontmatter.name !== "string" || frontmatter.name === "") {
-      frontmatter.name =
-        frontmatter.name !== undefined && frontmatter.name !== null && frontmatter.name !== ""
-          ? String(frontmatter.name)
-          : frontmatter.id;
+    if (typeof properties.name !== "string" || properties.name === "") {
+      properties.name =
+        properties.name !== undefined && properties.name !== null && properties.name !== ""
+          ? String(properties.name)
+          : properties.id;
     }
   }
 
-  return { path, kind, frontmatter, body, mtimeMs };
+  return { path, kind, properties, body, rev };
 }
 
 // --- summary builders ----------------------------------------------------------
-// Defensive coercion helpers: frontmatter is hand-edited, so every field can
+// Defensive coercion helpers: properties is hand-edited, so every field can
 // arrive with the wrong type. Summaries always deliver the shape the tree
 // needs and never throw.
 
@@ -174,7 +174,7 @@ function asStringOr(value: unknown, fallback: string): string {
 }
 
 export function sceneSummary(f: ParsedFile): SceneSummary {
-  const fm = f.frontmatter;
+  const fm = f.properties;
   const id = asStringOr(fm.id, fileStem(f.path));
   return {
     path: f.path,
@@ -192,7 +192,7 @@ export function sceneSummary(f: ParsedFile): SceneSummary {
 }
 
 export function npcSummary(f: ParsedFile): NpcSummary {
-  const fm = f.frontmatter;
+  const fm = f.properties;
   const id = asStringOr(fm.id, fileStem(f.path));
   return {
     path: f.path,
@@ -205,7 +205,7 @@ export function npcSummary(f: ParsedFile): NpcSummary {
 }
 
 export function locationSummary(f: ParsedFile): LocationSummary {
-  const fm = f.frontmatter;
+  const fm = f.properties;
   const id = asStringOr(fm.id, fileStem(f.path));
   return {
     path: f.path,
@@ -216,7 +216,7 @@ export function locationSummary(f: ParsedFile): LocationSummary {
 }
 
 export function sessionSummary(f: ParsedFile): SessionSummary {
-  const fm = f.frontmatter;
+  const fm = f.properties;
   return {
     path: f.path,
     id: asStringOr(fm.id, fileStem(f.path)),

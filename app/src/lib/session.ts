@@ -96,13 +96,13 @@ export function parseLocalDateTime(value: unknown): number | undefined {
  */
 export function sessionStartMs(session: SessionTimes | undefined): number | undefined {
   if (session === undefined) return undefined;
-  return session.startedMs ?? parseLocalDateTime(session.frontmatter?.started);
+  return session.startedMs ?? parseLocalDateTime(session.properties?.started);
 }
 
 /** End of a session as epoch milliseconds — see sessionStartMs. */
 export function sessionEndMs(session: SessionTimes | undefined): number | undefined {
   if (session === undefined) return undefined;
-  return session.endedMs ?? parseLocalDateTime(session.frontmatter?.ended);
+  return session.endedMs ?? parseLocalDateTime(session.properties?.ended);
 }
 
 /** The bit of a session FileResponse the helpers here need. */
@@ -113,12 +113,12 @@ export interface SessionTimes {
   pausedMs?: number;
   /** Start of the OPEN pause interval — present exactly while paused. */
   pausedSinceMs?: number;
-  frontmatter?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
 }
 
 /**
  * Total paused time in milliseconds — the server's sum, with a local fallback
- * from the `pauses` frontmatter for a response that carries no `pausedMs`
+ * from the `pauses` properties for a response that carries no `pausedMs`
  * (same fallback rule as sessionStartMs; degraded entries are dropped by the
  * shared `sessionPauses`).
  */
@@ -126,7 +126,7 @@ export function sessionPausedMs(session: SessionTimes | undefined): number {
   if (session === undefined) return 0;
   if (session.pausedMs !== undefined) return session.pausedMs;
   let sum = 0;
-  for (const pause of sessionPauses(session.frontmatter)) {
+  for (const pause of sessionPauses(session.properties)) {
     if (pause.to === undefined) continue;
     const from = parseLocalDateTime(pause.from);
     const to = parseLocalDateTime(pause.to);
@@ -140,13 +140,13 @@ export function sessionPausedMs(session: SessionTimes | undefined): number {
 export function sessionPausedSinceMs(session: SessionTimes | undefined): number | undefined {
   if (session === undefined) return undefined;
   if (session.pausedSinceMs !== undefined) return session.pausedSinceMs;
-  const open = openPause(session.frontmatter);
+  const open = openPause(session.properties);
   return open === undefined ? undefined : parseLocalDateTime(open.from);
 }
 
 /** True while the session is paused — the chip's dimmed state (AK8). */
 export function sessionIsPaused(session: SessionTimes | undefined): boolean {
-  return sessionPausedSinceMs(session) !== undefined || isPaused(session?.frontmatter);
+  return sessionPausedSinceMs(session) !== undefined || isPaused(session?.properties);
 }
 
 /**
@@ -217,8 +217,8 @@ export function sessionElapsedLabel(
  * honest answer for a hand-edited file, and better than the raw id, which is
  * 36 characters of noise.
  */
-export function sessionDateLabel(frontmatter: Record<string, unknown> | undefined): string {
-  const started = frontmatter?.started;
+export function sessionDateLabel(properties: Record<string, unknown> | undefined): string {
+  const started = properties?.started;
   const m = typeof started === "string" ? /^(\d{4})-(\d{2})-(\d{2})/.exec(started.trim()) : null;
   if (m === null) return "Session";
   return `Session vom ${m[3]}.${m[2]}.${m[1]}`;

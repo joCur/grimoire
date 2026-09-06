@@ -12,7 +12,7 @@ const OPEN_SESSION = (() => {
   const pad = (n: number) => String(n).padStart(2, "0");
   const id = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   return {
-    path: `sessions/${id}.md`,
+    path: `sessions/${id}`,
     content: `---\nid: ${id}\nstarted: ${id}T22:30\nscenes_played: []\n---\n\n## Log\n`,
   };
 })();
@@ -47,10 +47,10 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
 
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
   await expect(inbox).toHaveValue("");
-  await expect.poll(() => api.raw("inbox.md")).toContain(`- ${IDEA}`);
+  await expect.poll(() => api.raw("inbox")).toContain(`- ${IDEA}`);
   // Append-only: the line that was already there survives.
   await expect
-    .poll(() => api.raw("inbox.md"))
+    .poll(() => api.raw("inbox"))
     .toContain("- 2026-01-10 Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug");
 
   // --- search and reading view ---------------------------------------------
@@ -60,7 +60,7 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
   await search.fill("fenn");
   await page.getByRole("option").filter({ hasText: "Fenn" }).first().click();
 
-  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/fenn\.md$/);
+  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/fenn$/);
   // The mobile read view has its own way back to the start surface.
   const back = page.getByRole("link", { name: "Pool" });
   await expect(back).toBeVisible();
@@ -93,7 +93,7 @@ test.describe("with a session open since yesterday", () => {
 });
 
 test("mobile: the reference scene's reading view stays readable", async ({ page }) => {
-  await page.goto("/beispiel/file/01-salzhafen/hafen/lighthouse-arrival.md");
+  await page.goto("/beispiel/file/01-salzhafen/hafen/lighthouse-arrival");
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await expect(page.locator("[data-callout='readaloud']")).toBeVisible();

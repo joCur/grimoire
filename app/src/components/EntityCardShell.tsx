@@ -19,7 +19,7 @@ export function EntityCardShell({
   children,
 }: {
   campaign: string;
-  /** Campaign-relative file path of the entity (e.g. `npcs/jorna.md`). */
+  /** Campaign-relative file path of the entity (e.g. `npcs/jorna`). */
   path: string;
   className?: string;
   onOpen?: (path: string) => void;

@@ -11,29 +11,34 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
 Die Datenbank ist die einzige Wahrheit; der Server liest und schreibt keine
 Kampagnen-Markdown-Dateien mehr. Für die Suite heißt das:
 
-- **Gesät wird über den echten Erst-Import.** Jeder Test bekommt ein leeres
-  `GRIMOIRE_DATA`-Verzeichnis; sein Server bootet darauf, migriert das Schema
-  und importiert `CAMPAIGN_ROOT` — die pristine Kopie von `examples/beispiel`.
-  Genau dieser Boot-Pfad ist der Seed (Planung #52, PO-Entscheidung F5: kein
-  zweites Datenformat für Fixtures).
+- **Gesät wird über den echten Importer — `grimoire seed`.** Jeder Test
+  bekommt ein leeres `GRIMOIRE_DATA`-Verzeichnis; die `server`-Fixture ruft
+  darauf `grimoire seed <baum>` mit der pristinen Kopie von
+  `examples/beispiel` auf und startet DANN den Server. Seit Issue #79
+  importiert der Boot selbst nichts mehr; der Seed bleibt aber derselbe
+  Importer (Planung #52, PO-Entscheidung F5: kein zweites Datenformat für
+  Fixtures).
 - **Der Markdown-Baum ist nur noch EINGABE**, einmal pro Test gelesen. Ein
   Test, der Inhalte braucht, die die Beispielkampagne nicht hat, sät sie VOR
-  dem Boot in seine eigene Kopie des Baums:
+  dem Seed in seine eigene Kopie des Baums:
   `test.use({ seed: { files: { "locations/hafen.md": "…" }, remove: ["_campaign.md"] } })`.
   Ohne Seed wird die geteilte pristine Kopie direkt benutzt (niemand schreibt
   hinein), die meisten Tests kopieren also gar nichts.
 - **Zusicherungen laufen über die API** (`api`-Helfer, s. u.) — es gibt keine
   Datei mehr, die man zurücklesen könnte. Der frühere `files`-Helfer ist weg;
   eine Fixture, die von „der Datei auf der Platte" erzählt, wäre eine Lüge.
-- **Ein Szenen-Pfadsegment ist die `id`**, nicht der frühere Dateiname:
-  `01-salzhafen/hafen/lighthouse-arrival.md` und `.../smuggler-captured.md`.
-- **`mtimeMs` auf der Leitung ist die Zeilenversion `rev`** — ein opakes
-  Wächter-Token. Ein veraltetes antwortet weiter mit 409.
+- **Adressen tragen keine Dateiendung** (Issue #79) und ein Szenen-Segment
+  ist die `id`, nicht der frühere Dateiname:
+  `01-salzhafen/hafen/lighthouse-arrival` und `.../smuggler-captured`.
+  Die Schlüssel des `seed`-Fixtures sind ebenfalls Adressen — das `.md` für
+  den Importer hängt die Fixture selbst an.
+- **Das Wächter-Token heißt `rev`** (die Zeilenversion) und die Felder eines
+  Dokuments `properties`. Ein veraltetes `rev` antwortet weiter mit 409.
 - **„Extern geändert" gibt es nicht mehr.** Kritischer Pfad 9 prüft darum den
   ZWEITEN SCHREIBER: während der Editor offen steht, schreibt der Test über
   die API (`api.writeBody`), danach speichert die UI — und muss den Konflikt
   zeigen und neu laden statt still zu überschreiben. Genauso in
-  `status-control`, `frontmatter-form` und `block-composer`.
+  `status-control`, `properties-form` und `block-composer`.
 
 ## Lokal ausführen
 
@@ -86,7 +91,7 @@ inklusive des Generator-Jobs, der seit #23 selbst eine Zeile ist.
 - `api` — getippte Aufrufe gegen den Server dieses Tests: `api.raw(rel)` (die
   serialisierte Datei — der Nachfolger von `files.read`), `api.file`,
   `api.exists`, `api.get`/`api.send` und die beiden Schreibwege
-  `api.writeBody` / `api.patchFrontmatter`, die sich frisch ein Token holen
+  `api.writeBody` / `api.patchProperties`, die sich frisch ein Token holen
   und damit den „zweiten Schreiber" spielen.
 - `db` — liest `grimoire.db` dieses Tests über den Treiber des Servers
   (`server/src/db/driver.ts`, keine zweite SQLite-Abhängigkeit). Nur für
@@ -130,8 +135,9 @@ Der Stub läuft auch allein, z. B. um einen Prompt von Hand anzuschauen:
 ```bash
 bun e2e/fixtures/stub-llm.ts --port 4319
 LLM_PROVIDER=openai LLM_BASE_URL=http://127.0.0.1:4319/v1 LLM_MODEL=stub \
-  APP_DIST=app/dist GRIMOIRE_DATA=/tmp/grimoire-scratch CAMPAIGN_ROOT=examples \
+  APP_DIST=app/dist GRIMOIRE_DATA=/tmp/grimoire-scratch \
   bun server/src/server.ts
+# (mit Inhalt: vorher GRIMOIRE_DATA=/tmp/grimoire-scratch bun server/src/cli.ts seed)
 ```
 
 ## Regel
@@ -151,12 +157,12 @@ mehrere Schreibwege auf ihm liegen:
 | 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`                                   |
 | 5 Ernte            | `tests/review-harvest.e2e.ts`                                  |
 | 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-restart.e2e.ts`      |
-| 7 Frontmatter/409  | `tests/status-control.e2e.ts`, `tests/frontmatter-form.e2e.ts`, `tests/rename.e2e.ts` |
+| 7 Eigenschaften/409 | `tests/status-control.e2e.ts`, `tests/properties-form.e2e.ts`, `tests/rename.e2e.ts` |
 | 8 Mobil            | `tests/mobile.e2e.ts`                                          |
 | 9 Datei bearbeiten | `tests/block-composer.e2e.ts`, `tests/file-edit.e2e.ts`        |
 
 `tests/generator-restart.e2e.ts` ist die Neustart-Hälfte von Pfad 6 (#23) und
-braucht darum, wie der Migrations-Spec unten, zwei Server hintereinander auf
+braucht darum, wie der Seed-Spec unten, zwei Server hintereinander auf
 DEMSELBEN Datenverzeichnis: der erste startet einen Lauf bzw. bringt ihn zu
 Ende, der zweite ist der Neustart. Ein **fertiger** Job ist danach vollständig
 da (Ergebnis, Review-Edits) und wird übernommen; ein **laufender** steht als
@@ -164,17 +170,18 @@ da (Ergebnis, Review-Edits) und wird übernommen; ein **laufender** steht als
 statt als endloser Spinner.
 
 Dazu ein Spec, der auf keinem der neun Pfade liegt, sondern auf der Naht
-darunter: `tests/first-migration.e2e.ts` (Issue #57 AK4) bootet zwei Server
-hintereinander auf DEMSELBEN Datenverzeichnis — der erste importiert den
-Markdown-Baum vollständig (Tree, Szenenkörper, NPC, Session, Inbox, Glossar,
-leerer Migrations-Report), der zweite bootet mit einem LEEREN `CAMPAIGN_ROOT`
-und tut nichts: gleiche Marker, gleiche Zeilenzahlen, gleicher Inhalt. Er
-braucht zwei Boots und benutzt darum `startGrimoireServer` direkt statt der
+darunter: `tests/seed.e2e.ts` (Nachfolger von `first-migration.e2e.ts`, Issue
+#79 AK6). Er belegt zweierlei — dass eine frische Instanz **leer** startet
+(kein Boot-Import mehr) und dass `grimoire seed` den Markdown-Baum vollständig
+einliest (Tree, Szenenkörper, NPC, Session, Inbox, Glossar, sauberer Report
+auf stdout), während ein **zweiter** Seed-Lauf ein No-op ist: gleiche Marker,
+gleiche Zeilenzahlen, gleicher Inhalt. Er braucht eigene Boots und benutzt
+darum `startGrimoireServer`/`seedCampaigns` direkt statt der
 `server`-Fixture.
 
 Auf Pfad 7 teilen sich zwei Specs die Arbeit: `status-control.e2e.ts` deckt den
 Status-Regler ab (ein Schlüssel, Konflikt über das Poll-Fenster),
-`frontmatter-form.e2e.ts` den „Eigenschaften"-Dialog von #42 (alle Felder einer
+`properties-form.e2e.ts` den „Eigenschaften"-Dialog von #42 (alle Felder einer
 Entitätsart, Chips/Referenzen/Select, Leeren löscht den Schlüssel, und der
 deterministische 409, weil der Dialog sein Wächter-Token beim Öffnen
 einfriert). Der

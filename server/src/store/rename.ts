@@ -2,7 +2,7 @@
 //
 // SCOPE NOTE: the planning puts the rename rebuild in Scheibe 3 (#29/#30).
 // It could not stay behind, though — the moment the read/write endpoints stop
-// touching CAMPAIGN_ROOT, the file-tree cascade of `campaign-rename.ts` is
+// reading the markdown tree, the file-tree cascade of `campaign-rename.ts` is
 // renaming files nobody reads any more. So the endpoint moves with the
 // cutover, at exactly the size the cutover needs: the id update plus the
 // reference cascade, with the response shape (`{ renamed, changed }`) and the
@@ -125,7 +125,7 @@ function referenceSites(usage: UsageReport, oldId: string, newId: string): strin
 }
 
 /**
- * A display name that was literally the OLD ID follows the id. `npcs/jorna.md`
+ * A display name that was literally the OLD ID follows the id. `npcs/jorna`
  * with `name: jorna` is a file that never had a real name — the id was the
  * fallback, spelled out — and leaving it behind means the tree and the search
  * title keep naming a reference that does not exist any more. Files with no

@@ -1,4 +1,4 @@
-// Location card fed from locations/<id>.md (issue #40) — the counterpart of
+// Location card fed from locations/<id> (issue #40) — the counterpart of
 // NpcCard for the live aside: the DM needs the PLACE of the running scene as
 // readily as its people ("wo stehen wir gerade?"), and until now the scene's
 // `location` was only a line in the scene header.
@@ -19,7 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { fetchFile } from "@/api";
 import { EntityCardShell } from "@/components/EntityCardShell";
-import { fmString } from "@/lib/frontmatter";
+import { fmString } from "@/lib/properties";
 import { firstParagraphOfSection } from "@/lib/md-section";
 
 /**
@@ -29,7 +29,7 @@ import { firstParagraphOfSection } from "@/lib/md-section";
  * not a convention.
  */
 export function locationPath(id: string): string {
-  return `locations/${id}.md`;
+  return `locations/${id}`;
 }
 
 export function LocationCard({
@@ -63,7 +63,7 @@ export function LocationCard({
   }
   if (data === undefined) return null;
 
-  const fm = data.frontmatter;
+  const fm = data.properties;
   const name = fmString(fm.name) ?? id;
   const mood = firstParagraphOfSection(data.body, "Atmosphäre");
   const page = fmString(fm["roll20-page"]);

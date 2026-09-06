@@ -119,7 +119,7 @@ export function useSessionWrite<TVars = void>(
     mutationFn,
     onSuccess: (data) => {
       queryClient.setQueryData(["file", campaign, data.path], data);
-      queryClient.setQueryData(activeSessionKey(campaign), isEnded(data.frontmatter) ? null : data);
+      queryClient.setQueryData(activeSessionKey(campaign), isEnded(data.properties) ? null : data);
       queryClient.setQueryData(lastStartedSessionKey(campaign), data);
       onSuccess?.(data);
     },

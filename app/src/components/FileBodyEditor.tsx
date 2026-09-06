@@ -17,12 +17,12 @@
 //
 // What the DM sees stays the same page: the header (title, chips, status
 // regler) keeps standing, only the body below it becomes editable. The
-// frontmatter is not part of this by design — the status regler and the rename
+// properties is not part of this by design — the status regler and the rename
 // action own the structured fields.
 //
 // Losing work is the one real risk here, so:
 //   * a conflict (409) keeps the draft and only says „Inzwischen geändert" —
-//     the next „Speichern" carries the mtime the re-read brought and works,
+//     the next „Speichern" carries the rev the re-read brought and works,
 //   * a failed write keeps the draft as well,
 //   * „Abbrechen" with unsaved changes asks first (Dialog, never window.confirm),
 //   * a body-neutral new version of the file (the status regler right next to
@@ -92,7 +92,7 @@ export function FileBodyEditor({
 }: {
   campaign: string;
   /**
-   * The file on screen: its `body` seeds the editor once, its mtime is what
+   * The file on screen: its `body` seeds the editor once, its rev is what
    * the write is checked against. Later versions are adopted only when they
    * are body-neutral (see `base` below) — mount this component per path
    * (`key`) so a navigation reseeds it.
@@ -102,7 +102,7 @@ export function FileBodyEditor({
 }) {
   // The version this editor is working against — seeded once and deliberately
   // NOT following the file query: the 5s version poll refetches while the
-  // editor is open, and inheriting its mtime would turn a foreign edit into a
+  // editor is open, and inheriting its rev would turn a foreign edit into a
   // silent overwrite instead of a 409. It moves for exactly two reasons: after
   // a conflict, to the file the re-read brought, and for a BODY-NEUTRAL new
   // version (shouldAdvanceBase — the status regler next to the editor is the
@@ -121,7 +121,7 @@ export function FileBodyEditor({
   // card already shows its content.
   const [editing, setEditing] = useState(true);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const { save, isSaving, message } = useFileBodyMutation(campaign, base.path, base.mtimeMs, {
+  const { save, isSaving, message } = useFileBodyMutation(campaign, base.path, base.rev, {
     onSaved: onClose,
     onConflict: (reread) => {
       // The draft stays — only the version underneath it moves on, so the
@@ -134,7 +134,7 @@ export function FileBodyEditor({
   const body = useMemo(() => draftBody(draft), [draft]);
   const dirty = hasBodyChanges(base.body, body);
   // What the block list would break if it were written now, per block — the
-  // same seam „Eigenschaften" uses (FrontmatterAction, issue #42): the card
+  // same seam „Eigenschaften" uses (PropertiesAction, issue #42): the card
   // says it, the button waits. „Roh" has no such state: its text IS the file.
   const issues = useMemo(
     () => (draft.mode === "blocks" ? composerIssues(draft.blocks) : EMPTY_ISSUES),

@@ -23,7 +23,7 @@
 // is why it beats the pragmatic "reindex the whole campaign".
 //
 // SCOPE: every document whose body a DM writes prose in — scene, npc,
-// location, chapter AND the campaign file (`_campaign.md`, the free note
+// location, chapter AND the campaign file (`_campaign`, the free note
 // space). The campaign file used to be scanned HALF: its index row expanded
 // references (write.ts `indexCampaign`) but no scan ever found it again, so a
 // rename left a stale name in the search index and a dead slug in the note.

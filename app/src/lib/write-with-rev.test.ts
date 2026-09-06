@@ -1,4 +1,4 @@
-// Issue #38: the mtime protocol of ADR #4 has exactly one implementation, so
+// Issue #38: the rev protocol of ADR #4 has exactly one implementation, so
 // it is tested exactly once here — with plain stub functions, no fetch, no
 // react. The three per-path suites (scene-status, file-body, campaign-meta)
 // then only have to show that they wire the right request into it.
@@ -7,20 +7,20 @@ import type { FileResponse } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";
-import { isStaleFileError, withMtime, writeWithMtime } from "./write-with-mtime";
+import { isStaleFileError, withRev, writeWithRev } from "./write-with-rev";
 
-function fileAt(mtimeMs: number): FileResponse {
+function fileAt(rev: number): FileResponse {
   return {
-    path: "01-salzhafen/hafen/ankunft-leuchtturm.md",
+    path: "01-salzhafen/hafen/ankunft-leuchtturm",
     kind: "scene",
-    frontmatter: { id: "arrival", status: "ready" },
+    properties: { id: "arrival", status: "ready" },
     body: "Text",
     raw: "---\nid: arrival\n---\n\nText",
-    mtimeMs,
+    rev,
   };
 }
 
-const CONFLICT = new ApiError(409, "file changed on disk", { mtimeMs: 99 });
+const CONFLICT = new ApiError(409, "file changed on disk", { rev: 99 });
 
 /** A stub that records how often it ran, so double calls are visible. */
 function counted<T>(answer: () => Promise<T>): { run: () => Promise<T>; calls: () => number } {
@@ -35,7 +35,7 @@ function counted<T>(answer: () => Promise<T>): { run: () => Promise<T>; calls: (
 }
 
 describe("isStaleFileError", () => {
-  test("only a 409 from the API is the mtime conflict", () => {
+  test("only a 409 from the API is the rev conflict", () => {
     expect(isStaleFileError(CONFLICT)).toBe(true);
     expect(isStaleFileError(new ApiError(500, "boom"))).toBe(false);
     expect(isStaleFileError(new ApiError(404, "not found"))).toBe(false);
@@ -44,11 +44,11 @@ describe("isStaleFileError", () => {
   });
 });
 
-describe("writeWithMtime", () => {
+describe("writeWithRev", () => {
   test("a written file is passed through as the new truth", async () => {
     const written = fileAt(43);
     const reread = counted(() => Promise.resolve(fileAt(1)));
-    expect(await writeWithMtime(() => Promise.resolve(written), reread.run)).toEqual({
+    expect(await writeWithRev(() => Promise.resolve(written), reread.run)).toEqual({
       ok: true,
       file: written,
     });
@@ -59,7 +59,7 @@ describe("writeWithMtime", () => {
   test("409 means nothing was written — the file is re-read once for the next attempt", async () => {
     const fresh = fileAt(99);
     const reread = counted(() => Promise.resolve(fresh));
-    expect(await writeWithMtime(() => Promise.reject(CONFLICT), reread.run)).toEqual({
+    expect(await writeWithRev(() => Promise.reject(CONFLICT), reread.run)).toEqual({
       ok: false,
       file: fresh,
     });
@@ -68,7 +68,7 @@ describe("writeWithMtime", () => {
 
   test("a failed reload after the conflict keeps the conflict, not a crash", async () => {
     expect(
-      await writeWithMtime(
+      await writeWithRev(
         () => Promise.reject(CONFLICT),
         () => Promise.reject(new ApiError(500, "server gone")),
       ),
@@ -78,7 +78,7 @@ describe("writeWithMtime", () => {
   test("every other failure throws — that is the caller's error line", async () => {
     const reread = counted(() => Promise.resolve(fileAt(1)));
     const boom = new ApiError(500, "boom");
-    await expect(writeWithMtime(() => Promise.reject(boom), reread.run)).rejects.toBe(boom);
+    await expect(writeWithRev(() => Promise.reject(boom), reread.run)).rejects.toBe(boom);
     // A non-conflict failure says nothing about the file on disk.
     expect(reread.calls()).toBe(0);
   });
@@ -86,7 +86,7 @@ describe("writeWithMtime", () => {
   test("a non-API failure throws just as well (offline, bug)", async () => {
     const offline = new TypeError("Failed to fetch");
     await expect(
-      writeWithMtime(
+      writeWithRev(
         () => Promise.reject(offline),
         () => Promise.resolve(fileAt(1)),
       ),
@@ -94,25 +94,25 @@ describe("writeWithMtime", () => {
   });
 });
 
-describe("withMtime", () => {
-  test("without an mtime there is no write function at all", () => {
-    expect(withMtime(undefined, () => Promise.resolve({ ok: true, file: fileAt(1) }))).toBe(
+describe("withRev", () => {
+  test("without a rev there is no write function at all", () => {
+    expect(withRev(undefined, () => Promise.resolve({ ok: true, file: fileAt(1) }))).toBe(
       undefined,
     );
   });
 
-  test("with an mtime the write gets the variables and that very version", async () => {
-    const seen: Array<{ status: string; mtimeMs: number }> = [];
-    const write = withMtime<string>(42, (status, mtimeMs) => {
-      seen.push({ status, mtimeMs });
-      return Promise.resolve({ ok: true, file: fileAt(mtimeMs + 1) });
+  test("with a rev the write gets the variables and that very version", async () => {
+    const seen: Array<{ status: string; rev: number }> = [];
+    const write = withRev<string>(42, (status, rev) => {
+      seen.push({ status, rev });
+      return Promise.resolve({ ok: true, file: fileAt(rev + 1) });
     });
     expect(write).not.toBe(undefined);
     expect(await write?.("played")).toEqual({ ok: true, file: fileAt(43) });
-    expect(seen).toEqual([{ status: "played", mtimeMs: 42 }]);
+    expect(seen).toEqual([{ status: "played", rev: 42 }]);
   });
 
-  test("mtime 0 is a version, not a missing one", () => {
-    expect(withMtime(0, () => Promise.resolve({ ok: true, file: fileAt(0) }))).not.toBe(undefined);
+  test("rev 0 is a version, not a missing one", () => {
+    expect(withRev(0, () => Promise.resolve({ ok: true, file: fileAt(0) }))).not.toBe(undefined);
   });
 });

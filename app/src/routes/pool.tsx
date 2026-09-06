@@ -13,7 +13,6 @@ import { Link, useParams } from "react-router";
 
 import { fetchFile, fetchTree } from "@/api";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
-import { MigrationNotice } from "@/components/MigrationNotice";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { locationName } from "@/lib/campaign";
@@ -42,7 +41,7 @@ export function PoolRoute() {
       0,
     ) ?? 0;
   const chapterCount = data?.chapters.length ?? 0;
-  // Display name + description from _campaign.md (issue #17); the header
+  // Display name + description from _campaign (issue #17); the header
   // degrades to the campaign id when the file is missing.
   const meta = useCampaignMeta(campaign);
   // Open the active chapter(s) by default; without one, the first.
@@ -62,9 +61,6 @@ export function PoolRoute() {
         )}
         {data && (
           <>
-            {/* Quiet, collapsed, and only when the one-time markdown import
-                actually degraded something (issue #57). */}
-            <MigrationNotice campaign={campaign} />
             <div className="mb-5">
               <div className="flex flex-wrap items-baseline gap-3">
                 <h1 className="font-serif text-[28px] leading-[1.25] font-semibold text-foreground">
@@ -125,7 +121,7 @@ function Chapter({
   const scenes = chapter.groups.flatMap((g) => g.scenes);
   const contingencies = scenes.filter((s) => s.type === "contingency");
 
-  // The chapter goal lives in the _chapter.md body — fetched lazily on
+  // The chapter goal lives in the _chapter body — fetched lazily on
   // first expand; missing file/heading degrades to no goal line.
   const chapterFile = useQuery({
     queryKey: ["file", campaign, chapter.path],
@@ -220,7 +216,7 @@ function PlannedGroup({
         <div className="flex items-center gap-2 border-b border-border py-2 text-[13px]">
           <MapPin aria-hidden size={15} className="flex-none text-muted-foreground" />
           {/* The group directory is a loose convention (README): it MAY name a
-              location. When `locations/<slug>.md` exists the header reads its
+              location. When `locations/<slug>` exists the header reads its
               name; otherwise the slug stands as written — never prettified,
               because a guessed name would claim a location that has no file. */}
           <span className="font-medium text-soft">{locationName(tree, group.slug)}</span>
@@ -276,7 +272,7 @@ function SceneRow({
           ) : null}
         </span>
       </Link>
-      {/* No mtime in the tree — the control fetches the file when it opens. */}
+      {/* No rev in the tree — the control fetches the file when it opens. */}
       <SceneStatusControl
         campaign={campaign}
         path={scene.path}

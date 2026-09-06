@@ -18,7 +18,7 @@ export class ApiError extends Error {
    * The server's JSON error body when there was one — the endpoints answer
    * `{ error, … }` and put the interesting parts next to it (`conflicts` on
    * 409, `validationErrors`/`rawReply`/`usage` on the generator's 422,
-   * `mtimeMs` on a frontmatter conflict).
+   * `rev` on a properties conflict).
    */
   readonly details: Record<string, unknown>;
 
@@ -106,7 +106,7 @@ export interface GlossaryResponse {
 /**
  * The campaign's glossary as a LIST of terms (issue #57): since the SQLite
  * migration it is a table, not a markdown blob. The reading view still opens
- * `glossary.md` as a document — that rendering comes from these same rows —
+ * `glossary` as a document — that rendering comes from these same rows —
  * but anything that wants the terms themselves reads this.
  */
 export function fetchGlossary(campaign: string): Promise<GlossaryResponse> {
@@ -129,45 +129,21 @@ export function putGlossary(
   });
 }
 
-/** One incident of the one-time markdown → database migration (issue #57). */
-export interface MigrationReportEntry {
-  /** Campaign-relative path the incident happened in; "" when campaign-wide. */
-  path: string;
-  /** Human-readable German reason — written to be READ by the DM. */
-  reason: string;
-  at: string;
-}
-
-export interface MigrationReportResponse {
-  entries: MigrationReportEntry[];
-}
-
-/**
- * What the one-time migration had to degrade. An EMPTY list is the normal
- * state and the success criterion of a clean import — the UI shows nothing
- * then. A non-empty one is a reading task, not an error: the affected files
- * are still in the database verbatim, and the original markdown tree was
- * never touched.
- */
-export function fetchMigrationReport(campaign: string): Promise<MigrationReportResponse> {
-  return getJson<MigrationReportResponse>(`/${encodeURIComponent(campaign)}/migration-report`);
-}
-
 // --- write endpoints (session/log, issue #9) --------------------------------
 
 /**
- * Set/delete frontmatter keys of one file (issue #5 endpoint, used by the
+ * Set/delete properties keys of one file (issue #5 endpoint, used by the
  * scene-status control of issue #28). `patch` is flat: a value sets the key,
- * `null` deletes it. `mtimeMs` is the optimistic-concurrency token and must be
+ * `null` deletes it. `rev` is the optimistic-concurrency token and must be
  * the one from the FileResponse the UI is showing — when the file changed on
- * disk since, the server answers 409 with the current `mtimeMs` in
+ * disk since, the server answers 409 with the current `rev` in
  * `ApiError.details` and writes nothing.
  */
-export async function patchFrontmatter(
+export async function patchProperties(
   campaign: string,
-  input: { path: string; mtimeMs: number; patch: Record<string, unknown> },
+  input: { path: string; rev: number; patch: Record<string, unknown> },
 ): Promise<FileResponse> {
-  const path = `/${encodeURIComponent(campaign)}/frontmatter`;
+  const path = `/${encodeURIComponent(campaign)}/properties`;
   const response = await fetch(`/api${path}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
@@ -178,24 +154,24 @@ export async function patchFrontmatter(
 }
 
 /**
- * Replace the markdown BODY of one file, frontmatter untouched (issue #15 —
+ * Replace the markdown BODY of one file, properties untouched (issue #15 —
  * the reading view's edit mode). `body` is what GET /file hands out: the file
- * without its frontmatter block. `mtimeMs` is the same optimistic-concurrency
+ * without its properties block. `rev` is the same optimistic-concurrency
  * token as above and must come from the FileResponse the editor was seeded
- * from — on a mismatch the server answers 409 with the current `mtimeMs` in
+ * from — on a mismatch the server answers 409 with the current `rev` in
  * `ApiError.details` and writes nothing.
  */
 export async function putFileBody(
   campaign: string,
   path: string,
   body: string,
-  mtimeMs: number,
+  rev: number,
 ): Promise<FileResponse> {
   const url = `/${encodeURIComponent(campaign)}/file`;
   const response = await fetch(`/api${url}`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path, mtimeMs, body }),
+    body: JSON.stringify({ path, rev, body }),
   });
   if (!response.ok) throw await failure(`PUT /api${url}`, response);
   return (await response.json()) as FileResponse;
@@ -291,7 +267,7 @@ export function discardSession(campaign: string): Promise<{ path: string }> {
 }
 
 /**
- * Append a line to the campaign's inbox.md (mobile capture, issue #11);
+ * Append a line to the campaign's inbox (mobile capture, issue #11);
  * the server creates the file on the first entry.
  */
 export function appendInbox(campaign: string, text: string): Promise<FileResponse> {
@@ -329,7 +305,7 @@ export function markLogLineSeen(
 }
 
 /**
- * Append `- [ ] text` under `## Offene Fäden` of the chapter's _chapter.md
+ * Append `- [ ] text` under `## Offene Fäden` of the chapter's _chapter
  * (section created when missing). Returns the chapter file.
  */
 export function adoptThread(
@@ -365,7 +341,7 @@ export function ensureNpc(
 /**
  * Rewrite an inbox line to `- [x] …` (the one documented exception to the
  * inbox's append-only rule). Idempotent; the line must match byte for byte.
- * Returns inbox.md.
+ * Returns inbox.
  */
 export function markInboxLineDone(campaign: string, line: string): Promise<FileResponse> {
   return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/review/inbox-done`, { line });
@@ -450,7 +426,7 @@ export function fetchUsage(
 
 /**
  * Rename an entity id and let the server drag all references along
- * (frontmatter npcs/location/chapter, session scenes_played, `## Beziehungen`
+ * (properties npcs/location/chapter, session scenes_played, `## Beziehungen`
  * entries, log scene markers — prose is deliberately left alone).
  *
  * `dryRun: true` returns the very same plan without writing a byte: same code
@@ -593,7 +569,7 @@ export async function putDraftEdit(
 /**
  * Write the reviewed drafts (all or nothing): the possibly edited scene
  * markdown plus the accepted stubs. With `chapter` + `chapterTitle` the
- * server also creates `<chapter>/_chapter.md` when it is missing.
+ * server also creates `<chapter>/_chapter` when it is missing.
  * ApiError 409 carries the existing paths in `details.conflicts` — nothing
  * was written then.
  *
@@ -623,7 +599,7 @@ export function applyDrafts(
 /**
  * Write the reviewed NPC draft (issue #21) — the same apply endpoint as the
  * scene drafts: it re-validates server-side (path, id, status, parseable
- * frontmatter), answers 409 with `details.conflicts` when the file already
+ * properties), answers 409 with `details.conflicts` when the file already
  * exists (nothing written), and drops the job the draft came from.
  */
 export function applyNpcDraft(

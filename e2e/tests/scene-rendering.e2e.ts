@@ -17,14 +17,14 @@ import { expect, test } from "../support/test";
 
 /** The scene with the [!loot] callout — seeded, examples/ has none. */
 const LOOT_SCENE = {
-  // The path segment is the scene's ID from the fixture's frontmatter
+  // The path segment is the scene's ID from the fixture's properties
   // (`loot-check`), like every scene path since issue #57.
-  path: "01-salzhafen/hafen/loot-check.md",
+  path: "01-salzhafen/hafen/loot-check",
   content: readFileSync(path.join(FIXTURES_DIR, "loot-scene.md"), "utf8"),
 };
 
-const ARRIVAL = "/beispiel/file/01-salzhafen/hafen/lighthouse-arrival.md";
-const CAPTURED = "/beispiel/file/01-salzhafen/hafen/smuggler-captured.md";
+const ARRIVAL = "/beispiel/file/01-salzhafen/hafen/lighthouse-arrival";
+const CAPTURED = "/beispiel/file/01-salzhafen/hafen/smuggler-captured";
 
 test("reference scene 1: read-aloud, check, secret, note and the NPC card", async ({ page }) => {
   await page.goto(ARRIVAL);
@@ -47,7 +47,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   const article = page.getByRole("article");
   await expect(article.getByText("Geplante Szene")).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
-  // Chip row from the frontmatter (the scene's location, resolved to its name).
+  // Chip row from the properties (the scene's location, resolved to its name).
   await expect(article.getByText("Der Leuchtturm von Salzhafen", { exact: true })).toBeVisible();
   await expect(article.getByText("#social", { exact: true })).toBeVisible();
   await expect(article.getByText("Handout: Karte von Salzhafen")).toBeVisible();
@@ -85,7 +85,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
 
   // The card links into the NPC reading view (issue #26).
   await aside.getByRole("link").first().click();
-  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/jorna\.md$/);
+  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/jorna$/);
 });
 
 test("reference scene 2: contingency header, collapsible If-sections, consequence", async ({
@@ -144,11 +144,11 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
   // gives that id an EMPTY entry, and the aside shows it like any other card
   // — the id as the name, nothing else. No "NPC-Eintrag fehlt", no
   // "Stub anlegen" detour, and the card opens the (equally thin) page.
-  expect(await api.exists("npcs/holm.md")).toBe(false);
-  await api.patchFrontmatter("01-salzhafen/hafen/lighthouse-arrival.md", {
+  expect(await api.exists("npcs/holm")).toBe(false);
+  await api.patchProperties("01-salzhafen/hafen/lighthouse-arrival", {
     npcs: ["jorna", "holm"],
   });
-  expect(await api.exists("npcs/holm.md")).toBe(true);
+  expect(await api.exists("npcs/holm")).toBe(true);
 
   await page.goto(ARRIVAL);
   const aside = page.getByRole("complementary").filter({ hasText: "NPCs dieser Szene" });
@@ -157,7 +157,7 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
   await expect(aside.getByRole("button", { name: "Stub anlegen" })).toHaveCount(0);
 
   await aside.getByRole("link", { name: /holm/ }).click();
-  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/holm\.md$/);
+  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/holm$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("holm");
   // And it is editable from here like every other entry.
   await expect(page.getByRole("button", { name: "Eigenschaften" })).toBeVisible();
@@ -168,13 +168,13 @@ test("a scene location that is a slug becomes an entry; free text stays text", a
   api,
 }) => {
   // The one ambiguous field of the format (README): an id OR a string.
-  await api.patchFrontmatter("01-salzhafen/hafen/smuggler-captured.md", { location: "nordbucht" });
-  expect(await api.exists("locations/nordbucht.md")).toBe(true);
+  await api.patchProperties("01-salzhafen/hafen/smuggler-captured", { location: "nordbucht" });
+  expect(await api.exists("locations/nordbucht")).toBe(true);
 
-  await api.patchFrontmatter("01-salzhafen/hafen/smuggler-captured.md", {
+  await api.patchProperties("01-salzhafen/hafen/smuggler-captured", {
     location: "Der alte Hafen",
   });
-  expect(await api.exists("locations/der-alte-hafen.md")).toBe(false);
+  expect(await api.exists("locations/der-alte-hafen")).toBe(false);
   await page.goto(CAPTURED);
   await expect(page.getByRole("article")).toContainText("Der alte Hafen");
 });

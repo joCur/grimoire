@@ -8,7 +8,7 @@ const tree: CampaignTree = {
   chapters: [{ id: "01-salzhafen", title: "Kapitel 1: Der Leuchtturm von Salzhafen", groups: [] }],
   npcs: [],
   locations: [
-    { path: "locations/leuchtturm.md", id: "leuchtturm", name: "Der Leuchtturm von Salzhafen" },
+    { path: "locations/leuchtturm", id: "leuchtturm", name: "Der Leuchtturm von Salzhafen" },
   ],
   sessions: [],
 };
@@ -16,7 +16,7 @@ const tree: CampaignTree = {
 describe("pageContextCrumbs", () => {
   test("a grouped scene reads chapter title then group, chapter links to the pool", () => {
     expect(
-      pageContextCrumbs("beispiel", "01-salzhafen/hafen/ankunft-leuchtturm.md", tree),
+      pageContextCrumbs("beispiel", "01-salzhafen/hafen/ankunft-leuchtturm", tree),
     ).toEqual([
       { label: "Kapitel 1: Der Leuchtturm von Salzhafen", to: "/beispiel" },
       // No location file for "hafen" — the slug stands as written.
@@ -26,7 +26,7 @@ describe("pageContextCrumbs", () => {
 
   test("a group WITH a location file shows the location's name", () => {
     expect(
-      pageContextCrumbs("beispiel", "01-salzhafen/leuchtturm/aufstieg.md", tree),
+      pageContextCrumbs("beispiel", "01-salzhafen/leuchtturm/aufstieg", tree),
     ).toEqual([
       { label: "Kapitel 1: Der Leuchtturm von Salzhafen", to: "/beispiel" },
       { label: "Der Leuchtturm von Salzhafen" },
@@ -34,46 +34,46 @@ describe("pageContextCrumbs", () => {
   });
 
   test("a scene directly in the chapter directory has no group crumb", () => {
-    expect(pageContextCrumbs("beispiel", "01-salzhafen/prolog.md", tree)).toEqual([
+    expect(pageContextCrumbs("beispiel", "01-salzhafen/prolog", tree)).toEqual([
       { label: "Kapitel 1: Der Leuchtturm von Salzhafen", to: "/beispiel" },
     ]);
   });
 
   test("npc and location views point at THEIR list, never at a chapter", () => {
-    expect(pageContextCrumbs("beispiel", "npcs/fenn.md", tree)).toEqual([
+    expect(pageContextCrumbs("beispiel", "npcs/fenn", tree)).toEqual([
       { label: "NPCs", to: "/beispiel/list/npcs" },
     ]);
-    expect(pageContextCrumbs("beispiel", "locations/leuchtturm.md", tree)).toEqual([
+    expect(pageContextCrumbs("beispiel", "locations/leuchtturm", tree)).toEqual([
       { label: "Orte", to: "/beispiel/list/locations" },
     ]);
   });
 
   test("the campaign name never appears in the context line", () => {
     const labels = [
-      ...pageContextCrumbs("beispiel", "npcs/fenn.md", tree),
-      ...pageContextCrumbs("beispiel", "01-salzhafen/prolog.md", tree),
+      ...pageContextCrumbs("beispiel", "npcs/fenn", tree),
+      ...pageContextCrumbs("beispiel", "01-salzhafen/prolog", tree),
     ].map((c) => c.label);
     expect(labels).not.toContain("beispiel");
   });
 
   test("files outside the hierarchy get no context line", () => {
-    for (const path of ["_campaign.md", "sessions/2026-01-15.md", "inbox.md", "glossary.md"]) {
+    for (const path of ["_campaign", "sessions/2026-01-15", "inbox", "glossary"]) {
       expect(pageContextCrumbs("beispiel", path, tree)).toEqual([]);
     }
   });
 
   test("degrades: unknown chapter keeps its id, no tree keeps every raw value", () => {
-    expect(pageContextCrumbs("beispiel", "09-unbekannt/szene.md", tree)).toEqual([
+    expect(pageContextCrumbs("beispiel", "09-unbekannt/szene", tree)).toEqual([
       { label: "09-unbekannt", to: "/beispiel" },
     ]);
-    expect(pageContextCrumbs("beispiel", "01-salzhafen/hafen/x.md", undefined)).toEqual([
+    expect(pageContextCrumbs("beispiel", "01-salzhafen/hafen/x", undefined)).toEqual([
       { label: "01-salzhafen", to: "/beispiel" },
       { label: "hafen" },
     ]);
   });
 
   test("no campaign or no path yields nothing", () => {
-    expect(pageContextCrumbs("", "npcs/fenn.md", tree)).toEqual([]);
+    expect(pageContextCrumbs("", "npcs/fenn", tree)).toEqual([]);
     expect(pageContextCrumbs("beispiel", "", tree)).toEqual([]);
   });
 });

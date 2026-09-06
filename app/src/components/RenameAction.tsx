@@ -1,7 +1,7 @@
 // „Umbenennen" in the reading view (issue #30).
 //
 // An id is a reference key, so renaming it is never a one-file edit — it is a
-// cascade through scene frontmatter, session logs and relationship lists. The
+// cascade through scene properties, session logs and relationship lists. The
 // DM must SEE that before it happens, which is why the dialog has two steps:
 //
 //   1. new id -> „Vorschau" (a dryRun of the endpoint: the server computes

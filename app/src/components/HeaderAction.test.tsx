@@ -12,7 +12,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { CampaignMetaAction } from "./CampaignMetaAction";
 import { FileBodyEditAction } from "./FileBodyEditor";
-import { FrontmatterAction } from "./FrontmatterAction";
+import { PropertiesAction } from "./PropertiesAction";
 import { HeaderAction } from "./HeaderAction";
 import { RenameAction } from "./RenameAction";
 
@@ -54,7 +54,7 @@ describe("the three call sites", () => {
       renderToStaticMarkup(
         <RenameAction
           campaign="beispiel"
-          currentPath="npcs/jorna.md"
+          currentPath="npcs/jorna"
           target={{ kind: "npc", oldId: "jorna" }}
         />,
       ),
@@ -69,16 +69,16 @@ describe("the three call sites", () => {
 
   test("Eigenschaften (issue #42) is the shared trigger with its own glyph", () => {
     const npc: FileResponse = {
-      path: "npcs/jorna.md",
+      path: "npcs/jorna",
       kind: "npc",
-      frontmatter: { id: "jorna", name: "Jorna" },
+      properties: { id: "jorna", name: "Jorna" },
       body: "",
-      mtimeMs: 1,
+      rev: 1,
       raw: "",
     };
     expect(
       renderToStaticMarkup(
-        <FrontmatterAction campaign="beispiel" file={npc} tree={undefined} />,
+        <PropertiesAction campaign="beispiel" file={npc} tree={undefined} />,
       ),
     ).toBe(
       renderToStaticMarkup(
@@ -87,19 +87,19 @@ describe("the three call sites", () => {
     );
   });
 
-  test("no Eigenschaften where there is no typed frontmatter (session, inbox, campaign)", () => {
+  test("no Eigenschaften where there is no typed properties (session, inbox, campaign)", () => {
     for (const kind of ["session", "inbox", "campaign", "glossary"] as const) {
       const file: FileResponse = {
-        path: "x.md",
+        path: "x",
         kind,
-        frontmatter: {},
+        properties: {},
         body: "",
-        mtimeMs: 1,
+        rev: 1,
         raw: "",
       };
       expect(
         renderToStaticMarkup(
-          <FrontmatterAction campaign="beispiel" file={file} tree={undefined} />,
+          <PropertiesAction campaign="beispiel" file={file} tree={undefined} />,
         ),
       ).toBe("");
     }
