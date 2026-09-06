@@ -10,6 +10,10 @@
 // Plus its undo at the very start: "Session verwerfen" deletes the file of a
 // session that has nothing in it (issue #40 AK7) — its own test below.
 //
+// And the live nav's own grouping (issue #73): a scene whose STATUS is
+// `played`/`dropped` leaves "Geplant" for the collapsed, dimmed "Gespielt"
+// group, stays openable there, and never becomes the default selection.
+//
 // Every claim is checked twice: once in the UI and once in the stored file
 // (the server is the truth, the app keeps no state of its own).
 //
@@ -382,4 +386,127 @@ test("an unreachable session lookup dims the chip instead of offering a start", 
   // Nothing to press, and above all no start that could not work.
   await expect(page.getByRole("button", { name: "Session starten" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: /Session läuft/ })).toHaveCount(0);
+});
+
+// Issue #73: the scene STATUS sorts the live nav. Chapter 1 of the example
+// campaign holds exactly ONE planned scene, so this block seeds a second one —
+// otherwise "the played scene is no longer the default selection" has nothing
+// to fall through to.
+test.describe("played/dropped scenes in the live nav (issue #73)", () => {
+  // Stored paths come from the scene ID, not from the markdown file name (the
+  // import derives them) — so the seed key and the API path differ.
+  const SEED_FILE = "01-salzhafen/hafen/zweites-gespraech.md";
+  const ARRIVAL = "01-salzhafen/hafen/lighthouse-arrival.md";
+  // The seeded scene sorts BEFORE the example's own one in the nav
+  // ("harbor-office-talk" < "lighthouse-arrival"), which is exactly what AK3
+  // needs: the scene that gets played is the FIRST row, so a default selection
+  // that ignored the status would land on it.
+  const SEEDED = "01-salzhafen/hafen/harbor-office-talk.md";
+
+  test.use({
+    seed: {
+      files: {
+        [SEED_FILE]: [
+          "---",
+          "id: harbor-office-talk",
+          "title: Gespräch im Hafenkontor",
+          "type: planned",
+          "chapter: 01-salzhafen",
+          "location: hafen",
+          "npcs: []",
+          "tags: [social]",
+          "status: ready",
+          "---",
+          "",
+          "## Aufhänger",
+          "",
+          "Der Kontorschreiber hat die Frachtbücher der letzten Woche.",
+          "",
+        ].join("\n"),
+      },
+    },
+  });
+
+  test("status 'gespielt' moves the scene into the collapsed group, still openable", async ({
+    page,
+    api,
+  }) => {
+    await page.goto("/beispiel");
+    await page.getByRole("button", { name: "Session starten" }).click();
+    await expect(page).toHaveURL(/\/beispiel\/live$/);
+
+    const nav = page.getByRole("navigation", { name: "Szenen der Session" });
+    const arrivalRow = nav.getByRole("button", { name: /Ankunft am Leuchtturm/ });
+    const seededRow = nav.getByRole("button", { name: /Gespräch im Hafenkontor/ });
+    const heading = page.getByRole("article").getByRole("heading", { level: 1 });
+
+    // Before: both are planned, the FIRST row is the default selection …
+    await expect(arrivalRow).toBeVisible();
+    await expect(seededRow).toBeVisible();
+    await expect(heading).toHaveText("Gespräch im Hafenkontor");
+    // … and there is no "Gespielt" group at all yet.
+    await expect(nav.getByRole("button", { name: /^Gespielt/ })).toHaveCount(0);
+
+    // The status is set through the documented API — the same patch the status
+    // control writes (critical path 7), here as the precondition.
+    await api.patchFrontmatter(SEEDED, { status: "played" });
+    await page.reload();
+
+    // AK1: it is gone from "Geplant" — the group it now lives in starts
+    // COLLAPSED, so the row is not rendered …
+    await expect(arrivalRow).toBeVisible();
+    await expect(seededRow).toHaveCount(0);
+    // … but the group announces itself, with its count.
+    const groupTrigger = nav.getByRole("button", { name: /^Gespielt/ });
+    await expect(groupTrigger).toBeVisible();
+    await expect(groupTrigger).toContainText("(1)");
+
+    // AK3: the default selection is the first PLANNED scene, not the played
+    // one — which still stands at the top of the chapter's scene order.
+    await expect(heading).toHaveText("Ankunft am Leuchtturm");
+    await expect(arrivalRow).toHaveAttribute("aria-current", "true");
+
+    // AK2: the contingencies are untouched.
+    await expect(nav).toContainText("Falls es schiefgeht");
+    await expect(nav.getByRole("button", { name: /Von den Schmugglern erwischt/ })).toBeVisible();
+
+    // AK1: expanding reaches it, and it opens like any other scene.
+    await groupTrigger.click();
+    const playedGroup = nav.getByRole("group", { name: "Gespielt" });
+    const groupedRow = playedGroup.getByRole("button", { name: /Gespräch im Hafenkontor/ });
+    await expect(groupedRow).toBeVisible();
+    await groupedRow.click();
+    await expect(heading).toHaveText("Gespräch im Hafenkontor");
+    await expect(page).toHaveURL(/\/beispiel\/live$/);
+
+    // The group is view state only — a reload has it collapsed again (AK1).
+    await page.reload();
+    await expect(nav.getByRole("group", { name: "Gespielt" })).toHaveCount(0);
+
+    // AK2: the SESSION checkmark is a different thing and still works on top
+    // of the grouping — a note played on the grouped scene marks it.
+    await nav.getByRole("button", { name: /^Gespielt/ }).click();
+    await nav
+      .getByRole("group", { name: "Gespielt" })
+      .getByRole("button", { name: /Gespräch im Hafenkontor/ })
+      .click();
+    const quickNote = page.getByLabel("Schnellnotiz");
+    await quickNote.fill("Der Kontorschreiber rückt die Bücher heraus #thread");
+    await quickNote.press("Enter");
+    const sessionPath = (await api.sessionPath()) ?? "";
+    await expect.poll(() => api.raw(sessionPath)).toContain("harbor-office-talk");
+    await expect(
+      nav.getByRole("group", { name: "Gespielt" }).getByText("gespielt"),
+    ).toBeAttached();
+
+    // Degrade: with EVERY scene played the view stays usable — the planned
+    // list says so, the group holds both, and the center column still renders
+    // a scene instead of blanking (or crashing on an empty selection).
+    await api.patchFrontmatter(ARRIVAL, { status: "dropped" });
+    await page.reload();
+    await expect(nav).toContainText("Keine geplanten Szenen in diesem Kapitel.");
+    await expect(nav.getByRole("button", { name: /^Gespielt/ })).toContainText("(2)");
+    await expect(heading).toHaveText("Gespräch im Hafenkontor");
+    await expect(page.getByLabel("Schnellnotiz")).toBeVisible();
+  });
 });

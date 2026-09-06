@@ -9,6 +9,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { ApiError } from "@/api";
 import {
   SCENE_STATUS_OPTIONS,
+  isSceneDone,
   sceneStatusMeta,
   sceneStatusPatchBody,
   writeSceneStatus,
@@ -149,5 +150,23 @@ describe("status labels", () => {
   test("an unknown value stays visible verbatim (degrade, never corrected)", () => {
     expect(sceneStatusMeta("verschollen").label).toBe("verschollen");
     expect(SCENE_STATUS_OPTIONS.map((o) => o.value)).not.toContain("verschollen");
+  });
+});
+
+// Issue #73: the split the live nav groups by.
+describe("isSceneDone", () => {
+  test("played and dropped are behind us", () => {
+    expect(isSceneDone("played")).toBe(true);
+    expect(isSceneDone("dropped")).toBe(true);
+  });
+
+  test("draft and ready are still planned", () => {
+    expect(isSceneDone("draft")).toBe(false);
+    expect(isSceneDone("ready")).toBe(false);
+  });
+
+  test("an unknown status degrades to planned — it never hides a scene", () => {
+    expect(isSceneDone("verschollen")).toBe(false);
+    expect(isSceneDone("")).toBe(false);
   });
 });
