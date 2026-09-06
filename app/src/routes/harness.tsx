@@ -35,7 +35,7 @@ function Fixture({ name, raw }: { name: string; raw: string }) {
       {properties && (
         <details>
           <summary className="cursor-pointer text-sm text-muted-foreground">
-            Properties anzeigen
+            Eigenschaften anzeigen
           </summary>
           <pre className="mt-2 overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">
             {properties}

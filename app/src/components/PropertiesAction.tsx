@@ -227,7 +227,7 @@ function PropertiesDialog({
       >
         <DialogTitle>{kindLabel}: Eigenschaften</DialogTitle>
         <DialogDescription>
-          Alle Properties-Felder dieses Eintrags. Gespeichert wird nur, was du geändert hast —
+          Alle Eigenschaften dieses Eintrags. Gespeichert wird nur, was du geändert hast —
           alles andere bleibt unverändert stehen.
         </DialogDescription>
 
