@@ -64,7 +64,7 @@ import { hasBodyChanges, shouldAdvanceBase } from "@/lib/file-body";
 import { useFileBodyMutation } from "@/lib/use-file-body";
 
 /**
- * The quiet header trigger, in the same vocabulary as „Umbenennen" and the
+ * The quiet header trigger, in the same vocabulary as „Eigenschaften" and the
  * campaign metadata action next to it — hence the shared HeaderAction.
  */
 export function FileBodyEditAction({ onEdit }: { onEdit: () => void }) {

@@ -1,5 +1,5 @@
-// "Umbenennen" in the reading view (issue #30) — everything about it that is
-// pure, so the dialog itself stays a thin shell.
+// The id change (issue #30, demoted into the „Eigenschaften" footer by #77) —
+// everything about it that is pure, so the dialog itself stays a thin shell.
 //
 // The id of an entity is its stable reference key (README), so a rename is a
 // cascade the SERVER computes: the app only decides whether the file on

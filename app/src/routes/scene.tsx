@@ -36,14 +36,12 @@ import { PropertiesAction } from "@/components/PropertiesAction";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/components/NpcCard";
 import { PageContext } from "@/components/PageContext";
-import { RenameAction } from "@/components/RenameAction";
 import { SceneArticle } from "@/components/SceneArticle";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { entityHeaderKind } from "@/lib/entity";
 import { canEditFileBody } from "@/lib/file-body";
 import { fmString, fmStringArray } from "@/lib/properties";
 import { pageContextCrumbs } from "@/lib/page-context";
-import { renameTargetFor } from "@/lib/rename";
 
 export function SceneRoute() {
   const params = useParams();
@@ -91,12 +89,6 @@ export function SceneRoute() {
   const isScene = entityHeaderKind(data.kind) === "scene";
   // The aside belongs to scenes: only they reference npcs in properties.
   const npcs = isScene ? fmStringArray(data.properties.npcs) : [];
-  // „Umbenennen" (issue #30) — offered for the kinds that HAVE a renameable
-  // id (npc, location, scene, chapter); undefined for sessions, inbox,
-  // glossary and the campaign file, where the action renders nothing.
-  const renameAction = (
-    <RenameAction campaign={campaign} currentPath={data.path} target={renameTargetFor(data)} />
-  );
   // „Bearbeiten" (issue #15) — the body editor, offered for the kinds whose
   // prose the DM maintains (canEditFileBody). While it runs the trigger is
   // gone: the editor's own toggle owns the mode from then on.
@@ -118,6 +110,8 @@ export function SceneRoute() {
   // „Eigenschaften" (issue #42) — the properties form of the kinds that have
   // typed fields (scene, npc, location, chapter); it renders nothing for the
   // rest. The tree feeds its reference fields (npc/location/chapter ids).
+  // It also carries the id change (issue #77): the rename dialog is a
+  // secondary action in its footer, not a header button of its own.
   const propertiesAction = (
     <PropertiesAction campaign={campaign} file={data} tree={tree.data} />
   );
@@ -125,7 +119,6 @@ export function SceneRoute() {
     <>
       {editAction}
       {propertiesAction}
-      {renameAction}
     </>
   );
   // The campaign file's header carries the metadata „Bearbeiten" instead

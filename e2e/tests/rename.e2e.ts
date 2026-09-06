@@ -1,5 +1,11 @@
-// Critical paths 2 and 7: renaming an id from the reading view, with the
+// Critical paths 2 and 7: changing an id from the reading view, with the
 // USAGE PREVIEW the DM decides on (issue #60).
+//
+// Since issue #77 the way in is the FOOTER of the „Eigenschaften" dialog („id
+// ändern") — the header button is gone: names resolve themselves (#68), so an
+// id change is a repair, not everyday work. What this spec also pins is that
+// the two dialogs do not stack: the form closes and the rename dialog takes
+// the focus.
 //
 // A rename is the one action that touches other documents, so the dialog is
 // two steps: „Vorschau" asks the server for the plan (a dryRun — nothing is
@@ -20,9 +26,19 @@ test("rename with usage preview: count first, then the cascade", async ({ page, 
   await page.goto(`/beispiel/file/${NPC}`);
   await expect(page.getByRole("heading", { name: "Hafenmeisterin Jorna" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Umbenennen" }).click();
+  // No prominent header action any more — the id change lives in the form.
+  await expect(page.getByRole("button", { name: "Umbenennen" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Eigenschaften" }).click();
+  const properties = page.getByRole("dialog");
+  await expect(properties).toContainText("NPC: Eigenschaften");
+  await properties.getByRole("button", { name: "id ändern" }).click();
+
+  // One dialog, not two stacked: the properties form is gone.
   const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("NPC umbenennen");
+  await expect(dialog).toHaveCount(1);
+  await expect(dialog).toContainText("NPC: id ändern");
+  await expect(dialog).not.toContainText("NPC: Eigenschaften");
 
   // The dialog opens with the input focused — keyboard first (CLAUDE.md).
   const input = dialog.getByRole("textbox");

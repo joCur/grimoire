@@ -80,7 +80,7 @@ test("editing the body: save writes the file and the reading view shows it", asy
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
 
-  // The trigger sits in the header action row, next to „Umbenennen"; „Roh" is
+  // The trigger sits in the header action row, next to „Eigenschaften"; „Roh" is
   // the fallback surface this spec is about.
   await openRawEditor(page);
 
