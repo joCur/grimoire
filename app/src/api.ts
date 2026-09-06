@@ -396,7 +396,7 @@ export type UsageRef =
 
 /** One referencing document, with how many of its rows point at the entity. */
 export interface UsageSite {
-  kind: "scene" | "npc" | "location" | "session" | "chapter";
+  kind: "scene" | "npc" | "location" | "session" | "chapter" | "campaign";
   id: string;
   title: string;
   path: string;

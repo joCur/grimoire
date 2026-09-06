@@ -105,7 +105,7 @@ status: draft | ready | played | dropped
 ### Referenzen im Fließtext: `[[slug]]`
 
 `[[jorna]]` in einem Body-Text ist eine Referenz auf eine Entität. Sie gilt in
-jedem Body (Szene, NPC, Ort, Kapitel) und in jedem Callout.
+jedem Body (Szene, NPC, Ort, Kapitel, Kampagnen-Notiz) und in jedem Callout.
 
 - **Gespeichert wird immer der slug**, nie der Name. Den aktuellen Anzeigenamen
   setzt erst die Anzeige ein — nach einer Umbenennung stimmt der Text also
@@ -115,6 +115,11 @@ jedem Body (Szene, NPC, Ort, Kapitel) und in jedem Callout.
 - In den Klammern steht **nur der slug** in kebab-case (`[[alte-mole]]`); es
   gibt **keinen Anzeigetext** (`[[jorna|Jorna]]` ist normaler Text). Endungen
   stehen außerhalb: `[[jorna]]s Boot` → „Jornas Boot".
+- **Code ist keine Prosa**: In Code-Blöcken und in `` `[[jorna]]` `` bleibt die
+  Schreibweise wörtlich stehen — sie wird nicht aufgelöst, nicht indexiert und
+  von einer Umbenennung nicht angefasst.
+- In der Kopfzeile eines `## If:`-Zweigs erscheint der aufgelöste **Name als
+  Text** (kein Link): der Klick faltet den Zweig.
 - **Degradation**: Ein slug, den keine Entität hat, bleibt als `[[slug]]`
   sichtbar stehen — kein Fehler, und er wird lebendig, sobald die Entität
   existiert.

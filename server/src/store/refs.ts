@@ -22,25 +22,93 @@
 // columns of one campaign — cheap in a single-user tool, and precise, which
 // is why it beats the pragmatic "reindex the whole campaign".
 //
-// SCOPE: the four kinds with a body that a DM writes prose in (scene, npc,
-// location, chapter). The campaign file and the glossary are deliberately not
-// scanned — nothing points at an entity from there today, and a scan that
-// includes them would have to invent a usage site kind for them.
+// SCOPE: every document whose body a DM writes prose in — scene, npc,
+// location, chapter AND the campaign file (`_campaign.md`, the free note
+// space). The campaign file used to be scanned HALF: its index row expanded
+// references (write.ts `indexCampaign`) but no scan ever found it again, so a
+// rename left a stale name in the search index and a dead slug in the note.
+// It is now a FULL body kind: `reindexReferrers` and `rewriteBodyRefs` cover
+// it, and it counts as a usage site like any other document. The glossary
+// stays out — its rows are term/explanation pairs, not a prose body.
+//
+// CODE IS NOT PROSE: `` `[[jorna]]` `` and fenced blocks render literally, so
+// neither the expansion nor the rename may touch them. That rule lives once,
+// in @grimoire/shared/refs, and the renderer skips the same regions.
 
 import { and, eq, like, sql } from "drizzle-orm";
-import { ENTITY_REF_KINDS, expandEntityRefs, entityRefSource } from "@grimoire/shared/refs";
+import {
+  ENTITY_REF_KINDS,
+  bodyReferencesEntity,
+  entityRefSource,
+  expandBodyEntityRefs,
+  rewriteBodyEntityRefs,
+  type EntityRefKind,
+} from "@grimoire/shared/refs";
 import type { GrimoireDb } from "../db/client";
-import { chapters, locations, npcs, scenes } from "../db/schema";
+import { campaigns, chapters, locations, npcs, scenes } from "../db/schema";
 
 /** Body-bearing kinds that are scanned for references. */
-export const REF_BODY_KINDS = ["scene", "npc", "location", "chapter"] as const;
+export const REF_BODY_KINDS = ["scene", "npc", "location", "chapter", "campaign"] as const;
 export type RefBodyKind = (typeof REF_BODY_KINDS)[number];
 
+/** Display name of one slug IN ONE KIND, or undefined when it has no row. */
+function displayNameOfKind(
+  tx: GrimoireDb,
+  campaign: string,
+  kind: EntityRefKind,
+  slug: string,
+): string | undefined {
+  if (kind === "npc") {
+    const row = tx
+      .select({ name: npcs.name })
+      .from(npcs)
+      .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, slug)))
+      .all()[0];
+    return row === undefined ? undefined : row.name === "" ? slug : row.name;
+  }
+  if (kind === "location") {
+    const row = tx
+      .select({ name: locations.name })
+      .from(locations)
+      .where(and(eq(locations.campaignId, campaign), eq(locations.id, slug)))
+      .all()[0];
+    return row === undefined ? undefined : row.name === "" ? slug : row.name;
+  }
+  const row = tx
+    .select({ title: scenes.title })
+    .from(scenes)
+    .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, slug)))
+    .all()[0];
+  return row === undefined ? undefined : row.title === "" ? slug : row.title;
+}
+
 /**
- * Display name of one slug, resolved with the documented KIND PRIORITY
- * (npc > location > scene — ENTITY_REF_KINDS, and the app's resolver walks
- * the same order). Undefined when nothing owns the slug: the reference then
- * keeps its brackets, in the index exactly as on screen.
+ * The kind that OWNS a slug, by the documented KIND PRIORITY (npc > location
+ * > scene — ENTITY_REF_KINDS, and the app's resolver walks the same order).
+ * Undefined when nothing owns it.
+ *
+ * This is what makes a slug COLLISION safe. A scene and an npc may both be
+ * called `jorna`, but `[[jorna]]` resolves to exactly ONE of them — so only
+ * the owner may claim that prose: renaming the shadowed scene must leave
+ * `[[jorna]]` untouched (it still points at the npc, and rewriting it would
+ * HIJACK the sentence), and the scene's usage report must not count text that
+ * names somebody else.
+ */
+export function refOwnerKind(
+  tx: GrimoireDb,
+  campaign: string,
+  slug: string,
+): EntityRefKind | undefined {
+  for (const kind of ENTITY_REF_KINDS) {
+    if (displayNameOfKind(tx, campaign, kind, slug) !== undefined) return kind;
+  }
+  return undefined;
+}
+
+/**
+ * Display name of one slug, resolved with the documented KIND PRIORITY.
+ * Undefined when nothing owns the slug: the reference then keeps its
+ * brackets, in the index exactly as on screen.
  */
 export function refDisplayName(
   tx: GrimoireDb,
@@ -48,41 +116,22 @@ export function refDisplayName(
   slug: string,
 ): string | undefined {
   for (const kind of ENTITY_REF_KINDS) {
-    if (kind === "npc") {
-      const row = tx
-        .select({ name: npcs.name })
-        .from(npcs)
-        .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, slug)))
-        .all()[0];
-      if (row !== undefined) return row.name === "" ? slug : row.name;
-    } else if (kind === "location") {
-      const row = tx
-        .select({ name: locations.name })
-        .from(locations)
-        .where(and(eq(locations.campaignId, campaign), eq(locations.id, slug)))
-        .all()[0];
-      if (row !== undefined) return row.name === "" ? slug : row.name;
-    } else {
-      const row = tx
-        .select({ title: scenes.title })
-        .from(scenes)
-        .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, slug)))
-        .all()[0];
-      if (row !== undefined) return row.title === "" ? slug : row.title;
-    }
+    const name = displayNameOfKind(tx, campaign, kind, slug);
+    if (name !== undefined) return name;
   }
   return undefined;
 }
 
 /**
  * The text that goes into the search index: the body with every resolved
- * `[[slug]]` replaced by the current display name. Bodies without a reference
- * come back untouched without a single query.
+ * `[[slug]]` replaced by the current display name — CODE REGIONS EXCLUDED,
+ * because a reference inside them is literal text on the page too. Bodies
+ * without a reference come back untouched without a single query.
  */
 export function expandBodyRefs(tx: GrimoireDb, campaign: string, body: string): string {
   if (!body.includes("[[")) return body;
   const cache = new Map<string, string | undefined>();
-  return expandEntityRefs(body, (slug) => {
+  return expandBodyEntityRefs(body, (slug) => {
     if (!cache.has(slug)) cache.set(slug, refDisplayName(tx, campaign, slug));
     return cache.get(slug);
   });
@@ -125,26 +174,73 @@ const REF_TABLES = {
   chapter: chapters,
 } as const;
 
-/** Ids of the entities whose body contains `[[slug]]`, per kind. */
+/** One referring document with the body the check and the rewrite work on. */
+interface ReferrerRow {
+  kind: RefBodyKind;
+  id: string;
+  body: string;
+}
+
+/**
+ * Candidate bodies for `[[slug]]` and the documents they belong to.
+ *
+ * The `like` is only a PRE-FILTER — SQL cannot tell prose from code, so every
+ * candidate is confirmed in JS with the shared grammar. The campaign row is
+ * keyed by its own id (it IS the campaign) and therefore not part of the
+ * generic table loop.
+ */
+function referrerRows(tx: GrimoireDb, campaign: string, slug: string): ReferrerRow[] {
+  const needle = `%${entityRefSource(slug)}%`;
+  const rows: ReferrerRow[] = [];
+  for (const kind of REF_BODY_KINDS) {
+    if (kind === "campaign") {
+      const row = tx
+        .select({ id: campaigns.id, body: campaigns.body })
+        .from(campaigns)
+        .where(and(eq(campaigns.id, campaign), like(campaigns.body, needle)))
+        .all()[0];
+      if (row !== undefined) rows.push({ kind, id: row.id, body: row.body });
+      continue;
+    }
+    const table = REF_TABLES[kind];
+    for (const row of tx
+      .select({ id: table.id, body: table.body })
+      .from(table)
+      .where(and(eq(table.campaignId, campaign), like(table.body, needle)))
+      .orderBy(table.id)
+      .all()) {
+      rows.push({ kind, id: row.id, body: row.body });
+    }
+  }
+  return rows.filter((row) => bodyReferencesEntity(row.body, slug));
+}
+
+/** Ids of the entities whose body PROSE contains `[[slug]]`, per kind. */
 export function referrersOf(
   tx: GrimoireDb,
   campaign: string,
   slug: string,
 ): Array<{ kind: RefBodyKind; id: string }> {
-  const needle = `%${entityRefSource(slug)}%`;
-  const found: Array<{ kind: RefBodyKind; id: string }> = [];
-  for (const kind of REF_BODY_KINDS) {
-    const table = REF_TABLES[kind];
-    for (const row of tx
-      .select({ id: table.id })
-      .from(table)
-      .where(and(eq(table.campaignId, campaign), like(table.body, needle)))
-      .orderBy(table.id)
-      .all()) {
-      found.push({ kind, id: row.id });
-    }
+  return referrerRows(tx, campaign, slug).map((row) => ({ kind: row.kind, id: row.id }));
+}
+
+/** Write one body back, in the caller's transaction. */
+function setBody(
+  tx: GrimoireDb,
+  campaign: string,
+  kind: RefBodyKind,
+  id: string,
+  body: string,
+): void {
+  if (kind === "campaign") {
+    tx.update(campaigns).set({ body }).where(eq(campaigns.id, campaign)).run();
+    return;
   }
-  return found;
+  const table = REF_TABLES[kind];
+  tx.update(table)
+    .set({ body })
+    .where(and(eq(table.campaignId, campaign), eq(table.id, id)))
+    .run();
 }
 
 /**
@@ -152,6 +248,12 @@ export function referrersOf(
  * body reference is a SOFT reference (schema.ts rule 3) and the rename
  * cascade has to drag it along, or the DM's prose silently loses its links.
  * Returns the entities whose body changed, so the caller can re-index them.
+ *
+ * The rewrite happens IN JS, one body at a time, not as a SQL `replace`: the
+ * `replace` hit every occurrence, `` `[[jorna]]` `` in a code span included,
+ * and the DM's literal example silently turned into a different slug. Loading
+ * the body is what buys the shared skip logic — and the bodies are the ones
+ * the pre-filter already found, so nothing extra is read.
  */
 export function rewriteBodyRefs(
   tx: GrimoireDb,
@@ -159,16 +261,12 @@ export function rewriteBodyRefs(
   oldSlug: string,
   newSlug: string,
 ): Array<{ kind: RefBodyKind; id: string }> {
-  const affected = referrersOf(tx, campaign, oldSlug);
-  const from = entityRefSource(oldSlug);
-  const to = entityRefSource(newSlug);
-  for (const kind of REF_BODY_KINDS) {
-    const table = REF_TABLES[kind];
-    if (!affected.some((entity) => entity.kind === kind)) continue;
-    tx.update(table)
-      .set({ body: sql`replace(${table.body}, ${from}, ${to})` })
-      .where(and(eq(table.campaignId, campaign), like(table.body, `%${from}%`)))
-      .run();
+  const affected: Array<{ kind: RefBodyKind; id: string }> = [];
+  for (const row of referrerRows(tx, campaign, oldSlug)) {
+    const body = rewriteBodyEntityRefs(row.body, oldSlug, newSlug);
+    if (body === row.body) continue;
+    setBody(tx, campaign, row.kind, row.id, body);
+    affected.push({ kind: row.kind, id: row.id });
   }
   return affected;
 }

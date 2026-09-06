@@ -132,6 +132,22 @@ describe("rendered references", () => {
     expect(render("[[jorna]]")).toContain('aria-label="NPC: Hafenmeisterin Jorna"');
   });
 
+  test("in an `## If:` summary the name is TEXT — the row stays a toggle", () => {
+    const html = render("## If: [[jorna]] gewarnt wurde\n\nDann holt [[jorna]] sie.");
+    const summary = /<summary[\s\S]*?<\/summary>/.exec(html)?.[0] ?? "";
+    expect(summary).toContain("Hafenmeisterin Jorna gewarnt wurde");
+    expect(summary).not.toContain("<a ");
+    expect(summary).not.toContain("<button");
+    // The section BODY still gets the interactive reference.
+    expect(html).toContain('href="/beispiel/file/npcs/jorna.md"');
+  });
+
+  test("a reference in inline code is neither resolved nor linked", () => {
+    const html = render("Die Syntax heißt `[[jorna]]`.");
+    expect(html).toContain("<code>[[jorna]]</code>");
+    expect(html).not.toContain("Hafenmeisterin");
+  });
+
   test("a reference inside a read-aloud resolves too", () => {
     // The clipboard payload is expanded with the same resolver (Markdown.tsx
     // `CalloutSection`) — it lives in a prop, not in the markup, so what this

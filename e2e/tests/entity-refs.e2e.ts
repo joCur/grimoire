@@ -64,6 +64,31 @@ test("reading view: references render as the current name, unknown ones stay tex
   await expect(page.getByRole("heading", { level: 1, name: JORNA })).toBeVisible();
 });
 
+test("code stays code, and an `## If:` summary toggles instead of navigating", async ({
+  page,
+}) => {
+  await page.goto(SCENE_URL);
+
+  // `` `[[jorna]]` `` is the SYNTAX, quoted: it renders literally and never
+  // becomes a link — the same skip the index and the rename cascade apply.
+  await expect(
+    page.locator(".md-body code").filter({ hasText: "[[jorna]]" }).first(),
+  ).toBeVisible();
+
+  // A branch SUMMARY resolves to the name, but as plain text: the row is the
+  // toggle, so a click folds the branch instead of leaving the page.
+  const details = page.locator("details[data-if-section]").first();
+  const summary = details.locator("summary");
+  await expect(summary).toContainText(`${JORNA} gewarnt wurde`);
+  await expect(summary.getByRole("link")).toHaveCount(0);
+  await expect(summary.getByRole("button")).toHaveCount(0);
+
+  await expect(details).toHaveAttribute("open", "");
+  await summary.click();
+  await expect(details).not.toHaveAttribute("open", "");
+  await expect(page).toHaveURL(new RegExp(`${SCENE_URL}$`));
+});
+
 test("live view: a reference opens the drawer instead of leaving the session", async ({
   page,
 }) => {
@@ -129,7 +154,10 @@ test("an id rename drags the body reference along", async ({ page, api }) => {
 
   const stored = await api.file(SCENE.path);
   expect(stored.body).toContain("[[jorna-b]]");
-  expect(stored.body).not.toContain("[[jorna]]");
+  // The QUOTED syntax survives byte-identically — the cascade rewrites prose,
+  // not code (the old SQL `replace` hit both).
+  expect(stored.body).toContain("`[[jorna]]`");
+  expect(stored.body.replace(/`\[\[jorna\]\]`/g, "")).not.toContain("[[jorna]]");
 
   // …and the reference is still alive on the page, under the same name.
   await page.goto(SCENE_URL);

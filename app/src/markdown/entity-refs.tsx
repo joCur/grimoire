@@ -159,6 +159,17 @@ const REF_CLASS =
   "rounded-sm text-primary underline decoration-primary/40 decoration-dotted underline-offset-[3px] hover:text-primary-hover hover:decoration-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
 /**
+ * A reference where an interactive element must NOT go: the `## If:` summary
+ * row, whose whole job is to fold its branch. It resolves like any other
+ * reference — the DM reads "Falls Jorna gewarnt wurde", not `[[jorna]]` — but
+ * it is plain text, so the click stays the toggle's (issue #68 review).
+ */
+export function EntityRefName({ slug, fallback }: { slug: string; fallback: ReactNode }) {
+  const target = useEntityRefs().resolve(slug);
+  return <>{target === undefined ? fallback : target.name}</>;
+}
+
+/**
  * One `[[slug]]` in a body. `fallback` is the literal source text the plugin
  * put inside the span — what an unresolved reference keeps showing.
  */

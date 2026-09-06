@@ -9,11 +9,16 @@ import { ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 
-import { expandEntityRefs } from "@grimoire/shared/refs";
+import { renderEntityRefPieces, type EntityRefPiece } from "@grimoire/shared/refs";
 
 import { Callout } from "./Callout";
-import { EntityRef, useEntityRefs } from "./entity-refs";
-import { ENTITY_REF_ATTR, remarkGrimoire } from "./remark-grimoire";
+import { EntityRef, EntityRefName, useEntityRefs } from "./entity-refs";
+import {
+  COPY_PARTS_ATTR,
+  ENTITY_REF_ATTR,
+  ENTITY_REF_PLAIN_ATTR,
+  remarkGrimoire,
+} from "./remark-grimoire";
 
 const components: Components = {
   section(props) {
@@ -21,9 +26,9 @@ const components: Components = {
     const attrs = rest as Record<string, unknown>;
     const kind = attrs["data-callout"];
     if (typeof kind === "string") {
-      const copyText = attrs["data-copy-text"];
+      const parts = attrs[COPY_PARTS_ATTR];
       return (
-        <CalloutSection kind={kind} copyText={typeof copyText === "string" ? copyText : undefined}>
+        <CalloutSection kind={kind} copyParts={typeof parts === "string" ? parts : undefined}>
           {children}
         </CalloutSection>
       );
@@ -33,8 +38,14 @@ const components: Components = {
   // `[[slug]]` (issue #68): the plugin marked it, the tree resolves it.
   span(props) {
     const { node: _node, children, ...rest } = props;
-    const slug = (rest as Record<string, unknown>)[ENTITY_REF_ATTR];
+    const attrs = rest as Record<string, unknown>;
+    const slug = attrs[ENTITY_REF_ATTR];
     if (typeof slug !== "string") return <span {...rest}>{children}</span>;
+    // Inside a `## If:` summary a reference is the resolved NAME AS TEXT —
+    // the row's own click must toggle the branch, not navigate away.
+    if (attrs[ENTITY_REF_PLAIN_ATTR] !== undefined) {
+      return <EntityRefName slug={slug} fallback={children} />;
+    }
     return <EntityRef slug={slug} fallback={children} />;
   },
   details(props) {
@@ -70,29 +81,41 @@ const components: Components = {
 
 /**
  * A callout, with the read-aloud CLIPBOARD text resolved (issue #68): the
- * plugin computes `data-copy-text` from the raw mdast, so a `[[slug]]` in a
+ * plugin splits the raw mdast into `data-copy-parts`, so a `[[slug]]` in a
  * read-aloud would otherwise land in the Roll20 chat as brackets. What the DM
- * copies has to be what the DM reads.
+ * copies has to be what the DM reads — which is also why the PIECES come from
+ * the plugin: a reference the page shows literally (inside code) is a text
+ * piece there and is never resolved here.
  */
 function CalloutSection({
   kind,
-  copyText,
+  copyParts,
   children,
 }: {
   kind: string;
-  copyText?: string;
+  copyParts?: string;
   children: ReactNode;
 }) {
   const { resolve } = useEntityRefs();
   const text =
-    copyText === undefined
+    copyParts === undefined
       ? undefined
-      : expandEntityRefs(copyText, (slug) => resolve(slug)?.name);
+      : renderEntityRefPieces(parseCopyParts(copyParts), (slug) => resolve(slug)?.name);
   return (
     <Callout kind={kind} copyText={text}>
       {children}
     </Callout>
   );
+}
+
+/** The pieces come from our own plugin; a broken payload copies nothing. */
+function parseCopyParts(value: string): EntityRefPiece[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? (parsed as EntityRefPiece[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 const remarkPlugins = [remarkGrimoire];

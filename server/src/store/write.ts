@@ -60,7 +60,7 @@ import {
 
 } from "../db/schema";
 import { indexEntity } from "./fts";
-import { expandBodyRefs, referrersOf } from "./refs";
+import { expandBodyRefs, referrersOf, type RefBodyKind } from "./refs";
 import { getDb } from "./handle";
 import {
   campaignRow,
@@ -269,6 +269,9 @@ function indexChapter(tx: GrimoireDb, campaign: string, row: ChapterRow): void {
   });
 }
 
+// The campaign file is not referenceable either — but its note body CONTAINS
+// references like any other, and store/refs.ts scans it for them, so nothing
+// here is half-supported any more (issue #68 review).
 function indexCampaign(tx: GrimoireDb, row: CampaignRow): void {
   indexEntity(tx, row.id, {
     kind: "campaign",
@@ -415,13 +418,23 @@ function replaceRelations(tx: GrimoireDb, campaign: string, npcId: string, body:
 /**
  * Re-index one entity from its current row — used by the rename cascade,
  * which must refresh the index row's `title` too, not only its id.
+ *
+ * `campaign` is a kind here because the campaign FILE is a referring body
+ * like any other (store/refs.ts `REF_BODY_KINDS`): a note in `_campaign.md`
+ * that says `[[jorna]]` has the resolved name in its index row, so it goes
+ * stale with everybody else's.
  */
 export function reindexEntity(
   tx: GrimoireDb,
   campaign: string,
-  kind: "npc" | "location" | "scene" | "chapter",
+  kind: RefBodyKind,
   id: string,
 ): void {
+  if (kind === "campaign") {
+    const row = campaignRow(tx, campaign);
+    if (row !== undefined) indexCampaign(tx, row);
+    return;
+  }
   if (kind === "npc") {
     const row = npcRowOf(tx, campaign, id);
     if (row !== undefined) indexNpc(tx, campaign, row, relationRows(tx, campaign, id));
