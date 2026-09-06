@@ -27,9 +27,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { eq } from "drizzle-orm";
 import type { FileResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { setNow } from "../src/clock";
+import type { GrimoireDb } from "../src/db/client";
+import { sessions as sessionsTable } from "../src/db/schema";
 import {
   dropStore,
   removeTempRoot,
@@ -120,10 +123,12 @@ async function withFreshCampaign(fn: () => Promise<void>): Promise<void> {
   }
 }
 
+let db: GrimoireDb;
+
 beforeEach(async () => {
   // 2026-08-19 21:05 local time unless a test overrides it.
   setNow(() => new Date(2026, 7, 19, 21, 5));
-  await seedStore();
+  db = await seedStore();
 });
 
 afterEach(() => {
@@ -318,44 +323,100 @@ describe("PATCH /api/:campaign/frontmatter", () => {
 describe("POST /api/:campaign/session/start", () => {
   test("creates today's session with the documented shape", async () => {
     const file = await postOk("/api/beispiel/session/start");
-    expect(file.path).toBe("sessions/2026-08-19.md");
     expect(file.kind).toBe("session");
-    expect(file.frontmatter.id).toBe("2026-08-19");
-    expect(file.frontmatter.started).toBe("2026-08-19T21:05");
+    // The id is an OPAQUE random string since issue #58 (a UUID): the file's
+    // address and nothing else. What is asserted about it is that it IS the
+    // address and that it carries no calendar date.
+    const id = String(file.frontmatter.id);
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(file.path).toBe(`sessions/${id}.md`);
+    expect(file.frontmatter.started).toBe("2026-08-19T21:05:00");
     expect(file.frontmatter.scenes_played).toEqual([]);
     // The rendered skeleton is the one the format prescribes — the `## Log`
     // section is rendered from (still zero) log rows.
     expect(file.raw).toBe(
-      "---\nid: 2026-08-19\nstarted: 2026-08-19T21:05\nscenes_played: []\n---\n\n## Log\n",
+      `---\nid: ${id}\nstarted: 2026-08-19T21:05:00\nscenes_played: []\n---\n\n## Log\n`,
     );
     // A fresh row starts at rev 1, and the GET agrees.
     expect(file.mtimeMs).toBe(1);
-    expect((await getFile("sessions/2026-08-19.md")).mtimeMs).toBe(1);
+    expect((await getFile(file.path)).mtimeMs).toBe(1);
+  });
+
+  test("two starts hand out two DIFFERENT ids", async () => {
+    const first = await postOk("/api/beispiel/session/start");
+    await postOk("/api/beispiel/session/end");
+    const second = await postOk("/api/beispiel/session/start");
+    expect(second.frontmatter.id).not.toBe(first.frontmatter.id);
+  });
+
+  // Issue #58 bug: `started` used to be minute-precise, so it rounded DOWN to
+  // the start of its minute and the timer chip opened at up to 0:00:59 — after
+  // an end→start that read like the old session kept counting.
+  test("`started` keeps the seconds, so a fresh session starts at 0", async () => {
+    setNow(() => new Date(2026, 7, 19, 21, 5, 50));
+    const file = await postOk("/api/beispiel/session/start");
+    expect(file.frontmatter.started).toBe("2026-08-19T21:05:50");
+    // The seconds survive the YAML rendering the editor is shown, too.
+    expect(file.raw).toContain("started: 2026-08-19T21:05:50\n");
+    // …and what the app actually clocks — startedMs vs. the same instant — is
+    // zero, not 50 seconds.
+    expect(file.startedMs).toBe(new Date(2026, 7, 19, 21, 5, 50).getTime());
+  });
+
+  test("a session started on the REAL clock has an elapsed under 2s (#58)", async () => {
+    setNow(null); // the real clock: this is the bug's actual surface
+    const before = Date.now();
+    const file = await postOk("/api/beispiel/session/start");
+    expect(file.startedMs).toBeDefined();
+    expect(file.startedMs as number).toBeGreaterThanOrEqual(before - 1000);
+    expect(Date.now() - (file.startedMs as number)).toBeLessThan(2000);
   });
 
   test("second start on the same day is idempotent (nothing reset)", async () => {
     const first = await postOk("/api/beispiel/session/start");
     setNow(() => new Date(2026, 7, 19, 21, 30));
     const again = await postOk("/api/beispiel/session/start");
-    expect(again.frontmatter.started).toBe("2026-08-19T21:05"); // NOT 21:30
+    expect(again.frontmatter.started).toBe("2026-08-19T21:05:00"); // NOT 21:30
     // Idempotent all the way down: no write happened, so the token stands.
     expect(again.mtimeMs).toBe(first.mtimeMs);
+  });
+
+  test("after the end a start creates a SECOND session with an empty log (#58)", async () => {
+    const first = await postOk("/api/beispiel/session/start");
+    await postOk("/api/beispiel/log", { text: "Runde eins" });
+    await postOk("/api/beispiel/session/end");
+    setNow(() => new Date(2026, 7, 19, 23, 30));
+    const second = await postOk("/api/beispiel/session/start");
+    // A second session of the SAME DAY is simply another opaque id.
+    expect(second.path).not.toBe(first.path);
+    // Own id, own `started`, and the log skeleton is EMPTY — the runtime of
+    // the new session starts at 0 instead of inheriting the first evening's.
+    expect(second.raw).toBe(
+      `---\nid: ${String(second.frontmatter.id)}\nstarted: 2026-08-19T23:30:00\nscenes_played: []\n---\n\n## Log\n`,
+    );
+    expect(second.mtimeMs).toBe(1);
   });
 
   test("409 session_running when an OLDER session is still open", async () => {
     // A start on the NEXT day must not open a second session silently — the
     // app offers to end the old one (issue #40 review, finding 3).
-    await postOk("/api/beispiel/session/start");
+    const open = await postOk("/api/beispiel/session/start");
     setNow(() => new Date(2026, 7, 20, 20, 0));
     const res = await postJson("/api/beispiel/session/start");
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
       error: expect.any(String),
       code: "session_running",
-      path: "sessions/2026-08-19.md",
+      // "Older" is decided by the DATE PART OF `started` now — the id says
+      // nothing about a day (issue #58).
+      path: open.path,
     });
-    // …and nothing was created for the new day.
-    expect(await fileStatus("sessions/2026-08-20.md")).toBe(404);
+    // …and nothing was created for the new day: the campaign still has only
+    // the committed fixture's session and this one.
+    const tree = (await (await app.request("/api/beispiel/tree")).json()) as {
+      sessions: unknown[];
+    };
+    expect(tree.sessions).toHaveLength(2);
   });
 });
 
@@ -402,9 +463,14 @@ describe("POST /api/:campaign/log", () => {
     // of the session's prose follows it (store/render.ts renderSessionBody).
     // The invariant that mattered survives — a note does not land in, or
     // clobber, the DM's own sections — so it is asserted on the fixture
-    // session, re-opened for the purpose.
-    const resumed = await postOk("/api/beispiel/session/resume");
-    expect(resumed.path).toBe("sessions/2026-01-15.md");
+    // session, made the running one for the purpose. That used to be POST
+    // /session/resume; the endpoint is gone (issue #58 — "beenden" is final),
+    // so the row is opened directly here: the SUBJECT of the case is the log
+    // append, not the state machine.
+    db.update(sessionsTable)
+      .set({ ended: null })
+      .where(eq(sessionsTable.id, "2026-01-15"))
+      .run();
     setNow(() => new Date(2026, 0, 15, 23, 0));
     const file = await postOk("/api/beispiel/log", { text: "Nachtrag nach dem Cliffhanger" });
     expect(file.path).toBe("sessions/2026-01-15.md");
@@ -490,9 +556,9 @@ describe("POST /api/:campaign/session/end", () => {
     await postOk("/api/beispiel/log", { text: "Zeile eins Zeile zwei" });
     setNow(() => new Date(2026, 7, 19, 23, 45));
     const file = await postOk("/api/beispiel/session/end");
-    expect(file.frontmatter.ended).toBe("2026-08-19T23:45");
+    expect(file.frontmatter.ended).toBe("2026-08-19T23:45:00");
     expect(Object.keys(file.frontmatter)).toEqual(["id", "started", "ended", "scenes_played"]);
-    expect(file.frontmatter.started).toBe("2026-08-19T21:05");
+    expect(file.frontmatter.started).toBe("2026-08-19T21:05:00");
     // the log line appended earlier survives verbatim
     expect(file.body.endsWith("- 21:25 Zeile eins Zeile zwei\n")).toBe(true);
   });
@@ -503,13 +569,13 @@ describe("POST /api/:campaign/session/end", () => {
     const first = await postOk("/api/beispiel/session/end");
     setNow(() => new Date(2026, 7, 19, 23, 59));
     const second = await postOk("/api/beispiel/session/end");
-    expect(second.frontmatter.ended).toBe("2026-08-19T23:45");
+    expect(second.frontmatter.ended).toBe("2026-08-19T23:45:00");
     // Idempotent means no write: the guard token stands still.
     expect(second.mtimeMs).toBe(first.mtimeMs);
   });
 
   test("end stays idempotent across days, log is refused (issue #40 review)", async () => {
-    await postOk("/api/beispiel/session/start");
+    const started = await postOk("/api/beispiel/session/start");
     setNow(() => new Date(2026, 7, 19, 23, 45));
     await postOk("/api/beispiel/session/end");
     // With nothing running, `end` falls back to the LAST STARTED session —
@@ -517,8 +583,8 @@ describe("POST /api/:campaign/session/end", () => {
     // beenden" safe to press twice, also after midnight.
     setNow(() => new Date(2026, 7, 22, 22, 0));
     const file = await postOk("/api/beispiel/session/end");
-    expect(file.path).toBe("sessions/2026-08-19.md");
-    expect(file.frontmatter.ended).toBe("2026-08-19T23:45");
+    expect(file.path).toBe(started.path);
+    expect(file.frontmatter.ended).toBe("2026-08-19T23:45:00");
     // A log line, however, is STRICTLY the running session's business: a note
     // typed after the end used to land in the closed log with a 200.
     const log = await postJson("/api/beispiel/log", { text: "verloren" });
@@ -529,7 +595,6 @@ describe("POST /api/:campaign/session/end", () => {
   test("404 for a campaign that has no session at all", async () => {
     await withFreshCampaign(async () => {
       expect((await postJson(`/api/${FRESH}/session/end`)).status).toBe(404);
-      expect((await postJson(`/api/${FRESH}/session/resume`)).status).toBe(404);
       expect((await postJson(`/api/${FRESH}/log`, { text: "x" })).status).toBe(404);
     });
   });

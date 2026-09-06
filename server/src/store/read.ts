@@ -105,9 +105,14 @@ export async function campaignVersion(id: string): Promise<number> {
 // --- GET /api/campaigns ------------------------------------------------------
 
 /**
- * All campaigns with `name`/`description` and `lastSession` — the newest
- * session id, which is what lets the app re-open the last active campaign
- * (issue #14). Session ids are dates, so `max(id)` IS the newest.
+ * All campaigns with `name`/`description` plus the newest session's id
+ * (`lastSession`) and its `started` (`lastSessionStarted`) — which is what
+ * lets the app re-open the last active campaign (issue #14). "Newest" is
+ * `compareSessionsNewestFirst`: `started`, then the row's insertion order.
+ *
+ * The `started` value travels because the id CANNOT be ordered by the client:
+ * it is opaque since the PO decision on issue #58 (db/schema.ts). The app used
+ * to sort campaigns by the id string and would now be sorting random noise.
  *
  * `name` is the campaign's DISPLAY name and therefore always there: an
  * unnamed campaign is shown under its id. This list and `GET /file?path=
@@ -124,14 +129,23 @@ export async function listCampaigns(): Promise<CampaignSummary[]> {
     if (row.description !== null && row.description.trim() !== "") {
       summary.description = row.description;
     }
+    // Not `max(id)`: session ids are opaque random strings since issue #58, so
+    // there is no order in them at all. The sort needs exactly the three
+    // columns `compareSessionsNewestFirst` reads, so the list must NOT pull
+    // whole session rows — a campaign with 80 evenings would drag 80 log
+    // bodies through this loop for one id.
     const newest = db
-      .select({ id: sessions.id })
+      .select({ id: sessions.id, started: sessions.started, createdAt: sessions.createdAt })
       .from(sessions)
       .where(eq(sessions.campaignId, row.id))
-      .orderBy(desc(sessions.id))
-      .limit(1)
-      .all()[0];
-    if (newest !== undefined) summary.lastSession = newest.id;
+      .all()
+      .sort(compareSessionsNewestFirst)[0];
+    if (newest !== undefined) {
+      summary.lastSession = newest.id;
+      if (newest.started !== null && newest.started.trim() !== "") {
+        summary.lastSessionStarted = newest.started;
+      }
+    }
     return summary;
   });
 }
@@ -239,23 +253,23 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
     })
     .sort((a, b) => cmp(a.name, b.name));
 
+  // Newest first, by `started` with the row's insertion time as the tie-break
+  // — several sessions per day are possible since issue #58, and the opaque
+  // id orders nothing (compareSessionsNewestFirst).
   const sessionList: SessionSummary[] = (
-    db
-      .select()
-      .from(sessions)
-      .where(eq(sessions.campaignId, campaign))
-      .orderBy(desc(sessions.id))
-      .all() as SessionRow[]
-  ).map((row) => {
-    const summary: SessionSummary = {
-      path: `sessions/${row.id}.md`,
-      id: row.id,
-      scenes_played: playedScenes(db, campaign, row.id),
-    };
-    if (row.started !== null) summary.started = row.started;
-    if (row.ended !== null) summary.ended = row.ended;
-    return summary;
-  });
+    db.select().from(sessions).where(eq(sessions.campaignId, campaign)).all() as SessionRow[]
+  )
+    .sort(compareSessionsNewestFirst)
+    .map((row) => {
+      const summary: SessionSummary = {
+        path: `sessions/${row.id}.md`,
+        id: row.id,
+        scenes_played: playedScenes(db, campaign, row.id),
+      };
+      if (row.started !== null) summary.started = row.started;
+      if (row.ended !== null) summary.ended = row.ended;
+      return summary;
+    });
 
   return {
     campaign,
@@ -325,32 +339,53 @@ export function sessionRow(
     .all()[0] as SessionRow | undefined;
 }
 
+/** The only three session columns the ordering rule below looks at. */
+export type SessionOrderFields = Pick<SessionRow, "id" | "started" | "createdAt">;
+
 /**
  * Chronological order key of a session in epoch milliseconds, or undefined
- * when the row says nothing usable about WHEN it started. Unchanged rule
- * (campaign-fs.ts `sessionOrderKey`): `started` first, the id (a date) as the
- * fallback, and a session with neither never wins anything.
+ * when the row says nothing usable about WHEN it started.
+ *
+ * `started` is the ONLY source. The id used to serve as a fallback while it
+ * was date-shaped; since the PO decision on issue #58 it is an opaque random
+ * string (db/schema.ts) and there is nothing in it to read. A row without a
+ * usable `started` therefore wins nothing — same as before for a row that had
+ * neither.
+ *
+ * Takes only the columns it reads, so callers that need nothing else of a
+ * session (the campaign list) can select just those.
  */
-const SESSION_ID_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+export function sessionOrderKey(row: Pick<SessionOrderFields, "started">): number | undefined {
+  return localDateTimeToMs(row.started);
+}
 
-export function sessionOrderKey(row: SessionRow): number | undefined {
-  const started = localDateTimeToMs(row.started);
-  if (started !== undefined) return started;
-  return SESSION_ID_DATE.test(row.id) ? localDateTimeToMs(row.id) : undefined;
+/**
+ * Newest-first comparator: `started` decides, and `createdAt` — the row's
+ * insertion time in milliseconds — breaks the tie. Two sessions of the same
+ * evening can share a `started` to the SECOND (start, end, start again —
+ * issue #58), and "the last started one" has to be the second of them,
+ * deterministically. The opaque id cannot say which came first, so the row
+ * records it.
+ *
+ * Last resort for two rows that share both (migrated rows carry `createdAt`
+ * 0): a plain string compare of the ids. Which of them then counts as newer
+ * is arbitrary — but it is STABLE, and that is the property callers need.
+ */
+export function compareSessionsNewestFirst(
+  a: SessionOrderFields,
+  b: SessionOrderFields,
+): number {
+  const ka = sessionOrderKey(a) ?? -Infinity;
+  const kb = sessionOrderKey(b) ?? -Infinity;
+  if (ka !== kb) return kb - ka;
+  if (a.createdAt !== b.createdAt) return b.createdAt - a.createdAt;
+  return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
 }
 
 function pickLatest(rows: SessionRow[]): SessionRow | undefined {
-  let best: SessionRow | undefined;
-  let bestKey = -Infinity;
-  for (const row of rows) {
-    const key = sessionOrderKey(row);
-    if (key === undefined) continue;
-    if (best === undefined || key > bestKey) {
-      best = row;
-      bestKey = key;
-    }
-  }
-  return best;
+  const candidates = rows.filter((row) => sessionOrderKey(row) !== undefined);
+  if (candidates.length === 0) return undefined;
+  return [...candidates].sort(compareSessionsNewestFirst)[0];
 }
 
 /**

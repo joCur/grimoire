@@ -323,15 +323,18 @@ describe("applyDrafts — the conflict check is IN the insert transaction", () =
 
 describe("POST /log — the scene marker is a parse column", () => {
   test("a sceneId with a closing paren is refused, nothing appended", async () => {
-    expect((await postJson("/api/beispiel/session/start")).status).toBe(200);
-    const before = await getFile("sessions/2026-08-19.md");
+    const start = await postJson("/api/beispiel/session/start");
+    expect(start.status).toBe(200);
+    // The session's id is opaque (issue #58), so its path comes from the start.
+    const rel = ((await start.json()) as FileResponse).path;
+    const before = await getFile(rel);
     // (An EMPTY sceneId is not in this list: the route normalises it away to
     // "no scene", which is the same thing as omitting the key.)
     for (const sceneId of ["boom) und mehr", "a b", "Gross", "with/slash", "-lead"]) {
       const res = await postJson("/api/beispiel/log", { text: "Notiz", sceneId });
       expect(res.status).toBe(400);
     }
-    expect(await getFile("sessions/2026-08-19.md")).toEqual(before);
+    expect(await getFile(rel)).toEqual(before);
     // the legal form still works
     const ok = await postJson("/api/beispiel/log", {
       text: "Notiz",

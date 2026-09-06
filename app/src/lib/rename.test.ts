@@ -93,8 +93,8 @@ describe("newIdError / canSubmitNewId", () => {
 
 describe("changedCountLabel", () => {
   test("singular and plural", () => {
-    expect(changedCountLabel(1)).toBe("betrifft 1 Datei");
-    expect(changedCountLabel(4)).toBe("betrifft 4 Dateien");
+    expect(changedCountLabel(1)).toBe("betrifft 1 Eintrag");
+    expect(changedCountLabel(4)).toBe("betrifft 4 Einträge");
   });
 });
 
@@ -130,7 +130,7 @@ describe("renameErrorMessage", () => {
   });
 
   test("409 without a path is the ambiguous-id case", () => {
-    expect(renameErrorMessage(new ApiError(409, "ambiguous"))).toContain("Mehrere Dateien");
+    expect(renameErrorMessage(new ApiError(409, "ambiguous"))).toContain("Mehrere Einträge");
   });
 
   test("400/404 and anything else stay one quiet line", () => {

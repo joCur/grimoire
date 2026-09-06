@@ -338,7 +338,7 @@ export function GenerateRoute() {
             </h1>
             <p className="mb-5 text-[14px] leading-[1.6] text-body-secondary">
               {mode === "npc"
-                ? "Quellmaterial zu einer Figur rein, eine NPC-Datei nach Format raus — Will, Weiß, Beziehungen. Immer mit Review; geschrieben wird erst beim Übernehmen."
+                ? "Quellmaterial zu einer Figur rein, ein NPC-Eintrag nach Format raus — Will, Weiß, Beziehungen. Immer mit Review; geschrieben wird erst beim Übernehmen."
                 : "Englisches Quellmaterial rein, deutsche Szenen-Drafts raus. Immer status draft, immer mit Review — geschrieben wird erst beim Übernehmen."}
             </p>
 
@@ -482,7 +482,7 @@ export function GenerateRoute() {
                     )}
 
                     <label htmlFor="gen-new-id" className="mt-2 text-[12px] text-muted-foreground">
-                      Ordnername (Kapitel-id)
+                      Kapitel-id
                     </label>
                     <input
                       id="gen-new-id"
@@ -650,7 +650,7 @@ export function GenerateRoute() {
             {start.isError && startError?.status !== 503 && (
               <p aria-live="polite" className="mt-4 text-[13px] text-destructive">
                 {startError?.status === 409
-                  ? "NPC-Datei existiert schon — andere id wählen; bestehende Dateien werden nie überschrieben."
+                  ? "NPC existiert schon — andere id wählen; bestehende Einträge werden nie überschrieben."
                   : startError?.status === 404
                     ? "Kapitel nicht gefunden — anderes Ziel wählen."
                     : "Nicht generiert — Server prüfen."}
@@ -682,8 +682,8 @@ export function GenerateRoute() {
                 resultUsage === undefined ? "mb-[22px]" : "mb-1.5",
               )}
             >
-              Prüfen, anpassen, Stubs einzeln entscheiden. Erst „Übernehmen“ schreibt auf die
-              Platte — als Drafts, nie überschreibend.
+              Prüfen, anpassen, Stubs einzeln entscheiden. Erst „Übernehmen“ schreibt in die
+              Datenbank — als Drafts, nie überschreibend.
             </p>
             {/* What the run cost — quiet, but never invisible (issue #18). */}
             {resultUsage !== undefined && (
@@ -745,7 +745,7 @@ export function GenerateRoute() {
             {conflicts.length > 0 && (
               <div aria-live="polite" className="mb-3 rounded-md border border-input bg-card px-3.5 py-3">
                 <p className="mb-1.5 text-[13px] text-foreground">
-                  Diese Dateien existieren schon — nichts geschrieben:
+                  Diese Einträge existieren schon — nichts geschrieben:
                 </p>
                 <ul className="flex flex-col gap-1">
                   {conflicts.map((path) => (
@@ -808,7 +808,7 @@ export function GenerateRoute() {
                 resultUsage === undefined ? "mb-[22px]" : "mb-1.5",
               )}
             >
-              Prüfen und anpassen. Erst „Übernehmen“ schreibt die Datei — bestehende NPCs
+              Prüfen und anpassen. Erst „Übernehmen“ schreibt den Eintrag — bestehende NPCs
               werden nie überschrieben.
             </p>
             {resultUsage !== undefined && (
@@ -844,7 +844,7 @@ export function GenerateRoute() {
             {conflicts.length > 0 && (
               <div aria-live="polite" className="mb-3 rounded-md border border-input bg-card px-3.5 py-3">
                 <p className="mb-1.5 text-[13px] text-foreground">
-                  Diese Datei existiert schon — nichts geschrieben:
+                  Dieser Eintrag existiert schon — nichts geschrieben:
                 </p>
                 <ul className="flex flex-col gap-1">
                   {conflicts.map((path) => (
@@ -892,7 +892,7 @@ export function GenerateRoute() {
           <div className="flex flex-col items-start gap-3.5 py-14 md:py-20">
             <p className="flex items-center gap-2.5 text-[15px] text-foreground">
               <Check aria-hidden size={17} className="flex-none text-success-text" />
-              {mode === "npc" ? "Geschrieben — NPC-Datei angelegt" : "Geschrieben — alles als draft"}
+              {mode === "npc" ? "Geschrieben — NPC-Eintrag angelegt" : "Geschrieben — alles als draft"}
             </p>
             <ul className="flex flex-col gap-1.5">
               {written.map((path) => (
@@ -903,8 +903,8 @@ export function GenerateRoute() {
             </ul>
             <p className="max-w-[420px] text-[13px] leading-[1.6] text-muted-foreground">
               {mode === "npc"
-                ? "Der NPC erscheint in der NPC-Liste und in der Suche. Bestehende Dateien werden nie überschrieben — bei Konflikt schreibt der Server nichts."
-                : "Die Szenen erscheinen im Pool mit Status „Entwurf“. Bestehende Dateien werden nie überschrieben — bei Konflikt schreibt der Server nichts."}
+                ? "Der NPC erscheint in der NPC-Liste und in der Suche. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts."
+                : "Die Szenen erscheinen im Pool mit Status „Entwurf“. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts."}
             </p>
             <div className="mt-2 flex flex-wrap gap-2.5">
               {mode === "npc" && written[0] !== undefined && (

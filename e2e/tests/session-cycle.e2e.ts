@@ -2,17 +2,25 @@
 //
 // start → quick note → log + scenes_played → NPC/location drawer → back into
 // the session via the global live indicator → pause (the clock stops) →
-// weiter (it ticks again) → end → review.
+// weiter (it ticks again) → end → review → and, since issue #58, the restart:
+// "beenden" is FINAL, so pressing "Session starten" again on the same day
+// opens a SECOND, separate session (own file under its own id, empty log,
+// timer at 0) instead of re-opening the closed one. There is no "fortsetzen".
 //
 // Plus its undo at the very start: "Session verwerfen" deletes the file of a
 // session that has nothing in it (issue #40 AK7) — its own test below.
 //
 // Every claim is checked twice: once in the UI and once in the stored file
 // (the server is the truth, the app keeps no state of its own).
+//
+// A session id is an OPAQUE random string since the PO decision on issue #58,
+// so this spec never spells one out: every session path comes from the server
+// (`api.sessionPath()`). That is also the honest test — the app itself never
+// derives the file its notes land in either.
 
 import type { Page } from "@playwright/test";
 
-import { expect, test, todaySessionPath } from "../support/test";
+import { expect, test } from "../support/test";
 
 const NOTE = "Gruppe verhandelt mit Jorna am Fuß der Treppe #thread";
 
@@ -39,9 +47,8 @@ test("session start, quick note, pause, end — log and file follow", async ({
 }) => {
   await page.goto("/beispiel");
 
-  // No session stored yet — the session file is created by the button.
-  const sessionPath = todaySessionPath();
-  expect(await api.exists(sessionPath)).toBe(false);
+  // No session running yet — the session file is created by the button.
+  expect(await api.sessionPath()).toBeUndefined();
 
   // ONE session control across ALL states (PO requirement on issue #40): the
   // offer to start and the running session are the SAME chip in the SAME
@@ -52,6 +59,11 @@ test("session start, quick note, pause, end — log and file follow", async ({
 
   await startChip.click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
+
+  // WHICH file the session lives in is the server's answer — the id is opaque
+  // (issue #58) and carries no date to reconstruct.
+  const sessionPath = (await api.sessionPath()) ?? "";
+  expect(sessionPath).toMatch(/^sessions\/.+\.md$/);
 
   // The topbar carries ONE session control: the chip, brass, with the running
   // time as H:MM:SS. No "Live" label, no separate timer or buttons any more.
@@ -73,6 +85,10 @@ test("session start, quick note, pause, end — log and file follow", async ({
     );
   }
   await expect(chip).toContainText(/\d+:\d{2}:\d{2}/);
+  // …and it starts at ZERO. `started` is written to the second (issue #58);
+  // when it was minute-precise the reading rounded down to the start of the
+  // minute and the fresh chip could open at up to 0:00:59.
+  await expect(chip).toContainText(/\b0:00:0[0-4]\b/);
   await expect(page.getByText("Live", { exact: true })).toHaveCount(0);
 
   // The clock really ticks (1s), it is not a frozen render: two readings more
@@ -151,7 +167,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect(drawer).toBeVisible();
   await expect(drawer.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
   // The full file, not the card excerpt — and the way out into the full view.
-  await expect(drawer.getByRole("link", { name: "Datei öffnen" })).toHaveAttribute(
+  await expect(drawer.getByRole("link", { name: "Eintrag öffnen" })).toHaveAttribute(
     "href",
     "/beispiel/file/npcs/jorna.md",
   );
@@ -235,28 +251,69 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await (await sessionMenuItem(page, "Session beenden")).click();
   await expect(page).toHaveURL(/\/beispiel\/review$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fünf Minuten Ernte");
-  await expect.poll(() => api.raw(sessionPath)).toMatch(/^ended: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/m);
+  await expect.poll(() => api.raw(sessionPath)).toMatch(/^ended: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/m);
 
   // The harvest card for the tagged note is waiting there.
   await expect(page.getByText("Gruppe verhandelt mit Jorna am Fuß der Treppe")).toBeVisible();
   await expect(page.getByText("#thread", { exact: true }).first()).toBeVisible();
 
-  // --- ended too early? fortsetzen in ONE click (PO feedback on #40) -------
-  // "Session beenden" one scene too soon used to be a dead end until
-  // midnight. It then cost two clicks (start → "fortsetzen"); now the ended
-  // session is resumed by the same press — same file, so the evening's log
-  // stays in one piece, and no intermediate screen asks anything.
+  // --- beenden is FINAL, and a restart is a NEW session (issue #58) --------
+  // The chip offers a plain "Session starten" right after the end — no
+  // "fortsetzen" anywhere — and that press opens a SECOND session of the same
+  // day: own file (`<date>-2`), empty log, timer back at 0. The first
+  // session keeps its `ended`, its log and its pauses.
   await page.goto("/beispiel");
-  const startButton = page.getByRole("button", { name: "Session starten" });
-  await expect(startButton).toBeVisible();
-  await startButton.click();
+  const startAgain = page.getByRole("button", { name: "Session starten" });
+  await expect(startAgain).toBeVisible();
+  await expect(page.getByRole("button", { name: /fortsetzen/i })).toHaveCount(0);
+  await startAgain.click();
 
   await expect(page).toHaveURL(/\/beispiel\/live$/);
-  // The same session, not a fresh one: the note from before is still there …
-  await expect(page.getByText(NOTE)).toBeVisible();
-  // … and `ended` is gone from the file, so the session really runs again.
-  await expect.poll(() => api.raw(sessionPath)).not.toContain("ended:");
   await expect(sessionMenuChip(page)).toBeVisible();
+  // The timer of the SECOND session starts at zero too — the bug that made an
+  // end→start look like the old session kept counting (issue #58).
+  await expect(sessionMenuChip(page)).toContainText(/\b0:00:0[0-4]\b/);
+  // A fresh, empty session: nothing of the first evening is shown …
+  await expect(page.getByText(NOTE)).toHaveCount(0);
+  await expect(page.getByText("— Pause")).toHaveCount(0);
+  // … it lives in its OWN file, under a DIFFERENT opaque id …
+  const secondPath = (await api.sessionPath()) ?? "";
+  expect(secondPath).toMatch(/^sessions\/.+\.md$/);
+  expect(secondPath).not.toBe(sessionPath);
+  const second = await api.raw(secondPath);
+  expect(second).not.toContain("ended:");
+  expect(second).not.toContain("pauses:");
+  expect(second).not.toContain(NOTE);
+  // … and the first session is untouched: still ended, log and pauses intact.
+  const first = await api.raw(sessionPath);
+  expect(first).toMatch(/^ended: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/m);
+  expect(first).toContain(NOTE);
+  expect(first).toMatch(/pauses: \[\{from: [\d\-T:]+, to: [\d\-T:]+\}\]/);
+
+  // The two sessions stay separate under writing: a note now lands in the
+  // SECOND one only, and its own pause is its own.
+  const SECOND_NOTE = "Zweite Runde: die Gruppe bricht zum Leuchtturm auf #thread";
+  const secondNoteField = page.getByLabel("Schnellnotiz");
+  await secondNoteField.fill(SECOND_NOTE);
+  await secondNoteField.press("Enter");
+  await expect.poll(() => api.raw(secondPath)).toContain(SECOND_NOTE);
+  expect(await api.raw(sessionPath)).not.toContain(SECOND_NOTE);
+  await (await sessionMenuItem(page, "Pause")).click();
+  await expect.poll(() => api.raw(secondPath)).toMatch(/pauses: \[\{from: [\d\-T:]+\}\]/);
+  // The first session's pause list did not grow.
+  expect((await api.raw(sessionPath)).match(/from:/g)?.length).toBe(1);
+
+  // Ending the second one leads to the review of the SECOND session — the
+  // harvest works on the LAST STARTED session, which is this one.
+  await (await sessionMenuItem(page, "Session beenden")).click();
+  await expect(page).toHaveURL(/\/beispiel\/review$/);
+  await expect.poll(() => api.raw(secondPath)).toMatch(/^ended: /m);
+  await expect(
+    page.getByText("Zweite Runde: die Gruppe bricht zum Leuchtturm auf"),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Gruppe verhandelt mit Jorna am Fuß der Treppe"),
+  ).toHaveCount(0);
 });
 
 test("session verwerfen — the mis-click's undo removes the empty file", async ({
@@ -264,18 +321,18 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   api,
 }) => {
   await page.goto("/beispiel");
-  const sessionPath = todaySessionPath();
 
   // "Session starten" hit by accident.
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
-  await expect.poll(() => api.exists(sessionPath)).toBe(true);
+  const sessionPath = (await api.sessionPath()) ?? "";
+  expect(await api.exists(sessionPath)).toBe(true);
 
   // It asks first — the file is deleted, and that is what the dialog says.
   await (await sessionMenuItem(page, "Session verwerfen")).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Leere Session verwerfen?");
-  await expect(dialog).toContainText("Die Datei wird gelöscht.");
+  await expect(dialog).toContainText("Die Session wird gelöscht.");
 
   // Abbrechen changes nothing at all.
   await dialog.getByRole("button", { name: "Abbrechen" }).click();
@@ -294,9 +351,16 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   await expect.poll(() => api.exists(sessionPath)).toBe(false);
 
   // And the start really works again (it is not blocked by a stale session).
+  // The new session gets a FRESH id, never the discarded one back (#58): an
+  // id, once handed out, must not name a second evening — with random ids
+  // that holds without any bookkeeping.
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
-  await expect.poll(() => api.exists(sessionPath)).toBe(true);
+  const restarted = (await api.sessionPath()) ?? "";
+  expect(restarted).toMatch(/^sessions\/.+\.md$/);
+  expect(restarted).not.toBe(sessionPath);
+  expect(await api.exists(restarted)).toBe(true);
+  expect(await api.exists(sessionPath)).toBe(false);
 });
 
 // The third state of the ONE session control (PO requirement on issue #40): an

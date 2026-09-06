@@ -36,6 +36,13 @@
       "when": 1788645978142,
       "tag": "0004_generate_jobs_campaign_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1788651234226,
+      "tag": "0005_sessions_created_at",
+      "breakpoints": true
     }
   ]
 }

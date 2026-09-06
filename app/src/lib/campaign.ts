@@ -3,6 +3,8 @@
 
 import type { CampaignSummary, CampaignTree } from "@grimoire/shared/types";
 
+import { parseLocalDateTime } from "@/lib/session";
+
 /**
  * Resolve a location id to its display name via the tree; free strings
  * and unknown ids pass through unchanged (degrade).
@@ -62,14 +64,27 @@ export function findCampaign(
  * Order of the campaign list for "last active first" (issue #14): the
  * campaign with the newest session wins, campaigns without a session rank
  * behind all that have one, and ties fall back to the alphabetically first
- * id. Session ids are dates (`yyyy-mm-dd`), so plain string compare is date
- * compare; a missing (or empty) `lastSession` is the smallest value and thus
- * sorts last.
+ * id.
+ *
+ * A session ID says NOTHING about time since the PO decision on issue #58 —
+ * it is an opaque random string, so sorting by it would sort noise. The order
+ * therefore reads `lastSessionStarted`, the newest session's `started` as the
+ * server computed it (CampaignSummary), and compares the two as timestamps.
+ * A missing, empty or unparsable value is "no session at all" and sorts behind
+ * every campaign that has one; ties fall back to the id.
  */
+function startedMs(campaign: CampaignSummary): number | undefined {
+  return parseLocalDateTime(campaign.lastSessionStarted);
+}
+
 function byLastActive(a: CampaignSummary, b: CampaignSummary): number {
-  const sessionA = typeof a.lastSession === "string" ? a.lastSession : "";
-  const sessionB = typeof b.lastSession === "string" ? b.lastSession : "";
-  if (sessionA !== sessionB) return sessionA > sessionB ? -1 : 1;
+  const ma = startedMs(a);
+  const mb = startedMs(b);
+  if (ma === undefined || mb === undefined) {
+    if (ma !== mb) return ma === undefined ? 1 : -1;
+  } else if (ma !== mb) {
+    return mb - ma;
+  }
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 

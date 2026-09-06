@@ -15,7 +15,7 @@ describe("MissingLocationCard", () => {
     const html = renderToStaticMarkup(<MissingLocationCard id="leuchtturm" />);
     expect(html).toContain("leuchtturm");
     expect(html).toContain("font-mono");
-    expect(html).toContain("Ortsdatei fehlt");
+    expect(html).toContain("Ortseintrag fehlt");
     expect(html).not.toContain("<button");
   });
 });

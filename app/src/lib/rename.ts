@@ -91,9 +91,9 @@ export function canSubmitNewId(newId: string, oldId: string): boolean {
   return id !== "" && newIdError(id, oldId) === undefined;
 }
 
-/** „betrifft 1 Datei" / „betrifft 3 Dateien" — the preview's headline. */
+/** „betrifft 1 Eintrag" / „betrifft 3 Einträge" — the preview's headline. */
 export function changedCountLabel(count: number): string {
-  return `betrifft ${count} ${count === 1 ? "Datei" : "Dateien"}`;
+  return `betrifft ${count} ${count === 1 ? "Eintrag" : "Einträge"}`;
 }
 
 // --- usage summary (issue #60) ----------------------------------------------
@@ -162,7 +162,7 @@ export function renameErrorMessage(error: unknown): string {
   switch (error.status) {
     case 409:
       return path === undefined
-        ? "Mehrere Dateien beanspruchen diese id — bitte extern aufräumen."
+        ? "Mehrere Einträge beanspruchen diese id — Konflikt in der Datenbank."
         : `${path} existiert schon — andere id wählen.`;
     case 404:
       return "Nicht gefunden — Ansicht neu laden.";

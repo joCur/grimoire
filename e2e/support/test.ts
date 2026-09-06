@@ -111,6 +111,15 @@ export interface Api {
   /** Whether the path addresses an existing row (404 = no). */
   exists(rel: string): Promise<boolean>;
   /**
+   * Path of the ACTIVE session — or, with `includeEnded`, of the last started
+   * one. `undefined` when the campaign has no such session.
+   *
+   * A session id is an opaque random string since issue #58, so no spec can
+   * spell one out: "the file the app just started" is a question only the
+   * server can answer, and this asks it.
+   */
+  sessionPath(includeEnded?: boolean): Promise<string | undefined>;
+  /**
    * PUT /file with a FRESH guard token: a second writer, not a race. Returns
    * the new token. This is how a spec provokes the app's 409 since "someone
    * changed the file outside" cannot happen any more.
@@ -191,12 +200,19 @@ export async function startGrimoireServer(
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
-/** `sessions/<today>.md` — the server's local-date convention. */
+/**
+ * `sessions/<today>.md` — for session files a spec SEEDS itself.
+ *
+ * NOT the path of a session the app starts: those ids are opaque random
+ * strings since issue #58 and only the server knows them (`api.sessionPath`).
+ * A date-shaped id stays perfectly legal — it is what every campaign written
+ * before the cutover carries — so seeding one is also the compatibility case.
+ */
 export function todaySessionPath(d = new Date()): string {
   return `sessions/${todaySessionId(d)}.md`;
 }
 
-/** The id (and file stem) of the session of that day. */
+/** The date-shaped id of a seeded session file for that day (see above). */
 export function todaySessionId(d = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -246,6 +262,14 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
       if (response.status === 404) return false;
       if (!response.ok) throw new Error(`GET /file ${rel}: HTTP ${response.status}`);
       return true;
+    },
+    async sessionPath(includeEnded = false) {
+      const response = await fetchApi(
+        `${campaign}/session${includeEnded ? "?includeEnded=1" : ""}`,
+      );
+      if (response.status === 404) return undefined;
+      if (!response.ok) throw new Error(`GET /session: HTTP ${response.status}`);
+      return ((await response.json()) as ApiFile).path;
     },
     async writeBody(rel, body) {
       const current = await api.file(rel);

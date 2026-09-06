@@ -33,8 +33,10 @@ export { kindFromPath };
  *
  * SECONDS are kept when they are not zero (issue #40 AK8): the session's
  * `pauses` intervals are second-precise, and truncating them here would make
- * every pause up to a minute wrong on the next read. `started`/`ended` are
- * written without seconds and are therefore untouched by this.
+ * every pause up to a minute wrong on the next read. Since issue #58 the same
+ * holds for `started`/`ended`: they are written to the second so that a fresh
+ * session's timer starts at 0:00:00 instead of somewhere inside the current
+ * minute. Dropping a `:00` is harmless (same instant); a `:37` is not.
  *
  * A datetime that happens to be exactly midnight UTC is indistinguishable
  * from a date-only value and degrades to `yyyy-mm-dd`.

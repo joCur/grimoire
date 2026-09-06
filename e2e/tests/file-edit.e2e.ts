@@ -35,7 +35,7 @@ const SCENE_URL = `/beispiel/file/${SCENE}`;
 const NPC = "npcs/jorna.md";
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 /** aria-label of the raw-markdown textarea (FileBodyEditor). */
-const TEXTAREA = "Markdown-Text der Datei";
+const TEXTAREA = "Markdown-Text von";
 
 /**
  * The frontmatter block including both fences and the newline after the
@@ -305,9 +305,9 @@ test("a failing background refetch leaves the open editor standing", async ({ pa
 
   // The cached file is still there, so the PAGE must not swap itself for its
   // error line and take the unsaved text with it. (The status pill next to the
-  // editor says „Datei nicht ladbar" for its own failed read — that is its job
+  // editor says „Eintrag nicht ladbar" for its own failed read — that is its job
   // and stays, which is why this looks for the route's full sentence.)
-  await expect(page.getByText("Datei nicht ladbar — Pfad prüfen")).toHaveCount(0);
+  await expect(page.getByText("Eintrag nicht ladbar — Pfad prüfen")).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await expect(textarea).toHaveValue(draft);
 });
@@ -387,6 +387,12 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   // maintenance action (ADR #4).
   await page.goto("/beispiel/file/sessions/2026-01-15.md");
   await expect(page.getByRole("article")).toContainText("Spuren gefunden");
+  // A session's heading is its DATE, derived from `started` — the id is opaque
+  // since issue #58 and is never shown. (This fixture still carries the old
+  // date-shaped id, which must make no difference to the heading.)
+  await expect(page.getByRole("article").getByRole("heading", { level: 1 })).toHaveText(
+    "Session vom 15.01.2026",
+  );
   await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
 
   await page.goto("/beispiel/file/inbox.md");

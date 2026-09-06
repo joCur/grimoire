@@ -202,3 +202,24 @@ export function sessionElapsedLabel(
   const ms = sessionElapsedMs(session, nowMs);
   return ms === undefined ? undefined : formatDuration(ms);
 }
+
+/**
+ * The session's HEADING — "Session vom 15.01.2026" (issue #58, PO decision).
+ *
+ * The session id used to be the label because it WAS the date; it is an opaque
+ * random string now, so everything displayable about a session is derived from
+ * `started`. Formatted from the wall-clock digits of the string itself, not via
+ * `Date` and `toLocaleDateString`: the value is zone-less on purpose (README),
+ * and re-reading it in the browser's timezone is how a session that started at
+ * 23:30 ends up dated the next day.
+ *
+ * Falls back to a plain "Session" when there is no usable `started` — the
+ * honest answer for a hand-edited file, and better than the raw id, which is
+ * 36 characters of noise.
+ */
+export function sessionDateLabel(frontmatter: Record<string, unknown> | undefined): string {
+  const started = frontmatter?.started;
+  const m = typeof started === "string" ? /^(\d{4})-(\d{2})-(\d{2})/.exec(started.trim()) : null;
+  if (m === null) return "Session";
+  return `Session vom ${m[3]}.${m[2]}.${m[1]}`;
+}

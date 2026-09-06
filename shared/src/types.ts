@@ -101,7 +101,9 @@ export interface ChapterFrontmatter {
 }
 
 /**
- * Session files are app-managed (`sessions/<yyyy-mm-dd>.md`).
+ * Session files are app-managed (`sessions/<id>.md`, where `<id>` is an
+ * opaque random string since issue #58 — everything displayable about a
+ * session comes from `started`).
  * Timestamps are strings — YAML would otherwise parse bare ISO dates as
  * Date objects; the parser normalizes them back to strings.
  */
@@ -157,12 +159,20 @@ export interface CampaignSummary {
   id: string;
   /**
    * Id of the campaign's newest session (`sessions/<id>.md` without the
-   * extension, i.e. `yyyy-mm-dd`). Session ids are dates, so their string
-   * order IS their date order and the newest one is the lexicographically
-   * largest. Absent when the campaign has no session — the client uses it to
-   * pick the last active campaign (issue #14).
+   * extension). OPAQUE since the PO decision on issue #58: an address, not a
+   * date, and NOT comparable — order by `lastSessionStarted` instead. Absent
+   * when the campaign has no session.
    */
   lastSession?: string;
+  /**
+   * `started` of that newest session — the zone-less wall-clock string the
+   * file format carries (`yyyy-mm-ddTHH:MM:SS`). This is what "last active"
+   * means (issue #14) and the only orderable thing about a session the client
+   * gets. Absent when the campaign has no session, or when that session has no
+   * usable `started` (a hand-edited file) — either way it then sorts behind
+   * every campaign that has one.
+   */
+  lastSessionStarted?: string;
   /**
    * Display name (issue #17). Always present since issue #62: a campaign
    * without an authored name is shown under its ID, exactly as the campaign

@@ -5,7 +5,7 @@
 // The dialog is the house pattern of issues #30/#34: mounted only while open,
 // one aria-live error line, Abbrechen/Speichern. What it adds is the diff —
 // only the fields the DM actually changed are sent, so every key the form does
-// not know (and every field it did not touch) keeps its value on disk.
+// not know (and every field it did not touch) keeps its stored value.
 //
 // Two things are deliberately NOT in the form: the `id` (a reference key —
 // „Umbenennen" owns it, with its cascade) and the entity kind (derived from the
@@ -16,7 +16,7 @@
 // 5s version poll (issue #8) keeps refetching the file behind it, and following
 // that mtime would turn an external edit into a silent overwrite instead of a
 // 409. It moves only after a conflict, to the file the re-read brought — the
-// typed values stay, so the next „Speichern" writes on top of what is on disk.
+// typed values stay, so the next „Speichern" writes on top of what is stored.
 //
 // Because everything the save uses is frozen, the dialog is bound to ONE path
 // (same rule as the body editor of issue #15): the reading route stays mounted
@@ -179,7 +179,7 @@ function FrontmatterDialog({
       >
         <DialogTitle>{kindLabel}: Eigenschaften</DialogTitle>
         <DialogDescription>
-          Alle Frontmatter-Felder dieser Datei. Gespeichert wird nur, was du geändert hast —
+          Alle Frontmatter-Felder dieses Eintrags. Gespeichert wird nur, was du geändert hast —
           alles andere bleibt unverändert stehen.
         </DialogDescription>
 
@@ -254,7 +254,7 @@ function FrontmatterDialog({
             <DialogTitle>Änderungen verwerfen?</DialogTitle>
             <DialogDescription>
               Die geänderten Eigenschaften sind nicht gespeichert. Verwerfen schließt das Fenster
-              und lässt die Datei so, wie sie auf der Platte steht.
+              und lässt den Eintrag so, wie er gespeichert ist.
             </DialogDescription>
             <div className="mt-4 flex items-center justify-end gap-2">
               <DialogClose asChild>

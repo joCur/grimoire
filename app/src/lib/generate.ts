@@ -98,12 +98,12 @@ const RESERVED_CHAPTER_IDS = new Set(["npcs", "locations", "sessions"]);
  * the charset rule is the catch-all.
  */
 export function chapterIdError(id: string): string | undefined {
-  if (id === "") return "Ordnername fehlt.";
+  if (id === "") return "Kapitel-id fehlt.";
   if (id.includes("/") || id.includes("\\")) {
-    return "Keine Schrägstriche — der Ordnername ist ein einzelnes Segment.";
+    return "Keine Schrägstriche — die Kapitel-id ist ein einzelnes Segment.";
   }
-  if (id.includes("..")) return "Kein „..“ im Ordnernamen.";
-  if (id.startsWith(".")) return "Kein Punkt am Anfang — keine versteckten Ordner.";
+  if (id.includes("..")) return "Kein „..“ in der Kapitel-id.";
+  if (id.startsWith(".")) return "Kein Punkt am Anfang.";
   if (/\s/.test(id)) return "Keine Leerzeichen — Wörter mit Bindestrich trennen.";
   if (!/^[a-z0-9-]+$/.test(id)) return "Nur Kleinbuchstaben, Ziffern und Bindestriche.";
   if (RESERVED_CHAPTER_IDS.has(id)) {
@@ -117,17 +117,17 @@ export function chapterIdError(id: string): string | undefined {
  * field is OPTIONAL — an empty field means "the model chooses" and is
  * therefore not an error. Everything else follows the same bar as a chapter
  * id (the server's kebab pattern) plus the one check only the client can do
- * cheaply: an id whose file already exists would be a 409, and saying so
+ * cheaply: an id that already exists would be a 409, and saying so
  * before the run costs nothing.
  */
 export function npcIdError(id: string, existingIds: readonly string[] = []): string | undefined {
   if (id === "") return undefined;
-  if (id.includes("/") || id.includes("\\")) return "Keine Schrägstriche — die id ist der Dateiname.";
+  if (id.includes("/") || id.includes("\\")) return "Keine Schrägstriche — die id ist ein einzelnes Segment.";
   if (/\s/.test(id)) return "Keine Leerzeichen — Wörter mit Bindestrich trennen.";
   if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) {
     return "Nur Kleinbuchstaben, Ziffern und Bindestriche; Anfang keine Bindestriche.";
   }
-  if (existingIds.includes(id)) return "NPC existiert schon — bestehende Dateien werden nie überschrieben.";
+  if (existingIds.includes(id)) return "NPC existiert schon — bestehende Einträge werden nie überschrieben.";
   return undefined;
 }
 

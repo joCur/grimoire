@@ -125,7 +125,7 @@ export function FileBodyEditor({
     onSaved: onClose,
     onConflict: (reread) => {
       // The draft stays — only the version underneath it moves on, so the
-      // next „Speichern" writes on top of what is on disk now.
+      // next „Speichern" writes on top of what is stored now.
       if (reread !== undefined) setBase(reread);
     },
   });
@@ -202,7 +202,7 @@ export function FileBodyEditor({
             onChange={(text) => setDraft(withDraftText(text))}
             editing={editing}
             id={textareaId}
-            label={`Markdown-Text der Datei ${base.path}`}
+            label={`Markdown-Text von ${base.path}`}
           />
         )}
       </EditorShell>
@@ -227,8 +227,8 @@ export function FileBodyEditor({
           <DialogContent aria-describedby={undefined} className="max-w-[420px]">
             <DialogTitle>Änderungen verwerfen?</DialogTitle>
             <DialogDescription>
-              Die Änderungen sind nicht gespeichert. Verwerfen schließt den Editor und zeigt die
-              Datei wieder so, wie sie auf der Platte steht.
+              Die Änderungen sind nicht gespeichert. Verwerfen schließt den Editor und zeigt den
+              Eintrag wieder so, wie er gespeichert ist.
             </DialogDescription>
             <div className="mt-4 flex items-center justify-end gap-2">
               <DialogClose asChild>

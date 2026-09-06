@@ -67,7 +67,7 @@ export function SceneStatusControl({
       // A row whose file could not be read at all cannot be patched — the
       // display stays, the menu just does nothing.
       disabled={file.isError}
-      message={message ?? (file.isError ? "Datei nicht ladbar" : undefined)}
+      message={message ?? (file.isError ? "Szene nicht ladbar" : undefined)}
       open={open}
       onOpenChange={setOpen}
       onSelect={setStatus}

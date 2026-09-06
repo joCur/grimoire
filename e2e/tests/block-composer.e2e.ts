@@ -88,7 +88,7 @@ function composer(page: Page): Locator {
 
 /** The raw textarea of „Roh" (FileBodyEditor labels it with the file's path). */
 function rawTextarea(page: Page): Locator {
-  return page.getByRole("textbox", { name: /^Markdown-Text der Datei/ });
+  return page.getByRole("textbox", { name: /^Markdown-Text von/ });
 }
 
 /** The four controls of one card, addressed by its name („Vorlesetext 3"). */

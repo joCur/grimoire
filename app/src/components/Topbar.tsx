@@ -51,7 +51,7 @@
 // ONE CHIP FOR EVERY SESSION STATE (PO requirement on issue #40). The chip
 // is not only the running session's control — it is THE session control, in
 // the same slot, with the same geometry, in every state: it offers "Session
-// starten" (or "fortsetzen") while nothing runs, shows the ticking clock
+// starten" while nothing runs, shows the ticking clock
 // while one does, and reads "Status unbekannt", dimmed and inert, when the
 // session lookup failed. The separate brass start button and the bare
 // "Session-Status unbekannt" sentence are gone; only content and colour
@@ -59,8 +59,8 @@
 //
 // The right side stays per-view: the ⌘K search chip (opens the palette;
 // hidden without a campaign in the URL — "/" only ever shows the empty
-// state), the session chip (issue #9: one click starts — or resumes —
-// today's session and enters /:campaign/live), the harvest progress on the
+// state), the session chip (issue #9: one click starts a session and enters
+// /:campaign/live), the harvest progress on the
 // review (issue #10) with a quiet pool link into it while today's session
 // still has unharvested entries, and the "Generator" on the pool (issue #12)
 // with its run indicator (issue #19).
@@ -285,7 +285,7 @@ export function Topbar() {
  * a runtime that was hours off (issue #40). PAUSED time is deducted and the
  * clock STANDS while a pause runs (AK8) — the number on the chip is the time
  * played, which is what makes „Pause" mean something. An ENDED session freezes
- * at its `ended` (the chip is gone by then, but a resume race must not tick
+ * at its `ended` (the chip is gone by then, but a cache race must not tick
  * backwards).
  */
 function useElapsedLabel(session: FileResponse): string | undefined {
@@ -382,8 +382,8 @@ function SessionDot({ paused = false }: { paused?: boolean }) {
  * plus a bare sentence for a failed lookup. Now the element stays; only what
  * it says and which colour it wears change:
  *
- *   start   — "Session starten" ("Session fortsetzen" once today's session is
- *             ended). One click starts or resumes and enters /live.
+ *   start   — "Session starten". One click starts a NEW session and enters
+ *             /live; there is no "fortsetzen" (issue #58).
  *   running — dot + H:MM:SS. Off /live a click goes back into the session;
  *             ON /live it opens the session actions (Pause, beenden, and
  *             verwerfen while the session is still empty) — three separate
@@ -467,24 +467,20 @@ function SessionRunningChip({
 }
 
 /**
- * The chip in its start state: starts — or resumes — today's session and
- * navigates to the live mode. ONE click, always (PO feedback on issue #40):
- * the label is the intention, and "fortsetzen" must not cost a second press
- * or an intermediate screen.
+ * The chip in its start state: starts a NEW session and navigates to the live
+ * mode. ONE click, always, and always the same label — "Session beenden" is
+ * final since issue #58, so a start after an ended evening opens the next
+ * session of the day instead of re-opening the closed one. No "fortsetzen".
  *
- * A start can answer 409 (issue #40 review): today's session is already
- * ended, or an older one still runs. The ended case is answered inside the
- * flow (use-session.ts: `enter` retries as a resume immediately) — that is
- * the accident this chip causes ("beenden" hit one evening too early). For
- * the still-running case the live view is the place that asks, so the click
+ * A start can still answer 409 `session_running` — an OLDER session was never
+ * ended. The live view is the place that asks about it, so the click
  * navigates there.
  */
 function SessionStartChip({ campaign }: { campaign: string }) {
   const navigate = useNavigate();
   const toLive = () => void navigate(`/${campaign}/live`);
-  const { enter, entering, resume, conflict, failed } = useSessionStartFlow(campaign, toLive);
-  const resuming = conflict === "session_ended";
-  const label = resuming ? "Session fortsetzen" : "Session starten";
+  const { enter, entering, conflict, failed } = useSessionStartFlow(campaign, toLive);
+  const label = "Session starten";
   return (
     <button
       type="button"
@@ -496,13 +492,11 @@ function SessionStartChip({ campaign }: { campaign: string }) {
         else enter();
       }}
       title={
-        failed || resume.isError
+        failed
           ? "Session nicht gestartet — Server prüfen"
           : conflict === "session_running"
             ? "Eine ältere Session läuft noch — im Live-Modus beenden"
-            : resuming
-              ? "Die heutige Session ist beendet — fortsetzen"
-              : undefined
+            : undefined
       }
       className={cn(
         SESSION_CHIP_BASE,
@@ -686,7 +680,7 @@ function DiscardSessionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogTitle>Leere Session verwerfen?</DialogTitle>
-        <DialogDescription>Die Datei wird gelöscht.</DialogDescription>
+        <DialogDescription>Die Session wird gelöscht.</DialogDescription>
         {discard.isError && (
           <p className="mt-3 text-[12.5px] text-destructive">
             Session nicht verworfen — Server prüfen und neu laden.
@@ -836,7 +830,7 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
         )}
         <DropdownMenuSeparator />
         <p className="px-2.5 pt-[7px] pb-[5px] text-[11.5px] text-faint">
-          Kampagnen liegen als Ordner unter campaigns/
+          Kampagnen liegen in der Datenbank — Import über „grimoire seed“
         </p>
       </DropdownMenuContent>
     </DropdownMenu>

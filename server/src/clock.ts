@@ -28,8 +28,8 @@ export function localTime(d: Date): string {
 }
 
 /**
- * `yyyy-mm-ddTHH:MM` in local time — the `started`/`ended` format. Matches
- * what the shared parser normalizes YAML timestamps to (no seconds, no zone).
+ * `yyyy-mm-ddTHH:MM` in local time — minute precision, zone-less. The base of
+ * `localDateTimeSeconds`; nothing the write API produces stops here any more.
  */
 export function localDateTime(d: Date): string {
   return `${localDate(d)}T${localTime(d)}`;
@@ -37,9 +37,11 @@ export function localDateTime(d: Date): string {
 
 /**
  * `yyyy-mm-ddTHH:MM:SS` in local time — the `pauses` timestamps (issue #40
- * AK8). Same zone-less convention as localDateTime, one field wider: a pause
- * is measured in seconds, and a minute-precise `from`/`to` would make the
- * session runtime jump by up to a minute per pause. The shared parser keeps
+ * AK8) and `started`/`ended` (issue #58). Same zone-less convention as
+ * localDateTime, one field wider: these values are all read back as durations,
+ * and a minute-precise value rounds DOWN to the start of its minute — a pause
+ * would jump the runtime by up to a minute, and a session started at second 50
+ * showed 0:00:50 on the timer's very first tick. The shared parser keeps
  * the seconds on the way back in (parse.ts), and localDateTimeToMs has always
  * accepted them.
  */

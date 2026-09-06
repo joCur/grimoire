@@ -33,7 +33,6 @@ import {
   markLogLineSeen,
   patchFrontmatter,
   pauseSession,
-  resumeSession,
   startSession,
   writeFileBody,
   writeGlossary,
@@ -242,25 +241,19 @@ api.put("/:campaign/file", async (c) => {
 // /frontmatter and its 409.
 
 // POST /api/:campaign/session/start -> FileResponse
-// Creates sessions/<today>.md. Idempotent while TODAY's session is the running
-// one (pressing the button twice re-enters it). Two 409s instead of a silent
-// surprise (issue #40 review):
+// Creates a NEW session — `sessions/<today>.md`, or `<today>-2`, `-3` … when
+// that day already has sessions (issue #58: "beenden" is FINAL, so a second
+// evening on the same day is a second session with its own empty log and a
+// runtime starting at 0). Idempotent only while TODAY's session is the
+// RUNNING one (pressing the button twice re-enters it).
+// One 409 is left:
 //   { code: "session_running", path } — an OLDER session is still open (past
 //     midnight, or never ended). The app offers to end that one; nothing
 //     starts a second parallel session.
-//   { code: "session_ended", path } — today's session is already ended. The
-//     app offers POST /session/resume; before, the ended file came back with
-//     200 and the Start button did nothing until midnight.
+// The former `session_ended` 409 and POST /session/resume are gone with the
+// resume semantics (issue #58).
 api.post("/:campaign/session/start", async (c) =>
   c.json(await startSession(c.req.param("campaign"))),
-);
-
-// POST /api/:campaign/session/resume -> FileResponse — re-opens the last
-// started session by REMOVING `ended` (the explicit undo of an accidental
-// "Session beenden", issue #40 review). 404 without any session file, 409
-// { path } when that session is still running.
-api.post("/:campaign/session/resume", async (c) =>
-  c.json(await resumeSession(c.req.param("campaign"))),
 );
 
 // POST /api/:campaign/session/end -> FileResponse — ends the ACTIVE session
@@ -279,8 +272,8 @@ api.post("/:campaign/session/pause", async (c) =>
 );
 
 // POST /api/:campaign/session/continue -> FileResponse — closes the open pause
-// interval (`to`) and appends `— Weiter`. NOT named `resume`: that endpoint
-// re-opens an ENDED session. Idempotent (not paused -> 200, file unchanged);
+// interval (`to`) and appends `— Weiter` — it ends a PAUSE, not a session
+// (an ended session is never re-opened, issue #58). Idempotent (not paused -> 200, file unchanged);
 // 404 when no session is running.
 api.post("/:campaign/session/continue", async (c) =>
   c.json(await continueSession(c.req.param("campaign"))),

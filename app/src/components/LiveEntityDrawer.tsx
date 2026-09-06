@@ -6,7 +6,7 @@
 // was half-typed in the Schnellnotiz. The drawer keeps the live route mounted
 // (so both survive) and renders the very same article pipeline the reading
 // view uses (EntityArticle → Markdown → callouts), so what the DM reads here
-// is what the file says. „Datei öffnen" is the deliberate way OUT into the
+// is what the entry says. „Eintrag öffnen" is the deliberate way OUT into the
 // full view, for when the drawer is not enough.
 //
 // No animation (ui/sheet.tsx): the quality floor asks for reduced-motion
@@ -78,7 +78,7 @@ function DrawerBody({ campaign, path }: { campaign: string; path: string }) {
           className="inline-flex items-center gap-1.5 rounded-md text-[13px] text-primary hover:text-primary-hover"
         >
           <ExternalLink aria-hidden size={14} className="flex-none" />
-          Datei öffnen
+          Eintrag öffnen
         </Link>
       </div>
     </>

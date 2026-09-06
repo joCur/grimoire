@@ -147,7 +147,7 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   expect(await api.exists("npcs/brakk.md")).toBe(false);
   await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
 
-  await expect(page.getByText("Geschrieben — NPC-Datei angelegt")).toBeVisible();
+  await expect(page.getByText("Geschrieben — NPC-Eintrag angelegt")).toBeVisible();
   const npc = await api.raw("npcs/brakk.md");
   expect(npc).toContain("id: brakk");
   expect(npc).toContain("status: alive");

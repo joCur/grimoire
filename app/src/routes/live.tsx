@@ -291,7 +291,7 @@ function LiveScene({ campaign, path }: { campaign: string; path: string }) {
 
   if (isPending) return <p className="text-muted-foreground">Lade Szene …</p>;
   if (isError || !data) {
-    return <p className="text-muted-foreground">Szene nicht ladbar — Datei prüfen.</p>;
+    return <p className="text-muted-foreground">Szene nicht ladbar — Pfad prüfen.</p>;
   }
   return <SceneArticle file={data} tree={tree.data} variant="live" />;
 }
@@ -375,15 +375,14 @@ function LogPanel({
  * and the ONE place a start conflict becomes a question the DM can answer
  * (issue #40 review, finding 2).
  *
- * Exactly ONE conflict is still a question here (PO feedback on issue #40):
- * `session_running`, an OLDER session that was never ended — ending someone
- * else's evening is not implied by "starten". The `session_ended` case is no
- * longer a screen: "starten" and "fortsetzen" are the same intention, and the
- * flow resumes in the same click (lib/use-session.ts `enter`).
+ * Exactly ONE conflict is a question here: `session_running`, an OLDER
+ * session that was never ended — ending someone else's evening is not implied
+ * by "starten". An already ended session of today is no question at all: the
+ * start opens the NEXT session of the day (issue #58), so there is no
+ * "fortsetzen" here either.
  */
 function NoSessionYet({ campaign }: { campaign: string }) {
-  const { enter, entering, resume, conflict, conflictPath, failed } =
-    useSessionStartFlow(campaign);
+  const { enter, entering, conflict, conflictPath, failed } = useSessionStartFlow(campaign);
   const end = useSessionWrite(campaign, () => endSession(campaign));
   const busy = entering || end.isPending;
   return (
@@ -414,11 +413,11 @@ function NoSessionYet({ campaign }: { campaign: string }) {
               onClick={() => enter()}
               className="h-auto px-4 py-2 text-[13px] font-semibold"
             >
-              {conflict === "session_ended" ? "Session fortsetzen" : "Session starten"}
+              Session starten
             </Button>
           </>
         )}
-        {(failed || resume.isError || end.isError) && (
+        {(failed || end.isError) && (
           <p className="mt-3 text-[12.5px] text-destructive">
             Session nicht geändert — Server prüfen.
           </p>

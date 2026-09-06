@@ -310,15 +310,54 @@ export const locations = sqliteTable(
  * One game session. `started`/`ended` keep the zone-less wall-clock strings
  * of the file format (rule 6); the epoch reading stays the server's job.
  * An `ended` that is NULL or blank means the session runs (session-state.ts).
+ *
+ * IDENTITY (issue #58, PO decision): the id of a NEW session is an OPAQUE
+ * RANDOM string — `crypto.randomUUID()` (store/write.ts `newSessionId`).
+ * Nobody reads it: it is an address (`sessions/<id>.md`) and nothing else,
+ * and everything DISPLAYABLE about a session is derived from `started`.
+ *
+ * Why randomUUID and not a ULID or a date+sequence: it is URL-safe, needs no
+ * new npm dependency AND no hand-rolled encoder (node:crypto ships it), and —
+ * unlike a ULID — it carries no timestamp, so no reader can be tempted to
+ * order sessions by their id again. It also needs no coordination at all: the
+ * former `yyyy-mm-dd-<n>` scheme required a persisted per-day high-water mark
+ * so a discarded session's id could never be re-issued. That whole machinery
+ * is gone.
+ *
+ * COMPATIBILITY: session ids are plain strings, so the date-shaped ids written
+ * before this (`2026-01-15`, `2026-01-15-2`) stay valid and need no migration.
+ * They simply are not parsed any more.
+ *
+ * ORDER is `started` alone (store/read.ts `compareSessionsNewestFirst`), with
+ * `createdAt` as the tie-break — see that column.
  */
 export const sessions = sqliteTable(
   "sessions",
   {
     campaignId: text("campaign_id").notNull(),
-    /** `yyyy-mm-dd` — the former file name. */
+    /** Opaque random id (see above); older rows carry a date-shaped id. */
     id: text("id").notNull(),
     started: text("started"),
     ended: text("ended"),
+    /**
+     * INSERTION ORDER of the row in epoch MILLISECONDS — the tie-break behind
+     * `started`, which is only second-precise. "Start, beenden, wieder
+     * starten" inside one second gives two rows the same `started`, and "die
+     * zuletzt gestartete" has to be the second of them deterministically. The
+     * opaque id cannot answer that (it has no time in it), so the row records
+     * when it was written.
+     *
+     * NOT a wall-clock string like `started`: this is bookkeeping of the
+     * database, never file content, and the file format has no field for it.
+     * It is also STRICTLY INCREASING per campaign rather than a plain
+     * `Date.now()` (store/write.ts `nextCreatedAt`) — a clock that stands
+     * still or jumps back must not make two rows unorderable.
+     *
+     * `0` for rows written before the column existed and for the markdown
+     * import — they then fall back to the id compare, which only ever decides
+     * between sessions that already share a `started`.
+     */
+    createdAt: integer("created_at").notNull().default(0),
     /**
      * Everything in the session file that is neither `## Log` nor
      * frontmatter — `## Threads` above all. Kept as one markdown field so no
@@ -609,6 +648,12 @@ export const migrationReport = sqliteTable("migration_report", {
  *                     written inside that campaign's own transaction. This is
  *                     what lets a run interrupted between two campaigns
  *                     resume instead of dead-ending on "content, no marker".
+ *
+ * `session_seq:<campaign>:<date>` was such a key while session ids were
+ * date+sequence; with opaque random ids (see `sessions`) nothing has to be
+ * reserved any more. Old databases may still carry the keys — they are inert
+ * and are deliberately not deleted (a `meta` row costs nothing and a migration
+ * that removes bookkeeping can only fail).
  */
 export const meta = sqliteTable("meta", {
   key: text("key").primaryKey(),

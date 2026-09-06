@@ -91,7 +91,7 @@ export function MissingLocationCard({ id }: { id: string }) {
   return (
     <div className="rounded-lg border border-dashed border-input bg-transparent p-3.5">
       <p className="font-mono text-[12.5px] text-soft">{id}</p>
-      <p className="mt-1 text-[12.5px] leading-[1.5] text-muted-foreground">Ortsdatei fehlt</p>
+      <p className="mt-1 text-[12.5px] leading-[1.5] text-muted-foreground">Ortseintrag fehlt</p>
     </div>
   );
 }

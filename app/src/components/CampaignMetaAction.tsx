@@ -163,7 +163,7 @@ function CampaignMetaDialog({
           </label>
 
           <p aria-live="polite" className="min-h-[17px] text-[12px] text-destructive">
-            {unreachable ? "Kampagnendatei nicht ladbar — Server prüfen" : (save.message ?? "")}
+            {unreachable ? "Kampagne nicht ladbar — Server prüfen" : (save.message ?? "")}
           </p>
 
           <div className="flex items-center justify-end gap-2">
