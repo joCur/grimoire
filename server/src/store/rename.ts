@@ -222,10 +222,46 @@ function updateSoftReferences(
   ownsRefSlug: boolean,
 ): void {
   if (kind === "npc") {
+    // MERGE, don't collide (#70): a scene that lists BOTH ids — legal while a
+    // reference could dangle — has a `scene_npcs` primary key
+    // (campaign, scene, npc) that the plain UPDATE would violate. That was an
+    // unhandled constraint error, i.e. a 500 out of a rename the preview had
+    // just called safe. The old row goes, the existing one stays.
+    for (const row of tx
+      .select({ sceneId: sceneNpcs.sceneId })
+      .from(sceneNpcs)
+      .where(and(eq(sceneNpcs.campaignId, campaign), eq(sceneNpcs.npcId, newId)))
+      .all()) {
+      tx.delete(sceneNpcs)
+        .where(
+          and(
+            eq(sceneNpcs.campaignId, campaign),
+            eq(sceneNpcs.sceneId, row.sceneId),
+            eq(sceneNpcs.npcId, oldId),
+          ),
+        )
+        .run();
+    }
     tx.update(sceneNpcs)
       .set({ npcId: newId })
       .where(and(eq(sceneNpcs.campaignId, campaign), eq(sceneNpcs.npcId, oldId)))
       .run();
+    // Same for a relation list that names both counterparts.
+    for (const row of tx
+      .select({ npcId: npcRelations.npcId })
+      .from(npcRelations)
+      .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.otherNpcId, newId)))
+      .all()) {
+      tx.delete(npcRelations)
+        .where(
+          and(
+            eq(npcRelations.campaignId, campaign),
+            eq(npcRelations.npcId, row.npcId),
+            eq(npcRelations.otherNpcId, oldId),
+          ),
+        )
+        .run();
+    }
     tx.update(npcRelations)
       .set({ otherNpcId: newId })
       .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.otherNpcId, oldId)))

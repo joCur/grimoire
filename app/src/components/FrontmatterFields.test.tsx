@@ -65,10 +65,17 @@ describe("reference fields", () => {
     expect(html).toContain("Der Leuchtturm");
   });
 
-  test("an id without a file is kept and says so — it is not an error", () => {
+  test("an unknown id says the save will create it (#70)", () => {
     const html = render(sceneField("location"), { kind: "text", text: "nordbucht" });
     expect(html).toContain('value="nordbucht"');
-    expect(html).toContain("Noch kein Eintrag mit dieser id.");
+    expect(html).toContain("Neu — wird beim Speichern angelegt.");
+  });
+
+  test("a value that is no slug is free text and gets no entry", () => {
+    // The format's one ambiguous field: `location` takes an id OR a string.
+    const html = render(sceneField("location"), { kind: "text", text: "Der alte Hafen" });
+    expect(html).toContain("Freier Text — kein Eintrag.");
+    expect(html).not.toContain("angelegt");
   });
 
   test("npcs are chips: each id removable, the add-input suggests the known ones", () => {

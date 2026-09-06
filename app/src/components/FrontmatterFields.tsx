@@ -213,9 +213,15 @@ function ReferenceOptions({ id, options }: { id: string; options: readonly Field
 
 /**
  * What the typed id resolves to. Says nothing while the field is empty, names
- * the entity when the id is known, and says so quietly when it is not — an
- * unknown id is allowed (it may get its file later), it should just not look
- * like a typo went unnoticed.
+ * the entity when the id is known, and otherwise says what SAVING will do —
+ * because since issue #70 an unknown id is not a hole that stays open: the
+ * save creates the entry, so the DM should know that before clicking, and a
+ * typo is visible as "a new entry called that" instead of a silent nothing.
+ *
+ * The exception is the format's one ambiguous field: a value that is no
+ * kebab-case slug (spaces, capitals) is free text — `location: Der alte
+ * Hafen` stays text and gets no entry. Saying so is the whole documentation
+ * of that boundary the DM ever sees.
  */
 function ReferenceHint({ options, value }: { options: readonly FieldOption[]; value: string }) {
   const id = value.trim();
@@ -223,8 +229,14 @@ function ReferenceHint({ options, value }: { options: readonly FieldOption[]; va
   const name = referenceLabel(options, id);
   if (name !== undefined) return <p className="text-[11.5px] text-faint">{name}</p>;
   if (options.some((option) => option.value === id)) return null;
-  return <p className="text-[11.5px] text-faint">Noch kein Eintrag mit dieser id.</p>;
+  if (!ENTITY_SLUG.test(id)) {
+    return <p className="text-[11.5px] text-faint">Freier Text — kein Eintrag.</p>;
+  }
+  return <p className="text-[11.5px] text-faint">Neu — wird beim Speichern angelegt.</p>;
 }
+
+/** Entity ids are kebab slugs (server store/write.ts `ENTITY_SLUG`). */
+const ENTITY_SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /** Chips for a string list (`tags`, `handouts`) or an id list (`npcs`). */
 function ChipsField({

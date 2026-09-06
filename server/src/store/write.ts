@@ -151,13 +151,33 @@ function asMap(value: unknown): Record<string, unknown> {
     : {};
 }
 
-/** The frontmatter minus the keys a table has columns for — the `extra` half. */
-function extraOf(fm: Record<string, unknown>, contract: readonly string[]): string {
+/**
+ * The frontmatter minus the keys a table has columns for — the `extra` half.
+ *
+ * `keepAnyway` is the exception, and it exists for ONE case: a contract key
+ * whose COLUMN cannot hold the authored value. The migration preserves a
+ * misshapen `quickstats:` (a string where the format wants a mapping) in
+ * `extra`, the renderer shows it because the column is empty — and the first
+ * `PATCH /frontmatter` used to drop it here, silently, against the round-trip
+ * rule (schema.ts rule 1). Naming the key keeps it where it is readable.
+ */
+function extraOf(
+  fm: Record<string, unknown>,
+  contract: readonly string[],
+  keepAnyway: readonly string[] = [],
+): string {
   const extra: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(fm)) {
-    if (!contract.includes(key)) extra[key] = value;
+    if (!contract.includes(key) || keepAnyway.includes(key)) extra[key] = value;
   }
   return packJson(extra);
+}
+
+/** A `quickstats:` value the column cannot hold (the format wants a mapping). */
+function misshapenQuickstats(value: unknown): readonly string[] {
+  if (value === undefined || value === null) return [];
+  const isMapping = typeof value === "object" && !Array.isArray(value);
+  return isMapping ? [] : ["quickstats"];
 }
 
 /**
@@ -362,6 +382,138 @@ function nextPos(rows: Array<{ pos: number }>): number {
   return rows.reduce((max, row) => Math.max(max, row.pos), -1) + 1;
 }
 
+// --- "referencing creates" (issue #70) ---------------------------------------
+//
+// In the file era a referenced id without a file was a legal, permanent hole:
+// the app showed "NPC-Eintrag fehlt" and offered a stub. In the database
+// (#52/#13) an npc without information IS a row with an id and a name, so a
+// reference can be EMPTY but never MISSING. Every write that INTRODUCES a
+// reference therefore creates the referenced row in the SAME transaction:
+// scene `npcs`, a scene `location` that is a slug, and the counterpart of a
+// `## Beziehungen` line — in the UI write paths and in the generator's apply
+// step alike.
+//
+// THE BOUNDARY, and it is deliberate: only a KEBAB-CASE SLUG is a reference.
+// `location: Der alte Hafen` (spaces, capitals) is free text the format
+// explicitly allows (README) and stays exactly that — text, no row, no card.
+// A slug-shaped free text (`location: hafen`) is indistinguishable from a
+// reference and is therefore treated as one; that is the price of the
+// format's one ambiguous field, and it is why there is no blanket backfill of
+// existing data (see `backfillReferencedNpcs`).
+//
+// ONLY NEW references are created on a frontmatter patch: an unrelated
+// `PATCH { status }` re-sends the scene's existing `location`, and
+// materialising THAT would retroactively turn every legacy free-text place
+// name into an entity nobody authored.
+
+/** An empty row for `id`, unless the id is no slug or already has a row. */
+function ensureNpcRow(tx: GrimoireDb, campaign: string, id: string): boolean {
+  if (!ENTITY_SLUG.test(id)) return false;
+  if (npcRowOf(tx, campaign, id) !== undefined) return false;
+  // Nothing but the id: `name` stays "" because the id IS the display name
+  // until somebody types one (render.ts applies that fallback once), and
+  // `status` keeps its column default — an empty entry claims nothing.
+  tx.insert(npcs).values({ campaignId: campaign, id }).run();
+  const row = npcRowOf(tx, campaign, id);
+  if (row !== undefined) indexNpc(tx, campaign, row, []);
+  return true;
+}
+
+/** The same for a location — a scene's `location` when it is a slug. */
+function ensureLocationRow(tx: GrimoireDb, campaign: string, id: string): boolean {
+  if (!ENTITY_SLUG.test(id)) return false;
+  if (locationRowOf(tx, campaign, id) !== undefined) return false;
+  tx.insert(locations).values({ campaignId: campaign, id }).run();
+  const row = locationRowOf(tx, campaign, id);
+  if (row !== undefined) indexLocation(tx, campaign, row);
+  return true;
+}
+
+/**
+ * An entry that holds NOTHING but its id — what `ensureNpcRow` creates, and
+ * what a DM leaves behind by creating an entry and not filling it in.
+ *
+ * It matters in one place: the generator's apply step. A scene draft that
+ * names `holm` creates the empty `holm` row, so the npc draft for `holm` in
+ * the SAME batch (or a stub the DM referenced last week) would otherwise
+ * collide with itself and answer the documented `409 { conflicts }` for a
+ * target that has no content to lose. An empty row is therefore not a
+ * conflict: the generated entity FILLS it.
+ */
+function isEmptyNpcRow(row: NpcRow): boolean {
+  return (
+    row.name === "" &&
+    row.role === null &&
+    row.chapterId === null &&
+    row.statblock === null &&
+    row.voice === null &&
+    row.appearance === null &&
+    row.body.trim() === "" &&
+    isEmptyJsonObject(row.quickstats) &&
+    isEmptyJsonObject(row.extra)
+  );
+}
+
+function isEmptyLocationRow(row: LocationRow): boolean {
+  return (
+    row.name === "" &&
+    row.chapterId === null &&
+    row.roll20Page === null &&
+    row.body.trim() === "" &&
+    isEmptyJsonObject(row.extra)
+  );
+}
+
+function isEmptyJsonObject(packed: string): boolean {
+  const trimmed = packed.trim();
+  return trimmed === "" || trimmed === "{}";
+}
+
+/**
+ * The BOOT BACKFILL (issue #70) — for npcs, and deliberately ONLY for npcs.
+ *
+ * Lazy creation alone would leave the migrated stock in the old state: a
+ * scene that has listed `holm` since the file era keeps a dangling id until
+ * somebody happens to save that scene. So every boot closes the gap for the
+ * references that are UNAMBIGUOUS:
+ *
+ *   * `scene_npcs.npc_id` — the key of a list that only ever held npc ids;
+ *   * `npc_relations.other_npc_id` — the counterpart of a `## Beziehungen`
+ *     line, likewise an id by format.
+ *
+ * NOT `scenes.location`. That field holds an id OR a free string (README),
+ * and a slug-shaped free text (`location: bucht`) is indistinguishable from
+ * a reference. A blanket pass would invent Orte the DM never wrote, into a
+ * list the DM has to look at, with no undo in the tool — so the location
+ * half stays LAZY: the next write that touches the field creates the row,
+ * because there a human has just typed the value and meant it.
+ *
+ * Idempotent by construction (it only inserts what has no row) and cheap: two
+ * anti-joins per campaign. Returns the ids it created, for the boot log.
+ */
+export function backfillReferencedNpcs(tx: GrimoireDb, campaign: string): string[] {
+  const referenced = new Set<string>();
+  for (const row of tx
+    .select({ id: sceneNpcs.npcId })
+    .from(sceneNpcs)
+    .where(eq(sceneNpcs.campaignId, campaign))
+    .all()) {
+    referenced.add(row.id);
+  }
+  for (const row of tx
+    .select({ id: npcRelations.otherNpcId })
+    .from(npcRelations)
+    .where(eq(npcRelations.campaignId, campaign))
+    .all()) {
+    referenced.add(row.id);
+  }
+  const created: string[] = [];
+  for (const id of referenced) {
+    if (ensureNpcRow(tx, campaign, id)) created.push(id);
+  }
+  return created.sort();
+}
+
 // --- scene reference tables ---------------------------------------------------
 
 function replaceSceneRefs(
@@ -397,6 +549,11 @@ function replaceRelations(tx: GrimoireDb, campaign: string, npcId: string, body:
     .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.npcId, npcId)))
     .run();
   for (const relation of parsed.relations) {
+    // The counterpart gets its own (empty) row if it has none — issue #70.
+    // Until now `npc_relations` was asymmetrically legal: a relation TO an
+    // npc without a row was storable, one FROM it was not (the owner side
+    // has a foreign key). Both sides are rows now.
+    if (relation.otherNpcId !== npcId) ensureNpcRow(tx, campaign, relation.otherNpcId);
     tx.insert(npcRelations)
       .values({
         campaignId: campaign,
@@ -567,11 +724,8 @@ function patchLocator(
       const row = sceneRowAt(tx, campaign, locator);
       guardRev(row.rev, rev, "scene changed");
       rejectIdPatch(patch, row.id);
-      const before = renderScene(
-        row,
-        refNpcs(tx, campaign, row.id),
-        refTags(tx, campaign, row.id),
-      );
+      const npcsBefore = refNpcs(tx, campaign, row.id);
+      const before = renderScene(row, npcsBefore, refTags(tx, campaign, row.id));
       const fm = applyPatch(before.frontmatter, patch);
       const npcRefs = asStrArray(fm.npcs);
       const tags = asStrArray(fm.tags);
@@ -612,6 +766,14 @@ function patchLocator(
         })
         .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
         .run();
+      // Referencing creates (#70) — only what this patch ADDS, see the note
+      // above `ensureNpcRow`.
+      for (const npcId of npcRefs) {
+        if (!npcsBefore.includes(npcId)) ensureNpcRow(tx, campaign, npcId);
+      }
+      if (next.location !== null && next.location !== row.location) {
+        ensureLocationRow(tx, campaign, next.location);
+      }
       replaceSceneRefs(tx, campaign, row.id, npcRefs, tags);
       indexScene(tx, campaign, next, tags);
       return renderScene(next, refNpcs(tx, campaign, row.id), refTags(tx, campaign, row.id));
@@ -633,7 +795,7 @@ function patchLocator(
         quickstats: packJson(quickstats),
         voice: asOptStr(fm.voice),
         appearance: asOptStr(fm.appearance),
-        extra: extraOf(fm, NPC_KEYS),
+        extra: extraOf(fm, NPC_KEYS, misshapenQuickstats(fm.quickstats)),
         rev: row.rev + 1,
       };
       tx.update(npcs)
@@ -1457,9 +1619,21 @@ export async function appendThreadToChapter(
 export const ENTITY_SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /**
- * POST /api/:campaign/review/npc-stub — create the npc row with minimal
- * fields and the log text under `## Notizen`. An existing id is NEVER
- * overwritten -> 409 { path }.
+ * POST /api/:campaign/review/npc-stub — the review's "#npc line becomes an
+ * npc". CREATE OR LINK (issue #70): the caller's goal is that this id has an
+ * entry afterwards, so the endpoint is idempotent.
+ *
+ *   * no row      -> create it with the given name and the log text under
+ *                   `## Notizen`;
+ *   * EMPTY row   -> fill it (a reference created it — #70 — and the review
+ *                   is the first thing that knows a name and a note);
+ *   * filled row  -> return it UNTOUCHED, so the app links to what is there.
+ *                   Nothing is overwritten, and the old `409 { path }` is
+ *                   gone: it made the DM correct an id that was right.
+ *
+ * `status` keeps the column default ("unknown"). It used to insert "alive",
+ * which contradicted both the route's own documentation and the dialog text,
+ * and claimed something no log line ever said.
  */
 export async function createNpcStub(
   campaign: string,
@@ -1471,15 +1645,26 @@ export async function createNpcStub(
     throw new ApiError(400, "id must be a kebab-case slug (a-z, 0-9, single dashes)");
   }
   return mutate(campaign, (tx) => {
-    if (npcRowOf(tx, campaign, id) !== undefined) {
-      throw new ApiError(409, "npc already exists — not overwriting", { path: `npcs/${id}.md` });
-    }
     // `## Notizen` is the app-managed review section (README) — always there
-    // in a stub, so later review notes have their place.
+    // in a new entry, so later review notes have their place.
     const body = note === undefined ? "\n## Notizen\n" : `\n## Notizen\n\n- ${note}\n`;
-    tx.insert(npcs)
-      .values({ campaignId: campaign, id, name: name ?? id, status: "alive", body })
-      .run();
+    const existing = npcRowOf(tx, campaign, id);
+    if (existing !== undefined) {
+      if (!isEmptyNpcRow(existing)) {
+        const relations = relationRows(tx, campaign, id);
+        return renderNpc(existing, relations);
+      }
+      tx.update(npcs)
+        .set({ name: name ?? "", body, rev: existing.rev + 1 })
+        .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, id)))
+        .run();
+    } else {
+      // `name: ""` means "the id is the name" (render.ts applies that
+      // fallback once) — no redundant copy of the key in the row.
+      tx.insert(npcs)
+        .values({ campaignId: campaign, id, name: name ?? "", body })
+        .run();
+    }
     const row = npcRowOf(tx, campaign, id);
     if (row === undefined) throw new ApiError(500, "npc could not be created");
     indexNpc(tx, campaign, row, []);
@@ -1516,6 +1701,7 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       const title = asStr(fm.title, id);
       const npcRefs = asStrArray(fm.npcs);
       const tags = asStrArray(fm.tags);
+      const draftLocation = asOptStr(fm.location);
       const pos =
         (tx
           .select({ pos: scenes.pos })
@@ -1534,7 +1720,7 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           title,
           type: asStr(fm.type, "planned"),
           trigger: asOptStr(fm.trigger),
-          location: asOptStr(fm.location),
+          location: draftLocation,
           status: asStr(fm.status, "draft"),
           handouts: packJson(asStrArray(fm.handouts)),
           body: draft.body,
@@ -1542,6 +1728,13 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           pos,
         })
         .run();
+      // Referencing creates (#70): a generated scene may name an npc or a
+      // location the campaign does not have yet. The validation asks the
+      // model to ship a stub for it, but a draft that slips through must not
+      // leave a dangling id behind — it gets an empty row, and a stub in the
+      // same batch fills that row instead of colliding with it.
+      for (const npcId of npcRefs) ensureNpcRow(tx, campaign, npcId);
+      if (draftLocation !== null) ensureLocationRow(tx, campaign, draftLocation);
       replaceSceneRefs(tx, campaign, id, npcRefs, tags);
       const row = sceneRowOf(tx, campaign, id);
       if (row !== undefined) indexScene(tx, campaign, row, tags);
@@ -1556,23 +1749,38 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       // Only the parsed relation LINES leave the body — prose under the
       // heading stays (see `replaceRelations`).
       const stripped = removeRelationLines(draft.body);
-      tx.insert(npcs)
-        .values({
-          campaignId: campaign,
-          id,
-          name: asStr(fm.name, id),
-          role: asOptStr(fm.role),
-          chapterId: asOptStr(fm.chapter),
-          status: asStr(fm.status, "unknown"),
-          statblock: asOptStr(fm.statblock),
-          quickstats: packJson(asMap(fm.quickstats)),
-          voice: asOptStr(fm.voice),
-          appearance: asOptStr(fm.appearance),
-          body: stripped,
-          extra: extraOf(fm, NPC_KEYS),
-        })
-        .run();
+      const values = {
+        name: asStr(fm.name, id),
+        role: asOptStr(fm.role),
+        chapterId: asOptStr(fm.chapter),
+        status: asStr(fm.status, "unknown"),
+        statblock: asOptStr(fm.statblock),
+        quickstats: packJson(asMap(fm.quickstats)),
+        voice: asOptStr(fm.voice),
+        appearance: asOptStr(fm.appearance),
+        body: stripped,
+        extra: extraOf(fm, NPC_KEYS, misshapenQuickstats(fm.quickstats)),
+      };
+      // An EMPTY row for this id already exists when something referenced the
+      // npc before it was written — a scene draft in this very batch, or a
+      // reference the DM typed last week (#70). Filling it is the write the
+      // DM asked for; inserting would collide with a row that holds nothing.
+      const existing = npcRowOf(tx, campaign, id);
+      if (existing !== undefined) {
+        tx.update(npcs)
+          .set({ ...values, rev: existing.rev + 1 })
+          .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, id)))
+          .run();
+        tx.delete(npcRelations)
+          .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.npcId, id)))
+          .run();
+      } else {
+        tx.insert(npcs)
+          .values({ campaignId: campaign, id, ...values })
+          .run();
+      }
       for (const relation of parsedRelations.relations) {
+        if (relation.otherNpcId !== id) ensureNpcRow(tx, campaign, relation.otherNpcId);
         tx.insert(npcRelations)
           .values({
             campaignId: campaign,
@@ -1591,17 +1799,25 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
     }
     case "location": {
       const id = asStr(fm.id, locator.id);
-      tx.insert(locations)
-        .values({
-          campaignId: campaign,
-          id,
-          name: asStr(fm.name, id),
-          chapterId: asOptStr(fm.chapter),
-          roll20Page: asOptStr(fm["roll20-page"]),
-          body: draft.body,
-          extra: extraOf(fm, LOCATION_KEYS),
-        })
-        .run();
+      const values = {
+        name: asStr(fm.name, id),
+        chapterId: asOptStr(fm.chapter),
+        roll20Page: asOptStr(fm["roll20-page"]),
+        body: draft.body,
+        extra: extraOf(fm, LOCATION_KEYS),
+      };
+      // Fill an empty row rather than collide with it — see the npc case.
+      const existing = locationRowOf(tx, campaign, id);
+      if (existing !== undefined) {
+        tx.update(locations)
+          .set({ ...values, rev: existing.rev + 1 })
+          .where(and(eq(locations.campaignId, campaign), eq(locations.id, id)))
+          .run();
+      } else {
+        tx.insert(locations)
+          .values({ campaignId: campaign, id, ...values })
+          .run();
+      }
       const row = locationRowOf(tx, campaign, id);
       if (row !== undefined) indexLocation(tx, campaign, row);
       return;
@@ -1707,10 +1923,17 @@ function draftTargetExistsIn(db: GrimoireDb, campaign: string, rel: string): boo
   switch (locator.kind) {
     case "scene":
       return sceneRowOf(db, campaign, locator.id) !== undefined;
-    case "npc":
-      return npcRowOf(db, campaign, locator.id) !== undefined;
-    case "location":
-      return locationRowOf(db, campaign, locator.id) !== undefined;
+    // An EMPTY npc/location row is not a conflict (#70): it holds nothing but
+    // an id — put there by a reference, not by an author — and the generated
+    // entity is exactly what fills it. A row with content still answers 409.
+    case "npc": {
+      const row = npcRowOf(db, campaign, locator.id);
+      return row !== undefined && !isEmptyNpcRow(row);
+    }
+    case "location": {
+      const row = locationRowOf(db, campaign, locator.id);
+      return row !== undefined && !isEmptyLocationRow(row);
+    }
     case "chapter":
       return chapterRowOf(db, campaign, locator.id) !== undefined;
     case "campaign":

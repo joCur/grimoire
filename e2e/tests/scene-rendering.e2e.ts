@@ -139,6 +139,46 @@ test("reference scene 2: contingency header, collapsible If-sections, consequenc
   await expect(aside).toContainText("leise, höflich");
 });
 
+test("a referenced NPC without information is a thin card, not a gap", async ({ page, api }) => {
+  // Issue #70: referencing creates. Adding an unknown id to a scene's npcs
+  // gives that id an EMPTY entry, and the aside shows it like any other card
+  // — the id as the name, nothing else. No "NPC-Eintrag fehlt", no
+  // "Stub anlegen" detour, and the card opens the (equally thin) page.
+  expect(await api.exists("npcs/holm.md")).toBe(false);
+  await api.patchFrontmatter("01-salzhafen/hafen/lighthouse-arrival.md", {
+    npcs: ["jorna", "holm"],
+  });
+  expect(await api.exists("npcs/holm.md")).toBe(true);
+
+  await page.goto(ARRIVAL);
+  const aside = page.getByRole("complementary").filter({ hasText: "NPCs dieser Szene" });
+  await expect(aside).toContainText("holm");
+  await expect(aside).not.toContainText("fehlt");
+  await expect(aside.getByRole("button", { name: "Stub anlegen" })).toHaveCount(0);
+
+  await aside.getByRole("link", { name: /holm/ }).click();
+  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/holm\.md$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("holm");
+  // And it is editable from here like every other entry.
+  await expect(page.getByRole("button", { name: "Eigenschaften" })).toBeVisible();
+});
+
+test("a scene location that is a slug becomes an entry; free text stays text", async ({
+  page,
+  api,
+}) => {
+  // The one ambiguous field of the format (README): an id OR a string.
+  await api.patchFrontmatter("01-salzhafen/hafen/smuggler-captured.md", { location: "nordbucht" });
+  expect(await api.exists("locations/nordbucht.md")).toBe(true);
+
+  await api.patchFrontmatter("01-salzhafen/hafen/smuggler-captured.md", {
+    location: "Der alte Hafen",
+  });
+  expect(await api.exists("locations/der-alte-hafen.md")).toBe(false);
+  await page.goto(CAPTURED);
+  await expect(page.getByRole("article")).toContainText("Der alte Hafen");
+});
+
 test.describe("with a seeded loot scene", () => {
   test.use({ seed: { files: { [LOOT_SCENE.path]: LOOT_SCENE.content } } });
 

@@ -47,6 +47,18 @@ describe("EntityArticle — npc", () => {
     expect(html).toContain("passive-perception 12");
   });
 
+  test("an entry with nothing but its id is a normal, thin page (#70)", () => {
+    // A reference creates the entry it names, so this is what a brand-new
+    // npc looks like before anybody fills it in: the id as the name, the
+    // neutral status, no field rows, no "fehlt" placeholder anywhere.
+    const html = render(file("npc", { id: "holm", name: "holm", status: "unknown" }));
+    expect(html).toContain("holm");
+    expect(html).toContain("unbekannt");
+    expect(html).not.toContain("fehlt");
+    expect(html).not.toContain("Statblock");
+    expect(html).not.toContain("Stimme");
+  });
+
   test("statblock is a plain reference line, never a link", () => {
     const html = render(jorna);
     expect(html).toContain("Statblock: Roll20: Jorna");

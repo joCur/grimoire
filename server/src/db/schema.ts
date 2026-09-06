@@ -11,9 +11,16 @@
 //   2. REFERENCES ARE TABLES with a `pos` column. `npcs: [jorna, fenn]` is an
 //      ORDERED list in the file, and the order is authored information.
 //   3. SOFT REFERENCES CARRY NO FOREIGN KEY. `scenes.location`, `scene_npcs.
-//      npc_id`, `npc_relations.other_npc_id` may point at an id that has no
-//      file (README: "Kleinst-NPCs bekommen KEIN File"). A FK there would
-//      turn a legal campaign into a failed import.
+//      npc_id`, `npc_relations.other_npc_id` may hold an id that has no row.
+//      A FK there would turn a legal campaign into a failed import — of the
+//      file tree, and of a `location:` that is FREE TEXT (README).
+//      REVISED BY ISSUE #70: a dangling reference is no longer a state the
+//      app produces. Every write that INTRODUCES a reference creates the
+//      referenced row in the same transaction (store/write.ts
+//      `ensureNpcRow`), so a referenced entity is EMPTY, never MISSING — an
+//      npc without information is a row with an id and a name (#52). The
+//      missing FK is what keeps free text and imported stock legal, not a
+//      licence for new holes.
 //   4. `rev` IS THE ROW VERSION and replaces mtimeMs as the 409 guard. Every
 //      row a client can PATCH has one; the store bumps it on every write.
 //   5. NATURAL COMPOSITE KEYS, `ON UPDATE CASCADE`. The id IS the key

@@ -151,6 +151,16 @@ Abschnitte: `## Will` (Motivation), `## Weiß` (`[!secret]`-Callouts),
 Kleinst-NPCs bekommen KEIN File, bis sie wiederkehren. Bis dahin: Zeile im
 Szenentext oder `#npc`-Lognotiz.
 
+> **Seit dem DB-Cutover (Issue #70):** Wer eine id REFERENZIERT, legt sie an.
+> Trägt man in `npcs:` einer Szene, in `location:` (als Slug) oder in
+> `## Beziehungen` eine unbekannte id ein, entsteht im selben Schreibvorgang
+> ein LEERER Eintrag (id, Name = id, Status Default). Ein referenzierter
+> Eintrag ist damit nie „fehlt", höchstens leer — leere Einträge rendern als
+> normale, dünne Karten und sind normal befüllbar. Ausnahme und Grenze:
+> `location:` darf auch freier Text sein; ein Wert, der KEIN Kebab-Slug ist
+> (Leerzeichen, Großschreibung), bleibt reiner Text und bekommt keinen
+> Eintrag.
+
 ## Entität: Ort
 
 ```yaml

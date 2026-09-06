@@ -135,10 +135,11 @@ test("scene properties: chips, reference and status land in the file — nothing
   // of being lost with the closing dialog.
   await tags.fill("nachtszene");
 
-  // An id without a file stays typeable — the format degrades (README) — and
-  // the hint says so instead of letting a typo pass unnoticed.
+  // An unknown id stays typeable, and the hint says what saving will do:
+  // since issue #70 the write CREATES the entry, so a typo is visible as a
+  // new entry called that instead of a silent nothing.
   await location.fill("bucht");
-  await expect(referenceHint(dialog, "Noch kein Eintrag mit dieser id.")).toBeVisible();
+  await expect(referenceHint(dialog, "Neu — wird beim Speichern angelegt.")).toBeVisible();
   await expect(referenceHint(dialog, "Der Leuchtturm von Salzhafen")).toHaveCount(0);
 
   await dialog.getByLabel("Status").selectOption("draft");
@@ -159,6 +160,8 @@ test("scene properties: chips, reference and status land in the file — nothing
   const after = await split(api, SCENE);
   expect(after.frontmatter).toContain("tags: [social, travel, stealth, nachtszene]");
   expect(after.frontmatter).toContain("location: bucht");
+  // …and the referenced Ort now has its own (empty) entry — issue #70.
+  expect(await api.exists("locations/bucht.md")).toBe(true);
   expect(after.frontmatter).toContain("status: draft");
   // … the untouched ones with their values, the unknown one byte-identically …
   expect(after.frontmatter).toContain("x-custom: bleibt");

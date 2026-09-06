@@ -550,7 +550,10 @@ export function readByLocator(
       // running session. A content hash would be the unsafe fix (two
       // different edits can hash alike); a per-document counter is the exact
       // one.
-      if (rows.length === 0) throw new ApiError(404, "file not found");
+      // An EMPTY inbox is an empty document, not a missing one (200) — the
+      // same correction the glossary already had below (#70): "no rows yet"
+      // was the file era's "no file yet", and it made every reader special-
+      // case a 404 that means nothing is wrong.
       return renderInbox(campaign, rows, campaignRowValue.inboxRev);
     }
     case "glossary":

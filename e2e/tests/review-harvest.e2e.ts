@@ -105,7 +105,7 @@ test("adopting a thread lands in _chapter.md, the inbox line gets ticked off", a
   await expect(page.getByRole("link", { name: "Review · 2 offen" })).toBeVisible();
 });
 
-test("creating an NPC stub from a #npc log line", async ({ page, api }) => {
+test("creating an NPC entry from a #npc log line", async ({ page, api }) => {
   await page.goto("/beispiel/review");
 
   const npcCard = page.locator("div").filter({ hasText: NPC_TEXT }).last();
@@ -113,26 +113,47 @@ test("creating an NPC stub from a #npc log line", async ({ page, api }) => {
   // the tree — never the `(lighthouse-arrival)` id of the log line (issue #34).
   await expect(npcCard.getByText("Log · Ankunft am Leuchtturm")).toBeVisible();
   await expect(npcCard.getByText("lighthouse-arrival")).toHaveCount(0);
-  await npcCard.getByRole("button", { name: "NPC-Stub anlegen" }).click();
+  await npcCard.getByRole("button", { name: "NPC anlegen" }).click();
 
   // The dialog proposes id and name from the log text.
   const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("NPC-Stub anlegen");
+  await expect(dialog).toContainText("NPC anlegen");
   await expect(dialog.getByRole("textbox").first()).toHaveValue("old-metta");
   await expect(dialog.getByRole("textbox").nth(1)).toHaveValue("Old Metta");
   await dialog.getByRole("button", { name: "Anlegen" }).click();
 
-  await expect(npcCard.getByText("NPC-Stub angelegt")).toBeVisible();
+  await expect(npcCard.getByText("NPC angelegt")).toBeVisible();
   const stub = await api.raw("npcs/old-metta.md");
   expect(stub).toContain("id: old-metta");
   expect(stub).toContain("name: Old Metta");
-  expect(stub).toContain("status: alive");
+  // The log line said nothing about the NPC's state, so the entry claims
+  // nothing either (issue #70 — it used to write "alive").
+  expect(stub).toContain("status: unknown");
   expect(stub).toContain("## Notizen");
   expect(stub).toContain(NPC_TEXT);
 
   // The new NPC is in the tree right away (list page, search index).
   await page.goto("/beispiel/list/npcs");
   await expect(page.getByRole("link", { name: /Old Metta/ })).toBeVisible();
+});
+
+test("an id that already has an entry is linked, not refused (#70)", async ({ page, api }) => {
+  // The file era answered 409 here and made the DM correct an id that was
+  // right. The call is idempotent now: the entry stands, untouched.
+  const before = await api.raw("npcs/fenn.md");
+  await page.goto("/beispiel/review");
+
+  const npcCard = page.locator("div").filter({ hasText: NPC_TEXT }).last();
+  await npcCard.getByRole("button", { name: "NPC anlegen" }).click();
+  const dialog = page.getByRole("dialog");
+  const idField = dialog.getByRole("textbox").first();
+  await idField.fill("fenn");
+  await dialog.getByRole("button", { name: "Anlegen" }).click();
+
+  // The action counts as done and nothing was overwritten.
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(npcCard.getByText("NPC angelegt")).toBeVisible();
+  expect(await api.raw("npcs/fenn.md")).toBe(before);
 });
 
 test.describe("with yesterday's session, ended after midnight", () => {
