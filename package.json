@@ -1,8 +1,13 @@
 {
   "name": "grimoire",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "workspaces": ["shared", "server", "app", "e2e"],
+  "workspaces": [
+    "shared",
+    "server",
+    "app",
+    "e2e"
+  ],
   "scripts": {
     "test": "bun test",
     "typecheck": "bun run --filter '*' typecheck",
