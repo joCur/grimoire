@@ -5,8 +5,8 @@
 // "Wenn:" line and a plain hairline instead of the chip row.
 //
 // `statusControl` (issue #28) is the status regler of the reading view; it
-// rides at the right end of the overline row. `actions` (issue #30:
-// „Umbenennen") sits quietly to its left. The component stays free of
+// rides at the right end of the overline row. `actions` („Bearbeiten",
+// „Eigenschaften") sits quietly to its left. The component stays free of
 // queries — the route owns both and passes them in, so the live view simply
 // passes nothing.
 

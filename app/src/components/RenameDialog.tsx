@@ -1,4 +1,9 @@
-// „Umbenennen" in the reading view (issue #30).
+// „id ändern" — the rename dialog (issue #30), reached from the footer of the
+// „Eigenschaften" dialog since issue #77. It has no header trigger of its own
+// any more: with `[[slug]]` references resolving the CURRENT name (#68),
+// changing the id is a repair (a typo, a slug merge), not everyday work — so
+// it sits as a quiet secondary action next to the fields it does not own,
+// while „name" is edited in the form like any other property.
 //
 // An id is a reference key, so renaming it is never a one-file edit — it is a
 // cascade through scene properties, session logs and relationship lists. The
@@ -18,12 +23,10 @@
 // campaign's tree/file/search queries are invalidated (paths and ids moved).
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { PenLine } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
 import { renameEntity, type RenameResult } from "@/api";
-import { HeaderAction } from "@/components/HeaderAction";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -45,44 +48,17 @@ import {
 } from "@/lib/rename";
 
 /**
- * The quiet action next to an entity header. Renders nothing without a
- * renameable target (sessions, inbox, glossary, the campaign file).
+ * The rename dialog itself — mounted only while open, by whoever offers the
+ * action (today: the „Eigenschaften" dialog's footer, issue #77).
  */
-export function RenameAction({
-  campaign,
-  currentPath,
-  target,
-}: {
-  campaign: string;
-  /** The path of the file on screen — where the view has to follow to. */
-  currentPath: string;
-  target: RenameTarget | undefined;
-}) {
-  const [open, setOpen] = useState(false);
-  if (target === undefined) return null;
-
-  return (
-    <>
-      <HeaderAction icon={PenLine} label="Umbenennen" onClick={() => setOpen(true)} />
-      {open && (
-        <RenameDialog
-          campaign={campaign}
-          currentPath={currentPath}
-          target={target}
-          onClose={() => setOpen(false)}
-        />
-      )}
-    </>
-  );
-}
-
-function RenameDialog({
+export function RenameDialog({
   campaign,
   currentPath,
   target,
   onClose,
 }: {
   campaign: string;
+  /** The path of the file on screen — where the view has to follow to. */
   currentPath: string;
   target: RenameTarget;
   onClose: () => void;
@@ -135,7 +111,7 @@ function RenameDialog({
       }}
     >
       <DialogContent aria-describedby={undefined} className="max-w-[460px]">
-        <DialogTitle>{renameKindLabel(target.kind)} umbenennen</DialogTitle>
+        <DialogTitle>{renameKindLabel(target.kind)}: id ändern</DialogTitle>
         <DialogDescription>
           Die neue id zieht alle Referenzen mit: Eigenschaften, Session-Log und
           Beziehungslisten. Erwähnungen im Fließtext bleiben unverändert.

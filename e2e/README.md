@@ -189,7 +189,8 @@ Dialog berührt zusätzlich Pfad 2 (die Leseansicht zeigt die neuen Werte sofort
 und Pfad 8 (Formular bei 390px) — beides steht in demselben Spec.
 
 Auf den Pfaden 2 und 7 liegt zusätzlich `rename.e2e.ts` (#30, erweitert um die
-Usage-Vorschau aus #60): „Umbenennen" in der Leseansicht, die zweistufige
+Usage-Vorschau aus #60, Einstieg seit #77 über „id ändern" im Fußbereich des
+Eigenschaften-Dialogs — der Header-Knopf ist weg): die zweistufige
 Bestätigung („Vorschau" ist ein `dryRun` und schreibt nichts), die deutsche
 Usage-Zusammenfassung („2 Verwendungen: 1 Szene, 1 Beziehung" — die eigene
 ausgehende Beziehungszeile ist keine Referenz AUF die id) und danach die

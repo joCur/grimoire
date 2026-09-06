@@ -32,14 +32,13 @@ function Title({ children, className }: { children: string; className?: string }
 
 /**
  * The header's action slot is a GROUP, not a single button: since issue #15 it
- * carries „Bearbeiten" next to „Umbenennen". Wrapping them keeps them one
+ * carries „Bearbeiten" next to „Eigenschaften". Wrapping them keeps them one
  * right-aligned, evenly spaced unit in every header variant — without it the
  * `justify-between` rows below would strand the first button in the middle of
  * the header. Renders nothing when there are no actions.
  *
- * It WRAPS since issue #42 added „Eigenschaften" as a third action: three
- * labels plus a long title do not fit a 390px line, and a clipped action is
- * worse than a second row.
+ * It WRAPS since issue #42 added „Eigenschaften": labels plus a long title do
+ * not fit a 390px line, and a clipped action is worse than a second row.
  */
 function ActionGroup({ children }: { children?: ReactNode }) {
   if (children === undefined) return null;
@@ -49,7 +48,8 @@ function ActionGroup({ children }: { children?: ReactNode }) {
 }
 
 /**
- * `actions` is the header's quiet action slot (issue #30: „Umbenennen"). The
+ * `actions` is the header's quiet action slot („Bearbeiten", „Eigenschaften").
+ * The
  * component stays free of queries — the route owns the action and passes it
  * in, exactly like the scene article's status control.
  */

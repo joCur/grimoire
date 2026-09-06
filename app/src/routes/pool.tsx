@@ -71,7 +71,7 @@ export function PoolRoute() {
                   {sceneCountLabel(sceneCount)}
                 </span>
                 {/* Name/description are editable right where they are read
-                    (issue #34) — quiet, like „Umbenennen" in the read view. */}
+                    (issue #34) — quiet, like the read view's actions. */}
                 <span className="ml-auto">
                   <CampaignMetaAction campaign={campaign} />
                 </span>

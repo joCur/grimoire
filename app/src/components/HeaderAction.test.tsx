@@ -1,5 +1,5 @@
-// Issue #38: the three header triggers („Bearbeiten" for the body, for the
-// campaign metadata, „Umbenennen") were byte-identical copies. What must hold
+// Issue #38: the header triggers („Bearbeiten" for the body, for the campaign
+// metadata, „Eigenschaften") were byte-identical copies. What must hold
 // is that they STAY one component — so each call site is compared against a
 // live render of the equivalent <HeaderAction …/> instead of against frozen
 // markup (pinning lucide-react/react-dom byte output would break on every
@@ -14,7 +14,6 @@ import { CampaignMetaAction } from "./CampaignMetaAction";
 import { FileBodyEditAction } from "./FileBodyEditor";
 import { PropertiesAction } from "./PropertiesAction";
 import { HeaderAction } from "./HeaderAction";
-import { RenameAction } from "./RenameAction";
 
 /** The shared trigger with the icon all three call sites use. */
 function headerAction(label: string): string {
@@ -42,23 +41,11 @@ describe("HeaderAction", () => {
   });
 });
 
-describe("the three call sites", () => {
+describe("the call sites", () => {
   test("Bearbeiten of the body editor is the shared trigger", () => {
     expect(renderToStaticMarkup(<FileBodyEditAction onEdit={() => {}} />)).toBe(
       headerAction("Bearbeiten"),
     );
-  });
-
-  test("Umbenennen is the shared trigger (closed dialog: only the trigger)", () => {
-    expect(
-      renderToStaticMarkup(
-        <RenameAction
-          campaign="beispiel"
-          currentPath="npcs/jorna"
-          target={{ kind: "npc", oldId: "jorna" }}
-        />,
-      ),
-    ).toBe(headerAction("Umbenennen"));
   });
 
   test("Bearbeiten of the campaign metadata is the shared trigger", () => {

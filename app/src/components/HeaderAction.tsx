@@ -1,7 +1,7 @@
 // The quiet trigger next to an entity/campaign header (issue #38): one shape
-// for „Bearbeiten" (body editor, #15), „Umbenennen" (#30) and „Bearbeiten" of
-// the campaign metadata (#34). They sit next to each other in the same header,
-// so they must be one component — three copies of the class list is how they
+// for „Bearbeiten" (body editor, #15), „Eigenschaften" (#42) and „Bearbeiten"
+// of the campaign metadata (#34). They sit next to each other in the same
+// header, so they must be one component — copies of the class list is how they
 // drift apart.
 //
 // Deliberately plain: no variants, no size prop. It is the header vocabulary
@@ -16,7 +16,7 @@ export function HeaderAction({
 }: {
   /** Lucide glyph, rendered decorative — the label carries the meaning. */
   icon: LucideIcon;
-  /** German, as it stands in the header („Bearbeiten", „Umbenennen"). */
+  /** German, as it stands in the header („Bearbeiten", „Eigenschaften"). */
   label: string;
   onClick: () => void;
 }) {

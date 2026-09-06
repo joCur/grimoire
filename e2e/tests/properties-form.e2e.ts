@@ -88,20 +88,22 @@ test("scene properties: chips, reference and status land in the file — nothing
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
 
-  // The header action row: the body editor, this form, the rename — in that
-  // order (issue #42 put „Eigenschaften" between the two existing ones).
+  // The header action row: the body editor and this form. „Umbenennen" is NOT
+  // among them any more — issue #77 moved the id change into this dialog.
   const headerActions = page
     .getByRole("article")
     .getByRole("button")
     .filter({ hasText: /^(Bearbeiten|Eigenschaften|Umbenennen)$/ });
-  await expect(headerActions).toHaveText(["Bearbeiten", "Eigenschaften", "Umbenennen"]);
+  await expect(headerActions).toHaveText(["Bearbeiten", "Eigenschaften"]);
 
   const dialog = await openProperties(page);
   await expect(dialog).toContainText("Szene: Eigenschaften");
   // The two values the form does NOT own are context, not fields: the id
-  // belongs to „Umbenennen" (with its cascade), the kind comes from the path.
+  // belongs to the rename dialog (with its cascade), the kind comes from the
+  // path — and the footer says where to change it (issue #77).
   await expect(dialog).toContainText("lighthouse-arrival");
-  await expect(dialog).toContainText('über „Umbenennen" ändern');
+  await expect(dialog).toContainText('unten über „id ändern"');
+  await expect(dialog.getByRole("button", { name: "id ändern" })).toBeVisible();
   await expect(dialog.getByLabel("Titel")).toHaveValue("Ankunft am Leuchtturm");
   await expect(dialog.getByLabel("Status")).toHaveValue("ready");
 
