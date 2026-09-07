@@ -26,7 +26,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 
 import { fetchFile, fetchTree } from "@/api";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
@@ -59,6 +59,21 @@ export function SceneRoute() {
   useEffect(() => {
     setEditingPath(undefined);
   }, [path]);
+  // `?edit=1` opens edit mode straight away — how a freshly created scene
+  // arrives here (issue #56: a scene with nothing but a title is there to be
+  // written, and „Blöcke" is the composer). The flag is CONSUMED (replace, so
+  // it leaves no history entry): it is an instruction for this navigation, not
+  // a state of the page, and a reload or a „zurück" must not re-open an editor
+  // over a body the DM has meanwhile left.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const wantsEdit = searchParams.get("edit") === "1";
+  useEffect(() => {
+    if (!wantsEdit || path === "") return;
+    setEditingPath(path);
+    const next = new URLSearchParams(searchParams);
+    next.delete("edit");
+    setSearchParams(next, { replace: true });
+  }, [wantsEdit, path, searchParams, setSearchParams]);
   const enabled = campaign !== "" && path !== "";
   const { data, isPending } = useQuery({
     queryKey: ["file", campaign, path],

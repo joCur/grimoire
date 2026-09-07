@@ -48,7 +48,7 @@ import {
   type UsageReport,
 } from "./usage";
 import { isEmptyEntity, reindexEntity } from "./write";
-import { chapterPath, locationPath, npcPath, scenePath } from "./paths";
+import { chapterPath, locationPath, npcPath, RESERVED_SEGMENTS, scenePath } from "./paths";
 
 /**
  * The entity kinds that have a rename cascade (sessions have no id) — the
@@ -74,7 +74,6 @@ export interface RenameResult {
 }
 
 const ID_SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-const RESERVED = new Set(["npcs", "locations", "sessions"]);
 
 function assertSafeIdSegment(id: string, label: string): void {
   if (
@@ -94,7 +93,9 @@ function assertNewId(newId: string): void {
   if (!ID_SLUG.test(newId)) {
     throw new ApiError(400, "newId must be a kebab-case slug (a-z, 0-9, single dashes)");
   }
-  if (RESERVED.has(newId)) throw new ApiError(400, `newId is a reserved name: ${newId}`);
+  if (RESERVED_SEGMENTS.has(newId)) {
+    throw new ApiError(400, `newId is a reserved name: ${newId}`);
+  }
 }
 
 /**

@@ -30,6 +30,15 @@
 // Without a seed the pristine copy from the global setup is used directly (it
 // is never written to), so most tests copy nothing at all.
 //
+// And a test that needs an EMPTY INSTANCE — no campaign whatsoever, which is
+// what a fresh installation is since issue #79 — turns the seed run off:
+//
+//   test.use({ seed: { skip: true } });
+//
+// That is the starting point of critical path 10 ("Kaltstart", issue #56).
+// The `api` fixture is bound to the example campaign's id, so a spec that
+// creates its own campaign builds its helper with `apiFor(server.url, id)`.
+//
 // One server per test instead of one per worker: the server holds state the
 // tests care about (the in-memory generate job) and half the paths write to
 // the database — a fresh process on a fresh database is the only isolation
@@ -86,6 +95,20 @@ export interface Seed {
   files?: Record<string, string>;
   /** campaign-relative ADDRESSES to delete before the seed runs. */
   remove?: string[];
+  /**
+   * NO SEED AT ALL — `test.use({ seed: { skip: true } })`.
+   *
+   * The server boots on an empty data directory and the importer never runs,
+   * so the instance has no campaign: exactly what a fresh installation is
+   * since issue #79, and the only honest starting point for the cold-start
+   * path (issue #56, critical path 10). Everything else about the fixture is
+   * unchanged — the `api` and `db` helpers work, they just have nothing to
+   * look at until the test creates it.
+   *
+   * `files`/`remove` are meaningless with it and are ignored: there is no
+   * seed run for them to feed.
+   */
+  skip?: boolean;
 }
 
 /** One file as GET /api/:campaign/file answers it. */
@@ -348,7 +371,7 @@ export const test = base.extend<Fixtures>({
   campaignRoot: async ({ seed }, use, testInfo) => {
     const files = seed.files ?? {};
     const remove = seed.remove ?? [];
-    if (Object.keys(files).length === 0 && remove.length === 0) {
+    if (seed.skip === true || (Object.keys(files).length === 0 && remove.length === 0)) {
       await use(pristineDir());
       return;
     }
@@ -383,8 +406,10 @@ export const test = base.extend<Fixtures>({
     if (process.env.E2E_KEEP !== "1") await rm(dir, { recursive: true, force: true });
   },
 
-  server: async ({ campaignRoot, dataDir }, use, testInfo) => {
-    await seedCampaigns(campaignRoot, dataDir);
+  server: async ({ seed, campaignRoot, dataDir }, use, testInfo) => {
+    // `seed: { skip: true }` starts the server on an EMPTY data directory —
+    // the instance has no campaign at all (issue #56, critical path 10).
+    if (seed.skip !== true) await seedCampaigns(campaignRoot, dataDir);
     const { handle, proc } = await startGrimoireServer(
       campaignRoot,
       dataDir,
