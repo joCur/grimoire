@@ -13,7 +13,11 @@
 //     click sends is honoured verbatim;
 //   * an EMPTY npc/ort row — one a reference created (#70) — is FILLED, not
 //     collided with;
-//   * a scene needs an EXISTING chapter (ADR #14).
+//   * a scene needs an EXISTING chapter (ADR #14);
+//   * an id the ADDRESS SCHEMA reserves (`npcs`/`locations`/`sessions`) is not
+//     creatable as a chapter — it would be a row nothing can ever open;
+//   * a `suggestion` names only ids nobody holds, empty referenced rows
+//     included: filling one of those is the DM's own decision about that id.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { CampaignSummary, FileResponse } from "@grimoire/shared";
@@ -143,6 +147,69 @@ describe("the per-campaign creates", () => {
     expect(body.code).toBe("slug_taken");
     expect(body.suggestion).toBe("prolog-2");
     expect(body.path).toBe("prolog/_chapter");
+  });
+
+  test("a reserved chapter id is refused with a proposal, and no row is written", async () => {
+    // „NPCs" slugs to `npcs`, which the address schema routes to the npc kind —
+    // the chapter would exist and be unreachable forever (store/paths).
+    const res = await post("/nordwind/chapters", { title: "NPCs" });
+    expect(res.status).toBe(409);
+    const body = await errorBody(res);
+    expect(body.code).toBe("slug_taken");
+    expect(body.id).toBe("npcs");
+    expect(body.suggestion).toBe("npcs-2");
+    expect(String(body.error)).toContain("reservierter Name");
+
+    // Nothing was created — neither as a chapter row nor as a broken address.
+    const tree = (await (await app.request("/api/nordwind/tree")).json()) as {
+      chapters: Array<{ id: string }>;
+    };
+    expect(tree.chapters.map((c) => c.id)).not.toContain("npcs");
+    expect((await app.request("/api/nordwind/file?path=npcs/_chapter")).status).toBe(404);
+
+    // The proposal itself works, and the reserved ids are all three of them.
+    expect((await created<FileResponse>("/nordwind/chapters", { title: "NPCs", id: "npcs-2" })).path).toBe(
+      "npcs-2/_chapter",
+    );
+    expect((await post("/nordwind/chapters", { title: "Locations" })).status).toBe(409);
+    expect((await post("/nordwind/chapters", { title: "Sessions" })).status).toBe(409);
+  });
+
+  test("the campaign 409 points at an address, not at a bare id", async () => {
+    const res = await post("/campaigns", { name: "Nordwind" });
+    expect(res.status).toBe(409);
+    // `_campaign` is the one document an otherwise empty campaign always has.
+    expect((await errorBody(res)).path).toBe("nordwind/_campaign");
+  });
+
+  test("a proposal never lands on an empty row someone else references (#70)", async () => {
+    await created<FileResponse>("/nordwind/npcs", { name: "Holm" });
+    await created<FileResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
+    const scene = await created<FileResponse>("/nordwind/scenes", {
+      title: "Am Steg",
+      chapter: "01-salzhafen",
+    });
+    // A reference leaves an EMPTY `holm-2` behind.
+    expect(
+      (
+        await app.request("/api/nordwind/properties", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ path: scene.path, rev: scene.rev, patch: { npcs: ["holm-2"] } }),
+        })
+      ).status,
+    ).toBe(200);
+
+    // „Holm" collides with the filled `holm` — and the proposal SKIPS the
+    // referenced empty `holm-2` instead of handing it over.
+    const res = await post("/nordwind/npcs", { name: "Holm" });
+    expect(res.status).toBe(409);
+    expect((await errorBody(res)).suggestion).toBe("holm-3");
+
+    // Filling that entry stays possible — for the DM who types exactly its id.
+    const filled = await created<FileResponse>("/nordwind/npcs", { name: "Holm 2" });
+    expect(filled.path).toBe("npcs/holm-2");
+    expect(filled.properties.name).toBe("Holm 2");
   });
 
   test("a scene lands in its chapter as a draft with an empty body", async () => {

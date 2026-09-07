@@ -84,8 +84,10 @@ import {
   locationPath,
   locatorFromPath,
   npcPath,
+  RESERVED_SEGMENTS,
   scenePath,
   sessionPath,
+  CAMPAIGN_PATH,
   type Locator,
 } from "./paths";
 import {
@@ -2122,6 +2124,20 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
 // there by a mention, not by an author, and "NPC anlegen" for exactly that id
 // is what fills it. That is the same rule `createNpcStub` and the generator's
 // apply step already follow.
+//
+// …but only for the id the DM TYPED. An empty row is empty, not unclaimed: some
+// scene references it, so the id is already spoken for. Filling it is therefore
+// the DM's own decision about that one id, never something a machine-made
+// PROPOSAL may slide into: rule 2's `suggestion` skips every existing row,
+// empty ones included, so „Holm" next to a filled `holm` and a referenced empty
+// `holm-2` proposes `holm-3` — while typing „Holm 2" still fills `holm-2`.
+//
+// RESERVED IDS ARE NOT CREATABLE. `npcs`, `locations` and `sessions` are the
+// address schema's first segments (store/paths, RESERVED_SEGMENTS), so a
+// chapter with one of those ids would be a row whose own document and scenes
+// resolve to an entity kind instead — created, then unreachable forever. It is
+// answered like a collision (same 409 shape, same one-click proposal), because
+// from the dialog's side it is the same situation: this id is not available.
 
 /** The `slug_taken` 409 — see rule 2 above. */
 function slugTaken(kind: string, id: string, suggestion: string, path: string): ApiError {
@@ -2131,6 +2147,21 @@ function slugTaken(kind: string, id: string, suggestion: string, path: string): 
     suggestion,
     path,
   });
+}
+
+/**
+ * The reserved-id 409. It deliberately carries `code: "slug_taken"` as well:
+ * the app's collision handling (lib/create.ts) is exactly the interaction this
+ * needs — a German sentence plus the free proposal as one click — and a second
+ * code would only be a second branch answering the same question. `path` is ""
+ * because nothing is in the way; there is no document to link to.
+ */
+function slugReserved(id: string, suggestion: string): ApiError {
+  return new ApiError(
+    409,
+    `„${id}" ist ein reservierter Name — Vorschlag: „${suggestion}"`,
+    { code: "slug_taken", id, suggestion, path: "", reserved: true },
+  );
 }
 
 /**
@@ -2164,6 +2195,15 @@ function resolveNewId(explicit: string | undefined, name: string, what: string):
  * The one create that cannot go through `mutate`: there is no campaign yet, so
  * there is no `version` to bump — the row starts at the column defaults, and
  * its own first version IS the change.
+ *
+ * A campaign id has NO reserved names, and that was checked rather than
+ * assumed: `RESERVED_SEGMENTS` reserves first segments INSIDE a campaign, and
+ * the api mounts no `/:campaign` route that a literal (`/api/campaigns`) could
+ * be shadowed by — `/api/campaigns/tree` is the campaign `campaigns`, `GET
+ * /api/campaigns` is the list, and both keep working. What is refused is an id
+ * that is no id: an empty one, one a name yields nothing for, or an explicit
+ * one that is no slug (`resolveNewId`), plus the path-safety rules
+ * (`assertSafeCampaignId`).
  */
 export async function createCampaign(
   name: string,
@@ -2177,7 +2217,13 @@ export async function createCampaign(
     const tx = handle as unknown as GrimoireDb;
     if (campaignRow(tx, id) !== undefined) {
       const suggestion = freeSlug(id, (candidate) => campaignRow(tx, candidate) !== undefined);
-      throw slugTaken("Kampagne", id, suggestion, id);
+      // `path` in this 409 is an ADDRESS the app can link to, and a campaign id
+      // alone is not one. The document that always exists — even for a campaign
+      // that holds nothing else — is the campaign row itself (`_campaign`), so
+      // that is what is pointed at. It carries the campaign id as its first
+      // segment because a campaign collision has no campaign scope to be
+      // relative to, unlike every other create in this file.
+      throw slugTaken("Kampagne", id, suggestion, `${id}/${CAMPAIGN_PATH}`);
     }
     // `name === id` is stored as "" — the empty name means "fall back to the
     // id" everywhere it is rendered (./render, ./read), exactly as
@@ -2215,13 +2261,17 @@ export async function createChapter(
 ): Promise<FileResponse> {
   const id = resolveNewId(explicitId, title, "Der Titel");
   assertSafeChapterId(id);
+  // A reserved id would create an unreachable chapter — see the notes above.
+  // Both guards share one "is this id available" predicate, so the proposal
+  // cannot land on a reserved id either.
   return mutate(campaign, (tx) => {
+    const unavailable = (candidate: string): boolean =>
+      RESERVED_SEGMENTS.has(candidate) || chapterRowOf(tx, campaign, candidate) !== undefined;
+    if (RESERVED_SEGMENTS.has(id)) {
+      throw slugReserved(id, freeSlug(id, unavailable));
+    }
     if (chapterRowOf(tx, campaign, id) !== undefined) {
-      const suggestion = freeSlug(
-        id,
-        (candidate) => chapterRowOf(tx, campaign, candidate) !== undefined,
-      );
-      throw slugTaken("Kapitel", id, suggestion, chapterPath(id));
+      throw slugTaken("Kapitel", id, freeSlug(id, unavailable), chapterPath(id));
     }
     const trimmedGoal = goal?.trim() ?? "";
     const body = trimmedGoal === "" ? "" : `## Ziel des Kapitels\n\n${trimmedGoal}\n`;
@@ -2312,10 +2362,10 @@ export async function createNpc(
   return mutate(campaign, (tx) => {
     const existing = npcRowOf(tx, campaign, id);
     if (existing !== undefined && !isEmptyNpcRow(existing)) {
-      const suggestion = freeSlug(id, (candidate) => {
-        const row = npcRowOf(tx, campaign, candidate);
-        return row !== undefined && !isEmptyNpcRow(row);
-      });
+      // Any existing row is taken for the PROPOSAL — an empty one too: it is
+      // referenced, so proposing it would hand the DM someone else's entry
+      // under a name they never typed (see the notes above).
+      const suggestion = freeSlug(id, (candidate) => npcRowOf(tx, campaign, candidate) !== undefined);
       throw slugTaken("NPC", id, suggestion, npcPath(id));
     }
     const stored = name.trim() === id ? "" : name.trim();
@@ -2346,10 +2396,11 @@ export async function createLocation(
   return mutate(campaign, (tx) => {
     const existing = locationRowOf(tx, campaign, id);
     if (existing !== undefined && !isEmptyLocationRow(existing)) {
-      const suggestion = freeSlug(id, (candidate) => {
-        const row = locationRowOf(tx, campaign, candidate);
-        return row !== undefined && !isEmptyLocationRow(row);
-      });
+      // Same as for an npc: an empty row is referenced, so it is never proposed.
+      const suggestion = freeSlug(
+        id,
+        (candidate) => locationRowOf(tx, campaign, candidate) !== undefined,
+      );
       throw slugTaken("Ort", id, suggestion, locationPath(id));
     }
     const stored = name.trim() === id ? "" : name.trim();

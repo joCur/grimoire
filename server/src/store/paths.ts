@@ -48,8 +48,20 @@ export const CAMPAIGN_PATH = "_campaign";
 export const INBOX_PATH = "inbox";
 export const GLOSSARY_PATH = "glossary";
 
-/** Reserved first segments that are not chapters (mirror of campaign-fs). */
-const RESERVED = new Set(["npcs", "locations", "sessions"]);
+/**
+ * Reserved first segments that are not chapters — the ONE source for this set
+ * (`locatorFromPath` routes them to the entity kinds, so a chapter or a rename
+ * that claimed one of them would produce an address nothing can read).
+ * Imported by ./write.ts (create) and ./rename.ts (rename) rather than
+ * re-declared there.
+ */
+export const RESERVED_SEGMENTS: ReadonlySet<string> = new Set([
+  "npcs",
+  "locations",
+  "sessions",
+]);
+
+const RESERVED = RESERVED_SEGMENTS;
 
 /** Reserved last segment inside a chapter. */
 const CHAPTER_DOC = "_chapter";
