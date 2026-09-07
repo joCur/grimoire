@@ -16,12 +16,19 @@
 // has to work at 390px, and „Kampagne anlegen" is the only thing this screen is
 // about. On success the redirect below picks the new campaign up — the pool
 // then carries the next step („Kapitel anlegen").
+//
+// The SECOND campaign is created from the topbar switcher instead, through the
+// same `useCampaignCreate` (components/CreateActions.tsx) — one create, two
+// surfaces. The field hints here are generic („Name der Kampagne"): a
+// placeholder naming a campaign out of `examples/` reads like a default (PO
+// feedback on issue #56).
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
-import { Navigate, useNavigate } from "react-router";
+import { Navigate } from "react-router";
 
-import { createCampaign, fetchCampaigns } from "@/api";
+import { fetchCampaigns } from "@/api";
+import { useCampaignCreate } from "@/components/CreateActions";
 import { Button } from "@/components/ui/button";
 import { IconLogo } from "@/icons";
 import { pickLastCampaign } from "@/lib/campaign";
@@ -65,8 +72,10 @@ export function HomeRoute() {
 function ColdStart() {
   const nameId = useId();
   const descriptionId = useId();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  // Shared with the switcher's „Kampagne anlegen" dialog (components/
+  // CreateActions.tsx) — one create, two surfaces. `replace`: the redirect
+  // must not sit in the history, or "back" would bounce straight forward again.
+  const createCampaignFlow = useCampaignCreate({ replace: true });
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [conflict, setConflict] = useState<CreateConflict>();
@@ -74,7 +83,7 @@ function ColdStart() {
 
   const create = useMutation({
     mutationFn: (id?: string) =>
-      createCampaign({
+      createCampaignFlow({
         name: name.trim(),
         ...(description.trim() === "" ? {} : { description: description.trim() }),
         ...(id === undefined ? {} : { id }),
@@ -82,13 +91,6 @@ function ColdStart() {
     onMutate: () => {
       setConflict(undefined);
       setMessage("");
-    },
-    onSuccess: async (campaign) => {
-      // The switcher and this very page read the campaign list, so it must be
-      // refetched BEFORE the pool mounts — otherwise the new campaign's own
-      // header would render off a list that does not know it yet.
-      await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
-      await navigate(`/${campaign.id}`, { replace: true });
     },
     onError: (error) => {
       setConflict(createConflict(error));
@@ -127,7 +129,7 @@ function ColdStart() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoComplete="off"
-            placeholder="Die Küste von Salzhafen"
+            placeholder="Name der Kampagne"
             className="w-full rounded-md border border-input bg-panel-deep px-3 py-2.5 text-[14px] text-foreground placeholder:text-muted-foreground max-md:text-[16px]"
           />
           {/* The id the name produces — it goes into every URL and stays. */}

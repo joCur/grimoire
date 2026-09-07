@@ -52,13 +52,21 @@ interface CreateDialogProps {
   description: string;
   /** Label of the required field („Titel" for a chapter/scene, „Name" else). */
   nameLabel: string;
+  /**
+   * Hint inside the empty field. GENERIC by rule — it names the KIND of thing
+   * that belongs there („Titel der Szene", „Name des NPCs"), never an example
+   * lifted from `examples/` (PO feedback on issue #56): a placeholder that
+   * reads like real campaign content is taken for a default, and the sample
+   * campaign's names have no business in a fresh instance.
+   */
   namePlaceholder: string;
   /**
    * What the derived id gets prefixed with for the address preview
-   * („npcs/", „locations/", „<kapitel>/"). Empty for a campaign.
+   * („npcs/", „locations/", „<kapitel>/"). A campaign has no address to
+   * prefix, so it labels the bare id instead („id: ").
    */
   addressPrefix: string;
-  /** The optional second field. */
+  /** The optional second field — same placeholder rule as above. */
   extra?: { label: string; placeholder: string; multiline?: boolean };
   /** Runs the POST. Rejecting with an ApiError is what the dialog reads. */
   create: (values: CreateValues) => Promise<unknown>;

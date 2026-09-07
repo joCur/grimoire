@@ -1,7 +1,18 @@
-// The four „… anlegen" entry points (issue #56) — trigger plus wiring around
-// the shared CreateDialog. The campaign's own create is not here: it is the
-// cold-start surface of routes/home.tsx, which is a page, not an action next
-// to existing content.
+// The „… anlegen" entry points (issue #56) — trigger plus wiring around the
+// shared CreateDialog.
+//
+// The CAMPAIGN has two surfaces and both run through `useCampaignCreate` here,
+// so they cannot drift apart: the cold-start PAGE (routes/home.tsx — an empty
+// instance has nothing behind a dialog worth keeping visible) and
+// `CampaignCreateDialog`, which the topbar switcher opens on an instance that
+// already runs (PO feedback on issue #56: a SECOND campaign had no entry point
+// in the UI at all, which is the dead end this ticket exists to remove). Same
+// fields, same id preview, same 409 proposal.
+//
+// PLACEHOLDERS ARE GENERIC (same feedback): every field hint names the KIND of
+// thing that belongs there („Titel der Szene", „Name des Orts"), never a name
+// out of `examples/` — a placeholder that reads like real campaign content is
+// taken for a default.
 //
 // WHERE THEY SIT, and why:
 //
@@ -31,7 +42,7 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
-import { createChapter, createLocation, createNpc, createScene } from "@/api";
+import { createCampaign, createChapter, createLocation, createNpc, createScene } from "@/api";
 import { CreateDialog, type CreateValues } from "@/components/CreateDialog";
 import { HeaderAction } from "@/components/HeaderAction";
 import { Button } from "@/components/ui/button";
@@ -48,6 +59,71 @@ function useAfterCreate(campaign: string) {
       invalidationKeys(campaign).map((queryKey) => queryClient.invalidateQueries({ queryKey })),
     );
   };
+}
+
+/** What a campaign create sends — the cold-start page and the switcher dialog
+ *  both produce exactly this. */
+export interface CampaignCreateInput {
+  name: string;
+  description?: string;
+  /** Only set when the DM took the collision proposal. */
+  id?: string;
+}
+
+/**
+ * The campaign create both surfaces share: POST, refresh the campaign list,
+ * open the new campaign.
+ *
+ * The invalidation happens BEFORE the navigation on purpose — the switcher and
+ * the new campaign's own header read that list, so a pool mounting off a list
+ * that does not know the campaign yet would render without its name.
+ *
+ * `replace` is the difference between the two: the cold start replaces "/"
+ * (the redirect must not sit in the history, or "back" would bounce forward
+ * again), while switching campaigns from the topbar is a normal step.
+ */
+export function useCampaignCreate({ replace = false }: { replace?: boolean } = {}) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  return async (input: CampaignCreateInput) => {
+    const campaign = await createCampaign(input);
+    await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+    await navigate(`/${campaign.id}`, { replace });
+    return campaign;
+  };
+}
+
+/**
+ * „Kampagne anlegen" on a running instance — opened from the topbar switcher,
+ * which is where the question „and where is the second campaign?" comes up.
+ * The dialog only differs from the cold-start page in being a dialog; the
+ * fields, the id preview and the 409 branch are the shared ones.
+ */
+export function CampaignCreateDialog({ onClose }: { onClose: () => void }) {
+  const createCampaignFlow = useCampaignCreate();
+  return (
+    <CreateDialog
+      title="Kampagne anlegen"
+      description="Der Name wird zur id der Kampagne — sie steht in jeder Adresse und bleibt, wie sie ist. Danach entstehen darin Kapitel und Szenen."
+      nameLabel="Name der Kampagne"
+      namePlaceholder="Name der Kampagne"
+      addressPrefix="id: "
+      extra={{
+        label: "Beschreibung (optional)",
+        placeholder: "Ein Satz, der die Kampagne einordnet",
+        multiline: true,
+      }}
+      create={async (values: CreateValues) => {
+        await createCampaignFlow({
+          name: values.name,
+          ...(values.extra === undefined ? {} : { description: values.extra }),
+          ...(values.id === undefined ? {} : { id: values.id }),
+        });
+        onClose();
+      }}
+      onClose={onClose}
+    />
+  );
 }
 
 /**
@@ -97,7 +173,7 @@ export function ChapterCreateAction({
           title="Kapitel anlegen"
           description="Der Titel wird zur id des Kapitels — sie steht in jeder Szenen-Adresse und bleibt, wie sie ist. Das Ziel ist optional und landet unter „Ziel des Kapitels“."
           nameLabel="Titel"
-          namePlaceholder="01 Salzhafen"
+          namePlaceholder="Titel des Kapitels"
           addressPrefix=""
           extra={{
             label: "Ziel des Kapitels (optional)",
@@ -143,7 +219,7 @@ export function SceneCreateAction({
           title="Szene anlegen"
           description="Die Szene entsteht als Entwurf in diesem Kapitel und öffnet gleich im Editor. Der Titel wird zur id — sie bleibt, wie sie ist."
           nameLabel="Titel"
-          namePlaceholder="Ankunft am Leuchtturm"
+          namePlaceholder="Titel der Szene"
           addressPrefix={`${chapter}/`}
           create={async (values: CreateValues) => {
             const created = await createScene(campaign, {
@@ -177,7 +253,7 @@ export function NpcCreateAction({ campaign }: { campaign: string }) {
           title="NPC anlegen"
           description="Nur der Name — Rolle, Status und alles Weitere stehen danach im Eigenschaften-Dialog. Aus dem Namen wird die id, und die bleibt."
           nameLabel="Name"
-          namePlaceholder="Alte Fischerin"
+          namePlaceholder="Name des NPCs"
           addressPrefix="npcs/"
           create={async (values: CreateValues) => {
             const created = await createNpc(campaign, {
@@ -209,7 +285,7 @@ export function LocationCreateAction({ campaign }: { campaign: string }) {
           title="Ort anlegen"
           description="Nur der Name — alles Weitere steht danach im Eigenschaften-Dialog. Aus dem Namen wird die id, und die bleibt."
           nameLabel="Name"
-          namePlaceholder="Hafen"
+          namePlaceholder="Name des Orts"
           addressPrefix="locations/"
           create={async (values: CreateValues) => {
             const created = await createLocation(campaign, {
