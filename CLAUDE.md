@@ -155,6 +155,11 @@ Die Pfade:
    sichtbar; 409 bei konkurrierendem Zweit-Write → neu laden statt still
    überschreiben (seit ADR #13 gibt es keine externe Dateiänderung mehr —
    der Guard ist die Zeilenversion `rev`)
+10. Kaltstart: leere Instanz ohne Seed — seit ADR #13/#79 der Normalfall
+    einer frischen Installation → Kampagne anlegen → Kapitel → Szene →
+    Szene befüllen → Session starten → Szene in der Live-Ansicht
+    nutzbar; dazu NPC/Ort anlegen aus ihren Listen und die
+    Slug-Kollision (409 mit Vorschlag, schreibt nichts)
 
 Regel für neue Features: Jedes ready-Ticket benennt die berührten
 kritischen Pfade; wer einen berührt oder schafft, erweitert die

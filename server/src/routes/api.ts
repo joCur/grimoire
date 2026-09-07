@@ -25,7 +25,12 @@ import {
   appendLogEntry,
   appendThreadToChapter,
   continueSession,
+  createCampaign,
+  createChapter,
+  createLocation,
+  createNpc,
   createNpcStub,
+  createScene,
   discardSession,
   endSession,
   markInboxLineDone,
@@ -329,6 +334,89 @@ api.put("/:campaign/glossary", async (c) => {
     entries.push({ term: item.term, explanation: item.explanation ?? "" });
   }
   return c.json(await writeGlossary(c.req.param("campaign"), entries));
+});
+
+// --- creating content (issue #56) ---------------------------------------------------
+//
+// Five POSTs, one shape: the DM types a NAME, the server derives the id with
+// the shared slug rule (@grimoire/shared/slug) and answers with the created
+// DOCUMENT — the same `FileResponse` every other write returns, so the app can
+// navigate straight into it. A taken id is
+// `409 { code: "slug_taken", id, suggestion, path }`; a name that yields no
+// slug at all is a 400 that says so (store/write.ts explains why neither is
+// silently resolved). Every one of them also accepts an explicit `id` — that
+// exists for ONE flow: taking the 409's `suggestion` in one click instead of
+// making the DM invent another name. See server.ts for the checklist entries.
+
+/** The one required free-text field of a create body: trimmed, non-empty. */
+function requiredText(v: unknown, what: string): string {
+  if (typeof v !== "string" || v.trim() === "") {
+    throw new ApiError(400, `${what} must be a non-empty string`);
+  }
+  return v.trim();
+}
+
+/** An optional free-text field: undefined when absent, null or blank. */
+function optionalText(v: unknown, what: string): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== "string") throw new ApiError(400, `${what} must be a string`);
+  return v.trim() === "" ? undefined : v.trim();
+}
+
+// POST /api/campaigns { name, description? } -> 201 CampaignSummary
+// The cold start (issue #79 made an empty instance the normal first boot):
+// this is the only create that does not live under a campaign.
+api.post("/campaigns", async (c) => {
+  const body = await jsonBody(c, ["name", "description", "id"]);
+  const name = requiredText(body.name, "name");
+  const description = optionalText(body.description, "description");
+  return c.json(await createCampaign(name, description, optionalText(body.id, "id")), 201);
+});
+
+// POST /api/:campaign/chapters { title, goal? } -> 201 FileResponse
+api.post("/:campaign/chapters", async (c) => {
+  const body = await jsonBody(c, ["title", "goal", "id"]);
+  const title = requiredText(body.title, "title");
+  const goal = optionalText(body.goal, "goal");
+  return c.json(
+    await createChapter(c.req.param("campaign"), title, goal, optionalText(body.id, "id")),
+    201,
+  );
+});
+
+// POST /api/:campaign/scenes { title, chapter } -> 201 FileResponse
+// `chapter` is required and must exist (400) — a scene's chapter is part of
+// its address, and chapters are never created by being named (ADR #14).
+api.post("/:campaign/scenes", async (c) => {
+  const body = await jsonBody(c, ["title", "chapter", "id"]);
+  const title = requiredText(body.title, "title");
+  const chapter = requiredText(body.chapter, "chapter");
+  return c.json(
+    await createScene(c.req.param("campaign"), title, chapter, optionalText(body.id, "id")),
+    201,
+  );
+});
+
+// POST /api/:campaign/npcs { name } -> 201 FileResponse
+// An EMPTY entry for the derived id (one a reference created, issue #70) is
+// FILLED instead of colliding; an entry with content answers 409.
+api.post("/:campaign/npcs", async (c) => {
+  const body = await jsonBody(c, ["name", "id"]);
+  const name = requiredText(body.name, "name");
+  return c.json(
+    await createNpc(c.req.param("campaign"), name, optionalText(body.id, "id")),
+    201,
+  );
+});
+
+// POST /api/:campaign/locations { name } -> 201 FileResponse (same rules)
+api.post("/:campaign/locations", async (c) => {
+  const body = await jsonBody(c, ["name", "id"]);
+  const name = requiredText(body.name, "name");
+  return c.json(
+    await createLocation(c.req.param("campaign"), name, optionalText(body.id, "id")),
+    201,
+  );
 });
 
 // --- rename with reference cascade (issue #30) --------------------------------------

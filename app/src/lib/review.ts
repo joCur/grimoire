@@ -6,6 +6,8 @@
 // Everything degrades (README): unparsable input yields empty results or
 // passes through unchanged, never an error.
 
+import { toSlug } from "@grimoire/shared/slug";
+
 import { isEntityId } from "@/lib/entity";
 
 /**
@@ -191,24 +193,14 @@ export function npcNameFromText(text: string): string | undefined {
   return undefined;
 }
 
-const UMLAUTS: Record<string, string> = {
-  ä: "ae",
-  ö: "oe",
-  ü: "ue",
-  ß: "ss",
-};
-
-/** Kebab-case slug of a display name (German transliteration, diacritics
- *  folded); an empty string when nothing usable is left. */
-export function toSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[äöüß]/g, (c) => UMLAUTS[c] ?? c)
-    .normalize("NFD")
-    .replace(/\p{M}+/gu, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
+/**
+ * Kebab-case slug of a display name (German transliteration, diacritics
+ * folded); an empty string when nothing usable is left. The rule moved to
+ * `@grimoire/shared/slug` with issue #56 — the create dialogs derive ids the
+ * same way and the SERVER has to agree with them — and is re-exported here
+ * for the callers that already read it from this module.
+ */
+export { toSlug };
 
 /** Slug proposal for the NPC-stub dialog (editable there); "" when the text
  *  carries no recognizable name. */

@@ -347,6 +347,75 @@ export function markInboxLineDone(campaign: string, line: string): Promise<FileR
   return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/review/inbox-done`, { line });
 }
 
+// --- creating content (issue #56) --------------------------------------------
+//
+// Five POSTs with one shape: the DM types a NAME, the server derives the id
+// (the shared slug rule, `@grimoire/shared/slug`) and answers with the created
+// DOCUMENT — so the caller can navigate straight into it. `id` is optional and
+// exists for exactly one flow: taking the `slug_taken` 409's `suggestion` in
+// one click. Errors arrive as ApiError; a 409 carries
+// `{ code: "slug_taken", id, suggestion, path }` in `details` (lib/create.ts
+// turns that into the German sentence the dialogs show).
+
+/** The campaign the cold start creates — `id` is what the app navigates to. */
+export function createCampaign(input: {
+  name: string;
+  description?: string;
+  id?: string;
+}): Promise<CampaignSummary> {
+  return postJson<CampaignSummary>("/campaigns", {
+    name: input.name,
+    ...(input.description === undefined ? {} : { description: input.description }),
+    ...(input.id === undefined ? {} : { id: input.id }),
+  });
+}
+
+/** A new chapter; `goal` lands under `## Ziel des Kapitels` when given. */
+export function createChapter(
+  campaign: string,
+  input: { title: string; goal?: string; id?: string },
+): Promise<FileResponse> {
+  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/chapters`, {
+    title: input.title,
+    ...(input.goal === undefined ? {} : { goal: input.goal }),
+    ...(input.id === undefined ? {} : { id: input.id }),
+  });
+}
+
+/** A new scene in an EXISTING chapter (the server 400s on an unknown one). */
+export function createScene(
+  campaign: string,
+  input: { title: string; chapter: string; id?: string },
+): Promise<FileResponse> {
+  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/scenes`, {
+    title: input.title,
+    chapter: input.chapter,
+    ...(input.id === undefined ? {} : { id: input.id }),
+  });
+}
+
+/** A new NPC entry — an EMPTY one a reference left behind is filled (#70). */
+export function createNpc(
+  campaign: string,
+  input: { name: string; id?: string },
+): Promise<FileResponse> {
+  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/npcs`, {
+    name: input.name,
+    ...(input.id === undefined ? {} : { id: input.id }),
+  });
+}
+
+/** A new location entry, same rules as the NPC one. */
+export function createLocation(
+  campaign: string,
+  input: { name: string; id?: string },
+): Promise<FileResponse> {
+  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/locations`, {
+    name: input.name,
+    ...(input.id === undefined ? {} : { id: input.id }),
+  });
+}
+
 // --- rename with reference cascade (issue #30) -------------------------------
 
 /** The entity kinds the rename endpoint accepts (server: store/rename.ts). */

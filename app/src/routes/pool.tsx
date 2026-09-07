@@ -13,6 +13,7 @@ import { Link, useParams } from "react-router";
 
 import { fetchFile, fetchTree } from "@/api";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
+import { ChapterCreateAction, SceneCreateAction } from "@/components/CreateActions";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { locationName } from "@/lib/campaign";
@@ -72,7 +73,10 @@ export function PoolRoute() {
                 </span>
                 {/* Name/description are editable right where they are read
                     (issue #34) — quiet, like the read view's actions. */}
-                <span className="ml-auto">
+                {/* Quiet header actions: edit what is on screen, and add the
+                    thing the pool IS a list of (issue #56). */}
+                <span className="ml-auto flex items-center gap-1">
+                  <ChapterCreateAction campaign={campaign} />
                   <CampaignMetaAction campaign={campaign} />
                 </span>
               </div>
@@ -82,10 +86,18 @@ export function PoolRoute() {
                 </p>
               )}
             </div>
+            {/* The empty pool is the second half of the cold start (issue
+                #56): it used to point at the generator, which needs an API key
+                and source material — a dead end on a fresh instance. The next
+                step is now the one thing that always works. */}
             {data.chapters.length === 0 && (
-              <p className="text-[13.5px] text-muted-foreground">
-                Noch keine Kapitel — über „Szenen generieren“ eines anlegen.
-              </p>
+              <div className="flex flex-col items-start gap-3 rounded-lg border border-input bg-card px-5 py-4">
+                <p className="text-[13.5px] leading-[1.6] text-body-secondary">
+                  Noch keine Kapitel. Ein Kapitel ist die Klammer um Szenen — danach legst du
+                  darin die erste Szene an.
+                </p>
+                <ChapterCreateAction campaign={campaign} variant="primary" />
+              </div>
             )}
             {data.chapters.map((chapter, index) => (
               <Chapter
@@ -156,8 +168,8 @@ function Chapter({
             <p className="mb-3 text-[14px] leading-[1.6] text-body-secondary">Ziel: {goal}</p>
           )}
           {scenes.length === 0 && (
-            <p className="pt-0.5 pb-4 text-[13.5px] text-muted-foreground">
-              Noch keine Szenen in diesem Kapitel — erste Szene anlegen.
+            <p className="pt-0.5 pb-3 text-[13.5px] text-muted-foreground">
+              Noch keine Szenen in diesem Kapitel.
             </p>
           )}
           {chapter.groups.map((group) => (
@@ -175,6 +187,15 @@ function Chapter({
               ))}
             </div>
           )}
+          {/* „Szene anlegen" sits IN the chapter, which is what prefills the
+              chapter (issue #56) — no picker, no second decision. */}
+          <div className="pb-4">
+            <SceneCreateAction
+              campaign={campaign}
+              chapter={chapter.id}
+              variant={scenes.length === 0 ? "primary" : "quiet"}
+            />
+          </div>
         </div>
       </CollapsibleContent>
     </Collapsible>

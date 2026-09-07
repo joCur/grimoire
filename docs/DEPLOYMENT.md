@@ -43,8 +43,13 @@ docker run -d --name grimoire \
   kann die Datenbank nicht angelegt werden.
 
 **Eine frische Instanz startet leer** (Issue #79): der Server importiert beim
-Start nichts. Für einen Smoke-Test mit Inhalt einmal die Beispielkampagne aus
-dem Image einlesen — das Dev-Werkzeug `grimoire seed` (Abschnitt 2b):
+Start nichts. Das ist kein Sonderfall mehr — seit Issue #56 bietet „/" auf
+einer leeren Instanz „Kampagne anlegen" an, und Kapitel, Szenen, NPCs und Orte
+entstehen danach ebenfalls in der UI. `grimoire seed` bleibt das Dev-/E2E-
+Werkzeug für die Beispielkampagne, nicht der Weg zur ersten eigenen Kampagne.
+
+Für einen Smoke-Test *mit* Inhalt einmal die Beispielkampagne aus dem Image
+einlesen (Abschnitt 2b):
 
 ```bash
 docker run --rm -p 3000:3000 grimoire   # leere Instanz

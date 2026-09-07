@@ -27,11 +27,15 @@
 
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
+  ENTITY_SLUG,
+  freeSlug,
   isEnded,
   isSessionEmpty,
+  toSlug,
+  type CampaignSummary,
   type FileResponse,
 } from "@grimoire/shared";
-import { ApiError, assertSafeAddress } from "../campaign-fs";
+import { ApiError, assertSafeAddress, assertSafeCampaignId } from "../campaign-fs";
 import { localDate, localDateTimeSeconds, localTime, now } from "../clock";
 import type { GrimoireDb } from "../db/client";
 import {
@@ -75,8 +79,17 @@ import {
   requireCampaign,
   sessionRow,
 } from "./read";
-import { locatorFromPath, sessionPath, type Locator } from "./paths";
 import {
+  chapterPath,
+  locationPath,
+  locatorFromPath,
+  npcPath,
+  scenePath,
+  sessionPath,
+  type Locator,
+} from "./paths";
+import {
+  campaignDisplayName,
   renderCampaign,
   renderChapter,
   renderGlossary,
@@ -1710,8 +1723,14 @@ export async function appendThreadToChapter(
   });
 }
 
-/** Entity ids are kebab slugs — the README's stable reference keys. */
-export const ENTITY_SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+/**
+ * Entity ids are kebab slugs — the README's stable reference keys. The rule
+ * itself lives in `@grimoire/shared/slug` since issue #56 (the create
+ * endpoints DERIVE ids from typed titles and the app has to derive the same
+ * ones), and is re-exported here because this module is where the server's
+ * callers have always read it.
+ */
+export { ENTITY_SLUG };
 
 /**
  * POST /api/:campaign/review/npc-stub — the review's "#npc line becomes an
@@ -2070,5 +2089,282 @@ function draftTargetExistsIn(db: GrimoireDb, campaign: string, rel: string): boo
 export async function chapterExists(campaign: string, chapter: string): Promise<boolean> {
   const db = await getDb();
   return chapterRowOf(db, campaign, chapter) !== undefined;
+}
+
+// --- creating content (issue #56) --------------------------------------------
+//
+// Until now nothing in the app could bring a row into existence on purpose. A
+// row appeared as a side effect — the markdown import, the generator's apply
+// step, a reference that created its counterpart (#70) — so a fresh instance,
+// which is what every installation is since issue #79, was a dead end. These
+// five functions are the deliberate half: campaign, chapter, scene, npc, ort.
+//
+// THE THREE RULES they all share, and they are the whole design:
+//
+//   1. THE DM TYPES A NAME, NOT AN ID. An id is derived from it with the one
+//      slug rule (`@grimoire/shared/slug` — the app derives the same one and
+//      shows it, so nothing is a surprise). An id is never invented: a title
+//      that yields no slug at all (only punctuation, or a script no fold maps
+//      into a-z0-9) is a 400 that says so, because guessing "eintrag-1" would
+//      put an unfindable key into the format's most permanent field.
+//   2. A TAKEN ID IS A 409 WITH A FREE PROPOSAL. Not an automatic `-2`: the
+//      id is the permanent reference key, so the DM decides — either the
+//      proposal or another name. The body carries `code: "slug_taken"`, the
+//      colliding `id`, its `path` (so the app can link to what is there) and
+//      `suggestion`.
+//   3. A NEW ROW HOLDS ONLY WHAT WAS TYPED. Everything else keeps its column
+//      default, so `## Notizen`-style scaffolding nobody asked for cannot
+//      appear. The only exception is a chapter's optional goal, which goes
+//      into the section the pool reads it from (`## Ziel des Kapitels`).
+//
+// EMPTY ROWS ARE FILLED, NOT COLLIDED WITH — for npc and ort, the two kinds a
+// reference can create (#70). An entry that holds nothing but its id was put
+// there by a mention, not by an author, and "NPC anlegen" for exactly that id
+// is what fills it. That is the same rule `createNpcStub` and the generator's
+// apply step already follow.
+
+/** The `slug_taken` 409 — see rule 2 above. */
+function slugTaken(kind: string, id: string, suggestion: string, path: string): ApiError {
+  return new ApiError(409, `${kind} „${id}" gibt es schon — Vorschlag: „${suggestion}"`, {
+    code: "slug_taken",
+    id,
+    suggestion,
+    path,
+  });
+}
+
+/**
+ * The id of a new row: the caller's own `id` when it sent one, else the slug
+ * of the typed name. `what` is the German label of the name field, so a 400
+ * points at the input that has to change.
+ *
+ * An EXPLICIT id exists for exactly one flow: the `slug_taken` 409 hands the
+ * app a free `suggestion`, and "diesen Vorschlag nehmen" has to be one click
+ * rather than "now think of a different name". It is taken verbatim — no
+ * derivation, no fallback — and has to be a slug, because it lands in the
+ * format's one permanent field.
+ */
+function resolveNewId(explicit: string | undefined, name: string, what: string): string {
+  if (explicit !== undefined) {
+    if (!ENTITY_SLUG.test(explicit)) {
+      throw new ApiError(400, "id must be a kebab-case slug (a-z, 0-9, single dashes)");
+    }
+    return explicit;
+  }
+  const id = toSlug(name);
+  if (id === "") {
+    throw new ApiError(400, `${what} ergibt keine id — bitte Buchstaben oder Ziffern verwenden`);
+  }
+  return id;
+}
+
+/**
+ * POST /api/campaigns { name, description? } -> CampaignSummary.
+ *
+ * The one create that cannot go through `mutate`: there is no campaign yet, so
+ * there is no `version` to bump — the row starts at the column defaults, and
+ * its own first version IS the change.
+ */
+export async function createCampaign(
+  name: string,
+  description?: string,
+  explicitId?: string,
+): Promise<CampaignSummary> {
+  const id = resolveNewId(explicitId, name, "Der Name");
+  assertSafeCampaignId(id);
+  const db = await getDb();
+  return db.transaction((handle) => {
+    const tx = handle as unknown as GrimoireDb;
+    if (campaignRow(tx, id) !== undefined) {
+      const suggestion = freeSlug(id, (candidate) => campaignRow(tx, candidate) !== undefined);
+      throw slugTaken("Kampagne", id, suggestion, id);
+    }
+    // `name === id` is stored as "" — the empty name means "fall back to the
+    // id" everywhere it is rendered (./render, ./read), exactly as
+    // `patchProperties` stores it, so the round trip agrees.
+    tx.insert(campaigns)
+      .values({
+        id,
+        name: name.trim() === id ? "" : name.trim(),
+        description: description === undefined || description.trim() === "" ? null : description.trim(),
+      })
+      .run();
+    const row = campaignRow(tx, id);
+    if (row === undefined) throw new ApiError(500, "campaign could not be created");
+    indexCampaign(tx, row);
+    const summary: CampaignSummary = { id: row.id, name: campaignDisplayName(row) };
+    if (row.description !== null && row.description.trim() !== "") {
+      summary.description = row.description;
+    }
+    return summary;
+  }) as CampaignSummary;
+}
+
+/**
+ * POST /api/:campaign/chapters { title, goal? } -> the chapter document.
+ *
+ * `goal` is optional and lands under `## Ziel des Kapitels` — the heading the
+ * pool reads its goal line from (routes/pool.tsx). Without it the body stays
+ * empty rather than carrying an empty section.
+ */
+export async function createChapter(
+  campaign: string,
+  title: string,
+  goal?: string,
+  explicitId?: string,
+): Promise<FileResponse> {
+  const id = resolveNewId(explicitId, title, "Der Titel");
+  assertSafeChapterId(id);
+  return mutate(campaign, (tx) => {
+    if (chapterRowOf(tx, campaign, id) !== undefined) {
+      const suggestion = freeSlug(
+        id,
+        (candidate) => chapterRowOf(tx, campaign, candidate) !== undefined,
+      );
+      throw slugTaken("Kapitel", id, suggestion, chapterPath(id));
+    }
+    const trimmedGoal = goal?.trim() ?? "";
+    const body = trimmedGoal === "" ? "" : `## Ziel des Kapitels\n\n${trimmedGoal}\n`;
+    tx.insert(chapters)
+      .values({
+        campaignId: campaign,
+        id,
+        title: title.trim(),
+        body,
+        pos: nextPos(
+          tx.select({ pos: chapters.pos }).from(chapters).where(eq(chapters.campaignId, campaign)).all(),
+        ),
+      })
+      .run();
+    const row = chapterRowOf(tx, campaign, id);
+    if (row === undefined) throw new ApiError(500, "chapter could not be created");
+    indexChapter(tx, campaign, row);
+    return renderChapter(row);
+  });
+}
+
+/**
+ * POST /api/:campaign/scenes { title, chapter } -> the scene document.
+ *
+ * The chapter is REQUIRED and has to exist (400 otherwise): a scene's chapter
+ * is part of its address, and a scene under an unknown chapter has no node to
+ * hang in — the same rule `assertChapterRef` enforces for a properties patch
+ * (ADR #14, chapters are not created by naming them).
+ *
+ * `group_slug` is "" — the location subfolder of the file era is a loose
+ * grouping convention, and a scene created here has no location yet. Setting
+ * one later is `PATCH /properties`, which is also where the group comes from.
+ */
+export async function createScene(
+  campaign: string,
+  title: string,
+  chapter: string,
+  explicitId?: string,
+): Promise<FileResponse> {
+  const id = resolveNewId(explicitId, title, "Der Titel");
+  assertSafeChapterId(chapter);
+  return mutate(campaign, (tx) => {
+    if (!chapterIdExists(tx, campaign, chapter)) {
+      throw new ApiError(400, `unknown chapter: ${chapter} — create the chapter first`);
+    }
+    const existing = sceneRowOf(tx, campaign, id);
+    if (existing !== undefined) {
+      const suggestion = freeSlug(
+        id,
+        (candidate) => sceneRowOf(tx, campaign, candidate) !== undefined,
+      );
+      throw slugTaken(
+        "Szene",
+        id,
+        suggestion,
+        scenePath(existing.chapterId ?? chapter, existing.groupSlug, existing.id),
+      );
+    }
+    tx.insert(scenes)
+      .values({
+        campaignId: campaign,
+        id,
+        chapterId: chapter,
+        // The chapter was CHOSEN here, so it is a declared value: it belongs
+        // in the properties the reading view and the properties form show.
+        chapterDeclared: 1,
+        groupSlug: "",
+        title: title.trim(),
+        pos: nextPos(
+          tx.select({ pos: scenes.pos }).from(scenes).where(eq(scenes.campaignId, campaign)).all(),
+        ),
+      })
+      .run();
+    const row = sceneRowOf(tx, campaign, id);
+    if (row === undefined) throw new ApiError(500, "scene could not be created");
+    indexScene(tx, campaign, row, []);
+    return renderScene(row, [], []);
+  });
+}
+
+/** POST /api/:campaign/npcs { name } -> the npc document (see the notes above). */
+export async function createNpc(
+  campaign: string,
+  name: string,
+  explicitId?: string,
+): Promise<FileResponse> {
+  const id = resolveNewId(explicitId, name, "Der Name");
+  return mutate(campaign, (tx) => {
+    const existing = npcRowOf(tx, campaign, id);
+    if (existing !== undefined && !isEmptyNpcRow(existing)) {
+      const suggestion = freeSlug(id, (candidate) => {
+        const row = npcRowOf(tx, campaign, candidate);
+        return row !== undefined && !isEmptyNpcRow(row);
+      });
+      throw slugTaken("NPC", id, suggestion, npcPath(id));
+    }
+    const stored = name.trim() === id ? "" : name.trim();
+    if (existing === undefined) {
+      tx.insert(npcs).values({ campaignId: campaign, id, name: stored }).run();
+    } else {
+      // An empty row a reference left behind (#70) — this call fills it.
+      tx.update(npcs)
+        .set({ name: stored, rev: existing.rev + 1 })
+        .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, id)))
+        .run();
+    }
+    const row = npcRowOf(tx, campaign, id);
+    if (row === undefined) throw new ApiError(500, "npc could not be created");
+    const relations = relationRows(tx, campaign, id);
+    indexNpc(tx, campaign, row, relations);
+    return renderNpc(row, relations);
+  });
+}
+
+/** POST /api/:campaign/locations { name } -> the location document. */
+export async function createLocation(
+  campaign: string,
+  name: string,
+  explicitId?: string,
+): Promise<FileResponse> {
+  const id = resolveNewId(explicitId, name, "Der Name");
+  return mutate(campaign, (tx) => {
+    const existing = locationRowOf(tx, campaign, id);
+    if (existing !== undefined && !isEmptyLocationRow(existing)) {
+      const suggestion = freeSlug(id, (candidate) => {
+        const row = locationRowOf(tx, campaign, candidate);
+        return row !== undefined && !isEmptyLocationRow(row);
+      });
+      throw slugTaken("Ort", id, suggestion, locationPath(id));
+    }
+    const stored = name.trim() === id ? "" : name.trim();
+    if (existing === undefined) {
+      tx.insert(locations).values({ campaignId: campaign, id, name: stored }).run();
+    } else {
+      tx.update(locations)
+        .set({ name: stored, rev: existing.rev + 1 })
+        .where(and(eq(locations.campaignId, campaign), eq(locations.id, id)))
+        .run();
+    }
+    const row = locationRowOf(tx, campaign, id);
+    if (row === undefined) throw new ApiError(500, "location could not be created");
+    indexLocation(tx, campaign, row);
+    return renderLocation(row);
+  });
 }
 

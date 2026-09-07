@@ -7,6 +7,7 @@
     "./types": "./src/types.ts",
     "./kind": "./src/kind.ts",
     "./refs": "./src/refs.ts",
+    "./slug": "./src/slug.ts",
     "./session-state": "./src/session-state.ts"
   },
   "scripts": {
