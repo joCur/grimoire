@@ -1,6 +1,6 @@
 # e2e — die kritischen Pfade gegen den echten Stack
 
-Playwright-Suite für die neun kritischen Pfade aus `CLAUDE.md`. Gebaute App,
+Playwright-Suite für die zehn kritischen Pfade aus `CLAUDE.md`. Gebaute App,
 echter Server-Prozess auf einer eigenen SQLite-Datenbank, echter Browser.
 Nichts im Browser ist gemockt — die einzige Attrappe ist das LLM: ein lokaler,
 OpenAI-kompatibler Stub (`fixtures/stub-llm.ts`), den der Server über den
@@ -23,7 +23,10 @@ Kampagnen-Markdown-Dateien mehr. Für die Suite heißt das:
   dem Seed in seine eigene Kopie des Baums:
   `test.use({ seed: { files: { "locations/hafen.md": "…" }, remove: ["_campaign.md"] } })`.
   Ohne Seed wird die geteilte pristine Kopie direkt benutzt (niemand schreibt
-  hinein), die meisten Tests kopieren also gar nichts.
+  hinein), die meisten Tests kopieren also gar nichts. Und ein Test, der eine
+  **leere Instanz** braucht — keine Kampagne, der Normalfall einer frischen
+  Installation seit #79 — schaltet den Seed-Lauf ganz ab:
+  `test.use({ seed: { skip: true } })` (Pfad 10, Issue #56).
 - **Zusicherungen laufen über die API** (`api`-Helfer, s. u.) — es gibt keine
   Datei mehr, die man zurücklesen könnte. Der frühere `files`-Helfer ist weg;
   eine Fixture, die von „der Datei auf der Platte" erzählt, wäre eine Lüge.
@@ -160,6 +163,7 @@ mehrere Schreibwege auf ihm liegen:
 | 7 Eigenschaften/409 | `tests/status-control.e2e.ts`, `tests/properties-form.e2e.ts`, `tests/rename.e2e.ts` |
 | 8 Mobil            | `tests/mobile.e2e.ts`                                          |
 | 9 Datei bearbeiten | `tests/block-composer.e2e.ts`, `tests/file-edit.e2e.ts`        |
+| 10 Kaltstart       | `tests/cold-start.e2e.ts`                                       |
 
 `tests/generator-restart.e2e.ts` ist die Neustart-Hälfte von Pfad 6 (#23) und
 braucht darum, wie der Seed-Spec unten, zwei Server hintereinander auf
@@ -169,7 +173,7 @@ da (Ergebnis, Review-Edits) und wird übernommen; ein **laufender** steht als
 `failed` mit „Server wurde während des Laufs neu gestartet — Job neu starten"
 statt als endloser Spinner.
 
-Dazu ein Spec, der auf keinem der neun Pfade liegt, sondern auf der Naht
+Dazu ein Spec, der auf keinem der zehn Pfade liegt, sondern auf der Naht
 darunter: `tests/seed.e2e.ts` (Nachfolger von `first-migration.e2e.ts`, Issue
 #79 AK6). Er belegt zweierlei — dass eine frische Instanz **leer** startet
 (kein Boot-Import mehr) und dass `grimoire seed` den Markdown-Baum vollständig
@@ -209,6 +213,16 @@ gibt), die Kinds mit und ohne Editor und die Verlustpfade (Navigation,
 fehlgeschlagener Refetch, Status-Regler daneben). Jeder Test dort betritt den
 Editor über `openRawEditor` — erst „Bearbeiten", dann der Umschalter „Roh" —,
 weil „Bearbeiten" allein seit #43 im Composer landet.
+
+Pfad 10 (`cold-start.e2e.ts`, #56) ist der einzige Pfad, der OHNE Seed läuft:
+`test.use({ seed: { skip: true } })` startet den Server auf einem leeren
+Datenverzeichnis, der Importer läuft nie — genau das, was eine frische
+Installation seit #79 ist. Der Spec legt darum alles selbst an (Kampagne →
+Kapitel → Szene → Text → Session) und baut seinen `api`-Helfer mit
+`apiFor(server.url, id)`, weil die Kampagnen-id erst zur Laufzeit existiert.
+Dazu die beiden Listen-Einstiege („NPC/Ort anlegen") mit der
+Slug-Kollision — 409 mit Vorschlag, nichts geschrieben, der Vorschlag als ein
+Klick — und dieselben Listen bei 390px, womit der Spec auch auf Pfad 8 liegt.
 
 Beide lesen nach jedem Speichern die Datei über die API zurück, und der
 Composer parst und serialisiert den Textkörper: „kein Byte Diff außer dem bearbeiteten Block" ist

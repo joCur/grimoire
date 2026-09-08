@@ -12,6 +12,7 @@ import type { LucideIcon } from "lucide-react";
 import { Link, useParams } from "react-router";
 
 import { fetchTree } from "@/api";
+import { LocationCreateAction, NpcCreateAction } from "@/components/CreateActions";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { locationName } from "@/lib/campaign";
 import { browseListTitle } from "@/lib/entity";
@@ -30,9 +31,19 @@ export function BrowseRoute() {
     <>
       <MobileBackRow campaign={campaign} />
       <div className="mx-auto max-w-[760px] px-5 pt-5 pb-16 md:px-7 md:pt-10">
-        <h1 className="mb-3 font-serif text-[24px] leading-[1.25] font-semibold text-foreground">
-          {title ?? "Nachschlagen"}
-        </h1>
+        {/* The list heading carries the list's own create action (issue #56):
+            these two pages are the only surfaces that show ALL npcs/orte, and
+            the only ones a phone reaches (issue #11). Szenen are created in
+            their chapter, in the pool — a scene without one has no address. */}
+        <div className="mb-3 flex flex-wrap items-baseline gap-3">
+          <h1 className="font-serif text-[24px] leading-[1.25] font-semibold text-foreground">
+            {title ?? "Nachschlagen"}
+          </h1>
+          <span className="ml-auto">
+            {kind === "npcs" && <NpcCreateAction campaign={campaign} />}
+            {kind === "locations" && <LocationCreateAction campaign={campaign} />}
+          </span>
+        </div>
         {title === undefined && (
           <p className="text-[13.5px] text-muted-foreground">Diese Liste gibt es nicht.</p>
         )}

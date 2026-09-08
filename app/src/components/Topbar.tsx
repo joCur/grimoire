@@ -68,12 +68,23 @@
 import type { FileResponse } from "@grimoire/shared/types";
 import { isSessionEmpty } from "@grimoire/shared/session-state";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, Pause, Play, Search, Sparkles, Square, Trash2 } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Pause,
+  Play,
+  Plus,
+  Search,
+  Sparkles,
+  Square,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, matchPath, useLocation, useNavigate } from "react-router";
 
 import { continueSession, endSession, fetchCampaigns, fetchTree, pauseSession } from "@/api";
 import { CommandPalette } from "@/components/CommandPalette";
+import { CampaignCreateDialog } from "@/components/CreateActions";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
@@ -771,8 +782,23 @@ function PoolReviewLink({ campaign }: { campaign: string }) {
   );
 }
 
+/**
+ * The switcher is also where a SECOND campaign is created (PO feedback on
+ * issue #56). The cold start covers the FIRST one, but on a running instance
+ * this menu was a read-only list, so a second campaign had no entry point in
+ * the UI at all. The menu therefore ends with a quiet „Kampagne anlegen" that
+ * opens the shared create dialog (components/CreateActions.tsx) and navigates
+ * into the new campaign.
+ *
+ * What used to close the menu — „Kampagnen liegen in der Datenbank — Import
+ * über „grimoire seed"" — is GONE and gets no replacement (PO feedback on the
+ * same review): a shell command is developer jargon, `grimoire seed` belongs
+ * in README.md/docs/DEPLOYMENT.md, and where campaigns are stored is not a
+ * question this menu has to answer while switching between them.
+ */
 function CampaignSwitcher({ campaign }: { campaign: string }) {
   const navigate = useNavigate();
+  const [createOpen, setCreateOpen] = useState(false);
   const { data } = useQuery({ queryKey: ["campaigns"], queryFn: fetchCampaigns });
   const current = campaignLabel(
     (data ?? []).find((c) => c.id === campaign),
@@ -829,10 +855,17 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
           </p>
         )}
         <DropdownMenuSeparator />
-        <p className="px-2.5 pt-[7px] pb-[5px] text-[11.5px] text-faint">
-          Kampagnen liegen in der Datenbank — Import über „grimoire seed“
-        </p>
+        <DropdownMenuItem
+          // The dialog must not mount inside the menu: Radix unmounts the
+          // content on select, which would take the dialog with it.
+          onSelect={() => setCreateOpen(true)}
+          className="gap-2 text-[13px] text-body-secondary"
+        >
+          <Plus aria-hidden size={13} className="flex-none text-muted-foreground" />
+          Kampagne anlegen
+        </DropdownMenuItem>
       </DropdownMenuContent>
+      {createOpen && <CampaignCreateDialog onClose={() => setCreateOpen(false)} />}
     </DropdownMenu>
   );
 }

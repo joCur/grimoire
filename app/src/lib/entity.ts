@@ -32,17 +32,14 @@ export function entityHeaderKind(kind: EntityKind): EntityHeaderKind {
 }
 
 /**
- * Entity ids are kebab slugs — the server's `ENTITY_SLUG` (store/write.ts),
- * spelled out ONCE for the app. Three places ask the question and each used to
- * carry its own copy: the properties form (does an unknown value become an
- * entry or stay free text?), its `npcs` list (is this an id at all?) and the
- * review's #npc lines.
+ * Entity ids are kebab slugs. The rule itself lives in `@grimoire/shared/slug`
+ * since issue #56 — server and app derive the SAME id from a typed title, so
+ * the regex and the transliteration cannot be two copies any more. Re-exported
+ * here because this is where the app's callers look for it: the properties form
+ * (does an unknown value become an entry or stay free text?), its `npcs` list
+ * (is this an id at all?) and the review's #npc lines.
  */
-const ENTITY_SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-
-export function isEntityId(value: string): boolean {
-  return ENTITY_SLUG.test(value);
-}
+export { isEntityId } from "@grimoire/shared/slug";
 
 /**
  * German labels for the known npc `status` values (shared NPC_STATUSES).

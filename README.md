@@ -9,7 +9,10 @@
 >   **Dev-/E2E-Werkzeug `grimoire seed`** (siehe `docs/DEPLOYMENT.md`
 >   Abschnitt 2b); `examples/` ist seine Referenz und damit die Fixture-Quelle
 >   von Tests und E2E. Der **Server importiert nichts** — eine frische Instanz
->   startet leer (Issue #79). Nichts Neues wird in diesem Format geschrieben —
+>   startet leer (Issue #79) — und legt seit Issue #56 alles Weitere in der UI
+>   an (Kampagne, Kapitel, Szene, NPC, Ort; die `id` wird dabei aus dem
+>   getippten Namen abgeleitet, eine Regel: `@grimoire/shared/slug`).
+>   Nichts Neues wird in diesem Format geschrieben —
 >   die Beschreibung bleibt, weil `seed` jederzeit wieder laufen kann und weil
 >   `examples/` weiter das committete Beispiel ist.
 > - **Body-Vokabular — normativ.** Callouts (`> [!readaloud]` &c.), die

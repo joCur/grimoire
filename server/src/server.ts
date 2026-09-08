@@ -20,6 +20,32 @@
 //
 //   [x] GET  /api/campaigns                    campaign list (directories + lastSession +
 //                                              name/description from _campaign)
+//   [x] POST /api/campaigns                    { name, description? } -> 201 CampaignSummary.
+//                                              THE COLD START (issue #56): since #79 a fresh
+//                                              instance boots empty, so this is how the first
+//                                              campaign comes into being. `id` is DERIVED from
+//                                              the name with the shared slug rule
+//                                              (@grimoire/shared/slug — ä→ae, ö→oe, ü→ue, ß→ss,
+//                                              everything else folded, kebab-cased); a name
+//                                              that yields no slug is 400, a taken id is
+//                                              409 { code: "slug_taken", id, suggestion, path }
+//   [x] POST /api/:campaign/chapters           { title, goal? } -> 201 the chapter document.
+//                                              Same id derivation and same 400/409 as above;
+//                                              `goal` lands under `## Ziel des Kapitels`, the
+//                                              heading the pool reads its goal line from
+//   [x] POST /api/:campaign/scenes             { title, chapter } -> 201 the scene document
+//                                              (type planned, status draft, empty body,
+//                                              group_slug ""). `chapter` is REQUIRED and must
+//                                              exist — 400 otherwise: a scene's chapter is
+//                                              part of its address and chapters are never
+//                                              created by being named (ADR #14)
+//   [x] POST /api/:campaign/npcs               { name } -> 201 the npc document. An EMPTY
+//                                              entry for the derived id (one a reference
+//                                              created, issue #70) is FILLED rather than
+//                                              collided with; an entry that holds content
+//                                              answers the `slug_taken` 409
+//   [x] POST /api/:campaign/locations          { name } -> 201 the location document, same
+//                                              rules as npcs
 //   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (properties parsed)
 //   [x] GET  /api/:campaign/file?path=...      one document (raw + parsed + rev). glossary
 //                                              answers 200 with an EMPTY body when the

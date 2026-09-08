@@ -78,7 +78,11 @@ export function NpcCreateDialog({
               autoComplete="off"
               aria-invalid={idInvalid}
               className="w-full rounded-md border border-input bg-panel-deep px-3 py-2 font-mono text-[13.5px] text-foreground outline-none placeholder:text-muted-foreground max-md:text-[16px]"
-              placeholder="alte-fischerin"
+              // Generic, like every other create hint (PO feedback on issue
+              // #56): the field is normally prefilled from the log line
+              // anyway, and a sample-campaign id in an empty field reads like
+              // a default.
+              placeholder="id-des-npcs"
             />
           </label>
           <label className="flex flex-col gap-1.5">
@@ -88,7 +92,7 @@ export function NpcCreateDialog({
               onChange={(e) => setName(e.target.value)}
               autoComplete="off"
               className="w-full rounded-md border border-input bg-panel-deep px-3 py-2 text-[13.5px] text-foreground outline-none placeholder:text-muted-foreground max-md:text-[16px]"
-              placeholder="Alte Fischerin"
+              placeholder="Name des NPCs"
             />
           </label>
 
