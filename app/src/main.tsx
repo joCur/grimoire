@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 
 import { App } from "@/App";
+import { I18nProvider } from "@/i18n";
 
 import "@fontsource-variable/literata";
 import "@fontsource-variable/literata/wght-italic.css";
@@ -23,9 +24,14 @@ if (!rootElement) throw new Error("#root element missing in index.html");
 createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      {/* The UI language (issue #69) comes from the server, so the provider
+          sits INSIDE the query client and above everything that renders
+          copy — a switch re-renders the whole tree at once. */}
+      <I18nProvider>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </I18nProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

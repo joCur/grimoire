@@ -4,7 +4,8 @@
 # published image is built at the version tag.
 #
 #   test          — every PR and every main push: install, typecheck all
-#                   workspaces, tests, app build (runtime: Bun)
+#                   workspaces, the i18n lint gate (issue #69), tests,
+#                   app build (runtime: Bun)
 #   db-smoke-node — the same DB smoke file on NODE, so the `node:sqlite`
 #                   primary backend is proven, not just Bun's fallback
 #                   (issue #54, ADR #13)
@@ -53,6 +54,13 @@ jobs:
       # Root script fans out to all three workspaces (bun run --filter '*').
       - name: Typecheck (shared, server, app)
         run: bun run typecheck
+
+      # The i18n gate (issue #69): user-visible copy belongs in the catalog,
+      # not in a component. Sharp for the migrated files, a warning list for
+      # the rest — see eslint.config.js. Warnings do not fail the job; an
+      # error in a migrated file does.
+      - name: Lint (i18n gate)
+        run: bun run lint
 
       - name: Tests
         run: bun test

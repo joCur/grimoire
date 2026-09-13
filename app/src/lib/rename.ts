@@ -5,11 +5,15 @@
 // cascade the SERVER computes: the app only decides whether the file on
 // screen can be renamed at all, validates the new id the same way the server
 // does (fail before the request, not after it), and turns the server's
-// answers into German lines.
+// answers into readable lines — in the UI language since issue #69, which is
+// why every label function takes the translator as an argument instead of
+// carrying copy of its own.
 
 import type { EntityKind } from "@grimoire/shared/types";
 
 import { ApiError, type RenameKind, type UsageGroup, type UsageRef, type UsageReport } from "@/api";
+import type { Translate } from "@/i18n/format";
+import type { MessageKey } from "@/i18n/messages";
 import { fmString } from "@/lib/properties";
 import { isNpcSlug } from "@/lib/review";
 
@@ -56,17 +60,17 @@ export function renameTargetFor(file: {
   return oldId === "" ? undefined : { kind: file.kind, oldId };
 }
 
-/** German label of a rename kind, for the dialog copy. */
-export function renameKindLabel(kind: RenameKind): string {
+/** Label of a rename kind, for the dialog copy (catalog, issue #69). */
+export function renameKindLabel(kind: RenameKind, t: Translate): string {
   switch (kind) {
     case "npc":
-      return "NPC";
+      return t("rename.kind.npc");
     case "location":
-      return "Ort";
+      return t("rename.kind.location");
     case "scene":
-      return "Szene";
+      return t("rename.kind.scene");
     case "chapter":
-      return "Kapitel";
+      return t("rename.kind.chapter");
   }
 }
 
@@ -76,65 +80,70 @@ export function renameKindLabel(kind: RenameKind): string {
  * dialog can block a request that would only come back as a 400.
  * An empty input is not an error, just not submittable.
  */
-export function newIdError(newId: string, oldId: string): string | undefined {
+export function newIdError(newId: string, oldId: string, t: Translate): string | undefined {
   const id = newId.trim();
   if (id === "") return undefined;
-  if (id === oldId) return "Unverändert — das ist schon die aktuelle id.";
-  if (!isNpcSlug(id)) return "id braucht Kleinbuchstaben, Ziffern und einzelne Bindestriche.";
-  if (RESERVED_IDS.has(id)) return "npcs, locations und sessions sind reservierte Namen.";
+  if (id === oldId) return t("rename.error.unchanged");
+  if (!isNpcSlug(id)) return t("rename.error.slug");
+  if (RESERVED_IDS.has(id)) return t("rename.error.reserved");
   return undefined;
 }
 
 /** True when this input can be sent (non-empty and without a rule violation). */
 export function canSubmitNewId(newId: string, oldId: string): boolean {
   const id = newId.trim();
-  return id !== "" && newIdError(id, oldId) === undefined;
+  // Rule check only — the MESSAGE needs a language, the verdict does not, so
+  // the catalog-free path stays available to callers without a translator.
+  return id !== "" && (id === oldId ? false : isNpcSlug(id) && !RESERVED_IDS.has(id));
 }
 
-/** „betrifft 1 Eintrag" / „betrifft 3 Einträge" — the preview's headline. */
-export function changedCountLabel(count: number): string {
-  return `betrifft ${count} ${count === 1 ? "Eintrag" : "Einträge"}`;
+/** „betrifft 1 Eintrag" / „betrifft 3 Einträge" — the preview's headline
+ *  (ICU plural in the catalog since #69). */
+export function changedCountLabel(count: number, t: Translate): string {
+  return t("rename.changed", { count });
 }
 
 // --- usage summary (issue #60) ----------------------------------------------
 
 /**
- * German name of each reference kind, singular and plural. The wire keeps
- * stable English keys (`UsageRef`); the DM reads „3 Szenen, 2 Beziehungen,
- * 4 Log-Zeilen".
+ * The catalog key of each reference kind. The wire keeps stable English keys
+ * (`UsageRef`); the sentence („3 Szenen, 2 Beziehungen, 4 Log-Zeilen" /
+ * "3 scenes, 2 relationships, 4 log lines") is an ICU plural per key, so no
+ * caller has to pick a form.
+ *
+ * `bodyRefs` (issue #68) is a body text that says `[[<id>]]` — „Textstelle"
+ * is what the DM sees on the page, a name in running prose rather than a
+ * properties field.
  */
-const USAGE_REF_LABEL: Record<UsageRef, [string, string]> = {
-  sceneNpcs: ["Szene", "Szenen"],
-  npcRelations: ["Beziehung", "Beziehungen"],
-  sceneLocation: ["Szene", "Szenen"],
-  scenesPlayed: ["Session-Eintrag", "Session-Einträge"],
-  logEntries: ["Log-Zeile", "Log-Zeilen"],
-  chapterScenes: ["Szene", "Szenen"],
-  chapterNpcs: ["NPC", "NPCs"],
-  chapterLocations: ["Ort", "Orte"],
-  // Issue #68: a body text that says `[[<id>]]`. „Textstelle" is what the DM
-  // sees on the page — a name in running prose, not a properties field.
-  bodyRefs: ["Textstelle", "Textstellen"],
+const USAGE_REF_KEY: Record<UsageRef, MessageKey> = {
+  sceneNpcs: "rename.usage.sceneNpcs",
+  npcRelations: "rename.usage.npcRelations",
+  sceneLocation: "rename.usage.sceneLocation",
+  scenesPlayed: "rename.usage.scenesPlayed",
+  logEntries: "rename.usage.logEntries",
+  chapterScenes: "rename.usage.chapterScenes",
+  chapterNpcs: "rename.usage.chapterNpcs",
+  chapterLocations: "rename.usage.chapterLocations",
+  bodyRefs: "rename.usage.bodyRefs",
 };
 
-/** „4 Log-Zeilen" — one group as a German phrase. */
-export function usageGroupLabel(group: UsageGroup): string {
-  const [one, many] = USAGE_REF_LABEL[group.ref];
-  return `${group.count} ${group.count === 1 ? one : many}`;
+/** „4 Log-Zeilen" — one group as a phrase. */
+export function usageGroupLabel(group: UsageGroup, t: Translate): string {
+  return t(USAGE_REF_KEY[group.ref], { count: group.count });
 }
 
 /**
  * The whole report in one line: „3 Szenen, 2 Beziehungen, 4 Log-Zeilen" —
  * or the honest empty case, which is the reassuring one before a rename.
  */
-export function usageSummary(usage: UsageReport): string {
-  if (usage.groups.length === 0) return "Keine Referenzen — nichts hängt an dieser id.";
-  return usage.groups.map(usageGroupLabel).join(", ");
+export function usageSummary(usage: UsageReport, t: Translate): string {
+  if (usage.groups.length === 0) return t("rename.usage.none");
+  return usage.groups.map((group) => usageGroupLabel(group, t)).join(", ");
 }
 
 /** „12 Verwendungen" / „1 Verwendung" — the summary's headline. */
-export function usageTotalLabel(total: number): string {
-  return `${total} ${total === 1 ? "Verwendung" : "Verwendungen"}`;
+export function usageTotalLabel(total: number, t: Translate): string {
+  return t("rename.usage.total", { count: total });
 }
 
 /**
@@ -158,20 +167,20 @@ export function renamedPath(
   return currentPath;
 }
 
-/** One quiet German line for a failed rename (or preview). */
-export function renameErrorMessage(error: unknown): string {
-  if (!(error instanceof ApiError)) return "Umbenennen fehlgeschlagen — Server prüfen.";
+/** One quiet line for a failed rename (or preview), in the UI language. */
+export function renameErrorMessage(error: unknown, t: Translate): string {
+  if (!(error instanceof ApiError)) return t("rename.failed");
   const path = typeof error.details.path === "string" ? error.details.path : undefined;
   switch (error.status) {
     case 409:
       return path === undefined
-        ? "Mehrere Einträge beanspruchen diese id — Konflikt in der Datenbank."
-        : `${path} existiert schon — andere id wählen.`;
+        ? t("rename.conflict.ambiguous")
+        : t("rename.conflict.path", { path });
     case 404:
-      return "Nicht gefunden — Ansicht neu laden.";
+      return t("rename.notFound");
     case 400:
-      return "id abgelehnt — Kleinbuchstaben, Ziffern und einzelne Bindestriche.";
+      return t("rename.badId");
     default:
-      return "Umbenennen fehlgeschlagen — Server prüfen.";
+      return t("rename.failed");
   }
 }

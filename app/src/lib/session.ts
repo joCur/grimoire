@@ -11,6 +11,8 @@
 
 import { isPaused, openPause, sessionPauses } from "@grimoire/shared/session-state";
 
+import { formatDate, type Translate } from "@/i18n/format";
+
 export interface LogEntry {
   /** `HH:MM` — undefined for degraded raw lines. */
   time?: string;
@@ -217,9 +219,16 @@ export function sessionElapsedLabel(
  * honest answer for a hand-edited file, and better than the raw id, which is
  * 36 characters of noise.
  */
-export function sessionDateLabel(properties: Record<string, unknown> | undefined): string {
+export function sessionDateLabel(
+  properties: Record<string, unknown> | undefined,
+  t: Translate,
+): string {
   const started = properties?.started;
   const m = typeof started === "string" ? /^(\d{4})-(\d{2})-(\d{2})/.exec(started.trim()) : null;
-  if (m === null) return "Session";
-  return `Session vom ${m[3]}.${m[2]}.${m[1]}`;
+  if (m === null) return t("session.date.unknown");
+  // The DATE itself goes through `Intl` in the selected language (issue #69
+  // AK3): `13.09.2026` in German, `09/13/2026` in English. Built from the
+  // zone-less parts as a LOCAL date, so the day never shifts by a timezone.
+  const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return t("session.date", { date: formatDate(t.locale, date) });
 }

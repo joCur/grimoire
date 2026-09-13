@@ -18,6 +18,7 @@ import {
   requireCampaign,
 } from "../store/read";
 import { searchCampaign } from "../store/search";
+import { readSettings, writeSettings } from "../store/settings";
 import { isRenameKind, RENAME_KINDS, renameEntity } from "../store/rename";
 import { isUsageKind, readUsage, USAGE_KINDS } from "../store/usage";
 import {
@@ -119,6 +120,18 @@ function normalizeLineText(v: unknown): string | undefined {
 
 // GET /api/campaigns -> CampaignSummary[]
 api.get("/campaigns", async (c) => c.json(await listCampaigns()));
+
+// GET /api/settings -> InstanceSettings (issue #69). Campaign-independent:
+// the UI language belongs to the INSTANCE, and the app asks for it before it
+// knows which campaign it is about to open (the cold start has none).
+api.get("/settings", async (c) => c.json(await readSettings()));
+
+// PUT /api/settings { locale } -> InstanceSettings. `null` clears the setting
+// (back to "follow the browser"); anything but de/en/null is a 400.
+api.put("/settings", async (c) => {
+  const body = await jsonBody(c, ["locale"]);
+  return c.json(await writeSettings(body));
+});
 
 // GET /api/:campaign/tree -> CampaignTree
 api.get("/:campaign/tree", async (c) => c.json(await buildTree(c.req.param("campaign"))));

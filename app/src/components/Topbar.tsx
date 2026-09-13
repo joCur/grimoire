@@ -97,10 +97,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { IconLogo } from "@/icons";
+import { isLocale, LOCALES, useI18n, useT, type Locale, type Translate } from "@/i18n";
 import { campaignDescription, campaignLabel } from "@/lib/campaign";
 import { sessionElapsedLabel, sessionIsPaused } from "@/lib/session";
 import { navSection } from "@/lib/topbar-nav";
@@ -115,6 +118,7 @@ import {
 } from "@/lib/use-session";
 
 export function Topbar() {
+  const t = useT();
   const { pathname } = useLocation();
   const sceneMatch = matchPath("/:campaign/file/*", pathname);
   const liveMatch = matchPath("/:campaign/live", pathname);
@@ -171,7 +175,7 @@ export function Topbar() {
           className="-ml-1.5 flex flex-none items-center gap-[9px] rounded-md px-1.5 py-1 font-serif text-[17px] font-semibold tracking-[.01em] text-foreground hover:text-primary-hover"
         >
           <IconLogo size={19} className="text-primary" />
-          Grimoire
+          {t("topbar.brand")}
         </Link>
 
         {/* ONE campaign context for every campaign-scoped view: the switcher
@@ -200,7 +204,7 @@ export function Topbar() {
             // Deliberately NOT "Nachschlagen": that is the mobile start
             // surface's nav, and on the pool both live in the DOM at once
             // (responsive swap) — two navs with one name is a worse tree.
-            aria-label="Kapitel, NPCs und Orte"
+            aria-label={t("topbar.nav.aria")}
             className="flex flex-none items-center gap-1 border-l border-border pl-3 text-[13px] max-lg:hidden"
           >
             {/* The section of the current view carries aria-current and the
@@ -210,17 +214,17 @@ export function Topbar() {
                 section and mark nothing. */}
             <TopbarNavLink
               to={`/${campaign}`}
-              label="Kapitel"
+              label={t("topbar.nav.chapters")}
               active={section === "chapters"}
             />
             <TopbarNavLink
               to={`/${campaign}/list/npcs`}
-              label="NPCs"
+              label={t("topbar.nav.npcs")}
               active={section === "npcs"}
             />
             <TopbarNavLink
               to={`/${campaign}/list/locations`}
-              label="Orte"
+              label={t("topbar.nav.locations")}
               active={section === "locations"}
             />
           </nav>
@@ -244,7 +248,7 @@ export function Topbar() {
               className="hidden h-auto min-w-[5rem] shrink basis-[200px] gap-2 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-card hover:text-soft sm:flex"
             >
               <Search aria-hidden size={15} className="flex-none text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-left">Suchen …</span>
+              <span className="min-w-0 flex-1 truncate text-left">{t("topbar.search")}</span>
               <span className="flex-none rounded-[4px] border border-input px-[5px] py-px font-mono text-[11px] text-muted-foreground">
                 ⌘K
               </span>
@@ -417,16 +421,17 @@ function SessionChip({
   state: SessionChipState;
   mode: "link" | "menu";
 }) {
+  const t = useT();
   if (state === "hidden") return null;
   if (state === "error") {
     return (
       <span
         role="status"
-        aria-label="Session-Status unbekannt — Server prüfen"
+        aria-label={t("session.status.unknown.aria")}
         data-session-chip="error"
         className={cn(SESSION_CHIP_BASE, SESSION_CHIP_TONE.error)}
       >
-        Status unbekannt
+        {t("session.status.unknown")}
       </span>
     );
   }
@@ -446,23 +451,27 @@ function SessionRunningChip({
   session: FileResponse;
   mode: "link" | "menu";
 }) {
+  const t = useT();
   const elapsed = useElapsedLabel(session);
   // The state is part of the accessible name — the dimmed colour alone is not
   // information (quality floor, AK8).
   const paused = sessionIsPaused(session);
-  const state = paused ? "Session pausiert" : "Session läuft";
-  const label = elapsed === undefined ? state : `${state}, ${elapsed}`;
+  const state = t(paused ? "session.state.paused" : "session.state.running");
+  const label =
+    elapsed === undefined ? state : t("session.state.withElapsed", { state, elapsed });
 
   if (mode === "link") {
     return (
       <Link
         to={`/${campaign}/live`}
-        aria-label={`${label} — zur laufenden Session`}
+        aria-label={t("session.chip.link.aria", { label })}
         data-session-chip={paused ? "paused" : "running"}
         className={cn(SESSION_CHIP_BASE, paused ? SESSION_CHIP_TONE.paused : SESSION_CHIP_TONE.running)}
       >
         <SessionDot paused={paused} />
-        <span className="font-mono tabular-nums">{elapsed ?? (paused ? "pausiert" : "läuft")}</span>
+        <span className="font-mono tabular-nums">
+          {elapsed ?? t(paused ? "session.short.paused" : "session.short.running")}
+        </span>
       </Link>
     );
   }
@@ -488,10 +497,11 @@ function SessionRunningChip({
  * navigates there.
  */
 function SessionStartChip({ campaign }: { campaign: string }) {
+  const t = useT();
   const navigate = useNavigate();
   const toLive = () => void navigate(`/${campaign}/live`);
   const { enter, entering, conflict, failed } = useSessionStartFlow(campaign, toLive);
-  const label = "Session starten";
+  const label = t("session.start");
   return (
     <button
       type="button"
@@ -504,9 +514,9 @@ function SessionStartChip({ campaign }: { campaign: string }) {
       }}
       title={
         failed
-          ? "Session nicht gestartet — Server prüfen"
+          ? t("session.start.failed")
           : conflict === "session_running"
-            ? "Eine ältere Session läuft noch — im Live-Modus beenden"
+            ? t("session.start.olderRunning")
             : undefined
       }
       className={cn(
@@ -538,6 +548,7 @@ function SessionMenuChip({
   elapsed: string | undefined;
   paused: boolean;
 }) {
+  const t = useT();
   const navigate = useNavigate();
   const [discardOpen, setDiscardOpen] = useState(false);
   // ONE entry, two directions (issue #40 AK8): the pause endpoints open and
@@ -559,7 +570,7 @@ function SessionMenuChip({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          aria-label={`${label} — Session-Menü`}
+          aria-label={t("session.chip.menu.aria", { label })}
           disabled={busy}
           data-session-chip={paused ? "paused" : "running"}
           className={cn(
@@ -569,7 +580,7 @@ function SessionMenuChip({
         >
           <SessionDot paused={paused} />
           <span className="font-mono tabular-nums">
-            {elapsed ?? (paused ? "pausiert" : "läuft")}
+            {elapsed ?? t(paused ? "session.short.paused" : "session.short.running")}
           </span>
           <ChevronDown aria-hidden size={13} className="flex-none opacity-70" />
         </DropdownMenuTrigger>
@@ -580,11 +591,11 @@ function SessionMenuChip({
             ) : (
               <Pause aria-hidden size={14} className="flex-none text-muted-foreground" />
             )}
-            {paused ? "Weiter" : "Pause"}
+            {t(paused ? "session.menu.continue" : "session.menu.pause")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => end.mutate()}>
             <Square aria-hidden size={14} className="flex-none text-muted-foreground" />
-            Session beenden
+            {t("session.menu.end")}
           </DropdownMenuItem>
           {/* Only while the session is EMPTY (issue #40 AK7) — the mis-click's
               undo, gone the moment the evening has content. */}
@@ -596,7 +607,7 @@ function SessionMenuChip({
                 onSelect={() => setDiscardOpen(true)}
               >
                 <Trash2 aria-hidden size={14} className="flex-none" />
-                Session verwerfen
+                {t("session.menu.discard")}
               </DropdownMenuItem>
             </>
           )}
@@ -604,7 +615,7 @@ function SessionMenuChip({
       </DropdownMenu>
       {(pause.isError || end.isError) && (
         <span className="flex-none text-[12.5px] text-destructive">
-          Session nicht geändert — Server prüfen.
+          {t("session.write.failed")}
         </span>
       )}
       <DiscardSessionDialog campaign={campaign} open={discardOpen} onOpenChange={setDiscardOpen} />
@@ -620,10 +631,11 @@ function SessionMenuChip({
  * exactly the way back out of a lookup.
  */
 function MobileSessionRow({ campaign, session }: { campaign: string; session: FileResponse }) {
+  const t = useT();
   return (
     <div className="flex min-h-11 flex-none items-center gap-2.5 border-b border-border bg-panel-deep px-4 md:hidden">
       <SessionChip campaign={campaign} session={session} state="running" mode="link" />
-      <span className="ml-auto text-[13px] text-body-secondary">Zur Session</span>
+      <span className="ml-auto text-[13px] text-body-secondary">{t("topbar.session.back")}</span>
     </div>
   );
 }
@@ -681,6 +693,7 @@ function DiscardSessionDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useT();
   const navigate = useNavigate();
   const discard = useSessionDiscard(campaign, () => {
     onOpenChange(false);
@@ -690,11 +703,11 @@ function DiscardSessionDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogTitle>Leere Session verwerfen?</DialogTitle>
-        <DialogDescription>Die Session wird gelöscht.</DialogDescription>
+        <DialogTitle>{t("session.discard.title")}</DialogTitle>
+        <DialogDescription>{t("session.discard.description")}</DialogDescription>
         {discard.isError && (
           <p className="mt-3 text-[12.5px] text-destructive">
-            Session nicht verworfen — Server prüfen und neu laden.
+            {t("session.discard.failed")}
           </p>
         )}
         <div className="mt-4 flex items-center justify-end gap-2">
@@ -704,7 +717,7 @@ function DiscardSessionDialog({
               variant="outline"
               className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
             >
-              Abbrechen
+              {t("common.cancel")}
             </Button>
           </DialogClose>
           <Button
@@ -713,7 +726,7 @@ function DiscardSessionDialog({
             onClick={() => discard.mutate()}
             className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
           >
-            Verwerfen
+            {t("common.discard")}
           </Button>
         </div>
       </DialogContent>
@@ -728,12 +741,13 @@ function DiscardSessionDialog({
  * polling only while a job is actually running.
  */
 function GeneratorLink({ campaign }: { campaign: string }) {
+  const t = useT();
   const { data } = useGenerateJob(campaign);
   const running = data?.status === "running";
   return (
     <Link
       to={`/${campaign}/generate`}
-      title={running ? "Generierung läuft" : undefined}
+      title={running ? t("topbar.generator.running") : undefined}
       className={cn(
         buttonVariants({ variant: "outline" }),
         "h-auto flex-none gap-[7px] border-input bg-card px-3.5 py-[7px] text-[13px] font-normal text-soft hover:border-border-hover hover:bg-card hover:text-foreground [&_svg]:size-[15px]",
@@ -742,7 +756,7 @@ function GeneratorLink({ campaign }: { campaign: string }) {
       <Sparkles aria-hidden />
       {/* Below xl the row is tight (issue #50): the label steps aside and the
           icon carries the entry — the accessible name stays either way. */}
-      <span className="max-xl:sr-only">Generator</span>
+      <span className="max-xl:sr-only">{t("topbar.generator")}</span>
       {running && (
         <>
           {/* Pulses only where motion is welcome; otherwise a static dot
@@ -751,7 +765,7 @@ function GeneratorLink({ campaign }: { campaign: string }) {
             aria-hidden
             className="size-1.5 flex-none rounded-full bg-primary motion-safe:animate-pulse"
           />
-          <span className="sr-only">Generierung läuft</span>
+          <span className="sr-only">{t("topbar.generator.running")}</span>
         </>
       )}
     </Link>
@@ -768,6 +782,7 @@ function ReviewProgress({ campaign }: { campaign: string }) {
 /** Pool affordance into the review: only when the harvested session (the
  *  server's last started one) still has entries — nothing to see otherwise. */
 function PoolReviewLink({ campaign }: { campaign: string }) {
+  const t = useT();
   const review = useReviewEntries(campaign);
   if (review.isPending || review.noSession || review.isError || review.pendingCount === 0) {
     return null;
@@ -777,7 +792,7 @@ function PoolReviewLink({ campaign }: { campaign: string }) {
       to={`/${campaign}/review`}
       className="flex-none rounded-md px-1.5 py-1 text-[13px] text-body-secondary hover:text-foreground"
     >
-      Review · {review.pendingCount} offen
+      {t("topbar.review.pending", { count: review.pendingCount })}
     </Link>
   );
 }
@@ -797,6 +812,7 @@ function PoolReviewLink({ campaign }: { campaign: string }) {
  * question this menu has to answer while switching between them.
  */
 function CampaignSwitcher({ campaign }: { campaign: string }) {
+  const { t, locale, setLocale, isSwitching } = useI18n();
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
   const { data } = useQuery({ queryKey: ["campaigns"], queryFn: fetchCampaigns });
@@ -825,7 +841,7 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
             "Kapitel · NPCs · Orte" trio. The full name is one click away in
             the menu below. */}
         <span className="min-w-0 max-w-[9.5rem] truncate xl:max-w-[280px]">
-          Kampagne: {current}
+          {t("campaign.switcher.current", { name: current })}
         </span>
         <ChevronDown aria-hidden size={14} className="flex-none text-muted-foreground" />
       </DropdownMenuTrigger>
@@ -851,7 +867,7 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
         ))}
         {data !== undefined && data.length === 0 && (
           <p className="px-2.5 py-[9px] text-[13px] text-muted-foreground">
-            Noch keine Kampagnen gefunden.
+            {t("campaign.switcher.empty")}
           </p>
         )}
         <DropdownMenuSeparator />
@@ -862,10 +878,68 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
           className="gap-2 text-[13px] text-body-secondary"
         >
           <Plus aria-hidden size={13} className="flex-none text-muted-foreground" />
-          Kampagne anlegen
+          {t("create.campaign.title")}
         </DropdownMenuItem>
+        {/* THE language switch (issue #69 AK2) — deliberately NO new chrome
+            element of its own: this menu is already where the INSTANCE is
+            configured, it sits on every campaign-scoped route, and two radio
+            rows cost the topbar no pixel. The choice is stored on the SERVER
+            (PUT /api/settings), so it survives a reload instead of being a
+            per-browser secret (quality floor). */}
+        <DropdownMenuSeparator />
+        <LanguageChoice locale={locale} setLocale={setLocale} busy={isSwitching} t={t} />
       </DropdownMenuContent>
       {createOpen && <CampaignCreateDialog onClose={() => setCreateOpen(false)} />}
     </DropdownMenu>
+  );
+}
+
+/**
+ * The UI language, as the last block of the campaign switcher's menu (issue
+ * #69 AK2). A RADIO group, not two commands: the language is a state with
+ * exactly one current value, and the check mark says which — the same way the
+ * campaign rows above mark the open campaign.
+ *
+ * It is a quiet block on purpose. Switching the language is something a DM
+ * does once, so it must not compete with the campaign rows and must not grow
+ * a control of its own in a topbar that already overflowed once (issue #50).
+ * The two language NAMES are endonyms („Deutsch", "English") — the one kind of
+ * copy that is never translated, because it is read by someone who does not
+ * yet speak the language the UI is in.
+ */
+function LanguageChoice({
+  locale,
+  setLocale,
+  busy,
+  t,
+}: {
+  locale: Locale;
+  setLocale: (locale: Locale) => void;
+  busy: boolean;
+  t: Translate;
+}) {
+  return (
+    <>
+      <p className="px-2.5 pt-1 pb-1.5 text-[11.5px] text-muted-foreground">
+        {t("language.heading")}
+      </p>
+      <DropdownMenuRadioGroup
+        value={locale}
+        onValueChange={(next) => {
+          if (isLocale(next) && next !== locale) setLocale(next);
+        }}
+      >
+        {LOCALES.map((value) => (
+          <DropdownMenuRadioItem
+            key={value}
+            value={value}
+            disabled={busy}
+            className="text-[13px] text-body-secondary"
+          >
+            {t(value === "de" ? "language.de" : "language.en")}
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+    </>
   );
 }

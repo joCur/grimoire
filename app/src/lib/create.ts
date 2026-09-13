@@ -16,6 +16,7 @@
 import { toSlug } from "@grimoire/shared/slug";
 
 import { ApiError } from "@/api";
+import type { Translate } from "@/i18n/format";
 
 /** The id a typed name will produce ("" when the name yields none). */
 export function derivedId(name: string): string {
@@ -55,17 +56,22 @@ export function createConflict(error: unknown): CreateConflict | undefined {
 }
 
 /**
- * The German sentence a failed create shows. The server's own message is used
- * for the two cases where it KNOWS more than the client (the collision and the
- * 400 for a name that yields no id — both already German, both naming the
- * value); everything else degrades to "not saved", because a stack detail in
- * a dialog helps nobody.
+ * The sentence a failed create shows, in the UI language (issue #69 — the
+ * translator is PASSED IN, so this module holds no copy of its own). The
+ * server's own message is still used for the two cases where it KNOWS more
+ * than the client (the collision and the 400 for a name that yields no id —
+ * both naming the value); everything else degrades to "not created", because
+ * a stack detail in a dialog helps nobody.
+ *
+ * Those two server sentences are still German whatever the UI language is —
+ * server strings get stable `code`s in Scheibe 3 of #69, and only then can
+ * the app render them from the catalog.
  */
-export function createErrorMessage(error: unknown): string {
-  if (!(error instanceof ApiError)) return "Nicht angelegt — Server prüfen.";
+export function createErrorMessage(error: unknown, t: Translate): string {
+  if (!(error instanceof ApiError)) return t("create.failed");
   const message = typeof error.details.error === "string" ? error.details.error : "";
   if ((error.status === 409 || error.status === 400) && message !== "") return message;
-  return "Nicht angelegt — Server prüfen.";
+  return t("create.failed");
 }
 
 /** A create may run once the required field carries a derivable name. */

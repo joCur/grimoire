@@ -12,6 +12,12 @@ import {
   derivedAddress,
   derivedId,
 } from "@/lib/create";
+import { translator } from "@/i18n/format";
+
+// The language the assertions below are written in (issue #69): the helpers
+// take the translator as an argument, so a test says so explicitly instead of
+// leaning on a default.
+const t = translator("de");
 
 const conflictError = (details: Record<string, unknown>) =>
   new ApiError(409, "gibt es schon", { error: "NPC „holm\" gibt es schon", ...details });
@@ -76,20 +82,22 @@ describe("createErrorMessage", () => {
     expect(
       createErrorMessage(
         conflictError({ code: "slug_taken", id: "holm", suggestion: "holm-2" }),
+        t,
       ),
     ).toBe("NPC „holm\" gibt es schon");
     expect(
       createErrorMessage(
         new ApiError(400, "x", { error: "Der Name ergibt keine id — bitte Buchstaben verwenden" }),
+        t,
       ),
     ).toBe("Der Name ergibt keine id — bitte Buchstaben verwenden");
   });
 
   test("everything else degrades to one honest sentence", () => {
-    expect(createErrorMessage(new ApiError(500, "x", { error: "internal server error" }))).toBe(
+    expect(createErrorMessage(new ApiError(500, "x", { error: "internal server error" }), t)).toBe(
       "Nicht angelegt — Server prüfen.",
     );
-    expect(createErrorMessage(new ApiError(404, "x", {}))).toBe("Nicht angelegt — Server prüfen.");
-    expect(createErrorMessage(new Error("offline"))).toBe("Nicht angelegt — Server prüfen.");
+    expect(createErrorMessage(new ApiError(404, "x", {}), t)).toBe("Nicht angelegt — Server prüfen.");
+    expect(createErrorMessage(new Error("offline"), t)).toBe("Nicht angelegt — Server prüfen.");
   });
 });

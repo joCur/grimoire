@@ -28,6 +28,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/i18n";
 import {
   canCreate,
   createConflict,
@@ -83,6 +84,7 @@ export function CreateDialog({
   create,
   onClose,
 }: CreateDialogProps) {
+  const t = useT();
   const nameId = useId();
   const extraId = useId();
   const [name, setName] = useState("");
@@ -98,7 +100,7 @@ export function CreateDialog({
     },
     onError: (error) => {
       setConflict(createConflict(error));
-      setMessage(createErrorMessage(error));
+      setMessage(createErrorMessage(error, t));
     },
   });
 
@@ -184,7 +186,7 @@ export function CreateDialog({
                   onClick={() => submit(conflict.suggestion)}
                   className="rounded-sm text-body-secondary underline underline-offset-2 hover:text-foreground"
                 >
-                  „{conflict.suggestion}" verwenden
+                  {t("create.useSuggestion", { id: conflict.suggestion })}
                 </button>
               </>
             )}
@@ -197,7 +199,7 @@ export function CreateDialog({
                 variant="outline"
                 className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
               >
-                Abbrechen
+                {t("common.cancel")}
               </Button>
             </DialogClose>
             <Button
@@ -205,7 +207,7 @@ export function CreateDialog({
               disabled={!canSubmit}
               className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
             >
-              {run.isPending ? "Lege an …" : "Anlegen"}
+              {t(run.isPending ? "common.creating" : "common.create")}
             </Button>
           </div>
         </form>

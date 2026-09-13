@@ -45,6 +45,7 @@ import { useNavigate } from "react-router";
 import { createCampaign, createChapter, createLocation, createNpc, createScene } from "@/api";
 import { CreateDialog, type CreateValues } from "@/components/CreateDialog";
 import { HeaderAction } from "@/components/HeaderAction";
+import { useT } from "@/i18n";
 import { Button } from "@/components/ui/button";
 
 /** Queries that go stale when anything is created. */
@@ -100,17 +101,18 @@ export function useCampaignCreate({ replace = false }: { replace?: boolean } = {
  * fields, the id preview and the 409 branch are the shared ones.
  */
 export function CampaignCreateDialog({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const createCampaignFlow = useCampaignCreate();
   return (
     <CreateDialog
-      title="Kampagne anlegen"
-      description="Der Name wird zur id der Kampagne — sie steht in jeder Adresse und bleibt, wie sie ist. Danach entstehen darin Kapitel und Szenen."
-      nameLabel="Name der Kampagne"
-      namePlaceholder="Name der Kampagne"
-      addressPrefix="id: "
+      title={t("create.campaign.title")}
+      description={t("create.campaign.description")}
+      nameLabel={t("create.campaign.nameLabel")}
+      namePlaceholder={t("create.campaign.namePlaceholder")}
+      addressPrefix={t("create.campaign.idPrefix")}
       extra={{
-        label: "Beschreibung (optional)",
-        placeholder: "Ein Satz, der die Kampagne einordnet",
+        label: t("create.campaign.descriptionLabel"),
+        placeholder: t("create.campaign.descriptionPlaceholder"),
         multiline: true,
       }}
       create={async (values: CreateValues) => {
@@ -161,23 +163,28 @@ export function ChapterCreateAction({
   campaign: string;
   variant?: "quiet" | "primary";
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const afterCreate = useAfterCreate(campaign);
   if (campaign === "") return null;
 
   return (
     <>
-      <CreateTrigger label="Kapitel anlegen" variant={variant} onClick={() => setOpen(true)} />
+      <CreateTrigger
+        label={t("create.chapter.title")}
+        variant={variant}
+        onClick={() => setOpen(true)}
+      />
       {open && (
         <CreateDialog
-          title="Kapitel anlegen"
-          description="Der Titel wird zur id des Kapitels — sie steht in jeder Szenen-Adresse und bleibt, wie sie ist. Das Ziel ist optional und landet unter „Ziel des Kapitels“."
-          nameLabel="Titel"
-          namePlaceholder="Titel des Kapitels"
+          title={t("create.chapter.title")}
+          description={t("create.chapter.description")}
+          nameLabel={t("create.chapter.nameLabel")}
+          namePlaceholder={t("create.chapter.namePlaceholder")}
           addressPrefix=""
           extra={{
-            label: "Ziel des Kapitels (optional)",
-            placeholder: "Was die Gruppe hier erreichen soll",
+            label: t("create.chapter.goalLabel"),
+            placeholder: t("create.chapter.goalPlaceholder"),
             multiline: true,
           }}
           create={async (values: CreateValues) => {
@@ -206,6 +213,7 @@ export function SceneCreateAction({
   chapter: string;
   variant?: "quiet" | "primary";
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const afterCreate = useAfterCreate(campaign);
@@ -213,13 +221,17 @@ export function SceneCreateAction({
 
   return (
     <>
-      <CreateTrigger label="Szene anlegen" variant={variant} onClick={() => setOpen(true)} />
+      <CreateTrigger
+        label={t("create.scene.title")}
+        variant={variant}
+        onClick={() => setOpen(true)}
+      />
       {open && (
         <CreateDialog
-          title="Szene anlegen"
-          description="Die Szene entsteht als Entwurf in diesem Kapitel und öffnet gleich im Editor. Der Titel wird zur id — sie bleibt, wie sie ist."
-          nameLabel="Titel"
-          namePlaceholder="Titel der Szene"
+          title={t("create.scene.title")}
+          description={t("create.scene.description")}
+          nameLabel={t("create.scene.nameLabel")}
+          namePlaceholder={t("create.scene.namePlaceholder")}
           addressPrefix={`${chapter}/`}
           create={async (values: CreateValues) => {
             const created = await createScene(campaign, {
@@ -240,6 +252,7 @@ export function SceneCreateAction({
 }
 
 export function NpcCreateAction({ campaign }: { campaign: string }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const afterCreate = useAfterCreate(campaign);
@@ -247,13 +260,17 @@ export function NpcCreateAction({ campaign }: { campaign: string }) {
 
   return (
     <>
-      <CreateTrigger label="NPC anlegen" variant="quiet" onClick={() => setOpen(true)} />
+      <CreateTrigger
+        label={t("create.npc.title")}
+        variant="quiet"
+        onClick={() => setOpen(true)}
+      />
       {open && (
         <CreateDialog
-          title="NPC anlegen"
-          description="Nur der Name — Rolle, Status und alles Weitere stehen danach im Eigenschaften-Dialog. Aus dem Namen wird die id, und die bleibt."
-          nameLabel="Name"
-          namePlaceholder="Name des NPCs"
+          title={t("create.npc.title")}
+          description={t("create.npc.description")}
+          nameLabel={t("create.npc.nameLabel")}
+          namePlaceholder={t("create.npc.namePlaceholder")}
           addressPrefix="npcs/"
           create={async (values: CreateValues) => {
             const created = await createNpc(campaign, {
@@ -272,6 +289,7 @@ export function NpcCreateAction({ campaign }: { campaign: string }) {
 }
 
 export function LocationCreateAction({ campaign }: { campaign: string }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const afterCreate = useAfterCreate(campaign);
@@ -279,13 +297,17 @@ export function LocationCreateAction({ campaign }: { campaign: string }) {
 
   return (
     <>
-      <CreateTrigger label="Ort anlegen" variant="quiet" onClick={() => setOpen(true)} />
+      <CreateTrigger
+        label={t("create.location.title")}
+        variant="quiet"
+        onClick={() => setOpen(true)}
+      />
       {open && (
         <CreateDialog
-          title="Ort anlegen"
-          description="Nur der Name — alles Weitere steht danach im Eigenschaften-Dialog. Aus dem Namen wird die id, und die bleibt."
-          nameLabel="Name"
-          namePlaceholder="Name des Orts"
+          title={t("create.location.title")}
+          description={t("create.location.description")}
+          nameLabel={t("create.location.nameLabel")}
+          namePlaceholder={t("create.location.namePlaceholder")}
           addressPrefix="locations/"
           create={async (values: CreateValues) => {
             const created = await createLocation(campaign, {

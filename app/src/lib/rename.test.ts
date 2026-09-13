@@ -18,6 +18,12 @@ import {
   usageSummary,
   usageTotalLabel,
 } from "@/lib/rename";
+import { translator } from "@/i18n/format";
+
+// The language the assertions below are written in (issue #69): the helpers
+// take the translator as an argument, so a test says so explicitly instead of
+// leaning on a default.
+const t = translator("de");
 
 function file(path: string, kind: EntityKind, properties: Record<string, unknown> = {}) {
   return { path, kind, properties };
@@ -65,36 +71,36 @@ describe("renameTargetFor", () => {
 
 describe("newIdError / canSubmitNewId", () => {
   test("an empty input is not an error, just not submittable", () => {
-    expect(newIdError("", "jorna")).toBeUndefined();
+    expect(newIdError("", "jorna", t)).toBeUndefined();
     expect(canSubmitNewId("  ", "jorna")).toBe(false);
   });
 
   test("kebab slugs pass — including the chapter number prefix", () => {
     for (const id of ["hafenmeisterin", "alte-fischerin", "01-salzhafen", "x1"]) {
-      expect(newIdError(id, "jorna")).toBeUndefined();
+      expect(newIdError(id, "jorna", t)).toBeUndefined();
       expect(canSubmitNewId(id, "jorna")).toBe(true);
     }
   });
 
   test("non-kebab input is rejected before the request", () => {
     for (const id of ["Hafen", "hafen meisterin", "hafen_meisterin", "-hafen", "hafen--x", "ö"]) {
-      expect(newIdError(id, "jorna")).toContain("Kleinbuchstaben");
+      expect(newIdError(id, "jorna", t)).toContain("Kleinbuchstaben");
       expect(canSubmitNewId(id, "jorna")).toBe(false);
     }
   });
 
   test("the same id is „unverändert“, reserved names are refused", () => {
-    expect(newIdError("jorna", "jorna")).toContain("Unverändert");
+    expect(newIdError("jorna", "jorna", t)).toContain("Unverändert");
     expect(canSubmitNewId(" jorna ", "jorna")).toBe(false);
-    expect(newIdError("sessions", "jorna")).toContain("reservierte");
+    expect(newIdError("sessions", "jorna", t)).toContain("reservierte");
     expect(canSubmitNewId("npcs", "jorna")).toBe(false);
   });
 });
 
 describe("changedCountLabel", () => {
   test("singular and plural", () => {
-    expect(changedCountLabel(1)).toBe("betrifft 1 Eintrag");
-    expect(changedCountLabel(4)).toBe("betrifft 4 Einträge");
+    expect(changedCountLabel(1, t)).toBe("betrifft 1 Eintrag");
+    expect(changedCountLabel(4, t)).toBe("betrifft 4 Einträge");
   });
 });
 
@@ -126,27 +132,27 @@ describe("renamedPath", () => {
 describe("renameErrorMessage", () => {
   test("409 names the blocking path", () => {
     const error = new ApiError(409, "target already exists", { path: "npcs/fenn" });
-    expect(renameErrorMessage(error)).toBe("npcs/fenn existiert schon — andere id wählen.");
+    expect(renameErrorMessage(error, t)).toBe("npcs/fenn existiert schon — andere id wählen.");
   });
 
   test("409 without a path is the ambiguous-id case", () => {
-    expect(renameErrorMessage(new ApiError(409, "ambiguous"))).toContain("Mehrere Einträge");
+    expect(renameErrorMessage(new ApiError(409, "ambiguous"), t)).toContain("Mehrere Einträge");
   });
 
   test("400/404 and anything else stay one quiet line", () => {
-    expect(renameErrorMessage(new ApiError(400, "bad id"))).toContain("id abgelehnt");
-    expect(renameErrorMessage(new ApiError(404, "not found"))).toContain("Nicht gefunden");
-    expect(renameErrorMessage(new ApiError(500, "boom"))).toContain("Server prüfen");
-    expect(renameErrorMessage(new Error("offline"))).toContain("Server prüfen");
+    expect(renameErrorMessage(new ApiError(400, "bad id"), t)).toContain("id abgelehnt");
+    expect(renameErrorMessage(new ApiError(404, "not found"), t)).toContain("Nicht gefunden");
+    expect(renameErrorMessage(new ApiError(500, "boom"), t)).toContain("Server prüfen");
+    expect(renameErrorMessage(new Error("offline"), t)).toContain("Server prüfen");
   });
 });
 
 describe("renameKindLabel", () => {
   test("German labels for the dialog title", () => {
-    expect(renameKindLabel("npc")).toBe("NPC");
-    expect(renameKindLabel("location")).toBe("Ort");
-    expect(renameKindLabel("scene")).toBe("Szene");
-    expect(renameKindLabel("chapter")).toBe("Kapitel");
+    expect(renameKindLabel("npc", t)).toBe("NPC");
+    expect(renameKindLabel("location", t)).toBe("Ort");
+    expect(renameKindLabel("scene", t)).toBe("Szene");
+    expect(renameKindLabel("chapter", t)).toBe("Kapitel");
   });
 });
 
@@ -171,30 +177,31 @@ describe("usage summary", () => {
     expect(
       usageSummary(
         report([group("sceneNpcs", 3), group("npcRelations", 2), group("logEntries", 4)]),
+        t,
       ),
     ).toBe("3 Szenen, 2 Beziehungen, 4 Log-Zeilen");
   });
 
   test("singular per group, not per report", () => {
-    expect(usageGroupLabel(group("sceneNpcs", 1))).toBe("1 Szene");
-    expect(usageGroupLabel(group("npcRelations", 1))).toBe("1 Beziehung");
-    expect(usageGroupLabel(group("scenesPlayed", 1))).toBe("1 Session-Eintrag");
-    expect(usageGroupLabel(group("scenesPlayed", 2))).toBe("2 Session-Einträge");
-    expect(usageGroupLabel(group("logEntries", 1))).toBe("1 Log-Zeile");
-    expect(usageGroupLabel(group("chapterNpcs", 1))).toBe("1 NPC");
-    expect(usageGroupLabel(group("chapterNpcs", 3))).toBe("3 NPCs");
-    expect(usageGroupLabel(group("chapterLocations", 1))).toBe("1 Ort");
-    expect(usageGroupLabel(group("chapterLocations", 2))).toBe("2 Orte");
-    expect(usageGroupLabel(group("sceneLocation", 2))).toBe("2 Szenen");
-    expect(usageGroupLabel(group("chapterScenes", 2))).toBe("2 Szenen");
+    expect(usageGroupLabel(group("sceneNpcs", 1), t)).toBe("1 Szene");
+    expect(usageGroupLabel(group("npcRelations", 1), t)).toBe("1 Beziehung");
+    expect(usageGroupLabel(group("scenesPlayed", 1), t)).toBe("1 Session-Eintrag");
+    expect(usageGroupLabel(group("scenesPlayed", 2), t)).toBe("2 Session-Einträge");
+    expect(usageGroupLabel(group("logEntries", 1), t)).toBe("1 Log-Zeile");
+    expect(usageGroupLabel(group("chapterNpcs", 1), t)).toBe("1 NPC");
+    expect(usageGroupLabel(group("chapterNpcs", 3), t)).toBe("3 NPCs");
+    expect(usageGroupLabel(group("chapterLocations", 1), t)).toBe("1 Ort");
+    expect(usageGroupLabel(group("chapterLocations", 2), t)).toBe("2 Orte");
+    expect(usageGroupLabel(group("sceneLocation", 2), t)).toBe("2 Szenen");
+    expect(usageGroupLabel(group("chapterScenes", 2), t)).toBe("2 Szenen");
   });
 
   test("nothing references the id — the reassuring case is spelled out", () => {
-    expect(usageSummary(report([]))).toContain("Keine Referenzen");
+    expect(usageSummary(report([]), t)).toContain("Keine Referenzen");
   });
 
   test("the headline counts usages, not documents", () => {
-    expect(usageTotalLabel(1)).toBe("1 Verwendung");
-    expect(usageTotalLabel(12)).toBe("12 Verwendungen");
+    expect(usageTotalLabel(1, t)).toBe("1 Verwendung");
+    expect(usageTotalLabel(12, t)).toBe("12 Verwendungen");
   });
 });

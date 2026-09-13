@@ -13,6 +13,12 @@ import {
   sessionPausedSinceMs,
   sessionStartMs,
 } from "./session";
+import { translator } from "@/i18n/format";
+
+// The language the assertions below are written in (issue #69): the helpers
+// take the translator as an argument, so a test says so explicitly instead of
+// leaning on a default.
+const t = translator("de");
 
 describe("parseLogEntries", () => {
   const body = `
@@ -260,22 +266,22 @@ describe("sessionPausedMs / sessionPausedSinceMs — the properties fallback", (
 
 describe("sessionDateLabel", () => {
   test("the heading of a session is its `started` date, German format", () => {
-    expect(sessionDateLabel({ started: "2026-01-15T19:30:00" })).toBe("Session vom 15.01.2026");
+    expect(sessionDateLabel({ started: "2026-01-15T19:30:00" }, t)).toBe("Session vom 15.01.2026");
     // Minute-precise (pre-#58 files) and date-only (the midnight degradation)
     // read the same — only the date part is used.
-    expect(sessionDateLabel({ started: "2026-01-15T19:30" })).toBe("Session vom 15.01.2026");
-    expect(sessionDateLabel({ started: "2026-01-15" })).toBe("Session vom 15.01.2026");
+    expect(sessionDateLabel({ started: "2026-01-15T19:30" }, t)).toBe("Session vom 15.01.2026");
+    expect(sessionDateLabel({ started: "2026-01-15" }, t)).toBe("Session vom 15.01.2026");
   });
 
   test("a session close to midnight keeps ITS day (no timezone re-reading)", () => {
-    expect(sessionDateLabel({ started: "2026-01-15T23:59:59" })).toBe("Session vom 15.01.2026");
+    expect(sessionDateLabel({ started: "2026-01-15T23:59:59" }, t)).toBe("Session vom 15.01.2026");
   });
 
   test("the opaque id is never the label — no `started`, no date", () => {
     const id = "019a4f3c-6d21-7b8e-9c04-5f1ab2d7e380";
-    expect(sessionDateLabel({ id })).toBe("Session");
-    expect(sessionDateLabel({ id, started: "gestern abend" })).toBe("Session");
-    expect(sessionDateLabel({ started: 20260115 })).toBe("Session");
-    expect(sessionDateLabel(undefined)).toBe("Session");
+    expect(sessionDateLabel({ id }, t)).toBe("Session");
+    expect(sessionDateLabel({ id, started: "gestern abend" }, t)).toBe("Session");
+    expect(sessionDateLabel({ started: 20260115 }, t)).toBe("Session");
+    expect(sessionDateLabel(undefined, t)).toBe("Session");
   });
 });

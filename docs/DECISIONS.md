@@ -490,3 +490,60 @@ tat, oder umgekehrt. Verbindlich ist ab jetzt:
   entsteht jetzt regulär (eine Szene listet alte und neue id → die neue hat
   eine leere Zeile), und der Merge der Referenzlisten war sonst toter Code.
   Eine Zielzeile mit Inhalt bleibt 409 — Rename überschreibt nichts.
+
+## 15. i18n: typisierter TS-Katalog + ICU über `intl-messageformat`
+
+> **Status: final** (#69, Scheibe 1). Gilt für alles Nutzersichtbare in `app/`.
+> Server-Strings folgen in Scheibe 3 (stabile `code`s statt Sätze).
+
+**Entscheidung:** Nutzersichtbare Texte stehen im Katalog
+`app/src/i18n/` — `de.ts` (Primärsprache, CLAUDE.md) und `en.ts`, beide als
+TS-Objekte. `de.ts` definiert den Key-Satz (`MessageKey = keyof typeof de`),
+jede weitere Sprache ist ein totales `Record<MessageKey, string>`. Ein
+fehlender Key und ein Key, den es nur in `en.ts` gibt, sind beide ein
+**Typfehler** — kein Build-Schritt, kein Extraktions-Tool, kein
+Laufzeit-Fallback auf eine andere Sprache nötig.
+
+Interpolation und Plural sind **ICU MessageFormat** über
+**`intl-messageformat`** (≈10 kB gzip, ein Paket, keine Peers).
+
+**Warum nicht `i18next`:** Es bringt ein eigenes Ressourcen-, Namespace- und
+Backend-Modell mit (plus `react-i18next` für den Hook) für Probleme, die ein
+Einzelnutzer-Tool mit zwei Sprachen und einem Bundle nicht hat; Plural läuft
+über Key-Suffixe (`_one`/`_other`) statt im Text, was die Form aus dem Satz
+zieht; und Typsicherheit erfordert Module-Augmentation und generierte
+Typen statt eines `keyof`. `intl-messageformat` ist das kleinere Stück:
+reiner Formatter, wir behalten Katalog und Laden selbst in der Hand.
+
+**Kriterien, die entschieden haben:**
+
+- **Größe:** ein Paket, ≈10 kB gzip; `i18next` + `react-i18next` ist mehr
+  Laufzeit für weniger Typsicherheit.
+- **Keine Locale-Downloads:** Pluralkategorien kommen aus dem eingebauten
+  `Intl.PluralRules`, Datums-/Zahlformate aus `Intl` — nichts wird zur
+  Laufzeit nachgeladen, was ein selbst gehostetes, offline nutzbares Tool
+  ohnehin nicht dürfte.
+- **Plural/ICU im Text:** `{count, plural, one {# Eintrag} other {# Einträge}}`
+  — die Form steht im Satz, wo Übersetzende sie sehen.
+- **Typsicherheit:** über `keyof`, ohne Codegen.
+
+**Regeln, die daraus folgen:**
+
+- `t(key, params)` kommt in Komponenten aus `useT()`/`useI18n()`. Reine
+  Helfer in `app/src/lib/` **bekommen den Translator als Argument** — die
+  lib-Ebene entscheidet nie, in welcher Sprache die UI läuft.
+- Ein Wert mit Markup mitten im Satz wird über `tNode` zu Parts formatiert,
+  niemals aus zwei Halbsätzen zusammengeklebt.
+- Zeitangaben laufen über `Intl` mit der gewählten Sprache, nicht über
+  handgebaute Formate.
+- **Die Sprache ist eine Instanz-Einstellung auf dem Server**
+  (`GET/PUT /api/settings`, Zeile `setting:locale` in `meta`). Kein
+  localStorage (Qualitäts-Boden: der Server ist die Wahrheit). Ohne
+  gespeicherten Wert folgt die App `navigator.language` (`de*` → de, sonst
+  en) und schreibt nichts.
+- **Lint-Gate:** `react/jsx-no-literals` (`bun run lint`, in CI) — scharf für
+  die migrierten Dateien, `warn` für den Rest. Die Warnungen sind die
+  To-do-Liste von Scheibe 2.
+- Enum-Labels, die sich viele Views teilen (Szenen-/NPC-Status in
+  `lib/scene-status.ts` und `lib/entity.ts`), bleiben bis Scheibe 2 deutsch:
+  eine Signaturänderung dort zieht halbe Views in diese Scheibe.

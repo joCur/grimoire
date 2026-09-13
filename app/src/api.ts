@@ -9,6 +9,7 @@ import type {
   GenerateJob,
   GenerateJobStarted,
   GeneratedStub,
+  InstanceSettings,
   SearchResponse,
 } from "@grimoire/shared/types";
 
@@ -53,6 +54,26 @@ async function getJson<T>(path: string): Promise<T> {
 
 export function fetchCampaigns(): Promise<CampaignSummary[]> {
   return getJson<CampaignSummary[]>("/campaigns");
+}
+
+/**
+ * The instance settings (issue #69) — today just the UI language. Server
+ * state, deliberately not localStorage (quality floor), so the choice survives
+ * a reload and is the same in the next browser.
+ */
+export function fetchSettings(): Promise<InstanceSettings> {
+  return getJson<InstanceSettings>("/settings");
+}
+
+/** Store the UI language; `null` goes back to following `navigator.language`. */
+export async function putSettings(patch: InstanceSettings): Promise<InstanceSettings> {
+  const response = await fetch("/api/settings", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) throw await failure("PUT /api/settings", response);
+  return (await response.json()) as InstanceSettings;
 }
 
 export function fetchTree(campaign: string): Promise<CampaignTree> {

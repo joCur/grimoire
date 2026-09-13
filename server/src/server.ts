@@ -29,7 +29,19 @@
 //                                              everything else folded, kebab-cased); a name
 //                                              that yields no slug is 400, a taken id is
 //                                              409 { code: "slug_taken", id, suggestion, path }
-//   [x] POST /api/:campaign/chapters           { title, goal? } -> 201 the chapter document.
+//   [x] GET  /api/settings                     InstanceSettings — the instance's UI
+//                                              language (issue #69): { locale: "de" | "en"
+//                                              | null }. `null` is "never decided": the app
+//                                              then follows navigator.language and writes
+//                                              nothing. Campaign-INDEPENDENT on purpose —
+//                                              the cold start has no campaign yet
+//   [x] PUT  /api/settings                     { locale } -> InstanceSettings. Stored in the
+//                                              `meta` table under `setting:locale` (no table
+//                                              of its own: one user, one settings object).
+//                                              `null` deletes the row; anything but de/en/
+//                                              null is 400. NOT localStorage — the language
+//                                              is server state (quality floor)
+//   [x] POST /api/:campaign/chapters         { title, goal? } -> 201 the chapter document.
 //                                              Same id derivation and same 400/409 as above;
 //                                              `goal` lands under `## Ziel des Kapitels`, the
 //                                              heading the pool reads its goal line from
