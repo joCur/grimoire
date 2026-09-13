@@ -35,7 +35,7 @@ export function usePropertiesFormMutation(
       ["tree", campaign],
       ["search", campaign],
     ],
-    errorMessage: "Eigenschaften nicht gespeichert — Server prüfen",
+    errorMessage: "write.properties.failed",
     onSaved: handlers.onSaved,
     onConflict: handlers.onConflict,
   });

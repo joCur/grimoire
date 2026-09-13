@@ -19,6 +19,7 @@ import { Link } from "react-router";
 import { fetchFile } from "@/api";
 import { EntityArticle } from "@/components/EntityArticle";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useI18n } from "@/i18n";
 import { fmString } from "@/lib/properties";
 
 export function LiveEntityDrawer({
@@ -49,6 +50,7 @@ export function LiveEntityDrawer({
 }
 
 function DrawerBody({ campaign, path }: { campaign: string; path: string }) {
+  const { t, tNode } = useI18n();
   const { data, isPending, isError } = useQuery({
     queryKey: ["file", campaign, path],
     queryFn: () => fetchFile(campaign, path),
@@ -64,10 +66,20 @@ function DrawerBody({ campaign, path }: { campaign: string; path: string }) {
     <>
       <SheetTitle className="sr-only">{name}</SheetTitle>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-10 md:px-8">
-        {isPending && <p className="text-[13px] text-muted-foreground">Lade Details …</p>}
+        {isPending && (
+          <p className="text-[13px] text-muted-foreground">{t("live.drawer.loading")}</p>
+        )}
         {isError && (
           <p className="text-[13px] text-muted-foreground">
-            Nicht ladbar — <span className="font-mono">{path}</span> prüfen.
+            {/* The monospaced path sits INSIDE the sentence, so the message is
+                formatted to parts instead of glued together from two halves. */}
+            {tNode("live.drawer.unloadable", {
+              path: (
+                <span key="path" className="font-mono">
+                  {path}
+                </span>
+              ),
+            })}
           </p>
         )}
         {data !== undefined && <EntityArticle file={data} />}
@@ -78,7 +90,7 @@ function DrawerBody({ campaign, path }: { campaign: string; path: string }) {
           className="inline-flex items-center gap-1.5 rounded-md text-[13px] text-primary hover:text-primary-hover"
         >
           <ExternalLink aria-hidden size={14} className="flex-none" />
-          Eintrag öffnen
+          {t("live.drawer.open")}
         </Link>
       </div>
     </>

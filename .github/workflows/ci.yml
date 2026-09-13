@@ -56,9 +56,10 @@ jobs:
         run: bun run typecheck
 
       # The i18n gate (issue #69): user-visible copy belongs in the catalog,
-      # not in a component. Sharp for the migrated files, a warning list for
-      # the rest — see eslint.config.js. Warnings do not fail the job; an
-      # error in a migrated file does.
+      # not in a component. `error` everywhere in app/src since the migration
+      # finished — there is no warning tier left to ignore, so ANY literal
+      # fails the job (see eslint.config.js for the `allowedStrings` list of
+      # things that are not copy in any language).
       - name: Lint (i18n gate)
         run: bun run lint
 

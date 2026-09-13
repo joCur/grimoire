@@ -2,7 +2,7 @@
 // body through the pipeline. Shared between the reading view ("scene") and
 // the live center column ("live"); live is the denser variant from the
 // design prototype: 26px title, location inside the overline, italic
-// "Wenn:" line and a plain hairline instead of the chip row.
+// „Wenn:" line and a plain hairline instead of the chip row.
 //
 // `statusControl` (issue #28) is the status regler of the reading view; it
 // rides at the right end of the overline row. `actions` („Bearbeiten",
@@ -14,6 +14,7 @@ import type { CampaignTree, FileResponse } from "@grimoire/shared/types";
 import { Bookmark, GitFork, MapPin } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { useT } from "@/i18n";
 import { locationName } from "@/lib/campaign";
 import { fmString, fmStringArray } from "@/lib/properties";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,7 @@ export function SceneArticle({
    */
   body?: ReactNode;
 }) {
+  const t = useT();
   const live = variant === "live";
   const fm = file.properties;
   // npc/location files opened as a file view carry `name` instead of `title`.
@@ -65,7 +67,7 @@ export function SceneArticle({
             isContingency ? "text-soft" : "text-success-text",
           )}
         >
-          {isContingency ? "Kontingenz" : "Geplante Szene"}
+          {isContingency ? t("sceneArticle.type.contingency") : t("sceneArticle.type.planned")}
         </span>
         {live && location !== undefined && (
           <>
@@ -100,10 +102,12 @@ export function SceneArticle({
       {isContingency &&
         trigger !== undefined &&
         (live ? (
-          <p className="mb-1 text-[13px] text-soft italic">Wenn: {trigger}</p>
+          <p className="mb-1 text-[13px] text-soft italic">
+            {t("sceneArticle.trigger.inline", { trigger })}
+          </p>
         ) : (
           <div className="mb-3 flex items-baseline gap-2 text-[13.5px]">
-            <span className="text-muted-foreground">Auslöser</span>
+            <span className="text-muted-foreground">{t("sceneArticle.trigger.label")}</span>
             <span className="text-soft italic">{trigger}</span>
           </div>
         ))}
@@ -123,7 +127,7 @@ export function SceneArticle({
                 key={tag}
                 className="rounded-full border border-border bg-card px-3 py-1 text-[12.5px] text-muted-foreground"
               >
-                #{tag}
+                {t("sceneArticle.tag", { tag })}
               </span>
             ))}
             {handouts.map((handout) => (
@@ -131,7 +135,7 @@ export function SceneArticle({
                 key={handout}
                 className="rounded-full border border-dashed border-input px-3 py-1 text-[12.5px] text-body-secondary"
               >
-                Handout: {handout}
+                {t("sceneArticle.handout", { handout })}
               </span>
             ))}
           </div>

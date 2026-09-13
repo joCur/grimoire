@@ -27,9 +27,10 @@
 // tab may not destroy minutes of generation any more.
 //
 // A failed run stays in the input state and shows the server's 422 in full
-// (issue #18): the message (for a truncated reply the one naming
-// LLM_MAX_TOKENS), the validation errors when there are any, the last raw
-// reply behind a collapsed „Rohantwort anzeigen“, and the run's token spend.
+// (issue #18): the message — read in the UI language out of the job's error
+// CODE (i18n/server-errors.ts; for a truncated reply the one naming the token
+// cap) — the validation errors when there are any, the last raw reply behind a
+// collapsed „Rohantwort anzeigen“, and the run's token spend.
 //
 // Local state is only what the server cannot know: the current edit buffers
 // (mirrored into the job, debounced, so they survive too), which cards are
@@ -73,6 +74,7 @@ import {
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { Button } from "@/components/ui/button";
 import { locationName } from "@/lib/campaign";
+import { serverErrorBodyMessage, useT, type Translate } from "@/i18n";
 import { npcStatusLabel } from "@/lib/entity";
 import { fmQuickstats, fmString, fmStringArray } from "@/lib/properties";
 import {
@@ -113,6 +115,7 @@ const CHIP_OFF =
 const stubKey = (stub: GeneratedStub) => `${stub.kind}:${stub.id}`;
 
 export function GenerateRoute() {
+  const t = useT();
   const { campaign = "" } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -155,7 +158,7 @@ export function GenerateRoute() {
 
   const suggestedId = newChapterId(newTitle, chapterIds);
   const newIdInput = chapterIdValue(suggestedId, manualId);
-  const newIdError = chapterIdError(newIdInput);
+  const newIdError = chapterIdError(newIdInput, t);
   // A typed id may name a chapter that is already there: then this is NOT a
   // new chapter — the drafts go into the existing directory and its
   // _chapter stays untouched (#12 semantics), so neither the newChapter
@@ -180,7 +183,7 @@ export function GenerateRoute() {
   const [npcId, setNpcId] = useState("");
   const npcIds = (tree.data?.npcs ?? []).map((npc) => npc.id);
   const trimmedNpcId = npcId.trim();
-  const npcIdMessage = npcIdError(trimmedNpcId, npcIds);
+  const npcIdMessage = npcIdError(trimmedNpcId, npcIds, t);
 
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<Record<string, boolean>>({});
@@ -306,16 +309,17 @@ export function GenerateRoute() {
   const startError = start.error instanceof ApiError ? start.error : undefined;
   // A failed job carries the same body the endpoint used to answer with:
   // the last raw reply and (when the endpoint reports usage) what the run
-  // cost — a truncated reply additionally carries the server's German
-  // LLM_MAX_TOKENS message instead of a validation error list (issue #18).
+  // cost — a truncated reply additionally carries an error CODE instead of a
+  // validation error list (issue #18), and serverErrorBodyMessage turns that
+  // code into this language's sentence (issue #69).
   // Shown only in ITS OWN mode: after switching to the other mode the block
   // would talk about a run this form cannot repeat.
   const failed = jobKind === mode ? jobErrorBody(job) : undefined;
   const validationErrors = stringList(failed?.validationErrors);
   const rawReply = stringField(failed?.rawReply);
-  const failedUsage = usageLabel(failed?.usage);
-  const failedMessage = stringField(failed?.error);
-  const resultUsage = usageLabel(result?.usage ?? npcResult?.usage);
+  const failedUsage = usageLabel(failed?.usage, t);
+  const failedMessage = serverErrorBodyMessage(failed, t);
+  const resultUsage = usageLabel(result?.usage ?? npcResult?.usage, t);
   const conflicts = apply.error instanceof ApiError && apply.error.status === 409
     ? stringList(apply.error.details.conflicts)
     : [];
@@ -334,19 +338,21 @@ export function GenerateRoute() {
         {phase === "input" && (
           <>
             <h1 className="mb-2 font-serif text-[26px] leading-[1.25] font-semibold text-foreground">
-              {mode === "npc" ? "NPC generieren" : "Szenen generieren"}
+              {t(mode === "npc" ? "generate.input.title.npc" : "generate.input.title.scene")}
             </h1>
             <p className="mb-5 text-[14px] leading-[1.6] text-body-secondary">
-              {mode === "npc"
-                ? "Quellmaterial zu einer Figur rein, ein NPC-Eintrag nach Format raus — Will, Weiß, Beziehungen. Immer mit Review; geschrieben wird erst beim Übernehmen."
-                : "Englisches Quellmaterial rein, deutsche Szenen-Drafts raus. Immer status draft, immer mit Review — geschrieben wird erst beim Übernehmen."}
+              {t(mode === "npc" ? "generate.input.lead.npc" : "generate.input.lead.scene")}
             </p>
 
             {/* The mode switch (issue #21): two quiet chips, same vocabulary
                 as the chapter chips below. Switching drops a stale error of
                 the other mode's last attempt, nothing else — both modes keep
                 their own source buffer. */}
-            <div role="group" aria-label="Generator-Modus" className="mb-[26px] flex flex-wrap gap-2">
+            <div
+              role="group"
+              aria-label={t("generate.input.modeGroup")}
+              className="mb-[26px] flex flex-wrap gap-2"
+            >
               {(["scene", "npc"] as const).map((option) => (
                 <button
                   key={option}
@@ -359,7 +365,7 @@ export function GenerateRoute() {
                   }}
                   className={cn(CHIP, mode === option ? CHIP_ON : CHIP_OFF)}
                 >
-                  {option === "npc" ? "NPC" : "Szenen"}
+                  {t(option === "npc" ? "generate.input.mode.npc" : "generate.input.mode.scene")}
                 </button>
               ))}
             </div>
@@ -367,14 +373,14 @@ export function GenerateRoute() {
             {mode === "npc" && (
               <>
                 <label htmlFor="gen-npc-source" className={cn(OVERLINE, "mb-2 block")}>
-                  Quelltext
+                  {t("generate.input.npc.sourceLabel")}
                 </label>
                 <textarea
                   id="gen-npc-source"
                   rows={12}
                   value={npcSource}
                   onChange={(e) => setNpcSource(e.target.value)}
-                  placeholder="Bio, Hintergrund, Notizen zum NPC …"
+                  placeholder={t("generate.input.npc.sourcePlaceholder")}
                   className={cn(FIELD, "resize-y leading-[1.6] text-body")}
                 />
 
@@ -382,7 +388,7 @@ export function GenerateRoute() {
                   htmlFor="gen-npc-id"
                   className="mt-3.5 mb-1.5 block text-[12px] text-muted-foreground"
                 >
-                  id (optional)
+                  {t("generate.input.npc.idLabel")}
                 </label>
                 <input
                   id="gen-npc-id"
@@ -394,7 +400,7 @@ export function GenerateRoute() {
                   autoCorrect="off"
                   aria-invalid={npcIdMessage !== undefined}
                   aria-describedby="gen-npc-id-note"
-                  placeholder="z. B. grella"
+                  placeholder={t("generate.input.npc.idPlaceholder")}
                   className={cn(
                     FIELD,
                     "max-w-[320px] py-2.5 font-mono text-[12.5px]",
@@ -415,8 +421,8 @@ export function GenerateRoute() {
                 >
                   {npcIdMessage ??
                     (trimmedNpcId === ""
-                      ? "leer lassen — dann wählt das Modell die id"
-                      : `wird angelegt als: npcs/${trimmedNpcId}`)}
+                      ? t("generate.input.npc.idHint")
+                      : t("generate.input.npc.idPreview", { id: trimmedNpcId }))}
                 </p>
               </>
             )}
@@ -424,7 +430,7 @@ export function GenerateRoute() {
             {mode === "scene" && (
               <>
                 <div className={cn(OVERLINE, "mb-2")} id="gen-target-label">
-                  Ziel-Kapitel
+                  {t("generate.input.targetLabel")}
                 </div>
                 <div role="group" aria-labelledby="gen-target-label" className="mb-[22px] flex flex-wrap gap-2">
                   {chapters.map((chapter) => {
@@ -447,7 +453,7 @@ export function GenerateRoute() {
                     onClick={() => setPicked({ kind: "new" })}
                     className={cn(CHIP, target.kind === "new" ? CHIP_ON : CHIP_OFF)}
                   >
-                    Neues Kapitel
+                    {t("generate.input.newChapter")}
                   </button>
                 </div>
 
@@ -460,7 +466,7 @@ export function GenerateRoute() {
                 {target.kind === "new" && (
                   <div className="mt-[-10px] mb-[22px] flex flex-col gap-[7px]">
                     <label htmlFor="gen-new-title" className="sr-only">
-                      Kapiteltitel
+                      {t("generate.input.newTitleLabel")}
                     </label>
                     <input
                       id="gen-new-title"
@@ -468,7 +474,7 @@ export function GenerateRoute() {
                       value={newTitle}
                       onChange={(e) => setNewTitle(e.target.value)}
                       disabled={newIdExists}
-                      placeholder="Kapiteltitel, z. B. Die Schmugglerbucht"
+                      placeholder={t("generate.input.newTitlePlaceholder")}
                       className={cn(
                         FIELD,
                         "max-w-[320px] py-2.5",
@@ -477,12 +483,12 @@ export function GenerateRoute() {
                     />
                     {titleMissing && (
                       <p className="text-[12px] leading-[1.5] text-muted-foreground">
-                        Titel fehlt — er wird der Anzeigename des neuen Kapitels.
+                        {t("generate.input.titleMissing")}
                       </p>
                     )}
 
                     <label htmlFor="gen-new-id" className="mt-2 text-[12px] text-muted-foreground">
-                      Kapitel-id
+                      {t("generate.input.chapterIdLabel")}
                     </label>
                     <input
                       id="gen-new-id"
@@ -498,7 +504,7 @@ export function GenerateRoute() {
                       autoCorrect="off"
                       aria-invalid={showIdError}
                       aria-describedby="gen-new-id-note"
-                      placeholder="z. B. 03-schmugglerbucht"
+                      placeholder={t("generate.input.chapterIdPlaceholder")}
                       className={cn(
                         FIELD,
                         "max-w-[320px] py-2.5 font-mono text-[12.5px]",
@@ -520,23 +526,23 @@ export function GenerateRoute() {
                       {showIdError
                         ? newIdError
                         : newIdExists
-                          ? "Kapitel existiert — Szenen werden dort angelegt"
+                          ? t("generate.input.chapterExists")
                           : newIdInput === ""
-                            ? "wird aus dem Titel vorgeschlagen"
-                            : `wird angelegt als: ${newIdInput}/`}
+                            ? t("generate.input.chapterIdSuggested")
+                            : t("generate.input.chapterIdPreview", { id: newIdInput })}
                     </p>
                   </div>
                 )}
 
                 <label htmlFor="gen-source" className={cn(OVERLINE, "mb-2 block")}>
-                  Quelltext (EN)
+                  {t("generate.input.sourceLabel")}
                 </label>
                 <textarea
                   id="gen-source"
                   rows={12}
                   value={sourceText}
                   onChange={(e) => setSourceText(e.target.value)}
-                  placeholder="Abenteuertext einfügen — Absätze, Boxed Text, Statblock-Verweise …"
+                  placeholder={t("generate.input.sourcePlaceholder")}
                   className={cn(FIELD, "resize-y leading-[1.6] text-body")}
                 />
               </>
@@ -545,12 +551,13 @@ export function GenerateRoute() {
             {/* Both modes send the same context along (npc/location names +
                 the glossary, generator/README.md step 1). */}
             <p className="mt-2.5 mb-[26px] flex flex-wrap items-baseline gap-1.5 text-[12px] leading-[1.5] text-faint">
-              <span>Mitgeschickter Kontext:</span>
+              <span>{t("generate.input.contextLabel")}</span>
               <span className="text-muted-foreground">
                 {contextHint(
                   tree.data?.npcs.length ?? 0,
                   tree.data?.locations.length ?? 0,
                   glossary.isSuccess,
+                  t,
                 )}
               </span>
             </p>
@@ -565,14 +572,12 @@ export function GenerateRoute() {
               className="h-auto gap-2 px-[18px] py-2.5 text-[13.5px] font-semibold [&_svg]:size-[15px]"
             >
               <Sparkles aria-hidden />
-              {mode === "npc" ? "NPC generieren" : "Entwürfe generieren"}
+              {t(mode === "npc" ? "generate.input.submit.npc" : "generate.input.submit.scene")}
             </Button>
 
             {tree.isError && (
               <p className="mt-4 text-[13px] text-muted-foreground">
-                {mode === "npc"
-                  ? "Kampagne nicht ladbar — Grimoire-Server auf Port 3000 starten."
-                  : "Kapitel nicht ladbar — Grimoire-Server auf Port 3000 starten."}
+                {t(mode === "npc" ? "generate.error.treeNpc" : "generate.error.treeScene")}
               </p>
             )}
 
@@ -584,14 +589,13 @@ export function GenerateRoute() {
                 guess because that is still the likeliest cause for a DM. */}
             {lostJob && (
               <p aria-live="polite" className="mt-4 text-[13px] text-muted-foreground">
-                Der Generierungs-Job ist nicht mehr vorhanden (Server-Neustart?) — erneut
-                starten.
+                {t("generate.error.lostJob")}
               </p>
             )}
 
             {startError?.status === 503 && (
               <p className="mt-4 text-[13px] text-muted-foreground">
-                ANTHROPIC_API_KEY fehlt — siehe server/.env
+                {t("generate.error.noApiKey")}
               </p>
             )}
 
@@ -606,9 +610,8 @@ export function GenerateRoute() {
               >
                 <p className="mb-1.5 text-[13.5px] leading-[1.5] font-medium text-foreground">
                   {validationErrors.length > 0
-                    ? "Das Modell hat die Formprüfung nicht bestanden — nichts generiert."
-                    : (failedMessage ??
-                      "Das Modell hat keine verwertbare Antwort geliefert — nichts generiert.")}
+                    ? t("generate.error.validation")
+                    : (failedMessage ?? t("generate.error.unusable"))}
                 </p>
                 {validationErrors.length > 0 && (
                   <>
@@ -623,14 +626,14 @@ export function GenerateRoute() {
                       ))}
                     </ul>
                     <p className="mt-2 text-[12px] text-muted-foreground">
-                      Quelltext kürzen oder klarer strukturieren und erneut generieren.
+                      {t("generate.error.validationHint")}
                     </p>
                   </>
                 )}
                 {rawReply !== undefined && (
                   <details className="mt-2.5">
                     <summary className="cursor-pointer text-[12.5px] text-body-secondary hover:text-foreground">
-                      Rohantwort anzeigen
+                      {t("generate.error.rawReply")}
                     </summary>
                     <pre className="mt-2 max-h-[260px] overflow-auto rounded-md border border-input bg-background px-3 py-2.5 font-mono text-[11.5px] leading-[1.55] whitespace-pre-wrap text-body-secondary">
                       {rawReply}
@@ -650,10 +653,10 @@ export function GenerateRoute() {
             {start.isError && startError?.status !== 503 && (
               <p aria-live="polite" className="mt-4 text-[13px] text-destructive">
                 {startError?.status === 409
-                  ? "NPC existiert schon — andere id wählen; bestehende Einträge werden nie überschrieben."
+                  ? t("generate.error.npcExists")
                   : startError?.status === 404
-                    ? "Kapitel nicht gefunden — anderes Ziel wählen."
-                    : "Nicht generiert — Server prüfen."}
+                    ? t("generate.error.chapterMissing")
+                    : t("generate.error.failed")}
               </p>
             )}
           </>
@@ -670,10 +673,10 @@ export function GenerateRoute() {
           <>
             <div className="mb-1.5 flex flex-wrap items-baseline gap-3">
               <h1 className="font-serif text-[26px] leading-[1.25] font-semibold text-foreground">
-                Review
+                {t("generate.review.title")}
               </h1>
               <span className="text-[13px] text-muted-foreground">
-                {applySummary(scenes.length, stubs.length)} · noch nichts geschrieben
+                {t("generate.review.pending", { summary: applySummary(scenes.length, stubs.length, t) })}
               </span>
             </div>
             <p
@@ -682,8 +685,7 @@ export function GenerateRoute() {
                 resultUsage === undefined ? "mb-[22px]" : "mb-1.5",
               )}
             >
-              Prüfen, anpassen, Stubs einzeln entscheiden. Erst „Übernehmen“ schreibt in die
-              Datenbank — als Drafts, nie überschreibend.
+              {t("generate.review.lead")}
             </p>
             {/* What the run cost — quiet, but never invisible (issue #18). */}
             {resultUsage !== undefined && (
@@ -722,12 +724,12 @@ export function GenerateRoute() {
 
             {stubs.length > 0 && (
               <>
-                <div className={cn(OVERLINE, "mb-2.5")}>Stubs — einzeln entscheiden</div>
+                <div className={cn(OVERLINE, "mb-2.5")}>{t("generate.review.stubsHeading")}</div>
                 {stubs.map((stub) => (
                   <StubRow
                     key={stubKey(stub)}
                     stub={stub}
-                    reason={stubReason(scenes)}
+                    reason={stubReason(scenes, t)}
                     decision={decisions[stubKey(stub)]}
                     onDecide={(decision) =>
                       setDecisions((prev) => {
@@ -745,7 +747,7 @@ export function GenerateRoute() {
             {conflicts.length > 0 && (
               <div aria-live="polite" className="mb-3 rounded-md border border-input bg-card px-3.5 py-3">
                 <p className="mb-1.5 text-[13px] text-foreground">
-                  Diese Einträge existieren schon — nichts geschrieben:
+                  {t("generate.review.conflicts")}
                 </p>
                 <ul className="flex flex-col gap-1">
                   {conflicts.map((path) => (
@@ -758,12 +760,12 @@ export function GenerateRoute() {
             )}
             {apply.isError && conflicts.length === 0 && (
               <p aria-live="polite" className="mb-3 text-[13px] text-destructive">
-                Nicht geschrieben — Server prüfen.
+                {t("generate.review.applyFailed")}
               </p>
             )}
             {discard.isError && (
               <p aria-live="polite" className="mb-3 text-[13px] text-destructive">
-                Nicht verworfen — Server prüfen.
+                {t("generate.review.discardFailed")}
               </p>
             )}
 
@@ -774,7 +776,9 @@ export function GenerateRoute() {
                 onClick={() => apply.mutate()}
                 className="h-auto px-[18px] py-2.5 text-[13.5px] font-semibold"
               >
-                Übernehmen ({applySummary(scenes.length, acceptedStubs.length)})
+                {t("generate.review.apply", {
+                  count: applySummary(scenes.length, acceptedStubs.length, t),
+                })}
               </Button>
               <Button
                 type="button"
@@ -783,7 +787,7 @@ export function GenerateRoute() {
                 onClick={() => discard.mutate()}
                 className="h-auto border-input bg-transparent px-3.5 py-2 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
               >
-                Verwerfen
+                {t("common.discard")}
               </Button>
             </div>
           </>
@@ -796,10 +800,10 @@ export function GenerateRoute() {
           <>
             <div className="mb-1.5 flex flex-wrap items-baseline gap-3">
               <h1 className="font-serif text-[26px] leading-[1.25] font-semibold text-foreground">
-                Review
+                {t("generate.review.title")}
               </h1>
               <span className="text-[13px] text-muted-foreground">
-                1 NPC · noch nichts geschrieben
+                {t("generate.review.pendingNpc")}
               </span>
             </div>
             <p
@@ -808,8 +812,7 @@ export function GenerateRoute() {
                 resultUsage === undefined ? "mb-[22px]" : "mb-1.5",
               )}
             >
-              Prüfen und anpassen. Erst „Übernehmen“ schreibt den Eintrag — bestehende NPCs
-              werden nie überschrieben.
+              {t("generate.review.leadNpc")}
             </p>
             {resultUsage !== undefined && (
               <p className="mb-[22px] text-[12px] text-faint">{resultUsage}</p>
@@ -844,7 +847,7 @@ export function GenerateRoute() {
             {conflicts.length > 0 && (
               <div aria-live="polite" className="mb-3 rounded-md border border-input bg-card px-3.5 py-3">
                 <p className="mb-1.5 text-[13px] text-foreground">
-                  Dieser Eintrag existiert schon — nichts geschrieben:
+                  {t("generate.review.conflictsNpc")}
                 </p>
                 <ul className="flex flex-col gap-1">
                   {conflicts.map((path) => (
@@ -857,12 +860,12 @@ export function GenerateRoute() {
             )}
             {apply.isError && conflicts.length === 0 && (
               <p aria-live="polite" className="mb-3 text-[13px] text-destructive">
-                Nicht geschrieben — Server prüfen.
+                {t("generate.review.applyFailed")}
               </p>
             )}
             {discard.isError && (
               <p aria-live="polite" className="mb-3 text-[13px] text-destructive">
-                Nicht verworfen — Server prüfen.
+                {t("generate.review.discardFailed")}
               </p>
             )}
 
@@ -873,7 +876,7 @@ export function GenerateRoute() {
                 onClick={() => apply.mutate()}
                 className="h-auto px-[18px] py-2.5 text-[13.5px] font-semibold"
               >
-                Übernehmen
+                {t("generate.review.applyNpc")}
               </Button>
               <Button
                 type="button"
@@ -882,7 +885,7 @@ export function GenerateRoute() {
                 onClick={() => discard.mutate()}
                 className="h-auto border-input bg-transparent px-3.5 py-2 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
               >
-                Verwerfen
+                {t("common.discard")}
               </Button>
             </div>
           </>
@@ -892,7 +895,7 @@ export function GenerateRoute() {
           <div className="flex flex-col items-start gap-3.5 py-14 md:py-20">
             <p className="flex items-center gap-2.5 text-[15px] text-foreground">
               <Check aria-hidden size={17} className="flex-none text-success-text" />
-              {mode === "npc" ? "Geschrieben — NPC-Eintrag angelegt" : "Geschrieben — alles als draft"}
+              {t(mode === "npc" ? "generate.written.title.npc" : "generate.written.title.scene")}
             </p>
             <ul className="flex flex-col gap-1.5">
               {written.map((path) => (
@@ -902,9 +905,7 @@ export function GenerateRoute() {
               ))}
             </ul>
             <p className="max-w-[420px] text-[13px] leading-[1.6] text-muted-foreground">
-              {mode === "npc"
-                ? "Der NPC erscheint in der NPC-Liste und in der Suche. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts."
-                : "Die Szenen erscheinen im Pool mit Status „Entwurf“. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts."}
+              {t(mode === "npc" ? "generate.written.hint.npc" : "generate.written.hint.scene")}
             </p>
             <div className="mt-2 flex flex-wrap gap-2.5">
               {mode === "npc" && written[0] !== undefined && (
@@ -917,7 +918,7 @@ export function GenerateRoute() {
                   }}
                   className="h-auto border-input bg-transparent px-4 py-2.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
                 >
-                  NPC ansehen
+                  {t("generate.written.openNpc")}
                 </Button>
               )}
               <Button
@@ -928,7 +929,7 @@ export function GenerateRoute() {
                 }}
                 className="h-auto px-4 py-2.5 text-[13px] font-semibold"
               >
-                Zum Pool
+                {t("generate.written.toPool")}
               </Button>
             </div>
           </div>
@@ -942,11 +943,13 @@ export function GenerateRoute() {
  * The API has no reason field per stub — the honest reason is the batch the
  * stub came out of, so the row names the scene(s) of this run.
  */
-function stubReason(scenes: GenerateResult["scenes"]): string {
+function stubReason(scenes: GenerateResult["scenes"], t: Translate): string {
   const first = scenes[0];
-  if (first === undefined) return "aus diesem Lauf";
+  if (first === undefined) return t("generate.stub.reason.run");
   const title = fmString(first.properties.title) ?? first.path;
-  return scenes.length === 1 ? `aus ${title}` : `aus ${title} u. a.`;
+  return t(scenes.length === 1 ? "generate.stub.reason.scene" : "generate.stub.reason.scenes", {
+    title,
+  });
 }
 
 /**
@@ -956,6 +959,7 @@ function stubReason(scenes: GenerateResult["scenes"]): string {
  * (default 1) and a hardcoded "max. 2" would be a lie in half the setups.
  */
 function Working() {
+  const t = useT();
   return (
     <div
       role="status"
@@ -971,14 +975,12 @@ function Working() {
         aria-hidden
         className="hidden size-[30px] rounded-full border-[3px] border-primary motion-reduce:block"
       />
-      <p className="text-[14.5px] text-foreground">Drafts werden generiert …</p>
+      <p className="text-[14.5px] text-foreground">{t("generate.working.title")}</p>
       <p className="max-w-[380px] text-[13px] leading-[1.6] text-muted-foreground">
-        Der Server validiert die Antwort mechanisch; Formfehler gehen automatisch als Korrektur
-        ans Modell zurück.
+        {t("generate.working.correction")}
       </p>
       <p className="max-w-[380px] text-[12.5px] leading-[1.6] text-faint">
-        Läuft auf dem Server weiter — dieser Tab darf zu. Das Ergebnis wartet hier, bis es
-        übernommen oder verworfen wird.
+        {t("generate.working.background")}
       </p>
     </div>
   );
@@ -1008,6 +1010,7 @@ function SceneCard({
   onToggleEditing: () => void;
   onChange: (markdown: string) => void;
 }) {
+  const t = useT();
   const title = fmString(properties.title) ?? path;
   const status = fmString(properties.status) ?? "draft";
   const isContingency = fmString(properties.type) === "contingency";
@@ -1038,7 +1041,7 @@ function SceneCard({
           ) : (
             <Bookmark aria-hidden size={13} className="flex-none text-muted-foreground" />
           )}
-          {isContingency ? "Kontingenz" : "Geplante Szene"}
+          {t(isContingency ? "generate.review.contingency" : "generate.review.plannedScene")}
         </span>
         {location !== undefined && (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[12.5px] text-body-secondary">
@@ -1051,7 +1054,8 @@ function SceneCard({
             key={tag}
             className="rounded-full border border-border bg-card px-3 py-1 text-[12.5px] text-muted-foreground"
           >
-            #{tag}
+            {/* The hashtag is the data format's marker, not copy. */}
+            {`#${tag}`}
           </span>
         ))}
       </div>
@@ -1060,7 +1064,7 @@ function SceneCard({
         id={textareaId}
         value={markdown}
         onChange={onChange}
-        label={`Roh-Markdown von ${title}`}
+        label={t("generate.review.rawLabel", { title })}
         // A draft is a whole file — the preview renders the body only.
         preview={markdownBody(markdown)}
       />
@@ -1093,6 +1097,7 @@ function NpcDraftCard({
   onToggleEditing: () => void;
   onChange: (markdown: string) => void;
 }) {
+  const t = useT();
   const fm = draft.properties;
   const name = fmString(fm.name) ?? draft.path;
   const status = fmString(fm.status);
@@ -1111,7 +1116,7 @@ function NpcDraftCard({
         </h2>
         {status !== undefined && (
           <span className="flex-none rounded-full border border-input px-[9px] py-px text-[11.5px] text-dim">
-            {npcStatusLabel(status)}
+            {npcStatusLabel(status, t)}
           </span>
         )}
         <MarkdownEditorToggle
@@ -1144,7 +1149,9 @@ function NpcDraftCard({
           </div>
         )}
         {statblock !== undefined && (
-          <p className="mt-3 text-[12.5px] text-muted-foreground">Statblock: {statblock}</p>
+          <p className="mt-3 text-[12.5px] text-muted-foreground">
+            {t("generate.review.statblock", { statblock })}
+          </p>
         )}
       </div>
       <MarkdownEditorSurface
@@ -1152,7 +1159,7 @@ function NpcDraftCard({
         id={textareaId}
         value={markdown}
         onChange={onChange}
-        label={`Roh-Markdown von ${name}`}
+        label={t("generate.review.rawLabel", { title: name })}
         // A draft is a whole file — the preview renders the body only.
         preview={markdownBody(markdown)}
       />
@@ -1172,6 +1179,7 @@ function StubRow({
   decision: StubDecision | undefined;
   onDecide: (decision: StubDecision | undefined) => void;
 }) {
+  const t = useT();
   const path = `${stub.kind}s/${stub.id}`;
   return (
     <div
@@ -1200,7 +1208,7 @@ function StubRow({
             onClick={() => onDecide("accepted")}
             className="h-auto rounded-md border-[color-mix(in_srgb,var(--primary)_40%,transparent)] bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-3 py-1.5 text-[12.5px] font-normal text-primary-hover hover:bg-[color-mix(in_srgb,var(--primary)_20%,transparent)] hover:text-primary-hover"
           >
-            Annehmen
+            {t("generate.stub.accept")}
           </Button>
           <Button
             type="button"
@@ -1208,7 +1216,7 @@ function StubRow({
             onClick={() => onDecide("rejected")}
             className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
           >
-            Ablehnen
+            {t("generate.stub.reject")}
           </Button>
         </div>
       ) : (
@@ -1217,13 +1225,13 @@ function StubRow({
         <button
           type="button"
           onClick={() => onDecide(undefined)}
-          title="Entscheidung zurücknehmen"
+          title={t("generate.stub.undo")}
           className={cn(
             "flex-none rounded-md px-1.5 py-1 text-[12.5px]",
             decision === "accepted" ? "text-primary-hover" : "text-muted-foreground",
           )}
         >
-          {decision === "accepted" ? "Angenommen" : "Abgelehnt"}
+          {t(decision === "accepted" ? "generate.stub.accepted" : "generate.stub.rejected")}
         </button>
       )}
     </div>

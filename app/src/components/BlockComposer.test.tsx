@@ -19,6 +19,7 @@ import {
   type IfSectionBlock,
   type SceneBlock,
 } from "@/lib/blocks";
+import { translator } from "@/i18n/format";
 import { composerIssues, setBlockText } from "@/lib/composer";
 
 import {
@@ -253,7 +254,7 @@ describe("a block that would break the file", () => {
     const child = firstSection(blocks).children[0];
     if (child === undefined) throw new Error("expected a child");
     const next = setBlockText(blocks, child.id, "## Flow");
-    return { blocks: next, issues: composerIssues(next) };
+    return { blocks: next, issues: composerIssues(next, translator("de")) };
   }
 
   test("the hint stands at the offending card, not somewhere in the page", () => {

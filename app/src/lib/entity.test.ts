@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { NPC_STATUSES } from "@grimoire/shared/types";
 
+import { translator } from "@/i18n/format";
 import { browseListTitle, entityHeaderKind, npcStatusLabel } from "./entity";
+
+// The labels come from the catalog and the translator is passed in (issue
+// #69) — so a test says which language it asserts.
+const t = translator("de");
+const tEn = translator("en");
 
 describe("entityHeaderKind", () => {
   test("scene keeps the scene article", () => {
@@ -22,37 +28,37 @@ describe("entityHeaderKind", () => {
 
 describe("npcStatusLabel", () => {
   test("known statuses map to German labels", () => {
-    expect(npcStatusLabel("alive")).toBe("lebendig");
-    expect(npcStatusLabel("dead")).toBe("tot");
-    expect(npcStatusLabel("missing")).toBe("vermisst");
-    expect(npcStatusLabel("unknown")).toBe("unbekannt");
+    expect(npcStatusLabel("alive", t)).toBe("lebendig");
+    expect(npcStatusLabel("dead", t)).toBe("tot");
+    expect(npcStatusLabel("missing", t)).toBe("vermisst");
+    expect(npcStatusLabel("unknown", t)).toBe("unbekannt");
   });
 
   test("every known status of the format has a label", () => {
     for (const status of NPC_STATUSES) {
-      expect(npcStatusLabel(status)).not.toBe(status);
+      expect(npcStatusLabel(status, t)).not.toBe(status);
     }
   });
 
   test("case and surrounding whitespace do not matter", () => {
-    expect(npcStatusLabel(" Alive ")).toBe("lebendig");
+    expect(npcStatusLabel(" Alive ", t)).toBe("lebendig");
   });
 
   test("unknown values pass through verbatim (degrade)", () => {
-    expect(npcStatusLabel("verschollen im Nebel")).toBe("verschollen im Nebel");
-    expect(npcStatusLabel("")).toBe("");
+    expect(npcStatusLabel("verschollen im Nebel", t)).toBe("verschollen im Nebel");
+    expect(npcStatusLabel("", t)).toBe("");
   });
 });
 
 describe("browseListTitle", () => {
   test("the three list pages have German titles", () => {
-    expect(browseListTitle("scenes")).toBe("Szenen");
-    expect(browseListTitle("npcs")).toBe("NPCs");
-    expect(browseListTitle("locations")).toBe("Orte");
+    expect(browseListTitle("scenes", t)).toBe("Szenen");
+    expect(browseListTitle("npcs", t)).toBe("NPCs");
+    expect(browseListTitle("locations", t)).toBe("Orte");
   });
 
   test("a kind without a list has no title (the page says so)", () => {
-    expect(browseListTitle("dragons")).toBeUndefined();
-    expect(browseListTitle("")).toBeUndefined();
+    expect(browseListTitle("dragons", t)).toBeUndefined();
+    expect(browseListTitle("", t)).toBeUndefined();
   });
 });

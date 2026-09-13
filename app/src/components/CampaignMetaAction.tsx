@@ -32,6 +32,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/i18n";
 import { findCampaign } from "@/lib/campaign";
 import {
   CAMPAIGN_META_PATH,
@@ -46,12 +47,13 @@ import { useRevWriteMutation } from "@/lib/use-rev-write";
 
 /** The quiet trigger; the dialog itself mounts only while it is open. */
 export function CampaignMetaAction({ campaign }: { campaign: string }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   if (campaign === "") return null;
 
   return (
     <>
-      <HeaderAction icon={PenLine} label="Bearbeiten" onClick={() => setOpen(true)} />
+      <HeaderAction icon={PenLine} label={t("common.edit")} onClick={() => setOpen(true)} />
       {open && <CampaignMetaDialog campaign={campaign} onClose={() => setOpen(false)} />}
     </>
   );
@@ -64,6 +66,7 @@ function CampaignMetaDialog({
   campaign: string;
   onClose: () => void;
 }) {
+  const t = useT();
   // Authored name/description — the same cached list the switcher reads.
   // Prefill and edits are kept apart instead of seeding useState: the list is
   // normally already cached, but if it arrives a tick later the fields must
@@ -126,11 +129,8 @@ function CampaignMetaDialog({
       }}
     >
       <DialogContent aria-describedby={undefined} className="max-w-[460px]">
-        <DialogTitle>Kampagne bearbeiten</DialogTitle>
-        <DialogDescription>
-          Name und Beschreibung stehen in _campaign. Die id bleibt, wie sie ist — sie steckt
-          in jeder Adresse und ändert sich hier nicht.
-        </DialogDescription>
+        <DialogTitle>{t("campaignMeta.title")}</DialogTitle>
+        <DialogDescription>{t("campaignMeta.description")}</DialogDescription>
 
         <form
           onSubmit={(e) => {
@@ -141,7 +141,7 @@ function CampaignMetaDialog({
           className="mt-4 flex flex-col gap-3.5"
         >
           <label className="flex flex-col gap-1.5">
-            <span className="text-[12px] text-body-secondary">Name</span>
+            <span className="text-[12px] text-body-secondary">{t("campaignMeta.field.name")}</span>
             <input
               // Radix focuses the first focusable element on open — this input.
               value={values.name}
@@ -152,18 +152,20 @@ function CampaignMetaDialog({
             />
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="text-[12px] text-body-secondary">Beschreibung</span>
+            <span className="text-[12px] text-body-secondary">
+              {t("campaignMeta.field.description")}
+            </span>
             <textarea
               rows={3}
               value={values.description}
               onChange={(e) => setValue("description", e.target.value)}
-              placeholder="Ein Satz, der die Kampagne einordnet"
+              placeholder={t("campaignMeta.field.description.placeholder")}
               className="w-full resize-y rounded-md border border-input bg-panel-deep px-3 py-2 text-[13.5px] leading-[1.55] text-foreground placeholder:text-muted-foreground max-md:text-[16px]"
             />
           </label>
 
           <p aria-live="polite" className="min-h-[17px] text-[12px] text-destructive">
-            {unreachable ? "Kampagne nicht ladbar — Server prüfen" : (save.message ?? "")}
+            {unreachable ? t("campaignMeta.unreachable") : (save.message ?? "")}
           </p>
 
           <div className="flex items-center justify-end gap-2">
@@ -173,7 +175,7 @@ function CampaignMetaDialog({
                 variant="outline"
                 className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
               >
-                Abbrechen
+                {t("common.cancel")}
               </Button>
             </DialogClose>
             <Button
@@ -181,7 +183,7 @@ function CampaignMetaDialog({
               disabled={!canSubmit}
               className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
             >
-              {save.isPending ? "Speichere …" : "Speichern"}
+              {save.isPending ? t("common.saving") : t("common.save")}
             </Button>
           </div>
         </form>

@@ -2,20 +2,28 @@ import { describe, expect, test } from "bun:test";
 import type { CampaignTree } from "@grimoire/shared/types";
 import { BookMarked, BookOpen, Bookmark, FileText, GitFork, MapPin, User } from "lucide-react";
 
+import { translator } from "@/i18n/format";
 import { contingencyPaths, kindIcon, kindLabel, resultHref } from "./search";
+
+// The labels come from the catalog and the translator is passed in (issue #69).
+const t = translator("de");
+const tEn = translator("en");
 
 describe("kindLabel", () => {
   test("maps the indexed kinds to German labels", () => {
-    expect(kindLabel("scene")).toBe("Szene");
-    expect(kindLabel("npc")).toBe("NPC");
-    expect(kindLabel("location")).toBe("Ort");
-    expect(kindLabel("chapter")).toBe("Kapitel");
-    expect(kindLabel("campaign")).toBe("Kampagne");
+    expect(kindLabel("scene", t)).toBe("Szene");
+    expect(kindLabel("npc", t)).toBe("NPC");
+    expect(kindLabel("location", t)).toBe("Ort");
+    expect(kindLabel("chapter", t)).toBe("Kapitel");
+    expect(kindLabel("campaign", t)).toBe("Kampagne");
   });
 
   test("unknown kinds pass through unchanged (degrade, never throw)", () => {
-    expect(kindLabel("glossary")).toBe("glossary");
-    expect(kindLabel("")).toBe("");
+    expect(kindLabel("glossary", t)).toBe("glossary");
+    // …in every language: the kind comes off the wire, the catalog only names
+    // the five it knows.
+    expect(kindLabel("glossary", tEn)).toBe("glossary");
+    expect(kindLabel("", t)).toBe("");
   });
 });
 

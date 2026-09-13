@@ -1,6 +1,10 @@
 // The pure half of the create dialogs (issue #56): the address preview, and
-// how a failed POST becomes a German sentence plus, on a collision, one
-// actionable proposal.
+// how a failed POST becomes ONE sentence in the UI language plus, on a
+// collision, one actionable proposal.
+//
+// Since issue #69 the sentence is built from the server's error CODE through
+// the catalog, so these assertions are what the DM reads in German — with the
+// body's English `error` text as the documented fallback for an unknown code.
 
 import { describe, expect, test } from "bun:test";
 
@@ -20,7 +24,10 @@ import { translator } from "@/i18n/format";
 const t = translator("de");
 
 const conflictError = (details: Record<string, unknown>) =>
-  new ApiError(409, "gibt es schon", { error: "NPC „holm\" gibt es schon", ...details });
+  new ApiError(409, "already exists", {
+    error: 'npc "holm" already exists — suggestion: "holm-2"',
+    ...details,
+  });
 
 describe("derivedId / derivedAddress", () => {
   test("shows the id a name will produce", () => {
@@ -70,6 +77,13 @@ describe("createConflict", () => {
     expect(createConflict(conflictError({ code: "slug_taken", id: "holm" }))).toBeUndefined();
   });
 
+  test("a reserved id offers the same one-click proposal", () => {
+    const conflict = createConflict(
+      conflictError({ code: "slug_reserved", kind: "chapter", id: "npcs", suggestion: "npcs-2" }),
+    );
+    expect(conflict).toEqual({ id: "npcs", suggestion: "npcs-2", path: "" });
+  });
+
   test("other 409s and other errors are not collisions", () => {
     expect(createConflict(conflictError({ code: "session_running" }))).toBeUndefined();
     expect(createConflict(new ApiError(400, "nope", { error: "nope" }))).toBeUndefined();
@@ -78,19 +92,52 @@ describe("createConflict", () => {
 });
 
 describe("createErrorMessage", () => {
-  test("the server's German sentence wins for 409 and 400 — it names the value", () => {
+  test("the code's sentence wins for 409 and 400 — it names the value", () => {
     expect(
       createErrorMessage(
-        conflictError({ code: "slug_taken", id: "holm", suggestion: "holm-2" }),
+        conflictError({ code: "slug_taken", kind: "npc", id: "holm", suggestion: "holm-2" }),
         t,
       ),
-    ).toBe("NPC „holm\" gibt es schon");
+    ).toBe('NPC „holm" gibt es schon — Vorschlag: „holm-2"');
     expect(
       createErrorMessage(
-        new ApiError(400, "x", { error: "Der Name ergibt keine id — bitte Buchstaben verwenden" }),
+        conflictError({ code: "slug_reserved", kind: "chapter", id: "npcs", suggestion: "npcs-2" }),
         t,
       ),
-    ).toBe("Der Name ergibt keine id — bitte Buchstaben verwenden");
+    ).toBe('„npcs" ist ein reservierter Name — Vorschlag: „npcs-2"');
+    expect(
+      createErrorMessage(
+        new ApiError(400, "x", {
+          code: "slug_empty",
+          kind: "npc",
+          field: "name",
+          error: "the name yields no id — use letters or digits",
+        }),
+        t,
+      ),
+    ).toBe("Der Name ergibt keine id — bitte Buchstaben oder Ziffern verwenden.");
+  });
+
+  test("an English translation is really the English one", () => {
+    expect(
+      createErrorMessage(
+        conflictError({ code: "slug_taken", kind: "npc", id: "holm", suggestion: "holm-2" }),
+        translator("en"),
+      ),
+    ).toBe("NPC “holm” already exists — suggestion: “holm-2”");
+  });
+
+  test("an unknown code degrades to the body's English text, never to nothing", () => {
+    expect(
+      createErrorMessage(
+        new ApiError(409, "x", { code: "from_a_newer_server", error: "something is in the way" }),
+        t,
+      ),
+    ).toBe("something is in the way");
+    // …and a code whose body is missing its parameters does the same.
+    expect(
+      createErrorMessage(conflictError({ code: "slug_taken", kind: "npc" }), t),
+    ).toBe('npc "holm" already exists — suggestion: "holm-2"');
   });
 
   test("everything else degrades to one honest sentence", () => {

@@ -11,6 +11,8 @@ import { parseMarkdown } from "@grimoire/shared";
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 
+import { translator } from "@/i18n/format";
+
 import {
   blockLabel,
   blockMarkdown,
@@ -604,21 +606,25 @@ describe("list operations are lossless when nothing actually moves", () => {
   });
 });
 
+// The labels come from the catalog and the translator is passed in (issue
+// #69) — the German names are the ones the reading view shows.
+const t = translator("de");
+
 describe("labels", () => {
   test("the six callouts use the names the reading view already shows", () => {
     const kinds = ["readaloud", "check", "secret", "outcome", "loot", "note"] as const;
     const expected = ["Vorlesetext", "Check", "Geheim", "Konsequenz", "Beute", "Notiz"];
-    expect(kinds.map((kind) => blockLabel(makeCallout(kind, "x")))).toEqual(expected);
-    expect(kinds.map(calloutLabel)).toEqual(expected);
+    expect(kinds.map((kind) => blockLabel(makeCallout(kind, "x"), t))).toEqual(expected);
+    expect(kinds.map((kind) => calloutLabel(kind, t))).toEqual(expected);
   });
 
   test("structural blocks are named in German", () => {
-    expect(blockLabel(makeIfSection("a"))).toBe("Falls-Abschnitt");
-    expect(blockLabel(makeHeading(2, "Flow"))).toBe("Überschrift");
-    expect(blockLabel(makeText("Absatz"))).toBe("Text");
+    expect(blockLabel(makeIfSection("a"), t)).toBe("Falls-Abschnitt");
+    expect(blockLabel(makeHeading(2, "Flow"), t)).toBe("Überschrift");
+    expect(blockLabel(makeText("Absatz"), t)).toBe("Text");
     const raw = parseBlocks("> [!warning] x\n")[0];
     if (raw === undefined) throw new Error("expected a block");
-    expect(blockLabel(raw)).toBe("Roh-Block");
+    expect(blockLabel(raw, t)).toBe("Roh-Block");
   });
 
   test("ids are unique across blocks and parses", () => {

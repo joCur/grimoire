@@ -4,11 +4,17 @@
 // short hashes, inbox lines via their `- [x]` marker. Used by the review
 // route and by the topbar (progress, pool affordance); both share the same
 // query cache, so nothing fetches twice.
+//
+// It is a HOOK, not a pure helper, so the two readable labels it produces —
+// the source chip and the progress line — come from the catalog through
+// `useT()` (issue #69, same as lib/use-rev-write.ts); the lib layer stays
+// free of copy of its own.
 
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { fetchFile, fetchTree } from "@/api";
+import { useT } from "@/i18n";
 import { sceneTitle } from "@/lib/campaign";
 import { fmStringArray } from "@/lib/properties";
 import { useActedKeys } from "@/lib/review-memory";
@@ -59,7 +65,7 @@ export interface ReviewModel {
   total: number;
   seenCount: number;
   pendingCount: number;
-  /** Topbar progress per the prototype. */
+  /** Topbar progress per the prototype, in the UI language (#69). */
   progressLabel: string;
   /** Still loading session/inbox/hashes — nothing decided yet. */
   isPending: boolean;
@@ -80,6 +86,7 @@ export function useReviewEntries(
   campaign: string,
   { enabled = true }: UseReviewOptions = {},
 ): ReviewModel {
+  const t = useT();
   // Inbox lines acted on in THIS browser session keep their (now `- [x]`)
   // card visible instead of vanishing under the cursor — and the topbar
   // counts the same cards as the page because the memory sits above both.
@@ -160,7 +167,10 @@ export function useReviewEntries(
       const item: ReviewEntry = {
         key: `log:${index}`,
         source: "log",
-        sourceLabel: scene === undefined ? "Log" : `Log · ${scene}`,
+        // The scene is part of ONE sentence („Log · Ankunft am Leuchtturm"),
+        // so the separator travels with the message instead of being glued on.
+        sourceLabel:
+          scene === undefined ? t("review.source.log") : t("review.source.logScene", { scene }),
         tag,
         text: stripHashtags(entry.text),
         rawLine: entry.raw,
@@ -181,7 +191,7 @@ export function useReviewEntries(
         const item: ReviewEntry = {
           key: `inbox:${line.index}`,
           source: "inbox",
-          sourceLabel: "Inbox",
+          sourceLabel: t("review.source.inbox"),
           tag,
           text: line.text,
           rawLine: line.raw,
@@ -195,7 +205,7 @@ export function useReviewEntries(
     );
 
     return [...logEntries, ...inboxEntries];
-  }, [logLines, inboxBody, keepDoneInbox, hashes.data, reviewed, treeData]);
+  }, [logLines, inboxBody, keepDoneInbox, hashes.data, reviewed, treeData, t]);
 
   const seenCount = entries.filter((e) => e.done).length;
   const total = entries.length;
@@ -207,7 +217,7 @@ export function useReviewEntries(
     total,
     seenCount,
     pendingCount: total - seenCount,
-    progressLabel: `${seenCount} von ${total} gesichtet`,
+    progressLabel: t("review.progress", { seen: seenCount, total }),
     isPending: session.isPending || inbox.isPending || hashesWaiting,
     noSession,
     isError: session.isError,

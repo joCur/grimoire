@@ -125,8 +125,10 @@ describe("EntityArticle — location and titled entities", () => {
     // the first button would be stranded in the middle of the header.
     const actions = (
       <>
-        <button type="button">Bearbeiten</button>
-        <button type="button">Umbenennen</button>
+        {/* Stand-in caller markup, not app copy — the literals stay, in an
+            expression container so the i18n lint rule is satisfied. */}
+        <button type="button">{"Bearbeiten"}</button>
+        <button type="button">{"Umbenennen"}</button>
       </>
     );
     const grouped =

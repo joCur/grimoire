@@ -5,7 +5,10 @@
 import { ChevronLeft } from "lucide-react";
 import { Link } from "react-router";
 
+import { useT } from "@/i18n";
+
 export function MobileBackRow({ campaign }: { campaign: string }) {
+  const t = useT();
   return (
     <div className="border-b border-border px-3 py-0.5 md:hidden">
       <Link
@@ -13,7 +16,7 @@ export function MobileBackRow({ campaign }: { campaign: string }) {
         className="inline-flex min-h-11 items-center gap-0.5 rounded-md pr-2.5 pl-1 text-[15px] text-primary hover:text-primary-hover"
       >
         <ChevronLeft aria-hidden size={18} className="flex-none" />
-        Pool
+        {t("mobileBack.pool")}
       </Link>
     </div>
   );

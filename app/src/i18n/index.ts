@@ -31,3 +31,4 @@ export {
   type Messages,
 } from "./messages";
 export { I18nProvider, SETTINGS_KEY, useI18n, useT, type I18n } from "./provider";
+export { serverErrorBodyMessage, serverErrorMessage } from "./server-errors";

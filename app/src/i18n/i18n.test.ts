@@ -29,23 +29,24 @@ describe("the catalogs", () => {
   });
 
   test("every pattern compiles and formats in every language", () => {
-    // The parameters a message does not mention are ignored, so one generous
-    // bag of values covers the whole catalog — what is being proven here is
-    // that no pattern throws (a stray `{`, a broken plural).
-    const params = {
-      count: 2,
-      name: "Salzhafen",
-      id: "leuchtturm",
-      path: "npcs/jorna",
-      label: "Quickstats",
-      row: 1,
-      item: "combat",
-      state: "Session läuft",
-      elapsed: "0:12:33",
-      date: "13.09.2026",
-      kind: "Szene",
-      oldId: "jorna",
-    };
+    // The parameter names are READ OUT of the patterns themselves rather than
+    // kept in a hand-maintained bag: a new key with a new placeholder used to
+    // fail this test until somebody added its name here, which taught the
+    // catalog nothing. `{count}` and the two counters are numbers (plural
+    // needs one), everything else is a plain string.
+    const NUMERIC = new Set(["count", "seen", "total", "row"]);
+    const params: Record<string, string | number> = {};
+    for (const locale of LOCALES) {
+      for (const key of KEYS) {
+        for (const [, argument] of CATALOGS[locale][key].matchAll(/\{\s*(\w+)/g)) {
+          const at = argument as string;
+          params[at] = NUMERIC.has(at) ? 2 : `<${at}>`;
+        }
+      }
+    }
+    // Every catalog does mention SOMETHING, or this test proves nothing.
+    expect(Object.keys(params).length).toBeGreaterThan(5);
+
     for (const locale of LOCALES) {
       const t = translator(locale);
       for (const key of KEYS) {
@@ -53,7 +54,7 @@ describe("the catalogs", () => {
         expect(typeof out).toBe("string");
         // A pattern that failed to format falls back to the RAW pattern, so a
         // leftover `{` is the signature of exactly that.
-        expect(out).not.toContain("{");
+        expect(out, `${locale} ${key}`).not.toContain("{");
       }
     }
   });

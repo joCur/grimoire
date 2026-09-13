@@ -5,7 +5,7 @@
 // Three parties read this vocabulary:
 //
 //   app/src/markdown/remark-grimoire.ts   the renderer's mdast pass
-//   app/src/markdown/Callout.tsx          the six German names
+//   app/src/markdown/Callout.tsx          the six callout names
 //   app/src/lib/blocks.ts                 the Block-Composer's line scan
 //
 // Before this module each of them carried its own copy, and the copies had
@@ -18,6 +18,8 @@
 // No react, no mdast: plain string predicates, callable from both sides.
 
 import { CALLOUT_KINDS, type CalloutKind } from "@grimoire/shared/types";
+
+import type { MessageKey } from "@/i18n";
 
 // --- callouts ----------------------------------------------------------------
 
@@ -38,18 +40,22 @@ export function isCalloutKind(kind: string): kind is CalloutKind {
 }
 
 /**
- * The German names of the six callouts. These are the words the reading view
- * shows (Callout.tsx's label row; „Vorlesetext" from the read-aloud copy
- * button), and therefore the words the composer's cards and its type picker
- * use — one vocabulary for one block.
+ * The CATALOG KEYS of the six callout names (issue #69). The words themselves
+ * live in app/src/i18n — but which key belongs to which kind is part of the
+ * format's vocabulary and therefore belongs here: the reading view's label row
+ * (Callout.tsx) and the composer's cards and type picker (lib/blocks.ts) must
+ * name a block identically, in every language.
+ *
+ * Only a key lookup, no translator: this module stays free of React and of the
+ * catalogs, so both sides can keep asking it what a block IS.
  */
-export const CALLOUT_LABELS: Record<CalloutKind, string> = {
-  readaloud: "Vorlesetext",
-  check: "Check",
-  secret: "Geheim",
-  outcome: "Konsequenz",
-  loot: "Beute",
-  note: "Notiz",
+export const CALLOUT_LABEL_KEYS: Record<CalloutKind, MessageKey> = {
+  readaloud: "markdown.callout.readaloud",
+  check: "markdown.callout.check",
+  secret: "markdown.callout.secret",
+  outcome: "markdown.callout.outcome",
+  loot: "markdown.callout.loot",
+  note: "markdown.callout.note",
 };
 
 // --- `## If:` sections -------------------------------------------------------

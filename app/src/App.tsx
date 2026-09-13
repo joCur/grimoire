@@ -13,6 +13,7 @@ import { LiveRoute } from "@/routes/live";
 import { PoolRoute } from "@/routes/pool";
 import { ReviewRoute } from "@/routes/review";
 import { SceneRoute } from "@/routes/scene";
+import { SettingsRoute } from "@/routes/settings";
 
 // Shared layout of all campaign-scoped views: mounts the version polling
 // exactly once per campaign (issue #8 client side) — when the server bumps
@@ -62,6 +63,11 @@ export function App() {
         {/* Dev-only markdown harness (CLAUDE.md renderer check) — reached by
             URL, deliberately not linked from the chrome. */}
         {import.meta.env.DEV && <Route path="dev/markdown" element={<HarnessRoute />} />}
+        {/* Instance settings (issue #69) — deliberately NOT campaign-scoped:
+            the gear has to work on a fresh instance too, and the language is
+            an instance choice. Campaign-scoped sections appear on the page
+            when a campaign is open (issue #53 fills them). */}
+        <Route path="settings" element={<SettingsRoute />} />
         <Route path=":campaign" element={<CampaignScope />}>
           <Route index element={<PoolRoute />} />
           {/* The browse list pages (issue #11) — reached from the mobile start

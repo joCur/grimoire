@@ -64,7 +64,7 @@ export function HomeRoute() {
   if (isError) {
     return (
       <section className="mx-auto max-w-[560px] px-5 pt-16 pb-20 text-[14.5px] text-muted-foreground md:px-7">
-        <p>{t("home.serverDown")}</p>
+        <p>{t("common.serverDown")}</p>
       </section>
     );
   }

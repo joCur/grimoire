@@ -12,13 +12,17 @@
 //     edited as raw markdown, so the properties block has to be split off
 //     client-side (same rule as the server's parser: it degrades, it never
 //     throws).
-//   - German count labels for the context hint and the apply button.
+//   - the count labels for the context hint and the apply button — from the
+//     catalog since issue #69, with the translator PASSED IN (the lib layer
+//     must not decide which language the UI is in, see i18n/index.ts).
 //   - the run's token spend as one quiet line (issue #18), formatted from
 //     whatever the server sent — a successful run and a 422 both carry it.
 //   - which of the view's states the server's job puts us in (issue #19),
 //     and the error body of a failed job.
 
 import type { GenerateJob } from "@grimoire/shared/types";
+
+import type { Translate } from "@/i18n";
 
 /** German umlauts/ß first — NFKD would strip them to bare vowels. */
 const UMLAUTS: Array<[RegExp, string]> = [
@@ -82,8 +86,9 @@ export function newChapterId(title: string, chapterIds: readonly string[]): stri
 const RESERVED_CHAPTER_IDS = new Set(["npcs", "locations", "sessions"]);
 
 /**
- * Is this string usable as a chapter directory name? Returns the German
- * error text for the field, or undefined when the id is fine (issue #22).
+ * Is this string usable as a chapter directory name? Returns the error text
+ * for the field in the UI language, or undefined when the id is fine
+ * (issue #22).
  *
  * The bar is the server's: a chapter id is ONE safe, non-hidden path segment
  * (assertSafeChapterId) and not a reserved directory. On top of that the
@@ -97,18 +102,14 @@ const RESERVED_CHAPTER_IDS = new Set(["npcs", "locations", "sessions"]);
  * Order of the checks is by specificity: the most precise complaint wins,
  * the charset rule is the catch-all.
  */
-export function chapterIdError(id: string): string | undefined {
-  if (id === "") return "Kapitel-id fehlt.";
-  if (id.includes("/") || id.includes("\\")) {
-    return "Keine Schrägstriche — die Kapitel-id ist ein einzelnes Segment.";
-  }
-  if (id.includes("..")) return "Kein „..“ in der Kapitel-id.";
-  if (id.startsWith(".")) return "Kein Punkt am Anfang.";
-  if (/\s/.test(id)) return "Keine Leerzeichen — Wörter mit Bindestrich trennen.";
-  if (!/^[a-z0-9-]+$/.test(id)) return "Nur Kleinbuchstaben, Ziffern und Bindestriche.";
-  if (RESERVED_CHAPTER_IDS.has(id)) {
-    return "„npcs“, „locations“ und „sessions“ sind reserviert — kein Kapitelname.";
-  }
+export function chapterIdError(id: string, t: Translate): string | undefined {
+  if (id === "") return t("generate.input.chapterId.missing");
+  if (id.includes("/") || id.includes("\\")) return t("generate.input.chapterId.slash");
+  if (id.includes("..")) return t("generate.input.chapterId.dots");
+  if (id.startsWith(".")) return t("generate.input.chapterId.leadingDot");
+  if (/\s/.test(id)) return t("generate.input.chapterId.space");
+  if (!/^[a-z0-9-]+$/.test(id)) return t("generate.input.chapterId.charset");
+  if (RESERVED_CHAPTER_IDS.has(id)) return t("generate.input.chapterId.reserved");
   return undefined;
 }
 
@@ -120,14 +121,16 @@ export function chapterIdError(id: string): string | undefined {
  * cheaply: an id that already exists would be a 409, and saying so
  * before the run costs nothing.
  */
-export function npcIdError(id: string, existingIds: readonly string[] = []): string | undefined {
+export function npcIdError(
+  id: string,
+  existingIds: readonly string[],
+  t: Translate,
+): string | undefined {
   if (id === "") return undefined;
-  if (id.includes("/") || id.includes("\\")) return "Keine Schrägstriche — die id ist ein einzelnes Segment.";
-  if (/\s/.test(id)) return "Keine Leerzeichen — Wörter mit Bindestrich trennen.";
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) {
-    return "Nur Kleinbuchstaben, Ziffern und Bindestriche; Anfang keine Bindestriche.";
-  }
-  if (existingIds.includes(id)) return "NPC existiert schon — bestehende Einträge werden nie überschrieben.";
+  if (id.includes("/") || id.includes("\\")) return t("generate.input.npcId.slash");
+  if (/\s/.test(id)) return t("generate.input.npcId.space");
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) return t("generate.input.npcId.charset");
+  if (existingIds.includes(id)) return t("generate.input.npcId.exists");
   return undefined;
 }
 
@@ -162,14 +165,13 @@ export function markdownBody(markdown: string): string {
   return markdown;
 }
 
-/** German count label: `1 Szene` / `3 Szenen` (also used for 0). */
-export function countLabel(count: number, singular: string, plural: string): string {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
-/** Summary inside the apply button: "2 Szenen · 1 Stub". */
-export function applySummary(sceneCount: number, stubCount: number): string {
-  return `${countLabel(sceneCount, "Szene", "Szenen")} · ${countLabel(stubCount, "Stub", "Stubs")}`;
+/**
+ * Summary inside the apply button: "2 Szenen · 1 Stub". One catalog entry per
+ * sentence, so the plural of both halves is the message's business (ICU) and
+ * nothing is glued together here.
+ */
+export function applySummary(sceneCount: number, stubCount: number, t: Translate): string {
+  return t("generate.review.summary", { scenes: sceneCount, stubs: stubCount });
 }
 
 /**
@@ -177,12 +179,17 @@ export function applySummary(sceneCount: number, stubCount: number): string {
  * along with the prompt (npc/location names + the glossary, see
  * generator/README.md step 1).
  */
-export function contextHint(npcCount: number, locationCount: number, hasGlossary: boolean): string {
-  return [
-    countLabel(npcCount, "NPC", "NPCs"),
-    countLabel(locationCount, "Ort", "Orte"),
-    hasGlossary ? "Glossar" : "kein Glossar",
-  ].join(" · ");
+export function contextHint(
+  npcCount: number,
+  locationCount: number,
+  hasGlossary: boolean,
+  t: Translate,
+): string {
+  return t("generate.input.contextHint", {
+    npcs: npcCount,
+    locations: locationCount,
+    glossary: t(hasGlossary ? "generate.input.glossary" : "generate.input.noGlossary"),
+  });
 }
 
 /** Strings out of an error body field (`validationErrors`, `conflicts`). */
@@ -197,13 +204,15 @@ export function stringField(value: unknown): string | undefined {
 }
 
 /**
- * German thousands grouping, done by hand: Intl needs full ICU data, and a
- * runtime without it would silently print "12400" instead of "12.400".
+ * Thousands grouping, done by hand: Intl needs full ICU data, and a runtime
+ * without it would silently print "12400" instead of "12.400". The separator
+ * itself is locale data and therefore comes from the catalog („." in German,
+ * "," in English) — the rule does not.
  */
-function groupedNumber(n: number): string {
+function groupedNumber(n: number, separator: string): string {
   return Math.round(n)
     .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    .replace(/\B(?=(\d{3})+(?!\d))/g, separator);
 }
 
 // --- the view's state, derived from the server's job (issue #19) ----------
@@ -286,16 +295,15 @@ export function jobErrorBody(
  * out of an error body (`ApiError.details.usage`) — undefined whenever the
  * endpoint reported no usage, and then nothing is shown at all.
  */
-export function usageLabel(value: unknown): string | undefined {
+export function usageLabel(value: unknown, t: Translate): string | undefined {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
   const usage = value as Record<string, unknown>;
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
   const tokens = num(usage.inputTokens) + num(usage.outputTokens);
   const attempts = num(usage.attempts);
   if (tokens <= 0 && attempts <= 0) return undefined;
-  return `~${groupedNumber(Math.max(tokens, 0))} Tokens · ${countLabel(
-    Math.max(attempts, 0),
-    "Versuch",
-    "Versuche",
-  )}`;
+  return t("generate.usage", {
+    tokens: groupedNumber(Math.max(tokens, 0), t("generate.usage.group")),
+    attempts: Math.max(attempts, 0),
+  });
 }

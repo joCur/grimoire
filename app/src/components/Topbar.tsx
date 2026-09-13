@@ -75,6 +75,7 @@ import {
   Play,
   Plus,
   Search,
+  Settings,
   Sparkles,
   Square,
   Trash2,
@@ -97,13 +98,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { IconLogo } from "@/icons";
-import { isLocale, LOCALES, useI18n, useT, type Locale, type Translate } from "@/i18n";
+import { useT } from "@/i18n";
 import { campaignDescription, campaignLabel } from "@/lib/campaign";
 import { sessionElapsedLabel, sessionIsPaused } from "@/lib/session";
 import { navSection } from "@/lib/topbar-nav";
@@ -117,6 +116,29 @@ import {
   useSessionWrite,
 } from "@/lib/use-session";
 
+/**
+ * First path segments that are ROUTES, not campaign ids (issue #69).
+ *
+ * The topbar derives the campaign from the URL with its own `matchPath`
+ * calls, and `"/:campaign"` happily matches `/settings` with
+ * `campaign: "settings"` — which dressed the settings page in a full
+ * campaign chrome ("Kampagne: settings", the nav trio pointing at
+ * `/settings/list/npcs`, a session query for a campaign that does not
+ * exist). React Router itself ranks the static route higher and renders the
+ * right page; only this heuristic has to be told.
+ *
+ * The app's routes are the source: App.tsx has exactly these two non-campaign
+ * segments, and a campaign whose id collided with one of them would be
+ * unreachable anyway.
+ */
+const NON_CAMPAIGN_SEGMENTS: ReadonlySet<string> = new Set(["settings", "dev"]);
+
+function campaignOf(match: { params: { campaign?: string } } | null): string | undefined {
+  const id = match?.params.campaign;
+  if (id === undefined || NON_CAMPAIGN_SEGMENTS.has(id)) return undefined;
+  return id;
+}
+
 export function Topbar() {
   const t = useT();
   const { pathname } = useLocation();
@@ -127,12 +149,12 @@ export function Topbar() {
   const listMatch = matchPath("/:campaign/list/*", pathname);
   const poolMatch = matchPath("/:campaign", pathname);
   const campaign =
-    sceneMatch?.params.campaign ??
-    liveMatch?.params.campaign ??
-    reviewMatch?.params.campaign ??
-    generateMatch?.params.campaign ??
-    listMatch?.params.campaign ??
-    poolMatch?.params.campaign ??
+    campaignOf(sceneMatch) ??
+    campaignOf(liveMatch) ??
+    campaignOf(reviewMatch) ??
+    campaignOf(generateMatch) ??
+    campaignOf(listMatch) ??
+    campaignOf(poolMatch) ??
     "";
   const filePath = sceneMatch?.params["*"] ?? "";
   const isScene = sceneMatch !== null && filePath !== "" && campaign !== "";
@@ -242,14 +264,24 @@ export function Topbar() {
               onClick={() => setSearchOpen(true)}
               // THE elastic element of the topbar (issue #50): it wants
               // 200px, gives way down to ~5rem at medium widths and never
-              // lets the row overflow. Its label truncates; the ⌘K hint and
-              // the icon stay, so the chip is still recognizable at its
-              // narrowest.
-              className="hidden h-auto min-w-[5rem] shrink basis-[200px] gap-2 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-card hover:text-soft sm:flex"
+              // lets the row overflow — its label truncates on the way.
+              // Below lg it goes ICON-ONLY, the same step the generator entry
+              // takes below xl: that is the width at which the nav trio has
+              // already stepped aside and the settings gear (issue #69) would
+              // otherwise push the row over. The accessible name stays, so
+              // the control is unchanged for a screen reader.
+              className="hidden h-auto min-w-[5rem] shrink basis-[200px] gap-2 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-card hover:text-soft max-lg:min-w-0 max-lg:basis-auto max-lg:px-2.5 sm:flex"
             >
               <Search aria-hidden size={15} className="flex-none text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-left">{t("topbar.search")}</span>
-              <span className="flex-none rounded-[4px] border border-input px-[5px] py-px font-mono text-[11px] text-muted-foreground">
+              <span className="min-w-0 flex-1 truncate text-left max-lg:sr-only">
+                {t("topbar.search")}
+              </span>
+              {/* The ⌘K HINT, not the shortcut: it steps aside below lg,
+                  where the row is tight enough that the settings gear of
+                  issue #69 would otherwise push it over (issue #50 — the
+                  chip's 5rem floor is already reached there). The shortcut
+                  itself keeps working at every width. */}
+              <span className="flex-none rounded-[4px] border border-input px-[5px] py-px font-mono text-[11px] text-muted-foreground max-lg:hidden">
                 ⌘K
               </span>
             </Button>
@@ -268,6 +300,13 @@ export function Topbar() {
             brass session button per the prototype. Carries the run indicator
             of issue #19. */}
         {isPool && <GeneratorLink campaign={campaign} />}
+
+        {/* Instance settings (issue #69, PO feedback on PR #83) — ONE gear,
+            icon-only, following the generator entry's icon pattern. Icon-only
+            at EVERY width on purpose: the topbar overflowed once (issue #50)
+            and this is the least urgent thing on it, so it must not be able to
+            grow the row. Its accessible name comes from aria-label. */}
+        <SettingsLink />
 
         {/* THE session control: ONE chip in ONE slot for EVERY state (PO
             feedback on issue #40) — start offer, running session, unknown
@@ -772,6 +811,30 @@ function GeneratorLink({ campaign }: { campaign: string }) {
   );
 }
 
+/**
+ * The gear: `/settings` (issue #69). Icon-only and always present — the
+ * language lives behind it, and on a fresh instance (no campaign, no
+ * switcher) it is the only settings entry there is. Same geometry as the
+ * generator entry minus its label, so the row's width does not depend on it
+ * (issue #50).
+ */
+function SettingsLink() {
+  const t = useT();
+  return (
+    <Link
+      to="/settings"
+      aria-label={t("settings.title")}
+      title={t("settings.title")}
+      className={cn(
+        buttonVariants({ variant: "outline" }),
+        "h-auto w-auto flex-none border-input bg-card px-2.5 py-[7px] text-soft hover:border-border-hover hover:bg-card hover:text-foreground [&_svg]:size-[15px]",
+      )}
+    >
+      <Settings aria-hidden />
+    </Link>
+  );
+}
+
 /** "n von m gesichtet" on the review view (prototype's isReview topbar). */
 function ReviewProgress({ campaign }: { campaign: string }) {
   const review = useReviewEntries(campaign);
@@ -812,7 +875,7 @@ function PoolReviewLink({ campaign }: { campaign: string }) {
  * question this menu has to answer while switching between them.
  */
 function CampaignSwitcher({ campaign }: { campaign: string }) {
-  const { t, locale, setLocale, isSwitching } = useI18n();
+  const t = useT();
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
   const { data } = useQuery({ queryKey: ["campaigns"], queryFn: fetchCampaigns });
@@ -880,66 +943,8 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
           <Plus aria-hidden size={13} className="flex-none text-muted-foreground" />
           {t("create.campaign.title")}
         </DropdownMenuItem>
-        {/* THE language switch (issue #69 AK2) — deliberately NO new chrome
-            element of its own: this menu is already where the INSTANCE is
-            configured, it sits on every campaign-scoped route, and two radio
-            rows cost the topbar no pixel. The choice is stored on the SERVER
-            (PUT /api/settings), so it survives a reload instead of being a
-            per-browser secret (quality floor). */}
-        <DropdownMenuSeparator />
-        <LanguageChoice locale={locale} setLocale={setLocale} busy={isSwitching} t={t} />
       </DropdownMenuContent>
       {createOpen && <CampaignCreateDialog onClose={() => setCreateOpen(false)} />}
     </DropdownMenu>
-  );
-}
-
-/**
- * The UI language, as the last block of the campaign switcher's menu (issue
- * #69 AK2). A RADIO group, not two commands: the language is a state with
- * exactly one current value, and the check mark says which — the same way the
- * campaign rows above mark the open campaign.
- *
- * It is a quiet block on purpose. Switching the language is something a DM
- * does once, so it must not compete with the campaign rows and must not grow
- * a control of its own in a topbar that already overflowed once (issue #50).
- * The two language NAMES are endonyms („Deutsch", "English") — the one kind of
- * copy that is never translated, because it is read by someone who does not
- * yet speak the language the UI is in.
- */
-function LanguageChoice({
-  locale,
-  setLocale,
-  busy,
-  t,
-}: {
-  locale: Locale;
-  setLocale: (locale: Locale) => void;
-  busy: boolean;
-  t: Translate;
-}) {
-  return (
-    <>
-      <p className="px-2.5 pt-1 pb-1.5 text-[11.5px] text-muted-foreground">
-        {t("language.heading")}
-      </p>
-      <DropdownMenuRadioGroup
-        value={locale}
-        onValueChange={(next) => {
-          if (isLocale(next) && next !== locale) setLocale(next);
-        }}
-      >
-        {LOCALES.map((value) => (
-          <DropdownMenuRadioItem
-            key={value}
-            value={value}
-            disabled={busy}
-            className="text-[13px] text-body-secondary"
-          >
-            {t(value === "de" ? "language.de" : "language.en")}
-          </DropdownMenuRadioItem>
-        ))}
-      </DropdownMenuRadioGroup>
-    </>
   );
 }

@@ -29,6 +29,7 @@ import { NpcCard } from "@/components/NpcCard";
 import { SceneArticle } from "@/components/SceneArticle";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useI18n, useT } from "@/i18n";
 import { fmStringArray } from "@/lib/properties";
 import { isSceneDone } from "@/lib/scene-status";
 import { parseLogEntries } from "@/lib/session";
@@ -52,6 +53,7 @@ export function LiveRoute() {
 
 /** Below md: no live mode — a quiet pointer to the reading view instead. */
 function MobileLiveNote({ campaign }: { campaign: string }) {
+  const t = useT();
   const tree = useQuery({
     queryKey: ["tree", campaign],
     queryFn: () => fetchTree(campaign),
@@ -69,15 +71,13 @@ function MobileLiveNote({ campaign }: { campaign: string }) {
     <>
       <MobileBackRow campaign={campaign} />
       <div className="px-5 pt-12 text-center">
-        <p className="text-[14px] leading-[1.6] text-muted-foreground">
-          Der Live-Modus ist für den Desktop gedacht.
-        </p>
+        <p className="text-[14px] leading-[1.6] text-muted-foreground">{t("live.mobile.note")}</p>
         {scene !== undefined && (
           <Link
             to={`/${campaign}/file/${scene.path}`}
             className="mt-2 inline-flex min-h-11 items-center text-[15px] text-primary hover:text-primary-hover"
           >
-            Szene lesen: {scene.title}
+            {t("live.mobile.read", { title: scene.title })}
           </Link>
         )}
       </div>
@@ -86,6 +86,7 @@ function MobileLiveNote({ campaign }: { campaign: string }) {
 }
 
 function LiveDesktop({ campaign }: { campaign: string }) {
+  const t = useT();
   const session = useActiveSession(campaign);
   const tree = useQuery({
     queryKey: ["tree", campaign],
@@ -127,23 +128,19 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   const knownLocation = tree.data?.locations.find((l) => l.id === locationId);
 
   if (session.isPending) {
-    return <p className="px-7 pt-10 text-muted-foreground">Lade Session …</p>;
+    return <p className="px-7 pt-10 text-muted-foreground">{t("live.session.loading")}</p>;
   }
   if (session.data === null) {
     return <NoSessionYet campaign={campaign} />;
   }
   if (session.isError || session.data === undefined) {
-    return (
-      <p className="px-7 pt-10 text-muted-foreground">
-        Session nicht ladbar — Server prüfen und neu laden.
-      </p>
-    );
+    return <p className="px-7 pt-10 text-muted-foreground">{t("live.session.unloadable")}</p>;
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col max-lg:overflow-y-auto lg:flex-row">
       <nav
-        aria-label="Szenen der Session"
+        aria-label={t("live.nav.aria")}
         className="flex-none border-b border-border px-3 py-[18px] lg:w-[250px] lg:overflow-y-auto lg:border-b-0 lg:border-r"
       >
         {/* The chapter the session plays. It used to sit in the topbar next to
@@ -154,7 +151,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
           <p className="px-2 pb-3 font-serif text-[14px] text-foreground">{chapter.title}</p>
         )}
         <p className="px-2 pb-2 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
-          Geplant
+          {t("scene.planned.heading")}
         </p>
         <div className="mb-6 flex flex-col gap-0.5">
           {planned.map((scene) => (
@@ -168,14 +165,14 @@ function LiveDesktop({ campaign }: { campaign: string }) {
           ))}
           {planned.length === 0 && (
             <p className="px-2 text-[12.5px] text-muted-foreground">
-              Keine geplanten Szenen in diesem Kapitel.
+              {t("live.nav.noPlanned")}
             </p>
           )}
         </div>
         {contingencies.length > 0 && (
           <>
             <p className="px-2 pb-2 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
-              Falls es schiefgeht
+              {t("scene.contingencies.heading")}
             </p>
             <div className="mb-6 flex flex-col gap-0.5">
               {contingencies.map((scene) => (
@@ -203,9 +200,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
       <main className="min-w-0 flex-1 lg:overflow-y-auto">
         <div className="mx-auto max-w-[680px] px-7 pt-[30px] pb-[100px]">
           {selected === undefined ? (
-            <p className="text-muted-foreground">
-              Keine Szene im aktiven Kapitel — Szenen im Pool anlegen.
-            </p>
+            <p className="text-muted-foreground">{t("live.scene.none")}</p>
           ) : (
             // A `[[slug]]` in the scene text behaves like the aside cards
             // here: the click opens the DRAWER instead of navigating away
@@ -223,7 +218,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
           {locationId !== undefined && (
             <>
               <p className="text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
-                Ort
+                {t("live.scene.locationHeading")}
               </p>
               {knownLocation !== undefined ? (
                 // The tree knows the REAL path of the file — the card must not
@@ -242,13 +237,13 @@ function LiveDesktop({ campaign }: { campaign: string }) {
             </>
           )}
           <p className="text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
-            NPCs
+            {t("live.scene.npcsHeading")}
           </p>
           {(selected?.npcs ?? []).map((id) => (
             <NpcCard key={id} campaign={campaign} id={id} compact onOpen={setDrawerPath} />
           ))}
           {(selected?.npcs ?? []).length === 0 && (
-            <p className="text-[12.5px] text-muted-foreground">Keine NPCs in dieser Szene.</p>
+            <p className="text-[12.5px] text-muted-foreground">{t("live.scene.noNpcs")}</p>
           )}
         </div>
         <LogPanel campaign={campaign} body={session.data.body} activeSceneId={selected?.id} />
@@ -284,6 +279,7 @@ function PlayedGroup({
   playedIds: string[];
   onPick: (path: string) => void;
 }) {
+  const { t, tNode } = useI18n();
   const [open, setOpen] = useState(false);
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -293,13 +289,19 @@ function PlayedGroup({
           size={13}
           className="flex-none -rotate-90 transition-transform group-data-[state=open]:rotate-0"
         />
-        <span>Gespielt</span>
-        <span className="font-normal tracking-normal normal-case text-faint">
-          ({scenes.length})
-        </span>
+        {/* One sentence, one key: the count is a PART of the message (the
+            quieter styling travels with it) instead of a heading glued to a
+            number in JSX. */}
+        {tNode("live.nav.playedGroup", {
+          count: (
+            <span key="count" className="font-normal tracking-normal normal-case text-faint">
+              {`(${scenes.length})`}
+            </span>
+          ),
+        })}
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div role="group" aria-label="Gespielt" className="flex flex-col gap-0.5">
+        <div role="group" aria-label={t("live.nav.played")} className="flex flex-col gap-0.5">
           {scenes.map((scene) => (
             <SceneNavRow
               key={scene.path}
@@ -332,6 +334,7 @@ function SceneNavRow({
   dimmed?: boolean;
   onPick: () => void;
 }) {
+  const t = useT();
   const Icon = scene.type === "contingency" ? GitFork : Bookmark;
   return (
     <button
@@ -356,7 +359,7 @@ function SceneNavRow({
       {played && (
         <>
           <Check aria-hidden size={13} className="flex-none text-success-text" />
-          <span className="sr-only">gespielt</span>
+          <span className="sr-only">{t("status.scene.played")}</span>
         </>
       )}
     </button>
@@ -365,6 +368,7 @@ function SceneNavRow({
 
 /** Center column: the selected scene through the shared article pipeline. */
 function LiveScene({ campaign, path }: { campaign: string; path: string }) {
+  const t = useT();
   const { data, isPending, isError } = useQuery({
     queryKey: ["file", campaign, path],
     queryFn: () => fetchFile(campaign, path),
@@ -374,9 +378,9 @@ function LiveScene({ campaign, path }: { campaign: string; path: string }) {
     queryFn: () => fetchTree(campaign),
   });
 
-  if (isPending) return <p className="text-muted-foreground">Lade Szene …</p>;
+  if (isPending) return <p className="text-muted-foreground">{t("live.scene.loading")}</p>;
   if (isError || !data) {
-    return <p className="text-muted-foreground">Szene nicht ladbar — Pfad prüfen.</p>;
+    return <p className="text-muted-foreground">{t("live.scene.unloadable")}</p>;
   }
   return <SceneArticle file={data} tree={tree.data} variant="live" />;
 }
@@ -392,6 +396,7 @@ function LogPanel({
   body: string;
   activeSceneId: string | undefined;
 }) {
+  const t = useT();
   const [note, setNote] = useState("");
   const entries = parseLogEntries(body).reverse();
   const log = useSessionWrite(campaign, (vars: { text: string; sceneId?: string }) =>
@@ -413,12 +418,12 @@ function LogPanel({
   return (
     <div className="flex flex-none flex-col border-t border-border bg-panel-deep lg:max-h-[46%]">
       <p className="px-4 pt-3.5 pb-2 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
-        Log
+        {t("live.log.heading")}
       </p>
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 pb-2.5">
         {entries.length === 0 && (
           <p className="text-[12.5px] leading-[1.5] text-muted-foreground">
-            Noch keine Einträge — die Schnellnotiz unten landet hier.
+            {t("live.log.empty")}
           </p>
         )}
         {entries.map((entry, index) => (
@@ -432,9 +437,7 @@ function LogPanel({
       </div>
       <div className="flex-none px-4 pt-1 pb-3.5">
         {log.isError && (
-          <p className="mb-1.5 text-[11.5px] text-destructive">
-            Notiz nicht gespeichert — Server prüfen.
-          </p>
+          <p className="mb-1.5 text-[11.5px] text-destructive">{t("live.note.failed")}</p>
         )}
         <input
           type="text"
@@ -443,13 +446,11 @@ function LogPanel({
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.nativeEvent.isComposing) send();
           }}
-          placeholder="Schnellnotiz … #thread #npc #loot"
-          aria-label="Schnellnotiz"
+          placeholder={t("live.note.placeholder")}
+          aria-label={t("live.note.aria")}
           className="w-full rounded-lg border border-input bg-card px-[13px] py-[11px] text-[13.5px] text-foreground placeholder:text-muted-foreground"
         />
-        <p className="mt-[7px] text-[11.5px] text-faint">
-          Enter sendet · Zeit und Szene werden automatisch gesetzt
-        </p>
+        <p className="mt-[7px] text-[11.5px] text-faint">{t("live.note.hint")}</p>
       </div>
     </div>
   );
@@ -467,6 +468,7 @@ function LogPanel({
  * "fortsetzen" here either.
  */
 function NoSessionYet({ campaign }: { campaign: string }) {
+  const t = useT();
   const { enter, entering, conflict, conflictPath, failed } = useSessionStartFlow(campaign);
   const end = useSessionWrite(campaign, () => endSession(campaign));
   const busy = entering || end.isPending;
@@ -476,8 +478,11 @@ function NoSessionYet({ campaign }: { campaign: string }) {
         {conflict === "session_running" ? (
           <>
             <p className="mb-4 text-[14px] leading-[1.6] text-muted-foreground">
-              Eine ältere Session läuft noch
-              {conflictPath === undefined ? "" : ` (${conflictPath})`} — erst beenden.
+              {/* One sentence either way — the path is a parameter, not a
+                  fragment pasted between two halves. */}
+              {conflictPath === undefined
+                ? t("live.session.olderRunning")
+                : t("live.session.olderRunning.withPath", { path: conflictPath })}
             </p>
             <Button
               type="button"
@@ -486,26 +491,24 @@ function NoSessionYet({ campaign }: { campaign: string }) {
               onClick={() => end.mutate()}
               className="h-auto px-4 py-2 text-[13px]"
             >
-              Alte Session beenden
+              {t("live.session.endOld")}
             </Button>
           </>
         ) : (
           <>
-            <p className="mb-4 text-[14px] text-muted-foreground">Es läuft keine Session.</p>
+            <p className="mb-4 text-[14px] text-muted-foreground">{t("live.session.none")}</p>
             <Button
               type="button"
               disabled={busy}
               onClick={() => enter()}
               className="h-auto px-4 py-2 text-[13px] font-semibold"
             >
-              Session starten
+              {t("session.start")}
             </Button>
           </>
         )}
         {(failed || end.isError) && (
-          <p className="mt-3 text-[12.5px] text-destructive">
-            Session nicht geändert — Server prüfen.
-          </p>
+          <p className="mt-3 text-[12.5px] text-destructive">{t("session.write.failed")}</p>
         )}
       </div>
     </div>

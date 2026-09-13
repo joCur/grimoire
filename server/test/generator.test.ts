@@ -589,14 +589,20 @@ describe("POST /api/:campaign/generate", () => {
     const res = await generate(generateBody);
     expect(res.status).toBe(422);
     const body = (await res.json()) as {
+      code?: string;
+      maxTokens?: number;
       error: string;
       rawReply: string;
       usage: GenerateUsage;
       validationErrors?: string[];
     };
+    // Language-free since issue #69: the stable code plus the cap as a
+    // PARAMETER, and the English fallback text next to them.
+    expect(body.code).toBe("llm_truncated");
+    expect(body.maxTokens).toBe(8000);
     expect(body.error).toBe(
-      "Antwort wurde vom Modell abgeschnitten — LLM_MAX_TOKENS erhöhen " +
-        "(aktuell: 8000) oder Quelltext verkleinern.",
+      "the model's reply was cut off — raise LLM_MAX_TOKENS " +
+        "(currently: 8000) or shorten the source text.",
     );
     expect(body.rawReply).toBe(cut);
     expect(body.usage).toEqual({ inputTokens: 9000, outputTokens: 8000, attempts: 1 });
@@ -613,10 +619,19 @@ describe("POST /api/:campaign/generate", () => {
     const fake = useFake([{ text: "abgeschnitten", truncated: true }]);
     const res = await generate(generateBody);
     expect(res.status).toBe(422);
-    const body = (await res.json()) as { error: string; usage?: GenerateUsage };
+    const body = (await res.json()) as {
+      code?: string;
+      maxTokens?: number;
+      error: string;
+      usage?: GenerateUsage;
+    };
+    expect(body.code).toBe("llm_truncated");
+    // No cap configured, so none is reported — the app then names the
+    // endpoint default itself (i18n/server-errors.ts).
+    expect(body.maxTokens).toBeUndefined();
     expect(body.error).toBe(
-      "Antwort wurde vom Modell abgeschnitten — LLM_MAX_TOKENS erhöhen " +
-        "(aktuell: Standard des Endpoints) oder Quelltext verkleinern.",
+      "the model's reply was cut off — raise LLM_MAX_TOKENS " +
+        "(currently: the endpoint default) or shorten the source text.",
     );
     // no usage reported by the endpoint => no usage in the body
     expect(body.usage).toBeUndefined();
@@ -731,12 +746,14 @@ describe("POST /api/:campaign/generate", () => {
     const res = await generate(generateBody);
     expect(res.status).toBe(422);
     const body = (await res.json()) as {
+      code?: string;
+      maxTokens?: number;
       error: string;
       rawReply: string;
       usage: GenerateUsage;
       validationErrors?: string[];
     };
-    expect(body.error).toContain("abgeschnitten");
+    expect(body.code).toBe("llm_truncated");
     expect(body.rawReply).toBe(cut);
     expect(body.usage).toEqual({ inputTokens: 9000, outputTokens: 8000, attempts: 1 });
     expect(body.validationErrors).toBeUndefined();
@@ -1296,7 +1313,7 @@ describe("generate jobs", () => {
     const job = await waitForJob();
     expect(job.status).toBe("failed");
     expect(job.error!.status).toBe(422);
-    expect(job.error!.body.error).toContain("abgeschnitten");
+    expect(job.error!.body.code).toBe("llm_truncated");
     expect(job.error!.body.rawReply).toBe(cut);
     expect(job.error!.body.validationErrors).toBeUndefined();
     expect(fake.calls).toHaveLength(1);

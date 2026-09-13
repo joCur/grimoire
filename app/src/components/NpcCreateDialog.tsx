@@ -19,6 +19,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/i18n";
 import { deriveNpcSlug, isNpcSlug, npcNameFromText } from "@/lib/review";
 import type { ReviewEntry } from "@/lib/use-review";
 
@@ -38,6 +39,7 @@ export function NpcCreateDialog({
   onClose,
   onSubmit,
 }: NpcCreateDialogProps) {
+  const t = useT();
   const [id, setId] = useState(() => deriveNpcSlug(entry.text));
   const [name, setName] = useState(() => npcNameFromText(entry.text) ?? "");
 
@@ -54,11 +56,10 @@ export function NpcCreateDialog({
       }}
     >
       <DialogContent aria-describedby={undefined}>
-        <DialogTitle>NPC anlegen</DialogTitle>
-        <DialogDescription>
-          Legt den NPC-Eintrag mit status: unknown an; der Text landet unter ## Notizen. Gibt es
-          die id schon, wird auf den bestehenden Eintrag verwiesen.
-        </DialogDescription>
+        <DialogTitle>{t("create.npc.title")}</DialogTitle>
+        {/* `status: unknown` and `## Notizen` are FORMAT tokens on the wire
+            (README), so they stand verbatim inside the translated sentence. */}
+        <DialogDescription>{t("npcCreate.description")}</DialogDescription>
 
         <form
           onSubmit={(e) => {
@@ -69,7 +70,7 @@ export function NpcCreateDialog({
           className="mt-4 flex flex-col gap-3.5"
         >
           <label className="flex flex-col gap-1.5">
-            <span className="text-[12px] text-body-secondary">id (steht im Pfad)</span>
+            <span className="text-[12px] text-body-secondary">{t("npcCreate.idLabel")}</span>
             <input
               // Radix focuses the first focusable element on open — this input.
               value={id}
@@ -82,24 +83,22 @@ export function NpcCreateDialog({
               // #56): the field is normally prefilled from the log line
               // anyway, and a sample-campaign id in an empty field reads like
               // a default.
-              placeholder="id-des-npcs"
+              placeholder={t("npcCreate.idPlaceholder")}
             />
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="text-[12px] text-body-secondary">Name (optional)</span>
+            <span className="text-[12px] text-body-secondary">{t("npcCreate.nameLabel")}</span>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoComplete="off"
               className="w-full rounded-md border border-input bg-panel-deep px-3 py-2 text-[13.5px] text-foreground outline-none placeholder:text-muted-foreground max-md:text-[16px]"
-              placeholder="Name des NPCs"
+              placeholder={t("create.npc.namePlaceholder")}
             />
           </label>
 
           <p aria-live="polite" className="min-h-[17px] text-[12px] text-destructive">
-            {idInvalid
-              ? "id braucht Kleinbuchstaben, Ziffern und einzelne Bindestriche."
-              : (error ?? "")}
+            {idInvalid ? t("rename.error.slug") : (error ?? "")}
           </p>
 
           <div className="flex items-center justify-end gap-2">
@@ -109,7 +108,7 @@ export function NpcCreateDialog({
                 variant="outline"
                 className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
               >
-                Abbrechen
+                {t("common.cancel")}
               </Button>
             </DialogClose>
             <Button
@@ -117,7 +116,7 @@ export function NpcCreateDialog({
               disabled={!canSubmit}
               className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
             >
-              Anlegen
+              {t("common.create")}
             </Button>
           </div>
         </form>

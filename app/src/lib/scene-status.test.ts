@@ -7,13 +7,20 @@ import type { FileResponse } from "@grimoire/shared/types";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";
+import { translator } from "@/i18n/format";
 import {
-  SCENE_STATUS_OPTIONS,
   isSceneDone,
   sceneStatusMeta,
+  sceneStatusOptions,
   sceneStatusPatchBody,
   writeSceneStatus,
 } from "./scene-status";
+
+// The labels come from the catalog and the translator is passed in (issue
+// #69), so a test names the language it asserts instead of leaning on a
+// default.
+const t = translator("de");
+const tEn = translator("en");
 
 const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm";
 
@@ -133,13 +140,13 @@ describe("writeSceneStatus", () => {
 
 describe("status labels", () => {
   test("the menu offers exactly the known quartet, German and in lifecycle order", () => {
-    expect(SCENE_STATUS_OPTIONS.map((o) => o.value)).toEqual([
+    expect(sceneStatusOptions(t).map((o) => o.value)).toEqual([
       "draft",
       "ready",
       "played",
       "dropped",
     ]);
-    expect(SCENE_STATUS_OPTIONS.map((o) => o.label)).toEqual([
+    expect(sceneStatusOptions(t).map((o) => o.label)).toEqual([
       "Entwurf",
       "bereit",
       "gespielt",
@@ -147,9 +154,20 @@ describe("status labels", () => {
     ]);
   });
 
+  test("and the same quartet in English", () => {
+    expect(sceneStatusOptions(tEn).map((o) => o.label)).toEqual([
+      "draft",
+      "ready",
+      "played",
+      "dropped",
+    ]);
+  });
+
   test("an unknown value stays visible verbatim (degrade, never corrected)", () => {
-    expect(sceneStatusMeta("verschollen").label).toBe("verschollen");
-    expect(SCENE_STATUS_OPTIONS.map((o) => o.value)).not.toContain("verschollen");
+    expect(sceneStatusMeta("verschollen", t).label).toBe("verschollen");
+    // …in every language: the file is the truth, not the catalog.
+    expect(sceneStatusMeta("verschollen", tEn).label).toBe("verschollen");
+    expect(sceneStatusOptions(t).map((o) => o.value)).not.toContain("verschollen");
   });
 });
 

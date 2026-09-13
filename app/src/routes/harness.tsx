@@ -6,6 +6,7 @@
 import lighthouseRaw from "../../../examples/beispiel/01-salzhafen/hafen/ankunft-leuchtturm.md?raw";
 import smugglersRaw from "../../../examples/beispiel/01-salzhafen/hafen/von-schmugglern-erwischt.md?raw";
 
+import { useT } from "@/i18n";
 import { Markdown } from "@/markdown/Markdown";
 
 /** Splits a raw file into its properties block and the markdown body. */
@@ -28,6 +29,7 @@ Text nach der Verzweigung, außerhalb des details-Elements.
 `;
 
 function Fixture({ name, raw }: { name: string; raw: string }) {
+  const t = useT();
   const { properties, body } = splitProperties(raw);
   return (
     <section className="space-y-3 border-t pt-6">
@@ -35,7 +37,7 @@ function Fixture({ name, raw }: { name: string; raw: string }) {
       {properties && (
         <details>
           <summary className="cursor-pointer text-sm text-muted-foreground">
-            Eigenschaften anzeigen
+            {t("harness.properties")}
           </summary>
           <pre className="mt-2 overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">
             {properties}
@@ -48,13 +50,12 @@ function Fixture({ name, raw }: { name: string; raw: string }) {
 }
 
 export function HarnessRoute() {
+  const t = useT();
   return (
     <div className="mx-auto max-w-[760px] space-y-8 px-7 py-10">
       <header>
-        <h1 className="text-lg font-semibold">Markdown-Harness</h1>
-        <p className="text-sm text-muted-foreground">
-          Rendert die Referenz-Fixtures aus examples/ ohne laufenden Server.
-        </p>
+        <h1 className="text-lg font-semibold">{t("harness.title")}</h1>
+        <p className="text-sm text-muted-foreground">{t("harness.lead")}</p>
       </header>
       <Fixture name="01-salzhafen/hafen/ankunft-leuchtturm.md" raw={lighthouseRaw} />
       <Fixture name="01-salzhafen/hafen/von-schmugglern-erwischt.md" raw={smugglersRaw} />

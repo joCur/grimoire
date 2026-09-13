@@ -6,22 +6,27 @@ import type { CampaignTree, SearchResult } from "@grimoire/shared/types";
 import { BookMarked, BookOpen, Bookmark, FileText, GitFork, MapPin, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-/** German kind label per the design reference; unknown kinds pass through (degrade). */
-export function kindLabel(kind: string): string {
-  switch (kind) {
-    case "scene":
-      return "Szene";
-    case "npc":
-      return "NPC";
-    case "location":
-      return "Ort";
-    case "chapter":
-      return "Kapitel";
-    case "campaign":
-      return "Kampagne";
-    default:
-      return kind;
-  }
+import type { MessageKey, Translate } from "@/i18n";
+
+/**
+ * The kind labels of the ⌘K results, per the design reference. From the
+ * catalog since issue #69, with the translator PASSED IN (the lib layer never
+ * decides the language) — and from the SAME `kind.*` keys the properties
+ * dialog's title uses, so „Szene" is one string in one place.
+ *
+ * Unknown kinds pass through verbatim (degrade, README).
+ */
+const KIND_KEYS: Record<string, MessageKey> = {
+  scene: "kind.scene",
+  npc: "kind.npc",
+  location: "kind.location",
+  chapter: "kind.chapter",
+  campaign: "kind.campaign",
+};
+
+export function kindLabel(kind: string, t: Translate): string {
+  const key = KIND_KEYS[kind];
+  return key === undefined ? kind : t(key);
 }
 
 /**

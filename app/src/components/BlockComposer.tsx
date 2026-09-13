@@ -30,6 +30,7 @@ import { memo, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { INPUT_CLASS } from "@/components/ui/field";
+import { useT } from "@/i18n";
 import { blockLabel, blockText, type HeadingBlock, type SceneBlock } from "@/lib/blocks";
 import {
   headingDepths,
@@ -62,10 +63,11 @@ export function ComposerModeToggle({
   mode: ComposerMode;
   onModeChange: (mode: ComposerMode) => void;
 }) {
+  const t = useT();
   return (
     <div
       role="group"
-      aria-label="Editiermodus"
+      aria-label={t("composer.mode.aria")}
       className="flex flex-none items-center gap-px rounded-md border border-input p-px"
     >
       {(["blocks", "raw"] as const).map((candidate) => {
@@ -84,7 +86,7 @@ export function ComposerModeToggle({
                 : "text-body-secondary hover:bg-transparent hover:text-foreground",
             )}
           >
-            {candidate === "blocks" ? "Blöcke" : "Roh"}
+            {candidate === "blocks" ? t("composer.mode.blocks") : t("composer.mode.raw")}
           </Button>
         );
       })}
@@ -107,16 +109,17 @@ export function BlockTypePicker({
   onPick: (block: SceneBlock) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   return (
     <div className="rounded-[8px] border border-input bg-card p-2.5">
       <div className="mb-2 flex items-baseline gap-2">
         <p className="text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
-          Block einfügen
+          {t("composer.picker.title")}
         </p>
         <Button
           type="button"
           variant="ghost"
-          aria-label="Einfügen abbrechen"
+          aria-label={t("composer.picker.cancel.aria")}
           onClick={onCancel}
           className={cn(ICON_BUTTON_CLASS, "ml-auto size-7")}
         >
@@ -124,7 +127,7 @@ export function BlockTypePicker({
         </Button>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {newBlockOptions(scope).map((option) => (
+        {newBlockOptions(scope, t).map((option) => (
           <Button
             key={option.key}
             type="button"
@@ -166,8 +169,9 @@ export function BlockFields({
   onText: (text: string) => void;
   onDepth: (depth: HeadingBlock["depth"]) => void;
 }) {
+  const t = useT();
   const id = `${idPrefix}-${block.id}`;
-  const label = blockLabel(block);
+  const label = blockLabel(block, t);
   const text = blockText(block);
 
   if (block.type === "heading") {
@@ -177,18 +181,20 @@ export function BlockFields({
           <select
             id={`${id}-depth`}
             value={block.depth}
-            aria-label="Ebene der Überschrift"
+            aria-label={t("composer.heading.level.aria")}
             onChange={(event) => onDepth(Number(event.target.value) as HeadingBlock["depth"])}
             className={cn(INPUT_CLASS, "w-[104px] appearance-none pr-8")}
           >
             {/* A hand-written level outside the offered range stays selected
                 until the DM picks another one — the format degrades. */}
             {headingDepths(scope).includes(block.depth) ? null : (
-              <option value={block.depth}>Ebene {block.depth}</option>
+              <option value={block.depth}>
+                {t("composer.heading.level", { depth: block.depth })}
+              </option>
             )}
             {headingDepths(scope).map((depth) => (
               <option key={depth} value={depth}>
-                Ebene {depth}
+                {t("composer.heading.level", { depth })}
               </option>
             ))}
           </select>
@@ -201,8 +207,8 @@ export function BlockFields({
         <input
           id={id}
           value={text}
-          aria-label="Text der Überschrift"
-          placeholder="Flow"
+          aria-label={t("composer.heading.text.aria")}
+          placeholder={t("composer.heading.text.placeholder")}
           autoComplete="off"
           onChange={(event) => onText(event.target.value)}
           className={cn(INPUT_CLASS, "min-w-[140px] flex-1")}
@@ -217,15 +223,13 @@ export function BlockFields({
         <input
           id={id}
           value={text}
-          aria-label="Bedingung des Falls-Abschnitts"
-          placeholder="sie geben zu, für Jorna zu arbeiten"
+          aria-label={t("composer.ifSection.condition.aria")}
+          placeholder={t("composer.ifSection.condition.placeholder")}
           autoComplete="off"
           onChange={(event) => onText(event.target.value)}
           className={INPUT_CLASS}
         />
-        <p className="mt-1 text-[11.5px] text-faint">
-          Wird als „## If: …" geschrieben und in der Leseansicht einklappbar.
-        </p>
+        <p className="mt-1 text-[11.5px] text-faint">{t("composer.ifSection.hint")}</p>
       </div>
     );
   }
@@ -236,8 +240,12 @@ export function BlockFields({
         id={id}
         rows={textareaRows(text)}
         value={text}
-        aria-label={`Inhalt: ${label}`}
-        placeholder={block.type === "callout" ? "Text des Blocks" : "Markdown"}
+        aria-label={t("composer.block.content.aria", { label })}
+        placeholder={
+          block.type === "callout"
+            ? t("composer.block.text.placeholder")
+            : t("composer.block.raw.placeholder")
+        }
         onChange={(event) => onText(event.target.value)}
         className={cn(
           INPUT_CLASS,
@@ -249,9 +257,7 @@ export function BlockFields({
         )}
       />
       {block.type === "raw" && (
-        <p className="mt-1 text-[11.5px] text-faint">
-          Roh-Markdown mit Markern — wird unverändert übernommen.
-        </p>
+        <p className="mt-1 text-[11.5px] text-faint">{t("composer.raw.hint")}</p>
       )}
     </div>
   );
@@ -286,6 +292,7 @@ export function BlockComposer({
    */
   issues: Record<string, string>;
 }) {
+  const t = useT();
   // Exactly one card is expanded: on a phone a screen full of open textareas
   // hides the structure the list is there to show. Collapsing loses nothing —
   // the forms write into the draft as they are typed.
@@ -327,7 +334,7 @@ export function BlockComposer({
   );
 
   return (
-    <section aria-label={`Blöcke: ${label}`} className="mt-3">
+    <section aria-label={t("composer.list.aria", { label })} className="mt-3">
       <BlockList
         blocks={blocks}
         scope="document"
@@ -337,9 +344,7 @@ export function BlockComposer({
         handles={handles}
       />
       {blocks.length === 0 && (
-        <p className="mt-1 text-[12.5px] text-faint">
-          Noch keine Blöcke — mit „+" den ersten anlegen.
-        </p>
+        <p className="mt-1 text-[12.5px] text-faint">{t("composer.empty")}</p>
       )}
     </section>
   );
@@ -464,6 +469,7 @@ export const InsertSlot = memo(function InsertSlot({
   picking: boolean;
   handles: Handles;
 }) {
+  const t = useT();
   const at: InsertAt = { sectionId, index };
   if (picking) {
     return (
@@ -476,11 +482,17 @@ export const InsertSlot = memo(function InsertSlot({
       </div>
     );
   }
-  const where = at.sectionId === undefined ? "" : " im Falls-Abschnitt";
+  // Two whole sentences instead of a glued-in fragment: which list the „+"
+  // inserts into changes the word order in other languages (i18n, issue #69).
+  const position = at.index + 1;
   return (
     <button
       type="button"
-      aria-label={`Block${where} an Position ${at.index + 1} einfügen`}
+      aria-label={
+        at.sectionId === undefined
+          ? t("composer.insert.aria", { position })
+          : t("composer.insert.section.aria", { position })
+      }
       onClick={() => handles.openPicker(at)}
       className="group flex w-full items-center gap-2 py-1.5 text-faint transition-colors hover:text-primary"
     >
@@ -517,14 +529,15 @@ export const BlockCard = memo(function BlockCard({
   total: number;
   /** Is this card's form expanded? */
   open: boolean;
-  /** What blocks a save in THIS block (composerIssues), in German. */
+  /** What blocks a save in THIS block (composerIssues), already translated. */
   issue?: string;
   handles: Handles;
 }) {
-  const label = blockLabel(block);
+  const t = useT();
+  const label = blockLabel(block, t);
   // „Vorlesetext 2" — the position makes the label of the second Vorlesetext in
   // a scene distinguishable for screen readers and for the E2E suite.
-  const name = `${label} ${index + 1}`;
+  const name = t("composer.card.name", { label, position: index + 1 });
 
   return (
     <>
@@ -544,7 +557,7 @@ export const BlockCard = memo(function BlockCard({
           <Button
             type="button"
             variant="ghost"
-            aria-label={`${name} nach oben`}
+            aria-label={t("composer.card.moveUp.aria", { name })}
             disabled={index === 0}
             onClick={() => handles.move(block.id, -1)}
             className={ICON_BUTTON_CLASS}
@@ -554,7 +567,7 @@ export const BlockCard = memo(function BlockCard({
           <Button
             type="button"
             variant="ghost"
-            aria-label={`${name} nach unten`}
+            aria-label={t("composer.card.moveDown.aria", { name })}
             disabled={index === total - 1}
             onClick={() => handles.move(block.id, 1)}
             className={ICON_BUTTON_CLASS}
@@ -564,7 +577,11 @@ export const BlockCard = memo(function BlockCard({
           <Button
             type="button"
             variant="ghost"
-            aria-label={open ? `${name} zuklappen` : `${name} bearbeiten`}
+            aria-label={
+              open
+                ? t("composer.card.collapse.aria", { name })
+                : t("composer.card.edit.aria", { name })
+            }
             aria-expanded={open}
             onClick={() => handles.toggleOpen(block.id)}
             className={cn(ICON_BUTTON_CLASS, open && "text-primary")}
@@ -574,7 +591,7 @@ export const BlockCard = memo(function BlockCard({
           <Button
             type="button"
             variant="ghost"
-            aria-label={`${name} löschen`}
+            aria-label={t("composer.card.delete.aria", { name })}
             onClick={() => handles.remove(block.id)}
             className={cn(ICON_BUTTON_CLASS, "hover:bg-transparent hover:text-destructive")}
           >
@@ -614,9 +631,10 @@ export const BlockCard = memo(function BlockCard({
  * view itself.
  */
 function BlockSummary({ block }: { block: SceneBlock }) {
+  const t = useT();
   const text = blockText(block).trim();
   if (text === "") {
-    return <p className="mt-0.5 text-[13px] text-faint italic">leer</p>;
+    return <p className="mt-0.5 text-[13px] text-faint italic">{t("composer.summary.empty")}</p>;
   }
   return (
     <p

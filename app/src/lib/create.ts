@@ -8,15 +8,18 @@
 // they are about to create rather than discovering it later in an address.
 //
 // The interesting case is the collision. The server answers
-// `409 { code: "slug_taken", id, suggestion, path }` and writes nothing —
-// deliberately not an automatic `-2`, because the id is permanent. So the
-// dialog says what is in the way in German and offers the free proposal as ONE
-// click: taking it re-sends the same name with an explicit `id`.
+// `409 { code: "slug_taken" | "slug_reserved", kind, id, suggestion, path }`
+// and writes nothing — deliberately not an automatic `-2`, because the id is
+// permanent. So the dialog says what is in the way and offers the free
+// proposal as ONE click: taking it re-sends the same name with an explicit
+// `id`. The SENTENCE comes from the app's catalog via the code (issue #69,
+// i18n/server-errors.ts) — the server is language-free.
 
 import { toSlug } from "@grimoire/shared/slug";
 
 import { ApiError } from "@/api";
 import type { Translate } from "@/i18n/format";
+import { serverErrorMessage } from "@/i18n/server-errors";
 
 /** The id a typed name will produce ("" when the name yields none). */
 export function derivedId(name: string): string {
@@ -33,7 +36,7 @@ export function derivedAddress(name: string, prefix: string): string | undefined
   return id === "" ? undefined : `${prefix}${id}`;
 }
 
-/** What a `slug_taken` 409 carries — the taken id, a free one, and its path. */
+/** What a slug 409 carries — the taken id, a free one, and its path. */
 export interface CreateConflict {
   id: string;
   suggestion: string;
@@ -48,7 +51,10 @@ export interface CreateConflict {
 export function createConflict(error: unknown): CreateConflict | undefined {
   if (!(error instanceof ApiError) || error.status !== 409) return undefined;
   const { code, id, suggestion, path } = error.details;
-  if (code !== "slug_taken") return undefined;
+  // Both slug 409s offer the same interaction — a sentence plus one click on
+  // the free proposal. Only the sentence differs, and that is the catalog's
+  // job (i18n/server-errors.ts), not this function's.
+  if (code !== "slug_taken" && code !== "slug_reserved") return undefined;
   if (typeof id !== "string" || typeof suggestion !== "string" || suggestion === "") {
     return undefined;
   }
@@ -57,21 +63,19 @@ export function createConflict(error: unknown): CreateConflict | undefined {
 
 /**
  * The sentence a failed create shows, in the UI language (issue #69 — the
- * translator is PASSED IN, so this module holds no copy of its own). The
- * server's own message is still used for the two cases where it KNOWS more
- * than the client (the collision and the 400 for a name that yields no id —
- * both naming the value); everything else degrades to "not created", because
- * a stack detail in a dialog helps nobody.
+ * translator is PASSED IN, so this module holds no copy of its own).
  *
- * Those two server sentences are still German whatever the UI language is —
- * server strings get stable `code`s in Scheibe 3 of #69, and only then can
- * the app render them from the catalog.
+ * The cases where the SERVER knows more than the client — the collision, the
+ * reserved name, the 400 for a name that yields no id — are rendered from its
+ * error `code` through the catalog (i18n/server-errors.ts), which also carries
+ * the degrade to the body's English text for a code this app does not know.
+ * A 500 or a dead socket gets the generic „Nicht angelegt": a stack detail in
+ * a dialog helps nobody.
  */
 export function createErrorMessage(error: unknown, t: Translate): string {
   if (!(error instanceof ApiError)) return t("create.failed");
-  const message = typeof error.details.error === "string" ? error.details.error : "";
-  if ((error.status === 409 || error.status === 400) && message !== "") return message;
-  return t("create.failed");
+  if (error.status !== 409 && error.status !== 400) return t("create.failed");
+  return serverErrorMessage(error, t, "create.failed");
 }
 
 /** A create may run once the required field carries a derivable name. */

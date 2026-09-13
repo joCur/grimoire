@@ -14,11 +14,13 @@ import { Check, Copy, CornerDownRight, Dice3, Eye, Gem, PenLine } from "lucide-r
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { CALLOUT_LABELS, isCalloutKind } from "@/markdown/grammar";
+import { CALLOUT_LABEL_KEYS, isCalloutKind } from "@/markdown/grammar";
 
-// The labels are the format's vocabulary and live with it (grammar.ts) — the
-// composer's cards name the same six blocks and must not invent second names.
+// The labels are the format's vocabulary and live with it (grammar.ts holds
+// the catalog KEY per kind since issue #69) — the composer's cards name the
+// same six blocks and must not invent second names.
 // Markers are the closest lucide glyphs (Dice3/Eye/CornerDownRight/Gem/PenLine
 // match the prototype's own stroke SVGs closely enough — DECISIONS #5: lucide
 // first).
@@ -74,12 +76,13 @@ interface CalloutProps {
 }
 
 export function Callout({ kind, copyText, children }: CalloutProps) {
+  const t = useT();
   // Defensive degrade: the plugin only tags known kinds, but if an unknown
   // one ever arrives here it still renders as a plain blockquote.
   if (!isCalloutKind(kind)) return <blockquote>{children}</blockquote>;
   if (kind === "readaloud") return <ReadAloud copyText={copyText}>{children}</ReadAloud>;
 
-  const label = CALLOUT_LABELS[kind];
+  const label = t(CALLOUT_LABEL_KEYS[kind]);
   const icon = ICONS[kind];
   const colors = KIND_CLASSES[kind];
   return (
@@ -120,6 +123,7 @@ function ReadAloud({ copyText, children }: { copyText?: string | undefined; chil
 }
 
 function CopyButton({ text }: { text: string }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -141,7 +145,7 @@ function CopyButton({ text }: { text: string }) {
       variant="outline"
       onClick={copy}
       data-copied={copied ? "" : undefined}
-      aria-label={copied ? "Vorlesetext kopiert" : "Vorlesetext kopieren"}
+      aria-label={copied ? t("markdown.readaloud.copied.aria") : t("markdown.readaloud.copy.aria")}
       className="absolute top-2.5 right-2.5 h-auto gap-1.5 rounded-md border-input bg-background px-2.5 py-[5px] font-sans text-[12px] font-normal text-body-secondary opacity-25 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:border-border-hover hover:bg-background hover:text-foreground focus-visible:opacity-100 data-copied:opacity-100 [&_svg]:size-[13px]"
     >
       {copied ? (
@@ -149,7 +153,7 @@ function CopyButton({ text }: { text: string }) {
       ) : (
         <Copy aria-hidden />
       )}
-      {copied ? "Kopiert" : "Kopieren"}
+      {copied ? t("markdown.readaloud.copied") : t("markdown.readaloud.copy")}
     </Button>
   );
 }

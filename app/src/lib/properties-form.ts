@@ -35,7 +35,7 @@ import type { Translate } from "@/i18n/format";
 import type { MessageKey } from "@/i18n/messages";
 import { isEntityId, npcStatusLabel } from "@/lib/entity";
 import { fmQuickstats, fmStringArray } from "@/lib/properties";
-import { SCENE_STATUS_OPTIONS } from "@/lib/scene-status";
+import { sceneStatusOptions } from "@/lib/scene-status";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
 /** The kinds whose properties the form knows (README entity sections). */
@@ -112,10 +112,9 @@ function sceneTypeOptions(t: Translate): readonly FieldOption[] {
   });
 }
 
-const NPC_STATUS_OPTIONS: readonly FieldOption[] = NPC_STATUSES.map((value) => ({
-  value,
-  label: npcStatusLabel(value),
-}));
+function npcStatusOptions(t: Translate): readonly FieldOption[] {
+  return NPC_STATUSES.map((value) => ({ value, label: npcStatusLabel(value, t) }));
+}
 
 function sceneFields(t: Translate): readonly PropertiesField[] {
   return [
@@ -168,7 +167,7 @@ function sceneFields(t: Translate): readonly PropertiesField[] {
       key: "status",
       label: t("properties.scene.status.label"),
       control: "select",
-      options: SCENE_STATUS_OPTIONS,
+      options: sceneStatusOptions(t),
     },
   ];
 }
@@ -193,7 +192,7 @@ function npcFields(t: Translate): readonly PropertiesField[] {
       key: "status",
       label: t("properties.npc.status.label"),
       control: "select",
-      options: NPC_STATUS_OPTIONS,
+      options: npcStatusOptions(t),
     },
     {
       key: "statblock",
@@ -280,13 +279,13 @@ export function propertiesFieldsFor(
 export function propertiesKindLabel(kind: EntityKind, t: Translate): string | undefined {
   switch (kind) {
     case "scene":
-      return t("properties.kind.scene");
+      return t("kind.scene");
     case "npc":
-      return t("properties.kind.npc");
+      return t("kind.npc");
     case "location":
-      return t("properties.kind.location");
+      return t("kind.location");
     case "chapter":
-      return t("properties.kind.chapter");
+      return t("kind.chapter");
     default:
       return undefined;
   }

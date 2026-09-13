@@ -9,9 +9,11 @@
 
 import { RotateCw } from "lucide-react";
 
+import { useT } from "@/i18n";
 import { useStaleBuild } from "@/lib/build-id";
 
 export function UpdateBanner() {
+  const t = useT();
   const stale = useStaleBuild();
   if (!stale) return null;
 
@@ -20,14 +22,14 @@ export function UpdateBanner() {
       role="status"
       className="flex flex-none flex-wrap items-center justify-center gap-x-3 gap-y-1.5 border-b border-[color-mix(in_srgb,var(--primary)_35%,var(--border))] bg-[color-mix(in_srgb,var(--primary)_12%,var(--card))] px-4 py-2 text-[12.5px] text-body"
     >
-      <span className="text-center">Neue Version verfügbar — neu laden</span>
+      <span className="text-center">{t("update.available")}</span>
       <button
         type="button"
         onClick={() => location.reload()}
         className="inline-flex flex-none items-center gap-1.5 rounded-md border border-input bg-card px-2.5 py-1 text-[12.5px] font-medium text-soft transition-colors hover:border-primary hover:text-primary-hover"
       >
         <RotateCw aria-hidden size={13} />
-        Neu laden
+        {t("update.reload")}
       </button>
     </div>
   );

@@ -493,8 +493,10 @@ tat, oder umgekehrt. Verbindlich ist ab jetzt:
 
 ## 15. i18n: typisierter TS-Katalog + ICU über `intl-messageformat`
 
-> **Status: final** (#69, Scheibe 1). Gilt für alles Nutzersichtbare in `app/`.
-> Server-Strings folgen in Scheibe 3 (stabile `code`s statt Sätze).
+> **Status: final** (#69). Gilt für alles Nutzersichtbare in `app/` **und**
+> für jeden Fehler-Body des Servers, den ein Mensch liest. Der Zuschnitt in
+> Scheiben ist mit dem PO-Feedback zu PR #83 entfallen: die Migration ist
+> vollständig, das Lint-Gate ist überall scharf.
 
 **Entscheidung:** Nutzersichtbare Texte stehen im Katalog
 `app/src/i18n/` — `de.ts` (Primärsprache, CLAUDE.md) und `en.ts`, beide als
@@ -551,20 +553,49 @@ reiner Formatter, wir behalten Katalog und Laden selbst in der Hand.
 - **`<html lang>` folgt der Sprache**, gesetzt im Provider. `index.html` kann
   nur einen statischen Wert tragen; ein falsches `lang` spricht die Seite im
   Screenreader falsch aus und trennt sie falsch.
-- **Der Umschalter ist auf jeder Fläche erreichbar.** Im Menü des
-  Kampagnen-Switchers (jede kampagnen-gebundene Desktop-Route) und — über
-  `components/LanguageSwitch.tsx`, gleiche Radio-Semantik, native Radios — als
-  Fußzeile auf dem **Kaltstart** (dort gibt es keine Kampagne, also keinen
-  Switcher) und auf der **mobilen Startfläche** (die den Topbar unter `md`
-  ersetzt). Beide lesen und schreiben dieselbe Server-Einstellung über
-  `useI18n` — keine zweite Wahrheit.
-- **Lint-Gate:** `react/jsx-no-literals` (`bun run lint`, in CI) — scharf für
-  die migrierten Dateien, `warn` für den Rest. Die Warnungen sind die
-  To-do-Liste von Scheibe 2. **ESLint bleibt auf `^9`:**
-  `eslint-plugin-react@7.37.5` deklariert als Peer `… || ^9.7` und kennt
-  ESLint 10 nicht; da dieses Gate genau aus einer Regel dieses Plugins besteht,
-  ist die Major-Version des Linters die kleinere Abhängigkeit. Anheben, sobald
-  das Plugin ESLint 10 als Peer führt.
+- **Die Sprachwahl steht auf einer Einstellungsseite,** nicht im Menü des
+  Kampagnen-Switchers (PO-Feedback zu PR #83). Route `/settings`,
+  kampagnenunabhängig, Einstieg ist **ein** Zahnrad-Icon rechts im Topbar
+  (icon-only bei jeder Breite, damit es die Leiste nicht wachsen lässt —
+  Overflow #50). Begründung: das Switcher-Menü ist, wo man eine *Kampagne*
+  wählt; eine instanzweite Einstellung darin ist schwer zu finden und
+  kategorial falsch. Die Seite trennt **Instanz-Abschnitte** (heute: Sprache)
+  von **Kampagnen-Abschnitten** (`CAMPAIGN_SECTIONS`, leer — #53 füllt sie mit
+  Glossar und Kampagnenwissen); ohne Kampagne entfällt die zweite Hälfte samt
+  Überschrift.
+- **Der Umschalter bleibt zusätzlich dort, wo es kein Chrome gibt** — über
+  `components/LanguageSwitch.tsx` (gleiche Radio-Semantik, native Radios) als
+  Fußzeile auf dem **Kaltstart** (keine Kampagne, kein Switcher) und auf der
+  **mobilen Startfläche** (die den Topbar unter `md` ersetzt, das Zahnrad also
+  gar nicht zeigt). Mobil bewusst **inline statt Link auf `/settings`**: die
+  mobile Fläche ist Nachschlagen und Einwerfen (UI-BRIEF), die Lesesprache ist
+  die eine Instanz-Einstellung, die ein Telefon plausibel braucht — die übrigen
+  Abschnitte der Seite sind Vorbereitungsarbeit am Schreibtisch. Alle drei
+  Flächen lesen und schreiben dieselbe Server-Einstellung über `useI18n` —
+  keine zweite Wahrheit.
+- **Der Server ist sprachfrei.** Jeder Fehler-Body, den ein Mensch liest,
+  trägt einen stabilen `code` (`shared/src/error-codes.ts`) plus die
+  Parameter, die sein Satz braucht; der `error`-Text bleibt als **englischer
+  technischer Fallback** daneben (curl, Log, fremder Client). Die App bildet
+  den Satz aus dem Katalog (`app/src/i18n/server-errors.ts`, Keys
+  `server.<code>`). **Degradiert** nach der CLAUDE.md-Regel: kein Code, ein
+  unbekannter Code oder ein Body ohne die versprochenen Parameter fallen auf
+  den englischen `error`-Text zurück, danach auf den generischen Satz des
+  Views — nie auf eine leere Meldung. Codes sind **append-only**. Texte, die
+  nur im CLI/Log erscheinen (`grimoire seed`, Boot), bleiben englisch und
+  bekommen keinen Code.
+- **Lint-Gate:** `react/jsx-no-literals` (`bun run lint`, in CI) — **`error`
+  überall** in `app/src`. Die zweistufige Variante (scharf für migrierte
+  Dateien, `warn` für den Rest) war die To-do-Liste der Scheiben; die gibt es
+  nicht mehr. Die `allowedStrings`-Liste ist die einzige Ausnahme und trägt
+  ausschließlich Nicht-Copy: Trennzeichen, Tastennamen (`⌘K`, `esc`) und im
+  Block-Composer angezeigte Markdown-Marker (`[!`, `]`).
+  **ESLint bleibt auf `^9`:** `eslint-plugin-react@7.37.5` deklariert als Peer
+  `… || ^9.7` und kennt ESLint 10 nicht; da dieses Gate genau aus einer Regel
+  dieses Plugins besteht, ist die Major-Version des Linters die kleinere
+  Abhängigkeit. Anheben, sobald das Plugin ESLint 10 als Peer führt.
 - Enum-Labels, die sich viele Views teilen (Szenen-/NPC-Status in
-  `lib/scene-status.ts` und `lib/entity.ts`), bleiben bis Scheibe 2 deutsch:
-  eine Signaturänderung dort zieht halbe Views in diese Scheibe.
+  `lib/scene-status.ts`, `lib/entity.ts`), kommen ebenfalls aus dem Katalog;
+  die Helfer nehmen dafür `t: Translate` als Argument (`sceneStatusMeta`,
+  `sceneStatusOptions`, `npcStatusLabel`, `browseListTitle`). Ein **unbekannter**
+  Wert wird weiter verbatim angezeigt — die Datei bleibt die Wahrheit.

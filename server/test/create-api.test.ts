@@ -101,7 +101,13 @@ describe("POST /api/campaigns — the cold start", () => {
   test("a name that yields no id is a 400, not an invented one", async () => {
     const res = await post("/campaigns", { name: "!!! ??? ---" });
     expect(res.status).toBe(400);
-    expect(String((await errorBody(res)).error)).toContain("ergibt keine id");
+    const body = await errorBody(res);
+    // Language-free since issue #69: a stable code plus the field it points
+    // at, and an English technical fallback text next to them.
+    expect(body.code).toBe("slug_empty");
+    expect(body.kind).toBe("campaign");
+    expect(body.field).toBe("name");
+    expect(String(body.error)).toContain("yields no id");
   });
 
   test("an explicit id that is no slug is refused", async () => {
@@ -155,10 +161,13 @@ describe("the per-campaign creates", () => {
     const res = await post("/nordwind/chapters", { title: "NPCs" });
     expect(res.status).toBe(409);
     const body = await errorBody(res);
-    expect(body.code).toBe("slug_taken");
+    // Its OWN code since issue #69: the app offers the same one-click
+    // proposal as for a taken id, but says a different sentence.
+    expect(body.code).toBe("slug_reserved");
+    expect(body.kind).toBe("chapter");
     expect(body.id).toBe("npcs");
     expect(body.suggestion).toBe("npcs-2");
-    expect(String(body.error)).toContain("reservierter Name");
+    expect(String(body.error)).toContain("reserved name");
 
     // Nothing was created — neither as a chapter row nor as a broken address.
     const tree = (await (await app.request("/api/nordwind/tree")).json()) as {

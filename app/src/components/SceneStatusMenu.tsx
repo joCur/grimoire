@@ -25,7 +25,8 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SCENE_STATUS_OPTIONS, sceneStatusMeta } from "@/lib/scene-status";
+import { useT } from "@/i18n";
+import { sceneStatusMeta, sceneStatusOptions } from "@/lib/scene-status";
 import { useSceneStatusMutation } from "@/lib/use-scene-status";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +48,7 @@ export function SceneStatusControl({
   rev?: number | undefined;
   variant: SceneStatusVariant;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   // Lazy rev for the pool rows: only ever requested once the menu opens,
   // and served from the cache when the file was read before.
@@ -67,7 +69,7 @@ export function SceneStatusControl({
       // A row whose file could not be read at all cannot be patched — the
       // display stays, the menu just does nothing.
       disabled={file.isError}
-      message={message ?? (file.isError ? "Szene nicht ladbar" : undefined)}
+      message={message ?? (file.isError ? t("status.sceneUnloadable") : undefined)}
       open={open}
       onOpenChange={setOpen}
       onSelect={setStatus}
@@ -98,9 +100,10 @@ export function SceneStatusMenu({
   onOpenChange?: (open: boolean) => void;
   onSelect: (status: SceneStatus) => void;
 }) {
+  const t = useT();
   const pending = pendingStatus !== undefined;
   // Optimistic DISPLAY: the target value while the write is in flight.
-  const shown = sceneStatusMeta(pendingStatus ?? status);
+  const shown = sceneStatusMeta(pendingStatus ?? status, t);
   const pill = variant === "pill";
 
   return (
@@ -112,7 +115,7 @@ export function SceneStatusMenu({
         <DropdownMenuTrigger
           type="button"
           disabled={disabled}
-          aria-label={`Status ändern, aktuell ${sceneStatusMeta(status).label}`}
+          aria-label={t("status.change.aria", { current: sceneStatusMeta(status, t).label })}
           className="group -my-2 inline-flex items-center py-2 disabled:cursor-default"
         >
           <span
@@ -140,8 +143,8 @@ export function SceneStatusMenu({
             value={status}
             onValueChange={(value) => onSelect(value as SceneStatus)}
           >
-            {SCENE_STATUS_OPTIONS.map((option) => {
-              const meta = sceneStatusMeta(option.value);
+            {sceneStatusOptions(t).map((option) => {
+              const meta = sceneStatusMeta(option.value, t);
               return (
                 <DropdownMenuRadioItem
                   key={option.value}

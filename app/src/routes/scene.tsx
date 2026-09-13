@@ -38,12 +38,14 @@ import { NpcCard } from "@/components/NpcCard";
 import { PageContext } from "@/components/PageContext";
 import { SceneArticle } from "@/components/SceneArticle";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
+import { useT } from "@/i18n";
 import { entityHeaderKind } from "@/lib/entity";
 import { canEditFileBody } from "@/lib/file-body";
 import { fmString, fmStringArray } from "@/lib/properties";
 import { pageContextCrumbs } from "@/lib/page-context";
 
 export function SceneRoute() {
+  const t = useT();
   const params = useParams();
   const campaign = params.campaign ?? "";
   const path = params["*"] ?? "";
@@ -87,7 +89,11 @@ export function SceneRoute() {
   });
 
   if (isPending) {
-    return <p className="mx-auto max-w-[1060px] px-7 pt-10 text-muted-foreground">Lade Eintrag …</p>;
+    return (
+      <p className="mx-auto max-w-[1060px] px-7 pt-10 text-muted-foreground">
+        {t("scene.loading")}
+      </p>
+    );
   }
   // The error screen only when there is NOTHING to show. A failing BACKGROUND
   // refetch (server restarted, network blip) also flips the query to 'error'
@@ -96,7 +102,7 @@ export function SceneRoute() {
   if (data === undefined) {
     return (
       <p className="mx-auto max-w-[1060px] px-7 pt-10 text-muted-foreground">
-        Eintrag nicht ladbar — Pfad prüfen oder Server starten.
+        {t("scene.notLoadable")}
       </p>
     );
   }
@@ -178,7 +184,7 @@ export function SceneRoute() {
         {npcs.length > 0 && (
           <aside className="flex w-full flex-none flex-col gap-3.5 lg:sticky lg:top-0 lg:w-[280px]">
             <h2 className="text-[12px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
-              NPCs dieser Szene
+              {t("scene.npcs.heading")}
             </h2>
             {npcs.map((id) => (
               <NpcCard key={id} campaign={campaign} id={id} />

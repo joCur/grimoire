@@ -20,6 +20,7 @@
 import type { FileResponse } from "@grimoire/shared/types";
 
 import { ApiError } from "@/api";
+import type { MessageKey } from "@/i18n";
 
 /** True for the server's write conflict (409) — someone else wrote first. */
 export function isStaleFileError(error: unknown): boolean {
@@ -28,18 +29,21 @@ export function isStaleFileError(error: unknown): boolean {
 
 /**
  * Shown inline (no toast) after a conflict; the next attempt uses the fresh
- * token. The wording no longer says "extern": after the cutover the other
- * writer is another tab, the generator or a second request — not an editor
- * on the file system, which does not exist any more.
+ * token. CATALOG KEYS since issue #69 — the copy lives in app/src/i18n, this
+ * layer only names which sentence a path uses.
+ *
+ * The wording no longer says "extern": after the cutover the other writer is
+ * another tab, the generator or a second request — not an editor on the file
+ * system, which does not exist any more.
  */
-export const STALE_FILE_MESSAGE = "Inzwischen geändert — neu laden";
+export const STALE_FILE_MESSAGE: MessageKey = "write.stale";
 
 /**
  * Shown inline when a write failed for any reason OTHER than a conflict — the
  * default wording of every write path (a path with a narrower noun overrides
  * it, e.g. the status regler's „Status nicht gespeichert").
  */
-export const WRITE_FAILED_MESSAGE = "Nicht gespeichert — Server prüfen";
+export const WRITE_FAILED_MESSAGE: MessageKey = "write.failed";
 
 export type RevWriteResult =
   /** Written: the server's fresh file, ready to seed into the query cache. */

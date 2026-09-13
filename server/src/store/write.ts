@@ -33,6 +33,8 @@ import {
   isSessionEmpty,
   toSlug,
   type CampaignSummary,
+  type ErrorField,
+  type ErrorKind,
   type FileResponse,
 } from "@grimoire/shared";
 import { ApiError, assertSafeAddress, assertSafeCampaignId } from "../campaign-fs";
@@ -131,10 +133,18 @@ async function mutate<T>(campaign: string, fn: (db: GrimoireDb) => T): Promise<T
   }) as T;
 }
 
-/** The optimistic-concurrency check: the row's `rev` must be the one read. */
+/**
+ * The optimistic-concurrency check: the row's `rev` must be the one read.
+ *
+ * The body carries `code: "rev_conflict"` (issue #69) — `what` names WHICH
+ * document moved and stays English, as the technical fallback next to it.
+ */
 function guardRev(current: number, sent: number, what: string): void {
   if (current !== sent) {
-    throw new ApiError(409, `${what} — reload before saving`, { rev: current });
+    throw new ApiError(409, `${what} — reload before saving`, {
+      code: "rev_conflict",
+      rev: current,
+    });
   }
 }
 
@@ -1177,7 +1187,8 @@ export async function writeFileBody(
         if (duplicate !== undefined) {
           throw new ApiError(
             400,
-            `Glossar-Begriff „${duplicate}" kommt mehrfach vor — bitte zusammenfassen`,
+            `glossary term "${duplicate}" appears more than once — merge the entries`,
+            { code: "glossary_duplicate_term", term: duplicate },
           );
         }
         const nextRev = row.glossaryRev + 1;
@@ -2112,8 +2123,9 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
 //   2. A TAKEN ID IS A 409 WITH A FREE PROPOSAL. Not an automatic `-2`: the
 //      id is the permanent reference key, so the DM decides — either the
 //      proposal or another name. The body carries `code: "slug_taken"`, the
-//      colliding `id`, its `path` (so the app can link to what is there) and
-//      `suggestion`.
+//      entity `kind` as a stable token, the colliding `id`, its `path` (so the
+//      app can link to what is there) and `suggestion`. The SENTENCE the DM
+//      reads is the app's (issue #69) — what is here is its English fallback.
 //   3. A NEW ROW HOLDS ONLY WHAT WAS TYPED. Everything else keeps its column
 //      default, so `## Notizen`-style scaffolding nobody asked for cannot
 //      appear. The only exception is a chapter's optional goal, which goes
@@ -2136,13 +2148,22 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
 // address schema's first segments (store/paths, RESERVED_SEGMENTS), so a
 // chapter with one of those ids would be a row whose own document and scenes
 // resolve to an entity kind instead — created, then unreachable forever. It is
-// answered like a collision (same 409 shape, same one-click proposal), because
-// from the dialog's side it is the same situation: this id is not available.
+// answered like a collision (same 409 shape, same one-click proposal) under its
+// own code `slug_reserved`, because from the dialog's side it is the same
+// situation — only the reason differs, and the reason is what the app says.
 
-/** The `slug_taken` 409 — see rule 2 above. */
-function slugTaken(kind: string, id: string, suggestion: string, path: string): ApiError {
-  return new ApiError(409, `${kind} „${id}" gibt es schon — Vorschlag: „${suggestion}"`, {
+/**
+ * The `slug_taken` 409 — see rule 2 above.
+ *
+ * `kind` is a stable TOKEN (`@grimoire/shared/error-codes`, ErrorKind), not a
+ * label: the sentence the DM reads is built by the app from its own catalog in
+ * the UI language (issue #69). The `error` text here is the English technical
+ * fallback that curl, the log and an unknown-code client get.
+ */
+function slugTaken(kind: ErrorKind, id: string, suggestion: string, path: string): ApiError {
+  return new ApiError(409, `${kind} "${id}" already exists — suggestion: "${suggestion}"`, {
     code: "slug_taken",
+    kind,
     id,
     suggestion,
     path,
@@ -2150,24 +2171,28 @@ function slugTaken(kind: string, id: string, suggestion: string, path: string): 
 }
 
 /**
- * The reserved-id 409. It deliberately carries `code: "slug_taken"` as well:
- * the app's collision handling (lib/create.ts) is exactly the interaction this
- * needs — a German sentence plus the free proposal as one click — and a second
- * code would only be a second branch answering the same question. `path` is ""
- * because nothing is in the way; there is no document to link to.
+ * The reserved-id 409. Its own code since issue #69 — the app's collision
+ * handling (lib/create.ts) treats it exactly like a taken id (one sentence
+ * plus the free proposal as one click), but the SENTENCE is a different one
+ * („… ist ein reservierter Name"), and a catalog cannot say that from a code
+ * that also means "somebody else has it". `path` is "" because nothing is in
+ * the way; there is no document to link to.
  */
-function slugReserved(id: string, suggestion: string): ApiError {
-  return new ApiError(
-    409,
-    `„${id}" ist ein reservierter Name — Vorschlag: „${suggestion}"`,
-    { code: "slug_taken", id, suggestion, path: "", reserved: true },
-  );
+function slugReserved(kind: ErrorKind, id: string, suggestion: string): ApiError {
+  return new ApiError(409, `"${id}" is a reserved name — suggestion: "${suggestion}"`, {
+    code: "slug_reserved",
+    kind,
+    id,
+    suggestion,
+    path: "",
+  });
 }
 
 /**
  * The id of a new row: the caller's own `id` when it sent one, else the slug
- * of the typed name. `what` is the German label of the name field, so a 400
- * points at the input that has to change.
+ * of the typed name. `field` is the TOKEN of the input that has to change
+ * (`name` or `title`), so the app's 400 sentence can point at it in the UI
+ * language (issue #69).
  *
  * An EXPLICIT id exists for exactly one flow: the `slug_taken` 409 hands the
  * app a free `suggestion`, and "diesen Vorschlag nehmen" has to be one click
@@ -2175,7 +2200,12 @@ function slugReserved(id: string, suggestion: string): ApiError {
  * derivation, no fallback — and has to be a slug, because it lands in the
  * format's one permanent field.
  */
-function resolveNewId(explicit: string | undefined, name: string, what: string): string {
+function resolveNewId(
+  explicit: string | undefined,
+  name: string,
+  kind: ErrorKind,
+  field: ErrorField,
+): string {
   if (explicit !== undefined) {
     if (!ENTITY_SLUG.test(explicit)) {
       throw new ApiError(400, "id must be a kebab-case slug (a-z, 0-9, single dashes)");
@@ -2184,7 +2214,11 @@ function resolveNewId(explicit: string | undefined, name: string, what: string):
   }
   const id = toSlug(name);
   if (id === "") {
-    throw new ApiError(400, `${what} ergibt keine id — bitte Buchstaben oder Ziffern verwenden`);
+    throw new ApiError(400, `the ${field} yields no id — use letters or digits`, {
+      code: "slug_empty",
+      kind,
+      field,
+    });
   }
   return id;
 }
@@ -2210,7 +2244,7 @@ export async function createCampaign(
   description?: string,
   explicitId?: string,
 ): Promise<CampaignSummary> {
-  const id = resolveNewId(explicitId, name, "Der Name");
+  const id = resolveNewId(explicitId, name, "campaign", "name");
   assertSafeCampaignId(id);
   const db = await getDb();
   return db.transaction((handle) => {
@@ -2223,7 +2257,7 @@ export async function createCampaign(
       // that is what is pointed at. It carries the campaign id as its first
       // segment because a campaign collision has no campaign scope to be
       // relative to, unlike every other create in this file.
-      throw slugTaken("Kampagne", id, suggestion, `${id}/${CAMPAIGN_PATH}`);
+      throw slugTaken("campaign", id, suggestion, `${id}/${CAMPAIGN_PATH}`);
     }
     // `name === id` is stored as "" — the empty name means "fall back to the
     // id" everywhere it is rendered (./render, ./read), exactly as
@@ -2259,7 +2293,7 @@ export async function createChapter(
   goal?: string,
   explicitId?: string,
 ): Promise<FileResponse> {
-  const id = resolveNewId(explicitId, title, "Der Titel");
+  const id = resolveNewId(explicitId, title, "chapter", "title");
   assertSafeChapterId(id);
   // A reserved id would create an unreachable chapter — see the notes above.
   // Both guards share one "is this id available" predicate, so the proposal
@@ -2268,10 +2302,10 @@ export async function createChapter(
     const unavailable = (candidate: string): boolean =>
       RESERVED_SEGMENTS.has(candidate) || chapterRowOf(tx, campaign, candidate) !== undefined;
     if (RESERVED_SEGMENTS.has(id)) {
-      throw slugReserved(id, freeSlug(id, unavailable));
+      throw slugReserved("chapter", id, freeSlug(id, unavailable));
     }
     if (chapterRowOf(tx, campaign, id) !== undefined) {
-      throw slugTaken("Kapitel", id, freeSlug(id, unavailable), chapterPath(id));
+      throw slugTaken("chapter", id, freeSlug(id, unavailable), chapterPath(id));
     }
     const trimmedGoal = goal?.trim() ?? "";
     const body = trimmedGoal === "" ? "" : `## Ziel des Kapitels\n\n${trimmedGoal}\n`;
@@ -2311,7 +2345,7 @@ export async function createScene(
   chapter: string,
   explicitId?: string,
 ): Promise<FileResponse> {
-  const id = resolveNewId(explicitId, title, "Der Titel");
+  const id = resolveNewId(explicitId, title, "scene", "title");
   assertSafeChapterId(chapter);
   return mutate(campaign, (tx) => {
     if (!chapterIdExists(tx, campaign, chapter)) {
@@ -2324,7 +2358,7 @@ export async function createScene(
         (candidate) => sceneRowOf(tx, campaign, candidate) !== undefined,
       );
       throw slugTaken(
-        "Szene",
+        "scene",
         id,
         suggestion,
         scenePath(existing.chapterId ?? chapter, existing.groupSlug, existing.id),
@@ -2358,7 +2392,7 @@ export async function createNpc(
   name: string,
   explicitId?: string,
 ): Promise<FileResponse> {
-  const id = resolveNewId(explicitId, name, "Der Name");
+  const id = resolveNewId(explicitId, name, "npc", "name");
   return mutate(campaign, (tx) => {
     const existing = npcRowOf(tx, campaign, id);
     if (existing !== undefined && !isEmptyNpcRow(existing)) {
@@ -2366,7 +2400,7 @@ export async function createNpc(
       // referenced, so proposing it would hand the DM someone else's entry
       // under a name they never typed (see the notes above).
       const suggestion = freeSlug(id, (candidate) => npcRowOf(tx, campaign, candidate) !== undefined);
-      throw slugTaken("NPC", id, suggestion, npcPath(id));
+      throw slugTaken("npc", id, suggestion, npcPath(id));
     }
     const stored = name.trim() === id ? "" : name.trim();
     if (existing === undefined) {
@@ -2392,7 +2426,7 @@ export async function createLocation(
   name: string,
   explicitId?: string,
 ): Promise<FileResponse> {
-  const id = resolveNewId(explicitId, name, "Der Name");
+  const id = resolveNewId(explicitId, name, "location", "name");
   return mutate(campaign, (tx) => {
     const existing = locationRowOf(tx, campaign, id);
     if (existing !== undefined && !isEmptyLocationRow(existing)) {
@@ -2401,7 +2435,7 @@ export async function createLocation(
         id,
         (candidate) => locationRowOf(tx, campaign, candidate) !== undefined,
       );
-      throw slugTaken("Ort", id, suggestion, locationPath(id));
+      throw slugTaken("location", id, suggestion, locationPath(id));
     }
     const stored = name.trim() === id ? "" : name.trim();
     if (existing === undefined) {

@@ -25,6 +25,8 @@ export const de = {
   "common.saving": "Speichere …",
   "common.create": "Anlegen",
   "common.creating": "Lege an …",
+  "common.serverDown":
+    "Server nicht erreichbar — Grimoire-Server auf Port 3000 starten.",
 
   // --- language switch (campaign switcher menu) -----------------------------
   "language.heading": "Sprache",
@@ -114,7 +116,6 @@ export const de = {
 
   // --- cold start ("/" without a campaign) ----------------------------------
   "home.opening": "Kampagne wird geöffnet …",
-  "home.serverDown": "Server nicht erreichbar — Grimoire-Server auf Port 3000 starten.",
   "coldstart.title": "Willkommen bei Grimoire",
   "coldstart.lead": "Noch keine Kampagne. Leg eine an — danach entstehen darin Kapitel und Szenen.",
   "coldstart.id": "id: {id}",
@@ -134,10 +135,6 @@ export const de = {
     "Die geänderten Eigenschaften sind nicht gespeichert. Verwerfen öffnet die id-Änderung und lässt den Eintrag so, wie er gespeichert ist.",
   "properties.discard.keepEditing": "Weiter bearbeiten",
 
-  "properties.kind.scene": "Szene",
-  "properties.kind.npc": "NPC",
-  "properties.kind.location": "Ort",
-  "properties.kind.chapter": "Kapitel",
 
   // Field controls
   "properties.field.required": " · nötig",
@@ -239,4 +236,464 @@ export const de = {
   "rename.usage.chapterNpcs": "{count, plural, one {# NPC} other {# NPCs}}",
   "rename.usage.chapterLocations": "{count, plural, one {# Ort} other {# Orte}}",
   "rename.usage.bodyRefs": "{count, plural, one {# Textstelle} other {# Textstellen}}",
+
+  // --- settings page (/settings) --------------------------------------------
+  "settings.title": "Einstellungen",
+  "settings.lead":
+    "Einstellungen dieser Grimoire-Instanz. Änderungen gelten sofort und liegen auf dem Server.",
+  "settings.language.heading": "Sprache",
+  "settings.language.hint": "Sprache der Oberfläche. Gilt für diese Instanz, nicht für die Kampagnendaten.",
+  "settings.campaign.heading": "Kampagne: {name}",
+  "settings.campaign.hint": "Einstellungen, die nur für diese Kampagne gelten.",
+
+  // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
+  "server.slug_taken": '{kind} „{id}" gibt es schon — Vorschlag: „{suggestion}"',
+  "server.slug_reserved": '„{id}" ist ein reservierter Name — Vorschlag: „{suggestion}"',
+  "server.slug_empty": "{field} ergibt keine id — bitte Buchstaben oder Ziffern verwenden.",
+  "server.glossary_duplicate_term":
+    'Glossar-Begriff „{term}" kommt mehrfach vor — bitte zusammenfassen.',
+  "server.session_running": "Eine ältere Session läuft noch — erst beenden.",
+  "server.session_not_empty": "Diese Session hat Inhalt — beenden statt verwerfen.",
+  "server.rev_conflict": "Inzwischen extern geändert — neu laden vor dem Speichern.",
+  "server.job_restarted": "Server wurde während des Laufs neu gestartet — Job neu starten.",
+  "server.llm_truncated":
+    "Antwort wurde vom Modell abgeschnitten — LLM_MAX_TOKENS erhöhen (aktuell: {max}) oder Quelltext verkleinern.",
+  "server.llm_invalid": "Antwort hat die mechanische Prüfung nicht bestanden.",
+  "server.llm_truncated.defaultCap": "Standard des Endpoints",
+
+  "server.kind.entry": "Der Eintrag",
+  "server.kind.campaign": "Kampagne",
+  "server.kind.chapter": "Kapitel",
+  "server.kind.scene": "Szene",
+  "server.kind.npc": "NPC",
+  "server.kind.location": "Ort",
+  "server.field.name": "Der Name",
+  "server.field.title": "Der Titel",
+
+  // --- status enum labels (lib/scene-status.ts, lib/entity.ts) --------------
+  "status.scene.ready": "bereit",
+  "status.scene.draft": "Entwurf",
+  "status.scene.played": "gespielt",
+  "status.scene.dropped": "verworfen",
+  "status.npc.alive": "lebendig",
+  "status.npc.dead": "tot",
+  "status.npc.missing": "vermisst",
+  "status.npc.unknown": "unbekannt",
+
+  // --- browse list pages (/:campaign/list/:kind) ---------------------------
+  "browse.title.scenes": "Szenen",
+  "browse.title.npcs": "NPCs",
+  "browse.title.locations": "Orte",
+
+  // --- the shared write layer (lib/write-with-rev.ts, lib/use-rev-write.ts) -
+  "write.stale": "Inzwischen geändert — neu laden",
+  "write.failed": "Nicht gespeichert — Server prüfen",
+  "write.properties.failed": "Eigenschaften nicht gespeichert — Server prüfen",
+  "write.status.failed": "Status nicht gespeichert — Server prüfen",
+  "status.change.aria": "Status ändern, aktuell {current}",
+  "status.sceneUnloadable": "Szene nicht ladbar",
+
+  // --- the scene pool ("/:campaign", routes/pool.tsx) -----------------------
+  "pool.loading": "Lade Szenen …",
+  "pool.empty":
+    "Noch keine Kapitel. Ein Kapitel ist die Klammer um Szenen — danach legst du darin die erste Szene an.",
+  // The two counts of the pool header and the chapter accordions. German has
+  // one form for both plural categories here — the ICU shape stays, so `en`
+  // can differ without a second call site.
+  "pool.chapterCount": "{count, plural, one {# Kapitel} other {# Kapitel}}",
+  "pool.sceneCount": "{count, plural, =0 {keine Szenen} one {# Szene} other {# Szenen}}",
+  "pool.chapter.goal": "Ziel: {goal}",
+  "pool.chapter.empty": "Noch keine Szenen in diesem Kapitel.",
+  // The chapter pill: only `active` gets a label, every other value degrades
+  // to the raw string (README, "Format degradiert").
+  "pool.chapter.status.active": "aktiv",
+  // The quiet second half of the „Falls es schiefgeht" heading row — the „· "
+  // separator stays markup in the JSX.
+  "pool.contingencies.hint": "Kontingenzen",
+  "pool.scene.trigger": "Wenn: {trigger}",
+
+  // --- browse list pages (routes/browse.tsx) --------------------------------
+  // The three list titles are already above under `browse.title.*`.
+  "browse.fallbackTitle": "Nachschlagen",
+  "browse.unknown": "Diese Liste gibt es nicht.",
+  "browse.loading": "Lade …",
+  "browse.empty.scenes": "Noch keine Szenen.",
+  "browse.empty.npcs": "Noch keine NPCs.",
+  "browse.empty.locations": "Noch keine Orte.",
+
+  // --- the reading view ("/:campaign/file/*", routes/scene.tsx) -------------
+  "scene.loading": "Lade Eintrag …",
+  "scene.notLoadable": "Eintrag nicht ladbar — Pfad prüfen oder Server starten.",
+  "scene.npcs.heading": "NPCs dieser Szene",
+
+  // --- context line + mobile back row ---------------------------------------
+  "context.aria": "Kontext",
+  "mobileBack.pool": "Pool",
+
+  // --- shared scene-group headings (routes/live.tsx + routes/pool.tsx) ------
+  // Neutral prefix on purpose: the live nav and the pool list show the SAME
+  // two group headings — one key, not one per view.
+  "scene.planned.heading": "Geplant",
+  "scene.contingencies.heading": "Falls es schiefgeht",
+
+  // --- live mode (routes/live.tsx) ------------------------------------------
+  // Below md there is no live mode (UI-BRIEF §4) — just the pointer.
+  "live.mobile.note": "Der Live-Modus ist für den Desktop gedacht.",
+  "live.mobile.read": "Szene lesen: {title}",
+
+  "live.nav.aria": "Szenen der Session",
+  "live.nav.noPlanned": "Keine geplanten Szenen in diesem Kapitel.",
+  // The collapsed group of scenes that are behind us (issue #73): the heading
+  // alone names the group for a screen reader, `playedGroup` is the visible
+  // trigger where the count is PART of the sentence.
+  "live.nav.played": "Gespielt",
+  "live.nav.playedGroup": "Gespielt {count}",
+
+  "live.scene.none": "Keine Szene im aktiven Kapitel — Szenen im Pool anlegen.",
+  "live.scene.loading": "Lade Szene …",
+  "live.scene.unloadable": "Szene nicht ladbar — Pfad prüfen.",
+  "live.scene.locationHeading": "Ort",
+  "live.scene.npcsHeading": "NPCs",
+  "live.scene.noNpcs": "Keine NPCs in dieser Szene.",
+
+  "live.log.heading": "Log",
+  "live.log.empty": "Noch keine Einträge — die Schnellnotiz unten landet hier.",
+  "live.note.aria": "Schnellnotiz",
+  "live.note.placeholder": "Schnellnotiz … #thread #npc #loot",
+  "live.note.hint": "Enter sendet · Zeit und Szene werden automatisch gesetzt",
+  "live.note.failed": "Notiz nicht gespeichert — Server prüfen.",
+
+  "live.session.loading": "Lade Session …",
+  "live.session.unloadable": "Session nicht ladbar — Server prüfen und neu laden.",
+  "live.session.none": "Es läuft keine Session.",
+  // The one start conflict the live route turns into a question: an OLDER
+  // session nobody ended. One sentence per variant — the path is a parameter,
+  // never a fragment between two halves.
+  "live.session.olderRunning": "Eine ältere Session läuft noch — erst beenden.",
+  "live.session.olderRunning.withPath": "Eine ältere Session läuft noch ({path}) — erst beenden.",
+  "live.session.endOld": "Alte Session beenden",
+
+  // --- live detail drawer (components/LiveEntityDrawer.tsx) -----------------
+  "live.drawer.loading": "Lade Details …",
+  "live.drawer.unloadable": "Nicht ladbar — {path} prüfen.",
+  "live.drawer.open": "Eintrag öffnen",
+
+  // --- review ("Fünf Minuten Ernte", routes/review.tsx, lib/use-review.ts) --
+  "review.title": "Fünf Minuten Ernte",
+  "review.sessionFailed": "Session nicht ladbar — Server prüfen und neu laden.",
+  "review.noSession": "Es gibt keine Session zum Sichten.",
+  "review.backToPool": "Zurück zum Pool",
+  "review.lead":
+    "Einträge mit #thread und #npc aus Log und Inbox. Übernehmen, anlegen oder verwerfen — der Rest bleibt im Log.",
+  // Topbar and the mobile page read the same line (two parameters, #69).
+  "review.progress": "{seen} von {total} gesichtet",
+  "review.hashUnavailable":
+    "Gesichtet-Status der Log-Zeilen nicht verfügbar — Grimoire über localhost oder https öffnen.",
+  "review.loading": "Lade Einträge …",
+  "review.empty": "Keine markierten Einträge in dieser Session — nichts zu sichten.",
+
+  // The card's source chip — the scene travels INSIDE the sentence.
+  "review.source.log": "Log",
+  "review.source.logScene": "Log · {scene}",
+  "review.source.inbox": "Inbox",
+
+  "review.action.thread": "Als Faden übernehmen",
+  "review.action.failed": "Aktion nicht gespeichert — Server prüfen.",
+  "review.npc.failed": "NPC nicht angelegt — Server prüfen.",
+
+  // The done row: the action of THIS sitting, or the neutral fallback after a
+  // reload (the server only stores done/not-done).
+  "review.done.thread": "Als Faden übernommen",
+  "review.done.npc": "NPC angelegt",
+  "review.done.dismiss": "Verworfen",
+  "review.done.seen": "gesichtet",
+
+  "review.threads.title": "Offene Fäden des Kapitels",
+  "review.threads.empty": "Noch keine offenen Fäden in diesem Kapitel.",
+  "review.threads.new": "neu",
+  "review.finish": "Fertig — zurück zum Pool",
+
+  // --- NPC stub dialog of the review (components/NpcCreateDialog.tsx) -------
+  // `status: unknown` and `## Notizen` are FORMAT tokens on the wire (README),
+  // so they stand verbatim in both languages.
+  "npcCreate.description":
+    "Legt den NPC-Eintrag mit status: unknown an; der Text landet unter ## Notizen. Gibt es die id schon, wird auf den bestehenden Eintrag verwiesen.",
+  "npcCreate.idLabel": "id (steht im Pfad)",
+  "npcCreate.idPlaceholder": "id-des-npcs",
+  "npcCreate.nameLabel": "Name (optional)",
+
+  // --- shared verbs: ADD to the existing common block --------------------
+  "common.edit": "Bearbeiten",
+
+  // --- mobile start surface (routes/mobile-start.tsx) ----------------------
+  "mobileStart.search": "Szenen, NPCs, Orte suchen …",
+  "mobileStart.browse": "Nachschlagen",
+  "mobileStart.count.scenes": "{count, plural, one {# Szene} other {# Szenen}}",
+  "mobileStart.count.npcs": "{count, plural, one {# NPC} other {# NPCs}}",
+  "mobileStart.count.locations": "{count, plural, one {# Ort} other {# Orte}}",
+  "mobileStart.inbox.label": "Inbox",
+  "mobileStart.inbox.placeholder": "Inbox — Idee einwerfen … #thread #npc",
+  "mobileStart.inbox.submit": "Einwerfen",
+  "mobileStart.inbox.saved": "Eingeworfen.",
+  "mobileStart.inbox.failed": "Nicht gespeichert — Server prüfen.",
+
+  // --- ⌘K search palette (components/CommandPalette.tsx) -------------------
+  "palette.title": "Suchen",
+  "palette.placeholder": "Szenen, NPCs, Orte durchsuchen …",
+  "palette.results.aria": "Suchergebnisse",
+  "palette.empty": "Nichts gefunden.",
+
+  // --- stale-bundle banner (components/UpdateBanner.tsx) -------------------
+  "update.available": "Neue Version verfügbar — neu laden",
+  "update.reload": "Neu laden",
+
+  // --- campaign metadata dialog (components/CampaignMetaAction.tsx) --------
+  "campaignMeta.title": "Kampagne bearbeiten",
+  "campaignMeta.description":
+    "Name und Beschreibung stehen in _campaign. Die id bleibt, wie sie ist — sie steckt in jeder Adresse und ändert sich hier nicht.",
+  "campaignMeta.field.name": "Name",
+  "campaignMeta.field.description": "Beschreibung",
+  "campaignMeta.field.description.placeholder": "Ein Satz, der die Kampagne einordnet",
+  "campaignMeta.unreachable": "Kampagne nicht ladbar — Server prüfen",
+
+  // --- body editor (components/FileBodyEditor.tsx) -------------------------
+  "bodyEditor.raw.aria": "Markdown-Text von {path}",
+  "bodyEditor.hint": "Nur der Textkörper — die Eigenschaften bleiben unverändert.",
+  "bodyEditor.blocked": "Ein Block muss noch geklärt werden — siehe Hinweis am Block.",
+  "bodyEditor.discard.title": "Änderungen verwerfen?",
+  "bodyEditor.discard.description":
+    "Die Änderungen sind nicht gespeichert. Verwerfen schließt den Editor und zeigt den Eintrag wieder so, wie er gespeichert ist.",
+
+  // --- entity-kind labels ---------------------------------------------------
+  // ONE set for every place a kind is named to the DM: the ⌘K result rows
+  // (lib/search.ts) and the properties dialog's title (lib/properties-form.ts).
+  // An unknown kind is shown verbatim — the wire value is the truth.
+  "kind.scene": "Szene",
+  "kind.npc": "NPC",
+  "kind.location": "Ort",
+  "kind.chapter": "Kapitel",
+  "kind.campaign": "Kampagne",
+
+  // --- generator: input form (routes/generate.tsx, lib/generate.ts) --------
+  "generate.input.title.scene": "Szenen generieren",
+  "generate.input.title.npc": "NPC generieren",
+  "generate.input.lead.scene":
+    "Englisches Quellmaterial rein, deutsche Szenen-Drafts raus. Immer status draft, immer mit Review — geschrieben wird erst beim Übernehmen.",
+  "generate.input.lead.npc":
+    "Quellmaterial zu einer Figur rein, ein NPC-Eintrag nach Format raus — Will, Weiß, Beziehungen. Immer mit Review; geschrieben wird erst beim Übernehmen.",
+  "generate.input.modeGroup": "Generator-Modus",
+  "generate.input.mode.scene": "Szenen",
+  "generate.input.mode.npc": "NPC",
+  "generate.input.npc.sourceLabel": "Quelltext",
+  "generate.input.npc.sourcePlaceholder": "Bio, Hintergrund, Notizen zum NPC …",
+  "generate.input.npc.idLabel": "id (optional)",
+  "generate.input.npc.idPlaceholder": "z. B. grella",
+  "generate.input.npc.idHint": "leer lassen — dann wählt das Modell die id",
+  "generate.input.npc.idPreview": "wird angelegt als: npcs/{id}",
+  "generate.input.targetLabel": "Ziel-Kapitel",
+  "generate.input.newChapter": "Neues Kapitel",
+  "generate.input.newTitleLabel": "Kapiteltitel",
+  "generate.input.newTitlePlaceholder": "Kapiteltitel, z. B. Die Schmugglerbucht",
+  "generate.input.titleMissing": "Titel fehlt — er wird der Anzeigename des neuen Kapitels.",
+  "generate.input.chapterIdLabel": "Kapitel-id",
+  "generate.input.chapterIdPlaceholder": "z. B. 03-schmugglerbucht",
+  "generate.input.chapterIdSuggested": "wird aus dem Titel vorgeschlagen",
+  "generate.input.chapterIdPreview": "wird angelegt als: {id}/",
+  "generate.input.chapterExists": "Kapitel existiert — Szenen werden dort angelegt",
+  "generate.input.sourceLabel": "Quelltext (EN)",
+  "generate.input.sourcePlaceholder":
+    "Abenteuertext einfügen — Absätze, Boxed Text, Statblock-Verweise …",
+  "generate.input.contextLabel": "Mitgeschickter Kontext:",
+  // One sentence, both counts and the glossary token inside it.
+  "generate.input.contextHint":
+    "{npcs, plural, one {# NPC} other {# NPCs}} · {locations, plural, one {# Ort} other {# Orte}} · {glossary}",
+  "generate.input.glossary": "Glossar",
+  "generate.input.noGlossary": "kein Glossar",
+  "generate.input.submit.scene": "Entwürfe generieren",
+  "generate.input.submit.npc": "NPC generieren",
+
+  // --- generator: the two id fields' own rules (lib/generate.ts) -----------
+  "generate.input.chapterId.missing": "Kapitel-id fehlt.",
+  "generate.input.chapterId.slash":
+    "Keine Schrägstriche — die Kapitel-id ist ein einzelnes Segment.",
+  "generate.input.chapterId.dots": "Kein „..“ in der Kapitel-id.",
+  "generate.input.chapterId.leadingDot": "Kein Punkt am Anfang.",
+  "generate.input.chapterId.space": "Keine Leerzeichen — Wörter mit Bindestrich trennen.",
+  "generate.input.chapterId.charset": "Nur Kleinbuchstaben, Ziffern und Bindestriche.",
+  "generate.input.chapterId.reserved":
+    "„npcs“, „locations“ und „sessions“ sind reserviert — kein Kapitelname.",
+  "generate.input.npcId.slash": "Keine Schrägstriche — die id ist ein einzelnes Segment.",
+  "generate.input.npcId.space": "Keine Leerzeichen — Wörter mit Bindestrich trennen.",
+  "generate.input.npcId.charset":
+    "Nur Kleinbuchstaben, Ziffern und Bindestriche; Anfang keine Bindestriche.",
+  "generate.input.npcId.exists":
+    "NPC existiert schon — bestehende Einträge werden nie überschrieben.",
+
+  // --- generator: the run's own errors (routes/generate.tsx) ---------------
+  // The failed JOB's body is rendered by serverErrorBodyMessage (server.*) —
+  // these are the app's own sentences about a status.
+  "generate.error.treeScene": "Kapitel nicht ladbar — Grimoire-Server auf Port 3000 starten.",
+  "generate.error.treeNpc": "Kampagne nicht ladbar — Grimoire-Server auf Port 3000 starten.",
+  "generate.error.lostJob":
+    "Der Generierungs-Job ist nicht mehr vorhanden (Server-Neustart?) — erneut starten.",
+  "generate.error.noApiKey": "ANTHROPIC_API_KEY fehlt — siehe server/.env",
+  "generate.error.npcExists":
+    "NPC existiert schon — andere id wählen; bestehende Einträge werden nie überschrieben.",
+  "generate.error.chapterMissing": "Kapitel nicht gefunden — anderes Ziel wählen.",
+  "generate.error.failed": "Nicht generiert — Server prüfen.",
+  "generate.error.validation":
+    "Das Modell hat die Formprüfung nicht bestanden — nichts generiert.",
+  "generate.error.unusable":
+    "Das Modell hat keine verwertbare Antwort geliefert — nichts generiert.",
+  "generate.error.validationHint":
+    "Quelltext kürzen oder klarer strukturieren und erneut generieren.",
+  "generate.error.rawReply": "Rohantwort anzeigen",
+
+  // --- generator: working state (routes/generate.tsx) ----------------------
+  "generate.working.title": "Drafts werden generiert …",
+  "generate.working.correction":
+    "Der Server validiert die Antwort mechanisch; Formfehler gehen automatisch als Korrektur ans Modell zurück.",
+  "generate.working.background":
+    "Läuft auf dem Server weiter — dieser Tab darf zu. Das Ergebnis wartet hier, bis es übernommen oder verworfen wird.",
+
+  // --- generator: review (routes/generate.tsx, lib/generate.ts) -----------
+  "generate.review.title": "Review",
+  "generate.review.summary":
+    "{scenes, plural, one {# Szene} other {# Szenen}} · {stubs, plural, one {# Stub} other {# Stubs}}",
+  "generate.review.pending": "{summary} · noch nichts geschrieben",
+  "generate.review.pendingNpc": "1 NPC · noch nichts geschrieben",
+  "generate.review.lead":
+    "Prüfen, anpassen, Stubs einzeln entscheiden. Erst „Übernehmen“ schreibt in die Datenbank — als Drafts, nie überschreibend.",
+  "generate.review.leadNpc":
+    "Prüfen und anpassen. Erst „Übernehmen“ schreibt den Eintrag — bestehende NPCs werden nie überschrieben.",
+  "generate.review.stubsHeading": "Stubs — einzeln entscheiden",
+  "generate.review.conflicts": "Diese Einträge existieren schon — nichts geschrieben:",
+  "generate.review.conflictsNpc": "Dieser Eintrag existiert schon — nichts geschrieben:",
+  "generate.review.applyFailed": "Nicht geschrieben — Server prüfen.",
+  "generate.review.discardFailed": "Nicht verworfen — Server prüfen.",
+  "generate.review.apply": "Übernehmen ({count})",
+  "generate.review.applyNpc": "Übernehmen",
+  "generate.review.plannedScene": "Geplante Szene",
+  "generate.review.contingency": "Kontingenz",
+  "generate.review.statblock": "Statblock: {statblock}",
+  "generate.review.rawLabel": "Roh-Markdown von {title}",
+  // The run's token spend; the grouping SEPARATOR is locale data, not copy
+  // (lib/generate.ts groups by hand — Intl would need full ICU data).
+  "generate.usage": "~{tokens} Tokens · {attempts, plural, one {# Versuch} other {# Versuche}}",
+  "generate.usage.group": ".",
+
+  // --- generator: stub rows (routes/generate.tsx) -------------------------
+  "generate.stub.reason.run": "aus diesem Lauf",
+  "generate.stub.reason.scene": "aus {title}",
+  "generate.stub.reason.scenes": "aus {title} u. a.",
+  "generate.stub.accept": "Annehmen",
+  "generate.stub.reject": "Ablehnen",
+  "generate.stub.undo": "Entscheidung zurücknehmen",
+  "generate.stub.accepted": "Angenommen",
+  "generate.stub.rejected": "Abgelehnt",
+
+  // --- generator: what was written (routes/generate.tsx) ------------------
+  "generate.written.title.scene": "Geschrieben — alles als draft",
+  "generate.written.title.npc": "Geschrieben — NPC-Eintrag angelegt",
+  "generate.written.hint.scene":
+    "Die Szenen erscheinen im Pool mit Status „Entwurf“. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
+  "generate.written.hint.npc":
+    "Der NPC erscheint in der NPC-Liste und in der Suche. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
+  "generate.written.openNpc": "NPC ansehen",
+  "generate.written.toPool": "Zum Pool",
+
+  // --- the markdown format's own vocabulary (markdown/grammar.ts holds the KEY
+  //     per callout kind, markdown/Callout.tsx and markdown/Markdown.tsx show
+  //     them; lib/blocks.ts names the same blocks in the composer) -----------
+  "markdown.callout.readaloud": "Vorlesetext",
+  "markdown.callout.check": "Check",
+  "markdown.callout.secret": "Geheim",
+  "markdown.callout.outcome": "Konsequenz",
+  "markdown.callout.loot": "Beute",
+  "markdown.callout.note": "Notiz",
+  // The branch label of a `## If:` section — the heading in the FILE stays
+  // `## If:` in every language, only this prefix is copy.
+  "markdown.ifSection.prefix": "Falls:",
+  "markdown.readaloud.copy": "Kopieren",
+  "markdown.readaloud.copied": "Kopiert",
+  "markdown.readaloud.copy.aria": "Vorlesetext kopieren",
+  "markdown.readaloud.copied.aria": "Vorlesetext kopiert",
+
+  // --- the Block-Composer (components/BlockComposer.tsx, lib/blocks.ts,
+  //     lib/composer.ts) ----------------------------------------------------
+  "composer.mode.aria": "Editiermodus",
+  "composer.mode.blocks": "Blöcke",
+  "composer.mode.raw": "Roh",
+  "composer.picker.title": "Block einfügen",
+  "composer.picker.cancel.aria": "Einfügen abbrechen",
+
+  // The four structural block names; the six callouts come from markdown.* above.
+  "composer.blockType.ifSection": "Falls-Abschnitt",
+  "composer.blockType.heading": "Überschrift",
+  "composer.blockType.text": "Text",
+  "composer.blockType.raw": "Roh-Block",
+
+  // ONE key for both states of the level select: a hand-written level outside
+  // the offered range reads exactly like an offered one.
+  "composer.heading.level": "Ebene {depth}",
+  "composer.heading.level.aria": "Ebene der Überschrift",
+  "composer.heading.text.aria": "Text der Überschrift",
+  "composer.heading.text.placeholder": "Flow",
+  "composer.ifSection.condition.aria": "Bedingung des Falls-Abschnitts",
+  "composer.ifSection.condition.placeholder": "sie geben zu, für Jorna zu arbeiten",
+  "composer.ifSection.hint":
+    'Wird als „## If: …" geschrieben und in der Leseansicht einklappbar.',
+  "composer.block.content.aria": "Inhalt: {label}",
+  "composer.block.text.placeholder": "Text des Blocks",
+  "composer.block.raw.placeholder": "Markdown",
+  "composer.raw.hint": "Roh-Markdown mit Markern — wird unverändert übernommen.",
+  "composer.list.aria": "Blöcke: {label}",
+  "composer.empty": 'Noch keine Blöcke — mit „+" den ersten anlegen.',
+  // Two whole sentences instead of a glued-in fragment („… im Falls-Abschnitt"):
+  // the word order of the insert target is not the same in every language.
+  "composer.insert.aria": "Block an Position {position} einfügen",
+  "composer.insert.section.aria": "Block im Falls-Abschnitt an Position {position} einfügen",
+  // „Vorlesetext 2" — the position makes the second read-aloud of a scene
+  // distinguishable for screen readers and for the E2E suite.
+  "composer.card.name": "{label} {position}",
+  "composer.card.moveUp.aria": "{name} nach oben",
+  "composer.card.moveDown.aria": "{name} nach unten",
+  "composer.card.collapse.aria": "{name} zuklappen",
+  "composer.card.edit.aria": "{name} bearbeiten",
+  "composer.card.delete.aria": "{name} löschen",
+  "composer.summary.empty": "leer",
+  // What blocks a save, at the offending card (lib/composer.ts) — a HINT with
+  // two ways out, never a correction.
+  "composer.issue.sectionEscape":
+    "»##«-Überschrift beendet den Falls-Abschnitt — tiefer einstufen (###) oder Block nach außen ziehen.",
+
+  // --- the raw-markdown editor (components/MarkdownEditor.tsx) --------------
+  // „Bearbeiten" is `common.edit`.
+  "editor.preview": "Vorschau",
+
+  // --- scene article (components/SceneArticle.tsx) --------------------------
+  "sceneArticle.type.planned": "Geplante Szene",
+  "sceneArticle.type.contingency": "Kontingenz",
+  "sceneArticle.trigger.inline": "Wenn: {trigger}",
+  "sceneArticle.trigger.label": "Auslöser",
+  "sceneArticle.tag": "#{tag}",
+  "sceneArticle.handout": "Handout: {handout}",
+
+  // --- the aside cards (components/NpcCard.tsx, components/LocationCard.tsx) -
+  "npcCard.noId": "{id} — keine NPC-id, deshalb kein Eintrag.",
+  "npcCard.unloadable": "{id} — NPC nicht ladbar, Server prüfen.",
+  "npcCard.will.inline": "Will:",
+  "npcCard.will": "Will",
+  "npcCard.voice": "Stimme",
+  "locationCard.unloadable": "{id} — Ort nicht ladbar, Server prüfen.",
+  "locationCard.roll20": "Roll20-Seite: {value}",
+
+  // --- entity reading view (components/EntityArticle.tsx) -------------------
+  "entity.npc.statblock": "Statblock: {value}",
+  "entity.location.roll20": "Roll20-Seite: {value}",
+
+  // --- the DEV markdown harness ("/dev/markdown", routes/harness.tsx) -------
+  "harness.title": "Markdown-Harness",
+  "harness.lead": "Rendert die Referenz-Fixtures aus examples/ ohne laufenden Server.",
+  "harness.properties": "Eigenschaften anzeigen",
 } as const;

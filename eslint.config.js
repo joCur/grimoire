@@ -14,13 +14,13 @@
 // `aria-hidden` is a literal by nature, and a rule that flags those would be
 // switched off within a day. Copy that travels through a prop (`aria-label`,
 // `placeholder`, a dialog `title`) is caught by review instead — the catalog
-// is where those already come from in every migrated file.
+// is where those already come from in every file now.
 //
-// TWO SEVERITIES, on purpose (AK4):
-//   error — the files Scheibe 1 migrated. They are done, and they stay done.
-//   warn  — everything else in app/src. Scheibe 2 of #69 empties this list;
-//           until then the warnings ARE the to-do list, visible on every run
-//           without failing the build for work that is already planned.
+// ONE SEVERITY, everywhere: `error`. The two-tier version of this config
+// (error for the files Scheibe 1 had migrated, warn for the rest as a visible
+// to-do list) served exactly as long as there was a rest. The migration is
+// complete since the PO dropped the slicing on PR #83 — 165 warnings went to
+// zero — so a `warn` tier now has nothing to hold but the next regression.
 //
 // Run: `bun run lint` (repo root) — wired into CI next to the typecheck.
 
@@ -29,18 +29,39 @@ import react from "eslint-plugin-react";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
-/** The files Scheibe 1 of issue #69 migrated — the strict half of the gate. */
-const MIGRATED = [
-  "app/src/main.tsx",
-  "app/src/i18n/**/*.{ts,tsx}",
-  "app/src/components/Topbar.tsx",
-  "app/src/components/CreateDialog.tsx",
-  "app/src/components/CreateActions.tsx",
-  "app/src/components/LanguageSwitch.tsx",
-  "app/src/components/PropertiesAction.tsx",
-  "app/src/components/PropertiesFields.tsx",
-  "app/src/components/RenameDialog.tsx",
-  "app/src/routes/home.tsx",
+/**
+ * Strings that are NOT copy in any language and therefore not the catalog's
+ * business. Three kinds, and nothing else gets in here:
+ *
+ *   * SEPARATORS and punctuation that carry a sentence rather than being one
+ *     (`·`, `—`, `›`, `#`, the parentheses around a count).
+ *   * KEY HINTS — the names of physical keys (`⌘K`, `esc`) are the same on a
+ *     German and an English keyboard.
+ *   * MARKUP BEING SHOWN: the block composer previews raw markdown, so `[!`
+ *     and `]` around a callout marker are the FORMAT quoted on screen, not a
+ *     label (README, "Callouts").
+ *
+ * An entry here is a claim that the string reads identically in every
+ * language. When in doubt it belongs in the catalog.
+ */
+const NOT_COPY = [
+  "·",
+  "—",
+  "→",
+  "›",
+  ":",
+  "/",
+  "|",
+  "+",
+  "×",
+  "-",
+  "#",
+  "(",
+  ")",
+  "⌘K",
+  "esc",
+  "[!",
+  "]",
 ];
 
 /** The rule, with the one option that keeps it about COPY and not markup. */
@@ -50,8 +71,7 @@ const noLiterals = {
     {
       // Props are markup (className, data-testid, aria-hidden) — see header.
       ignoreProps: true,
-      // Punctuation and separators are not copy in any language.
-      allowedStrings: ["·", "—", "→", ":", "/", "|", "⌘K", "+", "×", "-"],
+      allowedStrings: NOT_COPY,
     },
   ],
 };
@@ -86,16 +106,10 @@ export default tseslint.config(
     // this config is the i18n gate, not a second type checker.
     rules: {
       ...noLiterals,
-      "react/jsx-no-literals": ["warn", noLiterals["react/jsx-no-literals"][1]],
       "no-unused-vars": "off",
       "no-undef": "off",
       "no-empty": "off",
       "no-control-regex": "off",
     },
-  },
-  // The migrated files: the same rule, sharp.
-  {
-    files: MIGRATED,
-    rules: noLiterals,
   },
 );

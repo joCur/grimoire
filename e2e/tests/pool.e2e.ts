@@ -229,11 +229,19 @@ test.describe("with a session running since 19:30", () => {
       });
 
     // The pool carries the fullest topbar there is: switcher, session chip,
-    // search, Generator — plus the review link once something is harvestable.
+    // search, Generator, the settings gear (issue #69) — plus the review link
+    // once something is harvestable.
     for (const width of [640, 768, 900, 1024, 1100]) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto("/beispiel");
       await expect(page.getByRole("link", { name: /Session läuft/ })).toBeVisible();
+      // The gear (issue #69) is on the row at every width the topbar IS the
+      // chrome at — icon-only on purpose, so it cannot grow the row. Below md
+      // the whole topbar is hidden (the mobile start surface replaces it), so
+      // there is nothing to be visible there.
+      if (width >= 768) {
+        await expect(page.getByRole("link", { name: "Einstellungen" })).toBeVisible();
+      }
       expect(await overflow(), `pool at ${width}px`).toEqual({ page: 0, header: 0 });
 
       // …and the live route, whose chip is the menu trigger — from md up,
