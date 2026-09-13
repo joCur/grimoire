@@ -58,28 +58,42 @@ async function switchTo(
   await radio.click();
 }
 
-test("the gear is the way in, and the campaign menu is not", async ({ page }) => {
+test("the gear is the way in, and the campaign menu is not", async ({
+  page,
+}) => {
   await page.goto("/beispiel");
   await expect(page.getByRole("button", { name: /^Kampagne: / })).toBeVisible();
 
   // The menu the switch used to live in: campaigns and „Kampagne anlegen",
   // and no language row of any kind.
   await page.getByRole("button", { name: /^Kampagne: / }).click();
-  await expect(page.getByRole("menuitem", { name: "Kampagne anlegen" })).toBeVisible();
-  await expect(page.getByRole("menuitemradio", { name: "Deutsch" })).toHaveCount(0);
-  await expect(page.getByRole("menuitemradio", { name: "English" })).toHaveCount(0);
+  await expect(
+    page.getByRole("menuitem", { name: "Kampagne anlegen" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitemradio", { name: "Deutsch" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("menuitemradio", { name: "English" }),
+  ).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   // The gear instead — and it is on EVERY campaign-scoped route, in the same
   // slot, because the chrome is global and stable (design/README.md).
-  for (const route of ["/beispiel", "/beispiel/list/npcs", "/beispiel/generate"]) {
+  for (const route of [
+    "/beispiel",
+    "/beispiel/list/npcs",
+    "/beispiel/generate",
+  ]) {
     await page.goto(route);
     await expect(gear(page, "Einstellungen")).toBeVisible();
   }
 
   await gear(page, "Einstellungen").click();
   await expect(page).toHaveURL(/\/settings(\?|$)/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Einstellungen");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Einstellungen",
+  );
   // The instance section, named by the heading that labels the radio group.
   await expect(page.getByRole("radiogroup", { name: "Sprache" })).toBeVisible();
   await expect(languageRadio(page, "Deutsch")).toBeChecked();
@@ -93,23 +107,33 @@ test("the language switch: English and back, server-side and without a reload", 
 
   // The instance has never been told a language, so it follows the browser —
   // de-DE here, which is what every other spec's locators assume.
-  expect(await api.get<{ locale: string | null }>("settings")).toEqual({ locale: null });
+  expect(await api.get<{ locale: string | null }>("settings")).toEqual({
+    locale: null,
+  });
   await expect(page.getByRole("button", { name: /^Kampagne: / })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Session starten" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Session starten" }),
+  ).toBeVisible();
 
   // --- to English -----------------------------------------------------------
   await switchTo(page, "Einstellungen", "English");
 
   // The page under the switch turns over at once, with no navigation.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Settings");
-  await expect(page.getByRole("radiogroup", { name: "Language" })).toBeVisible();
+  await expect(
+    page.getByRole("radiogroup", { name: "Language" }),
+  ).toBeVisible();
   await expect(languageRadio(page, "English")).toBeChecked();
-  // …and so does the chrome around it. `/settings` is NOT campaign-scoped, so
-  // the only thing in that chrome is the gear itself.
+  // …and so does the chrome around it — which on `/settings` is the chrome of
+  // the campaign the gear was pressed in (PO feedback on PR #83), so the
+  // switcher is up there in English too.
   await expect(gear(page, "Settings")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Campaign: / })).toBeVisible();
 
   // The setting is on the SERVER — asserted at the API, not in the browser.
-  expect(await api.get<{ locale: string | null }>("settings")).toEqual({ locale: "en" });
+  expect(await api.get<{ locale: string | null }>("settings")).toEqual({
+    locale: "en",
+  });
 
   // The whole chrome of a campaign route, at once: the switcher's own label,
   // the nav, the search chip and the session chip.
@@ -118,9 +142,13 @@ test("the language switch: English and back, server-side and without a reload", 
   await expect(page.getByRole("link", { name: "Chapters" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Locations" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Search …" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Start session" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Start session" }),
+  ).toBeVisible();
   // …and the German it replaced is really gone, not merely covered.
-  await expect(page.getByRole("button", { name: "Session starten" })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Session starten" }),
+  ).toHaveCount(0);
 
   // A DIALOG reads from the same catalog.
   await page.getByRole("button", { name: /^Campaign: / }).click();
@@ -135,26 +163,39 @@ test("the language switch: English and back, server-side and without a reload", 
   // every second from the catalog plus `Intl`.
   await page.getByRole("button", { name: "Start session" }).click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
-  await expect(page.getByRole("button", { name: /Session running/ }).first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Session running/ }).first(),
+  ).toBeVisible();
 
   // --- it survives a reload, because it never was in the browser ------------
   await page.reload();
   await expect(page.getByRole("button", { name: /^Campaign: / })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Session running/ }).first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Session running/ }).first(),
+  ).toBeVisible();
 
   // --- and back to German ---------------------------------------------------
   await page.goto("/beispiel");
   await switchTo(page, "Settings", "Deutsch");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Einstellungen");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Einstellungen",
+  );
   await page.goto("/beispiel");
   await expect(page.getByRole("button", { name: /^Kampagne: / })).toBeVisible();
   // Off /live the chip is a LINK back into the session (on /live it is the
   // menu trigger) — its LABEL is what this spec is about either way.
-  await expect(page.getByRole("link", { name: /Session läuft/ }).first()).toBeVisible();
-  expect(await api.get<{ locale: string | null }>("settings")).toEqual({ locale: "de" });
+  await expect(
+    page.getByRole("link", { name: /Session läuft/ }).first(),
+  ).toBeVisible();
+  expect(await api.get<{ locale: string | null }>("settings")).toEqual({
+    locale: "de",
+  });
 });
 
-test("a stored language wins over the browser's preference", async ({ page, api }) => {
+test("a stored language wins over the browser's preference", async ({
+  page,
+  api,
+}) => {
   // The instance was switched to English once; a browser that asks for German
   // must still get the language the INSTANCE was told (issue #69 AK2 — the
   // browser is only the fallback for "never decided").
@@ -162,7 +203,9 @@ test("a stored language wins over the browser's preference", async ({ page, api 
 
   await page.goto("/beispiel");
   await expect(page.getByRole("button", { name: /^Campaign: / })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Start session" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Start session" }),
+  ).toBeVisible();
 
   // Cleared again -> back to following the browser, which is de-DE here.
   await api.send("PUT", "settings", { locale: null });
@@ -183,7 +226,10 @@ test.describe("no language flash", () => {
   // for English. Without the gate the English catalog wins the first paint.
   test.use({ locale: "en-US" });
 
-  test("a stored language is the only one ever painted", async ({ page, api }) => {
+  test("a stored language is the only one ever painted", async ({
+    page,
+    api,
+  }) => {
     await api.send("PUT", "settings", { locale: "de" });
 
     // Every text node that reaches the document, from the very first one.
@@ -213,14 +259,22 @@ test.describe("no language flash", () => {
         // `document`, not `document.documentElement`: this runs at document
         // START, where the latter may not exist yet — and the document node
         // sees its own children appear.
-      }).observe(document, { childList: true, subtree: true, characterData: true });
+      }).observe(document, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
     });
 
     await page.goto("/beispiel");
     // Wait until the chrome is really up — the window in which a flash could
     // have happened is then definitively over.
-    await expect(page.getByRole("button", { name: /^Kampagne: / })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Session starten" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /^Kampagne: / }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Session starten" }),
+    ).toBeVisible();
 
     const painted = await page.evaluate(
       () => (window as unknown as { __painted: string[] }).__painted,
@@ -228,7 +282,13 @@ test.describe("no language flash", () => {
     // The German did arrive…
     expect(painted).toContain("Session starten");
     // …and not one word of the browser's English ever did.
-    for (const english of ["Start session", "Chapters", "Locations", "Search …", "Language"]) {
+    for (const english of [
+      "Start session",
+      "Chapters",
+      "Locations",
+      "Search …",
+      "Language",
+    ]) {
       expect(painted).not.toContain(english);
     }
     // Belt and braces: not even a stray „Campaign: " prefix.
@@ -247,13 +307,17 @@ test("<html lang> follows the UI language", async ({ page, api }) => {
   await expect(page.locator("html")).toHaveAttribute("lang", "de");
 
   await switchTo(page, "Einstellungen", "English");
-  await expect(page.getByRole("radiogroup", { name: "Language" })).toBeVisible();
+  await expect(
+    page.getByRole("radiogroup", { name: "Language" }),
+  ).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
 
   // …and it comes back from the server on a reload, like the language itself.
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  expect(await api.get<{ locale: string | null }>("settings")).toEqual({ locale: "en" });
+  expect(await api.get<{ locale: string | null }>("settings")).toEqual({
+    locale: "en",
+  });
 
   await languageRadio(page, "Deutsch").click();
   await expect(page.locator("html")).toHaveAttribute("lang", "de");
@@ -269,7 +333,10 @@ test("<html lang> follows the UI language", async ({ page, api }) => {
 //
 // This drives the collision through the UI in BOTH languages, so the assertion
 // is about the sentence the DM actually reads and not about a wire body.
-test("a server error is read in the selected language", async ({ page, api }) => {
+test("a server error is read in the selected language", async ({
+  page,
+  api,
+}) => {
   // „Jorna" slugs to `jorna`, which the example campaign already has — so this
   // is the real 409 the create dialog is built around, driven through the UI.
   const taken = "Jorna";
@@ -281,7 +348,9 @@ test("a server error is read in the selected language", async ({ page, api }) =>
   await page.getByRole("button", { name: "Anlegen" }).click();
   // The whole sentence, built from the code: the kind, the taken id, the free
   // proposal. Nothing here comes off the wire as prose.
-  await expect(page.getByText('NPC „jorna" existiert schon — Vorschlag: „jorna-2"')).toBeVisible();
+  await expect(
+    page.getByText('NPC „jorna" existiert schon — Vorschlag: „jorna-2"'),
+  ).toBeVisible();
   // …and the 409 wrote nothing.
   expect(await api.exists("npcs/jorna-2")).toBe(false);
   await page.getByRole("button", { name: "Abbrechen" }).click();
@@ -297,7 +366,9 @@ test("a server error is read in the selected language", async ({ page, api }) =>
   ).toBeVisible();
   // The German sentence is GONE, not merely covered — this is the regression
   // the codes exist to prevent.
-  await expect(page.getByText("existiert schon", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("existiert schon", { exact: false })).toHaveCount(
+    0,
+  );
   expect(await api.exists("npcs/jorna-2")).toBe(false);
 
   // Back to German for the rest of the suite.
@@ -306,14 +377,18 @@ test("a server error is read in the selected language", async ({ page, api }) =>
 
 // --- which campaign /settings is about, and what is NOT a campaign ----------
 
-test("the gear carries the campaign it was opened FROM, and has a way back", async ({ page }) => {
+test("the gear carries the campaign it was opened FROM, and has a way back", async ({
+  page,
+}) => {
   // The gear is campaign-independent as a ROUTE but not as a moment: the
   // page has to be about the campaign the DM was just looking at, not about
   // whichever one the "/" heuristic would guess (PO feedback on PR #83).
   await page.goto("/beispiel/list/npcs");
   await gear(page, "Einstellungen").click();
   await expect(page).toHaveURL(/\/settings\?from=beispiel$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Einstellungen");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Einstellungen",
+  );
   // The way back is THAT campaign's pool. The row is mobile chrome, so the
   // claim is checked where it is on screen: a phone width.
   await page.setViewportSize({ width: 390, height: 780 });
@@ -323,14 +398,25 @@ test("the gear carries the campaign it was opened FROM, and has a way back", asy
   await expect(page).toHaveURL(/\/beispiel$/);
 });
 
-test("anything below /settings is not a campaign — it redirects", async ({ page }) => {
+test("anything below /settings is not a campaign — it redirects", async ({
+  page,
+}) => {
   // `/:campaign/list/:kind` happily matched `campaign: "settings"` and left
   // the DM on a half-empty list page with no way out (PR #83 review).
   await page.goto("/settings/list/npcs");
   await expect(page).toHaveURL(/\/settings$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Einstellungen");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Einstellungen",
+  );
   await expect(page.getByRole("radiogroup", { name: "Sprache" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Kampagne: / })).toHaveCount(0);
+  // No `?from=` survives that redirect, so the chrome falls back to the same
+  // campaign "/" would open — the chrome is global, and the only instance
+  // without it is one without any campaign (the cold start below).
+  await expect(
+    page.getByRole("button", {
+      name: "Kampagne: Der Leuchtturm von Salzhafen",
+    }),
+  ).toBeVisible();
 });
 
 test.describe("the cold start", () => {
@@ -342,9 +428,13 @@ test.describe("the cold start", () => {
 
   test("carries the switch in its footer", async ({ page, api }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Willkommen bei Grimoire");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Willkommen bei Grimoire",
+    );
     // There is no campaign switcher at all here.
-    await expect(page.getByRole("button", { name: /^Kampagne: / })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Kampagne: / })).toHaveCount(
+      0,
+    );
 
     const group = page.getByRole("radiogroup", { name: "Sprache" });
     await expect(group).toBeVisible();
@@ -353,47 +443,71 @@ test.describe("the cold start", () => {
     await languageRadio(page, "English").click();
 
     // The page it sits on switches — heading, labels and the group's own name.
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Welcome to Grimoire");
-    await expect(page.getByRole("button", { name: "Create campaign" })).toBeVisible();
-    await expect(page.getByRole("radiogroup", { name: "Language" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Welcome to Grimoire",
+    );
+    await expect(
+      page.getByRole("button", { name: "Create campaign" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("radiogroup", { name: "Language" }),
+    ).toBeVisible();
     await expect(languageRadio(page, "English")).toBeChecked();
     // Stored on the server, as every switch is.
-    expect(await api.get<{ locale: string | null }>("settings")).toEqual({ locale: "en" });
+    expect(await api.get<{ locale: string | null }>("settings")).toEqual({
+      locale: "en",
+    });
 
     // And back — the suite's rest depends on German.
     await languageRadio(page, "Deutsch").click();
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Willkommen bei Grimoire");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Willkommen bei Grimoire",
+    );
   });
 
   test("and the settings page works without any campaign", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Willkommen bei Grimoire");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Willkommen bei Grimoire",
+    );
     // The gear is on the cold start's topbar too — a fresh instance must be
     // able to reach its settings.
     await gear(page, "Einstellungen").click();
     await expect(page).toHaveURL(/\/settings(\?|$)/);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Einstellungen");
-    await expect(page.getByRole("radiogroup", { name: "Sprache" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Einstellungen",
+    );
+    await expect(
+      page.getByRole("radiogroup", { name: "Sprache" }),
+    ).toBeVisible();
     // No campaign section, and no heading over nothing.
     await expect(page.getByRole("heading", { level: 2 })).toHaveText("Sprache");
     // And no campaign CHROME either: `/settings` is campaign-independent, so
     // the topbar's own `matchPath` must not read "settings" as a campaign id
     // (it did, and dressed this page in a „Kampagne: settings" switcher).
-    await expect(page.getByRole("button", { name: /^Kampagne: / })).toHaveCount(0);
-    await expect(page.getByRole("navigation", { name: /Kapitel/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Kampagne: / })).toHaveCount(
+      0,
+    );
+    await expect(page.getByRole("navigation", { name: /Kapitel/ })).toHaveCount(
+      0,
+    );
   });
 
   test("and at 390px, with a touch-sized target", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 780 });
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Willkommen bei Grimoire");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Willkommen bei Grimoire",
+    );
 
     const english = languageRadio(page, "English");
     const box = await english.boundingBox();
     // Inside the viewport (the row wraps rather than pushing the page wide).
     expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(390);
     await english.click();
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Welcome to Grimoire");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Welcome to Grimoire",
+    );
     await languageRadio(page, "Deutsch").click();
   });
 });
@@ -419,10 +533,16 @@ test.describe("the mobile start surface", () => {
     await expect(languageRadio(page, "Deutsch")).toBeChecked();
 
     await languageRadio(page, "English").click();
-    await expect(page.getByRole("radiogroup", { name: "Language" })).toBeVisible();
-    expect(await api.get<{ locale: string | null }>("settings")).toEqual({ locale: "en" });
+    await expect(
+      page.getByRole("radiogroup", { name: "Language" }),
+    ).toBeVisible();
+    expect(await api.get<{ locale: string | null }>("settings")).toEqual({
+      locale: "en",
+    });
 
     await languageRadio(page, "Deutsch").click();
-    await expect(page.getByRole("radiogroup", { name: "Sprache" })).toBeVisible();
+    await expect(
+      page.getByRole("radiogroup", { name: "Sprache" }),
+    ).toBeVisible();
   });
 });

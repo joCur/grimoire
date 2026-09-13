@@ -81,9 +81,21 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, matchPath, useLocation, useNavigate } from "react-router";
+import {
+  Link,
+  matchPath,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 
-import { continueSession, endSession, fetchCampaigns, fetchTree, pauseSession } from "@/api";
+import {
+  continueSession,
+  endSession,
+  fetchCampaigns,
+  fetchTree,
+  pauseSession,
+} from "@/api";
 import { CommandPalette } from "@/components/CommandPalette";
 import { CampaignCreateDialog } from "@/components/CreateActions";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -103,7 +115,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { IconLogo } from "@/icons";
 import { useT } from "@/i18n";
-import { campaignDescription, campaignLabel } from "@/lib/campaign";
+import {
+  campaignDescription,
+  campaignLabel,
+  settingsCampaign,
+} from "@/lib/campaign";
 import { NON_CAMPAIGN_SEGMENTS } from "@/lib/routes";
 import { sessionElapsedLabel, sessionIsPaused } from "@/lib/session";
 import { navSection } from "@/lib/topbar-nav";
@@ -123,10 +139,39 @@ import {
  * read the same list). React Router itself ranks the static route higher and
  * renders the right page; only this heuristic has to be told.
  */
-function campaignOf(match: { params: { campaign?: string } } | null): string | undefined {
+function campaignOf(
+  match: { params: { campaign?: string } } | null,
+): string | undefined {
   const id = match?.params.campaign;
   if (id === undefined || NON_CAMPAIGN_SEGMENTS.has(id)) return undefined;
   return id;
+}
+
+/**
+ * `/settings` KEEPS THE CAMPAIGN CHROME (PO feedback on PR #83).
+ *
+ * The gear is part of the global chrome, so pressing it must not undress the
+ * bar it sits on: the switcher, the nav trio, the search chip and the session
+ * chip stay exactly where they were, and the gear itself is simply marked as
+ * the current view. Which campaign that chrome is about is NOT a path segment
+ * here — `/settings` is campaign-independent on purpose — it is the campaign
+ * the DM came from, travelling in `?from=`. That answer has exactly one
+ * source, `settingsCampaign` (lib/campaign.ts), shared with the page below
+ * (routes/settings.tsx): the bar and the page can never name two different
+ * campaigns. Only the cold start — no usable `from` and no campaign at all —
+ * leaves the bar with the wordmark alone, because then there is nothing to
+ * dress it with.
+ */
+function useSettingsCampaign(isSettings: boolean): string {
+  const [search] = useSearchParams();
+  const from = search.get("from");
+  const { data } = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: fetchCampaigns,
+    enabled: isSettings,
+  });
+  if (!isSettings) return "";
+  return settingsCampaign(from, data ?? []) ?? "";
 }
 
 export function Topbar() {
@@ -138,6 +183,8 @@ export function Topbar() {
   const generateMatch = matchPath("/:campaign/generate", pathname);
   const listMatch = matchPath("/:campaign/list/*", pathname);
   const poolMatch = matchPath("/:campaign", pathname);
+  const isSettings = matchPath("/settings", pathname) !== null;
+  const settingsFrom = useSettingsCampaign(isSettings);
   const campaign =
     campaignOf(sceneMatch) ??
     campaignOf(liveMatch) ??
@@ -145,12 +192,18 @@ export function Topbar() {
     campaignOf(generateMatch) ??
     campaignOf(listMatch) ??
     campaignOf(poolMatch) ??
+    (settingsFrom === "" ? undefined : settingsFrom) ??
     "";
   const filePath = sceneMatch?.params["*"] ?? "";
-  const isScene = sceneMatch !== null && filePath !== "" && campaign !== "";
-  const isLive = liveMatch !== null && campaign !== "";
-  const isReview = reviewMatch !== null && campaign !== "";
-  const isPool = poolMatch !== null && campaign !== "";
+  // These read their OWN match, not `campaign`: on `/settings` the campaign is
+  // resolved from `?from=` (see above), and `/:campaign` matches "/settings"
+  // itself — asking `campaign !== ""` would make the settings page the POOL of
+  // that campaign, marking "Kapitel" and hanging the pool's review and
+  // generator entries into the row.
+  const isScene = campaignOf(sceneMatch) !== undefined && filePath !== "";
+  const isLive = campaignOf(liveMatch) !== undefined;
+  const isReview = campaignOf(reviewMatch) !== undefined;
+  const isPool = campaignOf(poolMatch) !== undefined;
   const listKind = listMatch?.params["*"] ?? "";
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -262,7 +315,11 @@ export function Topbar() {
               // the control is unchanged for a screen reader.
               className="hidden h-auto min-w-[5rem] shrink basis-[200px] gap-2 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-card hover:text-soft max-lg:min-w-0 max-lg:basis-auto max-lg:px-2.5 sm:flex"
             >
-              <Search aria-hidden size={15} className="flex-none text-muted-foreground" />
+              <Search
+                aria-hidden
+                size={15}
+                className="flex-none text-muted-foreground"
+              />
               <span className="min-w-0 flex-1 truncate text-left max-lg:sr-only">
                 {t("topbar.search")}
               </span>
@@ -275,7 +332,11 @@ export function Topbar() {
                 ⌘K
               </span>
             </Button>
-            <CommandPalette campaign={campaign} open={searchOpen} onOpenChange={setSearchOpen} />
+            <CommandPalette
+              campaign={campaign}
+              open={searchOpen}
+              onOpenChange={setSearchOpen}
+            />
           </>
         )}
 
@@ -296,7 +357,7 @@ export function Topbar() {
             at EVERY width on purpose: the topbar overflowed once (issue #50)
             and this is the least urgent thing on it, so it must not be able to
             grow the row. Its accessible name comes from aria-label. */}
-        <SettingsLink campaign={campaign} />
+        <SettingsLink campaign={campaign} active={isSettings} />
 
         {/* THE session control: ONE chip in ONE slot for EVERY state (PO
             feedback on issue #40) — start offer, running session, unknown
@@ -467,7 +528,9 @@ function SessionChip({
   if (state === "start" || session === undefined) {
     return <SessionStartChip campaign={campaign} />;
   }
-  return <SessionRunningChip campaign={campaign} session={session} mode={mode} />;
+  return (
+    <SessionRunningChip campaign={campaign} session={session} mode={mode} />
+  );
 }
 
 /** The running states of the chip — link off /live, menu on it. */
@@ -487,7 +550,9 @@ function SessionRunningChip({
   const paused = sessionIsPaused(session);
   const state = t(paused ? "session.state.paused" : "session.state.running");
   const label =
-    elapsed === undefined ? state : t("session.state.withElapsed", { state, elapsed });
+    elapsed === undefined
+      ? state
+      : t("session.state.withElapsed", { state, elapsed });
 
   if (mode === "link") {
     return (
@@ -495,11 +560,15 @@ function SessionRunningChip({
         to={`/${campaign}/live`}
         aria-label={t("session.chip.link.aria", { label })}
         data-session-chip={paused ? "paused" : "running"}
-        className={cn(SESSION_CHIP_BASE, paused ? SESSION_CHIP_TONE.paused : SESSION_CHIP_TONE.running)}
+        className={cn(
+          SESSION_CHIP_BASE,
+          paused ? SESSION_CHIP_TONE.paused : SESSION_CHIP_TONE.running,
+        )}
       >
         <SessionDot paused={paused} />
         <span className="font-mono tabular-nums">
-          {elapsed ?? t(paused ? "session.short.paused" : "session.short.running")}
+          {elapsed ??
+            t(paused ? "session.short.paused" : "session.short.running")}
         </span>
       </Link>
     );
@@ -529,7 +598,10 @@ function SessionStartChip({ campaign }: { campaign: string }) {
   const t = useT();
   const navigate = useNavigate();
   const toLive = () => void navigate(`/${campaign}/live`);
-  const { enter, entering, conflict, failed } = useSessionStartFlow(campaign, toLive);
+  const { enter, entering, conflict, failed } = useSessionStartFlow(
+    campaign,
+    toLive,
+  );
   const label = t("session.start");
   return (
     <button
@@ -609,21 +681,34 @@ function SessionMenuChip({
         >
           <SessionDot paused={paused} />
           <span className="font-mono tabular-nums">
-            {elapsed ?? t(paused ? "session.short.paused" : "session.short.running")}
+            {elapsed ??
+              t(paused ? "session.short.paused" : "session.short.running")}
           </span>
           <ChevronDown aria-hidden size={13} className="flex-none opacity-70" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-[210px] text-[13px]">
           <DropdownMenuItem onSelect={() => pause.mutate()}>
             {paused ? (
-              <Play aria-hidden size={14} className="flex-none text-muted-foreground" />
+              <Play
+                aria-hidden
+                size={14}
+                className="flex-none text-muted-foreground"
+              />
             ) : (
-              <Pause aria-hidden size={14} className="flex-none text-muted-foreground" />
+              <Pause
+                aria-hidden
+                size={14}
+                className="flex-none text-muted-foreground"
+              />
             )}
             {t(paused ? "session.menu.continue" : "session.menu.pause")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => end.mutate()}>
-            <Square aria-hidden size={14} className="flex-none text-muted-foreground" />
+            <Square
+              aria-hidden
+              size={14}
+              className="flex-none text-muted-foreground"
+            />
             {t("session.menu.end")}
           </DropdownMenuItem>
           {/* Only while the session is EMPTY (issue #40 AK7) — the mis-click's
@@ -647,7 +732,11 @@ function SessionMenuChip({
           {t("session.write.failed")}
         </span>
       )}
-      <DiscardSessionDialog campaign={campaign} open={discardOpen} onOpenChange={setDiscardOpen} />
+      <DiscardSessionDialog
+        campaign={campaign}
+        open={discardOpen}
+        onOpenChange={setDiscardOpen}
+      />
     </>
   );
 }
@@ -659,12 +748,25 @@ function SessionMenuChip({
  * action mobile needs. Mobile is "nachschlagen und einwerfen", and this is
  * exactly the way back out of a lookup.
  */
-function MobileSessionRow({ campaign, session }: { campaign: string; session: FileResponse }) {
+function MobileSessionRow({
+  campaign,
+  session,
+}: {
+  campaign: string;
+  session: FileResponse;
+}) {
   const t = useT();
   return (
     <div className="flex min-h-11 flex-none items-center gap-2.5 border-b border-border bg-panel-deep px-4 md:hidden">
-      <SessionChip campaign={campaign} session={session} state="running" mode="link" />
-      <span className="ml-auto text-[13px] text-body-secondary">{t("topbar.session.back")}</span>
+      <SessionChip
+        campaign={campaign}
+        session={session}
+        state="running"
+        mode="link"
+      />
+      <span className="ml-auto text-[13px] text-body-secondary">
+        {t("topbar.session.back")}
+      </span>
     </div>
   );
 }
@@ -733,7 +835,9 @@ function DiscardSessionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogTitle>{t("session.discard.title")}</DialogTitle>
-        <DialogDescription>{t("session.discard.description")}</DialogDescription>
+        <DialogDescription>
+          {t("session.discard.description")}
+        </DialogDescription>
         {discard.isError && (
           <p className="mt-3 text-[12.5px] text-destructive">
             {t("session.discard.failed")}
@@ -816,16 +920,32 @@ function GeneratorLink({ campaign }: { campaign: string }) {
  * heuristic "/" uses. A search param rather than `location.state`, so a
  * reload, a bookmark and the back button all keep the answer.
  */
-function SettingsLink({ campaign }: { campaign: string }) {
+function SettingsLink({
+  campaign,
+  active,
+}: {
+  campaign: string;
+  active: boolean;
+}) {
   const t = useT();
   return (
     <Link
-      to={campaign === "" ? "/settings" : `/settings?from=${encodeURIComponent(campaign)}`}
+      to={
+        campaign === ""
+          ? "/settings"
+          : `/settings?from=${encodeURIComponent(campaign)}`
+      }
       aria-label={t("settings.title")}
       title={t("settings.title")}
+      aria-current={active ? "page" : undefined}
       className={cn(
         buttonVariants({ variant: "outline" }),
         "h-auto w-auto flex-none border-input bg-card px-2.5 py-[7px] text-soft hover:border-border-hover hover:bg-card hover:text-foreground [&_svg]:size-[15px]",
+        // On `/settings` the gear IS the current view, marked the way the nav
+        // trio marks its section: a full step of contrast, no geometry change
+        // (padding and border width stay identical, so nothing next to it
+        // moves — issue #50, and the chrome must not shift at all).
+        active && "border-border-hover text-foreground",
       )}
     >
       <Settings aria-hidden />
@@ -836,8 +956,18 @@ function SettingsLink({ campaign }: { campaign: string }) {
 /** "n von m gesichtet" on the review view (prototype's isReview topbar). */
 function ReviewProgress({ campaign }: { campaign: string }) {
   const review = useReviewEntries(campaign);
-  if (review.isPending || review.noSession || review.isError || review.total === 0) return null;
-  return <div className="flex-none text-[13px] text-soft">{review.progressLabel}</div>;
+  if (
+    review.isPending ||
+    review.noSession ||
+    review.isError ||
+    review.total === 0
+  )
+    return null;
+  return (
+    <div className="flex-none text-[13px] text-soft">
+      {review.progressLabel}
+    </div>
+  );
 }
 
 /** Pool affordance into the review: only when the harvested session (the
@@ -845,7 +975,12 @@ function ReviewProgress({ campaign }: { campaign: string }) {
 function PoolReviewLink({ campaign }: { campaign: string }) {
   const t = useT();
   const review = useReviewEntries(campaign);
-  if (review.isPending || review.noSession || review.isError || review.pendingCount === 0) {
+  if (
+    review.isPending ||
+    review.noSession ||
+    review.isError ||
+    review.pendingCount === 0
+  ) {
     return null;
   }
   return (
@@ -876,7 +1011,10 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
   const t = useT();
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
-  const { data } = useQuery({ queryKey: ["campaigns"], queryFn: fetchCampaigns });
+  const { data } = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: fetchCampaigns,
+  });
   const current = campaignLabel(
     (data ?? []).find((c) => c.id === campaign),
     campaign,
@@ -904,13 +1042,20 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
         <span className="min-w-0 max-w-[9.5rem] truncate xl:max-w-[280px]">
           {t("campaign.switcher.current", { name: current })}
         </span>
-        <ChevronDown aria-hidden size={14} className="flex-none text-muted-foreground" />
+        <ChevronDown
+          aria-hidden
+          size={14}
+          className="flex-none text-muted-foreground"
+        />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-[290px]">
         {/* Name over description — the prototype's campaignRows (name + meta);
             the id never shows up, it only lives in the URL. */}
         {(data ?? []).map((c) => (
-          <DropdownMenuItem key={c.id} onSelect={() => void navigate(`/${c.id}`)}>
+          <DropdownMenuItem
+            key={c.id}
+            onSelect={() => void navigate(`/${c.id}`)}
+          >
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[13.5px] text-foreground">
                 {campaignLabel(c, c.id)}
@@ -922,7 +1067,11 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
               )}
             </span>
             {c.id === campaign && (
-              <Check aria-hidden size={13} className="flex-none text-success-text" />
+              <Check
+                aria-hidden
+                size={13}
+                className="flex-none text-success-text"
+              />
             )}
           </DropdownMenuItem>
         ))}
@@ -938,11 +1087,17 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
           onSelect={() => setCreateOpen(true)}
           className="gap-2 text-[13px] text-body-secondary"
         >
-          <Plus aria-hidden size={13} className="flex-none text-muted-foreground" />
+          <Plus
+            aria-hidden
+            size={13}
+            className="flex-none text-muted-foreground"
+          />
           {t("create.campaign.title")}
         </DropdownMenuItem>
       </DropdownMenuContent>
-      {createOpen && <CampaignCreateDialog onClose={() => setCreateOpen(false)} />}
+      {createOpen && (
+        <CampaignCreateDialog onClose={() => setCreateOpen(false)} />
+      )}
     </DropdownMenu>
   );
 }

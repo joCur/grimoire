@@ -47,6 +47,7 @@ import { MobileBackRow } from "@/components/MobileBackRow";
 import { useT } from "@/i18n";
 import type { MessageKey } from "@/i18n";
 import { campaignLabel, settingsCampaign } from "@/lib/campaign";
+import { useCampaignVersion } from "@/lib/use-campaign-version";
 
 /**
  * The campaign-scoped sections. EMPTY today — issue #53 (Generator knowledge
@@ -63,10 +64,19 @@ const CAMPAIGN_SECTIONS: ReadonlyArray<{
 
 export function SettingsRoute() {
   const t = useT();
-  const { data } = useQuery({ queryKey: ["campaigns"], queryFn: fetchCampaigns });
+  const { data } = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: fetchCampaigns,
+  });
   const campaigns = data ?? [];
   const [search] = useSearchParams();
   const campaign = settingsCampaign(search.get("from"), campaigns);
+  // The chrome above this page is that campaign's chrome (components/Topbar.tsx,
+  // PO feedback on PR #83) — session chip included. It has to stay LIVE here,
+  // so this route mounts the version polling CampaignScope mounts for every
+  // campaign-scoped view; `/settings` sits outside that layout because it must
+  // also work with no campaign at all, and then the hook stays idle ("").
+  useCampaignVersion(campaign ?? "");
   const label =
     campaign === undefined
       ? undefined
@@ -93,21 +103,23 @@ export function SettingsRoute() {
         <LanguageSection />
 
         {/* The campaign half — only with a campaign AND a section to show. */}
-        {campaign !== undefined && label !== undefined && CAMPAIGN_SECTIONS.length > 0 && (
-          <>
-            <h2 className="mt-10 mb-1 text-[13px] font-medium text-soft">
-              {t("settings.campaign.heading", { name: label })}
-            </h2>
-            <p className="mb-5 text-[12.5px] text-muted-foreground">
-              {t("settings.campaign.hint")}
-            </p>
-            {CAMPAIGN_SECTIONS.map((section) => (
-              <Section key={section.key} heading={t(section.heading)}>
-                {section.render(campaign)}
-              </Section>
-            ))}
-          </>
-        )}
+        {campaign !== undefined &&
+          label !== undefined &&
+          CAMPAIGN_SECTIONS.length > 0 && (
+            <>
+              <h2 className="mt-10 mb-1 text-[13px] font-medium text-soft">
+                {t("settings.campaign.heading", { name: label })}
+              </h2>
+              <p className="mb-5 text-[12.5px] text-muted-foreground">
+                {t("settings.campaign.hint")}
+              </p>
+              {CAMPAIGN_SECTIONS.map((section) => (
+                <Section key={section.key} heading={t(section.heading)}>
+                  {section.render(campaign)}
+                </Section>
+              ))}
+            </>
+          )}
       </div>
     </>
   );
