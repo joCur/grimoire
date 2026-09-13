@@ -35,6 +35,7 @@ export const en: Messages = {
   "topbar.generator": "Generator",
   "topbar.generator.running": "Generating …",
   "topbar.review.pending": "Wrap-up · {count} open",
+  "topbar.review.pendingShort": "{count} open",
   "topbar.session.back": "To the session",
 
   // --- campaign switcher ----------------------------------------------------

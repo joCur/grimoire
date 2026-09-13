@@ -995,12 +995,25 @@ function PoolReviewLink({ campaign }: { campaign: string }) {
   ) {
     return null;
   }
+  // Below xl the row carries switcher, search (already at its floor),
+  // generator, gear and the session chip with nothing elastic left: at 768
+  // and at 1024 the full label pushed the chip OVER the right padding and off
+  // the viewport (issue #69 CI finding — the old guard measured
+  // `scrollWidth - clientWidth`, which does not see an item overflowing INTO
+  // the padding, so it reported a clean row). The label steps down to the
+  // count, which is the news; the accessible name stays the full sentence at
+  // every width, so nothing changes for a screen reader.
+  const label = t("topbar.review.pending", { count: review.pendingCount });
   return (
     <Link
       to={`/${campaign}/review`}
+      aria-label={label}
       className="flex-none rounded-md px-1.5 py-1 text-[13px] text-body-secondary hover:text-foreground"
     >
-      {t("topbar.review.pending", { count: review.pendingCount })}
+      <span className="max-xl:hidden">{label}</span>
+      <span aria-hidden className="xl:hidden">
+        {t("topbar.review.pendingShort", { count: review.pendingCount })}
+      </span>
     </Link>
   );
 }
@@ -1052,8 +1065,16 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
             xl it also carries the "Kapitel · NPCs · Orte" trio, and below lg
             the search chip has already reached its floor, so the name is the
             last thing that can still give way there. The full name is one
-            click away in the menu below. */}
-        <span className="min-w-0 max-w-[8rem] truncate lg:max-w-[9.5rem] xl:max-w-[280px]">
+            click away in the menu below.
+            The xl cap is 200px, not 280 (issue #69 CI finding): at exactly
+            1280 the FULLEST row — switcher, nav trio, search, the review
+            link, generator, gear and the "Session starten" chip with its
+            reserved 8.5rem — had only the search chip's ~50px of shrink left,
+            and CI's wider Linux font metrics eat more than that. A static cap
+            keeps the chrome identical on every route (that is why the trigger
+            is flex-none) while handing the row 80px more slack; from 2xl the
+            row is wide enough for the full 280 again. */}
+        <span className="min-w-0 max-w-[8rem] truncate lg:max-w-[9.5rem] xl:max-w-[200px] 2xl:max-w-[280px]">
           {t("campaign.switcher.current", { name: current })}
         </span>
         <ChevronDown

@@ -22,7 +22,7 @@
 // (`api.sessionPath()`). That is also the honest test — the app itself never
 // derives the file its notes land in either.
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { expect, test } from "../support/test";
 
@@ -34,6 +34,40 @@ const sessionMenuChip = (page: Page) =>
 
 /** The session chip in link mode (every other route, and the mobile row). */
 const sessionLinkChip = (page: Page) => page.getByRole("link", { name: /Session läuft/ }).first();
+
+/**
+ * The chip's geometry MEASURED AGAINST THE ROW IT SITS IN, not in viewport
+ * pixels: its right edge as the distance to the right edge of the `<header>`
+ * content box, its middle as the distance to the row's own middle.
+ *
+ * Absolute viewport coordinates were wrong twice over (issue #69 CI finding).
+ * A vertical scrollbar on one route and not the other shifts every x by the
+ * scrollbar's width — nothing on macOS, where scrollbars are overlays, ~15px
+ * on CI's Linux Chromium. And the two states are compared ACROSS routes, so
+ * the frame has to be the row itself for the assertion to mean "same slot".
+ * What the check is about is the chip's place in the chrome; that is a
+ * relative quantity, so it is measured as one.
+ */
+async function chipGeometry(chip: Locator) {
+  return chip.evaluate((el) => {
+    const header = el.closest("header");
+    if (header === null) throw new Error("the chip is not in a <header>");
+    const style = getComputedStyle(header);
+    const row = header.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    return {
+      height: box.height,
+      /** Distance from the chip's right edge to the row's content edge. */
+      insetRight: Math.round(
+        row.right - parseFloat(style.paddingRight) - box.right,
+      ),
+      /** Offset of the chip's middle from the row's middle. */
+      offsetMiddle: Math.round(
+        box.top + box.height / 2 - (row.top + row.height / 2),
+      ),
+    };
+  });
+}
 
 /**
  * Opens the session menu on /live and returns the requested entry. The chip
@@ -59,7 +93,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // slot — same height, same right edge, same vertical center. Only the
   // content and the colour change; nothing in the chrome moves.
   const startChip = page.getByRole("button", { name: "Session starten" });
-  const startBox = await startChip.boundingBox();
+  const startGeometry = await chipGeometry(startChip);
 
   await startChip.click();
   await expect(page).toHaveURL(/\/beispiel\/live$/);
@@ -75,19 +109,13 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect(chip).toBeVisible();
 
   // Same element, same place: the chip that now ticks sits exactly where the
-  // start offer sat — same height, same right edge, same middle.
-  const runningBox = await chip.boundingBox();
-  expect(startBox).not.toBeNull();
-  expect(runningBox).not.toBeNull();
-  if (startBox !== null && runningBox !== null) {
-    expect(runningBox.height).toBe(startBox.height);
-    expect(Math.round(runningBox.x + runningBox.width)).toBe(
-      Math.round(startBox.x + startBox.width),
-    );
-    expect(Math.round(runningBox.y + runningBox.height / 2)).toBe(
-      Math.round(startBox.y + startBox.height / 2),
-    );
-  }
+  // start offer sat — same height, same right edge, same middle, all three
+  // measured against the topbar row (chipGeometry above).
+  expect(await chipGeometry(chip)).toEqual(startGeometry);
+  // …and it really is the LAST thing on the row, flush against the row's
+  // padding. Without this the assertion above would also pass if BOTH states
+  // were pushed out of the row together.
+  expect(startGeometry.insetRight).toBe(0);
   await expect(chip).toContainText(/\d+:\d{2}:\d{2}/);
   // …and it starts at ZERO. `started` is written to the second (issue #58);
   // when it was minute-precise the reading rounded down to the start of the

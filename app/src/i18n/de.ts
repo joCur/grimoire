@@ -43,6 +43,10 @@ export const de = {
   "topbar.generator": "Generator",
   "topbar.generator.running": "Generierung läuft …",
   "topbar.review.pending": "Nachbereitung · {count} offen",
+  // The same link below xl, where the row has no width to spare (issue #69):
+  // the COUNT is the news, the word is the one thing that can go. The full
+  // label stays as the accessible name at every width.
+  "topbar.review.pendingShort": "{count} offen",
   "topbar.session.back": "Zur Session",
 
   // --- campaign switcher ----------------------------------------------------

@@ -10,7 +10,62 @@
 // pool's own footer line is gone), and the campaign's name/description are
 // editable from the header.
 
+import type { Page } from "@playwright/test";
+
 import { expect, test, todaySessionId } from "../support/test";
+
+/**
+ * How far the topbar's content sticks out of the row, in pixels (0 = it fits).
+ *
+ * Measured as "right edge of the rightmost child vs. the row's CONTENT edge",
+ * not as `header.scrollWidth - header.clientWidth` (issue #69 CI finding):
+ * an overflowing flex item first eats the row's 24px right padding, and
+ * `scrollWidth` does not grow for that at all — the old metric reported a
+ * clean row while the session chip was already 10px past the padding and,
+ * further out, past the viewport. The page's own horizontal scroll is
+ * reported alongside, since that is the other half of "does not overflow".
+ */
+async function topbarOverflow(page: Page) {
+  return page.evaluate(() => {
+    const header = document.querySelector("header");
+    const doc = document.documentElement;
+    const pageOverflow = doc.scrollWidth - doc.clientWidth;
+    // Below md the topbar is hidden on campaign routes (the mobile start
+    // surface is the chrome there): no box, nothing to overflow.
+    if (header === null || header.getBoundingClientRect().width === 0) {
+      return { row: 0, page: pageOverflow };
+    }
+    const style = getComputedStyle(header);
+    const contentRight =
+      header.getBoundingClientRect().right - parseFloat(style.paddingRight);
+    const rightmost = Math.max(
+      ...[...header.children].map((el) => el.getBoundingClientRect().right),
+    );
+    return { row: Math.max(0, Math.round(rightmost - contentRight)), page: pageOverflow };
+  });
+}
+
+/**
+ * Stands in for WIDER GLYPHS than the machine running the test happens to
+ * have. Linux CI renders every label ~2px wider than macOS does, which is how
+ * the row came to overflow on CI only (issue #69) — twice. `letter-spacing`
+ * on the row reproduces that class of difference locally and scales it, so
+ * the guard below asserts that the row survives 1px of it: far more than the
+ * ~0.6px equivalent of the observed CI delta, at every width.
+ */
+async function widenGlyphs(page: Page, spacing: string) {
+  await page.addStyleTag({
+    content: `header, header * { letter-spacing: ${spacing} !important; }`,
+  });
+}
+
+/**
+ * The widths the row is checked at. 1000/1024/1040 bracket the lg breakpoint
+ * (the nav trio appears), 1280 the xl one (the trio, the full search chip and
+ * the chip's reserved width all switch on at once — the tightest width there
+ * is), 768 the corner where the search chip is already at its floor.
+ */
+const TOPBAR_WIDTHS = [640, 768, 900, 1000, 1024, 1040, 1100, 1280, 1300, 1536];
 
 /** A location file for the `hafen` group directory of the fixture campaign. */
 const HAFEN_LOCATION = `---
@@ -346,25 +401,7 @@ test.describe("with a session running since 19:30", () => {
   test("the topbar does not overflow at medium widths while a session runs", async ({
     page,
   }) => {
-    const overflow = () =>
-      page.evaluate(() => {
-        const header = document.querySelector("header");
-        const doc = document.documentElement;
-        return {
-          page: doc.scrollWidth - doc.clientWidth,
-          header: header === null ? 0 : header.scrollWidth - header.clientWidth,
-        };
-      });
-
-    // The pool carries the fullest topbar there is: switcher, session chip,
-    // search, Generator, the settings gear (issue #69) — plus the review link
-    // once something is harvestable.
-    // 1000/1024/1040 bracket the lg breakpoint on purpose (issue #69): that
-    // is where the nav trio appears, and the row used to clear the step by
-    // single digits — enough on macOS, 2px short on CI's wider Linux font
-    // metrics. 768 is the other corner, where the search chip is already at
-    // its floor.
-    for (const width of [640, 768, 900, 1000, 1024, 1040, 1100, 1280]) {
+    for (const width of TOPBAR_WIDTHS) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto("/beispiel");
       await expect(
@@ -379,10 +416,15 @@ test.describe("with a session running since 19:30", () => {
           page.getByRole("link", { name: "Einstellungen" }),
         ).toBeVisible();
       }
-      expect(await overflow(), `pool at ${width}px`).toEqual({
+      expect(await topbarOverflow(page), `pool at ${width}px`).toEqual({
+        row: 0,
         page: 0,
-        header: 0,
       });
+      await widenGlyphs(page, "1px");
+      expect(
+        await topbarOverflow(page),
+        `pool at ${width}px with wider glyphs`,
+      ).toEqual({ row: 0, page: 0 });
 
       // …and the live route, whose chip is the menu trigger — from md up,
       // where the topbar IS the chrome; below that the mobile row's link chip
@@ -393,12 +435,53 @@ test.describe("with a session running since 19:30", () => {
           ? page.getByRole("button", { name: /Session läuft/ })
           : page.getByRole("link", { name: /Session läuft/ }),
       ).toBeVisible();
-      expect(await overflow(), `live at ${width}px`).toEqual({
+      expect(await topbarOverflow(page), `live at ${width}px`).toEqual({
+        row: 0,
         page: 0,
-        header: 0,
       });
+      await widenGlyphs(page, "1px");
+      expect(
+        await topbarOverflow(page),
+        `live at ${width}px with wider glyphs`,
+      ).toEqual({ row: 0, page: 0 });
     }
   });
+});
+
+/**
+ * The FULLEST row there is — and the one the guard above never saw: with NO
+ * session running the chip carries the long "Session starten" label instead
+ * of the clock, and the example campaign's last session leaves the
+ * "Nachbereitung · N offen" link on the row next to generator and gear
+ * (issue #69 CI finding: at 768 and at 1024 that row overflowed by 41 and
+ * 10px in plain macOS rendering, invisible to the old scrollWidth metric).
+ */
+test("the topbar does not overflow at medium widths with no session running", async ({
+  page,
+}) => {
+  for (const width of TOPBAR_WIDTHS) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/beispiel");
+    if (width >= 768) {
+      await expect(
+        page.getByRole("button", { name: "Session starten" }),
+      ).toBeVisible();
+      // The review link is part of THIS row on purpose — it is the widest
+      // optional element, and the reason the row ran over.
+      await expect(
+        page.getByRole("link", { name: /Nachbereitung/ }),
+      ).toBeVisible();
+    }
+    expect(await topbarOverflow(page), `pool at ${width}px`).toEqual({
+      row: 0,
+      page: 0,
+    });
+    await widenGlyphs(page, "1px");
+    expect(
+      await topbarOverflow(page),
+      `pool at ${width}px with wider glyphs`,
+    ).toEqual({ row: 0, page: 0 });
+  }
 });
 
 test("editing the campaign metadata updates header, switcher and the file", async ({
