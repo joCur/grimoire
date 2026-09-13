@@ -391,7 +391,7 @@ export const de = {
   "review.noSession": "Es gibt keine Session zum Sichten.",
   "review.backToPool": "Zurück zum Pool",
   "review.lead":
-    "Notizen der Session durchgehen — als Faden übernehmen, NPC anlegen oder verwerfen. Der Rest bleibt im Log.",
+    "Notizen der Session durchgehen — als Handlungsstrang übernehmen, NPC anlegen oder verwerfen. Der Rest bleibt im Log.",
   // Topbar and the mobile page read the same line (two parameters, #69).
   "review.progress": "{seen} von {total} gesichtet",
   "review.hashUnavailable":
@@ -404,19 +404,19 @@ export const de = {
   "review.source.logScene": "Log · {scene}",
   "review.source.inbox": "Inbox",
 
-  "review.action.thread": "Als Faden übernehmen",
+  "review.action.thread": "Als Handlungsstrang übernehmen",
   "review.action.failed": "Aktion nicht gespeichert — Server prüfen.",
   "review.npc.failed": "NPC nicht angelegt — Server prüfen.",
 
   // The done row: the action of THIS sitting, or the neutral fallback after a
   // reload (the server only stores done/not-done).
-  "review.done.thread": "Als Faden übernommen",
+  "review.done.thread": "Als Handlungsstrang übernommen",
   "review.done.npc": "NPC angelegt",
   "review.done.dismiss": "Verworfen",
   "review.done.seen": "gesichtet",
 
-  "review.threads.title": "Offene Fäden des Kapitels",
-  "review.threads.empty": "Noch keine offenen Fäden in diesem Kapitel.",
+  "review.threads.title": "Offene Handlungsstränge des Kapitels",
+  "review.threads.empty": "Noch keine offenen Handlungsstränge in diesem Kapitel.",
   "review.threads.new": "neu",
   "review.finish": "Fertig — zurück zum Pool",
 

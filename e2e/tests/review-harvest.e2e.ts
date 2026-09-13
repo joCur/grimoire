@@ -65,7 +65,7 @@ test("adopting a thread lands in _chapter, the inbox line gets ticked off", asyn
 
   // Three tagged log lines + the tagged inbox line from examples/beispiel.
   await expect(progress).toHaveText("0 von 4 gesichtet");
-  await expect(page.getByText("Noch keine offenen Fäden in diesem Kapitel.")).toHaveCount(0);
+  await expect(page.getByText("Noch keine offenen Handlungsstränge in diesem Kapitel.")).toHaveCount(0);
   // The chapter already carries one open thread.
   await expect(page.getByText("Wer bezahlt die Schmuggler?")).toBeVisible();
 
@@ -74,9 +74,9 @@ test("adopting a thread lands in _chapter, the inbox line gets ticked off", asyn
   // This line was logged without a scene marker, so the chip stays bare
   // (issue #34 — the scene part only appears when the line names one).
   await expect(threadCard.getByText("Log", { exact: true })).toBeVisible();
-  await threadCard.getByRole("button", { name: "Als Faden übernehmen" }).click();
+  await threadCard.getByRole("button", { name: "Als Handlungsstrang übernehmen" }).click();
 
-  await expect(threadCard.getByText("Als Faden übernommen")).toBeVisible();
+  await expect(threadCard.getByText("Als Handlungsstrang übernommen")).toBeVisible();
   await expect(progress).toHaveText("1 von 4 gesichtet");
   // The thread list shows the new item with the "neu" chip.
   await expect(page.getByText("neu", { exact: true })).toBeVisible();
@@ -174,8 +174,8 @@ test.describe("with yesterday's session, ended after midnight", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session-Nachbereitung");
     const threadCard = page.locator("div").filter({ hasText: THREAD_TEXT }).last();
     await expect(threadCard).toBeVisible();
-    await threadCard.getByRole("button", { name: "Als Faden übernehmen" }).click();
-    await expect(threadCard.getByText("Als Faden übernommen")).toBeVisible();
+    await threadCard.getByRole("button", { name: "Als Handlungsstrang übernehmen" }).click();
+    await expect(threadCard.getByText("Als Handlungsstrang übernommen")).toBeVisible();
 
     // The `reviewed` hash lands in YESTERDAY's file — the one the session
     // actually lives in — and no file was invented for today.

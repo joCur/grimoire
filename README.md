@@ -241,7 +241,7 @@ reviewed: [a1b2c3d4]            # Kurzhashes gesichteter Log-Zeilen (Review-Schr
 
 ### Review-Aktionen (App-verwaltet)
 
-- „Als Faden übernehmen" → append `- [ ] <Text>` unter `## Offene Fäden`
+- „Als Handlungsstrang übernehmen" → append `- [ ] <Text>` unter `## Offene Fäden`
   von `<kapitel>/_chapter` des aktiven Kapitels (Abschnitt wird angelegt, wenn
   er fehlt).
 - „NPC-Stub anlegen" → erzeugt `npcs/<slug>` mit Minimal-Eigenschaften

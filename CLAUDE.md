@@ -152,7 +152,7 @@ Die Pfade:
 3. ⌘K-Suche findet und öffnet
 4. Session-Zyklus: starten → Schnellnotiz → Log + scenes_played →
    Pause → beenden → Review
-5. Nachbereitung: Thread übernehmen → _chapter.md; Inbox abhaken
+5. Nachbereitung: Handlungsstrang übernehmen → _chapter.md; Inbox abhaken
 6. Generator-Zyklus (Stub-LLM): Job → Review → Übernehmen → draft im
    Pool; plus 409-/Fehlerpfad und Server-Neustart (fertiger Job übersteht
    ihn und bleibt übernehmbar, laufender wird als `failed` gemeldet)
