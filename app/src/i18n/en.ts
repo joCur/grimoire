@@ -3,7 +3,7 @@
 // typecheck.
 //
 // DM vocabulary, not a literal translation: Session · Scene · Chapter ·
-// Location · Harvest (Ernte) · Read-aloud (Vorlesen) · Handout. Ids and
+// Location · Wrap-up (Nachbereitung) · Read-aloud (Vorlesen) · Handout. Ids and
 // frontmatter keys stay as they are on the wire — `id`, `active`, `insight +2`
 // are data, not copy.
 
@@ -34,7 +34,7 @@ export const en: Messages = {
   "topbar.search": "Search …",
   "topbar.generator": "Generator",
   "topbar.generator.running": "Generating …",
-  "topbar.review.pending": "Review · {count} open",
+  "topbar.review.pending": "Wrap-up · {count} open",
   "topbar.session.back": "To the session",
 
   // --- campaign switcher ----------------------------------------------------
@@ -363,13 +363,15 @@ export const en: Messages = {
   "live.drawer.open": "Open entry",
 
 
-  // --- review ("Five-minute harvest", routes/review.tsx, lib/use-review.ts) -
-  "review.title": "Five-minute harvest",
+  // --- review (the session wrap-up, formerly the "five-minute harvest" —
+  // issue #10; the harvest metaphor stayed in the code, not in the UI)
+  // routes/review.tsx, lib/use-review.ts ------------------------------------
+  "review.title": "Session wrap-up",
   "review.sessionFailed": "Session not loadable — check the server and reload.",
   "review.noSession": "There is no session to review.",
   "review.backToPool": "Back to the pool",
   "review.lead":
-    "Entries tagged #thread and #npc from log and inbox. Adopt, create or discard — the rest stays in the log.",
+    "Go through the notes of the session — adopt as a thread, create an NPC or discard. The rest stays in the log.",
   // Topbar and the mobile page read the same line (two parameters, #69).
   "review.progress": "{seen} of {total} reviewed",
   "review.hashUnavailable":

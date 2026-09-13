@@ -254,7 +254,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // --- end -> review -------------------------------------------------------
   await (await sessionMenuItem(page, "Session beenden")).click();
   await expect(page).toHaveURL(/\/beispiel\/review$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fünf Minuten Ernte");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session-Nachbereitung");
   await expect.poll(() => api.raw(sessionPath)).toMatch(/^ended: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/m);
 
   // The harvest card for the tagged note is waiting there.

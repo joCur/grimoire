@@ -1,4 +1,5 @@
-// Critical path 5: the harvest ("Ernte"); see CLAUDE.md.
+// Critical path 5: the session wrap-up ("Nachbereitung", formerly "Ernte" —
+// the harvest metaphor survives only in file names and code); see CLAUDE.md.
 //
 // Adopt a thread → _chapter, tick off an inbox line, create an NPC stub,
 // and the progress counter.
@@ -57,7 +58,7 @@ test("adopting a thread lands in _chapter, the inbox line gets ticked off", asyn
   api,
 }) => {
   await page.goto("/beispiel/review");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fünf Minuten Ernte");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session-Nachbereitung");
 
   // The topbar carries the harvest progress (the page repeats it below md).
   const progress = page.getByRole("banner").getByText(/von \d+ gesichtet/);
@@ -102,7 +103,7 @@ test("adopting a thread lands in _chapter, the inbox line gets ticked off", asyn
   await page.getByRole("button", { name: "Fertig — zurück zum Pool" }).click();
   await expect(page).toHaveURL(/\/beispiel$/);
   // The pool's quiet review affordance counts what is still open.
-  await expect(page.getByRole("link", { name: "Review · 2 offen" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Nachbereitung · 2 offen" })).toBeVisible();
 });
 
 test("creating an NPC entry from a #npc log line", async ({ page, api }) => {
@@ -159,7 +160,7 @@ test("an id that already has an entry is linked, not refused (#70)", async ({ pa
 test.describe("with yesterday's session, ended after midnight", () => {
   test.use({ seed: { files: { [PAST_MIDNIGHT.path]: PAST_MIDNIGHT.content } } });
 
-  test("a session that ran past midnight is still the harvest (issue #40 review)", async ({
+  test("a session that ran past midnight is still the wrap-up's session (issue #40 review)", async ({
     page,
     api,
   }) => {
@@ -170,7 +171,7 @@ test.describe("with yesterday's session, ended after midnight", () => {
     const rel = PAST_MIDNIGHT.path;
 
     await page.goto("/beispiel/review");
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fünf Minuten Ernte");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session-Nachbereitung");
     const threadCard = page.locator("div").filter({ hasText: THREAD_TEXT }).last();
     await expect(threadCard).toBeVisible();
     await threadCard.getByRole("button", { name: "Als Faden übernehmen" }).click();

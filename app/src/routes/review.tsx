@@ -1,4 +1,5 @@
-// "/:campaign/review" — the review view ("Fünf Minuten Ernte", issue #10)
+// "/:campaign/review" — the review view, "Session-Nachbereitung" in the UI
+// (issue #10; formerly "Fünf Minuten Ernte")
 // per the design reference: the tagged lines of today's log and of the inbox
 // as cards with one-click actions, the chapter's open threads below, brass
 // "Fertig" at the end. Reached after "Session beenden" and from the quiet

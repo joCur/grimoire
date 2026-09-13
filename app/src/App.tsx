@@ -87,7 +87,8 @@ export function App() {
           <Route path="live" element={<LiveRoute />} />
           {/* Generator (issue #12) — entered from the pool's "Generator". */}
           <Route path="generate" element={<GenerateRoute />} />
-          {/* Review ("Fünf Minuten Ernte", issue #10) — entered after
+          {/* Review — the "Session-Nachbereitung" (issue #10, formerly
+              "Fünf Minuten Ernte") — entered after
               "Session beenden" and from the pool affordance. */}
           <Route path="review" element={<ReviewRoute />} />
           <Route path="file/*" element={<SceneRoute />} />

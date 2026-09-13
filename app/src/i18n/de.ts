@@ -42,7 +42,7 @@ export const de = {
   "topbar.search": "Suchen …",
   "topbar.generator": "Generator",
   "topbar.generator.running": "Generierung läuft …",
-  "topbar.review.pending": "Review · {count} offen",
+  "topbar.review.pending": "Nachbereitung · {count} offen",
   "topbar.session.back": "Zur Session",
 
   // --- campaign switcher ----------------------------------------------------
@@ -379,13 +379,15 @@ export const de = {
   "live.drawer.unloadable": "Nicht ladbar — {path} prüfen.",
   "live.drawer.open": "Eintrag öffnen",
 
-  // --- review ("Fünf Minuten Ernte", routes/review.tsx, lib/use-review.ts) --
-  "review.title": "Fünf Minuten Ernte",
+  // --- review (the session wrap-up, formerly "Fünf Minuten Ernte" — issue
+  // #10; the "Ernte"/harvest metaphor stayed in the code, not in the UI)
+  // routes/review.tsx, lib/use-review.ts ------------------------------------
+  "review.title": "Session-Nachbereitung",
   "review.sessionFailed": "Session nicht ladbar — Server prüfen und neu laden.",
   "review.noSession": "Es gibt keine Session zum Sichten.",
   "review.backToPool": "Zurück zum Pool",
   "review.lead":
-    "Einträge mit #thread und #npc aus Log und Inbox. Übernehmen, anlegen oder verwerfen — der Rest bleibt im Log.",
+    "Notizen der Session durchgehen — als Faden übernehmen, NPC anlegen oder verwerfen. Der Rest bleibt im Log.",
   // Topbar and the mobile page read the same line (two parameters, #69).
   "review.progress": "{seen} von {total} gesichtet",
   "review.hashUnavailable":

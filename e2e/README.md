@@ -158,7 +158,7 @@ mehrere Schreibwege auf ihm liegen:
 | 2 Szene lesen      | `tests/scene-rendering.e2e.ts`, `tests/rename.e2e.ts`          |
 | 3 ⌘K-Suche         | `tests/search.e2e.ts`                                          |
 | 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`                                   |
-| 5 Ernte            | `tests/review-harvest.e2e.ts`                                  |
+| 5 Nachbereitung    | `tests/review-harvest.e2e.ts`                                  |
 | 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-restart.e2e.ts`      |
 | 7 Eigenschaften/409 | `tests/status-control.e2e.ts`, `tests/properties-form.e2e.ts`, `tests/rename.e2e.ts` |
 | 8 Mobil            | `tests/mobile.e2e.ts`                                          |

@@ -72,7 +72,8 @@ Startfläche: Suche und Inbox-Eingabe. Szenen/NPCs als reine Leseansicht.
 Kein Live-Modus auf Mobil erzwingen.
 
 ### 5. Review (nach der Session)
-Job: fünf Minuten Ernte. Log- und Inbox-Einträge mit `#thread`/`#npc`
+Job: fünf Minuten Nachbereitung (der frühere Begriff „Ernte" ist in der UI
+abgelöst — unklare Metaphorik). Log- und Inbox-Einträge mit `#thread`/`#npc`
 gefiltert, je Eintrag Ein-Klick-Aktionen (Thread übernehmen, NPC-Stub
 anlegen, verwerfen). Fortschritt sichtbar („3 von 7 gesichtet").
 

@@ -1,4 +1,5 @@
-// Pure helpers of the review view ("Fünf Minuten Ernte", issue #10):
+// Pure helpers of the review view — the "Session-Nachbereitung" (issue #10,
+// formerly "Fünf Minuten Ernte"; the harvest metaphor lives on in code only):
 // hashtag handling, the inbox list-line parser, the "Offene Fäden"
 // checklist parser, the NPC-slug derivation for the stub dialog and the
 // short hash that marks a log line as reviewed. No react, no query imports.
