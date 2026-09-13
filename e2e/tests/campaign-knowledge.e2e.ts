@@ -267,3 +267,136 @@ test("the sections are usable at 390px — the mobile floor", async ({ page }) =
   );
   expect(overflow).toBe(true);
 });
+
+test("leaving with unsaved rows asks first — and „Weiter bearbeiten“ keeps them", async ({ page }) => {
+  // The save is EXPLICIT, so navigating away is the moment the DM's work can
+  // vanish. At 390px the way out is the „‹ Pool" row (routes/settings.tsx),
+  // which is a plain router link — exactly the exit that used to drop the
+  // list without a word (components/UnsavedChangesGuard.tsx).
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/settings?from=beispiel");
+  const knowledge = section(page, "Kampagnenwissen");
+
+  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
+  await knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" }).fill("Nicht verlieren");
+
+  // --- „Weiter bearbeiten" stays on the page, with the rows intact ---------
+  await page.getByRole("link", { name: "Pool" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("Änderungen verwerfen?");
+  await dialog.getByRole("button", { name: "Weiter bearbeiten" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page).toHaveURL(/\/settings\?from=beispiel$/);
+  await expect(knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" })).toHaveValue(
+    "Nicht verlieren",
+  );
+
+  // --- „Verwerfen" is the DM's decision, and then it leaves ----------------
+  await page.getByRole("link", { name: "Pool" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
+  await expect(page).toHaveURL(/\/beispiel$/);
+});
+
+test("a SAVED list does not ask — the guard is about unsaved work only", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/settings?from=beispiel");
+  const knowledge = section(page, "Kampagnenwissen");
+
+  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
+  await knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" }).fill("Fertig");
+  await knowledge.getByRole("textbox", { name: "Neu (in dieser Kampagne)" }).fill("Neu");
+  await knowledge.getByRole("button", { name: "Speichern" }).click();
+  await expect(knowledge.getByText("Gespeichert", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "Pool" }).click();
+  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("deleting a row announces it and keeps the keyboard in the list", async ({ page }) => {
+  await openSettings(page);
+  const knowledge = section(page, "Kampagnenwissen");
+
+  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
+  await knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" }).fill("Eins");
+  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
+  await knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" }).last().fill("Zwei");
+
+  // Deleting the FIRST of two hands the focus to the survivor's delete
+  // button — clearing a list must not need the mouse again after every click.
+  await knowledge.getByRole("button", { name: "Eintrag löschen" }).first().click();
+  await expect(knowledge.getByText("Eintrag entfernt")).toBeAttached();
+  await expect(knowledge.getByRole("button", { name: "Eintrag löschen" })).toBeFocused();
+
+  // The last row leaves no row, so „Eintrag hinzufügen" takes the focus.
+  await knowledge.getByRole("button", { name: "Eintrag löschen" }).click();
+  await expect(knowledge.getByRole("button", { name: "Eintrag hinzufügen" })).toBeFocused();
+});
+
+test("switching the kind carries the text into the new form", async ({ page, api }) => {
+  await openSettings(page);
+  const knowledge = section(page, "Kampagnenwissen");
+
+  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
+  // A half-typed convention is flagged as incomplete — it is stored, but the
+  // prompt skips it, so the row says so instead of looking like it is in force.
+  await knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" }).fill("Salt Harbour");
+  await expect(knowledge.getByText("Unvollständig", { exact: false })).toBeVisible();
+  await knowledge.getByRole("textbox", { name: "Neu (in dieser Kampagne)" }).fill("Salzhafen");
+  await expect(knowledge.getByText("Unvollständig", { exact: false })).toHaveCount(0);
+
+  // naming -> fact: the pair survives as one sentence.
+  await knowledge.getByLabel("Art").selectOption("fact");
+  await expect(knowledge.getByRole("textbox", { name: "Fakt, der gilt" })).toHaveValue(
+    "Salt Harbour → Salzhafen",
+  );
+
+  // fact -> naming: the sentence lands in „Alt", where it is visible.
+  await knowledge.getByLabel("Art").selectOption("naming");
+  await expect(knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" })).toHaveValue(
+    "Salt Harbour → Salzhafen",
+  );
+  await expect(knowledge.getByRole("textbox", { name: "Neu (in dieser Kampagne)" })).toHaveValue("");
+
+  // And what is STORED is what is on screen — no column of a former kind
+  // travels along invisibly.
+  await knowledge.getByRole("textbox", { name: "Neu (in dieser Kampagne)" }).fill("Salzhafen");
+  await knowledge.getByRole("button", { name: "Speichern" }).click();
+  await expect(knowledge.getByText("Gespeichert", { exact: true })).toBeVisible();
+  const stored = await api.get<{ entries: Array<Record<string, unknown>> }>("beispiel/knowledge");
+  expect(stored.entries).toEqual([
+    { kind: "naming", from: "Salt Harbour → Salzhafen", to: "Salzhafen", text: "" },
+  ]);
+});
+
+test("a competing write while typing is a conflict on the spot, not on save", async ({
+  page,
+  api,
+}) => {
+  await openSettings(page);
+  const knowledge = section(page, "Kampagnenwissen");
+
+  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
+  await knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" }).fill("Meins");
+
+  // Somebody else writes. The version poll brings the new list in — and it
+  // must NOT replace what is being typed (ADR #4, in both directions).
+  const current = await api.get<{ rev: number }>("beispiel/knowledge");
+  await api.send("PUT", "beispiel/knowledge", {
+    entries: [{ kind: "fact", from: "", to: "", text: "Von woanders." }],
+    rev: current.rev,
+  });
+
+  await expect(knowledge.getByText("Inzwischen geändert", { exact: false })).toBeVisible();
+  await expect(knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" })).toHaveValue(
+    "Meins",
+  );
+
+  // Reloading is the DM's decision — and then the other list is on screen.
+  await knowledge.getByRole("button", { name: "Neu laden" }).click();
+  await expect(knowledge.getByRole("textbox", { name: "Fakt, der gilt" })).toHaveValue(
+    "Von woanders.",
+  );
+  await expect(knowledge.getByText("Inzwischen geändert", { exact: false })).toHaveCount(0);
+});

@@ -10,9 +10,13 @@
 //
 // KAMPAGNENWISSEN: the kind decides the fields. A naming convention is the
 // „Alt → Neu" PAIR the ticket asks for (and the only kind the server can
-// check after a run); a fact and a style rule are one sentence each. Switching
-// the kind keeps what was typed — the server stores all three columns, so a
-// mis-picked kind is not a reason to retype a sentence.
+// check after a run); a fact and a style rule are one sentence each.
+//
+// Switching the kind MOVES what was typed into the new form and empties the
+// old kind's columns (lib/settings-list.ts switchKnowledgeKind) — the first
+// version only hid them, which meant a mis-picked kind left text in the
+// database that nothing on screen explained. Nothing is lost and nothing is
+// hidden: what is stored is what is visible.
 
 import { fetchGlossary, fetchKnowledge, putGlossary, putKnowledge } from "@/api";
 import { SettingsListEditor, type RowApi } from "@/components/SettingsListEditor";
@@ -22,8 +26,10 @@ import type { MessageKey } from "@/i18n";
 import {
   emptyGlossaryEntry,
   emptyKnowledgeEntry,
+  isIncompleteNamingEntry,
   isSendableGlossaryEntry,
   isSendableKnowledgeEntry,
+  switchKnowledgeKind,
   type Row,
 } from "@/lib/settings-list";
 import { cn } from "@/lib/utils";
@@ -94,7 +100,11 @@ function KnowledgeRow({ row, api }: { row: Row<KnowledgeEntry>; api: RowApi<Know
       <div className="flex flex-col gap-2 md:flex-row md:items-center">
         <select
           value={row.value.kind}
-          onChange={(e) => api.patch({ kind: e.target.value as KnowledgeEntry["kind"] })}
+          onChange={(e) =>
+            // A full entry as the patch: the switch decides all four columns
+            // at once, so patching one of them would leave the others stale.
+            api.patch(switchKnowledgeKind(row.value, e.target.value as KnowledgeEntry["kind"]))
+          }
           aria-label={t("settings.knowledge.kindLabel")}
           className={cn(INPUT_CLASS, "md:w-[150px]")}
         >
@@ -146,6 +156,15 @@ function KnowledgeRow({ row, api }: { row: Row<KnowledgeEntry>; api: RowApi<Know
           />
         )}
       </div>
+
+      {/* A half-typed convention is SAVED (the DM may be mid-sentence) but the
+          prompt skips it, so the row says so quietly rather than looking like
+          a rule that is in force. Not an error — there is nothing to fix yet. */}
+      {isIncompleteNamingEntry(row.value) && (
+        <p className="text-[11.5px] text-muted-foreground">
+          {t("settings.knowledge.incomplete")}
+        </p>
+      )}
     </div>
   );
 }

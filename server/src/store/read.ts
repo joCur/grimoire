@@ -651,7 +651,12 @@ export async function glossaryText(campaign: string): Promise<string | undefined
   const db = await getDb();
   const rows = glossaryRows(db, campaign);
   if (rows.length === 0) return undefined;
-  return rows.map((row) => `- ${row.term} → ${row.explanation}`).join("\n");
+  // Same one-line-per-entry guarantee the knowledge lines have (`promptInline`,
+  // below): the glossary is quoted into the same prompt and is no more
+  // trustworthy as a source of markdown structure.
+  return rows
+    .map((row) => `- ${promptInline(row.term)} → ${promptInline(row.explanation)}`)
+    .join("\n");
 }
 
 // --- GET /api/:campaign/knowledge (issue #53) --------------------------------
@@ -702,7 +707,8 @@ export async function knowledgeText(campaign: string): Promise<string | undefine
   const lines: string[] = [];
   for (const row of rows) {
     const entry = knowledgeEntry(row);
-    const resolve = (value: string): string => expandBodyRefs(db, campaign, value);
+    const resolve = (value: string): string =>
+      promptInline(expandBodyRefs(db, campaign, value));
     if (entry.kind === "naming") {
       if (entry.from.trim() === "" || entry.to.trim() === "") continue;
       lines.push(
@@ -719,14 +725,48 @@ export async function knowledgeText(campaign: string): Promise<string | undefine
 
 /**
  * The naming conventions as `from`/`to` pairs — the input of the post-run
- * check (naming-check.ts). Unlike the prompt lines these are NOT expanded:
- * the check searches the draft for the literal spelling the DM typed.
+ * check (naming-check.ts).
+ *
+ * REF-EXPANDED like the prompt lines (review of #53): a rule written as
+ * „[[fenn]]" → „Fennwyn" reaches the model as „Fenn" → „Fennwyn", so the
+ * check has to search the drafts for „Fenn" too — searching for the literal
+ * „[[fenn]]" would silently never match and make the rule look obeyed. Both
+ * sides are expanded, because `to` is what the check uses to recognise the
+ * already-correct spelling (naming-check.ts findRuleHits).
  */
 export async function namingRules(campaign: string): Promise<Array<{ from: string; to: string }>> {
   const db = await getDb();
+  const expand = (value: string): string =>
+    promptInline(expandBodyRefs(db, campaign, value)).trim();
   return knowledgeRows(db, campaign)
     .map(knowledgeEntry)
     .filter((e) => e.kind === "naming" && e.from.trim() !== "" && e.to.trim() !== "")
-    .map((e) => ({ from: e.from.trim(), to: e.to.trim() }));
+    .map((e) => ({ from: expand(e.from), to: expand(e.to) }))
+    .filter((e) => e.from !== "" && e.to !== "");
+}
+
+/**
+ * One stored entry as it may appear INSIDE a prompt line (review of #53).
+ *
+ * The lists above are assembled into a markdown prompt, so an entry is a
+ * fragment of a document the model reads as instructions. The endpoints
+ * already refuse newlines (routes/api.ts), and this is the second half of
+ * that: whatever is in the database — a row from an older build, a hand-made
+ * one, a value that slipped past a validator — can only ever become ONE line
+ * of text here.
+ *
+ *   * all whitespace collapses to single spaces, so no entry can open a line
+ *     of its own;
+ *   * a leading „#" is escaped to „\#", so no entry can become a HEADING and
+ *     pose as a section of the prompt („## Kampagnenwissen" is the section
+ *     the prompt itself writes, and it is binding).
+ *
+ * Defensive, not decorative: the DM is the only author, but the source text
+ * they paste in is not theirs, and an entry is the one place where foreign
+ * text is quoted into the instruction half of the prompt.
+ */
+export function promptInline(value: string): string {
+  const flat = value.replace(/\s+/gu, " ").trim();
+  return flat.startsWith("#") ? `\\${flat}` : flat;
 }
 

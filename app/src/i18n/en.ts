@@ -126,6 +126,8 @@ export const en: Messages = {
   "properties.discard.rename":
     "The changed properties are not saved. Discarding opens the id change and leaves the entry as it is stored.",
   "properties.discard.keepEditing": "Keep editing",
+  "unsaved.description":
+    "This page has unsaved changes. They are lost if you leave now.",
 
 
   "properties.field.required": " · required",
@@ -244,6 +246,8 @@ export const en: Messages = {
   "settings.list.moveUp": "Move up",
   "settings.list.moveDown": "Move down",
   "settings.list.remove": "Delete entry",
+  "settings.list.removed": "Entry removed",
+  "settings.list.reload": "Reload",
 
   "settings.knowledge.heading": "Campaign knowledge",
   "settings.knowledge.hint":
@@ -259,6 +263,7 @@ export const en: Messages = {
   "settings.knowledge.to": "New (in this campaign)",
   "settings.knowledge.factText": "The fact that holds",
   "settings.knowledge.styleText": "Style rule for generated text",
+  "settings.knowledge.incomplete": "Incomplete — not sent with the prompt like this.",
 
   "settings.glossary.heading": "Glossary",
   "settings.glossary.hint":

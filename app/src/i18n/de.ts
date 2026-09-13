@@ -138,6 +138,10 @@ export const de = {
   "properties.discard.rename":
     "Die geänderten Eigenschaften sind nicht gespeichert. Verwerfen öffnet die id-Änderung und lässt den Eintrag so, wie er gespeichert ist.",
   "properties.discard.keepEditing": "Weiter bearbeiten",
+  // The same question for LEAVING A PAGE whose save is explicit
+  // (components/UnsavedChangesGuard.tsx); the title is shared.
+  "unsaved.description":
+    "Auf dieser Seite gibt es ungespeicherte Änderungen. Beim Verlassen gehen sie verloren.",
 
 
   // Field controls
@@ -262,6 +266,9 @@ export const de = {
   "settings.list.moveUp": "Nach oben",
   "settings.list.moveDown": "Nach unten",
   "settings.list.remove": "Eintrag löschen",
+  "settings.list.removed": "Eintrag entfernt",
+  // The action next to `write.stale`: the conflict's only sensible next step.
+  "settings.list.reload": "Neu laden",
 
   "settings.knowledge.heading": "Kampagnenwissen",
   "settings.knowledge.hint":
@@ -277,6 +284,7 @@ export const de = {
   "settings.knowledge.to": "Neu (in dieser Kampagne)",
   "settings.knowledge.factText": "Fakt, der gilt",
   "settings.knowledge.styleText": "Stilregel für generierte Texte",
+  "settings.knowledge.incomplete": "Unvollständig — geht so nicht mit in den Prompt.",
 
   "settings.glossary.heading": "Glossar",
   "settings.glossary.hint":

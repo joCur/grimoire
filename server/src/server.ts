@@ -179,7 +179,14 @@
 //                                              list, array order is the order, stale rev ->
 //                                              409 { code: "rev_conflict", rev }. A
 //                                              half-filled `naming` pair is STORED (the DM
-//                                              is still typing); the prompt skips it
+//                                              is still typing); the prompt skips it.
+//                                              Entry fields must be SINGLE LINE -> 400:
+//                                              an entry becomes one bullet of the
+//                                              generator prompt, and a newline would let
+//                                              it open lines (headings) of its own. The
+//                                              glossary keeps taking wrapped explanations
+//                                              (the import makes them) and is flattened
+//                                              for the prompt instead
 //   [—] GET  /api/:campaign/migration-report   REMOVED with issue #79. The markdown import
 //                                              left the production path (no boot import any
 //                                              more): it is the dev/E2E tool `grimoire seed`,

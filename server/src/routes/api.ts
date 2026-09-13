@@ -119,6 +119,25 @@ function requireRev(value: unknown): number {
   return value;
 }
 
+/**
+ * One SINGLE-LINE field of a knowledge entry (review of #53).
+ *
+ * The knowledge list feeds the generator prompt, where an entry becomes one
+ * bullet in a markdown document the model reads as INSTRUCTIONS
+ * (store/read.ts knowledgeText). A newline inside an entry is
+ * therefore not a formatting detail: it lets an entry open lines of its own —
+ * a „## " heading that poses as a section of the prompt, for instance. The UI
+ * has single-line inputs and cannot produce one, so refusing it costs the DM
+ * nothing and closes the door for every other client.
+ *
+ * The prompt assembly stays defensive as well (`promptInline`) — this is the
+ * validator, not the only line of defence.
+ */
+function requireSingleLine(value: string, key: string): string {
+  if (/[\r\n]/u.test(value)) throw new ApiError(400, `${key} must be a single line`);
+  return value;
+}
+
 /** Query flag: present and not `0`/`false` counts as on (`?includeEnded=1`). */
 function isTruthyFlag(v: string | undefined): boolean {
   return v !== undefined && v !== "0" && v.toLowerCase() !== "false";
@@ -378,6 +397,11 @@ api.put("/:campaign/glossary", async (c) => {
     if (item.explanation !== undefined && typeof item.explanation !== "string") {
       throw new ApiError(400, "explanation must be a string");
     }
+    // NO single-line rule here, unlike the knowledge list below: the markdown
+    // import produces glossary explanations that wrap over two lines
+    // (examples/beispiel/glossary.md), so a 400 would make an imported
+    // glossary unsavable. `promptInline` (store/read.ts) flattens them for
+    // the prompt instead — the defence that does not lose data.
     entries.push({ term: item.term, explanation: item.explanation ?? "" });
   }
   return c.json(await writeGlossary(c.req.param("campaign"), entries, requireRev(body.rev)));
@@ -408,7 +432,7 @@ api.put("/:campaign/knowledge", async (c) => {
       const value = item[key];
       if (value === undefined || value === null) return "";
       if (typeof value !== "string") throw new ApiError(400, `${key} must be a string`);
-      return value;
+      return requireSingleLine(value, key);
     };
     entries.push({ kind: item.kind, from: str("from"), to: str("to"), text: str("text") });
   }

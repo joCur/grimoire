@@ -22,6 +22,16 @@
 // DM would have to dismiss that hint every single run), while „Salzhafen,"
 // and „(Salzhafen)" are.
 //
+// TWO REFINEMENTS the plain search needs to stay useful (review of #53):
+// a hit that sits INSIDE an occurrence of `to` is not reported (a rule
+// „Dragon" → „Red Dragon" must not flag the corrected „Red Dragon"), and a
+// rule whose two sides differ only in CASE is searched case-sensitively, so
+// „salzhafen" → „Salzhafen" flags the lower-case spelling and not its own
+// target. Both are `findRuleHits`.
+//
+// `from`/`to` arrive here ALREADY ref-expanded (store/read.ts namingRules):
+// the DM may write a rule as „[[fenn]]", and the drafts contain the name.
+//
 // The check looks at the BODY and at the properties that hold PROSE the DM
 // reads out or shows (title, role, voice, appearance, trigger, name, …). It
 // deliberately does NOT look at ids, references or tags: those are addresses,
@@ -78,11 +88,16 @@ function isWordChar(ch: string | undefined): boolean {
  * (German „ß"/„SS" is the one pair this does not fold — an acceptable gap for
  * a hint, and folding it would need locale-aware case mapping.)
  */
-export function findWordHits(haystack: string, needle: string): number[] {
+export function findWordHits(
+  haystack: string,
+  needle: string,
+  options: { caseSensitive?: boolean } = {},
+): number[] {
   const trimmed = needle.trim();
   if (trimmed === "") return [];
-  const hay = haystack.toLowerCase();
-  const pin = trimmed.toLowerCase();
+  const fold = (s: string): string => (options.caseSensitive === true ? s : s.toLowerCase());
+  const hay = fold(haystack);
+  const pin = fold(trimmed);
   const hits: number[] = [];
   let at = hay.indexOf(pin);
   while (at !== -1) {
@@ -98,6 +113,67 @@ export function findWordHits(haystack: string, needle: string): number[] {
     at = hay.indexOf(pin, at + 1);
   }
   return hits;
+}
+
+/**
+ * Is this rule only about CASING — „salzhafen" → „Salzhafen"?
+ *
+ * It matters because the check is case-insensitive everywhere else: a
+ * case-insensitive search for „salzhafen" finds the CORRECT „Salzhafen" too,
+ * and a rule that flags its own target is a rule the DM can only turn off.
+ * So a casing-only rule is searched case-SENSITIVELY — then „salzhafen" is a
+ * finding and „Salzhafen" is not, which is exactly what the rule says.
+ */
+export function isCasingOnlyRule(rule: NamingRule): boolean {
+  const from = rule.from.trim();
+  const to = rule.to.trim();
+  if (from === "" || to === "" || from === to) return false;
+  return from.toLowerCase() === to.toLowerCase();
+}
+
+/**
+ * Every occurrence of `needle` in `haystack` as `[start, end)` spans. NO word
+ * boundary here — this is used to find where the NEW spelling stands, and a
+ * hit sitting inside „Red Dragons" is still sitting inside the new spelling.
+ */
+function spansOf(haystack: string, needle: string, caseSensitive: boolean): Array<[number, number]> {
+  if (needle === "") return [];
+  const hay = caseSensitive ? haystack : haystack.toLowerCase();
+  const pin = caseSensitive ? needle : needle.toLowerCase();
+  const spans: Array<[number, number]> = [];
+  let at = hay.indexOf(pin);
+  while (at !== -1) {
+    spans.push([at, at + pin.length]);
+    at = hay.indexOf(pin, at + 1);
+  }
+  return spans;
+}
+
+/**
+ * The hits of ONE RULE in one piece of text — `findWordHits` plus the two
+ * things that separate „the old spelling is still here" from a false alarm
+ * (issue #53 review):
+ *
+ *   1. A hit that lies INSIDE an occurrence of `to` is not a finding. „Dragon"
+ *      → „Red Dragon" is the common shape: the new spelling CONTAINS the old
+ *      one, so a correctly rewritten „Red Dragon" would otherwise be reported
+ *      on every run — the one hint that fires precisely when the model did as
+ *      it was told.
+ *   2. A casing-only rule is searched case-sensitively (see
+ *      `isCasingOnlyRule`), so it flags the wrong casing and nothing else.
+ */
+export function findRuleHits(text: string, rule: NamingRule): number[] {
+  const from = rule.from.trim();
+  const to = rule.to.trim();
+  if (from === "") return [];
+  const caseSensitive = isCasingOnlyRule(rule);
+  const hits = findWordHits(text, from, { caseSensitive });
+  if (hits.length === 0 || to === "") return hits;
+  const covered = spansOf(text, to, caseSensitive);
+  if (covered.length === 0) return hits;
+  return hits.filter(
+    (at) => !covered.some(([start, end]) => at >= start && at + from.length <= end),
+  );
 }
 
 function excerpt(line: string): string {
@@ -135,12 +211,12 @@ export function checkDraftNaming(
     for (const key of CHECKED_PROPERTIES) {
       const value = parsed.properties[key];
       if (typeof value !== "string") continue;
-      if (findWordHits(value, rule.from).length === 0) continue;
+      if (findRuleHits(value, rule).length === 0) continue;
       hints.push({ from: rule.from, to: rule.to, path, field: key, excerpt: excerpt(value) });
     }
     const lines = parsed.body.split("\n");
     for (const [index, line] of lines.entries()) {
-      if (findWordHits(line, rule.from).length === 0) continue;
+      if (findRuleHits(line, rule).length === 0) continue;
       hints.push({
         from: rule.from,
         to: rule.to,

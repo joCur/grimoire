@@ -45,6 +45,7 @@ import { fetchCampaigns } from "@/api";
 import { GlossarySection, KnowledgeSection } from "@/components/CampaignListSections";
 import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { MobileBackRow } from "@/components/MobileBackRow";
+import { UnsavedChangesGuard } from "@/components/UnsavedChangesGuard";
 import { useT } from "@/i18n";
 import type { MessageKey } from "@/i18n";
 import { campaignLabel, settingsCampaign } from "@/lib/campaign";
@@ -106,7 +107,11 @@ export function SettingsRoute() {
         );
 
   return (
-    <>
+    // The campaign sections save EXPLICITLY, so leaving with unsaved rows has
+    // to ask (review of #53). The guard sits around the whole page, not around
+    // one list: there are two editors and „you have unsaved changes" is a
+    // statement about the page (components/UnsavedChangesGuard.tsx).
+    <UnsavedChangesGuard>
       {/* Below md the topbar (and with it the gear) is not the chrome — the
           same "‹ Pool" row every other campaign view carries is the way back.
           Only with a campaign: on a fresh instance there is no pool to go
@@ -145,7 +150,7 @@ export function SettingsRoute() {
             </>
           )}
       </div>
-    </>
+    </UnsavedChangesGuard>
   );
 }
 

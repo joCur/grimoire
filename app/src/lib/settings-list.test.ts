@@ -8,6 +8,12 @@ import type { GlossaryEntry, KnowledgeEntry } from "@grimoire/shared/types";
 
 import {
   appendRow,
+  focusAfterRemove,
+  isIncompleteNamingEntry,
+  listId,
+  seedDraft,
+  switchKnowledgeKind,
+  syncDraft,
   emptyGlossaryEntry,
   emptyKnowledgeEntry,
   fromRows,
@@ -135,5 +141,149 @@ describe("isDirty", () => {
     // The component compares the sendable payload, which drops that row.
     const sendable = [...stored, emptyGlossaryEntry()].filter(isSendableGlossaryEntry);
     expect(isDirty(sendable, stored)).toBe(false);
+  });
+});
+
+// --- which server answer may replace the draft (review of #53) --------------
+
+describe("syncDraft", () => {
+  const listA = { id: listId(["knowledge", "a"]), rev: 3, entries: [fact("A")] };
+  const listB = { id: listId(["knowledge", "b"]), rev: 3, entries: [fact("B")] };
+
+  test("with no draft yet the server's list is taken", () => {
+    const sync = syncDraft(undefined, listA, false);
+    expect(sync.action).toBe("seed");
+    expect(sync.action === "seed" && fromRows(sync.draft.rows)).toEqual([fact("A")]);
+  });
+
+  test("a DIFFERENT list is always reseeded — even with unsaved changes", () => {
+    // `?from=a` -> `?from=b`. Keeping A's rows here is how A's entries would
+    // get saved under B; the two lists happen to share a rev, so the rev
+    // alone cannot tell them apart. The draft is discarded, not migrated.
+    const draft = seedDraft(listA);
+    const sync = syncDraft(draft, listB, true);
+    expect(sync.action).toBe("seed");
+    expect(sync.action === "seed" && fromRows(sync.draft.rows)).toEqual([fact("B")]);
+    expect(sync.action === "seed" && sync.draft.id).toBe(listB.id);
+  });
+
+  test("the SAME list at the same rev is left alone — a refetch is not a reset", () => {
+    const draft = seedDraft(listA);
+    expect(syncDraft(draft, listA, true).action).toBe("keep");
+    expect(syncDraft(draft, listA, false).action).toBe("keep");
+  });
+
+  test("a newer rev reseeds an UNTOUCHED draft", () => {
+    const draft = seedDraft(listA);
+    const sync = syncDraft(draft, { ...listA, rev: 4, entries: [fact("Von woanders")] }, false);
+    expect(sync.action).toBe("seed");
+    expect(sync.action === "seed" && fromRows(sync.draft.rows)).toEqual([fact("Von woanders")]);
+  });
+
+  test("a newer rev over UNSAVED changes is a conflict, never an overwrite", () => {
+    const draft = seedDraft(listA);
+    expect(syncDraft(draft, { ...listA, rev: 4, entries: [fact("Von woanders")] }, true)).toEqual({
+      action: "stale",
+    });
+  });
+
+  test("a seeded draft carries the server list as its dirty BASELINE", () => {
+    const draft = seedDraft(listA);
+    expect(draft.base).toEqual([fact("A")]);
+    expect(isDirty(fromRows(draft.rows), draft.base)).toBe(false);
+  });
+
+  test("the id is campaign AND list — the same list of two campaigns differs", () => {
+    expect(listId(["knowledge", "a"])).not.toBe(listId(["knowledge", "b"]));
+    expect(listId(["knowledge", "a"])).not.toBe(listId(["glossary", "a"]));
+    expect(listId(["knowledge", "a"])).toBe(listId(["knowledge", "a"]));
+  });
+});
+
+// --- where the keyboard lands after a deletion (review of #53) --------------
+
+describe("focusAfterRemove", () => {
+  test("a middle row hands the focus to the row that takes its place", () => {
+    expect(focusAfterRemove(3, 0)).toEqual({ target: "row", index: 0 });
+    expect(focusAfterRemove(3, 1)).toEqual({ target: "row", index: 1 });
+  });
+
+  test("the LAST row hands it back to the one above", () => {
+    expect(focusAfterRemove(3, 2)).toEqual({ target: "row", index: 1 });
+    expect(focusAfterRemove(2, 1)).toEqual({ target: "row", index: 0 });
+  });
+
+  test("the only row leaves no row — „Eintrag hinzufügen“ takes the focus", () => {
+    expect(focusAfterRemove(1, 0)).toEqual({ target: "add" });
+  });
+
+  test("out of range never invents a row", () => {
+    expect(focusAfterRemove(0, 0)).toEqual({ target: "add" });
+    expect(focusAfterRemove(2, 5)).toEqual({ target: "add" });
+  });
+});
+
+// --- switching the kind (review of #53) -------------------------------------
+
+describe("switchKnowledgeKind", () => {
+  test("a sentence becomes the „Alt“ half — the field the DM was typing in", () => {
+    expect(switchKnowledgeKind(fact("Salt Harbour"), "naming")).toEqual(
+      naming("Salt Harbour", ""),
+    );
+  });
+
+  test("a pair becomes ONE sentence, so neither half is lost", () => {
+    expect(switchKnowledgeKind(naming("Salt Harbour", "Salzhafen"), "fact")).toEqual(
+      fact("Salt Harbour → Salzhafen"),
+    );
+    // Half a pair carries over without a dangling arrow.
+    expect(switchKnowledgeKind(naming("Salt Harbour", ""), "style").text).toBe("Salt Harbour");
+  });
+
+  test("fact <-> style keeps the sentence untouched", () => {
+    expect(switchKnowledgeKind(fact("Kurz halten."), "style")).toEqual({
+      kind: "style",
+      from: "",
+      to: "",
+      text: "Kurz halten.",
+    });
+  });
+
+  test("the columns of the OLD kind are EMPTIED — nothing invisible survives", () => {
+    // The first version only hid them, which left text in the database that
+    // nothing on screen explained.
+    const switched = switchKnowledgeKind(naming("A", "B"), "fact");
+    expect(switched.from).toBe("");
+    expect(switched.to).toBe("");
+    const back = switchKnowledgeKind(switched, "naming");
+    expect(back.text).toBe("");
+    expect(back.from).toBe("A → B");
+  });
+
+  test("switching to the same kind is the identical entry", () => {
+    const entry = fact("Bleibt.");
+    expect(switchKnowledgeKind(entry, "fact")).toBe(entry);
+  });
+
+  test("what survives a round trip is still worth sending", () => {
+    const once = switchKnowledgeKind(fact("Salt Harbour"), "naming");
+    expect(isSendableKnowledgeEntry(once)).toBe(true);
+    expect(isSendableKnowledgeEntry(switchKnowledgeKind(once, "fact"))).toBe(true);
+  });
+});
+
+describe("isIncompleteNamingEntry", () => {
+  test("exactly one half of the pair is incomplete", () => {
+    expect(isIncompleteNamingEntry(naming("Salt Harbour", ""))).toBe(true);
+    expect(isIncompleteNamingEntry(naming("", "Salzhafen"))).toBe(true);
+  });
+
+  test("both halves, or neither, is not", () => {
+    expect(isIncompleteNamingEntry(naming("Salt Harbour", "Salzhafen"))).toBe(false);
+    expect(isIncompleteNamingEntry(naming("", ""))).toBe(false);
+  });
+
+  test("only a naming rule can be incomplete", () => {
+    expect(isIncompleteNamingEntry(fact(""))).toBe(false);
   });
 });

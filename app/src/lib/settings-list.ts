@@ -80,6 +80,88 @@ export function moveRow<T>(
   return next;
 }
 
+// --- the DRAFT: which list it belongs to, and when it may be replaced -------
+
+/**
+ * What the DM is typing, plus everything needed to decide whether a fresh
+ * server answer may replace it (review of #53).
+ *
+ * `id` is the list's IDENTITY — campaign AND list. Without it the editor
+ * recognised a reseed by `rev` alone, and two lists whose revs happen to
+ * match are indistinguishable: switching `?from=a` to `?from=b` kept
+ * campaign A's rows on screen and would have SAVED them under campaign B.
+ *
+ * `base` is the server list this draft started from. Dirtiness is measured
+ * against it and not against the latest fetch, so an edit somewhere else does
+ * not silently make the DM's untouched list look changed (or their changed
+ * list look saved).
+ */
+export interface DraftState<T> {
+  id: string;
+  rev: number;
+  base: T[];
+  rows: Array<Row<T>>;
+}
+
+/** The identity of one list — its react-query key, which already says both. */
+export function listId(queryKey: readonly unknown[]): string {
+  return JSON.stringify(queryKey);
+}
+
+/** A fresh draft for a server answer. */
+export function seedDraft<T>(server: { id: string; rev: number; entries: readonly T[] }): DraftState<T> {
+  return { id: server.id, rev: server.rev, base: [...server.entries], rows: toRows(server.entries) };
+}
+
+/**
+ * What to do with the draft when a server answer arrives.
+ *
+ *   * „seed" — take the server's list: there is no draft yet, the list is a
+ *     DIFFERENT one (campaign or list switched), or the draft is untouched and
+ *     the server moved on.
+ *   * „stale" — the server moved on WHILE the DM has unsaved changes. Their
+ *     work stays on screen and they are told (ADR #4: never a silent
+ *     overwrite, in neither direction); reloading is their decision.
+ *   * „keep" — nothing changed.
+ */
+export type DraftSync<T> =
+  | { action: "keep" }
+  | { action: "seed"; draft: DraftState<T> }
+  | { action: "stale" };
+
+export function syncDraft<T>(
+  draft: DraftState<T> | undefined,
+  server: { id: string; rev: number; entries: readonly T[] },
+  dirty: boolean,
+): DraftSync<T> {
+  if (draft === undefined || draft.id !== server.id) {
+    return { action: "seed", draft: seedDraft(server) };
+  }
+  if (draft.rev === server.rev) return { action: "keep" };
+  return dirty ? { action: "stale" } : { action: "seed", draft: seedDraft(server) };
+}
+
+// --- what the keyboard does after a row disappears ---------------------------
+
+/**
+ * Where the focus goes when the row at `index` is deleted from a list of
+ * `count` rows (review of #53).
+ *
+ * Deleting the row the focus sits in drops the focus to the document, which
+ * on a list you clear from the bottom means reaching for the mouse after
+ * every single click. The delete button of the NEIGHBOUR is the honest
+ * target — the next row's, because that is where the deleted row's place is
+ * now, and the previous row's for the last one. With nothing left there is
+ * no row to focus, so „Eintrag hinzufügen" takes it: the only thing still
+ * worth doing.
+ */
+export type RemoveFocus = { target: "row"; index: number } | { target: "add" };
+
+export function focusAfterRemove(count: number, index: number): RemoveFocus {
+  if (count <= 1 || index < 0 || index >= count) return { target: "add" };
+  return { target: "row", index: index < count - 1 ? index : index - 1 };
+}
+
 /** An empty glossary row — what „Eintrag hinzufügen" appends. */
 export function emptyGlossaryEntry(): GlossaryEntry {
   return { term: "", explanation: "" };
@@ -105,10 +187,54 @@ export function isSendableGlossaryEntry(entry: GlossaryEntry): boolean {
 }
 
 /**
- * Is a knowledge row worth sending? Anything with SOME content: a `naming`
- * with only its „Alt" half is kept on purpose (the server stores it, the
- * prompt skips it — see server/src/routes/api.ts), because throwing away
- * half-typed work on save is worse than carrying an unfinished rule.
+ * Switching a knowledge entry's KIND, carrying the text over (review of #53).
+ *
+ * The old behaviour kept all three columns filled and only hid the ones the
+ * new kind has no field for. That is the worst of both: the text is invisible
+ * but still saved, still counted and still sent — so a mis-picked kind left a
+ * fact in the database that nothing on screen explains.
+ *
+ * Clearing them instead would throw the sentence away on a mis-click. So the
+ * text MOVES into the new form, and the old kind's columns are emptied:
+ *
+ *   * fact/style → naming: the sentence becomes „Alt", which is where the DM
+ *     was typing and where they will see it;
+ *   * naming → fact/style: the pair becomes „Alt → Neu" as one sentence, so
+ *     both halves survive in the field that is now on screen;
+ *   * fact ↔ style: the sentence is the same sentence.
+ *
+ * Nothing is lost and nothing is hidden: what is stored is what is visible.
+ */
+export function switchKnowledgeKind(entry: KnowledgeEntry, kind: KnowledgeKind): KnowledgeEntry {
+  if (kind === entry.kind) return entry;
+  if (kind === "naming") {
+    return { kind, from: entry.text.trim(), to: "", text: "" };
+  }
+  if (entry.kind === "naming") {
+    const pair = [entry.from.trim(), entry.to.trim()].filter((part) => part !== "");
+    return { kind, from: "", to: "", text: pair.join(" → ") };
+  }
+  return { kind, from: "", to: "", text: entry.text };
+}
+
+/**
+ * A `naming` row with exactly one half of its pair — stored on purpose (the
+ * DM is mid-typing) but skipped by the prompt, so the UI says so quietly
+ * instead of letting a rule look active that never reaches the model.
+ */
+export function isIncompleteNamingEntry(entry: KnowledgeEntry): boolean {
+  if (entry.kind !== "naming") return false;
+  return (entry.from.trim() === "") !== (entry.to.trim() === "");
+}
+
+/**
+ * Is a knowledge row worth sending? Any VISIBLE column with content — which
+ * since `switchKnowledgeKind` is the same thing as „any column", because the
+ * columns the current kind has no field for are always empty.
+ *
+ * A `naming` with only its „Alt" half is kept on purpose (the server stores
+ * it, the prompt skips it — see server/src/routes/api.ts), because throwing
+ * away half-typed work on save is worse than carrying an unfinished rule.
  */
 export function isSendableKnowledgeEntry(entry: KnowledgeEntry): boolean {
   return entry.kind === "naming"

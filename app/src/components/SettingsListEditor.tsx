@@ -29,20 +29,25 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ApiError } from "@/api";
 import { Button } from "@/components/ui/button";
 import { useT, type MessageKey, type Translate } from "@/i18n";
 import { serverErrorMessage } from "@/i18n";
+import { useUnsavedChanges } from "@/components/UnsavedChangesGuard";
 import {
   appendRow,
+  focusAfterRemove,
   fromRows,
   isDirty,
+  listId,
   moveRow,
   removeRow,
-  toRows,
+  seedDraft,
+  syncDraft,
   updateRow,
+  type DraftState,
   type Row,
 } from "@/lib/settings-list";
 import { cn } from "@/lib/utils";
@@ -94,15 +99,55 @@ export function SettingsListEditor<T>({
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey, queryFn: load });
 
-  // The server's list is the truth; `draft` is what the DM is typing. It is
-  // seeded whenever the SERVER's `rev` changes — a fresh load, a save, a
-  // reload after a conflict — and never on an unchanged refetch, because
-  // that would overwrite what is being typed right now.
-  const [draft, setDraft] = useState<{ rev: number; rows: Array<Row<T>> }>();
+  // The server's list is the truth; `draft` is what the DM is typing. WHEN a
+  // server answer may replace it is `syncDraft` (lib/settings-list.ts) — the
+  // rule needs the list's IDENTITY and not only its `rev`, and it needs to
+  // know whether the DM has unsaved work, so neither a campaign switch nor a
+  // write from somewhere else can overwrite the wrong thing.
+  const [draft, setDraft] = useState<DraftState<T>>();
   const [state, setState] = useState<SaveState>({ kind: "idle" });
-  if (query.data !== undefined && draft?.rev !== query.data.rev) {
-    setDraft({ rev: query.data.rev, rows: toRows(query.data.entries) });
+  // What the keyboard should be on after the next render, and what a screen
+  // reader should hear — both only ever set by an action that moves the focus
+  // out from under it (a deletion).
+  const [pendingFocus, setPendingFocus] = useState<string>();
+  const [announced, setAnnounced] = useState<{ nth: number; message: string }>();
+  const removeButtons = useRef(new Map<string, HTMLButtonElement | null>());
+  const addButton = useRef<HTMLButtonElement | null>(null);
+
+  const id = listId(queryKey);
+  const sendableOf = useCallback(
+    (rows: ReadonlyArray<Row<T>>) => fromRows(rows).filter(isSendable),
+    [isSendable],
+  );
+  const sendable = draft === undefined ? [] : sendableOf(draft.rows);
+  // Dirty against the draft's OWN baseline, not against the latest fetch:
+  // otherwise a write from elsewhere makes an untouched list look edited.
+  const dirty = draft !== undefined && isDirty(sendable, draft.base);
+
+  // Leaving the page with unsaved rows asks first (UnsavedChangesGuard). Must
+  // stand above every early return below — it is a hook.
+  useUnsavedChanges(dirty);
+
+  if (query.data !== undefined) {
+    const sync = syncDraft(draft, { id, rev: query.data.rev, entries: query.data.entries }, dirty);
+    if (sync.action === "seed") {
+      setDraft(sync.draft);
+      // „Gespeichert" over a list that has been replaced since would be a lie.
+      if (state.kind !== "idle") setState({ kind: "idle" });
+    } else if (sync.action === "stale" && state.kind !== "stale") {
+      // Somebody else wrote while the DM was typing. Their rows STAY — the
+      // conflict is reported, and reloading is their call (ADR #4).
+      setState({ kind: "stale" });
+    }
   }
+
+  useEffect(() => {
+    if (pendingFocus === undefined) return;
+    const target =
+      pendingFocus === ADD_BUTTON ? addButton.current : (removeButtons.current.get(pendingFocus) ?? null);
+    target?.focus();
+    setPendingFocus(undefined);
+  }, [pendingFocus]);
 
   if (query.isError) {
     return <p className={NOTE}>{t("settings.list.loadFailed")}</p>;
@@ -111,16 +156,44 @@ export function SettingsListEditor<T>({
     return <p className={NOTE}>{t("settings.list.loading")}</p>;
   }
 
-  const stored = query.data?.entries ?? [];
-  const sendable = fromRows(draft.rows).filter(isSendable);
-  const dirty = isDirty(sendable, stored);
   const busy = state.kind === "saving";
+  const rows = draft.rows;
 
-  const edit = (rows: Array<Row<T>>): void => {
-    setDraft({ rev: draft.rev, rows });
+  const edit = (next: Array<Row<T>>): void => {
+    setDraft({ ...draft, rows: next });
     // Any edit clears the previous outcome — a „Gespeichert" hanging over a
-    // list that has changed since is a lie.
-    if (state.kind !== "idle") setState({ kind: "idle" });
+    // list that has changed since is a lie. A CONFLICT is the exception: it
+    // says something about the server, and it stays until it is resolved.
+    if (state.kind !== "idle" && state.kind !== "stale") setState({ kind: "idle" });
+  };
+
+  /**
+   * Delete one row and say so — with the focus on the neighbour's delete
+   * button (or on „Eintrag hinzufügen" for the last row), because deleting
+   * the row the focus sits in otherwise drops it to the document and makes
+   * clearing a list a mouse-only job. `role="status"` carries the same news
+   * to anyone not watching (lib/settings-list.ts focusAfterRemove).
+   */
+  const remove = (index: number, key: string): void => {
+    const next = removeRow(rows, key);
+    edit(next);
+    const focus = focusAfterRemove(rows.length, index);
+    setPendingFocus(
+      focus.target === "add" ? ADD_BUTTON : (next[focus.index]?.key ?? ADD_BUTTON),
+    );
+    setAnnounced((prev) => ({
+      nth: (prev?.nth ?? 0) + 1,
+      message: t("settings.list.removed"),
+    }));
+  };
+
+  /** Throw the draft away for the server's current list (the stale case). */
+  const reload = async (): Promise<void> => {
+    const fresh = await query.refetch();
+    if (fresh.data === undefined) return;
+    queryClient.setQueryData(queryKey, fresh.data);
+    setDraft(seedDraft({ id, rev: fresh.data.rev, entries: fresh.data.entries }));
+    setState({ kind: "idle" });
   };
 
   const onSave = async (): Promise<void> => {
@@ -128,7 +201,7 @@ export function SettingsListEditor<T>({
     try {
       const fresh = await save(sendable, draft.rev);
       queryClient.setQueryData(queryKey, fresh);
-      setDraft({ rev: fresh.rev, rows: toRows(fresh.entries) });
+      setDraft(seedDraft({ id, rev: fresh.rev, entries: fresh.entries }));
       setState({ kind: "saved" });
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
@@ -137,7 +210,7 @@ export function SettingsListEditor<T>({
         const fresh = await query.refetch();
         if (fresh.data !== undefined) {
           queryClient.setQueryData(queryKey, fresh.data);
-          setDraft({ rev: fresh.data.rev, rows: toRows(fresh.data.entries) });
+          setDraft(seedDraft({ id, rev: fresh.data.rev, entries: fresh.data.entries }));
         }
         setState({ kind: "stale" });
         return;
@@ -151,11 +224,11 @@ export function SettingsListEditor<T>({
 
   return (
     <div>
-      {draft.rows.length === 0 ? (
+      {rows.length === 0 ? (
         <p className={NOTE}>{t(emptyMessage)}</p>
       ) : (
         <ul className="mb-3 flex flex-col gap-2">
-          {draft.rows.map((row, index) => (
+          {rows.map((row, index) => (
             <li
               key={row.key}
               className="flex flex-col gap-2 rounded-md border border-border bg-card p-2.5 md:flex-row md:items-start"
@@ -163,7 +236,7 @@ export function SettingsListEditor<T>({
               <div className="min-w-0 flex-1">
                 {renderRow(row, {
                   t,
-                  patch: (patch) => edit(updateRow(draft.rows, row.key, patch)),
+                  patch: (patch) => edit(updateRow(rows, row.key, patch)),
                 })}
               </div>
               {/* The row controls. `md:` puts them beside the fields; below
@@ -172,21 +245,25 @@ export function SettingsListEditor<T>({
                 <IconButton
                   label={t("settings.list.moveUp")}
                   disabled={index === 0 || busy}
-                  onClick={() => edit(moveRow(draft.rows, index, -1))}
+                  onClick={() => edit(moveRow(rows, index, -1))}
                 >
                   <ArrowUp aria-hidden />
                 </IconButton>
                 <IconButton
                   label={t("settings.list.moveDown")}
-                  disabled={index === draft.rows.length - 1 || busy}
-                  onClick={() => edit(moveRow(draft.rows, index, 1))}
+                  disabled={index === rows.length - 1 || busy}
+                  onClick={() => edit(moveRow(rows, index, 1))}
                 >
                   <ArrowDown aria-hidden />
                 </IconButton>
                 <IconButton
                   label={t("settings.list.remove")}
                   disabled={busy}
-                  onClick={() => edit(removeRow(draft.rows, row.key))}
+                  onClick={() => remove(index, row.key)}
+                  buttonRef={(node) => {
+                    if (node === null) removeButtons.current.delete(row.key);
+                    else removeButtons.current.set(row.key, node);
+                  }}
                 >
                   <Trash2 aria-hidden />
                 </IconButton>
@@ -201,7 +278,8 @@ export function SettingsListEditor<T>({
           type="button"
           variant="outline"
           disabled={busy}
-          onClick={() => edit(appendRow(draft.rows, emptyEntry()))}
+          ref={addButton}
+          onClick={() => edit(appendRow(rows, emptyEntry()))}
           className="h-auto gap-1.5 px-3 py-1.5 text-[12.5px] [&_svg]:size-[14px]"
         >
           <Plus aria-hidden />
@@ -221,22 +299,49 @@ export function SettingsListEditor<T>({
         <span
           role="status"
           className={cn(
-            "text-[12px]",
+            "flex flex-wrap items-center gap-2 text-[12px]",
             state.kind === "stale" || state.kind === "failed"
               ? "text-destructive"
               : "text-faint",
           )}
         >
           {state.kind === "saved" && t("settings.list.saved")}
-          {state.kind === "stale" && t("write.stale")}
+          {state.kind === "stale" && (
+            <>
+              {t("write.stale")}
+              {/* The conflict's only sensible next step, as a control rather
+                  than as advice: the DM's rows are still on screen, so
+                  reloading has to be something they DO, not something that
+                  happened to them. */}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void reload()}
+                className="rounded px-0.5 underline decoration-dotted underline-offset-2 hover:no-underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                {t("settings.list.reload")}
+              </button>
+            </>
+          )}
           {state.kind === "failed" && state.message}
         </span>
       </div>
+
+      {/* Row actions announce themselves separately from the save outcome:
+          the two say different things and must not overwrite each other. The
+          `key` makes a repeated deletion a NEW node, which is what gets a
+          screen reader to read the same sentence twice. */}
+      <span role="status" key={announced?.nth ?? 0} className="sr-only">
+        {announced?.message ?? ""}
+      </span>
     </div>
   );
 }
 
 const NOTE = "text-[12.5px] leading-[1.55] text-muted-foreground";
+
+/** `pendingFocus` for „no row left — the add button". Not a valid row key. */
+const ADD_BUTTON = "\u0000add";
 
 /**
  * A quiet square icon button. Its own thing rather than a Button variant: it
@@ -248,14 +353,18 @@ function IconButton({
   disabled,
   onClick,
   children,
+  buttonRef,
 }: {
   label: string;
   disabled?: boolean;
   onClick: () => void;
   children: ReactNode;
+  /** Set where the focus has to be able to LAND (the delete buttons). */
+  buttonRef?: (node: HTMLButtonElement | null) => void;
 }) {
   return (
     <button
+      ref={buttonRef}
       type="button"
       aria-label={label}
       title={label}
