@@ -31,9 +31,11 @@ import {
 } from "@grimoire/shared/types";
 
 import { fetchFile, patchProperties } from "@/api";
+import type { Translate } from "@/i18n/format";
+import type { MessageKey } from "@/i18n/messages";
 import { isEntityId, npcStatusLabel } from "@/lib/entity";
 import { fmQuickstats, fmStringArray } from "@/lib/properties";
-import { SCENE_STATUS_OPTIONS } from "@/lib/scene-status";
+import { sceneStatusOptions } from "@/lib/scene-status";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
 /** The kinds whose properties the form knows (README entity sections). */
@@ -85,155 +87,205 @@ export interface PropertiesField {
   source?: ReferenceSource;
 }
 
-const SCENE_TYPE_LABELS: Record<string, string> = {
-  planned: "geplant",
-  contingency: "Kontingenz",
+// --- the field tables ------------------------------------------------------
+//
+// Labels, hints and placeholders come from the CATALOG since issue #69: the
+// tables are built per call with the translator the dialog is rendered with,
+// so a language switch changes them on the spot. The KEYS (`title`, `npcs`,
+// `roll20-page`) are frontmatter and never translated, and neither are the
+// option VALUES — `active`, `planned`, `insight +2` are data.
+//
+// The enum option LABELS (scene status, npc status) still come from
+// lib/scene-status.ts and lib/entity.ts, which the pool, the lists and the
+// cards share: they belong to Scheibe 2 of #69, and a signature change here
+// would drag half of those views into this slice.
+
+const SCENE_TYPE_LABEL_KEYS: Record<string, MessageKey> = {
+  planned: "properties.scene.type.planned",
+  contingency: "properties.scene.type.contingency",
 };
 
-/** SCENE_TYPES is the single source; the labels are the reading view's words. */
-const SCENE_TYPE_OPTIONS: readonly FieldOption[] = SCENE_TYPES.map((value) => ({
-  value,
-  label: SCENE_TYPE_LABELS[value] ?? value,
-}));
+function sceneTypeOptions(t: Translate): readonly FieldOption[] {
+  return SCENE_TYPES.map((value) => {
+    const key = SCENE_TYPE_LABEL_KEYS[value];
+    return { value, label: key === undefined ? value : t(key) };
+  });
+}
 
-const NPC_STATUS_OPTIONS: readonly FieldOption[] = NPC_STATUSES.map((value) => ({
-  value,
-  label: npcStatusLabel(value),
-}));
+function npcStatusOptions(t: Translate): readonly FieldOption[] {
+  return NPC_STATUSES.map((value) => ({ value, label: npcStatusLabel(value, t) }));
+}
 
-/** SceneProperties without `id` (README, „Entität: Szene"). */
-const SCENE_FIELDS: readonly PropertiesField[] = [
-  { key: "title", label: "Titel", control: "text", required: true },
-  { key: "type", label: "Typ", control: "select", options: SCENE_TYPE_OPTIONS },
-  {
-    key: "trigger",
-    label: "Auslöser",
-    control: "textarea",
-    hint: "Nur bei Kontingenz: wann feuert die Szene?",
-  },
-  { key: "chapter", label: "Kapitel", control: "reference", source: "chapters" },
-  {
-    key: "location",
-    label: "Ort",
-    control: "reference",
-    source: "locations",
-    hint: "id aus Orte oder freier Text.",
-  },
-  {
-    key: "npcs",
-    label: "NPCs",
-    control: "references",
-    source: "npcs",
-    // Unlike `location` this list has no free-text half: every entry is an id
-    // that gets a card and, on save, an entry (#70).
-    hint: "Nur ids — unbekannte werden beim Speichern angelegt.",
-  },
-  {
-    key: "handouts",
-    label: "Handouts",
-    control: "chips",
-    hint: "Name des Roll20-Handouts, nur ein Verweis.",
-  },
-  {
-    key: "tags",
-    label: "Tags",
-    control: "chips",
-    hint: "Frei; empfohlen: combat, social, stealth, travel.",
-  },
-  { key: "status", label: "Status", control: "select", options: SCENE_STATUS_OPTIONS },
-];
+function sceneFields(t: Translate): readonly PropertiesField[] {
+  return [
+    { key: "title", label: t("properties.scene.title.label"), control: "text", required: true },
+    {
+      key: "type",
+      label: t("properties.scene.type.label"),
+      control: "select",
+      options: sceneTypeOptions(t),
+    },
+    {
+      key: "trigger",
+      label: t("properties.scene.trigger.label"),
+      control: "textarea",
+      hint: t("properties.scene.trigger.hint"),
+    },
+    {
+      key: "chapter",
+      label: t("properties.scene.chapter.label"),
+      control: "reference",
+      source: "chapters",
+    },
+    {
+      key: "location",
+      label: t("properties.scene.location.label"),
+      control: "reference",
+      source: "locations",
+      hint: t("properties.scene.location.hint"),
+    },
+    {
+      key: "npcs",
+      label: t("properties.scene.npcs.label"),
+      control: "references",
+      source: "npcs",
+      hint: t("properties.scene.npcs.hint"),
+    },
+    {
+      key: "handouts",
+      label: t("properties.scene.handouts.label"),
+      control: "chips",
+      hint: t("properties.scene.handouts.hint"),
+    },
+    {
+      key: "tags",
+      label: t("properties.scene.tags.label"),
+      control: "chips",
+      hint: t("properties.scene.tags.hint"),
+    },
+    {
+      key: "status",
+      label: t("properties.scene.status.label"),
+      control: "select",
+      options: sceneStatusOptions(t),
+    },
+  ];
+}
 
-/** NpcProperties without `id` (README, „Entität: NPC"). */
-const NPC_FIELDS: readonly PropertiesField[] = [
-  { key: "name", label: "Name", control: "text", required: true },
-  { key: "role", label: "Rolle", control: "text", hint: "Ein Einzeiler." },
-  {
-    key: "chapter",
-    label: "Kapitel",
-    control: "reference",
-    source: "chapters",
-    hint: "Wo der NPC eingeführt wird.",
-  },
-  { key: "status", label: "Status", control: "select", options: NPC_STATUS_OPTIONS },
-  {
-    key: "statblock",
-    label: "Statblock",
-    control: "text",
-    placeholder: "Roll20: Fenn",
-    hint: "Verweis auf das Roll20-Sheet, keine Kopie.",
-  },
-  {
-    key: "quickstats",
-    label: "Quickstats",
-    control: "pairs",
-    hint: "Frei — nur was sozial gebraucht wird, z. B. insight +2.",
-  },
-  { key: "voice", label: "Stimme", control: "textarea", hint: "Wie klingt er/sie?" },
-  { key: "appearance", label: "Erscheinung", control: "textarea", hint: "Ein bis zwei Merkmale." },
-];
+function npcFields(t: Translate): readonly PropertiesField[] {
+  return [
+    { key: "name", label: t("properties.npc.name.label"), control: "text", required: true },
+    {
+      key: "role",
+      label: t("properties.npc.role.label"),
+      control: "text",
+      hint: t("properties.npc.role.hint"),
+    },
+    {
+      key: "chapter",
+      label: t("properties.npc.chapter.label"),
+      control: "reference",
+      source: "chapters",
+      hint: t("properties.npc.chapter.hint"),
+    },
+    {
+      key: "status",
+      label: t("properties.npc.status.label"),
+      control: "select",
+      options: npcStatusOptions(t),
+    },
+    {
+      key: "statblock",
+      label: t("properties.npc.statblock.label"),
+      control: "text",
+      placeholder: t("properties.npc.statblock.placeholder"),
+      hint: t("properties.npc.statblock.hint"),
+    },
+    {
+      key: "quickstats",
+      label: t("properties.npc.quickstats.label"),
+      control: "pairs",
+      hint: t("properties.npc.quickstats.hint"),
+    },
+    {
+      key: "voice",
+      label: t("properties.npc.voice.label"),
+      control: "textarea",
+      hint: t("properties.npc.voice.hint"),
+    },
+    {
+      key: "appearance",
+      label: t("properties.npc.appearance.label"),
+      control: "textarea",
+      hint: t("properties.npc.appearance.hint"),
+    },
+  ];
+}
 
-/** LocationProperties without `id` (README, „Entität: Ort"). */
-const LOCATION_FIELDS: readonly PropertiesField[] = [
-  { key: "name", label: "Name", control: "text", required: true },
-  { key: "chapter", label: "Kapitel", control: "reference", source: "chapters" },
-  {
-    key: "roll20-page",
-    label: "Roll20-Seite",
-    control: "text",
-    hint: "Verweis auf die Page, keine Karten-Kopie.",
-  },
-];
+function locationFields(t: Translate): readonly PropertiesField[] {
+  return [
+    { key: "name", label: t("properties.location.name.label"), control: "text", required: true },
+    {
+      key: "chapter",
+      label: t("properties.location.chapter.label"),
+      control: "reference",
+      source: "chapters",
+    },
+    {
+      key: "roll20-page",
+      label: t("properties.location.roll20.label"),
+      control: "text",
+      hint: t("properties.location.roll20.hint"),
+    },
+  ];
+}
 
-/** ChapterProperties without `id` (the id is the chapter DIRECTORY). */
-const CHAPTER_FIELDS: readonly PropertiesField[] = [
-  { key: "title", label: "Titel", control: "text", required: true },
-  {
-    key: "status",
-    label: "Status",
-    control: "text",
-    placeholder: "active",
-    hint: "Der Wert active markiert das Kapitel, das die Live-Ansicht öffnet.",
-  },
-];
+function chapterFields(t: Translate): readonly PropertiesField[] {
+  return [
+    { key: "title", label: t("properties.chapter.title.label"), control: "text", required: true },
+    {
+      key: "status",
+      label: t("properties.chapter.status.label"),
+      control: "text",
+      placeholder: t("properties.chapter.status.placeholder"),
+      hint: t("properties.chapter.status.hint"),
+    },
+  ];
+}
 
-const FIELDS_BY_KIND: Record<PropertiesKind, readonly PropertiesField[]> = {
-  scene: SCENE_FIELDS,
-  npc: NPC_FIELDS,
-  location: LOCATION_FIELDS,
-  chapter: CHAPTER_FIELDS,
+const FIELDS_BY_KIND: Record<PropertiesKind, (t: Translate) => readonly PropertiesField[]> = {
+  scene: sceneFields,
+  npc: npcFields,
+  location: locationFields,
+  chapter: chapterFields,
 };
 
-/**
- * The fields of a kind, or undefined when the reading view offers no
- * „Eigenschaften" at all:
- *
- *   campaign          has its own metadata dialog (issue #34)
- *   session / inbox   app-managed, append-only (ADR #4)
- *   glossary/unknown  no typed properties to offer
- */
-export function propertiesFieldsFor(kind: EntityKind): readonly PropertiesField[] | undefined {
+export function propertiesFieldsFor(
+  kind: EntityKind,
+  t: Translate,
+): readonly PropertiesField[] | undefined {
   switch (kind) {
     case "scene":
     case "npc":
     case "location":
     case "chapter":
-      return FIELDS_BY_KIND[kind];
+      return FIELDS_BY_KIND[kind](t);
     default:
       return undefined;
   }
 }
 
 /** German label of the kind for the dialog title („NPC-Eigenschaften"). */
-export function propertiesKindLabel(kind: EntityKind): string | undefined {
+export function propertiesKindLabel(kind: EntityKind, t: Translate): string | undefined {
   switch (kind) {
     case "scene":
-      return "Szene";
+      return t("kind.scene");
     case "npc":
-      return "NPC";
+      return t("kind.npc");
     case "location":
-      return "Ort";
+      return t("kind.location");
     case "chapter":
-      return "Kapitel";
+      return t("kind.chapter");
     default:
       return undefined;
   }
@@ -432,7 +484,8 @@ export function propertiesPatch(
 export function propertiesFormIssues(
   fields: readonly PropertiesField[],
   values: FormValues,
-  initial?: FormValues,
+  initial: FormValues | undefined,
+  t: Translate,
 ): Record<string, string> {
   const issues: Record<string, string> = {};
   for (const field of fields) {
@@ -445,8 +498,7 @@ export function propertiesFormIssues(
         (item) => !known.includes(item) && !isEntityId(item),
       );
       if (offender !== undefined) {
-        issues[field.key] =
-          `„${offender}" ist keine id — nur Kleinbuchstaben, Ziffern und Bindestriche.`;
+        issues[field.key] = t("properties.issue.notAnId", { id: offender });
       }
       continue;
     }
@@ -464,9 +516,9 @@ export function propertiesFormIssues(
       seen.add(key);
     }
     if (nameless) {
-      issues[field.key] = "Zeile ohne Namen — Name ergänzen oder Zeile entfernen.";
+      issues[field.key] = t("properties.issue.namelessRow");
     } else if (duplicate !== undefined) {
-      issues[field.key] = `Name „${duplicate}" doppelt — jeder Name darf nur einmal vorkommen.`;
+      issues[field.key] = t("properties.issue.duplicateName", { name: duplicate });
     }
   }
   return issues;
@@ -481,11 +533,12 @@ export function hasPropertiesChanges(
   fields: readonly PropertiesField[],
   initial: FormValues,
   current: FormValues,
+  t: Translate,
 ): boolean {
   if (Object.keys(propertiesPatch(fields, initial, current)).length > 0) return true;
   // With `initial`, so that free text a MIGRATED file already carries in
   // `npcs` is not read as unsaved work by the discard guard.
-  return Object.keys(propertiesFormIssues(fields, current, initial)).length > 0;
+  return Object.keys(propertiesFormIssues(fields, current, initial, t)).length > 0;
 }
 
 /** Blank required field = not a save (the entity would lose its name). */

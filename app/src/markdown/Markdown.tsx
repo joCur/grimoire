@@ -2,14 +2,16 @@
 // The plugin annotates callouts as `<section data-callout>` and `## If:`
 // sections as `<details data-if-section open>`; the component overrides
 // below map those elements to their React rendering per the design
-// reference: a borderless summary row — chevron, brass "Falls:" prefix,
+// reference: a borderless summary row — chevron, brass „Falls:" prefix,
 // italic condition — over 18px-indented content, no box.
 
 import { ChevronDown } from "lucide-react";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 
 import { renderEntityRefPieces, type EntityRefPiece } from "@grimoire/shared/refs";
+
+import { useT } from "@/i18n";
 
 import { Callout } from "./Callout";
 import { EntityRef, EntityRefName, useEntityRefs } from "./entity-refs";
@@ -62,22 +64,32 @@ const components: Components = {
   summary(props) {
     // Summaries only come from the plugin (raw HTML is not rendered).
     const { node: _node, children, ...rest } = props;
-    return (
-      <summary
-        {...rest}
-        className="flex w-full cursor-pointer list-none items-center gap-2 border-t border-border pt-3.5 pb-3 text-[14px] text-foreground select-none hover:text-primary-hover [&::-webkit-details-marker]:hidden"
-      >
-        <ChevronDown
-          aria-hidden
-          size={15}
-          className="flex-none -rotate-90 text-muted-foreground transition-transform group-open:rotate-0"
-        />
-        <span className="font-semibold text-primary">Falls:</span>
-        <span className="italic">{children}</span>
-      </summary>
-    );
+    return <IfSummary {...rest}>{children}</IfSummary>;
   },
 };
+
+/**
+ * The summary row of an `## If:` branch: chevron, the brass „Falls:" prefix
+ * from the catalog (issue #69 — the branch label is copy, the `## If:` in the
+ * FILE is not) and the italic condition.
+ */
+function IfSummary({ children, ...rest }: ComponentProps<"summary">) {
+  const t = useT();
+  return (
+    <summary
+      {...rest}
+      className="flex w-full cursor-pointer list-none items-center gap-2 border-t border-border pt-3.5 pb-3 text-[14px] text-foreground select-none hover:text-primary-hover [&::-webkit-details-marker]:hidden"
+    >
+      <ChevronDown
+        aria-hidden
+        size={15}
+        className="flex-none -rotate-90 text-muted-foreground transition-transform group-open:rotate-0"
+      />
+      <span className="font-semibold text-primary">{t("markdown.ifSection.prefix")}</span>
+      <span className="italic">{children}</span>
+    </summary>
+  );
+}
 
 /**
  * A callout, with the read-aloud CLIPBOARD text resolved (issue #68): the

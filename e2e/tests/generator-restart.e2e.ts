@@ -91,10 +91,18 @@ test("a run interrupted by a restart is reported as failed, not left spinning", 
     // restart answered 404 — and it says what happened.
     expect(failed).toMatchObject({ id: jobId, status: "failed" });
     expect(failed!.finishedAt).toEqual(expect.any(String));
-    const error = failed!.error as { status: number; body: { error: string } };
+    const error = failed!.error as {
+      status: number;
+      body: { code?: string; error: string };
+    };
     expect(error.status).toBe(503);
+    // Language-free since issue #69: the stable code is the contract, the
+    // English text next to it the technical fallback. The SENTENCE the DM
+    // reads is the app's (`server.job_restarted` in app/src/i18n) — the
+    // language spec asserts that side.
+    expect(error.body.code).toBe("job_restarted");
     expect(error.body.error).toBe(
-      "Server wurde während des Laufs neu gestartet — Job neu starten",
+      "the server was restarted while the job was running — start the job again",
     );
     // Nothing was written, and a new run may start right away (no stuck gate).
     expect(await api.exists(SCENE_PATH)).toBe(false);

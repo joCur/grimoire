@@ -7,6 +7,8 @@
 
 import type { EntityKind } from "@grimoire/shared/types";
 
+import type { MessageKey, Translate } from "@/i18n";
+
 /**
  * Which header the reading view renders for a kind:
  *
@@ -42,20 +44,24 @@ export function entityHeaderKind(kind: EntityKind): EntityHeaderKind {
 export { isEntityId } from "@grimoire/shared/slug";
 
 /**
- * German labels for the known npc `status` values (shared NPC_STATUSES).
+ * Labels for the known npc `status` values (shared NPC_STATUSES), from the
+ * catalog since issue #69 — the translator is PASSED IN, so this module holds
+ * no copy of its own (i18n/index.ts, the lib-layer rule).
+ *
  * The format degrades: an unknown value is shown verbatim instead of being
  * swallowed or corrected — the file stays the truth.
  */
-const NPC_STATUS_LABELS: Record<string, string> = {
-  alive: "lebendig",
-  dead: "tot",
-  missing: "vermisst",
-  unknown: "unbekannt",
+const NPC_STATUS_KEYS: Record<string, MessageKey> = {
+  alive: "status.npc.alive",
+  dead: "status.npc.dead",
+  missing: "status.npc.missing",
+  unknown: "status.npc.unknown",
 };
 
-export function npcStatusLabel(status: string): string {
+export function npcStatusLabel(status: string, t: Translate): string {
   const trimmed = status.trim();
-  return NPC_STATUS_LABELS[trimmed.toLowerCase()] ?? trimmed;
+  const key = NPC_STATUS_KEYS[trimmed.toLowerCase()];
+  return key === undefined ? trimmed : t(key);
 }
 
 /**
@@ -64,12 +70,13 @@ export function npcStatusLabel(status: string): string {
  * breadcrumb — on the desktop those pages are reached from the pool now
  * (issue #26), so they need a way back.
  */
-const BROWSE_LIST_TITLES: Record<string, string> = {
-  scenes: "Szenen",
-  npcs: "NPCs",
-  locations: "Orte",
+const BROWSE_LIST_TITLE_KEYS: Record<string, MessageKey> = {
+  scenes: "browse.title.scenes",
+  npcs: "browse.title.npcs",
+  locations: "browse.title.locations",
 };
 
-export function browseListTitle(kind: string): string | undefined {
-  return BROWSE_LIST_TITLES[kind];
+export function browseListTitle(kind: string, t: Translate): string | undefined {
+  const key = BROWSE_LIST_TITLE_KEYS[kind];
+  return key === undefined ? undefined : t(key);
 }

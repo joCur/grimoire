@@ -21,6 +21,7 @@ import type { KeyboardEvent, ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { INPUT_CLASS } from "@/components/ui/field";
+import { useT } from "@/i18n";
 import { isEntityId } from "@/lib/entity";
 import {
   referenceLabel,
@@ -51,10 +52,13 @@ function FieldRow({
   issue?: string;
   children: ReactNode;
 }) {
+  const t = useT();
   const label = (
     <span className="text-[12px] text-body-secondary">
       {field.label}
-      {field.required === true && <span className="text-faint"> · nötig</span>}
+      {field.required === true && (
+        <span className="text-faint">{t("properties.field.required")}</span>
+      )}
     </span>
   );
   return (
@@ -107,6 +111,7 @@ export function PropertiesFieldControl({
   onChange: (value: FieldValue) => void;
   onPendingChange: (text: string) => void;
 }) {
+  const t = useT();
   const options = field.source === undefined ? [] : referenceOptions(tree, field.source);
 
   if (value.kind === "list") {
@@ -148,7 +153,7 @@ export function PropertiesFieldControl({
             className={cn(INPUT_CLASS, "appearance-none pr-9")}
           >
             {/* Clearing is a real choice: it deletes the key. */}
-            <option value="">— nicht gesetzt —</option>
+            <option value="">{t("properties.field.unset")}</option>
             {selectOptions(field.options ?? [], value.text, initialText).map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -240,18 +245,21 @@ function ReferenceHint({
   options: readonly FieldOption[];
   value: string;
 }) {
+  const t = useT();
   const id = value.trim();
   if (id === "") return null;
   const name = referenceLabel(options, id);
   if (name !== undefined) return <p className="text-[11.5px] text-faint">{name}</p>;
   if (options.some((option) => option.value === id)) return null;
   if (field.source === "chapters") {
-    return <p className="text-[11.5px] text-faint">Unbekannt — Kapitel muss existieren.</p>;
+    return (
+      <p className="text-[11.5px] text-faint">{t("properties.ref.unknownChapter")}</p>
+    );
   }
   if (!isEntityId(id)) {
-    return <p className="text-[11.5px] text-faint">Freier Text — kein Eintrag.</p>;
+    return <p className="text-[11.5px] text-faint">{t("properties.ref.freeText")}</p>;
   }
-  return <p className="text-[11.5px] text-faint">Neu — wird beim Speichern angelegt.</p>;
+  return <p className="text-[11.5px] text-faint">{t("properties.ref.new")}</p>;
 }
 
 /** Chips for a string list (`tags`, `handouts`) or an id list (`npcs`). */
@@ -272,6 +280,7 @@ function ChipsField({
   onChange: (items: string[]) => void;
   onPendingChange: (text: string) => void;
 }) {
+  const t = useT();
   const id = fieldId(field.key);
   const isReference = field.control === "references";
   const add = () => {
@@ -299,7 +308,7 @@ function ChipsField({
               )}
               <button
                 type="button"
-                aria-label={`${item} entfernen`}
+                aria-label={t("properties.field.remove.aria", { item })}
                 onClick={() => onChange(items.filter((_, i) => i !== index))}
                 className="rounded-full p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
               >
@@ -339,7 +348,7 @@ function ChipsField({
         autoComplete="off"
         spellCheck={!isReference}
         list={isReference ? `${id}-options` : undefined}
-        placeholder="hinzufügen, Enter"
+        placeholder={t("properties.field.chipsPlaceholder")}
         className={cn(INPUT_CLASS, isReference && "font-mono text-[13px]")}
       />
       {isReference && <ReferenceOptions id={`${id}-options`} options={options} />}
@@ -363,6 +372,7 @@ function PairsField({
   issue?: string;
   onChange: (entries: { key: string; value: string }[]) => void;
 }) {
+  const t = useT();
   const replace = (index: number, entry: { key: string; value: string }) =>
     onChange(entries.map((existing, i) => (i === index ? entry : existing)));
   // These two inputs are the only ones in the form where Enter would hit the
@@ -380,7 +390,10 @@ function PairsField({
             value={entry.key}
             onChange={(e) => replace(index, { ...entry, key: e.target.value })}
             onKeyDown={swallowEnter}
-            aria-label={`${field.label}, Zeile ${index + 1}: Name`}
+            aria-label={t("properties.field.row.name.aria", {
+              label: field.label,
+              row: index + 1,
+            })}
             autoComplete="off"
             spellCheck={false}
             placeholder="insight"
@@ -390,7 +403,10 @@ function PairsField({
             value={entry.value}
             onChange={(e) => replace(index, { ...entry, value: e.target.value })}
             onKeyDown={swallowEnter}
-            aria-label={`${field.label}, Zeile ${index + 1}: Wert`}
+            aria-label={t("properties.field.row.value.aria", {
+              label: field.label,
+              row: index + 1,
+            })}
             autoComplete="off"
             spellCheck={false}
             placeholder="+2"
@@ -398,7 +414,12 @@ function PairsField({
           />
           <button
             type="button"
-            aria-label={`${entry.key === "" ? `Zeile ${index + 1}` : entry.key} entfernen`}
+            aria-label={t("properties.field.remove.aria", {
+              item:
+                entry.key === ""
+                  ? t("properties.field.row", { row: index + 1 })
+                  : entry.key,
+            })}
             onClick={() => onChange(entries.filter((_, i) => i !== index))}
             className="flex-none rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
@@ -412,7 +433,7 @@ function PairsField({
         onClick={() => onChange([...entries, { key: "", value: "" }])}
         className="h-auto self-start border-input bg-transparent px-2.5 py-1 text-[12px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
       >
-        Zeile hinzufügen
+        {t("properties.field.addRow")}
       </Button>
     </FieldRow>
   );

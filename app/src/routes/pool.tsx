@@ -16,19 +16,15 @@ import { CampaignMetaAction } from "@/components/CampaignMetaAction";
 import { ChapterCreateAction, SceneCreateAction } from "@/components/CreateActions";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useT } from "@/i18n";
 import { locationName } from "@/lib/campaign";
 import { firstParagraphOfSection } from "@/lib/md-section";
 import { useCampaignMeta } from "@/lib/use-campaign";
 import { cn } from "@/lib/utils";
 import { MobileStart } from "@/routes/mobile-start";
 
-function sceneCountLabel(count: number): string {
-  if (count === 0) return "keine Szenen";
-  if (count === 1) return "1 Szene";
-  return `${count} Szenen`;
-}
-
 export function PoolRoute() {
+  const t = useT();
   const { campaign = "" } = useParams();
   const { data, isPending, isError } = useQuery({
     queryKey: ["tree", campaign],
@@ -54,12 +50,8 @@ export function PoolRoute() {
         <MobileStart campaign={campaign} />
       </div>
       <div className="mx-auto hidden max-w-[760px] px-7 pt-10 pb-20 md:block">
-        {isPending && <p className="text-muted-foreground">Lade Szenen …</p>}
-        {isError && (
-          <p className="text-muted-foreground">
-            Server nicht erreichbar — Grimoire-Server auf Port 3000 starten.
-          </p>
-        )}
+        {isPending && <p className="text-muted-foreground">{t("pool.loading")}</p>}
+        {isError && <p className="text-muted-foreground">{t("common.serverDown")}</p>}
         {data && (
           <>
             <div className="mb-5">
@@ -68,8 +60,8 @@ export function PoolRoute() {
                   {meta.label}
                 </h1>
                 <span className="text-[13px] text-muted-foreground">
-                  {chapterCount === 1 ? "1 Kapitel" : `${chapterCount} Kapitel`} ·{" "}
-                  {sceneCountLabel(sceneCount)}
+                  {t("pool.chapterCount", { count: chapterCount })} ·{" "}
+                  {t("pool.sceneCount", { count: sceneCount })}
                 </span>
                 {/* Name/description are editable right where they are read
                     (issue #34) — quiet, like the read view's actions. */}
@@ -93,8 +85,7 @@ export function PoolRoute() {
             {data.chapters.length === 0 && (
               <div className="flex flex-col items-start gap-3 rounded-lg border border-input bg-card px-5 py-4">
                 <p className="text-[13.5px] leading-[1.6] text-body-secondary">
-                  Noch keine Kapitel. Ein Kapitel ist die Klammer um Szenen — danach legst du
-                  darin die erste Szene an.
+                  {t("pool.empty")}
                 </p>
                 <ChapterCreateAction campaign={campaign} variant="primary" />
               </div>
@@ -129,6 +120,7 @@ function Chapter({
   tree: CampaignTree;
   defaultOpen: boolean;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(defaultOpen);
   const scenes = chapter.groups.flatMap((g) => g.scenes);
   const contingencies = scenes.filter((s) => s.type === "contingency");
@@ -159,17 +151,19 @@ function Chapter({
         <ChapterStatusPill status={chapter.status} />
         <span className="flex-1" />
         <span className="flex-none text-[12.5px] text-muted-foreground">
-          {sceneCountLabel(scenes.length)}
+          {t("pool.sceneCount", { count: scenes.length })}
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="pt-4 pb-1 pl-[25px]">
           {goal !== undefined && (
-            <p className="mb-3 text-[14px] leading-[1.6] text-body-secondary">Ziel: {goal}</p>
+            <p className="mb-3 text-[14px] leading-[1.6] text-body-secondary">
+              {t("pool.chapter.goal", { goal })}
+            </p>
           )}
           {scenes.length === 0 && (
             <p className="pt-0.5 pb-3 text-[13.5px] text-muted-foreground">
-              Noch keine Szenen in diesem Kapitel.
+              {t("pool.chapter.empty")}
             </p>
           )}
           {chapter.groups.map((group) => (
@@ -179,8 +173,8 @@ function Chapter({
             <div>
               <div className="flex items-center gap-2 border-b border-border py-2 text-[13px]">
                 <GitFork aria-hidden size={15} className="flex-none text-muted-foreground" />
-                <span className="font-medium text-soft">Falls es schiefgeht</span>
-                <span className="text-muted-foreground">· Kontingenzen</span>
+                <span className="font-medium text-soft">{t("scene.contingencies.heading")}</span>
+                <span className="text-muted-foreground">· {t("pool.contingencies.hint")}</span>
               </div>
               {contingencies.map((scene) => (
                 <SceneRow key={scene.path} campaign={campaign} scene={scene} tree={tree} />
@@ -203,6 +197,7 @@ function Chapter({
 }
 
 function ChapterStatusPill({ status }: { status?: string | undefined }) {
+  const t = useT();
   if (status === undefined || status === "") return null;
   const active = status === "active";
   return (
@@ -214,7 +209,7 @@ function ChapterStatusPill({ status }: { status?: string | undefined }) {
           : "border-input text-dim",
       )}
     >
-      {active ? "aktiv" : status}
+      {active ? t("pool.chapter.status.active") : status}
     </span>
   );
 }
@@ -266,6 +261,7 @@ function SceneRow({
   scene: SceneSummary;
   tree: CampaignTree;
 }) {
+  const t = useT();
   const isContingency = scene.type === "contingency";
   const meta = [locationName(tree, scene.location), scene.tags.map((t) => `#${t}`).join(" ")]
     .filter((part) => part !== undefined && part !== "")
@@ -286,7 +282,7 @@ function SceneRow({
           <span className="block text-[14.5px] text-foreground">{scene.title}</span>
           {isContingency && scene.trigger !== undefined ? (
             <span className="mt-0.5 block text-[12.5px] text-muted-foreground italic">
-              Wenn: {scene.trigger}
+              {t("pool.scene.trigger", { trigger: scene.trigger })}
             </span>
           ) : meta !== "" ? (
             <span className="mt-0.5 block text-[12.5px] text-muted-foreground">{meta}</span>

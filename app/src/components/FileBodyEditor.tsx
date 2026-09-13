@@ -52,6 +52,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/i18n";
 import {
   composerDraft,
   composerIssues,
@@ -68,14 +69,12 @@ import { useFileBodyMutation } from "@/lib/use-file-body";
  * campaign metadata action next to it — hence the shared HeaderAction.
  */
 export function FileBodyEditAction({ onEdit }: { onEdit: () => void }) {
-  return <HeaderAction icon={PenLine} label="Bearbeiten" onClick={onEdit} />;
+  const t = useT();
+  return <HeaderAction icon={PenLine} label={t("common.edit")} onClick={onEdit} />;
 }
 
 /** One shared empty record — „Roh" has no per-block issues and needs no object. */
 const EMPTY_ISSUES: Record<string, string> = {};
-
-/** Why „Speichern" is dead; the block itself carries the details. */
-const BLOCKED_NOTE = "Ein Block muss noch geklärt werden — siehe Hinweis am Block.";
 
 /**
  * A DOM id that survives any path (same rule as the generator cards) — the
@@ -100,6 +99,7 @@ export function FileBodyEditor({
   file: FileResponse;
   onClose: () => void;
 }) {
+  const t = useT();
   // The version this editor is working against — seeded once and deliberately
   // NOT following the file query: the 5s version poll refetches while the
   // editor is open, and inheriting its rev would turn a foreign edit into a
@@ -137,8 +137,8 @@ export function FileBodyEditor({
   // same seam „Eigenschaften" uses (PropertiesAction, issue #42): the card
   // says it, the button waits. „Roh" has no such state: its text IS the file.
   const issues = useMemo(
-    () => (draft.mode === "blocks" ? composerIssues(draft.blocks) : EMPTY_ISSUES),
-    [draft],
+    () => (draft.mode === "blocks" ? composerIssues(draft.blocks, t) : EMPTY_ISSUES),
+    [draft, t],
   );
   const blocked = Object.keys(issues).length > 0;
   const cancel = () => {
@@ -173,7 +173,7 @@ export function FileBodyEditor({
               onClick={cancel}
               className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
             >
-              Abbrechen
+              {t("common.cancel")}
             </Button>
             {/* Saving never needs a detour through another surface: the block
                 list is the payload just as much as the textarea is. */}
@@ -183,7 +183,7 @@ export function FileBodyEditor({
               disabled={!dirty || blocked || isSaving}
               className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
             >
-              {isSaving ? "Speichere …" : "Speichern"}
+              {isSaving ? t("common.saving") : t("common.save")}
             </Button>
           </>
         }
@@ -202,19 +202,18 @@ export function FileBodyEditor({
             onChange={(text) => setDraft(withDraftText(text))}
             editing={editing}
             id={textareaId}
-            label={`Markdown-Text von ${base.path}`}
+            label={t("bodyEditor.raw.aria", { path: base.path })}
           />
         )}
       </EditorShell>
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="text-[12px] text-faint">
-          Nur der Textkörper — die Eigenschaften bleiben unverändert.
-        </p>
+        <p className="text-[12px] text-faint">{t("bodyEditor.hint")}</p>
         {/* A write error wins the line; without one it says why „Speichern"
             is dead, because a disabled button next to a card-level hint is
             otherwise a dead end. */}
         <p aria-live="polite" className="min-h-[17px] text-[12px] text-destructive">
-          {message ?? (blocked ? BLOCKED_NOTE : "")}
+          {/* Why „Speichern" is dead; the block itself carries the details. */}
+          {message ?? (blocked ? t("bodyEditor.blocked") : "")}
         </p>
       </div>
       {confirmDiscard && (
@@ -225,11 +224,8 @@ export function FileBodyEditor({
           }}
         >
           <DialogContent aria-describedby={undefined} className="max-w-[420px]">
-            <DialogTitle>Änderungen verwerfen?</DialogTitle>
-            <DialogDescription>
-              Die Änderungen sind nicht gespeichert. Verwerfen schließt den Editor und zeigt den
-              Eintrag wieder so, wie er gespeichert ist.
-            </DialogDescription>
+            <DialogTitle>{t("bodyEditor.discard.title")}</DialogTitle>
+            <DialogDescription>{t("bodyEditor.discard.description")}</DialogDescription>
             <div className="mt-4 flex items-center justify-end gap-2">
               <DialogClose asChild>
                 <Button
@@ -237,7 +233,7 @@ export function FileBodyEditor({
                   variant="outline"
                   className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
                 >
-                  Weiter bearbeiten
+                  {t("properties.discard.keepEditing")}
                 </Button>
               </DialogClose>
               <Button
@@ -249,7 +245,7 @@ export function FileBodyEditor({
                 }}
                 className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
               >
-                Verwerfen
+                {t("common.discard")}
               </Button>
             </div>
           </DialogContent>

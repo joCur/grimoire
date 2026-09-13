@@ -100,3 +100,21 @@ export function pickLastCampaign(campaigns: CampaignSummary[]): string | undefin
   }
   return best?.id;
 }
+
+/**
+ * The campaign `/settings` is about (issue #69, PO feedback on PR #83).
+ *
+ * `/settings` is campaign-independent — the gear has to work on a fresh
+ * instance — so the campaign the DM CAME FROM travels in `?from=`. It is
+ * checked against the list rather than trusted: a stale bookmark or a renamed
+ * campaign must not produce a back row into nothing. Only with no usable
+ * origin does the "/" heuristic stand in, which is a GUESS and therefore the
+ * fallback, never the answer when the origin is known.
+ */
+export function settingsCampaign(
+  from: string | null,
+  campaigns: CampaignSummary[],
+): string | undefined {
+  if (from !== null && from !== "" && campaigns.some((c) => c.id === from)) return from;
+  return pickLastCampaign(campaigns);
+}

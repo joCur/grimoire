@@ -14,10 +14,12 @@ import { Link, useParams } from "react-router";
 import { fetchTree } from "@/api";
 import { LocationCreateAction, NpcCreateAction } from "@/components/CreateActions";
 import { MobileBackRow } from "@/components/MobileBackRow";
+import { useT } from "@/i18n";
 import { locationName } from "@/lib/campaign";
 import { browseListTitle } from "@/lib/entity";
 
 export function BrowseRoute() {
+  const t = useT();
   const { campaign = "", kind = "" } = useParams();
   const { data, isPending, isError } = useQuery({
     queryKey: ["tree", campaign],
@@ -25,7 +27,7 @@ export function BrowseRoute() {
     enabled: campaign !== "",
   });
 
-  const title = browseListTitle(kind);
+  const title = browseListTitle(kind, t);
 
   return (
     <>
@@ -37,7 +39,7 @@ export function BrowseRoute() {
             their chapter, in the pool — a scene without one has no address. */}
         <div className="mb-3 flex flex-wrap items-baseline gap-3">
           <h1 className="font-serif text-[24px] leading-[1.25] font-semibold text-foreground">
-            {title ?? "Nachschlagen"}
+            {title ?? t("browse.fallbackTitle")}
           </h1>
           <span className="ml-auto">
             {kind === "npcs" && <NpcCreateAction campaign={campaign} />}
@@ -45,15 +47,13 @@ export function BrowseRoute() {
           </span>
         </div>
         {title === undefined && (
-          <p className="text-[13.5px] text-muted-foreground">Diese Liste gibt es nicht.</p>
+          <p className="text-[13.5px] text-muted-foreground">{t("browse.unknown")}</p>
         )}
         {title !== undefined && isPending && (
-          <p className="text-[13.5px] text-muted-foreground">Lade …</p>
+          <p className="text-[13.5px] text-muted-foreground">{t("browse.loading")}</p>
         )}
         {title !== undefined && isError && (
-          <p className="text-[13.5px] text-muted-foreground">
-            Server nicht erreichbar — Grimoire-Server auf Port 3000 starten.
-          </p>
+          <p className="text-[13.5px] text-muted-foreground">{t("common.serverDown")}</p>
         )}
         {data !== undefined && kind === "scenes" && <SceneList campaign={campaign} tree={data} />}
         {data !== undefined && kind === "npcs" && <NpcList campaign={campaign} tree={data} />}
@@ -67,9 +67,10 @@ export function BrowseRoute() {
 
 /** Scenes flat per chapter — the chapter title as a quiet group overline. */
 function SceneList({ campaign, tree }: { campaign: string; tree: CampaignTree }) {
+  const t = useT();
   const chapters = tree.chapters.filter((ch) => ch.groups.some((g) => g.scenes.length > 0));
   if (chapters.length === 0) {
-    return <p className="text-[13.5px] text-muted-foreground">Noch keine Szenen.</p>;
+    return <p className="text-[13.5px] text-muted-foreground">{t("browse.empty.scenes")}</p>;
   }
   return (
     <>
@@ -97,8 +98,9 @@ function SceneList({ campaign, tree }: { campaign: string; tree: CampaignTree })
 }
 
 function NpcList({ campaign, tree }: { campaign: string; tree: CampaignTree }) {
+  const t = useT();
   if (tree.npcs.length === 0) {
-    return <p className="text-[13.5px] text-muted-foreground">Noch keine NPCs.</p>;
+    return <p className="text-[13.5px] text-muted-foreground">{t("browse.empty.npcs")}</p>;
   }
   const npcs = [...tree.npcs].sort((a, b) => a.name.localeCompare(b.name, "de"));
   return (
@@ -118,8 +120,9 @@ function NpcList({ campaign, tree }: { campaign: string; tree: CampaignTree }) {
 }
 
 function LocationList({ campaign, tree }: { campaign: string; tree: CampaignTree }) {
+  const t = useT();
   if (tree.locations.length === 0) {
-    return <p className="text-[13.5px] text-muted-foreground">Noch keine Orte.</p>;
+    return <p className="text-[13.5px] text-muted-foreground">{t("browse.empty.locations")}</p>;
   }
   const locations = [...tree.locations].sort((a, b) => a.name.localeCompare(b.name, "de"));
   return (

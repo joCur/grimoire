@@ -49,6 +49,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useI18n, useT } from "@/i18n";
 import { fmString } from "@/lib/properties";
 import {
   canSubmitProperties,
@@ -81,6 +82,7 @@ export function PropertiesAction({
   /** For the reference fields — the ids that already have a file. */
   tree: CampaignTree | undefined;
 }) {
+  const t = useT();
   // Open-BY-FILE, not a boolean: navigating away closes the dialog instead of
   // leaving it standing over another file's reading view. Campaign AND path,
   // because two campaigns can hold the same relative path (`npcs/jorna`).
@@ -100,15 +102,15 @@ export function PropertiesAction({
   // The renameable id of the file on screen — undefined for the kinds the
   // rename endpoint does not cover, and then the footer action is absent.
   const renameTarget = renameTargetFor(file);
-  const fields = propertiesFieldsFor(file.kind);
-  const kindLabel = propertiesKindLabel(file.kind);
+  const fields = propertiesFieldsFor(file.kind, t);
+  const kindLabel = propertiesKindLabel(file.kind, t);
   if (fields === undefined || kindLabel === undefined) return null;
 
   return (
     <>
       <HeaderAction
         icon={SlidersHorizontal}
-        label="Eigenschaften"
+        label={t("properties.action")}
         onClick={() => setOpenFile(fileKey)}
       />
       {open && (
@@ -162,6 +164,7 @@ function PropertiesDialog({
   onClose: () => void;
   onChangeId: () => void;
 }) {
+  const { t } = useI18n();
   // Both frozen at open, on purpose (see the file header): `initial` is what
   // the diff is measured against — NOT the file behind the dialog, or an
   // external edit landing in the cache would silently swallow the DM's change
@@ -191,7 +194,7 @@ function PropertiesDialog({
   // save and says why under the field itself.
   // `initial` exempts what the file already holds: free text a migrated
   // campaign carries in `npcs` must not block a save of another field (#70).
-  const issues = propertiesFormIssues(fields, effective, initial);
+  const issues = propertiesFormIssues(fields, effective, initial, t);
   const canSubmit =
     canSubmitProperties(fields, effective) &&
     Object.keys(issues).length === 0 &&
@@ -202,7 +205,7 @@ function PropertiesDialog({
   // Esc, the overlay, „Abbrechen" and the X all come through here: with
   // something typed they ask first (house pattern of FileBodyEditor), an
   // untouched form just closes.
-  const dirty = hasPropertiesChanges(fields, initial, effective);
+  const dirty = hasPropertiesChanges(fields, initial, effective, t);
   const requestClose = () => {
     if (dirty) setDiscardIntent("close");
     else onClose();
@@ -225,11 +228,8 @@ function PropertiesDialog({
         aria-describedby={undefined}
         className="flex max-h-[calc(100dvh-32px)] max-w-[520px] flex-col"
       >
-        <DialogTitle>{kindLabel}: Eigenschaften</DialogTitle>
-        <DialogDescription>
-          Alle Eigenschaften dieses Eintrags. Gespeichert wird nur, was du geändert hast —
-          alles andere bleibt unverändert stehen.
-        </DialogDescription>
+        <DialogTitle>{t("properties.title", { kind: kindLabel })}</DialogTitle>
+        <DialogDescription>{t("properties.description")}</DialogDescription>
 
         <form
           onSubmit={(e) => {
@@ -242,9 +242,10 @@ function PropertiesDialog({
           <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto pr-0.5">
             {/* The two values the form does not own — shown, not editable. */}
             <p className="text-[12px] text-body-secondary">
-              id <span className="font-mono text-[12px] text-soft">{id ?? file.path}</span>
+              {t("properties.id")}{" "}
+              <span className="font-mono text-[12px] text-soft">{id ?? file.path}</span>
               {renameTarget !== undefined && (
-                <span className="text-faint"> · unten über „id ändern"</span>
+                <span className="text-faint">{t("properties.id.viaRename")}</span>
               )}
             </p>
             {fields.map((field) => {
@@ -283,7 +284,7 @@ function PropertiesDialog({
                 onClick={requestIdChange}
                 className="-mx-1 rounded-md px-1 py-1 text-[12px] text-muted-foreground underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
               >
-                id ändern
+                {t("properties.changeId")}
               </button>
             ) : (
               <span />
@@ -295,14 +296,14 @@ function PropertiesDialog({
               onClick={requestClose}
               className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
             >
-              Abbrechen
+              {t("common.cancel")}
             </Button>
             <Button
               type="submit"
               disabled={!canSubmit}
               className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
             >
-              {save.isPending ? "Speichere …" : "Speichern"}
+              {t(save.isPending ? "common.saving" : "common.save")}
             </Button>
             </div>
           </div>
@@ -316,11 +317,13 @@ function PropertiesDialog({
           }}
         >
           <DialogContent aria-describedby={undefined} className="max-w-[420px]">
-            <DialogTitle>Änderungen verwerfen?</DialogTitle>
+            <DialogTitle>{t("properties.discard.title")}</DialogTitle>
             <DialogDescription>
-              {discardIntent === "rename"
-                ? "Die geänderten Eigenschaften sind nicht gespeichert. Verwerfen öffnet die id-Änderung und lässt den Eintrag so, wie er gespeichert ist."
-                : "Die geänderten Eigenschaften sind nicht gespeichert. Verwerfen schließt das Fenster und lässt den Eintrag so, wie er gespeichert ist."}
+              {t(
+                discardIntent === "rename"
+                  ? "properties.discard.rename"
+                  : "properties.discard.close",
+              )}
             </DialogDescription>
             <div className="mt-4 flex items-center justify-end gap-2">
               <DialogClose asChild>
@@ -329,7 +332,7 @@ function PropertiesDialog({
                   variant="outline"
                   className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
                 >
-                  Weiter bearbeiten
+                  {t("properties.discard.keepEditing")}
                 </Button>
               </DialogClose>
               <Button
@@ -343,7 +346,7 @@ function PropertiesDialog({
                 }}
                 className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
               >
-                Verwerfen
+                {t("common.discard")}
               </Button>
             </div>
           </DialogContent>

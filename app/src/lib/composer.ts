@@ -27,6 +27,8 @@
 
 import { CALLOUT_KINDS } from "@grimoire/shared/types";
 
+import type { Translate } from "@/i18n";
+
 import {
   blockMarkdown,
   calloutLabel,
@@ -232,14 +234,6 @@ export function moveBy(blocks: SceneBlock[], id: string, delta: number): SceneBl
 // --- what blocks a save ------------------------------------------------------
 
 /**
- * The one German line the offending card shows. Deliberately a HINT with two
- * ways out, not a correction: `##` may be exactly what the DM meant to type,
- * and this module never rewrites their text.
- */
-const SECTION_ESCAPE =
-  "»##«-Überschrift beendet den Falls-Abschnitt — tiefer einstufen (###) oder Block nach außen ziehen.";
-
-/**
  * What is WRONG in the block list right now, per block id — the line the card
  * shows under itself and the reason „Speichern" stays disabled. Same seam as
  * the properties form's propertiesFormIssues (issue #42): the state is
@@ -253,12 +247,16 @@ const SECTION_ESCAPE =
  * OUTSIDE the branch, while the composer still shows it nested. The DM would
  * have moved a whole branch by typing two characters.
  */
-export function composerIssues(blocks: SceneBlock[]): Record<string, string> {
+export function composerIssues(blocks: SceneBlock[], t: Translate): Record<string, string> {
   const issues: Record<string, string> = {};
   for (const block of blocks) {
     if (block.type !== "ifSection") continue;
     for (const child of block.children) {
-      if (endsIfSectionText(blockMarkdown(child))) issues[child.id] = SECTION_ESCAPE;
+      // Deliberately a HINT with two ways out, not a correction: `##` may be
+      // exactly what the DM meant to type, and this module never rewrites
+      // their text. The sentence comes from the catalog (issue #69).
+      if (endsIfSectionText(blockMarkdown(child)))
+        issues[child.id] = t("composer.issue.sectionEscape");
     }
   }
   return issues;
@@ -290,20 +288,24 @@ export interface NewBlockOption {
  *   * a new heading starts at level 3: a `##` inside a section ENDS it, and the
  *     blocks below it would leave the section with it.
  */
-export function newBlockOptions(scope: BlockScope): NewBlockOption[] {
+export function newBlockOptions(scope: BlockScope, t: Translate): NewBlockOption[] {
   const options: NewBlockOption[] = CALLOUT_KINDS.map((kind) => ({
     key: `callout:${kind}`,
-    label: calloutLabel(kind),
+    label: calloutLabel(kind, t),
     create: () => makeCallout(kind, ""),
   }));
   options.push({
     key: "heading",
-    label: "Überschrift",
+    label: t("composer.blockType.heading"),
     create: () => makeHeading(newHeadingDepth(scope), ""),
   });
-  options.push({ key: "text", label: "Text", create: () => makeText("") });
+  options.push({ key: "text", label: t("composer.blockType.text"), create: () => makeText("") });
   if (scope === "document") {
-    options.push({ key: "ifSection", label: "Falls-Abschnitt", create: () => makeIfSection("") });
+    options.push({
+      key: "ifSection",
+      label: t("composer.blockType.ifSection"),
+      create: () => makeIfSection(""),
+    });
   }
   return options;
 }

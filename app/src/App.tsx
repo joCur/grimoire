@@ -1,8 +1,9 @@
-import { Outlet, Route, Routes, useParams } from "react-router";
+import { Navigate, Outlet, Route, Routes, useParams } from "react-router";
 
 import { Topbar } from "@/components/Topbar";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { ReviewMemoryProvider } from "@/lib/review-memory";
+import { nonCampaignRedirect } from "@/lib/routes";
 import { useCampaignVersion } from "@/lib/use-campaign-version";
 import { EntityRefProvider } from "@/markdown/entity-refs";
 import { BrowseRoute } from "@/routes/browse";
@@ -13,6 +14,7 @@ import { LiveRoute } from "@/routes/live";
 import { PoolRoute } from "@/routes/pool";
 import { ReviewRoute } from "@/routes/review";
 import { SceneRoute } from "@/routes/scene";
+import { SettingsRoute } from "@/routes/settings";
 
 // Shared layout of all campaign-scoped views: mounts the version polling
 // exactly once per campaign (issue #8 client side) — when the server bumps
@@ -21,6 +23,15 @@ import { SceneRoute } from "@/routes/scene";
 function CampaignScope() {
   const { campaign = "" } = useParams();
   useCampaignVersion(campaign);
+  // `/:campaign` is the widest route there is, so it also swallows everything
+  // BELOW a non-campaign segment: `/settings/list/npcs` (a stale link, a
+  // hand-edited URL) arrived here as `campaign: "settings"` and produced a
+  // half-empty list page with no way out — for a campaign that cannot exist.
+  // A sibling `settings/*` route cannot fix that (React Router ranks the
+  // campaign route higher, see lib/routes.ts); the check belongs here, where
+  // the segment is known. The DM lands on the page they were aiming at.
+  const redirect = nonCampaignRedirect(campaign);
+  if (redirect !== undefined) return <Navigate to={redirect} replace />;
   // `[[slug]]` references resolve against the campaign tree (issue #68) —
   // mounted here so EVERY view's markdown bodies resolve the same way, off
   // the tree query the views already share.
@@ -62,6 +73,11 @@ export function App() {
         {/* Dev-only markdown harness (CLAUDE.md renderer check) — reached by
             URL, deliberately not linked from the chrome. */}
         {import.meta.env.DEV && <Route path="dev/markdown" element={<HarnessRoute />} />}
+        {/* Instance settings (issue #69) — deliberately NOT campaign-scoped:
+            the gear has to work on a fresh instance too, and the language is
+            an instance choice. Campaign-scoped sections appear on the page
+            when a campaign is open (issue #53 fills them). */}
+        <Route path="settings" element={<SettingsRoute />} />
         <Route path=":campaign" element={<CampaignScope />}>
           <Route index element={<PoolRoute />} />
           {/* The browse list pages (issue #11) — reached from the mobile start
@@ -71,7 +87,8 @@ export function App() {
           <Route path="live" element={<LiveRoute />} />
           {/* Generator (issue #12) — entered from the pool's "Generator". */}
           <Route path="generate" element={<GenerateRoute />} />
-          {/* Review ("Fünf Minuten Ernte", issue #10) — entered after
+          {/* Review — the "Session-Nachbereitung" (issue #10, formerly
+              "Fünf Minuten Ernte") — entered after
               "Session beenden" and from the pool affordance. */}
           <Route path="review" element={<ReviewRoute />} />
           <Route path="file/*" element={<SceneRoute />} />

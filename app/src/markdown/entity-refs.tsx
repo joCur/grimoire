@@ -26,6 +26,7 @@ import type { CampaignTree } from "@grimoire/shared/types";
 import { ENTITY_REF_KINDS, type EntityRefKind } from "@grimoire/shared/refs";
 
 import { fetchTree } from "@/api";
+import { useT, type MessageKey } from "@/i18n";
 
 /** What a slug resolves to: the CURRENT display name plus where it lives. */
 export interface ResolvedEntityRef {
@@ -148,11 +149,15 @@ export function useEntityRefs(): EntityRefContextValue {
   return useContext(EntityRefContext);
 }
 
-/** German label of what a reference points at — for the accessible name. */
-const KIND_LABEL: Record<EntityRefKind, string> = {
-  npc: "NPC",
-  location: "Ort",
-  scene: "Szene",
+/**
+ * What a reference points at, for the accessible name — the SAME kind labels
+ * the ⌘K rows and the properties dialog use (`kind.*`, i18n/de.ts), so a
+ * screen reader hears one vocabulary and it follows the UI language.
+ */
+const KIND_KEY: Record<EntityRefKind, MessageKey> = {
+  npc: "kind.npc",
+  location: "kind.location",
+  scene: "kind.scene",
 };
 
 const REF_CLASS =
@@ -175,12 +180,16 @@ export function EntityRefName({ slug, fallback }: { slug: string; fallback: Reac
  */
 export function EntityRef({ slug, fallback }: { slug: string; fallback: ReactNode }) {
   const { campaign, resolve, onOpen } = useEntityRefs();
+  const t = useT();
   const target = resolve(slug);
 
   // Degrade: plain text, exactly as typed. Not an error, not a warning colour.
   if (target === undefined) return <>{fallback}</>;
 
-  const label = `${KIND_LABEL[target.kind]}: ${target.name}`;
+  const label = t("markdown.ref.aria", {
+    kind: t(KIND_KEY[target.kind]),
+    name: target.name,
+  });
 
   if (onOpen !== undefined) {
     return (

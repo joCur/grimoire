@@ -1,4 +1,5 @@
-// "/:campaign/review" — the review view ("Fünf Minuten Ernte", issue #10)
+// "/:campaign/review" — the review view, "Session-Nachbereitung" in the UI
+// (issue #10; formerly "Fünf Minuten Ernte")
 // per the design reference: the tagged lines of today's log and of the inbox
 // as cards with one-click actions, the chapter's open threads below, brass
 // "Fertig" at the end. Reached after "Session beenden" and from the quiet
@@ -28,6 +29,8 @@ import {
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCreateDialog } from "@/components/NpcCreateDialog";
 import { Button } from "@/components/ui/button";
+import type { Translate } from "@/i18n";
+import { useT } from "@/i18n";
 import { parseChecklist } from "@/lib/review";
 import type { ReviewActionKind } from "@/lib/review-memory";
 import { useActedKeys, useReviewMemory } from "@/lib/review-memory";
@@ -43,25 +46,28 @@ interface ActVars {
   npc?: { id: string; name?: string };
 }
 
+/** The H2 the chapter's checklist lives under — a FORMAT token of the
+ *  markdown body (README), not copy, so it stays German in every language. */
 const THREADS_HEADING = "Offene Fäden";
 
-function doneLabel(action: ActionKind | undefined): string {
+function doneLabel(action: ActionKind | undefined, t: Translate): string {
   switch (action) {
     case "thread":
-      return "Als Faden übernommen";
+      return t("review.done.thread");
     case "npc":
-      return "NPC angelegt";
+      return t("review.done.npc");
     case "dismiss":
-      return "Verworfen";
+      return t("review.done.dismiss");
     default:
       // The server only stores done/not-done — after a reload the specific
       // action is gone and the neutral label is the honest one.
-      return "gesichtet";
+      return t("review.done.seen");
   }
 }
 
 export function ReviewRoute() {
   const { campaign = "" } = useParams();
+  const t = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -140,12 +146,10 @@ export function ReviewRoute() {
   // LINKED, not refused, so the only thing left to report is a server that
   // did not answer.
   const npcError =
-    act.isError && act.variables?.action === "npc"
-      ? "NPC nicht angelegt — Server prüfen."
-      : undefined;
+    act.isError && act.variables?.action === "npc" ? t("review.npc.failed") : undefined;
   const cardError = (entry: ReviewEntry) =>
     act.isError && act.variables?.action !== "npc" && act.variables?.entry.key === entry.key
-      ? "Aktion nicht gespeichert — Server prüfen."
+      ? t("review.action.failed")
       : undefined;
 
   return (
@@ -153,25 +157,22 @@ export function ReviewRoute() {
       <MobileBackRow campaign={campaign} />
       <div className="mx-auto max-w-[680px] px-5 pt-8 pb-24 md:px-7 md:pt-10 md:pb-[100px]">
         <h1 className="mb-2 font-serif text-[26px] leading-[1.25] font-semibold text-foreground">
-          Fünf Minuten Ernte
+          {t("review.title")}
         </h1>
 
         {model.isError ? (
-          <p className="text-[14px] text-muted-foreground">
-            Session nicht ladbar — Server prüfen und neu laden.
-          </p>
+          <p className="text-[14px] text-muted-foreground">{t("review.sessionFailed")}</p>
         ) : model.noSession ? (
           <p className="text-[14px] leading-[1.6] text-muted-foreground">
-            Es gibt keine Session zum Sichten.{" "}
+            {t("review.noSession")}{" "}
             <Link to={`/${campaign}`} className="text-primary hover:text-primary-hover">
-              Zurück zum Pool
+              {t("review.backToPool")}
             </Link>
           </p>
         ) : (
           <>
             <p className="mb-2 text-[14px] leading-[1.6] text-body-secondary md:mb-8">
-              Einträge mit #thread und #npc aus Log und Inbox. Übernehmen, anlegen oder
-              verwerfen — der Rest bleibt im Log.
+              {t("review.lead")}
             </p>
             {/* The topbar carries the progress on the desktop; below md it is
                 hidden, so the count lives in the page there. */}
@@ -181,16 +182,15 @@ export function ReviewRoute() {
 
             {model.hashUnavailable && (
               <p className="mb-6 text-[12.5px] text-muted-foreground">
-                Gesichtet-Status der Log-Zeilen nicht verfügbar — Grimoire über localhost oder
-                https öffnen.
+                {t("review.hashUnavailable")}
               </p>
             )}
 
             {model.isPending ? (
-              <p className="text-[14px] text-muted-foreground">Lade Einträge …</p>
+              <p className="text-[14px] text-muted-foreground">{t("review.loading")}</p>
             ) : model.total === 0 ? (
               <p className="rounded-lg border border-dashed border-input px-8 py-8 text-center text-[14px] text-muted-foreground">
-                Keine markierten Einträge in dieser Session — nichts zu sichten.
+                {t("review.empty")}
               </p>
             ) : (
               <div className="flex flex-col gap-2.5">
@@ -221,12 +221,10 @@ export function ReviewRoute() {
 
             <section className="mt-9 border-t border-border pt-5">
               <h2 className="mb-3 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
-                Offene Fäden des Kapitels
+                {t("review.threads.title")}
               </h2>
               {threads.length === 0 ? (
-                <p className="text-[13.5px] text-muted-foreground">
-                  Noch keine offenen Fäden in diesem Kapitel.
-                </p>
+                <p className="text-[13.5px] text-muted-foreground">{t("review.threads.empty")}</p>
               ) : (
                 <ul className="flex flex-col gap-2">
                   {threads.map((thread, index) => (
@@ -248,7 +246,7 @@ export function ReviewRoute() {
                       <span>{thread.text}</span>
                       {adoptedHere.includes(thread.text) && (
                         <span className="flex-none rounded-[4px] bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-[7px] py-px text-[11px] text-primary-hover">
-                          neu
+                          {t("review.threads.new")}
                         </span>
                       )}
                     </li>
@@ -262,7 +260,7 @@ export function ReviewRoute() {
               onClick={() => void navigate(`/${campaign}`)}
               className="mt-9 h-auto px-[18px] py-2.5 text-[13.5px] font-semibold"
             >
-              Fertig — zurück zum Pool
+              {t("review.finish")}
             </Button>
           </>
         )}
@@ -309,7 +307,8 @@ function EntryCard({
   onNpc: () => void;
   onDismiss: () => void;
 }) {
-  const label = doneLabel(action);
+  const t = useT();
+  const label = doneLabel(action, t);
   return (
     <div
       className={cn(
@@ -351,7 +350,7 @@ function EntryCard({
                 onClick={onThread}
                 className="h-auto rounded-md border-[color-mix(in_srgb,var(--primary)_40%,transparent)] bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-3 py-1.5 text-[12.5px] font-normal text-primary-hover hover:bg-[color-mix(in_srgb,var(--primary)_20%,transparent)] hover:text-primary-hover"
               >
-                Als Faden übernehmen
+                {t("review.action.thread")}
               </Button>
             )}
             {entry.canNpc && (
@@ -362,7 +361,7 @@ function EntryCard({
                 onClick={onNpc}
                 className="h-auto rounded-md border-[color-mix(in_srgb,var(--primary)_40%,transparent)] bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-3 py-1.5 text-[12.5px] font-normal text-primary-hover hover:bg-[color-mix(in_srgb,var(--primary)_20%,transparent)] hover:text-primary-hover"
               >
-                NPC anlegen
+                {t("create.npc.title")}
               </Button>
             )}
             <Button
@@ -372,7 +371,7 @@ function EntryCard({
               onClick={onDismiss}
               className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
             >
-              Verwerfen
+              {t("common.discard")}
             </Button>
           </div>
           {error !== undefined && (

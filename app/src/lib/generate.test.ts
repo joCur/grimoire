@@ -5,12 +5,12 @@
 
 import { describe, expect, test } from "bun:test";
 
+import { translator } from "@/i18n/format";
 import {
   applySummary,
   chapterIdError,
   chapterIdValue,
   contextHint,
-  countLabel,
   generatePhase,
   jobErrorBody,
   jobMode,
@@ -24,6 +24,11 @@ import {
   stringList,
   usageLabel,
 } from "./generate";
+
+// The copy comes from the catalog and the translator is passed in (issue
+// #69) — so a test says which language it asserts.
+const t = translator("de");
+const tEn = translator("en");
 
 describe("slugify", () => {
   test("kebab-cases a German chapter title", () => {
@@ -85,51 +90,51 @@ describe("newChapterId", () => {
 
 describe("chapterIdError", () => {
   test("accepts kebab ids with and without a number prefix", () => {
-    expect(chapterIdError("03-schmugglerbucht")).toBeUndefined();
-    expect(chapterIdError("schmugglerbucht")).toBeUndefined();
-    expect(chapterIdError("prolog")).toBeUndefined();
-    expect(chapterIdError("007")).toBeUndefined();
+    expect(chapterIdError("03-schmugglerbucht", t)).toBeUndefined();
+    expect(chapterIdError("schmugglerbucht", t)).toBeUndefined();
+    expect(chapterIdError("prolog", t)).toBeUndefined();
+    expect(chapterIdError("007", t)).toBeUndefined();
   });
 
   test("rejects an empty id", () => {
-    expect(chapterIdError("")).toBe("Kapitel-id fehlt.");
+    expect(chapterIdError("", t)).toBe("Kapitel-id fehlt.");
   });
 
   test("rejects path separators", () => {
-    expect(chapterIdError("a/b")).toContain("Schrägstriche");
-    expect(chapterIdError("a\\b")).toContain("Schrägstriche");
-    expect(chapterIdError("/absolut")).toContain("Schrägstriche");
+    expect(chapterIdError("a/b", t)).toContain("Schrägstriche");
+    expect(chapterIdError("a\\b", t)).toContain("Schrägstriche");
+    expect(chapterIdError("/absolut", t)).toContain("Schrägstriche");
   });
 
   test("rejects traversal and hidden segments", () => {
-    expect(chapterIdError("..")).toContain("..");
-    expect(chapterIdError("a..b")).toContain("..");
-    expect(chapterIdError(".versteckt")).toContain("Punkt am Anfang");
+    expect(chapterIdError("..", t)).toContain("..");
+    expect(chapterIdError("a..b", t)).toContain("..");
+    expect(chapterIdError(".versteckt", t)).toContain("Punkt am Anfang");
   });
 
   test("rejects whitespace anywhere", () => {
-    expect(chapterIdError("03 schmugglerbucht")).toContain("Leerzeichen");
-    expect(chapterIdError(" 03-bucht")).toContain("Leerzeichen");
-    expect(chapterIdError("03-bucht ")).toContain("Leerzeichen");
-    expect(chapterIdError("   ")).toContain("Leerzeichen");
-    expect(chapterIdError("03-bucht\t")).toContain("Leerzeichen");
+    expect(chapterIdError("03 schmugglerbucht", t)).toContain("Leerzeichen");
+    expect(chapterIdError(" 03-bucht", t)).toContain("Leerzeichen");
+    expect(chapterIdError("03-bucht ", t)).toContain("Leerzeichen");
+    expect(chapterIdError("   ", t)).toContain("Leerzeichen");
+    expect(chapterIdError("03-bucht\t", t)).toContain("Leerzeichen");
   });
 
   test("rejects anything outside lowercase kebab — no silent rewrite", () => {
     const charset = "Nur Kleinbuchstaben, Ziffern und Bindestriche.";
-    expect(chapterIdError("03-Schmugglerbucht")).toBe(charset);
-    expect(chapterIdError("03-schmüggler")).toBe(charset);
-    expect(chapterIdError("03_bucht")).toBe(charset);
-    expect(chapterIdError("bucht.md")).toBe(charset);
-    expect(chapterIdError("bucht\0")).toBe(charset);
+    expect(chapterIdError("03-Schmugglerbucht", t)).toBe(charset);
+    expect(chapterIdError("03-schmüggler", t)).toBe(charset);
+    expect(chapterIdError("03_bucht", t)).toBe(charset);
+    expect(chapterIdError("bucht.md", t)).toBe(charset);
+    expect(chapterIdError("bucht\0", t)).toBe(charset);
   });
 
   test("rejects the reserved campaign directories", () => {
-    expect(chapterIdError("npcs")).toContain("reserviert");
-    expect(chapterIdError("locations")).toContain("reserviert");
-    expect(chapterIdError("sessions")).toContain("reserviert");
+    expect(chapterIdError("npcs", t)).toContain("reserviert");
+    expect(chapterIdError("locations", t)).toContain("reserviert");
+    expect(chapterIdError("sessions", t)).toContain("reserviert");
     // Only the exact names are reserved.
-    expect(chapterIdError("02-sessions-am-kai")).toBeUndefined();
+    expect(chapterIdError("02-sessions-am-kai", t)).toBeUndefined();
   });
 });
 
@@ -186,20 +191,18 @@ describe("markdownBody", () => {
 });
 
 describe("labels", () => {
-  test("countLabel picks the German plural", () => {
-    expect(countLabel(1, "Szene", "Szenen")).toBe("1 Szene");
-    expect(countLabel(0, "Szene", "Szenen")).toBe("0 Szenen");
-    expect(countLabel(3, "Stub", "Stubs")).toBe("3 Stubs");
-  });
-
+  // What countLabel used to prove — a count and its noun agree — is an ICU
+  // plural inside the catalog keys now, so it is asserted through the two
+  // functions that consume them.
   test("applySummary reads like the prototype's button", () => {
-    expect(applySummary(1, 1)).toBe("1 Szene · 1 Stub");
-    expect(applySummary(2, 0)).toBe("2 Szenen · 0 Stubs");
+    expect(applySummary(1, 1, t)).toBe("1 Szene · 1 Stub");
+    expect(applySummary(2, 0, t)).toBe("2 Szenen · 0 Stubs");
+    expect(applySummary(0, 3, t)).toBe("0 Szenen · 3 Stubs");
   });
 
   test("contextHint names what the prompt carries", () => {
-    expect(contextHint(2, 1, true)).toBe("2 NPCs · 1 Ort · Glossar");
-    expect(contextHint(1, 0, false)).toBe("1 NPC · 0 Orte · kein Glossar");
+    expect(contextHint(2, 1, true, t)).toBe("2 NPCs · 1 Ort · Glossar");
+    expect(contextHint(1, 0, false, t)).toBe("1 NPC · 0 Orte · kein Glossar");
   });
 });
 
@@ -222,33 +225,44 @@ describe("stringField", () => {
 
 describe("usageLabel", () => {
   test("sums the tokens and groups them the German way", () => {
-    expect(usageLabel({ inputTokens: 11400, outputTokens: 1000, attempts: 1 })).toBe(
+    expect(usageLabel({ inputTokens: 11400, outputTokens: 1000, attempts: 1 }, t)).toBe(
       "~12.400 Tokens · 1 Versuch",
     );
-    expect(usageLabel({ inputTokens: 40000, outputTokens: 1234, attempts: 3 })).toBe(
+    expect(usageLabel({ inputTokens: 40000, outputTokens: 1234, attempts: 3 }, t)).toBe(
       "~41.234 Tokens · 3 Versuche",
     );
     // below the grouping threshold, and the plural of 0
-    expect(usageLabel({ inputTokens: 800, outputTokens: 20, attempts: 2 })).toBe(
+    expect(usageLabel({ inputTokens: 800, outputTokens: 20, attempts: 2 }, t)).toBe(
       "~820 Tokens · 2 Versuche",
     );
-    expect(usageLabel({ inputTokens: 1000000, outputTokens: 0, attempts: 1 })).toBe(
+    expect(usageLabel({ inputTokens: 1000000, outputTokens: 0, attempts: 1 }, t)).toBe(
       "~1.000.000 Tokens · 1 Versuch",
     );
   });
 
+  // The separator is catalog data (generate.usage.group), so the other
+  // language has to be proven too — not just the German rule.
+  test("the thousands separator comes from the catalog", () => {
+    expect(usageLabel({ inputTokens: 11400, outputTokens: 1000, attempts: 1 }, tEn)).toBe(
+      "~12,400 tokens · 1 attempt",
+    );
+    expect(usageLabel({ inputTokens: 1000000, outputTokens: 0, attempts: 3 }, tEn)).toBe(
+      "~1,000,000 tokens · 3 attempts",
+    );
+  });
+
   test("nothing to show without usable numbers", () => {
-    expect(usageLabel(undefined)).toBeUndefined();
-    expect(usageLabel(null)).toBeUndefined();
-    expect(usageLabel("12400")).toBeUndefined();
-    expect(usageLabel([1, 2])).toBeUndefined();
-    expect(usageLabel({})).toBeUndefined();
-    expect(usageLabel({ inputTokens: 0, outputTokens: 0, attempts: 0 })).toBeUndefined();
+    expect(usageLabel(undefined, t)).toBeUndefined();
+    expect(usageLabel(null, t)).toBeUndefined();
+    expect(usageLabel("12400", t)).toBeUndefined();
+    expect(usageLabel([1, 2], t)).toBeUndefined();
+    expect(usageLabel({}, t)).toBeUndefined();
+    expect(usageLabel({ inputTokens: 0, outputTokens: 0, attempts: 0 }, t)).toBeUndefined();
   });
 
   test("survives a partial usage object instead of printing NaN", () => {
-    expect(usageLabel({ attempts: 1 })).toBe("~0 Tokens · 1 Versuch");
-    expect(usageLabel({ inputTokens: 500, attempts: "viele" })).toBe("~500 Tokens · 0 Versuche");
+    expect(usageLabel({ attempts: 1 }, t)).toBe("~0 Tokens · 1 Versuch");
+    expect(usageLabel({ inputTokens: 500, attempts: "viele" }, t)).toBe("~500 Tokens · 0 Versuche");
   });
 });
 
@@ -378,26 +392,26 @@ describe("restoredMode", () => {
 
 describe("npcIdError", () => {
   test("an empty field is not an error — it means 'the model chooses'", () => {
-    expect(npcIdError("")).toBeUndefined();
+    expect(npcIdError("", [], t)).toBeUndefined();
   });
 
   test("accepts kebab ids", () => {
-    expect(npcIdError("grella")).toBeUndefined();
-    expect(npcIdError("die-graue-witwe")).toBeUndefined();
-    expect(npcIdError("wache-2")).toBeUndefined();
+    expect(npcIdError("grella", [], t)).toBeUndefined();
+    expect(npcIdError("die-graue-witwe", [], t)).toBeUndefined();
+    expect(npcIdError("wache-2", [], t)).toBeUndefined();
   });
 
   test("rejects what the server would reject", () => {
-    expect(npcIdError("Grella")).toContain("Kleinbuchstaben");
-    expect(npcIdError("die graue")).toContain("Leerzeichen");
-    expect(npcIdError("npcs/grella")).toContain("Schrägstriche");
-    expect(npcIdError("grella_2")).toContain("Kleinbuchstaben");
-    expect(npcIdError("-grella")).toContain("Kleinbuchstaben");
-    expect(npcIdError("gräfin")).toContain("Kleinbuchstaben");
+    expect(npcIdError("Grella", [], t)).toContain("Kleinbuchstaben");
+    expect(npcIdError("die graue", [], t)).toContain("Leerzeichen");
+    expect(npcIdError("npcs/grella", [], t)).toContain("Schrägstriche");
+    expect(npcIdError("grella_2", [], t)).toContain("Kleinbuchstaben");
+    expect(npcIdError("-grella", [], t)).toContain("Kleinbuchstaben");
+    expect(npcIdError("gräfin", [], t)).toContain("Kleinbuchstaben");
   });
 
   test("an id whose file exists is named as such — the server would 409", () => {
-    expect(npcIdError("fenn", ["fenn", "jorna"])).toContain("existiert schon");
-    expect(npcIdError("grella", ["fenn", "jorna"])).toBeUndefined();
+    expect(npcIdError("fenn", ["fenn", "jorna"], t)).toContain("existiert schon");
+    expect(npcIdError("grella", ["fenn", "jorna"], t)).toBeUndefined();
   });
 });

@@ -18,6 +18,14 @@
 // Planned API — the living checklist (conventions: /README.md). Tick an
 // endpoint here when it is implemented:
 //
+// ERROR BODIES ARE LANGUAGE-FREE (issue #69). Every error a HUMAN reads carries
+// a stable `code` from `@grimoire/shared/error-codes` plus the parameters its
+// sentence needs; the `error` text next to it is the ENGLISH technical fallback
+// (curl, logs, an unknown-code client). The app renders the sentence from its
+// own catalog (app/src/i18n, keys `server.<code>`) and degrades to that text
+// for a code it does not know. Codes are append-only. The full list lives in
+// shared/src/error-codes.ts; per-endpoint they are noted below.
+//
 //   [x] GET  /api/campaigns                    campaign list (directories + lastSession +
 //                                              name/description from _campaign)
 //   [x] POST /api/campaigns                    { name, description? } -> 201 CampaignSummary.
@@ -27,9 +35,23 @@
 //                                              the name with the shared slug rule
 //                                              (@grimoire/shared/slug — ä→ae, ö→oe, ü→ue, ß→ss,
 //                                              everything else folded, kebab-cased); a name
-//                                              that yields no slug is 400, a taken id is
-//                                              409 { code: "slug_taken", id, suggestion, path }
-//   [x] POST /api/:campaign/chapters           { title, goal? } -> 201 the chapter document.
+//                                              that yields no slug is
+//                                              400 { code: "slug_empty", kind, field }, a
+//                                              taken id is 409 { code: "slug_taken", kind,
+//                                              id, suggestion, path }
+//   [x] GET  /api/settings                     InstanceSettings — the instance's UI
+//                                              language (issue #69): { locale: "de" | "en"
+//                                              | null }. `null` is "never decided": the app
+//                                              then follows navigator.language and writes
+//                                              nothing. Campaign-INDEPENDENT on purpose —
+//                                              the cold start has no campaign yet
+//   [x] PUT  /api/settings                     { locale } -> InstanceSettings. Stored in the
+//                                              `meta` table under `setting:locale` (no table
+//                                              of its own: one user, one settings object).
+//                                              `null` deletes the row; anything but de/en/
+//                                              null is 400. NOT localStorage — the language
+//                                              is server state (quality floor)
+//   [x] POST /api/:campaign/chapters         { title, goal? } -> 201 the chapter document.
 //                                              Same id derivation and same 400/409 as above;
 //                                              `goal` lands under `## Ziel des Kapitels`, the
 //                                              heading the pool reads its goal line from
@@ -43,7 +65,9 @@
 //                                              entry for the derived id (one a reference
 //                                              created, issue #70) is FILLED rather than
 //                                              collided with; an entry that holds content
-//                                              answers the `slug_taken` 409
+//                                              answers the `slug_taken` 409; a RESERVED
+//                                              id answers 409 { code: "slug_reserved" },
+//                                              same shape, different sentence
 //   [x] POST /api/:campaign/locations          { name } -> 201 the location document, same
 //                                              rules as npcs
 //   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (properties parsed)
@@ -57,8 +81,9 @@
 //                                              reasoning, it had been left behind.
 //                                              `rev` of glossary/inbox is that
 //                                              DOCUMENT's own counter, not campaigns.version
-//   [x] PATCH /api/:campaign/properties        { path, rev, patch } — only if
-//                                              rev is unchanged, otherwise 409.
+//   [x] PATCH /api/:campaign/properties        { path, rev, patch } — only if rev is
+//                                              unchanged, otherwise
+//                                              409 { code: "rev_conflict", rev }.
 //                                              A scene's `chapter` may be SET (400 when
 //                                              the chapter does not exist — a scene must
 //                                              never fall out of the tree) or DELETED with
@@ -68,7 +93,7 @@
 //                                              BODY of an existing document (issue #15);
 //                                              its properties are untouched (they are
 //                                              PATCH /properties' job), same rev guard
-//                                              as PATCH above (409)
+//                                              as PATCH above (409 `rev_conflict`)
 //   [—] POST /api/:campaign/campaign-meta      REMOVED with issue #62. It existed
 //                                              for the one gap PATCH /properties
 //                                              could not close: a campaign whose

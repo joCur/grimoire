@@ -82,7 +82,14 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   `server/src/store/paths.ts`. Auf der Leitung heißen die Felder eines
   Dokuments `properties` — `frontmatter`/`mtime` gibt es nur noch im
   Markdown-Importer unter `server/src/db/` (Issue #79).
-- Sprache der UI: Deutsch. Code, Kommentare, Commits: Englisch.
+- Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
+  Code, Kommentare, Commits: Englisch.
+- Nutzersichtbare Texte NIE direkt in Komponenten, sondern in den Katalog
+  `app/src/i18n/` (`de.ts` = Key-Satz, `en.ts` muss vollständig sein, sonst
+  Typfehler). `t()` kommt aus `useT()`/`useI18n()`; reine Helfer in
+  `app/src/lib/` bekommen den Translator als Argument. Details: ADR #15.
+  `bun run lint` ist das Gate — scharf für migrierte Dateien, `warn` für den
+  Rest (Scheibe 2 von #69 arbeitet die Warnungen ab).
 
 ## Backlog-Prozess
 
@@ -145,7 +152,7 @@ Die Pfade:
 3. ⌘K-Suche findet und öffnet
 4. Session-Zyklus: starten → Schnellnotiz → Log + scenes_played →
    Pause → beenden → Review
-5. Ernte: Thread übernehmen → _chapter.md; Inbox abhaken
+5. Nachbereitung: Handlungsstrang übernehmen → _chapter.md; Inbox abhaken
 6. Generator-Zyklus (Stub-LLM): Job → Review → Übernehmen → draft im
    Pool; plus 409-/Fehlerpfad und Server-Neustart (fertiger Job übersteht
    ihn und bleibt übernehmbar, laufender wird als `failed` gemeldet)

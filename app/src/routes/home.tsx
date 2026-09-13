@@ -29,8 +29,10 @@ import { Navigate } from "react-router";
 
 import { fetchCampaigns } from "@/api";
 import { useCampaignCreate } from "@/components/CreateActions";
+import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { Button } from "@/components/ui/button";
 import { IconLogo } from "@/icons";
+import { useT } from "@/i18n";
 import { pickLastCampaign } from "@/lib/campaign";
 import {
   canCreate,
@@ -41,6 +43,7 @@ import {
 } from "@/lib/create";
 
 export function HomeRoute() {
+  const t = useT();
   const { data, isPending, isError } = useQuery({
     queryKey: ["campaigns"],
     queryFn: fetchCampaigns,
@@ -54,14 +57,14 @@ export function HomeRoute() {
   if (isPending) {
     return (
       <section className="mx-auto max-w-[560px] px-5 pt-16 pb-20 text-[14.5px] text-muted-foreground md:px-7">
-        <p>Kampagne wird geöffnet …</p>
+        <p>{t("home.opening")}</p>
       </section>
     );
   }
   if (isError) {
     return (
       <section className="mx-auto max-w-[560px] px-5 pt-16 pb-20 text-[14.5px] text-muted-foreground md:px-7">
-        <p>Server nicht erreichbar — Grimoire-Server auf Port 3000 starten.</p>
+        <p>{t("common.serverDown")}</p>
       </section>
     );
   }
@@ -70,6 +73,7 @@ export function HomeRoute() {
 
 /** The empty instance: the first campaign is created right here. */
 function ColdStart() {
+  const t = useT();
   const nameId = useId();
   const descriptionId = useId();
   // Shared with the switcher's „Kampagne anlegen" dialog (components/
@@ -94,7 +98,7 @@ function ColdStart() {
     },
     onError: (error) => {
       setConflict(createConflict(error));
-      setMessage(createErrorMessage(error));
+      setMessage(createErrorMessage(error, t));
     },
   });
 
@@ -107,11 +111,11 @@ function ColdStart() {
       <div className="mb-4 flex items-center gap-2.5">
         <IconLogo size={22} className="text-primary" />
         <h1 className="font-serif text-[24px] leading-[1.25] font-semibold text-foreground">
-          Willkommen bei Grimoire
+          {t("coldstart.title")}
         </h1>
       </div>
       <p className="mb-6 text-[14px] leading-[1.6] text-body-secondary">
-        Noch keine Kampagne. Leg eine an — danach entstehen darin Kapitel und Szenen.
+        {t("coldstart.lead")}
       </p>
 
       <form
@@ -123,29 +127,33 @@ function ColdStart() {
         className="flex flex-col gap-3.5"
       >
         <label htmlFor={nameId} className="flex flex-col gap-1.5">
-          <span className="text-[12px] text-body-secondary">Name der Kampagne</span>
+          <span className="text-[12px] text-body-secondary">
+            {t("create.campaign.nameLabel")}
+          </span>
           <input
             id={nameId}
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoComplete="off"
-            placeholder="Name der Kampagne"
+            placeholder={t("create.campaign.namePlaceholder")}
             className="w-full rounded-md border border-input bg-panel-deep px-3 py-2.5 text-[14px] text-foreground placeholder:text-muted-foreground max-md:text-[16px]"
           />
           {/* The id the name produces — it goes into every URL and stays. */}
           <span className="min-h-[16px] font-mono text-[11.5px] text-muted-foreground">
-            {id === "" ? "" : `id: ${id}`}
+            {id === "" ? "" : t("coldstart.id", { id })}
           </span>
         </label>
 
         <label htmlFor={descriptionId} className="flex flex-col gap-1.5">
-          <span className="text-[12px] text-body-secondary">Beschreibung (optional)</span>
+          <span className="text-[12px] text-body-secondary">
+            {t("create.campaign.descriptionLabel")}
+          </span>
           <textarea
             id={descriptionId}
             rows={3}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Ein Satz, der die Kampagne einordnet"
+            placeholder={t("create.campaign.descriptionPlaceholder")}
             className="w-full resize-y rounded-md border border-input bg-panel-deep px-3 py-2 text-[13.5px] leading-[1.55] text-foreground placeholder:text-muted-foreground max-md:text-[16px]"
           />
         </label>
@@ -160,7 +168,7 @@ function ColdStart() {
                 onClick={() => create.mutate(conflict.suggestion)}
                 className="rounded-sm text-body-secondary underline underline-offset-2 hover:text-foreground"
               >
-                „{conflict.suggestion}" verwenden
+                {t("create.useSuggestion", { id: conflict.suggestion })}
               </button>
             </>
           )}
@@ -172,10 +180,19 @@ function ColdStart() {
             disabled={!canSubmit}
             className="h-auto min-h-11 px-4 py-2 text-[13.5px] font-semibold"
           >
-            {create.isPending ? "Lege an …" : "Kampagne anlegen"}
+            {t(create.isPending ? "common.creating" : "create.campaign.title")}
           </Button>
         </div>
       </form>
+
+      {/* The language switch (issue #69 follow-up). There is no campaign yet,
+          so the topbar carries no switcher — without this row the FIRST screen
+          of a new installation would be the one screen whose language cannot be
+          changed. A footer, hairline above, well below the form: the first
+          thing to do here is still „Kampagne anlegen". */}
+      <footer className="mt-10 border-t border-divider pt-3.5">
+        <LanguageSwitch />
+      </footer>
     </section>
   );
 }

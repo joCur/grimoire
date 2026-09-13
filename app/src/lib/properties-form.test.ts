@@ -24,10 +24,16 @@ import {
   type FormValues,
   type PropertiesField,
 } from "./properties-form";
+import { translator } from "@/i18n/format";
+
+// The language the assertions below are written in (issue #69): the helpers
+// take the translator as an argument, so a test says so explicitly instead of
+// leaning on a default.
+const t = translator("de");
 
 /** The fields of a kind, or [] — every test starts from the real list. */
 function fields(kind: EntityKind): readonly PropertiesField[] {
-  return propertiesFieldsFor(kind) ?? [];
+  return propertiesFieldsFor(kind, t) ?? [];
 }
 
 function keys(kind: EntityKind): string[] {
@@ -100,8 +106,8 @@ describe("propertiesFieldsFor", () => {
 
   test("the kinds without a typed form get no form at all", () => {
     for (const kind of ["campaign", "session", "inbox", "glossary", "unknown"] as const) {
-      expect(propertiesFieldsFor(kind)).toBe(undefined);
-      expect(propertiesKindLabel(kind)).toBe(undefined);
+      expect(propertiesFieldsFor(kind, t)).toBe(undefined);
+      expect(propertiesKindLabel(kind, t)).toBe(undefined);
     }
   });
 
@@ -326,7 +332,7 @@ describe("unfinished quickstat rows block the save", () => {
   });
 
   test("a file's own rows are fine — nothing to complain about", () => {
-    expect(propertiesFormIssues(npcFields, values)).toEqual({});
+    expect(propertiesFormIssues(npcFields, values, undefined, t)).toEqual({});
     // An empty row (the „Zeile hinzufügen" state) and a name whose value was
     // cleared (= delete this key) are both legitimate.
     expect(
@@ -336,7 +342,7 @@ describe("unfinished quickstat rows block the save", () => {
           { key: "insight", value: "2" },
           { key: "wis", value: "" },
           { key: "", value: "" },
-        ]),
+        ]), undefined, t,
       ),
     ).toEqual({});
   });
@@ -347,7 +353,7 @@ describe("unfinished quickstat rows block the save", () => {
       withStats([
         { key: "insight", value: "2" },
         { key: "  ", value: "+3" },
-      ]),
+      ]), undefined, t,
     );
     expect(issues.quickstats).toBe("Zeile ohne Namen — Name ergänzen oder Zeile entfernen.");
   });
@@ -358,7 +364,7 @@ describe("unfinished quickstat rows block the save", () => {
       withStats([
         { key: "insight", value: "2" },
         { key: "insight", value: "3" },
-      ]),
+      ]), undefined, t,
     );
     expect(issues.quickstats).toBe(
       'Name „insight" doppelt — jeder Name darf nur einmal vorkommen.',
@@ -367,7 +373,7 @@ describe("unfinished quickstat rows block the save", () => {
 
   test("a scene's own properties is fine as it stands", () => {
     const sceneFields = fields("scene");
-    expect(propertiesFormIssues(sceneFields, propertiesFormValues(sceneFields, SCENE_FM))).toEqual(
+    expect(propertiesFormIssues(sceneFields, propertiesFormValues(sceneFields, SCENE_FM), undefined, t)).toEqual(
       {},
     );
   });
@@ -384,23 +390,23 @@ describe("the npcs list holds ids, not names (#70 audit)", () => {
   test("a new free-text entry blocks the save and says the rule", () => {
     // The server refuses it with a 400 — saying it here makes that a line
     // under the field instead of a failed save.
-    const issues = propertiesFormIssues(sceneFields, withNpcs(["fenn", "Alte Fischerin"]), initial);
+    const issues = propertiesFormIssues(sceneFields, withNpcs(["fenn", "Alte Fischerin"]), initial, t);
     expect(issues.npcs).toBe(
       '„Alte Fischerin" ist keine id — nur Kleinbuchstaben, Ziffern und Bindestriche.',
     );
   });
 
   test("ids are fine, known or not — an unknown one is created on save", () => {
-    expect(propertiesFormIssues(sceneFields, withNpcs(["fenn", "holm"]), initial)).toEqual({});
+    expect(propertiesFormIssues(sceneFields, withNpcs(["fenn", "holm"]), initial, t)).toEqual({});
   });
 
   test("free text the FILE already carries is exempt — such a scene stays savable", () => {
     // A campaign migrated from the file era can hold anything in that list
     // (no foreign keys, schema.ts rule 1), and an unrelated save re-sends it.
     const stored = withNpcs(["fenn", "Alte Fischerin"]);
-    expect(propertiesFormIssues(sceneFields, stored, stored)).toEqual({});
+    expect(propertiesFormIssues(sceneFields, stored, stored, t)).toEqual({});
     // …and an untouched form with such a value is not "dirty" either.
-    expect(hasPropertiesChanges(sceneFields, stored, stored)).toBe(false);
+    expect(hasPropertiesChanges(sceneFields, stored, stored, t)).toBe(false);
   });
 });
 
@@ -410,13 +416,13 @@ describe("hasPropertiesChanges", () => {
   const initial = propertiesFormValues(sceneFields, SCENE_FM);
 
   test("an untouched form has nothing to discard", () => {
-    expect(hasPropertiesChanges(sceneFields, initial, initial)).toBe(false);
+    expect(hasPropertiesChanges(sceneFields, initial, initial, t)).toBe(false);
     // Whitespace is not work either (same rule the patch uses).
     expect(
       hasPropertiesChanges(sceneFields, initial, {
         ...initial,
         title: { kind: "text", text: `  ${SCENE_FM.title as string}  ` },
-      }),
+      }, t),
     ).toBe(false);
   });
 
@@ -425,7 +431,7 @@ describe("hasPropertiesChanges", () => {
       hasPropertiesChanges(sceneFields, initial, {
         ...initial,
         status: { kind: "text", text: "played" },
-      }),
+      }, t),
     ).toBe(true);
     // The invalid row produces no patch at all, so the guard has to ask the
     // issues as well — otherwise Esc would throw it away silently.
@@ -437,7 +443,7 @@ describe("hasPropertiesChanges", () => {
       quickstats: { kind: "pairs", entries: [...stats.entries, { key: "", value: "+1" }] },
     };
     expect(propertiesPatch(npcFields, npcInitial, nameless)).toEqual({});
-    expect(hasPropertiesChanges(npcFields, npcInitial, nameless)).toBe(true);
+    expect(hasPropertiesChanges(npcFields, npcInitial, nameless, t)).toBe(true);
   });
 });
 

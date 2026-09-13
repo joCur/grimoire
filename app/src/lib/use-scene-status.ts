@@ -31,7 +31,7 @@ export function useSceneStatusMutation(
     fileKey: ["file", campaign, path],
     // The status lives in the tree as well (pool rows, live nav, search).
     invalidateOnSuccess: [["tree", campaign]],
-    errorMessage: "Status nicht gespeichert — Server prüfen",
+    errorMessage: "write.status.failed",
   });
 
   return {

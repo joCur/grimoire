@@ -905,15 +905,16 @@ class RunUsage {
 }
 
 /**
- * The truncation message (German — it goes straight into the UI). It names
- * the effective cap so the DM knows which number to raise; see the
- * LLM_MAX_TOKENS section of docs/DEPLOYMENT.md.
+ * The truncation message — the ENGLISH technical fallback next to
+ * `code: "llm_truncated"` (issue #69); the sentence the DM reads is built by
+ * the app from `maxTokens`. It names the effective cap so the number to raise
+ * is unambiguous; see the LLM_MAX_TOKENS section of docs/DEPLOYMENT.md.
  */
 export function truncationMessage(maxTokens: number | undefined): string {
-  const current = maxTokens === undefined ? "Standard des Endpoints" : String(maxTokens);
+  const current = maxTokens === undefined ? "the endpoint default" : String(maxTokens);
   return (
-    `Antwort wurde vom Modell abgeschnitten — LLM_MAX_TOKENS erhöhen ` +
-    `(aktuell: ${current}) oder Quelltext verkleinern.`
+    `the model's reply was cut off — raise LLM_MAX_TOKENS ` +
+    `(currently: ${current}) or shorten the source text.`
   );
 }
 
@@ -987,6 +988,8 @@ async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
     if (completion.truncated) {
       spend.log(provider.name, "truncated");
       throw new ApiError(422, truncationMessage(provider.maxTokens), {
+        code: "llm_truncated",
+        ...(provider.maxTokens === undefined ? {} : { maxTokens: provider.maxTokens }),
         rawReply: capRawReply(raw),
         ...(spend.usage() === undefined ? {} : { usage: spend.usage() }),
       });
@@ -1001,6 +1004,7 @@ async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
     if (corrections.length >= maxCorrections) {
       spend.log(provider.name, "validation failed");
       throw new ApiError(422, "generation failed mechanical validation after retries", {
+        code: "llm_invalid",
         validationErrors: outcome.errors,
         rawReply: capRawReply(raw),
         ...(spend.usage() === undefined ? {} : { usage: spend.usage() }),

@@ -13,18 +13,19 @@ import type { GrimoireDb } from "./client";
 import { generateJobs } from "./schema";
 
 /**
- * The sentence the DM reads for an interrupted run. German, because the app
- * renders `error.body.error` of a failed job verbatim; 503 because that is
- * what the synchronous endpoint would have answered for "this server could
- * not carry the run out" — and the app shows a 503's message instead of a
- * validation block.
+ * What an interrupted run answers. ENGLISH since issue #69: the sentence the
+ * DM reads comes from the app's catalog via `code: "job_restarted"`, and this
+ * text is the technical fallback next to it. 503 because that is what the
+ * synchronous endpoint would have answered for "this server could not carry
+ * the run out" — and the app shows a 503's message instead of a validation
+ * block.
  */
 export const RESTART_FAILURE_MESSAGE =
-  "Server wurde während des Laufs neu gestartet — Job neu starten";
+  "the server was restarted while the job was running — start the job again";
 
 export const RESTART_FAILURE: GenerateJobError = {
   status: 503,
-  body: { error: RESTART_FAILURE_MESSAGE },
+  body: { code: "job_restarted", error: RESTART_FAILURE_MESSAGE },
 };
 
 /**

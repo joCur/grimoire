@@ -19,6 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { fetchFile } from "@/api";
 import { EntityCardShell } from "@/components/EntityCardShell";
+import { useI18n } from "@/i18n";
 import { fmString } from "@/lib/properties";
 import { firstParagraphOfSection } from "@/lib/md-section";
 
@@ -45,6 +46,7 @@ export function LocationCard({
   /** Opens the live drawer instead of navigating (see EntityCardShell). */
   onOpen?: (path: string) => void;
 }) {
+  const { t, tNode } = useI18n();
   const path = knownPath ?? locationPath(id);
   const { data, isPending, isError } = useQuery({
     queryKey: ["file", campaign, path],
@@ -57,7 +59,13 @@ export function LocationCard({
   if (isError) {
     return (
       <p className="text-[12px] leading-[1.5] text-muted-foreground">
-        <span className="font-mono">{id}</span> — Ort nicht ladbar, Server prüfen.
+        {tNode("locationCard.unloadable", {
+          id: (
+            <span key="id" className="font-mono">
+              {id}
+            </span>
+          ),
+        })}
       </p>
     );
   }
@@ -75,7 +83,9 @@ export function LocationCard({
         <p className="mt-1.5 text-[12.5px] leading-[1.5] text-body-secondary">{mood}</p>
       )}
       {mood === undefined && page !== undefined && (
-        <p className="mt-1.5 text-[12px] text-muted-foreground">Roll20-Seite: {page}</p>
+        <p className="mt-1.5 text-[12px] text-muted-foreground">
+          {t("locationCard.roll20", { value: page })}
+        </p>
       )}
     </EntityCardShell>
   );

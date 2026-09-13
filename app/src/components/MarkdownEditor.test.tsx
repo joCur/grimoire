@@ -88,7 +88,9 @@ describe("EditorShell", () => {
             controlsId="file-body-scene"
           />
         }
-        actions={<button type="button">Speichern</button>}
+        // Stand-in caller markup, not app copy — hence the literal (in an
+        // expression container, which is what the i18n lint rule asks for).
+        actions={<button type="button">{"Speichern"}</button>}
       >
         <MarkdownEditorSurface
           value={BODY}
@@ -120,8 +122,8 @@ describe("EditorShell", () => {
 
   test("a shell without actions renders no action slot at all", () => {
     const html = renderToStaticMarkup(
-      <EditorShell controls={<span>Blöcke</span>}>
-        <p>Blockliste</p>
+      <EditorShell controls={<span>{"Blöcke"}</span>}>
+        <p>{"Blockliste"}</p>
       </EditorShell>,
     );
     expect(html).toContain("Blöcke");

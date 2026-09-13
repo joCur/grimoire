@@ -17,6 +17,8 @@ import type { FileResponse } from "@grimoire/shared/types";
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
+import { useT } from "@/i18n";
+import type { MessageKey } from "@/i18n";
 import {
   STALE_FILE_MESSAGE,
   WRITE_FAILED_MESSAGE,
@@ -58,8 +60,12 @@ export interface RevWriteOptions<TVariables> {
    * none of them, because nothing changed.
    */
   invalidateOnSuccess?: readonly QueryKey[];
-  /** Inline message when the write failed for any reason other than a conflict. */
-  errorMessage?: string;
+  /**
+   * Catalog KEY of the inline message when the write failed for any reason
+   * other than a conflict (issue #69) — a key, not a sentence, so the message
+   * follows a language switch like everything else.
+   */
+  errorMessage?: MessageKey;
   /** Runs after a SUCCESSFUL write — where a dialog closes or a mode ends. */
   onSaved?: () => void;
   /**
@@ -77,6 +83,7 @@ export function useRevWriteMutation<TVariables>({
   onSaved,
   onConflict,
 }: RevWriteOptions<TVariables>): RevWriteMutation<TVariables> {
+  const t = useT();
   const queryClient = useQueryClient();
   const [message, setMessage] = useState<string>();
   // `mutation.isPending` is the render-time snapshot, so two calls in the same
@@ -101,7 +108,7 @@ export function useRevWriteMutation<TVariables>({
       // after a conflict — is the new truth for this path.
       if (result.file !== undefined) queryClient.setQueryData(fileKey, result.file);
       if (!result.ok) {
-        setMessage(STALE_FILE_MESSAGE);
+        setMessage(t(STALE_FILE_MESSAGE));
         onConflict?.(result.file);
         return;
       }
@@ -111,7 +118,7 @@ export function useRevWriteMutation<TVariables>({
       onSaved?.();
     },
     onError: () => {
-      setMessage(errorMessage);
+      setMessage(t(errorMessage));
     },
   });
 

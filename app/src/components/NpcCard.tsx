@@ -19,6 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { fetchFile } from "@/api";
 import { EntityCardShell } from "@/components/EntityCardShell";
+import { useI18n } from "@/i18n";
 import { isEntityId } from "@/lib/entity";
 import { fmQuickstats, fmString } from "@/lib/properties";
 import { firstParagraphOfSection } from "@/lib/md-section";
@@ -43,6 +44,7 @@ export function NpcCard({
    */
   onOpen?: (path: string) => void;
 }) {
+  const { t, tNode } = useI18n();
   const path = npcPath(id);
   // A NON-SLUG entry is no id and therefore no entry (#70 audit): `npcs:`
   // holds ids, and the server now refuses new free text there. What can still
@@ -61,7 +63,7 @@ export function NpcCard({
   if (!isId) {
     return (
       <p className="text-[12px] leading-[1.5] text-muted-foreground">
-        <span className="font-mono">{id}</span> — keine NPC-id, deshalb kein Eintrag.
+        {tNode("npcCard.noId", { id: monoId(id) })}
       </p>
     );
   }
@@ -72,7 +74,7 @@ export function NpcCard({
   if (isError) {
     return (
       <p className="text-[12px] leading-[1.5] text-muted-foreground">
-        <span className="font-mono">{id}</span> — NPC nicht ladbar, Server prüfen.
+        {tNode("npcCard.unloadable", { id: monoId(id) })}
       </p>
     );
   }
@@ -98,7 +100,7 @@ export function NpcCard({
         )}
         {will !== undefined && (
           <p className="mb-2.5 text-[12.5px] leading-[1.5] text-body-secondary">
-            <span className="text-muted-foreground">Will:</span> {will}
+            <span className="text-muted-foreground">{t("npcCard.will.inline")}</span> {will}
           </p>
         )}
         {quickstats.length > 0 && (
@@ -127,7 +129,7 @@ export function NpcCard({
       {voice !== undefined && (
         <>
           <p className="mb-[3px] text-[11px] tracking-[.06em] uppercase text-muted-foreground">
-            Stimme
+            {t("npcCard.voice")}
           </p>
           <p className="mb-2.5 text-[13px] leading-[1.5] text-body italic">{voice}</p>
         </>
@@ -135,7 +137,7 @@ export function NpcCard({
       {will !== undefined && (
         <>
           <p className="mb-[3px] text-[11px] tracking-[.06em] uppercase text-muted-foreground">
-            Will
+            {t("npcCard.will")}
           </p>
           <p className="mb-3 text-[13px] leading-[1.5] text-body">{will}</p>
         </>
@@ -153,5 +155,14 @@ export function NpcCard({
         </div>
       )}
     </EntityCardShell>
+  );
+}
+
+/** The id inside a degrade sentence — mono, and part of the sentence (tNode). */
+function monoId(id: string) {
+  return (
+    <span key="id" className="font-mono">
+      {id}
+    </span>
   );
 }

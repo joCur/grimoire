@@ -11,6 +11,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { propertiesFieldsFor, type FieldValue, type PropertiesField } from "@/lib/properties-form";
 
 import { PropertiesFieldControl } from "./PropertiesFields";
+import { translator } from "@/i18n/format";
+
+// The language the assertions below are written in (issue #69): the helpers
+// take the translator as an argument, so a test says so explicitly instead of
+// leaning on a default.
+const t = translator("de");
 
 const tree: CampaignTree = {
   campaign: "beispiel",
@@ -24,7 +30,7 @@ const tree: CampaignTree = {
 };
 
 function fieldOf(kind: "scene" | "npc", key: string): PropertiesField {
-  const field = (propertiesFieldsFor(kind) ?? []).find((f) => f.key === key);
+  const field = (propertiesFieldsFor(kind, t) ?? []).find((f) => f.key === key);
   if (field === undefined) throw new Error(`no ${kind} field ${key}`);
   return field;
 }

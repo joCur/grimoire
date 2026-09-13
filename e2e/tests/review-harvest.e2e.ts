@@ -1,4 +1,5 @@
-// Critical path 5: the harvest ("Ernte"); see CLAUDE.md.
+// Critical path 5: the session wrap-up ("Nachbereitung", formerly "Ernte" —
+// the harvest metaphor survives only in file names and code); see CLAUDE.md.
 //
 // Adopt a thread → _chapter, tick off an inbox line, create an NPC stub,
 // and the progress counter.
@@ -57,14 +58,14 @@ test("adopting a thread lands in _chapter, the inbox line gets ticked off", asyn
   api,
 }) => {
   await page.goto("/beispiel/review");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fünf Minuten Ernte");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session-Nachbereitung");
 
   // The topbar carries the harvest progress (the page repeats it below md).
   const progress = page.getByRole("banner").getByText(/von \d+ gesichtet/);
 
   // Three tagged log lines + the tagged inbox line from examples/beispiel.
   await expect(progress).toHaveText("0 von 4 gesichtet");
-  await expect(page.getByText("Noch keine offenen Fäden in diesem Kapitel.")).toHaveCount(0);
+  await expect(page.getByText("Noch keine offenen Handlungsstränge in diesem Kapitel.")).toHaveCount(0);
   // The chapter already carries one open thread.
   await expect(page.getByText("Wer bezahlt die Schmuggler?")).toBeVisible();
 
@@ -73,9 +74,9 @@ test("adopting a thread lands in _chapter, the inbox line gets ticked off", asyn
   // This line was logged without a scene marker, so the chip stays bare
   // (issue #34 — the scene part only appears when the line names one).
   await expect(threadCard.getByText("Log", { exact: true })).toBeVisible();
-  await threadCard.getByRole("button", { name: "Als Faden übernehmen" }).click();
+  await threadCard.getByRole("button", { name: "Als Handlungsstrang übernehmen" }).click();
 
-  await expect(threadCard.getByText("Als Faden übernommen")).toBeVisible();
+  await expect(threadCard.getByText("Als Handlungsstrang übernommen")).toBeVisible();
   await expect(progress).toHaveText("1 von 4 gesichtet");
   // The thread list shows the new item with the "neu" chip.
   await expect(page.getByText("neu", { exact: true })).toBeVisible();
@@ -102,7 +103,7 @@ test("adopting a thread lands in _chapter, the inbox line gets ticked off", asyn
   await page.getByRole("button", { name: "Fertig — zurück zum Pool" }).click();
   await expect(page).toHaveURL(/\/beispiel$/);
   // The pool's quiet review affordance counts what is still open.
-  await expect(page.getByRole("link", { name: "Review · 2 offen" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Nachbereitung · 2 offen" })).toBeVisible();
 });
 
 test("creating an NPC entry from a #npc log line", async ({ page, api }) => {
@@ -159,7 +160,7 @@ test("an id that already has an entry is linked, not refused (#70)", async ({ pa
 test.describe("with yesterday's session, ended after midnight", () => {
   test.use({ seed: { files: { [PAST_MIDNIGHT.path]: PAST_MIDNIGHT.content } } });
 
-  test("a session that ran past midnight is still the harvest (issue #40 review)", async ({
+  test("a session that ran past midnight is still the wrap-up's session (issue #40 review)", async ({
     page,
     api,
   }) => {
@@ -170,11 +171,11 @@ test.describe("with yesterday's session, ended after midnight", () => {
     const rel = PAST_MIDNIGHT.path;
 
     await page.goto("/beispiel/review");
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fünf Minuten Ernte");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session-Nachbereitung");
     const threadCard = page.locator("div").filter({ hasText: THREAD_TEXT }).last();
     await expect(threadCard).toBeVisible();
-    await threadCard.getByRole("button", { name: "Als Faden übernehmen" }).click();
-    await expect(threadCard.getByText("Als Faden übernommen")).toBeVisible();
+    await threadCard.getByRole("button", { name: "Als Handlungsstrang übernehmen" }).click();
+    await expect(threadCard.getByText("Als Handlungsstrang übernommen")).toBeVisible();
 
     // The `reviewed` hash lands in YESTERDAY's file — the one the session
     // actually lives in — and no file was invented for today.

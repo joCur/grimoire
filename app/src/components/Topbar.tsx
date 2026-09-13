@@ -75,14 +75,27 @@ import {
   Play,
   Plus,
   Search,
+  Settings,
   Sparkles,
   Square,
   Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, matchPath, useLocation, useNavigate } from "react-router";
+import {
+  Link,
+  matchPath,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 
-import { continueSession, endSession, fetchCampaigns, fetchTree, pauseSession } from "@/api";
+import {
+  continueSession,
+  endSession,
+  fetchCampaigns,
+  fetchTree,
+  pauseSession,
+} from "@/api";
 import { CommandPalette } from "@/components/CommandPalette";
 import { CampaignCreateDialog } from "@/components/CreateActions";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -101,7 +114,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { IconLogo } from "@/icons";
-import { campaignDescription, campaignLabel } from "@/lib/campaign";
+import { useT } from "@/i18n";
+import {
+  campaignDescription,
+  campaignLabel,
+  settingsCampaign,
+} from "@/lib/campaign";
+import { NON_CAMPAIGN_SEGMENTS } from "@/lib/routes";
 import { sessionElapsedLabel, sessionIsPaused } from "@/lib/session";
 import { navSection } from "@/lib/topbar-nav";
 import { useGenerateJob } from "@/lib/use-generate-job";
@@ -114,7 +133,49 @@ import {
   useSessionWrite,
 } from "@/lib/use-session";
 
+/**
+ * The campaign of a `matchPath` result, or undefined when the segment is a
+ * ROUTE and not a campaign id (`lib/routes.ts` — App.tsx and this heuristic
+ * read the same list). React Router itself ranks the static route higher and
+ * renders the right page; only this heuristic has to be told.
+ */
+function campaignOf(
+  match: { params: { campaign?: string } } | null,
+): string | undefined {
+  const id = match?.params.campaign;
+  if (id === undefined || NON_CAMPAIGN_SEGMENTS.has(id)) return undefined;
+  return id;
+}
+
+/**
+ * `/settings` KEEPS THE CAMPAIGN CHROME (PO feedback on PR #83).
+ *
+ * The gear is part of the global chrome, so pressing it must not undress the
+ * bar it sits on: the switcher, the nav trio, the search chip and the session
+ * chip stay exactly where they were, and the gear itself is simply marked as
+ * the current view. Which campaign that chrome is about is NOT a path segment
+ * here — `/settings` is campaign-independent on purpose — it is the campaign
+ * the DM came from, travelling in `?from=`. That answer has exactly one
+ * source, `settingsCampaign` (lib/campaign.ts), shared with the page below
+ * (routes/settings.tsx): the bar and the page can never name two different
+ * campaigns. Only the cold start — no usable `from` and no campaign at all —
+ * leaves the bar with the wordmark alone, because then there is nothing to
+ * dress it with.
+ */
+function useSettingsCampaign(isSettings: boolean): string {
+  const [search] = useSearchParams();
+  const from = search.get("from");
+  const { data } = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: fetchCampaigns,
+    enabled: isSettings,
+  });
+  if (!isSettings) return "";
+  return settingsCampaign(from, data ?? []) ?? "";
+}
+
 export function Topbar() {
+  const t = useT();
   const { pathname } = useLocation();
   const sceneMatch = matchPath("/:campaign/file/*", pathname);
   const liveMatch = matchPath("/:campaign/live", pathname);
@@ -122,19 +183,27 @@ export function Topbar() {
   const generateMatch = matchPath("/:campaign/generate", pathname);
   const listMatch = matchPath("/:campaign/list/*", pathname);
   const poolMatch = matchPath("/:campaign", pathname);
+  const isSettings = matchPath("/settings", pathname) !== null;
+  const settingsFrom = useSettingsCampaign(isSettings);
   const campaign =
-    sceneMatch?.params.campaign ??
-    liveMatch?.params.campaign ??
-    reviewMatch?.params.campaign ??
-    generateMatch?.params.campaign ??
-    listMatch?.params.campaign ??
-    poolMatch?.params.campaign ??
+    campaignOf(sceneMatch) ??
+    campaignOf(liveMatch) ??
+    campaignOf(reviewMatch) ??
+    campaignOf(generateMatch) ??
+    campaignOf(listMatch) ??
+    campaignOf(poolMatch) ??
+    (settingsFrom === "" ? undefined : settingsFrom) ??
     "";
   const filePath = sceneMatch?.params["*"] ?? "";
-  const isScene = sceneMatch !== null && filePath !== "" && campaign !== "";
-  const isLive = liveMatch !== null && campaign !== "";
-  const isReview = reviewMatch !== null && campaign !== "";
-  const isPool = poolMatch !== null && campaign !== "";
+  // These read their OWN match, not `campaign`: on `/settings` the campaign is
+  // resolved from `?from=` (see above), and `/:campaign` matches "/settings"
+  // itself — asking `campaign !== ""` would make the settings page the POOL of
+  // that campaign, marking "Kapitel" and hanging the pool's review and
+  // generator entries into the row.
+  const isScene = campaignOf(sceneMatch) !== undefined && filePath !== "";
+  const isLive = campaignOf(liveMatch) !== undefined;
+  const isReview = campaignOf(reviewMatch) !== undefined;
+  const isPool = campaignOf(poolMatch) !== undefined;
   const listKind = listMatch?.params["*"] ?? "";
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -162,7 +231,21 @@ export function Topbar() {
           is not a bare page. */}
       <header
         className={cn(
-          "flex h-14 flex-none items-center gap-3.5 border-b border-border px-6",
+          // Gap: 14px is the designed rhythm, and it holds from 2xl up —
+          // below that the SPACING gives way instead of any content (issue
+          // #69 CI finding; nothing is hidden or truncated for it). Below lg
+          // the row carries switcher, icon-only search, review count,
+          // generator and gear with the search chip already at its floor; in
+          // the lg–2xl band the nav trio, the full search chip, the long
+          // "Session starten" label and the "Nachbereitung · N offen" link
+          // are all on the row at once, and at exactly 1280 (the xl edge,
+          // where the trio, the full search and the chip's reserved width
+          // switch on together) that band was the tightest width there is:
+          // CI's wider Linux glyphs pushed it 2px over while macOS rendering
+          // still cleared it. 10px instead of 14px across eight gaps hands
+          // the row ~32px, which is real reserve rather than reserve to the
+          // pixel.
+          "flex h-14 flex-none items-center gap-2.5 border-b border-border px-6 2xl:gap-3.5",
           campaign !== "" && "max-md:hidden",
         )}
       >
@@ -171,7 +254,7 @@ export function Topbar() {
           className="-ml-1.5 flex flex-none items-center gap-[9px] rounded-md px-1.5 py-1 font-serif text-[17px] font-semibold tracking-[.01em] text-foreground hover:text-primary-hover"
         >
           <IconLogo size={19} className="text-primary" />
-          Grimoire
+          {t("topbar.brand")}
         </Link>
 
         {/* ONE campaign context for every campaign-scoped view: the switcher
@@ -200,7 +283,7 @@ export function Topbar() {
             // Deliberately NOT "Nachschlagen": that is the mobile start
             // surface's nav, and on the pool both live in the DOM at once
             // (responsive swap) — two navs with one name is a worse tree.
-            aria-label="Kapitel, NPCs und Orte"
+            aria-label={t("topbar.nav.aria")}
             className="flex flex-none items-center gap-1 border-l border-border pl-3 text-[13px] max-lg:hidden"
           >
             {/* The section of the current view carries aria-current and the
@@ -210,17 +293,17 @@ export function Topbar() {
                 section and mark nothing. */}
             <TopbarNavLink
               to={`/${campaign}`}
-              label="Kapitel"
+              label={t("topbar.nav.chapters")}
               active={section === "chapters"}
             />
             <TopbarNavLink
               to={`/${campaign}/list/npcs`}
-              label="NPCs"
+              label={t("topbar.nav.npcs")}
               active={section === "npcs"}
             />
             <TopbarNavLink
               to={`/${campaign}/list/locations`}
-              label="Orte"
+              label={t("topbar.nav.locations")}
               active={section === "locations"}
             />
           </nav>
@@ -237,19 +320,42 @@ export function Topbar() {
               variant="outline"
               onClick={() => setSearchOpen(true)}
               // THE elastic element of the topbar (issue #50): it wants
-              // 200px, gives way down to ~5rem at medium widths and never
-              // lets the row overflow. Its label truncates; the ⌘K hint and
-              // the icon stay, so the chip is still recognizable at its
-              // narrowest.
-              className="hidden h-auto min-w-[5rem] shrink basis-[200px] gap-2 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-card hover:text-soft sm:flex"
+              // 200px, gives way down to 3rem at medium widths and never
+              // lets the row overflow — its label truncates on the way.
+              // Below XL it goes ICON-ONLY (issue #69 CI finding): 1024px is
+              // where the nav trio, the full search and the chip's reserved
+              // width used to switch on ALL AT ONCE, and the row cleared that
+              // step by single digits — on CI's wider font metrics it did not
+              // clear it at all. So the elastic element shrinks one
+              // breakpoint EARLIER and the band from lg to xl, which carries
+              // switcher, nav trio, search, review link, generator and gear
+              // together, has room to spare instead of room to the pixel.
+              // The accessible name stays, so the control is unchanged for a
+              // screen reader.
+              className="hidden h-auto min-w-[3rem] shrink basis-[200px] gap-2 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-card hover:text-soft max-xl:min-w-0 max-xl:basis-auto max-xl:px-2.5 sm:flex"
             >
-              <Search aria-hidden size={15} className="flex-none text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-left">Suchen …</span>
-              <span className="flex-none rounded-[4px] border border-input px-[5px] py-px font-mono text-[11px] text-muted-foreground">
+              <Search
+                aria-hidden
+                size={15}
+                className="flex-none text-muted-foreground"
+              />
+              <span className="min-w-0 flex-1 truncate text-left max-xl:sr-only">
+                {t("topbar.search")}
+              </span>
+              {/* The ⌘K HINT, not the shortcut: it steps aside with the
+                  label, below xl, where the row is tight enough that the
+                  settings gear of issue #69 would otherwise push it over
+                  (issue #50). The shortcut itself keeps working at every
+                  width. */}
+              <span className="flex-none rounded-[4px] border border-input px-[5px] py-px font-mono text-[11px] text-muted-foreground max-xl:hidden">
                 ⌘K
               </span>
             </Button>
-            <CommandPalette campaign={campaign} open={searchOpen} onOpenChange={setSearchOpen} />
+            <CommandPalette
+              campaign={campaign}
+              open={searchOpen}
+              onOpenChange={setSearchOpen}
+            />
           </>
         )}
 
@@ -264,6 +370,13 @@ export function Topbar() {
             brass session button per the prototype. Carries the run indicator
             of issue #19. */}
         {isPool && <GeneratorLink campaign={campaign} />}
+
+        {/* Instance settings (issue #69, PO feedback on PR #83) — ONE gear,
+            icon-only, following the generator entry's icon pattern. Icon-only
+            at EVERY width on purpose: the topbar overflowed once (issue #50)
+            and this is the least urgent thing on it, so it must not be able to
+            grow the row. Its accessible name comes from aria-label. */}
+        <SettingsLink campaign={campaign} active={isSettings} />
 
         {/* THE session control: ONE chip in ONE slot for EVERY state (PO
             feedback on issue #40) — start offer, running session, unknown
@@ -313,12 +426,14 @@ function useElapsedLabel(session: FileResponse): string | undefined {
  * #40): same slot, same height, same radius, same paddings, same font size.
  * Only the colours below and the content inside change, so the switch from
  * "Session starten" to the running clock never makes the topbar jump. From
- * lg up a minimum width holds the states at a comparable size; below that the
- * row is too tight to reserve width (issue #50), and the clock's tabular
- * numbers alone keep a second's tick from re-flowing anything.
+ * xl up a minimum width holds the states at a comparable size; below that the
+ * row is too tight to reserve width (issue #50 — the reservation used to start
+ * at lg, which is exactly where the nav trio appears and the row had no slack
+ * left on CI's wider font metrics), and the clock's tabular numbers alone keep
+ * a second's tick from re-flowing anything.
  */
 const SESSION_CHIP_BASE =
-  "inline-flex min-h-8 flex-none items-center justify-center gap-2 rounded-full border px-3 py-[3px] text-[13px] lg:min-w-[8.5rem] focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none";
+  "inline-flex min-h-8 flex-none items-center justify-center gap-2 rounded-full border px-3 py-[3px] text-[13px] xl:min-w-[8.5rem] focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none";
 
 /** Tone per state — the colour IS the state, never the only information. */
 const SESSION_CHIP_TONE = {
@@ -417,23 +532,26 @@ function SessionChip({
   state: SessionChipState;
   mode: "link" | "menu";
 }) {
+  const t = useT();
   if (state === "hidden") return null;
   if (state === "error") {
     return (
       <span
         role="status"
-        aria-label="Session-Status unbekannt — Server prüfen"
+        aria-label={t("session.status.unknown.aria")}
         data-session-chip="error"
         className={cn(SESSION_CHIP_BASE, SESSION_CHIP_TONE.error)}
       >
-        Status unbekannt
+        {t("session.status.unknown")}
       </span>
     );
   }
   if (state === "start" || session === undefined) {
     return <SessionStartChip campaign={campaign} />;
   }
-  return <SessionRunningChip campaign={campaign} session={session} mode={mode} />;
+  return (
+    <SessionRunningChip campaign={campaign} session={session} mode={mode} />
+  );
 }
 
 /** The running states of the chip — link off /live, menu on it. */
@@ -446,23 +564,33 @@ function SessionRunningChip({
   session: FileResponse;
   mode: "link" | "menu";
 }) {
+  const t = useT();
   const elapsed = useElapsedLabel(session);
   // The state is part of the accessible name — the dimmed colour alone is not
   // information (quality floor, AK8).
   const paused = sessionIsPaused(session);
-  const state = paused ? "Session pausiert" : "Session läuft";
-  const label = elapsed === undefined ? state : `${state}, ${elapsed}`;
+  const state = t(paused ? "session.state.paused" : "session.state.running");
+  const label =
+    elapsed === undefined
+      ? state
+      : t("session.state.withElapsed", { state, elapsed });
 
   if (mode === "link") {
     return (
       <Link
         to={`/${campaign}/live`}
-        aria-label={`${label} — zur laufenden Session`}
+        aria-label={t("session.chip.link.aria", { label })}
         data-session-chip={paused ? "paused" : "running"}
-        className={cn(SESSION_CHIP_BASE, paused ? SESSION_CHIP_TONE.paused : SESSION_CHIP_TONE.running)}
+        className={cn(
+          SESSION_CHIP_BASE,
+          paused ? SESSION_CHIP_TONE.paused : SESSION_CHIP_TONE.running,
+        )}
       >
         <SessionDot paused={paused} />
-        <span className="font-mono tabular-nums">{elapsed ?? (paused ? "pausiert" : "läuft")}</span>
+        <span className="font-mono tabular-nums">
+          {elapsed ??
+            t(paused ? "session.short.paused" : "session.short.running")}
+        </span>
       </Link>
     );
   }
@@ -488,10 +616,14 @@ function SessionRunningChip({
  * navigates there.
  */
 function SessionStartChip({ campaign }: { campaign: string }) {
+  const t = useT();
   const navigate = useNavigate();
   const toLive = () => void navigate(`/${campaign}/live`);
-  const { enter, entering, conflict, failed } = useSessionStartFlow(campaign, toLive);
-  const label = "Session starten";
+  const { enter, entering, conflict, failed } = useSessionStartFlow(
+    campaign,
+    toLive,
+  );
+  const label = t("session.start");
   return (
     <button
       type="button"
@@ -504,9 +636,9 @@ function SessionStartChip({ campaign }: { campaign: string }) {
       }}
       title={
         failed
-          ? "Session nicht gestartet — Server prüfen"
+          ? t("session.start.failed")
           : conflict === "session_running"
-            ? "Eine ältere Session läuft noch — im Live-Modus beenden"
+            ? t("session.start.olderRunning")
             : undefined
       }
       className={cn(
@@ -538,6 +670,7 @@ function SessionMenuChip({
   elapsed: string | undefined;
   paused: boolean;
 }) {
+  const t = useT();
   const navigate = useNavigate();
   const [discardOpen, setDiscardOpen] = useState(false);
   // ONE entry, two directions (issue #40 AK8): the pause endpoints open and
@@ -559,7 +692,7 @@ function SessionMenuChip({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          aria-label={`${label} — Session-Menü`}
+          aria-label={t("session.chip.menu.aria", { label })}
           disabled={busy}
           data-session-chip={paused ? "paused" : "running"}
           className={cn(
@@ -569,22 +702,35 @@ function SessionMenuChip({
         >
           <SessionDot paused={paused} />
           <span className="font-mono tabular-nums">
-            {elapsed ?? (paused ? "pausiert" : "läuft")}
+            {elapsed ??
+              t(paused ? "session.short.paused" : "session.short.running")}
           </span>
           <ChevronDown aria-hidden size={13} className="flex-none opacity-70" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-[210px] text-[13px]">
           <DropdownMenuItem onSelect={() => pause.mutate()}>
             {paused ? (
-              <Play aria-hidden size={14} className="flex-none text-muted-foreground" />
+              <Play
+                aria-hidden
+                size={14}
+                className="flex-none text-muted-foreground"
+              />
             ) : (
-              <Pause aria-hidden size={14} className="flex-none text-muted-foreground" />
+              <Pause
+                aria-hidden
+                size={14}
+                className="flex-none text-muted-foreground"
+              />
             )}
-            {paused ? "Weiter" : "Pause"}
+            {t(paused ? "session.menu.continue" : "session.menu.pause")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => end.mutate()}>
-            <Square aria-hidden size={14} className="flex-none text-muted-foreground" />
-            Session beenden
+            <Square
+              aria-hidden
+              size={14}
+              className="flex-none text-muted-foreground"
+            />
+            {t("session.menu.end")}
           </DropdownMenuItem>
           {/* Only while the session is EMPTY (issue #40 AK7) — the mis-click's
               undo, gone the moment the evening has content. */}
@@ -596,7 +742,7 @@ function SessionMenuChip({
                 onSelect={() => setDiscardOpen(true)}
               >
                 <Trash2 aria-hidden size={14} className="flex-none" />
-                Session verwerfen
+                {t("session.menu.discard")}
               </DropdownMenuItem>
             </>
           )}
@@ -604,10 +750,14 @@ function SessionMenuChip({
       </DropdownMenu>
       {(pause.isError || end.isError) && (
         <span className="flex-none text-[12.5px] text-destructive">
-          Session nicht geändert — Server prüfen.
+          {t("session.write.failed")}
         </span>
       )}
-      <DiscardSessionDialog campaign={campaign} open={discardOpen} onOpenChange={setDiscardOpen} />
+      <DiscardSessionDialog
+        campaign={campaign}
+        open={discardOpen}
+        onOpenChange={setDiscardOpen}
+      />
     </>
   );
 }
@@ -619,11 +769,25 @@ function SessionMenuChip({
  * action mobile needs. Mobile is "nachschlagen und einwerfen", and this is
  * exactly the way back out of a lookup.
  */
-function MobileSessionRow({ campaign, session }: { campaign: string; session: FileResponse }) {
+function MobileSessionRow({
+  campaign,
+  session,
+}: {
+  campaign: string;
+  session: FileResponse;
+}) {
+  const t = useT();
   return (
     <div className="flex min-h-11 flex-none items-center gap-2.5 border-b border-border bg-panel-deep px-4 md:hidden">
-      <SessionChip campaign={campaign} session={session} state="running" mode="link" />
-      <span className="ml-auto text-[13px] text-body-secondary">Zur Session</span>
+      <SessionChip
+        campaign={campaign}
+        session={session}
+        state="running"
+        mode="link"
+      />
+      <span className="ml-auto text-[13px] text-body-secondary">
+        {t("topbar.session.back")}
+      </span>
     </div>
   );
 }
@@ -681,6 +845,7 @@ function DiscardSessionDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useT();
   const navigate = useNavigate();
   const discard = useSessionDiscard(campaign, () => {
     onOpenChange(false);
@@ -690,11 +855,13 @@ function DiscardSessionDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogTitle>Leere Session verwerfen?</DialogTitle>
-        <DialogDescription>Die Session wird gelöscht.</DialogDescription>
+        <DialogTitle>{t("session.discard.title")}</DialogTitle>
+        <DialogDescription>
+          {t("session.discard.description")}
+        </DialogDescription>
         {discard.isError && (
           <p className="mt-3 text-[12.5px] text-destructive">
-            Session nicht verworfen — Server prüfen und neu laden.
+            {t("session.discard.failed")}
           </p>
         )}
         <div className="mt-4 flex items-center justify-end gap-2">
@@ -704,7 +871,7 @@ function DiscardSessionDialog({
               variant="outline"
               className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
             >
-              Abbrechen
+              {t("common.cancel")}
             </Button>
           </DialogClose>
           <Button
@@ -713,7 +880,7 @@ function DiscardSessionDialog({
             onClick={() => discard.mutate()}
             className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
           >
-            Verwerfen
+            {t("common.discard")}
           </Button>
         </div>
       </DialogContent>
@@ -728,12 +895,13 @@ function DiscardSessionDialog({
  * polling only while a job is actually running.
  */
 function GeneratorLink({ campaign }: { campaign: string }) {
+  const t = useT();
   const { data } = useGenerateJob(campaign);
   const running = data?.status === "running";
   return (
     <Link
       to={`/${campaign}/generate`}
-      title={running ? "Generierung läuft" : undefined}
+      title={running ? t("topbar.generator.running") : undefined}
       className={cn(
         buttonVariants({ variant: "outline" }),
         "h-auto flex-none gap-[7px] border-input bg-card px-3.5 py-[7px] text-[13px] font-normal text-soft hover:border-border-hover hover:bg-card hover:text-foreground [&_svg]:size-[15px]",
@@ -742,7 +910,7 @@ function GeneratorLink({ campaign }: { campaign: string }) {
       <Sparkles aria-hidden />
       {/* Below xl the row is tight (issue #50): the label steps aside and the
           icon carries the entry — the accessible name stays either way. */}
-      <span className="max-xl:sr-only">Generator</span>
+      <span className="max-xl:sr-only">{t("topbar.generator")}</span>
       {running && (
         <>
           {/* Pulses only where motion is welcome; otherwise a static dot
@@ -751,9 +919,57 @@ function GeneratorLink({ campaign }: { campaign: string }) {
             aria-hidden
             className="size-1.5 flex-none rounded-full bg-primary motion-safe:animate-pulse"
           />
-          <span className="sr-only">Generierung läuft</span>
+          <span className="sr-only">{t("topbar.generator.running")}</span>
         </>
       )}
+    </Link>
+  );
+}
+
+/**
+ * The gear: `/settings` (issue #69). Icon-only and always present — the
+ * language lives behind it, and on a fresh instance (no campaign, no
+ * switcher) it is the only settings entry there is. Same geometry as the
+ * generator entry minus its label, so the row's width does not depend on it
+ * (issue #50).
+ *
+ * WHICH CAMPAIGN the page shows its campaign half for travels ALONG, in
+ * `?from=` (issue #69, PO feedback on PR #83): the campaign the DM was looking
+ * at when they reached for the gear. `/settings` itself stays campaign-
+ * independent — it has to work on a fresh instance — and without a campaign in
+ * the URL the link carries nothing, so the page falls back to the same
+ * heuristic "/" uses. A search param rather than `location.state`, so a
+ * reload, a bookmark and the back button all keep the answer.
+ */
+function SettingsLink({
+  campaign,
+  active,
+}: {
+  campaign: string;
+  active: boolean;
+}) {
+  const t = useT();
+  return (
+    <Link
+      to={
+        campaign === ""
+          ? "/settings"
+          : `/settings?from=${encodeURIComponent(campaign)}`
+      }
+      aria-label={t("settings.title")}
+      title={t("settings.title")}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        buttonVariants({ variant: "outline" }),
+        "h-auto w-auto flex-none border-input bg-card px-2.5 py-[7px] text-soft hover:border-border-hover hover:bg-card hover:text-foreground [&_svg]:size-[15px]",
+        // On `/settings` the gear IS the current view, marked the way the nav
+        // trio marks its section: a full step of contrast, no geometry change
+        // (padding and border width stay identical, so nothing next to it
+        // moves — issue #50, and the chrome must not shift at all).
+        active && "border-border-hover text-foreground",
+      )}
+    >
+      <Settings aria-hidden />
     </Link>
   );
 }
@@ -761,23 +977,52 @@ function GeneratorLink({ campaign }: { campaign: string }) {
 /** "n von m gesichtet" on the review view (prototype's isReview topbar). */
 function ReviewProgress({ campaign }: { campaign: string }) {
   const review = useReviewEntries(campaign);
-  if (review.isPending || review.noSession || review.isError || review.total === 0) return null;
-  return <div className="flex-none text-[13px] text-soft">{review.progressLabel}</div>;
+  if (
+    review.isPending ||
+    review.noSession ||
+    review.isError ||
+    review.total === 0
+  )
+    return null;
+  return (
+    <div className="flex-none text-[13px] text-soft">
+      {review.progressLabel}
+    </div>
+  );
 }
 
 /** Pool affordance into the review: only when the harvested session (the
  *  server's last started one) still has entries — nothing to see otherwise. */
 function PoolReviewLink({ campaign }: { campaign: string }) {
+  const t = useT();
   const review = useReviewEntries(campaign);
-  if (review.isPending || review.noSession || review.isError || review.pendingCount === 0) {
+  if (
+    review.isPending ||
+    review.noSession ||
+    review.isError ||
+    review.pendingCount === 0
+  ) {
     return null;
   }
+  // Below xl the row carries switcher, search (already at its floor),
+  // generator, gear and the session chip with nothing elastic left: at 768
+  // and at 1024 the full label pushed the chip OVER the right padding and off
+  // the viewport (issue #69 CI finding — the old guard measured
+  // `scrollWidth - clientWidth`, which does not see an item overflowing INTO
+  // the padding, so it reported a clean row). The label steps down to the
+  // count, which is the news; the accessible name stays the full sentence at
+  // every width, so nothing changes for a screen reader.
+  const label = t("topbar.review.pending", { count: review.pendingCount });
   return (
     <Link
       to={`/${campaign}/review`}
+      aria-label={label}
       className="flex-none rounded-md px-1.5 py-1 text-[13px] text-body-secondary hover:text-foreground"
     >
-      Review · {review.pendingCount} offen
+      <span className="max-xl:hidden">{label}</span>
+      <span aria-hidden className="xl:hidden">
+        {t("topbar.review.pendingShort", { count: review.pendingCount })}
+      </span>
     </Link>
   );
 }
@@ -797,9 +1042,13 @@ function PoolReviewLink({ campaign }: { campaign: string }) {
  * question this menu has to answer while switching between them.
  */
 function CampaignSwitcher({ campaign }: { campaign: string }) {
+  const t = useT();
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
-  const { data } = useQuery({ queryKey: ["campaigns"], queryFn: fetchCampaigns });
+  const { data } = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: fetchCampaigns,
+  });
   const current = campaignLabel(
     (data ?? []).find((c) => c.id === campaign),
     campaign,
@@ -821,19 +1070,42 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
         )}
       >
         {/* Truncates with an ellipsis rather than pushing the row over
-            (issue #50) — and harder below xl, where the row also carries the
-            "Kapitel · NPCs · Orte" trio. The full name is one click away in
-            the menu below. */}
-        <span className="min-w-0 max-w-[9.5rem] truncate xl:max-w-[280px]">
-          Kampagne: {current}
+            (issue #50), and one step harder per tightening of the row: below
+            xl it also carries the "Kapitel · NPCs · Orte" trio, and below lg
+            the search chip has already reached its floor, so the name is the
+            last thing that can still give way there. The full name is one
+            click away in the menu below.
+            The xl cap is 160px, not 280 (issue #69 CI finding): at exactly
+            1280 the FULLEST row — switcher, nav trio, search, the review
+            link, generator, gear and the "Session starten" chip with its
+            reserved 8.5rem — had only the search chip's ~50px of shrink left,
+            and CI's wider Linux font metrics eat more than that. A static cap
+            keeps the chrome identical on every route (that is why the trigger
+            is flex-none) while handing the row 120px more slack; from 2xl the
+            row is wide enough for the full 280 again. The two caps below it
+            step down by the same logic (7rem / 8.5rem).
+            Note that the SEARCH chip's `basis` is deliberately NOT part of
+            this: it is the elastic element, so a smaller basis only moves
+            width from the chip to the free space in the middle of the row and
+            changes what the row can absorb by exactly nothing. Reserve comes
+            from the flex-none parts — these caps and the gaps. */}
+        <span className="min-w-0 max-w-[7rem] truncate lg:max-w-[8.5rem] xl:max-w-[160px] 2xl:max-w-[280px]">
+          {t("campaign.switcher.current", { name: current })}
         </span>
-        <ChevronDown aria-hidden size={14} className="flex-none text-muted-foreground" />
+        <ChevronDown
+          aria-hidden
+          size={14}
+          className="flex-none text-muted-foreground"
+        />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-[290px]">
         {/* Name over description — the prototype's campaignRows (name + meta);
             the id never shows up, it only lives in the URL. */}
         {(data ?? []).map((c) => (
-          <DropdownMenuItem key={c.id} onSelect={() => void navigate(`/${c.id}`)}>
+          <DropdownMenuItem
+            key={c.id}
+            onSelect={() => void navigate(`/${c.id}`)}
+          >
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[13.5px] text-foreground">
                 {campaignLabel(c, c.id)}
@@ -845,13 +1117,17 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
               )}
             </span>
             {c.id === campaign && (
-              <Check aria-hidden size={13} className="flex-none text-success-text" />
+              <Check
+                aria-hidden
+                size={13}
+                className="flex-none text-success-text"
+              />
             )}
           </DropdownMenuItem>
         ))}
         {data !== undefined && data.length === 0 && (
           <p className="px-2.5 py-[9px] text-[13px] text-muted-foreground">
-            Noch keine Kampagnen gefunden.
+            {t("campaign.switcher.empty")}
           </p>
         )}
         <DropdownMenuSeparator />
@@ -861,11 +1137,17 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
           onSelect={() => setCreateOpen(true)}
           className="gap-2 text-[13px] text-body-secondary"
         >
-          <Plus aria-hidden size={13} className="flex-none text-muted-foreground" />
-          Kampagne anlegen
+          <Plus
+            aria-hidden
+            size={13}
+            className="flex-none text-muted-foreground"
+          />
+          {t("create.campaign.title")}
         </DropdownMenuItem>
       </DropdownMenuContent>
-      {createOpen && <CampaignCreateDialog onClose={() => setCreateOpen(false)} />}
+      {createOpen && (
+        <CampaignCreateDialog onClose={() => setCreateOpen(false)} />
+      )}
     </DropdownMenu>
   );
 }

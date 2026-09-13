@@ -12,13 +12,15 @@
 
 import { Link } from "react-router";
 
+import { useT } from "@/i18n";
 import type { ContextCrumb } from "@/lib/page-context";
 
 export function PageContext({ crumbs }: { crumbs: ContextCrumb[] }) {
+  const t = useT();
   if (crumbs.length === 0) return null;
   return (
     <nav
-      aria-label="Kontext"
+      aria-label={t("context.aria")}
       className="mb-2.5 hidden flex-wrap items-center gap-1.5 text-[12.5px] text-muted-foreground md:flex"
     >
       {crumbs.map((crumb, index) => (

@@ -21,6 +21,7 @@ import { PenLine } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useT } from "@/i18n";
 import { Markdown } from "@/markdown/Markdown";
 
 /**
@@ -37,6 +38,7 @@ export function MarkdownEditorToggle({
   onToggleEditing: () => void;
   controlsId: string;
 }) {
+  const t = useT();
   return (
     <Button
       type="button"
@@ -47,7 +49,7 @@ export function MarkdownEditorToggle({
       className="h-auto flex-none gap-1.5 border-input bg-transparent px-2.5 py-[5px] text-[12px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground [&_svg]:size-[13px]"
     >
       <PenLine aria-hidden />
-      {editing ? "Vorschau" : "Bearbeiten"}
+      {editing ? t("editor.preview") : t("common.edit")}
     </Button>
   );
 }

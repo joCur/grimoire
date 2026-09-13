@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { CampaignSummary, CampaignTree, SceneSummary } from "@grimoire/shared/types";
 
-import { locationName, pickLastCampaign, sceneTitle } from "./campaign";
+import { locationName, pickLastCampaign, sceneTitle, settingsCampaign } from "./campaign";
 
 /**
  * A campaign whose newest session STARTED at `lastSessionStarted`. The
@@ -140,5 +140,27 @@ describe("sceneTitle", () => {
 
   test("no scene id at all → nothing to label", () => {
     expect(sceneTitle(tree, undefined)).toBeUndefined();
+  });
+});
+
+describe("settingsCampaign", () => {
+  const list = [c("alpha"), c("zeta", "2026-06-01T18:00:00")];
+
+  test("the campaign the gear came FROM wins over the heuristic", () => {
+    // "zeta" is what pickLastCampaign would guess — the DM was in "alpha".
+    expect(settingsCampaign("alpha", list)).toBe("alpha");
+  });
+
+  test("no origin falls back to the heuristic \"/\" uses", () => {
+    expect(settingsCampaign(null, list)).toBe("zeta");
+    expect(settingsCampaign("", list)).toBe("zeta");
+  });
+
+  test("an origin that is no campaign is ignored — never a row into nothing", () => {
+    expect(settingsCampaign("weg-umbenannt", list)).toBe("zeta");
+  });
+
+  test("no campaign at all stays undefined — a fresh instance has no back row", () => {
+    expect(settingsCampaign("alpha", [])).toBeUndefined();
   });
 });

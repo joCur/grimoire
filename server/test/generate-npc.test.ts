@@ -481,14 +481,20 @@ describe("POST /api/:campaign/generate/npc", () => {
     const res = await generateNpc(npcBody);
     expect(res.status).toBe(422);
     const body = (await res.json()) as {
+      code?: string;
+      maxTokens?: number;
       error: string;
       rawReply: string;
       usage: GenerateUsage;
       validationErrors?: string[];
     };
+    // Language-free since issue #69: the stable code plus the cap as a
+    // PARAMETER, and the English fallback text next to them.
+    expect(body.code).toBe("llm_truncated");
+    expect(body.maxTokens).toBe(8000);
     expect(body.error).toBe(
-      "Antwort wurde vom Modell abgeschnitten — LLM_MAX_TOKENS erhöhen " +
-        "(aktuell: 8000) oder Quelltext verkleinern.",
+      "the model's reply was cut off — raise LLM_MAX_TOKENS " +
+        "(currently: 8000) or shorten the source text.",
     );
     expect(body.rawReply).toBe(cut);
     expect(body.usage).toEqual({ inputTokens: 9000, outputTokens: 8000, attempts: 1 });

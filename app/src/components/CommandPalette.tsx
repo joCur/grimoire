@@ -1,6 +1,6 @@
 // The ⌘K search palette (issue #7), per the design reference: dimmed
 // backdrop, 560px panel at 14vh, search input with esc chip, result rows
-// (kind icon · title · German kind label). Built on the Radix Dialog
+// (kind icon · title · kind label). Built on the Radix Dialog
 // primitives (focus trap, Esc, outside-click, aria-modal) with a manual
 // combobox/listbox pattern for the results — cmdk was skipped because the
 // server does all filtering/ranking; client-side re-filtering would fight
@@ -13,6 +13,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { fetchSearch, fetchTree } from "@/api";
+import { useT } from "@/i18n";
 import { contingencyPaths, kindIcon, kindLabel, resultHref } from "@/lib/search";
 import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
@@ -35,6 +36,7 @@ export function CommandPalette({
   onOpenChange,
   hotkey = true,
 }: CommandPaletteProps) {
+  const t = useT();
   const navigate = useNavigate();
   const listboxId = useId();
 
@@ -118,7 +120,7 @@ export function CommandPalette({
           // 560px cap, so the desktop panel is unchanged.
           className="fixed top-[14vh] left-1/2 z-50 w-[calc(100vw-32px)] max-w-[560px] -translate-x-1/2 overflow-hidden rounded-xl border border-input bg-card shadow-[0_24px_60px_rgba(0,0,0,.5)]"
         >
-          <DialogPrimitive.Title className="sr-only">Suchen</DialogPrimitive.Title>
+          <DialogPrimitive.Title className="sr-only">{t("palette.title")}</DialogPrimitive.Title>
           <div className="flex items-center gap-2.5 border-b border-border px-4 py-3.5">
             <Search aria-hidden size={16} className="flex-none text-muted-foreground" />
             <input
@@ -129,7 +131,7 @@ export function CommandPalette({
                 setActive(0);
               }}
               onKeyDown={onInputKeyDown}
-              placeholder="Szenen, NPCs, Orte durchsuchen …"
+              placeholder={t("palette.placeholder")}
               role="combobox"
               aria-expanded={results.length > 0}
               aria-controls={listboxId}
@@ -150,12 +152,12 @@ export function CommandPalette({
           <div
             role="listbox"
             id={listboxId}
-            aria-label="Suchergebnisse"
+            aria-label={t("palette.results.aria")}
             className="max-h-[320px] overflow-y-auto p-2"
           >
             {showNoResults && (
               <p className="p-5 text-center text-[13.5px] text-muted-foreground">
-                Nichts gefunden.
+                {t("palette.empty")}
               </p>
             )}
             {results.map((result, index) => {
@@ -178,7 +180,7 @@ export function CommandPalette({
                     {result.title}
                   </span>
                   <span className="flex-none text-xs text-muted-foreground">
-                    {kindLabel(result.kind)}
+                    {kindLabel(result.kind, t)}
                   </span>
                 </div>
               );

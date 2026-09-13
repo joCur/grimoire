@@ -25,11 +25,13 @@
 
 import type { CalloutKind } from "@grimoire/shared/types";
 
+import type { Translate } from "@/i18n";
+
 // The format's own vocabulary and predicates — shared with the renderer so the
 // composer can never model a document differently than the reading view shows
 // it (app/src/markdown/grammar.ts).
 import {
-  CALLOUT_LABELS,
+  CALLOUT_LABEL_KEYS,
   CALLOUT_MARKER,
   endsIfSection,
   ifSectionCondition,
@@ -813,26 +815,28 @@ export function moveBlock(blocks: SceneBlock[], from: number, to: number): Scene
 
 // --- labels ------------------------------------------------------------------
 
-// German UI labels. The six callout names are the format's own (grammar.ts,
-// CALLOUT_LABELS — the words the reading view shows); only the composer's four
-// structural names are added here.
+// The UI labels of the block types. The six callout names are the format's own
+// (grammar.ts, CALLOUT_LABEL_KEYS — the words the reading view shows); only the
+// composer's four structural names are added here. The words live in the
+// catalog and the translator is PASSED IN (issue #69): this module must not
+// decide which language the UI is in (CLAUDE.md/i18n/index.ts).
 
 /** Label of one callout kind — for a "new block" picker, where there is no block yet. */
-export function calloutLabel(kind: CalloutKind): string {
-  return CALLOUT_LABELS[kind];
+export function calloutLabel(kind: CalloutKind, t: Translate): string {
+  return t(CALLOUT_LABEL_KEYS[kind]);
 }
 
-export function blockLabel(block: SceneBlock): string {
+export function blockLabel(block: SceneBlock, t: Translate): string {
   switch (block.type) {
     case "callout":
-      return CALLOUT_LABELS[block.kind];
+      return t(CALLOUT_LABEL_KEYS[block.kind]);
     case "ifSection":
-      return "Falls-Abschnitt";
+      return t("composer.blockType.ifSection");
     case "heading":
-      return "Überschrift";
+      return t("composer.blockType.heading");
     case "text":
-      return "Text";
+      return t("composer.blockType.text");
     default:
-      return "Roh-Block";
+      return t("composer.blockType.raw");
   }
 }

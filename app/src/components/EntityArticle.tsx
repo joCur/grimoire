@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 
 import { entityHeaderKind, npcStatusLabel } from "@/lib/entity";
 import { fmQuickstats, fmString } from "@/lib/properties";
+import { useT } from "@/i18n";
 import { sessionDateLabel } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/markdown/Markdown";
@@ -66,6 +67,7 @@ export function EntityArticle({
    */
   body?: ReactNode;
 }) {
+  const t = useT();
   const header = entityHeaderKind(file.kind);
   const fm = file.properties;
   // npc/location files carry `name`, chapter/campaign files `title` — either
@@ -73,7 +75,7 @@ export function EntityArticle({
   // A SESSION has no `title` and its id is opaque noise since issue #58, so
   // the heading is derived from `started` ("Session vom 15.01.2026") instead
   // of falling through to the path.
-  const fallback = file.kind === "session" ? sessionDateLabel(fm) : file.path;
+  const fallback = file.kind === "session" ? sessionDateLabel(fm, t) : file.path;
   const name = fmString(fm.name) ?? fmString(fm.title) ?? fallback;
   const title = fmString(fm.title) ?? fmString(fm.name) ?? fallback;
 
@@ -103,6 +105,7 @@ function NpcHeader({
   name: string;
   actions?: ReactNode;
 }) {
+  const t = useT();
   const fm = file.properties;
   const role = fmString(fm.role);
   const status = fmString(fm.status);
@@ -117,7 +120,7 @@ function NpcHeader({
         <Title>{name}</Title>
         {status !== undefined && (
           <span className="flex-none rounded-full border border-input px-[9px] py-px text-[11.5px] text-dim">
-            {npcStatusLabel(status)}
+            {npcStatusLabel(status, t)}
           </span>
         )}
         {actions !== undefined && (
@@ -146,7 +149,9 @@ function NpcHeader({
         </div>
       )}
       {statblock !== undefined && (
-        <p className="mt-3 text-[12.5px] text-muted-foreground">Statblock: {statblock}</p>
+        <p className="mt-3 text-[12.5px] text-muted-foreground">
+          {t("entity.npc.statblock", { value: statblock })}
+        </p>
       )}
     </header>
   );
@@ -161,6 +166,7 @@ function LocationHeader({
   name: string;
   actions?: ReactNode;
 }) {
+  const t = useT();
   const page = fmString(file.properties["roll20-page"]);
   return (
     <header className="mb-7 border-b border-border pb-5">
@@ -169,7 +175,9 @@ function LocationHeader({
         <ActionGroup>{actions}</ActionGroup>
       </div>
       {page !== undefined && (
-        <p className="mt-2 text-[12.5px] text-muted-foreground">Roll20-Seite: {page}</p>
+        <p className="mt-2 text-[12.5px] text-muted-foreground">
+          {t("entity.location.roll20", { value: page })}
+        </p>
       )}
     </header>
   );

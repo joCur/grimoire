@@ -35,6 +35,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useI18n } from "@/i18n";
 import {
   canSubmitNewId,
   changedCountLabel,
@@ -63,6 +64,7 @@ export function RenameDialog({
   target: RenameTarget;
   onClose: () => void;
 }) {
+  const { t, tNode } = useI18n();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [newId, setNewId] = useState("");
@@ -70,14 +72,14 @@ export function RenameDialog({
   const [message, setMessage] = useState<string>();
 
   const trimmed = newId.trim();
-  const ruleError = newIdError(newId, target.oldId);
+  const ruleError = newIdError(newId, target.oldId, t);
   const canSubmit = canSubmitNewId(newId, target.oldId);
 
   const preview = useMutation({
     mutationFn: (id: string) =>
       renameEntity(campaign, { kind: target.kind, oldId: target.oldId, newId: id, dryRun: true }),
     onSuccess: (result) => setPlan(result),
-    onError: (error) => setMessage(renameErrorMessage(error)),
+    onError: (error) => setMessage(renameErrorMessage(error, t)),
   });
 
   const commit = useMutation({
@@ -98,7 +100,7 @@ export function RenameDialog({
         void queryClient.invalidateQueries({ queryKey: ["file", campaign, changed] });
       }
     },
-    onError: (error) => setMessage(renameErrorMessage(error)),
+    onError: (error) => setMessage(renameErrorMessage(error, t)),
   });
 
   const pending = preview.isPending || commit.isPending;
@@ -111,11 +113,10 @@ export function RenameDialog({
       }}
     >
       <DialogContent aria-describedby={undefined} className="max-w-[460px]">
-        <DialogTitle>{renameKindLabel(target.kind)}: id ändern</DialogTitle>
-        <DialogDescription>
-          Die neue id zieht alle Referenzen mit: Eigenschaften, Session-Log und
-          Beziehungslisten. Erwähnungen im Fließtext bleiben unverändert.
-        </DialogDescription>
+        <DialogTitle>
+          {t("rename.title", { kind: renameKindLabel(target.kind, t) })}
+        </DialogTitle>
+        <DialogDescription>{t("rename.description")}</DialogDescription>
 
         <form
           onSubmit={(e) => {
@@ -129,7 +130,16 @@ export function RenameDialog({
         >
           <label className="flex flex-col gap-1.5">
             <span className="text-[12px] text-body-secondary">
-              neue id (aktuell <span className="font-mono">{target.oldId}</span>)
+              {/* The current id sits INSIDE the sentence and is monospaced, so
+                  the message is formatted to PARTS rather than pasted together
+                  from two half sentences (i18n/format.ts). */}
+              {tNode("rename.newId.label", {
+                oldId: (
+                  <span key="old" className="font-mono">
+                    {target.oldId}
+                  </span>
+                ),
+              })}
             </span>
             <input
               // Radix focuses the first focusable element on open — this input.
@@ -161,7 +171,7 @@ export function RenameDialog({
                 variant="outline"
                 className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
               >
-                Abbrechen
+                {t("common.cancel")}
               </Button>
             </DialogClose>
             <Button
@@ -169,13 +179,15 @@ export function RenameDialog({
               disabled={!canSubmit || pending}
               className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
             >
-              {plan === undefined
-                ? preview.isPending
-                  ? "Prüfe …"
-                  : "Vorschau"
-                : commit.isPending
-                  ? "Benenne um …"
-                  : "Umbenennen"}
+              {t(
+                plan === undefined
+                  ? preview.isPending
+                    ? "rename.previewing"
+                    : "rename.preview"
+                  : commit.isPending
+                    ? "rename.committing"
+                    : "rename.commit",
+              )}
             </Button>
           </div>
         </form>
@@ -190,6 +202,7 @@ export function RenameDialog({
  * and every file it touches.
  */
 function RenamePlanPreview({ plan }: { plan: RenameResult }) {
+  const { t } = useI18n();
   return (
     <div className="rounded-md border border-input bg-panel-deep px-3 py-2.5">
       <p className="text-[12px] text-body-secondary">
@@ -199,11 +212,16 @@ function RenamePlanPreview({ plan }: { plan: RenameResult }) {
       </p>
       <p className="mt-2 text-[12px] text-body" data-testid="rename-usage">
         {plan.usage.total > 0 && (
-          <span className="font-semibold text-body">{usageTotalLabel(plan.usage.total)}: </span>
+          <span className="font-semibold text-body">
+            {usageTotalLabel(plan.usage.total, t)}
+            {": "}
+          </span>
         )}
-        <span className="text-body-secondary">{usageSummary(plan.usage)}</span>
+        <span className="text-body-secondary">{usageSummary(plan.usage, t)}</span>
       </p>
-      <p className="mt-2 text-[12px] font-semibold text-body">{changedCountLabel(plan.changed.length)}</p>
+      <p className="mt-2 text-[12px] font-semibold text-body">
+        {changedCountLabel(plan.changed.length, t)}
+      </p>
       <ul className="mt-1 max-h-[160px] overflow-y-auto">
         {plan.changed.map((file) => (
           <li key={file} className="font-mono text-[11.5px] leading-[1.7] break-all text-muted-foreground">

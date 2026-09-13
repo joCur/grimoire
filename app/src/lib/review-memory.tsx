@@ -1,6 +1,6 @@
 // Cosmetic memory of the review sitting (issue #10). The server stores only
 // WHETHER an entry was harvested (`reviewed` hash / `- [x]`), not WHICH
-// action it got — the specific done label ("Als Faden übernommen" …) and the
+// action it got — the specific done label ("Als Handlungsstrang übernommen" …) and the
 // "neu" chip on freshly adopted threads therefore live in the browser for
 // as long as the app is open. Nothing here is persisted (no localStorage —
 // the server is the truth); after a reload the neutral label is shown.

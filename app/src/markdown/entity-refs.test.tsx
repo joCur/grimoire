@@ -2,10 +2,13 @@
 // slug→entity index (kind priority!) and the two shapes of a reference —
 // a link in the reading views, a button in the live mode.
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { CampaignTree } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
+
+import { I18nProvider } from "@/i18n";
 
 import { Markdown } from "./Markdown";
 import { EntityRefScope, entityRefIndex } from "./entity-refs";
@@ -130,6 +133,28 @@ describe("rendered references", () => {
   test("the accessible name says WHAT the reference points at", () => {
     expect(render("[[leuchtturm]]")).toContain('aria-label="Ort: Der Leuchtturm"');
     expect(render("[[jorna]]")).toContain('aria-label="NPC: Hafenmeisterin Jorna"');
+  });
+
+  test("…in the UI language (issue #69), from the shared `kind.*` labels", () => {
+    // Outside a provider `useT` degrades to German, which is what every other
+    // assertion here reads; with an instance set to English the SAME labels
+    // the ⌘K rows and the properties dialog use have to come out.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(["settings"], { locale: "en" });
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <I18nProvider>
+          <MemoryRouter>
+            <EntityRefScope campaign="beispiel" index={entityRefIndex(TREE)}>
+              <Markdown>{"[[leuchtturm]] und [[jorna]]"}</Markdown>
+            </EntityRefScope>
+          </MemoryRouter>
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+    expect(html).toContain('aria-label="Location: Der Leuchtturm"');
+    expect(html).toContain('aria-label="NPC: Hafenmeisterin Jorna"');
+    expect(html).not.toContain("Ort:");
   });
 
   test("in an `## If:` summary the name is TEXT — the row stays a toggle", () => {

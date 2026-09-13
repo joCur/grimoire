@@ -13,6 +13,8 @@ import { parseMarkdown } from "@grimoire/shared";
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 
+import { translator } from "@/i18n/format";
+
 import {
   makeCallout,
   makeHeading,
@@ -38,6 +40,10 @@ import {
   withDraftMode,
   withDraftText,
 } from "./composer";
+
+// The German lines come from the catalog and the translator is passed in
+// (issue #69) — a test says which language it asserts.
+const t = translator("de");
 
 const EXAMPLES = new URL("../../../examples/", import.meta.url);
 const ARRIVAL = "beispiel/01-salzhafen/hafen/ankunft-leuchtturm.md";
@@ -337,13 +343,13 @@ describe("what blocks a save", () => {
 
   test("a clean list has nothing to say", () => {
     for (const rel of exampleFiles()) {
-      expect(composerIssues(parseBlocks(exampleBody(rel)))).toEqual({});
+      expect(composerIssues(parseBlocks(exampleBody(rel)), t)).toEqual({});
     }
   });
 
   test("a `##` typed into a section's child is named at that child", () => {
     const { blocks, childId } = withChild("## Flow");
-    const issues = composerIssues(blocks);
+    const issues = composerIssues(blocks, t);
     expect(Object.keys(issues)).toEqual([childId]);
     expect(issues[childId]).toContain("beendet den Falls-Abschnitt");
     // …and it is a HINT: the text the DM typed is still there, unchanged.
@@ -370,16 +376,16 @@ describe("what blocks a save", () => {
   });
 
   test("a `#` counts as well, a `###` does not", () => {
-    expect(Object.keys(composerIssues(withChild("# Kapitel").blocks))).toHaveLength(1);
-    expect(composerIssues(withChild("### Detail").blocks)).toEqual({});
+    expect(Object.keys(composerIssues(withChild("# Kapitel").blocks, t))).toHaveLength(1);
+    expect(composerIssues(withChild("### Detail").blocks, t)).toEqual({});
   });
 
   test("a `##` that is not a heading is not an issue", () => {
     // The parser's own reading decides — a fence, a blockquote and an indented
     // code block all hold their `##` harmlessly (README: the format degrades).
-    expect(composerIssues(withChild("```md\n## Flow\n```").blocks)).toEqual({});
-    expect(composerIssues(withChild("> [!note] x\n> ## keine Überschrift").blocks)).toEqual({});
-    expect(composerIssues(withChild("Ein Absatz über ## Rauten.").blocks)).toEqual({});
+    expect(composerIssues(withChild("```md\n## Flow\n```").blocks, t)).toEqual({});
+    expect(composerIssues(withChild("> [!note] x\n> ## keine Überschrift").blocks, t)).toEqual({});
+    expect(composerIssues(withChild("Ein Absatz über ## Rauten.").blocks, t)).toEqual({});
   });
 
   test("a heading child that would end the section is named too", () => {
@@ -387,29 +393,29 @@ describe("what blocks a save", () => {
     const child = at(section(blocks, 0).children, 0);
     // The picker never offers level 2 inside a section, but the regler shows a
     // level the FILE brought — the guard sits behind the UI, not in it.
-    expect(composerIssues(setHeadingDepth(blocks, child.id, 2))).not.toEqual({});
-    expect(composerIssues(setHeadingDepth(blocks, child.id, 4))).toEqual({});
+    expect(composerIssues(setHeadingDepth(blocks, child.id, 2), t)).not.toEqual({});
+    expect(composerIssues(setHeadingDepth(blocks, child.id, 4), t)).toEqual({});
   });
 
   test("a `##` at document level is a perfectly normal heading", () => {
     const blocks = parseBlocks("## Flow\n\nText\n");
-    expect(composerIssues(setBlockText(blocks, at(blocks, 1).id, "## Noch eine"))).toEqual({});
-    expect(composerIssues(insertAt(blocks, { index: 2 }, makeHeading(2, "Danach")))).toEqual({});
+    expect(composerIssues(setBlockText(blocks, at(blocks, 1).id, "## Noch eine"), t)).toEqual({});
+    expect(composerIssues(insertAt(blocks, { index: 2 }, makeHeading(2, "Danach")), t)).toEqual({});
   });
 
   test("a fresh block inserted into a section is clean", () => {
     const blocks = parseBlocks("## If: sie lügen\n\ndrin\n");
     const target = section(blocks, 0);
-    for (const option of newBlockOptions("section")) {
+    for (const option of newBlockOptions("section", t)) {
       const next = insertAt(blocks, { sectionId: target.id, index: 0 }, option.create());
-      expect(composerIssues(next)).toEqual({});
+      expect(composerIssues(next, t)).toEqual({});
     }
   });
 });
 
 describe("the type picker", () => {
   test("the document offers the six callouts, both plain blocks and a section", () => {
-    expect(newBlockOptions("document").map((option) => option.label)).toEqual([
+    expect(newBlockOptions("document", t).map((option) => option.label)).toEqual([
       "Vorlesetext",
       "Check",
       "Geheim",
@@ -423,14 +429,14 @@ describe("the type picker", () => {
   });
 
   test("inside a section there is no nested section", () => {
-    const options = newBlockOptions("section");
+    const options = newBlockOptions("section", t);
     expect(options.map((option) => option.key)).not.toContain("ifSection");
     expect(options).toHaveLength(8);
   });
 
   test("a new heading inside a section starts below the section's own level", () => {
     const heading = (scope: "document" | "section") => {
-      const option = newBlockOptions(scope).find((candidate) => candidate.key === "heading");
+      const option = newBlockOptions(scope, t).find((candidate) => candidate.key === "heading");
       const block = option?.create();
       if (block?.type !== "heading") throw new Error("expected a heading option");
       return block.depth;
@@ -445,7 +451,7 @@ describe("the type picker", () => {
 
   test("every option builds an empty block that serializes and parses back", () => {
     for (const scope of ["document", "section"] as const) {
-      for (const option of newBlockOptions(scope)) {
+      for (const option of newBlockOptions(scope, t)) {
         const block = option.create();
         const markdown = serializeBlocks([block]);
         expect(serializeBlocks(parseBlocks(markdown))).toBe(markdown);
