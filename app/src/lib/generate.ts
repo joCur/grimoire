@@ -175,28 +175,30 @@ export function applySummary(sceneCount: number, stubCount: number, t: Translate
 }
 
 /**
- * The context hint under the source textarea: what the server will send
- * along with the prompt (npc/location names + the glossary, see
- * generator/README.md step 1).
+ * The context hint under the source textarea: what the server will send along
+ * with the prompt (generator/README.md step 1).
+ *
+ * Only the two COUNTS that come from the tree. The campaign knowledge and the
+ * glossary used to be part of the same ICU sentence; since they are pages of
+ * their own (issue #53, PO feedback on PR #87) they are LINKS, and a link
+ * cannot live inside a formatted string without either splitting the pattern
+ * or rendering markup out of the catalog. The view composes the line from this
+ * half and the two below (routes/generate.tsx).
  */
-export function contextHint(
-  npcCount: number,
-  locationCount: number,
-  hasGlossary: boolean,
-  t: Translate,
-  /**
-   * How many campaign-knowledge entries travel (issue #53 AK5). The COUNT and
-   * not a yes/no like the glossary: the DM comes back here right after writing
-   * a rule, and „3 Wissens-Einträge" is what confirms it arrived.
-   */
-  knowledgeCount = 0,
-): string {
-  return t("generate.input.contextHint", {
-    npcs: npcCount,
-    locations: locationCount,
-    knowledge: knowledgeCount,
-    glossary: t(hasGlossary ? "generate.input.glossary" : "generate.input.noGlossary"),
-  });
+export function contextHint(npcCount: number, locationCount: number, t: Translate): string {
+  return t("generate.input.contextEntities", { npcs: npcCount, locations: locationCount });
+}
+
+/**
+ * The knowledge half of that line: how many entries travel (issue #53 AK5).
+ *
+ * The COUNT and not a yes/no like the glossary: the DM comes back here right
+ * after writing a rule, and „3 Wissens-Einträge" is what confirms it arrived.
+ * Count with `promptKnowledgeCount` (lib/entry-list.ts) — a half-typed
+ * convention is stored but skipped by the prompt.
+ */
+export function knowledgeHint(knowledgeCount: number, t: Translate): string {
+  return t("generate.input.knowledgeCount", { count: knowledgeCount });
 }
 
 /** Strings out of an error body field (`validationErrors`, `conflicts`). */

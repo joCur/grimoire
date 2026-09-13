@@ -5,19 +5,18 @@
 // into that menu: cheap, always on screen, no new chrome. The PO's objection
 // is about MEANING, not pixels — the switcher is where you pick a CAMPAIGN,
 // and an instance-wide setting hidden in it is both hard to find and wrong by
-// category. A settings page is where anyone looks for a setting, and it is the
-// surface that can GROW: the campaign knowledge and the glossary (issue #53)
-// land here as further sections.
+// category. A settings page is where anyone looks for a setting.
 //
-// TWO LEVELS, one page, and the structure says which is which:
+// INSTANCE ONLY — today exactly one section, the UI language.
 //
-//   * INSTANCE sections apply to the whole installation and are always shown —
-//     today exactly one, the UI language.
-//   * CAMPAIGN sections apply to the campaign that is currently open and are
-//     shown only then, under a heading that names it. Issue #53 adds its
-//     sections by appending to `CAMPAIGN_SECTIONS` below; nothing else on this
-//     page has to change, and the route stays reachable with no campaign at
-//     all (a fresh instance has none).
+// Issue #53 briefly put the campaign's Glossar and Kampagnenwissen here as
+// campaign sections. The PO's objection on PR #87 settles the category: those
+// two are campaign CONTENT, the same kind of thing as the NPCs and the Orte,
+// and they belong on list pages of their own (`/:campaign/knowledge`,
+// `/:campaign/glossary`) — not in a settings page, and not as 30 inline text
+// fields under one global save button. What is left here is what is true of
+// the INSTALLATION, which is also why the route stays reachable with no
+// campaign at all (a fresh instance has none).
 //
 // The page is deliberately QUIET (docs/UI-BRIEF.md): the DM comes here once,
 // so nothing here competes with the pool. Section headings follow the pool's
@@ -36,52 +35,19 @@
 // Only with no origin at all (the gear from "/" on a fresh instance, or a
 // hand-typed `/settings`) does the old heuristic stand in — `pickLastCampaign`
 // (lib/campaign.ts), the same one "/" uses. No localStorage (quality floor).
+// It is still needed with no campaign section on the page: the topbar above
+// and the mobile „‹ Pool" row both have to lead back where the DM came from.
 
 import { useQuery } from "@tanstack/react-query";
 import { useId, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 
 import { fetchCampaigns } from "@/api";
-import { GlossarySection, KnowledgeSection } from "@/components/CampaignListSections";
 import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { MobileBackRow } from "@/components/MobileBackRow";
-import { UnsavedChangesGuard } from "@/components/UnsavedChangesGuard";
 import { useT } from "@/i18n";
-import type { MessageKey } from "@/i18n";
-import { campaignLabel, settingsCampaign } from "@/lib/campaign";
+import { settingsCampaign } from "@/lib/campaign";
 import { useCampaignVersion } from "@/lib/use-campaign-version";
-
-/**
- * The campaign-scoped sections — filled by issue #53. Kept as a list rather
- * than as inline JSX so adding one is a single entry and the empty case stays
- * honest: with no sections there is no campaign heading either, instead of a
- * heading over nothing.
- *
- * THE ORDER IS AN ARGUMENT. „Kampagnenwissen" comes first because it is the
- * stronger statement — it overrides the source material and is what the DM
- * comes here to fix after a generator run went wrong — and because that is
- * the order the PROMPT puts them in (server/src/llm-provider.ts). The page
- * and the prompt reading the same way is one less thing to hold in your head.
- */
-const CAMPAIGN_SECTIONS: ReadonlyArray<{
-  key: string;
-  heading: MessageKey;
-  hint?: MessageKey;
-  render: (campaign: string) => ReactNode;
-}> = [
-  {
-    key: "knowledge",
-    heading: "settings.knowledge.heading",
-    hint: "settings.knowledge.hint",
-    render: (campaign) => <KnowledgeSection campaign={campaign} />,
-  },
-  {
-    key: "glossary",
-    heading: "settings.glossary.heading",
-    hint: "settings.glossary.hint",
-    render: (campaign) => <GlossarySection campaign={campaign} />,
-  },
-];
 
 export function SettingsRoute() {
   const t = useT();
@@ -98,20 +64,9 @@ export function SettingsRoute() {
   // campaign-scoped view; `/settings` sits outside that layout because it must
   // also work with no campaign at all, and then the hook stays idle ("").
   useCampaignVersion(campaign ?? "");
-  const label =
-    campaign === undefined
-      ? undefined
-      : campaignLabel(
-          campaigns.find((c) => c.id === campaign),
-          campaign,
-        );
 
   return (
-    // The campaign sections save EXPLICITLY, so leaving with unsaved rows has
-    // to ask (review of #53). The guard sits around the whole page, not around
-    // one list: there are two editors and „you have unsaved changes" is a
-    // statement about the page (components/UnsavedChangesGuard.tsx).
-    <UnsavedChangesGuard>
+    <>
       {/* Below md the topbar (and with it the gear) is not the chrome — the
           same "‹ Pool" row every other campaign view carries is the way back.
           Only with a campaign: on a fresh instance there is no pool to go
@@ -126,31 +81,8 @@ export function SettingsRoute() {
         </p>
 
         <LanguageSection />
-
-        {/* The campaign half — only with a campaign AND a section to show. */}
-        {campaign !== undefined &&
-          label !== undefined &&
-          CAMPAIGN_SECTIONS.length > 0 && (
-            <>
-              <h2 className="mt-10 mb-1 text-[13px] font-medium text-soft">
-                {t("settings.campaign.heading", { name: label })}
-              </h2>
-              <p className="mb-5 text-[12.5px] text-muted-foreground">
-                {t("settings.campaign.hint")}
-              </p>
-              {CAMPAIGN_SECTIONS.map((section) => (
-                <Section
-                  key={section.key}
-                  heading={t(section.heading)}
-                  hint={section.hint === undefined ? undefined : t(section.hint)}
-                >
-                  {section.render(campaign)}
-                </Section>
-              ))}
-            </>
-          )}
       </div>
-    </UnsavedChangesGuard>
+    </>
   );
 }
 

@@ -52,8 +52,19 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   // campaign has none, so it says so. The knowledge path itself is
   // campaign-knowledge.e2e.ts.
   await expect(
-    page.getByText("2 NPCs · 1 Ort · kein Kampagnenwissen · Glossar"),
+    page.getByText("2 NPCs · 1 Ort"),
   ).toBeVisible();
+  // The knowledge and the glossary halves are LINKS to their own pages now
+  // (issue #53, PO feedback on PR #87) — this line is where the DM notices a
+  // rule is missing, so the fix is one click from here.
+  await expect(page.getByRole("link", { name: "kein Kampagnenwissen" })).toHaveAttribute(
+    "href",
+    "/beispiel/knowledge",
+  );
+  await expect(page.getByRole("link", { name: "Glossar", exact: true })).toHaveAttribute(
+    "href",
+    "/beispiel/glossary",
+  );
 
   await page.getByLabel("Quelltext (EN)").fill(SOURCE);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();

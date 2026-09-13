@@ -19,6 +19,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useT } from "@/i18n";
 import { locationName } from "@/lib/campaign";
 import { firstParagraphOfSection } from "@/lib/md-section";
+import { POOL_LOOKUP_TARGETS } from "@/lib/lookup";
 import { useCampaignMeta } from "@/lib/use-campaign";
 import { cn } from "@/lib/utils";
 import { MobileStart } from "@/routes/mobile-start";
@@ -77,6 +78,7 @@ export function PoolRoute() {
                   {meta.description}
                 </p>
               )}
+              <LookupLine campaign={campaign} />
             </div>
             {/* The empty pool is the second half of the cold start (issue
                 #56): it used to point at the generator, which needs an API key
@@ -99,9 +101,6 @@ export function PoolRoute() {
                 defaultOpen={anyActive ? chapter.status === "active" : index === 0}
               />
             ))}
-            {/* The quiet "NPCs · Orte" line of issue #26 lived here until
-                issue #34 — a team interim solution the design never covered.
-                The topbar carries that navigation now (design/README.md). */}
           </>
         )}
       </div>
@@ -297,5 +296,47 @@ function SceneRow({
         variant="row"
       />
     </div>
+  );
+}
+
+/**
+ * „Nachschlagen: NPCs · Orte · Glossar · Kampagnenwissen" — the pool's quiet
+ * line into the campaign's reference pages (issue #53, PO feedback on PR #87).
+ *
+ * The mobile start surface has carried these as tap rows since issue #11; the
+ * desktop had nowhere for the two new pages to be reached from. The TOPBAR is
+ * deliberately not it — it keeps the three campaign-wide entries of issue #34
+ * and does not grow (a fourth and fifth link there would crowd the one bar
+ * that has to survive every width, and „Glossar" is not something the DM
+ * reaches for mid-session). So the pool's own header gets the line, one row
+ * under the campaign description: the same list as on the phone, in the
+ * compact shape a desktop header can afford.
+ *
+ * The scene list is left out: the pool IS the scene list (lib/lookup.ts).
+ */
+function LookupLine({ campaign }: { campaign: string }) {
+  const t = useT();
+  return (
+    <nav
+      aria-label={t("lookup.heading")}
+      className="mt-2.5 flex flex-wrap items-center gap-1 text-[12.5px] text-faint"
+    >
+      <span className="mr-0.5">{t("lookup.heading")}</span>
+      {POOL_LOOKUP_TARGETS.map((target, index) => (
+        <span key={target.id} className="flex items-center gap-1">
+          {index > 0 && (
+            <span aria-hidden className="mr-0.5">
+              ·
+            </span>
+          )}
+          <Link
+            to={target.href(campaign)}
+            className="rounded px-0.5 text-body-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            {t(target.label)}
+          </Link>
+        </span>
+      ))}
+    </nav>
   );
 }

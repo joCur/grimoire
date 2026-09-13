@@ -252,47 +252,63 @@ export const de = {
     "Einstellungen dieser Grimoire-Instanz. Änderungen gelten sofort und liegen auf dem Server.",
   "settings.language.heading": "Sprache",
   "settings.language.hint": "Sprache der Oberfläche. Gilt für diese Instanz, nicht für die Kampagnendaten.",
-  "settings.campaign.heading": "Kampagne: {name}",
-  "settings.campaign.hint": "Einstellungen, die nur für diese Kampagne gelten.",
 
-  // --- the two campaign lists on /settings (issue #53) ----------------------
-  // Shared by both editors (components/SettingsListEditor.tsx): the row
-  // controls, the save outcome, the two failure sentences.
-  "settings.list.loading": "Lade Liste …",
-  "settings.list.loadFailed": "Liste nicht geladen — Seite neu laden.",
-  "settings.list.saveFailed": "Nicht gespeichert.",
-  "settings.list.saving": "Speichere …",
-  "settings.list.saved": "Gespeichert",
-  "settings.list.moveUp": "Nach oben",
-  "settings.list.moveDown": "Nach unten",
-  "settings.list.remove": "Eintrag löschen",
-  "settings.list.removed": "Eintrag entfernt",
+  // --- the two campaign-content pages (issue #53) --------------------------
+  // „Kampagnenwissen" (/:campaign/knowledge) and „Glossar"
+  // (/:campaign/glossary). Campaign CONTENT, like the NPCs and the Orte — the
+  // instance settings under /settings are a different thing entirely (PO
+  // feedback on PR #87). Shared by both pages: the row controls, the per-entry
+  // save outcome, the delete confirmation.
+  "entryList.loading": "Lade Liste …",
+  "entryList.loadFailed": "Liste nicht geladen — Seite neu laden.",
+  "entryList.saveFailed": "Nicht gespeichert.",
+  "entryList.saving": "Speichere …",
+  "entryList.saved": "Gespeichert",
+  "entryList.moveUp": "Nach oben",
+  "entryList.moveDown": "Nach unten",
+  "entryList.edit": "„{name}“ bearbeiten",
+  "entryList.remove": "„{name}“ löschen",
+  "entryList.removed": "Eintrag gelöscht",
   // The action next to `write.stale`: the conflict's only sensible next step.
-  "settings.list.reload": "Neu laden",
+  "entryList.reload": "Neu laden",
+  "entryList.confirmDelete.title": "Eintrag löschen?",
+  "entryList.confirmDelete.body": "„{name}“ wird aus der Liste entfernt. Das lässt sich nicht rückgängig machen.",
+  "entryList.confirmDelete.confirm": "Löschen",
 
-  "settings.knowledge.heading": "Kampagnenwissen",
-  "settings.knowledge.hint":
-    "Geht bei jedem Generator-Lauf mit und gilt verbindlich — auch wenn das Quellmaterial etwas anderes sagt. Referenzen wie [[fenn]] werden zum Namen aufgelöst.",
-  "settings.knowledge.empty":
+  "knowledge.title": "Kampagnenwissen",
+  "knowledge.lead":
+    "Namenskonventionen, Fakten und Stilregeln dieser Kampagne. Geht bei jedem Generator-Lauf mit und gilt verbindlich — auch wenn das Quellmaterial etwas anderes sagt. Die Reihenfolge ist die Reihenfolge im Prompt. Referenzen wie [[fenn]] werden zum Namen aufgelöst.",
+  "knowledge.filter": "Wissen filtern",
+  "knowledge.empty":
     "Noch kein Kampagnenwissen — ersten Eintrag anlegen (z. B. eine Namenskonvention).",
-  "settings.knowledge.add": "Eintrag hinzufügen",
-  "settings.knowledge.kindLabel": "Art",
-  "settings.knowledge.kind.naming": "Namenskonvention",
-  "settings.knowledge.kind.fact": "Fakt",
-  "settings.knowledge.kind.style": "Stilregel",
-  "settings.knowledge.from": "Alt (im Quellmaterial)",
-  "settings.knowledge.to": "Neu (in dieser Kampagne)",
-  "settings.knowledge.factText": "Fakt, der gilt",
-  "settings.knowledge.styleText": "Stilregel für generierte Texte",
-  "settings.knowledge.incomplete": "Unvollständig — geht so nicht mit in den Prompt.",
+  "knowledge.noMatch": "Kein Eintrag passt zum Filter.",
+  "knowledge.add": "Neuer Eintrag",
+  "knowledge.blank": "Noch nichts eingetragen",
+  "knowledge.kindLabel": "Art",
+  "knowledge.kind.naming": "Namenskonvention",
+  "knowledge.kind.fact": "Fakt",
+  "knowledge.kind.style": "Stilregel",
+  "knowledge.from": "Alt (im Quellmaterial)",
+  "knowledge.to": "Neu (in dieser Kampagne)",
+  "knowledge.factText": "Fakt, der gilt",
+  "knowledge.styleText": "Stilregel für generierte Texte",
+  "knowledge.incomplete": "Unvollständig — geht so nicht mit in den Prompt.",
 
-  "settings.glossary.heading": "Glossar",
-  "settings.glossary.hint":
-    "Übersetzungen für den Generator: englischer Begriff und die Schreibweise dieser Kampagne.",
-  "settings.glossary.empty": "Noch keine Begriffe — ersten Begriff anlegen.",
-  "settings.glossary.add": "Begriff hinzufügen",
-  "settings.glossary.term": "Begriff",
-  "settings.glossary.explanation": "Erklärung",
+  "glossary.title": "Glossar",
+  "glossary.lead":
+    "Übersetzungen für den Generator: englischer Begriff und die Schreibweise dieser Kampagne. Alphabetisch sortiert.",
+  "glossary.filter": "Begriff filtern",
+  "glossary.empty": "Noch keine Begriffe — ersten Begriff anlegen.",
+  "glossary.noMatch": "Kein Begriff passt zum Filter.",
+  "glossary.add": "Neuer Begriff",
+  "glossary.term": "Begriff",
+  "glossary.explanation": "Erklärung",
+  "glossary.noExplanation": "Ohne Erklärung",
+
+  // Where the two pages are reached from: the pool's „Nachschlagen" line and
+  // the mobile start surface's rows (PO feedback on PR #87 — deliberately NOT
+  // the topbar, which stays the three campaign-wide entries it has).
+  "lookup.heading": "Nachschlagen",
 
   // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
   "server.slug_taken": '{kind} „{id}" existiert schon — Vorschlag: „{suggestion}"',
@@ -477,7 +493,6 @@ export const de = {
 
   // --- mobile start surface (routes/mobile-start.tsx) ----------------------
   "mobileStart.search": "Szenen, NPCs, Orte suchen …",
-  "mobileStart.browse": "Nachschlagen",
   "mobileStart.count.scenes": "{count, plural, one {# Szene} other {# Szenen}}",
   "mobileStart.count.npcs": "{count, plural, one {# NPC} other {# NPCs}}",
   "mobileStart.count.locations": "{count, plural, one {# Ort} other {# Orte}}",
@@ -492,6 +507,9 @@ export const de = {
   "palette.placeholder": "Szenen, NPCs, Orte durchsuchen …",
   "palette.results.aria": "Suchergebnisse",
   "palette.empty": "Nichts gefunden.",
+  // The kind label of a NAVIGATION row (issue #53): a page of this campaign,
+  // not a document the index found.
+  "palette.kind.page": "Seite",
 
   // --- stale-bundle banner (components/UpdateBanner.tsx) -------------------
   "update.available": "Neue Version verfügbar — neu laden",
@@ -557,11 +575,15 @@ export const de = {
   "generate.input.sourcePlaceholder":
     "Abenteuertext einfügen — Absätze, Boxed Text, Statblock-Verweise …",
   "generate.input.contextLabel": "Mitgeschickter Kontext:",
-  // One sentence: the two counts, the knowledge COUNT (issue #53 AK5 — the
-  // number is what tells the DM whether the rules they just wrote arrived)
-  // and the glossary token.
-  "generate.input.contextHint":
-    "{npcs, plural, one {# NPC} other {# NPCs}} · {locations, plural, one {# Ort} other {# Orte}} · {knowledge, plural, =0 {kein Kampagnenwissen} one {# Wissens-Eintrag} other {# Wissens-Einträge}} · {glossary}",
+  // The two counts that come from the tree. The knowledge and the glossary
+  // are LINKS to their own pages now (issue #53, PO feedback on PR #87), so
+  // the view composes the line from three pieces (lib/generate.ts).
+  "generate.input.contextEntities":
+    "{npcs, plural, one {# NPC} other {# NPCs}} \u00b7 {locations, plural, one {# Ort} other {# Orte}}",
+  // The knowledge COUNT (issue #53 AK5) — the number is what tells the DM
+  // whether the rules they just wrote arrived.
+  "generate.input.knowledgeCount":
+    "{count, plural, =0 {kein Kampagnenwissen} one {# Wissens-Eintrag} other {# Wissens-Eintr\u00e4ge}}",
   "generate.input.glossary": "Glossar",
   "generate.input.noGlossary": "kein Glossar",
   "generate.input.submit.scene": "Entwürfe generieren",

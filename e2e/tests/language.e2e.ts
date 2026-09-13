@@ -139,8 +139,15 @@ test("the language switch: English and back, server-side and without a reload", 
   // the nav, the search chip and the session chip.
   await page.goto("/beispiel");
   await expect(page.getByRole("button", { name: /^Campaign: / })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Chapters" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Locations" })).toBeVisible();
+  // The topbar's own trio — scoped, because the pool's „Nachschlagen" line
+  // (issue #53) links to two of the same pages with the same words.
+  const trio = page.getByRole("navigation", { name: "Chapters, NPCs and locations" });
+  await expect(trio.getByRole("link", { name: "Chapters" })).toBeVisible();
+  await expect(trio.getByRole("link", { name: "Locations" })).toBeVisible();
+  // And the line under the campaign header is translated along with it.
+  await expect(
+    page.getByRole("navigation", { name: "Look up" }).getByRole("link"),
+  ).toHaveText(["NPCs", "Locations", "Glossary", "Campaign knowledge"]);
   await expect(page.getByRole("button", { name: "Search …" })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Start session" }),

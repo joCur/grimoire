@@ -8,8 +8,10 @@ import { useCampaignVersion } from "@/lib/use-campaign-version";
 import { EntityRefProvider } from "@/markdown/entity-refs";
 import { BrowseRoute } from "@/routes/browse";
 import { GenerateRoute } from "@/routes/generate";
+import { GlossaryRoute } from "@/routes/glossary";
 import { HarnessRoute } from "@/routes/harness";
 import { HomeRoute } from "@/routes/home";
+import { KnowledgeRoute } from "@/routes/knowledge";
 import { LiveRoute } from "@/routes/live";
 import { PoolRoute } from "@/routes/pool";
 import { ReviewRoute } from "@/routes/review";
@@ -75,8 +77,8 @@ export function App() {
         {import.meta.env.DEV && <Route path="dev/markdown" element={<HarnessRoute />} />}
         {/* Instance settings (issue #69) — deliberately NOT campaign-scoped:
             the gear has to work on a fresh instance too, and the language is
-            an instance choice. Campaign-scoped sections appear on the page
-            when a campaign is open (issue #53 fills them). */}
+            an instance choice. Campaign CONTENT is not a setting and lives on
+            its own pages below (PO feedback on PR #87). */}
         <Route path="settings" element={<SettingsRoute />} />
         <Route path=":campaign" element={<CampaignScope />}>
           <Route index element={<PoolRoute />} />
@@ -84,6 +86,13 @@ export function App() {
               surface's "Nachschlagen" rows and from the topbar's quiet
               NPCs/Orte links on the desktop (issue #34). */}
           <Route path="list/:kind" element={<BrowseRoute />} />
+          {/* Campaign knowledge and glossary (issue #53) — campaign CONTENT,
+              so they are list pages next to the npc/location ones and not
+              sections of /settings (PO feedback on PR #87). Reached from the
+              pool's „Nachschlagen" line, the mobile start surface, ⌘K and the
+              generator's context line — deliberately not from the topbar. */}
+          <Route path="knowledge" element={<KnowledgeRoute />} />
+          <Route path="glossary" element={<GlossaryRoute />} />
           <Route path="live" element={<LiveRoute />} />
           {/* Generator (issue #12) — entered from the pool's "Generator". */}
           <Route path="generate" element={<GenerateRoute />} />

@@ -1,23 +1,25 @@
-// Critical path 6, extended (issue #53): the campaign knowledge and the
-// glossary as the DM maintains them, and what the generator then does with
-// them. See CLAUDE.md, „Kritische Pfade".
+// Critical path 6, extended (issue #53, PO feedback on PR #87): the campaign
+// knowledge and the glossary as the DM maintains them on their own PAGES, and
+// what the generator then does with them. See CLAUDE.md, „Kritische Pfade".
 //
 // Nothing here is mocked except the model (e2e/fixtures/stub-llm.ts), and the
 // two claims that only the real stack can show are:
 //
-//   1. WHAT THE DM TYPES ARRIVES. The rules are written through the settings
-//      UI — click, type, save — and the review screen then shows the stub's
-//      ECHO of the prompt block it received (replies.ts contextEchoWarnings).
-//      That is the only honest way to assert the prompt from a browser: the
-//      page cannot see the prompt, and reaching into the server would stop
-//      testing the path that runs in production.
+//   1. WHAT THE DM TYPES ARRIVES. The rules are written through the UI —
+//      click, type, save — and the review screen then shows the stub's ECHO
+//      of the prompt block it received (replies.ts contextEchoWarnings). That
+//      is the only honest way to assert the prompt from a browser: the page
+//      cannot see the prompt, and reaching into the server would stop testing
+//      the path that runs in production.
 //   2. THE POST-RUN CHECK FIRES AND DOES NOT BLOCK. With TRIGGER.oldName the
-//      stub answers in exactly the spelling the convention forbids; the
-//      review has to name it, with its position, AND still let „Übernehmen"
-//      write the draft.
+//      stub answers in exactly the spelling the convention forbids; the review
+//      has to name it, with its position, AND still let „Übernehmen" write the
+//      draft.
 //
-// Plus the list mechanics the ticket asks for on both lists — anlegen,
-// bearbeiten, löschen, umsortieren — and the 409 that a whole-list PUT needs.
+// Plus what the PAGES have to do that the old inline settings sections did
+// not: be reached from four entry points, filter, open ONE entry at a time
+// with fields that fit the content, save that entry on its own, confirm a
+// deletion — and the 409 that a whole-list PUT still needs underneath.
 
 import type { Page } from "@playwright/test";
 
@@ -26,130 +28,178 @@ import { expect, test } from "../support/test";
 
 const SOURCE = "The party watches the quay at low tide.";
 
-/** The settings page of the example campaign, reached the way the gear does. */
-async function openSettings(page: Page): Promise<void> {
+/** The knowledge page, reached from the pool's „Nachschlagen" line. */
+async function openKnowledge(page: Page): Promise<void> {
   await page.goto("/beispiel");
-  await page.getByRole("link", { name: "Einstellungen" }).click();
-  await expect(page).toHaveURL(/\/settings(\?|$)/);
-  await expect(page.getByRole("heading", { level: 2, name: "Kampagnenwissen" })).toBeVisible();
+  await page.getByRole("link", { name: "Kampagnenwissen" }).click();
+  await expect(page).toHaveURL(/\/beispiel\/knowledge$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Kampagnenwissen");
 }
 
-/** The knowledge section's own save button (the glossary has its own). */
-function section(page: Page, heading: "Kampagnenwissen" | "Glossar") {
-  // Each section is one <section>; the heading identifies it.
-  return page.locator("section").filter({ has: page.getByRole("heading", { name: heading }) });
+async function openGlossary(page: Page): Promise<void> {
+  await page.goto("/beispiel");
+  await page.getByRole("link", { name: "Glossar" }).click();
+  await expect(page).toHaveURL(/\/beispiel\/glossary$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Glossar");
 }
 
-test("the two campaign sections: add, edit, reorder, delete — and they survive a reload", async ({
+/** Save the open entry and wait for the page to say so. */
+async function saveEntry(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText("Gespeichert", { exact: true })).toBeVisible();
+}
+
+/** Delete the row whose delete button matches, through the confirmation. */
+async function deleteRow(page: Page, name: RegExp): Promise<void> {
+  await page.getByRole("button", { name }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Eintrag löschen?");
+  await dialog.getByRole("button", { name: "Löschen" }).click();
+  await expect(dialog).toHaveCount(0);
+}
+
+// --- the pages themselves ----------------------------------------------------
+
+test("the knowledge page: add, edit, reorder, delete — one entry at a time", async ({
   page,
   api,
 }) => {
-  await openSettings(page);
-  const knowledge = section(page, "Kampagnenwissen");
-  const glossary = section(page, "Glossar");
-
+  await openKnowledge(page);
   // Empty to begin with — the example campaign has no knowledge, and the
   // empty state invites action rather than showing a blank box.
-  await expect(knowledge.getByText("Noch kein Kampagnenwissen", { exact: false })).toBeVisible();
-  // The glossary is NOT empty: the example campaign ships terms.
-  await expect(glossary.getByRole("textbox", { name: "Begriff" }).first()).toBeVisible();
+  await expect(page.getByText("Noch kein Kampagnenwissen", { exact: false })).toBeVisible();
 
   // --- anlegen: a naming convention -----------------------------------------
-  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
-  // „Namenskonvention" is the default kind, so the Alt/Neu pair is there.
-  await expect(knowledge.getByLabel("Art")).toHaveValue("naming");
-  await knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" }).fill(OLD_NAME);
-  await knowledge.getByRole("textbox", { name: "Neu (in dieser Kampagne)" }).fill("Salzmarsch");
+  await page.getByRole("button", { name: "Neuer Eintrag" }).click();
+  // „Namenskonvention" is the default kind, so the Alt/Neu pair is there —
+  // each on its own full-width line (PO feedback on PR #87).
+  await expect(page.getByLabel("Art")).toHaveValue("naming");
+  await page.getByLabel("Alt (im Quellmaterial)").fill(OLD_NAME);
+  await page.getByLabel("Neu (in dieser Kampagne)").fill("Salzmarsch");
+  await saveEntry(page);
+  // The form CLOSED — the entry is stored, and the row is back to one line.
+  await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveCount(0);
 
   // --- anlegen: a style rule; switching the kind swaps the fields -----------
-  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
-  const secondKind = knowledge.getByLabel("Art").nth(1);
-  await secondKind.selectOption("style");
-  await knowledge
-    .getByRole("textbox", { name: "Stilregel für generierte Texte" })
+  await page.getByRole("button", { name: "Neuer Eintrag" }).click();
+  await page.getByLabel("Art").selectOption("style");
+  await page
+    .getByLabel("Stilregel für generierte Texte")
     .fill("Keine Würfelwerte im Read-Aloud.");
-
-  await knowledge.getByRole("button", { name: "Speichern" }).click();
-  await expect(knowledge.getByText("Gespeichert")).toBeVisible();
+  await saveEntry(page);
 
   // Stored on the SERVER, in the order they were typed (quality floor: no
   // localStorage — the list has to be visible through the API).
-  const stored = await api.get<{ entries: Array<Record<string, unknown>>; rev: number }>(
-    "beispiel/knowledge",
-  );
+  const stored = await api.get<{ entries: Array<Record<string, unknown>> }>("beispiel/knowledge");
   expect(stored.entries).toEqual([
     { kind: "naming", from: OLD_NAME, to: "Salzmarsch", text: "" },
     { kind: "style", from: "", to: "", text: "Keine Würfelwerte im Read-Aloud." },
   ]);
 
-  // --- umsortieren ----------------------------------------------------------
-  await knowledge.getByRole("button", { name: "Nach oben" }).nth(1).click();
-  await knowledge.getByRole("button", { name: "Speichern" }).click();
-  await expect(knowledge.getByText("Gespeichert")).toBeVisible();
+  // --- umsortieren: the order IS the order of the prompt --------------------
+  await page.getByRole("button", { name: "Nach oben" }).nth(1).click();
+  await expect(page.getByText("Gespeichert", { exact: true })).toBeVisible();
   const reordered = await api.get<{ entries: Array<{ kind: string }> }>("beispiel/knowledge");
   expect(reordered.entries.map((e) => e.kind)).toEqual(["style", "naming"]);
   // The buttons at the ends are disabled — there is nowhere to move.
-  await expect(knowledge.getByRole("button", { name: "Nach oben" }).first()).toBeDisabled();
-  await expect(knowledge.getByRole("button", { name: "Nach unten" }).last()).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Nach oben" }).first()).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Nach unten" }).last()).toBeDisabled();
 
-  // --- bearbeiten -----------------------------------------------------------
-  await knowledge
-    .getByRole("textbox", { name: "Stilregel für generierte Texte" })
-    .fill("Read-Aloud ohne Zahlen.");
-  await knowledge.getByRole("button", { name: "Speichern" }).click();
-  await expect(knowledge.getByText("Gespeichert")).toBeVisible();
+  // --- bearbeiten: the ROW opens the entry ---------------------------------
+  await page.getByRole("button", { name: /Keine Würfelwerte.*bearbeiten/ }).click();
+  const rule = page.getByLabel("Stilregel für generierte Texte");
+  await expect(rule).toBeFocused();
+  await rule.fill("Read-Aloud ohne Zahlen.");
+  await saveEntry(page);
 
   // --- and it survives a reload, because the server holds it ----------------
   await page.reload();
-  await expect(
-    section(page, "Kampagnenwissen").getByRole("textbox", {
-      name: "Stilregel für generierte Texte",
-    }),
-  ).toHaveValue("Read-Aloud ohne Zahlen.");
+  await expect(page.getByText("Read-Aloud ohne Zahlen.")).toBeVisible();
 
-  // --- löschen --------------------------------------------------------------
-  const fresh = section(page, "Kampagnenwissen");
-  await fresh.getByRole("button", { name: "Eintrag löschen" }).first().click();
-  await fresh.getByRole("button", { name: "Speichern" }).click();
-  await expect(fresh.getByText("Gespeichert")).toBeVisible();
+  // --- löschen, mit Bestätigung ---------------------------------------------
+  await deleteRow(page, /Read-Aloud ohne Zahlen.*löschen/);
   const afterDelete = await api.get<{ entries: Array<{ kind: string }> }>("beispiel/knowledge");
   expect(afterDelete.entries.map((e) => e.kind)).toEqual(["naming"]);
+  await expect(page.getByText("Read-Aloud ohne Zahlen.")).toHaveCount(0);
 });
 
-test("the glossary is editable on the same page, with the same controls", async ({
+test("the glossary page: alphabetical, filterable, and a LONG explanation fits", async ({
   page,
   api,
 }) => {
-  await openSettings(page);
-  const glossary = section(page, "Glossar");
+  await openGlossary(page);
   const before = await api.get<{ entries: Array<{ term: string }>; rev: number }>(
     "beispiel/glossary",
   );
+  expect(before.entries.length).toBeGreaterThan(0);
 
-  await glossary.getByRole("button", { name: "Begriff hinzufügen" }).click();
-  await glossary.getByRole("textbox", { name: "Begriff" }).last().fill("tidal flat");
-  await glossary.getByRole("textbox", { name: "Erklärung" }).last().fill("Watt");
-  await glossary.getByRole("button", { name: "Speichern" }).click();
-  await expect(glossary.getByText("Gespeichert")).toBeVisible();
+  // Alphabetical, not stored order — a glossary is looked things up in.
+  const shown = await page.getByRole("button", { name: /löschen$/ }).count();
+  expect(shown).toBe(before.entries.length);
 
-  const after = await api.get<{ entries: Array<{ term: string }>; rev: number }>(
+  // --- anlegen, with an explanation that is a PARAGRAPH ---------------------
+  // The complaint that started this rework: the old inline field was a 120px
+  // box. The textarea grows, and what is typed is what comes back.
+  const LONG =
+    "Das Watt vor Salzhafen fällt bei Ebbe über eine Meile weit trocken; " +
+    "Schmuggler nutzen die Priele, weil die Zollkutter dort auflaufen, und " +
+    "die Einheimischen nennen die Rinnen nach den Familien, die sie kennen.";
+  await page.getByRole("button", { name: "Neuer Begriff" }).click();
+  await page.getByLabel("Begriff", { exact: true }).fill("tidal flat");
+  const explanation = page.getByLabel("Erklärung");
+  await explanation.fill(LONG);
+  // The field grew with the text instead of scrolling inside itself.
+  const box = await explanation.boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThan(60);
+  await saveEntry(page);
+
+  const after = await api.get<{ entries: Array<{ term: string; explanation: string }>; rev: number }>(
     "beispiel/glossary",
   );
   expect(after.entries.map((e) => e.term)).toEqual([
     ...before.entries.map((e) => e.term),
     "tidal flat",
   ]);
+  expect(after.entries.at(-1)?.explanation).toBe(LONG);
   // The list's own guard token moved — the glossary is one document.
   expect(after.rev).toBe(before.rev + 1);
+
+  // --- the filter hides rows, and the row it leaves is the right one -------
+  await page.getByPlaceholder("Begriff filtern").fill("tidal");
+  await expect(page.getByRole("button", { name: /löschen$/ })).toHaveCount(1);
+  await expect(page.getByText("tidal flat")).toBeVisible();
+  await page.getByPlaceholder("Begriff filtern").fill("zzzqqq");
+  await expect(page.getByText("Kein Begriff passt zum Filter.")).toBeVisible();
+
+  // --- and deleting the FILTERED row deletes that row, not the first one ---
+  await page.getByPlaceholder("Begriff filtern").fill("tidal");
+  await deleteRow(page, /tidal flat.*löschen/);
+  const afterDelete = await api.get<{ entries: Array<{ term: string }> }>("beispiel/glossary");
+  expect(afterDelete.entries.map((e) => e.term)).toEqual(before.entries.map((e) => e.term));
+});
+
+test("„Abbrechen“ throws the open entry away and leaves the stored one alone", async ({
+  page,
+  api,
+}) => {
+  await openGlossary(page);
+  const before = await api.get<{ entries: Array<{ term: string }> }>("beispiel/glossary");
+  const first = before.entries[0]!.term;
+
+  await page.getByRole("button", { name: new RegExp(`${first}.*löschen`) }).first().click();
+  await page.getByRole("dialog").getByRole("button", { name: "Abbrechen" }).click();
+  // The confirmation was declined — nothing was written.
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const after = await api.get<{ entries: Array<{ term: string }> }>("beispiel/glossary");
+  expect(after.entries.map((e) => e.term)).toEqual(before.entries.map((e) => e.term));
 });
 
 test("a competing write is a conflict, not a silent overwrite", async ({ page, api }) => {
-  await openSettings(page);
-  const knowledge = section(page, "Kampagnenwissen");
+  await openKnowledge(page);
 
-  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
-  await knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" }).fill("Alt");
-  await knowledge.getByRole("textbox", { name: "Neu (in dieser Kampagne)" }).fill("Neu");
+  await page.getByRole("button", { name: "Neuer Eintrag" }).click();
+  await page.getByLabel("Alt (im Quellmaterial)").fill("Alt");
+  await page.getByLabel("Neu (in dieser Kampagne)").fill("Neu");
 
   // Somebody else saves first (another tab, the same endpoint).
   const current = await api.get<{ rev: number }>("beispiel/knowledge");
@@ -158,38 +208,162 @@ test("a competing write is a conflict, not a silent overwrite", async ({ page, a
     rev: current.rev,
   });
 
-  await knowledge.getByRole("button", { name: "Speichern" }).click();
+  await page.getByRole("button", { name: "Speichern" }).click();
   // Nothing was written, and the DM is told instead of losing the other list.
-  await expect(knowledge.getByText("Inzwischen geändert", { exact: false })).toBeVisible();
+  await expect(page.getByText("Inzwischen geändert", { exact: false })).toBeVisible();
   const after = await api.get<{ entries: Array<{ text: string }> }>("beispiel/knowledge");
   expect(after.entries.map((e) => e.text)).toEqual(["Von woanders."]);
-  // The list on screen was re-read, so the next attempt can work.
-  await expect(knowledge.getByRole("textbox", { name: "Fakt, der gilt" })).toHaveValue(
-    "Von woanders.",
-  );
+  // What the DM typed is still on screen — theirs to keep or to discard.
+  await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveValue("Alt");
+
+  // Reloading is their decision, and then the other list is on screen.
+  await page.getByRole("button", { name: "Neu laden" }).click();
+  await expect(page.getByText("Von woanders.")).toBeVisible();
+  await expect(page.getByText("Inzwischen geändert", { exact: false })).toHaveCount(0);
 });
+
+test("leaving with an unsaved entry asks first — and only then", async ({ page }) => {
+  // At 390px the way out is the „‹ Pool" row — a plain router link, which is
+  // exactly the exit that would otherwise drop the open entry without a word.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/beispiel/knowledge");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Kampagnenwissen");
+
+  // An entry that has been typed into blocks the way out.
+  await page.getByRole("button", { name: "Neuer Eintrag" }).click();
+  await page.getByLabel("Alt (im Quellmaterial)").fill("Nicht verlieren");
+  await page.getByRole("link", { name: "Pool" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Änderungen verwerfen?");
+  await dialog.getByRole("button", { name: "Weiter bearbeiten" }).click();
+  await expect(page).toHaveURL(/\/beispiel\/knowledge$/);
+  await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveValue("Nicht verlieren");
+
+  // A SAVED entry does not ask — the guard is about unsaved work only.
+  await page.getByLabel("Neu (in dieser Kampagne)").fill("Neu");
+  await saveEntry(page);
+  await page.getByRole("link", { name: "Pool" }).first().click();
+  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("switching the kind carries the text into the new form", async ({ page, api }) => {
+  await openKnowledge(page);
+
+  await page.getByRole("button", { name: "Neuer Eintrag" }).click();
+  // A half-typed convention is flagged as incomplete — it is stored, but the
+  // prompt skips it, so the form says so instead of looking like it is in force.
+  await page.getByLabel("Alt (im Quellmaterial)").fill("Salt Harbour");
+  await expect(page.getByText("Unvollständig", { exact: false })).toBeVisible();
+  await page.getByLabel("Neu (in dieser Kampagne)").fill("Salzhafen");
+  await expect(page.getByText("Unvollständig", { exact: false })).toHaveCount(0);
+
+  // naming -> fact: the pair survives as one sentence.
+  await page.getByLabel("Art").selectOption("fact");
+  await expect(page.getByLabel("Fakt, der gilt")).toHaveValue("Salt Harbour → Salzhafen");
+
+  // fact -> naming: the sentence lands in „Alt", where it is visible.
+  await page.getByLabel("Art").selectOption("naming");
+  await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveValue("Salt Harbour → Salzhafen");
+  await expect(page.getByLabel("Neu (in dieser Kampagne)")).toHaveValue("");
+
+  // And what is STORED is what is on screen — no column of a former kind
+  // travels along invisibly.
+  await page.getByLabel("Neu (in dieser Kampagne)").fill("Salzhafen");
+  await saveEntry(page);
+  const stored = await api.get<{ entries: Array<Record<string, unknown>> }>("beispiel/knowledge");
+  expect(stored.entries).toEqual([
+    { kind: "naming", from: "Salt Harbour → Salzhafen", to: "Salzhafen", text: "" },
+  ]);
+});
+
+// --- how the pages are REACHED ------------------------------------------------
+
+test("four ways in: the pool line, the phone, ⌘K and the generator", async ({ page }) => {
+  // (a) The pool's quiet „Nachschlagen" line — and the topbar is UNCHANGED
+  //     (PO feedback on PR #87: the two pages are deliberately not up there).
+  await page.goto("/beispiel");
+  const lookup = page.getByRole("navigation", { name: "Nachschlagen" });
+  await expect(lookup).toBeVisible();
+  await expect(lookup.getByRole("link", { name: "NPCs" })).toBeVisible();
+  await expect(lookup.getByRole("link", { name: "Orte" })).toBeVisible();
+  await lookup.getByRole("link", { name: "Kampagnenwissen" }).click();
+  await expect(page).toHaveURL(/\/beispiel\/knowledge$/);
+  const topbar = page.getByRole("navigation", { name: "Kapitel, NPCs und Orte" });
+  await expect(topbar.getByRole("link", { name: "Glossar" })).toHaveCount(0);
+  await expect(topbar.getByRole("link", { name: "Kampagnenwissen" })).toHaveCount(0);
+
+  // (c) ⌘K reaches both as navigation targets — the server's index holds
+  //     documents, not pages, so nothing but the palette itself can offer them.
+  await page.keyboard.press("ControlOrMeta+KeyK");
+  await page.getByRole("combobox").fill("glossar");
+  const option = page.getByRole("option").filter({ hasText: "Glossar" });
+  await expect(option.first()).toBeVisible();
+  await expect(option.first()).toContainText("Seite");
+  await option.first().click();
+  await expect(page).toHaveURL(/\/beispiel\/glossary$/);
+
+  // (d) The generator's context line links to both — this is where the DM
+  //     notices a rule is missing, and the fix is one click away.
+  await page.goto("/beispiel/generate");
+  await expect(page.getByRole("link", { name: /Kampagnenwissen/ })).toHaveAttribute(
+    "href",
+    "/beispiel/knowledge",
+  );
+  await page.getByRole("link", { name: "Glossar", exact: true }).click();
+  await expect(page).toHaveURL(/\/beispiel\/glossary$/);
+});
+
+test("(b) the phone: the two rows in „Nachschlagen“, and the pages at 390px", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/beispiel");
+  const browse = page.getByRole("navigation", { name: "Nachschlagen" });
+  await browse.getByRole("link", { name: "Kampagnenwissen" }).click();
+  await expect(page).toHaveURL(/\/beispiel\/knowledge$/);
+
+  // The page works at the mobile floor: a new entry, typed and saved.
+  await page.getByRole("button", { name: "Neuer Eintrag" }).click();
+  const from = page.getByLabel("Alt (im Quellmaterial)");
+  await from.fill("Mobil");
+  await expect(from).toHaveValue("Mobil");
+  await page.getByLabel("Neu (in dieser Kampagne)").fill("Handy");
+  await saveEntry(page);
+  // The row's controls are reachable, not pushed off the side.
+  await expect(page.getByRole("button", { name: /löschen$/ })).toBeVisible();
+
+  // Nothing scrolls sideways at this width (quality floor, design/README.md).
+  const noOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth <= window.innerWidth,
+  );
+  expect(noOverflow).toBe(true);
+
+  // „‹ Pool" is the way back, as on every other campaign view below md.
+  await page.getByRole("link", { name: "Pool" }).first().click();
+  await expect(page).toHaveURL(/\/beispiel$/);
+});
+
+// --- and what the generator does with all of it -------------------------------
 
 test("the generator run: the knowledge travels, the naming check flags the draft, apply still writes", async ({
   page,
   api,
 }) => {
   // The rules, written the way the DM writes them.
-  await openSettings(page);
-  const knowledge = section(page, "Kampagnenwissen");
-  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
-  await knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" }).fill(OLD_NAME);
-  await knowledge.getByRole("textbox", { name: "Neu (in dieser Kampagne)" }).fill("Salzmarsch");
-  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
-  await knowledge.getByLabel("Art").nth(1).selectOption("fact");
-  await knowledge
-    .getByRole("textbox", { name: "Fakt, der gilt" })
-    .fill("[[fenn]] führt die Schmuggler.");
-  await knowledge.getByRole("button", { name: "Speichern" }).click();
-  await expect(knowledge.getByText("Gespeichert")).toBeVisible();
+  await openKnowledge(page);
+  await page.getByRole("button", { name: "Neuer Eintrag" }).click();
+  await page.getByLabel("Alt (im Quellmaterial)").fill(OLD_NAME);
+  await page.getByLabel("Neu (in dieser Kampagne)").fill("Salzmarsch");
+  await saveEntry(page);
+  await page.getByRole("button", { name: "Neuer Eintrag" }).click();
+  await page.getByLabel("Art").selectOption("fact");
+  await page.getByLabel("Fakt, der gilt").fill("[[fenn]] führt die Schmuggler.");
+  await saveEntry(page);
 
   // --- the generator names the COUNT in „Mitgeschickter Kontext" (AK5) ------
   await page.goto("/beispiel/generate");
-  await expect(page.getByText("2 Wissens-Einträge", { exact: false })).toBeVisible();
+  await expect(page.getByRole("link", { name: "2 Wissens-Einträge" })).toBeVisible();
 
   // --- the run: the stub answers in the forbidden spelling ------------------
   await page.getByLabel("Quelltext (EN)").fill(`${SOURCE}\n\n${TRIGGER.oldName}`);
@@ -234,7 +408,7 @@ test("without naming conventions nothing is flagged and the prompt is unchanged"
   // campaign that never uses the feature sees (AK5: „Glossar-Verhalten im
   // Prompt unverändert").
   await page.goto("/beispiel/generate");
-  await expect(page.getByText("kein Kampagnenwissen", { exact: false })).toBeVisible();
+  await expect(page.getByRole("link", { name: "kein Kampagnenwissen" })).toBeVisible();
 
   await page.getByLabel("Quelltext (EN)").fill(SOURCE);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
@@ -244,159 +418,4 @@ test("without naming conventions nothing is flagged and the prompt is unchanged"
   // No echo (the prompt had no knowledge section at all) and no hint block.
   await expect(page.getByText(CONTEXT_ECHO, { exact: false })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: /Namens-Hinweis/ })).toHaveCount(0);
-});
-
-test("the sections are usable at 390px — the mobile floor", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  // Below `md` the topbar is not the chrome, so the page is opened directly;
-  // the „‹ Pool" row is the way back (routes/settings.tsx).
-  await page.goto("/settings?from=beispiel");
-  const knowledge = section(page, "Kampagnenwissen");
-
-  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
-  const from = knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" });
-  await from.fill("Mobil");
-  await expect(from).toHaveValue("Mobil");
-  // The row controls are reachable, not pushed off the side.
-  await expect(knowledge.getByRole("button", { name: "Eintrag löschen" })).toBeVisible();
-  await expect(knowledge.getByRole("button", { name: "Speichern" })).toBeVisible();
-
-  // Nothing scrolls sideways at this width (quality floor, design/README.md).
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth <= window.innerWidth,
-  );
-  expect(overflow).toBe(true);
-});
-
-test("leaving with unsaved rows asks first — and „Weiter bearbeiten“ keeps them", async ({ page }) => {
-  // The save is EXPLICIT, so navigating away is the moment the DM's work can
-  // vanish. At 390px the way out is the „‹ Pool" row (routes/settings.tsx),
-  // which is a plain router link — exactly the exit that used to drop the
-  // list without a word (components/UnsavedChangesGuard.tsx).
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/settings?from=beispiel");
-  const knowledge = section(page, "Kampagnenwissen");
-
-  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
-  await knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" }).fill("Nicht verlieren");
-
-  // --- „Weiter bearbeiten" stays on the page, with the rows intact ---------
-  await page.getByRole("link", { name: "Pool" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("Änderungen verwerfen?");
-  await dialog.getByRole("button", { name: "Weiter bearbeiten" }).click();
-  await expect(dialog).toHaveCount(0);
-  await expect(page).toHaveURL(/\/settings\?from=beispiel$/);
-  await expect(knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" })).toHaveValue(
-    "Nicht verlieren",
-  );
-
-  // --- „Verwerfen" is the DM's decision, and then it leaves ----------------
-  await page.getByRole("link", { name: "Pool" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
-  await expect(page).toHaveURL(/\/beispiel$/);
-});
-
-test("a SAVED list does not ask — the guard is about unsaved work only", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/settings?from=beispiel");
-  const knowledge = section(page, "Kampagnenwissen");
-
-  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
-  await knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" }).fill("Fertig");
-  await knowledge.getByRole("textbox", { name: "Neu (in dieser Kampagne)" }).fill("Neu");
-  await knowledge.getByRole("button", { name: "Speichern" }).click();
-  await expect(knowledge.getByText("Gespeichert", { exact: true })).toBeVisible();
-
-  await page.getByRole("link", { name: "Pool" }).click();
-  await expect(page).toHaveURL(/\/beispiel$/);
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-});
-
-test("deleting a row announces it and keeps the keyboard in the list", async ({ page }) => {
-  await openSettings(page);
-  const knowledge = section(page, "Kampagnenwissen");
-
-  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
-  await knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" }).fill("Eins");
-  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
-  await knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" }).last().fill("Zwei");
-
-  // Deleting the FIRST of two hands the focus to the survivor's delete
-  // button — clearing a list must not need the mouse again after every click.
-  await knowledge.getByRole("button", { name: "Eintrag löschen" }).first().click();
-  await expect(knowledge.getByText("Eintrag entfernt")).toBeAttached();
-  await expect(knowledge.getByRole("button", { name: "Eintrag löschen" })).toBeFocused();
-
-  // The last row leaves no row, so „Eintrag hinzufügen" takes the focus.
-  await knowledge.getByRole("button", { name: "Eintrag löschen" }).click();
-  await expect(knowledge.getByRole("button", { name: "Eintrag hinzufügen" })).toBeFocused();
-});
-
-test("switching the kind carries the text into the new form", async ({ page, api }) => {
-  await openSettings(page);
-  const knowledge = section(page, "Kampagnenwissen");
-
-  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
-  // A half-typed convention is flagged as incomplete — it is stored, but the
-  // prompt skips it, so the row says so instead of looking like it is in force.
-  await knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" }).fill("Salt Harbour");
-  await expect(knowledge.getByText("Unvollständig", { exact: false })).toBeVisible();
-  await knowledge.getByRole("textbox", { name: "Neu (in dieser Kampagne)" }).fill("Salzhafen");
-  await expect(knowledge.getByText("Unvollständig", { exact: false })).toHaveCount(0);
-
-  // naming -> fact: the pair survives as one sentence.
-  await knowledge.getByLabel("Art").selectOption("fact");
-  await expect(knowledge.getByRole("textbox", { name: "Fakt, der gilt" })).toHaveValue(
-    "Salt Harbour → Salzhafen",
-  );
-
-  // fact -> naming: the sentence lands in „Alt", where it is visible.
-  await knowledge.getByLabel("Art").selectOption("naming");
-  await expect(knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" })).toHaveValue(
-    "Salt Harbour → Salzhafen",
-  );
-  await expect(knowledge.getByRole("textbox", { name: "Neu (in dieser Kampagne)" })).toHaveValue("");
-
-  // And what is STORED is what is on screen — no column of a former kind
-  // travels along invisibly.
-  await knowledge.getByRole("textbox", { name: "Neu (in dieser Kampagne)" }).fill("Salzhafen");
-  await knowledge.getByRole("button", { name: "Speichern" }).click();
-  await expect(knowledge.getByText("Gespeichert", { exact: true })).toBeVisible();
-  const stored = await api.get<{ entries: Array<Record<string, unknown>> }>("beispiel/knowledge");
-  expect(stored.entries).toEqual([
-    { kind: "naming", from: "Salt Harbour → Salzhafen", to: "Salzhafen", text: "" },
-  ]);
-});
-
-test("a competing write while typing is a conflict on the spot, not on save", async ({
-  page,
-  api,
-}) => {
-  await openSettings(page);
-  const knowledge = section(page, "Kampagnenwissen");
-
-  await knowledge.getByRole("button", { name: "Eintrag hinzufügen" }).click();
-  await knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" }).fill("Meins");
-
-  // Somebody else writes. The version poll brings the new list in — and it
-  // must NOT replace what is being typed (ADR #4, in both directions).
-  const current = await api.get<{ rev: number }>("beispiel/knowledge");
-  await api.send("PUT", "beispiel/knowledge", {
-    entries: [{ kind: "fact", from: "", to: "", text: "Von woanders." }],
-    rev: current.rev,
-  });
-
-  await expect(knowledge.getByText("Inzwischen geändert", { exact: false })).toBeVisible();
-  await expect(knowledge.getByRole("textbox", { name: "Alt (im Quellmaterial)" })).toHaveValue(
-    "Meins",
-  );
-
-  // Reloading is the DM's decision — and then the other list is on screen.
-  await knowledge.getByRole("button", { name: "Neu laden" }).click();
-  await expect(knowledge.getByRole("textbox", { name: "Fakt, der gilt" })).toHaveValue(
-    "Von woanders.",
-  );
-  await expect(knowledge.getByText("Inzwischen geändert", { exact: false })).toHaveCount(0);
 });

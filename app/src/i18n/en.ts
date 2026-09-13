@@ -234,44 +234,54 @@ export const en: Messages = {
     "Settings for this Grimoire instance. Changes take effect at once and live on the server.",
   "settings.language.heading": "Language",
   "settings.language.hint": "Language of the interface. Applies to this instance, not to the campaign data.",
-  "settings.campaign.heading": "Campaign: {name}",
-  "settings.campaign.hint": "Settings that apply to this campaign only.",
 
-  // --- the two campaign lists on /settings (issue #53) ----------------------
-  "settings.list.loading": "Loading the list …",
-  "settings.list.loadFailed": "List not loaded — reload the page.",
-  "settings.list.saveFailed": "Not saved.",
-  "settings.list.saving": "Saving …",
-  "settings.list.saved": "Saved",
-  "settings.list.moveUp": "Move up",
-  "settings.list.moveDown": "Move down",
-  "settings.list.remove": "Delete entry",
-  "settings.list.removed": "Entry removed",
-  "settings.list.reload": "Reload",
+  // --- the two campaign-content pages (issue #53) --------------------------
+  "entryList.loading": "Loading the list …",
+  "entryList.loadFailed": "List not loaded — reload the page.",
+  "entryList.saveFailed": "Not saved.",
+  "entryList.saving": "Saving …",
+  "entryList.saved": "Saved",
+  "entryList.moveUp": "Move up",
+  "entryList.moveDown": "Move down",
+  "entryList.edit": "Edit “{name}”",
+  "entryList.remove": "Delete \u201c{name}\u201d",
+  "entryList.removed": "Entry deleted",
+  "entryList.reload": "Reload",
+  "entryList.confirmDelete.title": "Delete this entry?",
+  "entryList.confirmDelete.body": "\u201c{name}\u201d will be removed from the list. This cannot be undone.",
+  "entryList.confirmDelete.confirm": "Delete",
 
-  "settings.knowledge.heading": "Campaign knowledge",
-  "settings.knowledge.hint":
-    "Travels with every generator run and is binding — even when the source material says otherwise. References like [[fenn]] are resolved to the name.",
-  "settings.knowledge.empty":
-    "No campaign knowledge yet — add the first entry (a naming convention, say).",
-  "settings.knowledge.add": "Add entry",
-  "settings.knowledge.kindLabel": "Kind",
-  "settings.knowledge.kind.naming": "Naming convention",
-  "settings.knowledge.kind.fact": "Fact",
-  "settings.knowledge.kind.style": "Style rule",
-  "settings.knowledge.from": "Old (in the source material)",
-  "settings.knowledge.to": "New (in this campaign)",
-  "settings.knowledge.factText": "The fact that holds",
-  "settings.knowledge.styleText": "Style rule for generated text",
-  "settings.knowledge.incomplete": "Incomplete — not sent with the prompt like this.",
+  "knowledge.title": "Campaign knowledge",
+  "knowledge.lead":
+    "Naming conventions, facts and style rules of this campaign. Travels with every generator run and is binding \u2014 even when the source material says otherwise. The order here is the order in the prompt. References like [[fenn]] are resolved to the name.",
+  "knowledge.filter": "Filter the knowledge",
+  "knowledge.empty":
+    "No campaign knowledge yet \u2014 add the first entry (a naming convention, say).",
+  "knowledge.noMatch": "No entry matches the filter.",
+  "knowledge.add": "New entry",
+  "knowledge.blank": "Nothing filled in yet",
+  "knowledge.kindLabel": "Kind",
+  "knowledge.kind.naming": "Naming convention",
+  "knowledge.kind.fact": "Fact",
+  "knowledge.kind.style": "Style rule",
+  "knowledge.from": "Old (in the source material)",
+  "knowledge.to": "New (in this campaign)",
+  "knowledge.factText": "The fact that holds",
+  "knowledge.styleText": "Style rule for generated text",
+  "knowledge.incomplete": "Incomplete \u2014 not sent with the prompt like this.",
 
-  "settings.glossary.heading": "Glossary",
-  "settings.glossary.hint":
-    "Translations for the generator: the English term and this campaign's wording.",
-  "settings.glossary.empty": "No terms yet — add the first one.",
-  "settings.glossary.add": "Add term",
-  "settings.glossary.term": "Term",
-  "settings.glossary.explanation": "Explanation",
+  "glossary.title": "Glossary",
+  "glossary.lead":
+    "Translations for the generator: the English term and this campaign's wording. Sorted alphabetically.",
+  "glossary.filter": "Filter the terms",
+  "glossary.empty": "No terms yet \u2014 add the first one.",
+  "glossary.noMatch": "No term matches the filter.",
+  "glossary.add": "New term",
+  "glossary.term": "Term",
+  "glossary.explanation": "Explanation",
+  "glossary.noExplanation": "No explanation",
+
+  "lookup.heading": "Look up",
 
   // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
   "server.slug_taken": '{kind} “{id}” already exists — suggestion: “{suggestion}”',
@@ -454,7 +464,6 @@ export const en: Messages = {
 
   // --- mobile start surface (routes/mobile-start.tsx) ----------------------
   "mobileStart.search": "Search scenes, NPCs, locations …",
-  "mobileStart.browse": "Look up",
   "mobileStart.count.scenes": "{count, plural, one {# scene} other {# scenes}}",
   "mobileStart.count.npcs": "{count, plural, one {# NPC} other {# NPCs}}",
   "mobileStart.count.locations": "{count, plural, one {# location} other {# locations}}",
@@ -469,6 +478,7 @@ export const en: Messages = {
   "palette.placeholder": "Search scenes, NPCs, locations …",
   "palette.results.aria": "Search results",
   "palette.empty": "Nothing found.",
+  "palette.kind.page": "Page",
 
   // --- stale-bundle banner (components/UpdateBanner.tsx) -------------------
   "update.available": "New version available — reload",
@@ -534,8 +544,10 @@ export const en: Messages = {
   "generate.input.sourcePlaceholder":
     "Paste adventure text — paragraphs, boxed text, statblock references …",
   "generate.input.contextLabel": "Context sent along:",
-  "generate.input.contextHint":
-    "{npcs, plural, one {# NPC} other {# NPCs}} · {locations, plural, one {# location} other {# locations}} · {knowledge, plural, =0 {no campaign knowledge} one {# knowledge entry} other {# knowledge entries}} · {glossary}",
+  "generate.input.contextEntities":
+    "{npcs, plural, one {# NPC} other {# NPCs}} \u00b7 {locations, plural, one {# location} other {# locations}}",
+  "generate.input.knowledgeCount":
+    "{count, plural, =0 {no campaign knowledge} one {# knowledge entry} other {# knowledge entries}}",
   "generate.input.glossary": "glossary",
   "generate.input.noGlossary": "no glossary",
   "generate.input.submit.scene": "Generate drafts",

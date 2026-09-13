@@ -221,14 +221,14 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     page.getByRole("banner").getByText(/Der Leuchtturm von Salzhafen/),
   ).toHaveCount(1);
 
-  // The pool's own "NPCs · Orte" footer line (issue #26) is gone — the topbar
-  // is the only place that navigation lives now (issue #34).
+  // The pool carries a „Nachschlagen" line again (issue #53, PO feedback on
+  // PR #87) — it is where the two campaign-content pages are reached from on
+  // the desktop. What matters HERE is that they did not move into the TOPBAR:
+  // the trio above is still exactly Kapitel/NPCs/Orte, which is what the rest
+  // of this test measures.
   await expect(
-    page.getByRole("main").getByRole("link", { name: "NPCs" }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByRole("main").getByRole("link", { name: "Orte" }),
-  ).toHaveCount(0);
+    page.getByRole("navigation", { name: "Nachschlagen" }).getByRole("link"),
+  ).toHaveText(["NPCs", "Orte", "Glossar", "Kampagnenwissen"]);
 
   await nav.getByRole("link", { name: "Orte" }).click();
   await expect(page).toHaveURL(/\/beispiel\/list\/locations$/);

@@ -7,7 +7,7 @@
 // the server is the truth) and there is no recents endpoint yet.
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Bookmark, ChevronRight, MapPin, Search, User } from "lucide-react";
+import { BookA, Bookmark, ChevronRight, Lightbulb, MapPin, Search, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router";
@@ -71,9 +71,9 @@ export function MobileStart({ campaign }: { campaign: string }) {
 
       <InboxCard campaign={campaign} />
 
-      <nav aria-label={t("mobileStart.browse")} className="mt-8">
+      <nav aria-label={t("lookup.heading")} className="mt-8">
         <p className="mb-1 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
-          {t("mobileStart.browse")}
+          {t("lookup.heading")}
         </p>
         <BrowseRow
           to={`/${campaign}/list/scenes`}
@@ -93,6 +93,13 @@ export function MobileStart({ campaign }: { campaign: string }) {
           label={t("browse.title.locations")}
           meta={countLabel(tree?.locations.length, "mobileStart.count.locations")}
         />
+        {/* The two pages the DM MAINTAINS (issue #53, PO feedback on PR #87).
+            They sit after the three read-only lists — content you read before
+            content you edit (lib/lookup.ts) — and carry no count: a glossary
+            of 12 terms is not a number anyone acts on, and the counts above
+            come free with the tree query these two do not share. */}
+        <BrowseRow to={`/${campaign}/glossary`} icon={BookA} label={t("glossary.title")} />
+        <BrowseRow to={`/${campaign}/knowledge`} icon={Lightbulb} label={t("knowledge.title")} />
       </nav>
 
       {/* The language switch (issue #69 follow-up). This surface REPLACES the
@@ -117,7 +124,8 @@ function BrowseRow({
   to: string;
   icon: LucideIcon;
   label: string;
-  meta: string | undefined;
+  /** A count when the surface has one for free; a plain row otherwise. */
+  meta?: string;
 }) {
   return (
     <Link

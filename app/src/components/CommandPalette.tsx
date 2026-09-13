@@ -6,6 +6,7 @@
 // server does all filtering/ranking; client-side re-filtering would fight
 // the server's bm25 ordering (FTS5 since the cutover, #57).
 
+import type { SearchResult } from "@grimoire/shared/types";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
@@ -13,7 +14,8 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { fetchSearch, fetchTree } from "@/api";
-import { useT } from "@/i18n";
+import { useT, type Translate } from "@/i18n";
+import { LOOKUP_TARGETS, type LookupTarget } from "@/lib/lookup";
 import { contingencyPaths, kindIcon, kindLabel, resultHref } from "@/lib/search";
 import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
@@ -76,7 +78,18 @@ export function CommandPalette({
   const forkPaths = useMemo(() => contingencyPaths(tree.data), [tree.data]);
 
   // Empty query shows nothing yet; results only exist for a non-empty term.
-  const results = term === "" ? [] : (search.data?.results ?? []);
+  const hits = term === "" ? [] : (search.data?.results ?? []);
+  // Above the hits: the PAGES of this campaign whose name the DM typed (issue
+  // #53, PO feedback on PR #87). „Glossar" and „Kampagnenwissen" are reachable
+  // from the pool and the phone's start surface, but ⌘K is where this app's
+  // keyboard goes first — and the server's index holds documents, not pages,
+  // so it can never answer for them. A navigation target the DM typed the name
+  // of is what they meant, and there are never more than a handful.
+  const navs = useMemo(() => navTargets(campaign, term, t), [campaign, term, t]);
+  const results: Item[] = [
+    ...navs.map((target) => ({ kind: "nav" as const, target })),
+    ...hits.map((result) => ({ kind: "result" as const, result })),
+  ];
   const showNoResults = term !== "" && search.isSuccess && results.length === 0;
   const activeIndex = Math.min(active, Math.max(results.length - 1, 0));
   const optionId = (index: number) => `${listboxId}-option-${index}`;
@@ -90,10 +103,12 @@ export function CommandPalette({
   }
 
   function pick(index: number) {
-    const result = results[index];
-    if (result === undefined) return;
+    const item = results[index];
+    if (item === undefined) return;
     handleOpenChange(false);
-    void navigate(resultHref(campaign, result));
+    void navigate(
+      item.kind === "nav" ? item.target.href(campaign) : resultHref(campaign, item.result),
+    );
   }
 
   function onInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -160,11 +175,14 @@ export function CommandPalette({
                 {t("palette.empty")}
               </p>
             )}
-            {results.map((result, index) => {
-              const Icon = kindIcon(result.kind, forkPaths.has(result.path));
+            {results.map((item, index) => {
+              const nav = item.kind === "nav";
+              const Icon = nav
+                ? item.target.icon
+                : kindIcon(item.result.kind, forkPaths.has(item.result.path));
               return (
                 <div
-                  key={result.path}
+                  key={nav ? `nav:${item.target.id}` : item.result.path}
                   id={optionId(index)}
                   role="option"
                   aria-selected={index === activeIndex}
@@ -177,10 +195,10 @@ export function CommandPalette({
                 >
                   <Icon aria-hidden size={15} className="flex-none text-muted-foreground" />
                   <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                    {result.title}
+                    {nav ? t(item.target.label) : item.result.title}
                   </span>
                   <span className="flex-none text-xs text-muted-foreground">
-                    {kindLabel(result.kind, t)}
+                    {nav ? t("palette.kind.page") : kindLabel(item.result.kind, t)}
                   </span>
                 </div>
               );
@@ -190,4 +208,20 @@ export function CommandPalette({
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
   );
+}
+
+/** One row of the palette: a page of this campaign, or a document hit. */
+type Item =
+  | { kind: "nav"; target: LookupTarget }
+  | { kind: "result"; result: SearchResult };
+
+/**
+ * Which of the campaign's pages the typed term names. A plain substring match
+ * on the LOCALISED label — the DM types „gloss" or „wissen", and there are
+ * five candidates, so nothing here is worth a ranking.
+ */
+function navTargets(campaign: string, term: string, t: Translate): LookupTarget[] {
+  if (campaign === "" || term === "") return [];
+  const needle = term.toLocaleLowerCase("de");
+  return LOOKUP_TARGETS.filter((target) => t(target.label).toLocaleLowerCase("de").includes(needle));
 }

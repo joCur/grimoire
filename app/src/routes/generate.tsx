@@ -57,7 +57,7 @@ import {
   User,
 } from "lucide-react";
 import { useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 
 import {
   ApiError,
@@ -85,6 +85,7 @@ import {
   chapterIdError,
   chapterIdValue,
   contextHint,
+  knowledgeHint,
   generatePhase,
   jobErrorBody,
   jobMode,
@@ -97,7 +98,7 @@ import {
   usageLabel,
   type GenerateMode,
 } from "@/lib/generate";
-import { promptKnowledgeCount } from "@/lib/settings-list";
+import { promptKnowledgeCount } from "@/lib/entry-list";
 import { generateJobKey, useDraftEditSync, useGenerateJob } from "@/lib/use-generate-job";
 import { cn } from "@/lib/utils";
 
@@ -107,6 +108,9 @@ type Target = { kind: "chapter"; id: string } | { kind: "new" };
 type StubDecision = "accepted" | "rejected";
 
 const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground";
+/** The two links in „Mitgeschickter Kontext" — quiet, part of the sentence. */
+const CONTEXT_LINK =
+  "rounded px-0.5 text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground hover:decoration-solid focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
 const FIELD =
   "w-full rounded-lg border border-input bg-card px-4 py-3 text-[13.5px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-border-hover";
 const CHIP = "rounded-full border px-3.5 py-[5px] text-[12.5px]";
@@ -562,19 +566,25 @@ export function GenerateRoute() {
               </>
             )}
 
-            {/* Both modes send the same context along (npc/location names +
-                the glossary, generator/README.md step 1). */}
+            {/* Both modes send the same context along (npc/location names,
+                the campaign knowledge and the glossary, generator/README.md
+                step 1). The last two are LINKS since they became pages of
+                their own (issue #53, PO feedback on PR #87): this line is
+                exactly where the DM notices a rule is missing, and it should
+                be one click from here to the page that fixes it. */}
             <p className="mt-2.5 mb-[26px] flex flex-wrap items-baseline gap-1.5 text-[12px] leading-[1.5] text-faint">
               <span>{t("generate.input.contextLabel")}</span>
               <span className="text-muted-foreground">
-                {contextHint(
-                  tree.data?.npcs.length ?? 0,
-                  tree.data?.locations.length ?? 0,
-                  glossary.isSuccess,
-                  t,
-                  promptKnowledgeCount(knowledge.data?.entries ?? []),
-                )}
+                {contextHint(tree.data?.npcs.length ?? 0, tree.data?.locations.length ?? 0, t)}
               </span>
+              <span aria-hidden>·</span>
+              <Link to={`/${campaign}/knowledge`} className={CONTEXT_LINK}>
+                {knowledgeHint(promptKnowledgeCount(knowledge.data?.entries ?? []), t)}
+              </Link>
+              <span aria-hidden>·</span>
+              <Link to={`/${campaign}/glossary`} className={CONTEXT_LINK}>
+                {t(glossary.isSuccess ? "generate.input.glossary" : "generate.input.noGlossary")}
+              </Link>
             </p>
 
             <Button
