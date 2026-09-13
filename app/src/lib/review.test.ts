@@ -12,6 +12,7 @@ import {
   extractHashtags,
   firstReviewTag,
   harvestInboxEntries,
+  inboxNoteEntries,
   isNpcSlug,
   isReviewTag,
   npcNameFromText,
@@ -137,6 +138,38 @@ describe("harvestInboxEntries", () => {
       "Offen",
       "Erledigt",
     ]);
+  });
+});
+
+describe("inboxNoteEntries", () => {
+  const body = [
+    "- 2026-01-10 Offen #thread",
+    "- [x] 2026-01-09 Notiz erledigt",
+    "- 2026-01-11 Ohne Tag",
+    "- Auch ohne Tag",
+  ].join("\n");
+
+  test("returns only the open UNTAGGED lines (issue #85)", () => {
+    expect(inboxNoteEntries(body).map((e) => e.text)).toEqual(["Ohne Tag", "Auch ohne Tag"]);
+  });
+
+  test("keeps the date of the inbox convention", () => {
+    expect(inboxNoteEntries(body)[0]?.date).toBe("2026-01-11");
+  });
+
+  test("keeps a note ticked off in this sitting", () => {
+    expect(inboxNoteEntries(body, new Set([1])).map((e) => e.text)).toEqual([
+      "Notiz erledigt",
+      "Ohne Tag",
+      "Auch ohne Tag",
+    ]);
+  });
+
+  test("tagged and untagged lines partition the open inbox", () => {
+    const tagged = harvestInboxEntries(body).map((e) => e.raw);
+    const notes = inboxNoteEntries(body).map((e) => e.raw);
+    expect(tagged.filter((raw) => notes.includes(raw))).toEqual([]);
+    expect(tagged.length + notes.length).toBe(3);
   });
 });
 

@@ -125,9 +125,25 @@ export function harvestInboxEntries(
   body: string,
   keepDone: ReadonlySet<number> = new Set<number>(),
 ): InboxLine[] {
-  return parseInboxEntries(body).filter(
-    (line) => line.tags.length > 0 && (!line.done || keepDone.has(line.index)),
-  );
+  return openInboxLines(body, keepDone).filter((line) => line.tags.length > 0);
+}
+
+/**
+ * The UNTAGGED open inbox lines — the review's „Notizen" section (issue #85).
+ * Ideas thrown in on the go carry no hashtag, and before #85 they had no way
+ * out of the inbox document at all. Same done-rule as the tagged half: a line
+ * ticked off in an earlier review stays out, one ticked off in THIS sitting
+ * (`keepDone`) keeps its card.
+ */
+export function inboxNoteEntries(
+  body: string,
+  keepDone: ReadonlySet<number> = new Set<number>(),
+): InboxLine[] {
+  return openInboxLines(body, keepDone).filter((line) => line.tags.length === 0);
+}
+
+function openInboxLines(body: string, keepDone: ReadonlySet<number>): InboxLine[] {
+  return parseInboxEntries(body).filter((line) => !line.done || keepDone.has(line.index));
 }
 
 // --- chapter checklist ("Offene Fäden") ---------------------------------------
