@@ -156,7 +156,7 @@ export function SceneRoute() {
           {/* Where this file sits — the context the topbar breadcrumb used to
               carry (issue #34): chapter › group for a scene, the list for an
               npc/location, nothing for the rest. */}
-          <PageContext crumbs={pageContextCrumbs(campaign, data.path, tree.data)} />
+          <PageContext crumbs={pageContextCrumbs(campaign, data.path, tree.data, t)} />
           {isScene ? (
             <SceneArticle
               file={data}

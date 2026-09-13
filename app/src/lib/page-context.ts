@@ -19,6 +19,7 @@
 import type { CampaignTree } from "@grimoire/shared/types";
 import { kindFromPath } from "@grimoire/shared/kind";
 
+import type { Translate } from "@/i18n";
 import { locationName } from "@/lib/campaign";
 
 /** One step of the context line; without `to` it is plain text. */
@@ -39,20 +40,25 @@ export interface ContextCrumb {
  * in the chapter directory.
  * Chapter file: just the chapter, unlinked — it IS the chapter.
  * NPC / location: their list.
+ *
+ * The two list labels come from the CATALOG via `t` (issue #69) — the crumb
+ * says exactly what the list page it points at is titled, and this helper
+ * stays language-free like every other one in lib/.
  */
 export function pageContextCrumbs(
   campaign: string,
   path: string,
   tree: CampaignTree | undefined,
+  t: Translate,
 ): ContextCrumb[] {
   if (campaign === "" || path === "") return [];
   const segments = path.split("/");
 
   switch (kindFromPath(path)) {
     case "npc":
-      return [{ label: "NPCs", to: `/${campaign}/list/npcs` }];
+      return [{ label: t("browse.title.npcs"), to: `/${campaign}/list/npcs` }];
     case "location":
-      return [{ label: "Orte", to: `/${campaign}/list/locations` }];
+      return [{ label: t("browse.title.locations"), to: `/${campaign}/list/locations` }];
     case "scene":
     case "chapter": {
       const chapterId = segments[0] ?? "";

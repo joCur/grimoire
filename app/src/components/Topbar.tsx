@@ -104,6 +104,7 @@ import {
 import { IconLogo } from "@/icons";
 import { useT } from "@/i18n";
 import { campaignDescription, campaignLabel } from "@/lib/campaign";
+import { NON_CAMPAIGN_SEGMENTS } from "@/lib/routes";
 import { sessionElapsedLabel, sessionIsPaused } from "@/lib/session";
 import { navSection } from "@/lib/topbar-nav";
 import { useGenerateJob } from "@/lib/use-generate-job";
@@ -117,22 +118,11 @@ import {
 } from "@/lib/use-session";
 
 /**
- * First path segments that are ROUTES, not campaign ids (issue #69).
- *
- * The topbar derives the campaign from the URL with its own `matchPath`
- * calls, and `"/:campaign"` happily matches `/settings` with
- * `campaign: "settings"` — which dressed the settings page in a full
- * campaign chrome ("Kampagne: settings", the nav trio pointing at
- * `/settings/list/npcs`, a session query for a campaign that does not
- * exist). React Router itself ranks the static route higher and renders the
- * right page; only this heuristic has to be told.
- *
- * The app's routes are the source: App.tsx has exactly these two non-campaign
- * segments, and a campaign whose id collided with one of them would be
- * unreachable anyway.
+ * The campaign of a `matchPath` result, or undefined when the segment is a
+ * ROUTE and not a campaign id (`lib/routes.ts` — App.tsx and this heuristic
+ * read the same list). React Router itself ranks the static route higher and
+ * renders the right page; only this heuristic has to be told.
  */
-const NON_CAMPAIGN_SEGMENTS: ReadonlySet<string> = new Set(["settings", "dev"]);
-
 function campaignOf(match: { params: { campaign?: string } } | null): string | undefined {
   const id = match?.params.campaign;
   if (id === undefined || NON_CAMPAIGN_SEGMENTS.has(id)) return undefined;
@@ -306,7 +296,7 @@ export function Topbar() {
             at EVERY width on purpose: the topbar overflowed once (issue #50)
             and this is the least urgent thing on it, so it must not be able to
             grow the row. Its accessible name comes from aria-label. */}
-        <SettingsLink />
+        <SettingsLink campaign={campaign} />
 
         {/* THE session control: ONE chip in ONE slot for EVERY state (PO
             feedback on issue #40) — start offer, running session, unknown
@@ -817,12 +807,20 @@ function GeneratorLink({ campaign }: { campaign: string }) {
  * switcher) it is the only settings entry there is. Same geometry as the
  * generator entry minus its label, so the row's width does not depend on it
  * (issue #50).
+ *
+ * WHICH CAMPAIGN the page shows its campaign half for travels ALONG, in
+ * `?from=` (issue #69, PO feedback on PR #83): the campaign the DM was looking
+ * at when they reached for the gear. `/settings` itself stays campaign-
+ * independent — it has to work on a fresh instance — and without a campaign in
+ * the URL the link carries nothing, so the page falls back to the same
+ * heuristic "/" uses. A search param rather than `location.state`, so a
+ * reload, a bookmark and the back button all keep the answer.
  */
-function SettingsLink() {
+function SettingsLink({ campaign }: { campaign: string }) {
   const t = useT();
   return (
     <Link
-      to="/settings"
+      to={campaign === "" ? "/settings" : `/settings?from=${encodeURIComponent(campaign)}`}
       aria-label={t("settings.title")}
       title={t("settings.title")}
       className={cn(

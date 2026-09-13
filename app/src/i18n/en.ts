@@ -80,7 +80,7 @@ export const en: Messages = {
 
   "create.chapter.title": "Create chapter",
   "create.chapter.description":
-    "The title becomes the chapter's id — it appears in every scene address and stays as it is. The goal is optional and lands under “Ziel des Kapitels”.",
+    "The title becomes the chapter's id — it appears in every scene address and stays as it is. The goal is optional and lands in the file under the heading “## Ziel des Kapitels” — the section the pool reads it from.",
   "create.chapter.nameLabel": "Title",
   "create.chapter.namePlaceholder": "Chapter title",
   "create.chapter.goalLabel": "Goal of the chapter (optional)",
@@ -204,7 +204,8 @@ export const en: Messages = {
 
   "rename.error.unchanged": "Unchanged — that is already the current id.",
   "rename.error.slug": "An id needs lowercase letters, digits and single hyphens.",
-  "rename.error.reserved": "npcs, locations and sessions are reserved names.",
+  "rename.error.reserved":
+    "“npcs”, “locations” and “sessions” are reserved names.",
   "rename.failed": "Rename failed — check the server.",
   "rename.conflict.ambiguous": "Several entries claim this id — a conflict in the database.",
   "rename.conflict.path": "{path} already exists — pick another id.",
@@ -459,6 +460,7 @@ export const en: Messages = {
   "kind.location": "Location",
   "kind.chapter": "Chapter",
   "kind.campaign": "Campaign",
+  "markdown.ref.aria": "{kind}: {name}",
 
 
   // --- generator: input form (routes/generate.tsx, lib/generate.ts) --------
@@ -573,7 +575,7 @@ export const en: Messages = {
   "generate.written.title.scene": "Written — all as draft",
   "generate.written.title.npc": "Written — NPC entry created",
   "generate.written.hint.scene":
-    "The scenes show up in the pool with status “Draft”. Existing entries are never overwritten — on a conflict the server writes nothing.",
+    "The scenes show up in the pool with status “draft”. Existing entries are never overwritten — on a conflict the server writes nothing.",
   "generate.written.hint.npc":
     "The NPC shows up in the NPC list and in search. Existing entries are never overwritten — on a conflict the server writes nothing.",
   "generate.written.openNpc": "Open NPC",

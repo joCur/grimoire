@@ -23,21 +23,30 @@
 // so nothing here competes with the pool. Section headings follow the pool's
 // hairline-under-a-small-heading pattern rather than inventing a card style.
 //
-// WHICH CAMPAIGN is "currently open" is not in this route's URL — `/settings`
-// is campaign-independent on purpose, so the gear works from the cold start
-// too. The answer comes from the same server-side heuristic "/" uses
-// (`pickLastCampaign`, lib/campaign.ts): the last campaign with a session.
-// No localStorage (quality floor), and no second notion of "current".
+// WHICH CAMPAIGN is "currently open" cannot be the PATH — `/settings` is
+// campaign-independent on purpose, so the gear works from the cold start too.
+// It is the campaign the DM CAME FROM: the gear carries it in `?from=`
+// (components/Topbar.tsx). That is the only honest answer — guessing with the
+// "/" heuristic instead sent the DM back to a different campaign than the one
+// they had open, and would label a future campaign section with the wrong
+// name (PO feedback on PR #83).
+//
+// `?from=` is checked against the campaign LIST rather than trusted: a stale
+// bookmark or a renamed campaign must not produce a back row into nothing.
+// Only with no origin at all (the gear from "/" on a fresh instance, or a
+// hand-typed `/settings`) does the old heuristic stand in — `pickLastCampaign`
+// (lib/campaign.ts), the same one "/" uses. No localStorage (quality floor).
 
 import { useQuery } from "@tanstack/react-query";
 import { useId, type ReactNode } from "react";
+import { useSearchParams } from "react-router";
 
 import { fetchCampaigns } from "@/api";
 import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { useT } from "@/i18n";
 import type { MessageKey } from "@/i18n";
-import { campaignLabel, pickLastCampaign } from "@/lib/campaign";
+import { campaignLabel, settingsCampaign } from "@/lib/campaign";
 
 /**
  * The campaign-scoped sections. EMPTY today — issue #53 (Generator knowledge
@@ -56,7 +65,8 @@ export function SettingsRoute() {
   const t = useT();
   const { data } = useQuery({ queryKey: ["campaigns"], queryFn: fetchCampaigns });
   const campaigns = data ?? [];
-  const campaign = pickLastCampaign(campaigns);
+  const [search] = useSearchParams();
+  const campaign = settingsCampaign(search.get("from"), campaigns);
   const label =
     campaign === undefined
       ? undefined

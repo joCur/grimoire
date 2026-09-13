@@ -1,8 +1,9 @@
-import { Outlet, Route, Routes, useParams } from "react-router";
+import { Navigate, Outlet, Route, Routes, useParams } from "react-router";
 
 import { Topbar } from "@/components/Topbar";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { ReviewMemoryProvider } from "@/lib/review-memory";
+import { nonCampaignRedirect } from "@/lib/routes";
 import { useCampaignVersion } from "@/lib/use-campaign-version";
 import { EntityRefProvider } from "@/markdown/entity-refs";
 import { BrowseRoute } from "@/routes/browse";
@@ -22,6 +23,15 @@ import { SettingsRoute } from "@/routes/settings";
 function CampaignScope() {
   const { campaign = "" } = useParams();
   useCampaignVersion(campaign);
+  // `/:campaign` is the widest route there is, so it also swallows everything
+  // BELOW a non-campaign segment: `/settings/list/npcs` (a stale link, a
+  // hand-edited URL) arrived here as `campaign: "settings"` and produced a
+  // half-empty list page with no way out — for a campaign that cannot exist.
+  // A sibling `settings/*` route cannot fix that (React Router ranks the
+  // campaign route higher, see lib/routes.ts); the check belongs here, where
+  // the segment is known. The DM lands on the page they were aiming at.
+  const redirect = nonCampaignRedirect(campaign);
+  if (redirect !== undefined) return <Navigate to={redirect} replace />;
   // `[[slug]]` references resolve against the campaign tree (issue #68) —
   // mounted here so EVERY view's markdown bodies resolve the same way, off
   // the tree query the views already share.

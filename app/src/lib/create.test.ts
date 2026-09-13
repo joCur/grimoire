@@ -98,7 +98,7 @@ describe("createErrorMessage", () => {
         conflictError({ code: "slug_taken", kind: "npc", id: "holm", suggestion: "holm-2" }),
         t,
       ),
-    ).toBe('NPC „holm" gibt es schon — Vorschlag: „holm-2"');
+    ).toBe('NPC „holm" existiert schon — Vorschlag: „holm-2"');
     expect(
       createErrorMessage(
         conflictError({ code: "slug_reserved", kind: "chapter", id: "npcs", suggestion: "npcs-2" }),
@@ -116,6 +116,21 @@ describe("createErrorMessage", () => {
         t,
       ),
     ).toBe("Der Name ergibt keine id — bitte Buchstaben oder Ziffern verwenden.");
+  });
+
+  test("a body with no kind reads as a GRAMMATICAL German sentence", () => {
+    // The generic kind carries its article („Der Eintrag"), so the sentence
+    // has to be built around a nominative — „… gibt es schon" wanted an
+    // accusative and read wrong (PR #83 review).
+    expect(
+      createErrorMessage(conflictError({ code: "slug_taken", id: "holm", suggestion: "holm-2" }), t),
+    ).toBe('Der Eintrag „holm" existiert schon — Vorschlag: „holm-2"');
+    expect(
+      createErrorMessage(
+        conflictError({ code: "slug_taken", id: "holm", suggestion: "holm-2" }),
+        translator("en"),
+      ),
+    ).toBe("The entry “holm” already exists — suggestion: “holm-2”");
   });
 
   test("an English translation is really the English one", () => {

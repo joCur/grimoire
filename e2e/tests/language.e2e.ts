@@ -52,7 +52,7 @@ async function switchTo(
   language: "Deutsch" | "English",
 ) {
   await gear(page, entry).click();
-  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page).toHaveURL(/\/settings(\?|$)/);
   const radio = languageRadio(page, language);
   await expect(radio).toBeVisible();
   await radio.click();
@@ -78,7 +78,7 @@ test("the gear is the way in, and the campaign menu is not", async ({ page }) =>
   }
 
   await gear(page, "Einstellungen").click();
-  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page).toHaveURL(/\/settings(\?|$)/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Einstellungen");
   // The instance section, named by the heading that labels the radio group.
   await expect(page.getByRole("radiogroup", { name: "Sprache" })).toBeVisible();
@@ -281,7 +281,7 @@ test("a server error is read in the selected language", async ({ page, api }) =>
   await page.getByRole("button", { name: "Anlegen" }).click();
   // The whole sentence, built from the code: the kind, the taken id, the free
   // proposal. Nothing here comes off the wire as prose.
-  await expect(page.getByText('NPC „jorna" gibt es schon — Vorschlag: „jorna-2"')).toBeVisible();
+  await expect(page.getByText('NPC „jorna" existiert schon — Vorschlag: „jorna-2"')).toBeVisible();
   // …and the 409 wrote nothing.
   expect(await api.exists("npcs/jorna-2")).toBe(false);
   await page.getByRole("button", { name: "Abbrechen" }).click();
@@ -297,14 +297,41 @@ test("a server error is read in the selected language", async ({ page, api }) =>
   ).toBeVisible();
   // The German sentence is GONE, not merely covered — this is the regression
   // the codes exist to prevent.
-  await expect(page.getByText("gibt es schon", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("existiert schon", { exact: false })).toHaveCount(0);
   expect(await api.exists("npcs/jorna-2")).toBe(false);
 
   // Back to German for the rest of the suite.
   await api.send("PUT", "settings", { locale: null });
 });
 
-// --- the switch where there is no topbar ------------------------------------
+// --- which campaign /settings is about, and what is NOT a campaign ----------
+
+test("the gear carries the campaign it was opened FROM, and has a way back", async ({ page }) => {
+  // The gear is campaign-independent as a ROUTE but not as a moment: the
+  // page has to be about the campaign the DM was just looking at, not about
+  // whichever one the "/" heuristic would guess (PO feedback on PR #83).
+  await page.goto("/beispiel/list/npcs");
+  await gear(page, "Einstellungen").click();
+  await expect(page).toHaveURL(/\/settings\?from=beispiel$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Einstellungen");
+  // The way back is THAT campaign's pool. The row is mobile chrome, so the
+  // claim is checked where it is on screen: a phone width.
+  await page.setViewportSize({ width: 390, height: 780 });
+  const back = page.getByRole("link", { name: "Pool" });
+  await expect(back).toBeVisible();
+  await back.click();
+  await expect(page).toHaveURL(/\/beispiel$/);
+});
+
+test("anything below /settings is not a campaign — it redirects", async ({ page }) => {
+  // `/:campaign/list/:kind` happily matched `campaign: "settings"` and left
+  // the DM on a half-empty list page with no way out (PR #83 review).
+  await page.goto("/settings/list/npcs");
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Einstellungen");
+  await expect(page.getByRole("radiogroup", { name: "Sprache" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Kampagne: / })).toHaveCount(0);
+});
 
 test.describe("the cold start", () => {
   // An EMPTY instance: no campaign, so the settings page has no campaign
@@ -344,7 +371,7 @@ test.describe("the cold start", () => {
     // The gear is on the cold start's topbar too — a fresh instance must be
     // able to reach its settings.
     await gear(page, "Einstellungen").click();
-    await expect(page).toHaveURL(/\/settings$/);
+    await expect(page).toHaveURL(/\/settings(\?|$)/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Einstellungen");
     await expect(page.getByRole("radiogroup", { name: "Sprache" })).toBeVisible();
     // No campaign section, and no heading over nothing.

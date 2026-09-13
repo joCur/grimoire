@@ -189,7 +189,7 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   await page.getByRole("button", { name: "NPC anlegen" }).click();
   await page.getByLabel("Name").fill("Hafenmeisterin Jorna");
   await page.getByRole("button", { name: "Anlegen" }).click();
-  await expect(page.getByText("gibt es schon", { exact: false })).toBeVisible();
+  await expect(page.getByText("existiert schon", { exact: false })).toBeVisible();
   // Still exactly one entry — the 409 wrote nothing.
   expect(await api.exists("npcs/hafenmeisterin-jorna-2")).toBe(false);
 

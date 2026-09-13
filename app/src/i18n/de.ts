@@ -90,7 +90,7 @@ export const de = {
 
   "create.chapter.title": "Kapitel anlegen",
   "create.chapter.description":
-    "Der Titel wird zur id des Kapitels — sie steht in jeder Szenen-Adresse und bleibt, wie sie ist. Das Ziel ist optional und landet unter „Ziel des Kapitels“.",
+    'Der Titel wird zur id des Kapitels — sie steht in jeder Szenen-Adresse und bleibt, wie sie ist. Das Ziel ist optional und landet in der Datei unter der Überschrift „## Ziel des Kapitels" — dem Abschnitt, den der Pool liest.',
   "create.chapter.nameLabel": "Titel",
   "create.chapter.namePlaceholder": "Titel des Kapitels",
   "create.chapter.goalLabel": "Ziel des Kapitels (optional)",
@@ -216,7 +216,8 @@ export const de = {
 
   "rename.error.unchanged": "Unverändert — das ist schon die aktuelle id.",
   "rename.error.slug": "id braucht Kleinbuchstaben, Ziffern und einzelne Bindestriche.",
-  "rename.error.reserved": "npcs, locations und sessions sind reservierte Namen.",
+  "rename.error.reserved":
+    '„npcs", „locations" und „sessions" sind reservierte Namen.',
   "rename.failed": "Umbenennen fehlgeschlagen — Server prüfen.",
   "rename.conflict.ambiguous": "Mehrere Einträge beanspruchen diese id — Konflikt in der Datenbank.",
   "rename.conflict.path": "{path} existiert schon — andere id wählen.",
@@ -247,7 +248,7 @@ export const de = {
   "settings.campaign.hint": "Einstellungen, die nur für diese Kampagne gelten.",
 
   // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
-  "server.slug_taken": '{kind} „{id}" gibt es schon — Vorschlag: „{suggestion}"',
+  "server.slug_taken": '{kind} „{id}" existiert schon — Vorschlag: „{suggestion}"',
   "server.slug_reserved": '„{id}" ist ein reservierter Name — Vorschlag: „{suggestion}"',
   "server.slug_empty": "{field} ergibt keine id — bitte Buchstaben oder Ziffern verwenden.",
   "server.glossary_duplicate_term":
@@ -473,6 +474,9 @@ export const de = {
   "kind.location": "Ort",
   "kind.chapter": "Kapitel",
   "kind.campaign": "Kampagne",
+  // The accessible name of a `[[ref]]` in a body (markdown/entity-refs.tsx):
+  // what it points at, then its current name.
+  "markdown.ref.aria": "{kind}: {name}",
 
   // --- generator: input form (routes/generate.tsx, lib/generate.ts) --------
   "generate.input.title.scene": "Szenen generieren",
@@ -521,7 +525,7 @@ export const de = {
   "generate.input.chapterId.space": "Keine Leerzeichen — Wörter mit Bindestrich trennen.",
   "generate.input.chapterId.charset": "Nur Kleinbuchstaben, Ziffern und Bindestriche.",
   "generate.input.chapterId.reserved":
-    "„npcs“, „locations“ und „sessions“ sind reserviert — kein Kapitelname.",
+    '„npcs", „locations" und „sessions" sind reserviert — kein Kapitelname.',
   "generate.input.npcId.slash": "Keine Schrägstriche — die id ist ein einzelnes Segment.",
   "generate.input.npcId.space": "Keine Leerzeichen — Wörter mit Bindestrich trennen.",
   "generate.input.npcId.charset":
