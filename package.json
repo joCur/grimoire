@@ -15,8 +15,8 @@
     "e2e": "bun run --filter '@grimoire/e2e' test"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "eslint": "^10.10.0",
+    "@eslint/js": "^9.39.0",
+    "eslint": "^9.39.0",
     "eslint-plugin-react": "^7.37.5",
     "globals": "^17.12.0",
     "typescript-eslint": "^8.70.0"

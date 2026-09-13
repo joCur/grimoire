@@ -14,6 +14,7 @@ import { Link } from "react-router";
 
 import { appendInbox, fetchTree } from "@/api";
 import { CommandPalette } from "@/components/CommandPalette";
+import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { Button } from "@/components/ui/button";
 import { IconLogo } from "@/icons";
 import { useCampaignMeta } from "@/lib/use-campaign";
@@ -92,6 +93,16 @@ export function MobileStart({ campaign }: { campaign: string }) {
           meta={countLabel(tree?.locations.length, "Ort", "Orte")}
         />
       </nav>
+
+      {/* The language switch (issue #69 follow-up). This surface REPLACES the
+          topbar below `md`, so the campaign switcher's menu — where the switch
+          otherwise lives — is not on screen at all: on a phone there was no way
+          to change the language. It goes at the very end, after „Nachschlagen",
+          in the smallest fitting place rather than in a settings screen of its
+          own that this surface has no room for. */}
+      <footer className="mt-8 border-t border-divider pt-3.5">
+        <LanguageSwitch />
+      </footer>
     </div>
   );
 }

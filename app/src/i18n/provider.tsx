@@ -11,11 +11,26 @@
 // switch is a react-query mutation that invalidates `["settings"]`, which is
 // what makes the new language appear immediately (AK2) and survive a reload
 // (it came from the server in the first place).
+//
+// THE FIRST PAINT IS GATED. `GET /api/settings` is one local round trip, but
+// rendering the browser's language while it is in flight means an instance set
+// to German shows an English chrome for a frame and then swaps it — the tool
+// looks broken at the one moment there is nothing else to look at. So while
+// the query is pending NOTHING language-dependent is rendered at all: the
+// children stay unmounted behind a neutral shell (the wordmark glyph, which is
+// a logo and not copy), and the tree mounts once with the language it keeps.
+// Consequence: `isPending` is always false for anything BELOW this provider —
+// no component has to handle a "language not known yet" state.
+//
+// `<html lang>` follows the language from here too (`index.html` can only
+// carry a static value): a wrong `lang` mis-pronounces the whole page in a
+// screen reader and mis-hyphenates it in the browser.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
 
 import { fetchSettings, putSettings } from "@/api";
+import { IconLogo } from "@/icons";
 
 import { formatDate, formatParts, translator, type MessageParams, type Translate } from "./format";
 import { browserLocale, DEFAULT_LOCALE, type Locale, type MessageKey } from "./messages";
@@ -29,7 +44,8 @@ export interface I18n {
   tNode: (key: MessageKey, params?: MessageParams) => ReactNode;
   /** A date in the current language, via `Intl` (AK3). */
   date: (value: Date) => string;
-  /** True while the instance setting has not been read yet. */
+  /** True while the instance setting has not been read yet. Always false
+   * below `I18nProvider`, which gates its children on exactly that. */
   isPending: boolean;
   /** Store a language for the instance (server-side, effective at once). */
   setLocale: (locale: Locale) => void;
@@ -61,6 +77,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   // reached has bigger problems to report than its language.
   const locale: Locale = settings.data?.locale ?? browserLocale();
 
+  // `<html lang>`: the document's language, kept in sync with the UI's. Only
+  // once the setting is known — during the gate below there is no answer yet,
+  // and `index.html` already carries the default.
+  useEffect(() => {
+    if (settings.isPending) return;
+    document.documentElement.lang = locale;
+  }, [locale, settings.isPending]);
+
   const value = useMemo<I18n>(() => {
     const t = translator(locale);
     return {
@@ -74,7 +98,28 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     };
   }, [locale, settings.isPending, switchLocale.isPending, mutate]);
 
+  // The gate (see header): no copy before the language is settled.
+  if (settings.isPending) return <LanguageShell />;
+
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+/**
+ * What is on screen for the one round trip the settings query takes: the
+ * wordmark glyph on the app background, centred. No text — a "Lade …" here
+ * would be the very flash this shell exists to prevent — and no spinner, which
+ * would have to animate for a few dozen milliseconds (and `prefers-reduced-
+ * motion` says it should not, quality floor). `aria-busy` says what it is.
+ */
+function LanguageShell() {
+  return (
+    <div
+      aria-busy="true"
+      className="flex h-dvh items-center justify-center bg-background text-faint"
+    >
+      <IconLogo size={28} />
+    </div>
+  );
 }
 
 /**

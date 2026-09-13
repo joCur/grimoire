@@ -29,6 +29,7 @@ import { Navigate } from "react-router";
 
 import { fetchCampaigns } from "@/api";
 import { useCampaignCreate } from "@/components/CreateActions";
+import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { Button } from "@/components/ui/button";
 import { IconLogo } from "@/icons";
 import { useT } from "@/i18n";
@@ -183,6 +184,15 @@ function ColdStart() {
           </Button>
         </div>
       </form>
+
+      {/* The language switch (issue #69 follow-up). There is no campaign yet,
+          so the topbar carries no switcher — without this row the FIRST screen
+          of a new installation would be the one screen whose language cannot be
+          changed. A footer, hairline above, well below the form: the first
+          thing to do here is still „Kampagne anlegen". */}
+      <footer className="mt-10 border-t border-divider pt-3.5">
+        <LanguageSwitch />
+      </footer>
     </section>
   );
 }

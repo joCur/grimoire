@@ -541,9 +541,30 @@ reiner Formatter, wir behalten Katalog und Laden selbst in der Hand.
   localStorage (Qualitäts-Boden: der Server ist die Wahrheit). Ohne
   gespeicherten Wert folgt die App `navigator.language` (`de*` → de, sonst
   en) und schreibt nichts.
+- **Der erste Paint ist gegated.** Solange `GET /api/settings` läuft, rendert
+  `I18nProvider` nichts Sprachabhängiges, sondern eine neutrale Shell (nur das
+  Wortmarken-Glyph). Sonst zeigt eine auf Deutsch gestellte Instanz im
+  englischen Browser für einen Frame englische Chrome und tauscht sie dann aus
+  — genau in dem Moment, in dem sonst nichts auf dem Schirm ist. Folge:
+  unterhalb des Providers ist `isPending` immer `false`, kein View muss einen
+  Zustand „Sprache noch unbekannt" behandeln.
+- **`<html lang>` folgt der Sprache**, gesetzt im Provider. `index.html` kann
+  nur einen statischen Wert tragen; ein falsches `lang` spricht die Seite im
+  Screenreader falsch aus und trennt sie falsch.
+- **Der Umschalter ist auf jeder Fläche erreichbar.** Im Menü des
+  Kampagnen-Switchers (jede kampagnen-gebundene Desktop-Route) und — über
+  `components/LanguageSwitch.tsx`, gleiche Radio-Semantik, native Radios — als
+  Fußzeile auf dem **Kaltstart** (dort gibt es keine Kampagne, also keinen
+  Switcher) und auf der **mobilen Startfläche** (die den Topbar unter `md`
+  ersetzt). Beide lesen und schreiben dieselbe Server-Einstellung über
+  `useI18n` — keine zweite Wahrheit.
 - **Lint-Gate:** `react/jsx-no-literals` (`bun run lint`, in CI) — scharf für
   die migrierten Dateien, `warn` für den Rest. Die Warnungen sind die
-  To-do-Liste von Scheibe 2.
+  To-do-Liste von Scheibe 2. **ESLint bleibt auf `^9`:**
+  `eslint-plugin-react@7.37.5` deklariert als Peer `… || ^9.7` und kennt
+  ESLint 10 nicht; da dieses Gate genau aus einer Regel dieses Plugins besteht,
+  ist die Major-Version des Linters die kleinere Abhängigkeit. Anheben, sobald
+  das Plugin ESLint 10 als Peer führt.
 - Enum-Labels, die sich viele Views teilen (Szenen-/NPC-Status in
   `lib/scene-status.ts` und `lib/entity.ts`), bleiben bis Scheibe 2 deutsch:
   eine Signaturänderung dort zieht halbe Views in diese Scheibe.

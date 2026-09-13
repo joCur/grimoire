@@ -36,6 +36,7 @@ const MIGRATED = [
   "app/src/components/Topbar.tsx",
   "app/src/components/CreateDialog.tsx",
   "app/src/components/CreateActions.tsx",
+  "app/src/components/LanguageSwitch.tsx",
   "app/src/components/PropertiesAction.tsx",
   "app/src/components/PropertiesFields.tsx",
   "app/src/components/RenameDialog.tsx",

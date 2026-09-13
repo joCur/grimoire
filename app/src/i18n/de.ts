@@ -39,7 +39,7 @@ export const de = {
   "topbar.nav.locations": "Orte",
   "topbar.search": "Suchen …",
   "topbar.generator": "Generator",
-  "topbar.generator.running": "Generierung läuft",
+  "topbar.generator.running": "Generierung läuft …",
   "topbar.review.pending": "Review · {count} offen",
   "topbar.session.back": "Zur Session",
 

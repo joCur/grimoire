@@ -46,12 +46,20 @@ export function preferredLocale(languages: readonly string[]): Locale {
   return "en";
 }
 
-/** `preferredLocale` against the real browser (empty list outside one). */
+/**
+ * `preferredLocale` against the real browser. NO INFORMATION AT ALL — no
+ * `navigator`, or one without a language (Bun's global, a stripped embedder) —
+ * answers with the primary language rather than with `preferredLocale`'s "not
+ * German, so English": that branch is about a browser that ASKED for something
+ * else, which is a different statement from silence.
+ */
 export function browserLocale(): Locale {
   if (typeof navigator === "undefined") return DEFAULT_LOCALE;
-  const languages =
+  const offered =
     navigator.languages !== undefined && navigator.languages.length > 0
       ? navigator.languages
       : [navigator.language];
-  return preferredLocale(languages.filter((tag): tag is string => typeof tag === "string"));
+  const tags = offered.filter((tag): tag is string => typeof tag === "string" && tag !== "");
+  if (tags.length === 0) return DEFAULT_LOCALE;
+  return preferredLocale(tags);
 }
