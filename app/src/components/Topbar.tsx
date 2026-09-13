@@ -231,12 +231,21 @@ export function Topbar() {
           is not a bare page. */}
       <header
         className={cn(
-          // Gap: 14px is the designed rhythm, but below lg the row carries
-          // switcher, nav-trio-less search, review link, generator and gear
-          // with the search chip already at its floor — there is nothing
-          // elastic left, so the SPACING gives way instead of any content
-          // (issue #69 CI finding; nothing is hidden or truncated for it).
-          "flex h-14 flex-none items-center gap-2.5 border-b border-border px-6 lg:gap-3.5",
+          // Gap: 14px is the designed rhythm, and it holds from 2xl up —
+          // below that the SPACING gives way instead of any content (issue
+          // #69 CI finding; nothing is hidden or truncated for it). Below lg
+          // the row carries switcher, icon-only search, review count,
+          // generator and gear with the search chip already at its floor; in
+          // the lg–2xl band the nav trio, the full search chip, the long
+          // "Session starten" label and the "Nachbereitung · N offen" link
+          // are all on the row at once, and at exactly 1280 (the xl edge,
+          // where the trio, the full search and the chip's reserved width
+          // switch on together) that band was the tightest width there is:
+          // CI's wider Linux glyphs pushed it 2px over while macOS rendering
+          // still cleared it. 10px instead of 14px across eight gaps hands
+          // the row ~32px, which is real reserve rather than reserve to the
+          // pixel.
+          "flex h-14 flex-none items-center gap-2.5 border-b border-border px-6 2xl:gap-3.5",
           campaign !== "" && "max-md:hidden",
         )}
       >
@@ -1066,15 +1075,21 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
             the search chip has already reached its floor, so the name is the
             last thing that can still give way there. The full name is one
             click away in the menu below.
-            The xl cap is 200px, not 280 (issue #69 CI finding): at exactly
+            The xl cap is 160px, not 280 (issue #69 CI finding): at exactly
             1280 the FULLEST row — switcher, nav trio, search, the review
             link, generator, gear and the "Session starten" chip with its
             reserved 8.5rem — had only the search chip's ~50px of shrink left,
             and CI's wider Linux font metrics eat more than that. A static cap
             keeps the chrome identical on every route (that is why the trigger
-            is flex-none) while handing the row 80px more slack; from 2xl the
-            row is wide enough for the full 280 again. */}
-        <span className="min-w-0 max-w-[8rem] truncate lg:max-w-[9.5rem] xl:max-w-[200px] 2xl:max-w-[280px]">
+            is flex-none) while handing the row 120px more slack; from 2xl the
+            row is wide enough for the full 280 again. The two caps below it
+            step down by the same logic (7rem / 8.5rem).
+            Note that the SEARCH chip's `basis` is deliberately NOT part of
+            this: it is the elastic element, so a smaller basis only moves
+            width from the chip to the free space in the middle of the row and
+            changes what the row can absorb by exactly nothing. Reserve comes
+            from the flex-none parts — these caps and the gaps. */}
+        <span className="min-w-0 max-w-[7rem] truncate lg:max-w-[8.5rem] xl:max-w-[160px] 2xl:max-w-[280px]">
           {t("campaign.switcher.current", { name: current })}
         </span>
         <ChevronDown
