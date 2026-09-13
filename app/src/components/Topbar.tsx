@@ -231,7 +231,12 @@ export function Topbar() {
           is not a bare page. */}
       <header
         className={cn(
-          "flex h-14 flex-none items-center gap-3.5 border-b border-border px-6",
+          // Gap: 14px is the designed rhythm, but below lg the row carries
+          // switcher, nav-trio-less search, review link, generator and gear
+          // with the search chip already at its floor — there is nothing
+          // elastic left, so the SPACING gives way instead of any content
+          // (issue #69 CI finding; nothing is hidden or truncated for it).
+          "flex h-14 flex-none items-center gap-2.5 border-b border-border px-6 lg:gap-3.5",
           campaign !== "" && "max-md:hidden",
         )}
       >
@@ -306,29 +311,34 @@ export function Topbar() {
               variant="outline"
               onClick={() => setSearchOpen(true)}
               // THE elastic element of the topbar (issue #50): it wants
-              // 200px, gives way down to ~5rem at medium widths and never
+              // 200px, gives way down to 3rem at medium widths and never
               // lets the row overflow — its label truncates on the way.
-              // Below lg it goes ICON-ONLY, the same step the generator entry
-              // takes below xl: that is the width at which the nav trio has
-              // already stepped aside and the settings gear (issue #69) would
-              // otherwise push the row over. The accessible name stays, so
-              // the control is unchanged for a screen reader.
-              className="hidden h-auto min-w-[5rem] shrink basis-[200px] gap-2 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-card hover:text-soft max-lg:min-w-0 max-lg:basis-auto max-lg:px-2.5 sm:flex"
+              // Below XL it goes ICON-ONLY (issue #69 CI finding): 1024px is
+              // where the nav trio, the full search and the chip's reserved
+              // width used to switch on ALL AT ONCE, and the row cleared that
+              // step by single digits — on CI's wider font metrics it did not
+              // clear it at all. So the elastic element shrinks one
+              // breakpoint EARLIER and the band from lg to xl, which carries
+              // switcher, nav trio, search, review link, generator and gear
+              // together, has room to spare instead of room to the pixel.
+              // The accessible name stays, so the control is unchanged for a
+              // screen reader.
+              className="hidden h-auto min-w-[3rem] shrink basis-[200px] gap-2 border-input bg-card px-3 py-1.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-card hover:text-soft max-xl:min-w-0 max-xl:basis-auto max-xl:px-2.5 sm:flex"
             >
               <Search
                 aria-hidden
                 size={15}
                 className="flex-none text-muted-foreground"
               />
-              <span className="min-w-0 flex-1 truncate text-left max-lg:sr-only">
+              <span className="min-w-0 flex-1 truncate text-left max-xl:sr-only">
                 {t("topbar.search")}
               </span>
-              {/* The ⌘K HINT, not the shortcut: it steps aside below lg,
-                  where the row is tight enough that the settings gear of
-                  issue #69 would otherwise push it over (issue #50 — the
-                  chip's 5rem floor is already reached there). The shortcut
-                  itself keeps working at every width. */}
-              <span className="flex-none rounded-[4px] border border-input px-[5px] py-px font-mono text-[11px] text-muted-foreground max-lg:hidden">
+              {/* The ⌘K HINT, not the shortcut: it steps aside with the
+                  label, below xl, where the row is tight enough that the
+                  settings gear of issue #69 would otherwise push it over
+                  (issue #50). The shortcut itself keeps working at every
+                  width. */}
+              <span className="flex-none rounded-[4px] border border-input px-[5px] py-px font-mono text-[11px] text-muted-foreground max-xl:hidden">
                 ⌘K
               </span>
             </Button>
@@ -407,12 +417,14 @@ function useElapsedLabel(session: FileResponse): string | undefined {
  * #40): same slot, same height, same radius, same paddings, same font size.
  * Only the colours below and the content inside change, so the switch from
  * "Session starten" to the running clock never makes the topbar jump. From
- * lg up a minimum width holds the states at a comparable size; below that the
- * row is too tight to reserve width (issue #50), and the clock's tabular
- * numbers alone keep a second's tick from re-flowing anything.
+ * xl up a minimum width holds the states at a comparable size; below that the
+ * row is too tight to reserve width (issue #50 — the reservation used to start
+ * at lg, which is exactly where the nav trio appears and the row had no slack
+ * left on CI's wider font metrics), and the clock's tabular numbers alone keep
+ * a second's tick from re-flowing anything.
  */
 const SESSION_CHIP_BASE =
-  "inline-flex min-h-8 flex-none items-center justify-center gap-2 rounded-full border px-3 py-[3px] text-[13px] lg:min-w-[8.5rem] focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none";
+  "inline-flex min-h-8 flex-none items-center justify-center gap-2 rounded-full border px-3 py-[3px] text-[13px] xl:min-w-[8.5rem] focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none";
 
 /** Tone per state — the colour IS the state, never the only information. */
 const SESSION_CHIP_TONE = {
@@ -1036,10 +1048,12 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
         )}
       >
         {/* Truncates with an ellipsis rather than pushing the row over
-            (issue #50) — and harder below xl, where the row also carries the
-            "Kapitel · NPCs · Orte" trio. The full name is one click away in
-            the menu below. */}
-        <span className="min-w-0 max-w-[9.5rem] truncate xl:max-w-[280px]">
+            (issue #50), and one step harder per tightening of the row: below
+            xl it also carries the "Kapitel · NPCs · Orte" trio, and below lg
+            the search chip has already reached its floor, so the name is the
+            last thing that can still give way there. The full name is one
+            click away in the menu below. */}
+        <span className="min-w-0 max-w-[8rem] truncate lg:max-w-[9.5rem] xl:max-w-[280px]">
           {t("campaign.switcher.current", { name: current })}
         </span>
         <ChevronDown

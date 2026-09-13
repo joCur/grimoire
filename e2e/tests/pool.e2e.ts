@@ -359,7 +359,12 @@ test.describe("with a session running since 19:30", () => {
     // The pool carries the fullest topbar there is: switcher, session chip,
     // search, Generator, the settings gear (issue #69) — plus the review link
     // once something is harvestable.
-    for (const width of [640, 768, 900, 1024, 1100]) {
+    // 1000/1024/1040 bracket the lg breakpoint on purpose (issue #69): that
+    // is where the nav trio appears, and the row used to clear the step by
+    // single digits — enough on macOS, 2px short on CI's wider Linux font
+    // metrics. 768 is the other corner, where the search chip is already at
+    // its floor.
+    for (const width of [640, 768, 900, 1000, 1024, 1040, 1100, 1280]) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto("/beispiel");
       await expect(
