@@ -21,6 +21,7 @@ import { useActedKeys } from "@/lib/review-memory";
 import {
   firstReviewTag,
   harvestInboxEntries,
+  inboxNoteEntries,
   isReviewTag,
   shortLineHashes,
   stripHashtags,
@@ -37,6 +38,12 @@ export interface ReviewEntry {
    *  inbox rewrite happens in place). */
   key: string;
   source: "log" | "inbox";
+  /**
+   * Which list the entry belongs to (issue #85): the tagged harvest, or the
+   * „Notizen" section of untagged inbox lines thrown in on the go. The
+   * counting is the same for both — one source for page and topbar.
+   */
+  section: "harvest" | "notes";
   /**
    * Prototype card label — "Inbox", or "Log" plus the SCENE the line was
    * written under ("Log · Ankunft am Leuchtturm", issue #34). The scene id
@@ -167,6 +174,7 @@ export function useReviewEntries(
       const item: ReviewEntry = {
         key: `log:${index}`,
         source: "log",
+        section: "harvest",
         // The scene is part of ONE sentence („Log · Ankunft am Leuchtturm"),
         // so the separator travels with the message instead of being glued on.
         sourceLabel:
@@ -191,6 +199,7 @@ export function useReviewEntries(
         const item: ReviewEntry = {
           key: `inbox:${line.index}`,
           source: "inbox",
+          section: "harvest",
           sourceLabel: t("review.source.inbox"),
           tag,
           text: line.text,
@@ -204,7 +213,28 @@ export function useReviewEntries(
       },
     );
 
-    return [...logEntries, ...inboxEntries];
+    // Untagged inbox lines (issue #85): no tag means no tag-derived
+    // affordance, so BOTH harvest actions are offered — the DM decides what
+    // the note is. "Erledigt" is the same `inbox-done` write as the tagged
+    // card's "Verwerfen".
+    const noteEntries: ReviewEntry[] = inboxNoteEntries(inboxBody, keepDoneInbox).map((line) => {
+      const item: ReviewEntry = {
+        key: `inbox:${line.index}`,
+        source: "inbox",
+        section: "notes",
+        sourceLabel: t("review.source.inbox"),
+        tag: "",
+        text: line.text,
+        rawLine: line.raw,
+        done: line.done,
+        canThread: true,
+        canNpc: true,
+      };
+      if (line.date !== undefined) item.meta = line.date;
+      return item;
+    });
+
+    return [...logEntries, ...inboxEntries, ...noteEntries];
   }, [logLines, inboxBody, keepDoneInbox, hashes.data, reviewed, treeData, t]);
 
   const seenCount = entries.filter((e) => e.done).length;

@@ -386,6 +386,7 @@ export const en: Messages = {
   "review.source.inbox": "Inbox",
 
   "review.action.thread": "Adopt as thread",
+  "review.action.resolve": "Done",
   "review.action.failed": "Action not saved — check the server.",
   "review.npc.failed": "NPC not created — check the server.",
 
@@ -394,7 +395,12 @@ export const en: Messages = {
   "review.done.thread": "Adopted as thread",
   "review.done.npc": "NPC created",
   "review.done.dismiss": "Discarded",
+  "review.done.resolved": "Done",
   "review.done.seen": "reviewed",
+
+  "review.notes.title": "Notes",
+  "review.notes.lead":
+    "Untagged inbox entries — adopt them, create an NPC, or tick them off.",
 
   "review.threads.title": "Open threads of the chapter",
   "review.threads.empty": "No open threads in this chapter yet.",

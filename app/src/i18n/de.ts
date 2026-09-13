@@ -405,6 +405,7 @@ export const de = {
   "review.source.inbox": "Inbox",
 
   "review.action.thread": "Als Handlungsstrang übernehmen",
+  "review.action.resolve": "Erledigt",
   "review.action.failed": "Aktion nicht gespeichert — Server prüfen.",
   "review.npc.failed": "NPC nicht angelegt — Server prüfen.",
 
@@ -413,7 +414,13 @@ export const de = {
   "review.done.thread": "Als Handlungsstrang übernommen",
   "review.done.npc": "NPC angelegt",
   "review.done.dismiss": "Verworfen",
+  "review.done.resolved": "Erledigt",
   "review.done.seen": "gesichtet",
+
+  // The untagged inbox lines (issue #85) — ideas thrown in on the go.
+  "review.notes.title": "Notizen",
+  "review.notes.lead":
+    "Ungetaggte Einträge aus der Inbox — übernehmen, als NPC anlegen oder abhaken.",
 
   "review.threads.title": "Offene Handlungsstränge des Kapitels",
   "review.threads.empty": "Noch keine offenen Handlungsstränge in diesem Kapitel.",

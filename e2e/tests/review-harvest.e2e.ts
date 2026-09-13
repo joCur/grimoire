@@ -17,6 +17,8 @@ const THREAD_LINE = "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #th
 const THREAD_TEXT = "Cliffhanger: Lichter in der Bucht gesichtet";
 const NPC_TEXT = 'Improvisiert: Fischerin "Old Metta" am Steg';
 const INBOX_TEXT = "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug";
+/** An idea thrown in on the go — no hashtag at all (issue #85). */
+const NOTE_TEXT = "Die Laternen am Kai brennen bei Ebbe nie";
 
 /** Today's session with the three tagged log lines the review harvests. */
 function sessionFile(id: string): string {
@@ -104,6 +106,46 @@ test("adopting a thread lands in _chapter, the inbox line gets ticked off", asyn
   await expect(page).toHaveURL(/\/beispiel$/);
   // The pool's quiet review affordance counts what is still open.
   await expect(page.getByRole("link", { name: "Nachbereitung · 2 offen" })).toBeVisible();
+});
+
+test("an untagged inbox note is reviewable and can be ticked off (issue #85)", async ({
+  page,
+  api,
+}) => {
+  // Thrown in the way it happens on the go: the mobile start surface at
+  // 390px (critical path 8), no hashtag.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/beispiel");
+  await page.getByLabel("Inbox").fill(NOTE_TEXT);
+  await page.getByRole("button", { name: "Einwerfen" }).click();
+  await expect(page.getByText("Eingeworfen.")).toBeVisible();
+  await expect.poll(() => api.raw("inbox")).toContain(`- ${NOTE_TEXT}`);
+
+  // At the desk it shows up in the wrap-up — in its own "Notizen" section,
+  // and counted with everything else (one source for page and topbar).
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/beispiel/review");
+  const progress = page.getByRole("banner").getByText(/von \d+ gesichtet/);
+  await expect(progress).toHaveText("0 von 5 gesichtet");
+  await expect(page.getByRole("heading", { name: "Notizen" })).toBeVisible();
+
+  const noteCard = page.locator("div").filter({ hasText: NOTE_TEXT }).last();
+  await expect(noteCard).toContainText("Inbox");
+  // No tag means no tag-derived affordance — both harvest actions are offered.
+  await expect(
+    noteCard.getByRole("button", { name: "Als Handlungsstrang übernehmen" }),
+  ).toBeVisible();
+  await expect(noteCard.getByRole("button", { name: "NPC anlegen" })).toBeVisible();
+
+  await noteCard.getByRole("button", { name: "Erledigt" }).click();
+  await expect(noteCard.getByText("Erledigt", { exact: true })).toBeVisible();
+  await expect(progress).toHaveText("1 von 5 gesichtet");
+  // The line is ticked off in the inbox document itself.
+  await expect.poll(() => api.raw("inbox")).toContain(`- [x] ${NOTE_TEXT}`);
+
+  // The pool affordance counts the same entries the page does.
+  await page.getByRole("button", { name: "Fertig — zurück zum Pool" }).click();
+  await expect(page.getByRole("link", { name: "Nachbereitung · 4 offen" })).toBeVisible();
 });
 
 test("creating an NPC entry from a #npc log line", async ({ page, api }) => {

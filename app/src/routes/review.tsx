@@ -50,14 +50,20 @@ interface ActVars {
  *  markdown body (README), not copy, so it stays German in every language. */
 const THREADS_HEADING = "Offene Fäden";
 
-function doneLabel(action: ActionKind | undefined, t: Translate): string {
+function doneLabel(
+  action: ActionKind | undefined,
+  section: ReviewEntry["section"],
+  t: Translate,
+): string {
   switch (action) {
     case "thread":
       return t("review.done.thread");
     case "npc":
       return t("review.done.npc");
     case "dismiss":
-      return t("review.done.dismiss");
+      // An untagged note is not "verworfen", it is done with (issue #85) —
+      // the write is the same, the word the DM sees is not.
+      return section === "notes" ? t("review.done.resolved") : t("review.done.dismiss");
     default:
       // The server only stores done/not-done — after a reload the specific
       // action is gone and the neutral label is the honest one.
@@ -152,6 +158,32 @@ export function ReviewRoute() {
       ? t("review.action.failed")
       : undefined;
 
+  const harvest = model.entries.filter((entry) => entry.section === "harvest");
+  const notes = model.entries.filter((entry) => entry.section === "notes");
+
+  const renderCard = (entry: ReviewEntry) => (
+    <EntryCard
+      key={entry.key}
+      entry={entry}
+      action={acted.get(entry.key)}
+      busy={busyKey === entry.key}
+      error={cardError(entry)}
+      canAdopt={chapter !== undefined}
+      onThread={() => {
+        act.reset();
+        act.mutate({ entry, action: "thread" });
+      }}
+      onNpc={() => {
+        act.reset();
+        setNpcEntry(entry);
+      }}
+      onDismiss={() => {
+        act.reset();
+        act.mutate({ entry, action: "dismiss" });
+      }}
+    />
+  );
+
   return (
     <>
       <MobileBackRow campaign={campaign} />
@@ -193,30 +225,22 @@ export function ReviewRoute() {
                 {t("review.empty")}
               </p>
             ) : (
-              <div className="flex flex-col gap-2.5">
-                {model.entries.map((entry) => (
-                  <EntryCard
-                    key={entry.key}
-                    entry={entry}
-                    action={acted.get(entry.key)}
-                    busy={busyKey === entry.key}
-                    error={cardError(entry)}
-                    canAdopt={chapter !== undefined}
-                    onThread={() => {
-                      act.reset();
-                      act.mutate({ entry, action: "thread" });
-                    }}
-                    onNpc={() => {
-                      act.reset();
-                      setNpcEntry(entry);
-                    }}
-                    onDismiss={() => {
-                      act.reset();
-                      act.mutate({ entry, action: "dismiss" });
-                    }}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="flex flex-col gap-2.5">{harvest.map(renderCard)}</div>
+                {/* Untagged inbox lines get their own section (issue #85) so
+                    the tagged harvest above keeps reading as one list. */}
+                {notes.length > 0 && (
+                  <section className="mt-9">
+                    <h2 className="mb-3 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
+                      {t("review.notes.title")}
+                    </h2>
+                    <p className="mb-3 text-[13.5px] leading-[1.6] text-muted-foreground">
+                      {t("review.notes.lead")}
+                    </p>
+                    <div className="flex flex-col gap-2.5">{notes.map(renderCard)}</div>
+                  </section>
+                )}
+              </>
             )}
 
             <section className="mt-9 border-t border-border pt-5">
@@ -308,7 +332,7 @@ function EntryCard({
   onDismiss: () => void;
 }) {
   const t = useT();
-  const label = doneLabel(action, t);
+  const label = doneLabel(action, entry.section, t);
   return (
     <div
       className={cn(
@@ -371,7 +395,7 @@ function EntryCard({
               onClick={onDismiss}
               className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
             >
-              {t("common.discard")}
+              {entry.section === "notes" ? t("review.action.resolve") : t("common.discard")}
             </Button>
           </div>
           {error !== undefined && (
