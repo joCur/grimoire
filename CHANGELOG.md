@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/joCur/grimoire/compare/v0.2.0...v0.3.0) (2026-09-08)
+
+
+### Features
+
+* **app:** demote id change into the properties dialog ([#77](https://github.com/joCur/grimoire/issues/77)) ([#81](https://github.com/joCur/grimoire/issues/81)) ([9d93835](https://github.com/joCur/grimoire/commit/9d9383577e19db81836cc6d7f2120d9799486f32))
+* **app:** group played/dropped scenes in the live nav ([#73](https://github.com/joCur/grimoire/issues/73)) ([#75](https://github.com/joCur/grimoire/issues/75)) ([6a17983](https://github.com/joCur/grimoire/commit/6a17983d64963275da7b60f9cc1bd9ee1361f1e9))
+* create campaigns, chapters, scenes, npcs and locations in the UI ([#56](https://github.com/joCur/grimoire/issues/56)) ([#82](https://github.com/joCur/grimoire/issues/82)) ([c3d59d1](https://github.com/joCur/grimoire/commit/c3d59d1e0deaa1fe48cbeee65f851f8a991bbac3))
+* entity references in body text — [[slug]] renders the current name ([#68](https://github.com/joCur/grimoire/issues/68)) ([#72](https://github.com/joCur/grimoire/issues/72)) ([16b53f7](https://github.com/joCur/grimoire/commit/16b53f7e78725cd0bdf98b940d3e015f13041298))
+* referencing creates the row — file-era consistency audit ([#70](https://github.com/joCur/grimoire/issues/70)) ([#78](https://github.com/joCur/grimoire/issues/78)) ([5249c2d](https://github.com/joCur/grimoire/commit/5249c2dca29026816e330c57fd92370843f4321a))
+
 ## [0.2.0](https://github.com/joCur/grimoire/compare/v0.1.0...v0.2.0) (2026-09-06)
 
 
