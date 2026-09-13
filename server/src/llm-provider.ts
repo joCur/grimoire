@@ -19,7 +19,14 @@
 export interface GenerateRequest {
   systemPrompt: string; // generator/system-prompt.md (npc run: npc-system-prompt.md)
   fewShotTarget: string; // generator/example-output.md (npc run: npc-example-output.md)
-  glossary: string; // <campaign>/glossary body ("" when missing)
+  /**
+   * The campaign-knowledge lines (issue #53), already rendered and with
+   * `[[slug]]` references resolved (store/read.ts knowledgeText). `""` means
+   * the campaign has none — the prompt then has no knowledge section at all,
+   * so a campaign that never uses the feature sees the prompt unchanged.
+   */
+  knowledge: string;
+  glossary: string; // the campaign's glossary as `term → explanation` lines ("" when empty)
   context: {
     /** Target chapter of a scene run; absent for an NPC run (issue #21). */
     chapter?: string;
@@ -90,15 +97,30 @@ function normalizeUsage(
 
 // ---------------------------------------------------------------------------
 
+/**
+ * The heading of the campaign-knowledge block (issue #53 AK2). The WORDING is
+ * the contract — it is what makes the block binding rather than advisory, so
+ * it is a constant the prompt test asserts on and not an inline string.
+ *
+ * It stands FIRST, above the glossary: the glossary answers "what is this
+ * term called", the knowledge overrides what the source material says, and a
+ * model reading top to bottom must meet the override before the vocabulary.
+ */
+export const KNOWLEDGE_HEADING =
+  "## Kampagnenwissen — immer anwenden, auch wenn das Quellmaterial anders lautet";
+
 // The prompt content is German on purpose — the pipeline's target language
 // is German (see generator/system-prompt.md); only code and comments here
 // are English.
-function buildPrompt(req: GenerateRequest): string {
+export function buildPrompt(req: GenerateRequest): string {
   const npcList = req.context.npcs.map((n) => `${n.id} (${n.name})`).join(", ");
   const locList = req.context.locations
     .map((l) => `${l.id} (${l.name})`)
     .join(", ");
   return [
+    // Nothing at all when there is no knowledge — an empty binding section
+    // would be a heading the model has to interpret against no content.
+    ...(req.knowledge.trim() === "" ? [] : [KNOWLEDGE_HEADING, req.knowledge]),
     "## Glossar",
     req.glossary,
     "## Kontext",

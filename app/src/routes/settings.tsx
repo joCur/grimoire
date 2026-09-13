@@ -42,6 +42,7 @@ import { useId, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 
 import { fetchCampaigns } from "@/api";
+import { GlossarySection, KnowledgeSection } from "@/components/CampaignListSections";
 import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { useT } from "@/i18n";
@@ -50,17 +51,36 @@ import { campaignLabel, settingsCampaign } from "@/lib/campaign";
 import { useCampaignVersion } from "@/lib/use-campaign-version";
 
 /**
- * The campaign-scoped sections. EMPTY today — issue #53 (Generator knowledge
- * base, glossary) fills it. Kept as a list rather than as inline JSX so
- * adding one is a single entry and the empty case stays honest: with no
- * sections there is no campaign heading either, instead of a heading over
- * nothing.
+ * The campaign-scoped sections — filled by issue #53. Kept as a list rather
+ * than as inline JSX so adding one is a single entry and the empty case stays
+ * honest: with no sections there is no campaign heading either, instead of a
+ * heading over nothing.
+ *
+ * THE ORDER IS AN ARGUMENT. „Kampagnenwissen" comes first because it is the
+ * stronger statement — it overrides the source material and is what the DM
+ * comes here to fix after a generator run went wrong — and because that is
+ * the order the PROMPT puts them in (server/src/llm-provider.ts). The page
+ * and the prompt reading the same way is one less thing to hold in your head.
  */
 const CAMPAIGN_SECTIONS: ReadonlyArray<{
   key: string;
   heading: MessageKey;
+  hint?: MessageKey;
   render: (campaign: string) => ReactNode;
-}> = [];
+}> = [
+  {
+    key: "knowledge",
+    heading: "settings.knowledge.heading",
+    hint: "settings.knowledge.hint",
+    render: (campaign) => <KnowledgeSection campaign={campaign} />,
+  },
+  {
+    key: "glossary",
+    heading: "settings.glossary.heading",
+    hint: "settings.glossary.hint",
+    render: (campaign) => <GlossarySection campaign={campaign} />,
+  },
+];
 
 export function SettingsRoute() {
   const t = useT();
@@ -114,7 +134,11 @@ export function SettingsRoute() {
                 {t("settings.campaign.hint")}
               </p>
               {CAMPAIGN_SECTIONS.map((section) => (
-                <Section key={section.key} heading={t(section.heading)}>
+                <Section
+                  key={section.key}
+                  heading={t(section.heading)}
+                  hint={section.hint === undefined ? undefined : t(section.hint)}
+                >
                   {section.render(campaign)}
                 </Section>
               ))}

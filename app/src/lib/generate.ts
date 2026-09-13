@@ -184,10 +184,17 @@ export function contextHint(
   locationCount: number,
   hasGlossary: boolean,
   t: Translate,
+  /**
+   * How many campaign-knowledge entries travel (issue #53 AK5). The COUNT and
+   * not a yes/no like the glossary: the DM comes back here right after writing
+   * a rule, and „3 Wissens-Einträge" is what confirms it arrived.
+   */
+  knowledgeCount = 0,
 ): string {
   return t("generate.input.contextHint", {
     npcs: npcCount,
     locations: locationCount,
+    knowledge: knowledgeCount,
     glossary: t(hasGlossary ? "generate.input.glossary" : "generate.input.noGlossary"),
   });
 }

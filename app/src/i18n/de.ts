@@ -251,6 +251,41 @@ export const de = {
   "settings.campaign.heading": "Kampagne: {name}",
   "settings.campaign.hint": "Einstellungen, die nur für diese Kampagne gelten.",
 
+  // --- the two campaign lists on /settings (issue #53) ----------------------
+  // Shared by both editors (components/SettingsListEditor.tsx): the row
+  // controls, the save outcome, the two failure sentences.
+  "settings.list.loading": "Lade Liste …",
+  "settings.list.loadFailed": "Liste nicht geladen — Seite neu laden.",
+  "settings.list.saveFailed": "Nicht gespeichert.",
+  "settings.list.saving": "Speichere …",
+  "settings.list.saved": "Gespeichert",
+  "settings.list.moveUp": "Nach oben",
+  "settings.list.moveDown": "Nach unten",
+  "settings.list.remove": "Eintrag löschen",
+
+  "settings.knowledge.heading": "Kampagnenwissen",
+  "settings.knowledge.hint":
+    "Geht bei jedem Generator-Lauf mit und gilt verbindlich — auch wenn das Quellmaterial etwas anderes sagt. Referenzen wie [[fenn]] werden zum Namen aufgelöst.",
+  "settings.knowledge.empty":
+    "Noch kein Kampagnenwissen — ersten Eintrag anlegen (z. B. eine Namenskonvention).",
+  "settings.knowledge.add": "Eintrag hinzufügen",
+  "settings.knowledge.kindLabel": "Art",
+  "settings.knowledge.kind.naming": "Namenskonvention",
+  "settings.knowledge.kind.fact": "Fakt",
+  "settings.knowledge.kind.style": "Stilregel",
+  "settings.knowledge.from": "Alt (im Quellmaterial)",
+  "settings.knowledge.to": "Neu (in dieser Kampagne)",
+  "settings.knowledge.factText": "Fakt, der gilt",
+  "settings.knowledge.styleText": "Stilregel für generierte Texte",
+
+  "settings.glossary.heading": "Glossar",
+  "settings.glossary.hint":
+    "Übersetzungen für den Generator: englischer Begriff und die Schreibweise dieser Kampagne.",
+  "settings.glossary.empty": "Noch keine Begriffe — ersten Begriff anlegen.",
+  "settings.glossary.add": "Begriff hinzufügen",
+  "settings.glossary.term": "Begriff",
+  "settings.glossary.explanation": "Erklärung",
+
   // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
   "server.slug_taken": '{kind} „{id}" existiert schon — Vorschlag: „{suggestion}"',
   "server.slug_reserved": '„{id}" ist ein reservierter Name — Vorschlag: „{suggestion}"',
@@ -514,9 +549,11 @@ export const de = {
   "generate.input.sourcePlaceholder":
     "Abenteuertext einfügen — Absätze, Boxed Text, Statblock-Verweise …",
   "generate.input.contextLabel": "Mitgeschickter Kontext:",
-  // One sentence, both counts and the glossary token inside it.
+  // One sentence: the two counts, the knowledge COUNT (issue #53 AK5 — the
+  // number is what tells the DM whether the rules they just wrote arrived)
+  // and the glossary token.
   "generate.input.contextHint":
-    "{npcs, plural, one {# NPC} other {# NPCs}} · {locations, plural, one {# Ort} other {# Orte}} · {glossary}",
+    "{npcs, plural, one {# NPC} other {# NPCs}} · {locations, plural, one {# Ort} other {# Orte}} · {knowledge, plural, =0 {kein Kampagnenwissen} one {# Wissens-Eintrag} other {# Wissens-Einträge}} · {glossary}",
   "generate.input.glossary": "Glossar",
   "generate.input.noGlossary": "kein Glossar",
   "generate.input.submit.scene": "Entwürfe generieren",
@@ -577,6 +614,16 @@ export const de = {
   "generate.review.leadNpc":
     "Prüfen und anpassen. Erst „Übernehmen“ schreibt den Eintrag — bestehende NPCs werden nie überschrieben.",
   "generate.review.stubsHeading": "Stubs — einzeln entscheiden",
+  // --- naming hints of the post-run check (issue #53 AK3) -------------------
+  // Deliberately NOT a warning: the check is a plain text search and the DM
+  // decides. So the heading counts and the row states the finding plus where
+  // it sits — the sentence is built here because the server stays
+  // language-free (#69).
+  "generate.review.namingHeading":
+    "{count, plural, one {# Namens-Hinweis} other {# Namens-Hinweise}} — kein Blocker",
+  "generate.review.namingHint": '„{from}" steht noch da — vereinbart ist „{to}"',
+  "generate.review.namingWhereBody": "{path}, Zeile {line}",
+  "generate.review.namingWhereField": "{path}, Feld {field}",
   "generate.review.conflicts": "Diese Einträge existieren schon — nichts geschrieben:",
   "generate.review.conflictsNpc": "Dieser Eintrag existiert schon — nichts geschrieben:",
   "generate.review.applyFailed": "Nicht geschrieben — Server prüfen.",

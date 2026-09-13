@@ -777,3 +777,75 @@ describe("apply an npc draft", () => {
     expect(((await res.json()) as { error: string }).error).toBe("nothing to apply");
   });
 });
+
+// --- campaign knowledge in an NPC run (issue #53) ----------------------------
+//
+// The NPC half of AK2/AK3. The scene half is in generator.test.ts; what is
+// specific here is that an NPC run has NO chapter and still gets the block,
+// and that the naming check looks at the npc's PROPERTIES as well (a wrong
+// `role` is as visible to the DM as a wrong body line).
+
+describe("campaign knowledge", () => {
+  async function setKnowledge(entries: unknown[]): Promise<void> {
+    const current = await app.request("/api/beispiel/knowledge");
+    const { rev } = (await current.json()) as { rev: number };
+    const res = await app.request("/api/beispiel/knowledge", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ entries, rev }),
+    });
+    expect(res.status).toBe(200);
+  }
+
+  // The database is shared by the whole file — nothing may leak upwards.
+  afterEach(async () => {
+    await setKnowledge([]);
+  });
+
+  test("the block travels although the run has no chapter, refs resolved", async () => {
+    await setKnowledge([
+      { kind: "fact", from: "", to: "", text: "[[fenn]] lügt über die Ladung." },
+      { kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" },
+    ]);
+    const fake = useFake([replyFor("kennel-hand")]);
+    expect((await generateNpc({ sourceText: "A kennel hand.", id: "kennel-hand" })).status).toBe(
+      200,
+    );
+    const req = fake.calls[0]!.req;
+    expect(req.context.chapter).toBeUndefined();
+    // `[[fenn]]` reaches the model as the npc's NAME, never as a slug (AK4).
+    expect(req.knowledge).toBe(
+      [
+        "- Fakt: Fenn lügt über die Ladung.",
+        '- Namenskonvention: schreibe „Salt Harbour" immer als „Salzhafen".',
+      ].join("\n"),
+    );
+  });
+
+  test("a wrong spelling in a PROPERTY is reported with the key, not a line", async () => {
+    await setKnowledge([
+      { kind: "naming", from: "Schmugglerin", to: "Freihändlerin", text: "" },
+    ]);
+    useFake([replyFor("wharf-hand")]);
+    const result = (await (
+      await generateNpc({ sourceText: "A wharf hand.", id: "wharf-hand" })
+    ).json()) as GenerateNpcResult;
+    // The fixture's `role` is „Schmugglerin mit eigenen Plänen".
+    const hint = (result.namingHints ?? []).find((h) => h.field === "role");
+    expect(hint).toMatchObject({
+      from: "Schmugglerin",
+      to: "Freihändlerin",
+      path: "npcs/wharf-hand",
+      field: "role",
+    });
+    expect(hint?.line).toBeUndefined();
+  });
+
+  test("without naming conventions the field stays absent", async () => {
+    useFake([replyFor("net-mender")]);
+    const result = (await (
+      await generateNpc({ sourceText: "A net mender.", id: "net-mender" })
+    ).json()) as GenerateNpcResult;
+    expect(result.namingHints).toBeUndefined();
+  });
+});

@@ -53,16 +53,20 @@ Antworte ausschließlich mit dem JSON-Objekt — kein Text davor oder danach.
      Figuren ohne id bleiben normaler Text,
    - in `## Beziehungen` von NPC-Stubs bleibt die nackte id (kein `[[…]]`),
      das ist ein eigenes Format.
-5. **Übersetzung**: Nutze das mitgelieferte Glossar strikt. Regelbegriffe
+5. **Kampagnenwissen**: Der Abschnitt „Kampagnenwissen" im Prompt ist
+   verbindlich und gewinnt gegen den Quelltext. Namenskonventionen gelten
+   überall — Titel, Fließtext, Read-Alouds, Stubs. Steht dort kein
+   Abschnitt, gibt es für diese Kampagne kein Wissen.
+6. **Übersetzung**: Nutze das mitgelieferte Glossar strikt. Regelbegriffe
    (Checks, Skills, Conditions, advantage/disadvantage, DCs) bleiben
    Englisch. Read-Alouds: atmosphärisch, „ihr"-Anrede, Präsens.
-6. **Callouts**: `[!readaloud]` für Vorlesetext, `[!check]` für jede
+7. **Callouts**: `[!readaloud]` für Vorlesetext, `[!check]` für jede
    Würfelmechanik, `[!secret]` für Wissen, das Spieler nicht haben,
    `[!outcome]` für szenenübergreifende Konsequenzen, `[!loot]` für Beute,
    `[!note]` für DM-Hinweise. Kein anderer Typ.
-7. **Nichts erfinden**: Keine Inhalte ergänzen, die nicht im Quelltext
+8. **Nichts erfinden**: Keine Inhalte ergänzen, die nicht im Quelltext
    stehen — Ausnahme: `warnings`, wenn der Quelltext Lücken hat.
-8. **ids**: kebab-case, Englisch, kurz, stabil gedacht (z. B. `captured`,
+9. **ids**: kebab-case, Englisch, kurz, stabil gedacht (z. B. `captured`,
    nicht `gefangen-genommen-im-lager`).
 
 ## Beispiel (Few-Shot)

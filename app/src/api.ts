@@ -9,7 +9,11 @@ import type {
   GenerateJob,
   GenerateJobStarted,
   GeneratedStub,
+  GlossaryEntry,
+  GlossaryResponse,
   InstanceSettings,
+  KnowledgeEntry,
+  KnowledgeResponse,
   SearchResponse,
 } from "@grimoire/shared/types";
 
@@ -49,6 +53,17 @@ async function failure(what: string, response: Response): Promise<ApiError> {
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`/api${path}`);
   if (!response.ok) throw await failure(`GET /api${path}`, response);
+  return (await response.json()) as T;
+}
+
+/** PUT a JSON body and parse the JSON answer; a non-2xx becomes an ApiError. */
+async function putJson<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`/api${path}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw await failure(`PUT /api${path}`, response);
   return (await response.json()) as T;
 }
 
@@ -114,16 +129,6 @@ export function fetchVersion(campaign: string): Promise<VersionResponse> {
   return getJson<VersionResponse>(`/${encodeURIComponent(campaign)}/version`);
 }
 
-/** One entry of the translation glossary (server: the `glossary` table). */
-export interface GlossaryEntry {
-  term: string;
-  explanation: string;
-}
-
-export interface GlossaryResponse {
-  entries: GlossaryEntry[];
-}
-
 /**
  * The campaign's glossary as a LIST of terms (issue #57): since the SQLite
  * migration it is a table, not a markdown blob. The reading view still opens
@@ -134,19 +139,41 @@ export function fetchGlossary(campaign: string): Promise<GlossaryResponse> {
   return getJson<GlossaryResponse>(`/${encodeURIComponent(campaign)}/glossary`);
 }
 
-/** Replace the whole glossary (the list is short and is edited as a whole). */
+/**
+ * Replace the whole glossary. The list is short and is edited as a whole, so
+ * the ARRAY ORDER is the stored order — that is also how the settings page
+ * reorders (issue #53) — and `rev` is the guard token of the list, read from
+ * the `fetchGlossary` the editor is showing. A stale one answers 409.
+ */
 export function putGlossary(
   campaign: string,
   entries: GlossaryEntry[],
+  rev: number,
 ): Promise<GlossaryResponse> {
-  const url = `/${encodeURIComponent(campaign)}/glossary`;
-  return fetch(`/api${url}`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ entries }),
-  }).then(async (response) => {
-    if (!response.ok) throw await failure(`PUT /api${url}`, response);
-    return (await response.json()) as GlossaryResponse;
+  return putJson<GlossaryResponse>(`/${encodeURIComponent(campaign)}/glossary`, {
+    entries,
+    rev,
+  });
+}
+
+/**
+ * The campaign's KNOWLEDGE the generator has to apply (issue #53) — naming
+ * conventions, facts, style rules. Same whole-list-plus-`rev` contract as the
+ * glossary, on purpose: the DM edits both on the same page.
+ */
+export function fetchKnowledge(campaign: string): Promise<KnowledgeResponse> {
+  return getJson<KnowledgeResponse>(`/${encodeURIComponent(campaign)}/knowledge`);
+}
+
+/** Replace the whole knowledge list; see putGlossary for the `rev` rule. */
+export function putKnowledge(
+  campaign: string,
+  entries: KnowledgeEntry[],
+  rev: number,
+): Promise<KnowledgeResponse> {
+  return putJson<KnowledgeResponse>(`/${encodeURIComponent(campaign)}/knowledge`, {
+    entries,
+    rev,
   });
 }
 

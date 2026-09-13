@@ -235,6 +235,39 @@ export const en: Messages = {
   "settings.campaign.heading": "Campaign: {name}",
   "settings.campaign.hint": "Settings that apply to this campaign only.",
 
+  // --- the two campaign lists on /settings (issue #53) ----------------------
+  "settings.list.loading": "Loading the list …",
+  "settings.list.loadFailed": "List not loaded — reload the page.",
+  "settings.list.saveFailed": "Not saved.",
+  "settings.list.saving": "Saving …",
+  "settings.list.saved": "Saved",
+  "settings.list.moveUp": "Move up",
+  "settings.list.moveDown": "Move down",
+  "settings.list.remove": "Delete entry",
+
+  "settings.knowledge.heading": "Campaign knowledge",
+  "settings.knowledge.hint":
+    "Travels with every generator run and is binding — even when the source material says otherwise. References like [[fenn]] are resolved to the name.",
+  "settings.knowledge.empty":
+    "No campaign knowledge yet — add the first entry (a naming convention, say).",
+  "settings.knowledge.add": "Add entry",
+  "settings.knowledge.kindLabel": "Kind",
+  "settings.knowledge.kind.naming": "Naming convention",
+  "settings.knowledge.kind.fact": "Fact",
+  "settings.knowledge.kind.style": "Style rule",
+  "settings.knowledge.from": "Old (in the source material)",
+  "settings.knowledge.to": "New (in this campaign)",
+  "settings.knowledge.factText": "The fact that holds",
+  "settings.knowledge.styleText": "Style rule for generated text",
+
+  "settings.glossary.heading": "Glossary",
+  "settings.glossary.hint":
+    "Translations for the generator: the English term and this campaign's wording.",
+  "settings.glossary.empty": "No terms yet — add the first one.",
+  "settings.glossary.add": "Add term",
+  "settings.glossary.term": "Term",
+  "settings.glossary.explanation": "Explanation",
+
   // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
   "server.slug_taken": '{kind} “{id}” already exists — suggestion: “{suggestion}”',
   "server.slug_reserved": '“{id}” is a reserved name — suggestion: “{suggestion}”',
@@ -497,7 +530,7 @@ export const en: Messages = {
     "Paste adventure text — paragraphs, boxed text, statblock references …",
   "generate.input.contextLabel": "Context sent along:",
   "generate.input.contextHint":
-    "{npcs, plural, one {# NPC} other {# NPCs}} · {locations, plural, one {# location} other {# locations}} · {glossary}",
+    "{npcs, plural, one {# NPC} other {# NPCs}} · {locations, plural, one {# location} other {# locations}} · {knowledge, plural, =0 {no campaign knowledge} one {# knowledge entry} other {# knowledge entries}} · {glossary}",
   "generate.input.glossary": "glossary",
   "generate.input.noGlossary": "no glossary",
   "generate.input.submit.scene": "Generate drafts",
@@ -551,6 +584,12 @@ export const en: Messages = {
   "generate.review.leadNpc":
     "Check and adjust. Only “Apply” writes the entry — existing NPCs are never overwritten.",
   "generate.review.stubsHeading": "Stubs — decide one by one",
+  // --- naming hints of the post-run check (issue #53 AK3) -------------------
+  "generate.review.namingHeading":
+    "{count, plural, one {# naming hint} other {# naming hints}} — not a blocker",
+  "generate.review.namingHint": '“{from}” is still there — the convention says “{to}”',
+  "generate.review.namingWhereBody": "{path}, line {line}",
+  "generate.review.namingWhereField": "{path}, field {field}",
   "generate.review.conflicts": "These entries already exist — nothing written:",
   "generate.review.conflictsNpc": "This entry already exists — nothing written:",
   "generate.review.applyFailed": "Not written — check the server.",

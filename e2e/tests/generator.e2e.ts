@@ -48,7 +48,12 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   await expect(
     page.getByRole("button", { name: "Kapitel 1: Der Leuchtturm von Salzhafen" }),
   ).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByText("2 NPCs · 1 Ort · Glossar")).toBeVisible();
+  // The knowledge count is part of that line since issue #53; the example
+  // campaign has none, so it says so. The knowledge path itself is
+  // campaign-knowledge.e2e.ts.
+  await expect(
+    page.getByText("2 NPCs · 1 Ort · kein Kampagnenwissen · Glossar"),
+  ).toBeVisible();
 
   await page.getByLabel("Quelltext (EN)").fill(SOURCE);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();

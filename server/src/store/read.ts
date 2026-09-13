@@ -17,10 +17,14 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import {
   isEnded,
+  isKnowledgeKind,
   type CampaignSummary,
   type CampaignTree,
   type ChapterNode,
   type FileResponse,
+  type GlossaryResponse,
+  type KnowledgeEntry,
+  type KnowledgeResponse,
   type LocationSummary,
   type NpcSummary,
   type SceneGroup,
@@ -31,6 +35,7 @@ import { ApiError, assertSafeCampaignId, assertSafeAddress } from "../campaign-f
 import { localDateTimeToMs } from "../clock";
 import type { GrimoireDb } from "../db/client";
 import {
+  campaignKnowledge,
   campaigns,
   chapters,
   glossary,
@@ -48,6 +53,7 @@ import {
 
 } from "../db/schema";
 import { getDb } from "./handle";
+import { expandBodyRefs } from "./refs";
 import {
   chapterPath,
   locationPath,
@@ -476,6 +482,36 @@ export function glossaryRows(db: GrimoireDb, campaign: string): GlossaryRow[] {
     .all() as GlossaryRow[];
 }
 
+/**
+ * One `campaign_knowledge` row as it comes out of the table. Its own shape
+ * (not `KnowledgeEntry`) because `kind` is whatever the column holds: a row
+ * written by an older build, or by hand, degrades to `fact` on the way OUT
+ * instead of making the read fail (CLAUDE.md, "Format degradiert").
+ */
+export interface KnowledgeRow {
+  kind: string;
+  fromText: string;
+  toText: string;
+  text: string;
+  pos: number;
+}
+
+/** The campaign-knowledge list in its stored order (issue #53). */
+export function knowledgeRows(db: GrimoireDb, campaign: string): KnowledgeRow[] {
+  return db
+    .select({
+      kind: campaignKnowledge.kind,
+      fromText: campaignKnowledge.fromText,
+      toText: campaignKnowledge.toText,
+      text: campaignKnowledge.text,
+      pos: campaignKnowledge.pos,
+    })
+    .from(campaignKnowledge)
+    .where(eq(campaignKnowledge.campaignId, campaign))
+    .orderBy(asc(campaignKnowledge.pos))
+    .all() as KnowledgeRow[];
+}
+
 export function relationRows(
   db: GrimoireDb,
   campaign: string,
@@ -586,20 +622,24 @@ export async function readParsedFile(campaign: string, rel: string): Promise<Fil
 
 // --- GET /api/:campaign/glossary ---------------------------------------------
 
-export interface GlossaryEntry {
-  term: string;
-  explanation: string;
-}
-
-/** GET /api/:campaign/glossary -> `{ entries }` (planning section 2). */
-export async function readGlossary(campaign: string): Promise<{ entries: GlossaryEntry[] }> {
-  await requireCampaign(campaign);
+/**
+ * GET /api/:campaign/glossary -> `{ entries, rev }` (planning section 2).
+ *
+ * `rev` since issue #53: the settings page edits this list, so it needs the
+ * same guard token every other editable document has. It is the LIST's
+ * counter (`campaigns.glossary_rev`) — the same one `GET /file?path=glossary`
+ * hands out, so the two views of the glossary cannot disagree about what
+ * "unchanged" means.
+ */
+export async function readGlossary(campaign: string): Promise<GlossaryResponse> {
+  const row = await requireCampaign(campaign);
   const db = await getDb();
   return {
-    entries: glossaryRows(db, campaign).map((row) => ({
-      term: row.term,
-      explanation: row.explanation,
+    entries: glossaryRows(db, campaign).map((r) => ({
+      term: r.term,
+      explanation: r.explanation,
     })),
+    rev: row.glossaryRev,
   };
 }
 
@@ -612,5 +652,81 @@ export async function glossaryText(campaign: string): Promise<string | undefined
   const rows = glossaryRows(db, campaign);
   if (rows.length === 0) return undefined;
   return rows.map((row) => `- ${row.term} → ${row.explanation}`).join("\n");
+}
+
+// --- GET /api/:campaign/knowledge (issue #53) --------------------------------
+
+/** One stored row as the API shape — an unknown `kind` degrades to `fact`. */
+export function knowledgeEntry(row: KnowledgeRow): KnowledgeEntry {
+  return {
+    kind: isKnowledgeKind(row.kind) ? row.kind : "fact",
+    from: row.fromText,
+    to: row.toText,
+    text: row.text,
+  };
+}
+
+/** GET /api/:campaign/knowledge -> `{ entries, rev }`. */
+export async function readKnowledge(campaign: string): Promise<KnowledgeResponse> {
+  const row = await requireCampaign(campaign);
+  const db = await getDb();
+  return {
+    entries: knowledgeRows(db, campaign).map(knowledgeEntry),
+    rev: row.knowledgeRev,
+  };
+}
+
+/**
+ * The KNOWLEDGE lines of the prompt (issue #53 AK2) — the list the generator
+ * puts above the glossary, in stored order, one line per entry:
+ *
+ *     - Namenskonvention: schreibe „Alt" immer als „Neu".
+ *     - Fakt: <Satz>
+ *     - Stilregel: <Satz>
+ *
+ * German, like the rest of the prompt (llm-provider.ts: the pipeline's target
+ * language is German) — this is prompt CONTENT, not UI copy, so it does not
+ * belong in the app's catalog.
+ *
+ * `[[slug]]` references are RESOLVED here (AK4) with the same expansion the
+ * search index uses (store/refs.ts): a fact written as „[[fenn]] lügt immer"
+ * must reach the model as „Fenn lügt immer" — the model has never seen a
+ * slug table and would otherwise copy the brackets into the prose.
+ *
+ * `undefined` when the campaign has no knowledge at all, so the prompt keeps
+ * the exact shape it had before this feature (AK5).
+ */
+export async function knowledgeText(campaign: string): Promise<string | undefined> {
+  const db = await getDb();
+  const rows = knowledgeRows(db, campaign);
+  const lines: string[] = [];
+  for (const row of rows) {
+    const entry = knowledgeEntry(row);
+    const resolve = (value: string): string => expandBodyRefs(db, campaign, value);
+    if (entry.kind === "naming") {
+      if (entry.from.trim() === "" || entry.to.trim() === "") continue;
+      lines.push(
+        `- Namenskonvention: schreibe „${resolve(entry.from)}" immer als „${resolve(entry.to)}".`,
+      );
+      continue;
+    }
+    if (entry.text.trim() === "") continue;
+    const label = entry.kind === "fact" ? "Fakt" : "Stilregel";
+    lines.push(`- ${label}: ${resolve(entry.text)}`);
+  }
+  return lines.length === 0 ? undefined : lines.join("\n");
+}
+
+/**
+ * The naming conventions as `from`/`to` pairs — the input of the post-run
+ * check (naming-check.ts). Unlike the prompt lines these are NOT expanded:
+ * the check searches the draft for the literal spelling the DM typed.
+ */
+export async function namingRules(campaign: string): Promise<Array<{ from: string; to: string }>> {
+  const db = await getDb();
+  return knowledgeRows(db, campaign)
+    .map(knowledgeEntry)
+    .filter((e) => e.kind === "naming" && e.from.trim() !== "" && e.to.trim() !== "")
+    .map((e) => ({ from: e.from.trim(), to: e.to.trim() }));
 }
 

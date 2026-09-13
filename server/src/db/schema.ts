@@ -93,6 +93,14 @@ export const campaigns = sqliteTable("campaigns", {
    */
   glossaryRev: integer("glossary_rev").notNull().default(1),
   inboxRev: integer("inbox_rev").notNull().default(1),
+  /**
+   * Guard token of the CAMPAIGN KNOWLEDGE list (issue #53). Third of the same
+   * kind as the two above and for the same reason: `campaign_knowledge` is a
+   * whole-list document, so the version belongs to the LIST and not to a row
+   * — and `campaigns.version`, which every unrelated write bumps, would make
+   * an open knowledge edit unsaveable during a running session.
+   */
+  knowledgeRev: integer("knowledge_rev").notNull().default(1),
 });
 
 // --- chapters ---------------------------------------------------------------
@@ -546,6 +554,61 @@ export const glossary = sqliteTable(
   ],
 );
 
+// --- campaign knowledge -----------------------------------------------------
+
+/**
+ * The campaign's KNOWLEDGE BASE for the generator (issue #53): naming
+ * conventions, facts and style rules the model has to apply even when the
+ * source material says something else.
+ *
+ * Its own table next to `glossary`, per PO decision, because it answers a
+ * different question: the glossary translates a TERM, an entry here overrides
+ * the source. `kind` decides which columns carry the content (`naming`:
+ * `from_text`/`to_text`, otherwise `text`) — the unused ones stay empty
+ * strings rather than NULL, so nothing has to distinguish "not set" from
+ * "cleared" and a kind switched in the UI keeps what was typed.
+ *
+ * THE KEY IS (campaign, pos), not the content. The list is short, ordered and
+ * REPLACED AS A WHOLE (like the glossary), so `pos` is both the display order
+ * — which is authored information (schema rule 2) — and the only identity an
+ * entry needs. A content key would also forbid two identical style rules,
+ * which is a rule nobody asked for.
+ *
+ * `rev` is on the row for schema rule 4's sake; the guard the API actually
+ * checks is the LIST's `campaigns.knowledge_rev` (see there).
+ */
+export const campaignKnowledge = sqliteTable(
+  "campaign_knowledge",
+  {
+    campaignId: text("campaign_id").notNull(),
+    /** Position in the list — the display order AND the key (see above). */
+    pos: integer("pos").notNull(),
+    /** "naming" | "fact" | "style" (shared KNOWLEDGE_KINDS). */
+    kind: text("kind").notNull().default("fact"),
+    /**
+     * `naming`: the spelling the SOURCE material uses. Named `from_text`
+     * because `from` is a SQL keyword and a quoted column name would leak
+     * into every raw `sql` template that ever touches this table.
+     */
+    fromText: text("from_text").notNull().default(""),
+    /** `naming`: the spelling THIS campaign uses. */
+    toText: text("to_text").notNull().default(""),
+    /** `fact`/`style`: the sentence. */
+    text: text("text").notNull().default(""),
+    rev: revColumn(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.campaignId, t.pos] }),
+    foreignKey({
+      columns: [t.campaignId],
+      foreignColumns: [campaigns.id],
+      name: "campaign_knowledge_campaign_fk",
+    })
+      .onUpdate("cascade")
+      .onDelete("cascade"),
+  ],
+);
+
 // --- generator jobs ---------------------------------------------------------
 
 /**
@@ -742,6 +805,7 @@ export const schema = {
   sessionScenesPlayed,
   inboxEntries,
   glossary,
+  campaignKnowledge,
   generateJobs,
   unknownFiles,
   migrationReport,

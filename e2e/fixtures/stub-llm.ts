@@ -67,6 +67,33 @@ function sourceText(prompt: string): string {
   return index === -1 ? prompt : prompt.slice(index);
 }
 
+/**
+ * The campaign-knowledge block of the prompt (issue #53), or "" when the
+ * prompt has no such section — which is the normal case and what every
+ * campaign without knowledge produces.
+ *
+ * The stub ECHOES this back in a warning (replies.ts contextEchoWarnings), so
+ * a spec can assert what the server sent by reading the review screen. That
+ * is the only honest way round: the browser cannot see the prompt, and a spec
+ * that reached into the server would stop testing the real path.
+ */
+function knowledgeBlock(prompt: string): string {
+  const start = prompt.indexOf(KNOWLEDGE_HEADING);
+  if (start === -1) return "";
+  const after = prompt.slice(start + KNOWLEDGE_HEADING.length);
+  const end = after.indexOf("## Glossar");
+  return (end === -1 ? after : after.slice(0, end)).trim();
+}
+
+/**
+ * The knowledge section's heading, as server/src/llm-provider.ts writes it.
+ * Duplicated on purpose: the stub is a fake MODEL and reads the prompt as a
+ * model would — importing the server's constant would make the fixture agree
+ * with the server by construction instead of by assertion.
+ */
+const KNOWLEDGE_HEADING =
+  "## Kampagnenwissen — immer anwenden, auch wenn das Quellmaterial anders lautet";
+
 export interface StubDecision {
   /** The reply body (a JSON object, serialized into the message content). */
   reply: unknown;
@@ -85,6 +112,8 @@ export function decide(messages: ChatMessage[]): StubDecision {
   const truncated = source.includes(TRIGGER.truncated);
   const chapter = matchLine(prompt, "chapter");
   const delayMs = source.includes(TRIGGER.slow) ? SLOW_REPLY_MS : 0;
+  const knowledge = knowledgeBlock(prompt);
+  const oldName = source.includes(TRIGGER.oldName);
 
   if (chapter === undefined) {
     const pinned = matchLine(prompt, "vorgegebene id");
@@ -92,14 +121,14 @@ export function decide(messages: ChatMessage[]): StubDecision {
       kind: "npc",
       truncated,
       delayMs,
-      reply: invalid ? invalidNpcReply(pinned) : npcReply(pinned),
+      reply: invalid ? invalidNpcReply(pinned) : npcReply(pinned, knowledge),
     };
   }
   return {
     kind: "scene",
     truncated,
     delayMs,
-    reply: invalid ? invalidSceneReply(chapter) : sceneReply(chapter),
+    reply: invalid ? invalidSceneReply(chapter) : sceneReply(chapter, knowledge, oldName),
   };
 }
 

@@ -201,8 +201,19 @@ describe("labels", () => {
   });
 
   test("contextHint names what the prompt carries", () => {
-    expect(contextHint(2, 1, true, t)).toBe("2 NPCs · 1 Ort · Glossar");
-    expect(contextHint(1, 0, false, t)).toBe("1 NPC · 0 Orte · kein Glossar");
+    expect(contextHint(2, 1, true, t)).toBe(
+      "2 NPCs · 1 Ort · kein Kampagnenwissen · Glossar",
+    );
+    expect(contextHint(1, 0, false, t)).toBe(
+      "1 NPC · 0 Orte · kein Kampagnenwissen · kein Glossar",
+    );
+  });
+
+  test("contextHint COUNTS the knowledge entries (issue #53 AK5)", () => {
+    // A count, not a yes/no: the DM comes here right after writing a rule and
+    // the number is what confirms it travels.
+    expect(contextHint(2, 1, true, t, 1)).toBe("2 NPCs · 1 Ort · 1 Wissens-Eintrag · Glossar");
+    expect(contextHint(2, 1, true, t, 3)).toBe("2 NPCs · 1 Ort · 3 Wissens-Einträge · Glossar");
   });
 });
 

@@ -20,7 +20,9 @@ import {
   ClaudeProvider,
   DEFAULT_MAX_TOKENS,
   JSON_PREFILL,
+  KNOWLEDGE_HEADING,
   OpenAICompatProvider,
+  buildPrompt,
   createProvider,
 } from "../src/llm-provider";
 import type { GenerateRequest } from "../src/llm-provider";
@@ -107,10 +109,65 @@ describe("createProvider", () => {
 const REQ: GenerateRequest = {
   systemPrompt: "System-Prompt",
   fewShotTarget: "# Few-Shot",
+  knowledge: "",
   glossary: "Glossar",
   context: { chapter: "01-salzhafen", npcs: [{ id: "fenn", name: "Fenn" }], locations: [] },
   sourceText: "Fenn waits at the docks.",
 };
+
+// --- prompt assembly (issue #53 AK2) --------------------------------------------
+//
+// The ORDER of the prompt's sections is the contract the ticket writes down:
+// the campaign knowledge stands above the glossary and is introduced by a
+// heading that says it wins against the source material. A unit test rather
+// than only an E2E assertion, because this is the one place that order is
+// decided for BOTH run kinds.
+
+describe("buildPrompt", () => {
+  const KNOWLEDGE = '- Namenskonvention: schreibe „Salt Harbour" immer als „Salzhafen".';
+
+  test("no knowledge: the prompt starts with the glossary, exactly as before", () => {
+    const prompt = buildPrompt(REQ);
+    expect(prompt.startsWith("## Glossar")).toBe(true);
+    expect(prompt).not.toContain("Kampagnenwissen");
+  });
+
+  test("blank knowledge is treated as none — no empty binding section", () => {
+    expect(buildPrompt({ ...REQ, knowledge: "  \n " })).not.toContain("Kampagnenwissen");
+  });
+
+  test("the knowledge block comes FIRST, with the binding heading", () => {
+    const prompt = buildPrompt({ ...REQ, knowledge: KNOWLEDGE });
+    expect(prompt.startsWith(`${KNOWLEDGE_HEADING}\n\n${KNOWLEDGE}\n\n## Glossar`)).toBe(true);
+  });
+
+  test("the heading is the wording the ticket demands", () => {
+    expect(KNOWLEDGE_HEADING).toBe(
+      "## Kampagnenwissen — immer anwenden, auch wenn das Quellmaterial anders lautet",
+    );
+  });
+
+  test("knowledge sits above the glossary in an NPC run too (no chapter)", () => {
+    const prompt = buildPrompt({
+      ...REQ,
+      knowledge: KNOWLEDGE,
+      context: { npcs: [], locations: [], targetId: "brakk" },
+    });
+    expect(prompt.indexOf(KNOWLEDGE_HEADING)).toBeLessThan(prompt.indexOf("## Glossar"));
+    expect(prompt.indexOf("## Glossar")).toBeLessThan(prompt.indexOf("## Kontext"));
+    expect(prompt).toContain("vorgegebene id: brakk");
+    expect(prompt).not.toContain("chapter:");
+  });
+
+  test("the sections after it are unchanged and in their old order", () => {
+    const prompt = buildPrompt({ ...REQ, knowledge: KNOWLEDGE });
+    const order = ["## Glossar", "## Kontext", "## Referenz-Zieldatei", "## Quelltext"].map((h) =>
+      prompt.indexOf(h),
+    );
+    expect(order.every((at) => at !== -1)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+});
 
 interface Captured {
   path: string;

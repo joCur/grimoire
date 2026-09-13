@@ -43,6 +43,13 @@
 >
 > Die Dateinamen unten sind also die des **Import-Formats**; die Adresse einer
 > Szene ist ihre `id`, nicht ihr früherer Dateiname.
+>
+> **Kein Dokument, sondern eine Liste:** das **Kampagnenwissen** (Issue #53 —
+> Namenskonventionen, Fakten, Stilregeln für den Generator) hat keine Adresse
+> und kein Markdown-Format. Es entsteht in der UI (`/settings`) und wird über
+> `GET/PUT /api/:campaign/knowledge` gepflegt; das Import-Format kennt es
+> nicht. Das Glossar ist derselbe Fall mit einer Ausnahme: es hat aus
+> historischen Gründen zusätzlich die Adresse `glossary`.
 
 Alle **Keys sind Englisch** (stabil, maschinenlesbar), alle **Inhalte Deutsch**.
 Grundprinzip: Das Format degradiert, es validiert nicht — unbekannte

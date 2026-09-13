@@ -43,6 +43,7 @@ import type {
   GenerateResult,
   GeneratedNpcDraft,
   GeneratedStub,
+  NamingHint,
 } from "@grimoire/shared/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -51,6 +52,7 @@ import {
   GitFork,
   MapPin,
   Sparkles,
+  SpellCheck,
   StickyNote,
   User,
 } from "lucide-react";
@@ -63,6 +65,7 @@ import {
   applyNpcDraft,
   deleteGenerateJob,
   fetchFile,
+  fetchKnowledge,
   fetchTree,
   startGenerateJob,
   startGenerateNpcJob,
@@ -94,6 +97,7 @@ import {
   usageLabel,
   type GenerateMode,
 } from "@/lib/generate";
+import { promptKnowledgeCount } from "@/lib/settings-list";
 import { generateJobKey, useDraftEditSync, useGenerateJob } from "@/lib/use-generate-job";
 import { cn } from "@/lib/utils";
 
@@ -131,6 +135,16 @@ export function GenerateRoute() {
   const glossary = useQuery({
     queryKey: ["file", campaign, "glossary"],
     queryFn: () => fetchFile(campaign, "glossary"),
+    enabled: campaign !== "",
+    retry: false,
+  });
+  // Same purpose for the campaign knowledge (issue #53 AK5) — the hint names
+  // the NUMBER of entries, so this reads the list, not a document. The same
+  // query key the settings editor writes, so a rule saved there shows up here
+  // without a reload.
+  const knowledge = useQuery({
+    queryKey: ["knowledge", campaign],
+    queryFn: () => fetchKnowledge(campaign),
     enabled: campaign !== "",
     retry: false,
   });
@@ -558,6 +572,7 @@ export function GenerateRoute() {
                   tree.data?.locations.length ?? 0,
                   glossary.isSuccess,
                   t,
+                  promptKnowledgeCount(knowledge.data?.entries ?? []),
                 )}
               </span>
             </p>
@@ -702,6 +717,8 @@ export function GenerateRoute() {
               </div>
             ))}
 
+            <NamingHints hints={result.namingHints} t={t} />
+
             {scenes.map((scene) => (
               <SceneCard
                 key={scene.path}
@@ -828,6 +845,8 @@ export function GenerateRoute() {
               </div>
             ))}
 
+            <NamingHints hints={npcResult.namingHints} t={t} />
+
             <NpcDraftCard
               draft={npcResult.npc}
               markdown={edits[npcResult.npc.path] ?? npcResult.npc.markdown}
@@ -950,6 +969,58 @@ function stubReason(scenes: GenerateResult["scenes"], t: Translate): string {
   return t(scenes.length === 1 ? "generate.stub.reason.scene" : "generate.stub.reason.scenes", {
     title,
   });
+}
+
+/**
+ * The naming check's findings (issue #53 AK3) — the ONE block on this page
+ * that is not the model's voice but the server's.
+ *
+ * It is deliberately QUIETER than the warnings above it: a hairline box, no
+ * accent border, one small heading that says „kein Blocker" out loud. The
+ * check is a plain text search (server/src/naming-check.ts) and can be wrong
+ * about whether a hit is the thing the rule meant, so it may not look like a
+ * verdict — and it must never compete with the draft the DM is reading.
+ *
+ * Nothing renders when there is nothing to say: an empty „0 Hinweise" box
+ * would be noise on every single run of every campaign without conventions.
+ */
+function NamingHints({ hints, t }: { hints: NamingHint[] | undefined; t: Translate }) {
+  if (hints === undefined || hints.length === 0) return null;
+  return (
+    <section className="mb-[22px] rounded-md border border-border bg-card px-3.5 py-3">
+      <div className="mb-2 flex items-center gap-2 text-[12px] text-muted-foreground">
+        <SpellCheck aria-hidden size={14} className="flex-none" />
+        <h2 className="font-medium">
+          {t("generate.review.namingHeading", { count: hints.length })}
+        </h2>
+      </div>
+      <ul className="flex flex-col gap-2">
+        {hints.map((hint, index) => (
+          // The key needs every coordinate: one rule can hit the same path
+          // twice (a property and a body line), and two rules can hit the
+          // same line. The index closes the remaining tie.
+          <li key={`${hint.path}:${hint.field}:${hint.line ?? 0}:${hint.from}:${index}`}>
+            <p className="text-[13px] leading-[1.5] text-soft">
+              {t("generate.review.namingHint", { from: hint.from, to: hint.to })}
+            </p>
+            <p className="mt-0.5 font-mono text-[11.5px] text-faint">
+              {hint.line === undefined
+                ? t("generate.review.namingWhereField", {
+                    path: hint.path,
+                    field: hint.field,
+                  })
+                : t("generate.review.namingWhereBody", { path: hint.path, line: hint.line })}
+            </p>
+            {/* The line itself, so the DM can judge the hit without opening
+                the draft — the check's whole claim is „it says this here". */}
+            <p className="mt-0.5 text-[12px] leading-[1.5] text-muted-foreground">
+              {hint.excerpt}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 /**

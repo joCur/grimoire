@@ -81,9 +81,13 @@ Danach genau diese Abschnitte, in dieser Reihenfolge:
    Andere Typen (`[!note]`, `[!check]`, `[!readaloud]`, `[!outcome]`,
    `[!loot]`) sind außerhalb von `## Weiß` erlaubt, aber sparsam. Kein
    anderer Typ.
-8. **Übersetzung**: Nutze das mitgelieferte Glossar strikt. Regelbegriffe
+8. **Kampagnenwissen**: Der Abschnitt „Kampagnenwissen" im Prompt ist
+   verbindlich und gewinnt gegen den Quelltext. Namenskonventionen gelten
+   überall — `name`, `role`, Fließtext, Callouts. Steht dort kein Abschnitt,
+   gibt es für diese Kampagne kein Wissen.
+9. **Übersetzung**: Nutze das mitgelieferte Glossar strikt. Regelbegriffe
    (Checks, Skills, Conditions, advantage/disadvantage, DCs) bleiben Englisch.
-9. **Warnings**: kurze deutsche Hinweise für den DM — fehlende Motivation,
+10. **Warnings**: kurze deutsche Hinweise für den DM — fehlende Motivation,
    nicht referenzierbare Beziehungen, unklarer Status, geraten wirkende Werte.
 
 ## Beispiel (Few-Shot)

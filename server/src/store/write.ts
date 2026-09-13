@@ -36,6 +36,9 @@ import {
   type ErrorField,
   type ErrorKind,
   type FileResponse,
+  type GlossaryResponse,
+  type KnowledgeEntry,
+  type KnowledgeResponse,
 } from "@grimoire/shared";
 import { ApiError, assertSafeAddress, assertSafeCampaignId } from "../campaign-fs";
 import { localDate, localDateTimeSeconds, localTime, now } from "../clock";
@@ -47,6 +50,7 @@ import {
   removeRelationLines,
 } from "../db/import-markdown";
 import {
+  campaignKnowledge,
   campaigns,
   chapters,
   generateJobs,
@@ -72,6 +76,8 @@ import {
   campaignRow,
   glossaryRows,
   inboxRows,
+  knowledgeEntry,
+  knowledgeRows,
   logRows,
   pauseRows,
   pickSession,
@@ -1237,26 +1243,104 @@ function writeGlossaryRows(
   }
 }
 
-/** PUT /api/:campaign/glossary `{ entries }` -> the stored list. */
+/**
+ * PUT /api/:campaign/glossary `{ entries, rev }` -> the stored list + its
+ * fresh `rev`.
+ *
+ * The ORDER of `entries` is the stored order — that is what the settings
+ * page's reordering writes (issue #53): there is no separate "move" endpoint,
+ * because a list this short is one document and a move is simply a different
+ * document.
+ *
+ * `rev` is REQUIRED since issue #53, for the reason every other editable
+ * document has one: the settings page and the markdown editor can hold the
+ * same glossary open, and a whole-list PUT without a guard is exactly the
+ * silent overwrite ADR #4 forbids. An `undefined` rev is refused by the
+ * endpoint, not defaulted here.
+ */
 export async function writeGlossary(
   campaign: string,
   entries: Array<{ term: string; explanation: string }>,
-): Promise<{ entries: Array<{ term: string; explanation: string }> }> {
+  rev: number,
+): Promise<GlossaryResponse> {
   return mutate(campaign, (tx) => {
+    const row = requireCampaignRow(tx, campaign);
+    guardRev(row.glossaryRev, rev, "glossary changed");
     writeGlossaryRows(tx, campaign, entries);
     // Same document, same guard token: an editor holding `glossary` must
     // see a changed `rev` after this.
+    const nextRev = row.glossaryRev + 1;
     tx.update(campaigns)
-      .set({ glossaryRev: sql`${campaigns.glossaryRev} + 1` })
+      .set({ glossaryRev: nextRev })
       .where(eq(campaigns.id, campaign))
       .run();
     return {
-      entries: glossaryRows(tx, campaign).map((row) => ({
-        term: row.term,
-        explanation: row.explanation,
+      entries: glossaryRows(tx, campaign).map((r) => ({
+        term: r.term,
+        explanation: r.explanation,
       })),
+      rev: nextRev,
     };
   });
+}
+
+// --- the campaign_knowledge table (issue #53) ----------------------------------
+
+/**
+ * PUT /api/:campaign/knowledge `{ entries, rev }` -> the stored list + its
+ * fresh `rev`.
+ *
+ * Exactly the glossary's contract, deliberately: the DM edits both lists on
+ * the same page, so "the whole list plus its guard token" is ONE thing to
+ * understand instead of two. The list is replaced rather than diffed — which
+ * is what makes reordering, deleting and editing the same request — and
+ * `pos` is handed out fresh from the array order.
+ *
+ * ENTRIES ARE NOT DROPPED HERE for being half-filled: an empty `to` is a
+ * convention the DM has not finished typing, and swallowing it on save would
+ * lose work. The PROMPT skips those lines instead (read.ts knowledgeText),
+ * which is where an incomplete rule can actually do damage.
+ */
+export async function writeKnowledge(
+  campaign: string,
+  entries: KnowledgeEntry[],
+  rev: number,
+): Promise<KnowledgeResponse> {
+  return mutate(campaign, (tx) => {
+    const row = requireCampaignRow(tx, campaign);
+    guardRev(row.knowledgeRev, rev, "campaign knowledge changed");
+    tx.delete(campaignKnowledge).where(eq(campaignKnowledge.campaignId, campaign)).run();
+    let pos = 0;
+    for (const entry of entries) {
+      tx.insert(campaignKnowledge)
+        .values({
+          campaignId: campaign,
+          pos: pos++,
+          kind: entry.kind,
+          fromText: entry.from,
+          toText: entry.to,
+          text: entry.text,
+        })
+        .run();
+    }
+    const nextRev = row.knowledgeRev + 1;
+    tx.update(campaigns)
+      .set({ knowledgeRev: nextRev })
+      .where(eq(campaigns.id, campaign))
+      .run();
+    return { entries: knowledgeRows(tx, campaign).map(knowledgeEntry), rev: nextRev };
+  });
+}
+
+/**
+ * The campaign row inside a running transaction. `mutate` has already proved
+ * the campaign exists, so this only narrows the type — a 404 here would mean
+ * the row vanished between two statements of one transaction.
+ */
+function requireCampaignRow(tx: GrimoireDb, campaign: string): CampaignRow {
+  const row = campaignRow(tx, campaign);
+  if (row === undefined) throw new ApiError(404, "campaign not found");
+  return row;
 }
 
 // --- sessions -----------------------------------------------------------------
