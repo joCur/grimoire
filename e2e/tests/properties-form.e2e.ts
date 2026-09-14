@@ -201,6 +201,52 @@ test("scene properties: chips, reference and status land in the file — nothing
   expect(after.body).toBe(pristine.body);
 });
 
+test('free text in the Ort field names the id and blocks the save (#100)', async ({
+  page,
+  api,
+}) => {
+  // The group a scene sits under IS its `location`, so the field takes an id
+  // and nothing else. The form used to annotate free text „Freier Text —
+  // kein Eintrag" and let the DM click Speichern into a 400.
+  await page.goto(SCENE_URL);
+  const dialog = await openProperties(page);
+  const save = dialog.getByRole("button", { name: "Speichern" });
+
+  await dialog.getByLabel("Ort").fill("Der alte Hafen");
+  // The line names the id the server would suggest — same transliteration.
+  await expect(referenceHint(dialog, 'Keine Orts-id — „der-alte-hafen" verwenden.')).toBeVisible();
+  await expect(dialog.getByText('ist keine id — „der-alte-hafen"')).toBeVisible();
+  await expect(save).toBeDisabled();
+
+  // The id it proposes is accepted, and the save is available again.
+  await dialog.getByLabel("Ort").fill("der-alte-hafen");
+  await expect(referenceHint(dialog, "Neu — wird beim Speichern angelegt.")).toBeVisible();
+  await expect(save).toBeEnabled();
+
+  // Nothing was written by any of it.
+  expect(await api.raw(SCENE)).toContain("location: leuchtturm");
+});
+
+test('a rejected save shows the SERVER sentence, not the generic one (#100)', async ({
+  page,
+}) => {
+  // The shared write layer answered every non-conflict rejection with its
+  // caller's generic wording, so a 400 that names exactly what is wrong —
+  // `location_not_an_id` with its suggestion, or this unknown chapter — was
+  // invisible to the DM. An unknown CHAPTER is the reachable case: it is the
+  // one reference the app deliberately does not block (ADR #14), because
+  // only the server knows which chapters exist.
+  await page.goto(SCENE_URL);
+  const dialog = await openProperties(page);
+  await dialog.getByLabel("Kapitel").fill("99-nirgendwo");
+  await dialog.getByRole("button", { name: "Speichern" }).click();
+
+  // The server's own text, and the dialog stays open on the typed value.
+  await expect(dialog.getByText("unknown chapter: 99-nirgendwo")).toBeVisible();
+  await expect(dialog.getByText("Eigenschaften nicht gespeichert")).toHaveCount(0);
+  await expect(dialog.getByLabel("Kapitel")).toHaveValue("99-nirgendwo");
+});
+
 test("a second writer: the save reports the conflict, the second click writes", async ({
   page,
   api,
