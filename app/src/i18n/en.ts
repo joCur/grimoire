@@ -140,8 +140,10 @@ export const en: Messages = {
   "properties.field.row.name.aria": "{label}, row {row}: name",
   "properties.field.row.value.aria": "{label}, row {row}: value",
   "properties.ref.unknownChapter": "Unknown — the chapter has to exist.",
-  "properties.ref.freeText": "Free text — no entry.",
+  "properties.ref.locationSlug": 'Not a location id — use “{slug}”.',
   "properties.ref.new": "New — will be created on save.",
+  "properties.issue.locationNotAnId":
+    'Location “{value}” is not an id — use “{slug}” (created on save).',
   "properties.issue.notAnId": "“{id}” is not an id — lowercase letters, digits and hyphens only.",
   "properties.issue.namelessRow": "Row without a name — add a name or remove the row.",
   "properties.issue.duplicateName": "Name “{name}” twice — every name may appear only once.",
@@ -154,7 +156,8 @@ export const en: Messages = {
   "properties.scene.trigger.hint": "Contingency scenes only: when does the scene fire?",
   "properties.scene.chapter.label": "Chapter",
   "properties.scene.location.label": "Location",
-  "properties.scene.location.hint": "An id from Locations, or free text.",
+  "properties.scene.location.hint":
+    "An id from Locations — the chapter groups the scene under it.",
   "properties.scene.npcs.label": "NPCs",
   "properties.scene.npcs.hint": "Ids only — unknown ones are created on save.",
   "properties.scene.handouts.label": "Handouts",

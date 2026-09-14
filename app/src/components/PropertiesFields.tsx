@@ -22,6 +22,8 @@ import type { KeyboardEvent, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { INPUT_CLASS } from "@/components/ui/field";
 import { useT } from "@/i18n";
+import { toSlug } from "@grimoire/shared/slug";
+
 import { isEntityId } from "@/lib/entity";
 import {
   referenceLabel,
@@ -226,10 +228,12 @@ function ReferenceOptions({ id, options }: { id: string; options: readonly Field
  *
  * Two exceptions, and both are about telling the truth about the save:
  *
- *   * the format's one ambiguous field: a value that is no kebab-case slug
- *     (spaces, capitals) is free text — `location: Der alte Hafen` stays text
- *     and gets no entry. Saying so is the whole documentation of that boundary
- *     the DM ever sees.
+ *   * `location` takes an ID and nothing else since issue #100 — it IS the
+ *     group the scene sits under in its chapter, so there is no free-text
+ *     half of the field any more and the server answers
+ *     `400 location_not_an_id`. This line used to call a non-slug value
+ *     „freier Text — kein Eintrag", which is now simply false; it names the
+ *     slug to use instead, and `propertiesFormIssues` blocks the save.
  *   * CHAPTERS are not created by naming them (ADR #14, #70 audit): a scene
  *     under an unknown chapter would fall out of the tree, so the server
  *     answers 400 for every kind. This line used to promise the entry anyway
@@ -257,8 +261,15 @@ function ReferenceHint({
     );
   }
   if (!isEntityId(id)) {
-    return <p className="text-[11.5px] text-faint">{t("properties.ref.freeText")}</p>;
+    // The id the DM probably meant — derived with the SAME transliteration
+    // the server suggests (`@grimoire/shared/slug`), so the line and the
+    // rejected save cannot disagree about it.
+    const slug = toSlug(id);
+    return slug === "" ? null : (
+      <p className="text-[11.5px] text-faint">{t("properties.ref.locationSlug", { slug })}</p>
+    );
   }
+  // An unknown id is not a hole: the save creates the entry (#70).
   return <p className="text-[11.5px] text-faint">{t("properties.ref.new")}</p>;
 }
 

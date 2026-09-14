@@ -155,8 +155,10 @@ export const de = {
   "properties.field.row.name.aria": "{label}, Zeile {row}: Name",
   "properties.field.row.value.aria": "{label}, Zeile {row}: Wert",
   "properties.ref.unknownChapter": "Unbekannt — Kapitel muss existieren.",
-  "properties.ref.freeText": "Freier Text — kein Eintrag.",
+  "properties.ref.locationSlug": 'Keine Orts-id — „{slug}" verwenden.',
   "properties.ref.new": "Neu — wird beim Speichern angelegt.",
+  "properties.issue.locationNotAnId":
+    'Ort „{value}" ist keine id — „{slug}" verwenden (wird beim Speichern angelegt).',
   "properties.issue.notAnId":
     '„{id}" ist keine id — nur Kleinbuchstaben, Ziffern und Bindestriche.',
   "properties.issue.namelessRow": "Zeile ohne Namen — Name ergänzen oder Zeile entfernen.",
@@ -172,7 +174,7 @@ export const de = {
   "properties.scene.trigger.hint": "Nur bei Eventualszenen: wann feuert die Szene?",
   "properties.scene.chapter.label": "Kapitel",
   "properties.scene.location.label": "Ort",
-  "properties.scene.location.hint": "id aus Orte oder freier Text.",
+  "properties.scene.location.hint": "id aus Orte — die Szene steht im Kapitel unter diesem Ort.",
   "properties.scene.npcs.label": "NPCs",
   "properties.scene.npcs.hint": "Nur ids — unbekannte werden beim Speichern angelegt.",
   "properties.scene.handouts.label": "Handouts",

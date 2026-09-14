@@ -29,6 +29,7 @@ import {
   type CampaignTree,
   type EntityKind,
 } from "@grimoire/shared/types";
+import { toSlug } from "@grimoire/shared/slug";
 
 import { fetchFile, patchProperties } from "@/api";
 import type { Translate } from "@/i18n/format";
@@ -474,6 +475,14 @@ export function propertiesPatch(
  * A row that is completely empty (or holds only a name, which means „delete
  * this key") is fine and produces nothing here.
  *
+ * A `location` (issue #100): the field IS the group the scene sits under in
+ * its chapter, so it holds an id or nothing — the server answers
+ * `400 location_not_an_id` for anything else, with the slug it would have
+ * used. Saying it here puts that line under the field before the click, and
+ * unlike `npcs` there is no exemption for what the file already holds: the
+ * server ensures the reference on EVERY patch (#70 audit), so a stored
+ * non-slug cannot be re-sent either.
+ *
  * And an ID LIST (`npcs`, issue #70 audit): that list holds ids, not names —
  * every entry becomes a card and a reference the save creates — so the server
  * refuses a non-slug entry with a 400. Saying it here makes that a line under
@@ -491,6 +500,16 @@ export function propertiesFormIssues(
   for (const field of fields) {
     const value = values[field.key];
     if (value === undefined) continue;
+    if (field.source === "locations" && value.kind === "text") {
+      const id = value.text.trim();
+      if (id !== "" && !isEntityId(id)) {
+        issues[field.key] = t("properties.issue.locationNotAnId", {
+          value: id,
+          slug: toSlug(id),
+        });
+      }
+      continue;
+    }
     if (field.control === "references" && value.kind === "list") {
       const stored = initial?.[field.key];
       const known = stored !== undefined && stored.kind === "list" ? stored.items : [];

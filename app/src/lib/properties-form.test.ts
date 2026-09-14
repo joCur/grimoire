@@ -410,6 +410,41 @@ describe("the npcs list holds ids, not names (#70 audit)", () => {
   });
 });
 
+describe("a location is an id, never free text (#100)", () => {
+  const sceneFields = fields("scene");
+  const initial = propertiesFormValues(sceneFields, SCENE_FM);
+  const withLocation = (text: string): FormValues => ({
+    ...initial,
+    location: { kind: "text", text },
+  });
+
+  test("free text blocks the save and names the id to use", () => {
+    // `location` IS the group the scene sits under, so the server answers
+    // `400 location_not_an_id` with the slug it would have used. The form
+    // says the same thing before the click — and with the same slug.
+    const issues = propertiesFormIssues(sceneFields, withLocation("Der alte Hafen"), initial, t);
+    expect(issues.location).toBe(
+      'Ort „Der alte Hafen" ist keine id — „der-alte-hafen" verwenden (wird beim Speichern angelegt).',
+    );
+  });
+
+  test("an id is fine, known or not — an unknown one is created on save", () => {
+    expect(propertiesFormIssues(sceneFields, withLocation("leuchtturm"), initial, t)).toEqual({});
+    expect(propertiesFormIssues(sceneFields, withLocation("nordbucht"), initial, t)).toEqual({});
+    // …and so is no location at all.
+    expect(propertiesFormIssues(sceneFields, withLocation("  "), initial, t)).toEqual({});
+  });
+
+  test("NO exemption for what the file already holds", () => {
+    // Unlike `npcs`, the server ensures this reference on EVERY patch — a
+    // stored non-slug cannot be re-sent, so the form must not pretend it can.
+    const stored = withLocation("Der alte Hafen");
+    expect(propertiesFormIssues(sceneFields, stored, stored, t).location).toContain(
+      "der-alte-hafen",
+    );
+  });
+});
+
 describe("hasPropertiesChanges", () => {
   const sceneFields = fields("scene");
   const npcFields = fields("npc");

@@ -77,10 +77,13 @@ describe("reference fields", () => {
     expect(html).toContain("Neu — wird beim Speichern angelegt.");
   });
 
-  test("a value that is no slug is free text and gets no entry", () => {
-    // The format's one ambiguous field: `location` takes an id OR a string.
+  test("a value that is no slug names the id to use instead", () => {
+    // `location` IS the group the scene sits under (issue #100), so there is
+    // no free-text half of the field any more: the line names the slug the
+    // server would suggest, and the save is blocked (propertiesFormIssues).
     const html = render(sceneField("location"), { kind: "text", text: "Der alte Hafen" });
-    expect(html).toContain("Freier Text — kein Eintrag.");
+    expect(html).toContain("Keine Orts-id");
+    expect(html).toContain("der-alte-hafen");
     expect(html).not.toContain("angelegt");
   });
 
