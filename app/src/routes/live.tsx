@@ -107,13 +107,18 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   const done = nonContingency.filter((s) => isSceneDone(s.status));
   const contingencies = scenes.filter((s) => s.type === "contingency");
 
-  // Selected scene = client state (path); default: FIRST PLANNED scene, never
-  // a played one (AK3). With everything played the fallbacks keep the view
-  // usable instead of blanking it: a done scene, else any scene, else the
-  // empty note in the center column.
-  const [selectedPath, setSelectedPath] = useState<string>();
+  // Selected scene = client state (the scene's ID); default: FIRST PLANNED
+  // scene, never a played one (AK3). With everything played the fallbacks keep
+  // the view usable instead of blanking it: a done scene, else any scene, else
+  // the empty note in the center column.
+  //
+  // The ID and not the address (issue #100): a scene's address carries its
+  // `location`, so a location change moved the address out from under the
+  // selection — the tree refetched, no scene matched the stored path any
+  // more, and the live view jumped to the first planned scene mid-session.
+  const [selectedId, setSelectedId] = useState<string>();
   const selected =
-    scenes.find((s) => s.path === selectedPath) ?? planned[0] ?? done[0] ?? scenes[0];
+    scenes.find((s) => s.id === selectedId) ?? planned[0] ?? done[0] ?? scenes[0];
 
   // Which entity file the drawer shows — undefined = closed. Sitting HERE
   // (not inside the aside) is what keeps scene selection and note draft
@@ -159,9 +164,9 @@ function LiveDesktop({ campaign }: { campaign: string }) {
             <SceneNavRow
               key={scene.path}
               scene={scene}
-              active={scene.path === selected?.path}
+              active={scene.id === selected?.id}
               played={playedIds.includes(scene.id)}
-              onPick={() => setSelectedPath(scene.path)}
+              onPick={() => setSelectedId(scene.id)}
             />
           ))}
           {planned.length === 0 && (
@@ -180,9 +185,9 @@ function LiveDesktop({ campaign }: { campaign: string }) {
                 <SceneNavRow
                   key={scene.path}
                   scene={scene}
-                  active={scene.path === selected?.path}
+                  active={scene.id === selected?.id}
                   played={playedIds.includes(scene.id)}
-                  onPick={() => setSelectedPath(scene.path)}
+                  onPick={() => setSelectedId(scene.id)}
                 />
               ))}
             </div>
@@ -191,9 +196,9 @@ function LiveDesktop({ campaign }: { campaign: string }) {
         {done.length > 0 && (
           <PlayedGroup
             scenes={done}
-            selectedPath={selected?.path}
+            selectedId={selected?.id}
             playedIds={playedIds}
-            onPick={setSelectedPath}
+            onPick={setSelectedId}
           />
         )}
       </nav>
@@ -275,14 +280,14 @@ function LiveDesktop({ campaign }: { campaign: string }) {
  */
 function PlayedGroup({
   scenes,
-  selectedPath,
+  selectedId,
   playedIds,
   onPick,
 }: {
   scenes: SceneSummary[];
-  selectedPath: string | undefined;
+  selectedId: string | undefined;
   playedIds: string[];
-  onPick: (path: string) => void;
+  onPick: (id: string) => void;
 }) {
   const { t, tNode } = useI18n();
   const [open, setOpen] = useState(false);
@@ -311,10 +316,10 @@ function PlayedGroup({
             <SceneNavRow
               key={scene.path}
               scene={scene}
-              active={scene.path === selectedPath}
+              active={scene.id === selectedId}
               played={playedIds.includes(scene.id)}
               dimmed
-              onPick={() => onPick(scene.path)}
+              onPick={() => onPick(scene.id)}
             />
           ))}
         </div>
