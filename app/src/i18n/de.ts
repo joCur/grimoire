@@ -440,6 +440,11 @@ export const de = {
   "live.session.olderRunning.withPath": "Eine ältere Session läuft noch ({path}) — erst beenden.",
   "live.session.endOld": "Alte Session beenden",
 
+  // The „Für die Spieler" reminder list of the aside (issue #86).
+  "live.pc.heading": "Für die Spieler",
+  "live.pc.done": "„{text}“ erledigt",
+  "live.pc.failed": "Nicht gespeichert — Server prüfen.",
+
   // --- live detail drawer (components/LiveEntityDrawer.tsx) -----------------
   "live.drawer.loading": "Lade Details …",
   "live.drawer.unloadable": "Nicht ladbar — {path} prüfen.",
@@ -483,6 +488,15 @@ export const de = {
   "review.notes.title": "Notizen",
   "review.notes.lead":
     "Ungetaggte Einträge aus der Inbox — übernehmen, als NPC anlegen oder abhaken.",
+
+  // Player-character notes (issue #86): `#pc` lines from log and inbox.
+  "review.pc.title": "Spielercharaktere",
+  "review.pc.lead":
+    "Einträge mit #pc — Erinnerungen für den Tisch, kein Kampagneninhalt. Abhaken oder für die nächste Nachbereitung behalten.",
+  "review.pc.groupTag": "#{tag}",
+  "review.pc.groupGeneral": "Allgemein",
+  "review.action.keep": "Behalten",
+  "review.kept": "Behalten — bleibt offen",
 
   "review.threads.title": "Offene Handlungsstränge des Kapitels",
   "review.threads.empty": "Noch keine offenen Handlungsstränge in diesem Kapitel.",

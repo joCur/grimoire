@@ -407,6 +407,11 @@ export const en: Messages = {
   "live.session.olderRunning.withPath": "An older session is still running ({path}) — end it first.",
   "live.session.endOld": "End the old session",
 
+  // The "For the players" reminder list of the aside (issue #86).
+  "live.pc.heading": "For the players",
+  "live.pc.done": "Mark \u201c{text}\u201d done",
+  "live.pc.failed": "Not saved — check the server.",
+
   // --- live detail drawer (components/LiveEntityDrawer.tsx) -----------------
   "live.drawer.loading": "Loading details …",
   "live.drawer.unloadable": "Not loadable — check {path}.",
@@ -450,6 +455,15 @@ export const en: Messages = {
   "review.notes.title": "Notes",
   "review.notes.lead":
     "Untagged inbox entries — adopt them, create an NPC, or tick them off.",
+
+  // Player-character notes (issue #86): `#pc` lines from log and inbox.
+  "review.pc.title": "Player characters",
+  "review.pc.lead":
+    "Entries tagged #pc — reminders for the table, not campaign content. Tick them off or keep them for the next wrap-up.",
+  "review.pc.groupTag": "#{tag}",
+  "review.pc.groupGeneral": "General",
+  "review.action.keep": "Keep",
+  "review.kept": "Kept — stays open",
 
   "review.threads.title": "Open threads of the chapter",
   "review.threads.empty": "No open threads in this chapter yet.",
