@@ -163,9 +163,14 @@ function Chapter({
           size={15}
           className="flex-none -rotate-90 text-muted-foreground transition-transform group-data-[state=open]:rotate-0"
         />
-        <span className="font-serif text-[18px] font-semibold text-foreground">
+        {/* The chapter names a section of the page, so it IS a heading —
+            inside the trigger, which stays the button that opens it. Without
+            it the outline jumped from the pool's h1 straight to the group
+            h3s, and the chapter the groups belong to was not in the tree at
+            all (issue #100 review). */}
+        <h2 className="font-serif text-[18px] font-semibold text-foreground">
           {chapter.title}
-        </span>
+        </h2>
         <ChapterStatusPill status={chapter.status} />
         <span className="flex-1" />
         <span className="flex-none text-[12.5px] text-muted-foreground">
@@ -191,7 +196,9 @@ function Chapter({
             <div>
               <div className="flex items-center gap-2 border-b border-border py-2 text-[13px]">
                 <GitFork aria-hidden size={15} className="flex-none text-muted-foreground" />
-                <span className="font-medium text-soft">{t("scene.contingencies.heading")}</span>
+                {/* A section of the chapter, like a location group — and the
+                    same level as one. */}
+                <h3 className="font-medium text-soft">{t("scene.contingencies.heading")}</h3>
                 <span className="text-muted-foreground">· {t("pool.contingencies.hint")}</span>
               </div>
               {contingencies.map((scene) => (

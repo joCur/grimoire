@@ -121,6 +121,11 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
     name: /Kapitel 1: Der Leuchtturm von Salzhafen/,
   });
   await expect(chapter).toBeVisible();
+  // The chapter is a HEADING inside that trigger (issue #100 review): the
+  // outline used to jump from the pool's h1 straight to the group h3s.
+  await expect(
+    chapter.getByRole("heading", { level: 2, name: "Kapitel 1: Der Leuchtturm von Salzhafen" }),
+  ).toBeVisible();
   await expect(chapter).toContainText("Aktiv");
   await expect(chapter).toContainText("2 Szenen");
   // Open by default (status: active) — the goal comes from _chapter.
@@ -147,8 +152,9 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
     page.getByRole("button", { name: "Status ändern, aktuell Bereit" }).first(),
   ).toBeVisible();
 
-  // Contingencies live in their own group.
-  await expect(page.getByText("Eventualszenen")).toBeVisible();
+  // Contingencies live in their own group — a section of the chapter, so the
+  // same heading level as a location group.
+  await expect(page.getByRole("heading", { level: 3, name: "Eventualszenen" })).toBeVisible();
   const contingency = page.getByRole("link", {
     name: /Von den Schmugglern erwischt/,
   });
@@ -172,9 +178,14 @@ test.describe("a scene without a location", () => {
   test('scenes that name no location get the neutral „Ohne Ort" section', async ({ page }) => {
     await page.goto("/beispiel");
     // A section, not a location with a blank name — and it comes LAST, after
-    // every real location of the chapter.
+    // every real location of the chapter. („Eventualszenen" is a section of
+    // the chapter too and follows the location groups.)
     const headings = page.getByRole("heading", { level: 3 });
-    await expect(headings.last()).toHaveText("Ohne Ort");
+    await expect(headings).toHaveText([
+      "Der Leuchtturm von Salzhafen",
+      "Ohne Ort",
+      "Eventualszenen",
+    ]);
     const scene = page.getByRole("link", { name: /Irgendwo unterwegs/ });
     await expect(scene).toBeVisible();
     // …and the scene sits at chapter level, address included.
