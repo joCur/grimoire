@@ -410,6 +410,7 @@ export const en: Messages = {
   // The "For the players" reminder list of the aside (issue #86).
   "live.pc.heading": "For the players",
   "live.pc.done": "Mark \u201c{text}\u201d done",
+  "live.pc.allDone": "All done.",
   "live.pc.failed": "Not saved — check the server.",
 
   // --- live detail drawer (components/LiveEntityDrawer.tsx) -----------------

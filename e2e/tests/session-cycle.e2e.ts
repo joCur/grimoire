@@ -374,8 +374,13 @@ test("a #pc quick note becomes a reminder in the aside and is ticked off there (
   await expect(item).toBeVisible();
 
   // Ticking it off marks the log line reviewed — and the reminder is gone.
+  // The region does NOT vanish under the keyboard focus: it becomes the
+  // „Alles erledigt" line, which takes the focus over (quality floor).
   await item.click();
-  await expect(page.getByRole("region", { name: "Für die Spieler" })).toHaveCount(0);
+  const emptied = page.getByRole("region", { name: "Für die Spieler" });
+  await expect(emptied).toContainText("Alles erledigt.");
+  await expect(emptied.getByRole("button", { name: /Kaela bekommt den Brief/ })).toHaveCount(0);
+  await expect(emptied.getByText("Alles erledigt.")).toBeFocused();
   await expect.poll(() => api.raw(sessionPath)).toContain("reviewed:");
 });
 

@@ -443,6 +443,7 @@ export const de = {
   // The „Für die Spieler" reminder list of the aside (issue #86).
   "live.pc.heading": "Für die Spieler",
   "live.pc.done": "„{text}“ erledigt",
+  "live.pc.allDone": "Alles erledigt.",
   "live.pc.failed": "Nicht gespeichert — Server prüfen.",
 
   // --- live detail drawer (components/LiveEntityDrawer.tsx) -----------------

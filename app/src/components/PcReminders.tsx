@@ -7,10 +7,14 @@
 // adopted here — a PC note is a reminder for the table, not campaign content.
 //
 // The list renders only when there is something to remind of: an empty
-// heading in the aside would cost the space the log needs.
+// heading in the aside would cost the space the log needs. Once the LAST
+// reminder is ticked off, the region does not simply vanish — the focus would
+// fall to the body — it becomes a focusable "Alles erledigt" line that takes
+// the focus over.
 
 import type { FileResponse } from "@grimoire/shared/types";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 
 import { markInboxLineDone, markLogLineSeen } from "@/api";
 import { useT } from "@/i18n";
@@ -23,6 +27,9 @@ export function PcReminders({ campaign }: { campaign: string }) {
   const queryClient = useQueryClient();
   const model = useReviewEntries(campaign);
   const groups = pcGroups(model.entries.filter((entry) => !entry.done));
+  // Was something ticked off HERE? Then the emptied region stays as the
+  // done-line instead of unmounting under the keyboard focus.
+  const [cleared, setCleared] = useState(false);
 
   const done = useMutation({
     mutationFn: (entry: ReviewEntry): Promise<FileResponse> => {
@@ -31,6 +38,7 @@ export function PcReminders({ campaign }: { campaign: string }) {
       return markLogLineSeen(campaign, model.sessionPath, entry.rawLine);
     },
     onSuccess: (file) => {
+      setCleared(true);
       queryClient.setQueryData(["file", campaign, file.path], file);
       void queryClient.invalidateQueries({ queryKey: ["file", campaign, file.path] });
       // The done-state of a log line lives in the session file's frontmatter
@@ -40,21 +48,24 @@ export function PcReminders({ campaign }: { campaign: string }) {
     },
   });
 
-  if (groups.length === 0) return null;
+  if (groups.length === 0) return cleared ? <PcRemindersDone /> : null;
 
   return (
-    <section aria-label={t("live.pc.heading")}>
-      <p className="pb-2 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
+    <section aria-labelledby="pc-reminders-heading">
+      <h2
+        id="pc-reminders-heading"
+        className="pb-2 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground"
+      >
         {t("live.pc.heading")}
-      </p>
+      </h2>
       <div className="flex flex-col gap-2.5">
         {groups.map((group) => (
           <div key={group.tag ?? ""}>
-            <p className="pb-1 font-mono text-[11.5px] text-primary-hover">
+            <h3 className="pb-1 font-mono text-[11.5px] text-primary-hover">
               {group.tag === undefined
                 ? t("review.pc.groupGeneral")
                 : t("review.pc.groupTag", { tag: group.tag })}
-            </p>
+            </h3>
             <ul className="flex flex-col gap-1">
               {group.entries.map((entry) => (
                 <li key={entry.key}>
@@ -85,6 +96,34 @@ export function PcReminders({ campaign }: { campaign: string }) {
           {t("live.pc.failed")}
         </p>
       )}
+    </section>
+  );
+}
+
+/** What is left of the region when the last reminder is ticked off: one line
+ *  that TAKES the focus, so tabbing on does not start over at the body. */
+function PcRemindersDone() {
+  const t = useT();
+  const line = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    line.current?.focus();
+  }, []);
+  return (
+    <section aria-labelledby="pc-reminders-heading">
+      <h2
+        id="pc-reminders-heading"
+        className="pb-2 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground"
+      >
+        {t("live.pc.heading")}
+      </h2>
+      <p
+        ref={line}
+        tabIndex={-1}
+        aria-live="polite"
+        className="rounded-md text-[12.5px] leading-[1.5] text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        {t("live.pc.allDone")}
+      </p>
     </section>
   );
 }
