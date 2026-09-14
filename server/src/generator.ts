@@ -440,6 +440,31 @@ export function unknownCallouts(body: string): string[] {
  */
 const ENTITY_ID_PATTERN = ENTITY_SLUG;
 
+/**
+ * The stem a still-UNADDRESSED reply document is parsed under.
+ *
+ * The shared parser fills a missing `id` from the address's last segment
+ * (parse.ts, the degrade rule for a properties-less file), so a reply that
+ * names no `id` silently inherited one from whatever label it happened to be
+ * parsed under — for an NPC reply that label was `"npc"`, which is a kebab
+ * slug and passed the id pattern. The run then wrote `npcs/npc`.
+ *
+ * Parsing under a stem that can NEVER be an id makes the omission visible,
+ * and a missing `id` is exactly the kind of error a correction turn fixes
+ * (issue #100 review): the model is told „id fehlt" instead of having one
+ * invented for it.
+ */
+const NO_ID_STEM = "\u0000no-id";
+
+/**
+ * The `id` the document DECLARED, or undefined when it declared none — the
+ * parser's fallback (NO_ID_STEM) read back as what it means.
+ */
+function declaredId(parsed: ParsedFile): unknown {
+  const id = parsed.properties.id;
+  return id === NO_ID_STEM ? undefined : id;
+}
+
 /** Last segment of a campaign-relative address — the entity's id. */
 function addressId(rel: string): string {
   return rel.slice(rel.lastIndexOf("/") + 1);
@@ -573,12 +598,16 @@ function validateEntry(entry: RawEntry, index: number, errors: string[]): Genera
     return null;
   }
   const preview = `entries[${index}]`;
-  const { parsed, error } = parseWithProperties(entry.content, preview);
+  const { parsed, error } = parseWithProperties(entry.content, NO_ID_STEM);
   if (error !== undefined) {
     errors.push(`${kind} entry ${preview}: ${error}`);
     return null;
   }
-  const fmId = parsed.properties.id;
+  const fmId = declaredId(parsed);
+  if (fmId === undefined) {
+    errors.push(`${kind} entry ${preview}: "id" fehlt — jeder Eintrag nennt seine kebab-case id`);
+    return null;
+  }
   if (typeof fmId !== "string" || !ENTITY_ID_PATTERN.test(fmId)) {
     errors.push(
       `${kind} entry ${preview}: "id" must be a kebab-case id (a-z, 0-9, single dashes)`,
@@ -637,13 +666,17 @@ export function validateReply(
     // taken from the run's CONTEXT and never from the model (issue #100). The
     // id is the one thing the model decides here, so it is the one thing
     // validated as an address would be.
-    const { parsed, error } = parseWithProperties(entry.content, `scenes[${index}]`);
+    const { parsed, error } = parseWithProperties(entry.content, NO_ID_STEM);
     if (error !== undefined) {
       errors.push(`scene scenes[${index}]: ${error}`);
       return;
     }
     const fm = parsed.properties;
-    const fmId = fm.id;
+    const fmId = declaredId(parsed);
+    if (fmId === undefined) {
+      errors.push(`scene scenes[${index}]: "id" fehlt — jede Szene nennt ihre kebab-case id`);
+      return;
+    }
     if (typeof fmId !== "string" || !ENTITY_ID_PATTERN.test(fmId)) {
       errors.push(
         `scene scenes[${index}]: "id" must be a kebab-case id (a-z, 0-9, single dashes)`,
@@ -876,18 +909,25 @@ export function validateNpcReply(
 
   const entry = reply.npc;
   // Without usable properties nothing else can be judged (the id is in them).
-  const { parsed, error } = parseWithProperties(entry.content, "npc");
+  const { parsed, error } = parseWithProperties(entry.content, NO_ID_STEM);
   if (error !== undefined) {
     return { ok: false, errors: [`npc: ${error}`] };
   }
   const fm = parsed.properties;
-  if (typeof fm.id !== "string" || !ENTITY_ID_PATTERN.test(fm.id)) {
+  const fmId = declaredId(parsed);
+  if (fmId === undefined) {
+    return {
+      ok: false,
+      errors: ['npc: "id" fehlt — die Datei muss ihre kebab-case id nennen'],
+    };
+  }
+  if (typeof fmId !== "string" || !ENTITY_ID_PATTERN.test(fmId)) {
     return {
       ok: false,
       errors: ['npc: "id" muss eine kebab-case id sein (a-z, 0-9, einzelne Bindestriche)'],
     };
   }
-  const id = fm.id;
+  const id = fmId;
   // Re-parsed under the address the server will use, so the shared parser's
   // degrade rules (a missing `name` falls back to the address's last
   // segment) see the same address they always did — see reparseAtAddress.

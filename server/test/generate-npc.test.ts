@@ -304,6 +304,24 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(fake.calls[1]!.corrections[0]!.correction).toContain("vollständige NPC-Datei");
   });
 
+  test("an npc reply without an id is a correction turn, not the id npc", async () => {
+    // The reply carries NO `id`. The shared parser degrades a missing id to
+    // the address's last segment, and the validation used to parse the reply
+    // under the label `"npc"` — a kebab slug that passed the id pattern, so
+    // the run silently produced `npcs/npc` (issue #100 review).
+    const bad = npcReply({ content: npcMarkdown().replace("id: grella\n", "") });
+    const fake = useFake([bad, npcReply()]);
+    const res = await generateNpc(npcBody);
+    expect(res.status).toBe(200);
+    expect(fake.calls).toHaveLength(2);
+    const correction = fake.calls[1]!.corrections[0]!.correction;
+    expect(correction).toContain('"id" fehlt');
+    expect(correction).not.toContain("npcs/npc");
+    // …and the accepted reply is addressed by ITS id, as always.
+    const result = (await res.json()) as GenerateNpcResult;
+    expect(result.npc.path).toBe("npcs/grella");
+  });
+
   // --- the validation rules (each one a correction turn) ------------------------
 
   test("a relationship to an unknown npc triggers a correction turn, then succeeds", async () => {

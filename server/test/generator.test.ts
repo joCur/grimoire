@@ -496,6 +496,40 @@ describe("POST /api/:campaign/generate", () => {
     expect(fake.calls[1]!.corrections[0]!.correction).toContain("[!danger]");
   });
 
+  // --- the id is the model's ONE addressing decision (issue #100 review) -------
+  //
+  // The shared parser degrades a missing `id` to the address's last segment,
+  // and the validation used to parse the reply under its own PREVIEW LABEL —
+  // so an NPC reply with no `id` inherited the id `npc` and was written to
+  // `npcs/npc`. A missing id has to be the error it is.
+
+  test("a scene without an id triggers a correction turn that says the id is missing", async () => {
+    const bad = reply({
+      scenes: [{ content: sceneMarkdown().replace("id: treffen-am-kai\n", "") }],
+    });
+    const fake = useFake([bad, reply()]);
+    const res = await generate(generateBody);
+    expect(res.status).toBe(200);
+    expect(fake.calls).toHaveLength(2);
+    const correction = fake.calls[1]!.corrections[0]!.correction;
+    expect(correction).toContain('"id" fehlt');
+    expect(correction).toContain("scenes[0]");
+    // …and nothing was invented for it.
+    expect(correction).not.toContain("scenes[0]/");
+  });
+
+  test("a suggested entry without an id triggers a correction turn", async () => {
+    const bad = reply({
+      entries: [{ kind: "npc", content: npcStub().replace("id: grella\n", "") }],
+      scenes: [{ content: sceneMarkdown({ npcs: "fenn" }) }],
+    });
+    const fake = useFake([bad, reply()]);
+    const res = await generate(generateBody);
+    expect(res.status).toBe(200);
+    const correction = fake.calls[1]!.corrections[0]!.correction;
+    expect(correction).toContain('npc entry entries[0]: "id" fehlt');
+  });
+
   // --- stub status rules (issue #27) -------------------------------------------
 
   test("npc stub with the SCENE status draft triggers a correction turn, then succeeds", async () => {
