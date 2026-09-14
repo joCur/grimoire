@@ -111,7 +111,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Entwurf" })).toBeVisible();
 
   // --- Szene befüllen -------------------------------------------------------
-  await page.getByRole("button", { name: "Roh", exact: true }).click();
+  await page.getByRole("button", { name: "Markdown", exact: true }).click();
   await page.getByRole("textbox", { name: /^Markdown-Text von/ }).fill(SCENE_BODY);
   await page.getByRole("button", { name: "Speichern" }).click();
 

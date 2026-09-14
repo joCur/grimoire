@@ -24,7 +24,7 @@
 // place where a card's TYPE and its POSITION are both visible from outside, and
 // asserting them is asserting the vocabulary of the reading view (blockLabel:
 // Vorlesetext, Probe, Geheim, Ergebnis, Beute, Notiz, Falls-Abschnitt,
-// Überschrift, Text, Roh-Block). `exact: true` everywhere: „Text 3 bearbeiten"
+// Überschrift, Text, Markdown-Block). `exact: true` everywhere: „Text 3 bearbeiten"
 // is a substring of „Vorlesetext 3 bearbeiten".
 
 import type { Locator, Page } from "@playwright/test";
@@ -150,7 +150,7 @@ test("Bearbeiten opens the block composer — one card per block, no textarea", 
     "aria-pressed",
     "true",
   );
-  await expect(modes.getByRole("button", { name: "Roh", exact: true })).toHaveAttribute(
+  await expect(modes.getByRole("button", { name: "Markdown", exact: true })).toHaveAttribute(
     "aria-pressed",
     "false",
   );
@@ -190,7 +190,7 @@ test("Blöcke → Roh → Blöcke is not a change — Speichern stays disabled",
 
   // Blöcke → Roh: the serialized block list, byte-identical to the body on
   // disk. This is the phase-1 invariant seen from outside the app.
-  await page.getByRole("button", { name: "Roh", exact: true }).click();
+  await page.getByRole("button", { name: "Markdown", exact: true }).click();
   await expect(composer(page)).toHaveCount(0);
   await expect(rawTextarea(page)).toHaveValue(before.body);
   await expect(save).toBeDisabled();
@@ -625,21 +625,21 @@ test.describe("with a scene of unknown constructs", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Seltsame Mechanik");
     await page.getByRole("button", { name: "Bearbeiten" }).click();
 
-    // No error, no validation: the unknown callout is a „Roh-Block" (with its
+    // No error, no validation: the unknown callout is a „Markdown-Block" (with its
     // kind spelled out next to the label) and the table is a „Text" card.
     expect(await blockNames(page)).toEqual([
       "Überschrift 1",
       "Text 2",
-      "Roh-Block 3",
+      "Markdown-Block 3",
       "Text 4",
     ]);
     await expect(composer(page)).toContainText("[!weird]");
     await expect(composer(page)).toContainText("| Wurf | Ergebnis");
 
     // The raw card keeps its markers IN the form — it is handed over verbatim.
-    const raw = card(page, "Roh-Block 3");
+    const raw = card(page, "Markdown-Block 3");
     await raw.edit.click();
-    await expect(page.getByRole("textbox", { name: "Inhalt: Roh-Block", exact: true })).toHaveValue(
+    await expect(page.getByRole("textbox", { name: "Inhalt: Markdown-Block", exact: true })).toHaveValue(
       "> [!weird] bla",
     );
     await raw.collapse.click();

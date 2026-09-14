@@ -688,7 +688,7 @@ export const de = {
   "generate.review.plannedScene": "Geplante Szene",
   "generate.review.contingency": "Eventualszene",
   "generate.review.statblock": "Statblock: {statblock}",
-  "generate.review.rawLabel": "Roh-Markdown von {title}",
+  "generate.review.rawLabel": "Markdown von {title}",
   // The run's token spend; the grouping SEPARATOR is locale data, not copy
   // (lib/generate.ts groups by hand — Intl would need full ICU data).
   "generate.usage": "~{tokens} Tokens · {attempts, plural, one {# Versuch} other {# Versuche}}",
@@ -735,7 +735,7 @@ export const de = {
   //     lib/composer.ts) ----------------------------------------------------
   "composer.mode.aria": "Editiermodus",
   "composer.mode.blocks": "Blöcke",
-  "composer.mode.raw": "Roh",
+  "composer.mode.raw": "Markdown",
   "composer.picker.title": "Block einfügen",
   "composer.picker.cancel.aria": "Einfügen abbrechen",
 
@@ -743,7 +743,7 @@ export const de = {
   "composer.blockType.ifSection": "Falls-Abschnitt",
   "composer.blockType.heading": "Überschrift",
   "composer.blockType.text": "Text",
-  "composer.blockType.raw": "Roh-Block",
+  "composer.blockType.raw": "Markdown-Block",
 
   // ONE key for both states of the level select: a hand-written level outside
   // the offered range reads exactly like an offered one.
@@ -758,7 +758,7 @@ export const de = {
   "composer.block.content.aria": "Inhalt: {label}",
   "composer.block.text.placeholder": "Text des Blocks",
   "composer.block.raw.placeholder": "Markdown",
-  "composer.raw.hint": "Roh-Markdown mit Markern — wird unverändert übernommen.",
+  "composer.raw.hint": "Markdown mit Markern — wird unverändert übernommen.",
   "composer.list.aria": "Blöcke: {label}",
   "composer.empty": 'Noch keine Blöcke — mit „+" den ersten anlegen.',
   // Two whole sentences instead of a glued-in fragment („… im Falls-Abschnitt"):
@@ -845,7 +845,7 @@ export const de = {
   "augment.body.heading": "Text",
   "augment.body.modeGroup": "Ansicht des Vorschlags",
   "augment.body.blocks": "Blöcke",
-  "augment.body.raw": "Roh",
+  "augment.body.raw": "Markdown",
   "augment.body.none": "Keine Änderung am Text vorgeschlagen.",
   "augment.body.showUnchanged": "Unveränderte Blöcke zeigen",
   "augment.body.hideUnchanged": "Unveränderte Blöcke ausblenden",

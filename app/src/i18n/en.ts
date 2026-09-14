@@ -638,7 +638,7 @@ export const en: Messages = {
   "generate.review.plannedScene": "Planned scene",
   "generate.review.contingency": "Contingency scene",
   "generate.review.statblock": "Statblock: {statblock}",
-  "generate.review.rawLabel": "Raw markdown of {title}",
+  "generate.review.rawLabel": "Markdown of {title}",
   "generate.usage": "~{tokens} tokens · {attempts, plural, one {# attempt} other {# attempts}}",
   "generate.usage.group": ",",
 
@@ -682,14 +682,14 @@ export const en: Messages = {
   //     lib/composer.ts) ----------------------------------------------------
   "composer.mode.aria": "Edit mode",
   "composer.mode.blocks": "Blocks",
-  "composer.mode.raw": "Raw",
+  "composer.mode.raw": "Markdown",
   "composer.picker.title": "Insert block",
   "composer.picker.cancel.aria": "Cancel insert",
 
   "composer.blockType.ifSection": "If-section",
   "composer.blockType.heading": "Heading",
   "composer.blockType.text": "Text",
-  "composer.blockType.raw": "Raw block",
+  "composer.blockType.raw": "Markdown block",
 
   "composer.heading.level": "Level {depth}",
   "composer.heading.level.aria": "Heading level",
@@ -702,7 +702,7 @@ export const en: Messages = {
   "composer.block.content.aria": "Content: {label}",
   "composer.block.text.placeholder": "Text of the block",
   "composer.block.raw.placeholder": "Markdown",
-  "composer.raw.hint": "Raw markdown with its markers — taken over unchanged.",
+  "composer.raw.hint": "Markdown with its markers — taken over unchanged.",
   "composer.list.aria": "Blocks: {label}",
   "composer.empty": 'No blocks yet — add the first one with "+".',
   "composer.insert.aria": "Insert block at position {position}",
@@ -782,7 +782,7 @@ export const en: Messages = {
   "augment.body.heading": "Text",
   "augment.body.modeGroup": "Proposal view",
   "augment.body.blocks": "Blocks",
-  "augment.body.raw": "Raw",
+  "augment.body.raw": "Markdown",
   "augment.body.none": "No change to the text proposed.",
   "augment.body.showUnchanged": "Show unchanged blocks",
   "augment.body.hideUnchanged": "Hide unchanged blocks",

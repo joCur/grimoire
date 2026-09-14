@@ -66,8 +66,8 @@ async function split(api: Api, rel: string) {
  */
 async function openRawEditor(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Bearbeiten" }).click();
-  // exact: the composer's per-card controls are named „Roh-Block 1 …".
-  await page.getByRole("button", { name: "Roh", exact: true }).click();
+  // exact: the composer's per-card controls are named „Markdown-Block 1 …".
+  await page.getByRole("button", { name: "Markdown", exact: true }).click();
 }
 
 test("editing the body: save writes the file and the reading view shows it", async ({

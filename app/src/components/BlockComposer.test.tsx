@@ -122,9 +122,9 @@ describe("the block list", () => {
 
   test("an unknown callout stays a raw block and says which kind it was", () => {
     const html = composer(parseBlocks("> [!warning] Kein bekannter Typ\n"));
-    expect(html).toContain("Roh-Block");
+    expect(html).toContain("Markdown-Block");
     expect(html).toContain("[!warning]");
-    expect(html).toContain('aria-label="Roh-Block 1 bearbeiten"');
+    expect(html).toContain('aria-label="Markdown-Block 1 bearbeiten"');
   });
 });
 
@@ -240,10 +240,10 @@ describe("the per-block forms", () => {
     expect(textHtml).toContain("- eins");
 
     const rawHtml = fields(raw);
-    expect(rawHtml).toContain('aria-label="Inhalt: Roh-Block"');
+    expect(rawHtml).toContain('aria-label="Inhalt: Markdown-Block"');
     expect(rawHtml).toContain("&gt; Nur ein Zitat");
     expect(rawHtml).toContain("font-mono");
-    expect(rawHtml).toContain("Roh-Markdown mit Markern");
+    expect(rawHtml).toContain("Markdown mit Markern");
   });
 });
 
@@ -325,12 +325,12 @@ describe("the mode toggle", () => {
     );
     expect(html).toContain('aria-label="Editiermodus"');
     expect(html).toContain('aria-pressed="true">Blöcke</button>');
-    expect(html).toContain('aria-pressed="false">Roh</button>');
+    expect(html).toContain('aria-pressed="false">Markdown</button>');
   });
 
-  test("…and Roh is pressed on the fallback surface", () => {
+  test("…and Markdown is pressed on the fallback surface", () => {
     const html = renderToStaticMarkup(<ComposerModeToggle mode="raw" onModeChange={() => {}} />);
     expect(html).toContain('aria-pressed="false">Blöcke</button>');
-    expect(html).toContain('aria-pressed="true">Roh</button>');
+    expect(html).toContain('aria-pressed="true">Markdown</button>');
   });
 });

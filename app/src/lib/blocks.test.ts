@@ -624,7 +624,7 @@ describe("labels", () => {
     expect(blockLabel(makeText("Absatz"), t)).toBe("Text");
     const raw = parseBlocks("> [!warning] x\n")[0];
     if (raw === undefined) throw new Error("expected a block");
-    expect(blockLabel(raw, t)).toBe("Roh-Block");
+    expect(blockLabel(raw, t)).toBe("Markdown-Block");
   });
 
   test("ids are unique across blocks and parses", () => {
