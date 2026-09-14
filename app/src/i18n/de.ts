@@ -166,9 +166,9 @@ export const de = {
   "properties.scene.title.label": "Titel",
   "properties.scene.type.label": "Typ",
   "properties.scene.type.planned": "geplant",
-  "properties.scene.type.contingency": "Kontingenz",
+  "properties.scene.type.contingency": "Eventualszene",
   "properties.scene.trigger.label": "Auslöser",
-  "properties.scene.trigger.hint": "Nur bei Kontingenz: wann feuert die Szene?",
+  "properties.scene.trigger.hint": "Nur bei Eventualszenen: wann feuert die Szene?",
   "properties.scene.chapter.label": "Kapitel",
   "properties.scene.location.label": "Ort",
   "properties.scene.location.hint": "id aus Orte oder freier Text.",
@@ -374,9 +374,9 @@ export const de = {
   // The chapter pill: only `active` gets a label, every other value degrades
   // to the raw string (README, "Format degradiert").
   "pool.chapter.status.active": "aktiv",
-  // The quiet second half of the „Falls es schiefgeht" heading row — the „· "
+  // The quiet second half of the „Eventualszenen" heading row — the „· "
   // separator stays markup in the JSX.
-  "pool.contingencies.hint": "Kontingenzen",
+  "pool.contingencies.hint": "nur wenn der Auslöser feuert",
   "pool.scene.trigger": "Wenn: {trigger}",
 
   // --- browse list pages (routes/browse.tsx) --------------------------------
@@ -401,7 +401,7 @@ export const de = {
   // Neutral prefix on purpose: the live nav and the pool list show the SAME
   // two group headings — one key, not one per view.
   "scene.planned.heading": "Geplant",
-  "scene.contingencies.heading": "Falls es schiefgeht",
+  "scene.contingencies.heading": "Eventualszenen",
 
   // --- live mode (routes/live.tsx) ------------------------------------------
   // Below md there is no live mode (UI-BRIEF §4) — just the pointer.
@@ -686,7 +686,7 @@ export const de = {
   "generate.review.apply": "Übernehmen ({count})",
   "generate.review.applyNpc": "Übernehmen",
   "generate.review.plannedScene": "Geplante Szene",
-  "generate.review.contingency": "Kontingenz",
+  "generate.review.contingency": "Eventualszene",
   "generate.review.statblock": "Statblock: {statblock}",
   "generate.review.rawLabel": "Roh-Markdown von {title}",
   // The run's token spend; the grouping SEPARATOR is locale data, not copy
@@ -785,7 +785,7 @@ export const de = {
 
   // --- scene article (components/SceneArticle.tsx) --------------------------
   "sceneArticle.type.planned": "Geplante Szene",
-  "sceneArticle.type.contingency": "Kontingenz",
+  "sceneArticle.type.contingency": "Eventualszene",
   "sceneArticle.trigger.inline": "Wenn: {trigger}",
   "sceneArticle.trigger.label": "Auslöser",
   "sceneArticle.tag": "#{tag}",

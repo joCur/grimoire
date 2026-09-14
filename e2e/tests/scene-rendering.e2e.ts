@@ -93,7 +93,7 @@ test("reference scene 2: contingency header, collapsible If-sections, consequenc
 }) => {
   await page.goto(CAPTURED);
 
-  await expect(page.getByText("Kontingenz", { exact: true })).toBeVisible();
+  await expect(page.getByText("Eventualszene", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Von den Schmugglern erwischt",
   );

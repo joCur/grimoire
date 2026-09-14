@@ -135,7 +135,7 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
   ).toBeVisible();
 
   // Contingencies live in their own group.
-  await expect(page.getByText("Falls es schiefgeht")).toBeVisible();
+  await expect(page.getByText("Eventualszenen")).toBeVisible();
   const contingency = page.getByRole("link", {
     name: /Von den Schmugglern erwischt/,
   });

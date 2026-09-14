@@ -32,7 +32,7 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
     page.getByRole("main").getByText("Kampagne: Der Leuchtturm von Salzhafen"),
   ).toBeVisible();
   // The desktop pool is not rendered here.
-  await expect(page.getByText("Falls es schiefgeht")).toBeHidden();
+  await expect(page.getByText("Eventualszenen")).toBeHidden();
 
   // Lookup rows with their counts from the tree.
   const lookup = page.getByRole("navigation", { name: "Nachschlagen" });

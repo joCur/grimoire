@@ -73,7 +73,7 @@ describe("EntityArticle — npc", () => {
   test("no scene type overline above an npc", () => {
     const html = render(jorna);
     expect(html).not.toContain("Geplante Szene");
-    expect(html).not.toContain("Kontingenz");
+    expect(html).not.toContain("Eventualszene");
   });
 
   test("an unknown status value is shown verbatim (degrade)", () => {

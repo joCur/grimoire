@@ -148,9 +148,9 @@ export const en: Messages = {
   "properties.scene.title.label": "Title",
   "properties.scene.type.label": "Type",
   "properties.scene.type.planned": "planned",
-  "properties.scene.type.contingency": "contingency",
+  "properties.scene.type.contingency": "contingency scene",
   "properties.scene.trigger.label": "Trigger",
-  "properties.scene.trigger.hint": "Contingency only: when does the scene fire?",
+  "properties.scene.trigger.hint": "Contingency scenes only: when does the scene fire?",
   "properties.scene.chapter.label": "Chapter",
   "properties.scene.location.label": "Location",
   "properties.scene.location.hint": "An id from Locations, or free text.",
@@ -343,7 +343,7 @@ export const en: Messages = {
   "pool.chapter.goal": "Goal: {goal}",
   "pool.chapter.empty": "No scenes in this chapter yet.",
   "pool.chapter.status.active": "active",
-  "pool.contingencies.hint": "Contingencies",
+  "pool.contingencies.hint": "only when the trigger fires",
   "pool.scene.trigger": "When: {trigger}",
 
   // --- browse list pages (routes/browse.tsx) --------------------------------
@@ -368,7 +368,7 @@ export const en: Messages = {
   // Neutral prefix on purpose: the live nav and the pool list show the SAME
   // two group headings — one key, not one per view.
   "scene.planned.heading": "Planned",
-  "scene.contingencies.heading": "If it goes wrong",
+  "scene.contingencies.heading": "Contingency scenes",
 
   // --- live mode (routes/live.tsx) ------------------------------------------
   // Below md there is no live mode (UI-BRIEF §4) — just the pointer.
@@ -636,7 +636,7 @@ export const en: Messages = {
   "generate.review.apply": "Apply ({count})",
   "generate.review.applyNpc": "Apply",
   "generate.review.plannedScene": "Planned scene",
-  "generate.review.contingency": "Contingency",
+  "generate.review.contingency": "Contingency scene",
   "generate.review.statblock": "Statblock: {statblock}",
   "generate.review.rawLabel": "Raw markdown of {title}",
   "generate.usage": "~{tokens} tokens · {attempts, plural, one {# attempt} other {# attempts}}",
@@ -722,7 +722,7 @@ export const en: Messages = {
 
   // --- scene article (components/SceneArticle.tsx) --------------------------
   "sceneArticle.type.planned": "Planned scene",
-  "sceneArticle.type.contingency": "Contingency",
+  "sceneArticle.type.contingency": "Contingency scene",
   "sceneArticle.trigger.inline": "If: {trigger}",
   "sceneArticle.trigger.label": "Trigger",
   "sceneArticle.tag": "#{tag}",
