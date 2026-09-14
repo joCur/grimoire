@@ -661,14 +661,14 @@ export const de = {
   // --- generator: review (routes/generate.tsx, lib/generate.ts) -----------
   "generate.review.title": "Entwürfe prüfen",
   "generate.review.summary":
-    "{scenes, plural, one {# Szene} other {# Szenen}} · {stubs, plural, one {# Stub} other {# Stubs}}",
+    "{scenes, plural, one {# Szene} other {# Szenen}} · {stubs, plural, one {# vorgeschlagener Eintrag} other {# vorgeschlagene Einträge}}",
   "generate.review.pending": "{summary} · noch nichts geschrieben",
   "generate.review.pendingNpc": "1 NPC · noch nichts geschrieben",
   "generate.review.lead":
-    "Prüfen, anpassen, Stubs einzeln entscheiden. Erst „Übernehmen“ schreibt in die Datenbank — als Drafts, nie überschreibend.",
+    "Prüfen, anpassen, vorgeschlagene Einträge einzeln entscheiden. Erst „Übernehmen“ schreibt in die Datenbank — als Drafts, nie überschreibend.",
   "generate.review.leadNpc":
     "Prüfen und anpassen. Erst „Übernehmen“ schreibt den Eintrag — bestehende NPCs werden nie überschrieben.",
-  "generate.review.stubsHeading": "Stubs — einzeln entscheiden",
+  "generate.review.stubsHeading": "Vorgeschlagene Einträge — einzeln entscheiden",
   // --- naming hints of the post-run check (issue #53 AK3) -------------------
   // Deliberately NOT a warning: the check is a plain text search and the DM
   // decides. So the heading counts and the row states the finding plus where

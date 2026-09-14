@@ -615,14 +615,14 @@ export const en: Messages = {
   // --- generator: review (routes/generate.tsx, lib/generate.ts) -----------
   "generate.review.title": "Check drafts",
   "generate.review.summary":
-    "{scenes, plural, one {# scene} other {# scenes}} · {stubs, plural, one {# stub} other {# stubs}}",
+    "{scenes, plural, one {# scene} other {# scenes}} · {stubs, plural, one {# suggested entry} other {# suggested entries}}",
   "generate.review.pending": "{summary} · nothing written yet",
   "generate.review.pendingNpc": "1 NPC · nothing written yet",
   "generate.review.lead":
-    "Check, adjust, decide the stubs one by one. Only “Apply” writes to the database — as drafts, never overwriting.",
+    "Check, adjust, decide the suggested entries one by one. Only “Apply” writes to the database — as drafts, never overwriting.",
   "generate.review.leadNpc":
     "Check and adjust. Only “Apply” writes the entry — existing NPCs are never overwritten.",
-  "generate.review.stubsHeading": "Stubs — decide one by one",
+  "generate.review.stubsHeading": "Suggested entries — decide one by one",
   // --- naming hints of the post-run check (issue #53 AK3) -------------------
   "generate.review.namingHeading":
     "{count, plural, one {# naming hint} other {# naming hints}} — not a blocker",

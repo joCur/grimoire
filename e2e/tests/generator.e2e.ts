@@ -73,7 +73,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
     timeout: 30_000,
   });
-  await expect(page.getByText("1 Szene · 2 Stubs · noch nichts geschrieben")).toBeVisible();
+  await expect(page.getByText("1 Szene · 2 vorgeschlagene Einträge · noch nichts geschrieben")).toBeVisible();
   // Token spend of the run (the stub reports usage like a real endpoint).
   await expect(page.getByText(/~[\d.]+ Tokens · 1 Versuch/)).toBeVisible();
   // The model's warning is shown, not swallowed.
@@ -96,7 +96,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   expect(await api.exists(`01-salzhafen/${SCENE_SLUG}`)).toBe(false);
   expect(await api.exists(SCENE_PATH)).toBe(false);
 
-  // Stubs are decided one by one. An undecided row is the innermost div that
+  // Suggested entries are decided one by one. An undecided row is the innermost div that
   // carries the target path AND its own "Ablehnen" button.
   const acceptStub = async (targetPath: string, name: string) => {
     const row = page
@@ -107,12 +107,12 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
     await expect(row).toContainText(name);
     await row.getByRole("button", { name: "Annehmen" }).click();
   };
-  await expect(page.getByText("Stubs — einzeln entscheiden")).toBeVisible();
+  await expect(page.getByText("Vorgeschlagene Einträge — einzeln entscheiden")).toBeVisible();
   await acceptStub(`npcs/${NPC_STUB_ID}`, NPC_STUB_NAME);
   await acceptStub(`locations/${LOCATION_STUB_ID}`, LOCATION_STUB_NAME);
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
 
-  await page.getByRole("button", { name: /^Übernehmen \(1 Szene · 2 Stubs\)$/ }).click();
+  await page.getByRole("button", { name: /^Übernehmen \(1 Szene · 2 vorgeschlagene Einträge\)$/ }).click();
 
   // Done state lists exactly what was written — the ADDRESSES, so the DM sees
   // where the scene actually landed and not the model's file name.

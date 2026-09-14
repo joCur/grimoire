@@ -196,9 +196,9 @@ describe("labels", () => {
   // plural inside the catalog keys now, so it is asserted through the two
   // functions that consume them.
   test("applySummary reads like the prototype's button", () => {
-    expect(applySummary(1, 1, t)).toBe("1 Szene · 1 Stub");
-    expect(applySummary(2, 0, t)).toBe("2 Szenen · 0 Stubs");
-    expect(applySummary(0, 3, t)).toBe("0 Szenen · 3 Stubs");
+    expect(applySummary(1, 1, t)).toBe("1 Szene · 1 vorgeschlagener Eintrag");
+    expect(applySummary(2, 0, t)).toBe("2 Szenen · 0 vorgeschlagene Einträge");
+    expect(applySummary(0, 3, t)).toBe("0 Szenen · 3 vorgeschlagene Einträge");
   });
 
   test("contextHint names the two counts the tree carries", () => {
