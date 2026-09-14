@@ -718,7 +718,7 @@ export const de = {
   //     per callout kind, markdown/Callout.tsx and markdown/Markdown.tsx show
   //     them; lib/blocks.ts names the same blocks in the composer) -----------
   "markdown.callout.readaloud": "Vorlesetext",
-  "markdown.callout.check": "Check",
+  "markdown.callout.check": "Probe",
   "markdown.callout.secret": "Geheim",
   "markdown.callout.outcome": "Konsequenz",
   "markdown.callout.loot": "Beute",

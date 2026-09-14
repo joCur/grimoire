@@ -61,7 +61,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(readaloud.getByRole("button", { name: "Vorlesetext kopieren" })).toBeAttached();
 
   const check = page.locator("[data-callout='check']");
-  await expect(check).toContainText("Check");
+  await expect(check).toContainText("Probe");
   await expect(check).toContainText("Wisdom (Perception) DC 13");
 
   const secret = page.locator("[data-callout='secret']");

@@ -417,7 +417,7 @@ describe("the type picker", () => {
   test("the document offers the six callouts, both plain blocks and a section", () => {
     expect(newBlockOptions("document", t).map((option) => option.label)).toEqual([
       "Vorlesetext",
-      "Check",
+      "Probe",
       "Geheim",
       "Konsequenz",
       "Beute",

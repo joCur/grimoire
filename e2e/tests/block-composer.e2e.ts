@@ -20,10 +20,10 @@
 //     phone-sized layout (the whole point of the ticket) can do all of it.
 //
 // Block cards are addressed through their controls' accessible names —
-// „Vorlesetext 3 bearbeiten", „Check 4 nach unten" — because that is the only
+// „Vorlesetext 3 bearbeiten", „Probe 4 nach unten" — because that is the only
 // place where a card's TYPE and its POSITION are both visible from outside, and
 // asserting them is asserting the vocabulary of the reading view (blockLabel:
-// Vorlesetext, Check, Geheim, Konsequenz, Beute, Notiz, Falls-Abschnitt,
+// Vorlesetext, Probe, Geheim, Konsequenz, Beute, Notiz, Falls-Abschnitt,
 // Überschrift, Text, Roh-Block). `exact: true` everywhere: „Text 3 bearbeiten"
 // is a substring of „Vorlesetext 3 bearbeiten".
 
@@ -44,7 +44,7 @@ const SCENE_BLOCKS = [
   "Überschrift 1",
   "Text 2",
   "Vorlesetext 3",
-  "Check 4",
+  "Probe 4",
   "Geheim 5",
   "Notiz 6",
 ];
@@ -167,7 +167,7 @@ test("Bearbeiten opens the block composer — one card per block, no textarea", 
   await expect(composer(page)).toContainText("Der Turm ragt schwarz gegen den Abendhimmel auf.");
   await expect(composer(page)).toContainText("Wisdom (Perception) DC 13");
   await expect(composer(page)).toContainText("Flow");
-  // The header keeps standing around it (as in „Roh"): title, status regler.
+  // The header keeps standing around it (as in „Markdown"): title, status regler.
   await expect(page.getByRole("button", { name: "Status ändern, aktuell bereit" })).toBeVisible();
 
   // Nothing typed, so nothing to save — and nothing stored moved.
@@ -275,7 +275,7 @@ test("the + slot at the end creates a Beute block through the type picker", asyn
   // two plain blocks, then the section.
   for (const label of [
     "Vorlesetext",
-    "Check",
+    "Probe",
     "Geheim",
     "Konsequenz",
     "Beute",
@@ -324,14 +324,14 @@ test("⌄/⌃ reorder the blocks — the file follows, both blocks verbatim", as
   await expect(card(page, "Überschrift 1").up).toBeDisabled();
   await expect(card(page, "Notiz 6").down).toBeDisabled();
 
-  // Check ⇄ Geheim, from the Check card's ⌄.
-  await card(page, "Check 4").down.click();
+  // Probe ⇄ Geheim, from the Probe card's ⌄.
+  await card(page, "Probe 4").down.click();
   expect(await blockNames(page)).toEqual([
     "Überschrift 1",
     "Text 2",
     "Vorlesetext 3",
     "Geheim 4",
-    "Check 5",
+    "Probe 5",
     "Notiz 6",
   ]);
   await page.getByRole("button", { name: "Speichern" }).click();
@@ -376,7 +376,7 @@ test("a child of the first If-section edits without touching the two headings", 
     "Text 2",
     "Notiz 3",
     "Falls-Abschnitt 4",
-    "Check 1",
+    "Probe 1",
     "Text 2",
     "Konsequenz 3",
   ]);
@@ -705,7 +705,7 @@ test.describe("at 390px", () => {
       "Überschrift 1",
       "Vorlesetext 2",
       "Text 3",
-      "Check 4",
+      "Probe 4",
       "Geheim 5",
       "Notiz 6",
     ]);

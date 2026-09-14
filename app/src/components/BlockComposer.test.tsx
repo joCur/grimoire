@@ -79,7 +79,7 @@ function firstSection(blocks: SceneBlock[]): IfSectionBlock {
 describe("the block list", () => {
   test("names every block of the reference scene in the reading view's words", () => {
     const html = composer(exampleBlocks(ARRIVAL));
-    for (const label of ["Überschrift", "Text", "Vorlesetext", "Check", "Geheim", "Notiz"]) {
+    for (const label of ["Überschrift", "Text", "Vorlesetext", "Probe", "Geheim", "Notiz"]) {
       expect(html).toContain(label);
     }
     // A collapsed card shows its own content, not the markdown markers.
@@ -159,7 +159,7 @@ describe("the type picker", () => {
     );
     for (const label of [
       "Vorlesetext",
-      "Check",
+      "Probe",
       "Geheim",
       "Konsequenz",
       "Beute",

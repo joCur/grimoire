@@ -29,7 +29,7 @@ describe("Markdown pipeline rendering", () => {
   test("check callout renders label row and tagged section", () => {
     const html = render("> [!check] Wisdom (Perception) DC 13.");
     expect(html).toContain('data-callout="check"');
-    expect(html).toContain(">Check<");
+    expect(html).toContain(">Probe<");
     expect(html).toContain("Wisdom (Perception) DC 13.");
   });
 
