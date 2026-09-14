@@ -453,9 +453,9 @@ export const en: Messages = {
   "review.done.resolved": "Done",
   "review.done.seen": "reviewed",
 
-  "review.notes.title": "Notes",
+  "review.notes.title": "Untagged entries",
   "review.notes.lead":
-    "Untagged inbox entries — adopt them, create an NPC, or tick them off.",
+    "From the inbox, without a tag — adopt them, create an NPC, or tick them off.",
 
   // Player-character notes (issue #86): `#pc` lines from log and inbox.
   "review.pc.title": "Player characters",

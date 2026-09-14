@@ -486,9 +486,9 @@ export const de = {
   "review.done.seen": "gesichtet",
 
   // The untagged inbox lines (issue #85) — ideas thrown in on the go.
-  "review.notes.title": "Notizen",
+  "review.notes.title": "Ungetaggte Einträge",
   "review.notes.lead":
-    "Ungetaggte Einträge aus der Inbox — übernehmen, als NPC anlegen oder abhaken.",
+    "Aus der Inbox, ohne Tag — übernehmen, als NPC anlegen oder abhaken.",
 
   // Player-character notes (issue #86): `#pc` lines from log and inbox.
   "review.pc.title": "Spielercharaktere",

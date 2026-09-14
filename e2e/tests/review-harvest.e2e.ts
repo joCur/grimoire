@@ -123,13 +123,13 @@ test("an untagged inbox note is reviewable and can be ticked off (issue #85)", a
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
   await expect.poll(() => api.raw("inbox")).toContain(`- ${NOTE_TEXT}`);
 
-  // At the desk it shows up in the wrap-up — in its own "Notizen" section,
+  // At the desk it shows up in the wrap-up — in its own "Ungetaggte Einträge" section,
   // and counted with everything else (one source for page and topbar).
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/beispiel/review");
   const progress = page.getByRole("banner").getByText(/von \d+ gesichtet/);
   await expect(progress).toHaveText("0 von 5 gesichtet");
-  await expect(page.getByRole("heading", { name: "Notizen" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ungetaggte Einträge" })).toBeVisible();
 
   const noteCard = page.locator("div").filter({ hasText: NOTE_TEXT }).last();
   await expect(noteCard).toContainText("Inbox");
@@ -186,7 +186,7 @@ test("a #pc note is grouped by character and ticked off (issue #86)", async ({ p
   await keep.click();
   await expect(keep).toHaveAttribute("aria-pressed", "false");
   // …and it does not turn up among the untagged notes either.
-  await expect(page.getByRole("heading", { name: "Notizen" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Ungetaggte Einträge" })).toHaveCount(0);
 
   await pcCard.getByRole("button", { name: "Erledigt" }).click();
   await expect(pcCard.getByText("Erledigt", { exact: true })).toBeVisible();
