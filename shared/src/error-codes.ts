@@ -34,6 +34,12 @@ export const ERROR_CODES = [
   "slug_reserved",
   /** 400, create: the typed name yields no id at all. `{ kind, field }` */
   "slug_empty",
+  /**
+   * 400, scene write: `location` is neither empty nor an entity id
+   * (#100 — a scene's location is always a REFERENCE, and the reference
+   * creates the location row). `{ value, suggestion }`
+   */
+  "location_not_an_id",
   /** 400, glossary write: one term appears twice. `{ term }` */
   "glossary_duplicate_term",
   /** 409, session start: an older session is still running. `{ path }` */

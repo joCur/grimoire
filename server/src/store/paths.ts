@@ -11,14 +11,22 @@
 //   inbox                            the campaign's inbox list
 //   glossary                         the campaign's glossary list
 //   <chapter>/_chapter               a chapter row
-//   <chapter>/<scene-id>             a scene with group_slug ""
-//   <chapter>/<group>/<scene-id>     a scene inside a location group
+//   <chapter>/<scene-id>             a scene without a `location`
+//   <chapter>/<location>/<scene-id>  a scene whose `location` names that location
 //   npcs/<id>                        an npc row
 //   locations/<id>                   a location row
 //   sessions/<id>                    a session row
 //
 // Two things to know about the segments:
 //
+//   * a SCENE's GROUP segment is its `location` and nothing else (issue #100).
+//     There is no independent grouping any more: the group is derived, so a
+//     scene can never sit in a group that contradicts the location it names.
+//     The consequence is that a scene's address MOVES when its `location`
+//     does, and an address that names the right scene with a stale group is
+//     therefore not an error — the store resolves a scene by ID and answers
+//     with the CURRENT address in `ParsedFile.path`, which the app follows
+//     (redirect strategy, ADR #17).
 //   * a SCENE's last segment is its ID, not a former file name. The id is the
 //     key the format calls stable ("id … NIE ändern"); the file name never
 //     was, and `scenes.file_slug` was dropped with the cutover.
@@ -72,6 +80,19 @@ export function chapterPath(id: string): string {
 
 export function scenePath(chapterId: string, groupSlug: string, id: string): string {
   return groupSlug === "" ? `${chapterId}/${id}` : `${chapterId}/${groupSlug}/${id}`;
+}
+
+/**
+ * The address of a scene ROW — the one place that knows the group segment is
+ * the scene's `location` (issue #100). Structural on purpose: paths.ts must
+ * not depend on the schema.
+ */
+export function sceneAddress(row: {
+  chapterId: string | null;
+  location: string | null;
+  id: string;
+}): string {
+  return scenePath(row.chapterId ?? "", row.location ?? "", row.id);
 }
 
 export function npcPath(id: string): string {

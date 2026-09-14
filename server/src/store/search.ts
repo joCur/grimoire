@@ -30,6 +30,7 @@ import {
   GLOSSARY_PATH,
   locationPath,
   npcPath,
+  sceneAddress,
   scenePath,
   sessionPath,
 } from "./paths";
@@ -102,11 +103,15 @@ function pathForHit(db: GrimoireDb, campaign: string, kind: string, id: string):
   switch (kind) {
     case "scene": {
       const row = db
-        .select({ chapterId: scenes.chapterId, groupSlug: scenes.groupSlug })
+        .select({ chapterId: scenes.chapterId, location: scenes.location })
         .from(scenes)
         .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, id)))
         .all()[0];
-      return scenePath(row?.chapterId ?? "", row?.groupSlug ?? "", id);
+      return sceneAddress({
+        chapterId: row?.chapterId ?? null,
+        location: row?.location ?? null,
+        id,
+      });
     }
     case "npc":
       return npcPath(id);

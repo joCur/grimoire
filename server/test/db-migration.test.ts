@@ -128,13 +128,13 @@ describe("AK1 — examples/beispiel imports completely and cleanly", () => {
     expect(chapterRows[0]?.status).toBe("active");
     expect(chapterRows[0]?.body).toContain("Offene Fäden");
 
-    // scenes — contract fields as columns, the location-slug folder as the
-    // display grouping, handouts as an ordered JSON list.
+    // scenes — contract fields as columns, `location` as the group (#100:
+    // the group directory only fills in when the frontmatter names none),
+    // handouts as an ordered JSON list.
     const sceneRows = db.select().from(scenes).all();
     expect(sceneRows.map((s) => s.id).sort()).toEqual(["lighthouse-arrival", "smuggler-captured"]);
     const arrival = sceneRows.find((s) => s.id === "lighthouse-arrival");
     expect(arrival?.chapterId).toBe("01-salzhafen");
-    expect(arrival?.groupSlug).toBe("hafen");
     expect(arrival?.title).toBe("Ankunft am Leuchtturm");
     expect(arrival?.type).toBe("planned");
     expect(arrival?.status).toBe("ready");

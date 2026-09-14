@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { openSqlite, type SqliteClient } from "./driver";
+import { migrateGroupsToLocations, type GroupMigrationOutcome } from "./group-migration";
 import { schema } from "./schema";
 
 /** The drizzle handle the whole server uses. Synchronous, like the driver. */
@@ -31,6 +32,12 @@ export interface OpenDb {
   db: GrimoireDb;
   client: SqliteClient;
   close(): void;
+  /**
+   * What the pre-migration data step of issue #100 changed on THIS open —
+   * empty on every database that has already been through it. See
+   * ./group-migration.ts for why it cannot run after the migrator.
+   */
+  groupMigration: GroupMigrationOutcome;
 }
 
 /** Directory of the committed migration SQL files. */
@@ -95,9 +102,13 @@ export async function openDb(filename: string): Promise<OpenDb> {
   }
   const client = await openSqlite(filename);
   applyPragmas(client);
+  // BEFORE the migrator, on purpose (issue #100): migration 0009 drops
+  // `scenes.group_slug`, and this step is what carries the old grouping over
+  // into `location`. It is a no-op once the column is gone.
+  const groupMigration = migrateGroupsToLocations(client);
   const db = buildDrizzle(client);
   migrateDb(db);
-  return { db, client, close: () => client.close() };
+  return { db, client, close: () => client.close(), groupMigration };
 }
 
 /**

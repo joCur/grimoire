@@ -28,6 +28,7 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   slug_taken: "server.slug_taken",
   slug_reserved: "server.slug_reserved",
   slug_empty: "server.slug_empty",
+  location_not_an_id: "server.location_not_an_id",
   glossary_duplicate_term: "server.glossary_duplicate_term",
   session_running: "server.session_running",
   session_not_empty: "server.session_not_empty",
@@ -88,6 +89,14 @@ function paramsFor(
       if (!isField(body.field)) return undefined;
       return { field: t(FIELD_KEY[body.field]) };
     }
+    case "location_not_an_id": {
+      const value = text(body.value);
+      if (value === undefined) return undefined;
+      // Without a usable slug there is nothing to propose — the sentence
+      // then names only what was typed (two catalog entries, one code).
+      const suggestion = text(body.suggestion);
+      return suggestion === undefined ? { value } : { value, suggestion };
+    }
     case "glossary_duplicate_term": {
       const term = text(body.term);
       return term === undefined ? undefined : { term };
@@ -120,7 +129,15 @@ export function serverErrorBodyMessage(
   const { code } = body;
   if (isErrorCode(code)) {
     const params = paramsFor(code, body, t);
-    if (params !== undefined) return t(CODE_KEY[code], params);
+    if (params !== undefined) {
+      // One code, two sentences: „location_not_an_id" reads differently with
+      // and without a proposal, and a placeholder with no value would show
+      // as the literal `{suggestion}`.
+      if (code === "location_not_an_id" && params.suggestion === undefined) {
+        return t("server.location_not_an_id.noSuggestion", params);
+      }
+      return t(CODE_KEY[code], params);
+    }
   }
   // No code, an unknown one, or one whose body is incomplete: the server's own
   // English text is still the most specific thing anybody has.

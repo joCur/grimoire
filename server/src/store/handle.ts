@@ -13,6 +13,7 @@
 
 import { getDbFile } from "../config";
 import { openDb, type GrimoireDb, type OpenDb } from "../db/client";
+import type { GroupMigrationOutcome } from "../db/group-migration";
 import { failInterruptedJobs } from "../db/job-boot";
 import { backfillReferences } from "./ref-backfill";
 
@@ -33,6 +34,12 @@ export interface StoreInfo {
    * the first — the pass only inserts what has no row.
    */
   backfilledNpcs: string[];
+  /**
+   * What the one-time `group_slug` -> `location` step of issue #100 changed
+   * (db/group-migration.ts): the scenes whose address moved and the location
+   * entries it had to create. Empty on every boot after the first.
+   */
+  groupMigration: GroupMigrationOutcome;
 }
 
 let opened: OpenDb | null = null;
@@ -67,6 +74,7 @@ export async function initStore(options: { file?: string } = {}): Promise<Grimoi
       backend: handle.client.backend,
       interruptedJobs,
       backfilledNpcs: refBackfill.created,
+      groupMigration: handle.groupMigration,
     };
     return handle.db;
   })();

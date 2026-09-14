@@ -318,6 +318,10 @@ export const de = {
   "server.slug_taken": '{kind} „{id}" existiert schon — Vorschlag: „{suggestion}"',
   "server.slug_reserved": '„{id}" ist ein reservierter Name — Vorschlag: „{suggestion}"',
   "server.slug_empty": "{field} ergibt keine id — bitte Buchstaben oder Ziffern verwenden.",
+  "server.location_not_an_id":
+    'Der Ort „{value}" ist keine Orts-id — „{suggestion}" verwenden, der Eintrag wird angelegt.',
+  "server.location_not_an_id.noSuggestion":
+    'Der Ort „{value}" ist keine Orts-id — bitte Kleinbuchstaben, Ziffern und Bindestriche verwenden.',
   "server.glossary_duplicate_term":
     'Glossar-Begriff „{term}" kommt mehrfach vor — bitte zusammenfassen.',
   "server.session_running": "Eine ältere Session läuft noch — erst beenden.",

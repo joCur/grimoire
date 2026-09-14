@@ -34,6 +34,7 @@ import {
   INBOX_PATH,
   locationPath,
   npcPath,
+  sceneAddress,
   scenePath,
   sessionPath,
 } from "./paths";
@@ -73,7 +74,6 @@ export interface SceneRow {
   chapterId: string | null;
   /** 1 when the properties declares `chapter:` (schema.ts). */
   chapterDeclared: number;
-  groupSlug: string;
   title: string;
   type: string;
   trigger: string | null;
@@ -286,7 +286,7 @@ export function sceneProperties(
 
 export function renderScene(row: SceneRow, npcs: string[], tags: string[]): FileResponse {
   return parsed(
-    scenePath(row.chapterId ?? "", row.groupSlug, row.id),
+    sceneAddress(row),
     "scene",
     sceneProperties(row, npcs, tags),
     row.body,

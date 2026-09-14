@@ -93,6 +93,7 @@ import {
   locatorFromPath,
   npcPath,
   RESERVED_SEGMENTS,
+  sceneAddress,
   scenePath,
   sessionPath,
   CAMPAIGN_PATH,
@@ -369,12 +370,17 @@ function sceneRowOf(tx: GrimoireDb, campaign: string, id: string): SceneRow | un
 }
 
 /**
- * The scene a `{ kind: "scene" }` locator addresses — 404 unless the path
- * names the scene's CURRENT chapter and group too. Same rule as the read side
- * (read.ts `readByLocator`): a path with the wrong chapter is a stale link,
- * and a write must not silently land on the row it happens to share an id
- * with. Without this a write through a stale link answered 200 while the
- * matching GET answered 404.
+ * The scene a `{ kind: "scene" }` locator addresses — by ID, which is the
+ * key (issue #100). The chapter and group segments used to have to match the
+ * row, because a group was an independent value and a link with the wrong
+ * one was a link to nothing. The group is `location` now: it MOVES when the
+ * DM corrects the location, so every address handed out before that move is
+ * a stale address for a scene that still exists. Resolving by id is what
+ * makes the correction non-destructive — the response carries the current
+ * address in `path`, and the app replaces the URL with it (ADR #17).
+ *
+ * The write is not unguarded by this: `rev` is the guard that a write which
+ * has not seen the current document is refused (ADR #4).
  */
 function sceneRowAt(
   tx: GrimoireDb,
@@ -383,9 +389,6 @@ function sceneRowAt(
 ): SceneRow {
   const row = sceneRowOf(tx, campaign, locator.id);
   if (row === undefined) throw new ApiError(404, "file not found");
-  if ((row.chapterId ?? "") !== locator.chapterId || row.groupSlug !== locator.groupSlug) {
-    throw new ApiError(404, "file not found");
-  }
   return row;
 }
 
@@ -480,6 +483,35 @@ function ensureNpcRow(tx: GrimoireDb, campaign: string, id: string): boolean {
   const row = npcRowOf(tx, campaign, id);
   if (row !== undefined) indexNpc(tx, campaign, row, []);
   return true;
+}
+
+/**
+ * A scene's `location`, validated (issue #100): an entity id, or null.
+ *
+ * The free-text exception the README used to grant is gone. `location` is a
+ * REFERENCE — it is the scene's group and its address — so a value that
+ * cannot be an id cannot be a group either; naming an id that has no row
+ * CREATES the row (`ensureLocationRow`, the „Referenzieren legt an" rule of
+ * #70), and anything else is a 400 the app turns into a sentence with the
+ * slug it would have used.
+ */
+function sceneLocation(value: unknown): string | null {
+  const raw = asOptStr(value);
+  if (raw === null) return null;
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  if (!ENTITY_SLUG.test(trimmed)) {
+    const suggestion = toSlug(trimmed);
+    throw new ApiError(
+      400,
+      `location "${trimmed}" is not a location id — a scene's location is a reference` +
+        (suggestion === "" ? "" : `; use "${suggestion}" (the entry is created for you)`),
+      suggestion === ""
+        ? { code: "location_not_an_id", value: trimmed }
+        : { code: "location_not_an_id", value: trimmed, suggestion },
+    );
+  }
+  return trimmed;
 }
 
 /** The same for a location — a scene's `location` when it is a slug. */
@@ -863,7 +895,7 @@ function patchLocator(
         trigger: asOptStr(fm.trigger),
         chapterId: declared ?? row.chapterId,
         chapterDeclared: declared === null ? 0 : 1,
-        location: asOptStr(fm.location),
+        location: sceneLocation(fm.location),
         status: asStr(fm.status, "draft"),
         handouts: packJson(asStrArray(fm.handouts)),
         extra: extraOf(fm, SCENE_KEYS),
@@ -890,6 +922,9 @@ function patchLocator(
         if (!npcsBefore.includes(npcId)) ensureNpcRow(tx, campaign, npcId);
       }
       // `location`, in contrast, is ensured on EVERY patch, changed or not.
+      // It is also the scene's GROUP since issue #100, so this is the write
+      // that MOVES the scene: the address in the response is built from the
+      // new value and the app follows it.
       // The properties dialog promises "wird beim Speichern angelegt" for a
       // slug-shaped value, and with the change-guard a save left a dangling
       // OLD slug exactly as it was — the hint lied about the stock the DM is
@@ -1982,7 +2017,7 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       const title = asStr(fm.title, id);
       const npcRefs = asStrArray(fm.npcs);
       const tags = asStrArray(fm.tags);
-      const draftLocation = asOptStr(fm.location);
+      const draftLocation = sceneLocation(fm.location);
       const pos =
         (tx
           .select({ pos: scenes.pos })
@@ -1997,7 +2032,6 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           id,
           chapterId: locator.chapterId,
           chapterDeclared: fm.chapter === undefined || fm.chapter === null ? 0 : 1,
-          groupSlug: locator.groupSlug,
           title,
           type: asStr(fm.type, "planned"),
           trigger: asOptStr(fm.trigger),
@@ -2499,9 +2533,10 @@ export async function createChapter(
  * hang in — the same rule `assertChapterRef` enforces for a properties patch
  * (ADR #14, chapters are not created by naming them).
  *
- * `group_slug` is "" — the location subfolder of the file era is a loose
- * grouping convention, and a scene created here has no location yet. Setting
- * one later is `PATCH /properties`, which is also where the group comes from.
+ * A scene created here has no `location`, so it sits at chapter level and
+ * the app lists it under „Ohne Ort". Setting one later is `PATCH /properties`
+ * — and since issue #100 that patch is also what moves the scene into the
+ * location's group, address included.
  */
 export async function createScene(
   campaign: string,
@@ -2525,7 +2560,11 @@ export async function createScene(
         "scene",
         id,
         suggestion,
-        scenePath(existing.chapterId ?? chapter, existing.groupSlug, existing.id),
+        sceneAddress({
+          chapterId: existing.chapterId ?? chapter,
+          location: existing.location,
+          id: existing.id,
+        }),
       );
     }
     tx.insert(scenes)
@@ -2536,7 +2575,6 @@ export async function createScene(
         // The chapter was CHOSEN here, so it is a declared value: it belongs
         // in the properties the reading view and the properties form show.
         chapterDeclared: 1,
-        groupSlug: "",
         title: title.trim(),
         pos: nextPos(
           tx.select({ pos: scenes.pos }).from(scenes).where(eq(scenes.campaignId, campaign)).all(),

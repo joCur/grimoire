@@ -405,6 +405,29 @@ if (import.meta.main) {
         info.backfilledNpcs.join(", "),
     );
   }
+  // Issue #100: the one-time step that turned the file era's group
+  // directories into `location` references. It names EVERY scene whose
+  // address moved — an old link still resolves (the app follows the
+  // response's `path`), but a DM who wrote one down should see it.
+  const groupMigration = info?.groupMigration;
+  if (groupMigration !== undefined && groupMigration.moved.length > 0) {
+    console.log(
+      `${groupMigration.moved.length} scene(s) moved to the group their location names:`,
+    );
+    for (const move of groupMigration.moved) {
+      console.log(
+        `  · [${move.campaignId}] ${move.sceneId}: ` +
+          `${move.from === "" ? "(chapter level)" : move.from} -> ` +
+          `${move.to === "" ? "(chapter level)" : move.to}`,
+      );
+    }
+  }
+  if (groupMigration !== undefined && groupMigration.createdLocations.length > 0) {
+    console.log(
+      `${groupMigration.createdLocations.length} location(s) referenced by a scene had no ` +
+        `entry and got one: ${groupMigration.createdLocations.join(", ")}`,
+    );
+  }
   // Issue #23: jobs are rows now, so a restart no longer loses a finished
   // generation — but a run that was in flight died with the old process and
   // is reported as failed. Say so, it explains the app's message.

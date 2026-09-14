@@ -48,7 +48,14 @@ import {
   type UsageReport,
 } from "./usage";
 import { isEmptyEntity, reindexEntity } from "./write";
-import { chapterPath, locationPath, npcPath, RESERVED_SEGMENTS, scenePath } from "./paths";
+import {
+  chapterPath,
+  locationPath,
+  npcPath,
+  RESERVED_SEGMENTS,
+  sceneAddress,
+  scenePath,
+} from "./paths";
 
 /**
  * The entity kinds that have a rename cascade (sessions have no id) — the
@@ -392,11 +399,15 @@ export async function renameEntity(
       : kind === "scene"
         ? (() => {
             const row = db
-              .select({ chapterId: scenes.chapterId, groupSlug: scenes.groupSlug })
+              .select({ chapterId: scenes.chapterId, location: scenes.location })
               .from(scenes)
               .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, oldId)))
               .all()[0];
-            return scenePath(row?.chapterId ?? "", row?.groupSlug ?? "", newId);
+            return sceneAddress({
+              chapterId: row?.chapterId ?? null,
+              location: row?.location ?? null,
+              id: newId,
+            });
           })()
         : kind === "npc"
           ? npcPath(newId)

@@ -289,6 +289,10 @@ export const en: Messages = {
   "server.slug_taken": '{kind} “{id}” already exists — suggestion: “{suggestion}”',
   "server.slug_reserved": '“{id}” is a reserved name — suggestion: “{suggestion}”',
   "server.slug_empty": "{field} yields no id — please use letters or digits.",
+  "server.location_not_an_id":
+    'Location "{value}" is not a location id — use "{suggestion}"; the entry is created for you.',
+  "server.location_not_an_id.noSuggestion":
+    'Location "{value}" is not a location id — please use lowercase letters, digits and dashes.',
   "server.glossary_duplicate_term":
     'Glossary term “{term}” appears more than once — please merge the entries.',
   "server.session_running": "An older session is still running — end it first.",
