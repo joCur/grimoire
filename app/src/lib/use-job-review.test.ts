@@ -1,11 +1,13 @@
-// The review's patch queue (issue #97 review, finding 1).
+// The review's patch queue (issue #97 review, findings 1 and 2).
 //
 // Tested through `createReviewQueue`, the plain half of use-job-review.ts:
-// the property that matters here is invisible to a rendering test: a flush
-// that RESOLVES only when the patch has landed.
+// the two properties that matter here are invisible to a rendering test —
+// a flush that RESOLVES only when the patch has landed, and a failed patch
+// that goes back into the queue instead of evaporating.
 
 import { describe, expect, test } from "bun:test";
 
+import { ApiError } from "@/api";
 import type { ReviewPatch } from "@/lib/generate";
 import {
   createReviewQueue,
@@ -82,5 +84,56 @@ describe("flush", () => {
     queue.decide({ dropped: ["c"] });
     await queue.flush();
     expect(h.sent).toEqual([{ edits: { a: "one", b: "two" }, dropped: ["c"] }]);
+  });
+});
+
+describe("a failed patch", () => {
+  test("is retried on the next flush and rolls the optimistic copy back", async () => {
+    const h = harness();
+    const queue = createReviewQueue(h.io, 10_000);
+    h.fail = new Error("network");
+
+    queue.edit("kai", "im Regen");
+    await queue.flush();
+    expect(h.sent).toEqual([]);
+    expect(last(h.statuses)).toBe("error");
+    // Rolled back: the cache does not claim something the server refused.
+    expect(h.shown).toEqual({});
+
+    // The next flush retries it — nothing was lost.
+    await queue.flush();
+    expect(h.sent).toEqual([{ edits: { kai: "im Regen" } }]);
+    expect(h.shown).toEqual({ kai: "im Regen" });
+    expect(last(h.statuses)).toBe("saved");
+  });
+
+  test("keeps the error line while a retry is still queued", async () => {
+    const h = harness();
+    const queue = createReviewQueue(h.io, 10_000);
+    h.fail = new Error("network");
+    queue.edit("kai", "im Regen");
+    await queue.flush();
+    expect(last(h.statuses)).toBe("error");
+
+    // A LATER decision succeeds — but the failed text is still waiting, so
+    // „Gespeichert" would be a lie about the review as a whole.
+    queue.decide({ entries: { "npcs/grella": "accepted" } });
+    await queue.flush();
+    expect(last(h.statuses)).toBe("saved");
+    // …and the retried edit went along with it.
+    expect(h.sent).toEqual([
+      { edits: { kai: "im Regen" }, entries: { "npcs/grella": "accepted" } },
+    ]);
+  });
+
+  test("a 409 is a conflict instead: re-read, and nothing is retried blindly", async () => {
+    const h = harness();
+    const queue = createReviewQueue(h.io, 10_000);
+    h.fail = new ApiError(409, "conflict", { code: "rev_conflict", rev: 7 });
+    queue.decide({ entries: { "npcs/grella": "accepted" } });
+    await queue.flush();
+    expect(last(h.statuses)).toBe("conflict");
+    expect(h.rereads).toBe(1);
+    expect(h.sent).toEqual([]);
   });
 });

@@ -129,11 +129,14 @@ export function createReviewQueue(io: ReviewQueueIo, delayMs: number): ReviewQue
     // flight, and a caller that awaits this wants THAT to be done too.
     if (Object.keys(patch).length === 0) return chain;
     io.status("saving");
-    io.optimistic(patch);
+    const undo = io.optimistic(patch);
     chain = chain.then(async () => {
       try {
         await io.send(patch);
-        io.status("saved");
+        // Sticky until the queue is EMPTY: a success while a failed patch
+        // is waiting for its retry must not say „Gespeichert" over a review
+        // half of which is not on the server (issue #97 review, finding 2).
+        io.status(Object.keys(prune(pending)).length === 0 ? "saved" : "saving");
       } catch (error) {
         // A 409 is the house conflict protocol: nothing was written, the
         // other tab's state is the truth, so it is re-read rather than
@@ -143,7 +146,16 @@ export function createReviewQueue(io: ReviewQueueIo, delayMs: number): ReviewQue
           io.reread();
           return;
         }
+        // Any other failure: the optimistic copy is rolled back — the cache
+        // must not claim what the server refused — and the patch goes BACK
+        // into the queue. The next keystroke, the next decision, the flush
+        // before „Übernehmen" or the debounce armed here retries it.
+        // Dropping it (and then calling the next success „Gespeichert") is
+        // how an edit was lost without anyone being told.
+        undo?.();
+        pending = mergePatch(patch, pending);
         io.status("error");
+        if (timer === undefined) timer = setTimeout(() => void send(), delayMs);
       }
     });
     return chain;
