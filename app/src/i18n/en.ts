@@ -247,6 +247,7 @@ export const en: Messages = {
   "entryList.remove": "Delete \u201c{name}\u201d",
   "entryList.removed": "Entry deleted",
   "entryList.reload": "Reload",
+  "entryList.applyDraft": "Keep the draft and apply it to the current list",
   "entryList.confirmDelete.title": "Delete this entry?",
   "entryList.confirmDelete.body": "\u201c{name}\u201d will be removed from the list. This cannot be undone.",
   "entryList.confirmDelete.confirm": "Delete",

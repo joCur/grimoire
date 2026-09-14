@@ -31,7 +31,7 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     // `ref` is a plain prop in React 19, so it travels with the spread below;
     // it only has to be part of the TYPE. Needed where the app has to put the
-    // focus on a button (components/SettingsListEditor.tsx after a deletion).
+    // focus on a button (components/EntryListPage.tsx after a deletion).
     React.RefAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {}
 

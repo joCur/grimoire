@@ -31,7 +31,25 @@
 //
 // THE 409 is the shape ADR #4 prescribes: nothing was written, the list is
 // re-read and the DM is told — never a silent overwrite. The open row keeps
-// what they typed; reloading is their decision.
+// what they typed; what happens next is their decision — reload, or re-aim
+// the draft at the list that came back. „Speichern" is OFF in between: the
+// list moved, so retrying blindly is the overwrite the 409 just prevented.
+//
+// WHAT „THIS ENTRY" MEANS while the list moves underneath (PO findings on
+// PR #87). The version poller refetches both lists every few seconds
+// (lib/use-campaign-version.ts), so the stored array can change while a row
+// is open. Two consequences, and they are the load-bearing part of this file:
+//
+//   * the open row is identified by the CONTENT it had when it was opened
+//     (lib/entry-list.ts findEntryIndex), never by a remembered index — an
+//     index another tab renumbered addresses a neighbouring entry;
+//   * the save sends the `rev` that applied when the row was OPENED, not the
+//     one the poller just brought in, so an external write is reliably a
+//     conflict instead of a fresh token wrapped around a stale draft.
+//
+// AND WHILE A DRAFT IS OPEN the page does not let anything else rewrite the
+// list under it: deleting or moving another row is disabled, and opening a
+// different row asks „Änderungen verwerfen?" first.
 //
 // UNSAVED-CHANGES GUARD: only the open row can hold unsaved work, so that is
 // exactly what the guard asks about (components/UnsavedChangesGuard.tsx).
@@ -57,6 +75,7 @@ import { INPUT_CLASS } from "@/components/ui/field";
 import { serverErrorMessage, useT, type MessageKey, type Translate } from "@/i18n";
 import {
   appendEntry,
+  findEntryIndex,
   focusAfterRemove,
   isEntryDirty,
   moveEntry,
@@ -100,11 +119,30 @@ export interface EntryListPageProps<T> {
   reorderable?: boolean;
 }
 
-/** Which entry is open in the editor, and what has been typed into it. */
+/**
+ * Which entry is open in the editor, what has been typed into it — and the two
+ * things the save needs that the list itself can no longer be asked for.
+ *
+ * `original` is the entry AS IT WAS when the row was opened. The save looks it
+ * up again in the list as it stands then (lib/entry-list.ts findEntryIndex)
+ * instead of writing to a remembered index: the version poller refetches both
+ * lists every few seconds, so a delete in another tab silently renumbers
+ * everything below it, and an index-addressed write lands on a neighbour
+ * (PO finding on PR #87).
+ *
+ * `rev` is the list's guard token as of the same moment. Sending the CURRENT
+ * one would defeat the guard for exactly the case it exists for: the poller
+ * hands the page a fresh token while the draft still describes the old list,
+ * and the server would happily accept the overwrite. Sending the token the
+ * draft was written against turns that into the 409 it is.
+ *
+ * `index` is only where the open form is DRAWN while its entry cannot be
+ * found — never what a write addresses.
+ */
 type Editing<T> =
   /** A new entry — no stored position yet; saving appends it. */
-  | { at: "new"; value: T }
-  | { at: number; value: T };
+  | { at: "new"; value: T; rev: number }
+  | { at: "stored"; index: number; original: T; value: T; rev: number };
 
 type Status =
   | { kind: "idle" }
@@ -152,18 +190,41 @@ function EntryListBody<T>({
   const [filter, setFilter] = useState("");
   const [editing, setEditing] = useState<Editing<T>>();
   const [status, setStatus] = useState<Status>({ kind: "idle" });
-  /** Which stored position the DM asked to delete — the confirmation. */
-  const [confirmDelete, setConfirmDelete] = useState<number>();
+  /**
+   * Which entry the DM asked to delete — the confirmation. The ENTRY and not
+   * just its position, for the same reason the open row carries its original:
+   * the poller can bring a renumbered list in while the dialog stands, and a
+   * remembered index would then delete a neighbour.
+   */
+  const [confirmDelete, setConfirmDelete] = useState<{ index: number; entry: T }>();
   // What the keyboard should be on after the next render, and what a screen
   // reader should hear — both only ever set by an action that moves the focus
   // out from under it (a deletion).
   const [pendingFocus, setPendingFocus] = useState<number | "add">();
+  /** „Änderungen verwerfen?" — what would happen if the DM says yes. */
+  const [confirmDiscard, setConfirmDiscard] = useState<
+    { kind: "reload" } | { kind: "open"; target: Editing<T> }
+  >();
   const [announced, setAnnounced] = useState<{ nth: number; message: string }>();
   const rowButtons = useRef(new Map<number, HTMLButtonElement | null>());
   const addButton = useRef<HTMLButtonElement | null>(null);
 
   const entries = query.data?.entries ?? [];
   const rev = query.data?.rev ?? 0;
+
+  // WHERE the open entry sits in the list RIGHT NOW — recomputed every render
+  // rather than remembered, so the form follows its entry when the poller
+  // brings a reordered list. `-1` means it is gone (or no longer what it was);
+  // the form then stays where it was drawn so the typing is not swallowed, and
+  // the save refuses (see `onSaveEntry`).
+  const storedIndex =
+    editing !== undefined && editing.at === "stored" ? findEntryIndex(entries, editing.original) : -1;
+  const openIndex =
+    editing !== undefined && editing.at === "stored"
+      ? storedIndex >= 0
+        ? storedIndex
+        : editing.index
+      : -1;
 
   // Only the OPEN row can hold unsaved work. A brand-new row counts only once
   // something has been typed into it — opening an empty form and walking away
@@ -172,7 +233,7 @@ function EntryListBody<T>({
     editing !== undefined &&
     (editing.at === "new"
       ? isSendable(editing.value)
-      : isEntryDirty(editing.value, entries[editing.at]));
+      : isEntryDirty(editing.value, storedIndex >= 0 ? entries[storedIndex] : editing.original));
   useUnsavedChanges(dirty);
 
   useEffect(() => {
@@ -188,10 +249,10 @@ function EntryListBody<T>({
    * conflict handling and the status line exist exactly once.
    */
   const commit = useCallback(
-    async (next: T[]): Promise<boolean> => {
+    async (next: T[], guard: number): Promise<boolean> => {
       setStatus({ kind: "saving" });
       try {
-        const fresh = await save(next, rev);
+        const fresh = await save(next, guard);
         queryClient.setQueryData(queryKey, fresh);
         setStatus({ kind: "saved" });
         return true;
@@ -212,33 +273,74 @@ function EntryListBody<T>({
         return false;
       }
     },
-    [save, rev, queryClient, queryKey, query, t],
+    [save, queryClient, queryKey, query, t],
   );
 
   const rows = rowsOf(entries, filter);
   const busy = status.kind === "saving";
+  const stale = status.kind === "stale";
+  // A write that is NOT the open entry — delete, move — rewrites the whole
+  // list and would take the draft's row with it. While something is open and
+  // unsaved those controls are off; the DM finishes the entry first. That is
+  // the same rule the row switch enforces with a dialog, in the one place
+  // where a dialog would be about somebody ELSE's row.
+  const locked = busy || dirty;
 
-  const openNew = () => {
-    setEditing({ at: "new", value: emptyEntry() });
+  /**
+   * Open something else. With unsaved work on screen this ASKS first — before
+   * this, clicking the next row threw the draft away without a word, which is
+   * the silent loss ADR #4 forbids (and which the leave-the-page guard already
+   * refused to allow).
+   */
+  const requestOpen = (target: Editing<T>) => {
+    if (dirty) {
+      setConfirmDiscard({ kind: "open", target });
+      return;
+    }
+    setEditing(target);
     setStatus({ kind: "idle" });
   };
 
+  const openNew = () => requestOpen({ at: "new", value: emptyEntry(), rev });
+
   const onSaveEntry = async () => {
-    if (editing === undefined) return;
-    const next =
-      editing.at === "new"
-        ? appendEntry(entries, editing.value)
-        : replaceEntry(entries, editing.at, editing.value);
-    if (await commit(next)) setEditing(undefined);
+    if (editing === undefined || stale) return;
+    let next: T[];
+    if (editing.at === "new") {
+      next = appendEntry(entries, editing.value);
+    } else {
+      const index = findEntryIndex(entries, editing.original);
+      // The entry the DM opened is not in the list any more. Nothing is
+      // written and nothing is guessed: this is the conflict, told.
+      if (index < 0) {
+        setStatus({ kind: "stale" });
+        return;
+      }
+      next = replaceEntry(entries, index, editing.value);
+    }
+    if (await commit(next, editing.rev)) setEditing(undefined);
   };
 
-  const onDelete = async (index: number) => {
+  const onDelete = async (target: { index: number; entry: T }) => {
     setConfirmDelete(undefined);
+    // Where that entry sits NOW — not where it sat when the dialog opened.
+    const index = findEntryIndex(entries, target.entry);
+    if (index < 0) {
+      setStatus({ kind: "stale" });
+      return;
+    }
     const shown = rows.findIndex((row) => row.index === index);
-    if (!(await commit(removeEntry(entries, index)))) return;
-    if (editing !== undefined && editing.at === index) setEditing(undefined);
-    const focus = focusAfterRemove(rows.length, shown);
-    setPendingFocus(focus.target === "add" ? "add" : (rows[focus.index]?.index ?? "add"));
+    const without = removeEntry(entries, index);
+    // The focus target is read off the list as it will LOOK afterwards: the
+    // glossary is alphabetical and filtered, so a pre-delete index names a
+    // different row than the one that takes the gap (PO finding on PR #87).
+    const remaining = rowsOf(without, filter);
+    if (!(await commit(without, rev))) return;
+    if (editing !== undefined && editing.at === "stored" && storedIndex === index) {
+      setEditing(undefined);
+    }
+    const focus = focusAfterRemove(remaining.length, shown);
+    setPendingFocus(focus.target === "add" ? "add" : (remaining[focus.index]?.index ?? "add"));
     setAnnounced((prev) => ({ nth: (prev?.nth ?? 0) + 1, message: t("entryList.removed") }));
   };
 
@@ -246,6 +348,22 @@ function EntryListBody<T>({
     const fresh = await query.refetch();
     if (fresh.data !== undefined) queryClient.setQueryData(queryKey, fresh.data);
     setEditing(undefined);
+    setStatus({ kind: "idle" });
+  };
+
+  /**
+   * After a conflict: keep what was typed and re-aim it at the list that came
+   * back. Only offered when the opened entry is STILL THERE, unchanged — then
+   * „replace this entry" means the same thing in the new list as it did in the
+   * old one. Otherwise the only honest option is reloading.
+   */
+  const canApplyDraft =
+    editing !== undefined && (editing.at === "new" || findEntryIndex(entries, editing.original) >= 0);
+
+  const applyDraft = () => {
+    if (editing === undefined || !canApplyDraft) return;
+    // Adopt the fresh guard token; the entry is looked up again on save.
+    setEditing({ ...editing, rev });
     setStatus({ kind: "idle" });
   };
 
@@ -312,12 +430,12 @@ function EntryListBody<T>({
           <EntryForm
             heading={t(addLabel)}
             busy={busy}
-            canSave={isSendable(editing.value)}
+            canSave={isSendable(editing.value) && !stale}
             onSave={() => void onSaveEntry()}
             onCancel={() => setEditing(undefined)}
             t={t}
           >
-            {renderForm(editing.value, (value) => setEditing({ at: "new", value }), t)}
+            {renderForm(editing.value, (value) => setEditing({ ...editing, value }), t)}
           </EntryForm>
         )}
 
@@ -328,19 +446,19 @@ function EntryListBody<T>({
 
         <ul>
           {rows.map((row, shown) => {
-            const open = editing !== undefined && editing.at === row.index;
+            const open = editing !== undefined && editing.at === "stored" && openIndex === row.index;
             return (
               <li key={row.index} className="border-b border-divider">
                 {open ? (
                   <EntryForm
                     heading={rowLabel(row.entry, t)}
                     busy={busy}
-                    canSave={isSendable(editing.value)}
+                    canSave={isSendable(editing.value) && !stale}
                     onSave={() => void onSaveEntry()}
                     onCancel={() => setEditing(undefined)}
                     t={t}
                   >
-                    {renderForm(editing.value, (value) => setEditing({ at: row.index, value }), t)}
+                    {renderForm(editing.value, (value) => setEditing({ ...editing, value }), t)}
                   </EntryForm>
                 ) : (
                   <div className="flex min-h-[52px] items-center gap-2 py-1.5 max-md:flex-wrap">
@@ -355,10 +473,15 @@ function EntryListBody<T>({
                       // verb, and „was ist das hier, ein Link?" is exactly the
                       // question a screen reader user should not have to ask.
                       aria-label={t("entryList.edit", { name: rowTitle(row.entry) })}
-                      onClick={() => {
-                        setEditing({ at: row.index, value: row.entry });
-                        setStatus({ kind: "idle" });
-                      }}
+                      onClick={() =>
+                        requestOpen({
+                          at: "stored",
+                          index: row.index,
+                          original: row.entry,
+                          value: row.entry,
+                          rev,
+                        })
+                      }
                       className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-1 py-1.5 text-left hover:bg-card focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none max-md:basis-full"
                     >
                       <Pencil
@@ -373,15 +496,15 @@ function EntryListBody<T>({
                         <>
                           <IconButton
                             label={t("entryList.moveUp")}
-                            disabled={shown === 0 || busy || filter.trim() !== ""}
-                            onClick={() => void commit(moveEntry(entries, row.index, -1))}
+                            disabled={shown === 0 || locked || filter.trim() !== ""}
+                            onClick={() => void commit(moveEntry(entries, row.index, -1), rev)}
                           >
                             <ArrowUp aria-hidden />
                           </IconButton>
                           <IconButton
                             label={t("entryList.moveDown")}
-                            disabled={shown === rows.length - 1 || busy || filter.trim() !== ""}
-                            onClick={() => void commit(moveEntry(entries, row.index, 1))}
+                            disabled={shown === rows.length - 1 || locked || filter.trim() !== ""}
+                            onClick={() => void commit(moveEntry(entries, row.index, 1), rev)}
                           >
                             <ArrowDown aria-hidden />
                           </IconButton>
@@ -389,8 +512,8 @@ function EntryListBody<T>({
                       )}
                       <IconButton
                         label={t("entryList.remove", { name: rowTitle(row.entry) })}
-                        disabled={busy}
-                        onClick={() => setConfirmDelete(row.index)}
+                        disabled={locked}
+                        onClick={() => setConfirmDelete({ index: row.index, entry: row.entry })}
                         buttonRef={(node) => {
                           if (node === null) rowButtons.current.delete(row.index);
                           else rowButtons.current.set(row.index, node);
@@ -422,16 +545,26 @@ function EntryListBody<T>({
           {status.kind === "stale" && (
             <>
               {t("write.stale")}
-              {/* The conflict's only sensible next step, as a control rather
-                  than as advice. */}
+              {/* The two honest next steps, as controls rather than as advice.
+                  „Speichern" stays OFF until one of them is taken: retrying
+                  against a list that moved is how the draft ends up on a
+                  neighbouring entry (PO finding on PR #87). */}
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => void reload()}
-                className="rounded px-0.5 underline decoration-dotted underline-offset-2 hover:no-underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                onClick={() => {
+                  if (dirty) setConfirmDiscard({ kind: "reload" });
+                  else void reload();
+                }}
+                className={STALE_ACTION}
               >
                 {t("entryList.reload")}
               </button>
+              {canApplyDraft && (
+                <button type="button" disabled={busy} onClick={applyDraft} className={STALE_ACTION}>
+                  {t("entryList.applyDraft")}
+                </button>
+              )}
             </>
           )}
           {status.kind === "failed" && status.message}
@@ -446,6 +579,52 @@ function EntryListBody<T>({
         </span>
       </div>
 
+      {/* „Änderungen verwerfen?" — the same question the way OUT of the page
+          asks (components/UnsavedChangesGuard.tsx), for the two ways out of an
+          open ROW that stay on it: opening another entry, and reloading the
+          list after a conflict. */}
+      {confirmDiscard !== undefined && (
+        <Dialog
+          open
+          onOpenChange={(isOpen) => {
+            // Escape and the backdrop mean „Weiter bearbeiten".
+            if (!isOpen) setConfirmDiscard(undefined);
+          }}
+        >
+          <DialogContent className="max-w-[420px]">
+            <DialogTitle>{t("properties.discard.title")}</DialogTitle>
+            <DialogDescription>{t("unsaved.description")}</DialogDescription>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <DialogClose asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
+                >
+                  {t("properties.discard.keepEditing")}
+                </Button>
+              </DialogClose>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => {
+                  const pending = confirmDiscard;
+                  setConfirmDiscard(undefined);
+                  if (pending.kind === "reload") void reload();
+                  else {
+                    setEditing(pending.target);
+                    setStatus({ kind: "idle" });
+                  }
+                }}
+                className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
+              >
+                {t("common.discard")}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Deleting is the one action on this page with no undo — the entry is
           gone from the stored list the moment it is confirmed. So it asks,
           and it names WHAT it would delete. */}
@@ -459,9 +638,7 @@ function EntryListBody<T>({
           <DialogContent aria-describedby={undefined} className="max-w-[420px]">
             <DialogTitle>{t("entryList.confirmDelete.title")}</DialogTitle>
             <DialogDescription>
-              {t("entryList.confirmDelete.body", {
-                name: rowTitle(entries[confirmDelete] ?? emptyEntry()),
-              })}
+              {t("entryList.confirmDelete.body", { name: rowTitle(confirmDelete.entry) })}
             </DialogDescription>
             <div className="mt-4 flex items-center justify-end gap-2">
               <DialogClose asChild>
@@ -490,6 +667,10 @@ function EntryListBody<T>({
 }
 
 const NOTE = "text-[13px] leading-[1.55] text-muted-foreground";
+
+/** The inline links of the conflict line — a control, drawn as running text. */
+const STALE_ACTION =
+  "rounded px-0.5 underline decoration-dotted underline-offset-2 hover:no-underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
 
 /**
  * The open entry: its fields, and the two things that can happen to it.

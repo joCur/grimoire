@@ -11,6 +11,7 @@ import {
   appendEntry,
   emptyGlossaryEntry,
   emptyKnowledgeEntry,
+  findEntryIndex,
   focusAfterRemove,
   glossaryRows,
   isEntryDirty,
@@ -197,23 +198,88 @@ describe("promptKnowledgeCount", () => {
 // --- where the keyboard lands after a deletion (review of #53) --------------
 
 describe("focusAfterRemove", () => {
+  // `remaining`/`shown` are both read off the list AS IT LOOKS AFTERWARDS
+  // (PO finding on PR #87) — deleting the 2nd of 3 rows leaves 2, and the row
+  // now in display position 1 is the one that took the gap.
   test("a middle row hands the focus to the row that takes its place", () => {
-    expect(focusAfterRemove(3, 0)).toEqual({ target: "row", index: 0 });
-    expect(focusAfterRemove(3, 1)).toEqual({ target: "row", index: 1 });
+    expect(focusAfterRemove(2, 0)).toEqual({ target: "row", index: 0 });
+    expect(focusAfterRemove(2, 1)).toEqual({ target: "row", index: 1 });
   });
 
   test("the LAST row hands it back to the one above", () => {
-    expect(focusAfterRemove(3, 2)).toEqual({ target: "row", index: 1 });
-    expect(focusAfterRemove(2, 1)).toEqual({ target: "row", index: 0 });
+    expect(focusAfterRemove(2, 2)).toEqual({ target: "row", index: 1 });
+    expect(focusAfterRemove(1, 1)).toEqual({ target: "row", index: 0 });
   });
 
   test("the only row leaves no row — „Neuer Eintrag“ takes the focus", () => {
-    expect(focusAfterRemove(1, 0)).toEqual({ target: "add" });
+    expect(focusAfterRemove(0, 0)).toEqual({ target: "add" });
   });
 
   test("out of range never invents a row", () => {
-    expect(focusAfterRemove(0, 0)).toEqual({ target: "add" });
-    expect(focusAfterRemove(2, 5)).toEqual({ target: "add" });
+    expect(focusAfterRemove(0, 3)).toEqual({ target: "add" });
+    expect(focusAfterRemove(2, 9)).toEqual({ target: "row", index: 1 });
+    expect(focusAfterRemove(2, -1)).toEqual({ target: "row", index: 0 });
+  });
+
+  test("on a SORTED list the neighbour is the alphabetical one, not the stored one", () => {
+    // Stored in the order they were typed, shown alphabetically:
+    //   stored   0 Watt   1 Priel   2 Balge
+    //   shown    0 Balge  1 Priel   2 Watt
+    // Deleting „Priel" (display position 1) must hand the focus to the row
+    // that moves into display position 1 — „Watt".
+    const stored = [term("Watt"), term("Priel"), term("Balge")];
+    const shown = glossaryRows(stored).findIndex((row) => row.entry.term === "Priel");
+    expect(shown).toBe(1);
+
+    const remaining = glossaryRows(removeEntry(stored, 1));
+    const focus = focusAfterRemove(remaining.length, shown);
+    expect(focus).toEqual({ target: "row", index: 1 });
+    expect(remaining[1]!.entry.term).toBe("Watt");
+
+    // The stored position that display row addresses is 0 — and reading the
+    // target off the PRE-delete rows instead would have named stored position
+    // 1, which in the new list is „Balge": a different, unrelated row.
+    expect(remaining[1]!.index).toBe(0);
+    const preDelete = glossaryRows(stored)[1]!.index;
+    expect(removeEntry(stored, 1)[preDelete]!.term).toBe("Balge");
+  });
+});
+
+// --- which entry the open row IS, after the list moved (PO finding on #87) ---
+
+describe("findEntryIndex", () => {
+  test("finds the opened entry again where it now sits", () => {
+    const stored = [fact("a"), fact("b"), fact("c")];
+    const opened = stored[2]!;
+    // Somebody else deleted the first entry while the row was open: the
+    // remembered index 2 now names nothing, the CONTENT still names „c".
+    const moved = removeEntry(stored, 0);
+    expect(findEntryIndex(moved, opened)).toBe(1);
+    // Which is what keeps the save on its own entry instead of overwriting a
+    // neighbour — the bug this replaces wrote „c"'s draft over index 2.
+    expect(replaceEntry(moved, findEntryIndex(moved, opened), fact("C"))).toEqual([
+      fact("b"),
+      fact("C"),
+    ]);
+  });
+
+  test("a list that no longer holds it is a conflict, not a guess", () => {
+    const opened = fact("c");
+    expect(findEntryIndex([fact("a"), fact("b")], opened)).toBe(-1);
+    // Changed in place counts as gone, too: what the DM edited is not what is
+    // stored any more, so the page has to say so rather than write.
+    expect(findEntryIndex([fact("c!")], opened)).toBe(-1);
+  });
+
+  test("identity is the content, so a reorder alone is not a conflict", () => {
+    const stored = [naming("a", "A"), naming("b", "B")];
+    expect(findEntryIndex(moveEntry(stored, 1, -1), stored[1]!)).toBe(0);
+  });
+
+  test("byte-identical duplicates resolve to the first — they are interchangeable", () => {
+    const stored = [fact("same"), fact("same")];
+    expect(findEntryIndex(stored, fact("same"))).toBe(0);
+    expect(replaceEntry(stored, 0, fact("edited"))).toEqual([fact("edited"), fact("same")]);
   });
 });
 

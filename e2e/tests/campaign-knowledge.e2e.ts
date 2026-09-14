@@ -216,8 +216,19 @@ test("a competing write is a conflict, not a silent overwrite", async ({ page, a
   // What the DM typed is still on screen — theirs to keep or to discard.
   await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveValue("Alt");
 
-  // Reloading is their decision, and then the other list is on screen.
+  // Retrying blindly is not offered: „Speichern" is off until the DM decides.
+  await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
+
+  // Reloading is their decision — and it costs the draft, so it asks first
+  // (PO finding on PR #87: it used to discard the typing without a word).
   await page.getByRole("button", { name: "Neu laden" }).click();
+  const discard = page.getByRole("dialog");
+  await expect(discard).toContainText("Änderungen verwerfen?");
+  await discard.getByRole("button", { name: "Weiter bearbeiten" }).click();
+  await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveValue("Alt");
+
+  await page.getByRole("button", { name: "Neu laden" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
   await expect(page.getByText("Von woanders.")).toBeVisible();
   await expect(page.getByText("Inzwischen geändert", { exact: false })).toHaveCount(0);
 });
@@ -418,4 +429,167 @@ test("without naming conventions nothing is flagged and the prompt is unchanged"
   // No echo (the prompt had no knowledge section at all) and no hint block.
   await expect(page.getByText(CONTEXT_ECHO, { exact: false })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: /Namens-Hinweis/ })).toHaveCount(0);
+});
+
+// --- what an OPEN row survives (PO findings on PR #87) ------------------------
+//
+// The version poller refetches both lists every ~5s (app/src/lib/use-campaign-
+// version.ts), so the list under an open row really does change in production
+// — which is why these are E2E and not unit tests: the poll, the guard token
+// and the whole-list PUT only line up in the real stack.
+
+test("an open row is its ENTRY, not a position — and the guard token is the one it was opened with", async ({
+  page,
+  api,
+}) => {
+  await openGlossary(page);
+  const before = await api.get<{ entries: Array<{ term: string; explanation: string }>; rev: number }>(
+    "beispiel/glossary",
+  );
+  // Two terms that are not the same row: one is edited, the other is deleted
+  // from underneath by „another tab".
+  const edited = before.entries.at(-1)!;
+  const deleted = before.entries[0]!;
+  expect(edited.term).not.toBe(deleted.term);
+
+  // The DM opens the LAST entry and types into it.
+  await page.getByRole("button", { name: new RegExp(`${edited.term}.*bearbeiten`) }).click();
+  const explanation = page.getByLabel("Erklärung");
+  await explanation.fill("Von mir bearbeitet.");
+
+  // While that draft is open, nothing else may rewrite the list under it:
+  // delete and move are off (the draft's row is a position in the PUT).
+  await expect(page.getByRole("button", { name: /löschen$/ }).first()).toBeDisabled();
+
+  // Somebody else deletes the FIRST entry — every stored position below it
+  // shifts by one, and the poller brings that list into this page.
+  await api.send("PUT", "beispiel/glossary", {
+    entries: before.entries.filter((entry) => entry.term !== deleted.term),
+    rev: before.rev,
+  });
+  await expect(page.getByRole("button", { name: new RegExp(`${deleted.term}.*löschen`) })).toHaveCount(
+    0,
+    { timeout: 20_000 },
+  );
+
+  // Saving now is a CONFLICT, not a write: the draft was written against the
+  // list as it was. Nothing reached the server.
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText("Inzwischen geändert", { exact: false })).toBeVisible();
+  const afterConflict = await api.get<{
+    entries: Array<{ term: string; explanation: string }>;
+    rev: number;
+  }>("beispiel/glossary");
+  expect(afterConflict.entries.map((e) => e.explanation)).not.toContain("Von mir bearbeitet.");
+
+  // And „Speichern" is OFF until the DM decides — retrying against a list
+  // that moved is exactly how a draft lands on a neighbouring entry.
+  await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
+  await expect(explanation).toHaveValue("Von mir bearbeitet.");
+
+  // „Draft behalten" re-aims it at the list that came back — offered because
+  // the opened entry is still there, unchanged.
+  await page.getByRole("button", { name: /Entwurf behalten/ }).click();
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByText("Gespeichert", { exact: true })).toBeVisible();
+
+  // THE POINT: the text landed on the entry it was typed into, and the entry
+  // that moved into its old position is untouched.
+  const after = await api.get<{ entries: Array<{ term: string; explanation: string }> }>(
+    "beispiel/glossary",
+  );
+  const written = after.entries.find((entry) => entry.term === edited.term);
+  expect(written?.explanation).toBe("Von mir bearbeitet.");
+  for (const entry of after.entries) {
+    if (entry.term !== edited.term) {
+      expect(entry.explanation).toBe(
+        before.entries.find((old) => old.term === entry.term)?.explanation,
+      );
+    }
+  }
+});
+
+test("a dirty draft is never thrown away by a click — moving on asks first", async ({ page }) => {
+  await openGlossary(page);
+  const rows = page.getByRole("button", { name: /bearbeiten$/ });
+  const first = (await rows.first().getAttribute("aria-label")) ?? "";
+  const second = (await rows.nth(1).getAttribute("aria-label")) ?? "";
+
+  await rows.first().click();
+  await page.getByLabel("Erklärung").fill("Nicht verlieren.");
+
+  // Another ROW: the question is asked, and „Weiter bearbeiten" leaves the
+  // draft exactly where it was.
+  await page.getByRole("button", { name: second }).click();
+  let dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Änderungen verwerfen?");
+  await dialog.getByRole("button", { name: "Weiter bearbeiten" }).click();
+  await expect(page.getByLabel("Erklärung")).toHaveValue("Nicht verlieren.");
+
+  // „Neuer Begriff" is the same exit and asks the same question.
+  await page.getByRole("button", { name: "Neuer Begriff" }).click();
+  dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Änderungen verwerfen?");
+  await dialog.getByRole("button", { name: "Weiter bearbeiten" }).click();
+  await expect(page.getByLabel("Erklärung")).toHaveValue("Nicht verlieren.");
+
+  // Only „Verwerfen" moves on — and then the OTHER row is the open one.
+  await page.getByRole("button", { name: second }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: first })).toBeVisible();
+  await expect(page.getByRole("button", { name: second })).toHaveCount(0);
+});
+
+test("deleting in the ALPHABETICAL glossary hands the focus to the row that takes the gap", async ({
+  page,
+}) => {
+  await openGlossary(page);
+  // The display order is alphabetical, the stored order is not — so the
+  // neighbour has to be read off the list as it looks AFTER the deletion.
+  const labels = await page.getByRole("button", { name: /löschen$/ }).evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute("aria-label") ?? ""),
+  );
+  expect(labels.length).toBeGreaterThan(2);
+  const doomed = labels[1]!;
+  const successor = labels[2]!;
+
+  await page.getByRole("button", { name: doomed }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Löschen" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("button", { name: doomed })).toHaveCount(0);
+  // The row that moved into the gap holds the keyboard — not a row two
+  // positions away, and not the document.
+  await expect(page.getByRole("button", { name: successor })).toBeFocused();
+});
+
+test("the growing textarea follows the WIDTH, not only the text", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await openGlossary(page);
+  await page.getByRole("button", { name: "Neuer Begriff" }).click();
+  await page.getByLabel("Begriff", { exact: true }).fill("Wattlauf");
+  const explanation = page.getByLabel("Erklärung");
+  await explanation.fill(
+    "Das Watt vor Salzhafen fällt bei Ebbe über eine Meile weit trocken, und " +
+      "die Priele füllen sich schneller zurück, als ein Fußgänger laufen kann.",
+  );
+  const wide = await explanation.boundingBox();
+
+  // Narrower viewport: the same text needs more lines. The field has to grow
+  // with them instead of clipping its own bottom (PO finding on PR #87).
+  await page.setViewportSize({ width: 560, height: 900 });
+  await expect
+    .poll(async () => (await explanation.boundingBox())?.height ?? 0)
+    .toBeGreaterThan(wide?.height ?? 0);
+  const fits = await explanation.evaluate(
+    (node: HTMLTextAreaElement) => node.scrollHeight - node.clientHeight <= 2,
+  );
+  expect(fits).toBe(true);
+
+  // And back: it shrinks again rather than keeping the tall size for ever.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect
+    .poll(async () => (await explanation.boundingBox())?.height ?? 0)
+    .toBeLessThanOrEqual(wide?.height ?? 0);
 });

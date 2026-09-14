@@ -56,19 +56,38 @@ export function PoolRoute() {
         {data && (
           <>
             <div className="mb-5">
-              <div className="flex flex-wrap items-baseline gap-3">
-                <h1 className="font-serif text-[28px] leading-[1.25] font-semibold text-foreground">
-                  {meta.label}
-                </h1>
-                <span className="text-[13px] text-muted-foreground">
-                  {t("pool.chapterCount", { count: chapterCount })} ·{" "}
-                  {t("pool.sceneCount", { count: sceneCount })}
-                </span>
-                {/* Name/description are editable right where they are read
-                    (issue #34) — quiet, like the read view's actions. */}
-                {/* Quiet header actions: edit what is on screen, and add the
-                    thing the pool IS a list of (issue #56). */}
-                <span className="ml-auto flex items-center gap-1">
+              {/* ONE row: title and counter left, the actions hard right on
+                  the same line — the shape of the design reference's pool
+                  header (design/Grimoire.dc.html: a baseline row that does
+                  not wrap).
+                  Issue #56 added „Kapitel anlegen" next to „Bearbeiten"
+                  inside a `flex-wrap` row, and the pair promptly dropped onto
+                  a line of ITS OWN, right-aligned under the title, on any
+                  campaign with a normal-length name (PO finding on PR #87).
+                  So the actions are no longer a wrap candidate: the row holds
+                  the title block and the actions and does not wrap between
+                  them. What gives when 760px is not enough for all of it is
+                  the COUNTER, which drops under the title — it is the one
+                  part of this header that is pure decoration, and dropping it
+                  a line costs nothing, where truncating the campaign's name
+                  or moving its actions costs the thing the header is FOR.
+                  Below md the pool is not on screen at all (the mobile start
+                  surface is), but the column stays the fallback so a narrow
+                  viewport stacks LEFT-aligned instead of overflowing. */}
+              <div className="flex flex-col items-start gap-1.5 md:flex-row md:flex-nowrap md:items-baseline md:gap-3">
+                <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <h1 className="font-serif text-[28px] leading-[1.25] font-semibold text-foreground">
+                    {meta.label}
+                  </h1>
+                  <span className="text-[13px] text-muted-foreground">
+                    {t("pool.chapterCount", { count: chapterCount })} ·{" "}
+                    {t("pool.sceneCount", { count: sceneCount })}
+                  </span>
+                </div>
+                {/* Quiet header actions: add the thing the pool IS a list of
+                    (issue #56), and edit the name/description right where they
+                    are read (issue #34). */}
+                <span className="flex flex-none items-center gap-1 md:ml-auto">
                   <ChapterCreateAction campaign={campaign} />
                   <CampaignMetaAction campaign={campaign} />
                 </span>

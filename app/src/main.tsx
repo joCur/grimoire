@@ -21,8 +21,9 @@ const queryClient = new QueryClient({
 // A DATA router with ONE catch-all route, so `<App />`'s `<Routes>` keeps
 // owning the route table (review of #53). The switch away from
 // `<BrowserRouter>` buys exactly one thing: react-router's navigation
-// BLOCKER only exists on a data router, and the settings lists need it to ask
-// before throwing unsaved edits away (components/UnsavedChangesGuard.tsx).
+// BLOCKER only exists on a data router, and the campaign-content pages need
+// it to ask
+// before throwing an unsaved entry away (components/UnsavedChangesGuard.tsx).
 // No loaders, no actions — the queries stay with TanStack Query — so this is
 // the smallest form that provides the router context.
 const router = createBrowserRouter([{ path: "*", element: <App /> }]);

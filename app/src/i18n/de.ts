@@ -269,8 +269,11 @@ export const de = {
   "entryList.edit": "„{name}“ bearbeiten",
   "entryList.remove": "„{name}“ löschen",
   "entryList.removed": "Eintrag gelöscht",
-  // The action next to `write.stale`: the conflict's only sensible next step.
+  // The two actions next to `write.stale`. Reloading is always possible;
+  // re-aiming the draft only when the opened entry is still in the list that
+  // came back (components/EntryListPage.tsx).
   "entryList.reload": "Neu laden",
+  "entryList.applyDraft": "Entwurf behalten & auf aktuelle Liste anwenden",
   "entryList.confirmDelete.title": "Eintrag löschen?",
   "entryList.confirmDelete.body": "„{name}“ wird aus der Liste entfernt. Das lässt sich nicht rückgängig machen.",
   "entryList.confirmDelete.confirm": "Löschen",

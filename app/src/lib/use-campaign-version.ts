@@ -53,10 +53,11 @@ export function useCampaignVersion(campaign: string): void {
     // global live indicator without a reload.
     // "last-session" is the review's file (ended or not) — same reasoning.
     // "knowledge"/"glossary" (issue #53) are campaign reads like the rest:
-    // the settings page has to learn about a write from another tab, which is
-    // what turns a whole-list PUT's conflict into something the DM sees while
-    // typing instead of only when they press „Speichern"
-    // (components/SettingsListEditor.tsx).
+    // the two content pages have to learn about a write from another tab.
+    // NOTE what that means for an OPEN row there: the list under it changes.
+    // components/EntryListPage.tsx therefore addresses its save by the
+    // entry's CONTENT and sends the `rev` that applied when the row was
+    // opened — a fresh list must not turn into a silent overwrite.
     for (const key of [
       "tree",
       "file",

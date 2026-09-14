@@ -13,8 +13,10 @@
 // lot, and a client-side row key per entry so React could follow a row through
 // a reorder. With 30 glossary terms that page was a wall of tiny text fields
 // (PO feedback). The pages open exactly ONE entry at a time, so the identity
-// problem disappears with the keys: the open entry is named by its POSITION in
-// the stored list, which is the same thing the server calls it.
+// problem disappears with the keys: the page holds exactly one open entry.
+// WHICH entry that is is a snapshot of its CONTENT (`findEntryIndex`), not its
+// index — the version poller refetches the list under the open row, and an
+// index that another tab shifted addresses a neighbour (PO finding on PR #87).
 //
 // Why UP/DOWN buttons and not drag & drop for the knowledge order: the list is
 // short, the page has to work on a phone (quality floor) and a drag needs a
@@ -244,19 +246,48 @@ export function isEntryDirty<T>(draft: T, stored: T | undefined): boolean {
 // --- what the keyboard does after an entry disappears -------------------------
 
 /**
- * Where the focus goes when the entry at `index` is deleted from a list of
- * `count` entries (review of #53).
+ * Where the focus goes when a row is deleted (review of #53, follow-up).
  *
  * Deleting the row the focus sits in drops the focus to the document, which on
  * a list you clear from the bottom means reaching for the mouse after every
- * single click. The delete button of the NEIGHBOUR is the honest target — the
- * next row's, because that is where the deleted row's place is now, and the
- * previous row's for the last one. With nothing left there is no row to focus,
- * so the „Neuer Eintrag" action takes it: the only thing still worth doing.
+ * single click. The delete button of the NEIGHBOUR is the honest target.
+ *
+ * WHICH neighbour is a question about the list the DM is LOOKING at, not about
+ * the stored array: the glossary shows its entries alphabetically and filtered,
+ * so the row that takes the deleted one's place is the one at the same DISPLAY
+ * position afterwards. Hence `remaining` and `shown` are both measured on the
+ * POST-delete display list — computing the target from pre-delete indices is
+ * how the focus landed on an unrelated term two rows away.
+ *
+ * With nothing left there is no row to focus, so „Neuer Eintrag" takes it: the
+ * only thing still worth doing.
  */
 export type RemoveFocus = { target: "row"; index: number } | { target: "add" };
 
-export function focusAfterRemove(count: number, index: number): RemoveFocus {
-  if (count <= 1 || index < 0 || index >= count) return { target: "add" };
-  return { target: "row", index: index < count - 1 ? index : index - 1 };
+export function focusAfterRemove(remaining: number, shown: number): RemoveFocus {
+  if (remaining <= 0) return { target: "add" };
+  const index = Math.min(Math.max(shown, 0), remaining - 1);
+  return { target: "row", index };
+}
+
+// --- which stored entry an OPEN row is, after the list moved ------------------
+
+/**
+ * Find the entry the DM opened in the list as it stands NOW (PO finding on
+ * PR #87): `-1` when it is no longer there, or no longer what it was.
+ *
+ * The open row used to be named by its stored INDEX, which is only true while
+ * nothing else moves. It does move: the version poller (lib/use-campaign-
+ * version.ts) refetches both lists every few seconds, so another tab deleting
+ * the first term shifts every index below it — and the save then wrote the
+ * DM's text over a neighbour. Content is the identity that survives that: the
+ * snapshot taken when the row was opened is looked up again when it is saved,
+ * and „not found" is a conflict to be told about, never a write.
+ *
+ * Duplicates resolve to the first match. Two entries that are byte-identical
+ * are interchangeable by definition — replacing either produces the same list.
+ */
+export function findEntryIndex<T>(entries: readonly T[], original: T): number {
+  const wanted = JSON.stringify(original);
+  return entries.findIndex((entry) => JSON.stringify(entry) === wanted);
 }

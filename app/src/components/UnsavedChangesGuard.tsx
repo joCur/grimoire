@@ -1,7 +1,8 @@
 // „Änderungen verwerfen?" for views whose save is EXPLICIT (review of #53).
 //
-// The settings lists are edited inline and saved with a button, which means
-// there is a window in which the DM's work lives only in the page. Leaving it
+// The campaign-content pages (components/EntryListPage.tsx) edit an entry
+// inline and save it with a button, which means there is a window in which the
+// DM's work lives only in the page. Leaving it
 // — „‹ Pool", the campaign switcher, the browser's back button, a reload —
 // used to throw that work away without a word. That is the same silent loss
 // ADR #4 forbids on the write path, just on the way out instead of on the way
@@ -21,7 +22,7 @@
 //     to click through it.
 //
 // WHY A PROVIDER and not a hook per editor: `useBlocker` is one blocker per
-// router, and the settings page carries TWO editors. So the editors only
+// router, and a page may carry more than one editor. So the editors only
 // report whether they are dirty (`useUnsavedChanges`) and the page owns the
 // one blocker and the one dialog — which is also the honest UX, since „you
 // have unsaved changes" is a statement about the PAGE, not about one list.

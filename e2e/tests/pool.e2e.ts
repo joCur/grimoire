@@ -603,3 +603,55 @@ test("the campaign reading view carries the same edit action", async ({
 // branch is unit-tested in app/src/lib/campaign-meta.test.ts. Reproducing it
 // here would need the same "beat the 5s version poll" loop — and a retry that
 // closes the dialog on success, which makes the loop unrepeatable.
+
+test("the pool header is ONE row: the actions right beside the title, never under it", async ({
+  page,
+}) => {
+  // Issue #56 put „Kapitel anlegen" next to „Bearbeiten" inside a wrapping
+  // row, and on a campaign with a normal-length name the pair dropped onto a
+  // second line, right-aligned under the title (PO finding on PR #87). The
+  // actions share the title's line again — checked at the widths a desktop
+  // pool is actually read at, and by geometry rather than by class names.
+  for (const width of [1024, 1280, 1536]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/beispiel");
+    const title = page.getByRole("heading", { level: 1 });
+    await expect(title).toHaveText("Der Leuchtturm von Salzhafen");
+    const counter = page.getByText(/\d+ Kapitel · \d+ Szenen/);
+    const create = page.getByRole("button", { name: "Kapitel anlegen" });
+    const edit = page.getByRole("button", { name: "Bearbeiten" });
+    const description = page.getByText("Eine Küstenkampagne um einen erloschenen", {
+      exact: false,
+    });
+
+    const [titleBox, counterBox, createBox, editBox, descriptionBox] = await Promise.all(
+      [title, counter, create, edit, description].map(
+        async (locator) => (await locator.boundingBox())!,
+      ),
+    );
+
+    // SAME LINE as the title: the boxes overlap vertically. („Same y" cannot
+    // be literal — the heading is 28px and the quiet actions are 26px on its
+    // baseline; a wrapped row puts them a whole row apart instead.)
+    for (const box of [createBox!, editBox!]) {
+      expect(box.y).toBeLessThan(titleBox!.y + titleBox!.height);
+      expect(box.y + box.height).toBeGreaterThan(titleBox!.y);
+      // …and hard right, past everything on the left.
+      expect(box.x).toBeGreaterThan(titleBox!.x + titleBox!.width);
+    }
+    expect(editBox!.x).toBeGreaterThan(createBox!.x);
+
+    // The counter is LEFT, flush with the title (on its line when the name
+    // leaves room, directly under it when it does not — never right-aligned
+    // and never below the description).
+    expect(counterBox!.x).toBe(titleBox!.x);
+    expect(counterBox!.y).toBeLessThan(descriptionBox!.y);
+
+    // Description, then the „Nachschlagen" line (issue #53) — in that order.
+    const lookupBox = (await page
+      .getByRole("navigation", { name: "Nachschlagen" })
+      .boundingBox())!;
+    expect(descriptionBox!.y).toBeGreaterThanOrEqual(titleBox!.y + titleBox!.height);
+    expect(lookupBox.y).toBeGreaterThan(descriptionBox!.y);
+  }
+});
