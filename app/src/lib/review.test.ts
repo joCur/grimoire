@@ -12,7 +12,11 @@ import {
   extractHashtags,
   firstReviewTag,
   harvestInboxEntries,
+  groupByPcTag,
+  hasPcTag,
   inboxNoteEntries,
+  inboxPcEntries,
+  pcGroupTag,
   isNpcSlug,
   isReviewTag,
   npcNameFromText,
@@ -138,6 +142,77 @@ describe("harvestInboxEntries", () => {
       "Offen",
       "Erledigt",
     ]);
+  });
+});
+
+describe("player-character notes (issue #86)", () => {
+  const body = [
+    "- 2026-01-10 Geburtstags-Item für Kaela #pc #kaela",
+    "- 2026-01-10 Rückblende vorbereiten #PC #Brann",
+    "- 2026-01-10 Allen eine Karte geben #pc",
+    "- 2026-01-10 Kein PC-Eintrag #pcs",
+    "- 2026-01-10 Auch keiner #npc",
+    "- [x] 2026-01-09 Schon erledigt #pc #kaela",
+  ].join("\n");
+
+  test("hasPcTag matches the exact tag only", () => {
+    expect(hasPcTag(extractHashtags("Item #pc #kaela"))).toBe(true);
+    // `#pc` inside a longer tag is a DIFFERENT tag — no match.
+    expect(hasPcTag(extractHashtags("Notiz #pcs"))).toBe(false);
+    expect(hasPcTag(extractHashtags("Notiz #npc"))).toBe(false);
+    expect(hasPcTag(extractHashtags("Notiz ohne Tag"))).toBe(false);
+  });
+
+  test("hasPcTag ignores the writing case (#PC)", () => {
+    expect(hasPcTag(extractHashtags("Item #PC"))).toBe(true);
+  });
+
+  test("pcGroupTag is the first tag that is not #pc, lowercased", () => {
+    expect(pcGroupTag(extractHashtags("Item #pc #Kaela"))).toBe("kaela");
+    expect(pcGroupTag(extractHashtags("Item #kaela #pc"))).toBe("kaela");
+  });
+
+  test("pcGroupTag is undefined without a second tag", () => {
+    expect(pcGroupTag(extractHashtags("Karte für alle #pc"))).toBeUndefined();
+  });
+
+  test("inboxPcEntries returns the open #pc lines only", () => {
+    expect(inboxPcEntries(body).map((e) => e.text)).toEqual([
+      "Geburtstags-Item für Kaela",
+      "Rückblende vorbereiten",
+      "Allen eine Karte geben",
+    ]);
+  });
+
+  test("a #pc line is in neither the harvest nor the notes section", () => {
+    const raws = [...harvestInboxEntries(body), ...inboxNoteEntries(body)].map((e) => e.raw);
+    expect(raws.filter((raw) => raw.includes("#pc "))).toEqual([]);
+    expect(harvestInboxEntries(body).map((e) => e.text)).toEqual([
+      "Kein PC-Eintrag",
+      "Auch keiner",
+    ]);
+  });
+
+  test("keeps a #pc line ticked off in this sitting", () => {
+    expect(inboxPcEntries(body, new Set([5])).map((e) => e.text)).toContain("Schon erledigt");
+  });
+
+  test("groupByPcTag groups in first-appearance order, Allgemein last", () => {
+    const grouped = groupByPcTag(inboxPcEntries(body), (line) => pcGroupTag(line.tags));
+    expect(grouped.map((g) => g.tag)).toEqual(["kaela", "brann", undefined]);
+    expect(grouped[0]?.entries.map((e) => e.text)).toEqual(["Geburtstags-Item für Kaela"]);
+  });
+
+  test("groupByPcTag yields no Allgemein group when every entry has a tag", () => {
+    const grouped = groupByPcTag(
+      [{ tag: "kaela" }, { tag: "kaela" }],
+      (entry) => entry.tag,
+    );
+    expect(grouped).toEqual([{ tag: "kaela", entries: [{ tag: "kaela" }, { tag: "kaela" }] }]);
+  });
+
+  test("an empty list yields no groups", () => {
+    expect(groupByPcTag([], () => undefined)).toEqual([]);
   });
 });
 
