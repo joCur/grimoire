@@ -37,6 +37,7 @@ import { useActedKeys, useReviewMemory } from "@/lib/review-memory";
 import { cn } from "@/lib/utils";
 import type { ReviewEntry } from "@/lib/use-review";
 import { pcGroups, useReviewEntries } from "@/lib/use-review";
+import { activeSessionKey, lastStartedSessionKey } from "@/lib/use-session";
 
 type ActionKind = ReviewActionKind;
 
@@ -83,9 +84,8 @@ export function ReviewRoute() {
   const acted = useActedKeys(campaign);
   const adoptedHere = adopted[campaign] ?? [];
   const [npcEntry, setNpcEntry] = useState<ReviewEntry>();
-  // „Behalten" is a decision, not a write: the entry stays open (and counted)
-  // for the next wrap-up. Cosmetic, per sitting — like the rest of the review
-  // memory, nothing of it is persisted.
+  // „Behalten" writes nothing: the entry stays open (and counted) for the next
+  // wrap-up, the marker is cosmetic and lives for this sitting only.
   // Campaign-scoped like the rest of the review memory: the entry key is only
   // the line index in its file, so an unscoped set would carry a „Behalten"
   // over to the same index in the NEXT campaign (the route param changes
@@ -142,6 +142,14 @@ export function ReviewRoute() {
       for (const file of files) {
         queryClient.setQueryData(["file", campaign, file.path], file);
         void queryClient.invalidateQueries({ queryKey: ["file", campaign, file.path] });
+        // A log line's done-state lives in the session file's frontmatter, and
+        // the live aside and the topbar read that file through the SESSION
+        // queries — they have to see the fresh one too (same rule as
+        // components/PcReminders).
+        if (file.path === model.sessionPath) {
+          void queryClient.invalidateQueries({ queryKey: activeSessionKey(campaign) });
+          void queryClient.invalidateQueries({ queryKey: lastStartedSessionKey(campaign) });
+        }
       }
       // A new thread section or npc file can change the tree, too.
       if (vars.action !== "dismiss") {
