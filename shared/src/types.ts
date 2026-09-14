@@ -397,17 +397,86 @@ export interface GenerateNpcResult {
   usage?: GenerateUsage;
 }
 
+// --- augmenting an EXISTING entry (issue #36) -------------------------------
+
+/**
+ * The entity kinds „Mit KI ergänzen" works on. Deliberately its own list and
+ * not `EntityKind`: a chapter, a session or the campaign file has no augment
+ * prompt, and a kind without one must not even reach the pipeline.
+ */
+export const AUGMENT_KINDS = ["npc", "location", "scene"] as const;
+
+export type AugmentKind = (typeof AUGMENT_KINDS)[number];
+
+export function isAugmentKind(value: unknown): value is AugmentKind {
+  return typeof value === "string" && (AUGMENT_KINDS as readonly string[]).includes(value);
+}
+
+/**
+ * One properties field of an augment proposal, as the review renders it:
+ * „Vorhanden | Vorschlag" side by side.
+ *
+ * `state` is what the DEFAULT decision hangs off (issue #36 AK2 — never
+ * silently overwrite): `new` means the entry has no value for the key (absent,
+ * null, empty string, empty list) and the proposal is preselected; `changed`
+ * means the entry HAS a value and the model wants a different one — the
+ * default there is „Behalten".
+ *
+ * Fields the proposal leaves alone are not listed at all; `current` is absent
+ * exactly when the key does not exist on the entry.
+ */
+export interface AugmentPropertyProposal {
+  key: string;
+  current?: unknown;
+  proposed: unknown;
+  state: "new" | "changed";
+}
+
+/**
+ * The result of an augment run (issue #36): a PROPOSAL for one existing
+ * entry. Nothing is written — POST …/generate/augment/apply is the only
+ * write, and it carries the DM's per-field/per-block decisions.
+ *
+ * The body travels as two whole markdown strings rather than as a block list:
+ * the block model lives in the app (app/src/lib/blocks.ts) and is the same
+ * one the Block-Composer edits, so splitting the proposal into blocks in the
+ * app is the only way the review's decision units are guaranteed to be the
+ * units the DM already knows. The server stays the authority for what is
+ * WRITTEN (rev guard, one transaction), not for how the diff is cut.
+ */
+export interface AugmentResult {
+  /** Address of the augmented entry, e.g. `npcs/fenn`. */
+  path: string;
+  kind: AugmentKind;
+  /** The `rev` the run READ. Informational — the write sends the UI's rev. */
+  rev: number;
+  /** Only the keys the proposal adds or changes (see AugmentPropertyProposal). */
+  properties: AugmentPropertyProposal[];
+  /** The entry's body as the run read it — the „Vorher" side of the diff. */
+  currentBody: string;
+  /** The model's proposed body, complete (not a patch). */
+  proposedBody: string;
+  /** The LLM's own review notes for the DM. */
+  warnings: string[];
+  /** The naming check's findings — see GenerateResult.namingHints. */
+  namingHints?: NamingHint[];
+  /** Token spend of the run; absent when the endpoint reports no usage. */
+  usage?: GenerateUsage;
+}
+
 // --- background generate jobs (issue #19) ----------------------------------
 
 export const GENERATE_JOB_STATUSES = ["running", "done", "failed"] as const;
 export type GenerateJobStatus = (typeof GENERATE_JOB_STATUSES)[number];
 
 /**
- * What a generator job produces (issue #21): scene drafts for a chapter, or
- * one NPC file draft. There is still exactly ONE job per campaign — the kind
- * only tells the client which result field to read and which mode to restore.
+ * What a generator job produces: scene drafts for a chapter (issue #6), one
+ * NPC file draft (issue #21), or a PROPOSAL for an entry that already exists
+ * (issue #36 — `augment`). There is still exactly ONE job per campaign; the
+ * kind only tells the client which result field to read and which mode to
+ * restore.
  */
-export const GENERATE_JOB_KINDS = ["scene", "npc"] as const;
+export const GENERATE_JOB_KINDS = ["scene", "npc", "augment"] as const;
 export type GenerateJobKind = (typeof GENERATE_JOB_KINDS)[number];
 
 /**
@@ -455,6 +524,14 @@ export interface GenerateJob {
   result?: GenerateResult;
   /** Present iff status is "done" and kind is "npc" (issue #21). */
   npcResult?: GenerateNpcResult;
+  /** Present iff status is "done" and kind is "augment" (issue #36). */
+  augmentResult?: AugmentResult;
+  /**
+   * Address of the entry an `augment` run targets (issue #36). Present for
+   * that kind from the moment the job STARTS, so the app can show which entry
+   * is being worked on while the run is still going.
+   */
+  target?: string;
   /** Present iff status is "failed". */
   error?: GenerateJobError;
   /**
