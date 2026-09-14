@@ -45,6 +45,26 @@ unter einer bindenden Überschrift:
 soll Namen enthalten, keine Slugs). Ohne Einträge fehlt der Abschnitt ganz —
 der Prompt sieht dann genauso aus wie vorher.
 
+## Deutsche Orthografie (Issue #93)
+
+Alle vier System-Prompts (`system-prompt.md`, `npc-system-prompt.md`,
+`location-system-prompt.md`, `augment-system-prompt.md`) tragen **dieselbe**
+Regel „Deutsche Orthografie": jeder echte Text — Fließtext, Read-Alouds,
+Callouts, `## If:`-Bedingungen, Überschriften, `warnings` und jeder
+Frontmatter-Wert, der Text ist (`title`, `name`, `role`, `voice`,
+`appearance`, `trigger`, `goal`, `statblock` …) — nutzt ä/ö/ü/ß, niemals die
+ASCII-Ersatzschreibung ae/oe/ue/ss. **Einzige Ausnahme**: `id`-Werte und
+Pfade, die bleiben kebab-case ASCII; Eigennamen aus dem Quelltext bleiben
+unverändert.
+
+Die Regel steht in den drei Create-Prompts unter „## Regeln" und im
+Ergänzen-Prompt in der Ergänzungsregel — also genau **einmal** in jedem
+zusammengesetzten Prompt, auch im Ergänzen-Modus, der von den Create-Prompts
+nur „## Ziel-Format der Datei" einschneidet (`formatContract` in
+`server/src/generator-augment.ts`). Der Server korrigiert nichts nach: es
+gibt keine Heuristik und kein stilles Ersetzen, die Regel wirkt allein im
+Prompt.
+
 ## NPC-Generator
 
 Gleiche Pipeline, eigener Endpoint (`POST /api/:campaign/generate/npc`)

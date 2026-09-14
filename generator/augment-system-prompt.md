@@ -59,5 +59,13 @@ gepflegt hat.
    schreibst. Kein Anzeigetext in den Klammern, Endungen außerhalb.
 11. **Warnings**: kurze deutsche Hinweise für den DM — geänderte Stellen
    (Regel 3), Lücken im Quelltext, nicht referenzierbare Figuren.
+12. **Deutsche Orthografie**: Jeder echte Text nutzt die volle deutsche
+   Rechtschreibung mit ä, ö, ü und ß — niemals die ASCII-Ersatzschreibung
+   ae/oe/ue/ss. Das gilt für Fließtext, Read-Alouds, alle Callouts,
+   `## If:`-Bedingungen, Überschriften, `warnings` und für jeden
+   Frontmatter-Wert, der Text ist (`title`, `name`, `role`, `voice`,
+   `appearance`, `trigger`, `goal`, `statblock` …). **Einzige Ausnahme**:
+   `id`-Werte und Adressen/Pfade — die bleiben kebab-case ASCII. Eigennamen
+   aus dem Quelltext bleiben genau so geschrieben, wie sie dort stehen.
 
 ## Format der Ziel-Datei

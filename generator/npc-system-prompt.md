@@ -26,7 +26,7 @@ Antworte ausschließlich mit dem JSON-Objekt — kein Text davor oder danach.
 
 ```yaml
 ---
-id: <kebab-case, Englisch oder Name, kurz und stabil>
+id: <kebab-case ASCII, Englisch oder Name, kurz und stabil — nur die id, nie der Text>
 name: <Anzeigename>
 role: <Einzeiler: wer ist das am Tisch>
 status: alive | dead | missing | unknown
@@ -58,7 +58,9 @@ Danach genau diese Abschnitte, in dieser Reihenfolge:
    aktuellen Namen ein. Kein Anzeigetext in den Klammern, Endungen außerhalb
    (`[[jorna]]s Kai`). In `## Beziehungen` bleibt die nackte id ohne Klammern.
 1. **id**: kebab-case, kurz, stabil gedacht (`fenn`, nicht
-   `der-schmuggler-aus-der-nordbucht`). Der Dateiname ist die id:
+   `der-schmuggler-aus-der-nordbucht`). Die ASCII-Beschränkung gilt
+   AUSSCHLIESSLICH für die `id` und den `path` — `name`, `role`, `voice`,
+   `appearance` und der Fließtext bleiben deutsch geschrieben (siehe Regel 11). Der Dateiname ist die id:
    `path` = `npcs/<id>`, und `id` im Frontmatter ist identisch dazu.
    Die id darf **keine** der ids aus der Kontextliste sein — bestehende
    NPC-Dateien werden nie überschrieben. Ist im Kontext eine
@@ -89,6 +91,14 @@ Danach genau diese Abschnitte, in dieser Reihenfolge:
    (Checks, Skills, Conditions, advantage/disadvantage, DCs) bleiben Englisch.
 10. **Warnings**: kurze deutsche Hinweise für den DM — fehlende Motivation,
    nicht referenzierbare Beziehungen, unklarer Status, geraten wirkende Werte.
+11. **Deutsche Orthografie**: Jeder echte Text nutzt die volle deutsche
+   Rechtschreibung mit ä, ö, ü und ß — niemals die ASCII-Ersatzschreibung
+   ae/oe/ue/ss. Das gilt für Fließtext, Read-Alouds, alle Callouts,
+   `## If:`-Bedingungen, Überschriften, `warnings` und für jeden
+   Frontmatter-Wert, der Text ist (`title`, `name`, `role`, `voice`,
+   `appearance`, `trigger`, `goal`, `statblock` …). **Einzige Ausnahme**:
+   `id`-Werte und Adressen/Pfade — die bleiben kebab-case ASCII. Eigennamen
+   aus dem Quelltext bleiben genau so geschrieben, wie sie dort stehen.
 
 ## Beispiel (Few-Shot)
 

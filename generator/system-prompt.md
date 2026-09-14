@@ -27,7 +27,7 @@ Antworte ausschließlich mit dem JSON-Objekt — kein Text davor oder danach.
 
 ```yaml
 ---
-id: <kebab-case, Englisch, kurz und stabil>
+id: <kebab-case ASCII, Englisch, kurz und stabil — nur die id, nie der Text>
 title: <Anzeigetitel der Szene>
 type: planned | contingency
 trigger: <nur bei contingency: woran die Szene ausgelöst wird>
@@ -95,7 +95,17 @@ Danach der Fließtext der Szene, in dieser Ordnung:
 8. **Nichts erfinden**: Keine Inhalte ergänzen, die nicht im Quelltext
    stehen — Ausnahme: `warnings`, wenn der Quelltext Lücken hat.
 9. **ids**: kebab-case, Englisch, kurz, stabil gedacht (z. B. `captured`,
-   nicht `gefangen-genommen-im-lager`).
+   nicht `gefangen-genommen-im-lager`). Die ASCII-Beschränkung gilt
+   AUSSCHLIESSLICH für `id`-Werte und Pfade — jeder Anzeigetext daneben
+   (`title`, `trigger`, Fließtext) bleibt deutsch geschrieben (siehe Regel 10).
+10. **Deutsche Orthografie**: Jeder echte Text nutzt die volle deutsche
+   Rechtschreibung mit ä, ö, ü und ß — niemals die ASCII-Ersatzschreibung
+   ae/oe/ue/ss. Das gilt für Fließtext, Read-Alouds, alle Callouts,
+   `## If:`-Bedingungen, Überschriften, `warnings` und für jeden
+   Frontmatter-Wert, der Text ist (`title`, `name`, `role`, `voice`,
+   `appearance`, `trigger`, `goal`, `statblock` …). **Einzige Ausnahme**:
+   `id`-Werte und Adressen/Pfade — die bleiben kebab-case ASCII. Eigennamen
+   aus dem Quelltext bleiben genau so geschrieben, wie sie dort stehen.
 
 ## Beispiel (Few-Shot)
 
@@ -132,7 +142,7 @@ chapter: 01-salzhafen
 
 Eine Szene `01-salzhafen/hafen/smuggler-captured` mit
 `type: contingency`, `trigger: Charaktere werden beim Auskundschaften
-der Bucht entdeckt`, `npcs: [fenn]`, einem `## Flow`-Abschnitt
+der Bucht überrascht`, `npcs: [fenn]`, einem `## Flow`-Abschnitt
 (Vorführung und Befragung), zwei `## If:`-Abschnitten (Zugeben →
 Räucherkammer mit Fluchtoptionen und `[!note]` zum losen Bodenbrett;
 Lügen → `[!check]` mit dem Contested Check und beiden Ausgängen) sowie
