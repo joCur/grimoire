@@ -477,14 +477,17 @@ export async function deleteJob(campaign: string): Promise<boolean> {
  * reviews of different parts cannot overwrite each other inside one rev.
  *
  * `dropped` is the one exception: a set, sent whole, because "no longer
- * dropped" has to be expressible too.
+ * dropped" has to be expressible too. In `entries`, `fields` and `blocks` a
+ * `null` value DELETES the key — „wieder offen", and the only way to clear
+ * decisions whose keys no longer exist (an augment re-alignment cuts new
+ * block ids; issue #97 review, finding 5).
  */
 export interface ReviewPatch {
   edits?: Record<string, string>;
   entries?: Record<string, GenerateReviewDecision | null>;
   dropped?: string[];
-  fields?: Record<string, boolean>;
-  blocks?: Record<string, boolean>;
+  fields?: Record<string, boolean | null>;
+  blocks?: Record<string, boolean | null>;
 }
 
 /**
@@ -558,8 +561,16 @@ function applyReviewPatch(job: Job, patch: ReviewPatch): void {
     else job.review.entries[key] = decision;
   }
   if (patch.dropped !== undefined) job.review.dropped = [...new Set(patch.dropped)];
-  Object.assign(job.review.fields, patch.fields ?? {});
-  Object.assign(job.review.blocks, patch.blocks ?? {});
+  assignFlags(job.review.fields, patch.fields);
+  assignFlags(job.review.blocks, patch.blocks);
+}
+
+/** Merge boolean decisions; `null` deletes the key (see ReviewPatch). */
+function assignFlags(into: Record<string, boolean>, patch?: Record<string, boolean | null>): void {
+  for (const [key, value] of Object.entries(patch ?? {})) {
+    if (value === null) delete into[key];
+    else into[key] = value;
+  }
 }
 
 /**

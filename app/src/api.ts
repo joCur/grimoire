@@ -748,8 +748,8 @@ export async function patchJobReview(
     edits?: Record<string, string>;
     entries?: Record<string, "accepted" | "rejected" | null>;
     dropped?: string[];
-    fields?: Record<string, boolean>;
-    blocks?: Record<string, boolean>;
+    fields?: Record<string, boolean | null>;
+    blocks?: Record<string, boolean | null>;
   },
 ): Promise<GenerateJob> {
   const path = `/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}/review`;

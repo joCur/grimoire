@@ -411,6 +411,16 @@ function AugmentReview({
       // keeping the decisions that were cut against the stale body would
       // overwrite that writer on the next attempt, silently.
       if (reread === undefined) return;
+      // The stored decisions are keyed by BLOCK ID, and the ids come out of
+      // the alignment — re-cutting against the new body renames them. A
+      // decision left behind under an old id would either apply to whatever
+      // block inherits that id or sit on the job forever, so they are
+      // cleared FIRST (issue #97 review, finding 5) and the defaults are
+      // re-derived after.
+      const stale = Object.keys(stored.blocks);
+      if (stale.length > 0) {
+        review.decide({ blocks: Object.fromEntries(stale.map((id) => [id, null])) });
+      }
       setBase(reread.rev);
       setCurrentBody(reread.body);
       setBlockDefaults(defaultAccepted(alignBlocks(reread.body, proposal.proposedBody)));

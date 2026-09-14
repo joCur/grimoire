@@ -480,6 +480,21 @@ describe("review state mapping", () => {
     expect(next.draftEdits["01-x/a"]).toBe("typed");
   });
 
+  test("`null` clears a field or block decision, mirroring the server", () => {
+    // What an augment 409 needs: the re-alignment renames the block ids, so
+    // the decisions cut against the old ones have to be deletable (issue
+    // #97 review, finding 5).
+    let next = mergeReviewPatch(job(), { fields: { role: true }, blocks: { aug1: false } });
+    expect(next.review?.blocks).toEqual({ aug1: false });
+
+    next = mergeReviewPatch(next, { blocks: { aug1: null } });
+    expect(next.review?.blocks).toEqual({});
+    expect(next.review?.fields).toEqual({ role: true });
+
+    next = mergeReviewPatch(next, { fields: { role: null } });
+    expect(next.review?.fields).toEqual({});
+  });
+
   test("`dropped` is a set sent whole, not a merge", () => {
     const next = mergeReviewPatch(
       mergeReviewPatch(job(), { dropped: ["01-x/a"] }),

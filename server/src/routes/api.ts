@@ -669,6 +669,8 @@ function reviewRecord<T>(
 
 const isMarkdown = (v: unknown): v is string => typeof v === "string";
 const isBoolean = (v: unknown): v is boolean => typeof v === "boolean";
+/** A field/block decision, or `null` for „nicht mehr entschieden". */
+const isDecidedFlag = (v: unknown): v is boolean | null => v === null || typeof v === "boolean";
 /** `null` is „wieder offen" — the review's third state (issue #97). */
 const isDecision = (v: unknown): v is "accepted" | "rejected" | null =>
   v === null || v === "accepted" || v === "rejected";
@@ -835,8 +837,8 @@ api.patch("/:campaign/generate/job/:id/review", async (c) => {
     }
     patch.dropped = body.dropped as string[];
   }
-  if (body.fields !== undefined) patch.fields = reviewRecord(body.fields, "fields", isBoolean);
-  if (body.blocks !== undefined) patch.blocks = reviewRecord(body.blocks, "blocks", isBoolean);
+  if (body.fields !== undefined) patch.fields = reviewRecord(body.fields, "fields", isDecidedFlag);
+  if (body.blocks !== undefined) patch.blocks = reviewRecord(body.blocks, "blocks", isDecidedFlag);
   const job = await patchJobReview(c.req.param("campaign"), c.req.param("id"), rev, patch);
   return c.json(serializeJob(job));
 });

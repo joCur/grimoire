@@ -189,6 +189,31 @@ test("augment decisions per property and per block are stored as booleans", asyn
   expect(job.review?.blocks).toEqual({ aug2: false });
 });
 
+test("null CLEARS a field or block decision — the keys an augment conflict renames", async () => {
+  // A 409 re-aligns the proposal against the body that won, and the block
+  // ids move with it (issue #97 review, finding 5). The decisions cut
+  // against the old ids have to be removable, not just overwritable.
+  let job = await runJob();
+  job = await patch(job, { fields: { role: true }, blocks: { aug1: true, aug2: false } });
+  job = await patch(job, { blocks: { aug1: null, aug2: null } });
+  expect(job.review?.blocks).toEqual({});
+  expect(job.review?.fields).toEqual({ role: true });
+
+  job = await patch(job, { fields: { role: null } });
+  expect(job.review?.fields).toEqual({});
+  // It survives the round trip through the row, like every other decision.
+  expect((await fetchJob())?.review?.blocks).toEqual({});
+});
+
+test("a field or block value that is neither a boolean nor null is a 400", async () => {
+  const job = await runJob();
+  const res = await send("PATCH", `/api/beispiel/generate/job/${job.id}/review`, {
+    rev: job.rev ?? 0,
+    blocks: { aug1: "ja" },
+  });
+  expect(res.status).toBe(400);
+});
+
 test("a stale rev is a 409 rev_conflict carrying the current rev; nothing is written", async () => {
   const job = await runJob();
   await patch(job, { edits: { [SCENE_A]: "first" } });

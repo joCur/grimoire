@@ -352,8 +352,8 @@ export interface ReviewPatch {
   edits?: Record<string, string>;
   entries?: Record<string, GenerateReviewDecision | null>;
   dropped?: string[];
-  fields?: Record<string, boolean>;
-  blocks?: Record<string, boolean>;
+  fields?: Record<string, boolean | null>;
+  blocks?: Record<string, boolean | null>;
 }
 
 /**
@@ -361,8 +361,22 @@ export interface ReviewPatch {
  * shows while the request is in flight. It must merge exactly the way the
  * server does (generate-jobs.ts `applyReviewPatch`), including the one
  * asymmetry: `dropped` is a set sent whole, everything else merges per key,
- * and a `null` decision means „wieder offen".
+ * and a `null` value — in `entries`, `fields` and `blocks` alike — means
+ * „wieder offen" and deletes the key.
  */
+/** Merge boolean decisions; `null` deletes the key (the server does this). */
+function mergeFlags(
+  into: Record<string, boolean>,
+  patch?: Record<string, boolean | null>,
+): Record<string, boolean> {
+  const out = { ...into };
+  for (const [key, value] of Object.entries(patch ?? {})) {
+    if (value === null) delete out[key];
+    else out[key] = value;
+  }
+  return out;
+}
+
 export function mergeReviewPatch(job: GenerateJob, patch: ReviewPatch): GenerateJob {
   const review = reviewOf(job);
   const entries = { ...review.entries };
@@ -376,8 +390,8 @@ export function mergeReviewPatch(job: GenerateJob, patch: ReviewPatch): Generate
     review: {
       entries,
       dropped: patch.dropped === undefined ? review.dropped : [...new Set(patch.dropped)],
-      fields: { ...review.fields, ...(patch.fields ?? {}) },
-      blocks: { ...review.blocks, ...(patch.blocks ?? {}) },
+      fields: mergeFlags(review.fields, patch.fields),
+      blocks: mergeFlags(review.blocks, patch.blocks),
       written: review.written,
     },
   };
