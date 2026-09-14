@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/joCur/grimoire/compare/v0.4.0...v0.4.1) (2026-09-14)
+
+
+### Bug Fixes
+
+* **generator:** full German orthography rule in all four prompts ([#93](https://github.com/joCur/grimoire/issues/93)) ([#94](https://github.com/joCur/grimoire/issues/94)) ([6d8f8b5](https://github.com/joCur/grimoire/commit/6d8f8b502d6f20be0b2d3a8ca7efcf2302ad8d23))
+
 ## [0.4.0](https://github.com/joCur/grimoire/compare/v0.3.0...v0.4.0) (2026-09-14)
 
 
