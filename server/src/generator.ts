@@ -140,7 +140,7 @@ const PACKAGE_DIR = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "
 /** The prompt assets ship with the repo — resolved relative to the package. */
 const GENERATOR_DIR = path.resolve(PACKAGE_DIR, "../generator");
 
-interface PromptAssets {
+export interface PromptAssets {
   systemPrompt: string;
   fewShotTarget: string;
 }
@@ -149,14 +149,29 @@ interface PromptAssets {
  * The two asset pairs (issue #21): scenes and NPCs have their own prompt and
  * their own few-shot target file, cached per kind after the first read.
  */
-const ASSET_FILES = {
+export const ASSET_FILES = {
   scene: { systemPrompt: "system-prompt.md", fewShotTarget: "example-output.md" },
   npc: { systemPrompt: "npc-system-prompt.md", fewShotTarget: "npc-example-output.md" },
+  // Issue #36: locations had no prompt of their own — the augment run is the
+  // first caller, and the pair is written so a future „Ort generieren" can
+  // use it unchanged.
+  location: {
+    systemPrompt: "location-system-prompt.md",
+    fewShotTarget: "location-example-output.md",
+  },
+  // The augment run's OWN system prompt (issue #36). It has no few-shot of
+  // its own — the run sends the TARGET KIND's example file — so this entry
+  // carries the system prompt alone and `loadPromptAssets` is not the right
+  // shape for it; see loadAsset below.
+  augment: { systemPrompt: "augment-system-prompt.md" },
 } as const;
 
-const promptAssets = new Map<keyof typeof ASSET_FILES, PromptAssets>();
+const promptAssets = new Map<string, PromptAssets>();
 
-async function loadPromptAssets(kind: keyof typeof ASSET_FILES): Promise<PromptAssets> {
+/** The kinds that have a prompt PAIR — the augment run has no few-shot. */
+type PromptPairKind = Exclude<keyof typeof ASSET_FILES, "augment">;
+
+export async function loadPromptAssets(kind: PromptPairKind): Promise<PromptAssets> {
   const cached = promptAssets.get(kind);
   if (cached !== undefined) return cached;
   const files = ASSET_FILES[kind];
@@ -168,6 +183,17 @@ async function loadPromptAssets(kind: keyof typeof ASSET_FILES): Promise<PromptA
   return assets;
 }
 
+/** One prompt asset by FILE NAME, cached — the augment run mixes two pairs. */
+const assetCache = new Map<string, string>();
+
+export async function loadAsset(file: string): Promise<string> {
+  const cached = assetCache.get(file);
+  if (cached !== undefined) return cached;
+  const text = await readFile(path.join(GENERATOR_DIR, file), "utf8");
+  assetCache.set(file, text);
+  return text;
+}
+
 // --- context collection ------------------------------------------------------
 
 /**
@@ -175,7 +201,7 @@ async function loadPromptAssets(kind: keyof typeof ASSET_FILES): Promise<PromptA
  * model can only REFERENCE what exists), the CAMPAIGN KNOWLEDGE and the
  * glossary.
  */
-interface CampaignContext {
+export interface CampaignContext {
   npcs: Array<{ id: string; name: string }>;
   locations: Array<{ id: string; name: string }>;
   /**
@@ -294,7 +320,7 @@ async function collectSceneContext(
  * TABLE (issue #57) — rendered as the `EN → DE` lines the prompt documents,
  * so the prompt text the LLM sees is the same as before.
  */
-async function collectContext(campaign: string): Promise<CampaignContext> {
+export async function collectContext(campaign: string): Promise<CampaignContext> {
   const tree = await buildTree(campaign);
   const npcs = tree.npcs.map((n) => ({ id: n.id, name: n.name }));
   const locations = tree.locations.map((l) => ({ id: l.id, name: l.name }));
@@ -374,7 +400,7 @@ export function extractJsonReply(raw: string): { value: unknown } | null {
 // --- mechanical validation (generator/README.md step 4) ----------------------
 
 /** The reply schema the system prompt demands. */
-interface RawEntry {
+export interface RawEntry {
   path: string;
   content: string;
 }
@@ -390,7 +416,7 @@ const KNOWN_CALLOUTS = new Set<string>(CALLOUT_KINDS);
 /** `> [!kind]` markers at line starts (nested `>>` included). */
 const CALLOUT_MARKER = /^\s*>+\s*\[!([^\]\s]+)\]/gm;
 
-function unknownCallouts(body: string): string[] {
+export function unknownCallouts(body: string): string[] {
   const unknown: string[] = [];
   for (const m of body.matchAll(CALLOUT_MARKER)) {
     const kind = m[1]!.toLowerCase();
@@ -410,7 +436,7 @@ function addressId(rel: string): string {
  * as the body. So: parseable iff the content opens a block and the parser
  * actually split it off.
  */
-function parseWithProperties(
+export function parseWithProperties(
   content: string,
   rel: string,
 ): { parsed: ParsedFile; error?: string } {
@@ -423,7 +449,7 @@ function parseWithProperties(
 }
 
 /** Shape check for one scenes/stubs entry of the raw reply. */
-function isRawEntry(v: unknown): v is RawEntry {
+export function isRawEntry(v: unknown): v is RawEntry {
   return (
     v !== null &&
     typeof v === "object" &&
@@ -497,7 +523,7 @@ function stubStatusErrors(kind: "npc" | "location", fm: Record<string, unknown>)
  * (issue #21): present, and one of NPC_STATUSES. `subject` names who the rule
  * is about, so the correction turn reads naturally in both places.
  */
-function npcStatusErrors(fm: Record<string, unknown>, subject: string): string[] {
+export function npcStatusErrors(fm: Record<string, unknown>, subject: string): string[] {
   if (!Object.hasOwn(fm, "status")) {
     return [`"status" fehlt — ${subject} brauchen einen status (im Normalfall "alive")`];
   }
@@ -749,7 +775,7 @@ function notesErrors(body: string): string[] {
  * number 2 and the plus — the whole point of a social modifier — is gone
  * before anyone sees the file.
  */
-function quickstatsErrors(fm: Record<string, unknown>): string[] {
+export function quickstatsErrors(fm: Record<string, unknown>): string[] {
   const quickstats = fm.quickstats;
   if (quickstats === undefined || quickstats === null) return [];
   if (typeof quickstats !== "object" || Array.isArray(quickstats)) {
@@ -872,7 +898,7 @@ export function validateNpcReply(
 // German on purpose: it is part of the (German) prompt conversation. The tail
 // names what the corrected reply must still contain — the only part that
 // differs between a scene run and an NPC run (issue #21).
-function buildCorrectionMessage(errors: string[], tail: string): string {
+export function buildCorrectionMessage(errors: string[], tail: string): string {
   return [
     "Deine letzte Antwort hat die mechanische Validierung nicht bestanden:",
     errors.map((e) => `- ${e}`).join("\n"),
@@ -1004,7 +1030,7 @@ function stubPath(stub: GeneratedStub): string {
  * no field" case is spelled once: with nothing to report the key stays
  * ABSENT rather than becoming an empty array every client has to ignore.
  */
-function withNamingHints<T extends { namingHints?: NamingHint[] }>(
+export function withNamingHints<T extends { namingHints?: NamingHint[] }>(
   result: T,
   drafts: ReadonlyArray<{ path: string; markdown: string }>,
   rules: readonly NamingRule[],
@@ -1021,7 +1047,7 @@ function withNamingHints<T extends { namingHints?: NamingHint[] }>(
  *
  * `validate` is the only difference between a scene run and an NPC run.
  */
-async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
+export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
   req: GenerateRequest;
   provider: LLMProvider;
   validate: (raw: string) => { ok: true; result: T } | { ok: false; errors: string[] };

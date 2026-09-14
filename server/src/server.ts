@@ -215,9 +215,44 @@
 //                                              409 { jobId } while ANY generator job
 //                                              runs, 409 { path } when the pinned id's
 //                                              file exists. Writes NOTHING.
+//   [x] POST /api/:campaign/generate/augment  { path, sourceText?, instruction? }
+//                                              -> 202 { jobId } — „Mit KI ergänzen"
+//                                              (issue #36): the SAME job model and the
+//                                              same pipeline, pointed at an entry that
+//                                              already exists (npc/location/scene). At
+//                                              least one of sourceText/instruction is
+//                                              required (400 otherwise); 400 for a kind
+//                                              that has no augment prompt, 404 for an
+//                                              unknown entry, 409 { jobId } while ANY
+//                                              generator job runs. Writes NOTHING — the
+//                                              job carries an `augmentResult`: the
+//                                              properties proposal per field (current +
+//                                              proposed + new|changed) and the whole
+//                                              current/proposed BODY. The app cuts that
+//                                              into Block-Composer blocks for the review
+//                                              (the block model lives there), so the
+//                                              decision unit is the one the DM edits.
+//   [x] POST /api/:campaign/generate/augment/apply
+//                                              { path, rev, properties?, body?, jobId? }
+//                                              -> the written document. The DM's
+//                                              decisions: the accepted properties fields
+//                                              and the body assembled from the accepted
+//                                              blocks, written in ONE transaction against
+//                                              `rev` — 409 { code: "rev_conflict", rev }
+//                                              and nothing written when the entry moved.
+//                                              FTS and `[[slug]]` references follow (it is
+//                                              the ordinary write path, so the #70 rule
+//                                              „Referenzieren legt an" applies as well);
+//                                              `jobId` discards the job in the same
+//                                              transaction. `id` and the app-managed keys
+//                                              are refused (400) — an id change is
+//                                              POST /rename's job, with its cascade
 //   [x] GET  /api/:campaign/generate/job       GenerateJob (running/done/failed incl.
-//                                              kind, result/npcResult, error body and
-//                                              draftEdits), 404 when there is none.
+//                                              kind, result/npcResult/augmentResult,
+//                                              error body and draftEdits), 404 when
+//                                              there is none. An `augment` job also
+//                                              carries `target` — the entry's address —
+//                                              from the moment it STARTS.
 //                                              A finished result may carry `namingHints`
 //                                              (issue #53): the SERVER's own findings that
 //                                              a draft still uses a spelling a naming

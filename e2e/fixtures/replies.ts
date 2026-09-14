@@ -309,3 +309,106 @@ Irgendwas.
     warnings: [],
   };
 }
+
+// --- augment run (issue #36) ---------------------------------------------
+
+/**
+ * The heading the „Mit KI ergänzen" prompt puts the existing entry under —
+ * server/src/llm-provider.ts EXISTING_ENTRY_HEADING. Duplicated on purpose,
+ * like KNOWLEDGE_HEADING in the stub: the fixture reads the prompt the way a
+ * model does, so the server agrees with it by ASSERTION and not by import.
+ */
+export const EXISTING_ENTRY_HEADING = "## Bestehender Eintrag — ergänzen, nicht ersetzen";
+
+/** The `## If:` section a scene augment run adds — asserted in the spec. */
+export const AUGMENT_THREAD_CONDITION = "die Gruppe fragt nach dem Spitzel";
+
+/** The paragraph inside that section. */
+export const AUGMENT_THREAD_TEXT =
+  "[[jorna]] wird einsilbig und schiebt die Frage auf den nächsten Morgen.";
+
+/**
+ * What an augment run proposes for an EMPTY npc (the kind issue #70's
+ * „Referenzieren legt an" leaves behind: id, name == id, `status: unknown`,
+ * no body). Deliberately a MIX, because the default rule of AK2 is what the
+ * spec is about:
+ *
+ *   role, voice   the entry has nothing there  -> `new`,     preselected
+ *   name, status  the entry HAS a value        -> `changed`, kept
+ *
+ * so an accept with the defaults fills the holes and leaves the two fields
+ * the DM (or the reference) already authored exactly as they were.
+ */
+export const AUGMENT_NPC_ROLE = "Spitzel der Schmuggler in der Hafenwache";
+export const AUGMENT_NPC_VOICE = "leise, weicht Blicken aus";
+export const AUGMENT_NPC_NAME = "Kell Stichbein";
+export const AUGMENT_NPC_STATUS = "alive";
+export const AUGMENT_NPC_WILL =
+  "Nicht auffliegen — und trotzdem bezahlt werden. Beides geht nicht mehr lange gut.";
+export const AUGMENT_NPC_SECRET = "Meldet [[fenn]], wann die Hafenwache wechselt.";
+
+/** Everything above the properties' closing `---`, and the body below it. */
+function splitEntry(markdown: string): { properties: string[]; body: string } {
+  const lines = markdown.split("\n");
+  if (lines[0] !== "---") return { properties: [], body: markdown };
+  const end = lines.indexOf("---", 1);
+  if (end === -1) return { properties: [], body: markdown };
+  return { properties: lines.slice(1, end), body: lines.slice(end + 1).join("\n") };
+}
+
+/** `key: value` of the properties block, or undefined. */
+function propertyValue(properties: string[], key: string): string | undefined {
+  const line = properties.find((l) => l.startsWith(`${key}:`));
+  return line?.slice(key.length + 1).trim();
+}
+
+/**
+ * The augment reply: the existing entry, byte for byte, plus what the run
+ * adds. Which addition depends on what the entry IS — that is the whole
+ * point of the two E2E cases:
+ *
+ *   an EMPTY npc (one a reference created, issue #70)  ->  properties and
+ *       the two body sections are filled,
+ *   anything else (a prepared scene, a location)       ->  one NEW `## If:`
+ *       section at the end; every existing block comes back unchanged.
+ */
+export function augmentReply(path: string, markdown: string, knowledge = ""): unknown {
+  const { properties, body } = splitEntry(markdown);
+  const id = propertyValue(properties, "id") ?? path.slice(path.lastIndexOf("/") + 1);
+  const isEmptyNpc =
+    path.startsWith("npcs/") &&
+    propertyValue(properties, "role") === undefined &&
+    body.trim() === "";
+  const content = isEmptyNpc
+    ? [
+        "---",
+        `id: ${id}`,
+        `name: ${AUGMENT_NPC_NAME}`,
+        `role: ${AUGMENT_NPC_ROLE}`,
+        `status: ${AUGMENT_NPC_STATUS}`,
+        `voice: ${AUGMENT_NPC_VOICE}`,
+        "---",
+        "",
+        "## Will",
+        "",
+        AUGMENT_NPC_WILL,
+        "",
+        "## Weiß",
+        "",
+        `> [!secret] ${AUGMENT_NPC_SECRET}`,
+        "",
+      ].join("\n")
+    : [
+        markdown.replace(/\n*$/, "\n"),
+        `## If: ${AUGMENT_THREAD_CONDITION}`,
+        "",
+        AUGMENT_THREAD_TEXT,
+        "",
+      ].join("\n");
+  return { entry: { path, content }, warnings: contextEchoWarnings(knowledge) };
+}
+
+/** An augment reply that FAILS validation: it answers for another entry. */
+export function invalidAugmentReply(path: string): unknown {
+  return { entry: { path: `${path}-nope`, content: "---\nid: x\n---\n" }, warnings: [] };
+}

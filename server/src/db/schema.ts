@@ -630,8 +630,14 @@ export const generateJobs = sqliteTable(
     campaignId: text("campaign_id")
       .notNull()
       .references(() => campaigns.id, { onUpdate: "cascade", onDelete: "cascade" }),
-    /** "scene" | "npc". */
+    /** "scene" | "npc" | "augment" (issue #36). */
     kind: text("kind").notNull().default("scene"),
+    /**
+     * Address of the entry an `augment` run targets (issue #36); NULL for the
+     * two runs that CREATE something. Stored from the start of the run, so a
+     * job that is still going can already name the entry it works on.
+     */
+    targetPath: text("target_path"),
     /** Target chapter of a scene run; NULL for an npc run. */
     chapter: text("chapter"),
     /** "running" | "done" | "failed". Boot turns leftover "running" into "failed". */
@@ -641,6 +647,8 @@ export const generateJobs = sqliteTable(
     finishedAt: text("finished_at"),
     result: text("result"),
     npcResult: text("npc_result"),
+    /** The augment PROPOSAL (issue #36) — JSON, see AugmentResult. */
+    augmentResult: text("augment_result"),
     error: text("error"),
     draftEdits: text("draft_edits").notNull().default("{}"),
   },

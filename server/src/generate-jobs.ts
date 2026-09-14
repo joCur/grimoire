@@ -45,6 +45,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type {
+  AugmentResult,
   GenerateJob,
   GenerateJobError,
   GenerateJobKind,
@@ -55,6 +56,7 @@ import { ApiError } from "./campaign-fs";
 import { now } from "./clock";
 import type { GrimoireDb } from "./db/client";
 import { generateJobs } from "./db/schema";
+import { runAugment } from "./generator-augment";
 import { runGenerate, runGenerateNpc } from "./generator";
 import type { LLMProvider } from "./llm-provider";
 import { getDb } from "./store/handle";
@@ -67,9 +69,12 @@ interface Job {
   kind: GenerateJobKind;
   /** Target chapter; only a scene run has one. */
   chapter?: string;
+  /** Address of the entry an AUGMENT run works on (issue #36). */
+  target?: string;
   status: "running" | "done" | "failed";
   result?: GenerateResult;
   npcResult?: GenerateNpcResult;
+  augmentResult?: AugmentResult;
   error?: GenerateJobError;
   startedAt: string;
   finishedAt?: string;
@@ -101,11 +106,13 @@ export function serializeJob(job: Job): GenerateJob {
     campaign: job.campaign,
     kind: job.kind,
     ...(job.chapter === undefined ? {} : { chapter: job.chapter }),
+    ...(job.target === undefined ? {} : { target: job.target }),
     status: job.status,
     startedAt: job.startedAt,
     ...(job.finishedAt === undefined ? {} : { finishedAt: job.finishedAt }),
     ...(job.result === undefined ? {} : { result: job.result }),
     ...(job.npcResult === undefined ? {} : { npcResult: job.npcResult }),
+    ...(job.augmentResult === undefined ? {} : { augmentResult: job.augmentResult }),
     ...(job.error === undefined ? {} : { error: job.error }),
     draftEdits: Object.fromEntries(job.draftEdits),
   };
@@ -191,6 +198,7 @@ function toJob(row: JobRow): Job {
     row.status === "done" || row.status === "failed" ? row.status : "running";
   const result = unpackPayload<GenerateResult>(row.result);
   const npcResult = unpackPayload<GenerateNpcResult>(row.npcResult);
+  const augmentResult = unpackPayload<AugmentResult>(row.augmentResult);
   let error = unpackPayload<GenerateJobError>(row.error);
   normalizeDraftPaths(result, npcResult);
 
@@ -199,7 +207,8 @@ function toJob(row: JobRow): Job {
   // are gated on it — no drafts, no "Verwerfen", nothing the DM can do — and
   // `failed` without a body would render an empty failure. As a failed job
   // with a message the existing block appears, and discarding works.
-  const nothingToShow = result === undefined && npcResult === undefined;
+  const nothingToShow =
+    result === undefined && npcResult === undefined && augmentResult === undefined;
   if ((status === "done" && nothingToShow) || (status === "failed" && error === undefined)) {
     status = "failed";
     error = { status: 500, body: { error: UNREADABLE_PAYLOAD_MESSAGE } };
@@ -208,13 +217,15 @@ function toJob(row: JobRow): Job {
   return {
     id: row.id,
     campaign: row.campaignId,
-    kind: row.kind === "npc" ? "npc" : "scene",
+    kind: row.kind === "npc" || row.kind === "augment" ? row.kind : "scene",
     ...(row.chapter === null ? {} : { chapter: row.chapter }),
+    ...(row.targetPath === null ? {} : { target: row.targetPath }),
     status,
     startedAt: row.startedAt,
     ...(row.finishedAt === null ? {} : { finishedAt: row.finishedAt }),
     ...(result === undefined ? {} : { result }),
     ...(npcResult === undefined ? {} : { npcResult }),
+    ...(augmentResult === undefined ? {} : { augmentResult }),
     ...(error === undefined ? {} : { error }),
     draftEdits: unpackEdits(row.draftEdits),
   };
@@ -243,6 +254,10 @@ export async function getJob(campaign: string): Promise<Job | undefined> {
 export type JobInput = { campaign: string; provider: LLMProvider } & (
   | { kind: "scene"; chapter: string; sourceText: string; newChapter: boolean }
   | { kind: "npc"; sourceText: string; npcId?: string }
+  // Issue #36: an augment run targets an entry that EXISTS. At least one of
+  // sourceText/instruction is there — the route enforces that before a job
+  // is created, and runAugment asserts it again.
+  | { kind: "augment"; target: string; sourceText: string; instruction: string }
 );
 
 /**
@@ -266,6 +281,7 @@ export async function startJob(input: JobInput): Promise<Job> {
     campaign: input.campaign,
     kind: input.kind,
     ...(input.kind === "scene" ? { chapter: input.chapter } : {}),
+    ...(input.kind === "augment" ? { target: input.target } : {}),
     status: "running",
     startedAt: timestamp(),
     draftEdits: new Map(),
@@ -289,6 +305,7 @@ export async function startJob(input: JobInput): Promise<Job> {
         campaignId: job.campaign,
         kind: job.kind,
         chapter: job.chapter ?? null,
+        targetPath: job.target ?? null,
         status: "running",
         startedAt: job.startedAt,
         draftEdits: "{}",
@@ -300,6 +317,16 @@ export async function startJob(input: JobInput): Promise<Job> {
   // turns it into a failed job.
   void (async () => {
     try {
+      if (input.kind === "augment") {
+        const augmentResult = await runAugment(
+          input.campaign,
+          input.target,
+          { sourceText: input.sourceText, instruction: input.instruction },
+          () => input.provider,
+        );
+        await finish(job, { status: "done", augmentResult: JSON.stringify(augmentResult) });
+        return;
+      }
       if (input.kind === "npc") {
         const npcResult = await runGenerateNpc(
           input.campaign,
@@ -344,7 +371,13 @@ export async function startJob(input: JobInput): Promise<Job> {
  */
 async function finish(
   job: Job,
-  outcome: { status: "done" | "failed"; result?: string; npcResult?: string; error?: string },
+  outcome: {
+    status: "done" | "failed";
+    result?: string;
+    npcResult?: string;
+    augmentResult?: string;
+    error?: string;
+  },
 ): Promise<void> {
   const db = await getDb();
   db.update(generateJobs)
@@ -353,6 +386,7 @@ async function finish(
       finishedAt: timestamp(),
       ...(outcome.result === undefined ? {} : { result: outcome.result }),
       ...(outcome.npcResult === undefined ? {} : { npcResult: outcome.npcResult }),
+      ...(outcome.augmentResult === undefined ? {} : { augmentResult: outcome.augmentResult }),
       ...(outcome.error === undefined ? {} : { error: outcome.error }),
     })
     .where(

@@ -1,0 +1,376 @@
+// Critical path 6, the second half: „Mit KI ergänzen" (issue #36).
+//
+// The create runs of that path live in `generator.e2e.ts`; this spec is the
+// same pipeline pointed at an entry that ALREADY EXISTS, and it asserts the
+// four things the ticket's AK5 names:
+//
+//   a) an EMPTY npc — the row issue #70's „Referenzieren legt an" leaves
+//      behind — is augmented and its holes are filled,
+//   b) a PREPARED scene gains a new plot thread as ADDITIONAL blocks while
+//      every existing block comes back byte for byte,
+//   c) rejecting the proposal writes nothing and takes the job with it,
+//   d) an entry that moves while the review is open answers 409 and nothing
+//      is written (ADR #4) — the review recovers on the re-read.
+//
+// Two of them carry AK2's default rule with them, because it is the sentence
+// the whole ticket turns on: „Default übernimmt nur Leeres/Neues; Gefülltes
+// wird nie still ersetzt." The npc reply therefore proposes a mix — two
+// fields the entry has nothing in, two it already has — and the spec checks
+// the PRESELECTION, not just the outcome.
+//
+// Nothing is mocked but the model (fixtures/stub-llm.ts): a real job on a
+// real server, the real OpenAICompatProvider, the real write path with its
+// `rev` guard.
+//
+// Path 8 rides along at the bottom: the action is desktop-only (a block diff
+// is not a phone surface, UI-BRIEF), and the reading view of both kinds has
+// to keep rendering at 390px.
+
+import type { Page } from "@playwright/test";
+
+import {
+  AUGMENT_NPC_NAME,
+  AUGMENT_NPC_ROLE,
+  AUGMENT_NPC_SECRET,
+  AUGMENT_NPC_STATUS,
+  AUGMENT_NPC_VOICE,
+  AUGMENT_NPC_WILL,
+  AUGMENT_THREAD_CONDITION,
+  AUGMENT_THREAD_TEXT,
+  TRIGGER,
+} from "../fixtures/replies";
+import { expect, test, type Api } from "../support/test";
+
+/** The prepared scene of the example campaign — the augment target of (b). */
+const SCENE = "01-salzhafen/hafen/smuggler-captured";
+const SCENE_URL = `/beispiel/file/${SCENE}`;
+
+/** The empty npc: created by REFERENCING it from that scene (issue #70). */
+const EMPTY_NPC = "spitzel";
+const NPC_PATH = `npcs/${EMPTY_NPC}`;
+const NPC_URL = `/beispiel/file/${NPC_PATH}`;
+
+const INSTRUCTION = "Führe einen Handlungsstrang um den Schmuggler-Spitzel ein";
+
+/**
+ * Reference the id from the scene's `npcs` list. That is the #70 path that
+ * actually creates a row (a `[[slug]]` in prose does not), so this is how a
+ * DM ends up with an entry that exists and says nothing.
+ */
+async function createEmptyNpcByReference(api: Api): Promise<void> {
+  await api.patchProperties(SCENE, { npcs: ["fenn", EMPTY_NPC] });
+  const npc = await api.file(NPC_PATH);
+  expect(npc.properties.name).toBe(EMPTY_NPC);
+  expect(npc.body).toBe("");
+}
+
+/** Open the dialog on the entry the page shows and start a run. */
+async function startAugment(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
+  await page.getByLabel("Anweisung (optional)").fill(INSTRUCTION);
+  await page.getByRole("button", { name: "Ergänzen", exact: true }).click();
+}
+
+test("empty npc from a reference: augment fills the holes, keeps what is filled", async ({
+  page,
+  api,
+}) => {
+  await createEmptyNpcByReference(api);
+
+  await page.goto(NPC_URL);
+  await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
+  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toBeVisible();
+  // The dialog names the entry it is about by its DISPLAY NAME — the wire
+  // address is how it is stored, not how the DM knows it.
+  const lead = page.getByText("die KI ergänzt", { exact: false });
+  await expect(lead).toBeVisible();
+  await expect(lead).toContainText(EMPTY_NPC);
+  await expect(lead).not.toContainText("npcs/");
+
+  // Nothing may start without input (AK1: source text and/or instruction).
+  const startButton = page.getByRole("button", { name: "Ergänzen", exact: true });
+  await expect(startButton).toBeDisabled();
+  await page.getByLabel("Anweisung (optional)").fill(INSTRUCTION);
+  await expect(startButton).toBeEnabled();
+  await startButton.click();
+
+  // The server job finishes and the review takes the dialog over.
+  await expect(page.getByText("Vorhanden").first()).toBeVisible({ timeout: 30_000 });
+
+  // AK2, the defaults. `role` and `voice` are holes -> „Neu", preselected;
+  // `name` and `status` already carry a value -> „Geändert", KEPT.
+  await expectDecision(page, "role", "Neu", "Übernehmen");
+  await expectDecision(page, "voice", "Neu", "Übernehmen");
+  await expectDecision(page, "name", "Geändert", "Behalten");
+  await expectDecision(page, "status", "Geändert", "Behalten");
+  // „Vorhanden | Vorschlag" really shows both sides.
+  await expect(fieldRow(page, "role").getByText("leer")).toBeVisible();
+  await expect(fieldRow(page, "role")).toContainText(AUGMENT_NPC_ROLE);
+  await expect(fieldRow(page, "name")).toContainText(AUGMENT_NPC_NAME);
+
+  // The body is empty, so every proposed block is an addition — preselected.
+  const willBlock = page.locator("li").filter({ hasText: AUGMENT_NPC_WILL }).last();
+  await expect(willBlock.getByRole("button", { name: /^Übernehmen: / })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  // Nothing is written before the accept.
+  expect(await api.raw(NPC_PATH)).not.toContain(AUGMENT_NPC_ROLE);
+
+  await acceptButton(page).click();
+  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
+
+  // AK3: one transaction. The holes are filled …
+  const raw = await api.raw(NPC_PATH);
+  expect(raw).toContain(`role: ${AUGMENT_NPC_ROLE}`);
+  expect(raw).toContain(AUGMENT_NPC_VOICE);
+  expect(raw).toContain(AUGMENT_NPC_WILL);
+  expect(raw).toContain("> [!secret]");
+  // … and what the entry already carried was NOT silently replaced.
+  expect(raw).toContain(`name: ${EMPTY_NPC}`);
+  expect(raw).not.toContain(AUGMENT_NPC_NAME);
+  expect(raw).toContain("status: unknown");
+  expect(raw).not.toContain(`status: ${AUGMENT_NPC_STATUS}`);
+  // The job is gone with the same transaction.
+  expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
+
+  // Path 2: the reading view shows the filled entry at once — the callout
+  // renders as a callout and the `[[fenn]]` inside it resolves.
+  await expect(page.getByText(AUGMENT_NPC_WILL)).toBeVisible();
+  const secret = page.locator("[data-callout='secret']");
+  await expect(secret).toContainText("Meldet");
+  await expect(secret.getByRole("link", { name: /NPC:/ })).toBeVisible();
+});
+
+test("prepared scene: the new thread is added, every existing block survives", async ({
+  page,
+  api,
+}) => {
+  const before = await api.raw(SCENE);
+
+  await page.goto(SCENE_URL);
+  await startAugment(page);
+
+  // The scene's properties are untouched by the reply, and the review says so
+  // instead of inventing a decision.
+  await expect(page.getByText("Keine Änderung an den Eigenschaften vorgeschlagen.")).toBeVisible({
+    timeout: 30_000,
+  });
+
+  // Exactly ONE decision: the new `## If:` section, as an addition.
+  const newBlock = page.locator("li").filter({ hasText: AUGMENT_THREAD_CONDITION }).last();
+  await expect(newBlock).toContainText("Falls-Abschnitt");
+  await expect(newBlock).toContainText("Neu");
+  // The card is the decision, so it has to show the WHOLE section — the DM
+  // cannot accept a branch whose body is nowhere on screen.
+  await expect(newBlock).toContainText(`## If: ${AUGMENT_THREAD_CONDITION}`);
+  await expect(newBlock).toContainText(AUGMENT_THREAD_TEXT);
+  await expect(newBlock.getByRole("button", { name: /^Übernehmen: / })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  // The existing blocks are not decisions — they sit behind „Unveränderte
+  // Blöcke zeigen", and they carry no toggle when shown.
+  const flowBlock = () => page.locator("li").filter({ hasText: "Entwaffnet und gefesselt" }).last();
+  await expect(flowBlock()).toHaveCount(0);
+  await page.getByRole("button", { name: "Unveränderte Blöcke zeigen" }).click();
+  await expect(flowBlock()).toBeVisible();
+  await expect(flowBlock().getByRole("button", { name: /^Behalten: / })).toHaveCount(0);
+
+  // The raw tab is the second surface of AK2 — a line/word diff over the
+  // whole body, with the added lines marked.
+  await page.getByRole("button", { name: "Roh", exact: true }).click();
+  await expect(page.getByText(`## If: ${AUGMENT_THREAD_CONDITION}`)).toBeVisible();
+  await page.getByRole("button", { name: "Blöcke", exact: true }).click();
+
+  await acceptButton(page).click();
+  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
+
+  // The whole point: the scene GREW. Everything that stood there before
+  // stands there unchanged, character for character.
+  const after = await api.raw(SCENE);
+  expect(after).toContain(`## If: ${AUGMENT_THREAD_CONDITION}`);
+  expect(after).toContain(AUGMENT_THREAD_TEXT);
+  expect(after.startsWith(before.replace(/\n+$/, ""))).toBe(true);
+  // The prepared status is not reset to `draft` (that would undo the DM's
+  // pool state — the augment validation is narrower than the create run's).
+  expect(after).toContain("status: ready");
+
+  // Path 2: the added branch renders as a real `## If:` section.
+  await expect(page.locator("details[data-if-section]")).toHaveCount(3);
+  await expect(page.getByText(AUGMENT_THREAD_CONDITION)).toBeVisible();
+});
+
+test("while the run is on, only the run's own controls are there", async ({ page }) => {
+  // TRIGGER.slow holds the reply, so the running phase can actually be
+  // looked at. „Ergänzen"/„Abbrechen" belong to the INPUT phase: over a
+  // running job the first would start nothing (one job per campaign) and the
+  // second reads like a stop that it is not.
+  await page.goto(SCENE_URL);
+  await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
+  await page.getByLabel("Quelltext", { exact: false }).fill(`${INSTRUCTION}\n\n${TRIGGER.slow}`);
+  await page.getByRole("button", { name: "Ergänzen", exact: true }).click();
+
+  const discard = page.getByRole("button", { name: "Lauf verwerfen" });
+  await expect(discard).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "Ergänzen", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Abbrechen", exact: true })).toHaveCount(0);
+
+  // …and the run can be dropped from there, which is the point of the one
+  // button that IS shown.
+  await discard.click();
+  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
+});
+
+test("rejecting the proposal writes nothing and takes the job with it", async ({
+  page,
+  api,
+}) => {
+  const before = await api.file(SCENE);
+
+  await page.goto(SCENE_URL);
+  await startAugment(page);
+  const rejectButton = page.getByRole("button", { name: "Vorschlag verwerfen" });
+  await expect(rejectButton).toBeVisible({ timeout: 30_000 });
+
+  await rejectButton.click();
+  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
+
+  // Nothing written — not even a new row version — and the job is gone.
+  const after = await api.file(SCENE);
+  expect(after.raw).toBe(before.raw);
+  expect(after.rev).toBe(before.rev);
+  expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
+
+  // And the reading view carries none of the proposal.
+  await page.reload();
+  await expect(page.getByText(AUGMENT_THREAD_TEXT)).toHaveCount(0);
+});
+
+test("409: the entry moves while the review is open — nothing is written", async ({
+  page,
+  api,
+}) => {
+  await page.goto(SCENE_URL);
+  await startAugment(page);
+  await expect(page.getByRole("button", { name: "Vorschlag verwerfen" })).toBeVisible({
+    timeout: 30_000,
+  });
+
+  // The second writer (there is no "changed outside" since the cutover): the
+  // review's guard token is frozen at review time, so this invalidates it.
+  await api.writeBody(SCENE, "## Flow\n\nJemand anderes hat die Szene umgeschrieben.\n");
+
+  await acceptButton(page).click();
+  await expect(page.getByText("Inzwischen geändert — neu laden")).toBeVisible();
+  // The dialog stays open with the decisions intact, and NOTHING was written.
+  const conflicted = await api.raw(SCENE);
+  expect(conflicted).toContain("Jemand anderes hat die Szene umgeschrieben.");
+  expect(conflicted).not.toContain(AUGMENT_THREAD_TEXT);
+
+  // The review re-read the entry and RE-ALIGNED the proposal against it, so
+  // the next attempt carries the fresh token and goes through — a conflict is
+  // a detour, not a dead end…
+  await acceptButton(page).click();
+  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
+  const written = await api.raw(SCENE);
+  expect(written).toContain(AUGMENT_THREAD_TEXT);
+  // …and the other writer is NOT overwritten by a decision that was cut
+  // against the body they replaced.
+  expect(written).toContain("Jemand anderes hat die Szene umgeschrieben.");
+});
+
+test("the entry point: npc, location and scene — and nothing else (AK1)", async ({
+  page,
+}) => {
+  const action = page.getByRole("button", { name: "Mit KI ergänzen" });
+
+  await page.goto("/beispiel/file/npcs/jorna");
+  await expect(action).toBeVisible();
+  await page.goto("/beispiel/file/locations/leuchtturm");
+  await expect(action).toBeVisible();
+  await page.goto(SCENE_URL);
+  await expect(action).toBeVisible();
+
+  // The campaign file is not an augmentable entry — no augment prompt, no
+  // action, and the reading view is untouched.
+  await page.goto("/beispiel/file/_campaign");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(action).toHaveCount(0);
+});
+
+test.describe("at 390px (critical path 8)", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("the action is desktop-only and both reading views still render", async ({
+    page,
+    api,
+  }) => {
+    await createEmptyNpcByReference(api);
+    // What a desktop augment run leaves behind, written through the ordinary
+    // API — the phone's job is to READ the result, not to review a diff.
+    await api.writeBody(
+      NPC_PATH,
+      `\n## Will\n\n${AUGMENT_NPC_WILL}\n\n## Weiß\n\n> [!secret] ${AUGMENT_NPC_SECRET}\n`,
+    );
+
+    await page.goto(NPC_URL);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByText(AUGMENT_NPC_WILL)).toBeVisible();
+    await expect(page.locator("[data-callout='secret']")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Mit KI ergänzen" })).toBeHidden();
+
+    await page.goto(SCENE_URL);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Von den Schmugglern erwischt",
+    );
+    await expect(page.locator("details[data-if-section]")).toHaveCount(2);
+    await expect(page.getByRole("button", { name: "Mit KI ergänzen" })).toBeHidden();
+
+    // Nothing may scroll sideways at 390px.
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+  });
+});
+
+// --- helpers ------------------------------------------------------------------
+
+/**
+ * The properties row of one key. The key stands alone in its own mono span,
+ * which is what makes it addressable without a test id.
+ */
+function fieldRow(page: Page, key: string) {
+  return page
+    .locator("li")
+    .filter({ has: page.getByText(key, { exact: true }) })
+    .first();
+}
+
+/** State badge and preselected decision of one properties field (AK2). */
+async function expectDecision(
+  page: Page,
+  key: string,
+  state: string,
+  chosen: "Übernehmen" | "Behalten",
+): Promise<void> {
+  const row = fieldRow(page, key);
+  await expect(row).toContainText(state);
+  // The row buttons are named with their unit, so „Übernehmen: role" is what
+  // distinguishes them from the footer's „Übernehmen".
+  await expect(row.getByRole("button", { name: `${chosen}: ${key}` })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+}
+
+/**
+ * The review's accept button. The per-row toggles share its WORD but not its
+ * accessible name — theirs carries the unit („Übernehmen: role") — so the
+ * footer button is addressable exactly.
+ */
+function acceptButton(page: Page) {
+  return page.getByRole("button", { name: "Übernehmen", exact: true });
+}

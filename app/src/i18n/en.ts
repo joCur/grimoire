@@ -731,4 +731,62 @@ export const en: Messages = {
   "harness.lead": "Renders the reference fixtures from examples/ without a running server.",
   "harness.properties": "Show properties",
 
+
+  // --- "Augment with AI" (components/AugmentAction.tsx, issue #36) ---------
+  "augment.action": "Augment with AI",
+  "augment.title": "Augment with AI",
+  "augment.description":
+    "Source text and/or an instruction — the AI augments {name}. Nothing is overwritten "
+    + "until you accept it.",
+  "augment.description.running": "The AI is augmenting {name}.",
+  "augment.description.review": "Proposal for {name} — you decide every spot yourself.",
+  "augment.announce.running": "The run is going.",
+  "augment.announce.ready": "The proposal is ready.",
+  "augment.source.label": "Source text (EN)",
+  "augment.source.placeholder": "A section from the adventure, notes, background …",
+  "augment.instruction.label": "Instruction (optional)",
+  "augment.instruction.placeholder": "e.g. Introduce a new plot thread",
+  "augment.input.hint": "At least one of the two is needed.",
+  "augment.start": "Augment",
+  "augment.starting": "Starting …",
+  "augment.start.failed": "Run not started — check the server.",
+  "augment.running": "Running on the server. You can close the tab — the result stays.",
+  "augment.busy": "Another generator run is going. Wait for it, or discard it there.",
+  "augment.busy.review":
+    "Another generator run is still waiting for review. Accept or discard it in the "
+    + "generator first — a new run would delete it.",
+  "augment.discard": "Discard run",
+  "augment.discard.failed": "Could not discard the run — check the server.",
+
+  // the review
+  "augment.properties.heading": "Properties",
+  "augment.properties.none": "No change to the properties proposed.",
+  "augment.field.current": "Current",
+  "augment.field.proposed": "Proposed",
+  "augment.field.empty": "empty",
+  "augment.body.heading": "Text",
+  "augment.body.modeGroup": "Proposal view",
+  "augment.body.blocks": "Blocks",
+  "augment.body.raw": "Raw",
+  "augment.body.none": "No change to the text proposed.",
+  "augment.body.showUnchanged": "Show unchanged blocks",
+  "augment.body.hideUnchanged": "Hide unchanged blocks",
+  "augment.state.new": "New",
+  "augment.state.changed": "Changed",
+  "augment.state.removed": "Dropped",
+  "augment.decision.aria": "Accept or keep",
+  "augment.decision.take": "Accept",
+  "augment.decision.keep": "Keep",
+  "augment.decision.takeUnit": "Accept: {label}",
+  "augment.decision.keepUnit": "Keep: {label}",
+  "augment.diff.added": "added",
+  "augment.diff.removed": "removed",
+  "augment.diff.changed": "changed",
+  "augment.review.aria": "Review the proposal",
+  "augment.accept": "Accept",
+  "augment.reject": "Discard proposal",
+  "augment.review.namingHeading":
+    "{count, plural, one {# naming-convention hint} other {# naming-convention hints}} — not a blocker",
+  "augment.review.namingHint": "\u201c{from}\u201d is still there; the convention says \u201c{to}\u201d.",
+
 };

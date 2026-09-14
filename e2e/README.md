@@ -123,6 +123,13 @@ mitwandert. Die Specs behaupten die dort definierten Titel und ids.
 Welche Antwort kommt, entscheidet ausschließlich der Prompt — der Stub hält
 keinen Zustand und kann mehrere Worker parallel bedienen:
 
+- ein Abschnitt „## Bestehender Eintrag" im Prompt → **Ergänzungs-Lauf**
+  (Issue #36). Die Antwort spiegelt den Eintrag zurück und hängt etwas an:
+  bei einem LEEREN NPC (den #70 beim Referenzieren angelegt hat) werden
+  `role`/`voice` gefüllt und ein Körper geschrieben, bei allem anderen kommt
+  genau ein neuer `## If:`-Abschnitt dazu — jeder bestehende Block
+  unverändert. Diese Verzweigung wird ZUERST geprüft: ein Szenen-Ergänzungs-
+  Lauf trägt auch eine `chapter:`-Zeile.
 - `chapter: <id>` im Kontext-Block → Szenen-Lauf für genau dieses Kapitel
 - kein `chapter` → NPC-Lauf, `vorgegebene id: <id>` fixiert den Dateinamen
 - `E2E_SLOW` im Quelltext → der Stub antwortet **nie** (die Verbindung stirbt
@@ -159,7 +166,7 @@ mehrere Schreibwege auf ihm liegen:
 | 3 ⌘K-Suche         | `tests/search.e2e.ts`                                          |
 | 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`                                   |
 | 5 Nachbereitung    | `tests/review-harvest.e2e.ts`                                  |
-| 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-restart.e2e.ts`      |
+| 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-restart.e2e.ts`, `tests/augment.e2e.ts` |
 | 7 Eigenschaften/409 | `tests/status-control.e2e.ts`, `tests/properties-form.e2e.ts`, `tests/rename.e2e.ts` |
 | 8 Mobil            | `tests/mobile.e2e.ts`                                          |
 | 9 Datei bearbeiten | `tests/block-composer.e2e.ts`, `tests/file-edit.e2e.ts`        |
@@ -172,6 +179,19 @@ Ende, der zweite ist der Neustart. Ein **fertiger** Job ist danach vollständig
 da (Ergebnis, Review-Edits) und wird übernommen; ein **laufender** steht als
 `failed` mit „Server wurde während des Laufs neu gestartet — Job neu starten"
 statt als endloser Spinner.
+
+`tests/augment.e2e.ts` ist die Ergänzungs-Hälfte von Pfad 6 („Mit KI
+ergänzen", Issue #36): derselbe Lauf auf einen Eintrag, den es schon gibt.
+Der Spec belegt AK5 — leerer #70-NPC → ergänzen → Löcher gefüllt, während
+`name` und `status` (beide gefüllt) per Default NICHT ersetzt werden;
+vorbereitete Szene → ein neuer Handlungsstrang als zusätzlicher Block,
+jeder bestehende Block Zeichen für Zeichen gleich, `status: ready` bleibt;
+Vorschlag verwerfen schreibt nichts und nimmt den Job mit; und der
+409-Pfad (zweiter Schreiber während das Review offen steht) schreibt nichts
+und erholt sich beim nächsten Versuch. Er berührt zusätzlich Pfad 2 (die
+Leseansicht zeigt das Ergebnis sofort) und Pfad 8 — die Aktion ist
+Desktop-only, die Leseansichten beider Arten müssen bei 390px weiter
+rendern.
 
 Dazu ein Spec, der auf keinem der zehn Pfade liegt, sondern auf der Naht
 darunter: `tests/seed.e2e.ts` (Nachfolger von `first-migration.e2e.ts`, Issue

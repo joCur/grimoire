@@ -635,6 +635,37 @@ export function blockMarkdown(block: SceneBlock): string {
   return block.source ?? renderBlock(block);
 }
 
+/**
+ * The markdown of a block INCLUDING everything it contains — for an `## If:`
+ * section that is the heading plus its children, with the separators the file
+ * has between them.
+ *
+ * `blockMarkdown` deliberately answers for the block's own line only (the
+ * composer edits the heading and the children as separate cards, and the
+ * serializer flattens them itself). Anywhere a section has to be shown or
+ * compared as ONE thing — the augment review's block cards, issue #36 — that
+ * answer is a truncation: the section's body simply is not in it. This is
+ * that other question.
+ *
+ * Leading `lead` and the trailing gap are left out: they belong to the
+ * block's POSITION in the body, not to the block.
+ */
+export function blockTreeMarkdown(block: SceneBlock): string {
+  if (block.type !== "ifSection" || block.children.length === 0) return blockMarkdown(block);
+  const flat: SceneBlock[] = [];
+  const walk = (b: SceneBlock): void => {
+    flat.push(b);
+    if (b.type === "ifSection") for (const child of b.children) walk(child);
+  };
+  walk(block);
+  let out = "";
+  flat.forEach((b, index) => {
+    if (index > 0) out += (flat[index - 1]!.gap ?? "\n\n") + (b.lead ?? "");
+    out += blockMarkdown(b);
+  });
+  return out;
+}
+
 /** The markdown of one block, rendered from its fields (house style). */
 function renderBlock(block: SceneBlock): string {
   switch (block.type) {
