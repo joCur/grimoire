@@ -40,6 +40,7 @@
 
 import type {
   CampaignTree,
+  GenerateJob,
   GenerateResult,
   GeneratedNpcDraft,
   GeneratedStub,
@@ -298,10 +299,16 @@ export function GenerateRoute() {
    * which is what ends the review.
    */
   const apply = useMutation({
-    mutationFn: (paths?: string[]) => {
-      // Text the DM is still typing must be part of what gets written.
-      review.flush();
-      return acceptJobParts(campaign, job?.id ?? "", job?.rev ?? 0, {
+    mutationFn: async (paths?: string[]) => {
+      // Text the DM is still typing must be part of what gets written — and
+      // AWAITED, not merely started: the server reads `draftEdits` when the
+      // accept arrives, so a patch still in flight would land after the read
+      // and be deleted together with the job (issue #97 review, finding 1).
+      await review.flush();
+      // The flush moved the rev; the guard has to carry the one that is
+      // current now, not the one this render closed over.
+      const current = queryClient.getQueryData<GenerateJob | null>(generateJobKey(campaign));
+      return acceptJobParts(campaign, job?.id ?? "", current?.rev ?? job?.rev ?? 0, {
         ...(paths === undefined ? {} : { paths }),
         // The new chapter's _chapter is created in the same batch — only
         // for a chapter that really is new: for an existing id the pair

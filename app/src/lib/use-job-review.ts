@@ -2,7 +2,7 @@
 //
 // The review used to keep everything in component state; a navigation, a
 // reload or a second tab threw it away. Now the JOB is the state and this
-// hook is the one place that writes to it:
+// module is the one place that writes to it:
 //
 //   text        debounced (~600 ms) while the DM types, and FLUSHED before
 //               anything can lose it — on blur, on unmount (which covers a
@@ -20,9 +20,15 @@
 // Requests are SERIALIZED (one chain, one pending patch). Two patches in
 // flight at once would race on the rev and turn an ordinary double click
 // into a conflict.
+//
+// The queue itself is plain TypeScript (`createReviewQueue`) and the hook is
+// the react-query wiring around it. That split is not decoration: the two
+// properties this thing has to have — a flush that RESOLVES when the patch
+// has landed, and a failed patch that goes back into the queue instead of
+// evaporating — are exactly the ones a rendering test cannot see.
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GenerateJob } from "@grimoire/shared/types";
 
 import { ApiError, patchJobReview } from "@/api";
@@ -41,8 +47,14 @@ export interface JobReviewSync {
   edit: (path: string, markdown: string) => void;
   /** A decision — sent right away. */
   decide: (patch: ReviewPatch) => void;
-  /** Send whatever is still pending now (blur, unmount, page hide). */
-  flush: () => void;
+  /**
+   * Send whatever is still pending now (blur, unmount, page hide) and
+   * RESOLVE when it has landed. „Übernehmen" awaits this: the accept reads
+   * `draftEdits` on the server, so a debounced text patch that is still in
+   * flight would be read one request too late and then deleted together
+   * with the job (issue #97 review, finding 1).
+   */
+  flush: () => Promise<void>;
   /**
    * Another writer won — say so in the same quiet line a patch conflict uses
    * and re-read the job. The ACCEPT has the same rev guard as the patch
@@ -73,6 +85,85 @@ function prune(patch: ReviewPatch): ReviewPatch {
   return out;
 }
 
+/** What the queue needs from the world around it. */
+export interface ReviewQueueIo {
+  /**
+   * Show the patch before it is confirmed — the review reads its state from
+   * the cache, so a decision has to appear the moment it is clicked. Returns
+   * the undo for a send that then fails, or undefined when there was
+   * nothing to change.
+   */
+  optimistic: (patch: ReviewPatch) => (() => void) | undefined;
+  /** Send it. Rejects with the error; an ApiError 409 is the conflict. */
+  send: (patch: ReviewPatch) => Promise<void>;
+  /** Re-read the job after a conflict. */
+  reread: () => void;
+  status: (status: ReviewSaveStatus) => void;
+}
+
+export interface ReviewQueue {
+  edit: (path: string, markdown: string) => void;
+  decide: (patch: ReviewPatch) => void;
+  flush: () => Promise<void>;
+}
+
+/**
+ * The serialized patch queue. One patch in flight at a time; whatever
+ * arrives meanwhile merges into the next one.
+ */
+export function createReviewQueue(io: ReviewQueueIo, delayMs: number): ReviewQueue {
+  let pending: ReviewPatch = {};
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let chain: Promise<void> = Promise.resolve();
+
+  const cancelTimer = (): void => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  };
+
+  const send = (): Promise<void> => {
+    const patch = prune(pending);
+    pending = {};
+    cancelTimer();
+    // Nothing of our own to send — but an earlier patch may still be in
+    // flight, and a caller that awaits this wants THAT to be done too.
+    if (Object.keys(patch).length === 0) return chain;
+    io.status("saving");
+    io.optimistic(patch);
+    chain = chain.then(async () => {
+      try {
+        await io.send(patch);
+        io.status("saved");
+      } catch (error) {
+        // A 409 is the house conflict protocol: nothing was written, the
+        // other tab's state is the truth, so it is re-read rather than
+        // guessed at. Anything the DM typed stays in the queue either way.
+        if (error instanceof ApiError && error.status === 409) {
+          io.status("conflict");
+          io.reread();
+          return;
+        }
+        io.status("error");
+      }
+    });
+    return chain;
+  };
+
+  return {
+    edit: (path, markdown) => {
+      pending = mergePatch(pending, { edits: { [path]: markdown } });
+      io.status("saving");
+      cancelTimer();
+      timer = setTimeout(() => void send(), delayMs);
+    },
+    decide: (patch) => {
+      pending = mergePatch(pending, patch);
+      void send();
+    },
+    flush: send,
+  };
+}
+
 export function useJobReview(
   campaign: string,
   job: GenerateJob | null | undefined,
@@ -80,10 +171,6 @@ export function useJobReview(
 ): JobReviewSync {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<ReviewSaveStatus>("idle");
-  const pending = useRef<ReviewPatch>({});
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  /** One request at a time — see the header note on the rev. */
-  const chain = useRef<Promise<void>>(Promise.resolve());
   // Read at SEND time: a debounced edit must land on the job that is current
   // then, not on the one that was current when the key was pressed.
   const target = useRef({ campaign, jobId: job?.id });
@@ -91,58 +178,42 @@ export function useJobReview(
     target.current = { campaign, jobId: job?.id };
   }, [campaign, job?.id]);
 
-  const send = useCallback(() => {
-    const patch = prune(pending.current);
-    pending.current = {};
-    if (timer.current !== undefined) clearTimeout(timer.current);
-    timer.current = undefined;
-    const { campaign: forCampaign, jobId } = target.current;
-    if (jobId === undefined || Object.keys(patch).length === 0) return;
-    const key = generateJobKey(forCampaign);
-    setStatus("saving");
-    // Optimistic: the review reads its state from the cache, so a decision
-    // has to show the moment it is clicked.
-    const before = queryClient.getQueryData<GenerateJob | null>(key);
-    if (before !== undefined && before !== null) {
-      queryClient.setQueryData(key, mergeReviewPatch(before, patch));
-    }
-    chain.current = chain.current.then(async () => {
-      const rev = queryClient.getQueryData<GenerateJob | null>(key)?.rev ?? 0;
-      try {
-        const updated = await patchJobReview(forCampaign, jobId, rev, patch);
-        queryClient.setQueryData(key, updated);
-        setStatus("saved");
-      } catch (error) {
-        // A 409 is the house conflict protocol: nothing was written, the
-        // other tab's state is the truth, so it is re-read rather than
-        // guessed at. Everything else is an honest error line — the text is
-        // still on screen, only its copy on the server is behind.
-        if (error instanceof ApiError && error.status === 409) {
-          setStatus("conflict");
-          await queryClient.invalidateQueries({ queryKey: key });
-          return;
-        }
-        setStatus("error");
-      }
-    });
-  }, [queryClient]);
-
-  const edit = useCallback(
-    (path: string, markdown: string) => {
-      pending.current = mergePatch(pending.current, { edits: { [path]: markdown } });
-      setStatus("saving");
-      if (timer.current !== undefined) clearTimeout(timer.current);
-      timer.current = setTimeout(send, delayMs);
-    },
-    [send, delayMs],
-  );
-
-  const decide = useCallback(
-    (patch: ReviewPatch) => {
-      pending.current = mergePatch(pending.current, patch);
-      send();
-    },
-    [send],
+  const queue = useMemo(
+    () =>
+      createReviewQueue(
+        {
+          optimistic: (patch) => {
+            const key = generateJobKey(target.current.campaign);
+            const before = queryClient.getQueryData<GenerateJob | null>(key);
+            if (before === undefined || before === null) return undefined;
+            const after = mergeReviewPatch(before, patch);
+            queryClient.setQueryData(key, after);
+            return () => {
+              // Only if nothing landed on top in the meantime — a later
+              // patch's answer is fresher than our snapshot, and the failed
+              // patch is retried anyway.
+              if (queryClient.getQueryData<GenerateJob | null>(key) === after) {
+                queryClient.setQueryData(key, before);
+              }
+            };
+          },
+          send: async (patch) => {
+            const { campaign: forCampaign, jobId } = target.current;
+            if (jobId === undefined) return;
+            const key = generateJobKey(forCampaign);
+            const rev = queryClient.getQueryData<GenerateJob | null>(key)?.rev ?? 0;
+            queryClient.setQueryData(key, await patchJobReview(forCampaign, jobId, rev, patch));
+          },
+          reread: () => {
+            void queryClient.invalidateQueries({
+              queryKey: generateJobKey(target.current.campaign),
+            });
+          },
+          status: setStatus,
+        },
+        delayMs,
+      ),
+    [queryClient, delayMs],
   );
 
   // Leaving is exactly the case the ticket is about: flush on unmount (a
@@ -150,19 +221,25 @@ export function useJobReview(
   // tab never unmounts anything).
   useEffect(() => {
     const onHide = (): void => {
-      if (document.visibilityState === "hidden") send();
+      if (document.visibilityState === "hidden") void queue.flush();
     };
     document.addEventListener("visibilitychange", onHide);
     return () => {
       document.removeEventListener("visibilitychange", onHide);
-      send();
+      void queue.flush();
     };
-  }, [send]);
+  }, [queue]);
 
   const signalConflict = useCallback(() => {
     setStatus("conflict");
     void queryClient.invalidateQueries({ queryKey: generateJobKey(target.current.campaign) });
   }, [queryClient]);
 
-  return { status, edit, decide, flush: send, signalConflict };
+  return {
+    status,
+    edit: queue.edit,
+    decide: queue.decide,
+    flush: queue.flush,
+    signalConflict,
+  };
 }
