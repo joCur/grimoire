@@ -325,6 +325,9 @@ describe("tables", () => {
     const node = runWithTables(
       "> [!readaloud] Der Wurf:\n>\n> | W6 | Fund |\n> | --- | --- |\n> | 1 | Fass |",
     ).children[0];
-    expect(JSON.stringify(copyPartsOf(node))).toContain("Fass");
+    const text = JSON.stringify(copyPartsOf(node));
+    // Cells separated, rows on their own line — not `W6Fund1Fass`.
+    expect(text).toContain("W6 | Fund");
+    expect(text).toContain("1 | Fass");
   });
 });

@@ -89,6 +89,17 @@ function copyParts(node: Blockquote): EntityRefPiece[] {
       }
       return;
     }
+    if (item.type === "tableRow") {
+      // A row is one LINE in the Roll20 chat: cells separated, not glued into
+      // `W6Fund1Fass`. Issue #96.
+      const cells = Array.isArray(item.children) ? item.children : [];
+      cells.forEach((cell, index) => {
+        if (index > 0) pushText(" | ");
+        walk(cell);
+      });
+      pushText("\n");
+      return;
+    }
     if (Array.isArray(item.children)) {
       for (const child of item.children) walk(child);
       return;
