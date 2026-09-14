@@ -162,12 +162,20 @@ function parseRawAugmentReply(raw: string, errors: string[]): RawAugmentReply | 
 function kindErrors(
   kind: AugmentKind,
   fm: Record<string, unknown>,
+  current: Record<string, unknown>,
   label: string,
   errors: string[],
 ): void {
   if (kind === "npc") {
     for (const msg of npcStatusErrors(fm, "NPC-Dateien")) errors.push(`${label}: ${msg}`);
-    for (const msg of quickstatsErrors(fm)) errors.push(`${label}: ${msg}`);
+    // Only a quickstats the proposal CHANGES is checked. The rule ("+2" as a
+    // quoted string, or YAML eats the plus) is about what a MODEL writes; a
+    // campaign that carries bare numbers from its own history — the example
+    // campaign does — must not make every augment run fail on a value the DM
+    // authored and this run does not touch.
+    if (!sameValue(current.quickstats, fm.quickstats)) {
+      for (const msg of quickstatsErrors(fm)) errors.push(`${label}: ${msg}`);
+    }
     return;
   }
   if (kind === "location") {
@@ -230,7 +238,7 @@ export function validateAugmentReply(
         CALLOUT_KINDS.map((k) => `[!${k}]`).join(", "),
     );
   }
-  kindErrors(kind, fm, label, errors);
+  kindErrors(kind, fm, file.properties, label, errors);
   if (errors.length > 0) return { ok: false, errors };
 
   return {

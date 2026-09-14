@@ -1,0 +1,433 @@
+// „Mit KI ergänzen" — the augment run (issue #36).
+//
+// Same harness as the two create-run suites (generator.test.ts,
+// generate-npc.test.ts): a database seeded from the example campaign and a
+// FakeProvider with scripted raw replies instead of a real LLM.
+//
+// What is asserted here is the ticket's AK4 and AK3:
+//   * prompt assembly PER KIND — the existing entry travels complete, the
+//     campaign knowledge and the glossary travel with it, and each kind gets
+//     its own format contract (the location one is new with this ticket),
+//   * the proposal — properties per field with new|changed, body whole,
+//   * accepting — ONE transaction with a `rev` guard, and the job gone.
+
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import type { AugmentResult, FileResponse, GenerateJob } from "@grimoire/shared";
+import { app } from "../src/server";
+import { clearJobsForTests } from "../src/generate-jobs";
+import { setProviderForTests } from "../src/generator";
+import {
+  augmentSystemPrompt,
+  isEmptyValue,
+  propertyProposals,
+  validateAugmentReply,
+} from "../src/generator-augment";
+import { buildPrompt, EXISTING_ENTRY_HEADING, INSTRUCTION_HEADING } from "../src/llm-provider";
+import { dropStore, seedStore } from "./support/store";
+import type {
+  CompletionResult,
+  CorrectionTurn,
+  GenerateRequest,
+  LLMProvider,
+} from "../src/llm-provider";
+
+const CAMPAIGN = "beispiel";
+const NPC = "npcs/jorna";
+const LOCATION = "locations/leuchtturm";
+const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+
+async function read(rel: string): Promise<FileResponse> {
+  const res = await app.request(`/api/${CAMPAIGN}/file?path=${encodeURIComponent(rel)}`);
+  expect(res.status).toBe(200);
+  return (await res.json()) as FileResponse;
+}
+
+// --- fake provider ---------------------------------------------------------
+
+class FakeProvider implements LLMProvider {
+  readonly name = "fake";
+  readonly calls: Array<{ req: GenerateRequest; corrections: CorrectionTurn[] }> = [];
+  constructor(private replies: string[]) {}
+  async complete(
+    req: GenerateRequest,
+    corrections: CorrectionTurn[] = [],
+  ): Promise<CompletionResult> {
+    this.calls.push({ req, corrections: [...corrections] });
+    const reply = this.replies.shift();
+    if (reply === undefined) throw new Error("FakeProvider: no scripted reply left");
+    return { text: reply, truncated: false };
+  }
+}
+
+function useFake(replies: string[]): FakeProvider {
+  const fake = new FakeProvider(replies);
+  setProviderForTests(fake);
+  return fake;
+}
+
+/** The reply JSON in a fence, as real models tend to send it. */
+function augmentReply(path: string, content: string, warnings: string[] = []): string {
+  return "```json\n" + JSON.stringify({ entry: { path, content }, warnings }, null, 2) + "\n```";
+}
+
+/** Start a run and wait for the job to leave `running`. */
+async function runAugmentJob(body: Record<string, unknown>): Promise<GenerateJob> {
+  const res = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  expect(res.status).toBe(202);
+  for (let i = 0; i < 200; i += 1) {
+    const jobRes = await app.request(`/api/${CAMPAIGN}/generate/job`);
+    const job = (await jobRes.json()) as GenerateJob;
+    if (job.status !== "running") return job;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("job never finished");
+}
+
+beforeAll(async () => {
+  await seedStore();
+});
+afterAll(() => {
+  dropStore();
+});
+afterEach(async () => {
+  setProviderForTests(null);
+  await clearJobsForTests();
+});
+
+// --- prompt assembly per kind (AK4) ----------------------------------------
+
+describe("prompt assembly", () => {
+  test("carries the existing entry, the instruction, knowledge and glossary", () => {
+    const prompt = buildPrompt({
+      systemPrompt: "SYS",
+      fewShotTarget: "FEWSHOT",
+      knowledge: "- Salzhafen heißt immer Salzhafen",
+      glossary: "cove → Bucht",
+      context: { npcs: [{ id: "jorna", name: "Jorna" }], locations: [] },
+      sourceText: "A spy among the smugglers.",
+      existingEntry: { path: NPC, markdown: "---\nid: jorna\n---\n\n## Will\n\nX\n" },
+      instruction: "Führe einen Handlungsstrang um den Spitzel ein",
+    });
+    expect(prompt).toContain(EXISTING_ENTRY_HEADING);
+    expect(prompt).toContain(`(${NPC})`);
+    expect(prompt).toContain("id: jorna");
+    expect(prompt).toContain(INSTRUCTION_HEADING);
+    expect(prompt).toContain("Führe einen Handlungsstrang um den Spitzel ein");
+    expect(prompt).toContain("cove → Bucht");
+    expect(prompt).toContain("Salzhafen heißt immer Salzhafen");
+    expect(prompt).toContain("## Quelltext");
+    // The existing entry stands BELOW the few-shot and ABOVE the source text:
+    // the model has to know the entry before it reads what to add to it.
+    expect(prompt.indexOf("FEWSHOT")).toBeLessThan(prompt.indexOf(EXISTING_ENTRY_HEADING));
+    expect(prompt.indexOf(EXISTING_ENTRY_HEADING)).toBeLessThan(prompt.indexOf("## Quelltext"));
+  });
+
+  test("a run with only an instruction has no Quelltext section", () => {
+    const prompt = buildPrompt({
+      systemPrompt: "SYS",
+      fewShotTarget: "FEWSHOT",
+      knowledge: "",
+      glossary: "",
+      context: { npcs: [], locations: [] },
+      sourceText: "",
+      existingEntry: { path: NPC, markdown: "---\nid: jorna\n---\n" },
+      instruction: "Ergänze die Stimme",
+    });
+    expect(prompt).not.toContain("## Quelltext");
+    expect(prompt).toContain(INSTRUCTION_HEADING);
+  });
+
+  test("a create run's prompt is unchanged — no augment sections", () => {
+    const prompt = buildPrompt({
+      systemPrompt: "SYS",
+      fewShotTarget: "FEWSHOT",
+      knowledge: "",
+      glossary: "",
+      context: { chapter: "01-salzhafen", npcs: [], locations: [] },
+      sourceText: "source",
+    });
+    expect(prompt).not.toContain(EXISTING_ENTRY_HEADING);
+    expect(prompt).not.toContain(INSTRUCTION_HEADING);
+  });
+
+  test("every kind gets the augmentation rule plus its own format contract", async () => {
+    const npc = await augmentSystemPrompt("npc");
+    const location = await augmentSystemPrompt("location");
+    const scene = await augmentSystemPrompt("scene");
+    for (const prompt of [npc, location, scene]) {
+      expect(prompt).toContain("Die Ergänzungsregel");
+      expect(prompt).toContain("Vorhandenes bleibt Wort für Wort stehen");
+      expect(prompt).toContain('"entry"');
+    }
+    expect(npc).toContain("System-Prompt: NPC-Generator");
+    // The location prompt is NEW with this ticket — locations had none.
+    expect(location).toContain("System-Prompt: Ort-Generator");
+    expect(location).toContain("kein `status`");
+    expect(scene).toContain("System-Prompt: Szenen-Generator");
+    expect(scene).toContain("## If:");
+  });
+
+  test("the run sends the kind's own system prompt and few-shot", async () => {
+    const file = await read(LOCATION);
+    const content = `${file.raw}\n## Wer ist hier\n\n- niemand\n`;
+    const fake = useFake([augmentReply(LOCATION, content)]);
+    await runAugmentJob({ path: LOCATION, instruction: "Ergänze, wer hier ist" });
+    const req = fake.calls[0]!.req;
+    expect(req.systemPrompt).toContain("System-Prompt: Ort-Generator");
+    expect(req.fewShotTarget).toContain("id: leuchtturm");
+    expect(req.existingEntry?.path).toBe(LOCATION);
+    expect(req.existingEntry?.markdown).toContain("roll20-page");
+    // A location run has no target chapter in the context…
+    expect(req.context.chapter).toBeUndefined();
+  });
+
+  test("a scene run carries its chapter in the context", async () => {
+    const file = await read(SCENE);
+    const fake = useFake([augmentReply(SCENE, file.raw)]);
+    await runAugmentJob({ path: SCENE, instruction: "nichts ändern" });
+    expect(fake.calls[0]!.req.context.chapter).toBe("01-salzhafen");
+  });
+});
+
+// --- the proposal (AK2) -----------------------------------------------------
+
+describe("proposal", () => {
+  test("empty values are `new`, filled ones `changed`, equal ones absent", () => {
+    const proposals = propertyProposals(
+      { name: "Jorna", role: "", tags: [], status: "alive", id: "jorna" },
+      {
+        name: "Jorna",           // unchanged -> not listed
+        role: "Hafenmeisterin",  // was empty -> new
+        tags: ["social"],        // was empty list -> new
+        status: "missing",       // was filled -> changed
+        voice: "knapp",          // absent -> new
+        id: "other",             // frozen -> never listed
+      },
+    );
+    const byKey = Object.fromEntries(proposals.map((p) => [p.key, p]));
+    expect(Object.keys(byKey).sort()).toEqual(["role", "status", "tags", "voice"]);
+    expect(byKey.role!.state).toBe("new");
+    expect(byKey.tags!.state).toBe("new");
+    expect(byKey.voice!.state).toBe("new");
+    expect(byKey.voice!.current).toBeUndefined();
+    expect(byKey.status!.state).toBe("changed");
+    expect(byKey.status!.current).toBe("alive");
+    expect(byKey.status!.proposed).toBe("missing");
+  });
+
+  test("a key the proposal drops is never a deletion", () => {
+    expect(propertyProposals({ voice: "knapp" }, {})).toEqual([]);
+  });
+
+  test("isEmptyValue keeps false and 0 as real values", () => {
+    expect(isEmptyValue("")).toBe(true);
+    expect(isEmptyValue("  ")).toBe(true);
+    expect(isEmptyValue([])).toBe(true);
+    expect(isEmptyValue(null)).toBe(true);
+    expect(isEmptyValue(false)).toBe(false);
+    expect(isEmptyValue(0)).toBe(false);
+  });
+
+  test("a reply for another path is rejected", async () => {
+    const file = await read(NPC);
+    const outcome = validateAugmentReply(augmentReply("npcs/fenn", file.raw), {
+      kind: "npc",
+      file,
+    });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.errors[0]).toContain("path muss unverändert");
+  });
+
+  test("a changed id is rejected — it is the reference key", async () => {
+    const file = await read(NPC);
+    const outcome = validateAugmentReply(
+      augmentReply(NPC, file.raw.replace("id: jorna", "id: jorna-die-hafenmeisterin")),
+      { kind: "npc", file },
+    );
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.errors.join(" ")).toContain("die id bleibt");
+  });
+
+  test("an unknown callout is a correction turn, a known one is not", async () => {
+    const file = await read(NPC);
+    const bad = validateAugmentReply(
+      augmentReply(NPC, `${file.raw}\n> [!spoiler] nope\n`),
+      { kind: "npc", file },
+    );
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.errors.join(" ")).toContain("[!spoiler]");
+    const good = validateAugmentReply(
+      augmentReply(NPC, `${file.raw}\n> [!note] fine\n`),
+      { kind: "npc", file },
+    );
+    expect(good.ok).toBe(true);
+  });
+
+  test("a scene keeps the status the DM gave it", async () => {
+    const file = await read(SCENE);
+    expect(file.properties.status).toBe("ready");
+    const outcome = validateAugmentReply(augmentReply(SCENE, file.raw), {
+      kind: "scene",
+      file,
+    });
+    expect(outcome.ok).toBe(true);
+    // `ready` is not `draft` and must not be reported as a change at all.
+    if (outcome.ok) {
+      expect(outcome.result.properties.some((p) => p.key === "status")).toBe(false);
+    }
+  });
+
+  test("a location may not carry a status", async () => {
+    const file = await read(LOCATION);
+    const outcome = validateAugmentReply(
+      augmentReply(LOCATION, file.raw.replace("---\n\n", "status: alive\n---\n\n")),
+      { kind: "location", file },
+    );
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.errors.join(" ")).toContain("status");
+  });
+});
+
+// --- the run and its job ------------------------------------------------------
+
+describe("the job", () => {
+  test("a run answers 202 and leaves an augment job with the proposal", async () => {
+    const file = await read(NPC);
+    const content = file.raw.replace(
+      "## Notizen",
+      "> [!secret] Der Spitzel sitzt in der Hafenwache.\n\n## Notizen",
+    );
+    useFake([augmentReply(NPC, content, ["Neuer Handlungsstrang ergänzt"])]);
+    const job = await runAugmentJob({ path: NPC, instruction: "Spitzel einführen" });
+    expect(job.status).toBe("done");
+    expect(job.kind).toBe("augment");
+    expect(job.target).toBe(NPC);
+    const result = job.augmentResult as AugmentResult;
+    expect(result.path).toBe(NPC);
+    expect(result.kind).toBe("npc");
+    expect(result.rev).toBe(file.rev);
+    expect(result.currentBody).toBe(file.body);
+    expect(result.proposedBody).toContain("Der Spitzel sitzt in der Hafenwache");
+    expect(result.warnings).toEqual(["Neuer Handlungsstrang ergänzt"]);
+    // Nothing is written by a run.
+    expect((await read(NPC)).body).toBe(file.body);
+  });
+
+  test("a body without properties comes back as a correction turn", async () => {
+    const file = await read(NPC);
+    const fake = useFake([
+      augmentReply(NPC, "## Will\n\nkein Frontmatter\n"),
+      augmentReply(NPC, file.raw),
+    ]);
+    const job = await runAugmentJob({ path: NPC, instruction: "x" });
+    expect(job.status).toBe("done");
+    expect(fake.calls).toHaveLength(2);
+    expect(fake.calls[1]!.corrections[0]?.correction).toContain("ergänzten Eintrag");
+  });
+
+  test("neither source text nor instruction is a 400, before a job exists", async () => {
+    const res = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: NPC, sourceText: "  " }),
+    });
+    expect(res.status).toBe(400);
+    expect((await app.request(`/api/${CAMPAIGN}/generate/job`)).status).toBe(404);
+  });
+
+  test("a kind without an augment prompt is a 400", async () => {
+    const res = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: "01-salzhafen/_chapter", instruction: "x" }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("an unknown entry is a 404", async () => {
+    const res = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: "npcs/nobody", instruction: "x" }),
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+// --- accepting (AK3) -----------------------------------------------------------
+
+describe("accept", () => {
+  async function apply(body: Record<string, unknown>): Promise<Response> {
+    return app.request(`/api/${CAMPAIGN}/generate/augment/apply`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  test("properties and body land in ONE write, and the job is gone", async () => {
+    const before = await read(LOCATION);
+    useFake([augmentReply(LOCATION, before.raw)]);
+    const job = await runAugmentJob({ path: LOCATION, instruction: "x" });
+
+    const body = `${before.body}\n## Wer ist hier\n\n- niemand\n`;
+    const res = await apply({
+      path: LOCATION,
+      rev: before.rev,
+      properties: { "roll20-page": "Leuchtturm (neu)" },
+      body,
+      jobId: job.id,
+    });
+    expect(res.status).toBe(200);
+    const written = (await res.json()) as FileResponse;
+    expect(written.properties["roll20-page"]).toBe("Leuchtturm (neu)");
+    expect(written.body).toContain("## Wer ist hier");
+    // One transaction, two halves — both are on the stored row.
+    const reread = await read(LOCATION);
+    expect(reread.properties["roll20-page"]).toBe("Leuchtturm (neu)");
+    expect(reread.body).toContain("## Wer ist hier");
+    expect(reread.rev).toBeGreaterThan(before.rev);
+    // …and the job the proposal came from is discarded with it.
+    expect((await app.request(`/api/${CAMPAIGN}/generate/job`)).status).toBe(404);
+  });
+
+  test("a stale rev is a 409 and writes NOTHING", async () => {
+    const before = await read(NPC);
+    const res = await apply({
+      path: NPC,
+      rev: before.rev - 1,
+      properties: { voice: "ganz anders" },
+      body: "## Will\n\nüberschrieben\n",
+    });
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe("rev_conflict");
+    const after = await read(NPC);
+    expect(after.body).toBe(before.body);
+    expect(after.properties.voice).toBe(before.properties.voice);
+    expect(after.rev).toBe(before.rev);
+  });
+
+  test("a body-only accept leaves the properties alone", async () => {
+    const before = await read(NPC);
+    const res = await apply({ path: NPC, rev: before.rev, body: `${before.body}\nNachtrag.\n` });
+    expect(res.status).toBe(200);
+    const after = await read(NPC);
+    expect(after.body).toContain("Nachtrag.");
+    expect(after.properties.role).toBe(before.properties.role);
+  });
+
+  test("the id can never be accepted", async () => {
+    const before = await read(NPC);
+    const res = await apply({ path: NPC, rev: before.rev, properties: { id: "andere" } });
+    expect(res.status).toBe(400);
+  });
+
+  test("an empty accept is a 400", async () => {
+    const before = await read(NPC);
+    expect((await apply({ path: NPC, rev: before.rev, properties: {} })).status).toBe(400);
+  });
+});
