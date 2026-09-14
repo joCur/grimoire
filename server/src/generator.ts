@@ -882,7 +882,9 @@ function parseRawNpcReply(raw: string, errors: string[]): RawNpcReply | null {
   }
   const obj = parsed as Record<string, unknown>;
   if (!isRawEntry(obj.npc)) {
-    errors.push('"npc" must be an object with string "path" and "content"');
+    // No `path`: the model writes a DOCUMENT and the server addresses it
+    // (issue #100), so `content` is the only member left to ask for.
+    errors.push('"npc" must be an object with a string "content"');
     return null;
   }
   const warnings = Array.isArray(obj.warnings)

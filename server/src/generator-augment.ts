@@ -102,7 +102,7 @@ const FORMAT_HEADING = "## Ziel-Format der Datei";
  * „## Ziel-Format der Datei" section, and nothing else.
  *
  * Why the slice: a create prompt also carries its own „## Ausgabeformat" —
- * `scenes`/`npc_stubs` for a scene run, `npc` for an NPC run — and its
+ * `scenes`/`entries` for a scene run, `npc` for an NPC run — and its
  * „## Regeln" speak of stubs the augment run can never produce. Embedding
  * the whole document put TWO contradictory output schemas in front of the
  * model, and „this prompt wins" is a sentence, not a guarantee. The augment

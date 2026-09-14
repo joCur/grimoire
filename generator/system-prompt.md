@@ -65,11 +65,11 @@ Danach der Fließtext der Szene, in dieser Ordnung:
 2. **type**: `planned` für Szenen, die der DM aktiv ansteuert;
    `contingency` für Szenen, die auf ein Spielerereignis reagieren
    (dann `trigger` setzen).
-3. **status**: Szenen haben IMMER `status: draft`. NPC-Stubs bekommen
-   `status: alive`, außer der Quelltext sagt eindeutig etwas anderes
-   (`dead`/`missing` erlaubt) — NPC-Status kennt nur
-   `alive`/`dead`/`missing`/`unknown`, niemals `draft`. Orts-Stubs
-   bekommen KEINEN `status`-Key.
+3. **status**: Szenen haben IMMER `status: draft`. Ein `entries`-Eintrag mit
+   `kind: "npc"` bekommt `status: alive`, außer der Quelltext sagt eindeutig
+   etwas anderes (`dead`/`missing` erlaubt) — NPC-Status kennt nur
+   `alive`/`dead`/`missing`/`unknown`, niemals `draft`. Ein Eintrag mit
+   `kind: "location"` bekommt KEINEN `status`-Key.
 4. **Referenzen**: Nutze für `npcs`/`location` NUR ids aus der mitgelieferten
    Kontextliste. `location` ist immer eine Orts-id (kebab-case) oder fehlt
    ganz — Freitext ist keine gültige Angabe, denn die id ist zugleich die
@@ -83,16 +83,16 @@ Danach der Fließtext der Szene, in dieser Ordnung:
    `[[jorna]] wartet am Kai`, nicht `Jorna wartet am Kai`. Die App setzt beim
    Anzeigen den aktuellen Namen ein, deshalb bleibt der Text nach einer
    Umbenennung richtig. Regeln:
-   - nur ids aus der Kontextliste oder ids von Stubs derselben Antwort,
+   - nur ids aus der Kontextliste oder ids von `entries` derselben Antwort,
    - nur die id in den Klammern, kein Anzeigetext (`[[jorna|Jorna]]` ist
      falsch); Endungen stehen AUSSERHALB: `[[jorna]]s Boot`,
    - beim ERSTEN Auftreten im Fließtext genügt die Referenz; Namen von
      Figuren ohne id bleiben normaler Text,
-   - in `## Beziehungen` von NPC-Stubs bleibt die nackte id (kein `[[…]]`),
+   - in `## Beziehungen` eines `npc`-Eintrags bleibt die nackte id (kein `[[…]]`),
      das ist ein eigenes Format.
 5. **Kampagnenwissen**: Der Abschnitt „Kampagnenwissen" im Prompt ist
    verbindlich und gewinnt gegen den Quelltext. Namenskonventionen gelten
-   überall — Titel, Fließtext, Read-Alouds, Stubs. Steht dort kein
+   überall — Titel, Fließtext, Read-Alouds, `entries`. Steht dort kein
    Abschnitt, gibt es für diese Kampagne kein Wissen.
 6. **Übersetzung**: Nutze das mitgelieferte Glossar strikt. Regelbegriffe
    (Checks, Skills, Conditions, advantage/disadvantage, DCs) bleiben
@@ -165,7 +165,7 @@ der Bucht überrascht`, `npcs: [fenn]`, einem `## Flow`-Abschnitt
 (Vorführung und Befragung), zwei `## If:`-Abschnitten (Zugeben →
 Räucherkammer mit Fluchtoptionen und `[!note]` zum losen Bodenbrett;
 Lügen → `[!check]` mit dem Contested Check und beiden Ausgängen) sowie
-einem `[!outcome]` (Fenn kennt die Gesichter der Gruppe). Keine Stubs
+einem `[!outcome]` (Fenn kennt die Gesichter der Gruppe). Keine `entries`
 (beide NPCs existieren). Im Fließtext stehen die beiden als `[[fenn]]`
 und `[[jorna]]`. — Das Referenz-Dokument liegt dem Prompt als
 `example-output.md` bei.

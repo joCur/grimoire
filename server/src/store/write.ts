@@ -455,17 +455,18 @@ function nextPos(rows: Array<{ pos: number }>): number {
 // step alike.
 //
 // THE BOUNDARY, and it is deliberate: only a KEBAB-CASE SLUG is a reference.
-// `location: Der alte Hafen` (spaces, capitals) is free text the format
-// explicitly allows (README) and stays exactly that — text, no row, no card.
-// A slug-shaped free text (`location: hafen`) is indistinguishable from a
-// reference and is therefore treated as one; that is the price of the
-// format's one ambiguous field, and it is why there is no blanket backfill of
-// existing data (see `backfillReferencedNpcs`).
+// For `location` that is the ONLY legal value since issue #100 — the group a
+// scene sits in IS its location, so `location: Der alte Hafen` cannot be
+// text-that-means-nothing any more and is rejected with
+// `400 location_not_an_id`, suggestion included. The format's one ambiguous
+// field is gone; what the file era left behind was carried over ONCE by the
+// data step (db/group-migration.ts), not by a blanket backfill.
 //
-// ONLY NEW references are created on a properties patch: an unrelated
-// `PATCH { status }` re-sends the scene's existing `location`, and
-// materialising THAT would retroactively turn every legacy free-text place
-// name into an entity nobody authored.
+// ONLY NEW references are created on a properties patch — for `npcs`, whose
+// stored values may still be legacy names: materialising THOSE would turn a
+// name nobody meant as an id into an entity nobody authored. A scene's
+// `location` is ensured on EVERY patch (#70 audit), because since #100 an
+// unusable value cannot be stored in the first place.
 
 /**
  * The `npcs.status` column default (schema.ts) — "nothing is claimed". Named
@@ -604,12 +605,11 @@ function isEmptyJsonObject(packed: string): boolean {
  *   * `npc_relations.other_npc_id` — the counterpart of a `## Beziehungen`
  *     line, likewise an id by format.
  *
- * NOT `scenes.location`. That field holds an id OR a free string (README),
- * and a slug-shaped free text (`location: bucht`) is indistinguishable from
- * a reference. A blanket pass would invent Orte the DM never wrote, into a
- * list the DM has to look at, with no undo in the tool — so the location
- * half stays LAZY: the next write that touches the field creates the row,
- * because there a human has just typed the value and meant it.
+ * NOT `scenes.location`, and for a different reason than it used to be: the
+ * field holds an id or nothing at all since issue #100, and the stock was
+ * carried over ONCE by the data step that derived it (db/group-migration.ts),
+ * which creates every entry a scene references and reports it. There is
+ * nothing left for a per-boot pass to close.
  *
  * Idempotent by construction (it only inserts what has no row) and cheap: two
  * anti-joins per campaign. Returns the ids it created, for the boot log.

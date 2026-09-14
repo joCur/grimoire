@@ -56,8 +56,8 @@
 //                                              `goal` lands under `## Ziel des Kapitels`, the
 //                                              heading the pool reads its goal line from
 //   [x] POST /api/:campaign/scenes             { title, chapter } -> 201 the scene document
-//                                              (type planned, status draft, empty body,
-//                                              group_slug ""). `chapter` is REQUIRED and must
+//                                              (type planned, status draft, empty body, no
+//                                              `location`). `chapter` is REQUIRED and must
 //                                              exist — 400 otherwise: a scene's chapter is
 //                                              part of its address and chapters are never
 //                                              created by being named (ADR #14)

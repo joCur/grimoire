@@ -434,20 +434,21 @@ einer `## Beziehungen`-Zeile.
   zurückgeben. Das alte `409` ließ den DM eine id korrigieren, die richtig war.
   Der Status ist der Default `unknown` (die Zeile schrieb vorher `alive`,
   gegen ihre eigene Doku).
-- **Die Grenze, bewusst gezogen:** `location:` darf laut README freier Text
-  sein. Ein Wert, der KEIN Kebab-Slug ist (Leerzeichen, Großschreibung),
-  bleibt reiner Text und bekommt keinen Eintrag. Ein slug-FÖRMIGER freier Text
-  (`location: hafen`) ist von einer Referenz nicht unterscheidbar und wird als
-  Referenz behandelt — das ist der Preis des einen mehrdeutigen Feldes, und der
-  Grund für den nächsten Punkt.
+- **Die Grenze, bewusst gezogen** — *ersetzt durch #17:* `location:` durfte
+  laut README freier Text sein, und ein Wert, der KEIN Kebab-Slug war, blieb
+  reiner Text ohne Eintrag. Seit #17 ist `location` immer eine Orts-id oder
+  leer: Freitext wird mit `400 location_not_an_id` abgelehnt, eine unbekannte
+  id legt den Eintrag nach der Regel oben an. Das mehrdeutige Feld gibt es
+  nicht mehr.
 - **Bestandsdaten: Boot-Pass nur für NPCs.** Beim Boot legt ein idempotenter
   Pass leere Zeilen für alle noch hängenden `scene_npcs.npc_id` und
   `npc_relations.other_npc_id` an (`store/ref-backfill.ts`) und meldet sie im
-  Boot-Log. `scenes.location` bleibt bewusst AUSSEN: ein pauschaler Lauf würde
-  aus slug-förmigem Freitext Orte erfinden, die der DM nie geschrieben hat, in
-  eine Liste, die er ansehen muss, ohne Rückweg im Werkzeug. Dort greift die
-  Lazy-Regel — der nächste Schreibvorgang, der das Feld anfasst, legt an, denn
-  dann hat ein Mensch den Wert gerade getippt.
+  Boot-Log. Die Begründung, `scenes.location` auszunehmen (ein pauschaler Lauf
+  würde aus slug-förmigem Freitext Orte erfinden) ist mit #17 **ersetzt**:
+  dort legt der Einmal-Datenschritt genau einmal für jedes referenzierte
+  `location` einen Eintrag an und meldet jeden im Boot-Log. Für neue Werte
+  gilt weiter die Lazy-Regel — der nächste Schreibvorgang, der das Feld
+  anfasst, legt an.
 - **Keine Foreign Keys** auf diesen Spalten. Sie halten Freitext und
   Importbestand legal; die Konsistenz kommt aus den Schreibwegen, nicht aus
   einem Constraint, der einen legalen Import scheitern lassen würde.
@@ -474,10 +475,12 @@ tat, oder umgekehrt. Verbindlich ist ab jetzt:
 - **`location:` wird bei JEDEM Patch sichergestellt**, nicht nur bei einer
   Änderung. Der Eigenschaften-Dialog verspricht „wird beim Speichern
   angelegt"; mit der alten „nur NEUE Referenzen"-Regel blieb ein hängender
-  Alt-Slug beim Speichern genau so hängen. Die Freitext-Grenze bleibt
-  unverändert. Für `npcs:` gilt weiter „nur neue" (siehe nächster Punkt).
+  Alt-Slug beim Speichern genau so hängen. Der Satz „die Freitext-Grenze
+  bleibt unverändert" ist mit #17 **ersetzt**: es gibt keine Freitext-Hälfte
+  mehr, ein Nicht-Slug ist `400 location_not_an_id`. Für `npcs:` gilt weiter
+  „nur neue" (siehe nächster Punkt).
 - **`npcs:` nimmt ids, keine Namen.** Ein NEUER Eintrag ohne Slug-Form wird
-  mit 400 abgelehnt (`npcs` hat, anders als `location`, keine Freitext-Hälfte:
+  mit 400 abgelehnt (seit #17 gilt dasselbe für `location`:
   jeder Eintrag wird eine Karte und eine Referenz). Bereits GESPEICHERTE
   Werte sind ausgenommen — die Migration importiert, was da ist, und eine
   Alt-Szene muss speicherbar bleiben. Die Karte einer solchen Alt-Referenz
@@ -486,10 +489,12 @@ tat, oder umgekehrt. Verbindlich ist ab jetzt:
   Szene abgelehnt, bei NPC und Ort still gespeichert; jetzt gilt für alle drei
   dasselbe (nur bei geändertem Wert, wegen Bestandsdaten), und der Hinweis im
   Dialog sagt „Kapitel muss existieren" statt „wird angelegt".
-- **Zwei Drafts auf dieselbe Adresse sind 409** (`{ conflicts }`) statt
+- **Zwei Drafts auf dieselbe ZEILE sind 409** (`{ conflicts }`) statt
   last-write-win: seit eine leere Zeile kein Konflikt mehr ist, hat der
   zweite Draft den ersten befüllt, und das Review meldete einen sauberen
-  Apply für weggeworfenen Inhalt.
+  Apply für weggeworfenen Inhalt. „Dieselbe Zeile" und nicht „dieselbe
+  Adresse" — seit #17 trägt die Szenen-Adresse ihr `location`, dieselbe id
+  unter zwei Orten sind zwei Adressen und ein Primärschlüssel.
 - **Rename merged in eine LEERE Zielzeile** statt 409. Genau dieser Zustand
   entsteht jetzt regulär (eine Szene listet alte und neue id → die neue hat
   eine leere Zeile), und der Merge der Referenzlisten war sonst toter Code.
