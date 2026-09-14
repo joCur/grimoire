@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/joCur/grimoire/compare/v0.3.0...v0.4.0) (2026-09-14)
+
+
+### Features
+
+* **app:** player-character notes via #pc — grouped wrap-up section and live reminders ([#86](https://github.com/joCur/grimoire/issues/86)) ([#91](https://github.com/joCur/grimoire/issues/91)) ([1803fd1](https://github.com/joCur/grimoire/commit/1803fd1294e44d6b8a784f0d3b4dc96e4f362172))
+* **app:** review lists untagged inbox notes ([#85](https://github.com/joCur/grimoire/issues/85)) ([#89](https://github.com/joCur/grimoire/issues/89)) ([512505e](https://github.com/joCur/grimoire/commit/512505ee177861c77008e5fcb1cef01c7cb3d93b))
+* augment existing NPC, location and scene with AI — block-level review ([#36](https://github.com/joCur/grimoire/issues/36)) ([#90](https://github.com/joCur/grimoire/issues/90)) ([e221c38](https://github.com/joCur/grimoire/commit/e221c38b03284a27a6d411e5c83c91600874b540))
+* campaign knowledge & glossary pages, binding generator context ([#53](https://github.com/joCur/grimoire/issues/53)) ([#87](https://github.com/joCur/grimoire/issues/87)) ([694ba2c](https://github.com/joCur/grimoire/commit/694ba2c5441a5ea776218e011f517c8c122e3bec))
+* localisation — de/en catalog, settings page, language-free server errors ([#69](https://github.com/joCur/grimoire/issues/69)) ([#83](https://github.com/joCur/grimoire/issues/83)) ([5d7138f](https://github.com/joCur/grimoire/commit/5d7138fca568027ee543b59eb96e28eaf4df100a))
+
 ## [0.3.0](https://github.com/joCur/grimoire/compare/v0.2.0...v0.3.0) (2026-09-08)
 
 
