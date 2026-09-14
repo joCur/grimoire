@@ -86,7 +86,12 @@ export function ReviewRoute() {
   // „Behalten" is a decision, not a write: the entry stays open (and counted)
   // for the next wrap-up. Cosmetic, per sitting — like the rest of the review
   // memory, nothing of it is persisted.
+  // Campaign-scoped like the rest of the review memory: the entry key is only
+  // the line index in its file, so an unscoped set would carry a „Behalten"
+  // over to the same index in the NEXT campaign (the route param changes
+  // without remounting this component).
   const [kept, setKept] = useState<ReadonlySet<string>>(() => new Set<string>());
+  const keptKey = (entry: ReviewEntry) => `${campaign}:${entry.key}`;
 
   const model = useReviewEntries(campaign);
 
@@ -175,8 +180,8 @@ export function ReviewRoute() {
       busy={busyKey === entry.key}
       error={cardError(entry)}
       canAdopt={chapter !== undefined}
-      kept={kept.has(entry.key)}
-      onKeep={() => setKept((current) => new Set(current).add(entry.key))}
+      kept={kept.has(keptKey(entry))}
+      onKeep={() => setKept((current) => new Set(current).add(keptKey(entry)))}
       onThread={() => {
         act.reset();
         act.mutate({ entry, action: "thread" });
