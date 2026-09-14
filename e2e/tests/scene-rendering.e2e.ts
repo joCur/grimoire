@@ -203,3 +203,44 @@ test.describe("with a seeded loot scene", () => {
     await expect(page.locator("blockquote")).toContainText("[!erfunden] Unbekannte Callout-Sorte");
   });
 });
+
+// Issue #96: the table is part of the same critical path — the reference
+// scene carries a W6 table inside its `[!note]`, so path 2 checks it where
+// the DM meets it.
+test("the reference scene's W6 table renders as a table inside the note callout", async ({
+  page,
+}) => {
+  await page.goto(ARRIVAL);
+
+  const table = page.locator("[data-callout='note'] table");
+  await expect(table).toHaveCount(1);
+  // Header row distinguished, and the rows are rows — not a wall of pipes.
+  await expect(table.locator("thead th").first()).toHaveText("W6");
+  await expect(table.locator("tbody tr")).toHaveCount(3);
+  await expect(table).toContainText("Eine Laterne, das Glas rußgeschwärzt");
+  // No pipe survived into the rendered text.
+  await expect(page.getByRole("article")).not.toContainText("| --- |");
+});
+
+test.describe("the table at 390px", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("the table scrolls in its own box, the page does not", async ({ page }) => {
+    await page.goto(ARRIVAL);
+
+    const box = page.getByRole("region", { name: "Tabelle" });
+    await expect(box.locator("table")).toBeVisible();
+    // The box is the one thing allowed to be wider than itself.
+    const scrollable = await box.evaluate(
+      (node) => getComputedStyle(node).overflowX === "auto" && node.scrollWidth >= node.clientWidth,
+    );
+    expect(scrollable).toBe(true);
+
+    // AK 2: the PAGE never scrolls sideways.
+    const doc = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    expect(doc.scrollWidth).toBeLessThanOrEqual(doc.clientWidth + 1);
+  });
+});
