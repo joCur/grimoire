@@ -62,6 +62,7 @@ import { runAugment } from "./generator-augment";
 import { runGenerate, runGenerateNpc } from "./generator";
 import type { LLMProvider } from "./llm-provider";
 import { getDb } from "./store/handle";
+import { RESERVED_SEGMENTS } from "./store/paths";
 
 /** Server-side job record; `draftEdits` is a Map here, an object on the wire. */
 interface Job {
@@ -193,27 +194,53 @@ function unpackReview(value: string): GenerateJobReview {
       : [],
     fields: stringRecord(parsed.fields, (v) => (typeof v === "boolean" ? v : undefined)),
     blocks: stringRecord(parsed.blocks, (v) => (typeof v === "boolean" ? v : undefined)),
-    written: stringRecord(parsed.written, (v) => (typeof v === "string" ? v : undefined)),
+    // `written` is keyed by the DRAFT PATH, so it is normalized like every
+    // other path key of a persisted row (see draftAddress). Its VALUES are
+    // the addresses the parts actually landed at — already current, and a
+    // scene address legitimately has three segments.
+    written: normalizeKeys(
+      stringRecord(parsed.written, (v) => (typeof v === "string" ? v : undefined)),
+    ),
   };
 }
 
 /**
- * Entity ADDRESSES carry no file extension since issue #79, but a job row
- * written before that upgrade stored the draft paths the model produced —
- * `npcs/x.md`, `01-salzhafen/hafen/y.md`. Those rows outlive the deploy (that
- * is the whole point of persisting them), and a `.md` path is no longer a
- * legal address: the NPC apply pattern rejects it outright (400 on
- * "Übernehmen"), and a scene path would insert a row whose id nothing can
- * address.
+ * A persisted job row outlives the deploy that wrote it — that is the whole
+ * point of persisting it — so its draft paths can be spelled the way TWO
+ * earlier schemes spelled them, and neither is a legal target any more:
  *
- * So a persisted job is normalized ONCE, on the way out of the row: the
- * suffix is stripped from every draft path and from the `draftEdits` keys
- * (which are those same paths). The review patch and apply then both
- * see the new scheme, and a fresh row — where nothing ends in `.md` — passes
+ *   * issue #79 dropped the file extension from every ADDRESS, and a `.md`
+ *     path is rejected outright by the NPC apply pattern (400 on
+ *     „Übernehmen") or would insert a scene row whose id nothing can address.
+ *   * issue #100 made a scene draft's path `<chapter>/<id>`: the group
+ *     segment IS the `location`, and the SERVER derives it on the way in.
+ *     A three-segment scene path is now a client naming a group of its own,
+ *     which `applySceneTarget` answers with a 400 — for a `done` job stored
+ *     before this deploy, forever. The drafts are still perfectly good, so
+ *     the group segment is dropped instead of the run.
+ *
+ * So a persisted job is normalized ONCE, on the way out of the row: both
+ * rewrites are applied to every draft path and to every KEY that is one of
+ * those paths (`draftEdits`, `review.written`, `review.dropped`). The review
+ * patch and apply then both see the current scheme, and a fresh row — where
+ * nothing ends in `.md` and no scene path has three segments — passes
  * through untouched.
  */
 function draftAddress(path: string): string {
-  return path.endsWith(".md") ? path.slice(0, -3) : path;
+  const stripped = path.endsWith(".md") ? path.slice(0, -3) : path;
+  const segments = stripped.split("/");
+  // Only a SCENE path collapses: `npcs/<id>`/`locations/<id>` have two
+  // segments anyway, and a chapter document is not a draft path.
+  if (segments.length !== 3) return stripped;
+  if (RESERVED_SEGMENTS.has(segments[0]!) || segments[2] === "_chapter") return stripped;
+  return `${segments[0]!}/${segments[2]!}`;
+}
+
+/** The same rewrite over the KEYS of a persisted path-keyed record. */
+function normalizeKeys<T>(record: Record<string, T>): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const [key, value] of Object.entries(record)) out[draftAddress(key)] = value;
+  return out;
 }
 
 /** Rewrite the draft paths of a persisted payload in place (see draftAddress). */

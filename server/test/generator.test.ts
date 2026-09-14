@@ -1733,6 +1733,63 @@ describe("generate jobs", () => {
     expect(await exists("npcs/legacy-npc")).toBe(true);
   });
 
+  // --- a row written BEFORE the group cutover (issue #100 review) ----------
+
+  test("a persisted job with a three-segment scene draft path is collapsed", async () => {
+    // The row a pre-#100 process left behind: the scene draft's path carries
+    // the GROUP segment the model used to choose. `applySceneTarget` answers
+    // 400 for that shape now, so without this normalization the job could
+    // never be applied again — it would sit there for good.
+    const legacy = "01-salzhafen/hafen/legacy-grouped";
+    const markdown = sceneWithId("legacy-grouped");
+    const db = await getDb();
+    db.insert(generateJobs)
+      .values({
+        id: "legacy-grouped-row",
+        campaignId: "beispiel",
+        kind: "scene",
+        chapter: "01-salzhafen",
+        status: "done",
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        result: JSON.stringify({
+          scenes: [{ path: legacy, markdown, properties: { id: "legacy-grouped" } }],
+          stubs: [],
+          warnings: [],
+        }),
+        draftEdits: JSON.stringify({ [legacy]: markdown }),
+        review: JSON.stringify({
+          entries: {},
+          dropped: ["01-salzhafen/hafen/legacy-dropped"],
+          fields: {},
+          blocks: {},
+          written: { "01-salzhafen/hafen/legacy-written": "01-salzhafen/hafen/legacy-written" },
+        }),
+      })
+      .run();
+
+    const job = (await fetchJob())!;
+    expect(job.result!.scenes[0]!.path).toBe("01-salzhafen/legacy-grouped");
+    expect(Object.keys(job.draftEdits)).toEqual(["01-salzhafen/legacy-grouped"]);
+    expect(job.review!.dropped).toEqual(["01-salzhafen/legacy-dropped"]);
+    // The KEY is the draft path and collapses; the VALUE is the address the
+    // part landed at, and a scene address legitimately has three segments.
+    expect(job.review!.written).toEqual({
+      "01-salzhafen/legacy-written": "01-salzhafen/hafen/legacy-written",
+    });
+    // An npc draft path keeps its two segments — only scenes collapse.
+    expect(Object.keys(job.draftEdits).every((k) => !k.startsWith("npcs/"))).toBe(true);
+
+    // The point of all of it: „Übernehmen" works again.
+    const res = await postJson("/api/beispiel/generate/apply", {
+      scenes: job.result!.scenes,
+      stubs: [],
+      jobId: job.id,
+    });
+    expect(res.status).toBe(200);
+    expect(await exists("01-salzhafen/leuchtturm/legacy-grouped")).toBe(true);
+  });
+
   // --- the invariant is a constraint (issue #62 review) ---------------------
 
   test("a second job row for the same campaign is rejected by the database", async () => {
