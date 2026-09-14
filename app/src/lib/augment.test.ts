@@ -9,6 +9,7 @@ import {
   defaultAccepted,
   formatPropertyValue,
   lineDiff,
+  similarity,
   tokenizeWords,
   wordDiff,
 } from "./augment";
@@ -108,11 +109,51 @@ describe("alignBlocks", () => {
     expect(defaultAccepted(changes).has(changed[0]!.id)).toBe(false);
   });
 
+  test("an unrelated drop and add stay two decisions, not one `changed` row", () => {
+    // Same position, nothing in common: pairing them positionally would hide
+    // the deletion inside a word diff and cost the addition its default.
+    const current = "Die Gruppe wartet am Kai.\n\n> [!note] Der Wachwechsel ist um vier.\n";
+    const proposed =
+      "Die Gruppe wartet am Kai.\n\n## If: jemand fragt nach dem Leuchtturm\n\nSie schweigen.\n";
+    const changes = alignBlocks(current, proposed);
+    expect(changes.filter((c) => c.kind === "changed")).toHaveLength(0);
+    expect(changes.filter((c) => c.kind === "removed")).toHaveLength(1);
+    const added = changes.filter((c) => c.kind === "added");
+    expect(added.length).toBeGreaterThan(0);
+    // The addition keeps its „übernehmen" default, the removal has none.
+    expect(defaultAccepted(changes)).toEqual(new Set(added.map((c) => c.id)));
+  });
+
+  test("a genuinely rewritten block at the same position IS one `changed` row", () => {
+    const current = "Die Gruppe wartet am Kai auf die Hafenmeisterin.\n";
+    const proposed = "Die Gruppe wartet am Kai auf die Hafenmeisterin Jorna.\n";
+    const changes = alignBlocks(current, proposed);
+    expect(changes.filter((c) => c.kind === "changed")).toHaveLength(1);
+    expect(changes.filter((c) => c.kind === "removed")).toHaveLength(0);
+  });
+
   test("a block the proposal dropped is a `removed` decision, defaulting to keep", () => {
     const proposed = CURRENT.split("\n\n").slice(0, 2).join("\n\n");
     const changes = alignBlocks(CURRENT, proposed);
     expect(changes.some((c) => c.kind === "removed")).toBe(true);
     expect(defaultAccepted(changes).size).toBe(0);
+  });
+});
+
+describe("similarity", () => {
+  test("identical text is 1, unrelated text is near 0", () => {
+    expect(similarity("die Bucht liegt still", "die Bucht liegt still")).toBe(1);
+    expect(similarity("die Bucht liegt still", "Regeln für Fackeln")).toBeLessThan(0.2);
+  });
+
+  test("a huge pair is measured cheaply instead of quadratically", () => {
+    // Past the word-diff bound the bag ratio decides — the LCS on 40k tokens
+    // per side would allocate a matrix of 1.6 billion cells.
+    const a = Array.from({ length: 40_000 }, (_, i) => `wort${i % 97}`).join(" ");
+    const b = `${a} und noch ein Satz`;
+    const started = Date.now();
+    expect(similarity(a, b)).toBeGreaterThan(0.9);
+    expect(Date.now() - started).toBeLessThan(2_000);
   });
 });
 

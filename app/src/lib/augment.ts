@@ -57,12 +57,17 @@ export function tokenizeWords(text: string): string[] {
   return text.match(/\s+|[^\s]+/g) ?? [];
 }
 
-/** Longest common subsequence of two token lists, as index pairs. */
+/**
+ * Longest common subsequence of two token lists, as index pairs.
+ *
+ * The full n*m table is kept on purpose: the walk below reads it BACKWARDS to
+ * recover the pairs, and a row-at-a-time fill would only give the length.
+ * What keeps it affordable is the caller's bound — `WORD_DIFF_LIMIT` on both
+ * sides — not the fill strategy.
+ */
 function lcsPairs(a: readonly string[], b: readonly string[]): Array<[number, number]> {
   const n = a.length;
   const m = b.length;
-  // One row at a time: the tables here are small, but a full n*m matrix of
-  // numbers for a long scene body is needless memory.
   const lengths: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
   for (let i = n - 1; i >= 0; i -= 1) {
     for (let j = m - 1; j >= 0; j -= 1) {
@@ -138,15 +143,52 @@ export interface DiffLine {
   words?: DiffToken[];
 }
 
-/** How similar two lines have to be to count as one CHANGED line. */
-const LINE_PAIR_SIMILARITY = 0.4;
+/**
+ * How similar two units have to be to count as ONE changed unit — a rewritten
+ * line in the raw diff, a rewritten block in the review. Below it they are an
+ * honest remove plus an honest add, and the add keeps its „übernehmen"
+ * default.
+ */
+const PAIR_SIMILARITY = 0.4;
 
-function similarity(a: string, b: string): number {
+/** Words of a text without the whitespace tokens. */
+function words(text: string): string[] {
+  return tokenizeWords(text).filter((token) => token.trim() !== "");
+}
+
+/**
+ * How many tokens the two sides share, as a bag — order-blind, linear, and
+ * within a few percent of the LCS ratio for the texts this decides about.
+ * It is what a pair too large for the quadratic LCS is measured with.
+ */
+function bagOverlap(a: readonly string[], b: readonly string[]): number {
+  const counts = new Map<string, number>();
+  for (const token of a) counts.set(token, (counts.get(token) ?? 0) + 1);
+  let common = 0;
+  for (const token of b) {
+    const left = counts.get(token) ?? 0;
+    if (left === 0) continue;
+    counts.set(token, left - 1);
+    common += 1;
+  }
+  return common;
+}
+
+/**
+ * 0…1 — how much of two texts is the same words. The LCS is quadratic, so
+ * beyond `WORD_DIFF_LIMIT` on either side the cheap bag ratio decides
+ * instead: this runs once per candidate PAIR inside a flush, and an unbounded
+ * LCS there made a big paste cost minutes.
+ */
+export function similarity(a: string, b: string): number {
   if (a === "" || b === "") return 0;
-  const tokensA = tokenizeWords(a).filter((t) => t.trim() !== "");
-  const tokensB = tokenizeWords(b).filter((t) => t.trim() !== "");
+  const tokensA = words(a);
+  const tokensB = words(b);
   if (tokensA.length === 0 || tokensB.length === 0) return 0;
-  const common = lcsPairs(tokensA, tokensB).length;
+  const common =
+    tokensA.length > WORD_DIFF_LIMIT || tokensB.length > WORD_DIFF_LIMIT
+      ? bagOverlap(tokensA, tokensB)
+      : lcsPairs(tokensA, tokensB).length;
   return (2 * common) / (tokensA.length + tokensB.length);
 }
 
@@ -170,7 +212,7 @@ export function lineDiff(before: string, after: string): DiffLine[] {
     let paired = 0;
     while (
       paired < shared &&
-      similarity(removed[paired]!, added[paired]!) >= LINE_PAIR_SIMILARITY
+      similarity(removed[paired]!, added[paired]!) >= PAIR_SIMILARITY
     ) {
       const beforeLine = removed[paired]!;
       const afterLine = added[paired]!;
@@ -229,9 +271,10 @@ export interface BlockChange {
  * everything the model left untouched — which the augmentation rule says is
  * most of it — matches exactly and is not a decision at all.
  *
- * A removed and an added block that face each other at the same position are
- * folded into one `changed` block, which is what carries the before/after and
- * the word diff. Leftovers on either side stay honest adds and removes.
+ * A removed and an added block that face each other at the same position AND
+ * are similar enough (the line diff's own threshold) are folded into one
+ * `changed` block, which is what carries the before/after and the word diff.
+ * Everything else stays an honest add or remove.
  */
 export function alignBlocks(currentBody: string, proposedBody: string): BlockChange[] {
   const current = parseBlocks(currentBody);
@@ -247,9 +290,18 @@ export function alignBlocks(currentBody: string, proposedBody: string): BlockCha
   };
   const flush = (removed: SceneBlock[], added: SceneBlock[]): void => {
     const shared = Math.min(removed.length, added.length);
-    for (let k = 0; k < shared; k += 1) {
-      const beforeBlock = removed[k]!;
-      const afterBlock = added[k]!;
+    // Facing each other is not enough to be the SAME block rewritten — the
+    // gate is the one the line diff uses. Without it a dropped callout and an
+    // unrelated new paragraph became one „geändert" row, which both hid the
+    // deletion and cost the addition its „übernehmen" default.
+    let paired = 0;
+    while (
+      paired < shared &&
+      similarity(blockMarkdown(removed[paired]!), blockMarkdown(added[paired]!)) >=
+        PAIR_SIMILARITY
+    ) {
+      const beforeBlock = removed[paired]!;
+      const afterBlock = added[paired]!;
       out.push({
         id: id(),
         kind: "changed",
@@ -257,11 +309,12 @@ export function alignBlocks(currentBody: string, proposedBody: string): BlockCha
         after: afterBlock,
         words: wordDiff(blockMarkdown(beforeBlock), blockMarkdown(afterBlock)),
       });
+      paired += 1;
     }
-    for (const block of removed.slice(shared)) {
+    for (const block of removed.slice(paired)) {
       out.push({ id: id(), kind: "removed", before: block });
     }
-    for (const block of added.slice(shared)) {
+    for (const block of added.slice(paired)) {
       out.push({ id: id(), kind: "added", after: block });
     }
   };
