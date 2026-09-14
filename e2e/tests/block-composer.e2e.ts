@@ -23,7 +23,7 @@
 // „Vorlesetext 3 bearbeiten", „Probe 4 nach unten" — because that is the only
 // place where a card's TYPE and its POSITION are both visible from outside, and
 // asserting them is asserting the vocabulary of the reading view (blockLabel:
-// Vorlesetext, Probe, Geheim, Konsequenz, Beute, Notiz, Falls-Abschnitt,
+// Vorlesetext, Probe, Geheim, Ergebnis, Beute, Notiz, Falls-Abschnitt,
 // Überschrift, Text, Roh-Block). `exact: true` everywhere: „Text 3 bearbeiten"
 // is a substring of „Vorlesetext 3 bearbeiten".
 
@@ -277,7 +277,7 @@ test("the + slot at the end creates a Beute block through the type picker", asyn
     "Vorlesetext",
     "Probe",
     "Geheim",
-    "Konsequenz",
+    "Ergebnis",
     "Beute",
     "Notiz",
     "Überschrift",
@@ -378,7 +378,7 @@ test("a child of the first If-section edits without touching the two headings", 
     "Falls-Abschnitt 4",
     "Probe 1",
     "Text 2",
-    "Konsequenz 3",
+    "Ergebnis 3",
   ]);
 
   // The section card itself carries the CONDITION, not the `## If:` markup.

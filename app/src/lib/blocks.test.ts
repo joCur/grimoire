@@ -613,7 +613,7 @@ const t = translator("de");
 describe("labels", () => {
   test("the six callouts use the names the reading view already shows", () => {
     const kinds = ["readaloud", "check", "secret", "outcome", "loot", "note"] as const;
-    const expected = ["Vorlesetext", "Probe", "Geheim", "Konsequenz", "Beute", "Notiz"];
+    const expected = ["Vorlesetext", "Probe", "Geheim", "Ergebnis", "Beute", "Notiz"];
     expect(kinds.map((kind) => blockLabel(makeCallout(kind, "x"), t))).toEqual(expected);
     expect(kinds.map((kind) => calloutLabel(kind, t))).toEqual(expected);
   });

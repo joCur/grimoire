@@ -35,7 +35,7 @@ describe("Markdown pipeline rendering", () => {
 
   test("callout labels match the design reference", () => {
     expect(render("> [!secret] x")).toContain(">Geheim<");
-    expect(render("> [!outcome] x")).toContain(">Konsequenz<");
+    expect(render("> [!outcome] x")).toContain(">Ergebnis<");
     expect(render("> [!loot] x")).toContain(">Beute<");
     expect(render("> [!note] x")).toContain(">Notiz<");
   });

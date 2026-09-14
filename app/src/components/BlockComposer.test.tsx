@@ -161,7 +161,7 @@ describe("the type picker", () => {
       "Vorlesetext",
       "Probe",
       "Geheim",
-      "Konsequenz",
+      "Ergebnis",
       "Beute",
       "Notiz",
       "Überschrift",

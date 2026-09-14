@@ -720,7 +720,7 @@ export const de = {
   "markdown.callout.readaloud": "Vorlesetext",
   "markdown.callout.check": "Probe",
   "markdown.callout.secret": "Geheim",
-  "markdown.callout.outcome": "Konsequenz",
+  "markdown.callout.outcome": "Ergebnis",
   "markdown.callout.loot": "Beute",
   "markdown.callout.note": "Notiz",
   // The branch label of a `## If:` section — the heading in the FILE stays

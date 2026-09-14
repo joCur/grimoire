@@ -126,7 +126,7 @@ test("reference scene 2: contingency header, collapsible If-sections, consequenc
     "Charisma (Deception)",
   );
   const outcome = page.locator("[data-callout='outcome']");
-  await expect(outcome).toContainText("Konsequenz");
+  await expect(outcome).toContainText("Ergebnis");
   await expect(outcome).toContainText("Fenn kennt nach dieser Szene die Gesichter der Gruppe");
 
   await expect(page.locator("[data-callout='note']")).toContainText(
