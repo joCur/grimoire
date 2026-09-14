@@ -2,7 +2,7 @@
 id: smuggler-captured
 title: Von den Schmugglern erwischt
 type: contingency
-trigger: Charaktere werden beim Auskundschaften der Bucht entdeckt
+trigger: Charaktere werden beim Auskundschaften der Bucht überrascht
 chapter: 01-salzhafen
 location: bucht
 npcs: [fenn]

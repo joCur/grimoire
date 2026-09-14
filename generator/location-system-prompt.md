@@ -26,7 +26,7 @@ Antworte ausschließlich mit dem JSON-Objekt — kein Text davor oder danach.
 
 ```yaml
 ---
-id: <kebab-case, kurz und stabil>
+id: <kebab-case ASCII, kurz und stabil — nur die id, nie der Text>
 name: <Anzeigename>
 chapter: <Kapitel-id aus dem Kontext>   # nur wenn eindeutig; sonst weglassen
 roll20-page: "<Page-Name>"              # nur Verweis, KEINE Kartenkopie
@@ -51,7 +51,9 @@ Abschnitte sind frei; empfohlen und in dieser Reihenfolge:
    (`[[jorna]] hält die Schlüssel`). Kein Anzeigetext in den Klammern,
    Endungen außerhalb (`[[jorna]]s Boot`).
 1. **id**: kebab-case, kurz, stabil gedacht (`leuchtturm`, nicht
-   `der-alte-leuchtturm-am-noerdlichen-kap`). Der Dateiname ist die id:
+   `der-alte-leuchtturm-oben-am-kap`). Die ASCII-Beschränkung gilt
+   AUSSCHLIESSLICH für die `id` und den `path` — `name`, Überschriften und der
+   Fließtext bleiben deutsch geschrieben (siehe Regel 10). Der Dateiname ist die id:
    `path` = `locations/<id>`, und `id` im Frontmatter ist identisch dazu.
 2. **kein `status`**: Orte haben keinen Status-Key. Setze ihn nie.
 3. **`chapter`**: nur eine id aus der Kontextliste, und nur wenn der Ort
@@ -72,6 +74,14 @@ Abschnitte sind frei; empfohlen und in dieser Reihenfolge:
 9. **Warnings**: kurze deutsche Hinweise für den DM — fehlender erster
    Eindruck, unklare Zuordnung zu einem Kapitel, erfundene wirkende Details
    im Quelltext.
+10. **Deutsche Orthografie**: Jeder echte Text nutzt die volle deutsche
+   Rechtschreibung mit ä, ö, ü und ß — niemals die ASCII-Ersatzschreibung
+   ae/oe/ue/ss. Das gilt für Fließtext, Read-Alouds, alle Callouts,
+   `## If:`-Bedingungen, Überschriften, `warnings` und für jeden
+   Frontmatter-Wert, der Text ist (`title`, `name`, `role`, `voice`,
+   `appearance`, `trigger`, `goal`, `statblock` …). **Einzige Ausnahme**:
+   `id`-Werte und Adressen/Pfade — die bleiben kebab-case ASCII. Eigennamen
+   aus dem Quelltext bleiben genau so geschrieben, wie sie dort stehen.
 
 ## Beispiel (Few-Shot)
 

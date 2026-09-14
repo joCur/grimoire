@@ -15,7 +15,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import type { AugmentResult, FileResponse, GenerateJob } from "@grimoire/shared";
 import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generate-jobs";
-import { MAX_CORRECTION_TURNS, setProviderForTests } from "../src/generator";
+import {
+  ASSET_FILES,
+  MAX_CORRECTION_TURNS,
+  loadAsset,
+  setProviderForTests,
+} from "../src/generator";
 import {
   augmentSystemPrompt,
   formatContract,
@@ -196,6 +201,45 @@ describe("prompt assembly", () => {
       expect(prompt.split("## Ausgabeformat").length - 1).toBe(1);
       // The file format itself is still there.
       expect(prompt).toContain("## Ziel-Format der Datei");
+    }
+  });
+
+  // Issue #93: the German-orthography rule. It has to reach EVERY assembled
+  // prompt kind and exactly once — the create prompts carry it under
+  // „## Regeln", which `formatContract` slices off, so the augment kinds get
+  // it from augment-system-prompt.md instead. Once means once: a rule the
+  // model meets twice in slightly different company is a rule it can weigh.
+  const ORTHOGRAPHY_RULE = "**Deutsche Orthografie**";
+
+  test("every prompt kind carries the orthography rule exactly once", async () => {
+    const assembled: Array<[string, string]> = [
+      ["scene", await loadAsset(ASSET_FILES.scene.systemPrompt)],
+      ["npc", await loadAsset(ASSET_FILES.npc.systemPrompt)],
+      ["location", await loadAsset(ASSET_FILES.location.systemPrompt)],
+      ["augment/npc", await augmentSystemPrompt("npc")],
+      ["augment/location", await augmentSystemPrompt("location")],
+      ["augment/scene", await augmentSystemPrompt("scene")],
+    ];
+    for (const [kind, prompt] of assembled) {
+      expect(prompt.split(ORTHOGRAPHY_RULE).length - 1, kind).toBe(1);
+      // The wording is the contract, not just the label.
+      expect(prompt, kind).toContain("ä, ö, ü und ß");
+      expect(prompt, kind).toContain("ae/oe/ue/ss");
+      expect(prompt, kind).toContain("`id`-Werte und Adressen/Pfade");
+    }
+    // …and it is the SAME sentence everywhere: one rule, four prompts.
+    const paragraph = (doc: string) =>
+      doc.slice(doc.indexOf(ORTHOGRAPHY_RULE)).split("\n\n")[0];
+    const wordings = new Set(assembled.map(([, doc]) => paragraph(doc)));
+    expect(wordings.size).toBe(1);
+  });
+
+  test("the few-shot targets show umlauts in properties AND body", async () => {
+    for (const kind of ["scene", "npc", "location"] as const) {
+      const doc = await loadAsset(ASSET_FILES[kind].fewShotTarget);
+      const [, frontmatter = "", ...rest] = doc.split("---\n");
+      expect(frontmatter, `${kind} properties`).toMatch(/[äöüß]/);
+      expect(rest.join("---\n"), `${kind} body`).toMatch(/[äöüß]/);
     }
   });
 

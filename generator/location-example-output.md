@@ -1,6 +1,6 @@
 ---
 id: leuchtturm
-name: Der Leuchtturm von Salzhafen
+name: Der Leuchtturm über Salzhafen
 chapter: 01-salzhafen
 roll20-page: "Leuchtturm"
 ---
