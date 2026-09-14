@@ -268,8 +268,6 @@
 //   [x] DELETE /api/:campaign/generate/job     discard the job ("Verwerfen"). Since issue
 //                                              #97 that is the OPEN REST only — parts a
 //                                              partial accept wrote are entries now
-//   [x] PUT  /api/:campaign/generate/job/drafts { path, markdown } -> keep one review
-//                                              edit in the job (400 unknown path)
 //   [x] PATCH /api/:campaign/generate/job/:id/review
 //                                              { rev, edits?, entries?, dropped?, fields?,
 //                                              blocks? } -> the job (issue #97). Everything

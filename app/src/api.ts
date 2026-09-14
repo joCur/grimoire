@@ -730,24 +730,6 @@ export async function deleteGenerateJob(campaign: string): Promise<void> {
   }
 }
 
-/**
- * Keep one review edit in the job store, so an edited draft survives
- * navigation and reload (issue #19). Debounced by the caller; the local
- * editor state stays authoritative while typing.
- */
-export async function putDraftEdit(
-  campaign: string,
-  path: string,
-  markdown: string,
-): Promise<void> {
-  const url = `/${encodeURIComponent(campaign)}/generate/job/drafts`;
-  const response = await fetch(`/api${url}`, {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path, markdown }),
-  });
-  if (!response.ok) throw await failure(`PUT /api${url}`, response);
-}
 
 /**
  * Store part of the REVIEW STATE on the job (issue #97). Everything merges,

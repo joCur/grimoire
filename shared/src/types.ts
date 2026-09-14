@@ -536,8 +536,8 @@ export interface GenerateJob {
   error?: GenerateJobError;
   /**
    * Review edits kept server-side, keyed by the draft's campaign-relative
-   * path (PUT …/generate/job/drafts) — so an edited draft survives a reload
-   * as well. Empty until the DM edits something; applied ON TOP of
+   * path (PATCH …/generate/job/:id/review) — so an edited draft survives a
+   * reload as well. Empty until the DM edits something; applied ON TOP of
    * `result.scenes` (or of `npcResult.npc`) by the review UI.
    */
   draftEdits: Record<string, string>;

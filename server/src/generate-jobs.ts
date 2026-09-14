@@ -208,7 +208,7 @@ function unpackReview(value: string): GenerateJobReview {
  *
  * So a persisted job is normalized ONCE, on the way out of the row: the
  * suffix is stripped from every draft path and from the `draftEdits` keys
- * (which are those same paths). Review, `PUT …/job/drafts` and apply then all
+ * (which are those same paths). The review patch and apply then both
  * see the new scheme, and a fresh row — where nothing ends in `.md` — passes
  * through untouched.
  */
@@ -467,33 +467,6 @@ export async function deleteJob(campaign: string): Promise<boolean> {
 
 // --- review edits ------------------------------------------------------------
 
-/**
- * Store one review edit in the job (PUT …/generate/job/drafts). 404 without
- * a job, 400 for a path that is not one of the result's draft paths — the
- * store is not a free-form key/value bag, and an unknown path is a client
- * bug worth seeing. Editable are the scene drafts of a scene run and the one
- * npc draft of an NPC run (issue #21); stub markdown is not editable in the
- * review, so stubs are not accepted.
- */
-export async function setDraftEdit(
-  campaign: string,
-  rel: string,
-  markdown: string,
-): Promise<void> {
-  const db = await getDb();
-  const row = jobRow(db, campaign);
-  if (row === undefined) throw new ApiError(404, "no generate job for this campaign");
-  const job = toJob(row);
-  const known =
-    job.result?.scenes.some((scene) => scene.path === rel) === true ||
-    job.npcResult?.npc.path === rel;
-  if (!known) throw new ApiError(400, `unknown draft path: ${rel}`);
-  job.draftEdits.set(rel, markdown);
-  db.update(generateJobs)
-    .set({ draftEdits: JSON.stringify(Object.fromEntries(job.draftEdits)) })
-    .where(eq(generateJobs.id, row.id))
-    .run();
-}
 
 // --- review state (issue #97) -----------------------------------------------
 
@@ -543,6 +516,7 @@ export async function patchJobReview(
       });
     }
     const job = toJob(row);
+    assertKnownDraftPaths(job, patch);
     applyReviewPatch(job, patch);
     tx.update(generateJobs)
       .set({
@@ -554,6 +528,22 @@ export async function patchJobReview(
       .run();
     return { ...job, rev: row.rev + 1 };
   }) as Job;
+}
+
+/**
+ * A draft path the run never produced is a client bug, not state to store
+ * (issue #97 review, finding 8). `PUT …/job/drafts` always checked this;
+ * the review patch that replaced it did not, so a typo grew a `draftEdits`
+ * key nothing would ever read again.
+ */
+function assertKnownDraftPaths(job: Job, patch: ReviewPatch): void {
+  for (const path of Object.keys(patch.edits ?? {})) {
+    const rel = draftAddress(path);
+    const known =
+      job.result?.scenes.some((scene) => scene.path === rel) === true ||
+      job.npcResult?.npc.path === rel;
+    if (!known) throw new ApiError(400, `unknown draft path: ${path}`);
+  }
 }
 
 /** Merge a patch into a job in memory (the transaction writes the result). */

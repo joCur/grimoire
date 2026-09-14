@@ -132,9 +132,11 @@ test("a finished job survives a restart whole and is still applyable", async ({}
 
     const result = before.result as { scenes: { path: string; markdown: string }[] };
     expect(result.scenes.map((s) => s.path)).toEqual([DRAFT_PATH]);
-    await api.send("PUT", "beispiel/generate/job/drafts", {
-      path: DRAFT_PATH,
-      markdown: `${result.scenes[0]!.markdown}${edited}`,
+    // The review PATCH is the one way an edit reaches the job since issue
+    // #97 (its review, finding 8 — `PUT …/job/drafts` is gone).
+    await api.send("PATCH", `beispiel/generate/job/${before.id as string}/review`, {
+      rev: (before.rev as number | undefined) ?? 0,
+      edits: { [DRAFT_PATH]: `${result.scenes[0]!.markdown}${edited}` },
     });
     // Still nothing written — the review has not been applied.
     expect(await api.exists(SCENE_PATH)).toBe(false);

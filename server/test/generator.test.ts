@@ -292,14 +292,29 @@ async function fetchJob(campaign = "beispiel"): Promise<GenerateJob | null> {
   return (await res.json()) as GenerateJob;
 }
 
-/** PUT one review edit into the job store. */
-async function putDraft(campaign: string, body: unknown): Promise<Response> {
-  return app.request(`/api/${campaign}/generate/job/drafts`, {
-    method: "PUT",
+/**
+ * PATCH the review with one draft edit — the endpoint that replaced
+ * `PUT …/job/drafts` (issue #97 review, finding 8). `jobId`/`rev` default to
+ * the campaign's current job, which is what every caller here wants.
+ */
+async function patchReview(
+  campaign: string,
+  body: Record<string, unknown>,
+  over: { jobId?: string; rev?: number } = {},
+): Promise<Response> {
+  const job = await fetchJob(campaign);
+  const jobId = over.jobId ?? job?.id ?? "no-job";
+  const rev = over.rev ?? job?.rev ?? 0;
+  return app.request(`/api/${campaign}/generate/job/${jobId}/review`, {
+    method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ rev, ...body }),
   });
 }
+
+/** The common case: store the edited markdown of one draft. */
+const putDraftEdit = (campaign: string, path: string, markdown: string): Promise<Response> =>
+  patchReview(campaign, { edits: { [path]: markdown } });
 
 /** Poll the in-process app until the job is no longer running. */
 async function waitForJob(campaign = "beispiel"): Promise<GenerateJob> {
@@ -1349,36 +1364,34 @@ describe("generate jobs", () => {
     expect(await fetchJob()).toBeNull();
   });
 
-  test("PUT drafts: 404 without a job, 400 for an unknown path, and edits survive", async () => {
+  test("review edits: 404 without a job, 400 for an unknown path, and edits survive", async () => {
     const scenePath = "01-salzhafen/hafen/job-drafts";
     const edited = `${sceneMarkdown({ npcs: "fenn" })}\nHandgeschriebene Ergänzung.\n`;
 
     // no job at all
-    let res = await putDraft("beispiel", { path: scenePath, markdown: edited });
+    let res = await putDraftEdit("beispiel", scenePath, edited);
     expect(res.status).toBe(404);
 
     useFake([jobReply(scenePath)]);
     await generate(generateBody);
 
-    // a path that is not part of the result
-    res = await putDraft("beispiel", { path: "01-salzhafen/hafen/fremd", markdown: edited });
+    // a path that is not part of the result (issue #97 review, finding 8:
+    // the review patch used to store any key it was handed)
+    res = await putDraftEdit("beispiel", "01-salzhafen/hafen/fremd", edited);
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("unknown draft path");
+    expect((await fetchJob())!.draftEdits).toEqual({});
 
     // malformed bodies
-    expect((await putDraft("beispiel", { path: scenePath })).status).toBe(400);
-    expect((await putDraft("beispiel", { markdown: edited })).status).toBe(400);
+    expect((await patchReview("beispiel", { edits: { [scenePath]: 42 } })).status).toBe(400);
+    expect((await patchReview("beispiel", { edits: edited })).status).toBe(400);
     expect(
-      (await putDraft("beispiel", { path: scenePath, markdown: 42 })).status,
-    ).toBe(400);
-    expect(
-      (await putDraft("beispiel", { path: scenePath, markdown: edited, extra: 1 })).status,
+      (await patchReview("beispiel", { edits: { [scenePath]: edited }, extra: 1 })).status,
     ).toBe(400);
 
     // the real thing
-    res = await putDraft("beispiel", { path: scenePath, markdown: edited });
+    res = await putDraftEdit("beispiel", scenePath, edited);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ path: scenePath });
 
     const job = await fetchJob();
     expect(job!.draftEdits).toEqual({ [scenePath]: edited });
@@ -1386,9 +1399,9 @@ describe("generate jobs", () => {
     expect(job!.result!.scenes[0]!.markdown).not.toBe(edited);
 
     // last write wins
-    expect((await putDraft("beispiel", { path: scenePath, markdown: "---\nid: x\n---\n" })).status)
-      .toBe(200);
-    expect((await fetchJob())!.draftEdits[scenePath]).toBe("---\nid: x\n---\n");
+    const rewritten = `${sceneMarkdown({ npcs: "fenn" })}\nNoch einmal anders.\n`;
+    expect((await putDraftEdit("beispiel", scenePath, rewritten)).status).toBe(200);
+    expect((await fetchJob())!.draftEdits[scenePath]).toBe(rewritten);
   });
 
   test("apply with jobId discards the job; a stale id leaves it alone", async () => {
@@ -1468,7 +1481,7 @@ describe("generate jobs", () => {
     await generate(generateBody);
     const before = (await fetchJob())!;
     expect(before.status).toBe("done");
-    expect((await putDraft("beispiel", { path: scenePath, markdown: edited })).status).toBe(200);
+    expect((await putDraftEdit("beispiel", scenePath, edited)).status).toBe(200);
 
     // The boot touches nothing that already finished.
     expect(await restartServer()).toBe(0);
@@ -1620,9 +1633,7 @@ describe("generate jobs", () => {
 
     // …and the edit store accepts the normalized path (it used to 400 on
     // both spellings: the stored one is unknown, the new one had no draft).
-    expect(
-      (await putDraft("beispiel", { path: "npcs/legacy-npc", markdown: npcMarkdown })).status,
-    ).toBe(200);
+    expect((await putDraftEdit("beispiel", "npcs/legacy-npc", npcMarkdown)).status).toBe(200);
 
     // The point of all of it: "Übernehmen" works, under the new address.
     const res = await postJson("/api/beispiel/generate/apply", {

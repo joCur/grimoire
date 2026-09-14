@@ -62,7 +62,6 @@ import {
   getJob,
   patchJobReview,
   serializeJob,
-  setDraftEdit,
   type ReviewPatch,
   startJob,
 } from "../generate-jobs";
@@ -885,22 +884,6 @@ api.delete("/:campaign/generate/job", async (c) => {
     throw new ApiError(404, "no generate job for this campaign");
   }
   return c.json({ deleted: true });
-});
-
-// PUT /api/:campaign/generate/job/drafts { path, markdown } -> { path }
-// One review edit into the job store, so edits survive navigation as well
-// (issue #19 AK3). 404 without a job, 400 when the path is not one of the
-// result's scene paths. The markdown is stored verbatim and NOT validated
-// here — apply re-validates everything server-side anyway, and a
-// half-written draft must still be storable while the DM types.
-api.put("/:campaign/generate/job/drafts", async (c) => {
-  const body = await jsonBody(c, ["path", "markdown"]);
-  const rel = body.path;
-  const markdown = body.markdown;
-  if (typeof rel !== "string" || rel === "") throw new ApiError(400, "path must be a string");
-  if (typeof markdown !== "string") throw new ApiError(400, "markdown must be a string");
-  await setDraftEdit(c.req.param("campaign"), rel, markdown);
-  return c.json({ path: rel });
 });
 
 // POST /api/:campaign/generate/apply
