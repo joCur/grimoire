@@ -31,7 +31,7 @@ import type { AugmentPropertyProposal, AugmentResult, FileResponse } from "@grim
 import { isAugmentKind } from "@grimoire/shared/types";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, SpellCheck, StickyNote } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { applyAugment, deleteGenerateJob, fetchFile, startAugmentJob } from "@/api";
 import { HeaderAction } from "@/components/HeaderAction";
@@ -49,11 +49,22 @@ import {
   type DiffToken,
 } from "@/lib/augment";
 import { blockLabel, blockMarkdown } from "@/lib/blocks";
+import { fmString } from "@/lib/properties";
 import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
+import { useRevWriteMutation } from "@/lib/use-rev-write";
 import { cn } from "@/lib/utils";
-import { isStaleFileError } from "@/lib/write-with-rev";
+import { writeWithRev } from "@/lib/write-with-rev";
 
 const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground";
+
+/**
+ * What the dialog CALLS the entry: the name the DM gave it (an npc's `name`,
+ * a scene's `title`), never the wire address. „npcs/fenn" is how the entry is
+ * addressed, not how it is known at the table.
+ */
+function entryName(file: FileResponse): string {
+  return fmString(file.properties.name) ?? fmString(file.properties.title) ?? file.path;
+}
 
 /** The two review surfaces — blocks (default) and the raw text diff. */
 type ReviewMode = "blocks" | "raw";
@@ -111,7 +122,12 @@ function AugmentDialog({
   // is the server's rule and the DM has to know whose job is in the way.
   const current = job.data;
   const mine = current?.kind === "augment" && current.target === file.path;
-  const foreign = current !== undefined && current !== null && !mine && current.status === "running";
+  // ANY foreign job blocks, not just a running one: a finished generator run
+  // whose review nobody has looked at yet would be DELETED by the next start
+  // (one job per campaign, and a start replaces a finished row). The DM has
+  // to go and deal with it there — so the two cases get their own sentence.
+  const foreign = current !== undefined && current !== null && !mine;
+  const foreignRunning = foreign && current.status === "running";
   const proposal = mine ? current?.augmentResult : undefined;
 
   const start = useMutation({
@@ -136,6 +152,8 @@ function AugmentDialog({
     (sourceText.trim() !== "" || instruction.trim() !== "") && !start.isPending && !foreign;
 
   const failure = mine && current?.status === "failed" ? current.error : undefined;
+  const running = mine && current?.status === "running" && proposal === undefined;
+  const name = entryName(file);
 
   return (
     <Dialog
@@ -144,14 +162,29 @@ function AugmentDialog({
         if (!isOpen) onClose();
       }}
     >
-      <DialogContent
-        aria-describedby={undefined}
-        className="flex max-h-[calc(100dvh-48px)] w-[calc(100vw-48px)] max-w-[820px] flex-col"
-      >
+      <DialogContent className="flex max-h-[calc(100dvh-48px)] w-[calc(100vw-48px)] max-w-[820px] flex-col">
         <DialogTitle>{t("augment.title")}</DialogTitle>
+        {/* One lead per phase (never the input hint during a run or a
+            review), and it names the ENTRY, not its address. */}
         <DialogDescription>
-          {t("augment.description", { path: file.path })}
+          {t(
+            proposal !== undefined
+              ? "augment.description.review"
+              : running
+                ? "augment.description.running"
+                : "augment.description",
+            { name },
+          )}
         </DialogDescription>
+        {/* ONE live region for the whole dialog: the phases swap their
+            subtrees, and a region that unmounts announces nothing. */}
+        <p aria-live="polite" className="sr-only">
+          {proposal !== undefined
+            ? t("augment.announce.ready")
+            : running
+              ? t("augment.announce.running")
+              : ""}
+        </p>
 
         <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-y-auto pr-0.5">
           {proposal !== undefined ? (
@@ -162,8 +195,8 @@ function AugmentDialog({
               proposal={proposal}
               onDone={onClose}
             />
-          ) : mine && current?.status === "running" ? (
-            <p role="status" className="py-10 text-center text-[13.5px] text-muted-foreground">
+          ) : running ? (
+            <p className="py-10 text-center text-[13.5px] text-muted-foreground">
               {t("augment.running")}
             </p>
           ) : (
@@ -174,7 +207,9 @@ function AugmentDialog({
                 </p>
               )}
               {foreign && (
-                <p className="mb-3 text-[13px] text-muted-foreground">{t("augment.busy")}</p>
+                <p className="mb-3 text-[13px] text-muted-foreground">
+                  {t(foreignRunning ? "augment.busy" : "augment.busy.review")}
+                </p>
               )}
               <label htmlFor="augment-source" className={cn(OVERLINE, "mb-2 block")}>
                 {t("augment.source.label")}
@@ -259,9 +294,12 @@ function AugmentReview({
 }) {
   const t = useT();
   const queryClient = useQueryClient();
+  // The body the proposal is diffed AGAINST. It starts as the one the run
+  // saw and moves only after a conflict — see `onConflict` below.
+  const [currentBody, setCurrentBody] = useState(proposal.currentBody);
   const changes = useMemo(
-    () => alignBlocks(proposal.currentBody, proposal.proposedBody),
-    [proposal.currentBody, proposal.proposedBody],
+    () => alignBlocks(currentBody, proposal.proposedBody),
+    [currentBody, proposal.proposedBody],
   );
   const [acceptedBlocks, setAcceptedBlocks] = useState<Set<string>>(() => defaultAccepted(changes));
   // Properties default (AK2): take what is new, keep what is filled.
@@ -270,52 +308,61 @@ function AugmentReview({
   );
   const [mode, setMode] = useState<ReviewMode>("blocks");
   const [showUnchanged, setShowUnchanged] = useState(false);
-  const [message, setMessage] = useState<string>();
   // Frozen at review time and advanced only after a conflict — the same rule
   // the properties dialog follows, so the 5s version poll cannot turn an
   // external write into a silent overwrite.
   const [base, setBase] = useState(file.rev);
+  const [rejectMessage, setRejectMessage] = useState<string>();
+  // The review takes the focus when it replaces the running state: the button
+  // that had it is gone, and focus on <body> announces nothing at all.
+  const container = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    container.current?.focus();
+  }, []);
 
   const decisions = changes.filter((change) => change.kind !== "same");
+  const hasUnchanged = changes.some((change) => change.kind === "same");
+  const visible = changes.filter((change) => showUnchanged || change.kind !== "same");
   const body = assembleBody(changes, acceptedBlocks);
   const patch = Object.fromEntries(
     proposal.properties
       .filter((p) => acceptedFields.has(p.key))
       .map((p) => [p.key, p.proposed] as const),
   );
-  const bodyChanged = body !== proposal.currentBody;
+  const bodyChanged = body !== currentBody;
   const canApply = bodyChanged || Object.keys(patch).length > 0;
 
-  const apply = useMutation({
-    mutationFn: () =>
-      applyAugment(campaign, {
-        path: proposal.path,
-        rev: base,
-        ...(Object.keys(patch).length === 0 ? {} : { properties: patch }),
-        ...(bodyChanged ? { body } : {}),
-        ...(jobId === undefined ? {} : { jobId }),
-      }),
-    onMutate: () => setMessage(undefined),
-    onSuccess: (written) => {
-      queryClient.setQueryData(["file", campaign, file.path], written);
-      void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
-      void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
-      onDone();
-    },
-    onError: (error) => {
-      if (!isStaleFileError(error)) {
-        setMessage(t("write.failed"));
-        return;
-      }
-      // 409: nothing was written. Re-read once so the next attempt carries
-      // the fresh token, and say so instead of losing the decisions.
-      setMessage(t("write.stale"));
-      void fetchFile(campaign, file.path)
-        .then((reread) => {
-          queryClient.setQueryData(["file", campaign, file.path], reread);
-          setBase(reread.rev);
-        })
-        .catch(() => undefined);
+  // The accept is an ORDINARY rev-checked write (issue #38's shared layer):
+  // the written file seeds the cache, tree AND search are invalidated — ⌘K
+  // must not keep the text the proposal replaced — and the 409 protocol is
+  // the house one.
+  const apply = useRevWriteMutation<{ rev: number; properties?: typeof patch; body?: string }>({
+    write: (variables) =>
+      writeWithRev(
+        () =>
+          applyAugment(campaign, {
+            path: proposal.path,
+            ...variables,
+            ...(jobId === undefined ? {} : { jobId }),
+          }),
+        () => fetchFile(campaign, file.path),
+      ),
+    fileKey: ["file", campaign, file.path],
+    invalidateOnSuccess: [
+      ["tree", campaign],
+      ["search", campaign],
+      generateJobKey(campaign),
+    ],
+    onSaved: onDone,
+    onConflict: (reread) => {
+      // 409: nothing was written, and the OTHER writer's text is now the
+      // truth. Re-align the proposal against it and re-derive the defaults —
+      // keeping the decisions that were cut against the stale body would
+      // overwrite that writer on the next attempt, silently.
+      if (reread === undefined) return;
+      setBase(reread.rev);
+      setCurrentBody(reread.body);
+      setAcceptedBlocks(defaultAccepted(alignBlocks(reread.body, proposal.proposedBody)));
     },
   });
 
@@ -325,11 +372,18 @@ function AugmentReview({
       void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
       onDone();
     },
-    onError: () => setMessage(t("augment.discard.failed")),
+    onError: () => setRejectMessage(t("augment.discard.failed")),
   });
 
+  const message = rejectMessage ?? apply.message;
+
   return (
-    <div className="flex min-h-0 flex-col">
+    <div
+      ref={container}
+      tabIndex={-1}
+      aria-label={t("augment.review.aria")}
+      className="flex min-h-0 flex-col outline-none"
+    >
       {proposal.warnings.map((warning) => (
         <div
           key={warning}
@@ -416,40 +470,43 @@ function AugmentReview({
 
       {mode === "blocks" ? (
         <>
-          {decisions.length === 0 ? (
+          {decisions.length === 0 && (
             <p className="text-[13px] text-muted-foreground">{t("augment.body.none")}</p>
-          ) : (
+          )}
+          {visible.length > 0 && (
             <ul className="flex flex-col gap-2.5">
-              {changes
-                .filter((change) => showUnchanged || change.kind !== "same")
-                .map((change) => (
-                  <BlockRow
-                    key={change.id}
-                    change={change}
-                    accepted={acceptedBlocks.has(change.id)}
-                    onDecide={(take) =>
-                      setAcceptedBlocks((prev) => {
-                        const next = new Set(prev);
-                        if (take) next.add(change.id);
-                        else next.delete(change.id);
-                        return next;
-                      })
-                    }
-                    t={t}
-                  />
-                ))}
+              {visible.map((change) => (
+                <BlockRow
+                  key={change.id}
+                  change={change}
+                  accepted={acceptedBlocks.has(change.id)}
+                  onDecide={(take) =>
+                    setAcceptedBlocks((prev) => {
+                      const next = new Set(prev);
+                      if (take) next.add(change.id);
+                      else next.delete(change.id);
+                      return next;
+                    })
+                  }
+                  t={t}
+                />
+              ))}
             </ul>
           )}
-          <button
-            type="button"
-            onClick={() => setShowUnchanged((prev) => !prev)}
-            className="mt-2.5 self-start rounded-md text-[12px] text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
-          >
-            {t(showUnchanged ? "augment.body.hideUnchanged" : "augment.body.showUnchanged")}
-          </button>
+          {/* Only offered when there is something behind it — the toggle used
+              to sit there on an all-new body and reveal nothing. */}
+          {hasUnchanged && (
+            <button
+              type="button"
+              onClick={() => setShowUnchanged((prev) => !prev)}
+              className="mt-2.5 self-start rounded-md text-[12px] text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
+            >
+              {t(showUnchanged ? "augment.body.hideUnchanged" : "augment.body.showUnchanged")}
+            </button>
+          )}
         </>
       ) : (
-        <RawDiff before={proposal.currentBody} after={proposal.proposedBody} />
+        <RawDiff before={currentBody} after={proposal.proposedBody} t={t} />
       )}
 
       <p aria-live="polite" className="min-h-[17px] pt-3 text-[12px] text-destructive">
@@ -467,7 +524,13 @@ function AugmentReview({
         <Button
           type="button"
           disabled={!canApply || apply.isPending}
-          onClick={() => apply.mutate()}
+          onClick={() =>
+            apply.write({
+              rev: base,
+              ...(Object.keys(patch).length === 0 ? {} : { properties: patch }),
+              ...(bodyChanged ? { body } : {}),
+            })
+          }
           className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
         >
           {t(apply.isPending ? "common.saving" : "augment.accept")}
@@ -495,7 +558,7 @@ function PropertyRow({
       <div className="mb-1.5 flex items-center gap-2">
         <span className="font-mono text-[12px] text-soft">{field.key}</span>
         <StateBadge state={field.state} t={t} />
-        <DecisionToggle accepted={accepted} onDecide={onDecide} t={t} />
+        <DecisionToggle accepted={accepted} onDecide={onDecide} unit={field.key} t={t} />
       </div>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px] leading-[1.5]">
         <dt className="text-[11.5px] text-muted-foreground">{t("augment.field.current")}</dt>
@@ -534,10 +597,12 @@ function BlockRow({
       <div className="mb-1.5 flex items-center gap-2">
         <span className={OVERLINE}>{blockLabel(block, t)}</span>
         {change.kind !== "same" && <StateBadge state={change.kind} t={t} />}
-        {!quiet && <DecisionToggle accepted={accepted} onDecide={onDecide} t={t} />}
+        {!quiet && (
+          <DecisionToggle accepted={accepted} onDecide={onDecide} unit={blockLabel(block, t)} t={t} />
+        )}
       </div>
       {change.kind === "changed" ? (
-        <WordDiffText tokens={change.words ?? []} />
+        <WordDiffText tokens={change.words ?? []} t={t} />
       ) : (
         <pre
           className={cn(
@@ -562,8 +627,14 @@ function blockSource(change: BlockChange): string {
   return block === undefined ? "" : blockMarkdown(block);
 }
 
-/** Word-level diff: only what moved is highlighted, the rest is neutral. */
-function WordDiffText({ tokens }: { tokens: DiffToken[] }) {
+/**
+ * Word-level diff: only what moved is highlighted, the rest is neutral.
+ *
+ * Colour is never the only cue — a removed run is struck through and an added
+ * one is announced, so „hinzugefügt"/„entfernt" reaches a reader who sees no
+ * highlight at all.
+ */
+function WordDiffText({ tokens, t }: { tokens: DiffToken[]; t: Translate }) {
   return (
     <p className="font-serif text-[13.5px] leading-[1.6] whitespace-pre-wrap text-body-secondary">
       {tokens.map((token, index) => (
@@ -575,6 +646,11 @@ function WordDiffText({ tokens }: { tokens: DiffToken[] }) {
             token.kind === "added" && "bg-primary/15 text-foreground",
           )}
         >
+          {token.kind !== "same" && (
+            <span className="sr-only">
+              {t(token.kind === "added" ? "augment.diff.added" : "augment.diff.removed")}{" "}
+            </span>
+          )}
           {token.text}
         </span>
       ))}
@@ -583,7 +659,7 @@ function WordDiffText({ tokens }: { tokens: DiffToken[] }) {
 }
 
 /** The raw tab: a line diff over the whole body, word diff inside a line. */
-function RawDiff({ before, after }: { before: string; after: string }) {
+function RawDiff({ before, after, t }: { before: string; after: string; t: Translate }) {
   const lines = useMemo(() => lineDiff(before, after), [before, after]);
   return (
     <div className="overflow-x-auto rounded-md border border-border bg-panel-deep">
@@ -592,15 +668,32 @@ function RawDiff({ before, after }: { before: string; after: string }) {
           <div
             key={index}
             className={cn(
-              "whitespace-pre-wrap",
-              line.kind === "added" && "bg-primary/10 text-foreground",
-              line.kind === "removed" && "bg-destructive/10 text-muted-foreground",
-              line.kind === "same" && "text-body-secondary",
+              // A left accent, not colour alone: an added line reads as added
+              // in a monochrome rendering too.
+              "whitespace-pre-wrap border-l-2 pl-1.5",
+              line.kind === "added" && "border-primary bg-primary/10 text-foreground",
+              line.kind === "removed" &&
+                "border-destructive bg-destructive/10 text-muted-foreground line-through",
+              line.kind === "changed" && "border-primary/50",
+              line.kind === "same" && "border-transparent text-body-secondary",
             )}
           >
-            <span aria-hidden className="mr-2 inline-block w-2 text-faint">
+            {/* The gutter marker is REAL text, and the kind is spelled out
+                for a reader who cannot see it. */}
+            <span className="mr-2 inline-block w-2 text-faint">
               {line.kind === "added" ? "+" : line.kind === "removed" ? "-" : line.kind === "changed" ? "~" : " "}
             </span>
+            {line.kind !== "same" && (
+              <span className="sr-only">
+                {t(
+                  line.kind === "added"
+                    ? "augment.diff.added"
+                    : line.kind === "removed"
+                      ? "augment.diff.removed"
+                      : "augment.diff.changed",
+                )}{" "}
+              </span>
+            )}
             {line.kind === "changed" ? (
               (line.words ?? []).map((token, tokenIndex) => (
                 <span
@@ -645,14 +738,24 @@ function StateBadge({
   );
 }
 
-/** Übernehmen ⇄ Behalten — two real buttons with aria-pressed, no select. */
+/**
+ * Übernehmen ⇄ Behalten — two real buttons with aria-pressed, no select.
+ *
+ * The VISIBLE word stays the screen's vocabulary, but the accessible name
+ * carries the unit („Übernehmen: role", „Behalten: Falls-Abschnitt"): a
+ * review of a dozen decisions plus the footer button otherwise offers a
+ * dozen identical „Übernehmen" to a screen reader, and the footer's is the
+ * one that writes.
+ */
 function DecisionToggle({
   accepted,
   onDecide,
+  unit,
   t,
 }: {
   accepted: boolean;
   onDecide: (take: boolean) => void;
+  unit: string;
   t: Translate;
 }) {
   return (
@@ -667,6 +770,9 @@ function DecisionToggle({
           type="button"
           variant="ghost"
           aria-pressed={accepted === take}
+          aria-label={t(take ? "augment.decision.takeUnit" : "augment.decision.keepUnit", {
+            label: unit,
+          })}
           onClick={() => onDecide(take)}
           className={cn(
             "h-auto rounded-[5px] px-2 py-[3px] text-[11.5px] font-normal",

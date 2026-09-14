@@ -736,18 +736,25 @@ export const en: Messages = {
   "augment.action": "Augment with AI",
   "augment.title": "Augment with AI",
   "augment.description":
-    "Source text and/or an instruction — the AI augments {path}. Nothing is overwritten "
+    "Source text and/or an instruction — the AI augments {name}. Nothing is overwritten "
     + "until you accept it.",
+  "augment.description.running": "The AI is augmenting {name}.",
+  "augment.description.review": "Proposal for {name} — you decide every spot yourself.",
+  "augment.announce.running": "The run is going.",
+  "augment.announce.ready": "The proposal is ready.",
   "augment.source.label": "Source text (EN)",
   "augment.source.placeholder": "A section from the adventure, notes, background …",
   "augment.instruction.label": "Instruction (optional)",
-  "augment.instruction.placeholder": "e.g. Introduce a plot thread about the smugglers' informer",
+  "augment.instruction.placeholder": "e.g. Introduce a new plot thread",
   "augment.input.hint": "At least one of the two is needed.",
   "augment.start": "Augment",
   "augment.starting": "Starting …",
   "augment.start.failed": "Run not started — check the server.",
   "augment.running": "Running on the server. You can close the tab — the result stays.",
   "augment.busy": "Another generator run is going. Wait for it, or discard it there.",
+  "augment.busy.review":
+    "Another generator run is still waiting for review. Accept or discard it in the "
+    + "generator first — a new run would delete it.",
   "augment.discard": "Discard run",
   "augment.discard.failed": "Could not discard the run — check the server.",
 
@@ -770,6 +777,12 @@ export const en: Messages = {
   "augment.decision.aria": "Accept or keep",
   "augment.decision.take": "Accept",
   "augment.decision.keep": "Keep",
+  "augment.decision.takeUnit": "Accept: {label}",
+  "augment.decision.keepUnit": "Keep: {label}",
+  "augment.diff.added": "added",
+  "augment.diff.removed": "removed",
+  "augment.diff.changed": "changed",
+  "augment.review.aria": "Review the proposal",
   "augment.accept": "Accept",
   "augment.reject": "Discard proposal",
   "augment.review.namingHeading":

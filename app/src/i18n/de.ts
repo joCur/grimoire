@@ -798,19 +798,26 @@ export const de = {
   "augment.action": "Mit KI ergänzen",
   "augment.title": "Mit KI ergänzen",
   "augment.description":
-    "Quelltext und/oder Anweisung — die KI ergänzt {path}. Nichts wird überschrieben, "
+    "Quelltext und/oder Anweisung — die KI ergänzt {name}. Nichts wird überschrieben, "
     + "bevor du es übernommen hast.",
+  "augment.description.running": "Die KI ergänzt {name}.",
+  "augment.description.review":
+    "Vorschlag für {name} — du entscheidest jede Stelle einzeln.",
+  "augment.announce.running": "Der Lauf läuft.",
+  "augment.announce.ready": "Der Vorschlag steht bereit.",
   "augment.source.label": "Quelltext (EN)",
   "augment.source.placeholder": "Abschnitt aus dem Abenteuer, Notizen, Hintergrund …",
   "augment.instruction.label": "Anweisung (optional)",
-  "augment.instruction.placeholder":
-    "z. B. Führe einen Handlungsstrang um den Schmuggler-Spitzel ein",
+  "augment.instruction.placeholder": "z. B. Führe einen neuen Handlungsstrang ein",
   "augment.input.hint": "Mindestens eines von beidem wird gebraucht.",
   "augment.start": "Ergänzen",
   "augment.starting": "Starte …",
   "augment.start.failed": "Lauf nicht gestartet — Server prüfen.",
   "augment.running": "Läuft auf dem Server. Du kannst den Tab schließen — das Ergebnis bleibt.",
   "augment.busy": "Ein anderer Generator-Lauf läuft gerade. Erst abwarten oder dort verwerfen.",
+  "augment.busy.review":
+    "Ein anderer Generator-Lauf wartet noch auf Review. Übernimm oder verwirf ihn erst "
+    + "im Generator — ein neuer Lauf würde ihn löschen.",
   "augment.discard": "Lauf verwerfen",
   "augment.discard.failed": "Konnte den Lauf nicht verwerfen — Server prüfen.",
 
@@ -833,6 +840,12 @@ export const de = {
   "augment.decision.aria": "Übernehmen oder behalten",
   "augment.decision.take": "Übernehmen",
   "augment.decision.keep": "Behalten",
+  "augment.decision.takeUnit": "Übernehmen: {label}",
+  "augment.decision.keepUnit": "Behalten: {label}",
+  "augment.diff.added": "hinzugefügt",
+  "augment.diff.removed": "entfernt",
+  "augment.diff.changed": "geändert",
+  "augment.review.aria": "Vorschlag prüfen",
   "augment.accept": "Übernehmen",
   "augment.reject": "Vorschlag verwerfen",
   "augment.review.namingHeading":

@@ -79,8 +79,12 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   await page.goto(NPC_URL);
   await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
   await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toBeVisible();
-  // The dialog names the entry it is about — one dialog, one target.
-  await expect(page.getByText(NPC_PATH, { exact: false })).toBeVisible();
+  // The dialog names the entry it is about by its DISPLAY NAME — the wire
+  // address is how it is stored, not how the DM knows it.
+  const lead = page.getByText("die KI ergänzt", { exact: false });
+  await expect(lead).toBeVisible();
+  await expect(lead).toContainText(EMPTY_NPC);
+  await expect(lead).not.toContainText("npcs/");
 
   // Nothing may start without input (AK1: source text and/or instruction).
   const startButton = page.getByRole("button", { name: "Ergänzen", exact: true });
@@ -105,7 +109,7 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
 
   // The body is empty, so every proposed block is an addition — preselected.
   const willBlock = page.locator("li").filter({ hasText: AUGMENT_NPC_WILL }).last();
-  await expect(willBlock.getByRole("button", { name: "Übernehmen" })).toHaveAttribute(
+  await expect(willBlock.getByRole("button", { name: /^Übernehmen: / })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
@@ -136,7 +140,6 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   const secret = page.locator("[data-callout='secret']");
   await expect(secret).toContainText("Meldet");
   await expect(secret.getByRole("link", { name: /NPC:/ })).toBeVisible();
-  expect(AUGMENT_NPC_SECRET).toContain("[[fenn]]");
 });
 
 test("prepared scene: the new thread is added, every existing block survives", async ({
@@ -158,7 +161,7 @@ test("prepared scene: the new thread is added, every existing block survives", a
   const newBlock = page.locator("li").filter({ hasText: AUGMENT_THREAD_CONDITION }).last();
   await expect(newBlock).toContainText("Falls-Abschnitt");
   await expect(newBlock).toContainText("Neu");
-  await expect(newBlock.getByRole("button", { name: "Übernehmen" })).toHaveAttribute(
+  await expect(newBlock.getByRole("button", { name: /^Übernehmen: / })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
@@ -168,7 +171,7 @@ test("prepared scene: the new thread is added, every existing block survives", a
   await expect(flowBlock()).toHaveCount(0);
   await page.getByRole("button", { name: "Unveränderte Blöcke zeigen" }).click();
   await expect(flowBlock()).toBeVisible();
-  await expect(flowBlock().getByRole("button", { name: "Behalten" })).toHaveCount(0);
+  await expect(flowBlock().getByRole("button", { name: /^Behalten: / })).toHaveCount(0);
 
   // The raw tab is the second surface of AK2 — a line/word diff over the
   // whole body, with the added lines marked.
@@ -240,11 +243,16 @@ test("409: the entry moves while the review is open — nothing is written", asy
   expect(conflicted).toContain("Jemand anderes hat die Szene umgeschrieben.");
   expect(conflicted).not.toContain(AUGMENT_THREAD_TEXT);
 
-  // The review re-read the entry, so the next attempt carries the fresh
-  // token and goes through — a conflict is a detour, not a dead end.
+  // The review re-read the entry and RE-ALIGNED the proposal against it, so
+  // the next attempt carries the fresh token and goes through — a conflict is
+  // a detour, not a dead end…
   await acceptButton(page).click();
   await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
-  expect(await api.raw(SCENE)).toContain(AUGMENT_THREAD_TEXT);
+  const written = await api.raw(SCENE);
+  expect(written).toContain(AUGMENT_THREAD_TEXT);
+  // …and the other writer is NOT overwritten by a decision that was cut
+  // against the body they replaced.
+  expect(written).toContain("Jemand anderes hat die Szene umgeschrieben.");
 });
 
 test("the entry point: npc, location and scene — and nothing else (AK1)", async ({
@@ -324,14 +332,19 @@ async function expectDecision(
 ): Promise<void> {
   const row = fieldRow(page, key);
   await expect(row).toContainText(state);
-  await expect(row.getByRole("button", { name: chosen })).toHaveAttribute("aria-pressed", "true");
+  // The row buttons are named with their unit, so „Übernehmen: role" is what
+  // distinguishes them from the footer's „Übernehmen".
+  await expect(row.getByRole("button", { name: `${chosen}: ${key}` })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 }
 
 /**
- * The review's accept button. It shares its word with the per-row toggles —
- * „Übernehmen" is the vocabulary of this screen on both levels — and it is
- * the LAST one on the page, in the dialog's footer.
+ * The review's accept button. The per-row toggles share its WORD but not its
+ * accessible name — theirs carries the unit („Übernehmen: role") — so the
+ * footer button is addressable exactly.
  */
 function acceptButton(page: Page) {
-  return page.getByRole("button", { name: "Übernehmen", exact: true }).last();
+  return page.getByRole("button", { name: "Übernehmen", exact: true });
 }
