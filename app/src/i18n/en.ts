@@ -3,7 +3,7 @@
 // typecheck.
 //
 // DM vocabulary, not a literal translation: Session · Scene · Chapter ·
-// Location · Wrap-up (Nachbereitung) · Read-aloud (Vorlesen) · Handout. Ids and
+// Location · Session review (Nachbereitung) · Read-aloud (Vorlesen) · Handout. Ids and
 // frontmatter keys stay as they are on the wire — `id`, `active`, `insight +2`
 // are data, not copy.
 
@@ -34,7 +34,7 @@ export const en: Messages = {
   "topbar.search": "Search …",
   "topbar.generator": "Generator",
   "topbar.generator.running": "Generating …",
-  "topbar.review.pending": "Wrap-up · {count} open",
+  "topbar.review.pending": "Session review · {count} open",
   "topbar.review.pendingShort": "{count} open",
   "topbar.session.back": "To the session",
 
@@ -419,15 +419,15 @@ export const en: Messages = {
   "live.drawer.open": "Open entry",
 
 
-  // --- review (the session wrap-up, formerly the "five-minute harvest" —
+  // --- review (the session review, formerly the "five-minute harvest" —
   // issue #10; the harvest metaphor stayed in the code, not in the UI)
   // routes/review.tsx, lib/use-review.ts ------------------------------------
-  "review.title": "Session wrap-up",
+  "review.title": "Session review",
   "review.sessionFailed": "Session not loadable — check the server and reload.",
   "review.noSession": "There is no session to review.",
   "review.backToPool": "Back to the chapters",
   "review.lead":
-    "Go through the notes of the session — adopt as a thread, create an NPC or discard. The rest stays in the log.",
+    "Go through the notes of the session — adopt as a storyline, create an NPC or discard. The rest stays in the log.",
   // Topbar and the mobile page read the same line (two parameters, #69).
   "review.progress": "{seen} of {total} reviewed",
   "review.hashUnavailable":
@@ -440,14 +440,14 @@ export const en: Messages = {
   "review.source.logScene": "Log · {scene}",
   "review.source.inbox": "Idea",
 
-  "review.action.thread": "Adopt as thread",
+  "review.action.thread": "Adopt as storyline",
   "review.action.resolve": "Done",
   "review.action.failed": "Action not saved — check the server.",
   "review.npc.failed": "NPC not created — check the server.",
 
   // The done row: the action of THIS sitting, or the neutral fallback after a
   // reload (the server only stores done/not-done).
-  "review.done.thread": "Adopted as thread",
+  "review.done.thread": "Adopted as storyline",
   "review.done.npc": "NPC created",
   "review.done.dismiss": "Discarded",
   "review.done.resolved": "Done",
@@ -460,14 +460,14 @@ export const en: Messages = {
   // Player-character notes (issue #86): `#pc` lines from log and inbox.
   "review.pc.title": "Player characters",
   "review.pc.lead":
-    "Entries tagged #pc — reminders for the table, not campaign content. Tick them off or keep them for the next wrap-up.",
+    "Entries tagged #pc — reminders for the table, not campaign content. Tick them off or keep them for the next review.",
   "review.pc.groupTag": "#{tag}",
   "review.pc.groupGeneral": "General",
   "review.action.keep": "Keep",
-  "review.action.keepHint": "Stays open for the next wrap-up.",
+  "review.action.keepHint": "Stays open for the next review.",
 
-  "review.threads.title": "Open threads of the chapter",
-  "review.threads.empty": "No open threads in this chapter yet.",
+  "review.threads.title": "Open storylines of the chapter",
+  "review.threads.empty": "No open storylines in this chapter yet.",
   "review.threads.new": "new",
   "review.finish": "Done — back to the chapters",
 
@@ -760,7 +760,7 @@ export const en: Messages = {
   "augment.source.label": "Source text (EN)",
   "augment.source.placeholder": "A section from the adventure, notes, background …",
   "augment.instruction.label": "Instruction (optional)",
-  "augment.instruction.placeholder": "e.g. Introduce a new plot thread",
+  "augment.instruction.placeholder": "e.g. Introduce a new storyline",
   "augment.input.hint": "At least one of the two is needed.",
   "augment.start": "Augment",
   "augment.starting": "Starting …",
