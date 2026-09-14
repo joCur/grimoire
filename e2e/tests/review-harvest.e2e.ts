@@ -103,8 +103,8 @@ test("adopting a thread lands in _chapter, the inbox line gets ticked off", asyn
     .poll(() => api.raw("inbox"))
     .toMatch(/- \[x\] 2026-01-10 Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread/);
 
-  // "Fertig" goes back to the pool.
-  await page.getByRole("button", { name: "Fertig — zurück zum Pool" }).click();
+  // "Fertig" goes back to the chapters.
+  await page.getByRole("button", { name: "Fertig — zurück zu den Kapiteln" }).click();
   await expect(page).toHaveURL(/\/beispiel$/);
   // The pool's quiet review affordance counts what is still open.
   await expect(page.getByRole("link", { name: "Nachbereitung · 2 offen" })).toBeVisible();
@@ -146,7 +146,7 @@ test("an untagged inbox note is reviewable and can be ticked off (issue #85)", a
   await expect.poll(() => api.raw("inbox")).toContain(`- [x] ${NOTE_TEXT}`);
 
   // The pool affordance counts the same entries the page does.
-  await page.getByRole("button", { name: "Fertig — zurück zum Pool" }).click();
+  await page.getByRole("button", { name: "Fertig — zurück zu den Kapiteln" }).click();
   await expect(page.getByRole("link", { name: "Nachbereitung · 4 offen" })).toBeVisible();
 });
 
@@ -198,7 +198,7 @@ test("a #pc note is grouped by character and ticked off (issue #86)", async ({ p
 
   // Back at the desk the pool affordance counts what is still open.
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.getByRole("button", { name: "Fertig — zurück zum Pool" }).click();
+  await page.getByRole("button", { name: "Fertig — zurück zu den Kapiteln" }).click();
   await expect(page.getByRole("link", { name: "Nachbereitung · 4 offen" })).toBeVisible();
 });
 

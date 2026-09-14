@@ -94,7 +94,7 @@ export const de = {
 
   "create.chapter.title": "Kapitel anlegen",
   "create.chapter.description":
-    'Der Titel wird zur id des Kapitels — sie steht in jeder Szenen-Adresse und bleibt, wie sie ist. Das Ziel ist optional und landet in der Datei unter der Überschrift „## Ziel des Kapitels" — dem Abschnitt, den der Pool liest.',
+    'Der Titel wird zur id des Kapitels — sie steht in jeder Szenen-Adresse und bleibt, wie sie ist. Das Ziel ist optional und landet in der Datei unter der Überschrift „## Ziel des Kapitels" — dem Abschnitt, der als Ziel des Kapitels angezeigt wird.',
   "create.chapter.nameLabel": "Titel",
   "create.chapter.namePlaceholder": "Titel des Kapitels",
   "create.chapter.goalLabel": "Ziel des Kapitels (optional)",
@@ -395,7 +395,7 @@ export const de = {
 
   // --- context line + mobile back row ---------------------------------------
   "context.aria": "Kontext",
-  "mobileBack.pool": "Pool",
+  "mobileBack.pool": "Kapitel",
 
   // --- shared scene-group headings (routes/live.tsx + routes/pool.tsx) ------
   // Neutral prefix on purpose: the live nav and the pool list show the SAME
@@ -416,7 +416,7 @@ export const de = {
   "live.nav.played": "Gespielt",
   "live.nav.playedGroup": "Gespielt {count}",
 
-  "live.scene.none": "Keine Szene im aktiven Kapitel — Szenen im Pool anlegen.",
+  "live.scene.none": "Keine Szene im aktiven Kapitel — Szenen in den Kapiteln anlegen.",
   "live.scene.loading": "Lade Szene …",
   "live.scene.unloadable": "Szene nicht ladbar — Pfad prüfen.",
   "live.scene.locationHeading": "Ort",
@@ -457,7 +457,7 @@ export const de = {
   "review.title": "Session-Nachbereitung",
   "review.sessionFailed": "Session nicht ladbar — Server prüfen und neu laden.",
   "review.noSession": "Es gibt keine Session zum Sichten.",
-  "review.backToPool": "Zurück zum Pool",
+  "review.backToPool": "Zurück zu den Kapiteln",
   "review.lead":
     "Notizen der Session durchgehen — als Handlungsstrang übernehmen, NPC anlegen oder verwerfen. Der Rest bleibt im Log.",
   // Topbar and the mobile page read the same line (two parameters, #69).
@@ -502,7 +502,7 @@ export const de = {
   "review.threads.title": "Offene Handlungsstränge des Kapitels",
   "review.threads.empty": "Noch keine offenen Handlungsstränge in diesem Kapitel.",
   "review.threads.new": "neu",
-  "review.finish": "Fertig — zurück zum Pool",
+  "review.finish": "Fertig — zurück zu den Kapiteln",
 
   // --- NPC stub dialog of the review (components/NpcCreateDialog.tsx) -------
   // `status: unknown` and `## Notizen` are FORMAT tokens on the wire (README),
@@ -708,11 +708,11 @@ export const de = {
   "generate.written.title.scene": "Geschrieben — alles als draft",
   "generate.written.title.npc": "Geschrieben — NPC-Eintrag angelegt",
   "generate.written.hint.scene":
-    "Die Szenen erscheinen im Pool mit Status „Entwurf“. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
+    "Die Szenen erscheinen in den Kapiteln mit Status „Entwurf“. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
   "generate.written.hint.npc":
     "Der NPC erscheint in der NPC-Liste und in der Suche. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
   "generate.written.openNpc": "NPC ansehen",
-  "generate.written.toPool": "Zum Pool",
+  "generate.written.toPool": "Zu den Kapiteln",
 
   // --- the markdown format's own vocabulary (markdown/grammar.ts holds the KEY
   //     per callout kind, markdown/Callout.tsx and markdown/Markdown.tsx show

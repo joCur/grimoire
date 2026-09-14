@@ -81,7 +81,7 @@ export const en: Messages = {
 
   "create.chapter.title": "Create chapter",
   "create.chapter.description":
-    "The title becomes the chapter's id — it appears in every scene address and stays as it is. The goal is optional and lands in the file under the heading “## Ziel des Kapitels” — the section the pool reads it from.",
+    "The title becomes the chapter's id — it appears in every scene address and stays as it is. The goal is optional and lands in the file under the heading “## Ziel des Kapitels” — the section shown as the chapter's goal.",
   "create.chapter.nameLabel": "Title",
   "create.chapter.namePlaceholder": "Chapter title",
   "create.chapter.goalLabel": "Goal of the chapter (optional)",
@@ -361,7 +361,7 @@ export const en: Messages = {
 
   // --- context line + mobile back row ---------------------------------------
   "context.aria": "Context",
-  "mobileBack.pool": "Pool",
+  "mobileBack.pool": "Chapters",
 
 
   // --- shared scene-group headings (routes/live.tsx + routes/pool.tsx) ------
@@ -383,7 +383,7 @@ export const en: Messages = {
   "live.nav.played": "Played",
   "live.nav.playedGroup": "Played {count}",
 
-  "live.scene.none": "No scene in the active chapter — create scenes in the pool.",
+  "live.scene.none": "No scene in the active chapter — create scenes in the chapters.",
   "live.scene.loading": "Loading scene …",
   "live.scene.unloadable": "Scene not loadable — check the path.",
   "live.scene.locationHeading": "Location",
@@ -425,7 +425,7 @@ export const en: Messages = {
   "review.title": "Session wrap-up",
   "review.sessionFailed": "Session not loadable — check the server and reload.",
   "review.noSession": "There is no session to review.",
-  "review.backToPool": "Back to the pool",
+  "review.backToPool": "Back to the chapters",
   "review.lead":
     "Go through the notes of the session — adopt as a thread, create an NPC or discard. The rest stays in the log.",
   // Topbar and the mobile page read the same line (two parameters, #69).
@@ -469,7 +469,7 @@ export const en: Messages = {
   "review.threads.title": "Open threads of the chapter",
   "review.threads.empty": "No open threads in this chapter yet.",
   "review.threads.new": "new",
-  "review.finish": "Done — back to the pool",
+  "review.finish": "Done — back to the chapters",
 
   // --- NPC stub dialog of the review (components/NpcCreateDialog.tsx) -------
   // `status: unknown` and `## Notizen` are FORMAT tokens on the wire (README),
@@ -656,11 +656,11 @@ export const en: Messages = {
   "generate.written.title.scene": "Written — all as draft",
   "generate.written.title.npc": "Written — NPC entry created",
   "generate.written.hint.scene":
-    "The scenes show up in the pool with status “draft”. Existing entries are never overwritten — on a conflict the server writes nothing.",
+    "The scenes show up in the chapters with status “draft”. Existing entries are never overwritten — on a conflict the server writes nothing.",
   "generate.written.hint.npc":
     "The NPC shows up in the NPC list and in search. Existing entries are never overwritten — on a conflict the server writes nothing.",
   "generate.written.openNpc": "Open NPC",
-  "generate.written.toPool": "To the pool",
+  "generate.written.toPool": "To the chapters",
 
 
   // --- the markdown format's own vocabulary (markdown/grammar.ts holds the KEY

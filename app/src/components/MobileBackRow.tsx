@@ -1,4 +1,4 @@
-// "‹ Pool" back row of the mobile read/list views (design/Grimoire-Mobil):
+// "‹ Kapitel" back row of the mobile read/list views (design/Grimoire-Mobil):
 // links to /:campaign, which below md IS the mobile start surface (same
 // route, responsive swap). Hidden at md+ — the desktop has the topbar.
 

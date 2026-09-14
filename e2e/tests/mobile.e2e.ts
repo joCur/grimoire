@@ -62,7 +62,7 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
 
   await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/fenn$/);
   // The mobile read view has its own way back to the start surface.
-  const back = page.getByRole("link", { name: "Pool" });
+  const back = page.getByRole("link", { name: "Kapitel" });
   await expect(back).toBeVisible();
   await back.click();
   await expect(page).toHaveURL(/\/beispiel$/);

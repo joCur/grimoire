@@ -132,7 +132,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   expect(await api.exists(`01-salzhafen/${SCENE_SLUG}`)).toBe(false);
 
   // Back in the pool the draft shows up with the German status label.
-  await page.getByRole("button", { name: "Zum Pool" }).click();
+  await page.getByRole("button", { name: "Zu den Kapiteln" }).click();
   await expect(page).toHaveURL(/\/beispiel$/);
   const row = page.getByRole("link", { name: new RegExp(SCENE_TITLE) });
   await expect(row).toBeVisible();

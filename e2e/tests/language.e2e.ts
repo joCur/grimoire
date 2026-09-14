@@ -399,7 +399,7 @@ test("the gear carries the campaign it was opened FROM, and has a way back", asy
   // The way back is THAT campaign's pool. The row is mobile chrome, so the
   // claim is checked where it is on screen: a phone width.
   await page.setViewportSize({ width: 390, height: 780 });
-  const back = page.getByRole("link", { name: "Pool" });
+  const back = page.getByRole("link", { name: "Kapitel" });
   await expect(back).toBeVisible();
   await back.click();
   await expect(page).toHaveURL(/\/beispiel$/);

@@ -3,7 +3,7 @@
 // The campaign-content pages (components/EntryListPage.tsx) edit an entry
 // inline and save it with a button, which means there is a window in which the
 // DM's work lives only in the page. Leaving it
-// — „‹ Pool", the campaign switcher, the browser's back button, a reload —
+// — „‹ Kapitel", the campaign switcher, the browser's back button, a reload —
 // used to throw that work away without a word. That is the same silent loss
 // ADR #4 forbids on the write path, just on the way out instead of on the way
 // in, and the app already has the answer for it: the properties dialog's
