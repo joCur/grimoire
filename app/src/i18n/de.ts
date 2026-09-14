@@ -56,7 +56,7 @@ export const de = {
   // --- the session chip -----------------------------------------------------
   "session.start": "Session starten",
   "session.start.failed": "Session nicht gestartet — Server prüfen",
-  "session.start.olderRunning": "Eine ältere Session läuft noch — im Live-Modus beenden",
+  "session.start.olderRunning": "Eine ältere Session läuft noch — in der Session-Ansicht beenden",
   "session.status.unknown": "Status unbekannt",
   "session.status.unknown.aria": "Session-Status unbekannt — Server prüfen",
   "session.state.running": "Session läuft",
@@ -205,7 +205,7 @@ export const de = {
   "properties.chapter.status.label": "Status",
   "properties.chapter.status.placeholder": "active",
   "properties.chapter.status.hint":
-    "Der Wert active markiert das Kapitel, das die Live-Ansicht öffnet.",
+    "Der Wert active markiert das Kapitel, das die Session-Ansicht öffnet.",
 
   // --- rename dialog --------------------------------------------------------
   "rename.title": "{kind}: id ändern",
@@ -405,7 +405,7 @@ export const de = {
 
   // --- live mode (routes/live.tsx) ------------------------------------------
   // Below md there is no live mode (UI-BRIEF §4) — just the pointer.
-  "live.mobile.note": "Der Live-Modus ist für den Desktop gedacht.",
+  "live.mobile.note": "Die Session-Ansicht ist für den Desktop gedacht.",
   "live.mobile.read": "Szene lesen: {title}",
 
   "live.nav.aria": "Szenen der Session",

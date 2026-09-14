@@ -6,7 +6,7 @@
 // the path from there to a playable evening has to run entirely in the UI:
 //
 //   "/" → Kampagne anlegen → Kapitel anlegen → Szene anlegen → Szene befüllen
-//        → Session starten → die Szene ist in der Live-Ansicht nutzbar
+//        → Session starten → die Szene ist in der Session-Ansicht nutzbar
 //
 // Nothing here uses the `api` fixture's default campaign: this spec CREATES
 // the campaign, so its id is only known at runtime and the helper is built

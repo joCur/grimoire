@@ -45,7 +45,7 @@ export const en: Messages = {
   // --- the session chip -----------------------------------------------------
   "session.start": "Start session",
   "session.start.failed": "Session not started — check the server",
-  "session.start.olderRunning": "An older session is still running — end it in live mode",
+  "session.start.olderRunning": "An older session is still running — end it in the session view",
   "session.status.unknown": "Status unknown",
   "session.status.unknown.aria": "Session status unknown — check the server",
   "session.state.running": "Session running",
@@ -188,7 +188,7 @@ export const en: Messages = {
   "properties.chapter.status.label": "Status",
   "properties.chapter.status.placeholder": "active",
   "properties.chapter.status.hint":
-    "The value active marks the chapter the live view opens.",
+    "The value active marks the chapter the session view opens.",
 
   // --- rename dialog --------------------------------------------------------
   "rename.title": "{kind}: change id",
@@ -372,7 +372,7 @@ export const en: Messages = {
 
   // --- live mode (routes/live.tsx) ------------------------------------------
   // Below md there is no live mode (UI-BRIEF §4) — just the pointer.
-  "live.mobile.note": "Live mode is made for the desktop.",
+  "live.mobile.note": "The session view is made for the desktop.",
   "live.mobile.read": "Read scene: {title}",
 
   "live.nav.aria": "Scenes of the session",
