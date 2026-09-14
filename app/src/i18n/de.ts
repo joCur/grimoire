@@ -56,7 +56,7 @@ export const de = {
   // --- the session chip -----------------------------------------------------
   "session.start": "Session starten",
   "session.start.failed": "Session nicht gestartet — Server prüfen",
-  "session.start.olderRunning": "Eine ältere Session läuft noch — im Live-Modus beenden",
+  "session.start.olderRunning": "Eine ältere Session läuft noch — in der Session-Ansicht beenden",
   "session.status.unknown": "Status unbekannt",
   "session.status.unknown.aria": "Session-Status unbekannt — Server prüfen",
   "session.state.running": "Session läuft",
@@ -94,7 +94,7 @@ export const de = {
 
   "create.chapter.title": "Kapitel anlegen",
   "create.chapter.description":
-    'Der Titel wird zur id des Kapitels — sie steht in jeder Szenen-Adresse und bleibt, wie sie ist. Das Ziel ist optional und landet in der Datei unter der Überschrift „## Ziel des Kapitels" — dem Abschnitt, den der Pool liest.',
+    'Der Titel wird zur id des Kapitels — sie steht in jeder Szenen-Adresse und bleibt, wie sie ist. Das Ziel ist optional und landet in der Datei unter der Überschrift „## Ziel des Kapitels" — dem Abschnitt, der als Ziel des Kapitels angezeigt wird.',
   "create.chapter.nameLabel": "Titel",
   "create.chapter.namePlaceholder": "Titel des Kapitels",
   "create.chapter.goalLabel": "Ziel des Kapitels (optional)",
@@ -165,10 +165,10 @@ export const de = {
   // Per-kind field labels/hints/placeholders (lib/properties-form.ts)
   "properties.scene.title.label": "Titel",
   "properties.scene.type.label": "Typ",
-  "properties.scene.type.planned": "geplant",
-  "properties.scene.type.contingency": "Kontingenz",
+  "properties.scene.type.planned": "Geplante Szene",
+  "properties.scene.type.contingency": "Eventualszene",
   "properties.scene.trigger.label": "Auslöser",
-  "properties.scene.trigger.hint": "Nur bei Kontingenz: wann feuert die Szene?",
+  "properties.scene.trigger.hint": "Nur bei Eventualszenen: wann feuert die Szene?",
   "properties.scene.chapter.label": "Kapitel",
   "properties.scene.location.label": "Ort",
   "properties.scene.location.hint": "id aus Orte oder freier Text.",
@@ -189,7 +189,7 @@ export const de = {
   "properties.npc.statblock.label": "Statblock",
   "properties.npc.statblock.placeholder": "Roll20: Fenn",
   "properties.npc.statblock.hint": "Verweis auf das Roll20-Sheet, keine Kopie.",
-  "properties.npc.quickstats.label": "Quickstats",
+  "properties.npc.quickstats.label": "Kurzwerte",
   "properties.npc.quickstats.hint": "Frei — nur was sozial gebraucht wird, z. B. insight +2.",
   "properties.npc.voice.label": "Stimme",
   "properties.npc.voice.hint": "Wie klingt er/sie?",
@@ -205,7 +205,7 @@ export const de = {
   "properties.chapter.status.label": "Status",
   "properties.chapter.status.placeholder": "active",
   "properties.chapter.status.hint":
-    "Der Wert active markiert das Kapitel, das die Live-Ansicht öffnet.",
+    "Der Wert active markiert das Kapitel, das die Session-Ansicht öffnet.",
 
   // --- rename dialog --------------------------------------------------------
   "rename.title": "{kind}: id ändern",
@@ -338,14 +338,14 @@ export const de = {
   "server.field.title": "Der Titel",
 
   // --- status enum labels (lib/scene-status.ts, lib/entity.ts) --------------
-  "status.scene.ready": "bereit",
+  "status.scene.ready": "Bereit",
   "status.scene.draft": "Entwurf",
-  "status.scene.played": "gespielt",
-  "status.scene.dropped": "verworfen",
-  "status.npc.alive": "lebendig",
-  "status.npc.dead": "tot",
-  "status.npc.missing": "vermisst",
-  "status.npc.unknown": "unbekannt",
+  "status.scene.played": "Gespielt",
+  "status.scene.dropped": "Verworfen",
+  "status.npc.alive": "Lebendig",
+  "status.npc.dead": "Tot",
+  "status.npc.missing": "Vermisst",
+  "status.npc.unknown": "Unbekannt",
 
   // --- browse list pages (/:campaign/list/:kind) ---------------------------
   "browse.title.scenes": "Szenen",
@@ -373,10 +373,10 @@ export const de = {
   "pool.chapter.empty": "Noch keine Szenen in diesem Kapitel.",
   // The chapter pill: only `active` gets a label, every other value degrades
   // to the raw string (README, "Format degradiert").
-  "pool.chapter.status.active": "aktiv",
-  // The quiet second half of the „Falls es schiefgeht" heading row — the „· "
+  "pool.chapter.status.active": "Aktiv",
+  // The quiet second half of the „Eventualszenen" heading row — the „· "
   // separator stays markup in the JSX.
-  "pool.contingencies.hint": "Kontingenzen",
+  "pool.contingencies.hint": "nur wenn der Auslöser feuert",
   "pool.scene.trigger": "Wenn: {trigger}",
 
   // --- browse list pages (routes/browse.tsx) --------------------------------
@@ -395,17 +395,17 @@ export const de = {
 
   // --- context line + mobile back row ---------------------------------------
   "context.aria": "Kontext",
-  "mobileBack.pool": "Pool",
+  "mobileBack.pool": "Kapitel",
 
   // --- shared scene-group headings (routes/live.tsx + routes/pool.tsx) ------
   // Neutral prefix on purpose: the live nav and the pool list show the SAME
   // two group headings — one key, not one per view.
   "scene.planned.heading": "Geplant",
-  "scene.contingencies.heading": "Falls es schiefgeht",
+  "scene.contingencies.heading": "Eventualszenen",
 
   // --- live mode (routes/live.tsx) ------------------------------------------
   // Below md there is no live mode (UI-BRIEF §4) — just the pointer.
-  "live.mobile.note": "Der Live-Modus ist für den Desktop gedacht.",
+  "live.mobile.note": "Die Session-Ansicht ist für den Desktop gedacht.",
   "live.mobile.read": "Szene lesen: {title}",
 
   "live.nav.aria": "Szenen der Session",
@@ -416,7 +416,8 @@ export const de = {
   "live.nav.played": "Gespielt",
   "live.nav.playedGroup": "Gespielt {count}",
 
-  "live.scene.none": "Keine Szene im aktiven Kapitel — Szenen im Pool anlegen.",
+  "live.scene.none":
+    "Keine Szene im aktiven Kapitel — Szenen in der Kapitelübersicht anlegen.",
   "live.scene.loading": "Lade Szene …",
   "live.scene.unloadable": "Szene nicht ladbar — Pfad prüfen.",
   "live.scene.locationHeading": "Ort",
@@ -457,9 +458,9 @@ export const de = {
   "review.title": "Session-Nachbereitung",
   "review.sessionFailed": "Session nicht ladbar — Server prüfen und neu laden.",
   "review.noSession": "Es gibt keine Session zum Sichten.",
-  "review.backToPool": "Zurück zum Pool",
+  "review.backToPool": "Zurück zu den Kapiteln",
   "review.lead":
-    "Notizen der Session durchgehen — als Handlungsstrang übernehmen, NPC anlegen oder verwerfen. Der Rest bleibt im Log.",
+    "Die Einträge der Session durchgehen — als Handlungsstrang übernehmen, NPC anlegen oder verwerfen. Der Rest bleibt im Log.",
   // Topbar and the mobile page read the same line (two parameters, #69).
   "review.progress": "{seen} von {total} gesichtet",
   "review.hashUnavailable":
@@ -470,7 +471,7 @@ export const de = {
   // The card's source chip — the scene travels INSIDE the sentence.
   "review.source.log": "Log",
   "review.source.logScene": "Log · {scene}",
-  "review.source.inbox": "Inbox",
+  "review.source.inbox": "Idee",
 
   "review.action.thread": "Als Handlungsstrang übernehmen",
   "review.action.resolve": "Erledigt",
@@ -486,9 +487,9 @@ export const de = {
   "review.done.seen": "gesichtet",
 
   // The untagged inbox lines (issue #85) — ideas thrown in on the go.
-  "review.notes.title": "Notizen",
+  "review.notes.title": "Ungetaggte Einträge",
   "review.notes.lead":
-    "Ungetaggte Einträge aus der Inbox — übernehmen, als NPC anlegen oder abhaken.",
+    "Einträge aus den Ideen ohne Tag — übernehmen, als NPC anlegen oder abhaken.",
 
   // Player-character notes (issue #86): `#pc` lines from log and inbox.
   "review.pc.title": "Spielercharaktere",
@@ -502,7 +503,7 @@ export const de = {
   "review.threads.title": "Offene Handlungsstränge des Kapitels",
   "review.threads.empty": "Noch keine offenen Handlungsstränge in diesem Kapitel.",
   "review.threads.new": "neu",
-  "review.finish": "Fertig — zurück zum Pool",
+  "review.finish": "Fertig — zurück zu den Kapiteln",
 
   // --- NPC stub dialog of the review (components/NpcCreateDialog.tsx) -------
   // `status: unknown` and `## Notizen` are FORMAT tokens on the wire (README),
@@ -521,8 +522,8 @@ export const de = {
   "mobileStart.count.scenes": "{count, plural, one {# Szene} other {# Szenen}}",
   "mobileStart.count.npcs": "{count, plural, one {# NPC} other {# NPCs}}",
   "mobileStart.count.locations": "{count, plural, one {# Ort} other {# Orte}}",
-  "mobileStart.inbox.label": "Inbox",
-  "mobileStart.inbox.placeholder": "Inbox — Idee einwerfen … #thread #npc",
+  "mobileStart.inbox.label": "Ideen",
+  "mobileStart.inbox.placeholder": "Idee einwerfen … #thread #npc",
   "mobileStart.inbox.submit": "Einwerfen",
   "mobileStart.inbox.saved": "Eingeworfen.",
   "mobileStart.inbox.failed": "Nicht gespeichert — Server prüfen.",
@@ -574,9 +575,9 @@ export const de = {
   "generate.input.title.scene": "Szenen generieren",
   "generate.input.title.npc": "NPC generieren",
   "generate.input.lead.scene":
-    "Englisches Quellmaterial rein, deutsche Szenen-Drafts raus. Immer status draft, immer mit Review — geschrieben wird erst beim Übernehmen.",
+    "Englisches Quellmaterial rein, deutsche Szenen-Entwürfe raus. Immer als Entwurf, immer mit Prüfung — geschrieben wird erst beim Übernehmen.",
   "generate.input.lead.npc":
-    "Quellmaterial zu einer Figur rein, ein NPC-Eintrag nach Format raus — Will, Weiß, Beziehungen. Immer mit Review; geschrieben wird erst beim Übernehmen.",
+    "Quellmaterial zu einer Figur rein, ein NPC-Eintrag nach Format raus — Will, Weiß, Beziehungen. Immer mit Prüfung; geschrieben wird erst beim Übernehmen.",
   "generate.input.modeGroup": "Generator-Modus",
   "generate.input.mode.scene": "Szenen",
   "generate.input.mode.npc": "NPC",
@@ -637,7 +638,7 @@ export const de = {
   "generate.error.treeScene": "Kapitel nicht ladbar — Grimoire-Server auf Port 3000 starten.",
   "generate.error.treeNpc": "Kampagne nicht ladbar — Grimoire-Server auf Port 3000 starten.",
   "generate.error.lostJob":
-    "Der Generierungs-Job ist nicht mehr vorhanden (Server-Neustart?) — erneut starten.",
+    "Der Lauf ist nicht mehr vorhanden (Server-Neustart?) — erneut starten.",
   "generate.error.noApiKey": "ANTHROPIC_API_KEY fehlt — siehe server/.env",
   "generate.error.npcExists":
     "NPC existiert schon — andere id wählen; bestehende Einträge werden nie überschrieben.",
@@ -649,26 +650,28 @@ export const de = {
     "Das Modell hat keine verwertbare Antwort geliefert — nichts generiert.",
   "generate.error.validationHint":
     "Quelltext kürzen oder klarer strukturieren und erneut generieren.",
-  "generate.error.rawReply": "Rohantwort anzeigen",
+  "generate.error.rawReply": "Unverarbeitete Antwort anzeigen",
 
   // --- generator: working state (routes/generate.tsx) ----------------------
-  "generate.working.title": "Drafts werden generiert …",
+  "generate.working.title": "Entwürfe werden generiert …",
   "generate.working.correction":
     "Der Server validiert die Antwort mechanisch; Formfehler gehen automatisch als Korrektur ans Modell zurück.",
   "generate.working.background":
     "Läuft auf dem Server weiter — dieser Tab darf zu. Das Ergebnis wartet hier, bis es übernommen oder verworfen wird.",
 
   // --- generator: review (routes/generate.tsx, lib/generate.ts) -----------
-  "generate.review.title": "Review",
+  "generate.review.title": "Entwürfe prüfen",
+  // The NPC run reviews ONE suggested entry, not a set of drafts (#88).
+  "generate.review.titleNpc": "Vorschlag prüfen",
   "generate.review.summary":
-    "{scenes, plural, one {# Szene} other {# Szenen}} · {stubs, plural, one {# Stub} other {# Stubs}}",
+    "{scenes, plural, one {# Szene} other {# Szenen}} · {stubs, plural, one {# vorgeschlagener Eintrag} other {# vorgeschlagene Einträge}}",
   "generate.review.pending": "{summary} · noch nichts geschrieben",
   "generate.review.pendingNpc": "1 NPC · noch nichts geschrieben",
   "generate.review.lead":
-    "Prüfen, anpassen, Stubs einzeln entscheiden. Erst „Übernehmen“ schreibt in die Datenbank — als Drafts, nie überschreibend.",
+    "Prüfen, anpassen, vorgeschlagene Einträge einzeln entscheiden. Erst „Übernehmen“ schreibt in die Datenbank — als Entwürfe, nie überschreibend.",
   "generate.review.leadNpc":
     "Prüfen und anpassen. Erst „Übernehmen“ schreibt den Eintrag — bestehende NPCs werden nie überschrieben.",
-  "generate.review.stubsHeading": "Stubs — einzeln entscheiden",
+  "generate.review.stubsHeading": "Vorgeschlagene Einträge — einzeln entscheiden",
   // --- naming hints of the post-run check (issue #53 AK3) -------------------
   // Deliberately NOT a warning: the check is a plain text search and the DM
   // decides. So the heading counts and the row states the finding plus where
@@ -686,9 +689,9 @@ export const de = {
   "generate.review.apply": "Übernehmen ({count})",
   "generate.review.applyNpc": "Übernehmen",
   "generate.review.plannedScene": "Geplante Szene",
-  "generate.review.contingency": "Kontingenz",
+  "generate.review.contingency": "Eventualszene",
   "generate.review.statblock": "Statblock: {statblock}",
-  "generate.review.rawLabel": "Roh-Markdown von {title}",
+  "generate.review.rawLabel": "Markdown von {title}",
   // The run's token spend; the grouping SEPARATOR is locale data, not copy
   // (lib/generate.ts groups by hand — Intl would need full ICU data).
   "generate.usage": "~{tokens} Tokens · {attempts, plural, one {# Versuch} other {# Versuche}}",
@@ -705,22 +708,22 @@ export const de = {
   "generate.stub.rejected": "Abgelehnt",
 
   // --- generator: what was written (routes/generate.tsx) ------------------
-  "generate.written.title.scene": "Geschrieben — alles als draft",
+  "generate.written.title.scene": "Geschrieben — alles als Entwurf",
   "generate.written.title.npc": "Geschrieben — NPC-Eintrag angelegt",
   "generate.written.hint.scene":
-    "Die Szenen erscheinen im Pool mit Status „Entwurf“. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
+    "Die Szenen erscheinen unter ihrem Kapitel mit Status „Entwurf“. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
   "generate.written.hint.npc":
     "Der NPC erscheint in der NPC-Liste und in der Suche. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
   "generate.written.openNpc": "NPC ansehen",
-  "generate.written.toPool": "Zum Pool",
+  "generate.written.toPool": "Zu den Kapiteln",
 
   // --- the markdown format's own vocabulary (markdown/grammar.ts holds the KEY
   //     per callout kind, markdown/Callout.tsx and markdown/Markdown.tsx show
   //     them; lib/blocks.ts names the same blocks in the composer) -----------
   "markdown.callout.readaloud": "Vorlesetext",
-  "markdown.callout.check": "Check",
+  "markdown.callout.check": "Probe",
   "markdown.callout.secret": "Geheim",
-  "markdown.callout.outcome": "Konsequenz",
+  "markdown.callout.outcome": "Ergebnis",
   "markdown.callout.loot": "Beute",
   "markdown.callout.note": "Notiz",
   // The branch label of a `## If:` section — the heading in the FILE stays
@@ -735,7 +738,7 @@ export const de = {
   //     lib/composer.ts) ----------------------------------------------------
   "composer.mode.aria": "Editiermodus",
   "composer.mode.blocks": "Blöcke",
-  "composer.mode.raw": "Roh",
+  "composer.mode.raw": "Markdown",
   "composer.picker.title": "Block einfügen",
   "composer.picker.cancel.aria": "Einfügen abbrechen",
 
@@ -743,7 +746,7 @@ export const de = {
   "composer.blockType.ifSection": "Falls-Abschnitt",
   "composer.blockType.heading": "Überschrift",
   "composer.blockType.text": "Text",
-  "composer.blockType.raw": "Roh-Block",
+  "composer.blockType.raw": "Markdown-Block",
 
   // ONE key for both states of the level select: a hand-written level outside
   // the offered range reads exactly like an offered one.
@@ -758,7 +761,7 @@ export const de = {
   "composer.block.content.aria": "Inhalt: {label}",
   "composer.block.text.placeholder": "Text des Blocks",
   "composer.block.raw.placeholder": "Markdown",
-  "composer.raw.hint": "Roh-Markdown mit Markern — wird unverändert übernommen.",
+  "composer.raw.hint": "Markdown mit Markern — wird unverändert übernommen.",
   "composer.list.aria": "Blöcke: {label}",
   "composer.empty": 'Noch keine Blöcke — mit „+" den ersten anlegen.',
   // Two whole sentences instead of a glued-in fragment („… im Falls-Abschnitt"):
@@ -785,7 +788,7 @@ export const de = {
 
   // --- scene article (components/SceneArticle.tsx) --------------------------
   "sceneArticle.type.planned": "Geplante Szene",
-  "sceneArticle.type.contingency": "Kontingenz",
+  "sceneArticle.type.contingency": "Eventualszene",
   "sceneArticle.trigger.inline": "Wenn: {trigger}",
   "sceneArticle.trigger.label": "Auslöser",
   "sceneArticle.tag": "#{tag}",
@@ -831,7 +834,7 @@ export const de = {
   "augment.running": "Läuft auf dem Server. Du kannst den Tab schließen — das Ergebnis bleibt.",
   "augment.busy": "Ein anderer Generator-Lauf läuft gerade. Erst abwarten oder dort verwerfen.",
   "augment.busy.review":
-    "Ein anderer Generator-Lauf wartet noch auf Review. Übernimm oder verwirf ihn erst "
+    "Ein anderer Generator-Lauf wartet noch auf Prüfung. Übernimm oder verwirf ihn erst "
     + "im Generator — ein neuer Lauf würde ihn löschen.",
   "augment.discard": "Lauf verwerfen",
   "augment.discard.failed": "Konnte den Lauf nicht verwerfen — Server prüfen.",
@@ -845,7 +848,7 @@ export const de = {
   "augment.body.heading": "Text",
   "augment.body.modeGroup": "Ansicht des Vorschlags",
   "augment.body.blocks": "Blöcke",
-  "augment.body.raw": "Roh",
+  "augment.body.raw": "Markdown",
   "augment.body.none": "Keine Änderung am Text vorgeschlagen.",
   "augment.body.showUnchanged": "Unveränderte Blöcke zeigen",
   "augment.body.hideUnchanged": "Unveränderte Blöcke ausblenden",

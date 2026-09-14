@@ -40,7 +40,7 @@ describe("EntityArticle — npc", () => {
     const html = render(jorna);
     expect(html).toContain("Hafenmeisterin Jorna");
     expect(html).toContain("Auftraggeberin, Hafenmeisterin von Salzhafen");
-    expect(html).toContain("lebendig");
+    expect(html).toContain("Lebendig");
     expect(html).toContain("knapp, wetterrau, duzt jeden");
     expect(html).toContain("Ölmantel, graue Flechte");
     expect(html).toContain("insight +2");
@@ -53,7 +53,7 @@ describe("EntityArticle — npc", () => {
     // neutral status, no field rows, no "fehlt" placeholder anywhere.
     const html = render(file("npc", { id: "holm", name: "holm", status: "unknown" }));
     expect(html).toContain("holm");
-    expect(html).toContain("unbekannt");
+    expect(html).toContain("Unbekannt");
     expect(html).not.toContain("fehlt");
     expect(html).not.toContain("Statblock");
     expect(html).not.toContain("Stimme");
@@ -73,7 +73,7 @@ describe("EntityArticle — npc", () => {
   test("no scene type overline above an npc", () => {
     const html = render(jorna);
     expect(html).not.toContain("Geplante Szene");
-    expect(html).not.toContain("Kontingenz");
+    expect(html).not.toContain("Eventualszene");
   });
 
   test("an unknown status value is shown verbatim (degrade)", () => {

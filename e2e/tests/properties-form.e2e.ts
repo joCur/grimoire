@@ -305,11 +305,11 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
 
   await dialog.getByLabel("Rolle").fill(role);
   await dialog.getByLabel("Status").selectOption("missing");
-  // Quickstats are free key/value rows — jorna has two, this is the third.
+  // Kurzwerte are free key/value rows — jorna has two, this is the third.
   const save = dialog.getByRole("button", { name: "Speichern" });
   await dialog.getByRole("button", { name: "Zeile hinzufügen" }).click();
-  const statName = dialog.getByLabel("Quickstats, Zeile 3: Name");
-  const statValue = dialog.getByLabel("Quickstats, Zeile 3: Wert");
+  const statName = dialog.getByLabel("Kurzwerte, Zeile 3: Name");
+  const statValue = dialog.getByLabel("Kurzwerte, Zeile 3: Wert");
   // A row that cannot be written blocks the save and says why — silently
   // dropping it (a value with no name) or silently swallowing the first of two
   // rows with the SAME name would both lose what the DM typed.
@@ -333,7 +333,7 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const article = page.getByRole("article");
   await expect(article).toContainText(role);
-  await expect(article).toContainText("vermisst");
+  await expect(article).toContainText("Vermisst");
   await expect(article).toContainText("deception +1");
   // Untouched header values stand.
   await expect(article).toContainText("knapp, wetterrau, duzt jeden");

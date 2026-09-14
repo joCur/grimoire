@@ -20,11 +20,11 @@
 //     phone-sized layout (the whole point of the ticket) can do all of it.
 //
 // Block cards are addressed through their controls' accessible names —
-// „Vorlesetext 3 bearbeiten", „Check 4 nach unten" — because that is the only
+// „Vorlesetext 3 bearbeiten", „Probe 4 nach unten" — because that is the only
 // place where a card's TYPE and its POSITION are both visible from outside, and
 // asserting them is asserting the vocabulary of the reading view (blockLabel:
-// Vorlesetext, Check, Geheim, Konsequenz, Beute, Notiz, Falls-Abschnitt,
-// Überschrift, Text, Roh-Block). `exact: true` everywhere: „Text 3 bearbeiten"
+// Vorlesetext, Probe, Geheim, Ergebnis, Beute, Notiz, Falls-Abschnitt,
+// Überschrift, Text, Markdown-Block). `exact: true` everywhere: „Text 3 bearbeiten"
 // is a substring of „Vorlesetext 3 bearbeiten".
 
 import type { Locator, Page } from "@playwright/test";
@@ -44,7 +44,7 @@ const SCENE_BLOCKS = [
   "Überschrift 1",
   "Text 2",
   "Vorlesetext 3",
-  "Check 4",
+  "Probe 4",
   "Geheim 5",
   "Notiz 6",
 ];
@@ -150,7 +150,7 @@ test("Bearbeiten opens the block composer — one card per block, no textarea", 
     "aria-pressed",
     "true",
   );
-  await expect(modes.getByRole("button", { name: "Roh", exact: true })).toHaveAttribute(
+  await expect(modes.getByRole("button", { name: "Markdown", exact: true })).toHaveAttribute(
     "aria-pressed",
     "false",
   );
@@ -167,8 +167,8 @@ test("Bearbeiten opens the block composer — one card per block, no textarea", 
   await expect(composer(page)).toContainText("Der Turm ragt schwarz gegen den Abendhimmel auf.");
   await expect(composer(page)).toContainText("Wisdom (Perception) DC 13");
   await expect(composer(page)).toContainText("Flow");
-  // The header keeps standing around it (as in „Roh"): title, status regler.
-  await expect(page.getByRole("button", { name: "Status ändern, aktuell bereit" })).toBeVisible();
+  // The header keeps standing around it (as in „Markdown"): title, status regler.
+  await expect(page.getByRole("button", { name: "Status ändern, aktuell Bereit" })).toBeVisible();
 
   // Nothing typed, so nothing to save — and nothing stored moved.
   await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
@@ -190,7 +190,7 @@ test("Blöcke → Roh → Blöcke is not a change — Speichern stays disabled",
 
   // Blöcke → Roh: the serialized block list, byte-identical to the body on
   // disk. This is the phase-1 invariant seen from outside the app.
-  await page.getByRole("button", { name: "Roh", exact: true }).click();
+  await page.getByRole("button", { name: "Markdown", exact: true }).click();
   await expect(composer(page)).toHaveCount(0);
   await expect(rawTextarea(page)).toHaveValue(before.body);
   await expect(save).toBeDisabled();
@@ -275,9 +275,9 @@ test("the + slot at the end creates a Beute block through the type picker", asyn
   // two plain blocks, then the section.
   for (const label of [
     "Vorlesetext",
-    "Check",
+    "Probe",
     "Geheim",
-    "Konsequenz",
+    "Ergebnis",
     "Beute",
     "Notiz",
     "Überschrift",
@@ -324,14 +324,14 @@ test("⌄/⌃ reorder the blocks — the file follows, both blocks verbatim", as
   await expect(card(page, "Überschrift 1").up).toBeDisabled();
   await expect(card(page, "Notiz 6").down).toBeDisabled();
 
-  // Check ⇄ Geheim, from the Check card's ⌄.
-  await card(page, "Check 4").down.click();
+  // Probe ⇄ Geheim, from the Probe card's ⌄.
+  await card(page, "Probe 4").down.click();
   expect(await blockNames(page)).toEqual([
     "Überschrift 1",
     "Text 2",
     "Vorlesetext 3",
     "Geheim 4",
-    "Check 5",
+    "Probe 5",
     "Notiz 6",
   ]);
   await page.getByRole("button", { name: "Speichern" }).click();
@@ -376,9 +376,9 @@ test("a child of the first If-section edits without touching the two headings", 
     "Text 2",
     "Notiz 3",
     "Falls-Abschnitt 4",
-    "Check 1",
+    "Probe 1",
     "Text 2",
-    "Konsequenz 3",
+    "Ergebnis 3",
   ]);
 
   // The section card itself carries the CONDITION, not the `## If:` markup.
@@ -625,21 +625,21 @@ test.describe("with a scene of unknown constructs", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Seltsame Mechanik");
     await page.getByRole("button", { name: "Bearbeiten" }).click();
 
-    // No error, no validation: the unknown callout is a „Roh-Block" (with its
+    // No error, no validation: the unknown callout is a „Markdown-Block" (with its
     // kind spelled out next to the label) and the table is a „Text" card.
     expect(await blockNames(page)).toEqual([
       "Überschrift 1",
       "Text 2",
-      "Roh-Block 3",
+      "Markdown-Block 3",
       "Text 4",
     ]);
     await expect(composer(page)).toContainText("[!weird]");
     await expect(composer(page)).toContainText("| Wurf | Ergebnis");
 
     // The raw card keeps its markers IN the form — it is handed over verbatim.
-    const raw = card(page, "Roh-Block 3");
+    const raw = card(page, "Markdown-Block 3");
     await raw.edit.click();
-    await expect(page.getByRole("textbox", { name: "Inhalt: Roh-Block", exact: true })).toHaveValue(
+    await expect(page.getByRole("textbox", { name: "Inhalt: Markdown-Block", exact: true })).toHaveValue(
       "> [!weird] bla",
     );
     await raw.collapse.click();
@@ -705,7 +705,7 @@ test.describe("at 390px", () => {
       "Überschrift 1",
       "Vorlesetext 2",
       "Text 3",
-      "Check 4",
+      "Probe 4",
       "Geheim 5",
       "Notiz 6",
     ]);

@@ -507,7 +507,7 @@ describe("reference and select options", () => {
   test("a select offers the value that stands in the file, known or not", () => {
     const known = [
       { value: "draft", label: "Entwurf" },
-      { value: "ready", label: "bereit" },
+      { value: "ready", label: "Bereit" },
     ];
     expect(selectOptions(known, "ready")).toBe(known);
     expect(selectOptions(known, "")).toBe(known);
@@ -517,7 +517,7 @@ describe("reference and select options", () => {
   test("the file's unknown value stays selectable after the DM clicked away", () => {
     const known = [
       { value: "draft", label: "Entwurf" },
-      { value: "ready", label: "bereit" },
+      { value: "ready", label: "Bereit" },
     ];
     // Open on `onhold`, switch to a known value: the odd one must still be in
     // the list, or the DM could never put it back (issue #42 review).

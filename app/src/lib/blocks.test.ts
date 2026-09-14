@@ -613,7 +613,7 @@ const t = translator("de");
 describe("labels", () => {
   test("the six callouts use the names the reading view already shows", () => {
     const kinds = ["readaloud", "check", "secret", "outcome", "loot", "note"] as const;
-    const expected = ["Vorlesetext", "Check", "Geheim", "Konsequenz", "Beute", "Notiz"];
+    const expected = ["Vorlesetext", "Probe", "Geheim", "Ergebnis", "Beute", "Notiz"];
     expect(kinds.map((kind) => blockLabel(makeCallout(kind, "x"), t))).toEqual(expected);
     expect(kinds.map((kind) => calloutLabel(kind, t))).toEqual(expected);
   });
@@ -624,7 +624,7 @@ describe("labels", () => {
     expect(blockLabel(makeText("Absatz"), t)).toBe("Text");
     const raw = parseBlocks("> [!warning] x\n")[0];
     if (raw === undefined) throw new Error("expected a block");
-    expect(blockLabel(raw, t)).toBe("Roh-Block");
+    expect(blockLabel(raw, t)).toBe("Markdown-Block");
   });
 
   test("ids are unique across blocks and parses", () => {

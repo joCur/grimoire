@@ -29,13 +29,13 @@ describe("Markdown pipeline rendering", () => {
   test("check callout renders label row and tagged section", () => {
     const html = render("> [!check] Wisdom (Perception) DC 13.");
     expect(html).toContain('data-callout="check"');
-    expect(html).toContain(">Check<");
+    expect(html).toContain(">Probe<");
     expect(html).toContain("Wisdom (Perception) DC 13.");
   });
 
   test("callout labels match the design reference", () => {
     expect(render("> [!secret] x")).toContain(">Geheim<");
-    expect(render("> [!outcome] x")).toContain(">Konsequenz<");
+    expect(render("> [!outcome] x")).toContain(">Ergebnis<");
     expect(render("> [!loot] x")).toContain(">Beute<");
     expect(render("> [!note] x")).toContain(">Notiz<");
   });

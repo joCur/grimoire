@@ -1,4 +1,4 @@
-// Critical path 5: the session wrap-up ("Nachbereitung", formerly "Ernte" —
+// Critical path 5: the session review ("Nachbereitung", formerly "Ernte" —
 // the harvest metaphor survives only in file names and code); see CLAUDE.md.
 //
 // Adopt a thread → _chapter, tick off an inbox line, create an NPC stub,
@@ -94,7 +94,7 @@ test("adopting a thread lands in _chapter, the inbox line gets ticked off", asyn
 
   // --- tick off the inbox line --------------------------------------------
   const inboxCard = page.locator("div").filter({ hasText: INBOX_TEXT }).last();
-  await expect(inboxCard).toContainText("Inbox");
+  await expect(inboxCard.getByText("Idee", { exact: true })).toBeVisible();
   await inboxCard.getByRole("button", { name: "Verwerfen" }).click();
 
   await expect(inboxCard.getByText("Verworfen")).toBeVisible();
@@ -103,8 +103,8 @@ test("adopting a thread lands in _chapter, the inbox line gets ticked off", asyn
     .poll(() => api.raw("inbox"))
     .toMatch(/- \[x\] 2026-01-10 Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread/);
 
-  // "Fertig" goes back to the pool.
-  await page.getByRole("button", { name: "Fertig — zurück zum Pool" }).click();
+  // "Fertig" goes back to the chapters.
+  await page.getByRole("button", { name: "Fertig — zurück zu den Kapiteln" }).click();
   await expect(page).toHaveURL(/\/beispiel$/);
   // The pool's quiet review affordance counts what is still open.
   await expect(page.getByRole("link", { name: "Nachbereitung · 2 offen" })).toBeVisible();
@@ -118,21 +118,21 @@ test("an untagged inbox note is reviewable and can be ticked off (issue #85)", a
   // 390px (critical path 8), no hashtag.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/beispiel");
-  await page.getByLabel("Inbox").fill(NOTE_TEXT);
+  await page.getByLabel("Ideen").fill(NOTE_TEXT);
   await page.getByRole("button", { name: "Einwerfen" }).click();
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
   await expect.poll(() => api.raw("inbox")).toContain(`- ${NOTE_TEXT}`);
 
-  // At the desk it shows up in the wrap-up — in its own "Notizen" section,
+  // At the desk it shows up in the session review — in its own "Ungetaggte Einträge" section,
   // and counted with everything else (one source for page and topbar).
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/beispiel/review");
   const progress = page.getByRole("banner").getByText(/von \d+ gesichtet/);
   await expect(progress).toHaveText("0 von 5 gesichtet");
-  await expect(page.getByRole("heading", { name: "Notizen" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ungetaggte Einträge" })).toBeVisible();
 
   const noteCard = page.locator("div").filter({ hasText: NOTE_TEXT }).last();
-  await expect(noteCard).toContainText("Inbox");
+  await expect(noteCard).toContainText("Idee");
   // No tag means no tag-derived affordance — both harvest actions are offered.
   await expect(
     noteCard.getByRole("button", { name: "Als Handlungsstrang übernehmen" }),
@@ -146,7 +146,7 @@ test("an untagged inbox note is reviewable and can be ticked off (issue #85)", a
   await expect.poll(() => api.raw("inbox")).toContain(`- [x] ${NOTE_TEXT}`);
 
   // The pool affordance counts the same entries the page does.
-  await page.getByRole("button", { name: "Fertig — zurück zum Pool" }).click();
+  await page.getByRole("button", { name: "Fertig — zurück zu den Kapiteln" }).click();
   await expect(page.getByRole("link", { name: "Nachbereitung · 4 offen" })).toBeVisible();
 });
 
@@ -155,11 +155,11 @@ test("a #pc note is grouped by character and ticked off (issue #86)", async ({ p
   // 390px (critical path 8), tagged `#pc #kaela`.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/beispiel");
-  await page.getByLabel("Inbox").fill(`${PC_TEXT} #pc #kaela`);
+  await page.getByLabel("Ideen").fill(`${PC_TEXT} #pc #kaela`);
   await page.getByRole("button", { name: "Einwerfen" }).click();
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
 
-  // Still at 390px: the wrap-up is a desk task, but it has to stay readable
+  // Still at 390px: the session review is a desk task, but it has to stay readable
   // and operable on the phone (quality floor).
   await page.goto("/beispiel/review");
   const section = page.getByRole("heading", { name: "Spielercharaktere" });
@@ -171,7 +171,7 @@ test("a #pc note is grouped by character and ticked off (issue #86)", async ({ p
   await expect(page.getByText(/von \d+ gesichtet/).first()).toHaveText("0 von 5 gesichtet");
 
   const pcCard = page.locator("div").filter({ hasText: PC_TEXT }).last();
-  await expect(pcCard).toContainText("Inbox");
+  await expect(pcCard).toContainText("Idee");
   // A PC note is no campaign content: neither harvest action is offered.
   await expect(
     pcCard.getByRole("button", { name: "Als Handlungsstrang übernehmen" }),
@@ -186,7 +186,7 @@ test("a #pc note is grouped by character and ticked off (issue #86)", async ({ p
   await keep.click();
   await expect(keep).toHaveAttribute("aria-pressed", "false");
   // …and it does not turn up among the untagged notes either.
-  await expect(page.getByRole("heading", { name: "Notizen" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Ungetaggte Einträge" })).toHaveCount(0);
 
   await pcCard.getByRole("button", { name: "Erledigt" }).click();
   await expect(pcCard.getByText("Erledigt", { exact: true })).toBeVisible();
@@ -198,7 +198,7 @@ test("a #pc note is grouped by character and ticked off (issue #86)", async ({ p
 
   // Back at the desk the pool affordance counts what is still open.
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.getByRole("button", { name: "Fertig — zurück zum Pool" }).click();
+  await page.getByRole("button", { name: "Fertig — zurück zu den Kapiteln" }).click();
   await expect(page.getByRole("link", { name: "Nachbereitung · 4 offen" })).toBeVisible();
 });
 
@@ -256,7 +256,7 @@ test("an id that already has an entry is linked, not refused (#70)", async ({ pa
 test.describe("with yesterday's session, ended after midnight", () => {
   test.use({ seed: { files: { [PAST_MIDNIGHT.path]: PAST_MIDNIGHT.content } } });
 
-  test("a session that ran past midnight is still the wrap-up's session (issue #40 review)", async ({
+  test("a session that ran past midnight is still the session review's session (issue #40 review)", async ({
     page,
     api,
   }) => {

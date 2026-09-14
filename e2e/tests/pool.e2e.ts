@@ -107,12 +107,12 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
     }),
   ).toBeVisible();
 
-  // The chapter accordion: title, "aktiv" pill, scene count, goal line.
+  // The chapter accordion: title, "Aktiv" pill, scene count, goal line.
   const chapter = page.getByRole("button", {
     name: /Kapitel 1: Der Leuchtturm von Salzhafen/,
   });
   await expect(chapter).toBeVisible();
-  await expect(chapter).toContainText("aktiv");
+  await expect(chapter).toContainText("Aktiv");
   await expect(chapter).toContainText("2 Szenen");
   // Open by default (status: active) — the goal comes from _chapter.
   await expect(
@@ -131,11 +131,11 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
     "Leuchtturm von Salzhafen · #social #travel",
   );
   await expect(
-    page.getByRole("button", { name: "Status ändern, aktuell bereit" }).first(),
+    page.getByRole("button", { name: "Status ändern, aktuell Bereit" }).first(),
   ).toBeVisible();
 
   // Contingencies live in their own group.
-  await expect(page.getByText("Falls es schiefgeht")).toBeVisible();
+  await expect(page.getByText("Eventualszenen")).toBeVisible();
   const contingency = page.getByRole("link", {
     name: /Von den Schmugglern erwischt/,
   });

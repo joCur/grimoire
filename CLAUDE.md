@@ -147,28 +147,28 @@ Playwright gegen den echten Stack (realer Server auf einer eigenen, aus
 das LLM ist ein lokaler Stub-HTTP-Server — der Provider-Pfad läuft real).
 Die Pfade:
 
-1. Auto-Einstieg `/` → Pool lädt die Kampagne
+1. Auto-Einstieg `/` → Kapitel lädt die Kampagne
 2. Szene lesen: Callouts, If-Sections, NPC-Karten der Referenzszenen
 3. ⌘K-Suche findet und öffnet
 4. Session-Zyklus: starten → Schnellnotiz → Log + scenes_played →
-   Pause → beenden → Review
-5. Nachbereitung: Handlungsstrang übernehmen → _chapter.md; Inbox abhaken
-6. Generator-Zyklus (Stub-LLM): Job → Review → Übernehmen → draft im
-   Pool; plus 409-/Fehlerpfad. Dazu (Issue #53) Kampagnenwissen und
+   Pause → beenden → Nachbereitung
+5. Nachbereitung: Handlungsstrang übernehmen → _chapter.md; Ideen abhaken
+6. Generator-Zyklus (Stub-LLM): Job → Entwürfe prüfen → Übernehmen → Entwurf
+   in den Kapiteln; plus 409-/Fehlerpfad. Dazu (Issue #53) Kampagnenwissen und
    Glossar auf `/settings` pflegen — anlegen, bearbeiten, löschen,
    umsortieren, 409 — und der Lauf danach: Wissen im mitgeschickten
-   Kontext (Stub echot den Prompt-Block zurück), Namens-Hinweise im
-   Review, „Übernehmen" trotzdem möglich und Server-Neustart (fertiger Job übersteht
+   Kontext (Stub echot den Prompt-Block zurück), Namens-Hinweise in
+   „Entwürfe prüfen", „Übernehmen" trotzdem möglich und Server-Neustart (fertiger Job übersteht
    ihn und bleibt übernehmbar, laufender wird als `failed` gemeldet)
 7. Eigenschaften-Patch (`PATCH /properties`)/Status-Regler inkl. 409-Konflikt
-8. Mobil-Startfläche + Inbox-Einwurf bei 390px
+8. Mobil-Startfläche + Ideen-Einwurf bei 390px
 9. Datei bearbeiten: öffnen → Body ändern → speichern → gerendert
    sichtbar; 409 bei konkurrierendem Zweit-Write → neu laden statt still
    überschreiben (seit ADR #13 gibt es keine externe Dateiänderung mehr —
    der Guard ist die Zeilenversion `rev`)
 10. Kaltstart: leere Instanz ohne Seed — seit ADR #13/#79 der Normalfall
     einer frischen Installation → Kampagne anlegen → Kapitel → Szene →
-    Szene befüllen → Session starten → Szene in der Live-Ansicht
+    Szene befüllen → Session starten → Szene in der Session-Ansicht
     nutzbar; dazu NPC/Ort anlegen aus ihren Listen und die
     Slug-Kollision (409 mit Vorschlag, schreibt nichts)
 
@@ -178,7 +178,7 @@ E2E-Suite im selben PR — sonst kein Merge.
 
 ## Qualitäts-Boden (nicht verhandelbar)
 
-- Responsive bis Mobil (Mobile = Suche, Leseansicht, Inbox — siehe UI-BRIEF)
+- Responsive bis Mobil (Mobile = Suche, Leseansicht, Ideen — siehe UI-BRIEF)
 - Dark Mode ist der Primärmodus, Light Mode muss funktionieren
 - Tastatur-Fokus sichtbar; `prefers-reduced-motion` respektieren
 - Keine localStorage-Persistenz für Daten — der Server ist die Wahrheit

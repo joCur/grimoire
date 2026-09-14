@@ -52,7 +52,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(article.getByText("#social", { exact: true })).toBeVisible();
   await expect(article.getByText("Handout: Karte von Salzhafen")).toBeVisible();
   // The status display IS the control (issue #28).
-  await expect(page.getByRole("button", { name: "Status ändern, aktuell bereit" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Status ändern, aktuell Bereit" })).toBeVisible();
 
   // The signature element: no label row, brass ribbon, copy button on hover.
   const readaloud = page.locator("[data-callout='readaloud']");
@@ -61,7 +61,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(readaloud.getByRole("button", { name: "Vorlesetext kopieren" })).toBeAttached();
 
   const check = page.locator("[data-callout='check']");
-  await expect(check).toContainText("Check");
+  await expect(check).toContainText("Probe");
   await expect(check).toContainText("Wisdom (Perception) DC 13");
 
   const secret = page.locator("[data-callout='secret']");
@@ -93,7 +93,7 @@ test("reference scene 2: contingency header, collapsible If-sections, consequenc
 }) => {
   await page.goto(CAPTURED);
 
-  await expect(page.getByText("Kontingenz", { exact: true })).toBeVisible();
+  await expect(page.getByText("Eventualszene", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Von den Schmugglern erwischt",
   );
@@ -126,7 +126,7 @@ test("reference scene 2: contingency header, collapsible If-sections, consequenc
     "Charisma (Deception)",
   );
   const outcome = page.locator("[data-callout='outcome']");
-  await expect(outcome).toContainText("Konsequenz");
+  await expect(outcome).toContainText("Ergebnis");
   await expect(outcome).toContainText("Fenn kennt nach dieser Szene die Gesichter der Gruppe");
 
   await expect(page.locator("[data-callout='note']")).toContainText(

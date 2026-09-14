@@ -135,7 +135,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect(nav).toContainText("Kapitel 1: Der Leuchtturm von Salzhafen");
   await expect(nav).toContainText("Geplant");
   await expect(nav).toContainText("Ankunft am Leuchtturm");
-  await expect(nav).toContainText("Falls es schiefgeht");
+  await expect(nav).toContainText("Eventualszenen");
   await expect(page.getByRole("article").getByRole("heading", { level: 1 })).toHaveText(
     "Ankunft am Leuchtturm",
   );
@@ -179,7 +179,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect.poll(() => api.raw(sessionPath)).toContain("lighthouse-arrival");
 
   // The played checkmark comes from scenes_played — never faked client-side.
-  await expect(nav.getByText("gespielt")).toBeAttached();
+  await expect(nav.getByText("Gespielt")).toBeAttached();
 
   // The session has content now — discarding it is no longer on offer; the
   // way out is "Session beenden".
@@ -531,7 +531,7 @@ test.describe("played/dropped scenes in the live nav (issue #73)", () => {
     await expect(arrivalRow).toHaveAttribute("aria-current", "true");
 
     // AK2: the contingencies are untouched.
-    await expect(nav).toContainText("Falls es schiefgeht");
+    await expect(nav).toContainText("Eventualszenen");
     await expect(nav.getByRole("button", { name: /Von den Schmugglern erwischt/ })).toBeVisible();
 
     // AK1: expanding reaches it, and it opens like any other scene.
@@ -560,7 +560,7 @@ test.describe("played/dropped scenes in the live nav (issue #73)", () => {
     const sessionPath = (await api.sessionPath()) ?? "";
     await expect.poll(() => api.raw(sessionPath)).toContain("harbor-office-talk");
     await expect(
-      nav.getByRole("group", { name: "Gespielt" }).getByText("gespielt"),
+      nav.getByRole("group", { name: "Gespielt" }).getByText("Gespielt"),
     ).toBeAttached();
 
     // Degrade: with EVERY scene played the view stays usable — the planned

@@ -148,9 +148,9 @@ describe("status labels", () => {
     ]);
     expect(sceneStatusOptions(t).map((o) => o.label)).toEqual([
       "Entwurf",
-      "bereit",
-      "gespielt",
-      "verworfen",
+      "Bereit",
+      "Gespielt",
+      "Verworfen",
     ]);
   });
 

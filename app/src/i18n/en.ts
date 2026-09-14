@@ -3,7 +3,7 @@
 // typecheck.
 //
 // DM vocabulary, not a literal translation: Session · Scene · Chapter ·
-// Location · Wrap-up (Nachbereitung) · Read-aloud (Vorlesen) · Handout. Ids and
+// Location · Session review (Nachbereitung) · Read-aloud (Vorlesen) · Handout. Ids and
 // frontmatter keys stay as they are on the wire — `id`, `active`, `insight +2`
 // are data, not copy.
 
@@ -34,7 +34,7 @@ export const en: Messages = {
   "topbar.search": "Search …",
   "topbar.generator": "Generator",
   "topbar.generator.running": "Generating …",
-  "topbar.review.pending": "Wrap-up · {count} open",
+  "topbar.review.pending": "Session review · {count} open",
   "topbar.review.pendingShort": "{count} open",
   "topbar.session.back": "To the session",
 
@@ -45,7 +45,7 @@ export const en: Messages = {
   // --- the session chip -----------------------------------------------------
   "session.start": "Start session",
   "session.start.failed": "Session not started — check the server",
-  "session.start.olderRunning": "An older session is still running — end it in live mode",
+  "session.start.olderRunning": "An older session is still running — end it in the session view",
   "session.status.unknown": "Status unknown",
   "session.status.unknown.aria": "Session status unknown — check the server",
   "session.state.running": "Session running",
@@ -81,7 +81,7 @@ export const en: Messages = {
 
   "create.chapter.title": "Create chapter",
   "create.chapter.description":
-    "The title becomes the chapter's id — it appears in every scene address and stays as it is. The goal is optional and lands in the file under the heading “## Ziel des Kapitels” — the section the pool reads it from.",
+    "The title becomes the chapter's id — it appears in every scene address and stays as it is. The goal is optional and lands in the file under the heading “## Ziel des Kapitels” — the section shown as the chapter's goal.",
   "create.chapter.nameLabel": "Title",
   "create.chapter.namePlaceholder": "Chapter title",
   "create.chapter.goalLabel": "Goal of the chapter (optional)",
@@ -147,10 +147,10 @@ export const en: Messages = {
 
   "properties.scene.title.label": "Title",
   "properties.scene.type.label": "Type",
-  "properties.scene.type.planned": "planned",
-  "properties.scene.type.contingency": "contingency",
+  "properties.scene.type.planned": "planned scene",
+  "properties.scene.type.contingency": "contingency scene",
   "properties.scene.trigger.label": "Trigger",
-  "properties.scene.trigger.hint": "Contingency only: when does the scene fire?",
+  "properties.scene.trigger.hint": "Contingency scenes only: when does the scene fire?",
   "properties.scene.chapter.label": "Chapter",
   "properties.scene.location.label": "Location",
   "properties.scene.location.hint": "An id from Locations, or free text.",
@@ -171,7 +171,7 @@ export const en: Messages = {
   "properties.npc.statblock.label": "Statblock",
   "properties.npc.statblock.placeholder": "Roll20: Fenn",
   "properties.npc.statblock.hint": "A reference to the Roll20 sheet, not a copy.",
-  "properties.npc.quickstats.label": "Quickstats",
+  "properties.npc.quickstats.label": "Quick stats",
   "properties.npc.quickstats.hint":
     "Free — only what is needed socially, e.g. insight +2.",
   "properties.npc.voice.label": "Voice",
@@ -188,7 +188,7 @@ export const en: Messages = {
   "properties.chapter.status.label": "Status",
   "properties.chapter.status.placeholder": "active",
   "properties.chapter.status.hint":
-    "The value active marks the chapter the live view opens.",
+    "The value active marks the chapter the session view opens.",
 
   // --- rename dialog --------------------------------------------------------
   "rename.title": "{kind}: change id",
@@ -343,7 +343,7 @@ export const en: Messages = {
   "pool.chapter.goal": "Goal: {goal}",
   "pool.chapter.empty": "No scenes in this chapter yet.",
   "pool.chapter.status.active": "active",
-  "pool.contingencies.hint": "Contingencies",
+  "pool.contingencies.hint": "only when the trigger fires",
   "pool.scene.trigger": "When: {trigger}",
 
   // --- browse list pages (routes/browse.tsx) --------------------------------
@@ -361,18 +361,18 @@ export const en: Messages = {
 
   // --- context line + mobile back row ---------------------------------------
   "context.aria": "Context",
-  "mobileBack.pool": "Pool",
+  "mobileBack.pool": "Chapters",
 
 
   // --- shared scene-group headings (routes/live.tsx + routes/pool.tsx) ------
   // Neutral prefix on purpose: the live nav and the pool list show the SAME
   // two group headings — one key, not one per view.
   "scene.planned.heading": "Planned",
-  "scene.contingencies.heading": "If it goes wrong",
+  "scene.contingencies.heading": "Contingency scenes",
 
   // --- live mode (routes/live.tsx) ------------------------------------------
   // Below md there is no live mode (UI-BRIEF §4) — just the pointer.
-  "live.mobile.note": "Live mode is made for the desktop.",
+  "live.mobile.note": "The session view is made for the desktop.",
   "live.mobile.read": "Read scene: {title}",
 
   "live.nav.aria": "Scenes of the session",
@@ -383,7 +383,8 @@ export const en: Messages = {
   "live.nav.played": "Played",
   "live.nav.playedGroup": "Played {count}",
 
-  "live.scene.none": "No scene in the active chapter — create scenes in the pool.",
+  "live.scene.none":
+    "No scene in the active chapter — create scenes on the chapters page.",
   "live.scene.loading": "Loading scene …",
   "live.scene.unloadable": "Scene not loadable — check the path.",
   "live.scene.locationHeading": "Location",
@@ -419,15 +420,15 @@ export const en: Messages = {
   "live.drawer.open": "Open entry",
 
 
-  // --- review (the session wrap-up, formerly the "five-minute harvest" —
+  // --- review (the session review, formerly the "five-minute harvest" —
   // issue #10; the harvest metaphor stayed in the code, not in the UI)
   // routes/review.tsx, lib/use-review.ts ------------------------------------
-  "review.title": "Session wrap-up",
+  "review.title": "Session review",
   "review.sessionFailed": "Session not loadable — check the server and reload.",
   "review.noSession": "There is no session to review.",
-  "review.backToPool": "Back to the pool",
+  "review.backToPool": "Back to the chapters",
   "review.lead":
-    "Go through the notes of the session — adopt as a thread, create an NPC or discard. The rest stays in the log.",
+    "Go through the entries of the session — adopt as a storyline, create an NPC or discard. The rest stays in the log.",
   // Topbar and the mobile page read the same line (two parameters, #69).
   "review.progress": "{seen} of {total} reviewed",
   "review.hashUnavailable":
@@ -438,38 +439,38 @@ export const en: Messages = {
   // The card's source chip — the scene travels INSIDE the sentence.
   "review.source.log": "Log",
   "review.source.logScene": "Log · {scene}",
-  "review.source.inbox": "Inbox",
+  "review.source.inbox": "Idea",
 
-  "review.action.thread": "Adopt as thread",
+  "review.action.thread": "Adopt as storyline",
   "review.action.resolve": "Done",
   "review.action.failed": "Action not saved — check the server.",
   "review.npc.failed": "NPC not created — check the server.",
 
   // The done row: the action of THIS sitting, or the neutral fallback after a
   // reload (the server only stores done/not-done).
-  "review.done.thread": "Adopted as thread",
+  "review.done.thread": "Adopted as storyline",
   "review.done.npc": "NPC created",
   "review.done.dismiss": "Discarded",
   "review.done.resolved": "Done",
   "review.done.seen": "reviewed",
 
-  "review.notes.title": "Notes",
+  "review.notes.title": "Untagged entries",
   "review.notes.lead":
-    "Untagged inbox entries — adopt them, create an NPC, or tick them off.",
+    "Untagged entries from the ideas — adopt them, create an NPC or tick them off.",
 
   // Player-character notes (issue #86): `#pc` lines from log and inbox.
   "review.pc.title": "Player characters",
   "review.pc.lead":
-    "Entries tagged #pc — reminders for the table, not campaign content. Tick them off or keep them for the next wrap-up.",
+    "Entries tagged #pc — reminders for the table, not campaign content. Tick them off or keep them for the next review.",
   "review.pc.groupTag": "#{tag}",
   "review.pc.groupGeneral": "General",
   "review.action.keep": "Keep",
-  "review.action.keepHint": "Stays open for the next wrap-up.",
+  "review.action.keepHint": "Stays open for the next review.",
 
-  "review.threads.title": "Open threads of the chapter",
-  "review.threads.empty": "No open threads in this chapter yet.",
+  "review.threads.title": "Open storylines of the chapter",
+  "review.threads.empty": "No open storylines in this chapter yet.",
   "review.threads.new": "new",
-  "review.finish": "Done — back to the pool",
+  "review.finish": "Done — back to the chapters",
 
   // --- NPC stub dialog of the review (components/NpcCreateDialog.tsx) -------
   // `status: unknown` and `## Notizen` are FORMAT tokens on the wire (README),
@@ -489,8 +490,8 @@ export const en: Messages = {
   "mobileStart.count.scenes": "{count, plural, one {# scene} other {# scenes}}",
   "mobileStart.count.npcs": "{count, plural, one {# NPC} other {# NPCs}}",
   "mobileStart.count.locations": "{count, plural, one {# location} other {# locations}}",
-  "mobileStart.inbox.label": "Inbox",
-  "mobileStart.inbox.placeholder": "Inbox — drop an idea … #thread #npc",
+  "mobileStart.inbox.label": "Ideas",
+  "mobileStart.inbox.placeholder": "Drop an idea … #thread #npc",
   "mobileStart.inbox.submit": "Drop in",
   "mobileStart.inbox.saved": "Dropped in.",
   "mobileStart.inbox.failed": "Not saved — check the server.",
@@ -540,9 +541,9 @@ export const en: Messages = {
   "generate.input.title.scene": "Generate scenes",
   "generate.input.title.npc": "Generate NPC",
   "generate.input.lead.scene":
-    "English source material in, German scene drafts out. Always status draft, always with a review — nothing is written before you apply.",
+    "English source material in, German scene drafts out. Always status draft, always with a check — nothing is written before you apply.",
   "generate.input.lead.npc":
-    "Source material about a character in, one NPC entry in format out — wants, knows, relations. Always with a review; nothing is written before you apply.",
+    "Source material about a character in, one NPC entry in format out — wants, knows, relations. Always with a check; nothing is written before you apply.",
   "generate.input.modeGroup": "Generator mode",
   "generate.input.mode.scene": "Scenes",
   "generate.input.mode.npc": "NPC",
@@ -593,7 +594,7 @@ export const en: Messages = {
   // --- generator: the run's own errors (routes/generate.tsx) ---------------
   "generate.error.treeScene": "Chapters not loadable — start the Grimoire server on port 3000.",
   "generate.error.treeNpc": "Campaign not loadable — start the Grimoire server on port 3000.",
-  "generate.error.lostJob": "The generator job is gone (server restart?) — start it again.",
+  "generate.error.lostJob": "The run is gone (server restart?) — start it again.",
   "generate.error.noApiKey": "ANTHROPIC_API_KEY missing — see server/.env",
   "generate.error.npcExists":
     "NPC already exists — pick another id; existing entries are never overwritten.",
@@ -603,7 +604,7 @@ export const en: Messages = {
   "generate.error.unusable": "The model returned nothing usable — nothing generated.",
   "generate.error.validationHint":
     "Shorten the source text or structure it more clearly, then generate again.",
-  "generate.error.rawReply": "Show raw reply",
+  "generate.error.rawReply": "Show unprocessed reply",
 
   // --- generator: working state (routes/generate.tsx) ----------------------
   "generate.working.title": "Generating drafts …",
@@ -613,16 +614,18 @@ export const en: Messages = {
     "Keeps running on the server — this tab may close. The result waits here until it is applied or discarded.",
 
   // --- generator: review (routes/generate.tsx, lib/generate.ts) -----------
-  "generate.review.title": "Review",
+  "generate.review.title": "Check drafts",
+  // The NPC run reviews ONE suggested entry, not a set of drafts (#88).
+  "generate.review.titleNpc": "Check the proposal",
   "generate.review.summary":
-    "{scenes, plural, one {# scene} other {# scenes}} · {stubs, plural, one {# stub} other {# stubs}}",
+    "{scenes, plural, one {# scene} other {# scenes}} · {stubs, plural, one {# suggested entry} other {# suggested entries}}",
   "generate.review.pending": "{summary} · nothing written yet",
   "generate.review.pendingNpc": "1 NPC · nothing written yet",
   "generate.review.lead":
-    "Check, adjust, decide the stubs one by one. Only “Apply” writes to the database — as drafts, never overwriting.",
+    "Check, adjust, decide the suggested entries one by one. Only “Apply” writes to the database — as drafts, never overwriting.",
   "generate.review.leadNpc":
     "Check and adjust. Only “Apply” writes the entry — existing NPCs are never overwritten.",
-  "generate.review.stubsHeading": "Stubs — decide one by one",
+  "generate.review.stubsHeading": "Suggested entries — decide one by one",
   // --- naming hints of the post-run check (issue #53 AK3) -------------------
   "generate.review.namingHeading":
     "{count, plural, one {# naming hint} other {# naming hints}} — not a blocker",
@@ -636,9 +639,9 @@ export const en: Messages = {
   "generate.review.apply": "Apply ({count})",
   "generate.review.applyNpc": "Apply",
   "generate.review.plannedScene": "Planned scene",
-  "generate.review.contingency": "Contingency",
+  "generate.review.contingency": "Contingency scene",
   "generate.review.statblock": "Statblock: {statblock}",
-  "generate.review.rawLabel": "Raw markdown of {title}",
+  "generate.review.rawLabel": "Markdown of {title}",
   "generate.usage": "~{tokens} tokens · {attempts, plural, one {# attempt} other {# attempts}}",
   "generate.usage.group": ",",
 
@@ -656,11 +659,11 @@ export const en: Messages = {
   "generate.written.title.scene": "Written — all as draft",
   "generate.written.title.npc": "Written — NPC entry created",
   "generate.written.hint.scene":
-    "The scenes show up in the pool with status “draft”. Existing entries are never overwritten — on a conflict the server writes nothing.",
+    "The scenes show up under their chapter with status “draft”. Existing entries are never overwritten — on a conflict the server writes nothing.",
   "generate.written.hint.npc":
     "The NPC shows up in the NPC list and in search. Existing entries are never overwritten — on a conflict the server writes nothing.",
   "generate.written.openNpc": "Open NPC",
-  "generate.written.toPool": "To the pool",
+  "generate.written.toPool": "To the chapters",
 
 
   // --- the markdown format's own vocabulary (markdown/grammar.ts holds the KEY
@@ -682,14 +685,14 @@ export const en: Messages = {
   //     lib/composer.ts) ----------------------------------------------------
   "composer.mode.aria": "Edit mode",
   "composer.mode.blocks": "Blocks",
-  "composer.mode.raw": "Raw",
+  "composer.mode.raw": "Markdown",
   "composer.picker.title": "Insert block",
   "composer.picker.cancel.aria": "Cancel insert",
 
   "composer.blockType.ifSection": "If-section",
   "composer.blockType.heading": "Heading",
   "composer.blockType.text": "Text",
-  "composer.blockType.raw": "Raw block",
+  "composer.blockType.raw": "Markdown block",
 
   "composer.heading.level": "Level {depth}",
   "composer.heading.level.aria": "Heading level",
@@ -702,7 +705,7 @@ export const en: Messages = {
   "composer.block.content.aria": "Content: {label}",
   "composer.block.text.placeholder": "Text of the block",
   "composer.block.raw.placeholder": "Markdown",
-  "composer.raw.hint": "Raw markdown with its markers — taken over unchanged.",
+  "composer.raw.hint": "Markdown with its markers — taken over unchanged.",
   "composer.list.aria": "Blocks: {label}",
   "composer.empty": 'No blocks yet — add the first one with "+".',
   "composer.insert.aria": "Insert block at position {position}",
@@ -722,7 +725,7 @@ export const en: Messages = {
 
   // --- scene article (components/SceneArticle.tsx) --------------------------
   "sceneArticle.type.planned": "Planned scene",
-  "sceneArticle.type.contingency": "Contingency",
+  "sceneArticle.type.contingency": "Contingency scene",
   "sceneArticle.trigger.inline": "If: {trigger}",
   "sceneArticle.trigger.label": "Trigger",
   "sceneArticle.tag": "#{tag}",
@@ -760,7 +763,7 @@ export const en: Messages = {
   "augment.source.label": "Source text (EN)",
   "augment.source.placeholder": "A section from the adventure, notes, background …",
   "augment.instruction.label": "Instruction (optional)",
-  "augment.instruction.placeholder": "e.g. Introduce a new plot thread",
+  "augment.instruction.placeholder": "e.g. Introduce a new storyline",
   "augment.input.hint": "At least one of the two is needed.",
   "augment.start": "Augment",
   "augment.starting": "Starting …",
@@ -768,7 +771,7 @@ export const en: Messages = {
   "augment.running": "Running on the server. You can close the tab — the result stays.",
   "augment.busy": "Another generator run is going. Wait for it, or discard it there.",
   "augment.busy.review":
-    "Another generator run is still waiting for review. Accept or discard it in the "
+    "Another generator run is still waiting for a check. Accept or discard it in the "
     + "generator first — a new run would delete it.",
   "augment.discard": "Discard run",
   "augment.discard.failed": "Could not discard the run — check the server.",
@@ -782,7 +785,7 @@ export const en: Messages = {
   "augment.body.heading": "Text",
   "augment.body.modeGroup": "Proposal view",
   "augment.body.blocks": "Blocks",
-  "augment.body.raw": "Raw",
+  "augment.body.raw": "Markdown",
   "augment.body.none": "No change to the text proposed.",
   "augment.body.showUnchanged": "Show unchanged blocks",
   "augment.body.hideUnchanged": "Hide unchanged blocks",
@@ -797,7 +800,7 @@ export const en: Messages = {
   "augment.diff.added": "added",
   "augment.diff.removed": "removed",
   "augment.diff.changed": "changed",
-  "augment.review.aria": "Review the proposal",
+  "augment.review.aria": "Check the proposal",
   "augment.accept": "Accept",
   "augment.reject": "Discard proposal",
   "augment.review.namingHeading":

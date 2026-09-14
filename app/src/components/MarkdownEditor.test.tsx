@@ -39,7 +39,7 @@ describe("MarkdownEditorSurface", () => {
         onChange={() => {}}
         editing
         id="raw-1"
-        label="Roh-Markdown von Ankunft"
+        label="Markdown von Ankunft"
         {...props}
       />,
     );
@@ -49,7 +49,7 @@ describe("MarkdownEditorSurface", () => {
     expect(html).toContain('id="raw-1"');
     expect(html).toContain('rows="22"');
     expect(html).toContain("font-mono");
-    expect(html).toContain('aria-label="Roh-Markdown von Ankunft"');
+    expect(html).toContain('aria-label="Markdown von Ankunft"');
     expect(html).toContain("Der Leuchtturm ist dunkel.");
     // The raw source is in the textarea, not rendered into a heading.
     expect(html).not.toContain("<h2");

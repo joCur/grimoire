@@ -70,10 +70,10 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
 
   // The review of the finished job (the working state may flash by).
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Review", {
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
     timeout: 30_000,
   });
-  await expect(page.getByText("1 Szene · 2 Stubs · noch nichts geschrieben")).toBeVisible();
+  await expect(page.getByText("1 Szene · 2 vorgeschlagene Einträge · noch nichts geschrieben")).toBeVisible();
   // Token spend of the run (the stub reports usage like a real endpoint).
   await expect(page.getByText(/~[\d.]+ Tokens · 1 Versuch/)).toBeVisible();
   // The model's warning is shown, not swallowed.
@@ -82,7 +82,8 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   // The draft card: title, target path, status pill, rendered body.
   const card = page.locator("div").filter({ hasText: `01-salzhafen/${SCENE_SLUG}` }).last();
   await expect(page.getByRole("heading", { level: 2, name: SCENE_TITLE })).toBeVisible();
-  await expect(card).toContainText("draft");
+  // The status chip shows the LABEL, not the raw frontmatter value (#88).
+  await expect(card.getByText("Entwurf", { exact: true })).toBeVisible();
   await expect(card.locator("[data-callout='readaloud']")).toContainText("Die Flut zieht sich");
   await expect(card.locator("[data-callout='loot']")).toContainText("Beute");
   await expect(card.locator("details[data-if-section]")).toHaveCount(2);
@@ -96,7 +97,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   expect(await api.exists(`01-salzhafen/${SCENE_SLUG}`)).toBe(false);
   expect(await api.exists(SCENE_PATH)).toBe(false);
 
-  // Stubs are decided one by one. An undecided row is the innermost div that
+  // Suggested entries are decided one by one. An undecided row is the innermost div that
   // carries the target path AND its own "Ablehnen" button.
   const acceptStub = async (targetPath: string, name: string) => {
     const row = page
@@ -107,16 +108,16 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
     await expect(row).toContainText(name);
     await row.getByRole("button", { name: "Annehmen" }).click();
   };
-  await expect(page.getByText("Stubs — einzeln entscheiden")).toBeVisible();
+  await expect(page.getByText("Vorgeschlagene Einträge — einzeln entscheiden")).toBeVisible();
   await acceptStub(`npcs/${NPC_STUB_ID}`, NPC_STUB_NAME);
   await acceptStub(`locations/${LOCATION_STUB_ID}`, LOCATION_STUB_NAME);
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
 
-  await page.getByRole("button", { name: /^Übernehmen \(1 Szene · 2 Stubs\)$/ }).click();
+  await page.getByRole("button", { name: /^Übernehmen \(1 Szene · 2 vorgeschlagene Einträge\)$/ }).click();
 
   // Done state lists exactly what was written — the ADDRESSES, so the DM sees
   // where the scene actually landed and not the model's file name.
-  await expect(page.getByText("Geschrieben — alles als draft")).toBeVisible();
+  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
   await expect(page.getByText(SCENE_PATH)).toBeVisible();
 
   // Stored: the draft plus both stubs, and a location stub without a status.
@@ -132,7 +133,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   expect(await api.exists(`01-salzhafen/${SCENE_SLUG}`)).toBe(false);
 
   // Back in the pool the draft shows up with the German status label.
-  await page.getByRole("button", { name: "Zum Pool" }).click();
+  await page.getByRole("button", { name: "Zu den Kapiteln" }).click();
   await expect(page).toHaveURL(/\/beispiel$/);
   const row = page.getByRole("link", { name: new RegExp(SCENE_TITLE) });
   await expect(row).toBeVisible();
@@ -153,13 +154,13 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
 
   await page.getByRole("button", { name: "NPC generieren", exact: true }).click();
 
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Review", {
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Vorschlag prüfen", {
     timeout: 30_000,
   });
   await expect(page.getByText("1 NPC · noch nichts geschrieben")).toBeVisible();
   const card = page.locator("div").filter({ hasText: "npcs/brakk" }).last();
   await expect(page.getByRole("heading", { level: 2, name: NPC_DEFAULT_NAME })).toBeVisible();
-  await expect(card).toContainText("lebendig");
+  await expect(card).toContainText("Lebendig");
   await expect(card).toContainText(NPC_ROLE);
   // Quoted quickstats survive as strings — the plus is still there.
   await expect(card).toContainText("insight +1");
@@ -203,7 +204,7 @@ test("failure path: an invalid model reply shows the 422 block with the raw repl
   await expect(page.getByText(/~[\d.]+ Tokens · 2 Versuche/)).toBeVisible();
 
   // The raw reply is one click away — that is what makes a 422 debuggable.
-  await page.getByText("Rohantwort anzeigen").click();
+  await page.getByText("Unverarbeitete Antwort anzeigen").click();
   await expect(page.locator("pre")).toContainText("night-watch-quay");
 
   // Nothing was written, and the form is usable again.

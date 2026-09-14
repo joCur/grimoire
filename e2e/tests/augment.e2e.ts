@@ -180,7 +180,7 @@ test("prepared scene: the new thread is added, every existing block survives", a
 
   // The raw tab is the second surface of AK2 — a line/word diff over the
   // whole body, with the added lines marked.
-  await page.getByRole("button", { name: "Roh", exact: true }).click();
+  await page.getByRole("button", { name: "Markdown", exact: true }).click();
   await expect(page.getByText(`## If: ${AUGMENT_THREAD_CONDITION}`)).toBeVisible();
   await page.getByRole("button", { name: "Blöcke", exact: true }).click();
 

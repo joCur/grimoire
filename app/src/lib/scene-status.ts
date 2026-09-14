@@ -17,7 +17,7 @@ import { fetchFile, patchProperties } from "@/api";
 import type { MessageKey, Translate } from "@/i18n";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
-/** Catalog key + dot/text colors per design/README.md ("bereit · Entwurf · gespielt"). */
+/** Catalog key + dot/text colors per design/README.md ("Bereit · Entwurf · Gespielt"). */
 const SCENE_STATUS_META: Record<
   SceneStatus,
   { key: MessageKey; dot: string; text: string }
@@ -61,8 +61,8 @@ export function sceneStatusOptions(
 }
 
 /**
- * Statuses that take a scene out of the evening's plan: `played` ("gespielt")
- * and `dropped` ("verworfen"). The live nav groups these away (issue #73);
+ * Statuses that take a scene out of the evening's plan: `played` ("Gespielt")
+ * and `dropped` ("Verworfen"). The live nav groups these away (issue #73);
  * everything else — including an unknown value, which degrades to plain text —
  * counts as still planned.
  */

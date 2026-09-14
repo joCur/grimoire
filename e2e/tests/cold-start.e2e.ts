@@ -6,7 +6,7 @@
 // the path from there to a playable evening has to run entirely in the UI:
 //
 //   "/" → Kampagne anlegen → Kapitel anlegen → Szene anlegen → Szene befüllen
-//        → Session starten → die Szene ist in der Live-Ansicht nutzbar
+//        → Session starten → die Szene ist in der Session-Ansicht nutzbar
 //
 // Nothing here uses the `api` fixture's default campaign: this spec CREATES
 // the campaign, so its id is only known at runtime and the helper is built
@@ -111,7 +111,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Entwurf" })).toBeVisible();
 
   // --- Szene befüllen -------------------------------------------------------
-  await page.getByRole("button", { name: "Roh", exact: true }).click();
+  await page.getByRole("button", { name: "Markdown", exact: true }).click();
   await page.getByRole("textbox", { name: /^Markdown-Text von/ }).fill(SCENE_BODY);
   await page.getByRole("button", { name: "Speichern" }).click();
 

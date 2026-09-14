@@ -1,6 +1,6 @@
 // "/:campaign" — the scene pool per the design reference: campaign header,
 // chapter accordions with goal line, location-grouped planned scenes and a
-// separate contingency group ("Falls es schiefgeht").
+// separate contingency group ("Eventualszenen").
 // Below md the SAME route shows the mobile start surface instead (issue #11,
 // responsive swap — no separate URL): desktop pool `hidden md:block`, mobile
 // start `md:hidden`. Both share the tree query cache, so nothing fetches twice.

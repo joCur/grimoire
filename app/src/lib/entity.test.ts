@@ -28,10 +28,10 @@ describe("entityHeaderKind", () => {
 
 describe("npcStatusLabel", () => {
   test("known statuses map to German labels", () => {
-    expect(npcStatusLabel("alive", t)).toBe("lebendig");
-    expect(npcStatusLabel("dead", t)).toBe("tot");
-    expect(npcStatusLabel("missing", t)).toBe("vermisst");
-    expect(npcStatusLabel("unknown", t)).toBe("unbekannt");
+    expect(npcStatusLabel("alive", t)).toBe("Lebendig");
+    expect(npcStatusLabel("dead", t)).toBe("Tot");
+    expect(npcStatusLabel("missing", t)).toBe("Vermisst");
+    expect(npcStatusLabel("unknown", t)).toBe("Unbekannt");
   });
 
   test("every known status of the format has a label", () => {
@@ -41,7 +41,7 @@ describe("npcStatusLabel", () => {
   });
 
   test("case and surrounding whitespace do not matter", () => {
-    expect(npcStatusLabel(" Alive ", t)).toBe("lebendig");
+    expect(npcStatusLabel(" Alive ", t)).toBe("Lebendig");
   });
 
   test("unknown values pass through verbatim (degrade)", () => {

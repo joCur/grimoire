@@ -234,7 +234,7 @@ test("a competing write is a conflict, not a silent overwrite", async ({ page, a
 });
 
 test("leaving with an unsaved entry asks first — and only then", async ({ page }) => {
-  // At 390px the way out is the „‹ Pool" row — a plain router link, which is
+  // At 390px the way out is the „‹ Kapitel" row — a plain router link, which is
   // exactly the exit that would otherwise drop the open entry without a word.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/beispiel/knowledge");
@@ -243,7 +243,7 @@ test("leaving with an unsaved entry asks first — and only then", async ({ page
   // An entry that has been typed into blocks the way out.
   await page.getByRole("button", { name: "Neuer Eintrag" }).click();
   await page.getByLabel("Alt (im Quellmaterial)").fill("Nicht verlieren");
-  await page.getByRole("link", { name: "Pool" }).first().click();
+  await page.getByRole("link", { name: "Kapitel" }).first().click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Änderungen verwerfen?");
   await dialog.getByRole("button", { name: "Weiter bearbeiten" }).click();
@@ -253,7 +253,7 @@ test("leaving with an unsaved entry asks first — and only then", async ({ page
   // A SAVED entry does not ask — the guard is about unsaved work only.
   await page.getByLabel("Neu (in dieser Kampagne)").fill("Neu");
   await saveEntry(page);
-  await page.getByRole("link", { name: "Pool" }).first().click();
+  await page.getByRole("link", { name: "Kapitel" }).first().click();
   await expect(page).toHaveURL(/\/beispiel$/);
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
@@ -350,8 +350,8 @@ test("(b) the phone: the two rows in „Nachschlagen“, and the pages at 390px"
   );
   expect(noOverflow).toBe(true);
 
-  // „‹ Pool" is the way back, as on every other campaign view below md.
-  await page.getByRole("link", { name: "Pool" }).first().click();
+  // „‹ Kapitel" is the way back, as on every other campaign view below md.
+  await page.getByRole("link", { name: "Kapitel" }).first().click();
   await expect(page).toHaveURL(/\/beispiel$/);
 });
 
@@ -379,7 +379,7 @@ test("the generator run: the knowledge travels, the naming check flags the draft
   // --- the run: the stub answers in the forbidden spelling ------------------
   await page.getByLabel("Quelltext (EN)").fill(`${SOURCE}\n\n${TRIGGER.oldName}`);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Review", {
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
     timeout: 30_000,
   });
 
@@ -407,7 +407,7 @@ test("the generator run: the knowledge travels, the naming check flags the draft
 
   // 3. NOT A BLOCKER: apply writes the draft exactly as it would without it.
   await page.getByRole("button", { name: /^Übernehmen/ }).click();
-  await expect(page.getByText("Geschrieben — alles als draft")).toBeVisible();
+  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
   const scene = await api.raw(`01-salzhafen/${SCENE_ID}`);
   expect(scene).toContain(OLD_NAME);
 });
@@ -423,7 +423,7 @@ test("without naming conventions nothing is flagged and the prompt is unchanged"
 
   await page.getByLabel("Quelltext (EN)").fill(SOURCE);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Review", {
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
     timeout: 30_000,
   });
   // No echo (the prompt had no knowledge section at all) and no hint block.
