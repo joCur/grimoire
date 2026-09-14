@@ -574,9 +574,9 @@ export const de = {
   "generate.input.title.scene": "Szenen generieren",
   "generate.input.title.npc": "NPC generieren",
   "generate.input.lead.scene":
-    "Englisches Quellmaterial rein, deutsche Szenen-Drafts raus. Immer status draft, immer mit Review — geschrieben wird erst beim Übernehmen.",
+    "Englisches Quellmaterial rein, deutsche Szenen-Drafts raus. Immer status draft, immer mit Prüfung — geschrieben wird erst beim Übernehmen.",
   "generate.input.lead.npc":
-    "Quellmaterial zu einer Figur rein, ein NPC-Eintrag nach Format raus — Will, Weiß, Beziehungen. Immer mit Review; geschrieben wird erst beim Übernehmen.",
+    "Quellmaterial zu einer Figur rein, ein NPC-Eintrag nach Format raus — Will, Weiß, Beziehungen. Immer mit Prüfung; geschrieben wird erst beim Übernehmen.",
   "generate.input.modeGroup": "Generator-Modus",
   "generate.input.mode.scene": "Szenen",
   "generate.input.mode.npc": "NPC",
@@ -659,7 +659,7 @@ export const de = {
     "Läuft auf dem Server weiter — dieser Tab darf zu. Das Ergebnis wartet hier, bis es übernommen oder verworfen wird.",
 
   // --- generator: review (routes/generate.tsx, lib/generate.ts) -----------
-  "generate.review.title": "Review",
+  "generate.review.title": "Entwürfe prüfen",
   "generate.review.summary":
     "{scenes, plural, one {# Szene} other {# Szenen}} · {stubs, plural, one {# Stub} other {# Stubs}}",
   "generate.review.pending": "{summary} · noch nichts geschrieben",
@@ -831,7 +831,7 @@ export const de = {
   "augment.running": "Läuft auf dem Server. Du kannst den Tab schließen — das Ergebnis bleibt.",
   "augment.busy": "Ein anderer Generator-Lauf läuft gerade. Erst abwarten oder dort verwerfen.",
   "augment.busy.review":
-    "Ein anderer Generator-Lauf wartet noch auf Review. Übernimm oder verwirf ihn erst "
+    "Ein anderer Generator-Lauf wartet noch auf Prüfung. Übernimm oder verwirf ihn erst "
     + "im Generator — ein neuer Lauf würde ihn löschen.",
   "augment.discard": "Lauf verwerfen",
   "augment.discard.failed": "Konnte den Lauf nicht verwerfen — Server prüfen.",

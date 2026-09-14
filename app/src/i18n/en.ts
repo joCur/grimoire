@@ -540,9 +540,9 @@ export const en: Messages = {
   "generate.input.title.scene": "Generate scenes",
   "generate.input.title.npc": "Generate NPC",
   "generate.input.lead.scene":
-    "English source material in, German scene drafts out. Always status draft, always with a review — nothing is written before you apply.",
+    "English source material in, German scene drafts out. Always status draft, always with a check — nothing is written before you apply.",
   "generate.input.lead.npc":
-    "Source material about a character in, one NPC entry in format out — wants, knows, relations. Always with a review; nothing is written before you apply.",
+    "Source material about a character in, one NPC entry in format out — wants, knows, relations. Always with a check; nothing is written before you apply.",
   "generate.input.modeGroup": "Generator mode",
   "generate.input.mode.scene": "Scenes",
   "generate.input.mode.npc": "NPC",
@@ -613,7 +613,7 @@ export const en: Messages = {
     "Keeps running on the server — this tab may close. The result waits here until it is applied or discarded.",
 
   // --- generator: review (routes/generate.tsx, lib/generate.ts) -----------
-  "generate.review.title": "Review",
+  "generate.review.title": "Check drafts",
   "generate.review.summary":
     "{scenes, plural, one {# scene} other {# scenes}} · {stubs, plural, one {# stub} other {# stubs}}",
   "generate.review.pending": "{summary} · nothing written yet",
@@ -768,7 +768,7 @@ export const en: Messages = {
   "augment.running": "Running on the server. You can close the tab — the result stays.",
   "augment.busy": "Another generator run is going. Wait for it, or discard it there.",
   "augment.busy.review":
-    "Another generator run is still waiting for review. Accept or discard it in the "
+    "Another generator run is still waiting for a check. Accept or discard it in the "
     + "generator first — a new run would delete it.",
   "augment.discard": "Discard run",
   "augment.discard.failed": "Could not discard the run — check the server.",

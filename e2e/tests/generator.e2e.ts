@@ -70,7 +70,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
 
   // The review of the finished job (the working state may flash by).
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Review", {
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
     timeout: 30_000,
   });
   await expect(page.getByText("1 Szene · 2 Stubs · noch nichts geschrieben")).toBeVisible();
@@ -153,7 +153,7 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
 
   await page.getByRole("button", { name: "NPC generieren", exact: true }).click();
 
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Review", {
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
     timeout: 30_000,
   });
   await expect(page.getByText("1 NPC · noch nichts geschrieben")).toBeVisible();

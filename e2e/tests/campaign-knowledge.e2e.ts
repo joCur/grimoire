@@ -379,7 +379,7 @@ test("the generator run: the knowledge travels, the naming check flags the draft
   // --- the run: the stub answers in the forbidden spelling ------------------
   await page.getByLabel("Quelltext (EN)").fill(`${SOURCE}\n\n${TRIGGER.oldName}`);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Review", {
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
     timeout: 30_000,
   });
 
@@ -423,7 +423,7 @@ test("without naming conventions nothing is flagged and the prompt is unchanged"
 
   await page.getByLabel("Quelltext (EN)").fill(SOURCE);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Review", {
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
     timeout: 30_000,
   });
   // No echo (the prompt had no knowledge section at all) and no hint block.
