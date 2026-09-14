@@ -40,7 +40,21 @@ export const TRIGGER = {
    * is what the restart case of issue #23 needs.
    */
   slow: "E2E_SLOW",
+  /**
+   * The stub answers with a draft that IGNORES the campaign's naming
+   * convention — it writes `OLD_NAME` where the rule says otherwise (issue
+   * #53 AK3). A badly-behaved model, on demand: without it the post-run check
+   * can only be shown to find nothing.
+   */
+  oldName: "E2E_OLD_NAME",
 } as const;
+
+/**
+ * The spelling `TRIGGER.oldName` puts into the draft. The spec writes a
+ * naming convention „<OLD_NAME> → …" on the settings page and then expects
+ * the review to flag exactly this word.
+ */
+export const OLD_NAME = "Saltmarsh";
 
 /** How long a TRIGGER.slow request is held before it would answer. */
 export const SLOW_REPLY_MS = 60_000;
@@ -68,7 +82,41 @@ export const NPC_STUB_NAME = "Grella";
 export const LOCATION_STUB_ID = "bucht";
 export const LOCATION_STUB_NAME = "Nordbucht";
 
-function sceneDraft(chapter: string): string {
+/**
+ * How the stub reports back WHAT CONTEXT it was sent (issue #53 AK2). The
+ * echo rides along as a `warning`, because that is the one field of the reply
+ * the review shows verbatim — so a spec can assert on the prompt's knowledge
+ * block through the BROWSER instead of reaching into the server.
+ *
+ * Only emitted when the campaign actually has knowledge, so every other spec
+ * sees exactly the warnings it saw before.
+ */
+export const CONTEXT_ECHO = "Kontext-Echo:";
+
+export function contextEchoWarnings(knowledge: string): string[] {
+  const trimmed = knowledge.trim();
+  return trimmed === "" ? [] : [`${CONTEXT_ECHO} ${trimmed.replace(/\n/g, " | ")}`];
+}
+
+function sceneDraft(chapter: string, oldName = false): string {
+  if (oldName) {
+    return `---
+id: ${SCENE_ID}
+title: Nachtwache in ${OLD_NAME}
+type: planned
+chapter: ${chapter}
+handouts: []
+tags: [stealth]
+status: draft
+---
+
+## Flow
+
+Die Gruppe beobachtet den Kai von ${OLD_NAME}, während die Flut fällt.
+
+> [!readaloud] Über den Dächern von ${OLD_NAME} hängt der Nebel.
+`;
+  }
   return `---
 id: ${SCENE_ID}
 title: ${SCENE_TITLE}
@@ -132,13 +180,31 @@ name: ${LOCATION_STUB_NAME}
 Die flache Bucht nördlich des Hafens — bei Ebbe zu Fuß erreichbar.
 `;
 
-/** The good scene reply for the chapter the prompt names. */
-export function sceneReply(chapter: string): unknown {
+/**
+ * The good scene reply for the chapter the prompt names.
+ *
+ * `knowledge` is the campaign-knowledge block the prompt carried — echoed
+ * back as a warning so a spec can see it (see contextEchoWarnings).
+ * `oldName` is TRIGGER.oldName: the same well-formed reply, but written in
+ * the spelling a naming convention forbids.
+ */
+export function sceneReply(chapter: string, knowledge = "", oldName = false): unknown {
+  if (oldName) {
+    return {
+      scenes: [{ path: `${chapter}/${SCENE_SLUG}`, content: sceneDraft(chapter, true) }],
+      npc_stubs: [],
+      location_stubs: [],
+      warnings: contextEchoWarnings(knowledge),
+    };
+  }
   return {
     scenes: [{ path: `${chapter}/${SCENE_SLUG}`, content: sceneDraft(chapter) }],
     npc_stubs: [{ path: `npcs/${NPC_STUB_ID}`, content: npcStub }],
     location_stubs: [{ path: `locations/${LOCATION_STUB_ID}`, content: locationStub }],
-    warnings: ["Der Frachtbrief ist erfunden — im Quelltext steht kein Siegel."],
+    warnings: [
+      "Der Frachtbrief ist erfunden — im Quelltext steht kein Siegel.",
+      ...contextEchoWarnings(knowledge),
+    ],
   };
 }
 
@@ -213,10 +279,10 @@ Nächten keinen Fang verkauft und traut [[fenn]] nicht.
 }
 
 /** The good NPC reply; `id` is the DM's pin when there was one. */
-export function npcReply(id: string = NPC_DEFAULT_ID): unknown {
+export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): unknown {
   return {
     npc: { path: `npcs/${id}`, content: npcFile(id) },
-    warnings: [],
+    warnings: contextEchoWarnings(knowledge),
   };
 }
 

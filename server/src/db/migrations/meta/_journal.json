@@ -43,6 +43,13 @@
       "when": 1788651234226,
       "tag": "0005_sessions_created_at",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1789325427066,
+      "tag": "0006_campaign_knowledge",
+      "breakpoints": true
     }
   ]
 }

@@ -47,12 +47,20 @@ import {
   type GenerateUsage,
   type GeneratedSceneDraft,
   type GeneratedStub,
+  type NamingHint,
   type ParsedFile,
 } from "@grimoire/shared";
 import { ApiError, assertSafeAddress } from "./campaign-fs";
+import { checkDraftsNaming, type NamingRule } from "./naming-check";
 // The generator reads its context and writes its drafts through the store
 // (issue #57) — the campaign file tree is not a data source any more.
-import { buildTree, glossaryText, requireCampaign } from "./store/read";
+import {
+  buildTree,
+  glossaryText,
+  knowledgeText,
+  namingRules,
+  requireCampaign,
+} from "./store/read";
 import { applyDrafts, chapterExists, draftTargetExists } from "./store/write";
 import { chapterPath, locationPath, npcPath, scenePath } from "./store/paths";
 import {
@@ -164,12 +172,24 @@ async function loadPromptAssets(kind: keyof typeof ASSET_FILES): Promise<PromptA
 
 /**
  * What every run sends along: the campaign's npc/location ids + names (so the
- * model can only REFERENCE what exists) and the glossary.
+ * model can only REFERENCE what exists), the CAMPAIGN KNOWLEDGE and the
+ * glossary.
  */
 interface CampaignContext {
   npcs: Array<{ id: string; name: string }>;
   locations: Array<{ id: string; name: string }>;
+  /**
+   * The binding knowledge block (issue #53) — `""` when the campaign has
+   * none, and then the prompt has no such section at all.
+   */
+  knowledge: string;
   glossary: string;
+  /**
+   * The naming conventions of that knowledge, for the POST-RUN check
+   * (naming-check.ts). Collected WITH the context so the run checks against
+   * the same rules it prompted with, even if the DM edits them meanwhile.
+   */
+  namingRules: NamingRule[];
   npcIds: Set<string>;
   locationIds: Set<string>;
 }
@@ -279,11 +299,16 @@ async function collectContext(campaign: string): Promise<CampaignContext> {
   const npcs = tree.npcs.map((n) => ({ id: n.id, name: n.name }));
   const locations = tree.locations.map((l) => ({ id: l.id, name: l.name }));
   const glossary = (await glossaryText(campaign)) ?? "";
+  // Issue #53: the knowledge block travels with EVERY run kind, and its
+  // `[[slug]]` references are already resolved by knowledgeText.
+  const knowledge = (await knowledgeText(campaign)) ?? "";
 
   return {
     npcs,
     locations,
+    knowledge,
     glossary,
+    namingRules: await namingRules(campaign),
     npcIds: new Set(npcs.map((n) => n.id)),
     locationIds: new Set(locations.map((l) => l.id)),
   };
@@ -945,10 +970,11 @@ export async function runGenerate(
 ): Promise<GenerateResult> {
   const ctx = await collectSceneContext(campaign, chapter, newChapter);
   const assets = await loadPromptAssets("scene");
-  return runPipeline({
+  const result = await runPipeline({
     req: {
       systemPrompt: assets.systemPrompt,
       fewShotTarget: assets.fewShotTarget,
+      knowledge: ctx.knowledge,
       glossary: ctx.glossary,
       context: { chapter: ctx.chapter, npcs: ctx.npcs, locations: ctx.locations },
       sourceText,
@@ -957,6 +983,34 @@ export async function runGenerate(
     validate: (raw) => validateReply(raw, ctx),
     correctionTail: SCENE_CORRECTION_TAIL,
   });
+  // The naming check runs on the FINISHED drafts (issue #53 AK3) — after the
+  // correction turns, because only the reply that survived validation is the
+  // text the DM will read. Stubs are checked too: a stub is a file the run
+  // creates, and a convention applies to it exactly as much.
+  return withNamingHints(result, [
+    ...result.scenes.map((s) => ({ path: s.path, markdown: s.markdown })),
+    ...result.stubs.map((s) => ({ path: stubPath(s), markdown: s.markdown })),
+  ], ctx.namingRules);
+}
+
+/** Where a stub would be written — the address the hint has to name. */
+function stubPath(stub: GeneratedStub): string {
+  return stub.kind === "npc" ? npcPath(stub.id) : locationPath(stub.id);
+}
+
+/**
+ * Attach the naming check's findings to a result. Its own function so a
+ * scene run and an NPC run cannot drift apart on it, and so the "no rules,
+ * no field" case is spelled once: with nothing to report the key stays
+ * ABSENT rather than becoming an empty array every client has to ignore.
+ */
+function withNamingHints<T extends { namingHints?: NamingHint[] }>(
+  result: T,
+  drafts: ReadonlyArray<{ path: string; markdown: string }>,
+  rules: readonly NamingRule[],
+): T {
+  const namingHints = checkDraftsNaming(drafts, rules);
+  return namingHints.length === 0 ? result : { ...result, namingHints };
 }
 
 /**
@@ -1037,10 +1091,11 @@ export async function runGenerateNpc(
 ): Promise<GenerateNpcResult> {
   const ctx = await collectNpcContext(campaign, npcId);
   const assets = await loadPromptAssets("npc");
-  return runPipeline({
+  const result = await runPipeline({
     req: {
       systemPrompt: assets.systemPrompt,
       fewShotTarget: assets.fewShotTarget,
+      knowledge: ctx.knowledge,
       glossary: ctx.glossary,
       context: {
         npcs: ctx.npcs,
@@ -1053,6 +1108,11 @@ export async function runGenerateNpc(
     validate: (raw) => validateNpcReply(raw, ctx, npcId),
     correctionTail: NPC_CORRECTION_TAIL,
   });
+  return withNamingHints(
+    result,
+    [{ path: result.npc.path, markdown: result.npc.markdown }],
+    ctx.namingRules,
+  );
 }
 
 // --- POST /api/:campaign/generate/apply -----------------------------------------

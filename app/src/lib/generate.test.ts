@@ -11,6 +11,7 @@ import {
   chapterIdError,
   chapterIdValue,
   contextHint,
+  knowledgeHint,
   generatePhase,
   jobErrorBody,
   jobMode,
@@ -200,9 +201,18 @@ describe("labels", () => {
     expect(applySummary(0, 3, t)).toBe("0 Szenen · 3 Stubs");
   });
 
-  test("contextHint names what the prompt carries", () => {
-    expect(contextHint(2, 1, true, t)).toBe("2 NPCs · 1 Ort · Glossar");
-    expect(contextHint(1, 0, false, t)).toBe("1 NPC · 0 Orte · kein Glossar");
+  test("contextHint names the two counts the tree carries", () => {
+    expect(contextHint(2, 1, t)).toBe("2 NPCs \u00b7 1 Ort");
+    expect(contextHint(1, 0, t)).toBe("1 NPC \u00b7 0 Orte");
+  });
+
+  test("knowledgeHint COUNTS the knowledge entries (issue #53 AK5)", () => {
+    // A count, not a yes/no: the DM comes here right after writing a rule and
+    // the number is what confirms it travels. Zero says so in words — the
+    // line has to read as a sentence either way.
+    expect(knowledgeHint(0, t)).toBe("kein Kampagnenwissen");
+    expect(knowledgeHint(1, t)).toBe("1 Wissens-Eintrag");
+    expect(knowledgeHint(3, t)).toBe("3 Wissens-Eintr\u00e4ge");
   });
 });
 

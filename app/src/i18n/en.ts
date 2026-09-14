@@ -126,6 +126,8 @@ export const en: Messages = {
   "properties.discard.rename":
     "The changed properties are not saved. Discarding opens the id change and leaves the entry as it is stored.",
   "properties.discard.keepEditing": "Keep editing",
+  "unsaved.description":
+    "This page has unsaved changes. They are lost if you leave now.",
 
 
   "properties.field.required": " · required",
@@ -232,8 +234,55 @@ export const en: Messages = {
     "Settings for this Grimoire instance. Changes take effect at once and live on the server.",
   "settings.language.heading": "Language",
   "settings.language.hint": "Language of the interface. Applies to this instance, not to the campaign data.",
-  "settings.campaign.heading": "Campaign: {name}",
-  "settings.campaign.hint": "Settings that apply to this campaign only.",
+
+  // --- the two campaign-content pages (issue #53) --------------------------
+  "entryList.loading": "Loading the list …",
+  "entryList.loadFailed": "List not loaded — reload the page.",
+  "entryList.saveFailed": "Not saved.",
+  "entryList.saving": "Saving …",
+  "entryList.saved": "Saved",
+  "entryList.moveUp": "Move up",
+  "entryList.moveDown": "Move down",
+  "entryList.edit": "Edit “{name}”",
+  "entryList.remove": "Delete \u201c{name}\u201d",
+  "entryList.removed": "Entry deleted",
+  "entryList.reload": "Reload",
+  "entryList.applyDraft": "Keep the draft and apply it to the current list",
+  "entryList.confirmDelete.title": "Delete this entry?",
+  "entryList.confirmDelete.body": "\u201c{name}\u201d will be removed from the list. This cannot be undone.",
+  "entryList.confirmDelete.confirm": "Delete",
+
+  "knowledge.title": "Campaign knowledge",
+  "knowledge.lead":
+    "Naming conventions, facts and style rules of this campaign. Travels with every generator run and is binding \u2014 even when the source material says otherwise. The order here is the order in the prompt. References like [[fenn]] are resolved to the name.",
+  "knowledge.filter": "Filter the knowledge",
+  "knowledge.empty":
+    "No campaign knowledge yet \u2014 add the first entry (a naming convention, say).",
+  "knowledge.noMatch": "No entry matches the filter.",
+  "knowledge.add": "New entry",
+  "knowledge.blank": "Nothing filled in yet",
+  "knowledge.kindLabel": "Kind",
+  "knowledge.kind.naming": "Naming convention",
+  "knowledge.kind.fact": "Fact",
+  "knowledge.kind.style": "Style rule",
+  "knowledge.from": "Old (in the source material)",
+  "knowledge.to": "New (in this campaign)",
+  "knowledge.factText": "The fact that holds",
+  "knowledge.styleText": "Style rule for generated text",
+  "knowledge.incomplete": "Incomplete \u2014 not sent with the prompt like this.",
+
+  "glossary.title": "Glossary",
+  "glossary.lead":
+    "Translations for the generator: the English term and this campaign's wording. Sorted alphabetically.",
+  "glossary.filter": "Filter the terms",
+  "glossary.empty": "No terms yet \u2014 add the first one.",
+  "glossary.noMatch": "No term matches the filter.",
+  "glossary.add": "New term",
+  "glossary.term": "Term",
+  "glossary.explanation": "Explanation",
+  "glossary.noExplanation": "No explanation",
+
+  "lookup.heading": "Look up",
 
   // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
   "server.slug_taken": '{kind} “{id}” already exists — suggestion: “{suggestion}”',
@@ -422,7 +471,6 @@ export const en: Messages = {
 
   // --- mobile start surface (routes/mobile-start.tsx) ----------------------
   "mobileStart.search": "Search scenes, NPCs, locations …",
-  "mobileStart.browse": "Look up",
   "mobileStart.count.scenes": "{count, plural, one {# scene} other {# scenes}}",
   "mobileStart.count.npcs": "{count, plural, one {# NPC} other {# NPCs}}",
   "mobileStart.count.locations": "{count, plural, one {# location} other {# locations}}",
@@ -437,6 +485,7 @@ export const en: Messages = {
   "palette.placeholder": "Search scenes, NPCs, locations …",
   "palette.results.aria": "Search results",
   "palette.empty": "Nothing found.",
+  "palette.kind.page": "Page",
 
   // --- stale-bundle banner (components/UpdateBanner.tsx) -------------------
   "update.available": "New version available — reload",
@@ -502,8 +551,10 @@ export const en: Messages = {
   "generate.input.sourcePlaceholder":
     "Paste adventure text — paragraphs, boxed text, statblock references …",
   "generate.input.contextLabel": "Context sent along:",
-  "generate.input.contextHint":
-    "{npcs, plural, one {# NPC} other {# NPCs}} · {locations, plural, one {# location} other {# locations}} · {glossary}",
+  "generate.input.contextEntities":
+    "{npcs, plural, one {# NPC} other {# NPCs}} \u00b7 {locations, plural, one {# location} other {# locations}}",
+  "generate.input.knowledgeCount":
+    "{count, plural, =0 {no campaign knowledge} one {# knowledge entry} other {# knowledge entries}}",
   "generate.input.glossary": "glossary",
   "generate.input.noGlossary": "no glossary",
   "generate.input.submit.scene": "Generate drafts",
@@ -557,6 +608,12 @@ export const en: Messages = {
   "generate.review.leadNpc":
     "Check and adjust. Only “Apply” writes the entry — existing NPCs are never overwritten.",
   "generate.review.stubsHeading": "Stubs — decide one by one",
+  // --- naming hints of the post-run check (issue #53 AK3) -------------------
+  "generate.review.namingHeading":
+    "{count, plural, one {# naming hint} other {# naming hints}} — not a blocker",
+  "generate.review.namingHint": '“{from}” is still there — the convention says “{to}”',
+  "generate.review.namingWhereBody": "{path}, line {line}",
+  "generate.review.namingWhereField": "{path}, field {field}",
   "generate.review.conflicts": "These entries already exist — nothing written:",
   "generate.review.conflictsNpc": "This entry already exists — nothing written:",
   "generate.review.applyFailed": "Not written — check the server.",

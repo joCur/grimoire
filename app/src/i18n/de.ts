@@ -138,6 +138,10 @@ export const de = {
   "properties.discard.rename":
     "Die geänderten Eigenschaften sind nicht gespeichert. Verwerfen öffnet die id-Änderung und lässt den Eintrag so, wie er gespeichert ist.",
   "properties.discard.keepEditing": "Weiter bearbeiten",
+  // The same question for LEAVING A PAGE whose save is explicit
+  // (components/UnsavedChangesGuard.tsx); the title is shared.
+  "unsaved.description":
+    "Auf dieser Seite gibt es ungespeicherte Änderungen. Beim Verlassen gehen sie verloren.",
 
 
   // Field controls
@@ -248,8 +252,66 @@ export const de = {
     "Einstellungen dieser Grimoire-Instanz. Änderungen gelten sofort und liegen auf dem Server.",
   "settings.language.heading": "Sprache",
   "settings.language.hint": "Sprache der Oberfläche. Gilt für diese Instanz, nicht für die Kampagnendaten.",
-  "settings.campaign.heading": "Kampagne: {name}",
-  "settings.campaign.hint": "Einstellungen, die nur für diese Kampagne gelten.",
+
+  // --- the two campaign-content pages (issue #53) --------------------------
+  // „Kampagnenwissen" (/:campaign/knowledge) and „Glossar"
+  // (/:campaign/glossary). Campaign CONTENT, like the NPCs and the Orte — the
+  // instance settings under /settings are a different thing entirely (PO
+  // feedback on PR #87). Shared by both pages: the row controls, the per-entry
+  // save outcome, the delete confirmation.
+  "entryList.loading": "Lade Liste …",
+  "entryList.loadFailed": "Liste nicht geladen — Seite neu laden.",
+  "entryList.saveFailed": "Nicht gespeichert.",
+  "entryList.saving": "Speichere …",
+  "entryList.saved": "Gespeichert",
+  "entryList.moveUp": "Nach oben",
+  "entryList.moveDown": "Nach unten",
+  "entryList.edit": "„{name}“ bearbeiten",
+  "entryList.remove": "„{name}“ löschen",
+  "entryList.removed": "Eintrag gelöscht",
+  // The two actions next to `write.stale`. Reloading is always possible;
+  // re-aiming the draft only when the opened entry is still in the list that
+  // came back (components/EntryListPage.tsx).
+  "entryList.reload": "Neu laden",
+  "entryList.applyDraft": "Entwurf behalten & auf aktuelle Liste anwenden",
+  "entryList.confirmDelete.title": "Eintrag löschen?",
+  "entryList.confirmDelete.body": "„{name}“ wird aus der Liste entfernt. Das lässt sich nicht rückgängig machen.",
+  "entryList.confirmDelete.confirm": "Löschen",
+
+  "knowledge.title": "Kampagnenwissen",
+  "knowledge.lead":
+    "Namenskonventionen, Fakten und Stilregeln dieser Kampagne. Geht bei jedem Generator-Lauf mit und gilt verbindlich — auch wenn das Quellmaterial etwas anderes sagt. Die Reihenfolge ist die Reihenfolge im Prompt. Referenzen wie [[fenn]] werden zum Namen aufgelöst.",
+  "knowledge.filter": "Wissen filtern",
+  "knowledge.empty":
+    "Noch kein Kampagnenwissen — ersten Eintrag anlegen (z. B. eine Namenskonvention).",
+  "knowledge.noMatch": "Kein Eintrag passt zum Filter.",
+  "knowledge.add": "Neuer Eintrag",
+  "knowledge.blank": "Noch nichts eingetragen",
+  "knowledge.kindLabel": "Art",
+  "knowledge.kind.naming": "Namenskonvention",
+  "knowledge.kind.fact": "Fakt",
+  "knowledge.kind.style": "Stilregel",
+  "knowledge.from": "Alt (im Quellmaterial)",
+  "knowledge.to": "Neu (in dieser Kampagne)",
+  "knowledge.factText": "Fakt, der gilt",
+  "knowledge.styleText": "Stilregel für generierte Texte",
+  "knowledge.incomplete": "Unvollständig — geht so nicht mit in den Prompt.",
+
+  "glossary.title": "Glossar",
+  "glossary.lead":
+    "Übersetzungen für den Generator: englischer Begriff und die Schreibweise dieser Kampagne. Alphabetisch sortiert.",
+  "glossary.filter": "Begriff filtern",
+  "glossary.empty": "Noch keine Begriffe — ersten Begriff anlegen.",
+  "glossary.noMatch": "Kein Begriff passt zum Filter.",
+  "glossary.add": "Neuer Begriff",
+  "glossary.term": "Begriff",
+  "glossary.explanation": "Erklärung",
+  "glossary.noExplanation": "Ohne Erklärung",
+
+  // Where the two pages are reached from: the pool's „Nachschlagen" line and
+  // the mobile start surface's rows (PO feedback on PR #87 — deliberately NOT
+  // the topbar, which stays the three campaign-wide entries it has).
+  "lookup.heading": "Nachschlagen",
 
   // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
   "server.slug_taken": '{kind} „{id}" existiert schon — Vorschlag: „{suggestion}"',
@@ -441,7 +503,6 @@ export const de = {
 
   // --- mobile start surface (routes/mobile-start.tsx) ----------------------
   "mobileStart.search": "Szenen, NPCs, Orte suchen …",
-  "mobileStart.browse": "Nachschlagen",
   "mobileStart.count.scenes": "{count, plural, one {# Szene} other {# Szenen}}",
   "mobileStart.count.npcs": "{count, plural, one {# NPC} other {# NPCs}}",
   "mobileStart.count.locations": "{count, plural, one {# Ort} other {# Orte}}",
@@ -456,6 +517,9 @@ export const de = {
   "palette.placeholder": "Szenen, NPCs, Orte durchsuchen …",
   "palette.results.aria": "Suchergebnisse",
   "palette.empty": "Nichts gefunden.",
+  // The kind label of a NAVIGATION row (issue #53): a page of this campaign,
+  // not a document the index found.
+  "palette.kind.page": "Seite",
 
   // --- stale-bundle banner (components/UpdateBanner.tsx) -------------------
   "update.available": "Neue Version verfügbar — neu laden",
@@ -521,9 +585,15 @@ export const de = {
   "generate.input.sourcePlaceholder":
     "Abenteuertext einfügen — Absätze, Boxed Text, Statblock-Verweise …",
   "generate.input.contextLabel": "Mitgeschickter Kontext:",
-  // One sentence, both counts and the glossary token inside it.
-  "generate.input.contextHint":
-    "{npcs, plural, one {# NPC} other {# NPCs}} · {locations, plural, one {# Ort} other {# Orte}} · {glossary}",
+  // The two counts that come from the tree. The knowledge and the glossary
+  // are LINKS to their own pages now (issue #53, PO feedback on PR #87), so
+  // the view composes the line from three pieces (lib/generate.ts).
+  "generate.input.contextEntities":
+    "{npcs, plural, one {# NPC} other {# NPCs}} \u00b7 {locations, plural, one {# Ort} other {# Orte}}",
+  // The knowledge COUNT (issue #53 AK5) — the number is what tells the DM
+  // whether the rules they just wrote arrived.
+  "generate.input.knowledgeCount":
+    "{count, plural, =0 {kein Kampagnenwissen} one {# Wissens-Eintrag} other {# Wissens-Eintr\u00e4ge}}",
   "generate.input.glossary": "Glossar",
   "generate.input.noGlossary": "kein Glossar",
   "generate.input.submit.scene": "Entwürfe generieren",
@@ -584,6 +654,16 @@ export const de = {
   "generate.review.leadNpc":
     "Prüfen und anpassen. Erst „Übernehmen“ schreibt den Eintrag — bestehende NPCs werden nie überschrieben.",
   "generate.review.stubsHeading": "Stubs — einzeln entscheiden",
+  // --- naming hints of the post-run check (issue #53 AK3) -------------------
+  // Deliberately NOT a warning: the check is a plain text search and the DM
+  // decides. So the heading counts and the row states the finding plus where
+  // it sits — the sentence is built here because the server stays
+  // language-free (#69).
+  "generate.review.namingHeading":
+    "{count, plural, one {# Namens-Hinweis} other {# Namens-Hinweise}} — kein Blocker",
+  "generate.review.namingHint": '„{from}" steht noch da — vereinbart ist „{to}"',
+  "generate.review.namingWhereBody": "{path}, Zeile {line}",
+  "generate.review.namingWhereField": "{path}, Feld {field}",
   "generate.review.conflicts": "Diese Einträge existieren schon — nichts geschrieben:",
   "generate.review.conflictsNpc": "Dieser Eintrag existiert schon — nichts geschrieben:",
   "generate.review.applyFailed": "Nicht geschrieben — Server prüfen.",

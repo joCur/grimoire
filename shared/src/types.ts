@@ -353,6 +353,13 @@ export interface GenerateResult {
   scenes: GeneratedSceneDraft[];
   stubs: GeneratedStub[];
   warnings: string[];
+  /**
+   * The SERVER's own findings, not the model's (issue #53 AK3): drafts that
+   * still carry a spelling a naming convention replaces. Absent/empty when
+   * the campaign has no naming conventions or nothing was found — never a
+   * reason to fail a run.
+   */
+  namingHints?: NamingHint[];
   /** Token spend of the run; absent when the endpoint reports no usage. */
   usage?: GenerateUsage;
 }
@@ -384,6 +391,8 @@ export interface GenerateNpcResult {
   npc: GeneratedNpcDraft;
   /** The LLM's own review notes for the DM (gaps in the source text). */
   warnings: string[];
+  /** The naming check's findings — see GenerateResult.namingHints. */
+  namingHints?: NamingHint[];
   /** Token spend of the run; absent when the endpoint reports no usage. */
   usage?: GenerateUsage;
 }
@@ -492,4 +501,95 @@ export function isUiLocale(value: unknown): value is UiLocale {
  */
 export interface InstanceSettings {
   locale: UiLocale | null;
+}
+
+// --- glossary & campaign knowledge (issue #53) -----------------------------
+
+/**
+ * One glossary term. The glossary answers the TRANSLATION question ("what do
+ * we call a `lighthouse keeper` in this campaign?") and is quoted to the
+ * model as `term → explanation` lines.
+ */
+export interface GlossaryEntry {
+  term: string;
+  explanation: string;
+}
+
+/**
+ * GET/PUT /api/:campaign/glossary. `rev` is the guard token of the WHOLE
+ * list (`campaigns.glossary_rev`) — the glossary is one document that is
+ * edited as a whole, so there is no per-entry version to hold, and the
+ * ORDER of `entries` is the stored order (that is what reordering writes).
+ */
+export interface GlossaryResponse {
+  entries: GlossaryEntry[];
+  rev: number;
+}
+
+/**
+ * The three kinds of campaign knowledge (issue #53, PO decision):
+ *
+ *   naming  a NAMING CONVENTION — `from` is the spelling the source material
+ *           uses, `to` the one this campaign uses. The only kind the server
+ *           can CHECK after a run, which is why it is a pair and not prose.
+ *   fact    a campaign fact that outranks the source material.
+ *   style   a style rule for the generated prose.
+ *
+ * `fact` and `style` carry `text`; `naming` carries `from` + `to`. The unused
+ * fields are empty strings rather than absent — one row shape, and a kind
+ * switched in the UI keeps what was already typed instead of dropping it.
+ */
+export const KNOWLEDGE_KINDS = ["naming", "fact", "style"] as const;
+export type KnowledgeKind = (typeof KNOWLEDGE_KINDS)[number];
+
+export function isKnowledgeKind(value: unknown): value is KnowledgeKind {
+  return typeof value === "string" && (KNOWLEDGE_KINDS as readonly string[]).includes(value);
+}
+
+/** One campaign-knowledge entry. See KNOWLEDGE_KINDS for which fields apply. */
+export interface KnowledgeEntry {
+  kind: KnowledgeKind;
+  /** `naming`: the source material's spelling. Empty for the other kinds. */
+  from: string;
+  /** `naming`: the spelling this campaign uses. Empty for the other kinds. */
+  to: string;
+  /** `fact`/`style`: the sentence. Empty for `naming`. */
+  text: string;
+}
+
+/**
+ * GET/PUT /api/:campaign/knowledge — same whole-list shape and the same
+ * guard rule as the glossary (`campaigns.knowledge_rev`).
+ */
+export interface KnowledgeResponse {
+  entries: KnowledgeEntry[];
+  rev: number;
+}
+
+/**
+ * One finding of the POST-RUN naming check (issue #53 AK3): a finished draft
+ * still carries a spelling that a naming convention replaces.
+ *
+ * A HINT, never a blocker — the check is a plain word-boundary text search
+ * and cannot know whether the hit is the thing the rule means (a `from` of
+ * "Salt" hits "Salt Harbour" and the word "salt"). So it reports WHERE it
+ * looked and lets the DM decide; the sentence around it is built by the app
+ * from its own catalog, because the server stays language-free (#69).
+ */
+export interface NamingHint {
+  /** The convention's `from` — the spelling that was found. */
+  from: string;
+  /** The convention's `to` — what should stand there instead. */
+  to: string;
+  /** Campaign-relative path of the draft the hit sits in. */
+  path: string;
+  /**
+   * Where inside the draft: `"body"` together with a 1-based `line`, or the
+   * name of the properties key (`"title"`, `"role"`, …) with `line` absent.
+   */
+  field: string;
+  /** 1-based line number inside the markdown body; absent for a property. */
+  line?: number;
+  /** The line (or property value) the hit sits in, trimmed and capped. */
+  excerpt: string;
 }

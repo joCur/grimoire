@@ -6,6 +6,11 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import {
+  isKnowledgeKind,
+  KNOWLEDGE_KINDS,
+  type KnowledgeEntry,
+} from "@grimoire/shared";
 import { getBuildId } from "../config";
 import { ApiError } from "../campaign-fs";
 import {
@@ -14,6 +19,7 @@ import {
   listCampaigns,
   readActiveSession,
   readGlossary,
+  readKnowledge,
   readParsedFile,
   requireCampaign,
 } from "../store/read";
@@ -41,6 +47,7 @@ import {
   startSession,
   writeFileBody,
   writeGlossary,
+  writeKnowledge,
 } from "../store/write";
 import {
   applyGenerated,
@@ -97,6 +104,38 @@ async function jsonBody(c: Context, allowed: string[]): Promise<Record<string, u
     if (!allowed.includes(key)) throw new ApiError(400, `unknown body key: ${key}`);
   }
   return body;
+}
+
+/**
+ * The `rev` of a guarded write. Its own helper since issue #53, when the
+ * third and fourth endpoint needed the identical three lines: a MISSING rev
+ * has to be a 400 and never a default, because a defaulted guard token is no
+ * guard at all (ADR #4).
+ */
+function requireRev(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new ApiError(400, "rev must be a number");
+  }
+  return value;
+}
+
+/**
+ * One SINGLE-LINE field of a knowledge entry (review of #53).
+ *
+ * The knowledge list feeds the generator prompt, where an entry becomes one
+ * bullet in a markdown document the model reads as INSTRUCTIONS
+ * (store/read.ts knowledgeText). A newline inside an entry is
+ * therefore not a formatting detail: it lets an entry open lines of its own —
+ * a „## " heading that poses as a section of the prompt, for instance. The UI
+ * has single-line inputs and cannot produce one, so refusing it costs the DM
+ * nothing and closes the door for every other client.
+ *
+ * The prompt assembly stays defensive as well (`promptInline`) — this is the
+ * validator, not the only line of defence.
+ */
+function requireSingleLine(value: string, key: string): string {
+  if (/[\r\n]/u.test(value)) throw new ApiError(400, `${key} must be a single line`);
+  return value;
 }
 
 /** Query flag: present and not `0`/`false` counts as on (`?includeEnded=1`). */
@@ -199,6 +238,16 @@ api.get("/:campaign/version", async (c) => {
 // rows), but this is the shape anything that wants the TERMS should read —
 // the generator knowledge base of issue #53 builds on exactly this.
 api.get("/:campaign/glossary", async (c) => c.json(await readGlossary(c.req.param("campaign"))));
+
+// GET /api/:campaign/knowledge -> { entries: [{ kind, from, to, text }], rev }
+// The campaign's KNOWLEDGE BASE for the generator (issue #53): naming
+// conventions („write <from> as <to>"), facts and style rules that outrank
+// the source material. Its own list next to the glossary because it answers
+// a different question — the glossary translates a term, an entry here
+// overrides the source (db/schema.ts campaignKnowledge).
+api.get("/:campaign/knowledge", async (c) =>
+  c.json(await readKnowledge(c.req.param("campaign"))),
+);
 
 // GET /api/:campaign/migration-report is GONE (issue #79 AK6). The markdown
 // import is no longer part of the production path — it is the dev/E2E tool
@@ -326,13 +375,17 @@ api.post("/:campaign/inbox", async (c) => {
   return c.json(await appendInboxEntry(c.req.param("campaign"), text));
 });
 
-// PUT /api/:campaign/glossary { entries: [{ term, explanation }] }
-//   -> { entries }
-// Replaces the WHOLE list: the glossary is a short, hand-curated table and is
-// edited as a whole, so there is nothing an entry-level guard would protect.
-// Duplicate terms follow the import's rule — the first one wins.
+// PUT /api/:campaign/glossary { entries: [{ term, explanation }], rev }
+//   -> { entries, rev }
+// Replaces the WHOLE list — the glossary is a short, hand-curated table that
+// is edited as a whole, and that is also what makes REORDERING an ordinary
+// save (issue #53): the array order is the stored order, so there is no
+// separate move endpoint. Duplicate terms follow the import's rule — the
+// first one wins. `rev` is the list's guard token (the one GET /glossary and
+// GET /file?path=glossary both hand out); a stale one is
+// `409 { code: "rev_conflict", rev }` and writes nothing.
 api.put("/:campaign/glossary", async (c) => {
-  const body = await jsonBody(c, ["entries"]);
+  const body = await jsonBody(c, ["entries", "rev"]);
   const raw = body.entries;
   if (!Array.isArray(raw)) throw new ApiError(400, "entries must be an array");
   const entries: Array<{ term: string; explanation: string }> = [];
@@ -344,9 +397,46 @@ api.put("/:campaign/glossary", async (c) => {
     if (item.explanation !== undefined && typeof item.explanation !== "string") {
       throw new ApiError(400, "explanation must be a string");
     }
+    // NO single-line rule here, unlike the knowledge list below: the markdown
+    // import produces glossary explanations that wrap over two lines
+    // (examples/beispiel/glossary.md), so a 400 would make an imported
+    // glossary unsavable. `promptInline` (store/read.ts) flattens them for
+    // the prompt instead — the defence that does not lose data.
     entries.push({ term: item.term, explanation: item.explanation ?? "" });
   }
-  return c.json(await writeGlossary(c.req.param("campaign"), entries));
+  return c.json(await writeGlossary(c.req.param("campaign"), entries, requireRev(body.rev)));
+});
+
+// PUT /api/:campaign/knowledge { entries: [{ kind, from?, to?, text? }], rev }
+//   -> { entries, rev }
+// The knowledge list's write, with the glossary's contract to the letter
+// (issue #53): the whole list, the array order IS the order, `rev` guards it
+// and a stale one is a 409 `rev_conflict`. Same page, same rules.
+//
+// A `naming` entry's pair may be HALF-FILLED here on purpose — that is a
+// convention the DM has not finished typing, and refusing the save would
+// lose the rest of the list with it. The prompt skips incomplete rules
+// instead (store/read.ts knowledgeText), which is where a half rule could do
+// damage.
+api.put("/:campaign/knowledge", async (c) => {
+  const body = await jsonBody(c, ["entries", "rev"]);
+  const raw = body.entries;
+  if (!Array.isArray(raw)) throw new ApiError(400, "entries must be an array");
+  const entries: KnowledgeEntry[] = [];
+  for (const item of raw) {
+    if (!isPlainObject(item)) throw new ApiError(400, "each entry must be an object");
+    if (!isKnowledgeKind(item.kind)) {
+      throw new ApiError(400, `each entry needs a kind of ${KNOWLEDGE_KINDS.join(", ")}`);
+    }
+    const str = (key: "from" | "to" | "text"): string => {
+      const value = item[key];
+      if (value === undefined || value === null) return "";
+      if (typeof value !== "string") throw new ApiError(400, `${key} must be a string`);
+      return requireSingleLine(value, key);
+    };
+    entries.push({ kind: item.kind, from: str("from"), to: str("to"), text: str("text") });
+  }
+  return c.json(await writeKnowledge(c.req.param("campaign"), entries, requireRev(body.rev)));
 });
 
 // --- creating content (issue #56) ---------------------------------------------------

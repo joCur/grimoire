@@ -154,7 +154,11 @@ Die Pfade:
    Pause → beenden → Review
 5. Nachbereitung: Handlungsstrang übernehmen → _chapter.md; Inbox abhaken
 6. Generator-Zyklus (Stub-LLM): Job → Review → Übernehmen → draft im
-   Pool; plus 409-/Fehlerpfad und Server-Neustart (fertiger Job übersteht
+   Pool; plus 409-/Fehlerpfad. Dazu (Issue #53) Kampagnenwissen und
+   Glossar auf `/settings` pflegen — anlegen, bearbeiten, löschen,
+   umsortieren, 409 — und der Lauf danach: Wissen im mitgeschickten
+   Kontext (Stub echot den Prompt-Block zurück), Namens-Hinweise im
+   Review, „Übernehmen" trotzdem möglich und Server-Neustart (fertiger Job übersteht
    ihn und bleibt übernehmbar, laufender wird als `failed` gemeldet)
 7. Eigenschaften-Patch (`PATCH /properties`)/Status-Regler inkl. 409-Konflikt
 8. Mobil-Startfläche + Inbox-Einwurf bei 390px

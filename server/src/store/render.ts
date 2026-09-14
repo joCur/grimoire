@@ -48,10 +48,12 @@ export interface CampaignRow {
   extra: string;
   version: number;
   rev: number;
-  /** The glossary's prose preamble and the two list documents' guard tokens. */
+  /** The glossary's prose preamble and the three list documents' guard tokens. */
   glossaryIntro: string;
   glossaryRev: number;
   inboxRev: number;
+  /** Guard token of the campaign-knowledge list (issue #53). */
+  knowledgeRev: number;
 }
 
 export interface ChapterRow {

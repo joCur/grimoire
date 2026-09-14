@@ -182,6 +182,12 @@ export function Topbar() {
   const reviewMatch = matchPath("/:campaign/review", pathname);
   const generateMatch = matchPath("/:campaign/generate", pathname);
   const listMatch = matchPath("/:campaign/list/*", pathname);
+  // The two campaign-content pages (issue #53). They are NOT in the nav trio
+  // and must not be (PO feedback on PR #87) — but the bar above them is still
+  // this campaign's bar, so the campaign has to be derived here too. Without
+  // them the topbar went blank on those pages: no switcher, no ⌘K, no gear.
+  const knowledgeMatch = matchPath("/:campaign/knowledge", pathname);
+  const glossaryMatch = matchPath("/:campaign/glossary", pathname);
   const poolMatch = matchPath("/:campaign", pathname);
   const isSettings = matchPath("/settings", pathname) !== null;
   const settingsFrom = useSettingsCampaign(isSettings);
@@ -191,6 +197,8 @@ export function Topbar() {
     campaignOf(reviewMatch) ??
     campaignOf(generateMatch) ??
     campaignOf(listMatch) ??
+    campaignOf(knowledgeMatch) ??
+    campaignOf(glossaryMatch) ??
     campaignOf(poolMatch) ??
     (settingsFrom === "" ? undefined : settingsFrom) ??
     "";

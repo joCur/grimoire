@@ -5,19 +5,18 @@
 // into that menu: cheap, always on screen, no new chrome. The PO's objection
 // is about MEANING, not pixels — the switcher is where you pick a CAMPAIGN,
 // and an instance-wide setting hidden in it is both hard to find and wrong by
-// category. A settings page is where anyone looks for a setting, and it is the
-// surface that can GROW: the campaign knowledge and the glossary (issue #53)
-// land here as further sections.
+// category. A settings page is where anyone looks for a setting.
 //
-// TWO LEVELS, one page, and the structure says which is which:
+// INSTANCE ONLY — today exactly one section, the UI language.
 //
-//   * INSTANCE sections apply to the whole installation and are always shown —
-//     today exactly one, the UI language.
-//   * CAMPAIGN sections apply to the campaign that is currently open and are
-//     shown only then, under a heading that names it. Issue #53 adds its
-//     sections by appending to `CAMPAIGN_SECTIONS` below; nothing else on this
-//     page has to change, and the route stays reachable with no campaign at
-//     all (a fresh instance has none).
+// Issue #53 briefly put the campaign's Glossar and Kampagnenwissen here as
+// campaign sections. The PO's objection on PR #87 settles the category: those
+// two are campaign CONTENT, the same kind of thing as the NPCs and the Orte,
+// and they belong on list pages of their own (`/:campaign/knowledge`,
+// `/:campaign/glossary`) — not in a settings page, and not as 30 inline text
+// fields under one global save button. What is left here is what is true of
+// the INSTALLATION, which is also why the route stays reachable with no
+// campaign at all (a fresh instance has none).
 //
 // The page is deliberately QUIET (docs/UI-BRIEF.md): the DM comes here once,
 // so nothing here competes with the pool. Section headings follow the pool's
@@ -36,6 +35,8 @@
 // Only with no origin at all (the gear from "/" on a fresh instance, or a
 // hand-typed `/settings`) does the old heuristic stand in — `pickLastCampaign`
 // (lib/campaign.ts), the same one "/" uses. No localStorage (quality floor).
+// It is still needed with no campaign section on the page: the topbar above
+// and the mobile „‹ Pool" row both have to lead back where the DM came from.
 
 import { useQuery } from "@tanstack/react-query";
 import { useId, type ReactNode } from "react";
@@ -45,22 +46,8 @@ import { fetchCampaigns } from "@/api";
 import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { useT } from "@/i18n";
-import type { MessageKey } from "@/i18n";
-import { campaignLabel, settingsCampaign } from "@/lib/campaign";
+import { settingsCampaign } from "@/lib/campaign";
 import { useCampaignVersion } from "@/lib/use-campaign-version";
-
-/**
- * The campaign-scoped sections. EMPTY today — issue #53 (Generator knowledge
- * base, glossary) fills it. Kept as a list rather than as inline JSX so
- * adding one is a single entry and the empty case stays honest: with no
- * sections there is no campaign heading either, instead of a heading over
- * nothing.
- */
-const CAMPAIGN_SECTIONS: ReadonlyArray<{
-  key: string;
-  heading: MessageKey;
-  render: (campaign: string) => ReactNode;
-}> = [];
 
 export function SettingsRoute() {
   const t = useT();
@@ -77,13 +64,6 @@ export function SettingsRoute() {
   // campaign-scoped view; `/settings` sits outside that layout because it must
   // also work with no campaign at all, and then the hook stays idle ("").
   useCampaignVersion(campaign ?? "");
-  const label =
-    campaign === undefined
-      ? undefined
-      : campaignLabel(
-          campaigns.find((c) => c.id === campaign),
-          campaign,
-        );
 
   return (
     <>
@@ -101,25 +81,6 @@ export function SettingsRoute() {
         </p>
 
         <LanguageSection />
-
-        {/* The campaign half — only with a campaign AND a section to show. */}
-        {campaign !== undefined &&
-          label !== undefined &&
-          CAMPAIGN_SECTIONS.length > 0 && (
-            <>
-              <h2 className="mt-10 mb-1 text-[13px] font-medium text-soft">
-                {t("settings.campaign.heading", { name: label })}
-              </h2>
-              <p className="mb-5 text-[12.5px] text-muted-foreground">
-                {t("settings.campaign.hint")}
-              </p>
-              {CAMPAIGN_SECTIONS.map((section) => (
-                <Section key={section.key} heading={t(section.heading)}>
-                  {section.render(campaign)}
-                </Section>
-              ))}
-            </>
-          )}
       </div>
     </>
   );

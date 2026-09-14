@@ -5,9 +5,10 @@ Pipeline: Quelltext (EN) → LLM → Szenen-Drafts (DE) → Review-Vorschau → 
 ## Ablauf pro Aufruf
 
 1. Server sammelt Kontext: alle npc-/location-ids + Namen, Kapitel-id,
-   `glossary.md`.
+   **Kampagnenwissen** und Glossar (beides aus der Datenbank —
+   `campaign_knowledge` bzw. `glossary`).
 2. Prompt = `system-prompt.md` + `example-output.md` (Few-Shot-Ziel)
-   + Kontext + Quelltext.
+   + Kampagnenwissen + Glossar + Kontext + Quelltext.
 3. LLM antwortet mit JSON (Schema siehe system-prompt.md).
 4. Server validiert mechanisch:
    - Frontmatter-Block parsebar? `type`/`status` gültig? `status == draft`?
@@ -19,8 +20,30 @@ Pipeline: Quelltext (EN) → LLM → Szenen-Drafts (DE) → Review-Vorschau → 
    nicht an den Nutzer. Ausnahme: eine vom Modell abgeschnittene Antwort
    (finish_reason/stop_reason) bricht sofort ab — Korrektur-Turns können
    ein Token-Limit nicht heilen, sie kosten nur.
-5. App zeigt Review-Vorschau: Szenen editierbar, Stubs einzeln
-   annehmen/ablehnen. Erst „Übernehmen" schreibt auf die Platte.
+5. Server prüft den fertigen Draft gegen die **Namenskonventionen** des
+   Kampagnenwissens (Wortgrenzen, Groß/Klein-unabhängig, keine Heuristik)
+   und legt Treffer als `namingHints` ins Job-Ergebnis.
+6. App zeigt Review-Vorschau: Szenen editierbar, Stubs einzeln
+   annehmen/ablehnen, Namens-Hinweise dezent daneben (kein Blocker).
+   Erst „Übernehmen" schreibt auf die Platte.
+
+## Kampagnenwissen (Issue #53)
+
+Gepflegt auf `/settings` je Kampagne, drei Arten: Namenskonvention
+(`Alt → Neu`), Fakt, Stilregel. Der Prompt stellt sie **vor** das Glossar,
+unter einer bindenden Überschrift:
+
+```
+## Kampagnenwissen — immer anwenden, auch wenn das Quellmaterial anders lautet
+
+- Namenskonvention: schreibe „Salt Harbour" immer als „Salzhafen".
+- Fakt: Der Leuchtturm ist seit zwei Wintern unbesetzt.
+- Stilregel: Keine Würfelwerte im Read-Aloud-Text.
+```
+
+`[[slug]]`-Referenzen in Einträgen werden vorher aufgelöst (der Modell-Text
+soll Namen enthalten, keine Slugs). Ohne Einträge fehlt der Abschnitt ganz —
+der Prompt sieht dann genauso aus wie vorher.
 
 ## NPC-Generator
 

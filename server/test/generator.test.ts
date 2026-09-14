@@ -1772,3 +1772,91 @@ describe("LLM_CORRECTION_TURNS", () => {
     expect(fake.calls).toHaveLength(2);
   });
 });
+
+// --- campaign knowledge in the run (issue #53) -------------------------------
+//
+// Two claims, both about the WIRING rather than about the wording: the
+// knowledge reaches the provider on every run kind (the wording itself is
+// llm-provider.test.ts's buildPrompt block), and the naming check runs over
+// the finished drafts and lands in the result.
+
+describe("campaign knowledge", () => {
+  /** Write the campaign's knowledge list against its current rev. */
+  async function setKnowledge(entries: unknown[]): Promise<void> {
+    const current = await app.request("/api/beispiel/knowledge");
+    const { rev } = (await current.json()) as { rev: number };
+    const res = await app.request("/api/beispiel/knowledge", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ entries, rev }),
+    });
+    expect(res.status).toBe(200);
+  }
+
+  // The database is shared by the whole file, so the list must not leak into
+  // the cases above (a naming hint appearing in an unrelated result).
+  afterEach(async () => {
+    await setKnowledge([]);
+  });
+
+  test("no knowledge: the request carries an empty block and no hints", async () => {
+    const fake = useFake([reply()]);
+    const result = (await (await generate(generateBody)).json()) as GenerateResult;
+    expect(fake.calls[0]!.req.knowledge).toBe("");
+    expect(result.namingHints).toBeUndefined();
+  });
+
+  test("the rendered knowledge block travels with a SCENE run", async () => {
+    await setKnowledge([
+      { kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" },
+      { kind: "style", from: "", to: "", text: "Keine Würfelwerte im Read-Aloud." },
+    ]);
+    const fake = useFake([reply()]);
+    expect((await generate(generateBody)).status).toBe(200);
+    const knowledge = fake.calls[0]!.req.knowledge;
+    expect(knowledge).toContain('schreibe „Salt Harbour" immer als „Salzhafen"');
+    expect(knowledge).toContain("- Stilregel: Keine Würfelwerte im Read-Aloud.");
+  });
+
+  // The NPC run's half of AK2 (knowledge travels, `[[slug]]` resolved) is in
+  // generate-npc.test.ts — it needs that file's harness.
+
+  test("a draft that keeps the old spelling produces a hint with its position", async () => {
+    await setKnowledge([
+      { kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" },
+    ]);
+    const scene = sceneMarkdown().replace(
+      "Fenn wartet am Kai; Grella beobachtet aus dem Schatten.",
+      "Fenn wartet am Kai von Salt Harbour.",
+    );
+    useFake([reply({ scenes: [{ path: SCENE_PATH, content: scene }] })]);
+    const result = (await (await generate(generateBody)).json()) as GenerateResult;
+    // A HINT, not a failure: the run succeeded and the draft is in the result.
+    expect(result.scenes).toHaveLength(1);
+    expect(result.namingHints).toHaveLength(1);
+    const hint = result.namingHints![0]!;
+    expect(hint).toMatchObject({
+      from: "Salt Harbour",
+      to: "Salzhafen",
+      path: SCENE_PATH,
+      field: "body",
+      excerpt: "Fenn wartet am Kai von Salt Harbour.",
+    });
+    expect(hint.line).toBeGreaterThan(0);
+  });
+
+  test("stubs are checked too — a stub is a file the run creates", async () => {
+    await setKnowledge([{ kind: "naming", from: "Grella", to: "Grellwyn", text: "" }]);
+    useFake([reply({ scenes: [{ path: SCENE_PATH, content: sceneWithId("kai-zwei") }] })]);
+    const result = (await (await generate(generateBody)).json()) as GenerateResult;
+    const paths = (result.namingHints ?? []).map((h) => h.path);
+    expect(paths).toContain("npcs/grella");
+  });
+
+  test("a draft that FOLLOWS the convention produces no hint at all", async () => {
+    await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
+    useFake([reply({ scenes: [{ path: SCENE_PATH, content: sceneWithId("kai-drei") }] })]);
+    const result = (await (await generate(generateBody)).json()) as GenerateResult;
+    expect(result.namingHints).toBeUndefined();
+  });
+});

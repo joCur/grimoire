@@ -160,9 +160,33 @@
 //                                              prefix terms, diacritics folded;
 //                                              scenes/npcs/locations/chapters/campaign/
 //                                              GLOSSARY, max 20 results — issue #57)
-//   [x] GET  /api/:campaign/glossary           { entries: [{ term, explanation }] } — the
-//                                              glossary TABLE (issue #57, planning F6)
-//   [x] PUT  /api/:campaign/glossary           { entries } -> { entries }; replaces the list
+//   [x] GET  /api/:campaign/glossary           { entries: [{ term, explanation }], rev } — the
+//                                              glossary TABLE (issue #57, planning F6); `rev`
+//                                              is the LIST's guard token, the same one
+//                                              GET /file?path=glossary hands out (issue #53)
+//   [x] PUT  /api/:campaign/glossary           { entries, rev } -> { entries, rev }; replaces
+//                                              the WHOLE list, so the array order IS the
+//                                              stored order and reordering needs no endpoint
+//                                              of its own. Stale rev -> 409
+//                                              { code: "rev_conflict", rev } (issue #53)
+//   [x] GET  /api/:campaign/knowledge          { entries: [{ kind, from, to, text }], rev } —
+//                                              the CAMPAIGN KNOWLEDGE the generator must
+//                                              apply (issue #53): kind is naming|fact|style,
+//                                              a `naming` entry carries from/to, the others
+//                                              `text`. Guard token: campaigns.knowledge_rev
+//   [x] PUT  /api/:campaign/knowledge          { entries, rev } -> { entries, rev }; the
+//                                              glossary's contract to the letter — whole
+//                                              list, array order is the order, stale rev ->
+//                                              409 { code: "rev_conflict", rev }. A
+//                                              half-filled `naming` pair is STORED (the DM
+//                                              is still typing); the prompt skips it.
+//                                              Entry fields must be SINGLE LINE -> 400:
+//                                              an entry becomes one bullet of the
+//                                              generator prompt, and a newline would let
+//                                              it open lines (headings) of its own. The
+//                                              glossary keeps taking wrapped explanations
+//                                              (the import makes them) and is flattened
+//                                              for the prompt instead
 //   [—] GET  /api/:campaign/migration-report   REMOVED with issue #79. The markdown import
 //                                              left the production path (no boot import any
 //                                              more): it is the dev/E2E tool `grimoire seed`,
@@ -193,7 +217,12 @@
 //                                              file exists. Writes NOTHING.
 //   [x] GET  /api/:campaign/generate/job       GenerateJob (running/done/failed incl.
 //                                              kind, result/npcResult, error body and
-//                                              draftEdits), 404 when there is none
+//                                              draftEdits), 404 when there is none.
+//                                              A finished result may carry `namingHints`
+//                                              (issue #53): the SERVER's own findings that
+//                                              a draft still uses a spelling a naming
+//                                              convention replaces — hints for the review,
+//                                              never a reason to fail or block
 //   [x] DELETE /api/:campaign/generate/job     discard the job ("Verwerfen")
 //   [x] PUT  /api/:campaign/generate/job/drafts { path, markdown } -> keep one review
 //                                              edit in the job (400 unknown path)
