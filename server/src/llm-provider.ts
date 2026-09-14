@@ -35,7 +35,20 @@ export interface GenerateRequest {
     /** Id the DM pinned for the generated file (NPC run) — absent: free choice. */
     targetId?: string;
   };
-  sourceText: string; // English source text
+  sourceText: string; // English source text ("" when a run has none — issue #36)
+  /**
+   * The entry an AUGMENT run works on (issue #36): its complete current
+   * document, properties block included, under its address. Absent for the
+   * two runs that create something — and then the prompt has no such section,
+   * so a scene/npc run sees the prompt exactly as before.
+   */
+  existingEntry?: { path: string; markdown: string };
+  /**
+   * The DM's free instruction of an augment run („Führe einen Handlungsstrang
+   * um den Schmuggler-Spitzel ein"). Either this or `sourceText` is there —
+   * the dialog requires at least one of them.
+   */
+  instruction?: string;
 }
 
 /**
@@ -109,6 +122,16 @@ function normalizeUsage(
 export const KNOWLEDGE_HEADING =
   "## Kampagnenwissen — immer anwenden, auch wenn das Quellmaterial anders lautet";
 
+/**
+ * Heading of the augment run's „this is what already stands there" block
+ * (issue #36). A constant for the same reason KNOWLEDGE_HEADING is one: the
+ * prompt test asserts on it, and the E2E stub reads the prompt by it.
+ */
+export const EXISTING_ENTRY_HEADING = "## Bestehender Eintrag — ergänzen, nicht ersetzen";
+
+/** Heading of the DM's free instruction of an augment run (issue #36). */
+export const INSTRUCTION_HEADING = "## Anweisung des DM";
+
 // The prompt content is German on purpose — the pipeline's target language
 // is German (see generator/system-prompt.md); only code and comments here
 // are English.
@@ -136,8 +159,23 @@ export function buildPrompt(req: GenerateRequest): string {
     "```markdown",
     req.fewShotTarget,
     "```",
-    "## Quelltext",
-    req.sourceText,
+    // The augment run's two extra sections (issue #36). They stand BELOW the
+    // few-shot (which is the FORMAT reference) and ABOVE the source text: the
+    // model has to know what the entry is before it reads what to add to it.
+    ...(req.existingEntry === undefined
+      ? []
+      : [
+          `${EXISTING_ENTRY_HEADING} (${req.existingEntry.path})`,
+          "```markdown",
+          req.existingEntry.markdown,
+          "```",
+        ]),
+    ...(req.instruction === undefined || req.instruction.trim() === ""
+      ? []
+      : [INSTRUCTION_HEADING, req.instruction]),
+    // A run may have an instruction and no source text (issue #36); an empty
+    // heading would be one the model has to interpret against nothing.
+    ...(req.sourceText.trim() === "" ? [] : ["## Quelltext", req.sourceText]),
   ].join("\n\n");
 }
 

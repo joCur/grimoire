@@ -1112,8 +1112,24 @@ export async function writeFileBody(
   // without its final newline made the next appended section run into the
   // last line. EXISTING trailing newlines are left alone, so a read/write
   // roundtrip changes nothing; an empty body stays empty.
+  return mutate(campaign, (tx) => writeBodyIn(tx, campaign, locator, rev, markdown));
+}
+
+/**
+ * The body write itself, INSIDE a caller's transaction. Split out of
+ * `writeFileBody` for issue #36: „Mit KI ergänzen" accepts properties and
+ * body of one entry together, and the ticket's AK3 says that is ONE
+ * transaction with one rev guard — two `mutate` calls would be two.
+ */
+function writeBodyIn(
+  tx: GrimoireDb,
+  campaign: string,
+  locator: Locator,
+  rev: number,
+  markdown: string,
+): FileResponse {
   const body = markdown === "" || markdown.endsWith("\n") ? markdown : `${markdown}\n`;
-  return mutate(campaign, (tx) => {
+  {
     switch (locator.kind) {
       case "campaign": {
         const row = campaignRow(tx, campaign);
@@ -1215,6 +1231,52 @@ export async function writeFileBody(
       default:
         throw new ApiError(404, "file not found");
     }
+  }
+}
+
+/**
+ * „Mit KI ergänzen" accepts a proposal (issue #36): the chosen properties
+ * fields and the chosen body in ONE transaction, guarded by ONE `rev` — the
+ * version the DM was looking at in the review.
+ *
+ * The properties patch runs first and bumps the row to `rev + 1`; the body
+ * write is therefore checked against that bumped value, not against the one
+ * the client sent. Both halves see the same transaction, so a conflict in
+ * either rolls the whole accept back and nothing is half-written. Everything
+ * a normal write does — FTS, `[[slug]]` reference rows, the #70 „referencing
+ * creates" rule — happens because these are the very same code paths.
+ *
+ * `jobId` discards the augment job the proposal came from, in the SAME
+ * transaction as the write (issue #62's rule: drafts and job can never
+ * disagree after a crash). A stale id matches nothing and is ignored.
+ */
+export async function writePropertiesAndBody(
+  campaign: string,
+  rel: string,
+  rev: number,
+  patch: Record<string, unknown>,
+  body: string | undefined,
+  jobId?: string,
+): Promise<FileResponse> {
+  assertSafeAddress(rel);
+  const locator = locatorFromPath(rel);
+  if (locator.kind === "session" || locator.kind === "inbox") {
+    throw new ApiError(400, "this file is append-only — use the log/inbox endpoints");
+  }
+  return mutate(campaign, (tx) => {
+    const patched =
+      Object.keys(patch).length === 0
+        ? undefined
+        : patchLocator(tx, campaign, locator, rev, patch);
+    const bodyRev = patched?.rev ?? rev;
+    const written = body === undefined ? patched : writeBodyIn(tx, campaign, locator, bodyRev, body);
+    if (written === undefined) throw new ApiError(400, "nothing to write");
+    if (jobId !== undefined) {
+      tx.delete(generateJobs)
+        .where(and(eq(generateJobs.id, jobId), eq(generateJobs.campaignId, campaign)))
+        .run();
+    }
+    return written;
   });
 }
 

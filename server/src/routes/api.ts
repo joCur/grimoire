@@ -55,6 +55,7 @@ import {
   assertNpcGenerateTarget,
   obtainProvider,
 } from "../generator";
+import { applyAugment, readAugmentTarget } from "../generator-augment";
 import {
   deleteJob,
   getJob,
@@ -724,6 +725,59 @@ api.post("/:campaign/generate/npc", async (c) => {
     provider,
   });
   return c.json({ jobId: job.id }, 202);
+});
+
+// POST /api/:campaign/generate/augment { path, sourceText?, instruction? }
+// -> 202 { jobId } — „Mit KI ergänzen" (issue #36): the same background job
+// model as the two create runs, pointed at an entry that already EXISTS.
+// ONE generator job per campaign, so a start while ANY run is going answers
+// 409 { jobId }. Writes NOTHING; the proposal waits in the job.
+//
+// Synchronous, before a job exists: 400 for a malformed body, for an unsafe
+// address, for a kind that has no augment prompt (only npc/location/scene),
+// and when NEITHER sourceText nor instruction carries text — the dialog
+// requires at least one of them; 404 for an unknown campaign/entry; 503
+// without a configured provider.
+api.post("/:campaign/generate/augment", async (c) => {
+  const body = await jsonBody(c, ["path", "sourceText", "instruction"]);
+  const campaign = c.req.param("campaign");
+  const target = body.path;
+  if (typeof target !== "string" || target.trim() === "") {
+    throw new ApiError(400, "path must be a non-empty string");
+  }
+  const sourceText = optionalText(body.sourceText, "sourceText") ?? "";
+  const instruction = optionalText(body.instruction, "instruction") ?? "";
+  if (sourceText === "" && instruction === "") {
+    throw new ApiError(400, "sourceText or instruction is required");
+  }
+  await readAugmentTarget(campaign, target); // 400 unsafe/kind, 404 unknown
+  const provider = obtainProvider(); // 503 when nothing is configured
+  const job = await startJob({
+    kind: "augment",
+    campaign,
+    target,
+    sourceText,
+    instruction,
+    provider,
+  });
+  return c.json({ jobId: job.id }, 202);
+});
+
+// POST /api/:campaign/generate/augment/apply
+// { path, rev, properties?, body?, jobId? } -> the written FileResponse.
+// Accepting the reviewed proposal (issue #36 AK3): the DM's chosen fields
+// and the body they assembled from the accepted blocks, written in ONE
+// transaction against `rev` — 409 { code: "rev_conflict", rev } when the
+// entry moved underneath, and then NOTHING is written. FTS and `[[slug]]`
+// reference rows follow because this is the ordinary write path; `jobId`
+// discards the augment job in that same transaction.
+api.post("/:campaign/generate/augment/apply", async (c) => {
+  const body = await jsonBody(c, ["path", "rev", "properties", "body", "jobId"]);
+  const jobId = body.jobId;
+  if (jobId !== undefined && typeof jobId !== "string") {
+    throw new ApiError(400, "jobId must be a string");
+  }
+  return c.json(await applyAugment(c.req.param("campaign"), body, jobId));
 });
 
 // GET /api/:campaign/generate/job -> GenerateJob (404 when there is none).
