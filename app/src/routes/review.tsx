@@ -181,7 +181,15 @@ export function ReviewRoute() {
       error={cardError(entry)}
       canAdopt={chapter !== undefined}
       kept={kept.has(keptKey(entry))}
-      onKeep={() => setKept((current) => new Set(current).add(keptKey(entry)))}
+      onKeep={() =>
+        setKept((current) => {
+          const next = new Set(current);
+          const key = keptKey(entry);
+          if (next.has(key)) next.delete(key);
+          else next.add(key);
+          return next;
+        })
+      }
       onThread={() => {
         act.reset();
         act.mutate({ entry, action: "thread" });
@@ -439,22 +447,24 @@ function EntryCard({
             >
               {entry.section === "harvest" ? t("common.discard") : t("review.action.resolve")}
             </Button>
-            {entry.section === "pc" && !kept && (
+            {entry.section === "pc" && (
+              // „Behalten" writes NOTHING — it is a marker for this sitting,
+              // so it stays a toggle (aria-pressed) and never claims a
+              // recorded decision. The entry stays open either way.
               <Button
                 type="button"
                 variant="outline"
+                aria-pressed={kept}
+                title={t("review.action.keepHint")}
                 disabled={busy}
                 onClick={onKeep}
-                className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
+                className={cn(
+                  "h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground",
+                  kept && "border-border-hover text-foreground",
+                )}
               >
                 {t("review.action.keep")}
               </Button>
-            )}
-            {entry.section === "pc" && kept && (
-              <p className="flex items-center gap-[7px] self-center text-[12.5px] text-muted-foreground">
-                <Check aria-hidden size={13} className="flex-none" />
-                {t("review.kept")}
-              </p>
             )}
           </div>
           {error !== undefined && (

@@ -177,7 +177,14 @@ test("a #pc note is grouped by character and ticked off (issue #86)", async ({ p
     pcCard.getByRole("button", { name: "Als Handlungsstrang übernehmen" }),
   ).toHaveCount(0);
   await expect(pcCard.getByRole("button", { name: "NPC anlegen" })).toHaveCount(0);
-  await expect(pcCard.getByRole("button", { name: "Behalten" })).toBeVisible();
+  // „Behalten" persists nothing — it is an honest toggle for this sitting.
+  const keep = pcCard.getByRole("button", { name: "Behalten" });
+  await expect(keep).toBeVisible();
+  await expect(keep).toHaveAttribute("aria-pressed", "false");
+  await keep.click();
+  await expect(keep).toHaveAttribute("aria-pressed", "true");
+  await keep.click();
+  await expect(keep).toHaveAttribute("aria-pressed", "false");
   // …and it does not turn up among the untagged notes either.
   await expect(page.getByRole("heading", { name: "Notizen" })).toHaveCount(0);
 

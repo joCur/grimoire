@@ -463,7 +463,7 @@ export const en: Messages = {
   "review.pc.groupTag": "#{tag}",
   "review.pc.groupGeneral": "General",
   "review.action.keep": "Keep",
-  "review.kept": "Kept — stays open",
+  "review.action.keepHint": "Stays open for the next wrap-up.",
 
   "review.threads.title": "Open threads of the chapter",
   "review.threads.empty": "No open threads in this chapter yet.",

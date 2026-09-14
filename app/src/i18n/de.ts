@@ -496,7 +496,7 @@ export const de = {
   "review.pc.groupTag": "#{tag}",
   "review.pc.groupGeneral": "Allgemein",
   "review.action.keep": "Behalten",
-  "review.kept": "Behalten — bleibt offen",
+  "review.action.keepHint": "Bleibt offen für die nächste Nachbereitung.",
 
   "review.threads.title": "Offene Handlungsstränge des Kapitels",
   "review.threads.empty": "Noch keine offenen Handlungsstränge in diesem Kapitel.",
