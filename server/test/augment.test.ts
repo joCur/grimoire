@@ -15,7 +15,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import type { AugmentResult, FileResponse, GenerateJob } from "@grimoire/shared";
 import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generate-jobs";
-import { setProviderForTests } from "../src/generator";
+import { MAX_CORRECTION_TURNS, setProviderForTests } from "../src/generator";
 import {
   augmentSystemPrompt,
   formatContract,
@@ -24,6 +24,8 @@ import {
   validateAugmentReply,
 } from "../src/generator-augment";
 import { buildPrompt, EXISTING_ENTRY_HEADING, INSTRUCTION_HEADING } from "../src/llm-provider";
+import { failInterruptedJobs } from "../src/db/job-boot";
+import { getDb } from "../src/store/handle";
 import { dropStore, seedStore } from "./support/store";
 import type {
   CompletionResult,
@@ -57,6 +59,14 @@ class FakeProvider implements LLMProvider {
     const reply = this.replies.shift();
     if (reply === undefined) throw new Error("FakeProvider: no scripted reply left");
     return { text: reply, truncated: false };
+  }
+}
+
+/** A provider whose call never returns — a run that is still `running`. */
+class StuckProvider implements LLMProvider {
+  readonly name = "stuck";
+  async complete(): Promise<CompletionResult> {
+    return new Promise<CompletionResult>(() => undefined);
   }
 }
 
@@ -377,6 +387,115 @@ describe("the job", () => {
       body: JSON.stringify({ path: "npcs/nobody", instruction: "x" }),
     });
     expect(res.status).toBe(404);
+  });
+});
+
+describe("one job per campaign, whatever its kind", () => {
+  async function jobStatus(): Promise<number> {
+    return (await app.request(`/api/${CAMPAIGN}/generate/job`)).status;
+  }
+
+  test("an augment start while a SCENE run is going is a 409", async () => {
+    setProviderForTests(new StuckProvider());
+    const scene = await app.request(`/api/${CAMPAIGN}/generate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chapter: "01-salzhafen", sourceText: "source" }),
+    });
+    expect(scene.status).toBe(202);
+    const res = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: NPC, instruction: "x" }),
+    });
+    expect(res.status).toBe(409);
+    expect((await res.json()).jobId).toBeString();
+  });
+
+  test("a SCENE start while an augment run is going is a 409", async () => {
+    setProviderForTests(new StuckProvider());
+    const augment = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: NPC, instruction: "x" }),
+    });
+    expect(augment.status).toBe(202);
+    const res = await app.request(`/api/${CAMPAIGN}/generate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chapter: "01-salzhafen", sourceText: "source" }),
+    });
+    expect(res.status).toBe(409);
+    // …and so is a second augment run.
+    const again = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: LOCATION, instruction: "x" }),
+    });
+    expect(again.status).toBe(409);
+  });
+
+  test("Vorschlag verwerfen discards a finished augment job", async () => {
+    const file = await read(NPC);
+    useFake([augmentReply(NPC, file.raw)]);
+    await runAugmentJob({ path: NPC, instruction: "x" });
+    expect(await jobStatus()).toBe(200);
+    const res = await app.request(`/api/${CAMPAIGN}/generate/job`, { method: "DELETE" });
+    expect(res.status).toBe(200);
+    expect(await jobStatus()).toBe(404);
+    // Nothing was written by the run, and nothing by the reject.
+    expect((await read(NPC)).rev).toBe(file.rev);
+  });
+
+  test("a leftover `running` augment row becomes a failed job at the next boot", async () => {
+    setProviderForTests(new StuckProvider());
+    const started = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: NPC, instruction: "x" }),
+    });
+    expect(started.status).toBe(202);
+
+    // What the next boot does with the row the dead process left behind.
+    expect(failInterruptedJobs(await getDb())).toBe(1);
+
+    const job = (await (await app.request(`/api/${CAMPAIGN}/generate/job`)).json()) as GenerateJob;
+    expect(job.kind).toBe("augment");
+    expect(job.target).toBe(NPC);
+    expect(job.status).toBe("failed");
+    expect(job.error?.body.code).toBe("job_restarted");
+  });
+
+  test("the proposal round-trips through the job row", async () => {
+    const file = await read(NPC);
+    const content = file.raw.replace("voice:", "tags: [hafen, see]\nvoice:");
+    useFake([augmentReply(NPC, content, ["geprüft"])]);
+    const started = await runAugmentJob({ path: NPC, instruction: "x" });
+
+    // Re-read from the ROW (a fresh request is a fresh `toJob`), not from the
+    // object the start returned.
+    const job = (await (await app.request(`/api/${CAMPAIGN}/generate/job`)).json()) as GenerateJob;
+    expect(job.id).toBe(started.id);
+    expect(job.augmentResult).toEqual(started.augmentResult as AugmentResult);
+    const result = job.augmentResult as AugmentResult;
+    expect(result.properties.find((p) => p.key === "tags")?.proposed).toEqual(["hafen", "see"]);
+    expect(result.warnings).toEqual(["geprüft"]);
+    expect(result.rev).toBe(file.rev);
+  });
+
+  test("every reply malformed is a terminal 422 llm_invalid", async () => {
+    // One initial call plus LLM_CORRECTION_TURNS; more replies than that are
+    // never asked for, and the last word is a failed job, not an endless loop.
+    const before = await read(NPC);
+    const fake = useFake(Array.from({ length: 5 }, () => "kein JSON, nur Prosa"));
+    const job = await runAugmentJob({ path: NPC, instruction: "x" });
+    expect(job.status).toBe("failed");
+    expect(job.error?.status).toBe(422);
+    expect(job.error?.body.code).toBe("llm_invalid");
+    expect(fake.calls.length).toBeLessThanOrEqual(1 + MAX_CORRECTION_TURNS);
+    expect(fake.calls.length).toBeGreaterThan(1);
+    // A failed run writes nothing at all.
+    expect((await read(NPC)).rev).toBe(before.rev);
   });
 });
 
