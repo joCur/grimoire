@@ -36,8 +36,9 @@ export interface StoreInfo {
   backfilledNpcs: string[];
   /**
    * What the one-time `group_slug` -> `location` step of issue #100 changed
-   * (db/group-migration.ts): the scenes whose address moved and the location
-   * entries it had to create. Empty on every boot after the first.
+   * (db/group-migration.ts): the scenes whose address moved, the location
+   * entries it had to create, and the scenes whose `location` yields no id
+   * and were left untouched. Empty on every boot after the first.
    */
   groupMigration: GroupMigrationOutcome;
 }

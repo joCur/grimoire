@@ -7,7 +7,7 @@
 // step reads a column the current schema no longer has.
 
 import { describe, expect, test } from "bun:test";
-import { migrateGroupsToLocations } from "../src/db/group-migration";
+import { migrateGroupsToLocations, NO_GROUP_MIGRATION } from "../src/db/group-migration";
 import { openSqlite, type SqliteClient } from "../src/db/driver";
 
 /** The pre-#100 shape of the three tables the step touches. */
@@ -117,17 +117,33 @@ describe("group_slug -> location (#100)", () => {
     addScene(client, "frei", "", null);
     const out = migrateGroupsToLocations(client);
     expect(scenes(client)).toEqual([{ id: "frei", location: null }]);
-    expect(out).toEqual({ moved: [], createdLocations: [] });
+    expect(out).toEqual(NO_GROUP_MIGRATION);
+    client.close();
+  });
+
+  test("a location that yields no id is left untouched and reported", async () => {
+    const client = await oldSchemaDb();
+    // Nothing survives the transliteration, so there is no id to derive.
+    // The step used to write `null` here — the only copy of the DM's text,
+    // gone, and reported as a move to chapter level (issue #100 review).
+    addScene(client, "ankunft", "hafen", "???");
+    const out = migrateGroupsToLocations(client);
+    expect(scenes(client)).toEqual([{ id: "ankunft", location: "???" }]);
+    expect(out.moved).toEqual([]);
+    expect(out.createdLocations).toEqual([]);
+    expect(out.unresolved).toEqual([
+      { campaignId: "beispiel", sceneId: "ankunft", location: "???" },
+    ]);
     client.close();
   });
 
   test("a database without the column is a no-op — the step is idempotent", async () => {
     const client = await openSqlite(":memory:");
     client.exec("create table scenes (campaign_id text, id text, location text)");
-    expect(migrateGroupsToLocations(client)).toEqual({ moved: [], createdLocations: [] });
+    expect(migrateGroupsToLocations(client)).toEqual(NO_GROUP_MIGRATION);
     // …and so is a database that has no scenes table at all (a fresh file).
     const fresh = await openSqlite(":memory:");
-    expect(migrateGroupsToLocations(fresh)).toEqual({ moved: [], createdLocations: [] });
+    expect(migrateGroupsToLocations(fresh)).toEqual(NO_GROUP_MIGRATION);
     client.close();
     fresh.close();
   });

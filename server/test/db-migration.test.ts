@@ -619,6 +619,29 @@ describe("no silent content loss", () => {
     ).toEqual(["hafen", "leuchtturm", "hafen"]);
   });
 
+  test("a `location` that yields no id is imported empty and reported", async () => {
+    const id = await campaignWith({
+      "_campaign.md": "---\nid: review\n---\n",
+      "01-x/_chapter.md": "---\nid: 01-x\ntitle: Kapitel\n---\n",
+      // Nothing survives the transliteration, so there is no id to derive —
+      // and the field used to be dropped in silence (issue #100 review).
+      "01-x/szene.md": "---\nid: szene\ntitle: Szene\nlocation: \"???\"\n---\n\nText.\n",
+    });
+    const { db } = await freshDb();
+    await runInitialMigration(db, tmpRoot);
+    const scene = db.select().from(scenes).where(eq(scenes.campaignId, id)).all()[0];
+    expect(scene?.location).toBeNull();
+    expect(
+      db
+        .select()
+        .from(migrationReport)
+        .where(eq(migrationReport.campaignId, id))
+        .all()
+        .map((r) => r.reason)
+        .join(" "),
+    ).toContain("ergibt keine Orts-id");
+  });
+
   test("a `quickstats` that is not a map is kept in extra and reported", async () => {
     const id = await campaignWith({
       "_campaign.md": "---\nid: review\n---\n",

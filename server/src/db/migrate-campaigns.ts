@@ -696,7 +696,17 @@ function importCampaign(
     const npcRefs = asStringArray(p.frontmatter.npcs);
     const tags = asStringArray(p.frontmatter.tags);
     const rawLocation = (asOptionalString(p.frontmatter.location) ?? cls.groupSlug).trim();
-    const sceneLocation = rawLocation === "" ? null : (toSlug(rawLocation) || null);
+    const locationSlug = rawLocation === "" ? "" : toSlug(rawLocation);
+    // A `location` that transliterates to NOTHING („???", an emoji): the
+    // field is imported empty, and that is a degrade the DM has to read —
+    // it used to happen in silence (issue #100 review).
+    if (rawLocation !== "" && locationSlug === "") {
+      degrade(
+        p.file,
+        `location „${rawLocation}" ergibt keine Orts-id — Feld leer übernommen.`,
+      );
+    }
+    const sceneLocation = locationSlug === "" ? null : locationSlug;
     if (sceneLocation !== null && sceneLocation !== rawLocation) {
       degrade(
         p.file,

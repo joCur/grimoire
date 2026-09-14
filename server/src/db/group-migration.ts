@@ -38,14 +38,33 @@ export interface GroupMigrationMove {
   to: string;
 }
 
+/** A `location` this step could not turn into an id — left as it was. */
+export interface GroupMigrationUnresolved {
+  campaignId: string;
+  sceneId: string;
+  /** The text the scene named, verbatim. */
+  location: string;
+}
+
 export interface GroupMigrationOutcome {
   /** Scenes whose address changed, in a stable order. */
   moved: GroupMigrationMove[];
   /** `<campaign>/<location-id>` per entry this step created. */
   createdLocations: string[];
+  /**
+   * Scenes whose `location` transliterates to NOTHING (`„???"`, an emoji).
+   * They are reported instead of migrated: the row keeps the text it had,
+   * because inventing an id for it — or dropping it, which is what this step
+   * used to do — is a decision only the DM can make.
+   */
+  unresolved: GroupMigrationUnresolved[];
 }
 
-export const NO_GROUP_MIGRATION: GroupMigrationOutcome = { moved: [], createdLocations: [] };
+export const NO_GROUP_MIGRATION: GroupMigrationOutcome = {
+  moved: [],
+  createdLocations: [],
+  unresolved: [],
+};
 
 /** Does this database still have the pre-#100 column? */
 function hasGroupSlug(client: SqliteClient): boolean {
@@ -90,6 +109,7 @@ export function migrateGroupsToLocations(client: SqliteClient): GroupMigrationOu
 
   const moved: GroupMigrationMove[] = [];
   const createdLocations: string[] = [];
+  const unresolved: GroupMigrationUnresolved[] = [];
 
   client
     .transaction(() => {
@@ -98,6 +118,14 @@ export function migrateGroupsToLocations(client: SqliteClient): GroupMigrationOu
         const declared = (row.location ?? "").trim();
         const source = declared === "" ? group : declared;
         const target = source === "" ? "" : toSlug(source);
+        // Nothing survives the transliteration („???", an emoji-only name).
+        // The row is left EXACTLY as it is and reported: writing `null` here
+        // deleted the only copy of the text the DM had typed, and reported it
+        // as a move to chapter level — a data loss dressed up as a migration.
+        if (source !== "" && target === "") {
+          unresolved.push({ campaignId: row.campaign_id, sceneId: row.id, location: source });
+          continue;
+        }
         if (target !== declared) {
           setLocation.run(target === "" ? null : target, row.campaign_id, row.id);
         }
@@ -117,5 +145,5 @@ export function migrateGroupsToLocations(client: SqliteClient): GroupMigrationOu
     })
     .immediate();
 
-  return { moved, createdLocations };
+  return { moved, createdLocations, unresolved };
 }
