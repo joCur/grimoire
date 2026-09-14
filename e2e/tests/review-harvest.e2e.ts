@@ -19,6 +19,8 @@ const NPC_TEXT = 'Improvisiert: Fischerin "Old Metta" am Steg';
 const INBOX_TEXT = "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug";
 /** An idea thrown in on the go — no hashtag at all (issue #85). */
 const NOTE_TEXT = "Die Laternen am Kai brennen bei Ebbe nie";
+/** A note ABOUT a player character (issue #86) — `#pc` plus the name tag. */
+const PC_TEXT = "Geburtstags-Item für Kaela vorbereiten";
 
 /** Today's session with the three tagged log lines the review harvests. */
 function sessionFile(id: string): string {
@@ -144,6 +146,51 @@ test("an untagged inbox note is reviewable and can be ticked off (issue #85)", a
   await expect.poll(() => api.raw("inbox")).toContain(`- [x] ${NOTE_TEXT}`);
 
   // The pool affordance counts the same entries the page does.
+  await page.getByRole("button", { name: "Fertig — zurück zum Pool" }).click();
+  await expect(page.getByRole("link", { name: "Nachbereitung · 4 offen" })).toBeVisible();
+});
+
+test("a #pc note is grouped by character and ticked off (issue #86)", async ({ page, api }) => {
+  // Thrown in the way it happens on the go: the mobile start surface at
+  // 390px (critical path 8), tagged `#pc #kaela`.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/beispiel");
+  await page.getByLabel("Inbox").fill(`${PC_TEXT} #pc #kaela`);
+  await page.getByRole("button", { name: "Einwerfen" }).click();
+  await expect(page.getByText("Eingeworfen.")).toBeVisible();
+
+  // Still at 390px: the wrap-up is a desk task, but it has to stay readable
+  // and operable on the phone (quality floor).
+  await page.goto("/beispiel/review");
+  const section = page.getByRole("heading", { name: "Spielercharaktere" });
+  await expect(section).toBeVisible();
+  // Grouped under the second tag — not under "Allgemein".
+  await expect(page.getByRole("heading", { name: "#kaela" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Allgemein" })).toHaveCount(0);
+  // The page repeats the counter below md: the `#pc` line counts with.
+  await expect(page.getByText(/von \d+ gesichtet/).first()).toHaveText("0 von 5 gesichtet");
+
+  const pcCard = page.locator("div").filter({ hasText: PC_TEXT }).last();
+  await expect(pcCard).toContainText("Inbox");
+  // A PC note is no campaign content: neither harvest action is offered.
+  await expect(
+    pcCard.getByRole("button", { name: "Als Handlungsstrang übernehmen" }),
+  ).toHaveCount(0);
+  await expect(pcCard.getByRole("button", { name: "NPC anlegen" })).toHaveCount(0);
+  await expect(pcCard.getByRole("button", { name: "Behalten" })).toBeVisible();
+  // …and it does not turn up among the untagged notes either.
+  await expect(page.getByRole("heading", { name: "Notizen" })).toHaveCount(0);
+
+  await pcCard.getByRole("button", { name: "Erledigt" }).click();
+  await expect(pcCard.getByText("Erledigt", { exact: true })).toBeVisible();
+  await expect(page.getByText(/von \d+ gesichtet/).first()).toHaveText("1 von 5 gesichtet");
+  // The line is ticked off in the inbox document itself.
+  await expect
+    .poll(() => api.raw("inbox"))
+    .toContain(`- [x] ${PC_TEXT} #pc #kaela`);
+
+  // Back at the desk the pool affordance counts what is still open.
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole("button", { name: "Fertig — zurück zum Pool" }).click();
   await expect(page.getByRole("link", { name: "Nachbereitung · 4 offen" })).toBeVisible();
 });

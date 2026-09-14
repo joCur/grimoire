@@ -348,6 +348,37 @@ test("session start, quick note, pause, end — log and file follow", async ({
   ).toHaveCount(0);
 });
 
+test("a #pc quick note becomes a reminder in the aside and is ticked off there (issue #86)", async ({
+  page,
+  api,
+}) => {
+  // Path 4 with the PC reminder on top: a `#pc` note written during the
+  // session shows up in the aside as „Für die Spieler" and is done with
+  // right there — the same write the wrap-up would do.
+  await page.goto("/beispiel");
+  await page.getByRole("button", { name: "Session starten" }).click();
+  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  const sessionPath = (await api.sessionPath()) ?? "";
+
+  const aside = page.getByRole("complementary");
+  // Nothing to remind of yet — the list is not rendered at all.
+  await expect(aside.getByText("Für die Spieler")).toHaveCount(0);
+
+  await page.getByLabel("Schnellnotiz").fill("Kaela bekommt den Brief ihrer Schwester #pc #kaela");
+  await page.getByLabel("Schnellnotiz").press("Enter");
+
+  const list = page.getByRole("region", { name: "Für die Spieler" });
+  await expect(list).toBeVisible();
+  await expect(list).toContainText("#kaela");
+  const item = list.getByRole("button", { name: /Kaela bekommt den Brief/ });
+  await expect(item).toBeVisible();
+
+  // Ticking it off marks the log line reviewed — and the reminder is gone.
+  await item.click();
+  await expect(page.getByRole("region", { name: "Für die Spieler" })).toHaveCount(0);
+  await expect.poll(() => api.raw(sessionPath)).toContain("reviewed:");
+});
+
 test("session verwerfen — the mis-click's undo removes the empty file", async ({
   page,
   api,
