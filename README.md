@@ -131,6 +131,37 @@ status: draft | ready | played | dropped
 | `> [!loot]`      | Beute / Gegenstände                                          |
 | `> [!note]`      | Freitext-Marginal des DM                                     |
 
+### Tabellen (GFM-Pipe-Tabellen)
+
+Das einzige aus GFM übernommene Konstrukt — für Zufallstabellen und
+Begegnungslisten, die als Prosa unlesbar wären. Die Syntax: **Kopfzeile**,
+**Trennzeile** aus `|---|` (eine Zelle je Spalte) und **Rand-Pipes** links und
+rechts in jeder Zeile. Tabellen gelten in jedem Body, in **jedem Callout** und
+in `## If:`-Abschnitten.
+
+```markdown
+> [!note] Zufallsbegegnung an der Bucht
+>
+> | W6 | Was die Brandung anschwemmt |
+> | --- | --- |
+> | 1–2 | Ein leeres Fass mit fremdem Brandzeichen |
+> | 3–4 | Ein Ruder, frisch gekerbt |
+> | 5–6 | Eine Laterne, das Glas rußgeschwärzt |
+```
+
+(Im Callout steht die Tabelle unter demselben `>`-Block wie der Text — siehe
+`examples/beispiel/01-salzhafen/hafen/ankunft-leuchtturm.md`.)
+
+- **Nur Tabellen.** Kein Durchgestrichen (`~~x~~`), **keine Aufgabenlisten**,
+  keine Auto-Links, keine Fußnoten. `- [x]` bleibt bewusst normaler
+  Listentext: es ist die Abhak-Syntax der Inbox, kein Kontrollkästchen.
+- **Degradation wie überall**: Eine Zeile mit Pipes ohne gültige Trennzeile
+  ist keine Tabelle, sondern Text — nichts bricht.
+- **Anzeige**: Die Tabelle scrollt in einem eigenen Container; auf dem Handy
+  scrollt die Tabelle, nie die Seite.
+- **Block-Composer**: Eine Tabelle ist kein eigener Blocktyp, sondern Teil des
+  Text- bzw. Callout-Blocks; sie wird als Markdown bearbeitet.
+
 ### Referenzen im Fließtext: `[[slug]]`
 
 `[[jorna]]` in einem Body-Text ist eine Referenz auf eine Entität. Sie gilt in

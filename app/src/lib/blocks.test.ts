@@ -636,3 +636,64 @@ describe("labels", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
+
+// --- tables (issue #96) ------------------------------------------------------
+//
+// AK 3: a table is NOT a block type. It is markdown inside a text block (or
+// inside a callout's text), which is exactly why nothing here had to change —
+// the line scan never splits on a `|` line. These tests nail that down, so a
+// later "let us model tables" change has to argue with the round-trip.
+
+describe("tables are part of a text block, byte-stable", () => {
+  const W6 = [
+    "| W6 | Was treibt in der Bucht |",
+    "| --- | --- |",
+    "| 1 | Ein leeres Fass |",
+    "| 2 | Ein Ruder mit Kerben |",
+  ].join("\n");
+
+  test("a table is ONE text block, not one per row", () => {
+    const body = `${W6}\n`;
+    expect(shape(parseBlocks(body))).toEqual(["text"]);
+    expect(serializeBlocks(parseBlocks(body))).toBe(body);
+  });
+
+  test("prose, table and prose stay three blocks and round-trip", () => {
+    const body = `Davor.\n\n${W6}\n\nDanach.\n`;
+    expect(shape(parseBlocks(body))).toEqual(["text", "text", "text"]);
+    expect(serializeBlocks(parseBlocks(body))).toBe(body);
+  });
+
+  test("a table inside a callout is part of the callout's text", () => {
+    const quoted = W6.split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n");
+    const body = `> [!note] Zufallstabelle\n>\n${quoted}\n`;
+    const blocks = parseBlocks(body);
+    expect(shape(blocks)).toEqual(["callout:note"]);
+    const callout = blocks[0];
+    if (callout?.type !== "callout") throw new Error("expected a callout");
+    // The `>` markers are stripped, the table's own pipes are not.
+    expect(callout.text).toContain("| --- | --- |");
+    expect(callout.text).not.toContain(">");
+    expect(serializeBlocks(blocks)).toBe(body);
+  });
+
+  test("a table inside an If-section round-trips with the section", () => {
+    const body = `## If: sie wurfeln\n\n${W6}\n`;
+    expect(shape(parseBlocks(body))).toEqual(["ifSection(text)"]);
+    expect(serializeBlocks(parseBlocks(body))).toBe(body);
+  });
+
+  test("the reference scene's own table survives a re-serialize", () => {
+    const rel = "beispiel/01-salzhafen/hafen/ankunft-leuchtturm.md";
+    const body = exampleBody(rel);
+    expect(body).toContain("| W6 | Was die Brandung anschwemmt |");
+    const blocks = parseBlocks(body);
+    const note = blocks[blocks.length - 1];
+    if (note?.type !== "callout") throw new Error("expected the note callout");
+    expect(note.kind).toBe("note");
+    expect(note.text).toContain("| 5\u20136 | Eine Laterne, das Glas ru\u00dfgeschw\u00e4rzt |");
+    expect(serializeBlocks(blocks)).toBe(body);
+  });
+});
