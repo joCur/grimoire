@@ -1,4 +1,4 @@
-// Critical path 5: the session wrap-up ("Nachbereitung", formerly "Ernte" —
+// Critical path 5: the session review ("Nachbereitung", formerly "Ernte" —
 // the harvest metaphor survives only in file names and code); see CLAUDE.md.
 //
 // Adopt a thread → _chapter, tick off an inbox line, create an NPC stub,
@@ -123,7 +123,7 @@ test("an untagged inbox note is reviewable and can be ticked off (issue #85)", a
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
   await expect.poll(() => api.raw("inbox")).toContain(`- ${NOTE_TEXT}`);
 
-  // At the desk it shows up in the wrap-up — in its own "Ungetaggte Einträge" section,
+  // At the desk it shows up in the session review — in its own "Ungetaggte Einträge" section,
   // and counted with everything else (one source for page and topbar).
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/beispiel/review");
@@ -159,7 +159,7 @@ test("a #pc note is grouped by character and ticked off (issue #86)", async ({ p
   await page.getByRole("button", { name: "Einwerfen" }).click();
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
 
-  // Still at 390px: the wrap-up is a desk task, but it has to stay readable
+  // Still at 390px: the session review is a desk task, but it has to stay readable
   // and operable on the phone (quality floor).
   await page.goto("/beispiel/review");
   const section = page.getByRole("heading", { name: "Spielercharaktere" });
@@ -256,7 +256,7 @@ test("an id that already has an entry is linked, not refused (#70)", async ({ pa
 test.describe("with yesterday's session, ended after midnight", () => {
   test.use({ seed: { files: { [PAST_MIDNIGHT.path]: PAST_MIDNIGHT.content } } });
 
-  test("a session that ran past midnight is still the wrap-up's session (issue #40 review)", async ({
+  test("a session that ran past midnight is still the session review's session (issue #40 review)", async ({
     page,
     api,
   }) => {

@@ -165,7 +165,7 @@ mehrere Schreibwege auf ihm liegen:
 | 2 Szene lesen      | `tests/scene-rendering.e2e.ts`, `tests/rename.e2e.ts`          |
 | 3 ⌘K-Suche         | `tests/search.e2e.ts`                                          |
 | 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`                                   |
-| 5 Nachbereitung    | `tests/review-harvest.e2e.ts`                                  |
+| 5 Nachbereitung    | `tests/review.e2e.ts`                                         |
 | 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-restart.e2e.ts`, `tests/augment.e2e.ts` |
 | 7 Eigenschaften/409 | `tests/status-control.e2e.ts`, `tests/properties-form.e2e.ts`, `tests/rename.e2e.ts` |
 | 8 Mobil            | `tests/mobile.e2e.ts`                                          |
@@ -254,7 +254,7 @@ Gedächtnis: bei einer Textänderung in der App wandert der Spec mit.
 Ein Spec deckt auch spätere Scheiben auf seinem Pfad ab, nicht nur die Scheibe,
 die ihn angelegt hat: `tests/pool.e2e.ts` prüft zusätzlich Gruppenkopf-Namen,
 die Topbar-Navigation und den Kampagnen-Metadaten-Dialog (#34),
-`tests/review-harvest.e2e.ts` den Szenentitel im Quellchip, und
+`tests/review.e2e.ts` den Szenentitel im Quellchip, und
 `tests/search.e2e.ts` die Frische-Zusicherung des Cutovers (#57 AK5): was die
 APP gerade geschrieben hat, findet ⌘K sofort — der Index wandert in derselben
 Transaktion mit, es gibt keinen Watcher mehr, auf den zu warten wäre.

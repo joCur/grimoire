@@ -38,29 +38,29 @@ Alles andere im Interface ist bewusst still, damit dieser Block trägt.
 
 **Ikonografie:** Lucide für Funktionales (Navigation, Aktionen, Status).
 game-icons.net (CC BY, als eigene React-Komponenten eingecheckt) NUR als
-Typ-Marker: Szene, NPC, Ort, Kontingenz und die sechs Callout-Typen.
+Typ-Marker: Szene, NPC, Ort, Eventualszene und die sechs Callout-Typen.
 Monochrom, in Textfarbe, 16–20px. Keine bunten Icon-Illustrationen.
 
 ## Die Ansichten
 
-### 1. Pool (Prep-Modus, Desktop)
+### 1. Kapitel (Prep-Modus, Desktop; Route `pool`)
 Job: Überblick und Ordnung. Kapitel > Ort > Szenen als ruhige Liste
-(keine Karten-Grids), Status als dezente Marker, Kontingenzen visuell
-als eigene Gruppe („Falls es schiefgeht"). Filter über Tags/Status,
+(keine Karten-Grids), Status als dezente Marker, Eventualszenen visuell
+als eigene Gruppe („Eventualszenen"). Filter über Tags/Status,
 globale Suche prominent (Cmd/Ctrl-K). Von hier: Szene öffnen,
 Session starten, Generator aufrufen.
 
 ### 2. Szene (Lesen)
 Job: eine Szene vollständig erfassen. Eigenschaften als kompakte Kopfzeile
 (Typ, Trigger, Ort, Tags), NPC-Karten der Szene rechts (voice, Will,
-Quickstats — genau diese drei), Body mit gerendertem Flow, einklappbaren
+Kurzwerte — genau diese drei), Body mit gerendertem Flow, einklappbaren
 `If:`-Verzweigungen und den Callout-Blöcken. Read-Aloud siehe Signatur.
 `[!check]` klar erkennbar (Akzentrahmen), `[!secret]` mit Auge-Marker
 und leicht abgedunkelt — Geheimnisse sehen geheim aus.
 
-### 3. Live (Session-Modus, Desktop)
-Job: moderieren ohne suchen. Drei ruhige Zonen: links Szenen-Pool des
-Kapitels (geplant oben, Kontingenzen darunter), Mitte aktuelle Szene,
+### 3. Session-Ansicht (Session-Modus, Desktop; Route `live`)
+Job: moderieren ohne suchen. Drei ruhige Zonen: links Szenenliste des
+Kapitels (geplant oben, Eventualszenen darunter), Mitte aktuelle Szene,
 rechts NPCs + Schnellnotiz-Feld (immer fokussierbar, Enter sendet).
 Kopfzeile: Sessionzeit (berechnet aus `started`), Pause-Eintrag,
 Session beenden. Die Schnellnotiz ist nach dem Read-Aloud das
@@ -68,12 +68,12 @@ zweitwichtigste Element — nichts darf sie verdecken.
 
 ### 4. Mobil
 Job: nachschlagen und einwerfen, nicht moderieren. Zwei Dinge auf der
-Startfläche: Suche und Inbox-Eingabe. Szenen/NPCs als reine Leseansicht.
-Kein Live-Modus auf Mobil erzwingen.
+Startfläche: Suche und Ideen-Eingabe. Szenen/NPCs als reine Leseansicht.
+Keine Session-Ansicht auf Mobil erzwingen.
 
-### 5. Review (nach der Session)
+### 5. Nachbereitung (nach der Session; Route `review`)
 Job: fünf Minuten Nachbereitung (der frühere Begriff „Ernte" ist in der UI
-abgelöst — unklare Metaphorik). Log- und Inbox-Einträge mit `#thread`/`#npc`
+abgelöst — unklare Metaphorik). Log- und Ideen-Einträge mit `#thread`/`#npc`
 gefiltert, je Eintrag Ein-Klick-Aktionen (Thread übernehmen, NPC-Stub
 anlegen, verwerfen). Fortschritt sichtbar („3 von 7 gesichtet").
 
@@ -83,6 +83,29 @@ Deutsch, Sätze klein, Verben zuerst („Session starten", „Szene öffnen").
 Keine Ausrufezeichen, kein Fantasy-Sprech in Funktionstexten
 (kein „Beschwöre eine neue Szene"). Leere Zustände laden zum Handeln ein
 („Noch keine Szenen in diesem Kapitel — erste Szene anlegen").
+
+### Begriffe in der UI (Issue #88)
+
+Jede Ansicht und jede Aktion heißt nach ihrer Funktion — keine internen
+Namen, keine Metaphern, keine Anglizismen, wo ein deutsches Wort trägt.
+Routen, Query-Keys, Katalog-Keys und Format-Token (`inbox`-Datei, Hashtags,
+Callout-Typen, Status-Werte) bleiben davon unberührt.
+
+| UI sagt (de) | UI sagt (en) | früher |
+|---|---|---|
+| Kapitel | Chapters | Pool |
+| Session-Ansicht | Session view | Live-Modus / Live-Ansicht |
+| Nachbereitung | Session review | Ernte, Wrap-up |
+| Ungetaggte Einträge | Untagged entries | Notizen (Sektion der Nachbereitung) |
+| Ideen | Ideas | Inbox |
+| Entwürfe prüfen | Check drafts | Review (Generator) |
+| Vorgeschlagene Einträge | Suggested entries | Stubs |
+| Eventualszene | Contingency scene | Kontingenz, „Falls es schiefgeht" |
+| Probe | Check | Check (de) |
+| Ergebnis | Outcome | Konsequenz |
+| Markdown-Block | Markdown block | Roh-Block |
+| Kurzwerte | Quick stats | Quickstats |
+| Handlungsstrang | Storyline | Thread (en) |
 
 ## Nicht-Ziele
 
