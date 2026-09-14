@@ -55,6 +55,7 @@ import {
 } from "./generator";
 import type { LLMProvider } from "./llm-provider";
 import { readParsedFile } from "./store/read";
+import { renderRaw } from "./store/render";
 import { writePropertiesAndBody } from "./store/write";
 
 /** The correction turn's tail — what a corrected reply must still contain. */
@@ -406,10 +407,19 @@ function chapterOf(file: FileResponse): string {
   return file.path.split("/")[0] ?? "";
 }
 
-/** The proposed body under the proposed properties — what the check reads. */
+/**
+ * The proposed body under the proposed properties — what the check reads.
+ *
+ * The properties go through the STORE'S OWN frontmatter renderer, not through
+ * `String(value)`: a list, a mapping or a `role` that contains „: " produced
+ * YAML the parser could not read, and the whole block then degraded into the
+ * body — every hint landed on `body` with a line number that pointed at
+ * nothing. Same renderer as a written file, so the check reads the document
+ * the DM is about to accept.
+ */
 function proposedDocument(result: AugmentResult): string {
-  const lines = result.properties.map((p) => `${p.key}: ${String(p.proposed)}`);
-  return `---\n${lines.join("\n")}\n---\n${result.proposedBody}`;
+  const properties = Object.fromEntries(result.properties.map((p) => [p.key, p.proposed]));
+  return renderRaw(properties, result.proposedBody);
 }
 
 // --- accepting ---------------------------------------------------------------

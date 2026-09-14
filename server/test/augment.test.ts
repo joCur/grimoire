@@ -532,6 +532,28 @@ describe("naming check", () => {
     });
   });
 
+  test("a list value and a colon in a property do not derail the check", async () => {
+    // The proposal document is rendered with the store's frontmatter
+    // renderer: `role: Hafenmeisterin: Salt Harbour` and a LIST value used to
+    // produce YAML nothing could parse, and every hint then landed on `body`
+    // with a line number pointing at nothing.
+    await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
+    const file = await read(NPC);
+    const content = file.raw
+      .replace(
+        "role: Auftraggeberin, Hafenmeisterin von Salzhafen",
+        "role: \"Hafenmeisterin: Salt Harbour\"\ntags: [hafen, salt harbour]",
+      );
+    useFake([augmentReply(NPC, content)]);
+    const job = await runAugmentJob({ path: NPC, instruction: "Rolle schärfen" });
+    expect(job.status).toBe("done");
+    const hints = (job.augmentResult as AugmentResult).namingHints ?? [];
+    // The hint knows WHICH field it is about — that is only true when the
+    // frontmatter parsed.
+    expect(hints.map((h) => h.field)).toContain("role");
+    expect(hints.every((h) => h.field !== "body")).toBe(true);
+  });
+
   test("a proposal that follows the convention produces no hint", async () => {
     await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
     const file = await read(NPC);
