@@ -165,7 +165,7 @@ export const de = {
   // Per-kind field labels/hints/placeholders (lib/properties-form.ts)
   "properties.scene.title.label": "Titel",
   "properties.scene.type.label": "Typ",
-  "properties.scene.type.planned": "geplant",
+  "properties.scene.type.planned": "Geplante Szene",
   "properties.scene.type.contingency": "Eventualszene",
   "properties.scene.trigger.label": "Auslöser",
   "properties.scene.trigger.hint": "Nur bei Eventualszenen: wann feuert die Szene?",
@@ -416,7 +416,8 @@ export const de = {
   "live.nav.played": "Gespielt",
   "live.nav.playedGroup": "Gespielt {count}",
 
-  "live.scene.none": "Keine Szene im aktiven Kapitel — Szenen in den Kapiteln anlegen.",
+  "live.scene.none":
+    "Keine Szene im aktiven Kapitel — Szenen in der Kapitelübersicht anlegen.",
   "live.scene.loading": "Lade Szene …",
   "live.scene.unloadable": "Szene nicht ladbar — Pfad prüfen.",
   "live.scene.locationHeading": "Ort",
@@ -459,7 +460,7 @@ export const de = {
   "review.noSession": "Es gibt keine Session zum Sichten.",
   "review.backToPool": "Zurück zu den Kapiteln",
   "review.lead":
-    "Notizen der Session durchgehen — als Handlungsstrang übernehmen, NPC anlegen oder verwerfen. Der Rest bleibt im Log.",
+    "Die Einträge der Session durchgehen — als Handlungsstrang übernehmen, NPC anlegen oder verwerfen. Der Rest bleibt im Log.",
   // Topbar and the mobile page read the same line (two parameters, #69).
   "review.progress": "{seen} von {total} gesichtet",
   "review.hashUnavailable":
@@ -488,7 +489,7 @@ export const de = {
   // The untagged inbox lines (issue #85) — ideas thrown in on the go.
   "review.notes.title": "Ungetaggte Einträge",
   "review.notes.lead":
-    "Aus den Ideen, ohne Tag — übernehmen, als NPC anlegen oder abhaken.",
+    "Einträge aus den Ideen ohne Tag — übernehmen, als NPC anlegen oder abhaken.",
 
   // Player-character notes (issue #86): `#pc` lines from log and inbox.
   "review.pc.title": "Spielercharaktere",
@@ -574,7 +575,7 @@ export const de = {
   "generate.input.title.scene": "Szenen generieren",
   "generate.input.title.npc": "NPC generieren",
   "generate.input.lead.scene":
-    "Englisches Quellmaterial rein, deutsche Szenen-Drafts raus. Immer status draft, immer mit Prüfung — geschrieben wird erst beim Übernehmen.",
+    "Englisches Quellmaterial rein, deutsche Szenen-Entwürfe raus. Immer als Entwurf, immer mit Prüfung — geschrieben wird erst beim Übernehmen.",
   "generate.input.lead.npc":
     "Quellmaterial zu einer Figur rein, ein NPC-Eintrag nach Format raus — Will, Weiß, Beziehungen. Immer mit Prüfung; geschrieben wird erst beim Übernehmen.",
   "generate.input.modeGroup": "Generator-Modus",
@@ -649,10 +650,10 @@ export const de = {
     "Das Modell hat keine verwertbare Antwort geliefert — nichts generiert.",
   "generate.error.validationHint":
     "Quelltext kürzen oder klarer strukturieren und erneut generieren.",
-  "generate.error.rawReply": "Rohantwort anzeigen",
+  "generate.error.rawReply": "Unverarbeitete Antwort anzeigen",
 
   // --- generator: working state (routes/generate.tsx) ----------------------
-  "generate.working.title": "Drafts werden generiert …",
+  "generate.working.title": "Entwürfe werden generiert …",
   "generate.working.correction":
     "Der Server validiert die Antwort mechanisch; Formfehler gehen automatisch als Korrektur ans Modell zurück.",
   "generate.working.background":
@@ -660,12 +661,14 @@ export const de = {
 
   // --- generator: review (routes/generate.tsx, lib/generate.ts) -----------
   "generate.review.title": "Entwürfe prüfen",
+  // The NPC run reviews ONE suggested entry, not a set of drafts (#88).
+  "generate.review.titleNpc": "Vorschlag prüfen",
   "generate.review.summary":
     "{scenes, plural, one {# Szene} other {# Szenen}} · {stubs, plural, one {# vorgeschlagener Eintrag} other {# vorgeschlagene Einträge}}",
   "generate.review.pending": "{summary} · noch nichts geschrieben",
   "generate.review.pendingNpc": "1 NPC · noch nichts geschrieben",
   "generate.review.lead":
-    "Prüfen, anpassen, vorgeschlagene Einträge einzeln entscheiden. Erst „Übernehmen“ schreibt in die Datenbank — als Drafts, nie überschreibend.",
+    "Prüfen, anpassen, vorgeschlagene Einträge einzeln entscheiden. Erst „Übernehmen“ schreibt in die Datenbank — als Entwürfe, nie überschreibend.",
   "generate.review.leadNpc":
     "Prüfen und anpassen. Erst „Übernehmen“ schreibt den Eintrag — bestehende NPCs werden nie überschrieben.",
   "generate.review.stubsHeading": "Vorgeschlagene Einträge — einzeln entscheiden",
@@ -708,7 +711,7 @@ export const de = {
   "generate.written.title.scene": "Geschrieben — alles als Entwurf",
   "generate.written.title.npc": "Geschrieben — NPC-Eintrag angelegt",
   "generate.written.hint.scene":
-    "Die Szenen erscheinen in den Kapiteln mit Status „Entwurf“. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
+    "Die Szenen erscheinen unter ihrem Kapitel mit Status „Entwurf“. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
   "generate.written.hint.npc":
     "Der NPC erscheint in der NPC-Liste und in der Suche. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
   "generate.written.openNpc": "NPC ansehen",

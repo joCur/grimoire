@@ -147,7 +147,7 @@ export const en: Messages = {
 
   "properties.scene.title.label": "Title",
   "properties.scene.type.label": "Type",
-  "properties.scene.type.planned": "planned",
+  "properties.scene.type.planned": "planned scene",
   "properties.scene.type.contingency": "contingency scene",
   "properties.scene.trigger.label": "Trigger",
   "properties.scene.trigger.hint": "Contingency scenes only: when does the scene fire?",
@@ -383,7 +383,8 @@ export const en: Messages = {
   "live.nav.played": "Played",
   "live.nav.playedGroup": "Played {count}",
 
-  "live.scene.none": "No scene in the active chapter — create scenes in the chapters.",
+  "live.scene.none":
+    "No scene in the active chapter — create scenes on the chapters page.",
   "live.scene.loading": "Loading scene …",
   "live.scene.unloadable": "Scene not loadable — check the path.",
   "live.scene.locationHeading": "Location",
@@ -427,7 +428,7 @@ export const en: Messages = {
   "review.noSession": "There is no session to review.",
   "review.backToPool": "Back to the chapters",
   "review.lead":
-    "Go through the notes of the session — adopt as a storyline, create an NPC or discard. The rest stays in the log.",
+    "Go through the entries of the session — adopt as a storyline, create an NPC or discard. The rest stays in the log.",
   // Topbar and the mobile page read the same line (two parameters, #69).
   "review.progress": "{seen} of {total} reviewed",
   "review.hashUnavailable":
@@ -455,7 +456,7 @@ export const en: Messages = {
 
   "review.notes.title": "Untagged entries",
   "review.notes.lead":
-    "From the ideas, without a tag — adopt them, create an NPC, or tick them off.",
+    "Untagged entries from the ideas — adopt them, create an NPC or tick them off.",
 
   // Player-character notes (issue #86): `#pc` lines from log and inbox.
   "review.pc.title": "Player characters",
@@ -603,7 +604,7 @@ export const en: Messages = {
   "generate.error.unusable": "The model returned nothing usable — nothing generated.",
   "generate.error.validationHint":
     "Shorten the source text or structure it more clearly, then generate again.",
-  "generate.error.rawReply": "Show raw reply",
+  "generate.error.rawReply": "Show unprocessed reply",
 
   // --- generator: working state (routes/generate.tsx) ----------------------
   "generate.working.title": "Generating drafts …",
@@ -614,6 +615,8 @@ export const en: Messages = {
 
   // --- generator: review (routes/generate.tsx, lib/generate.ts) -----------
   "generate.review.title": "Check drafts",
+  // The NPC run reviews ONE suggested entry, not a set of drafts (#88).
+  "generate.review.titleNpc": "Check the proposal",
   "generate.review.summary":
     "{scenes, plural, one {# scene} other {# scenes}} · {stubs, plural, one {# suggested entry} other {# suggested entries}}",
   "generate.review.pending": "{summary} · nothing written yet",
@@ -656,7 +659,7 @@ export const en: Messages = {
   "generate.written.title.scene": "Written — all as draft",
   "generate.written.title.npc": "Written — NPC entry created",
   "generate.written.hint.scene":
-    "The scenes show up in the chapters with status “draft”. Existing entries are never overwritten — on a conflict the server writes nothing.",
+    "The scenes show up under their chapter with status “draft”. Existing entries are never overwritten — on a conflict the server writes nothing.",
   "generate.written.hint.npc":
     "The NPC shows up in the NPC list and in search. Existing entries are never overwritten — on a conflict the server writes nothing.",
   "generate.written.openNpc": "Open NPC",
@@ -797,7 +800,7 @@ export const en: Messages = {
   "augment.diff.added": "added",
   "augment.diff.removed": "removed",
   "augment.diff.changed": "changed",
-  "augment.review.aria": "Review the proposal",
+  "augment.review.aria": "Check the proposal",
   "augment.accept": "Accept",
   "augment.reject": "Discard proposal",
   "augment.review.namingHeading":

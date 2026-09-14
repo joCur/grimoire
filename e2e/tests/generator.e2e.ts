@@ -82,7 +82,8 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   // The draft card: title, target path, status pill, rendered body.
   const card = page.locator("div").filter({ hasText: `01-salzhafen/${SCENE_SLUG}` }).last();
   await expect(page.getByRole("heading", { level: 2, name: SCENE_TITLE })).toBeVisible();
-  await expect(card).toContainText("draft");
+  // The status chip shows the LABEL, not the raw frontmatter value (#88).
+  await expect(card.getByText("Entwurf", { exact: true })).toBeVisible();
   await expect(card.locator("[data-callout='readaloud']")).toContainText("Die Flut zieht sich");
   await expect(card.locator("[data-callout='loot']")).toContainText("Beute");
   await expect(card.locator("details[data-if-section]")).toHaveCount(2);
@@ -153,7 +154,7 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
 
   await page.getByRole("button", { name: "NPC generieren", exact: true }).click();
 
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Vorschlag prüfen", {
     timeout: 30_000,
   });
   await expect(page.getByText("1 NPC · noch nichts geschrieben")).toBeVisible();
@@ -203,7 +204,7 @@ test("failure path: an invalid model reply shows the 422 block with the raw repl
   await expect(page.getByText(/~[\d.]+ Tokens · 2 Versuche/)).toBeVisible();
 
   // The raw reply is one click away — that is what makes a 422 debuggable.
-  await page.getByText("Rohantwort anzeigen").click();
+  await page.getByText("Unverarbeitete Antwort anzeigen").click();
   await expect(page.locator("pre")).toContainText("night-watch-quay");
 
   // Nothing was written, and the form is usable again.

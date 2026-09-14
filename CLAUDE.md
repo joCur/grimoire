@@ -147,7 +147,7 @@ Playwright gegen den echten Stack (realer Server auf einer eigenen, aus
 das LLM ist ein lokaler Stub-HTTP-Server — der Provider-Pfad läuft real).
 Die Pfade:
 
-1. Auto-Einstieg `/` → Kapitelübersicht lädt die Kampagne
+1. Auto-Einstieg `/` → Kapitel lädt die Kampagne
 2. Szene lesen: Callouts, If-Sections, NPC-Karten der Referenzszenen
 3. ⌘K-Suche findet und öffnet
 4. Session-Zyklus: starten → Schnellnotiz → Log + scenes_played →
@@ -157,8 +157,8 @@ Die Pfade:
    in den Kapiteln; plus 409-/Fehlerpfad. Dazu (Issue #53) Kampagnenwissen und
    Glossar auf `/settings` pflegen — anlegen, bearbeiten, löschen,
    umsortieren, 409 — und der Lauf danach: Wissen im mitgeschickten
-   Kontext (Stub echot den Prompt-Block zurück), Namens-Hinweise im
-   Prüfschritt, „Übernehmen" trotzdem möglich und Server-Neustart (fertiger Job übersteht
+   Kontext (Stub echot den Prompt-Block zurück), Namens-Hinweise in
+   „Entwürfe prüfen", „Übernehmen" trotzdem möglich und Server-Neustart (fertiger Job übersteht
    ihn und bleibt übernehmbar, laufender wird als `failed` gemeldet)
 7. Eigenschaften-Patch (`PATCH /properties`)/Status-Regler inkl. 409-Konflikt
 8. Mobil-Startfläche + Ideen-Einwurf bei 390px
@@ -168,7 +168,7 @@ Die Pfade:
    der Guard ist die Zeilenversion `rev`)
 10. Kaltstart: leere Instanz ohne Seed — seit ADR #13/#79 der Normalfall
     einer frischen Installation → Kampagne anlegen → Kapitel → Szene →
-    Szene befüllen → Session starten → Szene in der Live-Ansicht
+    Szene befüllen → Session starten → Szene in der Session-Ansicht
     nutzbar; dazu NPC/Ort anlegen aus ihren Listen und die
     Slug-Kollision (409 mit Vorschlag, schreibt nichts)
 

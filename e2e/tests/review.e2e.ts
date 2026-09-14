@@ -94,7 +94,7 @@ test("adopting a thread lands in _chapter, the inbox line gets ticked off", asyn
 
   // --- tick off the inbox line --------------------------------------------
   const inboxCard = page.locator("div").filter({ hasText: INBOX_TEXT }).last();
-  await expect(inboxCard).toContainText("Idee");
+  await expect(inboxCard.getByText("Idee", { exact: true })).toBeVisible();
   await inboxCard.getByRole("button", { name: "Verwerfen" }).click();
 
   await expect(inboxCard.getByText("Verworfen")).toBeVisible();

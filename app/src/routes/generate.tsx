@@ -80,6 +80,7 @@ import { locationName } from "@/lib/campaign";
 import { serverErrorBodyMessage, useT, type Translate } from "@/i18n";
 import { npcStatusLabel } from "@/lib/entity";
 import { fmQuickstats, fmString, fmStringArray } from "@/lib/properties";
+import { sceneStatusMeta } from "@/lib/scene-status";
 import {
   applySummary,
   chapterIdError,
@@ -827,7 +828,7 @@ export function GenerateRoute() {
           <>
             <div className="mb-1.5 flex flex-wrap items-baseline gap-3">
               <h1 className="font-serif text-[26px] leading-[1.25] font-semibold text-foreground">
-                {t("generate.review.title")}
+                {t("generate.review.titleNpc")}
               </h1>
               <span className="text-[13px] text-muted-foreground">
                 {t("generate.review.pendingNpc")}
@@ -1094,6 +1095,9 @@ function SceneCard({
   const t = useT();
   const title = fmString(properties.title) ?? path;
   const status = fmString(properties.status) ?? "draft";
+  // Show the status LABEL, never the raw frontmatter value (#88); unknown
+  // values still degrade to their verbatim text inside the helper.
+  const statusLabel = sceneStatusMeta(status, t).label;
   const isContingency = fmString(properties.type) === "contingency";
   const location = locationName(tree, fmString(properties.location));
   const tags = fmStringArray(properties.tags);
@@ -1106,7 +1110,7 @@ function SceneCard({
           {title}
         </h2>
         <span className="flex-none rounded-full border border-input px-[9px] py-px text-[11.5px] text-dim">
-          {status}
+          {statusLabel}
         </span>
         <MarkdownEditorToggle
           editing={editing}

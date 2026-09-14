@@ -74,8 +74,8 @@ Keine Session-Ansicht auf Mobil erzwingen.
 ### 5. Nachbereitung (nach der Session; Route `review`)
 Job: fünf Minuten Nachbereitung (der frühere Begriff „Ernte" ist in der UI
 abgelöst — unklare Metaphorik). Log- und Ideen-Einträge mit `#thread`/`#npc`
-gefiltert, je Eintrag Ein-Klick-Aktionen (Thread übernehmen, NPC-Stub
-anlegen, verwerfen). Fortschritt sichtbar („3 von 7 gesichtet").
+gefiltert, je Eintrag Ein-Klick-Aktionen (Handlungsstrang übernehmen,
+vorgeschlagenen NPC-Eintrag anlegen, verwerfen). Fortschritt sichtbar („3 von 7 gesichtet").
 
 ## Ton der UI-Texte
 
@@ -99,6 +99,7 @@ Callout-Typen, Status-Werte) bleiben davon unberührt.
 | Ungetaggte Einträge | Untagged entries | Notizen (Sektion der Nachbereitung) |
 | Ideen | Ideas | Inbox |
 | Entwürfe prüfen | Check drafts | Review (Generator) |
+| Vorschlag prüfen | Check the proposal | Review (NPC-Generator) |
 | Vorgeschlagene Einträge | Suggested entries | Stubs |
 | Eventualszene | Contingency scene | Kontingenz, „Falls es schiefgeht" |
 | Probe | Check | Check (de) |
