@@ -181,7 +181,15 @@ describe("GET /api/:campaign/tree", () => {
     // The `hafen/` directory of the import format is not a group: the group
     // is what the scene's `location` names, so the two example scenes sit
     // apart even though they shared a directory.
-    expect(chapter.groups.map((g) => g.slug)).toEqual(["bucht", "leuchtturm"]);
+    //
+    // Ordered by the NAME the heading shows (issue #100 review), not by the
+    // id behind it: `leuchtturm` has an entry called „Der Leuchtturm von
+    // Salzhafen", `bucht` has none and falls back to its id.
+    expect(chapter.groups.map((g) => g.slug)).toEqual(["leuchtturm", "bucht"]);
+    expect(chapter.groups.map((g) => g.name)).toEqual([
+      "Der Leuchtturm von Salzhafen",
+      "bucht",
+    ]);
     const leuchtturm = chapter.groups.find((g) => g.slug === "leuchtturm")!;
     expect(leuchtturm.scenes.map((s) => s.id)).toEqual(["lighthouse-arrival"]);
     expect(leuchtturm.scenes[0]!.status).toBe("ready");

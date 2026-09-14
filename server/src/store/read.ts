@@ -214,6 +214,17 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
     .orderBy(asc(scenes.pos), asc(scenes.id))
     .all() as SceneRow[];
 
+  // Location id -> display name, for the scene GROUPS below: the heading is
+  // the name, so the groups have to be ordered by it (issue #100 review).
+  const locationRows = db
+    .select()
+    .from(locations)
+    .where(eq(locations.campaignId, campaign))
+    .all() as LocationRow[];
+  const locationNames = new Map(
+    locationRows.map((row) => [row.id, row.name === "" ? row.id : row.name] as const),
+  );
+
   const chapterNodes: ChapterNode[] = chapterRows.map((chapter) => {
     const own = sceneRows.filter((s) => (s.chapterId ?? "") === chapter.id);
     // The group IS the scene's location (issue #100) — "" means the scene
@@ -226,10 +237,17 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
       bySlug.set(group, list);
     }
     const groups: SceneGroup[] = [...bySlug.entries()]
-      .map(([slug, list]) => ({ slug, scenes: list.sort((a, b) => cmp(a.path, b.path)) }))
-      // "" — the scenes that name no location — goes LAST: it is the
-      // leftovers section the app labels „Ohne Ort", not the first location.
-      .sort((a, b) => (a.slug === "" ? 1 : b.slug === "" ? -1 : cmp(a.slug, b.slug)));
+      .map(([slug, list]) => ({
+        slug,
+        // An entry always exists (referencing one creates it, #70), and an
+        // unnamed one degrades to its id — still the word the DM typed.
+        name: slug === "" ? "" : (locationNames.get(slug) ?? slug),
+        scenes: list.sort((a, b) => cmp(a.path, b.path)),
+      }))
+      // By the NAME the heading shows, not by the id behind it. "" — the
+      // scenes that name no location — goes LAST: it is the leftovers section
+      // the app labels „Ohne Ort", not the first location.
+      .sort((a, b) => (a.slug === "" ? 1 : b.slug === "" ? -1 : cmp(a.name, b.name)));
     const node: ChapterNode = {
       id: chapter.id,
       title: chapter.title === "" ? chapter.id : chapter.title,
@@ -259,9 +277,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
     })
     .sort((a, b) => cmp(a.name, b.name));
 
-  const locationList: LocationSummary[] = (
-    db.select().from(locations).where(eq(locations.campaignId, campaign)).all() as LocationRow[]
-  )
+  const locationList: LocationSummary[] = locationRows
     .map((row) => {
       const summary: LocationSummary = {
         path: locationPath(row.id),

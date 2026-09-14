@@ -318,9 +318,11 @@ describe("POST /api/:campaign/rename — chapter", () => {
     expect(campaignTree.chapters.map((ch) => ch.id)).toEqual(["01-salzbucht"]);
     const chapter = campaignTree.chapters[0]!;
     expect(chapter.path).toBe("01-salzbucht/_chapter");
+    // Groups ordered by their NAME (issue #100 review): „Der Leuchtturm von
+    // Salzhafen" before the unnamed `bucht`.
     expect(chapter.groups.flatMap((g) => g.scenes.map((s) => s.path))).toEqual([
-      "01-salzbucht/bucht/smuggler-captured",
       "01-salzbucht/leuchtturm/lighthouse-arrival",
+      "01-salzbucht/bucht/smuggler-captured",
     ]);
     // scene ids are untouched by a chapter rename (one group per location
     // since issue #100, so the ids are collected across the groups)

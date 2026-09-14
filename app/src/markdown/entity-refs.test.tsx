@@ -20,8 +20,7 @@ const TREE: CampaignTree = {
       id: "01-salzhafen",
       title: "Kapitel 1",
       groups: [
-        {
-          slug: "hafen",
+        { slug: "hafen", name: "hafen",
           scenes: [
             {
               path: "01-salzhafen/hafen/lighthouse-arrival",

@@ -50,27 +50,33 @@ function render(group: SceneGroup): string {
 
 describe("PlannedGroup — the heading is the location", () => {
   test("a named location heads its group with its NAME, not its slug", () => {
-    const html = render({ slug: "leuchtturm", scenes: [scene("ankunft")] });
+    const html = render({
+      slug: "leuchtturm",
+      name: "Der Leuchtturm von Salzhafen",
+      scenes: [scene("ankunft")],
+    });
     expect(html).toContain("Der Leuchtturm von Salzhafen");
     expect(html).not.toContain(">leuchtturm<");
   });
 
   test("a location nobody has named yet shows its id", () => {
-    // The entry exists — referencing created it (#70) — and the tree already
-    // degrades its empty name to the id, so the heading is the word the DM
-    // typed and never a guess.
-    const html = render({ slug: "bucht", scenes: [scene("erwischt")] });
-    expect(html).toContain("bucht");
+    // The entry exists — referencing created it (#70) — and it has no name.
+    // The heading must be the word the DM typed, never a blank line: the
+    // tree degrades an empty name to the id and so does this view, so the
+    // fixture carries the EMPTY name the database actually holds.
+    const html = render({ slug: "bucht", name: "", scenes: [scene("erwischt")] });
+    expect(html).toContain(">bucht<");
   });
 
   test("the scenes without a location get the neutral section", () => {
-    const html = render({ slug: "", scenes: [scene("heimatlos")] });
+    const html = render({ slug: "", name: "", scenes: [scene("heimatlos")] });
     expect(html).toContain("Ohne Ort");
   });
 
   test("a group with nothing but contingencies renders nothing at all", () => {
     const html = render({
       slug: "",
+      name: "",
       scenes: [scene("notfall", { type: "contingency" })],
     });
     expect(html).toBe("");

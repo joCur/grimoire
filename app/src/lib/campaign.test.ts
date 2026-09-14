@@ -103,8 +103,8 @@ const tree: CampaignTree = {
       id: "02-bucht",
       title: "Kapitel 2",
       groups: [
-        { slug: "", scenes: [scene("lighthouse-arrival", "Ankunft am Leuchtturm")] },
-        { slug: "hafen", scenes: [scene("smuggler-captured", "Von den Schmugglern erwischt")] },
+        { slug: "", name: "", scenes: [scene("lighthouse-arrival", "Ankunft am Leuchtturm")] },
+        { slug: "hafen", name: "hafen", scenes: [scene("smuggler-captured", "Von den Schmugglern erwischt")] },
       ],
     },
   ],

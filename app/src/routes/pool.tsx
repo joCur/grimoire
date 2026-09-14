@@ -251,15 +251,19 @@ export function PlannedGroup({
       <div className="flex items-center gap-2 border-b border-border py-2 text-[13px]">
         <MapPin aria-hidden size={15} className="flex-none text-muted-foreground" />
         {/* The group IS the scene's location (issue #100), so the heading is
-            the location's NAME. A location entry always exists — referencing
-            one creates it — but an entry nobody has named yet falls back to
-            its id, which is still the word the DM typed. "" is the group of
-            the scenes that name no location at all: a neutral section, not a
-            location with an empty name. */}
+            the location's NAME — resolved by the SERVER, which also orders
+            the groups by it (`SceneGroup.name`): an entry nobody has named
+            yet falls back to its id, which is still the word the DM typed.
+            "" is the group of the scenes that name no location at all: a
+            neutral section, not a location with an empty name. */}
         {/* A real heading: it names a section of the chapter, and the
             accessibility tree (and the E2E suite) should be able to say so. */}
         <h3 className="font-medium text-soft">
-          {group.slug === "" ? t("pool.group.noLocation") : locationName(tree, group.slug)}
+          {group.slug === ""
+            ? t("pool.group.noLocation")
+            : group.name === ""
+              ? group.slug
+              : group.name}
         </h3>
       </div>
       {planned.map((scene) => (

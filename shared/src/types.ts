@@ -201,8 +201,20 @@ export interface SceneSummary {
 }
 
 export interface SceneGroup {
-  /** Location-slug directory inside the chapter; "" for scenes directly in the chapter dir. */
+  /**
+   * The `location` the scenes of this group name — the group IS that location
+   * since issue #100. "" for the scenes that name none.
+   */
   slug: string;
+  /**
+   * The location entry's display NAME, degraded to the id when nobody has
+   * named it yet (an entry a reference created, #70). "" for the `slug: ""`
+   * group, which is not a location and is labelled by the app.
+   *
+   * Resolved HERE because the groups are ordered by it: the heading the DM
+   * reads is the name, so an ordering by slug put „Die Bucht" under B.
+   */
+  name: string;
   scenes: SceneSummary[];
 }
 
