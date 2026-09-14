@@ -106,6 +106,16 @@ Danach der Fließtext der Szene, in dieser Ordnung:
    `appearance`, `trigger`, `goal`, `statblock` …). **Einzige Ausnahme**:
    `id`-Werte und Adressen/Pfade — die bleiben kebab-case ASCII. Eigennamen
    aus dem Quelltext bleiben genau so geschrieben, wie sie dort stehen.
+11. **Tabellen**: Tabellen aus dem Quellmaterial — Zufallstabellen, Begegnungs-
+   und Würfellisten — gibst du als gültige GFM-Pipe-Tabelle aus: Kopfzeile,
+   Trennzeile aus `|---|` (eine Zelle je Spalte) und Rand-Pipes links und
+   rechts in jeder Zeile. Die Tabelle steht im passenden Callout (Zufalls-
+   und Begegnungstabellen in `[!note]`, Probenreihen in `[!check]`, Beute in
+   `[!loot]`) und trägt in jeder Zeile das `>` des Callouts. **Sonst nichts
+   aus GFM**: kein Durchgestrichen (`~~x~~`), keine Aufgabenlisten (`- [x]`),
+   keine Fußnoten, keine Auto-Links — das ist normaler Text und wird auch so
+   gerendert. Erfinde keine Tabelle, die das Quellmaterial nicht hat, und
+   presst fließenden Text nicht in eine Tabelle.
 
 ## Beispiel (Few-Shot)
 

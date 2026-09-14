@@ -65,6 +65,27 @@ nur „## Ziel-Format der Datei" einschneidet (`formatContract` in
 gibt keine Heuristik und kein stilles Ersetzen, die Regel wirkt allein im
 Prompt.
 
+## Tabellen (Issue #96)
+
+Dieselbe Mechanik wie bei der Orthografie-Regel: **eine identische Regel
+„Tabellen"** in allen vier System-Prompts — in den drei Create-Prompts unter
+„## Regeln", im Ergänzen-Prompt in der Ergänzungsregel, also genau **einmal**
+in jedem zusammengesetzten Prompt (`formatContract` in
+`server/src/generator-augment.ts` schneidet aus den Create-Prompts nur
+„## Ziel-Format der Datei" heraus).
+
+Inhalt der Regel: Tabellen aus dem Quellmaterial — Zufallstabellen,
+Begegnungs- und Würfellisten — werden als gültige GFM-Pipe-Tabelle
+ausgegeben (Kopfzeile, `|---|`-Trennzeile, Rand-Pipes) und stehen im
+passenden Callout, in jeder Zeile mit dessen `>`. **Sonst nichts aus GFM**:
+Durchgestrichen, Aufgabenlisten, Fußnoten und Auto-Links bleiben normaler
+Text — der Renderer kennt sie nicht (`app/src/markdown/remark-table.ts`).
+
+Der Szenen-Few-Shot (`example-output.md`) zeigt eine kleine W6-Tabelle in
+einem `[!note]`-Callout, damit das Modell die Form im Callout sieht und nicht
+nur beschrieben bekommt. Der Server validiert Tabellen nicht: eine kaputte
+Trennzeile ist keine Tabelle, sondern Text — Degradation statt Fehler.
+
 ## NPC-Generator
 
 Gleiche Pipeline, eigener Endpoint (`POST /api/:campaign/generate/npc`)

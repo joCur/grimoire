@@ -29,6 +29,12 @@ zum Morgengrauen Zeit zu entkommen.
 
 > [!note] Notfall-Ventil: Der gefangene Leuchtturmwärter in der
 > Nachbarkammer kennt ein loses Bodenbrett.
+>
+> | W6 | Wer die Nachtwache schiebt |
+> | --- | --- |
+> | 1–3 | Ein mürrischer Rudergast, halb betrunken |
+> | 4–5 | Zwei Schmuggler, die Würfel spielen |
+> | 6 | [[fenn]] selbst, wach und misstrauisch |
 
 ## If: sie lügen (Schiffbrüchige, verirrte Reisende ...)
 
