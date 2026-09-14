@@ -451,6 +451,21 @@ function addressId(rel: string): string {
  * as the body. So: parseable iff the content opens a block and the parser
  * actually split it off.
  */
+/**
+ * Re-parse a document under the ADDRESS the server derives from the `id`
+ * inside it (issue #100). The shared parser fills a missing `name`/`title`
+ * from the address's last segment, so once the id is known the document has
+ * to be parsed again under its real address — otherwise a reply that
+ * legitimately omits the display name degrades to a placeholder nobody chose.
+ */
+export function reparseAtAddress(
+  content: string,
+  id: string,
+  address: (id: string) => string,
+): ParsedFile {
+  return parseMarkdown(content, address(id), 0);
+}
+
 export function parseWithProperties(
   content: string,
   rel: string,
@@ -571,6 +586,7 @@ function validateEntry(entry: RawEntry, index: number, errors: string[]): Genera
     return null;
   }
   const id = fmId;
+  const reparsed = reparseAtAddress(entry.content, id, kind === "npc" ? npcPath : locationPath);
   const label = `${kind} entry "${id}"`;
   // A status error does not stop the mapping: the stub still resolves the
   // scene's reference, so the correction turn gets the ONE real error
@@ -579,7 +595,7 @@ function validateEntry(entry: RawEntry, index: number, errors: string[]): Genera
   return {
     kind,
     id,
-    name: typeof parsed.properties.name === "string" ? parsed.properties.name : id,
+    name: typeof reparsed.properties.name === "string" ? reparsed.properties.name : id,
     markdown: entry.content,
   };
 }
@@ -640,6 +656,7 @@ export function validateReply(
       return;
     }
     seenIds.add(fmId);
+    const reparsed = reparseAtAddress(entry.content, fmId, (id) => scenePath(ctx.chapter, "", id));
 
     if (!(SCENE_TYPES as readonly string[]).includes(String(fm.type))) {
       errors.push(`${label}: "type" must be one of ${SCENE_TYPES.join(", ")}`);
@@ -676,7 +693,11 @@ export function validateReply(
       );
     }
 
-    scenes.push({ path: scenePath(ctx.chapter, "", fmId), markdown: entry.content, properties: fm });
+    scenes.push({
+      path: scenePath(ctx.chapter, "", fmId),
+      markdown: entry.content,
+      properties: reparsed.properties,
+    });
   });
 
   if (errors.length > 0) return { ok: false, errors };
@@ -867,6 +888,10 @@ export function validateNpcReply(
     };
   }
   const id = fm.id;
+  // Re-parsed under the address the server will use, so the shared parser's
+  // degrade rules (a missing `name` falls back to the address's last
+  // segment) see the same address they always did — see reparseAtAddress.
+  const reparsed = reparseAtAddress(entry.content, id, npcPath);
   const label = `npc "${id}"`;
   if (pinnedId !== undefined && id !== pinnedId) {
     errors.push(`${label}: die id ist vorgegeben — "id" muss "${pinnedId}" sein`);
@@ -904,7 +929,7 @@ export function validateNpcReply(
   return {
     ok: true,
     result: {
-      npc: { path: npcPath(id), markdown: entry.content, properties: fm },
+      npc: { path: npcPath(id), markdown: entry.content, properties: reparsed.properties },
       warnings: reply.warnings,
     },
   };

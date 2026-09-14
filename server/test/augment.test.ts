@@ -42,7 +42,7 @@ import type {
 const CAMPAIGN = "beispiel";
 const NPC = "npcs/jorna";
 const LOCATION = "locations/leuchtturm";
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
 async function read(rel: string): Promise<FileResponse> {
   const res = await app.request(`/api/${CAMPAIGN}/file?path=${encodeURIComponent(rel)}`);

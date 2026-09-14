@@ -9,7 +9,7 @@
 //     not a filesystem rev — so there is nothing left to `stat`.
 //   - a scene's path segment is its ID, not its former file name
 //     (store/paths.ts): ankunft-leuchtturm.md is addressed as
-//     01-salzhafen/hafen/lighthouse-arrival.
+//     01-salzhafen/leuchtturm/lighthouse-arrival.
 // Every status code, ordering and response field below is the one the
 // file-tree reader answered with.
 
@@ -184,7 +184,7 @@ describe("GET /api/:campaign/tree", () => {
     expect(hafen!.scenes.map((s) => s.status)).toEqual(["ready", "ready"]);
     // The path segment is the scene ID now (store/paths.ts) — the file stem
     // ("ankunft-leuchtturm") does not exist anywhere any more.
-    expect(hafen!.scenes[0]!.path).toBe("01-salzhafen/hafen/lighthouse-arrival");
+    expect(hafen!.scenes[0]!.path).toBe("01-salzhafen/leuchtturm/lighthouse-arrival");
     expect(hafen!.scenes[1]!.type).toBe("contingency");
   });
 
@@ -239,7 +239,7 @@ describe("GET /api/:campaign/file", () => {
   });
 
   test("returns raw + parsed + the rev as rev", async () => {
-    const rel = "01-salzhafen/hafen/lighthouse-arrival";
+    const rel = "01-salzhafen/leuchtturm/lighthouse-arrival";
     const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as FileResponse;

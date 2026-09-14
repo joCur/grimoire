@@ -22,7 +22,7 @@ import {
   tempCampaignRoot,
 } from "./support/store";
 
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const NPC = "npcs/fenn";
 
 async function getFile(rel: string, campaign = "beispiel"): Promise<FileResponse> {
@@ -90,52 +90,76 @@ describe("a reference creates the entry it names", () => {
     expect(named.properties.name).toBe("Holm");
   });
 
-  test("a scene's location, when it is a slug", async () => {
-    expect(await fileStatus("locations/bucht")).toBe(404);
-    await patchFm(SCENE, { location: "bucht" });
-    const created = await getFile("locations/bucht");
-    expect(created.properties.name).toBe("bucht");
-    expect((await tree()).locations.some((l) => l.id === "bucht")).toBe(true);
+  test("a scene's location — an unknown id gets its entry", async () => {
+    expect(await fileStatus("locations/alte-mole")).toBe(404);
+    await patchFm(SCENE, { location: "alte-mole" });
+    const created = await getFile("locations/alte-mole");
+    expect(created.properties.name).toBe("alte-mole");
+    expect((await tree()).locations.some((l) => l.id === "alte-mole")).toBe(true);
   });
 
-  test("free text in location stays free text — no entry, no invented Ort", async () => {
-    // The format allows a free string there (README). Spaces or capitals make
-    // it unmistakably text, and text must not become an entity.
-    await patchFm(SCENE, { location: "Der alte Hafen" });
-    expect((await getFile(SCENE)).properties.location).toBe("Der alte Hafen");
-    expect((await tree()).locations.some((l) => l.name === "Der alte Hafen")).toBe(false);
-    await patchFm(SCENE, { location: "Nordbucht" });
-    expect((await tree()).locations.some((l) => l.id === "Nordbucht")).toBe(false);
+  test("free text in location is a 400 — it is a reference, not a label (#100)", async () => {
+    // The README's free-text exception is gone: `location` is the scene's
+    // GROUP, so a value that cannot be an id cannot be a group. The body
+    // carries the code the app has a sentence for, plus the slug it would
+    // have used — and nothing is written.
+    const before = await getFile(SCENE);
+    const res = await app.request("/api/beispiel/properties", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        path: SCENE,
+        rev: before.rev,
+        patch: { location: "Der alte Hafen" },
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      code: "location_not_an_id",
+      value: "Der alte Hafen",
+      suggestion: "der-alte-hafen",
+    });
+    expect((await getFile(SCENE)).properties.location).toBe(before.properties.location);
+    expect((await tree()).locations.some((l) => l.id === "der-alte-hafen")).toBe(false);
   });
 
-  test("a scene's location is ensured on EVERY patch, changed or not", async () => {
-    // The properties dialog promises "wird beim Speichern angelegt" for a
-    // slug-shaped value. With the old "only NEW references" guard a save left
-    // a dangling OLD slug exactly as it stood, and the hint lied about the
-    // stock most likely to have one. `bucht` is such a slug in the examples.
-    const scene = "01-salzhafen/hafen/smuggler-captured";
+  test("changing location MOVES the scene — group, address and entry (#100)", async () => {
+    // The one write this ticket is about: the group is derived, so the patch
+    // that sets `location` is also the patch that re-addresses the scene —
+    // and it creates the entry the new group needs.
+    const scene = "01-salzhafen/bucht/smuggler-captured";
     expect((await getFile(scene)).properties.location).toBe("bucht");
-    expect(await fileStatus("locations/bucht")).toBe(404);
 
-    await patchFm(scene, { status: "played" });
-
-    expect((await getFile("locations/bucht")).properties.name).toBe("bucht");
-    expect((await tree()).locations.some((l) => l.id === "bucht")).toBe(true);
+    const moved = await patchFm(scene, { location: "alte-raeucherkammer" });
+    expect(moved.path).toBe("01-salzhafen/alte-raeucherkammer/smuggler-captured");
+    // The OLD address still names the scene and answers with the new one —
+    // the app replaces the URL with it (ADR #17).
+    expect((await getFile(scene)).path).toBe(
+      "01-salzhafen/alte-raeucherkammer/smuggler-captured",
+    );
+    expect((await getFile("locations/alte-raeucherkammer")).properties.name).toBe(
+      "alte-raeucherkammer",
+    );
+    const chapter = (await tree()).chapters.find((c) => c.id === "01-salzhafen");
+    expect(chapter?.groups.map((g) => g.slug).sort()).toEqual([
+      "alte-raeucherkammer",
+      "leuchtturm",
+    ]);
   });
 
-  test("…while free text stays free text, however often it is patched", async () => {
-    const scene = "01-salzhafen/hafen/smuggler-captured";
-    await patchFm(scene, { location: "Der alte Hafen" });
-    const before = (await tree()).locations.map((l) => l.id);
-    await patchFm(scene, { status: "played" });
-    expect((await tree()).locations.map((l) => l.id)).toEqual(before);
+  test("clearing location puts the scene on chapter level", async () => {
+    const scene = "01-salzhafen/bucht/smuggler-captured";
+    const cleared = await patchFm(scene, { location: null });
+    expect(cleared.path).toBe("01-salzhafen/smuggler-captured");
+    const chapter = (await tree()).chapters.find((c) => c.id === "01-salzhafen");
+    expect(chapter?.groups.map((g) => g.slug)).toEqual(["leuchtturm", ""]);
   });
 
   test("an unrelated patch does not materialise an existing NPC reference", async () => {
     // The npc half keeps the "only NEW references" rule: the list may hold
     // imported values, and a `PATCH { status }` re-sends all of them.
     const before = (await tree()).npcs.map((n) => n.id);
-    await patchFm("01-salzhafen/hafen/smuggler-captured", { status: "played" });
+    await patchFm("01-salzhafen/bucht/smuggler-captured", { status: "played" });
     expect((await tree()).npcs.map((n) => n.id)).toEqual(before);
   });
 
@@ -176,12 +200,14 @@ describe("the seed pass for imported stock", () => {
     }
   });
 
-  test("a clean campaign is untouched — and a slug-shaped location stays text", async () => {
-    // `location: bucht` in the examples has no locations row and must KEEP
-    // none: in that one field a slug is indistinguishable from free text, so
-    // a blanket pass would invent Orte the DM never wrote.
+  test("a clean campaign is untouched — but every location a scene names exists", async () => {
+    // The npc backfill still finds nothing. `location: bucht` had no
+    // `locations/bucht.md` in the example tree and now HAS an entry: since
+    // issue #100 the value is the scene's group, and a group the campaign
+    // cannot name is not a thing the import may leave behind.
     expect(lastSeedBackfill()).toEqual([]);
-    expect(await fileStatus("locations/bucht")).toBe(404);
+    expect(await fileStatus("locations/bucht")).toBe(200);
+    expect((await getFile("locations/bucht")).properties.name).toBe("bucht");
   });
 });
 

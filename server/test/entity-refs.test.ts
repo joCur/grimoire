@@ -23,7 +23,7 @@ import {
 } from "./support/store";
 
 /** A scene of the example campaign we overwrite with reference prose. */
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
 beforeEach(async () => {
   await seedStore();

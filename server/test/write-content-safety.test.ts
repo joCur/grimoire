@@ -77,7 +77,7 @@ async function version(): Promise<number> {
 }
 
 const NPC = "npcs/fenn";
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const GLOSSARY = "glossary";
 
 beforeEach(async () => {
@@ -305,7 +305,7 @@ describe("applyDrafts — the conflict check is IN the insert transaction", () =
     expect(thrown).toBeInstanceOf(ApiError);
     const api = thrown as ApiError;
     expect(api.status).toBe(409);
-    expect(api.extra?.conflicts).toEqual(["01-salzhafen/hafen/lighthouse-arrival"]);
+    expect(api.extra?.conflicts).toEqual(["01-salzhafen/leuchtturm/lighthouse-arrival"]);
   });
 
   test("all or nothing: a conflict late in the batch writes none of it", async () => {

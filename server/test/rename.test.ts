@@ -28,8 +28,8 @@ afterEach(() => {
   dropStore();
 });
 
-const SCENE_A = "01-salzhafen/hafen/lighthouse-arrival";
-const SCENE_B = "01-salzhafen/hafen/smuggler-captured";
+const SCENE_A = "01-salzhafen/leuchtturm/lighthouse-arrival";
+const SCENE_B = "01-salzhafen/bucht/smuggler-captured";
 const SESSION = "sessions/2026-01-15";
 
 interface RenameResponse {
