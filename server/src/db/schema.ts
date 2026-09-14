@@ -651,6 +651,20 @@ export const generateJobs = sqliteTable(
     augmentResult: text("augment_result"),
     error: text("error"),
     draftEdits: text("draft_edits").notNull().default("{}"),
+    /**
+     * The DM's REVIEW STATE (issue #97) — JSON, see `GenerateJobReview`:
+     * the decision per suggested entry, the dropped scenes, the per
+     * field/block decisions of an augment run and the parts a partial
+     * accept already wrote. JSON for the same reason as the payloads above:
+     * it is the API's own shape and nothing queries inside it.
+     */
+    review: text("review").notNull().default("{}"),
+    /**
+     * Optimistic-concurrency token of that review state. Two tabs on the
+     * same review are the case it exists for: the second `PATCH …/review`
+     * carries a stale rev and gets a 409 instead of overwriting the first.
+     */
+    rev: integer("rev").notNull().default(0),
   },
   (t) => [uniqueIndex("generate_jobs_campaign_unique").on(t.campaignId)],
 );

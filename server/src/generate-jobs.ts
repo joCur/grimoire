@@ -47,6 +47,8 @@ import { and, eq } from "drizzle-orm";
 import type {
   AugmentResult,
   GenerateJob,
+  GenerateJobReview,
+  GenerateReviewDecision,
   GenerateJobError,
   GenerateJobKind,
   GenerateNpcResult,
@@ -79,6 +81,10 @@ interface Job {
   startedAt: string;
   finishedAt?: string;
   draftEdits: Map<string, string>;
+  /** The DM's review state (issue #97) — decisions, drops, written parts. */
+  review: GenerateJobReview;
+  /** Optimistic-concurrency token of that review state. */
+  rev: number;
 }
 
 function timestamp(): string {
@@ -115,6 +121,8 @@ export function serializeJob(job: Job): GenerateJob {
     ...(job.augmentResult === undefined ? {} : { augmentResult: job.augmentResult }),
     ...(job.error === undefined ? {} : { error: job.error }),
     draftEdits: Object.fromEntries(job.draftEdits),
+    review: job.review,
+    rev: job.rev,
   };
 }
 
@@ -150,6 +158,43 @@ function unpackEdits(value: string): Map<string, string> {
     if (typeof markdown === "string") edits.set(draftAddress(key), markdown);
   }
   return edits;
+}
+
+/** The review state of a job that has not been touched yet (issue #97). */
+export function emptyReview(): GenerateJobReview {
+  return { entries: {}, dropped: [], fields: {}, blocks: {}, written: {} };
+}
+
+function stringRecord<T>(value: unknown, pick: (v: unknown) => T | undefined): Record<string, T> {
+  const out: Record<string, T> = {};
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return out;
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    const kept = pick(raw);
+    if (kept !== undefined) out[key] = kept;
+  }
+  return out;
+}
+
+/**
+ * Parse the review column. Like every other payload here it DEGRADES: a
+ * column that cannot be read (a hand-edited database, a truncated write)
+ * becomes "nothing decided yet" instead of making the job unreachable — the
+ * decisions are cheap to redo, the generation is not.
+ */
+function unpackReview(value: string): GenerateJobReview {
+  const parsed = unpackPayload<Record<string, unknown>>(value);
+  if (parsed === undefined) return emptyReview();
+  return {
+    entries: stringRecord(parsed.entries, (v) =>
+      v === "accepted" || v === "rejected" ? v : undefined,
+    ),
+    dropped: Array.isArray(parsed.dropped)
+      ? parsed.dropped.filter((v): v is string => typeof v === "string").map(draftAddress)
+      : [],
+    fields: stringRecord(parsed.fields, (v) => (typeof v === "boolean" ? v : undefined)),
+    blocks: stringRecord(parsed.blocks, (v) => (typeof v === "boolean" ? v : undefined)),
+    written: stringRecord(parsed.written, (v) => (typeof v === "string" ? v : undefined)),
+  };
 }
 
 /**
@@ -228,6 +273,8 @@ function toJob(row: JobRow): Job {
     ...(augmentResult === undefined ? {} : { augmentResult }),
     ...(error === undefined ? {} : { error }),
     draftEdits: unpackEdits(row.draftEdits),
+    review: unpackReview(row.review),
+    rev: row.rev,
   };
 }
 
@@ -285,6 +332,8 @@ export async function startJob(input: JobInput): Promise<Job> {
     status: "running",
     startedAt: timestamp(),
     draftEdits: new Map(),
+    review: emptyReview(),
+    rev: 0,
   };
 
   db.transaction((handle) => {
@@ -309,6 +358,8 @@ export async function startJob(input: JobInput): Promise<Job> {
         status: "running",
         startedAt: job.startedAt,
         draftEdits: "{}",
+        review: "{}",
+        rev: 0,
       })
       .run();
   });
@@ -442,6 +493,134 @@ export async function setDraftEdit(
     .set({ draftEdits: JSON.stringify(Object.fromEntries(job.draftEdits)) })
     .where(eq(generateJobs.id, row.id))
     .run();
+}
+
+// --- review state (issue #97) -----------------------------------------------
+
+/**
+ * What one `PATCH …/review` may change. Every field is OPTIONAL and MERGES:
+ * the app sends the one decision the DM just made (or the text of the one
+ * draft they are typing in), never the whole state — so two half-finished
+ * reviews of different parts cannot overwrite each other inside one rev.
+ *
+ * `dropped` is the one exception: a set, sent whole, because "no longer
+ * dropped" has to be expressible too.
+ */
+export interface ReviewPatch {
+  edits?: Record<string, string>;
+  entries?: Record<string, GenerateReviewDecision | null>;
+  dropped?: string[];
+  fields?: Record<string, boolean>;
+  blocks?: Record<string, boolean>;
+}
+
+/**
+ * Store a review patch on the job (issue #97). The `rev` the client read
+ * must still be the row's — a second tab that decided something first makes
+ * this a 409 `rev_conflict` carrying the CURRENT rev, and the app reloads
+ * the state instead of silently winning.
+ *
+ * 404 when the campaign has no job or when `jobId` names a different one: a
+ * patch for a run that was replaced must not land on its successor.
+ */
+export async function patchJobReview(
+  campaign: string,
+  jobId: string,
+  rev: number,
+  patch: ReviewPatch,
+): Promise<Job> {
+  const db = await getDb();
+  return db.transaction((handle) => {
+    const tx = handle as unknown as GrimoireDb;
+    const row = jobRow(tx, campaign);
+    if (row === undefined || row.id !== jobId) {
+      throw new ApiError(404, "no generate job for this campaign");
+    }
+    if (row.rev !== rev) {
+      throw new ApiError(409, "the review state changed — reload before saving", {
+        code: "rev_conflict",
+        rev: row.rev,
+      });
+    }
+    const job = toJob(row);
+    applyReviewPatch(job, patch);
+    tx.update(generateJobs)
+      .set({
+        draftEdits: JSON.stringify(Object.fromEntries(job.draftEdits)),
+        review: JSON.stringify(job.review),
+        rev: row.rev + 1,
+      })
+      .where(eq(generateJobs.id, row.id))
+      .run();
+    return { ...job, rev: row.rev + 1 };
+  }) as Job;
+}
+
+/** Merge a patch into a job in memory (the transaction writes the result). */
+function applyReviewPatch(job: Job, patch: ReviewPatch): void {
+  for (const [path, markdown] of Object.entries(patch.edits ?? {})) {
+    job.draftEdits.set(draftAddress(path), markdown);
+  }
+  for (const [key, decision] of Object.entries(patch.entries ?? {})) {
+    // `null` is „wieder offen" — the review's third state, which is why an
+    // undo has to be expressible and is not just a missing key.
+    if (decision === null) delete job.review.entries[key];
+    else job.review.entries[key] = decision;
+  }
+  if (patch.dropped !== undefined) job.review.dropped = [...new Set(patch.dropped)];
+  Object.assign(job.review.fields, patch.fields ?? {});
+  Object.assign(job.review.blocks, patch.blocks ?? {});
+}
+
+/**
+ * Record a partial accept on the job — called INSIDE the write transaction
+ * (store/write.ts `applyDrafts`), so the job and the entries it produced can
+ * never disagree after a crash: either both landed or neither did (the rule
+ * issue #62 established for the whole-run apply).
+ *
+ * Returns true when the job row was deleted because nothing is left open.
+ */
+export function markWrittenInTx(
+  tx: GrimoireDb,
+  campaign: string,
+  jobId: string,
+  written: Record<string, string>,
+): boolean {
+  const row = jobRow(tx, campaign);
+  if (row === undefined || row.id !== jobId) return false;
+  const job = toJob(row);
+  Object.assign(job.review.written, written);
+  if (jobIsSettled(job)) {
+    tx.delete(generateJobs).where(eq(generateJobs.id, row.id)).run();
+    return true;
+  }
+  tx.update(generateJobs)
+    .set({ review: JSON.stringify(job.review), rev: row.rev + 1 })
+    .where(eq(generateJobs.id, row.id))
+    .run();
+  return false;
+}
+
+/**
+ * Is there anything left to decide? Every scene is written or dropped, every
+ * suggested entry is written or rejected, and an NPC run's one draft is
+ * written. That question is what makes the job DISAPPEAR on its own (issue
+ * #97 Zuschnitt 3) instead of leaving an empty review behind.
+ */
+export function jobIsSettled(job: Job): boolean {
+  const written = job.review.written;
+  const dropped = new Set(job.review.dropped);
+  const scenes = job.result?.scenes ?? [];
+  for (const scene of scenes) {
+    if (written[scene.path] === undefined && !dropped.has(scene.path)) return false;
+  }
+  for (const stub of job.result?.stubs ?? []) {
+    const path = `${stub.kind}s/${stub.id}`;
+    if (written[path] === undefined && job.review.entries[path] !== "rejected") return false;
+  }
+  const npc = job.npcResult?.npc.path;
+  if (npc !== undefined && written[npc] === undefined) return false;
+  return true;
 }
 
 /** Test-only: drop every job row. */
