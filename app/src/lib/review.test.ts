@@ -176,6 +176,17 @@ describe("player-character notes (issue #86)", () => {
     expect(pcGroupTag(extractHashtags("Karte für alle #pc"))).toBeUndefined();
   });
 
+  test("pcGroupTag skips the convention tags — those are no character names", () => {
+    // The harvest tags (README) and `#date` describe the LINE, not a person.
+    expect(pcGroupTag(extractHashtags("Notiz #pc #thread"))).toBeUndefined();
+    expect(pcGroupTag(extractHashtags("Notiz #npc #pc"))).toBeUndefined();
+    expect(pcGroupTag(extractHashtags("Notiz #pc #date"))).toBeUndefined();
+    expect(pcGroupTag(extractHashtags("Notiz #pc #loot #decision"))).toBeUndefined();
+    // …but a character tag next to one of them still wins.
+    expect(pcGroupTag(extractHashtags("Notiz #pc #thread #kaela"))).toBe("kaela");
+    expect(pcGroupTag(extractHashtags("Notiz #pc #kaela #thread"))).toBe("kaela");
+  });
+
   test("inboxPcEntries returns the open #pc lines only", () => {
     expect(inboxPcEntries(body).map((e) => e.text)).toEqual([
       "Geburtstags-Item für Kaela",
@@ -185,8 +196,12 @@ describe("player-character notes (issue #86)", () => {
   });
 
   test("a #pc line is in neither the harvest nor the notes section", () => {
-    const raws = [...harvestInboxEntries(body), ...inboxNoteEntries(body)].map((e) => e.raw);
-    expect(raws.filter((raw) => raw.includes("#pc "))).toEqual([]);
+    // On the PARSED tags, not on the raw text: a `#pc` at the end of a line
+    // carries no trailing space and a substring check would miss it.
+    const entries = [...harvestInboxEntries(body), ...inboxNoteEntries(body)];
+    expect(entries.filter((entry) => hasPcTag(entry.tags)).map((entry) => entry.raw)).toEqual(
+      [],
+    );
     expect(harvestInboxEntries(body).map((e) => e.text)).toEqual([
       "Kein PC-Eintrag",
       "Auch keiner",

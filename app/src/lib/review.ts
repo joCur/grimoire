@@ -165,13 +165,23 @@ export function hasPcTag(tags: readonly string[]): boolean {
 }
 
 /**
- * The character a `#pc` line names: the FIRST hashtag that is not `#pc`
- * itself (`#pc #kaela` → `kaela`, `#kaela #pc` → `kaela`, already lowercased
- * by extractHashtags). Undefined when the line carries nothing but `#pc` —
- * the review files those under „Allgemein".
+ * Tags that belong to the log/inbox CONVENTION (README) and can therefore
+ * never be a character name: `#pc` itself, the four harvest tags and `#date`.
+ * `#pc #thread` is a PC reminder that also mentions a thread — not a note
+ * about a character called „thread".
+ */
+function isConventionTag(tag: string): boolean {
+  return tag === PC_TAG || tag === "date" || isReviewTag(tag);
+}
+
+/**
+ * The character a `#pc` line names: the first hashtag that is not a
+ * convention tag (`#pc #kaela` → `kaela`, `#kaela #pc` → `kaela`, already
+ * lowercased by extractHashtags). Undefined when the line carries convention
+ * tags only — the review files those under „Allgemein".
  */
 export function pcGroupTag(tags: readonly string[]): string | undefined {
-  return tags.find((tag) => tag !== PC_TAG);
+  return tags.find((tag) => !isConventionTag(tag));
 }
 
 /** The open inbox lines carrying `#pc` — the review's „Spielercharaktere". */
