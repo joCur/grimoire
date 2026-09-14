@@ -581,10 +581,12 @@ function applyReviewPatch(job: Job, patch: ReviewPatch): void {
  * Returns true when the job row was deleted because nothing is left open.
  *
  * `rev` is the review rev the client read (issue #97 review, findings 3+4).
- * The row is re-read HERE, inside the transaction, and a rev that moved in
- * the meantime is a 409 that rolls the whole write back — the pre-read the
- * accept planned with is then stale, and writing over a decision nobody saw
- * is exactly what the rev guard exists to prevent.
+ * The row is re-read HERE, inside the transaction. A job that MOVED (rev) or
+ * VANISHED in the meantime throws, which rolls the whole write back — the
+ * pre-read the accept planned with is then stale. Reporting a lost job as a
+ * quiet `false` used to commit the drafts while silently dropping the
+ * bookkeeping that says they were written, so the next „Alle übernehmen"
+ * would have written them a second time (issue #97 review, finding 4).
  */
 export function markWrittenInTx(
   tx: GrimoireDb,
@@ -594,7 +596,9 @@ export function markWrittenInTx(
   written: Record<string, string>,
 ): boolean {
   const row = jobRow(tx, campaign);
-  if (row === undefined || row.id !== jobId) return false;
+  if (row === undefined || row.id !== jobId) {
+    throw new ApiError(404, "no generate job for this campaign");
+  }
   if (row.rev !== rev) {
     throw new ApiError(409, "the review state changed — reload before accepting", {
       code: "rev_conflict",

@@ -15,7 +15,8 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import type { GenerateJob } from "@grimoire/shared";
 import { app } from "../src/server";
-import { clearJobsForTests } from "../src/generate-jobs";
+import { clearJobsForTests, markWrittenInTx } from "../src/generate-jobs";
+import { getDb } from "../src/store/handle";
 import { setProviderForTests } from "../src/generator";
 import { dropStore, seedStore } from "./support/store";
 import type {
@@ -364,4 +365,22 @@ test("a job that disappears mid-accept rolls the whole write back", async () => 
   const res = await accept(job, { paths: [SCENE_A] });
   expect(res.status).toBe(404);
   expect(await exists(ADDRESS_A)).toBe(false);
+});
+
+// The case above is caught by the pre-read; this one is the TRANSACTION's
+// own guard — the row vanishing between plan and commit. It is reached
+// directly because there is no way to interleave a delete into a synchronous
+// SQLite transaction from a test. A quiet `false` here used to commit the
+// drafts while dropping the bookkeeping (issue #97 review, finding 4).
+test("markWrittenInTx throws for a lost job instead of reporting false", async () => {
+  const job = await runJob();
+  const db = await getDb();
+  expect(() =>
+    db.transaction((handle) =>
+      markWrittenInTx(handle as never, "beispiel", "a-job-that-is-gone", job.rev ?? 0, {
+        [SCENE_A]: ADDRESS_A,
+      }),
+    ),
+  ).toThrow();
+  expect((await fetchJob())?.review?.written).toEqual({});
 });
