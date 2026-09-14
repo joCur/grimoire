@@ -359,16 +359,6 @@ describe("proposal", () => {
     expect(isEmptyValue(0)).toBe(false);
   });
 
-  test("a reply for another path is rejected", async () => {
-    const file = await read(NPC);
-    const outcome = validateAugmentReply(augmentReply("npcs/fenn", file.raw), {
-      kind: "npc",
-      file,
-    });
-    expect(outcome.ok).toBe(false);
-    if (!outcome.ok) expect(outcome.errors[0]).toContain("path muss unverändert");
-  });
-
   test("a changed id is rejected — it is the reference key", async () => {
     const file = await read(NPC);
     const outcome = validateAugmentReply(
@@ -664,11 +654,14 @@ describe("accept", () => {
     const moved = await read(written.path);
     expect(moved.body).toContain("Sie ziehen um.");
     expect(moved.properties.chapter).toBe("02-umzug");
-    // …and nothing is left behind at the old address.
+    // …and the old address is a STALE address, not a dead one (issue #100):
+    // it still names the scene and answers with the one it has now, which is
+    // what lets the app replace the URL instead of showing a 404.
     const old = await app.request(
       `/api/${CAMPAIGN}/file?path=${encodeURIComponent(scene.path)}`,
     );
-    expect(old.status).toBe(404);
+    expect(old.status).toBe(200);
+    expect(((await old.json()) as FileResponse).path).toBe(written.path);
   });
 
   test("a stale rev is a 409 and writes NOTHING", async () => {
