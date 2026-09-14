@@ -438,7 +438,7 @@ export const en: Messages = {
   // The card's source chip — the scene travels INSIDE the sentence.
   "review.source.log": "Log",
   "review.source.logScene": "Log · {scene}",
-  "review.source.inbox": "Inbox",
+  "review.source.inbox": "Idea",
 
   "review.action.thread": "Adopt as thread",
   "review.action.resolve": "Done",
@@ -455,7 +455,7 @@ export const en: Messages = {
 
   "review.notes.title": "Untagged entries",
   "review.notes.lead":
-    "From the inbox, without a tag — adopt them, create an NPC, or tick them off.",
+    "From the ideas, without a tag — adopt them, create an NPC, or tick them off.",
 
   // Player-character notes (issue #86): `#pc` lines from log and inbox.
   "review.pc.title": "Player characters",
@@ -489,8 +489,8 @@ export const en: Messages = {
   "mobileStart.count.scenes": "{count, plural, one {# scene} other {# scenes}}",
   "mobileStart.count.npcs": "{count, plural, one {# NPC} other {# NPCs}}",
   "mobileStart.count.locations": "{count, plural, one {# location} other {# locations}}",
-  "mobileStart.inbox.label": "Inbox",
-  "mobileStart.inbox.placeholder": "Inbox — drop an idea … #thread #npc",
+  "mobileStart.inbox.label": "Ideas",
+  "mobileStart.inbox.placeholder": "Drop an idea … #thread #npc",
   "mobileStart.inbox.submit": "Drop in",
   "mobileStart.inbox.saved": "Dropped in.",
   "mobileStart.inbox.failed": "Not saved — check the server.",

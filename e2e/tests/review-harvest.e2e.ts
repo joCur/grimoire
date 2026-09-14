@@ -94,7 +94,7 @@ test("adopting a thread lands in _chapter, the inbox line gets ticked off", asyn
 
   // --- tick off the inbox line --------------------------------------------
   const inboxCard = page.locator("div").filter({ hasText: INBOX_TEXT }).last();
-  await expect(inboxCard).toContainText("Inbox");
+  await expect(inboxCard).toContainText("Idee");
   await inboxCard.getByRole("button", { name: "Verwerfen" }).click();
 
   await expect(inboxCard.getByText("Verworfen")).toBeVisible();
@@ -118,7 +118,7 @@ test("an untagged inbox note is reviewable and can be ticked off (issue #85)", a
   // 390px (critical path 8), no hashtag.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/beispiel");
-  await page.getByLabel("Inbox").fill(NOTE_TEXT);
+  await page.getByLabel("Ideen").fill(NOTE_TEXT);
   await page.getByRole("button", { name: "Einwerfen" }).click();
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
   await expect.poll(() => api.raw("inbox")).toContain(`- ${NOTE_TEXT}`);
@@ -132,7 +132,7 @@ test("an untagged inbox note is reviewable and can be ticked off (issue #85)", a
   await expect(page.getByRole("heading", { name: "Ungetaggte Einträge" })).toBeVisible();
 
   const noteCard = page.locator("div").filter({ hasText: NOTE_TEXT }).last();
-  await expect(noteCard).toContainText("Inbox");
+  await expect(noteCard).toContainText("Idee");
   // No tag means no tag-derived affordance — both harvest actions are offered.
   await expect(
     noteCard.getByRole("button", { name: "Als Handlungsstrang übernehmen" }),
@@ -155,7 +155,7 @@ test("a #pc note is grouped by character and ticked off (issue #86)", async ({ p
   // 390px (critical path 8), tagged `#pc #kaela`.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/beispiel");
-  await page.getByLabel("Inbox").fill(`${PC_TEXT} #pc #kaela`);
+  await page.getByLabel("Ideen").fill(`${PC_TEXT} #pc #kaela`);
   await page.getByRole("button", { name: "Einwerfen" }).click();
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
 
@@ -171,7 +171,7 @@ test("a #pc note is grouped by character and ticked off (issue #86)", async ({ p
   await expect(page.getByText(/von \d+ gesichtet/).first()).toHaveText("0 von 5 gesichtet");
 
   const pcCard = page.locator("div").filter({ hasText: PC_TEXT }).last();
-  await expect(pcCard).toContainText("Inbox");
+  await expect(pcCard).toContainText("Idee");
   // A PC note is no campaign content: neither harvest action is offered.
   await expect(
     pcCard.getByRole("button", { name: "Als Handlungsstrang übernehmen" }),

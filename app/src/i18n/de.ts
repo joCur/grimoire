@@ -470,7 +470,7 @@ export const de = {
   // The card's source chip — the scene travels INSIDE the sentence.
   "review.source.log": "Log",
   "review.source.logScene": "Log · {scene}",
-  "review.source.inbox": "Inbox",
+  "review.source.inbox": "Idee",
 
   "review.action.thread": "Als Handlungsstrang übernehmen",
   "review.action.resolve": "Erledigt",
@@ -488,7 +488,7 @@ export const de = {
   // The untagged inbox lines (issue #85) — ideas thrown in on the go.
   "review.notes.title": "Ungetaggte Einträge",
   "review.notes.lead":
-    "Aus der Inbox, ohne Tag — übernehmen, als NPC anlegen oder abhaken.",
+    "Aus den Ideen, ohne Tag — übernehmen, als NPC anlegen oder abhaken.",
 
   // Player-character notes (issue #86): `#pc` lines from log and inbox.
   "review.pc.title": "Spielercharaktere",
@@ -521,8 +521,8 @@ export const de = {
   "mobileStart.count.scenes": "{count, plural, one {# Szene} other {# Szenen}}",
   "mobileStart.count.npcs": "{count, plural, one {# NPC} other {# NPCs}}",
   "mobileStart.count.locations": "{count, plural, one {# Ort} other {# Orte}}",
-  "mobileStart.inbox.label": "Inbox",
-  "mobileStart.inbox.placeholder": "Inbox — Idee einwerfen … #thread #npc",
+  "mobileStart.inbox.label": "Ideen",
+  "mobileStart.inbox.placeholder": "Idee einwerfen … #thread #npc",
   "mobileStart.inbox.submit": "Einwerfen",
   "mobileStart.inbox.saved": "Eingeworfen.",
   "mobileStart.inbox.failed": "Nicht gespeichert — Server prüfen.",

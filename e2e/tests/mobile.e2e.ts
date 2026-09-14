@@ -41,7 +41,7 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
   await expect(lookup.getByRole("link", { name: /Orte/ })).toContainText("1 Ort");
 
   // --- inbox capture -------------------------------------------------------
-  const inbox = page.getByLabel("Inbox");
+  const inbox = page.getByLabel("Ideen");
   await inbox.fill(IDEA);
   await page.getByRole("button", { name: "Einwerfen" }).click();
 
@@ -66,7 +66,7 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
   await expect(back).toBeVisible();
   await back.click();
   await expect(page).toHaveURL(/\/beispiel$/);
-  await expect(page.getByLabel("Inbox")).toBeVisible();
+  await expect(page.getByLabel("Ideen")).toBeVisible();
 });
 
 // Issue #40 AK2: a running session must be visible on EVERY route, mobile
