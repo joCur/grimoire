@@ -20,13 +20,16 @@
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 
-import { SCENE_ID, SCENE_TITLE, TRIGGER } from "../fixtures/replies";
+import { LOCATION_STUB_ID, SCENE_ID, SCENE_TITLE, TRIGGER } from "../fixtures/replies";
 import { pristineDir, runDir } from "../support/paths";
 import { apiFor, expect, seedCampaigns, startGrimoireServer, test, type Api } from "../support/test";
 
-/** Where an applied scene draft lives: `<chapter>/<id>` (issue #57). */
-const SCENE_PATH = `01-salzhafen/${SCENE_ID}`;
+/**
+ * How the review addresses the draft (`<chapter>/<id>`) and where it LIVES
+ * once accepted — the group segment is its `location` (issue #100).
+ */
 const DRAFT_PATH = `01-salzhafen/${SCENE_ID}`;
+const SCENE_PATH = `01-salzhafen/${LOCATION_STUB_ID}/${SCENE_ID}`;
 
 const SOURCE = `The party watches the quay at low tide. Two lanterns move along the
 mole while Fenn's crew shifts a cargo before dawn.`;

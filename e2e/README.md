@@ -31,8 +31,7 @@ Kampagnen-Markdown-Dateien mehr. Für die Suite heißt das:
   Datei mehr, die man zurücklesen könnte. Der frühere `files`-Helfer ist weg;
   eine Fixture, die von „der Datei auf der Platte" erzählt, wäre eine Lüge.
 - **Adressen tragen keine Dateiendung** (Issue #79) und ein Szenen-Segment
-  ist die `id`, nicht der frühere Dateiname:
-  `01-salzhafen/hafen/lighthouse-arrival` und `.../smuggler-captured`.
+  ist die `id`, nicht der frühere Dateiname.
   Die Schlüssel des `seed`-Fixtures sind ebenfalls Adressen — das `.md` für
   den Importer hängt die Fixture selbst an.
 - **Das Wächter-Token heißt `rev`** (die Zeilenversion) und die Felder eines
@@ -42,6 +41,29 @@ Kampagnen-Markdown-Dateien mehr. Für die Suite heißt das:
   die API (`api.writeBody`), danach speichert die UI — und muss den Konflikt
   zeigen und neu laden statt still zu überschreiben. Genauso in
   `status-control`, `properties-form` und `block-composer`.
+
+## Seit „Gruppe = Ort" (#100)
+
+Die **Gruppe** einer Szene ist ihr `location`, es gibt kein eigenes
+Gruppenfeld mehr. Für die Suite heißt das drei Dinge:
+
+- **Die Adressen der Beispielszenen haben sich geändert.** Beide Dateien
+  liegen im Verzeichnis `hafen/`, nennen aber verschiedene Orte:
+  `01-salzhafen/leuchtturm/lighthouse-arrival` und
+  `01-salzhafen/bucht/smuggler-captured`. `hafen` ist keine Gruppe und
+  kommt in keiner Zusicherung mehr vor. `locations/bucht` gibt es im Baum
+  nicht — der Import legt den Eintrag an, weil eine Szene ihn nennt
+  („Referenzieren legt an", #70), die Kampagne hat also **zwei** Orte.
+- **Eine veraltete Szenen-Adresse ist kein 404.** Sie nennt dieselbe id, der
+  Server löst sie auf und antwortet mit der aktuellen Adresse (`path`); die
+  App ersetzt die URL (ADR #17). `api.exists(<alte Adresse>)` ist deshalb
+  `true` — wer prüfen will, WO eine Szene liegt, fragt
+  `(await api.file(rel)).path`.
+- **Der Generator vergibt keine Pfade.** Der Prüfschritt adressiert eine
+  Szene als `<kapitel>/<id>` (`DRAFT_PATH` in den Specs), geschrieben wird
+  sie unter `<kapitel>/<location>/<id>` (`SCENE_PATH`). Die Fixture-Antwort
+  setzt `location: bucht` und schlägt diesen Ort im selben Lauf vor — Pfad 6
+  prüft damit genau AK1 des Tickets.
 
 ## Lokal ausführen
 
@@ -112,10 +134,16 @@ einsammelt (Bun matcht `*.test.ts` und `*.spec.ts`).
 `fixtures/replies.ts` enthält die Modellantworten als lesbare Markdown-Blöcke:
 den Szenen-Entwurf mit NPC- und Ort-Stub, die NPC-Datei und je eine bewusst
 ungültige Variante. Sie erfüllen die aktuelle mechanische Validierung aus
-`server/src/generator.ts` (Szene: Pfad im Ziel-Kapitel, `status: draft`, nur
-bekannte Callouts, Referenzen existieren oder kommen als Stub mit; NPC-Stub
-*mit* Status, Ort-Stub *ohne*; NPC-Lauf: `id` == Dateiname, kein `chapter`,
-Quickstats als Strings in Anführungszeichen, `## Notizen` leer).
+`server/src/generator.ts`. Seit Issue #100 enthält **keine** Antwort mehr
+einen `path`: Szenen kommen als `{ content }` (die `id` im Frontmatter ist
+alles, was das Modell über die Adressierung entscheidet), vorgeschlagene
+Einträge als ein gemeinsames Array `entries` mit
+`{ kind: "npc" | "location", content }`, und NPC- wie Ergänzungs-Lauf
+liefern ein Dokument ohne Adresse. Die inhaltlichen Regeln bleiben (Szene:
+`status: draft`, nur bekannte Callouts, `location` ist eine id, Referenzen
+existieren oder kommen als Eintrag mit; NPC-Eintrag *mit* Status,
+Ort-Eintrag *ohne*; NPC-Lauf: kebab-`id`, kein `chapter`, Quickstats als
+Strings in Anführungszeichen, `## Notizen` leer).
 
 Wenn sich eine Validierungsregel ändert, ist diese Datei die Stelle, die
 mitwandert. Die Specs behaupten die dort definierten Titel und ids.
@@ -161,7 +189,7 @@ mehrere Schreibwege auf ihm liegen:
 
 | Pfad (CLAUDE.md)   | Spec                                                           |
 | ------------------ | -------------------------------------------------------------- |
-| 1 Auto-Einstieg    | `tests/pool.e2e.ts`                                            |
+| 1 Auto-Einstieg    | `tests/pool.e2e.ts` (Gruppen = Ortsnamen, „Ohne Ort")          |
 | 2 Szene lesen      | `tests/scene-rendering.e2e.ts`, `tests/rename.e2e.ts`          |
 | 3 ⌘K-Suche         | `tests/search.e2e.ts`                                          |
 | 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`                                   |
@@ -220,7 +248,13 @@ Entitätsart, Chips/Referenzen/Select, Leeren löscht den Schlüssel, und der
 deterministische 409, weil der Dialog sein Wächter-Token beim Öffnen
 einfriert). Der
 Dialog berührt zusätzlich Pfad 2 (die Leseansicht zeigt die neuen Werte sofort)
-und Pfad 8 (Formular bei 390px) — beides steht in demselben Spec.
+und Pfad 8 (Formular bei 390px) — beides steht in demselben Spec. Seit
+Issue #100 prüft `properties-form.e2e.ts` dort auch den UMZUG: `location`
+ändern verschiebt die Szene, die URL wird ersetzt, die Kapitelübersicht
+sortiert um, die alte Adresse zeigt weiter auf dieselbe Szene und das
+Session-Log bleibt gültig (es referenziert über ids). Freitext in `location`
+ist dort ein 400 mit `code: "location_not_an_id"` — die Gegenprobe steht in
+`scene-rendering.e2e.ts`.
 
 Auf den Pfaden 2 und 7 liegt zusätzlich `rename.e2e.ts` (#30, erweitert um die
 Usage-Vorschau aus #60, Einstieg seit #77 über „id ändern" im Fußbereich des
@@ -242,7 +276,11 @@ den „Roh"-Fallback ab: die Textarea aus #39, ihre „Vorschau" (die es nur dor
 gibt), die Kinds mit und ohne Editor und die Verlustpfade (Navigation,
 fehlgeschlagener Refetch, Status-Regler daneben). Jeder Test dort betritt den
 Editor über `openRawEditor` — erst „Bearbeiten", dann der Umschalter „Roh" —,
-weil „Bearbeiten" allein seit #43 im Composer landet.
+weil „Bearbeiten" allein seit #43 im Composer landet. Ein Test dort deckt
+zusätzlich Issue #100 ab: eine Szene, deren `location` sich geändert hat,
+wird über ihre ALTE Adresse geöffnet, bearbeitet und gespeichert — der
+Editor arbeitet nur am Körper, also ist der Umzug selbst Pfad 7, aber ein
+Speichern über eine veraltete Adresse darf nicht ins Leere laufen.
 
 Pfad 10 (`cold-start.e2e.ts`, #56) ist der einzige Pfad, der OHNE Seed läuft:
 `test.use({ seed: { skip: true } })` startet den Server auf einem leeren

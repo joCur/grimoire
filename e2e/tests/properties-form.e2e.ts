@@ -37,7 +37,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import { expect, test, type Api } from "../support/test";
 
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const SCENE_URL = `/beispiel/file/${SCENE}`;
 const NPC = "npcs/jorna";
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
@@ -117,8 +117,9 @@ test("scene properties: chips, reference and status land in the file — nothing
   // option, so this is the one place the spec uses the DOM id the field
   // builds for its list.)
   const suggestions = dialog.locator("#fm-location-options option");
-  await expect(suggestions).toHaveCount(1);
-  await expect(suggestions).toHaveAttribute("value", "leuchtturm");
+  // Two since issue #100: `bucht` is a scene's location, so it is an entry.
+  await expect(suggestions).toHaveCount(2);
+  await expect(suggestions.first()).toHaveAttribute("value", "leuchtturm");
   // A reference CHIP names its entity next to the raw id.
   const npcChip = dialog.getByRole("listitem").filter({ hasText: "jorna" });
   await expect(npcChip).toContainText("Hafenmeisterin Jorna");
@@ -140,7 +141,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   // An unknown id stays typeable, and the hint says what saving will do:
   // since issue #70 the write CREATES the entry, so a typo is visible as a
   // new entry called that instead of a silent nothing.
-  await location.fill("bucht");
+  await location.fill("nordbucht");
   await expect(referenceHint(dialog, "Neu — wird beim Speichern angelegt.")).toBeVisible();
   await expect(referenceHint(dialog, "Der Leuchtturm von Salzhafen")).toHaveCount(0);
 
@@ -162,16 +163,31 @@ test("scene properties: chips, reference and status land in the file — nothing
   const article = page.getByRole("article");
   await expect(article).toContainText("#stealth");
   await expect(article).toContainText("#nachtszene");
-  await expect(article.getByText("bucht", { exact: true })).toBeVisible();
+  await expect(article.getByText("nordbucht", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Entwurf" })).toBeVisible();
+  // The location IS the group since issue #100, so the scene MOVED — and the
+  // URL follows it (replace, so „zurück" does not return to the old address).
+  await expect(page).toHaveURL(
+    /\/beispiel\/file\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
+  );
+  // The chapter overview re-sorts: a „nordbucht" section, no „leuchtturm" one.
+  await page.goto("/beispiel");
+  await expect(page.getByRole("heading", { level: 3, name: "nordbucht" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 3, name: "Der Leuchtturm von Salzhafen" }),
+  ).toHaveCount(0);
+  // The old address still names the scene and reports the new one.
+  expect((await api.file(SCENE)).path).toBe("01-salzhafen/nordbucht/lighthouse-arrival");
+  // `[[…]]` references resolve over ids, so the session log is untouched.
+  expect(await api.raw("sessions/2026-01-15")).toContain("lighthouse-arrival");
 
   // On disk: the three changed keys …
   await expect.poll(() => api.raw(SCENE)).toContain("status: draft");
   const after = await split(api, SCENE);
   expect(after.properties).toContain("tags: [social, travel, stealth, nachtszene]");
-  expect(after.properties).toContain("location: bucht");
+  expect(after.properties).toContain("location: nordbucht");
   // …and the referenced Ort now has its own (empty) entry — issue #70.
-  expect(await api.exists("locations/bucht")).toBe(true);
+  expect(await api.exists("locations/nordbucht")).toBe(true);
   expect(after.properties).toContain("status: draft");
   // … the untouched ones with their values, the unknown one byte-identically …
   expect(after.properties).toContain("x-custom: bleibt");
@@ -435,7 +451,7 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
 }) => {
   // The four kinds with typed properties offer it …
   const withForm: [string, string, string][] = [
-    ["01-salzhafen/hafen/smuggler-captured", "Von den Schmugglern erwischt", "Szene"],
+    ["01-salzhafen/bucht/smuggler-captured", "Von den Schmugglern erwischt", "Szene"],
     ["npcs/fenn", "Fenn", "NPC"],
     ["locations/leuchtturm", "Der Leuchtturm von Salzhafen", "Ort"],
     ["01-salzhafen/_chapter", "Kapitel 1: Der Leuchtturm von Salzhafen", "Kapitel"],

@@ -30,7 +30,7 @@ import type { Page } from "@playwright/test";
 
 import { expect, test, type Api } from "../support/test";
 
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const SCENE_URL = `/beispiel/file/${SCENE}`;
 const NPC = "npcs/jorna";
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
@@ -118,6 +118,37 @@ test("editing the body: save writes the file and the reading view shows it", asy
   const after = await split(api, SCENE);
   expect(after.properties).toBe(before.properties);
   expect(after.body).toBe(`${before.body}\n${added}\n`);
+});
+
+test("a scene that MOVED is still editable under its old address (#100)", async ({
+  page,
+  api,
+}) => {
+  // The group segment of a scene address is its `location`, so correcting
+  // the location re-addresses the scene — and every link written down before
+  // that (a bookmark, another tab) names the old address. Opening it has to
+  // land on the scene, replace the URL with the one it has now, and save
+  // through it like any other edit.
+  await api.patchProperties(SCENE, { location: "nordbucht" });
+  const moved = "01-salzhafen/nordbucht/lighthouse-arrival";
+
+  await page.goto(SCENE_URL);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
+  await expect(page).toHaveURL(new RegExp(`/beispiel/file/${moved}$`));
+
+  const before = await split(api, moved);
+  const added = "Der Weg zur Nordbucht ist bei Ebbe trocken.";
+  await openRawEditor(page);
+  const textarea = page.getByRole("textbox", { name: TEXTAREA });
+  await textarea.fill(`${before.body}\n${added}\n`);
+  await page.getByRole("button", { name: "Speichern" }).click();
+
+  await expect(textarea).toHaveCount(0);
+  await expect(page.getByRole("article")).toContainText(added);
+  await expect.poll(() => api.raw(moved)).toContain(added);
+  // …and the properties are untouched, the moved `location` included.
+  const after = await split(api, moved);
+  expect(after.properties).toBe(before.properties);
 });
 
 test("the preview toggle renders the draft through the real markdown pipeline", async ({

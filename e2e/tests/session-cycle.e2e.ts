@@ -460,7 +460,7 @@ test.describe("played/dropped scenes in the live nav (issue #73)", () => {
   // Stored paths come from the scene ID, not from the markdown file name (the
   // import derives them) — so the seed key and the API path differ.
   const SEED_FILE = "01-salzhafen/hafen/zweites-gespraech";
-  const ARRIVAL = "01-salzhafen/hafen/lighthouse-arrival";
+  const ARRIVAL = "01-salzhafen/leuchtturm/lighthouse-arrival";
   // The seeded scene sorts BEFORE the example's own one in the nav
   // ("harbor-office-talk" < "lighthouse-arrival"), which is exactly what AK3
   // needs: the scene that gets played is the FIRST row, so a default selection

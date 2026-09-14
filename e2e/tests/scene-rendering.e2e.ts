@@ -19,7 +19,7 @@ import { expect, test } from "../support/test";
 const LOOT_SCENE = {
   // The path segment is the scene's ID from the fixture's properties
   // (`loot-check`), like every scene path since issue #57.
-  path: "01-salzhafen/hafen/loot-check",
+  path: "01-salzhafen/leuchtturm/loot-check",
   content: readFileSync(path.join(FIXTURES_DIR, "loot-scene.md"), "utf8"),
 };
 
@@ -29,12 +29,12 @@ const LOOT_SCENE = {
  * prove that the box overflows instead of the page; this one can.
  */
 const WIDE_TABLE_SCENE = {
-  path: "01-salzhafen/hafen/wide-table",
+  path: "01-salzhafen/leuchtturm/wide-table",
   content: readFileSync(path.join(FIXTURES_DIR, "wide-table-scene.md"), "utf8"),
 };
 
-const ARRIVAL = "/beispiel/file/01-salzhafen/hafen/lighthouse-arrival";
-const CAPTURED = "/beispiel/file/01-salzhafen/hafen/smuggler-captured";
+const ARRIVAL = "/beispiel/file/01-salzhafen/leuchtturm/lighthouse-arrival";
+const CAPTURED = "/beispiel/file/01-salzhafen/bucht/smuggler-captured";
 
 test("reference scene 1: read-aloud, check, secret, note and the NPC card", async ({ page }) => {
   await page.goto(ARRIVAL);
@@ -155,7 +155,7 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
   // — the id as the name, nothing else. No "NPC-Eintrag fehlt", no
   // "Stub anlegen" detour, and the card opens the (equally thin) page.
   expect(await api.exists("npcs/holm")).toBe(false);
-  await api.patchProperties("01-salzhafen/hafen/lighthouse-arrival", {
+  await api.patchProperties("01-salzhafen/leuchtturm/lighthouse-arrival", {
     npcs: ["jorna", "holm"],
   });
   expect(await api.exists("npcs/holm")).toBe(true);
@@ -173,20 +173,38 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
   await expect(page.getByRole("button", { name: "Eigenschaften" })).toBeVisible();
 });
 
-test("a scene location that is a slug becomes an entry; free text stays text", async ({
+test("a scene location is a REFERENCE: an id creates the entry, text is a 400", async ({
   page,
   api,
 }) => {
-  // The one ambiguous field of the format (README): an id OR a string.
-  await api.patchProperties("01-salzhafen/hafen/smuggler-captured", { location: "nordbucht" });
+  // Issue #100: `location` is the scene's group, so it is always an id or
+  // empty. Naming an unknown id creates the entry (#70) …
+  await api.patchProperties("01-salzhafen/bucht/smuggler-captured", { location: "nordbucht" });
   expect(await api.exists("locations/nordbucht")).toBe(true);
+  // … and the scene MOVES with it, address included.
+  const moved = await api.file("01-salzhafen/bucht/smuggler-captured");
+  expect(moved.path).toBe("01-salzhafen/nordbucht/smuggler-captured");
 
-  await api.patchProperties("01-salzhafen/hafen/smuggler-captured", {
-    location: "Der alte Hafen",
+  // Free text is refused, with the slug it would have used — the README's
+  // free-text exception is gone.
+  const res = await api.fetch("beispiel/properties", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      path: moved.path,
+      rev: moved.rev,
+      patch: { location: "Der alte Hafen" },
+    }),
+  });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toMatchObject({
+    code: "location_not_an_id",
+    suggestion: "der-alte-hafen",
   });
   expect(await api.exists("locations/der-alte-hafen")).toBe(false);
-  await page.goto(CAPTURED);
-  await expect(page.getByRole("article")).toContainText("Der alte Hafen");
+  // Nothing moved, and the scene still reads under the location it has.
+  await page.goto(`/beispiel/file/${moved.path}`);
+  await expect(page.getByRole("article")).toContainText("nordbucht");
 });
 
 test.describe("with a seeded loot scene", () => {

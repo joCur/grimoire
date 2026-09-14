@@ -38,7 +38,9 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
   const lookup = page.getByRole("navigation", { name: "Nachschlagen" });
   await expect(lookup.getByRole("link", { name: /Szenen/ })).toContainText("2 Szenen");
   await expect(lookup.getByRole("link", { name: /NPCs/ })).toContainText("2 NPCs");
-  await expect(lookup.getByRole("link", { name: /Orte/ })).toContainText("1 Ort");
+  // Two locations since issue #100: `bucht` is a scene's location, so the
+  // import created an entry for it.
+  await expect(lookup.getByRole("link", { name: /Orte/ })).toContainText("2 Orte");
 
   // --- inbox capture -------------------------------------------------------
   const inbox = page.getByLabel("Ideen");
@@ -93,7 +95,7 @@ test.describe("with a session open since yesterday", () => {
 });
 
 test("mobile: the reference scene's reading view stays readable", async ({ page }) => {
-  await page.goto("/beispiel/file/01-salzhafen/hafen/lighthouse-arrival");
+  await page.goto("/beispiel/file/01-salzhafen/leuchtturm/lighthouse-arrival");
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await expect(page.locator("[data-callout='readaloud']")).toBeVisible();

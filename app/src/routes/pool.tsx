@@ -256,9 +256,11 @@ export function PlannedGroup({
             its id, which is still the word the DM typed. "" is the group of
             the scenes that name no location at all: a neutral section, not a
             location with an empty name. */}
-        <span className="font-medium text-soft">
+        {/* A real heading: it names a section of the chapter, and the
+            accessibility tree (and the E2E suite) should be able to say so. */}
+        <h3 className="font-medium text-soft">
           {group.slug === "" ? t("pool.group.noLocation") : locationName(tree, group.slug)}
-        </span>
+        </h3>
       </div>
       {planned.map((scene) => (
         <SceneRow key={scene.path} campaign={campaign} scene={scene} tree={tree} />
