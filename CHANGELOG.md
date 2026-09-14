@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/joCur/grimoire/compare/v0.4.1...v0.5.0) (2026-09-14)
+
+
+### Features
+
+* Markdown tables (GFM tables only) in renderer, format and generator prompts ([#96](https://github.com/joCur/grimoire/issues/96)) ([#98](https://github.com/joCur/grimoire/issues/98)) ([69021d7](https://github.com/joCur/grimoire/commit/69021d7eae4df7d7a12324b36cceabcb7fb857e0))
+* persist the review state on the job and accept generator proposals one by one ([#97](https://github.com/joCur/grimoire/issues/97)) ([#101](https://github.com/joCur/grimoire/issues/101)) ([4d727dd](https://github.com/joCur/grimoire/commit/4d727dd5390a4020421652ba865f352d2930d6c8))
+
 ## [0.4.1](https://github.com/joCur/grimoire/compare/v0.4.0...v0.4.1) (2026-09-14)
 
 
