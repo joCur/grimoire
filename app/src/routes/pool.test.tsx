@@ -1,0 +1,78 @@
+// The chapter overview's grouping heading (issue #100).
+//
+// A scene's group IS its `location`, so the heading is the LOCATION'S NAME —
+// and the group `""` is not a location with an empty name but the scenes
+// that name none. They get a neutral section from the catalog („Ohne Ort"),
+// never a blank line where a heading belongs.
+
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { describe, expect, test } from "bun:test";
+import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router";
+import type { CampaignTree, SceneGroup, SceneSummary } from "@grimoire/shared";
+
+import { PlannedGroup } from "./pool";
+
+function scene(id: string, over: Partial<SceneSummary> = {}): SceneSummary {
+  return {
+    path: `01-salzhafen/${id}`,
+    id,
+    title: id,
+    type: "planned",
+    status: "draft",
+    npcs: [],
+    tags: [],
+    ...over,
+  };
+}
+
+const tree = {
+  campaign: "beispiel",
+  chapters: [],
+  npcs: [],
+  locations: [
+    { path: "locations/leuchtturm", id: "leuchtturm", name: "Der Leuchtturm von Salzhafen" },
+    { path: "locations/bucht", id: "bucht", name: "bucht" },
+  ],
+  sessions: [],
+} as unknown as CampaignTree;
+
+function render(group: SceneGroup): string {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return renderToStaticMarkup(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <PlannedGroup campaign="beispiel" group={group} tree={tree} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe("PlannedGroup — the heading is the location", () => {
+  test("a named location heads its group with its NAME, not its slug", () => {
+    const html = render({ slug: "leuchtturm", scenes: [scene("ankunft")] });
+    expect(html).toContain("Der Leuchtturm von Salzhafen");
+    expect(html).not.toContain(">leuchtturm<");
+  });
+
+  test("a location nobody has named yet shows its id", () => {
+    // The entry exists — referencing created it (#70) — and the tree already
+    // degrades its empty name to the id, so the heading is the word the DM
+    // typed and never a guess.
+    const html = render({ slug: "bucht", scenes: [scene("erwischt")] });
+    expect(html).toContain("bucht");
+  });
+
+  test("the scenes without a location get the neutral section", () => {
+    const html = render({ slug: "", scenes: [scene("heimatlos")] });
+    expect(html).toContain("Ohne Ort");
+  });
+
+  test("a group with nothing but contingencies renders nothing at all", () => {
+    const html = render({
+      slug: "",
+      scenes: [scene("notfall", { type: "contingency" })],
+    });
+    expect(html).toBe("");
+  });
+});

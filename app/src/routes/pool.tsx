@@ -233,7 +233,8 @@ function ChapterStatusPill({ status }: { status?: string | undefined }) {
 }
 
 /** One location group with its planned scenes (contingencies render separately). */
-function PlannedGroup({
+/** Exported for the render test — the „Ohne Ort" heading rule (#100). */
+export function PlannedGroup({
   campaign,
   group,
   tree,
