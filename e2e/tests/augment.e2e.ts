@@ -37,6 +37,7 @@ import {
   AUGMENT_NPC_WILL,
   AUGMENT_THREAD_CONDITION,
   AUGMENT_THREAD_TEXT,
+  TRIGGER,
 } from "../fixtures/replies";
 import { expect, test, type Api } from "../support/test";
 
@@ -161,6 +162,10 @@ test("prepared scene: the new thread is added, every existing block survives", a
   const newBlock = page.locator("li").filter({ hasText: AUGMENT_THREAD_CONDITION }).last();
   await expect(newBlock).toContainText("Falls-Abschnitt");
   await expect(newBlock).toContainText("Neu");
+  // The card is the decision, so it has to show the WHOLE section — the DM
+  // cannot accept a branch whose body is nowhere on screen.
+  await expect(newBlock).toContainText(`## If: ${AUGMENT_THREAD_CONDITION}`);
+  await expect(newBlock).toContainText(AUGMENT_THREAD_TEXT);
   await expect(newBlock.getByRole("button", { name: /^Übernehmen: / })).toHaveAttribute(
     "aria-pressed",
     "true",
@@ -195,6 +200,27 @@ test("prepared scene: the new thread is added, every existing block survives", a
   // Path 2: the added branch renders as a real `## If:` section.
   await expect(page.locator("details[data-if-section]")).toHaveCount(3);
   await expect(page.getByText(AUGMENT_THREAD_CONDITION)).toBeVisible();
+});
+
+test("while the run is on, only the run's own controls are there", async ({ page }) => {
+  // TRIGGER.slow holds the reply, so the running phase can actually be
+  // looked at. „Ergänzen"/„Abbrechen" belong to the INPUT phase: over a
+  // running job the first would start nothing (one job per campaign) and the
+  // second reads like a stop that it is not.
+  await page.goto(SCENE_URL);
+  await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
+  await page.getByLabel("Quelltext", { exact: false }).fill(`${INSTRUCTION}\n\n${TRIGGER.slow}`);
+  await page.getByRole("button", { name: "Ergänzen", exact: true }).click();
+
+  const discard = page.getByRole("button", { name: "Lauf verwerfen" });
+  await expect(discard).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "Ergänzen", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Abbrechen", exact: true })).toHaveCount(0);
+
+  // …and the run can be dropped from there, which is the point of the one
+  // button that IS shown.
+  await discard.click();
+  await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
 });
 
 test("rejecting the proposal writes nothing and takes the job with it", async ({

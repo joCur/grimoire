@@ -242,6 +242,11 @@ function AugmentDialog({
           {message ?? ""}
         </p>
 
+        {/* One footer per PHASE — never the input's buttons over a running
+            job. While the run is on, „Ergänzen" would start nothing (one job
+            per campaign) and „Abbrechen" would read like a stop: the only
+            honest controls there are „Lauf verwerfen" and the close cross.
+            The review brings its own footer. */}
         {proposal === undefined && (
           <div className="flex items-center justify-end gap-2">
             {mine && current !== null && current !== undefined && (
@@ -254,22 +259,26 @@ function AugmentDialog({
                 {t("augment.discard")}
               </Button>
             )}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button
-              type="button"
-              disabled={!canStart}
-              onClick={() => start.mutate()}
-              className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
-            >
-              {t(start.isPending ? "augment.starting" : "augment.start")}
-            </Button>
+            {!running && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onClose}
+                  className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
+                >
+                  {t("common.cancel")}
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!canStart}
+                  onClick={() => start.mutate()}
+                  className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
+                >
+                  {t(start.isPending ? "augment.starting" : "augment.start")}
+                </Button>
+              </>
+            )}
           </div>
         )}
       </DialogContent>
