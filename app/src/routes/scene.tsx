@@ -54,33 +54,18 @@ export function SceneRoute() {
   const params = useParams();
   const campaign = params.campaign ?? "";
   const path = params["*"] ?? "";
-  // Edit mode (issue #15) is remembered BY PATH, not as a plain boolean: this
-  // route stays mounted across a navigation, and an editor seeded from another
-  // file would be a lie. Opening a different file simply leaves edit mode.
-  const [editingPath, setEditingPath] = useState<string>();
-  const editing = editingPath !== undefined && editingPath === path;
-  // … and it ENDS at a navigation. Leaving the file drops the draft (accepted
-  // for this slice), so coming back must not re-open the editor unasked: an
-  // editor seeded from disk looks exactly like the one the DM left, and the
-  // paragraph they typed would be silently gone from it.
-  useEffect(() => {
-    setEditingPath(undefined);
-  }, [path]);
-  // `?edit=1` opens edit mode straight away — how a freshly created scene
-  // arrives here (issue #56: a scene with nothing but a title is there to be
-  // written, and „Blöcke" is the composer). The flag is CONSUMED (replace, so
-  // it leaves no history entry): it is an instruction for this navigation, not
-  // a state of the page, and a reload or a „zurück" must not re-open an editor
-  // over a body the DM has meanwhile left.
+  // Edit mode (issue #15) is remembered BY DOCUMENT, not as a plain boolean:
+  // this route stays mounted across a navigation, and an editor seeded from
+  // another file would be a lie. Opening a different file simply leaves edit
+  // mode.
+  //
+  // The document is identified by its `id`, NOT by its address (issue #100):
+  // a scene's address carries its `location`, so correcting the location
+  // while the body editor is open moves the address — and keying on the
+  // address threw the open draft away for a move the DM had just asked for.
+  const [editingId, setEditingId] = useState<string>();
   const [searchParams, setSearchParams] = useSearchParams();
   const wantsEdit = searchParams.get("edit") === "1";
-  useEffect(() => {
-    if (!wantsEdit || path === "") return;
-    setEditingPath(path);
-    const next = new URLSearchParams(searchParams);
-    next.delete("edit");
-    setSearchParams(next, { replace: true });
-  }, [wantsEdit, path, searchParams, setSearchParams]);
   const enabled = campaign !== "" && path !== "";
   const { data, isPending } = useQuery({
     queryKey: ["file", campaign, path],
@@ -92,6 +77,33 @@ export function SceneRoute() {
     queryFn: () => fetchTree(campaign),
     enabled: campaign !== "",
   });
+
+  // What the file on screen IS, across every address it may have: the
+  // properties `id`, which the format calls stable („id … NIE ändern"), with
+  // the canonical address as the fallback for a document whose properties
+  // carries none.
+  const docId = data === undefined ? undefined : (fmString(data.properties.id) ?? data.path);
+  const editing = editingId !== undefined && editingId === docId;
+  // Edit mode ENDS at a navigation. Leaving the file drops the draft
+  // (accepted for this slice), so coming back must not re-open the editor
+  // unasked: an editor seeded from disk looks exactly like the one the DM
+  // left, and the paragraph they typed would be silently gone from it.
+  useEffect(() => {
+    setEditingId(undefined);
+  }, [docId]);
+  // `?edit=1` opens edit mode straight away — how a freshly created scene
+  // arrives here (issue #56: a scene with nothing but a title is there to be
+  // written, and „Blöcke" is the composer). The flag is CONSUMED (replace, so
+  // it leaves no history entry): it is an instruction for this navigation, not
+  // a state of the page, and a reload or a „zurück" must not re-open an editor
+  // over a body the DM has meanwhile left.
+  useEffect(() => {
+    if (!wantsEdit || docId === undefined) return;
+    setEditingId(docId);
+    const next = new URLSearchParams(searchParams);
+    next.delete("edit");
+    setSearchParams(next, { replace: true });
+  }, [wantsEdit, docId, searchParams, setSearchParams]);
 
   // The scene MOVED (issue #100). A scene's group segment is its `location`,
   // so correcting the location rewrites the address — and every link written
@@ -134,17 +146,17 @@ export function SceneRoute() {
   // gone: the editor's own toggle owns the mode from then on.
   const editAction =
     canEditFileBody(data.kind) && !editing ? (
-      <FileBodyEditAction onEdit={() => setEditingPath(path)} />
+      <FileBodyEditAction onEdit={() => setEditingId(docId)} />
     ) : null;
   // The body slot of the article — the editor while edit mode is on, seeded
   // from the file on screen (and re-keyed per path, so it never carries the
   // draft of another file).
   const bodyEditor = editing ? (
     <FileBodyEditor
-      key={data.path}
+      key={docId}
       campaign={campaign}
       file={data}
-      onClose={() => setEditingPath(undefined)}
+      onClose={() => setEditingId(undefined)}
     />
   ) : undefined;
   // „Eigenschaften" (issue #42) — the properties form of the kinds that have
