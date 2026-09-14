@@ -154,8 +154,8 @@ describe("quickstats", () => {
       kind: "pairs",
       entries: [{ key: "insight", value: "+2" }],
     });
-    expect(html).toContain('aria-label="Quickstats, Zeile 1: Name"');
-    expect(html).toContain('aria-label="Quickstats, Zeile 1: Wert"');
+    expect(html).toContain('aria-label="Kurzwerte, Zeile 1: Name"');
+    expect(html).toContain('aria-label="Kurzwerte, Zeile 1: Wert"');
     expect(html).toContain('aria-label="insight entfernen"');
     expect(html).toContain("Zeile hinzufügen");
   });

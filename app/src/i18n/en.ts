@@ -171,7 +171,7 @@ export const en: Messages = {
   "properties.npc.statblock.label": "Statblock",
   "properties.npc.statblock.placeholder": "Roll20: Fenn",
   "properties.npc.statblock.hint": "A reference to the Roll20 sheet, not a copy.",
-  "properties.npc.quickstats.label": "Quickstats",
+  "properties.npc.quickstats.label": "Quick stats",
   "properties.npc.quickstats.hint":
     "Free — only what is needed socially, e.g. insight +2.",
   "properties.npc.voice.label": "Voice",

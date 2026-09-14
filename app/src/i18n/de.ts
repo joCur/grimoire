@@ -189,7 +189,7 @@ export const de = {
   "properties.npc.statblock.label": "Statblock",
   "properties.npc.statblock.placeholder": "Roll20: Fenn",
   "properties.npc.statblock.hint": "Verweis auf das Roll20-Sheet, keine Kopie.",
-  "properties.npc.quickstats.label": "Quickstats",
+  "properties.npc.quickstats.label": "Kurzwerte",
   "properties.npc.quickstats.hint": "Frei — nur was sozial gebraucht wird, z. B. insight +2.",
   "properties.npc.voice.label": "Stimme",
   "properties.npc.voice.hint": "Wie klingt er/sie?",
