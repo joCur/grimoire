@@ -22,6 +22,8 @@
 // Which reply comes back is decided by the PROMPT, never by hidden state, so
 // the stub stays stateless and can serve several test workers at once:
 //
+//   - a "## Bestehender Eintrag" section in the prompt        -> augment run
+//     (issue #36; the reply echoes that entry and adds to it)
 //   - a `chapter: <id>` line in the prompt's "## Kontext" block  -> scene run
 //     (the reply's scene path uses exactly that chapter)
 //   - no chapter line                                            -> npc run
@@ -35,8 +37,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 import {
+  EXISTING_ENTRY_HEADING,
   SLOW_REPLY_MS,
   TRIGGER,
+  augmentReply,
+  invalidAugmentReply,
   invalidNpcReply,
   invalidSceneReply,
   npcReply,
@@ -94,12 +99,31 @@ function knowledgeBlock(prompt: string): string {
 const KNOWLEDGE_HEADING =
   "## Kampagnenwissen — immer anwenden, auch wenn das Quellmaterial anders lautet";
 
+/**
+ * The augment run's target (issue #36): the address out of the „Bestehender
+ * Eintrag" heading, and the entry's markdown out of the fenced block right
+ * below it. Returns null when the prompt has no such section — which is
+ * every create run, and then nothing about the stub changes.
+ */
+function existingEntry(prompt: string): { path: string; markdown: string } | null {
+  const start = prompt.indexOf(EXISTING_ENTRY_HEADING);
+  if (start === -1) return null;
+  const rest = prompt.slice(start + EXISTING_ENTRY_HEADING.length);
+  const address = /^[ \t]*\(([^)]+)\)/.exec(rest);
+  const fence = /```markdown\n([\s\S]*?)```/.exec(rest);
+  if (address === null || fence === null) return null;
+  // buildPrompt joins its sections with a blank line, so the fenced block
+  // arrives padded. The entry itself starts at its properties block.
+  const markdown = fence[1]!.replace(/^\n+/, "").replace(/\n+$/, "\n");
+  return { path: address[1]!.trim(), markdown };
+}
+
 export interface StubDecision {
   /** The reply body (a JSON object, serialized into the message content). */
   reply: unknown;
   /** The endpoint reports the reply as cut off. */
   truncated: boolean;
-  kind: "scene" | "npc";
+  kind: "scene" | "npc" | "augment";
   /** Milliseconds to hold the reply before sending it (TRIGGER.slow). */
   delayMs: number;
 }
@@ -114,6 +138,21 @@ export function decide(messages: ChatMessage[]): StubDecision {
   const delayMs = source.includes(TRIGGER.slow) ? SLOW_REPLY_MS : 0;
   const knowledge = knowledgeBlock(prompt);
   const oldName = source.includes(TRIGGER.oldName);
+
+  // Issue #36: an augment run is the one prompt that carries an EXISTING
+  // entry. It is checked FIRST — a scene augment also carries a `chapter:`
+  // line, and that line is what tells a create run apart from an npc one.
+  const existing = existingEntry(prompt);
+  if (existing !== null) {
+    return {
+      kind: "augment",
+      truncated,
+      delayMs,
+      reply: invalid
+        ? invalidAugmentReply(existing.path)
+        : augmentReply(existing.path, existing.markdown, knowledge),
+    };
+  }
 
   if (chapter === undefined) {
     const pinned = matchLine(prompt, "vorgegebene id");
