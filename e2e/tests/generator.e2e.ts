@@ -116,7 +116,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
 
   // Done state lists exactly what was written — the ADDRESSES, so the DM sees
   // where the scene actually landed and not the model's file name.
-  await expect(page.getByText("Geschrieben — alles als draft")).toBeVisible();
+  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
   await expect(page.getByText(SCENE_PATH)).toBeVisible();
 
   // Stored: the draft plus both stubs, and a location stub without a status.

@@ -593,7 +593,7 @@ export const en: Messages = {
   // --- generator: the run's own errors (routes/generate.tsx) ---------------
   "generate.error.treeScene": "Chapters not loadable — start the Grimoire server on port 3000.",
   "generate.error.treeNpc": "Campaign not loadable — start the Grimoire server on port 3000.",
-  "generate.error.lostJob": "The generator job is gone (server restart?) — start it again.",
+  "generate.error.lostJob": "The run is gone (server restart?) — start it again.",
   "generate.error.noApiKey": "ANTHROPIC_API_KEY missing — see server/.env",
   "generate.error.npcExists":
     "NPC already exists — pick another id; existing entries are never overwritten.",

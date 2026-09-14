@@ -637,7 +637,7 @@ export const de = {
   "generate.error.treeScene": "Kapitel nicht ladbar — Grimoire-Server auf Port 3000 starten.",
   "generate.error.treeNpc": "Kampagne nicht ladbar — Grimoire-Server auf Port 3000 starten.",
   "generate.error.lostJob":
-    "Der Generierungs-Job ist nicht mehr vorhanden (Server-Neustart?) — erneut starten.",
+    "Der Lauf ist nicht mehr vorhanden (Server-Neustart?) — erneut starten.",
   "generate.error.noApiKey": "ANTHROPIC_API_KEY fehlt — siehe server/.env",
   "generate.error.npcExists":
     "NPC existiert schon — andere id wählen; bestehende Einträge werden nie überschrieben.",
@@ -705,7 +705,7 @@ export const de = {
   "generate.stub.rejected": "Abgelehnt",
 
   // --- generator: what was written (routes/generate.tsx) ------------------
-  "generate.written.title.scene": "Geschrieben — alles als draft",
+  "generate.written.title.scene": "Geschrieben — alles als Entwurf",
   "generate.written.title.npc": "Geschrieben — NPC-Eintrag angelegt",
   "generate.written.hint.scene":
     "Die Szenen erscheinen in den Kapiteln mit Status „Entwurf“. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
