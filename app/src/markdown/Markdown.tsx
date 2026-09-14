@@ -21,6 +21,7 @@ import {
   ENTITY_REF_PLAIN_ATTR,
   remarkGrimoire,
 } from "./remark-grimoire";
+import { remarkTable } from "./remark-table";
 
 const components: Components = {
   section(props) {
@@ -61,12 +62,39 @@ const components: Components = {
       </details>
     );
   },
+  // A table (issue #96) never widens the page: it scrolls inside its own box.
+  // The wrapper is focusable and named, because a scroll container the mouse
+  // can reach has to be reachable by keyboard too (quality floor).
+  table(props) {
+    const { node: _node, children, ...rest } = props;
+    return <TableScroll {...rest}>{children}</TableScroll>;
+  },
   summary(props) {
     // Summaries only come from the plugin (raw HTML is not rendered).
     const { node: _node, children, ...rest } = props;
     return <IfSummary {...rest}>{children}</IfSummary>;
   },
 };
+
+/**
+ * The horizontal-scroll box around a rendered table. `min-w-0` on the callout
+ * body and `max-w-full` here are what keep a wide W6 table from pushing the
+ * page sideways at 390px — the box scrolls, `document.documentElement` does
+ * not (E2E, critical path 2).
+ */
+function TableScroll({ children, ...rest }: ComponentProps<"table">) {
+  const t = useT();
+  return (
+    <div
+      role="region"
+      aria-label={t("markdown.table.aria")}
+      tabIndex={0}
+      className="md-table-scroll"
+    >
+      <table {...rest}>{children}</table>
+    </div>
+  );
+}
 
 /**
  * The summary row of an `## If:` branch: chevron, the brass „Falls:" prefix
@@ -130,7 +158,7 @@ function parseCopyParts(value: string): EntityRefPiece[] {
   }
 }
 
-const remarkPlugins = [remarkGrimoire];
+const remarkPlugins = [remarkTable, remarkGrimoire];
 
 export function Markdown({ children }: { children: string }) {
   return (

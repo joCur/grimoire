@@ -261,6 +261,51 @@
     overflow-x: auto;
   }
   .md-body pre code { background: none; padding: 0; }
+
+  /* Tables (issue #96) — the one borrowed GFM construct. Dense enough that a
+     W6 table reads as one object, and always inside its own scroll box: on a
+     390px phone the TABLE scrolls, never the page. */
+  .md-table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 0 0 14px;
+    /* A focusable scroll box must show its focus like every other control. */
+    border-radius: var(--radius-sm);
+  }
+  .md-body table {
+    border-collapse: collapse;
+    /* `auto` + `min-content` keeps a narrow table narrow and lets a wide one
+       overflow INTO the scroll box instead of squeezing its columns. */
+    width: auto;
+    min-width: min-content;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  .md-body th,
+  .md-body td {
+    border-bottom: 1px solid var(--color-border);
+    padding: 5px 12px 5px 0;
+    text-align: start;
+    vertical-align: top;
+  }
+  .md-body th:last-child,
+  .md-body td:last-child { padding-inline-end: 0; }
+  /* The header row is the distinguishing element — same overline vocabulary
+     the H2 uses, so a table looks like it belongs to this document. */
+  .md-body thead th {
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--muted-foreground);
+    border-bottom-color: var(--color-input);
+    white-space: nowrap;
+  }
+  .md-body tbody tr:last-child th,
+  .md-body tbody tr:last-child td { border-bottom: 0; }
+  /* A table inside a callout carries the callout's own text color. */
+  .md-body [data-callout] .md-table-scroll { margin-block-end: 0; }
+  .md-body [data-callout] table { color: inherit; }
   .md-body hr {
     border: 0;
     border-top: 1px solid var(--color-border);

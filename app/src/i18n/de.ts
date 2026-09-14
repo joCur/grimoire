@@ -733,6 +733,9 @@ export const de = {
   "markdown.readaloud.copied": "Kopiert",
   "markdown.readaloud.copy.aria": "Vorlesetext kopieren",
   "markdown.readaloud.copied.aria": "Vorlesetext kopiert",
+  // The scroll container around a table (issue #96): on a phone the table
+  // scrolls, the page never does — and a scrollable box needs a name.
+  "markdown.table.aria": "Tabelle",
 
   // --- the Block-Composer (components/BlockComposer.tsx, lib/blocks.ts,
   //     lib/composer.ts) ----------------------------------------------------

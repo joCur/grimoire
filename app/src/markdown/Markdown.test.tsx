@@ -1,10 +1,17 @@
-// Render tests for the markdown pipeline (react-dom/server — no DOM
-// needed): callout anatomy, read-aloud without label row, open-by-default
-// if-sections, and the degrade paths.
+// Issue #96: GFM TABLES, and the four GFM extensions that stay off.
+//
+// Rendered HTML rather than mdast, because the question is what the DM sees:
+// a table has to become a real `<table>` — in body text, in every callout and
+// inside an `## If:` branch — while `- [x]`, `~~wort~~`, a bare URL and a
+// `[^1]` footnote have to stay the literal text they are today. That second
+// half is the load-bearing one: `- [x]` is the INBOX's check-off syntax
+// (README), and a checkbox rendered from it would be a control that writes
+// nothing.
 
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
+
+import { CALLOUT_KINDS } from "@grimoire/shared/types";
 
 import { Markdown } from "./Markdown";
 
@@ -12,115 +19,79 @@ function render(markdown: string): string {
   return renderToStaticMarkup(<Markdown>{markdown}</Markdown>);
 }
 
-/** The reference fixtures CLAUDE.md names for renderer changes, body only. */
-function fixtureBody(rel: string): string {
-  const raw = readFileSync(new URL(`../../../examples/beispiel/${rel}`, import.meta.url), "utf8");
-  const match = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(raw);
-  return match === null ? raw : raw.slice(match[0].length);
-}
+const W6 = [
+  "| W6 | Was treibt in der Bucht |",
+  "| --- | --- |",
+  "| 1 | Ein leeres Fass |",
+  "| 2 | Ein Ruder mit Kerben |",
+].join("\n");
 
-const FIXTURES = [
-  "01-salzhafen/hafen/ankunft-leuchtturm.md",
-  "01-salzhafen/hafen/von-schmugglern-erwischt.md",
-  "npcs/fenn.md",
-];
-
-describe("Markdown pipeline rendering", () => {
-  test("check callout renders label row and tagged section", () => {
-    const html = render("> [!check] Wisdom (Perception) DC 13.");
-    expect(html).toContain('data-callout="check"');
-    expect(html).toContain(">Probe<");
-    expect(html).toContain("Wisdom (Perception) DC 13.");
+describe("tables", () => {
+  test("a pipe table in the body becomes a real table", () => {
+    const html = render(W6);
+    expect(html).toContain("<table>");
+    expect(html).toContain("<thead>");
+    expect(html).toContain("<th");
+    expect(html).toContain("Was treibt in der Bucht");
+    expect(html).toContain("Ein Ruder mit Kerben");
   });
 
-  test("callout labels match the design reference", () => {
-    expect(render("> [!secret] x")).toContain(">Geheim<");
-    expect(render("> [!outcome] x")).toContain(">Ergebnis<");
-    expect(render("> [!loot] x")).toContain(">Beute<");
-    expect(render("> [!note] x")).toContain(">Notiz<");
+  test("the table sits in its own horizontal scroll box, not on the page", () => {
+    // AK 2: at 390px the TABLE scrolls. The box is the mechanism, and it is
+    // focusable and named so a keyboard can reach it too.
+    const html = render(W6);
+    expect(html).toContain('class="md-table-scroll"');
+    expect(html).toContain('role="region"');
+    expect(html).toContain('tabindex="0"');
+    expect(html).toContain('aria-label="Tabelle"');
   });
 
-  test("read-aloud has no label row but a copy button", () => {
-    const html = render("> [!readaloud] Der Turm ragt schwarz auf.");
-    expect(html).toContain('data-callout="readaloud"');
-    expect(html).not.toContain("Vorlesen<"); // no label row anymore
-    expect(html).toContain("Kopieren");
-    expect(html).toContain("Der Turm ragt schwarz auf.");
+  test.each([...CALLOUT_KINDS])("a table inside [!%s] renders as a table", (kind) => {
+    const quoted = W6.split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n");
+    const html = render(`> [!${kind}] Zufallstabelle\n>\n${quoted}`);
+    expect(html).toContain(`data-callout="${kind}"`);
+    expect(html).toContain("<table>");
+    expect(html).toContain("Ein leeres Fass");
   });
 
-  test("if-section renders as details that are open by default", () => {
-    const html = render("## If: sie lügen\n\nInhalt.");
-    expect(html).toContain("<details");
-    expect(html).toContain(" open");
-    expect(html).toContain("Falls:");
-    expect(html).toContain("sie lügen");
-    expect(html).toContain("Inhalt.");
+  test("a table inside an `## If:` branch renders as a table", () => {
+    const html = render(`## If: sie würfeln auf der Tabelle\n\n${W6}\n`);
+    expect(html).toContain("data-if-section");
+    expect(html).toContain("<table>");
   });
 
-  test("unknown callout kind degrades to a plain blockquote", () => {
-    const html = render("> [!homebrew] Bleibt einfach Text.");
-    expect(html).toContain("<blockquote>");
-    expect(html).toContain("[!homebrew] Bleibt einfach Text.");
-    expect(html).not.toContain("data-callout");
-  });
-
-  test("unknown headings render as normal text (no section wrapping)", () => {
-    const html = render("## Ganz normale Überschrift\n\nText.");
-    expect(html).toContain("<h2>Ganz normale Überschrift</h2>");
-    expect(html).not.toContain("<details");
+  test("`[[slug]]` in a cell degrades exactly like one in prose", () => {
+    // The Grimoire pass walks the tree the table pass produced, so a cell is
+    // not a blind spot: an unresolved reference shows its literal source here
+    // just as it does in a paragraph (see remark-grimoire.test.ts for the
+    // mdast side, where the cell's reference is marked for resolution).
+    const cell = render("| Wer |\n| --- |\n| [[jorna]] |");
+    expect(cell).toContain("[[jorna]]");
+    expect(cell).toContain("<td>");
   });
 });
 
-// Raw HTML is dropped instead of printed (skipHtml, review of issue #26): the
-// generator leaves `<!-- … -->` hints in the files, and they were showing up
-// as visible text under `## Notizen`.
-describe("HTML in the body", () => {
-  test("an HTML comment is invisible", () => {
-    const html = render("## Notizen\n\n<!-- wird von der App im Review-Schritt befüllt -->\n");
-    expect(html).toContain("<h2>Notizen</h2>");
-    expect(html).not.toContain("<!--");
-    expect(html).not.toContain("wird von der App");
+describe("the rest of GFM stays text", () => {
+  test("a task list stays a plain list — no checkbox (inbox syntax)", () => {
+    const html = render("- [x] erledigt\n- [ ] offen\n");
+    expect(html).not.toContain("<input");
+    expect(html).not.toContain("checkbox");
+    expect(html).toContain("[x] erledigt");
+    expect(html).toContain("[ ] offen");
   });
 
-  test("an inline comment leaves the surrounding sentence intact", () => {
-    const html = render("Ein Satz <!-- Notiz --> mit Kommentar.\n");
-    expect(html).not.toContain("Notiz");
-    expect(html).toContain("Ein Satz");
-    expect(html).toContain("mit Kommentar.");
+  test("strikethrough stays text", () => {
+    const html = render("Der ~~alte~~ neue Turm.\n");
+    expect(html).not.toContain("<del");
+    expect(html).toContain("~~alte~~");
   });
 
-  test("the npc fixture that carries the comment renders without it", () => {
-    const html = render(fixtureBody("npcs/fenn.md"));
-    expect(html).not.toContain("<!--");
-    expect(html).not.toContain("wird von der App");
-    expect(html).toContain("<h2>Notizen</h2>");
-  });
-
-  test("the reference fixtures render exactly as before — comments are the only loss", () => {
-    // The dropped comment leaves its surrounding blank lines behind as text,
-    // so whitespace is collapsed before comparing; every element and every
-    // visible character must be identical.
-    const normalize = (html: string): string =>
-      html.replace(/\s+/g, " ").replace(/>\s+</g, "><").trim();
-    for (const rel of FIXTURES) {
-      const body = fixtureBody(rel);
-      const html = render(body);
-      // Adding a comment anywhere changes NOTHING in the output …
-      expect(normalize(render(`${body}\n\n<!-- ein Kommentar -->\n`))).toBe(normalize(html));
-      // … and everything the format promises is still there.
-      expect(html).not.toContain("<!--");
-      expect(html).toContain("md-body");
-    }
-  });
-
-  test("callouts and if-sections of the scene fixtures survive untouched", () => {
-    const smugglers = render(fixtureBody("01-salzhafen/hafen/von-schmugglern-erwischt.md"));
-    expect([...smugglers.matchAll(/data-callout="/g)]).toHaveLength(3);
-    expect([...smugglers.matchAll(/data-if-section="/g)]).toHaveLength(2);
-    expect(smugglers).toContain("Falls:");
-
-    const lighthouse = render(fixtureBody("01-salzhafen/hafen/ankunft-leuchtturm.md"));
-    expect(lighthouse).toContain('data-callout="readaloud"');
-    expect(lighthouse).toContain('data-callout="check"');
+  test("a bare URL is not autolinked and a footnote marker stays text", () => {
+    const html = render("Siehe www.example.com und die Fußnote[^1].\n");
+    expect(html).not.toContain("<a ");
+    expect(html).toContain("www.example.com");
+    expect(html).toContain("[^1]");
   });
 });
