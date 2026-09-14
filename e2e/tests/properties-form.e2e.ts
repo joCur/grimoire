@@ -85,6 +85,9 @@ test("scene properties: chips, reference and status land in the file — nothing
   // the only way to put it there now — nobody hand-edits a row.)
   await api.patchProperties(SCENE, { "x-custom": "bleibt" });
 
+  // Entered from the pool, so there is a history entry BEHIND the scene —
+  // the „zurück" assertion after the move below needs one.
+  await page.goto("/beispiel");
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
 
@@ -170,6 +173,17 @@ test("scene properties: chips, reference and status land in the file — nothing
   await expect(page).toHaveURL(
     /\/beispiel\/file\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
   );
+  // „Zurück" must not return to the address the scene just left: the redirect
+  // REPLACES the history entry, so the step back is the page the DM came from
+  // (the pool), never `…/leuchtturm/lighthouse-arrival` — which would reload,
+  // redirect forward again and trap the button.
+  await page.goBack();
+  await expect(page).toHaveURL(/\/beispiel$/);
+  await page.goForward();
+  await expect(page).toHaveURL(
+    /\/beispiel\/file\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
+  );
+
   // The chapter overview re-sorts: a „nordbucht" section, no „leuchtturm" one.
   await page.goto("/beispiel");
   await expect(page.getByRole("heading", { level: 3, name: "nordbucht" })).toBeVisible();

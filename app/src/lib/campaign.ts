@@ -6,15 +6,21 @@ import type { CampaignSummary, CampaignTree } from "@grimoire/shared/types";
 import { parseLocalDateTime } from "@/lib/session";
 
 /**
- * Resolve a location id to its display name via the tree; free strings
- * and unknown ids pass through unchanged (degrade).
+ * Resolve a location id to its display name via the tree; an unknown id
+ * passes through unchanged (degrade).
+ *
+ * An entry whose `name` is EMPTY degrades to the id too — that is the state
+ * „Referenzieren legt an" (#70) leaves behind, and the id is still the word
+ * the DM typed. The tree already degrades it server-side; doing it here as
+ * well means no caller can render a blank chip or breadcrumb for it.
  */
 export function locationName(
   tree: CampaignTree | undefined,
   location: string | undefined,
 ): string | undefined {
   if (location === undefined) return undefined;
-  return tree?.locations.find((l) => l.id === location)?.name ?? location;
+  const name = tree?.locations.find((l) => l.id === location)?.name;
+  return name === undefined || name === "" ? location : name;
 }
 
 /**

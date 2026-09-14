@@ -317,7 +317,6 @@ export const de = {
   "lookup.heading": "Nachschlagen",
 
   // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
-  "pool.group.noLocation": "Ohne Ort",
   "server.slug_taken": '{kind} „{id}" existiert schon — Vorschlag: „{suggestion}"',
   "server.slug_reserved": '„{id}" ist ein reservierter Name — Vorschlag: „{suggestion}"',
   "server.slug_empty": "{field} ergibt keine id — bitte Buchstaben oder Ziffern verwenden.",
@@ -376,6 +375,8 @@ export const de = {
   // one form for both plural categories here — the ICU shape stays, so `en`
   // can differ without a second call site.
   "pool.chapterCount": "{count, plural, one {# Kapitel} other {# Kapitel}}",
+  // Die Restsektion eines Kapitels: Szenen, die keinen Ort nennen (#100).
+  "pool.group.noLocation": "Ohne Ort",
   "pool.sceneCount": "{count, plural, =0 {keine Szenen} one {# Szene} other {# Szenen}}",
   "pool.chapter.goal": "Ziel: {goal}",
   "pool.chapter.empty": "Noch keine Szenen in diesem Kapitel.",

@@ -116,7 +116,11 @@ export function SceneRoute() {
   const navigate = useNavigate();
   useEffect(() => {
     if (canonical === undefined || canonical === path) return;
-    navigate(`/${campaign}/file/${canonical}`, { replace: true });
+    // Encoded PER SEGMENT, like every other file link the app builds
+    // (lib/search.ts): the slashes are the address, everything else is a
+    // segment that may carry anything an id may carry.
+    const target = canonical.split("/").map(encodeURIComponent).join("/");
+    navigate(`/${encodeURIComponent(campaign)}/file/${target}`, { replace: true });
   }, [campaign, canonical, path, navigate]);
 
   if (isPending) {

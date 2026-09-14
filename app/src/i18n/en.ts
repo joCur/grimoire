@@ -291,12 +291,11 @@ export const en: Messages = {
   // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
   "server.slug_taken": '{kind} “{id}” already exists — suggestion: “{suggestion}”',
   "server.slug_reserved": '“{id}” is a reserved name — suggestion: “{suggestion}”',
-  "pool.group.noLocation": "No location",
   "server.slug_empty": "{field} yields no id — please use letters or digits.",
   "server.location_not_an_id":
-    'Location "{value}" is not a location id — use "{suggestion}"; the entry is created for you.',
+    'Location “{value}” is not a location id — use “{suggestion}”; the entry is created for you.',
   "server.location_not_an_id.noSuggestion":
-    'Location "{value}" is not a location id — please use lowercase letters, digits and dashes.',
+    'Location “{value}” is not a location id — please use lowercase letters, digits and dashes.',
   "server.glossary_duplicate_term":
     'Glossary term “{term}” appears more than once — please merge the entries.',
   "server.session_running": "An older session is still running — end it first.",
@@ -348,6 +347,8 @@ export const en: Messages = {
   "pool.empty":
     "No chapters yet. A chapter is the bracket around scenes — the first scene goes inside one.",
   "pool.chapterCount": "{count, plural, one {# chapter} other {# chapters}}",
+  // The chapter's leftovers section: the scenes that name no location (#100).
+  "pool.group.noLocation": "No location",
   "pool.sceneCount": "{count, plural, =0 {no scenes} one {# scene} other {# scenes}}",
   "pool.chapter.goal": "Goal: {goal}",
   "pool.chapter.empty": "No scenes in this chapter yet.",
