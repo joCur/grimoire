@@ -13,7 +13,7 @@ import {
   tokenizeWords,
   wordDiff,
 } from "./augment";
-import { blockMarkdown } from "./blocks";
+import { blockMarkdown, blockTreeMarkdown } from "./blocks";
 
 describe("wordDiff", () => {
   test("tokenizing is lossless", () => {
@@ -97,6 +97,35 @@ describe("alignBlocks", () => {
     expect(blockMarkdown(added[0]!.after!)).toContain("## If: die Gruppe fragt nach dem Spitzel");
     // AK2 default: new material is preselected.
     expect(defaultAccepted(changes)).toEqual(new Set(added.map((c) => c.id)));
+  });
+
+  test("an added `## If:` section carries its BODY, not just the heading", () => {
+    // The card shows one block per decision, so the section the DM accepts
+    // has to be READABLE in it — heading and paragraph. Before this the
+    // section's body lived in `children` and no card ever printed it.
+    const body = "[[jorna]] wird einsilbig und schiebt die Frage auf den nächsten Morgen.";
+    const proposed = `${CURRENT}\n## If: die Gruppe fragt nach dem Spitzel\n\n${body}\n`;
+    const changes = alignBlocks(CURRENT, proposed);
+    const added = changes.filter((c) => c.kind === "added");
+    expect(added).toHaveLength(1);
+    const shown = blockTreeMarkdown(added[0]!.after!);
+    expect(shown).toContain("## If: die Gruppe fragt nach dem Spitzel");
+    expect(shown).toContain(body);
+    // …and accepting it writes exactly that.
+    expect(assembleBody(changes, defaultAccepted(changes))).toContain(body);
+  });
+
+  test("an `## If:` section whose BODY alone changed is a decision, not `same`", () => {
+    // The heading is byte-identical; aligning on the heading line alone made
+    // the rewritten branch invisible.
+    const current = `${CURRENT}\n## If: die Gruppe fragt nach dem Spitzel\n\nJorna wird einsilbig.\n`;
+    const proposed = current.replace("Jorna wird einsilbig.", "Jorna wird sehr einsilbig.");
+    const changes = alignBlocks(current, proposed);
+    const changed = changes.filter((c) => c.kind === "changed");
+    expect(changed).toHaveLength(1);
+    expect(blockTreeMarkdown(changed[0]!.after!)).toContain("Jorna wird sehr einsilbig.");
+    // A rewrite is never preselected.
+    expect(defaultAccepted(changes).size).toBe(0);
   });
 
   test("a rewritten paragraph is ONE changed block with a word diff", () => {

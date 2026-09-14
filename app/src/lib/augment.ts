@@ -25,7 +25,7 @@
 // the byte-identical original (blocks.ts' round-trip invariant).
 
 import {
-  blockMarkdown,
+  blockTreeMarkdown,
   parseBlocks,
   serializeBlocks,
   type SceneBlock,
@@ -279,8 +279,12 @@ export interface BlockChange {
 export function alignBlocks(currentBody: string, proposedBody: string): BlockChange[] {
   const current = parseBlocks(currentBody);
   const proposed = parseBlocks(proposedBody);
-  const a = current.map(blockMarkdown);
-  const b = proposed.map(blockMarkdown);
+  // An `## If:` section is compared and shown as a WHOLE (heading + body):
+  // `blockMarkdown` answers for the heading line alone, which made a NEW
+  // section show as a bare heading in the review, and a section whose body
+  // alone changed align as `same` (issue #36).
+  const a = current.map(blockTreeMarkdown);
+  const b = proposed.map(blockTreeMarkdown);
   const pairs = lcsPairs(a, b);
   const out: BlockChange[] = [];
   let counter = 0;
@@ -297,7 +301,7 @@ export function alignBlocks(currentBody: string, proposedBody: string): BlockCha
     let paired = 0;
     while (
       paired < shared &&
-      similarity(blockMarkdown(removed[paired]!), blockMarkdown(added[paired]!)) >=
+      similarity(blockTreeMarkdown(removed[paired]!), blockTreeMarkdown(added[paired]!)) >=
         PAIR_SIMILARITY
     ) {
       const beforeBlock = removed[paired]!;
@@ -307,7 +311,7 @@ export function alignBlocks(currentBody: string, proposedBody: string): BlockCha
         kind: "changed",
         before: beforeBlock,
         after: afterBlock,
-        words: wordDiff(blockMarkdown(beforeBlock), blockMarkdown(afterBlock)),
+        words: wordDiff(blockTreeMarkdown(beforeBlock), blockTreeMarkdown(afterBlock)),
       });
       paired += 1;
     }
