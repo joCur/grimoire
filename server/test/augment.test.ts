@@ -431,3 +431,51 @@ describe("accept", () => {
     expect((await apply({ path: NPC, rev: before.rev, properties: {} })).status).toBe(400);
   });
 });
+
+// --- the naming check (issue #53 AK3, „läuft auch hier") ----------------------
+
+describe("naming check", () => {
+  async function setKnowledge(entries: unknown[]): Promise<void> {
+    const current = await app.request(`/api/${CAMPAIGN}/knowledge`);
+    const { rev } = (await current.json()) as { rev: number };
+    const res = await app.request(`/api/${CAMPAIGN}/knowledge`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ entries, rev }),
+    });
+    expect(res.status).toBe(200);
+  }
+
+  afterEach(async () => {
+    await setKnowledge([]);
+  });
+
+  test("a proposal that keeps the old spelling is a HINT, never a failure", async () => {
+    await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
+    const file = await read(NPC);
+    const content = file.raw.replace(
+      "## Notizen",
+      "> [!secret] Sie kam aus Salt Harbour zurück.\n\n## Notizen",
+    );
+    useFake([augmentReply(NPC, content)]);
+    const job = await runAugmentJob({ path: NPC, instruction: "Hintergrund ergänzen" });
+    // The run SUCCEEDED — the check never blocks an augment either.
+    expect(job.status).toBe("done");
+    const result = job.augmentResult as AugmentResult;
+    expect(result.namingHints).toHaveLength(1);
+    expect(result.namingHints![0]).toMatchObject({
+      from: "Salt Harbour",
+      to: "Salzhafen",
+      path: NPC,
+    });
+  });
+
+  test("a proposal that follows the convention produces no hint", async () => {
+    await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
+    const file = await read(NPC);
+    useFake([augmentReply(NPC, file.raw.replace("## Notizen", "## Notizen\n\nSalzhafen."))]);
+    const job = await runAugmentJob({ path: NPC, instruction: "x" });
+    expect(job.status).toBe("done");
+    expect((job.augmentResult as AugmentResult).namingHints).toBeUndefined();
+  });
+});
