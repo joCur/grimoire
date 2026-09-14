@@ -318,11 +318,6 @@ export function GenerateRoute() {
           : {}),
       });
     },
-    onMutate: (paths) => {
-      // Only a FULL accept can drop the job; a partial one leaves it there,
-      // and a job that stays must not be mistaken for one that vanished.
-      if (paths === undefined) droppedRef.current = true;
-    },
     onError: (error) => {
       // The accept carries the review rev (issue #97 review, finding 3): a
       // 409 `rev_conflict` means another tab decided in between and NOTHING
@@ -334,6 +329,10 @@ export function GenerateRoute() {
     },
     onSuccess: (data) => {
       const addresses = Object.values(data.written);
+      // ONLY the answer decides: a bulk accept whose rest did not settle the
+      // run leaves the job there, and marking it dropped up front turned a
+      // job that is still open into one that „vanished" (issue #97 review,
+      // finding 7).
       if (data.jobDeleted) {
         droppedRef.current = true;
         setWritten((prev) => [...(prev ?? []), ...addresses]);
