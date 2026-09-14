@@ -164,9 +164,17 @@ describe("tables", () => {
     // AK 2: at 390px the TABLE scrolls. The box is the mechanism.
     const html = render(W6);
     expect(html).toContain('class="md-table-scroll"');
-    expect(html).toContain('role="region"');
-    expect(html).toContain('tabindex="0"');
-    expect(html).toContain('aria-label="Tabelle"');
+  });
+
+  test("the box is only a focusable region once it really overflows", () => {
+    // Nothing has been measured at render time, so the box is plain markup:
+    // the tab stop and the landmark are added by the layout effect, and only
+    // while `scrollWidth > clientWidth`. A table that fits is not a control.
+    // The overflowing case is an E2E assertion (critical path 2, 390px).
+    const html = render(W6);
+    expect(html).not.toContain('role="region"');
+    expect(html).not.toContain('tabindex="0"');
+    expect(html).not.toContain('aria-label="Tabelle"');
   });
 
   test.each([...CALLOUT_KINDS])("a table inside [!%s] renders as a table", (kind) => {

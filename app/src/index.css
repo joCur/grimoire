@@ -269,7 +269,9 @@
     max-width: 100%;
     overflow-x: auto;
     margin: 0 0 14px;
-    /* A focusable scroll box must show its focus like every other control. */
+    /* Rounded so the global `:focus-visible` outline — the one that gives
+       this box its focus ring while it is focusable (overflowing) — follows
+       the box instead of cutting its corners. */
     border-radius: var(--radius-sm);
   }
   .md-body table {

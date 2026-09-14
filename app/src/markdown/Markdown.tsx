@@ -6,7 +6,7 @@
 // italic condition — over 18px-indented content, no box.
 
 import { ChevronDown } from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 
 import { renderEntityRefPieces, type EntityRefPiece } from "@grimoire/shared/refs";
@@ -63,8 +63,6 @@ const components: Components = {
     );
   },
   // A table (issue #96) never widens the page: it scrolls inside its own box.
-  // The wrapper is focusable and named, because a scroll container the mouse
-  // can reach has to be reachable by keyboard too (quality floor).
   table(props) {
     const { node: _node, children, ...rest } = props;
     return <TableScroll {...rest}>{children}</TableScroll>;
@@ -81,14 +79,43 @@ const components: Components = {
  * body and `max-w-full` here are what keep a wide W6 table from pushing the
  * page sideways at 390px — the box scrolls, `document.documentElement` does
  * not (E2E, critical path 2).
+ *
+ * The box becomes a focusable, named region ONLY while it actually overflows:
+ * a narrow two-column table that fits has nothing to scroll, and a tab stop
+ * plus a landmark announcement there would be noise in the reading flow.
+ * A `ResizeObserver` re-decides on every width change (rotation, sidebar).
  */
 function TableScroll({ children, ...rest }: ComponentProps<"table">) {
   const t = useT();
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const [overflows, setOverflows] = useState(false);
+
+  const measure = useCallback(() => {
+    const box = boxRef.current;
+    if (box === null) return;
+    setOverflows(box.scrollWidth > box.clientWidth);
+  }, []);
+
+  useEffect(() => {
+    const box = boxRef.current;
+    if (box === null) return;
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
+    const table = box.firstElementChild;
+    if (table !== null) observer.observe(table);
+    return () => {
+      observer.disconnect();
+    };
+  }, [measure]);
+
   return (
     <div
-      role="region"
-      aria-label={t("markdown.table.aria")}
-      tabIndex={0}
+      ref={boxRef}
+      role={overflows ? "region" : undefined}
+      aria-label={overflows ? t("markdown.table.aria") : undefined}
+      tabIndex={overflows ? 0 : undefined}
       className="md-table-scroll"
     >
       <table {...rest}>{children}</table>
