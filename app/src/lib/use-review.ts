@@ -19,15 +19,22 @@ import { sceneTitle } from "@/lib/campaign";
 import { fmStringArray } from "@/lib/properties";
 import { useActedKeys } from "@/lib/review-memory";
 import {
+  PC_TAG,
+  extractHashtags,
   firstReviewTag,
+  groupByPcTag,
   harvestInboxEntries,
+  hasPcTag,
   inboxNoteEntries,
+  inboxPcEntries,
+  pcGroupTag,
   isReviewTag,
   shortLineHashes,
   stripHashtags,
   tagAllowsNpc,
   tagAllowsThread,
 } from "@/lib/review";
+import type { LogEntry } from "@/lib/session";
 import { parseLogEntries } from "@/lib/session";
 import { useLastStartedSession } from "@/lib/use-session";
 
@@ -40,10 +47,11 @@ export interface ReviewEntry {
   source: "log" | "inbox";
   /**
    * Which list the entry belongs to (issue #85): the tagged harvest, or the
-   * „Notizen" section of untagged inbox lines thrown in on the go. The
-   * counting is the same for both — one source for page and topbar.
+   * „Notizen" section of untagged inbox lines thrown in on the go, or the
+   * „Spielercharaktere" of `#pc` lines (issue #86). The counting is the same
+   * for all of them — one source for page and topbar.
    */
-  section: "harvest" | "notes";
+  section: "harvest" | "notes" | "pc";
   /**
    * Prototype card label — "Inbox", or "Log" plus the SCENE the line was
    * written under ("Log · Ankunft am Leuchtturm", issue #34). The scene id
@@ -62,6 +70,8 @@ export interface ReviewEntry {
   rawLine: string;
   /** Short hash of rawLine — log entries only. */
   hash?: string;
+  /** The character tag of a `#pc` entry — undefined means „Allgemein". */
+  pcGroup?: string;
   done: boolean;
   canThread: boolean;
   canNpc: boolean;
@@ -87,6 +97,24 @@ export interface ReviewModel {
 
 interface UseReviewOptions {
   enabled?: boolean;
+}
+
+/** The „Spielercharaktere" entries of a model, grouped by character tag. */
+export function pcGroups(entries: readonly ReviewEntry[]) {
+  return groupByPcTag(
+    entries.filter((entry) => entry.section === "pc"),
+    (entry) => entry.pcGroup,
+  );
+}
+
+/** A log line the review shows — with the tag that put it there. */
+interface HarvestedLogLine {
+  entry: LogEntry;
+  index: number;
+  tag: string;
+  /** A `#pc` line (issue #86) — its own section, no adoption. */
+  pc: boolean;
+  pcGroup?: string;
 }
 
 export function useReviewEntries(
@@ -137,13 +165,22 @@ export function useReviewEntries(
 
   // Tagged log lines (README: #thread/#npc/#loot/#decision), keeping the raw
   // line and the index in the full log for the hash and the stable key.
-  const logLines = useMemo(
+  const logLines = useMemo<HarvestedLogLine[]>(
     () =>
       parseLogEntries(sessionBody)
         .map((entry, index) => ({ entry, index }))
         .flatMap(({ entry, index }) => {
+          const tags = extractHashtags(entry.text);
+          // `#pc` wins over the harvest tags (README): the line is a reminder
+          // for the table, not campaign content.
+          if (hasPcTag(tags)) {
+            const line: HarvestedLogLine = { entry, index, tag: PC_TAG, pc: true };
+            const group = pcGroupTag(tags);
+            if (group !== undefined) line.pcGroup = group;
+            return [line];
+          }
           const tag = firstReviewTag(entry.text);
-          return tag === undefined ? [] : [{ entry, index, tag }];
+          return tag === undefined ? [] : [{ entry, index, tag, pc: false }];
         }),
     [sessionBody],
   );
@@ -168,13 +205,13 @@ export function useReviewEntries(
 
   const entries = useMemo<ReviewEntry[]>(() => {
     const hashOf = hashes.data;
-    const logEntries: ReviewEntry[] = logLines.map(({ entry, index, tag }) => {
+    const logEntries: ReviewEntry[] = logLines.map(({ entry, index, tag, pc, pcGroup }) => {
       const hash = hashOf?.[entry.raw];
       const scene = sceneTitle(treeData, entry.sceneId);
       const item: ReviewEntry = {
         key: `log:${index}`,
         source: "log",
-        section: "harvest",
+        section: pc ? "pc" : "harvest",
         // The scene is part of ONE sentence („Log · Ankunft am Leuchtturm"),
         // so the separator travels with the message instead of being glued on.
         sourceLabel:
@@ -183,9 +220,11 @@ export function useReviewEntries(
         text: stripHashtags(entry.text),
         rawLine: entry.raw,
         done: hash !== undefined && reviewed.has(hash),
-        canThread: tagAllowsThread(tag),
-        canNpc: tagAllowsNpc(tag),
+        // A PC note is never adopted into chapter or NPC (issue #86).
+        canThread: !pc && tagAllowsThread(tag),
+        canNpc: !pc && tagAllowsNpc(tag),
       };
+      if (pcGroup !== undefined) item.pcGroup = pcGroup;
       if (entry.time !== undefined) item.meta = entry.time;
       if (hash !== undefined) item.hash = hash;
       return item;
@@ -234,7 +273,29 @@ export function useReviewEntries(
       return item;
     });
 
-    return [...logEntries, ...inboxEntries, ...noteEntries];
+    // `#pc` inbox lines (issue #86): same list/tick-off mechanic as the
+    // notes, but grouped by character in the page and offered in the live
+    // aside. No adoption — see README.
+    const pcEntries: ReviewEntry[] = inboxPcEntries(inboxBody, keepDoneInbox).map((line) => {
+      const item: ReviewEntry = {
+        key: `inbox:${line.index}`,
+        source: "inbox",
+        section: "pc",
+        sourceLabel: t("review.source.inbox"),
+        tag: PC_TAG,
+        text: line.text,
+        rawLine: line.raw,
+        done: line.done,
+        canThread: false,
+        canNpc: false,
+      };
+      const group = pcGroupTag(line.tags);
+      if (group !== undefined) item.pcGroup = group;
+      if (line.date !== undefined) item.meta = line.date;
+      return item;
+    });
+
+    return [...logEntries, ...inboxEntries, ...noteEntries, ...pcEntries];
   }, [logLines, inboxBody, keepDoneInbox, hashes.data, reviewed, treeData, t]);
 
   const seenCount = entries.filter((e) => e.done).length;

@@ -32,6 +32,14 @@ export function tagAllowsNpc(tag: string): boolean {
   return tag === "npc";
 }
 
+/**
+ * The player-character tag (issue #86, README): `#pc` marks a note ABOUT a
+ * player character. It is deliberately not part of REVIEW_TAGS — a `#pc`
+ * line is no harvest (no thread, no NPC stub), it is a reminder for the
+ * table. Where both appear (`#pc #thread`), `#pc` wins.
+ */
+export const PC_TAG = "pc";
+
 // `#tag` — letters/digits (unicode: `#öl` works), then also `_`/`-`.
 const HASHTAG = /#([\p{L}\p{N}][\p{L}\p{N}_-]*)/gu;
 
@@ -119,13 +127,16 @@ export function parseInboxEntries(body: string): InboxLine[] {
  * in the inbox — prototype), and `- [x] …` lines only when they were acted
  * on in THIS browser session (`keepDone`, so a card does not vanish under
  * the cursor). Everything else stays out so harvested ideas never resurface
- * in a later review (README, inbox exception).
+ * in a later review (README, inbox exception). `#pc` lines are NOT part of
+ * the harvest — they have their own section (issue #86).
  */
 export function harvestInboxEntries(
   body: string,
   keepDone: ReadonlySet<number> = new Set<number>(),
 ): InboxLine[] {
-  return openInboxLines(body, keepDone).filter((line) => line.tags.length > 0);
+  return openInboxLines(body, keepDone).filter(
+    (line) => line.tags.length > 0 && !hasPcTag(line.tags),
+  );
 }
 
 /**
@@ -144,6 +155,74 @@ export function inboxNoteEntries(
 
 function openInboxLines(body: string, keepDone: ReadonlySet<number>): InboxLine[] {
   return parseInboxEntries(body).filter((line) => !line.done || keepDone.has(line.index));
+}
+
+// --- player-character notes (issue #86) ---------------------------------------
+
+/** Does this line carry `#pc`? (`#pcs`/`#npc` are other tags — no match.) */
+export function hasPcTag(tags: readonly string[]): boolean {
+  return tags.includes(PC_TAG);
+}
+
+/**
+ * Tags that belong to the log/inbox CONVENTION (README) and can therefore
+ * never be a character name: `#pc` itself, the four harvest tags and `#date`.
+ * `#pc #thread` is a PC reminder that also mentions a thread — not a note
+ * about a character called „thread".
+ */
+function isConventionTag(tag: string): boolean {
+  return tag === PC_TAG || tag === "date" || isReviewTag(tag);
+}
+
+/**
+ * The character a `#pc` line names: the first hashtag that is not a
+ * convention tag (`#pc #kaela` → `kaela`, `#kaela #pc` → `kaela`, already
+ * lowercased by extractHashtags). Undefined when the line carries convention
+ * tags only — the review files those under „Allgemein".
+ */
+export function pcGroupTag(tags: readonly string[]): string | undefined {
+  return tags.find((tag) => !isConventionTag(tag));
+}
+
+/** The open inbox lines carrying `#pc` — the review's „Spielercharaktere". */
+export function inboxPcEntries(
+  body: string,
+  keepDone: ReadonlySet<number> = new Set<number>(),
+): InboxLine[] {
+  return openInboxLines(body, keepDone).filter((line) => hasPcTag(line.tags));
+}
+
+/** One group of the „Spielercharaktere" section. */
+export interface PcGroup<T> {
+  /** The second tag, or undefined for the „Allgemein" group. */
+  tag: string | undefined;
+  entries: T[];
+}
+
+/**
+ * Group entries by their character tag, in first-appearance order; the
+ * untagged („Allgemein") group always comes last, however early it appeared.
+ * Pure and entry-shape agnostic — the caller says where the tag sits.
+ */
+export function groupByPcTag<T>(
+  entries: readonly T[],
+  tagOf: (entry: T) => string | undefined,
+): PcGroup<T>[] {
+  const named = new Map<string, T[]>();
+  const general: T[] = [];
+  for (const entry of entries) {
+    const tag = tagOf(entry);
+    if (tag === undefined || tag === "") {
+      general.push(entry);
+      continue;
+    }
+    const bucket = named.get(tag);
+    if (bucket === undefined) named.set(tag, [entry]);
+    else bucket.push(entry);
+  }
+  const groups: PcGroup<T>[] = [...named].map(([tag, items]) => ({ tag, entries: items }));
+  if (general.length > 0) groups.push({ tag: undefined, entries: general });
+  return groups;
 }
 
 // --- chapter checklist ("Offene Fäden") ---------------------------------------

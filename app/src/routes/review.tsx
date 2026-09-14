@@ -36,7 +36,8 @@ import type { ReviewActionKind } from "@/lib/review-memory";
 import { useActedKeys, useReviewMemory } from "@/lib/review-memory";
 import { cn } from "@/lib/utils";
 import type { ReviewEntry } from "@/lib/use-review";
-import { useReviewEntries } from "@/lib/use-review";
+import { pcGroups, useReviewEntries } from "@/lib/use-review";
+import { activeSessionKey, lastStartedSessionKey } from "@/lib/use-session";
 
 type ActionKind = ReviewActionKind;
 
@@ -61,9 +62,10 @@ function doneLabel(
     case "npc":
       return t("review.done.npc");
     case "dismiss":
-      // An untagged note is not "verworfen", it is done with (issue #85) —
-      // the write is the same, the word the DM sees is not.
-      return section === "notes" ? t("review.done.resolved") : t("review.done.dismiss");
+      // An untagged note or a PC reminder is not "verworfen", it is done
+      // with (issues #85, #86) — the write is the same, the word the DM sees
+      // is not.
+      return section === "harvest" ? t("review.done.dismiss") : t("review.done.resolved");
     default:
       // The server only stores done/not-done — after a reload the specific
       // action is gone and the neutral label is the honest one.
@@ -82,6 +84,14 @@ export function ReviewRoute() {
   const acted = useActedKeys(campaign);
   const adoptedHere = adopted[campaign] ?? [];
   const [npcEntry, setNpcEntry] = useState<ReviewEntry>();
+  // „Behalten" writes nothing: the entry stays open (and counted) for the next
+  // wrap-up, the marker is cosmetic and lives for this sitting only.
+  // Campaign-scoped like the rest of the review memory: the entry key is only
+  // the line index in its file, so an unscoped set would carry a „Behalten"
+  // over to the same index in the NEXT campaign (the route param changes
+  // without remounting this component).
+  const [kept, setKept] = useState<ReadonlySet<string>>(() => new Set<string>());
+  const keptKey = (entry: ReviewEntry) => `${campaign}:${entry.key}`;
 
   const model = useReviewEntries(campaign);
 
@@ -132,6 +142,14 @@ export function ReviewRoute() {
       for (const file of files) {
         queryClient.setQueryData(["file", campaign, file.path], file);
         void queryClient.invalidateQueries({ queryKey: ["file", campaign, file.path] });
+        // A log line's done-state lives in the session file's frontmatter, and
+        // the live aside and the topbar read that file through the SESSION
+        // queries — they have to see the fresh one too (same rule as
+        // components/PcReminders).
+        if (file.path === model.sessionPath) {
+          void queryClient.invalidateQueries({ queryKey: activeSessionKey(campaign) });
+          void queryClient.invalidateQueries({ queryKey: lastStartedSessionKey(campaign) });
+        }
       }
       // A new thread section or npc file can change the tree, too.
       if (vars.action !== "dismiss") {
@@ -160,6 +178,7 @@ export function ReviewRoute() {
 
   const harvest = model.entries.filter((entry) => entry.section === "harvest");
   const notes = model.entries.filter((entry) => entry.section === "notes");
+  const pcs = pcGroups(model.entries);
 
   const renderCard = (entry: ReviewEntry) => (
     <EntryCard
@@ -169,6 +188,16 @@ export function ReviewRoute() {
       busy={busyKey === entry.key}
       error={cardError(entry)}
       canAdopt={chapter !== undefined}
+      kept={kept.has(keptKey(entry))}
+      onKeep={() =>
+        setKept((current) => {
+          const next = new Set(current);
+          const key = keptKey(entry);
+          if (next.has(key)) next.delete(key);
+          else next.add(key);
+          return next;
+        })
+      }
       onThread={() => {
         act.reset();
         act.mutate({ entry, action: "thread" });
@@ -227,6 +256,30 @@ export function ReviewRoute() {
             ) : (
               <>
                 <div className="flex flex-col gap-2.5">{harvest.map(renderCard)}</div>
+                {/* `#pc` lines, grouped by character (issue #86): reminders
+                    for the table — abhaken or keep, never adopted. */}
+                {pcs.length > 0 && (
+                  <section className="mt-9">
+                    <h2 className="mb-3 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
+                      {t("review.pc.title")}
+                    </h2>
+                    <p className="mb-3 text-[13.5px] leading-[1.6] text-muted-foreground">
+                      {t("review.pc.lead")}
+                    </p>
+                    <div className="flex flex-col gap-5">
+                      {pcs.map((group) => (
+                        <div key={group.tag ?? ""} className="flex flex-col gap-2.5">
+                          <h3 className="font-serif text-[15px] text-foreground">
+                            {group.tag === undefined
+                              ? t("review.pc.groupGeneral")
+                              : t("review.pc.groupTag", { tag: group.tag })}
+                          </h3>
+                          {group.entries.map(renderCard)}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
                 {/* Untagged inbox lines get their own section (issue #85) so
                     the tagged harvest above keeps reading as one list. */}
                 {notes.length > 0 && (
@@ -318,18 +371,23 @@ function EntryCard({
   busy,
   error,
   canAdopt,
+  kept,
   onThread,
   onNpc,
   onDismiss,
+  onKeep,
 }: {
   entry: ReviewEntry;
   action: ActionKind | undefined;
   busy: boolean;
   error: string | undefined;
   canAdopt: boolean;
+  /** „Behalten" was clicked in this sitting (issue #86) — still open. */
+  kept: boolean;
   onThread: () => void;
   onNpc: () => void;
   onDismiss: () => void;
+  onKeep: () => void;
 }) {
   const t = useT();
   const label = doneLabel(action, entry.section, t);
@@ -395,8 +453,27 @@ function EntryCard({
               onClick={onDismiss}
               className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
             >
-              {entry.section === "notes" ? t("review.action.resolve") : t("common.discard")}
+              {entry.section === "harvest" ? t("common.discard") : t("review.action.resolve")}
             </Button>
+            {entry.section === "pc" && (
+              // „Behalten" writes NOTHING — it is a marker for this sitting,
+              // so it stays a toggle (aria-pressed) and never claims a
+              // recorded decision. The entry stays open either way.
+              <Button
+                type="button"
+                variant="outline"
+                aria-pressed={kept}
+                title={t("review.action.keepHint")}
+                disabled={busy}
+                onClick={onKeep}
+                className={cn(
+                  "h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground",
+                  kept && "border-border-hover text-foreground",
+                )}
+              >
+                {t("review.action.keep")}
+              </Button>
+            )}
           </div>
           {error !== undefined && (
             <p className="mt-2 text-[12px] text-destructive" aria-live="polite">

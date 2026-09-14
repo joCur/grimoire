@@ -26,6 +26,7 @@ import { LiveEntityDrawer } from "@/components/LiveEntityDrawer";
 import { LocationCard } from "@/components/LocationCard";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/components/NpcCard";
+import { PcReminders } from "@/components/PcReminders";
 import { SceneArticle } from "@/components/SceneArticle";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -215,6 +216,10 @@ function LiveDesktop({ campaign }: { campaign: string }) {
 
       <aside className="flex w-full flex-none flex-col border-t border-border lg:min-h-0 lg:w-[300px] lg:border-t-0 lg:border-l">
         <div className="flex flex-col gap-3 px-4 py-[18px] lg:flex-1 lg:overflow-y-auto">
+          {/* What the players should get or hear TONIGHT (issue #86) —
+              above the scene cards, because it is about the table, not
+              about the scene. Renders nothing when there is nothing. */}
+          <PcReminders campaign={campaign} />
           {locationId !== undefined && (
             <>
               <p className="text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">

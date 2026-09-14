@@ -264,6 +264,15 @@ reviewed: [a1b2c3d4]            # Kurzhashes gesichteter Log-Zeilen (Review-Schr
 `#thread` offener Faden · `#npc` improvisierter NPC · `#loot` Beute ·
 `#decision` Spieler-Entscheidung · `#date` In-Game-Datum (z. B. `#date Tag 4`)
 
+`#pc` Notiz zu einem Spielercharakter. Ein optionaler zweiter Tag benennt den
+Charakter (`#pc #kaela`); die Namen sind frei, es gibt keine PC-Entität und
+nichts zu pflegen. Die Nachbereitung sammelt solche Zeilen im Abschnitt
+„Spielercharaktere", gruppiert nach dem zweiten Tag (ohne zweiten Tag:
+„Allgemein"). `#pc` gewinnt gegen die übrigen Tags: die Zeile wird nicht als
+Handlungsstrang oder NPC angeboten, sondern nur abgehakt („Erledigt") oder
+offen gelassen („Behalten") — PC-Notizen sind Erinnerungen für den Tisch,
+kein Kampagneninhalt.
+
 ## Inbox
 
 `inbox` — append-only, gleiche Hashtag-Konventionen wie das Session-Log,
