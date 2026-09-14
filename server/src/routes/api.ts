@@ -49,6 +49,7 @@ import {
   writeGlossary,
   writeKnowledge,
 } from "../store/write";
+import { acceptJobParts } from "../generate-accept";
 import {
   applyGenerated,
   assertGenerateTarget,
@@ -59,8 +60,9 @@ import { applyAugment, readAugmentTarget } from "../generator-augment";
 import {
   deleteJob,
   getJob,
+  patchJobReview,
   serializeJob,
-  setDraftEdit,
+  type ReviewPatch,
   startJob,
 } from "../generate-jobs";
 
@@ -648,6 +650,31 @@ api.post("/:campaign/review/inbox-done", async (c) => {
   return c.json(await markInboxLineDone(c.req.param("campaign"), line));
 });
 
+/** One `{ key: value }` map out of a review patch body, value-checked. */
+function reviewRecord<T>(
+  value: unknown,
+  label: string,
+  check: (v: unknown) => v is T,
+): Record<string, T> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new ApiError(400, `${label} must be an object`);
+  }
+  const out: Record<string, T> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (!check(item)) throw new ApiError(400, `${label}.${key} has an unusable value`);
+    out[key] = item;
+  }
+  return out;
+}
+
+const isMarkdown = (v: unknown): v is string => typeof v === "string";
+const isBoolean = (v: unknown): v is boolean => typeof v === "boolean";
+/** A field/block decision, or `null` for „nicht mehr entschieden". */
+const isDecidedFlag = (v: unknown): v is boolean | null => v === null || typeof v === "boolean";
+/** `null` is „wieder offen" — the review's third state (issue #97). */
+const isDecision = (v: unknown): v is "accepted" | "rejected" | null =>
+  v === null || v === "accepted" || v === "rejected";
+
 // --- generator endpoints (issue #6) -------------------------------------------------
 
 // POST /api/:campaign/generate { chapter, sourceText, newChapter? } ->
@@ -780,6 +807,66 @@ api.post("/:campaign/generate/augment/apply", async (c) => {
   return c.json(await applyAugment(c.req.param("campaign"), body, jobId));
 });
 
+// PATCH /api/:campaign/generate/job/:id/review { rev, edits?, entries?,
+// dropped?, fields?, blocks? } -> the job.
+// The review state of a run lives ON THE JOB since issue #97: the edited
+// text per draft, the decision per suggested entry, the dropped scenes and
+// (for an augment run) the decision per property/block. Everything merges,
+// so the app sends the ONE thing that just changed — text debounced,
+// decisions immediately.
+//
+// `rev` is the job's review rev as the client read it: a second tab that
+// decided first makes this a 409 { code: "rev_conflict", rev } and nothing
+// is written — the app reloads the state instead of silently winning.
+// 404 when the campaign has no job, or when :id names a different one (a
+// patch for a replaced run must not land on its successor).
+api.patch("/:campaign/generate/job/:id/review", async (c) => {
+  const body = await jsonBody(c, ["rev", "edits", "entries", "dropped", "fields", "blocks"]);
+  const rev = body.rev;
+  if (typeof rev !== "number" || !Number.isInteger(rev) || rev < 0) {
+    throw new ApiError(400, "rev must be a non-negative integer");
+  }
+  const patch: ReviewPatch = {};
+  if (body.edits !== undefined) patch.edits = reviewRecord(body.edits, "edits", isMarkdown);
+  if (body.entries !== undefined) {
+    patch.entries = reviewRecord(body.entries, "entries", isDecision);
+  }
+  if (body.dropped !== undefined) {
+    if (!Array.isArray(body.dropped) || body.dropped.some((v) => typeof v !== "string")) {
+      throw new ApiError(400, "dropped must be an array of strings");
+    }
+    patch.dropped = body.dropped as string[];
+  }
+  if (body.fields !== undefined) patch.fields = reviewRecord(body.fields, "fields", isDecidedFlag);
+  if (body.blocks !== undefined) patch.blocks = reviewRecord(body.blocks, "blocks", isDecidedFlag);
+  const job = await patchJobReview(c.req.param("campaign"), c.req.param("id"), rev, patch);
+  return c.json(serializeJob(job));
+});
+
+// POST /api/:campaign/generate/job/:id/accept
+// { paths?, chapter?, chapterTitle? } -> { written, jobDeleted }
+// „Diesen übernehmen" per scene / per suggested entry, and „Alle
+// übernehmen" for the rest (issue #97). `paths` selects scene draft paths
+// and suggested-entry addresses (`npcs/grella`); without it EVERY part that
+// is still open is written — a dropped scene and a rejected entry are not
+// open, so the bulk action never resurrects a "no".
+//
+// One transaction with the ordinary draft write: the conflict check lives
+// inside it (409 { conflicts }), FTS and reference rows follow, and the
+// job records what was written in that same commit. The job row disappears
+// the moment nothing is left open (`jobDeleted`). `rev` is the review rev
+// the client read and is re-checked inside that transaction: a decision
+// made in between is a 409 `rev_conflict` and nothing is written. 404
+// without a job or for a stale :id, 409 for a job that has no result, 400
+// for an unknown path and for a BULK accept with nothing left to do. A
+// named selection that is already written is not an error — a double click
+// gets 200 with an empty `written`.
+api.post("/:campaign/generate/job/:id/accept", async (c) => {
+  const body = await jsonBody(c, ["rev", "paths", "chapter", "chapterTitle"]);
+  const rev = requireRev(body.rev);
+  return c.json(await acceptJobParts(c.req.param("campaign"), c.req.param("id"), rev, body));
+});
+
 // GET /api/:campaign/generate/job -> GenerateJob (404 when there is none).
 // The campaign is NOT re-validated here: the job store is the authority for
 // this endpoint, and "no job" is the honest answer for an unknown campaign
@@ -799,22 +886,6 @@ api.delete("/:campaign/generate/job", async (c) => {
     throw new ApiError(404, "no generate job for this campaign");
   }
   return c.json({ deleted: true });
-});
-
-// PUT /api/:campaign/generate/job/drafts { path, markdown } -> { path }
-// One review edit into the job store, so edits survive navigation as well
-// (issue #19 AK3). 404 without a job, 400 when the path is not one of the
-// result's scene paths. The markdown is stored verbatim and NOT validated
-// here — apply re-validates everything server-side anyway, and a
-// half-written draft must still be storable while the DM types.
-api.put("/:campaign/generate/job/drafts", async (c) => {
-  const body = await jsonBody(c, ["path", "markdown"]);
-  const rel = body.path;
-  const markdown = body.markdown;
-  if (typeof rel !== "string" || rel === "") throw new ApiError(400, "path must be a string");
-  if (typeof markdown !== "string") throw new ApiError(400, "markdown must be a string");
-  await setDraftEdit(c.req.param("campaign"), rel, markdown);
-  return c.json({ path: rel });
 });
 
 // POST /api/:campaign/generate/apply

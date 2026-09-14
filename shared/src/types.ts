@@ -536,12 +536,63 @@ export interface GenerateJob {
   error?: GenerateJobError;
   /**
    * Review edits kept server-side, keyed by the draft's campaign-relative
-   * path (PUT …/generate/job/drafts) — so an edited draft survives a reload
-   * as well. Empty until the DM edits something; applied ON TOP of
+   * path (PATCH …/generate/job/:id/review) — so an edited draft survives a
+   * reload as well. Empty until the DM edits something; applied ON TOP of
    * `result.scenes` (or of `npcResult.npc`) by the review UI.
    */
   draftEdits: Record<string, string>;
+  /**
+   * Optimistic-concurrency token of the REVIEW STATE (issue #97). Every
+   * `PATCH …/review` sends the rev it read and gets a 409
+   * `rev_conflict` when the job moved underneath (a second tab), so nothing
+   * a DM decided is ever silently overwritten. Bumped by the review patch
+   * and by a partial accept; absent on a payload from an older server.
+   */
+  rev?: number;
+  /**
+   * Everything the DM DID in the review, kept on the job (issue #97) so a
+   * navigation, a reload, a second tab and a server restart all show the
+   * same state. `draftEdits` holds the edited TEXT; this holds the
+   * decisions. Absent on a payload from an older server — the UI treats
+   * that as "nothing decided yet".
+   */
+  review?: GenerateJobReview;
 }
+
+/**
+ * The review state of a job (issue #97). Deliberately a small, additive
+ * record of DECISIONS, not a second copy of the result: the result stays
+ * the model's output, this is what the DM did with it.
+ */
+export interface GenerateJobReview {
+  /**
+   * Decision per suggested entry, keyed by the address it would be written
+   * to (`npcs/grella`). A key that is absent is OPEN — the review's third
+   * state, which is why "open" is not a value here.
+   */
+  entries: Record<string, GenerateReviewDecision>;
+  /** Scene draft paths the DM dropped from the run — never written. */
+  dropped: string[];
+  /**
+   * Augment run only: decision per PROPERTY key. `true` = übernehmen,
+   * `false` = behalten; an absent key keeps the computed default (lib/augment
+   * `defaultAccepted`), so a fresh review still starts where it always did.
+   */
+  fields: Record<string, boolean>;
+  /** Augment run only: the same per body BLOCK id. */
+  blocks: Record<string, boolean>;
+  /**
+   * The parts a PARTIAL accept already wrote: draft path -> the ADDRESS the
+   * entry actually landed at (they differ for a scene, whose address is
+   * `<chapter>/<id>`). A written part is read-only in the review and links
+   * to the entry; the job disappears once every part is written, dropped or
+   * rejected.
+   */
+  written: Record<string, string>;
+}
+
+/** What the DM decided about one suggested entry. */
+export type GenerateReviewDecision = "accepted" | "rejected";
 
 /**
  * POST /api/:campaign/generate and POST /api/:campaign/generate/npc — 202

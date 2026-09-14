@@ -212,3 +212,106 @@ test("failure path: an invalid model reply shows the 422 block with the raw repl
   expect(await api.exists(SCENE_PATH)).toBe(false);
   await expect(page.getByRole("button", { name: "Entwürfe generieren" })).toBeEnabled();
 });
+
+// --- the review state lives on the job (issue #97) ---------------------------
+
+test("review state survives navigation and reload; parts are accepted one by one", async ({
+  page,
+  api,
+}) => {
+  await page.goto("/beispiel/generate");
+  await page.getByLabel("Quelltext (EN)").fill(SOURCE);
+  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+    timeout: 30_000,
+  });
+
+  // (1) Edit the draft, leave the page, come back: the text is there. This is
+  // the loss the ticket is about — it used to live in component state only.
+  const card = page.locator("div").filter({ hasText: `01-salzhafen/${SCENE_SLUG}` }).last();
+  await card.getByRole("button", { name: "Bearbeiten" }).click();
+  const textarea = page.getByRole("textbox", { name: `Markdown von ${SCENE_TITLE}` });
+  const edited = (await textarea.inputValue()).replace(
+    "Die Flut zieht sich",
+    "Die Flut zieht sich im Regen",
+  );
+  await textarea.fill(edited);
+  // Blur flushes the debounce — the DM does not have to wait for a timer.
+  await textarea.blur();
+  await expect(page.getByText("Gespeichert")).toBeVisible();
+
+  await page.goto("/beispiel");
+  await page.goto("/beispiel/generate");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen");
+  await expect(page.getByText("Die Flut zieht sich im Regen")).toBeVisible();
+
+  // (2) A decision about a suggested entry survives a RELOAD (a second tab
+  // sees the same, for the same reason: it is a row).
+  const stubRow = (targetPath: string) =>
+    page
+      .locator("div")
+      .filter({ hasText: targetPath })
+      .filter({ has: page.getByRole("button", { name: "Ablehnen" }) })
+      .last();
+  await stubRow(`npcs/${NPC_STUB_ID}`).getByRole("button", { name: "Annehmen" }).click();
+  await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(1);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(1);
+
+  // (3) „Diesen übernehmen" writes exactly that scene; the rest stays.
+  expect(await api.exists(SCENE_PATH)).toBe(false);
+  await page
+    .locator("div")
+    .filter({ hasText: `01-salzhafen/${SCENE_SLUG}` })
+    .last()
+    .getByRole("button", { name: "Diesen übernehmen" })
+    .click();
+  await expect(page.getByText("1 von 3 übernommen", { exact: false })).toBeVisible();
+  expect(await api.exists(SCENE_PATH)).toBe(true);
+  // The written scene is not editable here any more and links to the entry.
+  const written = page.locator("div").filter({ hasText: SCENE_TITLE }).last();
+  await expect(written.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: SCENE_PATH })).toBeVisible();
+  // The edit really is what was written.
+  expect(await api.raw(SCENE_PATH)).toContain("Die Flut zieht sich im Regen");
+  // Writing the scene creates EMPTY rows for the ids it references (#70), so
+  // „exists" cannot answer whether a stub landed — its CONTENT can.
+  expect(await api.raw(`locations/${LOCATION_STUB_ID}`)).not.toContain(LOCATION_STUB_NAME);
+  // The undecided location stub is still open — a bulk accept would skip it,
+  // so it is decided explicitly here.
+  await stubRow(`locations/${LOCATION_STUB_ID}`)
+    .getByRole("button", { name: "Annehmen" })
+    .click();
+
+  // (4) „Rest übernehmen" writes what is left — and the job is gone.
+  await page.getByRole("button", { name: /^Rest übernehmen/ }).click();
+  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
+  expect(await api.raw(`npcs/${NPC_STUB_ID}`)).toContain(NPC_STUB_NAME);
+  expect(await api.raw(`locations/${LOCATION_STUB_ID}`)).toContain(LOCATION_STUB_NAME);
+  expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
+});
+
+test("„Verwerfen\" drops only the open rest — what was accepted stays", async ({ page, api }) => {
+  await page.goto("/beispiel/generate");
+  await page.getByLabel("Quelltext (EN)").fill(SOURCE);
+  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+    timeout: 30_000,
+  });
+
+  await page
+    .locator("div")
+    .filter({ hasText: `01-salzhafen/${SCENE_SLUG}` })
+    .last()
+    .getByRole("button", { name: "Diesen übernehmen" })
+    .click();
+  await expect(page.getByRole("link", { name: SCENE_PATH })).toBeVisible();
+
+  await page.getByRole("button", { name: "Rest verwerfen" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Szenen generieren");
+  // The accepted scene is an entry now; the suggested entries never landed —
+  // their ids exist only as the empty rows the scene's references leave (#70).
+  expect(await api.exists(SCENE_PATH)).toBe(true);
+  expect(await api.raw(`npcs/${NPC_STUB_ID}`)).not.toContain(NPC_STUB_NAME);
+  expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
+});

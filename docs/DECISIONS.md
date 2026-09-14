@@ -603,3 +603,42 @@ reiner Formatter, wir behalten Katalog und Laden selbst in der Hand.
   die Helfer nehmen dafür `t: Translate` als Argument (`sceneStatusMeta`,
   `sceneStatusOptions`, `npcStatusLabel`, `browseListTitle`). Ein **unbekannter**
   Wert wird weiter verbatim angezeigt — die Datei bleibt die Wahrheit.
+
+## 16. Der Prüfzustand einer Generierung gehört auf den Job
+
+> **Status: final** (#97). Betrifft den Generator-Prüfschritt (Szenen, NPC)
+> und den „Mit KI ergänzen"-Lauf.
+
+**Entscheidung:** Alles, was der DM im Prüfschritt tut — Text bearbeiten,
+vorgeschlagene Einträge annehmen/ablehnen, Szenen aus dem Lauf nehmen, je
+Feld/Block übernehmen oder behalten — steht als Spalte auf der Job-Zeile
+(`generate_jobs.review`), nicht im Browser. Die App liest ihren Zustand aus
+dem Job und schreibt jede Änderung zurück: Texteingaben debounced (~600 ms)
+und spätestens beim Verlassen des Feldes, Entscheidungen sofort.
+
+**Warum:** ADR #10 hat den LAUF serverseitig gemacht, weil ein Browser-Zurück
+zwanzig Minuten Modellarbeit vernichtet hat. Der Prüfschritt hatte genau
+dasselbe Problem eine Ebene höher — er ist die Arbeit, die der DM selbst
+hineinsteckt, und sie war flüchtiger als das Ergebnis, das sie bearbeitet.
+Mit dem Job als Zeile (ADR #13) ist die Zeile der offensichtliche Ort; ein
+zweiter Speicher (localStorage) verbietet sich ohnehin (Qualitäts-Boden: der
+Server ist die Wahrheit).
+
+**Konsequenzen:**
+
+- Der Zustand hat ein eigenes `rev`. Zwei Tabs sind der Normalfall, nicht die
+  Ausnahme: der zweite `PATCH …/review` bekommt `409 rev_conflict` und die App
+  lädt neu, statt die Entscheidung des anderen still zu überschreiben. Es ist
+  dasselbe Protokoll wie bei jedem anderen Schreibzugriff (ADR #4) — kein
+  zweites Konfliktmodell.
+- Ein Lauf ist damit **teilweise übernehmbar**: `POST …/job/:id/accept`
+  schreibt genau die gewählten Teile in einer Transaktion (Konfliktprüfung
+  drin, FTS und Referenzen folgen) und vermerkt sie im selben Commit auf dem
+  Job. Der Job verschwindet von selbst, sobald nichts mehr offen ist.
+- **„Verwerfen" nimmt nur den offenen Rest mit** (Lead-Entscheid im Ticket).
+  Was einzeln übernommen wurde, ist ein Eintrag und kein Job mehr — es im
+  Prüfschritt weiter zu bearbeiten ist ausdrücklich kein Ziel, dafür gibt es
+  den normalen Editor.
+- Kein Undo-Verlauf und kein Merge zwischen zwei Bearbeitern. Grimoire ist
+  einbenutzerig; „zwei Tabs" ist ein Konflikt, den man meldet, keiner, den man
+  zusammenführt.

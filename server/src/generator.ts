@@ -1149,7 +1149,7 @@ const STUB_ITEM_KEYS = new Set(["kind", "id", "name", "markdown"]);
 const NPC_ITEM_KEYS = SCENE_ITEM_KEYS;
 
 /** One validated file ready to be written. */
-interface ApplyTarget {
+export interface ApplyTarget {
   rel: string;
   markdown: string;
 }
@@ -1165,7 +1165,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 }
 
 /** Deep-validate one scene item of the apply body -> write target. */
-function applySceneTarget(item: unknown, index: number): ApplyTarget {
+export function applySceneTarget(item: unknown, index: number): ApplyTarget {
   const label = `scenes[${index}]`;
   if (!isPlainObject(item)) throw new ApiError(400, `${label} must be an object`);
   assertKnownKeys(item, SCENE_ITEM_KEYS, label);
@@ -1211,7 +1211,7 @@ function applySceneTarget(item: unknown, index: number): ApplyTarget {
  * here on the DM is the author of the markdown, and their raw edit must not
  * be rejected for a prompt rule.
  */
-function applyNpcTarget(item: unknown): ApplyTarget {
+export function applyNpcTarget(item: unknown): ApplyTarget {
   const label = "npc";
   if (!isPlainObject(item)) throw new ApiError(400, `${label} must be an object`);
   assertKnownKeys(item, NPC_ITEM_KEYS, label);
@@ -1237,7 +1237,7 @@ function applyNpcTarget(item: unknown): ApplyTarget {
 }
 
 /** Deep-validate one stub item of the apply body -> write target. */
-function applyStubTarget(item: unknown, index: number): ApplyTarget {
+export function applyStubTarget(item: unknown, index: number): ApplyTarget {
   const label = `stubs[${index}]`;
   if (!isPlainObject(item)) throw new ApiError(400, `${label} must be an object`);
   assertKnownKeys(item, STUB_ITEM_KEYS, label);
@@ -1275,7 +1275,7 @@ function applyStubTarget(item: unknown, index: number): ApplyTarget {
  * (id/title/status: planned — a generator-created chapter is upcoming,
  * never the active one); the body stays empty and degrades.
  */
-async function newChapterTarget(
+export async function newChapterTarget(
   campaign: string,
   chapter: unknown,
   chapterTitle: unknown,
@@ -1400,7 +1400,7 @@ const DRAFT_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
  * 422 like the generator's other content rejections: the payload is
  * well-formed, its CONTENT is unusable.
  */
-function assertDraftId(id: unknown, rel: string): void {
+export function assertDraftId(id: unknown, rel: string): void {
   if (id === undefined) return;
   if (typeof id !== "string" || !DRAFT_ID_PATTERN.test(id.trim())) {
     throw new ApiError(
@@ -1417,7 +1417,7 @@ function assertDraftId(id: unknown, rel: string): void {
  * location draft is validated against its own segment, a chapter's id IS the
  * first segment), but the rule is stated once for all of them.
  */
-function draftAddress(rel: string, properties: Record<string, unknown>): string {
+export function draftAddress(rel: string, properties: Record<string, unknown>): string {
   const id = typeof properties.id === "string" ? properties.id.trim() : "";
   if (id === "" || kindFromPath(rel) !== "scene") return rel;
   const segments = rel.split("/");

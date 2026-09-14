@@ -656,20 +656,24 @@ describe("npc generate jobs", () => {
     expect(job!.error).toBeUndefined();
   });
 
-  test("PUT drafts accepts the npc draft path and rejects anything else", async () => {
+  test("a review edit accepts the npc draft path and rejects anything else", async () => {
     useFake([replyFor("job-drafts")]);
     await generateNpc(npcBody);
     const edited = `${npcMarkdown({ id: "job-drafts" })}\nHandgeschriebene Ergänzung.\n`;
 
-    const put = (body: unknown) =>
-      app.request("/api/beispiel/generate/job/drafts", {
-        method: "PUT",
+    // The review PATCH replaced `PUT …/job/drafts` (issue #97 review,
+    // finding 8) and checks the same known-path rule.
+    const edit = async (path: string) => {
+      const current = await fetchJob();
+      return app.request(`/api/beispiel/generate/job/${current!.id}/review`, {
+        method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ rev: current!.rev ?? 0, edits: { [path]: edited } }),
       });
+    };
 
-    expect((await put({ path: "npcs/fremd", markdown: edited })).status).toBe(400);
-    const res = await put({ path: "npcs/job-drafts", markdown: edited });
+    expect((await edit("npcs/fremd")).status).toBe(400);
+    const res = await edit("npcs/job-drafts");
     expect(res.status).toBe(200);
 
     const job = await fetchJob();

@@ -180,6 +180,16 @@ da (Ergebnis, Review-Edits) und wird übernommen; ein **laufender** steht als
 `failed` mit „Server wurde während des Laufs neu gestartet — Job neu starten"
 statt als endloser Spinner.
 
+Seit Issue #97 deckt `tests/generator.e2e.ts` zusätzlich den **Prüfzustand**
+ab: Entwurf bearbeiten → Seite verlassen → zurück → der Text ist da; einen
+vorgeschlagenen Eintrag entscheiden → Reload → die Entscheidung steht; eine
+Szene einzeln übernehmen („Diesen übernehmen") → der Rest bleibt prüfbar und
+die Fortschrittszeile sagt „1 von 3 übernommen" → „Rest übernehmen" schreibt
+den Rest und der Job ist weg. Ein zweiter Spec zeigt die Lead-Entscheidung
+dazu: „Rest verwerfen" nimmt nur den offenen Rest mit, das einzeln Übernommene
+bleibt als Eintrag stehen. `tests/augment.e2e.ts` prüft dieselbe Persistenz
+auf Block-Ebene — eine Block-Entscheidung überlebt den Reload.
+
 `tests/augment.e2e.ts` ist die Ergänzungs-Hälfte von Pfad 6 („Mit KI
 ergänzen", Issue #36): derselbe Lauf auf einen Eintrag, den es schon gibt.
 Der Spec belegt AK5 — leerer #70-NPC → ergänzen → Löcher gefüllt, während

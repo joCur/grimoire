@@ -40,6 +40,7 @@
 
 import type {
   CampaignTree,
+  GenerateJob,
   GenerateResult,
   GeneratedNpcDraft,
   GeneratedStub,
@@ -61,8 +62,7 @@ import { Link, useNavigate, useParams } from "react-router";
 
 import {
   ApiError,
-  applyDrafts,
-  applyNpcDraft,
+  acceptJobParts,
   deleteGenerateJob,
   fetchFile,
   fetchKnowledge,
@@ -75,6 +75,7 @@ import {
   MarkdownEditorToggle,
 } from "@/components/MarkdownEditor";
 import { MobileBackRow } from "@/components/MobileBackRow";
+import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
 import { Button } from "@/components/ui/button";
 import { locationName } from "@/lib/campaign";
 import { serverErrorBodyMessage, useT, type Translate } from "@/i18n";
@@ -90,17 +91,23 @@ import {
   generatePhase,
   jobErrorBody,
   jobMode,
+  jobProgress,
   markdownBody,
   newChapterId,
   npcIdError,
+  openParts,
+  partState,
   restoredMode,
+  reviewOf,
   stringField,
   stringList,
   usageLabel,
   type GenerateMode,
+  type PartState,
 } from "@/lib/generate";
 import { promptKnowledgeCount } from "@/lib/entry-list";
-import { generateJobKey, useDraftEditSync, useGenerateJob } from "@/lib/use-generate-job";
+import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
+import { useJobReview } from "@/lib/use-job-review";
 import { cn } from "@/lib/utils";
 
 /** Which chapter the drafts are for: an existing one, or a new one. */
@@ -120,8 +127,12 @@ const CHIP_ON =
 const CHIP_OFF =
   "border-border bg-card text-body-secondary hover:border-border-hover hover:text-foreground";
 
-/** Stub identity — kind + id is unique inside one result. */
-const stubKey = (stub: GeneratedStub) => `${stub.kind}:${stub.id}`;
+/**
+ * A suggested entry is addressed by the path it would be WRITTEN to
+ * (`npcs/grella`) — that is the key the job's review state uses and the one
+ * a partial accept selects with, so the UI must not invent a second one.
+ */
+const stubKey = (stub: GeneratedStub) => `${stub.kind}s/${stub.id}`;
 
 export function GenerateRoute() {
   const t = useT();
@@ -204,16 +215,22 @@ export function GenerateRoute() {
   const trimmedNpcId = npcId.trim();
   const npcIdMessage = npcIdError(trimmedNpcId, npcIds, t);
 
+  // The TYPING overlay, nothing more: the saved text lives on the job
+  // (`job.draftEdits`) and this only keeps the textarea from lagging behind
+  // the keystroke while the debounced patch is on its way.
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<Record<string, boolean>>({});
-  const [decisions, setDecisions] = useState<Record<string, StubDecision>>({});
   const [written, setWritten] = useState<string[]>();
 
   // The server's job IS the state of a run (issue #19).
   const jobQuery = useGenerateJob(campaign);
   const job = jobQuery.data ?? null;
   const jobId = job?.id ?? null;
-  const syncEdit = useDraftEditSync(campaign, job?.id);
+  // Every review change goes back to the job (issue #97): text debounced,
+  // decisions immediately, both flushed before the view can go away.
+  const review = useJobReview(campaign, job);
+  const reviewState = reviewOf(job);
+  const decisions = reviewState.entries;
 
   // Seed the local buffers from the job whenever the job IDENTITY changes —
   // a restored job brings its stored edits along, a new run starts clean.
@@ -227,9 +244,8 @@ export function GenerateRoute() {
   if (jobQuery.isSuccess && (seeded?.campaign !== campaign || seeded.jobId !== jobId)) {
     const previous = seeded?.campaign === campaign ? seeded.jobId : undefined;
     setSeeded({ campaign, jobId });
-    setEdits(job?.draftEdits ?? {});
+    setEdits({});
     setEditing({});
-    setDecisions({});
     // A restored run decides the mode (issue #21) — its result belongs to its
     // kind. No job leaves the DM's choice alone.
     setMode((current) => restoredMode(current, job));
@@ -247,6 +263,14 @@ export function GenerateRoute() {
   const scenes = result?.scenes ?? [];
   const stubs = result?.stubs ?? [];
   const acceptedStubs = stubs.filter((s) => decisions[stubKey(s)] === "accepted");
+  /** The text of one draft: what is being typed, else the job's, else the model's. */
+  const draftText = (path: string, fallback: string): string =>
+    edits[path] ?? job?.draftEdits[path] ?? fallback;
+  /** What is still reviewable — „Alle übernehmen" and „Verwerfen" work on it. */
+  const rest = openParts(job);
+  const progress = jobProgress(job);
+  const openScenes = scenes.filter((scene) => partState(job, scene.path) === "open");
+  const openAcceptedStubs = acceptedStubs.filter((s) => partState(job, stubKey(s)) === "open");
 
   const start = useMutation({
     mutationFn: () =>
@@ -266,42 +290,62 @@ export function GenerateRoute() {
     },
   });
 
+  /**
+   * „Übernehmen" (issue #97). ONE endpoint for both buttons and both modes:
+   * without a selection it writes everything that is still open (the
+   * accepted suggested entries included, an undecided one not — the rule
+   * from before this ticket); with one it writes exactly that part and
+   * leaves the rest reviewable. The server answers which job is gone,
+   * which is what ends the review.
+   */
   const apply = useMutation({
-    mutationFn: () => {
-      // The NPC run's one draft goes through the same endpoint (issue #21),
-      // with the review edit applied on top just like a scene draft.
-      if (npcResult !== undefined) {
-        const npc = npcResult.npc;
-        return applyNpcDraft(campaign, {
-          npc: { path: npc.path, markdown: edits[npc.path] ?? npc.markdown },
-          ...(job === null ? {} : { jobId: job.id }),
-        });
-      }
-      return applyDrafts(campaign, {
-        scenes: scenes.map((s) => ({ path: s.path, markdown: edits[s.path] ?? s.markdown })),
-        stubs: acceptedStubs,
+    mutationFn: async (paths?: string[]) => {
+      // Text the DM is still typing must be part of what gets written — and
+      // AWAITED, not merely started: the server reads `draftEdits` when the
+      // accept arrives, so a patch still in flight would land after the read
+      // and be deleted together with the job (issue #97 review, finding 1).
+      await review.flush();
+      // The flush moved the rev; the guard has to carry the one that is
+      // current now, not the one this render closed over.
+      const current = queryClient.getQueryData<GenerateJob | null>(generateJobKey(campaign));
+      return acceptJobParts(campaign, job?.id ?? "", current?.rev ?? job?.rev ?? 0, {
+        ...(paths === undefined ? {} : { paths }),
         // The new chapter's _chapter is created in the same batch — only
         // for a chapter that really is new: for an existing id the pair
-        // stays out of the body so apply cannot touch its _chapter.
+        // stays out of the body so an accept cannot touch its _chapter.
         ...(creatingChapter && chapterId !== undefined
           ? { chapter: chapterId, chapterTitle: newTitle.trim() }
           : {}),
-        // The server drops the job once the drafts are on disk.
-        ...(job === null ? {} : { jobId: job.id }),
       });
     },
-    onMutate: () => {
-      droppedRef.current = true;
+    onError: (error) => {
+      // The accept carries the review rev (issue #97 review, finding 3): a
+      // 409 `rev_conflict` means another tab decided in between and NOTHING
+      // was written, so the job is re-read and the quiet conflict line says
+      // so — the same protocol the review patch follows.
+      if (error instanceof ApiError && error.status === 409 && error.details.code === "rev_conflict") {
+        review.signalConflict();
+      }
     },
     onSuccess: (data) => {
-      setWritten(data.written);
-      // The drafts exist now — the pool has to show them.
+      const addresses = Object.values(data.written);
+      // ONLY the answer decides: a bulk accept whose rest did not settle the
+      // run leaves the job there, and marking it dropped up front turned a
+      // job that is still open into one that „vanished" (issue #97 review,
+      // finding 7).
+      if (data.jobDeleted) {
+        droppedRef.current = true;
+        setWritten((prev) => [...(prev ?? []), ...addresses]);
+      }
+      // The entries exist now — the pool has to show them.
       void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
       void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
     },
   });
 
-  // "Verwerfen": nothing was written, so this only drops the server's job.
+  // „Verwerfen": drops the server's job and with it the OPEN REST only —
+  // parts a partial accept already wrote are entries now, not a job
+  // (issue #97, Lead-Entscheid).
   const discard = useMutation({
     mutationFn: () => deleteGenerateJob(campaign),
     onMutate: () => {
@@ -702,8 +746,13 @@ export function GenerateRoute() {
                 {t("generate.review.title")}
               </h1>
               <span className="text-[13px] text-muted-foreground">
-                {t("generate.review.pending", { summary: applySummary(scenes.length, stubs.length, t) })}
+                {progress.written === 0
+                  ? t("generate.review.pending", {
+                      summary: applySummary(scenes.length, stubs.length, t),
+                    })
+                  : t("generate.review.progress", progress)}
               </span>
+              <ReviewSaveStatus status={review.status} />
             </div>
             <p
               className={cn(
@@ -733,20 +782,34 @@ export function GenerateRoute() {
             {scenes.map((scene) => (
               <SceneCard
                 key={scene.path}
+                campaign={campaign}
                 path={scene.path}
                 properties={scene.properties}
-                markdown={edits[scene.path] ?? scene.markdown}
+                markdown={draftText(scene.path, scene.markdown)}
                 tree={tree.data}
+                state={partState(job, scene.path)}
+                writtenAt={reviewState.written[scene.path]}
+                busy={apply.isPending}
                 editing={editing[scene.path] === true}
                 onToggleEditing={() =>
                   setEditing((prev) => ({ ...prev, [scene.path]: prev[scene.path] !== true }))
                 }
                 onChange={(markdown) => {
                   // Local first (the textarea must not lag), then debounced
-                  // into the job so the edit survives navigation too.
+                  // into the JOB — that copy is what survives a navigation.
                   setEdits((prev) => ({ ...prev, [scene.path]: markdown }));
-                  syncEdit(scene.path, markdown);
+                  review.edit(scene.path, markdown);
                 }}
+                // Leaving the field is the last cheap moment to be sure.
+                onBlur={review.flush}
+                onAccept={() => apply.mutate([scene.path])}
+                onDrop={() =>
+                  review.decide({
+                    dropped: reviewState.dropped.includes(scene.path)
+                      ? reviewState.dropped.filter((path) => path !== scene.path)
+                      : [...reviewState.dropped, scene.path],
+                  })
+                }
               />
             ))}
 
@@ -756,17 +819,17 @@ export function GenerateRoute() {
                 {stubs.map((stub) => (
                   <StubRow
                     key={stubKey(stub)}
+                    campaign={campaign}
                     stub={stub}
                     reason={stubReason(scenes, t)}
                     decision={decisions[stubKey(stub)]}
+                    state={partState(job, stubKey(stub))}
+                    writtenAt={reviewState.written[stubKey(stub)]}
+                    busy={apply.isPending}
                     onDecide={(decision) =>
-                      setDecisions((prev) => {
-                        const next = { ...prev };
-                        if (decision === undefined) delete next[stubKey(stub)];
-                        else next[stubKey(stub)] = decision;
-                        return next;
-                      })
+                      review.decide({ entries: { [stubKey(stub)]: decision ?? null } })
                     }
+                    onAccept={() => apply.mutate([stubKey(stub)])}
                   />
                 ))}
               </>
@@ -798,14 +861,17 @@ export function GenerateRoute() {
             )}
 
             <div className="flex flex-wrap items-center gap-2.5 border-t border-border pt-[18px]">
+              {/* „Alle übernehmen" writes what is LEFT — the count follows
+                  the partial accepts instead of promising the whole run
+                  again (issue #97). */}
               <Button
                 type="button"
-                disabled={apply.isPending || scenes.length === 0}
-                onClick={() => apply.mutate()}
+                disabled={apply.isPending || openScenes.length + openAcceptedStubs.length === 0}
+                onClick={() => apply.mutate(undefined)}
                 className="h-auto px-[18px] py-2.5 text-[13.5px] font-semibold"
               >
-                {t("generate.review.apply", {
-                  count: applySummary(scenes.length, acceptedStubs.length, t),
+                {t(progress.written === 0 ? "generate.review.apply" : "generate.review.applyRest", {
+                  count: applySummary(openScenes.length, openAcceptedStubs.length, t),
                 })}
               </Button>
               <Button
@@ -815,8 +881,13 @@ export function GenerateRoute() {
                 onClick={() => discard.mutate()}
                 className="h-auto border-input bg-transparent px-3.5 py-2 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
               >
-                {t("common.discard")}
+                {t(progress.written === 0 ? "common.discard" : "generate.review.discardRest")}
               </Button>
+              {rest.length === 0 && progress.written > 0 && (
+                <p className="text-[12.5px] text-muted-foreground">
+                  {t("generate.review.allDecided")}
+                </p>
+              )}
             </div>
           </>
         )}
@@ -833,6 +904,7 @@ export function GenerateRoute() {
               <span className="text-[13px] text-muted-foreground">
                 {t("generate.review.pendingNpc")}
               </span>
+              <ReviewSaveStatus status={review.status} />
             </div>
             <p
               className={cn(
@@ -860,7 +932,7 @@ export function GenerateRoute() {
 
             <NpcDraftCard
               draft={npcResult.npc}
-              markdown={edits[npcResult.npc.path] ?? npcResult.npc.markdown}
+              markdown={draftText(npcResult.npc.path, npcResult.npc.markdown)}
               editing={editing[npcResult.npc.path] === true}
               onToggleEditing={() =>
                 setEditing((prev) => ({
@@ -870,8 +942,9 @@ export function GenerateRoute() {
               }
               onChange={(markdown) => {
                 setEdits((prev) => ({ ...prev, [npcResult.npc.path]: markdown }));
-                syncEdit(npcResult.npc.path, markdown);
+                review.edit(npcResult.npc.path, markdown);
               }}
+              onBlur={review.flush}
             />
 
             {conflicts.length > 0 && (
@@ -903,7 +976,7 @@ export function GenerateRoute() {
               <Button
                 type="button"
                 disabled={apply.isPending}
-                onClick={() => apply.mutate()}
+                onClick={() => apply.mutate(undefined)}
                 className="h-auto px-[18px] py-2.5 text-[13.5px] font-semibold"
               >
                 {t("generate.review.applyNpc")}
@@ -1076,21 +1149,37 @@ function Working() {
  * preview and on apply, not in the card's header.
  */
 function SceneCard({
+  campaign,
   path,
   properties,
   markdown,
   tree,
+  state,
+  writtenAt,
+  busy,
   editing,
   onToggleEditing,
   onChange,
+  onBlur,
+  onAccept,
+  onDrop,
 }: {
+  campaign: string;
   path: string;
   properties: Record<string, unknown>;
   markdown: string;
   tree: CampaignTree | undefined;
+  /** What became of this scene (issue #97) — written parts are read-only. */
+  state: PartState;
+  /** The address it landed at, once it is written. */
+  writtenAt: string | undefined;
+  busy: boolean;
   editing: boolean;
   onToggleEditing: () => void;
   onChange: (markdown: string) => void;
+  onBlur: () => void;
+  onAccept: () => void;
+  onDrop: () => void;
 }) {
   const t = useT();
   const title = fmString(properties.title) ?? path;
@@ -1102,9 +1191,15 @@ function SceneCard({
   const location = locationName(tree, fmString(properties.location));
   const tags = fmStringArray(properties.tags);
   const textareaId = `gen-raw-${path.replace(/[^a-zA-Z0-9-]/g, "-")}`;
+  const written = state === "written";
 
   return (
-    <div className="my-4 rounded-[10px] border border-border bg-[color-mix(in_srgb,var(--card)_60%,var(--background))] px-5 py-5 md:px-6">
+    <div
+      className={cn(
+        "my-4 rounded-[10px] border border-border bg-[color-mix(in_srgb,var(--card)_60%,var(--background))] px-5 py-5 md:px-6",
+        state === "dropped" && "opacity-55",
+      )}
+    >
       <div className="mb-1 flex flex-wrap items-center gap-2.5">
         <h2 className="flex-1 font-serif text-[20px] leading-[1.3] font-semibold text-foreground">
           {title}
@@ -1112,11 +1207,15 @@ function SceneCard({
         <span className="flex-none rounded-full border border-input px-[9px] py-px text-[11.5px] text-dim">
           {statusLabel}
         </span>
-        <MarkdownEditorToggle
-          editing={editing}
-          onToggleEditing={onToggleEditing}
-          controlsId={textareaId}
-        />
+        {/* A written part is not editable here any more (issue #97, Nicht-
+            Ziele): it is an entry now, and the normal editor owns it. */}
+        {!written && (
+          <MarkdownEditorToggle
+            editing={editing}
+            onToggleEditing={onToggleEditing}
+            controlsId={textareaId}
+          />
+        )}
       </div>
       <p className="mb-3.5 font-mono text-[11.5px] text-faint">{path}</p>
       <div className="mb-2 flex flex-wrap gap-2 border-b border-border pb-4">
@@ -1145,14 +1244,89 @@ function SceneCard({
         ))}
       </div>
       <MarkdownEditorSurface
-        editing={editing}
+        editing={editing && !written}
         id={textareaId}
         value={markdown}
         onChange={onChange}
+        onBlur={onBlur}
         label={t("generate.review.rawLabel", { title })}
         // A draft is a whole file — the preview renders the body only.
         preview={markdownBody(markdown)}
       />
+      <PartActions
+        campaign={campaign}
+        state={state}
+        writtenAt={writtenAt}
+        busy={busy}
+        onAccept={onAccept}
+        onDrop={onDrop}
+      />
+    </div>
+  );
+}
+
+/**
+ * What can be done with ONE part of a run (issue #97): write it on its own,
+ * drop it, or — once it is written — open the entry it became.
+ *
+ * The row is deliberately the same under a scene card and under a suggested
+ * entry: „Diesen übernehmen" means the same thing in both places, and a
+ * written part reads the same way in both.
+ */
+function PartActions({
+  campaign,
+  state,
+  writtenAt,
+  busy,
+  onAccept,
+  onDrop,
+}: {
+  campaign: string;
+  state: PartState;
+  writtenAt: string | undefined;
+  busy: boolean;
+  onAccept: () => void;
+  onDrop?: () => void;
+}) {
+  const t = useT();
+  if (state === "written") {
+    return (
+      <p className="mt-3.5 flex flex-wrap items-center gap-2 border-t border-border pt-3 text-[12.5px] text-muted-foreground">
+        <Check aria-hidden size={14} className="flex-none text-success-text" />
+        {t("generate.review.partWritten")}
+        {writtenAt !== undefined && (
+          <Link
+            to={`/${campaign}/file/${writtenAt}`}
+            className="rounded font-mono text-[11.5px] underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            {writtenAt}
+          </Link>
+        )}
+      </p>
+    );
+  }
+  return (
+    <div className="mt-3.5 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+      <Button
+        type="button"
+        variant="outline"
+        disabled={busy || state === "dropped"}
+        onClick={onAccept}
+        className="h-auto rounded-md border-[color-mix(in_srgb,var(--primary)_40%,transparent)] bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] px-3 py-1.5 text-[12.5px] font-normal text-primary-hover hover:bg-[color-mix(in_srgb,var(--primary)_20%,transparent)] hover:text-primary-hover"
+      >
+        {t("generate.review.acceptOne")}
+      </Button>
+      {onDrop !== undefined && (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={onDrop}
+          className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
+        >
+          {t(state === "dropped" ? "generate.review.undrop" : "generate.review.drop")}
+        </Button>
+      )}
     </div>
   );
 }
@@ -1175,12 +1349,14 @@ function NpcDraftCard({
   editing,
   onToggleEditing,
   onChange,
+  onBlur,
 }: {
   draft: GeneratedNpcDraft;
   markdown: string;
   editing: boolean;
   onToggleEditing: () => void;
   onChange: (markdown: string) => void;
+  onBlur: () => void;
 }) {
   const t = useT();
   const fm = draft.properties;
@@ -1244,6 +1420,7 @@ function NpcDraftCard({
         id={textareaId}
         value={markdown}
         onChange={onChange}
+        onBlur={onBlur}
         label={t("generate.review.rawLabel", { title: name })}
         // A draft is a whole file — the preview renders the body only.
         preview={markdownBody(markdown)}
@@ -1254,15 +1431,25 @@ function NpcDraftCard({
 
 /** One stub row: marker, name, mono target path, italic reason, decision. */
 function StubRow({
+  campaign,
   stub,
   reason,
   decision,
+  state,
+  writtenAt,
+  busy,
   onDecide,
+  onAccept,
 }: {
+  campaign: string;
   stub: GeneratedStub;
   reason: string;
   decision: StubDecision | undefined;
+  state: PartState;
+  writtenAt: string | undefined;
+  busy: boolean;
   onDecide: (decision: StubDecision | undefined) => void;
+  onAccept: () => void;
 }) {
   const t = useT();
   const path = `${stub.kind}s/${stub.id}`;
@@ -1270,7 +1457,7 @@ function StubRow({
     <div
       className={cn(
         "mb-[18px] flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3.5",
-        decision === "rejected" && "opacity-55",
+        (decision === "rejected" || state === "rejected") && "opacity-55",
       )}
     >
       {stub.kind === "npc" ? (
@@ -1285,7 +1472,20 @@ function StubRow({
         </div>
         <p className="mt-0.5 text-[12.5px] text-muted-foreground italic">{reason}</p>
       </div>
-      {decision === undefined ? (
+      {state === "written" ? (
+        <p className="flex flex-none items-center gap-2 text-[12.5px] text-muted-foreground">
+          <Check aria-hidden size={14} className="flex-none text-success-text" />
+          {t("generate.review.partWritten")}
+          {writtenAt !== undefined && (
+            <Link
+              to={`/${campaign}/file/${writtenAt}`}
+              className="rounded font-mono text-[11px] underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              {writtenAt}
+            </Link>
+          )}
+        </p>
+      ) : decision === undefined ? (
         <div className="flex flex-none gap-2">
           <Button
             type="button"
@@ -1305,19 +1505,35 @@ function StubRow({
           </Button>
         </div>
       ) : (
-        // The done row stays a control so a wrong decision is reversible
-        // (the prototype shows a label; a click puts the buttons back).
-        <button
-          type="button"
-          onClick={() => onDecide(undefined)}
-          title={t("generate.stub.undo")}
-          className={cn(
-            "flex-none rounded-md px-1.5 py-1 text-[12.5px]",
-            decision === "accepted" ? "text-primary-hover" : "text-muted-foreground",
+        <div className="flex flex-none items-center gap-2">
+          {/* An ACCEPTED entry can be written on its own (issue #97) — the
+              rest of the run stays reviewable. */}
+          {decision === "accepted" && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={onAccept}
+              className="h-auto border-input bg-transparent px-3 py-1.5 text-[12.5px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
+            >
+              {t("generate.review.acceptOne")}
+            </Button>
           )}
-        >
-          {t(decision === "accepted" ? "generate.stub.accepted" : "generate.stub.rejected")}
-        </button>
+          {/* The decided row stays a control so a wrong decision is
+              reversible (the prototype shows a label; a click puts the
+              buttons back). */}
+          <button
+            type="button"
+            onClick={() => onDecide(undefined)}
+            title={t("generate.stub.undo")}
+            className={cn(
+              "flex-none rounded-md px-1.5 py-1 text-[12.5px]",
+              decision === "accepted" ? "text-primary-hover" : "text-muted-foreground",
+            )}
+          >
+            {t(decision === "accepted" ? "generate.stub.accepted" : "generate.stub.rejected")}
+          </button>
+        </div>
       )}
     </div>
   );

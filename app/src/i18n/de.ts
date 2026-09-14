@@ -42,6 +42,7 @@ export const de = {
   "topbar.search": "Suchen …",
   "topbar.generator": "Generator",
   "topbar.generator.running": "Generierung läuft …",
+  "topbar.generator.progress": "{written} von {total} übernommen",
   "topbar.review.pending": "Nachbereitung · {count} offen",
   // The same link below xl, where the row has no width to spare (issue #69):
   // the COUNT is the news, the word is the one thing that can go. The full
@@ -688,6 +689,23 @@ export const de = {
   "generate.review.discardFailed": "Nicht verworfen — Server prüfen.",
   "generate.review.apply": "Übernehmen ({count})",
   "generate.review.applyNpc": "Übernehmen",
+  // --- generator: review state on the job (issue #97) ----------------------
+  // Everything the DM does here is saved on the SERVER — the line says so
+  // quietly, and only once something has happened.
+  "generate.review.saving": "Speichern …",
+  "generate.review.saved": "Gespeichert",
+  "generate.review.saveConflict": "In einem anderen Tab geändert — neu geladen.",
+  "generate.review.saveFailed": "Nicht gespeichert — Server prüfen.",
+  // Partial accepts: „2 von 3 übernommen" (ICU, both halves are numbers).
+  "generate.review.progress":
+    "{written} von {total} übernommen · der Rest wartet hier",
+  "generate.review.acceptOne": "Diesen übernehmen",
+  "generate.review.partWritten": "Übernommen",
+  "generate.review.drop": "Aus dem Lauf nehmen",
+  "generate.review.undrop": "Wieder aufnehmen",
+  "generate.review.applyRest": "Rest übernehmen ({count})",
+  "generate.review.discardRest": "Rest verwerfen",
+  "generate.review.allDecided": "Alles entschieden.",
   "generate.review.plannedScene": "Geplante Szene",
   "generate.review.contingency": "Eventualszene",
   "generate.review.statblock": "Statblock: {statblock}",

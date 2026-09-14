@@ -258,9 +258,34 @@
 //                                              a draft still uses a spelling a naming
 //                                              convention replaces — hints for the review,
 //                                              never a reason to fail or block
-//   [x] DELETE /api/:campaign/generate/job     discard the job ("Verwerfen")
-//   [x] PUT  /api/:campaign/generate/job/drafts { path, markdown } -> keep one review
-//                                              edit in the job (400 unknown path)
+//                                              A job also carries its REVIEW STATE and
+//                                              that state's `rev` (issue #97): the
+//                                              decision per suggested entry, the dropped
+//                                              scenes, the per field/block decisions of an
+//                                              augment run and the parts a partial accept
+//                                              already wrote (`review.written`, draft path
+//                                              -> the address it landed at)
+//   [x] DELETE /api/:campaign/generate/job     discard the job ("Verwerfen"). Since issue
+//                                              #97 that is the OPEN REST only — parts a
+//                                              partial accept wrote are entries now
+//   [x] PATCH /api/:campaign/generate/job/:id/review
+//                                              { rev, edits?, entries?, dropped?, fields?,
+//                                              blocks? } -> the job (issue #97). Everything
+//                                              MERGES, so the app sends the one thing that
+//                                              changed — text debounced, decisions at once.
+//                                              409 { code: "rev_conflict", rev } when
+//                                              another tab decided first (nothing written);
+//                                              404 without a job or for a stale :id
+//   [x] POST /api/:campaign/generate/job/:id/accept
+//                                              { paths?, chapter?, chapterTitle? } ->
+//                                              { written, jobDeleted } (issue #97).
+//                                              „Diesen übernehmen" per scene / suggested
+//                                              entry; without `paths` everything still
+//                                              open (accepted entries included, undecided
+//                                              ones not). ONE transaction with the target
+//                                              guards of the ordinary draft write, FTS and
+//                                              refs follow, and the job row disappears the
+//                                              moment nothing is left open
 //   [x] POST /api/:campaign/generate/apply     { scenes?, stubs?, npc?, chapter?,
 //                                              chapterTitle?, jobId? } -> { written }
 //                                              (drafts as rows; 409 { conflicts } when any

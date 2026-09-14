@@ -70,6 +70,12 @@ export interface MarkdownEditorSurfaceProps {
    * reading view needs — GET /file already hands out a body without it.
    */
   preview?: string;
+  /**
+   * Leaving the textarea. The generator review uses it to FLUSH its
+   * debounced save (issue #97): blur is the last cheap moment before a
+   * click can take the DM somewhere else.
+   */
+  onBlur?: () => void;
 }
 
 /** Either the mono textarea or the rendered body — never both. */
@@ -80,6 +86,7 @@ export function MarkdownEditorSurface({
   id,
   label,
   preview,
+  onBlur,
 }: MarkdownEditorSurfaceProps) {
   return editing ? (
     <textarea
@@ -87,6 +94,7 @@ export function MarkdownEditorSurface({
       rows={22}
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      onBlur={onBlur}
       aria-label={label}
       className="mt-2 w-full resize-y rounded-lg border border-input bg-background px-4 py-3.5 font-mono text-[12.5px] leading-[1.6] text-body outline-none focus-visible:border-border-hover"
     />

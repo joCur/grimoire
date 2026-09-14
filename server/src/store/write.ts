@@ -2155,6 +2155,14 @@ export async function applyDrafts(
   campaign: string,
   drafts: EntityDraft[],
   jobId?: string,
+  /**
+   * A PARTIAL accept (issue #97) does not discard the job — it records what
+   * it wrote on it and deletes the row only when nothing is left open. That
+   * bookkeeping belongs in THIS transaction for the same reason the discard
+   * does: after a crash the job and the entries it produced must not
+   * disagree. When it is given it replaces the `jobId` discard entirely.
+   */
+  onWritten?: (tx: GrimoireDb) => void,
 ): Promise<void> {
   try {
     await mutate(campaign, (tx) => {
@@ -2176,7 +2184,9 @@ export async function applyDrafts(
         throw new ApiError(409, "target files already exist", { conflicts });
       }
       for (const draft of drafts) insertDraft(tx, campaign, draft);
-      if (jobId !== undefined) {
+      if (onWritten !== undefined) {
+        onWritten(tx);
+      } else if (jobId !== undefined) {
         tx.delete(generateJobs)
           .where(and(eq(generateJobs.id, jobId), eq(generateJobs.campaignId, campaign)))
           .run();

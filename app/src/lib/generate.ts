@@ -20,7 +20,11 @@
 //   - which of the view's states the server's job puts us in (issue #19),
 //     and the error body of a failed job.
 
-import type { GenerateJob } from "@grimoire/shared/types";
+import type {
+  GenerateJob,
+  GenerateJobReview,
+  GenerateReviewDecision,
+} from "@grimoire/shared/types";
 
 import type { Translate } from "@/i18n";
 
@@ -315,4 +319,129 @@ export function usageLabel(value: unknown, t: Translate): string | undefined {
     tokens: groupedNumber(Math.max(tokens, 0), t("generate.usage.group")),
     attempts: Math.max(attempts, 0),
   });
+}
+
+// --- the review state on the job (issue #97) --------------------------------
+//
+// Everything the DM does in the review — the edited text, the decision per
+// suggested entry, the dropped scenes, the per field/block decisions of an
+// augment run — lives on the JOB, not in this browser. These are the pure
+// halves of that: what the state IS, what a patch does to it, and what is
+// still open. No fetching; the hook (lib/use-job-review.ts) does that.
+
+/** A review state with nothing decided — also the fallback for an older payload. */
+export function emptyReview(): GenerateJobReview {
+  return { entries: {}, dropped: [], fields: {}, blocks: {}, written: {} };
+}
+
+/** The job's review state, degrading to "nothing decided" when it has none. */
+export function reviewOf(job: GenerateJob | null | undefined): GenerateJobReview {
+  const review = job?.review;
+  if (review === undefined) return emptyReview();
+  return {
+    entries: review.entries ?? {},
+    dropped: review.dropped ?? [],
+    fields: review.fields ?? {},
+    blocks: review.blocks ?? {},
+    written: review.written ?? {},
+  };
+}
+
+/** What one `PATCH …/review` changes — the same merge the server does. */
+export interface ReviewPatch {
+  edits?: Record<string, string>;
+  entries?: Record<string, GenerateReviewDecision | null>;
+  dropped?: string[];
+  fields?: Record<string, boolean | null>;
+  blocks?: Record<string, boolean | null>;
+}
+
+/**
+ * The job as it will look once a patch lands — the OPTIMISTIC copy the UI
+ * shows while the request is in flight. It must merge exactly the way the
+ * server does (generate-jobs.ts `applyReviewPatch`), including the one
+ * asymmetry: `dropped` is a set sent whole, everything else merges per key,
+ * and a `null` value — in `entries`, `fields` and `blocks` alike — means
+ * „wieder offen" and deletes the key.
+ */
+/** Merge boolean decisions; `null` deletes the key (the server does this). */
+function mergeFlags(
+  into: Record<string, boolean>,
+  patch?: Record<string, boolean | null>,
+): Record<string, boolean> {
+  const out = { ...into };
+  for (const [key, value] of Object.entries(patch ?? {})) {
+    if (value === null) delete out[key];
+    else out[key] = value;
+  }
+  return out;
+}
+
+export function mergeReviewPatch(job: GenerateJob, patch: ReviewPatch): GenerateJob {
+  const review = reviewOf(job);
+  const entries = { ...review.entries };
+  for (const [key, decision] of Object.entries(patch.entries ?? {})) {
+    if (decision === null) delete entries[key];
+    else entries[key] = decision;
+  }
+  return {
+    ...job,
+    draftEdits: { ...job.draftEdits, ...(patch.edits ?? {}) },
+    review: {
+      entries,
+      dropped: patch.dropped === undefined ? review.dropped : [...new Set(patch.dropped)],
+      fields: mergeFlags(review.fields, patch.fields),
+      blocks: mergeFlags(review.blocks, patch.blocks),
+      written: review.written,
+    },
+  };
+}
+
+/** What became of one part of a run. */
+export type PartState = "open" | "written" | "dropped" | "rejected";
+
+/**
+ * The state of one part, addressed the way the review addresses it: a scene
+ * by its draft path, a suggested entry by the address it would be written to
+ * (`npcs/grella`). A WRITTEN part is read-only and links to the entry; a
+ * dropped or rejected one is out of every accept.
+ */
+export function partState(job: GenerateJob | null | undefined, path: string): PartState {
+  const review = reviewOf(job);
+  if (review.written[path] !== undefined) return "written";
+  if (review.dropped.includes(path)) return "dropped";
+  if (review.entries[path] === "rejected") return "rejected";
+  return "open";
+}
+
+/** Every part of a run, by the path the review addresses it with. */
+export function jobParts(job: GenerateJob | null | undefined): string[] {
+  const parts = (job?.result?.scenes ?? []).map((scene) => scene.path);
+  for (const stub of job?.result?.stubs ?? []) parts.push(`${stub.kind}s/${stub.id}`);
+  const npc = job?.npcResult?.npc.path;
+  if (npc !== undefined) parts.push(npc);
+  return parts;
+}
+
+/**
+ * How far a partially accepted run got — „2 von 3 übernommen" in the topbar
+ * and on the generator page. `total` counts every part the run produced,
+ * `written` the ones already on disk; a run nobody has accepted anything of
+ * reports 0 and shows no progress at all.
+ */
+export function jobProgress(job: GenerateJob | null | undefined): {
+  written: number;
+  total: number;
+} {
+  const parts = jobParts(job);
+  const review = reviewOf(job);
+  return {
+    written: parts.filter((path) => review.written[path] !== undefined).length,
+    total: parts.length,
+  };
+}
+
+/** The parts „Alle übernehmen" would write: everything still open. */
+export function openParts(job: GenerateJob | null | undefined): string[] {
+  return jobParts(job).filter((path) => partState(job, path) === "open");
 }

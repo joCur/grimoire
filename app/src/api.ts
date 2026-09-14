@@ -730,23 +730,62 @@ export async function deleteGenerateJob(campaign: string): Promise<void> {
   }
 }
 
+
 /**
- * Keep one review edit in the job store, so an edited draft survives
- * navigation and reload (issue #19). Debounced by the caller; the local
- * editor state stays authoritative while typing.
+ * Store part of the REVIEW STATE on the job (issue #97). Everything merges,
+ * so this sends only what changed: the text of the draft being typed in
+ * (debounced by the caller), the decision that was just made, the drops.
+ *
+ * `rev` is the job's review rev as the caller read it — a 409
+ * `rev_conflict` (with the current rev in `ApiError.details`) means a second
+ * tab decided first and nothing was written; the caller reloads the job.
  */
-export async function putDraftEdit(
+export async function patchJobReview(
   campaign: string,
-  path: string,
-  markdown: string,
-): Promise<void> {
-  const url = `/${encodeURIComponent(campaign)}/generate/job/drafts`;
-  const response = await fetch(`/api${url}`, {
-    method: "PUT",
+  jobId: string,
+  rev: number,
+  patch: {
+    edits?: Record<string, string>;
+    entries?: Record<string, "accepted" | "rejected" | null>;
+    dropped?: string[];
+    fields?: Record<string, boolean | null>;
+    blocks?: Record<string, boolean | null>;
+  },
+): Promise<GenerateJob> {
+  const path = `/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}/review`;
+  const response = await fetch(`/api${path}`, {
+    method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path, markdown }),
+    body: JSON.stringify({ rev, ...patch }),
   });
-  if (!response.ok) throw await failure(`PUT /api${url}`, response);
+  if (!response.ok) throw await failure(`PATCH /api${path}`, response);
+  return (await response.json()) as GenerateJob;
+}
+
+/**
+ * Accept PART of a finished run (issue #97): „Diesen übernehmen" for one
+ * scene or one suggested entry, „Alle übernehmen" without a selection.
+ * Answers what it wrote (draft path -> the address it landed at) and
+ * whether the job is gone because nothing is open any more. `rev` is the
+ * review rev as the caller read it: a 409 `rev_conflict` means another tab
+ * decided in between and nothing was written. A 409 with
+ * `details.conflicts` is the ordinary write conflict, as for the whole-run
+ * apply.
+ */
+export function acceptJobParts(
+  campaign: string,
+  jobId: string,
+  rev: number,
+  input: { paths?: string[]; chapter?: string; chapterTitle?: string } = {},
+): Promise<{ written: Record<string, string>; jobDeleted: boolean }> {
+  const path = `/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}/accept`;
+  return postJson<{ written: Record<string, string>; jobDeleted: boolean }>(path, {
+    rev,
+    ...(input.paths === undefined ? {} : { paths: input.paths }),
+    ...(input.chapter === undefined || input.chapterTitle === undefined
+      ? {}
+      : { chapter: input.chapter, chapterTitle: input.chapterTitle }),
+  });
 }
 
 /**
