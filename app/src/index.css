@@ -292,6 +292,16 @@
   }
   .md-body th:last-child,
   .md-body td:last-child { padding-inline-end: 0; }
+  /* Issue #96: the first column is the roll/dice column by convention
+     (`W6` → `1–2`, `3–4`, …). Breaking it at the en dash turns one range
+     into two lines, so headers and that column never wrap; the remaining
+     cells wrap as usual. `min-width: min-content` on the table then pushes
+     the extra width into `.md-table-scroll` rather than onto the page. */
+  .md-body th,
+  .md-body tbody th:first-child,
+  .md-body tbody td:first-child {
+    white-space: nowrap;
+  }
   /* The header row is the distinguishing element — same overline vocabulary
      the H2 uses, so a table looks like it belongs to this document. */
   .md-body thead th {
