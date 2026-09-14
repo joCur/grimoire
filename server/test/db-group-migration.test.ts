@@ -31,6 +31,7 @@ async function oldSchemaDb(): Promise<SqliteClient> {
       rev integer not null default 1,
       primary key (campaign_id, id)
     );
+    create table meta (key text primary key, value text not null);
     create virtual table search_fts using fts5(
       title, ref, tags, body, campaign_id unindexed, kind unindexed, entity_id unindexed
     );
@@ -134,6 +135,31 @@ describe("group_slug -> location (#100)", () => {
     expect(out.unresolved).toEqual([
       { campaignId: "beispiel", sceneId: "ankunft", location: "???" },
     ]);
+    client.close();
+  });
+
+  test("a re-run after a failed 0009 reports nothing a second time", async () => {
+    // 0009 is the migration that DROPS the column, and it is what makes this
+    // step a no-op. A boot whose migrator failed after the step succeeded
+    // therefore finds the old schema again — and used to re-derive and
+    // RE-REPORT every move (issue #100 review). The marker ends that.
+    const client = await oldSchemaDb();
+    addScene(client, "ankunft", "hafen", "leuchtturm");
+    expect(migrateGroupsToLocations(client).moved).toHaveLength(1);
+
+    const again = migrateGroupsToLocations(client);
+    expect(again).toEqual(NO_GROUP_MIGRATION);
+    // …and nothing was written twice either.
+    expect(locations(client)).toEqual([{ id: "leuchtturm", name: "" }]);
+    client.close();
+  });
+
+  test("an open row keeps the step reporting until the DM fixes it", async () => {
+    const client = await oldSchemaDb();
+    addScene(client, "ankunft", "hafen", "???");
+    expect(migrateGroupsToLocations(client).unresolved).toHaveLength(1);
+    // No marker while something is open: the line has to keep appearing.
+    expect(migrateGroupsToLocations(client).unresolved).toHaveLength(1);
     client.close();
   });
 

@@ -66,16 +66,44 @@ export const NO_GROUP_MIGRATION: GroupMigrationOutcome = {
   unresolved: [],
 };
 
+/** Is there such a table? Asked before every raw-client query below. */
+function hasTable(client: SqliteClient, name: string): boolean {
+  return (
+    client
+      .prepare("select name from sqlite_master where type = 'table' and name = ?")
+      .all(name).length > 0
+  );
+}
+
 /** Does this database still have the pre-#100 column? */
 function hasGroupSlug(client: SqliteClient): boolean {
-  const tables = client
-    .prepare("select name from sqlite_master where type = 'table' and name = 'scenes'")
-    .all();
-  if (tables.length === 0) return false;
+  if (!hasTable(client, "scenes")) return false;
   return client
     .prepare("pragma table_info(scenes)")
     .all()
     .some((row) => row.name === "group_slug");
+}
+
+/**
+ * The `meta` marker that says this step has nothing left to do.
+ *
+ * "The column is gone" is the step's idempotency guard, and it is the
+ * migrator that removes it — so a boot whose MIGRATOR failed after this step
+ * succeeded (0009 is the migration that drops the column) finds the old
+ * schema again and re-derived everything: the writes were idempotent, but
+ * the boot log re-reported every moved scene as if it had just moved. The
+ * marker is the missing half: written in the SAME transaction as the writes,
+ * so it exists exactly when the derivation is complete.
+ *
+ * It is written only when NOTHING is left open (`unresolved`) — a scene whose
+ * location yields no id still needs the DM, and that line should keep
+ * appearing until it does.
+ */
+const MIGRATION_DONE_KEY = "group_migration_100";
+
+function alreadyMigrated(client: SqliteClient): boolean {
+  if (!hasTable(client, "meta")) return false;
+  return client.prepare("select 1 from meta where key = ?").all(MIGRATION_DONE_KEY).length > 0;
 }
 
 interface SceneRow {
@@ -87,11 +115,16 @@ interface SceneRow {
 
 /**
  * Derive `location` from `group_slug` for every scene that needs it, and
- * create the location entries the result references. Idempotent by
- * construction: the column it reads is gone after migration 0009.
+ * create the location entries the result references.
+ *
+ * Idempotent twice over: the column it reads is gone after migration 0009,
+ * and a boot that ran this step but not the migrator finds the
+ * MIGRATION_DONE_KEY marker and does nothing — so the boot log reports each
+ * moved scene exactly once, in the boot that moved it.
  */
 export function migrateGroupsToLocations(client: SqliteClient): GroupMigrationOutcome {
   if (!hasGroupSlug(client)) return NO_GROUP_MIGRATION;
+  if (alreadyMigrated(client)) return NO_GROUP_MIGRATION;
 
   const rows = client
     .prepare("select campaign_id, id, group_slug, location from scenes order by campaign_id, id")
@@ -103,9 +136,17 @@ export function migrateGroupsToLocations(client: SqliteClient): GroupMigrationOu
   const insertLocation = client.prepare(
     "insert into locations (campaign_id, id, name, body, extra, rev) values (?, ?, ?, '', '{}', 1)",
   );
-  const indexLocation = client.prepare(
-    "insert into search_fts (title, ref, tags, body, campaign_id, kind, entity_id) values (?, ?, '', '', ?, 'location', ?)",
-  );
+  // Prepared on FIRST USE: most databases create no entry at all here (every
+  // group directory the DM had is already a location), and a statement
+  // against the FTS table is the one query in this step that can fail on a
+  // database whose virtual table was never created.
+  let indexLocation: ReturnType<SqliteClient["prepare"]> | undefined;
+  const indexLocationStatement = (): ReturnType<SqliteClient["prepare"]> => {
+    indexLocation ??= client.prepare(
+      "insert into search_fts (title, ref, tags, body, campaign_id, kind, entity_id) values (?, ?, '', '', ?, 'location', ?)",
+    );
+    return indexLocation;
+  };
 
   const moved: GroupMigrationMove[] = [];
   const createdLocations: string[] = [];
@@ -139,8 +180,15 @@ export function migrateGroupsToLocations(client: SqliteClient): GroupMigrationOu
         // render.ts falls back to the id anyway.
         const name = source === target ? "" : source;
         insertLocation.run(row.campaign_id, target, name);
-        indexLocation.run(name === "" ? target : name, target, row.campaign_id, target);
+        indexLocationStatement().run(name === "" ? target : name, target, row.campaign_id, target);
         createdLocations.push(`${row.campaign_id}/${target}`);
+      }
+      // The marker commits WITH the writes (or not at all) — see
+      // MIGRATION_DONE_KEY. Open rows keep the step reporting.
+      if (unresolved.length === 0 && hasTable(client, "meta")) {
+        client
+          .prepare("insert or replace into meta (key, value) values (?, ?)")
+          .run(MIGRATION_DONE_KEY, new Date().toISOString());
       }
     })
     .immediate();
