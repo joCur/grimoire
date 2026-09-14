@@ -31,10 +31,13 @@ import { applyDrafts } from "./store/write";
  * bookkeeping behind it:
  *
  *   selection   scene draft paths and suggested-entry addresses
- *               (`npcs/grella`). Absent means EVERY part that is still open
- *               — a dropped scene and a rejected entry are not open, so
- *               „Alle übernehmen" never resurrects something the DM said no
- *               to.
+ *               (`npcs/grella`). Absent is „Alle übernehmen": every scene
+ *               that is neither written nor dropped, plus the suggested
+ *               entries the DM ACCEPTED — an undecided entry is not written
+ *               by a bulk action, exactly as before this ticket, and a
+ *               rejected one never is. Naming a path explicitly is the one
+ *               way an undecided entry gets written („Diesen übernehmen"
+ *               on its row is the decision).
  *   transaction one, with the target rev guards of the ordinary draft write
  *               (`applyDrafts`: conflicts checked INSIDE it, FTS and
  *               `[[slug]]` reference rows follow because this is that path).
@@ -58,36 +61,41 @@ export async function acceptJobParts(
   const review = job.review;
   const dropped = new Set(review.dropped);
   /** Every part of this run, by the path the review addresses it with. */
-  const parts = new Map<string, { target: ApplyTarget; open: boolean }>();
+  const parts = new Map<string, { target: ApplyTarget; open: boolean; bulk: boolean }>();
   job.result?.scenes.forEach((scene, index) => {
     const markdown = job.draftEdits.get(scene.path) ?? scene.markdown;
+    const open = review.written[scene.path] === undefined && !dropped.has(scene.path);
     parts.set(scene.path, {
       target: applySceneTarget({ path: scene.path, markdown }, index),
-      open: review.written[scene.path] === undefined && !dropped.has(scene.path),
+      open,
+      bulk: open,
     });
   });
   job.result?.stubs.forEach((stub, index) => {
     const rel = stub.kind === "npc" ? npcPath(stub.id) : locationPath(stub.id);
+    const decision = review.entries[rel];
+    const open =
+      review.written[rel] === undefined && decision !== "rejected" && !dropped.has(rel);
     parts.set(rel, {
       target: applyStubTarget(stub, index),
-      open:
-        review.written[rel] === undefined &&
-        review.entries[rel] !== "rejected" &&
-        !dropped.has(rel),
+      open,
+      bulk: open && decision === "accepted",
     });
   });
   const npcDraft = job.npcResult?.npc;
   if (npcDraft !== undefined) {
     const markdown = job.draftEdits.get(npcDraft.path) ?? npcDraft.markdown;
+    const open = review.written[npcDraft.path] === undefined;
     parts.set(npcDraft.path, {
       target: applyNpcTarget({ path: npcDraft.path, markdown }),
-      open: review.written[npcDraft.path] === undefined,
+      open,
+      bulk: open,
     });
   }
 
   let selected: string[];
   if (body.paths === undefined) {
-    selected = [...parts].filter(([, part]) => part.open).map(([rel]) => rel);
+    selected = [...parts].filter(([, part]) => part.bulk).map(([rel]) => rel);
   } else {
     if (!Array.isArray(body.paths)) throw new ApiError(400, "paths must be an array of strings");
     selected = [];

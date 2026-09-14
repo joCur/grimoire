@@ -27,7 +27,12 @@
 // searching and inbox surface (UI-BRIEF), and a block-by-block diff review is
 // not that. The reading view itself is untouched by this at every width.
 
-import type { AugmentPropertyProposal, AugmentResult, FileResponse } from "@grimoire/shared/types";
+import type {
+  AugmentPropertyProposal,
+  AugmentResult,
+  FileResponse,
+  GenerateJob,
+} from "@grimoire/shared/types";
 import { isAugmentKind } from "@grimoire/shared/types";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, SpellCheck, StickyNote } from "lucide-react";
@@ -35,6 +40,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { applyAugment, deleteGenerateJob, fetchFile, startAugmentJob } from "@/api";
 import { HeaderAction } from "@/components/HeaderAction";
+import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useT, type Translate } from "@/i18n";
@@ -50,7 +56,9 @@ import {
 } from "@/lib/augment";
 import { blockLabel, blockTreeMarkdown } from "@/lib/blocks";
 import { fmString } from "@/lib/properties";
+import { reviewOf } from "@/lib/generate";
 import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
+import { useJobReview } from "@/lib/use-job-review";
 import { useRevWriteMutation } from "@/lib/use-rev-write";
 import { cn } from "@/lib/utils";
 import { writeWithRev } from "@/lib/write-with-rev";
@@ -64,6 +72,24 @@ const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-mute
  */
 function entryName(file: FileResponse): string {
   return fmString(file.properties.name) ?? fmString(file.properties.title) ?? file.path;
+}
+
+/**
+ * What is accepted right now: the computed DEFAULT set, overridden by every
+ * decision the job carries (issue #97). Absent from the record means the DM
+ * has not touched that field/block, so the default still stands — which is
+ * what keeps „nie stilles Überschreiben" true after a reload.
+ */
+function decidedSet(
+  defaults: ReadonlySet<string>,
+  decided: Record<string, boolean>,
+): Set<string> {
+  const out = new Set(defaults);
+  for (const [key, take] of Object.entries(decided)) {
+    if (take) out.add(key);
+    else out.delete(key);
+  }
+  return out;
 }
 
 /** The two review surfaces — blocks (default) and the raw text diff. */
@@ -192,6 +218,7 @@ function AugmentDialog({
               campaign={campaign}
               file={file}
               jobId={current?.id}
+              job={current}
               proposal={proposal}
               onDone={onClose}
             />
@@ -292,17 +319,27 @@ function AugmentReview({
   campaign,
   file,
   jobId,
+  job,
   proposal,
   onDone,
 }: {
   campaign: string;
   file: FileResponse;
   jobId: string | undefined;
+  /** The job the proposal came from — it carries the DM's decisions (#97). */
+  job: GenerateJob | null | undefined;
   proposal: AugmentResult;
   onDone: () => void;
 }) {
   const t = useT();
   const queryClient = useQueryClient();
+  // The per-field and per-block decisions are SERVER state since issue #97:
+  // a closed dialog, a reload or a second tab all come back to the same
+  // review. Only the DEFAULTS are computed here — a key the job does not
+  // carry has not been decided, and then the ticket's rule applies (take
+  // what is new, keep what is filled).
+  const review = useJobReview(campaign, job);
+  const stored = reviewOf(job);
   // The body the proposal is diffed AGAINST. It starts as the one the run
   // saw and moves only after a conflict — see `onConflict` below.
   const [currentBody, setCurrentBody] = useState(proposal.currentBody);
@@ -310,11 +347,16 @@ function AugmentReview({
     () => alignBlocks(currentBody, proposal.proposedBody),
     [currentBody, proposal.proposedBody],
   );
-  const [acceptedBlocks, setAcceptedBlocks] = useState<Set<string>>(() => defaultAccepted(changes));
+  // Re-derived after a conflict (see `onConflict`): the blocks are cut
+  // against a body that moved, so their ids did too.
+  const [blockDefaults, setBlockDefaults] = useState<Set<string>>(() => defaultAccepted(changes));
+  const acceptedBlocks = decidedSet(blockDefaults, stored.blocks);
   // Properties default (AK2): take what is new, keep what is filled.
-  const [acceptedFields, setAcceptedFields] = useState<Set<string>>(
+  const fieldDefaults = useMemo(
     () => new Set(proposal.properties.filter((p) => p.state === "new").map((p) => p.key)),
+    [proposal.properties],
   );
+  const acceptedFields = decidedSet(fieldDefaults, stored.fields);
   const [mode, setMode] = useState<ReviewMode>("blocks");
   const [showUnchanged, setShowUnchanged] = useState(false);
   // Frozen at review time and advanced only after a conflict — the same rule
@@ -371,7 +413,7 @@ function AugmentReview({
       if (reread === undefined) return;
       setBase(reread.rev);
       setCurrentBody(reread.body);
-      setAcceptedBlocks(defaultAccepted(alignBlocks(reread.body, proposal.proposedBody)));
+      setBlockDefaults(defaultAccepted(alignBlocks(reread.body, proposal.proposedBody)));
     },
   });
 
@@ -435,14 +477,7 @@ function AugmentReview({
               key={field.key}
               field={field}
               accepted={acceptedFields.has(field.key)}
-              onDecide={(take) =>
-                setAcceptedFields((prev) => {
-                  const next = new Set(prev);
-                  if (take) next.add(field.key);
-                  else next.delete(field.key);
-                  return next;
-                })
-              }
+              onDecide={(take) => review.decide({ fields: { [field.key]: take } })}
               t={t}
             />
           ))}
@@ -489,14 +524,7 @@ function AugmentReview({
                   key={change.id}
                   change={change}
                   accepted={acceptedBlocks.has(change.id)}
-                  onDecide={(take) =>
-                    setAcceptedBlocks((prev) => {
-                      const next = new Set(prev);
-                      if (take) next.add(change.id);
-                      else next.delete(change.id);
-                      return next;
-                    })
-                  }
+                  onDecide={(take) => review.decide({ blocks: { [change.id]: take } })}
                   t={t}
                 />
               ))}
@@ -522,6 +550,9 @@ function AugmentReview({
         {message ?? ""}
       </p>
       <div className="flex items-center justify-end gap-2 pt-1">
+        {/* Every decision above is saved on the job (issue #97) — said here
+            as quietly as in the generator review, and with the same words. */}
+        <ReviewSaveStatus status={review.status} />
         <Button
           type="button"
           variant="outline"

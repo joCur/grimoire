@@ -750,6 +750,58 @@ export async function putDraftEdit(
 }
 
 /**
+ * Store part of the REVIEW STATE on the job (issue #97). Everything merges,
+ * so this sends only what changed: the text of the draft being typed in
+ * (debounced by the caller), the decision that was just made, the drops.
+ *
+ * `rev` is the job's review rev as the caller read it — a 409
+ * `rev_conflict` (with the current rev in `ApiError.details`) means a second
+ * tab decided first and nothing was written; the caller reloads the job.
+ */
+export async function patchJobReview(
+  campaign: string,
+  jobId: string,
+  rev: number,
+  patch: {
+    edits?: Record<string, string>;
+    entries?: Record<string, "accepted" | "rejected" | null>;
+    dropped?: string[];
+    fields?: Record<string, boolean>;
+    blocks?: Record<string, boolean>;
+  },
+): Promise<GenerateJob> {
+  const path = `/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}/review`;
+  const response = await fetch(`/api${path}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rev, ...patch }),
+  });
+  if (!response.ok) throw await failure(`PATCH /api${path}`, response);
+  return (await response.json()) as GenerateJob;
+}
+
+/**
+ * Accept PART of a finished run (issue #97): „Diesen übernehmen" for one
+ * scene or one suggested entry, „Alle übernehmen" without a selection.
+ * Answers what it wrote (draft path -> the address it landed at) and
+ * whether the job is gone because nothing is open any more. A 409 carries
+ * the existing paths in `details.conflicts`, as the whole-run apply does.
+ */
+export function acceptJobParts(
+  campaign: string,
+  jobId: string,
+  input: { paths?: string[]; chapter?: string; chapterTitle?: string } = {},
+): Promise<{ written: Record<string, string>; jobDeleted: boolean }> {
+  const path = `/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}/accept`;
+  return postJson<{ written: Record<string, string>; jobDeleted: boolean }>(path, {
+    ...(input.paths === undefined ? {} : { paths: input.paths }),
+    ...(input.chapter === undefined || input.chapterTitle === undefined
+      ? {}
+      : { chapter: input.chapter, chapterTitle: input.chapterTitle }),
+  });
+}
+
+/**
  * Write the reviewed drafts (all or nothing): the possibly edited scene
  * markdown plus the accepted stubs. With `chapter` + `chapterTitle` the
  * server also creates `<chapter>/_chapter` when it is missing.

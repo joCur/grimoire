@@ -5,12 +5,20 @@
 
 import { describe, expect, test } from "bun:test";
 
+import type { GenerateJob } from "@grimoire/shared/types";
+
 import { translator } from "@/i18n/format";
 import {
   applySummary,
   chapterIdError,
   chapterIdValue,
   contextHint,
+  jobParts,
+  jobProgress,
+  mergeReviewPatch,
+  openParts,
+  partState,
+  reviewOf,
   knowledgeHint,
   generatePhase,
   jobErrorBody,
@@ -423,5 +431,117 @@ describe("npcIdError", () => {
   test("an id whose file exists is named as such — the server would 409", () => {
     expect(npcIdError("fenn", ["fenn", "jorna"], t)).toContain("existiert schon");
     expect(npcIdError("grella", ["fenn", "jorna"], t)).toBeUndefined();
+  });
+});
+
+// --- the review state on the job (issue #97) --------------------------------
+
+describe("review state mapping", () => {
+  const job = (over: Partial<GenerateJob> = {}): GenerateJob =>
+    ({
+      id: "j1",
+      campaign: "beispiel",
+      kind: "scene",
+      status: "done",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      draftEdits: {},
+      rev: 0,
+      result: {
+        scenes: [
+          { path: "01-x/a", markdown: "a", properties: {} },
+          { path: "01-x/b", markdown: "b", properties: {} },
+        ],
+        stubs: [{ kind: "npc", id: "grella", name: "Grella", markdown: "s" }],
+        warnings: [],
+      },
+      ...over,
+    }) as GenerateJob;
+
+  test("a payload without a review degrades to „nothing decided yet“", () => {
+    expect(reviewOf(job())).toEqual({
+      entries: {},
+      dropped: [],
+      fields: {},
+      blocks: {},
+      written: {},
+    });
+    expect(reviewOf(null)).toEqual(reviewOf(undefined));
+  });
+
+  test("a patch merges per key — and `null` puts a decision back to open", () => {
+    let next = mergeReviewPatch(job(), { entries: { "npcs/grella": "accepted" } });
+    next = mergeReviewPatch(next, { edits: { "01-x/a": "typed" } });
+    expect(next.review?.entries).toEqual({ "npcs/grella": "accepted" });
+    expect(next.draftEdits["01-x/a"]).toBe("typed");
+
+    next = mergeReviewPatch(next, { entries: { "npcs/grella": null } });
+    expect(next.review?.entries).toEqual({});
+    // The unrelated half is untouched — that is what „merge" has to mean.
+    expect(next.draftEdits["01-x/a"]).toBe("typed");
+  });
+
+  test("`dropped` is a set sent whole, not a merge", () => {
+    const next = mergeReviewPatch(
+      mergeReviewPatch(job(), { dropped: ["01-x/a"] }),
+      { dropped: ["01-x/b"] },
+    );
+    expect(next.review?.dropped).toEqual(["01-x/b"]);
+  });
+
+  test("a part is open, written, dropped or rejected", () => {
+    const decided = job({
+      review: {
+        entries: { "npcs/grella": "rejected" },
+        dropped: ["01-x/b"],
+        fields: {},
+        blocks: {},
+        written: { "01-x/a": "01-x/a" },
+      },
+    });
+    expect(partState(decided, "01-x/a")).toBe("written");
+    expect(partState(decided, "01-x/b")).toBe("dropped");
+    expect(partState(decided, "npcs/grella")).toBe("rejected");
+    expect(partState(job(), "01-x/a")).toBe("open");
+  });
+
+  test("the parts of a run are the scenes, the suggested entries and an npc draft", () => {
+    expect(jobParts(job())).toEqual(["01-x/a", "01-x/b", "npcs/grella"]);
+    expect(
+      jobParts(
+        job({
+          result: undefined,
+          kind: "npc",
+          npcResult: { npc: { path: "npcs/brakk", markdown: "m", properties: {} }, warnings: [] },
+        }),
+      ),
+    ).toEqual(["npcs/brakk"]);
+  });
+
+  test("progress counts the written parts — „2 von 3 übernommen“", () => {
+    expect(jobProgress(job())).toEqual({ written: 0, total: 3 });
+    const partly = job({
+      review: {
+        entries: {},
+        dropped: [],
+        fields: {},
+        blocks: {},
+        written: { "01-x/a": "01-x/a", "npcs/grella": "npcs/grella" },
+      },
+    });
+    expect(jobProgress(partly)).toEqual({ written: 2, total: 3 });
+    expect(openParts(partly)).toEqual(["01-x/b"]);
+  });
+
+  test("a dropped or rejected part is not part of the rest", () => {
+    const decided = job({
+      review: {
+        entries: { "npcs/grella": "rejected" },
+        dropped: ["01-x/b"],
+        fields: {},
+        blocks: {},
+        written: {},
+      },
+    });
+    expect(openParts(decided)).toEqual(["01-x/a"]);
   });
 });

@@ -298,6 +298,28 @@ test('„Alle übernehmen" writes the open rest — never a dropped or rejected 
   expect(await exists(STUB_PATH)).toBe(false);
 });
 
+test("a bulk accept skips an UNDECIDED suggested entry, an explicit one writes it", async () => {
+  const job = await runJob();
+  // Nothing decided about the entry: „Alle übernehmen" writes the scenes and
+  // leaves it alone — the pre-#97 rule, and the reason the job stays.
+  const bulk = (await (await accept(job, {})).json()) as {
+    written: Record<string, string>;
+    jobDeleted: boolean;
+  };
+  expect(Object.keys(bulk.written).sort()).toEqual([SCENE_B, SCENE_A].sort());
+  expect(bulk.jobDeleted).toBe(false);
+  expect(await exists(STUB_PATH)).toBe(false);
+
+  // Naming it is the decision: „Diesen übernehmen" on its row writes it, and
+  // then nothing is open any more.
+  const rest = (await fetchJob()) as GenerateJob;
+  const one = (await (await accept(rest, { paths: [STUB_PATH] })).json()) as {
+    jobDeleted: boolean;
+  };
+  expect(one.jobDeleted).toBe(true);
+  expect(await exists(STUB_PATH)).toBe(true);
+});
+
 test('„Verwerfen" removes only the open rest — what was written stays', async () => {
   const job = await runJob();
   expect((await accept(job, { paths: [SCENE_A] })).status).toBe(200);
