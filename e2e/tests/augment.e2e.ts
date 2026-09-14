@@ -202,6 +202,34 @@ test("prepared scene: the new thread is added, every existing block survives", a
   await expect(page.getByText(AUGMENT_THREAD_CONDITION)).toBeVisible();
 });
 
+test("block decisions survive a reload — the review state is on the job (#97)", async ({
+  page,
+}) => {
+  await page.goto(SCENE_URL);
+  await startAugment(page);
+
+  // The one decision of this reply is the new `## If:` section, preselected
+  // („Neu" is taken by default, AK2).
+  const newBlock = () => page.locator("li").filter({ hasText: AUGMENT_THREAD_CONDITION }).last();
+  const keep = () => newBlock().getByRole("button", { name: /^Behalten: / });
+  await expect(newBlock()).toBeVisible({ timeout: 30_000 });
+  await expect(newBlock().getByRole("button", { name: /^Übernehmen: / })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  // Decide AGAINST it and reload: before issue #97 the dialog came back with
+  // the default again and the DM's „behalten" was gone.
+  await keep().click();
+  await expect(keep()).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("Gespeichert")).toBeVisible();
+
+  await page.reload();
+  await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
+  await expect(newBlock()).toBeVisible({ timeout: 30_000 });
+  await expect(keep()).toHaveAttribute("aria-pressed", "true");
+});
+
 test("while the run is on, only the run's own controls are there", async ({ page }) => {
   // TRIGGER.slow holds the reply, so the running phase can actually be
   // looked at. „Ergänzen"/„Abbrechen" belong to the INPUT phase: over a
