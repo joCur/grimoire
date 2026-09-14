@@ -19,6 +19,10 @@
 // not part of it. The route owns only the "which path is being edited" bit;
 // the write, the 409 and the discard guard live in FileBodyEditor.
 //
+// „Mit KI ergänzen" (issue #36) is the third one: source text and/or an
+// instruction go to a server job, and its proposal comes back as a review —
+// properties per field, body per block, nothing written until accepted.
+//
 // „Eigenschaften" next to it (issue #42) is the properties half: a form over
 // all typed fields of the kind. It stays available while the body editor runs —
 // its patch never touches the body, and the editor adopts a body-neutral new
@@ -29,6 +33,7 @@ import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 
 import { fetchFile, fetchTree } from "@/api";
+import { AugmentAction } from "@/components/AugmentAction";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
 import { EntityArticle } from "@/components/EntityArticle";
 import { FileBodyEditAction, FileBodyEditor } from "@/components/FileBodyEditor";
@@ -136,10 +141,17 @@ export function SceneRoute() {
   const propertiesAction = (
     <PropertiesAction campaign={campaign} file={data} tree={tree.data} />
   );
+  // „Mit KI ergänzen" (issue #36) — the third quiet action, for the kinds
+  // that have an augment prompt (npc, location, scene); it renders nothing
+  // for the rest, and it is desktop-only (mobile is the reading surface).
+  // While the body editor runs it stays out of the way for the same reason
+  // „Bearbeiten" does: two writers on one body is not a review.
+  const augmentAction = editing ? null : <AugmentAction campaign={campaign} file={data} />;
   const articleActions = (
     <>
       {editAction}
       {propertiesAction}
+      {augmentAction}
     </>
   );
   // The campaign file's header carries the metadata „Bearbeiten" instead

@@ -793,4 +793,50 @@ export const de = {
   "harness.title": "Markdown-Harness",
   "harness.lead": "Rendert die Referenz-Fixtures aus examples/ ohne laufenden Server.",
   "harness.properties": "Eigenschaften anzeigen",
+
+  // --- „Mit KI ergänzen" (components/AugmentAction.tsx, issue #36) ---------
+  "augment.action": "Mit KI ergänzen",
+  "augment.title": "Mit KI ergänzen",
+  "augment.description":
+    "Quelltext und/oder Anweisung — die KI ergänzt {path}. Nichts wird überschrieben, "
+    + "bevor du es übernommen hast.",
+  "augment.source.label": "Quelltext (EN)",
+  "augment.source.placeholder": "Abschnitt aus dem Abenteuer, Notizen, Hintergrund …",
+  "augment.instruction.label": "Anweisung (optional)",
+  "augment.instruction.placeholder":
+    "z. B. Führe einen Handlungsstrang um den Schmuggler-Spitzel ein",
+  "augment.input.hint": "Mindestens eines von beidem wird gebraucht.",
+  "augment.start": "Ergänzen",
+  "augment.starting": "Starte …",
+  "augment.start.failed": "Lauf nicht gestartet — Server prüfen.",
+  "augment.running": "Läuft auf dem Server. Du kannst den Tab schließen — das Ergebnis bleibt.",
+  "augment.busy": "Ein anderer Generator-Lauf läuft gerade. Erst abwarten oder dort verwerfen.",
+  "augment.discard": "Lauf verwerfen",
+  "augment.discard.failed": "Konnte den Lauf nicht verwerfen — Server prüfen.",
+
+  // the review
+  "augment.properties.heading": "Eigenschaften",
+  "augment.properties.none": "Keine Änderung an den Eigenschaften vorgeschlagen.",
+  "augment.field.current": "Vorhanden",
+  "augment.field.proposed": "Vorschlag",
+  "augment.field.empty": "leer",
+  "augment.body.heading": "Text",
+  "augment.body.modeGroup": "Ansicht des Vorschlags",
+  "augment.body.blocks": "Blöcke",
+  "augment.body.raw": "Roh",
+  "augment.body.none": "Keine Änderung am Text vorgeschlagen.",
+  "augment.body.showUnchanged": "Unveränderte Blöcke zeigen",
+  "augment.body.hideUnchanged": "Unveränderte Blöcke ausblenden",
+  "augment.state.new": "Neu",
+  "augment.state.changed": "Geändert",
+  "augment.state.removed": "Entfällt",
+  "augment.decision.aria": "Übernehmen oder behalten",
+  "augment.decision.take": "Übernehmen",
+  "augment.decision.keep": "Behalten",
+  "augment.accept": "Übernehmen",
+  "augment.reject": "Vorschlag verwerfen",
+  "augment.review.namingHeading":
+    "{count, plural, one {# Hinweis zur Namenskonvention} other {# Hinweise zur Namenskonvention}} — kein Blocker",
+  "augment.review.namingHint": "„{from}“ steht noch da, die Konvention sagt „{to}“.",
+
 } as const;

@@ -640,6 +640,72 @@ export async function startGenerateNpcJob(
 }
 
 /**
+ * Start an augment run („Mit KI ergänzen", issue #36): an entry that already
+ * exists plus source material and/or an instruction, and the model proposes
+ * the filled-in version. Same job model as the create runs — 202 { jobId },
+ * the proposal is fetched via fetchGenerateJob (`kind: "augment"`,
+ * `augmentResult`), and a 409 carrying a jobId means „a generator job is
+ * already running for this campaign" and is ADOPTED instead of shown as an
+ * error (the review then simply belongs to that job).
+ *
+ * At least one of sourceText/instruction has to carry text; the dialog
+ * enforces it and the server answers 400 for the rest.
+ */
+export async function startAugmentJob(
+  campaign: string,
+  input: { path: string; sourceText?: string; instruction?: string },
+): Promise<GenerateJobStarted> {
+  const path = `/${encodeURIComponent(campaign)}/generate/augment`;
+  const response = await fetch(`/api${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      path: input.path,
+      ...(input.sourceText === undefined || input.sourceText === ""
+        ? {}
+        : { sourceText: input.sourceText }),
+      ...(input.instruction === undefined || input.instruction === ""
+        ? {}
+        : { instruction: input.instruction }),
+    }),
+  });
+  if (!response.ok) {
+    const error = await failure(`POST /api${path}`, response);
+    if (error.status === 409 && typeof error.details.jobId === "string") {
+      return { jobId: error.details.jobId };
+    }
+    throw error;
+  }
+  return (await response.json()) as GenerateJobStarted;
+}
+
+/**
+ * Accept a reviewed augment proposal (issue #36): the properties fields the
+ * DM took and the body they assembled from the accepted blocks, written in
+ * ONE transaction against `rev`. A 409 is the ordinary conflict protocol
+ * (ADR #4) and arrives as ApiError — the caller re-reads and tries again.
+ * `jobId` discards the job in the same transaction.
+ */
+export function applyAugment(
+  campaign: string,
+  input: {
+    path: string;
+    rev: number;
+    properties?: Record<string, unknown>;
+    body?: string;
+    jobId?: string;
+  },
+): Promise<FileResponse> {
+  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/generate/augment/apply`, {
+    path: input.path,
+    rev: input.rev,
+    ...(input.properties === undefined ? {} : { properties: input.properties }),
+    ...(input.body === undefined ? {} : { body: input.body }),
+    ...(input.jobId === undefined ? {} : { jobId: input.jobId }),
+  });
+}
+
+/**
  * The campaign's generate job, or null when there is none (the server's 404
  * is the normal "nothing running, nothing to restore" answer — never an
  * error state in the UI). A `null` after a job WAS there means it is gone:

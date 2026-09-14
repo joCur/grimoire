@@ -9,22 +9,34 @@
 
 import type { LucideIcon } from "lucide-react";
 
+import { cn } from "@/lib/utils";
+
 export function HeaderAction({
   icon: Icon,
   label,
   onClick,
+  className,
 }: {
   /** Lucide glyph, rendered decorative — the label carries the meaning. */
   icon: LucideIcon;
   /** German, as it stands in the header („Bearbeiten", „Eigenschaften"). */
   label: string;
   onClick: () => void;
+  /**
+   * The ONE thing a caller may vary: WHERE the action appears. „Mit KI
+   * ergänzen" (#36) is desktop-only — mobile is the reading surface, not a
+   * diff review — and that is a placement rule, not a new variant.
+   */
+  className?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex flex-none items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+      className={cn(
+        "inline-flex flex-none items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
+        className,
+      )}
     >
       <Icon aria-hidden size={12.5} className="flex-none" />
       {label}
