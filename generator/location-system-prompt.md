@@ -33,6 +33,8 @@ roll20-page: "<Page-Name>"              # nur Verweis, KEINE Kartenkopie
 ---
 ```
 
+Orte haben **kein `status`**-Feld — setze es nie.
+
 Abschnitte sind frei; empfohlen und in dieser Reihenfolge:
 
 1. `## Beim ersten Betreten` — der erste Eindruck, als `[!readaloud]`.

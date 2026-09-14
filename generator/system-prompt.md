@@ -23,6 +23,34 @@ Gib ausschließlich einen JSON-Block zurück, kein Markdown drumherum:
 
 Antworte ausschließlich mit dem JSON-Objekt — kein Text davor oder danach.
 
+## Ziel-Format der Datei
+
+```yaml
+---
+id: <kebab-case, Englisch, kurz und stabil>
+title: <Anzeigetitel der Szene>
+type: planned | contingency
+trigger: <nur bei contingency: woran die Szene ausgelöst wird>
+chapter: <Kapitel-id aus dem Kontext>
+location: <Orts-id aus dem Kontext, oder Freitext>
+npcs: [<npc-ids aus dem Kontext>]
+handouts: []                      # nur Roll20-Namen, KEINE Kopien
+tags: [<frei>]
+status: draft | ready | played
+---
+```
+
+Danach der Fließtext der Szene, in dieser Ordnung:
+
+1. `## Flow` — die Situation, wie sie am Tisch läuft.
+2. Beliebig viele `## If: <Bedingung>` — Verzweigungen derselben Situation.
+3. Callouts stehen IN diesen Abschnitten: `[!readaloud]` für Vorlesetext,
+   `[!check]` für jede Würfelmechanik, `[!secret]` für Wissen, das Spieler
+   nicht haben, `[!outcome]` für szenenübergreifende Konsequenzen, `[!loot]`
+   für Beute, `[!note]` für DM-Hinweise. Kein anderer Typ.
+4. Referenzen im Fließtext: NPCs, Orte und Szenen mit id aus der Kontextliste
+   als `[[id]]`, ohne Anzeigetext, Endungen außerhalb der Klammern.
+
 ## Regeln
 
 1. **Szenen-Schnitt**: Eine Szene = eine Situation, die am Tisch am Stück

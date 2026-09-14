@@ -93,20 +93,46 @@ export async function readAugmentTarget(
 
 // --- prompt --------------------------------------------------------------------
 
+/** The heading every create prompt describes the TARGET FILE under. */
+const FORMAT_HEADING = "## Ziel-Format der Datei";
+
+/**
+ * The FILE-FORMAT half of a create prompt: its title line plus the
+ * „## Ziel-Format der Datei" section, and nothing else.
+ *
+ * Why the slice: a create prompt also carries its own „## Ausgabeformat" —
+ * `scenes`/`npc_stubs` for a scene run, `npc` for an NPC run — and its
+ * „## Regeln" speak of stubs the augment run can never produce. Embedding
+ * the whole document put TWO contradictory output schemas in front of the
+ * model, and „this prompt wins" is a sentence, not a guarantee. The augment
+ * run brings its own output schema and its own rules; all it needs from the
+ * create prompt is what the target file looks like.
+ *
+ * Degrades: a document without the heading travels whole rather than empty —
+ * a missing section must not silently strip the format contract.
+ */
+export function formatContract(doc: string): string {
+  const start = doc.indexOf(FORMAT_HEADING);
+  if (start === -1) return doc;
+  const rest = doc.slice(start + FORMAT_HEADING.length);
+  const next = rest.indexOf("\n## ");
+  const section = next === -1 ? rest : rest.slice(0, next);
+  const title = doc.startsWith("# ") ? `${doc.slice(0, doc.indexOf("\n"))}\n\n` : "";
+  return `${title}${FORMAT_HEADING}${section.trimEnd()}\n`;
+}
+
 /**
  * The augment system prompt of one kind: the shared augmentation rule
  * (augment-system-prompt.md, which ends on the heading „## Format der
- * Ziel-Datei") followed by that kind's own format contract. The format
- * documents are the ones the create runs use, so the format is described
- * exactly ONCE — the augment prompt says in so many words that its own
- * output shape wins where the two disagree.
+ * Ziel-Datei") followed by that kind's own FILE format contract — the format
+ * is still described exactly ONCE, but only the half that is about the file.
  */
 export async function augmentSystemPrompt(kind: AugmentKind): Promise<string> {
   const [rule, format] = await Promise.all([
     loadAsset(ASSET_FILES.augment.systemPrompt),
     loadAsset(ASSET_FILES[kind].systemPrompt),
   ]);
-  return `${rule.trimEnd()}\n\n${format}`;
+  return `${rule.trimEnd()}\n\n${formatContract(format)}`;
 }
 
 /** The few-shot target of a kind — its example document. */

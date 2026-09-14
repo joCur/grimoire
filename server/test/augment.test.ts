@@ -18,6 +18,7 @@ import { clearJobsForTests } from "../src/generate-jobs";
 import { setProviderForTests } from "../src/generator";
 import {
   augmentSystemPrompt,
+  formatContract,
   isEmptyValue,
   propertyProposals,
   validateAugmentReply,
@@ -169,6 +170,27 @@ describe("prompt assembly", () => {
     expect(location).toContain("kein `status`");
     expect(scene).toContain("System-Prompt: Szenen-Generator");
     expect(scene).toContain("## If:");
+  });
+
+  test("only ONE output schema travels — the create runs' is sliced off", async () => {
+    for (const kind of ["npc", "location", "scene"] as const) {
+      const prompt = await augmentSystemPrompt(kind);
+      // The augment schema…
+      expect(prompt).toContain('"entry"');
+      // …and neither of the two create schemas that used to ride along.
+      expect(prompt).not.toContain("npc_stubs");
+      expect(prompt).not.toContain("location_stubs");
+      expect(prompt).not.toContain('"npc":');
+      expect(prompt).not.toContain('"scenes"');
+      // Exactly one „## Ausgabeformat" heading: the augmentation rule's own.
+      expect(prompt.split("## Ausgabeformat").length - 1).toBe(1);
+      // The file format itself is still there.
+      expect(prompt).toContain("## Ziel-Format der Datei");
+    }
+  });
+
+  test("a document without the format heading travels whole", () => {
+    expect(formatContract("# Titel\n\n## Regeln\n\nnichts\n")).toContain("## Regeln");
   });
 
   test("the run sends the kind's own system prompt and few-shot", async () => {
