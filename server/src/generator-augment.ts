@@ -161,7 +161,7 @@ function parseRawAugmentReply(raw: string, errors: string[]): RawAugmentReply | 
   }
   const obj = parsed as Record<string, unknown>;
   if (!isRawEntry(obj.entry)) {
-    errors.push('"entry" must be an object with string "path" and "content"');
+    errors.push('"entry" must be an object with a string "content"');
     return null;
   }
   const warnings = Array.isArray(obj.warnings)
@@ -239,15 +239,11 @@ export function validateAugmentReply(
 
   const { kind, file } = target;
   const entry = reply.entry;
-  const label = `entry "${entry.path}"`;
-  if (entry.path !== file.path) {
-    return {
-      ok: false,
-      errors: [
-        `${label}: path muss unverändert "${file.path}" sein — der Eintrag existiert schon`,
-      ],
-    };
-  }
+  // The target address is the SERVER's and always was — since issue #100 the
+  // model is not even asked for one: an augment run rewrites the document at
+  // `file.path`, full stop. (Its `location`, on the other hand, is an
+  // ordinary proposal: accepting one moves the scene like any other write.)
+  const label = `entry "${file.path}"`;
   const { parsed, error } = parseWithProperties(entry.content, file.path);
   if (error !== undefined) return { ok: false, errors: [`${label}: ${error}`] };
   const fm = parsed.properties;

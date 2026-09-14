@@ -5,15 +5,18 @@
 // are written to pass the CURRENT mechanical validation of
 // server/src/generator.ts:
 //
-//   scenes         path inside the target chapter, parseable properties,
+//   scenes         no path at all (issue #100 — the server builds the
+//                  address from the run's chapter and the frontmatter `id`),
+//                  parseable properties, a kebab `id` used only once,
 //                  type planned|contingency, status draft, only known
 //                  callouts, npc/location references either existing in the
-//                  campaign or shipped as a stub in the same reply
-//   npc_stubs      npcs/<kebab-id> WITH a status (alive unless the source
-//                  says otherwise)
-//   location_stubs locations/<kebab-id> WITHOUT any status (locations have
-//                  none — issue #27)
-//   npc run        npcs/<kebab-id>, properties id == file name, no
+//                  campaign or shipped as an entry in the same reply, and a
+//                  `location` that is an id (it IS the scene's group)
+//   entries        one array for both kinds, `kind: "npc" | "location"` plus
+//                  the `id` in the entry's frontmatter. An npc entry carries
+//                  a status (alive unless the source says otherwise), a
+//                  location entry carries none (issue #27)
+//   npc run        one document, no path, kebab `id` in the properties, no
 //                  `chapter`, quickstats values QUOTED ("+2" — YAML would eat
 //                  the plus otherwise), `## Weiß` only [!secret],
 //                  `## Beziehungen` only npc ids that exist, `## Notizen`
@@ -64,15 +67,10 @@ export const SLOW_REPLY_MS = 60_000;
 /** Title of the generated scene draft — asserted in the specs. */
 export const SCENE_TITLE = "Nachtwache am Kai";
 /**
- * File name the model puts the scene draft under, inside the target chapter —
- * what the review shows and what the apply request sends.
- */
-export const SCENE_SLUG = "nachtwache-am-kai";
-/**
- * The draft's `id`, deliberately DIFFERENT from the file name above: since the
- * cutover (issue #57) a scene's address is `<chapter>/<id>`, so this is the
- * path the draft ends up under once it is applied — the model's file name
- * decides nothing (server/src/generator.ts, draftAddress).
+ * The draft's `id` — the ONE thing the model decides about addressing since
+ * issue #100. The review addresses the draft as `<chapter>/<id>`; the address
+ * it is WRITTEN to is `<chapter>/<location>/<id>`, because a scene's group is
+ * its location (server/src/generator.ts, draftAddress).
  */
 export const SCENE_ID = "night-watch-quay";
 /** The npc stub the scene reply ships (does not exist in examples/beispiel). */
@@ -191,16 +189,17 @@ Die flache Bucht nördlich des Hafens — bei Ebbe zu Fuß erreichbar.
 export function sceneReply(chapter: string, knowledge = "", oldName = false): unknown {
   if (oldName) {
     return {
-      scenes: [{ path: `${chapter}/${SCENE_SLUG}`, content: sceneDraft(chapter, true) }],
-      npc_stubs: [],
-      location_stubs: [],
+      scenes: [{ content: sceneDraft(chapter, true) }],
+      entries: [],
       warnings: contextEchoWarnings(knowledge),
     };
   }
   return {
-    scenes: [{ path: `${chapter}/${SCENE_SLUG}`, content: sceneDraft(chapter) }],
-    npc_stubs: [{ path: `npcs/${NPC_STUB_ID}`, content: npcStub }],
-    location_stubs: [{ path: `locations/${LOCATION_STUB_ID}`, content: locationStub }],
+    scenes: [{ content: sceneDraft(chapter) }],
+    entries: [
+      { kind: "npc", content: npcStub },
+      { kind: "location", content: locationStub },
+    ],
     warnings: [
       "Der Frachtbrief ist erfunden — im Quelltext steht kein Siegel.",
       ...contextEchoWarnings(knowledge),
@@ -217,7 +216,6 @@ export function invalidSceneReply(chapter: string): unknown {
   return {
     scenes: [
       {
-        path: `${chapter}/${SCENE_SLUG}`,
         content: `---
 id: ${SCENE_ID}
 title: ${SCENE_TITLE}
@@ -232,8 +230,7 @@ status: ready
 `,
       },
     ],
-    npc_stubs: [],
-    location_stubs: [],
+    entries: [],
     warnings: [],
   };
 }
@@ -281,7 +278,7 @@ Nächten keinen Fang verkauft und traut [[fenn]] nicht.
 /** The good NPC reply; `id` is the DM's pin when there was one. */
 export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): unknown {
   return {
-    npc: { path: `npcs/${id}`, content: npcFile(id) },
+    npc: { content: npcFile(id) },
     warnings: contextEchoWarnings(knowledge),
   };
 }
@@ -293,7 +290,6 @@ export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): unknown {
 export function invalidNpcReply(id: string = NPC_DEFAULT_ID): unknown {
   return {
     npc: {
-      path: `npcs/${id}`,
       content: `---
 id: ${id}
 name: ${NPC_DEFAULT_NAME}
@@ -405,10 +401,15 @@ export function augmentReply(path: string, markdown: string, knowledge = ""): un
         AUGMENT_THREAD_TEXT,
         "",
       ].join("\n");
-  return { entry: { path, content }, warnings: contextEchoWarnings(knowledge) };
+  return { entry: { content }, warnings: contextEchoWarnings(knowledge) };
 }
 
-/** An augment reply that FAILS validation: it answers for another entry. */
-export function invalidAugmentReply(path: string): unknown {
-  return { entry: { path: `${path}-nope`, content: "---\nid: x\n---\n" }, warnings: [] };
+/**
+ * An augment reply that FAILS validation: it CHANGES the id. The model does
+ * not address anything any more (issue #100), so "answers for another entry"
+ * is no longer a shape a reply can have — rewriting the reference key is,
+ * and it is the rule the augment run cares about most.
+ */
+export function invalidAugmentReply(_path: string): unknown {
+  return { entry: { content: "---\nid: not-the-entry\n---\n" }, warnings: [] };
 }

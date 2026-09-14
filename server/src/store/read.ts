@@ -227,7 +227,9 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
     }
     const groups: SceneGroup[] = [...bySlug.entries()]
       .map(([slug, list]) => ({ slug, scenes: list.sort((a, b) => cmp(a.path, b.path)) }))
-      .sort((a, b) => cmp(a.slug, b.slug));
+      // "" — the scenes that name no location — goes LAST: it is the
+      // leftovers section the app labels „Ohne Ort", not the first location.
+      .sort((a, b) => (a.slug === "" ? 1 : b.slug === "" ? -1 : cmp(a.slug, b.slug)));
     const node: ChapterNode = {
       id: chapter.id,
       title: chapter.title === "" ? chapter.id : chapter.title,

@@ -11,17 +11,22 @@ Gib ausschließlich einen JSON-Block zurück, kein Markdown drumherum:
 ```json
 {
   "scenes": [
-    { "path": "<chapter>/<location-slug>/<id>", "content": "<vollständiges Dokument inkl. Frontmatter-Block>" }
+    { "content": "<vollständiges Dokument inkl. Frontmatter-Block>" }
   ],
-  "npc_stubs": [
-    { "path": "npcs/<id>", "content": "<NPC-Stub im NPC-Format>", "reason": "im Quelltext erwähnt, existiert noch nicht" }
+  "entries": [
+    { "kind": "npc", "content": "<NPC-Eintrag im NPC-Format>" },
+    { "kind": "location", "content": "<Ort-Eintrag im Ort-Format>" }
   ],
-  "location_stubs": [],
   "warnings": ["<alles, was der DM prüfen sollte>"]
 }
 ```
 
 Antworte ausschließlich mit dem JSON-Objekt — kein Text davor oder danach.
+
+**Keine Adressen.** Du vergibst keine Pfade und keine Verzeichnisse. Die
+Adresse bildet der Server: `<kapitel>/<id>` aus dem Kapitel im Kontext und
+der `id` im Frontmatter, und die Gruppe aus `location`. Jede `id` kommt nur
+einmal vor — auch nicht doppelt zwischen `scenes` und `entries`.
 
 ## Ziel-Format der Datei
 
@@ -32,7 +37,7 @@ title: <Anzeigetitel der Szene>
 type: planned | contingency
 trigger: <nur bei contingency: woran die Szene ausgelöst wird>
 chapter: <Kapitel-id aus dem Kontext>
-location: <Orts-id aus dem Kontext, oder Freitext>
+location: <Orts-id aus dem Kontext oder aus "entries" — nie Freitext, nie leer erfinden>
 npcs: [<npc-ids aus dem Kontext>]
 handouts: []                      # nur Roll20-Namen, KEINE Kopien
 tags: [<frei>]
@@ -66,8 +71,12 @@ Danach der Fließtext der Szene, in dieser Ordnung:
    `alive`/`dead`/`missing`/`unknown`, niemals `draft`. Orts-Stubs
    bekommen KEINEN `status`-Key.
 4. **Referenzen**: Nutze für `npcs`/`location` NUR ids aus der mitgelieferten
-   Kontextliste. Erwähnt der Quelltext eine Figur/einen Ort ohne id,
-   lege einen Stub in `npc_stubs`/`location_stubs` an (mit dem, was der
+   Kontextliste. `location` ist immer eine Orts-id (kebab-case) oder fehlt
+   ganz — Freitext ist keine gültige Angabe, denn die id ist zugleich die
+   Gruppe, unter der die Szene in der Kapitelübersicht steht. Erwähnt der
+   Quelltext eine Figur/einen Ort ohne id,
+   lege einen Eintrag in `entries` an (`kind: "npc"` bzw. `kind: "location"`,
+   die `id` steht im Frontmatter des Eintrags) — mit dem, was der
    Quelltext hergibt) und referenziere dessen neue id.
 4b. **Referenzen IM TEXT**: Nennt der Fließtext einen NPC, einen Ort oder eine
    andere Szene, die eine id hat, schreibe `[[id]]` statt des Namens —

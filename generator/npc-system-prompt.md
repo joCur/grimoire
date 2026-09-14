@@ -13,7 +13,6 @@ Gib ausschließlich einen JSON-Block zurück, kein Markdown drumherum:
 ```json
 {
   "npc": {
-    "path": "npcs/<id>",
     "content": "<vollständige Markdown-Datei inkl. Frontmatter>"
   },
   "warnings": ["<alles, was der DM prüfen sollte>"]
@@ -59,9 +58,10 @@ Danach genau diese Abschnitte, in dieser Reihenfolge:
    (`[[jorna]]s Kai`). In `## Beziehungen` bleibt die nackte id ohne Klammern.
 1. **id**: kebab-case, kurz, stabil gedacht (`fenn`, nicht
    `der-schmuggler-aus-der-nordbucht`). Die ASCII-Beschränkung gilt
-   AUSSCHLIESSLICH für die `id` und den `path` — `name`, `role`, `voice`,
-   `appearance` und der Fließtext bleiben deutsch geschrieben (siehe Regel 11). Der Dateiname ist die id:
-   `path` = `npcs/<id>`, und `id` im Frontmatter ist identisch dazu.
+   AUSSCHLIESSLICH für die `id` — `name`, `role`, `voice`,
+   `appearance` und der Fließtext bleiben deutsch geschrieben (siehe Regel 11).
+   Eine Adresse gibst du nicht an: der Server adressiert den Eintrag als
+   `npcs/<id>`.
    Die id darf **keine** der ids aus der Kontextliste sein — bestehende
    NPC-Dateien werden nie überschrieben. Ist im Kontext eine
    `vorgegebene id` genannt, benutze genau diese.

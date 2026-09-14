@@ -53,9 +53,9 @@ Regel „Deutsche Orthografie": jeder echte Text — Fließtext, Read-Alouds,
 Callouts, `## If:`-Bedingungen, Überschriften, `warnings` und jeder
 Frontmatter-Wert, der Text ist (`title`, `name`, `role`, `voice`,
 `appearance`, `trigger`, `goal`, `statblock` …) — nutzt ä/ö/ü/ß, niemals die
-ASCII-Ersatzschreibung ae/oe/ue/ss. **Einzige Ausnahme**: `id`-Werte und
-Pfade, die bleiben kebab-case ASCII; Eigennamen aus dem Quelltext bleiben
-unverändert.
+ASCII-Ersatzschreibung ae/oe/ue/ss. **Einzige Ausnahme**: `id`-Werte (und
+`location`, das eine id ist), die bleiben kebab-case ASCII; Eigennamen aus
+dem Quelltext bleiben unverändert.
 
 Die Regel steht in den drei Create-Prompts unter „## Regeln" und im
 Ergänzen-Prompt in der Ergänzungsregel — also genau **einmal** in jedem
@@ -116,3 +116,24 @@ Auth-Header. Fehlende Pflicht-Variablen und ein unbekannter
 `LLM_PROVIDER`-Wert werden nicht verschluckt: `POST /api/:campaign/generate`
 antwortet `503` mit der Meldung im Klartext. Vollständige Variablen-Tabelle:
 docs/DEPLOYMENT.md Abschnitt 2.
+
+## Keine Adressen im Modell-Reply (Issue #100)
+
+Das Modell vergibt keine Pfade mehr. Es liefert **Dokumente**, und der
+Server bildet die Adresse:
+
+* Szenen: `<kapitel>/<id>` — Kapitel aus dem Kontext des Laufs, `id` aus
+  dem Frontmatter. Die **Gruppe** kommt aus `location`, also lautet die
+  gespeicherte Adresse `<kapitel>/<location>/<id>` (ohne `location`:
+  Kapitelebene).
+* Vorgeschlagene Einträge: ein gemeinsames Array `entries` mit
+  `kind: "npc" | "location"`; die `id` steht im Frontmatter des Eintrags,
+  adressiert wird als `npcs/<id>` bzw. `locations/<id>`.
+* NPC-Lauf und Ergänzen-Lauf: ein Dokument ohne `path`; beim Ergänzen steht
+  die Zieladresse ohnehin serverseitig fest.
+
+Der Prüfschritt adressiert die Teile eines Laufs weiterhin über die vom
+Server gebildete Adresse (`GenerateResult.scenes[].path` = `<kapitel>/<id>`);
+beim Übernehmen kann die tatsächlich geschriebene Adresse davon abweichen,
+wenn die Szene eine `location` nennt — genau dafür meldet die Antwort
+`written: { <prüfschritt-adresse>: <geschriebene adresse> }`.

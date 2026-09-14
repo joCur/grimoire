@@ -315,6 +315,7 @@ export const de = {
   "lookup.heading": "Nachschlagen",
 
   // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
+  "pool.group.noLocation": "Ohne Ort",
   "server.slug_taken": '{kind} „{id}" existiert schon — Vorschlag: „{suggestion}"',
   "server.slug_reserved": '„{id}" ist ein reservierter Name — Vorschlag: „{suggestion}"',
   "server.slug_empty": "{field} ergibt keine id — bitte Buchstaben oder Ziffern verwenden.",

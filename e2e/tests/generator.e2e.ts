@@ -4,7 +4,7 @@
 // path.
 //
 // One thing the cutover (issue #57) changed here: the draft is REVIEWED under
-// the file name the model chose (`SCENE_SLUG`) but STORED under its id
+// the file name the model chose (`SCENE_ID`) but STORED under its id
 // (`SCENE_ID`), because a scene's address is `<chapter>/<id>` now. So the
 // review assertions use the slug and everything after „Übernehmen" the id.
 //
@@ -21,7 +21,6 @@ import {
   NPC_STUB_ID,
   NPC_STUB_NAME,
   SCENE_ID,
-  SCENE_SLUG,
   SCENE_TITLE,
   TRIGGER,
 } from "../fixtures/replies";
@@ -80,7 +79,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   await expect(page.getByText("Der Frachtbrief ist erfunden", { exact: false })).toBeVisible();
 
   // The draft card: title, target path, status pill, rendered body.
-  const card = page.locator("div").filter({ hasText: `01-salzhafen/${SCENE_SLUG}` }).last();
+  const card = page.locator("div").filter({ hasText: `01-salzhafen/${SCENE_ID}` }).last();
   await expect(page.getByRole("heading", { level: 2, name: SCENE_TITLE })).toBeVisible();
   // The status chip shows the LABEL, not the raw frontmatter value (#88).
   await expect(card.getByText("Entwurf", { exact: true })).toBeVisible();
@@ -94,7 +93,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   await expect(card).toContainText("[[grella]]");
 
   // Nothing is stored before "Übernehmen" — under neither name.
-  expect(await api.exists(`01-salzhafen/${SCENE_SLUG}`)).toBe(false);
+  expect(await api.exists(`01-salzhafen/${SCENE_ID}`)).toBe(false);
   expect(await api.exists(SCENE_PATH)).toBe(false);
 
   // Suggested entries are decided one by one. An undecided row is the innermost div that
@@ -130,7 +129,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   const locationFile = await api.raw(`locations/${LOCATION_STUB_ID}`);
   expect(locationFile).not.toContain("status:");
   // The model's file name addresses nothing.
-  expect(await api.exists(`01-salzhafen/${SCENE_SLUG}`)).toBe(false);
+  expect(await api.exists(`01-salzhafen/${SCENE_ID}`)).toBe(false);
 
   // Back in the pool the draft shows up with the German status label.
   await page.getByRole("button", { name: "Zu den Kapiteln" }).click();
@@ -208,7 +207,7 @@ test("failure path: an invalid model reply shows the 422 block with the raw repl
   await expect(page.locator("pre")).toContainText("night-watch-quay");
 
   // Nothing was written, and the form is usable again.
-  expect(await api.exists(`01-salzhafen/${SCENE_SLUG}`)).toBe(false);
+  expect(await api.exists(`01-salzhafen/${SCENE_ID}`)).toBe(false);
   expect(await api.exists(SCENE_PATH)).toBe(false);
   await expect(page.getByRole("button", { name: "Entwürfe generieren" })).toBeEnabled();
 });
@@ -228,7 +227,7 @@ test("review state survives navigation and reload; parts are accepted one by one
 
   // (1) Edit the draft, leave the page, come back: the text is there. This is
   // the loss the ticket is about — it used to live in component state only.
-  const card = page.locator("div").filter({ hasText: `01-salzhafen/${SCENE_SLUG}` }).last();
+  const card = page.locator("div").filter({ hasText: `01-salzhafen/${SCENE_ID}` }).last();
   await card.getByRole("button", { name: "Bearbeiten" }).click();
   const textarea = page.getByRole("textbox", { name: `Markdown von ${SCENE_TITLE}` });
   const edited = (await textarea.inputValue()).replace(
@@ -262,7 +261,7 @@ test("review state survives navigation and reload; parts are accepted one by one
   expect(await api.exists(SCENE_PATH)).toBe(false);
   await page
     .locator("div")
-    .filter({ hasText: `01-salzhafen/${SCENE_SLUG}` })
+    .filter({ hasText: `01-salzhafen/${SCENE_ID}` })
     .last()
     .getByRole("button", { name: "Diesen übernehmen" })
     .click();
@@ -301,7 +300,7 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
 
   await page
     .locator("div")
-    .filter({ hasText: `01-salzhafen/${SCENE_SLUG}` })
+    .filter({ hasText: `01-salzhafen/${SCENE_ID}` })
     .last()
     .getByRole("button", { name: "Diesen übernehmen" })
     .click();

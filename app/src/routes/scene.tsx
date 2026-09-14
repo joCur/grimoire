@@ -30,7 +30,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 
 import { fetchFile, fetchTree } from "@/api";
 import { AugmentAction } from "@/components/AugmentAction";
@@ -92,6 +92,20 @@ export function SceneRoute() {
     queryFn: () => fetchTree(campaign),
     enabled: campaign !== "",
   });
+
+  // The scene MOVED (issue #100). A scene's group segment is its `location`,
+  // so correcting the location rewrites the address — and every link written
+  // before that correction (a browser bookmark, the URL in another tab, a
+  // note) now names the old one. The server resolves a scene by id and
+  // answers with the CURRENT address in `path`, so the one thing left to do
+  // is to make the URL agree with it: replace, never push, because the stale
+  // address must not become a history entry the back button returns to.
+  const canonical = data?.path;
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (canonical === undefined || canonical === path) return;
+    navigate(`/${campaign}/file/${canonical}`, { replace: true });
+  }, [campaign, canonical, path, navigate]);
 
   if (isPending) {
     return (

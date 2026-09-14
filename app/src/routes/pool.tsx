@@ -242,20 +242,23 @@ function PlannedGroup({
   group: SceneGroup;
   tree: CampaignTree;
 }) {
+  const t = useT();
   const planned = group.scenes.filter((s) => s.type !== "contingency");
   if (planned.length === 0) return null;
   return (
     <div className="mb-7">
-      {group.slug !== "" && (
-        <div className="flex items-center gap-2 border-b border-border py-2 text-[13px]">
-          <MapPin aria-hidden size={15} className="flex-none text-muted-foreground" />
-          {/* The group directory is a loose convention (README): it MAY name a
-              location. When `locations/<slug>` exists the header reads its
-              name; otherwise the slug stands as written — never prettified,
-              because a guessed name would claim a location that has no file. */}
-          <span className="font-medium text-soft">{locationName(tree, group.slug)}</span>
-        </div>
-      )}
+      <div className="flex items-center gap-2 border-b border-border py-2 text-[13px]">
+        <MapPin aria-hidden size={15} className="flex-none text-muted-foreground" />
+        {/* The group IS the scene's location (issue #100), so the heading is
+            the location's NAME. A location entry always exists — referencing
+            one creates it — but an entry nobody has named yet falls back to
+            its id, which is still the word the DM typed. "" is the group of
+            the scenes that name no location at all: a neutral section, not a
+            location with an empty name. */}
+        <span className="font-medium text-soft">
+          {group.slug === "" ? t("pool.group.noLocation") : locationName(tree, group.slug)}
+        </span>
+      </div>
       {planned.map((scene) => (
         <SceneRow key={scene.path} campaign={campaign} scene={scene} tree={tree} />
       ))}

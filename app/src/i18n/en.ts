@@ -288,6 +288,7 @@ export const en: Messages = {
   // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
   "server.slug_taken": '{kind} “{id}” already exists — suggestion: “{suggestion}”',
   "server.slug_reserved": '“{id}” is a reserved name — suggestion: “{suggestion}”',
+  "pool.group.noLocation": "No location",
   "server.slug_empty": "{field} yields no id — please use letters or digits.",
   "server.location_not_an_id":
     'Location "{value}" is not a location id — use "{suggestion}"; the entry is created for you.',

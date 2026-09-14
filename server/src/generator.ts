@@ -50,6 +50,7 @@ import {
   type NamingHint,
   type ParsedFile,
 } from "@grimoire/shared";
+import { ENTITY_SLUG } from "@grimoire/shared/slug";
 import { ApiError, assertSafeAddress } from "./campaign-fs";
 import { checkDraftsNaming, type NamingRule } from "./naming-check";
 // The generator reads its context and writes its drafts through the store
@@ -399,16 +400,24 @@ export function extractJsonReply(raw: string): { value: unknown } | null {
 
 // --- mechanical validation (generator/README.md step 4) ----------------------
 
-/** The reply schema the system prompt demands. */
+/**
+ * One document of a model reply (issue #100). There is no `path` any more:
+ * the model does not address anything. It writes a DOCUMENT, the `id` in its
+ * properties is the entity's key, and the server builds the address from the
+ * run's chapter plus that id — which is what makes a corrected `location`
+ * move the scene instead of contradicting a path the model chose.
+ *
+ * `kind` is how a suggested ENTRY says what it is; scenes and the npc run's
+ * single document carry none (the run knows).
+ */
 export interface RawEntry {
-  path: string;
+  kind?: string;
   content: string;
 }
 
 interface RawReply {
   scenes: RawEntry[];
-  npc_stubs: RawEntry[];
-  location_stubs: RawEntry[];
+  entries: RawEntry[];
   warnings: string[];
 }
 
@@ -424,6 +433,12 @@ export function unknownCallouts(body: string): string[] {
   }
   return unknown;
 }
+
+/**
+ * An entity id is a kebab slug — the README's stable reference key, and
+ * since issue #100 the ONLY thing a model decides about addressing.
+ */
+const ENTITY_ID_PATTERN = ENTITY_SLUG;
 
 /** Last segment of a campaign-relative address — the entity's id. */
 function addressId(rel: string): string {
@@ -450,12 +465,7 @@ export function parseWithProperties(
 
 /** Shape check for one scenes/stubs entry of the raw reply. */
 export function isRawEntry(v: unknown): v is RawEntry {
-  return (
-    v !== null &&
-    typeof v === "object" &&
-    typeof (v as RawEntry).path === "string" &&
-    typeof (v as RawEntry).content === "string"
-  );
+  return v !== null && typeof v === "object" && typeof (v as RawEntry).content === "string";
 }
 
 function parseRawReply(raw: string, errors: string[]): RawReply | null {
@@ -470,7 +480,7 @@ function parseRawReply(raw: string, errors: string[]): RawReply | null {
     return null;
   }
   const obj = parsed as Record<string, unknown>;
-  const entryList = (key: "scenes" | "npc_stubs" | "location_stubs"): RawEntry[] => {
+  const entryList = (key: "scenes" | "entries"): RawEntry[] => {
     const v = obj[key] ?? [];
     if (!Array.isArray(v)) {
       errors.push(`"${key}" must be an array`);
@@ -479,13 +489,12 @@ function parseRawReply(raw: string, errors: string[]): RawReply | null {
     const good: RawEntry[] = [];
     v.forEach((item, i) => {
       if (isRawEntry(item)) good.push(item);
-      else errors.push(`"${key}[${i}]" must be an object with string "path" and "content"`);
+      else errors.push(`"${key}[${i}]" must be an object with a string "content"`);
     });
     return good;
   };
   const scenes = entryList("scenes");
-  const npc_stubs = entryList("npc_stubs");
-  const location_stubs = entryList("location_stubs");
+  const entries = entryList("entries");
   if (errors.length > 0) return null;
   if (scenes.length === 0) {
     errors.push('"scenes" must contain at least one scene');
@@ -494,7 +503,7 @@ function parseRawReply(raw: string, errors: string[]): RawReply | null {
   const warnings = Array.isArray(obj.warnings)
     ? obj.warnings.filter((w): w is string => typeof w === "string")
     : [];
-  return { scenes, npc_stubs, location_stubs, warnings };
+  return { scenes, entries, warnings };
 }
 
 /**
@@ -537,29 +546,32 @@ export function npcStatusErrors(fm: Record<string, unknown>, subject: string): s
   return [];
 }
 
-/** Validate one stub entry; returns the GeneratedStub or pushes errors. */
-function validateStub(
-  entry: RawEntry,
-  kind: "npc" | "location",
-  errors: string[],
-): GeneratedStub | null {
-  const dirName = kind === "npc" ? "npcs" : "locations";
-  const label = `${kind} stub "${entry.path}"`;
-  if (!new RegExp(`^${dirName}/[a-z0-9][a-z0-9-]*$`).test(entry.path)) {
-    errors.push(`${label}: path must be "${dirName}/<kebab-case-id>"`);
+/**
+ * Validate one SUGGESTED ENTRY of a scene reply (issue #100): `kind` says
+ * what it is, the properties `id` is its key, and the server addresses it as
+ * `npcs/<id>` / `locations/<id>`. Returns the GeneratedStub or pushes errors.
+ */
+function validateEntry(entry: RawEntry, index: number, errors: string[]): GeneratedStub | null {
+  const kind = entry.kind;
+  if (kind !== "npc" && kind !== "location") {
+    errors.push(`entries[${index}]: "kind" must be "npc" or "location"`);
     return null;
   }
-  const { parsed, error } = parseWithProperties(entry.content, entry.path);
+  const preview = `entries[${index}]`;
+  const { parsed, error } = parseWithProperties(entry.content, preview);
   if (error !== undefined) {
-    errors.push(`${label}: ${error}`);
+    errors.push(`${kind} entry ${preview}: ${error}`);
     return null;
   }
-  const id = addressId(entry.path);
   const fmId = parsed.properties.id;
-  if (typeof fmId === "string" && fmId !== id) {
-    errors.push(`${label}: properties id "${fmId}" does not match the address`);
+  if (typeof fmId !== "string" || !ENTITY_ID_PATTERN.test(fmId)) {
+    errors.push(
+      `${kind} entry ${preview}: "id" must be a kebab-case id (a-z, 0-9, single dashes)`,
+    );
     return null;
   }
+  const id = fmId;
+  const label = `${kind} entry "${id}"`;
   // A status error does not stop the mapping: the stub still resolves the
   // scene's reference, so the correction turn gets the ONE real error
   // instead of a cascade of "npc does not exist".
@@ -585,45 +597,49 @@ export function validateReply(
   const reply = parseRawReply(raw, errors);
   if (reply === null) return { ok: false, errors };
 
-  // Stubs first — scene references may point at them.
+  // Suggested entries first — scene references may point at them.
   const stubs: GeneratedStub[] = [];
-  for (const entry of reply.npc_stubs) {
-    const stub = validateStub(entry, "npc", errors);
-    if (stub !== null) stubs.push(stub);
-  }
-  for (const entry of reply.location_stubs) {
-    const stub = validateStub(entry, "location", errors);
-    if (stub !== null) stubs.push(stub);
-  }
+  const seenEntries = new Set<string>();
+  reply.entries.forEach((entry, index) => {
+    const stub = validateEntry(entry, index, errors);
+    if (stub === null) return;
+    const key = `${stub.kind}/${stub.id}`;
+    if (seenEntries.has(key)) {
+      errors.push(`${stub.kind} entry "${stub.id}": duplicate id`);
+      return;
+    }
+    seenEntries.add(key);
+    stubs.push(stub);
+  });
   const stubNpcIds = new Set(stubs.filter((s) => s.kind === "npc").map((s) => s.id));
   const stubLocationIds = new Set(stubs.filter((s) => s.kind === "location").map((s) => s.id));
 
   const scenes: GeneratedSceneDraft[] = [];
-  const seenPaths = new Set<string>();
-  for (const entry of reply.scenes) {
-    const label = `scene "${entry.path}"`;
-
-    try {
-      assertSafeAddress(entry.path);
-    } catch {
-      errors.push(`${label}: invalid path`);
-      continue;
-    }
-    const segments = entry.path.split("/");
-    if (segments[0] !== ctx.chapter || segments.length < 2 || segments.length > 3) {
-      errors.push(
-        `${label}: path must be "${ctx.chapter}/<scene>" or "${ctx.chapter}/<location-slug>/<scene>"`,
-      );
-    }
-    if (seenPaths.has(entry.path)) errors.push(`${label}: duplicate path`);
-    seenPaths.add(entry.path);
-
-    const { parsed, error } = parseWithProperties(entry.content, entry.path);
+  const seenIds = new Set<string>();
+  reply.scenes.forEach((entry, index) => {
+    // The scene's ADDRESS is the server's: `<chapter>/<id>`, with the chapter
+    // taken from the run's CONTEXT and never from the model (issue #100). The
+    // id is the one thing the model decides here, so it is the one thing
+    // validated as an address would be.
+    const { parsed, error } = parseWithProperties(entry.content, `scenes[${index}]`);
     if (error !== undefined) {
-      errors.push(`${label}: ${error}`);
-      continue;
+      errors.push(`scene scenes[${index}]: ${error}`);
+      return;
     }
     const fm = parsed.properties;
+    const fmId = fm.id;
+    if (typeof fmId !== "string" || !ENTITY_ID_PATTERN.test(fmId)) {
+      errors.push(
+        `scene scenes[${index}]: "id" must be a kebab-case id (a-z, 0-9, single dashes)`,
+      );
+      return;
+    }
+    const label = `scene "${fmId}"`;
+    if (seenIds.has(fmId)) {
+      errors.push(`${label}: duplicate id`);
+      return;
+    }
+    seenIds.add(fmId);
 
     if (!(SCENE_TYPES as readonly string[]).includes(String(fm.type))) {
       errors.push(`${label}: "type" must be one of ${SCENE_TYPES.join(", ")}`);
@@ -639,7 +655,7 @@ export function validateReply(
         for (const npc of fm.npcs as string[]) {
           if (!ctx.npcIds.has(npc) && !stubNpcIds.has(npc)) {
             errors.push(
-              `${label}: npc "${npc}" does not exist in the campaign and no npc_stub provides it`,
+              `${label}: npc "${npc}" does not exist in the campaign and no suggested entry provides it`,
             );
           }
         }
@@ -648,7 +664,8 @@ export function validateReply(
     if (typeof fm.location === "string" && fm.location !== "") {
       if (!ctx.locationIds.has(fm.location) && !stubLocationIds.has(fm.location)) {
         errors.push(
-          `${label}: location "${fm.location}" does not exist in the campaign and no location_stub provides it`,
+          `${label}: location "${fm.location}" does not exist in the campaign and ` +
+            `no suggested entry provides it`,
         );
       }
     }
@@ -659,8 +676,8 @@ export function validateReply(
       );
     }
 
-    scenes.push({ path: entry.path, markdown: entry.content, properties: fm });
-  }
+    scenes.push({ path: scenePath(ctx.chapter, "", fmId), markdown: entry.content, properties: fm });
+  });
 
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, result: { scenes, stubs, warnings: reply.warnings } };
@@ -820,8 +837,8 @@ function parseRawNpcReply(raw: string, errors: string[]): RawNpcReply | null {
  * the error list for the correction turn.
  *
  * The rules, all from the format contract (README "Entität: NPC"):
- * target address `npcs/<kebab-id>`, parseable properties whose `id` matches
- * the file name, a `name`, a valid NpcStatus (`alive` unless the source says
+ * parseable properties whose `id` is a kebab-case id — the ADDRESS is the
+ * server's (`npcs/<id>`, issue #100), the model does not name one — a `name`, a valid NpcStatus (`alive` unless the source says
  * otherwise), no invented `chapter`, quoted quickstats, relationships only to
  * npcs that exist, only `[!secret]` inside `## Weiß`, only known callouts, and
  * an empty `## Notizen`. An id that already exists is an error too — the DM
@@ -837,14 +854,22 @@ export function validateNpcReply(
   if (reply === null) return { ok: false, errors };
 
   const entry = reply.npc;
-  const label = `npc "${entry.path}"`;
-  // Without a usable path nothing else can be judged (the id comes from it).
-  if (!NPC_PATH_PATTERN.test(entry.path)) {
-    return { ok: false, errors: [`${label}: path muss "npcs/<kebab-id>" sein`] };
+  // Without usable properties nothing else can be judged (the id is in them).
+  const { parsed, error } = parseWithProperties(entry.content, "npc");
+  if (error !== undefined) {
+    return { ok: false, errors: [`npc: ${error}`] };
   }
-  const id = addressId(entry.path);
+  const fm = parsed.properties;
+  if (typeof fm.id !== "string" || !ENTITY_ID_PATTERN.test(fm.id)) {
+    return {
+      ok: false,
+      errors: ['npc: "id" muss eine kebab-case id sein (a-z, 0-9, einzelne Bindestriche)'],
+    };
+  }
+  const id = fm.id;
+  const label = `npc "${id}"`;
   if (pinnedId !== undefined && id !== pinnedId) {
-    errors.push(`${label}: die id ist vorgegeben — der path muss "npcs/${pinnedId}" sein`);
+    errors.push(`${label}: die id ist vorgegeben — "id" muss "${pinnedId}" sein`);
   }
   if (ctx.npcIds.has(id)) {
     errors.push(
@@ -853,19 +878,9 @@ export function validateNpcReply(
     );
   }
 
-  const { parsed, error } = parseWithProperties(entry.content, entry.path);
-  if (error !== undefined) {
-    errors.push(`${label}: ${error}`);
-    return { ok: false, errors };
-  }
-  const fm = parsed.properties;
-
   // `name` is NOT checked: the shared parser degrades a missing display name
   // to the id (README/parse.ts), so there is nothing mechanical left to
   // complain about — the prompt asks for one, the format survives without it.
-  if (fm.id !== id) {
-    errors.push(`${label}: properties id "${String(fm.id)}" passt nicht zum Dateinamen`);
-  }
   if (Object.hasOwn(fm, "chapter")) {
     errors.push(`${label}: kein "chapter" — der NPC-Lauf kennt kein Ziel-Kapitel`);
   }
@@ -889,7 +904,7 @@ export function validateNpcReply(
   return {
     ok: true,
     result: {
-      npc: { path: entry.path, markdown: entry.content, properties: fm },
+      npc: { path: npcPath(id), markdown: entry.content, properties: fm },
       warnings: reply.warnings,
     },
   };
@@ -1176,20 +1191,22 @@ export function applySceneTarget(item: unknown, index: number): ApplyTarget {
     throw new ApiError(400, `${label}.markdown must be a non-empty string`);
   }
   assertSafeAddress(rel); // 400 on traversal/absolute/hidden
+  // `<chapter>/<id>` and nothing else since issue #100: the group segment of
+  // a scene address is its `location`, which the SERVER derives on the way in
+  // (`draftAddress`). A client that still sends a three-segment path is
+  // naming a group of its own, and that is exactly the contradiction between
+  // address and `location` this ticket removes.
   const segments = rel.split("/");
-  if (segments.length < 2 || segments.length > 3 || RESERVED_DIRS.has(segments[0]!)) {
-    throw new ApiError(
-      400,
-      `${label}.path must be "<chapter>/<scene>" or "<chapter>/<location-slug>/<scene>"`,
-    );
+  if (segments.length !== 2 || RESERVED_DIRS.has(segments[0]!)) {
+    throw new ApiError(400, `${label}.path must be "<chapter>/<scene-id>"`);
   }
   // The last segment is the SCENE ID whenever the properties carry none
   // (`draftAddress` only overrides it when there is one, and `insertDraft`
   // falls back to the locator id). So it has to obey the same address
   // contract as an explicit `id` does — otherwise `01-x/foo.md` inserts a
   // row whose id contradicts the addressing and cannot be opened again.
-  if (!DRAFT_ID_PATTERN.test(segments[segments.length - 1]!)) {
-    throw new ApiError(400, `${label}.path: "${segments[segments.length - 1]!}" is not a scene id`);
+  if (!ENTITY_ID_PATTERN.test(segments[1]!)) {
+    throw new ApiError(400, `${label}.path: "${segments[1]!}" is not a scene id`);
   }
   // Re-validation (apply is a separate request — never trust the client):
   // the properties must still parse and the draft must still be a draft.
@@ -1384,9 +1401,6 @@ export async function applyGenerated(
   return { written: drafts.map((draft) => draft.address) };
 }
 
-/** An entity id is a kebab slug — the README's stable reference key. */
-const DRAFT_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-
 /**
  * The `id` of a draft BECOMES THE PRIMARY KEY of the inserted row (and, for a
  * scene, the id segment of its address). It arrives from a client payload and
@@ -1402,7 +1416,7 @@ const DRAFT_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
  */
 export function assertDraftId(id: unknown, rel: string): void {
   if (id === undefined) return;
-  if (typeof id !== "string" || !DRAFT_ID_PATTERN.test(id.trim())) {
+  if (typeof id !== "string" || !ENTITY_ID_PATTERN.test(id.trim())) {
     throw new ApiError(
       422,
       `${rel}: "id" must be a kebab-case slug (a-z, 0-9, single dashes) — ` +
@@ -1412,16 +1426,24 @@ export function assertDraftId(id: unknown, rel: string): void {
 }
 
 /**
- * Where a draft will live: its address, with the id segment taken from the
- * properties when there is one. Only scenes can actually differ (an npc or
+ * Where a draft will live: its address. For a SCENE that is
+ * `<chapter>/<location>/<id>` — the chapter from the draft's own path (the
+ * run's chapter), the id from the properties, and the GROUP from the
+ * properties `location` (issue #100). Nothing about the group is taken from
+ * the path any more: that is what made a corrected `location` and the stored
+ * address disagree. For every other kind the address is the path (an npc or
  * location draft is validated against its own segment, a chapter's id IS the
- * first segment), but the rule is stated once for all of them.
+ * first segment).
+ *
+ * An unusable `location` is NOT rejected here — `insertDraft` does that, in
+ * the transaction, with the code the app has a sentence for.
  */
 export function draftAddress(rel: string, properties: Record<string, unknown>): string {
-  const id = typeof properties.id === "string" ? properties.id.trim() : "";
-  if (id === "" || kindFromPath(rel) !== "scene") return rel;
+  if (kindFromPath(rel) !== "scene") return rel;
   const segments = rel.split("/");
   const chapterId = segments[0] ?? "";
-  const groupSlug = segments.length === 3 ? (segments[1] ?? "") : "";
-  return scenePath(chapterId, groupSlug, id);
+  const fmId = typeof properties.id === "string" ? properties.id.trim() : "";
+  const id = fmId === "" ? (segments[segments.length - 1] ?? "") : fmId;
+  const location = typeof properties.location === "string" ? properties.location.trim() : "";
+  return scenePath(chapterId, ENTITY_ID_PATTERN.test(location) ? location : "", id);
 }
