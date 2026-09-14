@@ -857,7 +857,9 @@ api.patch("/:campaign/generate/job/:id/review", async (c) => {
 // the client read and is re-checked inside that transaction: a decision
 // made in between is a 409 `rev_conflict` and nothing is written. 404
 // without a job or for a stale :id, 409 for a job that has no result, 400
-// for an unknown path and for a bulk accept with nothing left to do.
+// for an unknown path and for a BULK accept with nothing left to do. A
+// named selection that is already written is not an error — a double click
+// gets 200 with an empty `written`.
 api.post("/:campaign/generate/job/:id/accept", async (c) => {
   const body = await jsonBody(c, ["rev", "paths", "chapter", "chapterTitle"]);
   const rev = requireRev(body.rev);

@@ -257,11 +257,29 @@ test("the edited text is what a partial accept writes", async () => {
   expect(((await res.json()) as { body: string }).body).toContain("Fenn wartet im Regen.");
 });
 
-test("accepting the same part twice is a 400 — there is nothing left to do", async () => {
+test("accepting the same part twice answers 200 with nothing written", async () => {
+  // A double click, or the second tab clicking what the first already wrote:
+  // the caller asked for a state that already holds (issue #97 review,
+  // finding 6). The empty answer says so; a 400 said the DM did something
+  // wrong and put an error line under a review that was in order.
   const job = await runJob();
   expect((await accept(job, { paths: [SCENE_A] })).status).toBe(200);
   const again = (await fetchJob()) as GenerateJob;
-  expect((await accept(again, { paths: [SCENE_A] })).status).toBe(400);
+  const res = await accept(again, { paths: [SCENE_A] });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ written: {}, jobDeleted: false });
+  // Nothing moved: the rest is still reviewable and the job is still there.
+  expect((await fetchJob())?.review?.written).toEqual({ [SCENE_A]: ADDRESS_A });
+});
+
+test("a bulk accept with nothing open left stays a 400", async () => {
+  // Everything dropped or rejected: „Alle übernehmen" names nothing and
+  // there is nothing — a client bug, and still an error.
+  const job = await patch(await runJob(), {
+    dropped: [SCENE_A, SCENE_B],
+    entries: { [STUB_PATH]: "rejected" },
+  });
+  expect((await accept(job, {})).status).toBe(400);
 });
 
 test("an unknown path is a 400", async () => {

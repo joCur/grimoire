@@ -110,7 +110,15 @@ export async function acceptJobParts(
       if (part.open) selected.push(rel);
     }
   }
-  if (selected.length === 0) throw new ApiError(400, "nothing to apply");
+  // A selection whose parts are ALL written already is a double click or a
+  // second tab, not an error: the caller asked for a state that is the
+  // state, so it gets the honest empty answer (issue #97 review, finding 6).
+  // Only a BULK accept with nothing open left stays a 400 — there the caller
+  // named nothing and there was nothing, which is a client bug.
+  if (selected.length === 0) {
+    if (body.paths !== undefined) return { written: {}, jobDeleted: false };
+    throw new ApiError(400, "nothing to apply");
+  }
 
   const targets: ApplyTarget[] = selected.map((rel) => (parts.get(rel) as { target: ApplyTarget }).target);
   // The chapter file comes first — the scenes live inside it. Idempotent:
