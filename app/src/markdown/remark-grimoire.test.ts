@@ -15,9 +15,16 @@ import {
   ENTITY_REF_PLAIN_ATTR,
   remarkGrimoire,
 } from "./remark-grimoire";
+import { remarkTable } from "./remark-table";
 
 function run(markdown: string): Root {
   const processor = unified().use(remarkParse).use(remarkGrimoire);
+  return processor.runSync(processor.parse(markdown)) as Root;
+}
+
+/** The renderer's real pipeline: GFM tables (issue #96) plus the plugin. */
+function runWithTables(markdown: string): Root {
+  const processor = unified().use(remarkParse).use(remarkTable).use(remarkGrimoire);
   return processor.runSync(processor.parse(markdown)) as Root;
 }
 
@@ -289,5 +296,38 @@ describe("entity references (issue #68)", () => {
       "fenn",
       "alte-mole",
     ]);
+  });
+});
+
+// --- tables (issue #96) ------------------------------------------------------
+
+describe("tables", () => {
+  const W6 = "| W6 | Fund |\n| --- | --- |\n| 1 | [[jorna]]s Kompass |";
+
+  test("a cell is walked by the reference pass like any other text", () => {
+    const table = runWithTables(W6).children[0];
+    const cell = childrenOf(childrenOf(childrenOf(table)[1])[1])[0];
+    expect(dataOf(cell).hProperties?.[ENTITY_REF_ATTR]).toBe("jorna");
+  });
+
+  test("a table inside a callout stays inside it — the callout keeps its tag", () => {
+    const quoted = W6.split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n");
+    const node = runWithTables(`> [!note] Zufallstabelle\n>\n${quoted}`).children[0];
+    expect(dataOf(node).hProperties?.["data-callout"]).toBe("note");
+    expect(childrenOf(node).some((child) => child.type === "table")).toBe(true);
+  });
+
+  test("a read-aloud's clipboard text reads a table row by row", () => {
+    // The copy button must not hand the Roll20 chat an empty string just
+    // because the block is a table: cells are text like any other leaf.
+    const node = runWithTables(
+      "> [!readaloud] Der Wurf:\n>\n> | W6 | Fund |\n> | --- | --- |\n> | 1 | Fass |",
+    ).children[0];
+    const text = JSON.stringify(copyPartsOf(node));
+    // Cells separated, rows on their own line — not `W6Fund1Fass`.
+    expect(text).toContain("W6 | Fund");
+    expect(text).toContain("1 | Fass");
   });
 });

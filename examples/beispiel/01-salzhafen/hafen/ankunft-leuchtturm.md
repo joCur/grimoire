@@ -29,3 +29,9 @@ angeheuert und will Ergebnisse sehen.
 
 > [!note] Wenn die Gruppe nachts die Bucht auskundschaftet und erwischt
 > wird → Kontingenz `smuggler-captured`.
+>
+> | W6 | Was die Brandung anschwemmt |
+> | --- | --- |
+> | 1–2 | Ein leeres Fass mit fremdem Brandzeichen |
+> | 3–4 | Ein Ruder, frisch gekerbt |
+> | 5–6 | Eine Laterne, das Glas rußgeschwärzt |

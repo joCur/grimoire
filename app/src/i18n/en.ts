@@ -680,6 +680,7 @@ export const en: Messages = {
   "markdown.readaloud.copied": "Copied",
   "markdown.readaloud.copy.aria": "Copy read-aloud text",
   "markdown.readaloud.copied.aria": "Read-aloud text copied",
+  "markdown.table.aria": "Table",
 
   // --- the Block-Composer (components/BlockComposer.tsx, lib/blocks.ts,
   //     lib/composer.ts) ----------------------------------------------------

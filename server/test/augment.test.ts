@@ -116,6 +116,18 @@ afterEach(async () => {
 
 // --- prompt assembly per kind (AK4) ----------------------------------------
 
+/**
+ * One numbered rule's own text, from its bold label to the start of the NEXT
+ * rule (or the next section). The list position differs per prompt — rule 10
+ * in one, 12 in another — so the NUMBER is deliberately not part of what is
+ * compared; the wording is.
+ */
+function ruleParagraph(doc: string, label: string): string {
+  const rest = doc.slice(doc.indexOf(label));
+  const next = rest.search(/\n(?:\d+\.\s|\n|## )/);
+  return next === -1 ? rest : rest.slice(0, next);
+}
+
 describe("prompt assembly", () => {
   test("carries the existing entry, the instruction, knowledge and glossary", () => {
     const prompt = buildPrompt({
@@ -228,9 +240,7 @@ describe("prompt assembly", () => {
       expect(prompt, kind).toContain("`id`-Werte und Adressen/Pfade");
     }
     // …and it is the SAME sentence everywhere: one rule, four prompts.
-    const paragraph = (doc: string) =>
-      doc.slice(doc.indexOf(ORTHOGRAPHY_RULE)).split("\n\n")[0];
-    const wordings = new Set(assembled.map(([, doc]) => paragraph(doc)));
+    const wordings = new Set(assembled.map(([, doc]) => ruleParagraph(doc, ORTHOGRAPHY_RULE)));
     expect(wordings.size).toBe(1);
   });
 
@@ -241,6 +251,47 @@ describe("prompt assembly", () => {
       expect(frontmatter, `${kind} properties`).toMatch(/[äöüß]/);
       expect(rest.join("---\n"), `${kind} body`).toMatch(/[äöüß]/);
     }
+  });
+
+  // Issue #96: the table rule, carried the same way for the same reason —
+  // once per assembled prompt kind, augment included. The renderer takes
+  // TABLES from GFM and nothing else, so the prompt has to say both halves:
+  // what a table looks like, and that the rest of GFM is plain text.
+  const TABLE_RULE = "**Tabellen**";
+
+  test("every prompt kind carries the table rule exactly once", async () => {
+    const assembled: Array<[string, string]> = [
+      ["scene", await loadAsset(ASSET_FILES.scene.systemPrompt)],
+      ["npc", await loadAsset(ASSET_FILES.npc.systemPrompt)],
+      ["location", await loadAsset(ASSET_FILES.location.systemPrompt)],
+      ["augment/npc", await augmentSystemPrompt("npc")],
+      ["augment/location", await augmentSystemPrompt("location")],
+      ["augment/scene", await augmentSystemPrompt("scene")],
+    ];
+    for (const [kind, prompt] of assembled) {
+      expect(prompt.split(TABLE_RULE).length - 1, kind).toBe(1);
+      // The FORM is the contract: header row, delimiter row, edge pipes.
+      expect(prompt, kind).toContain("GFM-Pipe-Tabelle");
+      expect(prompt, kind).toContain("`|---|`");
+      expect(prompt, kind).toContain("Rand-Pipes");
+      // …and the boundary: tables only.
+      expect(prompt, kind).toContain("**Sonst nichts\n   aus GFM**");
+      expect(prompt, kind).toContain("keine Aufgabenlisten (`- [x]`)");
+    }
+    const wordings = new Set(assembled.map(([, doc]) => ruleParagraph(doc, TABLE_RULE)));
+    expect(wordings.size).toBe(1);
+  });
+
+  test("the scene few-shot shows a table inside a callout", async () => {
+    // Described is not shown: the model gets one worked example of the form
+    // it has to produce, `>` markers included.
+    const doc = await loadAsset(ASSET_FILES.scene.fewShotTarget);
+    const lines = doc.split("\n");
+    const delimiter = lines.findIndex((line) => /^>\s*\|\s*-{3,}\s*\|/.test(line));
+    expect(delimiter).toBeGreaterThan(0);
+    // The row above it is the header row, and both carry the callout marker.
+    expect(lines[delimiter - 1]).toMatch(/^>\s*\|.*\|\s*$/);
+    expect(lines[delimiter + 1]).toMatch(/^>\s*\|.*\|\s*$/);
   });
 
   test("a document without the format heading travels whole", () => {

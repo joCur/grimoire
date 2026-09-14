@@ -23,6 +23,16 @@ const LOOT_SCENE = {
   content: readFileSync(path.join(FIXTURES_DIR, "loot-scene.md"), "utf8"),
 };
 
+/**
+ * A scene whose table CANNOT fit 390px — seven columns of long, unbreakable
+ * words. The reference scene's W6 table is narrow enough to fit, so it cannot
+ * prove that the box overflows instead of the page; this one can.
+ */
+const WIDE_TABLE_SCENE = {
+  path: "01-salzhafen/hafen/wide-table",
+  content: readFileSync(path.join(FIXTURES_DIR, "wide-table-scene.md"), "utf8"),
+};
+
 const ARRIVAL = "/beispiel/file/01-salzhafen/hafen/lighthouse-arrival";
 const CAPTURED = "/beispiel/file/01-salzhafen/hafen/smuggler-captured";
 
@@ -201,5 +211,82 @@ test.describe("with a seeded loot scene", () => {
     // Unknown kinds stay a plain blockquote — the format degrades, never errors.
     await expect(page.locator("[data-callout='erfunden']")).toHaveCount(0);
     await expect(page.locator("blockquote")).toContainText("[!erfunden] Unbekannte Callout-Sorte");
+  });
+});
+
+// Issue #96: the table is part of the same critical path — the reference
+// scene carries a W6 table inside its `[!note]`, so path 2 checks it where
+// the DM meets it.
+test("the reference scene's W6 table renders as a table inside the note callout", async ({
+  page,
+}) => {
+  await page.goto(ARRIVAL);
+
+  const table = page.locator("[data-callout='note'] table");
+  await expect(table).toHaveCount(1);
+  // Header row distinguished, and the rows are rows — not a wall of pipes.
+  await expect(table.locator("thead th").first()).toHaveText("W6");
+  await expect(table.locator("tbody tr")).toHaveCount(3);
+  await expect(table).toContainText("Eine Laterne, das Glas rußgeschwärzt");
+  // No pipe survived into the rendered text.
+  await expect(page.getByRole("article")).not.toContainText("| --- |");
+});
+
+test.describe("the table at 390px", () => {
+  test.use({
+    viewport: { width: 390, height: 844 },
+    seed: { files: { [WIDE_TABLE_SCENE.path]: WIDE_TABLE_SCENE.content } },
+  });
+
+  test("a table too wide for the phone scrolls in its own box, the page does not", async ({
+    page,
+  }) => {
+    await page.goto(`/beispiel/file/${WIDE_TABLE_SCENE.path}`);
+
+    // Overflowing, so the box IS a named region: the tab stop and the
+    // landmark only appear once there is something to scroll.
+    const box = page.getByRole("region", { name: "Tabelle" });
+    await expect(box.locator("table")).toBeVisible();
+    const measured = await box.evaluate((node) => ({
+      overflowX: getComputedStyle(node).overflowX,
+      scrollWidth: node.scrollWidth,
+      clientWidth: node.clientWidth,
+      tabIndex: node.tabIndex,
+    }));
+    expect(measured.overflowX).toBe("auto");
+    // Strictly wider than the box — the content really does not fit.
+    expect(measured.scrollWidth).toBeGreaterThan(measured.clientWidth);
+    expect(measured.tabIndex).toBe(0);
+
+    // And it actually scrolls, rather than merely being allowed to.
+    await box.evaluate((node) => {
+      node.scrollLeft = node.scrollWidth;
+    });
+    expect(await box.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+
+    // AK 2: the PAGE never scrolls sideways.
+    const doc = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    expect(doc.scrollWidth).toBeLessThanOrEqual(doc.clientWidth + 1);
+  });
+
+  test("the narrow reference table is not a tab stop — nothing to scroll", async ({ page }) => {
+    await page.goto(ARRIVAL);
+
+    const table = page.locator("[data-callout='note'] table");
+    await expect(table).toBeVisible();
+    const measured = await table.evaluate((node) => {
+      const box = node.parentElement as HTMLElement;
+      return {
+        fits: box.scrollWidth <= box.clientWidth,
+        tabIndex: box.tabIndex,
+        role: box.getAttribute("role"),
+      };
+    });
+    expect(measured.fits).toBe(true);
+    expect(measured.tabIndex).toBe(-1);
+    expect(measured.role).toBeNull();
   });
 });

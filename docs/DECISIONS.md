@@ -55,6 +55,10 @@ Server-State: TanStack Query (Caching, Refetch nach Mutation,
 409-Handling). Lokaler UI-State: plain React — kein Zustand/Redux.
 Markdown-Rendering: react-markdown + eigenes Remark-Plugin für
 `[!callout]`-Blöcke und `## If:`-Überschriften.
+GFM nur für Tabellen (#96): `micromark-extension-gfm-table` +
+`mdast-util-gfm-table` statt `remark-gfm` — die Sammel-Plugin-Variante
+ließe sich nicht auf Tabellen beschränken (Aufgabenlisten würden die
+Inbox-Syntax `- [x]` vereinnahmen).
 Kein Electron/Tauri — Web-App hinter Tailscale reicht.
 
 **Backend:** Bun + Hono. Bibliotheken ursprünglich: gray-matter
