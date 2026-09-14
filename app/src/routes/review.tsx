@@ -256,8 +256,6 @@ export function ReviewRoute() {
             ) : (
               <>
                 <div className="flex flex-col gap-2.5">{harvest.map(renderCard)}</div>
-                {/* Untagged inbox lines get their own section (issue #85) so
-                    the tagged harvest above keeps reading as one list. */}
                 {/* `#pc` lines, grouped by character (issue #86): reminders
                     for the table — abhaken or keep, never adopted. */}
                 {pcs.length > 0 && (
@@ -282,6 +280,8 @@ export function ReviewRoute() {
                     </div>
                   </section>
                 )}
+                {/* Untagged inbox lines get their own section (issue #85) so
+                    the tagged harvest above keeps reading as one list. */}
                 {notes.length > 0 && (
                   <section className="mt-9">
                     <h2 className="mb-3 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
