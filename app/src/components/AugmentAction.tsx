@@ -48,7 +48,7 @@ import {
   type BlockChangeKind,
   type DiffToken,
 } from "@/lib/augment";
-import { blockLabel, blockMarkdown } from "@/lib/blocks";
+import { blockLabel, blockTreeMarkdown } from "@/lib/blocks";
 import { fmString } from "@/lib/properties";
 import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
 import { useRevWriteMutation } from "@/lib/use-rev-write";
@@ -619,12 +619,14 @@ function BlockRow({
 
 /**
  * The markdown a non-changed row shows — the side that exists. It is the
- * block's VERBATIM source (blockMarkdown), so the review shows exactly the
- * text the accept would write.
+ * block's VERBATIM source WITH everything the block contains: an `## If:`
+ * section's card shows its heading AND its body, because that whole section
+ * is what the one toggle next to it decides about (issue #36). So the review
+ * shows exactly the text the accept would write.
  */
 function blockSource(change: BlockChange): string {
   const block = change.kind === "removed" ? change.before : change.after;
-  return block === undefined ? "" : blockMarkdown(block);
+  return block === undefined ? "" : blockTreeMarkdown(block);
 }
 
 /**
