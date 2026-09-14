@@ -159,15 +159,19 @@ export const ASSET_FILES = {
     systemPrompt: "location-system-prompt.md",
     fewShotTarget: "location-example-output.md",
   },
-  // The augment run's OWN system prompt (issue #36). Its few-shot target is
-  // the kind's example file, so `loadPromptAssets` is not the right shape for
-  // it — see loadAsset below.
-  augment: { systemPrompt: "augment-system-prompt.md", fewShotTarget: "example-output.md" },
+  // The augment run's OWN system prompt (issue #36). It has no few-shot of
+  // its own — the run sends the TARGET KIND's example file — so this entry
+  // carries the system prompt alone and `loadPromptAssets` is not the right
+  // shape for it; see loadAsset below.
+  augment: { systemPrompt: "augment-system-prompt.md" },
 } as const;
 
-const promptAssets = new Map<keyof typeof ASSET_FILES, PromptAssets>();
+const promptAssets = new Map<string, PromptAssets>();
 
-export async function loadPromptAssets(kind: keyof typeof ASSET_FILES): Promise<PromptAssets> {
+/** The kinds that have a prompt PAIR — the augment run has no few-shot. */
+type PromptPairKind = Exclude<keyof typeof ASSET_FILES, "augment">;
+
+export async function loadPromptAssets(kind: PromptPairKind): Promise<PromptAssets> {
   const cached = promptAssets.get(kind);
   if (cached !== undefined) return cached;
   const files = ASSET_FILES[kind];

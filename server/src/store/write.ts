@@ -1129,108 +1129,106 @@ function writeBodyIn(
   markdown: string,
 ): FileResponse {
   const body = markdown === "" || markdown.endsWith("\n") ? markdown : `${markdown}\n`;
-  {
-    switch (locator.kind) {
-      case "campaign": {
-        const row = campaignRow(tx, campaign);
-        if (row === undefined) throw new ApiError(404, "file not found");
-        guardRev(row.rev, rev, "campaign changed");
-        const next: CampaignRow = { ...row, body, rev: row.rev + 1 };
-        tx.update(campaigns)
-          .set({ body: next.body, rev: next.rev })
-          .where(eq(campaigns.id, campaign))
-          .run();
-        indexCampaign(tx, next);
-        return renderCampaign(next);
-      }
-      case "chapter": {
-        const row = chapterRowOf(tx, campaign, locator.id);
-        if (row === undefined) throw new ApiError(404, "file not found");
-        guardRev(row.rev, rev, "chapter changed");
-        const next: ChapterRow = { ...row, body, rev: row.rev + 1 };
-        tx.update(chapters)
-          .set({ body: next.body, rev: next.rev })
-          .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, row.id)))
-          .run();
-        indexChapter(tx, campaign, next);
-        return renderChapter(next);
-      }
-      case "scene": {
-        const row = sceneRowAt(tx, campaign, locator);
-        guardRev(row.rev, rev, "scene changed");
-        const next: SceneRow = { ...row, body, rev: row.rev + 1 };
-        tx.update(scenes)
-          .set({ body: next.body, rev: next.rev })
-          .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
-          .run();
-        const tags = refTags(tx, campaign, row.id);
-        indexScene(tx, campaign, next, tags);
-        return renderScene(next, refNpcs(tx, campaign, row.id), tags);
-      }
-      case "npc": {
-        const row = npcRowOf(tx, campaign, locator.id);
-        if (row === undefined) throw new ApiError(404, "file not found");
-        guardRev(row.rev, rev, "npc changed");
-        // `## Beziehungen` in the edited body becomes rows again — the
-        // renderer puts the section back, so an edit there is not lost.
-        const stripped = replaceRelations(tx, campaign, row.id, body);
-        const next: NpcRow = { ...row, body: stripped, rev: row.rev + 1 };
-        tx.update(npcs)
-          .set({ body: next.body, rev: next.rev })
-          .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, row.id)))
-          .run();
-        const relations = relationRows(tx, campaign, row.id);
-        indexNpc(tx, campaign, next, relations);
-        return renderNpc(next, relations);
-      }
-      case "location": {
-        const row = locationRowOf(tx, campaign, locator.id);
-        if (row === undefined) throw new ApiError(404, "file not found");
-        guardRev(row.rev, rev, "location changed");
-        const next: LocationRow = { ...row, body, rev: row.rev + 1 };
-        tx.update(locations)
-          .set({ body: next.body, rev: next.rev })
-          .where(and(eq(locations.campaignId, campaign), eq(locations.id, row.id)))
-          .run();
-        indexLocation(tx, campaign, next);
-        return renderLocation(next);
-      }
-      case "glossary": {
-        const row = campaignRow(tx, campaign);
-        if (row === undefined) throw new ApiError(404, "file not found");
-        // The glossary's OWN counter, not `campaigns.version`: an unrelated
-        // write during a running session must not invalidate an open edit.
-        guardRev(row.glossaryRev, rev, "glossary changed");
-        const parsedGlossary = parseGlossaryBody(body);
-        // A term typed twice would silently lose its second explanation
-        // ("first wins" is the IMPORT's degrade rule, not a save's) — say so
-        // instead, with the term in the message.
-        const duplicate = parsedGlossary.duplicates[0];
-        if (duplicate !== undefined) {
-          throw new ApiError(
-            400,
-            `glossary term "${duplicate}" appears more than once — merge the entries`,
-            { code: "glossary_duplicate_term", term: duplicate },
-          );
-        }
-        const nextRev = row.glossaryRev + 1;
-        // Prose above the first heading belongs to no term. It is KEPT
-        // (campaigns.glossary_intro) and rendered back in front of the list;
-        // dropping it is what made a save lose text.
-        tx.update(campaigns)
-          .set({ glossaryIntro: parsedGlossary.preamble, glossaryRev: nextRev })
-          .where(eq(campaigns.id, campaign))
-          .run();
-        writeGlossaryRows(
-          tx,
-          campaign,
-          parsedGlossary.entries.map((e) => ({ term: e.term, explanation: e.explanation })),
-        );
-        return renderGlossary(glossaryRows(tx, campaign), nextRev, parsedGlossary.preamble);
-      }
-      default:
-        throw new ApiError(404, "file not found");
+  switch (locator.kind) {
+    case "campaign": {
+      const row = campaignRow(tx, campaign);
+      if (row === undefined) throw new ApiError(404, "file not found");
+      guardRev(row.rev, rev, "campaign changed");
+      const next: CampaignRow = { ...row, body, rev: row.rev + 1 };
+      tx.update(campaigns)
+        .set({ body: next.body, rev: next.rev })
+        .where(eq(campaigns.id, campaign))
+        .run();
+      indexCampaign(tx, next);
+      return renderCampaign(next);
     }
+    case "chapter": {
+      const row = chapterRowOf(tx, campaign, locator.id);
+      if (row === undefined) throw new ApiError(404, "file not found");
+      guardRev(row.rev, rev, "chapter changed");
+      const next: ChapterRow = { ...row, body, rev: row.rev + 1 };
+      tx.update(chapters)
+        .set({ body: next.body, rev: next.rev })
+        .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, row.id)))
+        .run();
+      indexChapter(tx, campaign, next);
+      return renderChapter(next);
+    }
+    case "scene": {
+      const row = sceneRowAt(tx, campaign, locator);
+      guardRev(row.rev, rev, "scene changed");
+      const next: SceneRow = { ...row, body, rev: row.rev + 1 };
+      tx.update(scenes)
+        .set({ body: next.body, rev: next.rev })
+        .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
+        .run();
+      const tags = refTags(tx, campaign, row.id);
+      indexScene(tx, campaign, next, tags);
+      return renderScene(next, refNpcs(tx, campaign, row.id), tags);
+    }
+    case "npc": {
+      const row = npcRowOf(tx, campaign, locator.id);
+      if (row === undefined) throw new ApiError(404, "file not found");
+      guardRev(row.rev, rev, "npc changed");
+      // `## Beziehungen` in the edited body becomes rows again — the
+      // renderer puts the section back, so an edit there is not lost.
+      const stripped = replaceRelations(tx, campaign, row.id, body);
+      const next: NpcRow = { ...row, body: stripped, rev: row.rev + 1 };
+      tx.update(npcs)
+        .set({ body: next.body, rev: next.rev })
+        .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, row.id)))
+        .run();
+      const relations = relationRows(tx, campaign, row.id);
+      indexNpc(tx, campaign, next, relations);
+      return renderNpc(next, relations);
+    }
+    case "location": {
+      const row = locationRowOf(tx, campaign, locator.id);
+      if (row === undefined) throw new ApiError(404, "file not found");
+      guardRev(row.rev, rev, "location changed");
+      const next: LocationRow = { ...row, body, rev: row.rev + 1 };
+      tx.update(locations)
+        .set({ body: next.body, rev: next.rev })
+        .where(and(eq(locations.campaignId, campaign), eq(locations.id, row.id)))
+        .run();
+      indexLocation(tx, campaign, next);
+      return renderLocation(next);
+    }
+    case "glossary": {
+      const row = campaignRow(tx, campaign);
+      if (row === undefined) throw new ApiError(404, "file not found");
+      // The glossary's OWN counter, not `campaigns.version`: an unrelated
+      // write during a running session must not invalidate an open edit.
+      guardRev(row.glossaryRev, rev, "glossary changed");
+      const parsedGlossary = parseGlossaryBody(body);
+      // A term typed twice would silently lose its second explanation
+      // ("first wins" is the IMPORT's degrade rule, not a save's) — say so
+      // instead, with the term in the message.
+      const duplicate = parsedGlossary.duplicates[0];
+      if (duplicate !== undefined) {
+        throw new ApiError(
+          400,
+          `glossary term "${duplicate}" appears more than once — merge the entries`,
+          { code: "glossary_duplicate_term", term: duplicate },
+        );
+      }
+      const nextRev = row.glossaryRev + 1;
+      // Prose above the first heading belongs to no term. It is KEPT
+      // (campaigns.glossary_intro) and rendered back in front of the list;
+      // dropping it is what made a save lose text.
+      tx.update(campaigns)
+        .set({ glossaryIntro: parsedGlossary.preamble, glossaryRev: nextRev })
+        .where(eq(campaigns.id, campaign))
+        .run();
+      writeGlossaryRows(
+        tx,
+        campaign,
+        parsedGlossary.entries.map((e) => ({ term: e.term, explanation: e.explanation })),
+      );
+      return renderGlossary(glossaryRows(tx, campaign), nextRev, parsedGlossary.preamble);
+    }
+    default:
+      throw new ApiError(404, "file not found");
   }
 }
 
@@ -1239,12 +1237,20 @@ function writeBodyIn(
  * fields and the chosen body in ONE transaction, guarded by ONE `rev` — the
  * version the DM was looking at in the review.
  *
- * The properties patch runs first and bumps the row to `rev + 1`; the body
- * write is therefore checked against that bumped value, not against the one
- * the client sent. Both halves see the same transaction, so a conflict in
- * either rolls the whole accept back and nothing is half-written. Everything
- * a normal write does — FTS, `[[slug]]` reference rows, the #70 „referencing
- * creates" rule — happens because these are the very same code paths.
+ * THE BODY GOES FIRST. A properties patch may MOVE the entry — a scene whose
+ * `chapter` the proposal changes lands under another address — and `locator`
+ * is the address the request came in on. Patching first therefore left the
+ * body write resolving an address that no longer exists: a bogus 404 and a
+ * rolled-back accept, for a proposal that was perfectly fine. Written the
+ * other way round the body lands on the row while it is still where the
+ * client found it, and the patch runs against the rev that write produced.
+ * Both halves see the same transaction, so a conflict in either rolls the
+ * whole accept back and nothing is half-written. Everything a normal write
+ * does — FTS, `[[slug]]` reference rows, the #70 „referencing creates" rule —
+ * happens because these are the very same code paths.
+ *
+ * The answer is the LAST render, so a move is already in the path the client
+ * gets back.
  *
  * `jobId` discards the augment job the proposal came from, in the SAME
  * transaction as the write (issue #62's rule: drafts and job can never
@@ -1264,12 +1270,14 @@ export async function writePropertiesAndBody(
     throw new ApiError(400, "this file is append-only — use the log/inbox endpoints");
   }
   return mutate(campaign, (tx) => {
+    const bodyWritten =
+      body === undefined ? undefined : writeBodyIn(tx, campaign, locator, rev, body);
+    const patchRev = bodyWritten?.rev ?? rev;
     const patched =
       Object.keys(patch).length === 0
         ? undefined
-        : patchLocator(tx, campaign, locator, rev, patch);
-    const bodyRev = patched?.rev ?? rev;
-    const written = body === undefined ? patched : writeBodyIn(tx, campaign, locator, bodyRev, body);
+        : patchLocator(tx, campaign, locator, patchRev, patch);
+    const written = patched ?? bodyWritten;
     if (written === undefined) throw new ApiError(400, "nothing to write");
     if (jobId !== undefined) {
       tx.delete(generateJobs)

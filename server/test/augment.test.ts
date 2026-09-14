@@ -417,6 +417,46 @@ describe("accept", () => {
     expect((await app.request(`/api/${CAMPAIGN}/generate/job`)).status).toBe(404);
   });
 
+  test("a scene that MOVES chapter still gets its body — one write, new address", async () => {
+    // The proposal changes `chapter`, which is part of a scene's ADDRESS. The
+    // body write has to land before the move, or it resolves an address that
+    // no longer exists and the whole accept rolls back on a bogus 404.
+    const chapterRes = await app.request(`/api/${CAMPAIGN}/chapters`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "Zweites Kapitel", id: "02-umzug" }),
+    });
+    expect(chapterRes.status).toBe(201);
+
+    const sceneRes = await app.request(`/api/${CAMPAIGN}/scenes`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "Umzugsszene", chapter: "01-salzhafen", id: "moving-scene" }),
+    });
+    expect(sceneRes.status).toBe(201);
+    const scene = (await sceneRes.json()) as FileResponse;
+
+    const res = await apply({
+      path: scene.path,
+      rev: scene.rev,
+      properties: { chapter: "02-umzug" },
+      body: "## Flow\n\nSie ziehen um.\n",
+    });
+    expect(res.status).toBe(200);
+    const written = (await res.json()) as FileResponse;
+    // The answer is the FINAL render: the new address, and the new body.
+    expect(written.path).toContain("02-umzug/");
+    expect(written.body).toContain("Sie ziehen um.");
+    const moved = await read(written.path);
+    expect(moved.body).toContain("Sie ziehen um.");
+    expect(moved.properties.chapter).toBe("02-umzug");
+    // …and nothing is left behind at the old address.
+    const old = await app.request(
+      `/api/${CAMPAIGN}/file?path=${encodeURIComponent(scene.path)}`,
+    );
+    expect(old.status).toBe(404);
+  });
+
   test("a stale rev is a 409 and writes NOTHING", async () => {
     const before = await read(NPC);
     const res = await apply({
