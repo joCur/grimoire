@@ -43,6 +43,12 @@ export interface JobReviewSync {
   decide: (patch: ReviewPatch) => void;
   /** Send whatever is still pending now (blur, unmount, page hide). */
   flush: () => void;
+  /**
+   * Another writer won — say so in the same quiet line a patch conflict uses
+   * and re-read the job. The ACCEPT has the same rev guard as the patch
+   * (issue #97 review, finding 3), and its 409 deserves the same answer.
+   */
+  signalConflict: () => void;
 }
 
 function mergePatch(into: ReviewPatch, patch: ReviewPatch): ReviewPatch {
@@ -153,5 +159,10 @@ export function useJobReview(
     };
   }, [send]);
 
-  return { status, edit, decide, flush: send };
+  const signalConflict = useCallback(() => {
+    setStatus("conflict");
+    void queryClient.invalidateQueries({ queryKey: generateJobKey(target.current.campaign) });
+  }, [queryClient]);
+
+  return { status, edit, decide, flush: send, signalConflict };
 }

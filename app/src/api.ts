@@ -784,16 +784,21 @@ export async function patchJobReview(
  * Accept PART of a finished run (issue #97): „Diesen übernehmen" for one
  * scene or one suggested entry, „Alle übernehmen" without a selection.
  * Answers what it wrote (draft path -> the address it landed at) and
- * whether the job is gone because nothing is open any more. A 409 carries
- * the existing paths in `details.conflicts`, as the whole-run apply does.
+ * whether the job is gone because nothing is open any more. `rev` is the
+ * review rev as the caller read it: a 409 `rev_conflict` means another tab
+ * decided in between and nothing was written. A 409 with
+ * `details.conflicts` is the ordinary write conflict, as for the whole-run
+ * apply.
  */
 export function acceptJobParts(
   campaign: string,
   jobId: string,
+  rev: number,
   input: { paths?: string[]; chapter?: string; chapterTitle?: string } = {},
 ): Promise<{ written: Record<string, string>; jobDeleted: boolean }> {
   const path = `/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}/accept`;
   return postJson<{ written: Record<string, string>; jobDeleted: boolean }>(path, {
+    rev,
     ...(input.paths === undefined ? {} : { paths: input.paths }),
     ...(input.chapter === undefined || input.chapterTitle === undefined
       ? {}

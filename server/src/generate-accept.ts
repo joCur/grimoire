@@ -8,7 +8,7 @@
 
 import { parseMarkdown } from "@grimoire/shared";
 import { ApiError } from "./campaign-fs";
-import { getJob, markWrittenInTx } from "./generate-jobs";
+import { getJob, markWrittenInTx, openPartPaths } from "./generate-jobs";
 import {
   applyNpcTarget,
   applySceneTarget,
@@ -49,6 +49,7 @@ import { applyDrafts } from "./store/write";
 export async function acceptJobParts(
   campaign: string,
   jobId: string,
+  rev: number,
   body: { paths?: unknown; chapter?: unknown; chapterTitle?: unknown },
 ): Promise<{ written: Record<string, string>; jobDeleted: boolean }> {
   await requireCampaign(campaign);
@@ -136,7 +137,7 @@ export async function acceptJobParts(
   }
   let jobDeleted = false;
   await applyDrafts(campaign, drafts, undefined, (tx) => {
-    jobDeleted = markWrittenInTx(tx, campaign, jobId, written);
+    jobDeleted = markWrittenInTx(tx, campaign, jobId, rev, written);
   });
   return { written, jobDeleted };
 }

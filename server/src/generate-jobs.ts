@@ -579,16 +579,40 @@ function applyReviewPatch(job: Job, patch: ReviewPatch): void {
  * issue #62 established for the whole-run apply).
  *
  * Returns true when the job row was deleted because nothing is left open.
+ *
+ * `rev` is the review rev the client read (issue #97 review, findings 3+4).
+ * The row is re-read HERE, inside the transaction, and a rev that moved in
+ * the meantime is a 409 that rolls the whole write back — the pre-read the
+ * accept planned with is then stale, and writing over a decision nobody saw
+ * is exactly what the rev guard exists to prevent.
  */
 export function markWrittenInTx(
   tx: GrimoireDb,
   campaign: string,
   jobId: string,
+  rev: number,
   written: Record<string, string>,
 ): boolean {
   const row = jobRow(tx, campaign);
   if (row === undefined || row.id !== jobId) return false;
+  if (row.rev !== rev) {
+    throw new ApiError(409, "the review state changed — reload before accepting", {
+      code: "rev_conflict",
+      rev: row.rev,
+    });
+  }
   const job = toJob(row);
+  // Openness is recomputed from the row THIS transaction sees, never from
+  // the caller's pre-read: a part that was dropped or rejected in between
+  // must not be assigned `written` (issue #97 review, finding 3).
+  const open = openPartPaths(job);
+  for (const rel of Object.keys(written)) {
+    if (open.has(rel)) continue;
+    throw new ApiError(409, "the review state changed — reload before accepting", {
+      code: "rev_conflict",
+      rev: row.rev,
+    });
+  }
   Object.assign(job.review.written, written);
   if (jobIsSettled(job)) {
     tx.delete(generateJobs).where(eq(generateJobs.id, row.id)).run();
@@ -599,6 +623,34 @@ export function markWrittenInTx(
     .where(eq(generateJobs.id, row.id))
     .run();
   return false;
+}
+
+/**
+ * Which parts of a finished run are still OPEN, addressed the way the review
+ * addresses them. The one place that question is answered — the accept reads
+ * it INSIDE its transaction so a decision made between the pre-read and the
+ * commit cannot be written over (issue #97 review, finding 3).
+ */
+export function openPartPaths(job: Job): Set<string> {
+  const written = job.review.written;
+  const dropped = new Set(job.review.dropped);
+  const open = new Set<string>();
+  for (const scene of job.result?.scenes ?? []) {
+    if (written[scene.path] === undefined && !dropped.has(scene.path)) open.add(scene.path);
+  }
+  for (const stub of job.result?.stubs ?? []) {
+    const path = `${stub.kind}s/${stub.id}`;
+    if (
+      written[path] === undefined &&
+      !dropped.has(path) &&
+      job.review.entries[path] !== "rejected"
+    ) {
+      open.add(path);
+    }
+  }
+  const npc = job.npcResult?.npc.path;
+  if (npc !== undefined && written[npc] === undefined) open.add(npc);
+  return open;
 }
 
 /**

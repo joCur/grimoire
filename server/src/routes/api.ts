@@ -853,12 +853,15 @@ api.patch("/:campaign/generate/job/:id/review", async (c) => {
 // One transaction with the ordinary draft write: the conflict check lives
 // inside it (409 { conflicts }), FTS and reference rows follow, and the
 // job records what was written in that same commit. The job row disappears
-// the moment nothing is left open (`jobDeleted`). 404 without a job or for
-// a stale :id, 409 for a job that has no result, 400 for an unknown path
-// and for a selection with nothing left to do.
+// the moment nothing is left open (`jobDeleted`). `rev` is the review rev
+// the client read and is re-checked inside that transaction: a decision
+// made in between is a 409 `rev_conflict` and nothing is written. 404
+// without a job or for a stale :id, 409 for a job that has no result, 400
+// for an unknown path and for a bulk accept with nothing left to do.
 api.post("/:campaign/generate/job/:id/accept", async (c) => {
-  const body = await jsonBody(c, ["paths", "chapter", "chapterTitle"]);
-  return c.json(await acceptJobParts(c.req.param("campaign"), c.req.param("id"), body));
+  const body = await jsonBody(c, ["rev", "paths", "chapter", "chapterTitle"]);
+  const rev = requireRev(body.rev);
+  return c.json(await acceptJobParts(c.req.param("campaign"), c.req.param("id"), rev, body));
 });
 
 // GET /api/:campaign/generate/job -> GenerateJob (404 when there is none).

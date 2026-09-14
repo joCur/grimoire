@@ -136,7 +136,7 @@ async function patch(job: GenerateJob, body: Record<string, unknown>): Promise<G
 }
 
 const accept = (job: GenerateJob, body: Record<string, unknown> = {}): Promise<Response> =>
-  send("POST", `/api/beispiel/generate/job/${job.id}/accept`, body);
+  send("POST", `/api/beispiel/generate/job/${job.id}/accept`, { rev: job.rev ?? 0, ...body });
 
 async function exists(rel: string): Promise<boolean> {
   const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
@@ -330,4 +330,38 @@ test('„Verwerfen" removes only the open rest — what was written stays', asyn
   // The accepted scene is an entry now, not a job.
   expect(await exists(ADDRESS_A)).toBe(true);
   expect(await exists(ADDRESS_B)).toBe(false);
+});
+
+test("an accept with a stale rev is a 409 rev_conflict and writes nothing", async () => {
+  const job = await runJob();
+  // Another tab decides something — the rev moves and this one's is stale.
+  await patch(job, { entries: { [STUB_PATH]: "rejected" } });
+
+  const res = await send("POST", `/api/beispiel/generate/job/${job.id}/accept`, {
+    rev: job.rev ?? 0,
+    paths: [SCENE_A],
+  });
+  expect(res.status).toBe(409);
+  expect(((await res.json()) as { code: string }).code).toBe("rev_conflict");
+  // Rolled back: no entry, and the job still has the part open.
+  expect(await exists(ADDRESS_A)).toBe(false);
+  expect((await fetchJob())?.review?.written).toEqual({});
+});
+
+test("an accept without a rev is a 400 — a defaulted guard is no guard", async () => {
+  const job = await runJob();
+  const res = await send("POST", `/api/beispiel/generate/job/${job.id}/accept`, {
+    paths: [SCENE_A],
+  });
+  expect(res.status).toBe(400);
+  expect(await exists(ADDRESS_A)).toBe(false);
+});
+
+test("a job that disappears mid-accept rolls the whole write back", async () => {
+  const job = await runJob();
+  // „Verwerfen" in another tab: the row is gone before the accept starts.
+  expect((await send("DELETE", "/api/beispiel/generate/job")).status).toBe(200);
+  const res = await accept(job, { paths: [SCENE_A] });
+  expect(res.status).toBe(404);
+  expect(await exists(ADDRESS_A)).toBe(false);
 });

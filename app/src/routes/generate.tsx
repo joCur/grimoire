@@ -301,7 +301,7 @@ export function GenerateRoute() {
     mutationFn: (paths?: string[]) => {
       // Text the DM is still typing must be part of what gets written.
       review.flush();
-      return acceptJobParts(campaign, job?.id ?? "", {
+      return acceptJobParts(campaign, job?.id ?? "", job?.rev ?? 0, {
         ...(paths === undefined ? {} : { paths }),
         // The new chapter's _chapter is created in the same batch — only
         // for a chapter that really is new: for an existing id the pair
@@ -315,6 +315,15 @@ export function GenerateRoute() {
       // Only a FULL accept can drop the job; a partial one leaves it there,
       // and a job that stays must not be mistaken for one that vanished.
       if (paths === undefined) droppedRef.current = true;
+    },
+    onError: (error) => {
+      // The accept carries the review rev (issue #97 review, finding 3): a
+      // 409 `rev_conflict` means another tab decided in between and NOTHING
+      // was written, so the job is re-read and the quiet conflict line says
+      // so — the same protocol the review patch follows.
+      if (error instanceof ApiError && error.status === 409 && error.details.code === "rev_conflict") {
+        review.signalConflict();
+      }
     },
     onSuccess: (data) => {
       const addresses = Object.values(data.written);
