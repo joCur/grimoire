@@ -33,32 +33,32 @@ function itemLabels(html: string): string[] {
 describe("SceneStatusMenu", () => {
   test("lists the four German labels as single-choice options", () => {
     const html = render();
-    expect(itemLabels(html)).toEqual(["Entwurf", "bereit", "gespielt", "verworfen"]);
+    expect(itemLabels(html)).toEqual(["Entwurf", "Bereit", "Gespielt", "Verworfen"]);
   });
 
   test("the current value is the checked option", () => {
     const html = render({ status: "played" });
     // Exactly one option is checked, and it is the one with the current label.
     expect([...html.matchAll(/aria-checked="true"/g)]).toHaveLength(1);
-    expect(html).toMatch(/aria-checked="true"[^>]*>.*?<span class="flex-1">gespielt</);
+    expect(html).toMatch(/aria-checked="true"[^>]*>.*?<span class="flex-1">Gespielt</);
   });
 
   test("an unknown value shows verbatim and checks nothing", () => {
     const html = render({ status: "verschollen" });
     expect(html).toContain("verschollen");
-    expect(itemLabels(html)).toEqual(["Entwurf", "bereit", "gespielt", "verworfen"]);
+    expect(itemLabels(html)).toEqual(["Entwurf", "Bereit", "Gespielt", "Verworfen"]);
     expect(html).not.toContain('aria-checked="true"');
   });
 
   test("the trigger names the current status for screen readers", () => {
-    expect(render({ status: "ready" })).toContain('aria-label="Status ändern, aktuell bereit"');
+    expect(render({ status: "ready" })).toContain('aria-label="Status ändern, aktuell Bereit"');
   });
 
   test("while a write runs the trigger shows the target value dimmed", () => {
     const html = render({ status: "draft", pendingStatus: "ready" });
     expect(html).toContain("opacity-60");
     // The pill shows the target, the menu still checks the value on disk.
-    expect(html).toMatch(/opacity-60">bereit</);
+    expect(html).toMatch(/opacity-60">Bereit</);
     expect(html).toMatch(/aria-checked="true"[^>]*>.*?<span class="flex-1">Entwurf</);
   });
 

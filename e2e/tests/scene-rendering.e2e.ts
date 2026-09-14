@@ -52,7 +52,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(article.getByText("#social", { exact: true })).toBeVisible();
   await expect(article.getByText("Handout: Karte von Salzhafen")).toBeVisible();
   // The status display IS the control (issue #28).
-  await expect(page.getByRole("button", { name: "Status ändern, aktuell bereit" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Status ändern, aktuell Bereit" })).toBeVisible();
 
   // The signature element: no label row, brass ribbon, copy button on hover.
   const readaloud = page.locator("[data-callout='readaloud']");

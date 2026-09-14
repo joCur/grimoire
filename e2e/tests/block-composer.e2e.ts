@@ -168,7 +168,7 @@ test("Bearbeiten opens the block composer — one card per block, no textarea", 
   await expect(composer(page)).toContainText("Wisdom (Perception) DC 13");
   await expect(composer(page)).toContainText("Flow");
   // The header keeps standing around it (as in „Markdown"): title, status regler.
-  await expect(page.getByRole("button", { name: "Status ändern, aktuell bereit" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Status ändern, aktuell Bereit" })).toBeVisible();
 
   // Nothing typed, so nothing to save — and nothing stored moved.
   await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();

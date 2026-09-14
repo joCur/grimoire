@@ -179,7 +179,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect.poll(() => api.raw(sessionPath)).toContain("lighthouse-arrival");
 
   // The played checkmark comes from scenes_played — never faked client-side.
-  await expect(nav.getByText("gespielt")).toBeAttached();
+  await expect(nav.getByText("Gespielt")).toBeAttached();
 
   // The session has content now — discarding it is no longer on offer; the
   // way out is "Session beenden".
@@ -560,7 +560,7 @@ test.describe("played/dropped scenes in the live nav (issue #73)", () => {
     const sessionPath = (await api.sessionPath()) ?? "";
     await expect.poll(() => api.raw(sessionPath)).toContain("harbor-office-talk");
     await expect(
-      nav.getByRole("group", { name: "Gespielt" }).getByText("gespielt"),
+      nav.getByRole("group", { name: "Gespielt" }).getByText("Gespielt"),
     ).toBeAttached();
 
     // Degrade: with EVERY scene played the view stays usable — the planned

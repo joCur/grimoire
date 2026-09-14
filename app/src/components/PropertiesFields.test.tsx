@@ -129,7 +129,7 @@ describe("chips and selects", () => {
   test("a status the file carries but nobody knows is an option of its own", () => {
     const html = render(sceneField("status"), { kind: "text", text: "onhold" });
     expect(html).toContain('value="onhold"');
-    expect(html).toContain("bereit"); // the known options are still offered
+    expect(html).toContain("Bereit"); // the known options are still offered
     // Clearing must be reachable: the empty option deletes the key on save.
     expect(html).toContain("— nicht gesetzt —");
   });

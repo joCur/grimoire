@@ -17,28 +17,28 @@ test("the status control writes the status into the file", async ({ page, api })
 
   // The pill IS the control (issue #28).
   const trigger = page.getByRole("button", { name: /^Status ändern, aktuell/ });
-  await expect(trigger).toHaveText(/bereit/);
+  await expect(trigger).toHaveText(/Bereit/);
   await trigger.click();
 
   // All four options, the current one checked.
-  for (const label of ["Entwurf", "bereit", "gespielt", "verworfen"]) {
+  for (const label of ["Entwurf", "Bereit", "Gespielt", "Verworfen"]) {
     await expect(page.getByRole("menuitemradio", { name: label })).toBeVisible();
   }
-  await page.getByRole("menuitemradio", { name: "gespielt" }).click();
+  await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
 
-  await expect(trigger).toHaveText(/gespielt/);
+  await expect(trigger).toHaveText(/Gespielt/);
   await expect.poll(() => api.raw(SCENE)).toContain("status: played");
 
-  // …and back to "bereit" — the file follows every pick.
+  // …and back to "Bereit" — the file follows every pick.
   await trigger.click();
-  await page.getByRole("menuitemradio", { name: "bereit" }).click();
-  await expect(trigger).toHaveText(/bereit/);
+  await page.getByRole("menuitemradio", { name: "Bereit" }).click();
+  await expect(trigger).toHaveText(/Bereit/);
   await expect.poll(() => api.raw(SCENE)).toContain("status: ready");
 
   // The pool row shows the same control with the same label.
   await page.goto("/beispiel");
   await expect(
-    page.getByRole("button", { name: "Status ändern, aktuell bereit" }).first(),
+    page.getByRole("button", { name: "Status ändern, aktuell Bereit" }).first(),
   ).toBeVisible();
 });
 
@@ -48,7 +48,7 @@ test("a second writer: the status pick reports the conflict inline", async ({
 }) => {
   await page.goto(SCENE_URL);
   const trigger = page.getByRole("button", { name: /^Status ändern, aktuell/ });
-  await expect(trigger).toHaveText(/bereit/);
+  await expect(trigger).toHaveText(/Bereit/);
 
   const message = page.getByText(STALE_MESSAGE);
   // A new BODY, same status: only the row's version moves, and that is what
@@ -62,7 +62,7 @@ test("a second writer: the status pick reports the conflict inline", async ({
   for (let attempt = 1; attempt <= 3 && !conflicted; attempt++) {
     await api.writeBody(SCENE, secondWriter(attempt));
     await trigger.click();
-    await page.getByRole("menuitemradio", { name: "gespielt" }).click();
+    await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
     conflicted = await message
       .waitFor({ state: "visible", timeout: 4000 })
       .then(() => true)
@@ -77,8 +77,8 @@ test("a second writer: the status pick reports the conflict inline", async ({
 
   // The control re-read the file, so the SAME pick works now.
   await trigger.click();
-  await page.getByRole("menuitemradio", { name: "gespielt" }).click();
-  await expect(trigger).toHaveText(/gespielt/);
+  await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
+  await expect(trigger).toHaveText(/Gespielt/);
   await expect(message).toHaveCount(0);
   await expect.poll(() => api.raw(SCENE)).toContain("status: played");
 });

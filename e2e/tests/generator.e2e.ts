@@ -160,7 +160,7 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   await expect(page.getByText("1 NPC · noch nichts geschrieben")).toBeVisible();
   const card = page.locator("div").filter({ hasText: "npcs/brakk" }).last();
   await expect(page.getByRole("heading", { level: 2, name: NPC_DEFAULT_NAME })).toBeVisible();
-  await expect(card).toContainText("lebendig");
+  await expect(card).toContainText("Lebendig");
   await expect(card).toContainText(NPC_ROLE);
   // Quoted quickstats survive as strings — the plus is still there.
   await expect(card).toContainText("insight +1");

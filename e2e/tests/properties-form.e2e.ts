@@ -333,7 +333,7 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const article = page.getByRole("article");
   await expect(article).toContainText(role);
-  await expect(article).toContainText("vermisst");
+  await expect(article).toContainText("Vermisst");
   await expect(article).toContainText("deception +1");
   // Untouched header values stand.
   await expect(article).toContainText("knapp, wetterrau, duzt jeden");

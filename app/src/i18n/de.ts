@@ -338,14 +338,14 @@ export const de = {
   "server.field.title": "Der Titel",
 
   // --- status enum labels (lib/scene-status.ts, lib/entity.ts) --------------
-  "status.scene.ready": "bereit",
+  "status.scene.ready": "Bereit",
   "status.scene.draft": "Entwurf",
-  "status.scene.played": "gespielt",
-  "status.scene.dropped": "verworfen",
-  "status.npc.alive": "lebendig",
-  "status.npc.dead": "tot",
-  "status.npc.missing": "vermisst",
-  "status.npc.unknown": "unbekannt",
+  "status.scene.played": "Gespielt",
+  "status.scene.dropped": "Verworfen",
+  "status.npc.alive": "Lebendig",
+  "status.npc.dead": "Tot",
+  "status.npc.missing": "Vermisst",
+  "status.npc.unknown": "Unbekannt",
 
   // --- browse list pages (/:campaign/list/:kind) ---------------------------
   "browse.title.scenes": "Szenen",
@@ -373,7 +373,7 @@ export const de = {
   "pool.chapter.empty": "Noch keine Szenen in diesem Kapitel.",
   // The chapter pill: only `active` gets a label, every other value degrades
   // to the raw string (README, "Format degradiert").
-  "pool.chapter.status.active": "aktiv",
+  "pool.chapter.status.active": "Aktiv",
   // The quiet second half of the „Eventualszenen" heading row — the „· "
   // separator stays markup in the JSX.
   "pool.contingencies.hint": "nur wenn der Auslöser feuert",

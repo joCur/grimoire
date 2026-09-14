@@ -91,7 +91,7 @@ test("editing the body: save writes the file and the reading view shows it", asy
   await expect(textarea).toHaveValue(before.body);
   await expect(page.getByText("Nur der Textkörper — die Eigenschaften bleiben unverändert.")).toBeVisible();
   // The header keeps standing: title, chips and the status regler stay put.
-  await expect(page.getByRole("button", { name: "Status ändern, aktuell bereit" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Status ändern, aktuell Bereit" })).toBeVisible();
   // While the editor runs the header trigger is gone — the toolbar toggle owns
   // the mode from here on, and it currently offers the OTHER side.
   await expect(page.getByRole("button", { name: "Vorschau" })).toBeVisible();
@@ -236,8 +236,8 @@ test("the status regler next to the editor is no conflict for the own save", asy
   // bumps the file's rev without touching one byte of the body.
   const trigger = page.getByRole("button", { name: /^Status ändern, aktuell/ });
   await trigger.click();
-  await page.getByRole("menuitemradio", { name: "gespielt" }).click();
-  await expect(trigger).toHaveText(/gespielt/);
+  await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
+  await expect(trigger).toHaveText(/Gespielt/);
   await expect.poll(() => api.raw(SCENE)).toContain("status: played");
 
   // The DM's OWN change must not come back as „Inzwischen geändert": a new
