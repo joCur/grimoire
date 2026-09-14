@@ -63,7 +63,13 @@ import {
   requireCampaign,
 } from "./store/read";
 import { applyDrafts, chapterExists, draftTargetExists } from "./store/write";
-import { chapterPath, locationPath, npcPath, scenePath } from "./store/paths";
+import {
+  addressIdentity,
+  chapterPath,
+  locationPath,
+  npcPath,
+  scenePath,
+} from "./store/paths";
 import {
   createProvider,
   type CompletionResult,
@@ -1448,10 +1454,14 @@ export async function applyGenerated(
     };
   });
 
+  // By IDENTITY, not by address: a scene's address carries its `location`
+  // (issue #100), so two drafts with the same id under different locations
+  // are two addresses for ONE row — and the row is what the insert claims.
   const seen = new Set<string>();
   for (const draft of drafts) {
-    if (seen.has(draft.address)) throw new ApiError(400, `duplicate target path: ${draft.rel}`);
-    seen.add(draft.address);
+    const key = addressIdentity(draft.address);
+    if (seen.has(key)) throw new ApiError(400, `duplicate target path: ${draft.rel}`);
+    seen.add(key);
   }
 
   // The conflict check runs in the SAME transaction as the inserts — see

@@ -88,6 +88,7 @@ import {
   sessionRow,
 } from "./read";
 import {
+  addressIdentity,
   chapterPath,
   locationPath,
   locatorFromPath,
@@ -2238,18 +2239,24 @@ export async function applyDrafts(
 }
 
 /**
- * The `rel`s of every draft whose ADDRESS another draft in the batch claims
- * too — `rel` because that is what the review shows, `address` because that
- * is the row the write lands in (`rel` can differ from it when the draft's
- * properties carries another id).
+ * The `rel`s of every draft whose ROW another draft in the batch claims too
+ * — `rel` because that is what the review shows.
+ *
+ * Keyed by IDENTITY (`addressIdentity`), not by address: a scene's address
+ * carries its `location` (issue #100), so two drafts with the same id and
+ * different locations have different addresses and the same primary key.
+ * Keying on the address let that pair through, and the insert then filled
+ * the row twice — last write wins, and the review reported a clean apply for
+ * content it had silently dropped.
  */
 function duplicateDraftRels(drafts: EntityDraft[]): string[] {
   const seen = new Map<string, number>();
   for (const draft of drafts) {
-    seen.set(draft.address, (seen.get(draft.address) ?? 0) + 1);
+    const key = addressIdentity(draft.address);
+    seen.set(key, (seen.get(key) ?? 0) + 1);
   }
   return drafts
-    .filter((draft) => (seen.get(draft.address) ?? 0) > 1)
+    .filter((draft) => (seen.get(addressIdentity(draft.address)) ?? 0) > 1)
     .map((draft) => draft.rel)
     .sort();
 }

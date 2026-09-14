@@ -108,6 +108,25 @@ export function sessionPath(id: string): string {
 }
 
 /**
+ * The ROW one address names, as a comparable key: `<kind>/<id>`.
+ *
+ * Two addresses that differ can still name the same row — a scene's group
+ * segment is its `location` (issue #100), so `01-x/hafen/ankunft` and
+ * `01-x/bucht/ankunft` are the same scene under two different locations. The
+ * primary key is `(campaign, id)`, so anything asking "is this the same
+ * target?" has to ask by identity and not by address; an address the schema
+ * does not describe is its own key (it names nothing and cannot collide).
+ */
+export function addressIdentity(rel: string): string {
+  try {
+    const locator = locatorFromPath(rel);
+    return "id" in locator ? `${locator.kind}/${locator.id}` : locator.kind;
+  } catch {
+    return rel;
+  }
+}
+
+/**
  * Parse a campaign-relative address into the row it names — LEXICALLY, so
  * this stays a pure function; whether the row exists is the store's answer
  * (404). Address safety (no `..`, no absolute paths, no hidden segments) is

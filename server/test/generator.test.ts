@@ -1186,6 +1186,31 @@ describe("POST /api/:campaign/generate/apply", () => {
   });
 
   /**
+   * TWO drafts, ONE row (issue #100 review): a scene's address carries its
+   * `location`, so the same id under two locations produced two DIFFERENT
+   * addresses. The duplicate check keyed on the address let the pair through,
+   * and the insert then filled one row twice — last write wins, and the
+   * review reported a clean apply for content it had silently dropped.
+   */
+  test("400 for two scene drafts with the same id under different locations", async () => {
+    const markdown = sceneWithId("doppelter-ort");
+    const res = await postJson("/api/beispiel/generate/apply", {
+      scenes: [
+        { path: "01-salzhafen/doppelter-ort", markdown },
+        {
+          path: "01-salzhafen/doppelter-ort",
+          markdown: markdown.replace("location: leuchtturm", "location: hafen"),
+        },
+      ],
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain("duplicate target path");
+    // Neither address exists — nothing was written at all.
+    expect(await exists("01-salzhafen/leuchtturm/doppelter-ort")).toBe(false);
+    expect(await exists("01-salzhafen/hafen/doppelter-ort")).toBe(false);
+  });
+
+  /**
    * The last segment of a scene path IS the id whenever the properties carry
    * none (issue #79 review) — so a path segment that is not a slug has to be
    * rejected at the door, or the insert stores a row whose id ("foo.md")
