@@ -947,10 +947,30 @@ function GeneratorLink({ campaign }: { campaign: string }) {
           <span className="sr-only">{runProgress ?? t("topbar.generator.running")}</span>
         </>
       )}
+      {/* The progress number, and the width it is allowed to cost. A run that
+          is BOTH running and half accepted (a pipelined one — issue #102)
+          carries the dot AND this label, which is ~90px the row never had to
+          budget for: at 1280, where the nav trio, the full search chip and
+          this chip's reserved width all switch on at once, the row ran over
+          by 50px. So the pair is only spelled out from 2xl up; below that the
+          dot carries the state and the number stays in the accessible name
+          (and in the chip's `title`) — the same trade the label above makes
+          below xl. */}
       {partial && (
-        <span className="text-[12px] text-muted-foreground max-xl:sr-only">{progressLabel}</span>
+        <span
+          className={cn(
+            "text-[12px] text-muted-foreground",
+            running ? "max-2xl:sr-only" : "max-xl:sr-only",
+          )}
+        >
+          {progressLabel}
+        </span>
       )}
-      {partial && <span className="sr-only xl:hidden">{progressLabel}</span>}
+      {partial && (
+        <span className={cn("sr-only", running ? "2xl:hidden" : "xl:hidden")}>
+          {progressLabel}
+        </span>
+      )}
     </Link>
   );
 }

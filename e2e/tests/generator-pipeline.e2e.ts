@@ -69,7 +69,7 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   await expect(failedCard).toContainText("nicht geschrieben");
   await expect(failedCard.getByText('"status" must be "draft"', { exact: false })).toBeVisible();
   // The cost of the whole run is one quiet line, counting CALLS (AK5).
-  await expect(page.getByText(/~[\d.]+ Tokens · \d+ Aufrufe/)).toBeVisible();
+  await expect(page.getByText(/~[\d.]+ Tokens · \d+ Aufrufe?/)).toBeVisible();
 
   // --- (2) a finished part is acceptable while one is still open (AK2) ----
   const firstId = THREE_SCENES[0].id;
@@ -105,6 +105,52 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
     expect(stored).toContain("status: draft");
   }
   expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
+});
+
+test("a finished part is acceptable while the run is still running (AK2)", async ({
+  page,
+  api,
+}) => {
+  await page.goto("/beispiel/generate");
+  // The LAST scene's reply is held, so the run is genuinely `running` while
+  // the DM accepts one of the two that answered — which is the claim: „was
+  // hier steht, kannst du schon übernehmen", not „warte, bis alles da ist".
+  await page
+    .getByLabel("Quelltext (EN)")
+    .fill([SOURCE, TRIGGER.threeScenes, TRIGGER.slowPart].join("\n\n"));
+  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+    timeout: 30_000,
+  });
+  await expect(page.getByText("Der Lauf ist noch nicht fertig", { exact: false })).toBeVisible();
+
+  const firstId = THREE_SCENES[0].id;
+  const before = (await api.fetch("beispiel/generate/job").then((r) => r.json())) as {
+    status: string;
+  };
+  expect(before.status).toBe("running");
+
+  expect(await api.exists(draftPath(firstId))).toBe(false);
+  await page
+    .locator("div")
+    .filter({ hasText: draftPath(firstId) })
+    .last()
+    .getByRole("button", { name: "Diesen übernehmen" })
+    .click();
+  await expect(page.getByRole("link", { name: draftPath(firstId) })).toBeVisible();
+  expect(await api.exists(draftPath(firstId))).toBe(true);
+
+  // …and the run is STILL running: accepting a part does not end it, and the
+  // open rest keeps the job alive.
+  const after = (await api.fetch("beispiel/generate/job").then((r) => r.json())) as {
+    status: string;
+    pipeline?: { parts: Array<{ status: string }> };
+  };
+  expect(after.status).toBe("running");
+  expect(after.pipeline!.parts.at(-1)!.status).toBe("running");
+
+  // Cleanup: the held call must not outlive the test's server.
+  await page.getByRole("button", { name: /^(Verwerfen|Rest verwerfen)$/ }).click();
 });
 
 test("„Verwerfen\" during a run stops the open parts", async ({ page, api }, testInfo) => {
@@ -164,7 +210,6 @@ async function ownDataDir(testId: string, workerIndex: number): Promise<string> 
 
 test("a restart mid-run keeps the finished parts and fails the one in flight", async ({}, testInfo) => {
   const dataDir = await ownDataDir(testInfo.testId, testInfo.workerIndex);
-  const nonce = `w${testInfo.workerIndex}c`;
 
   // --- boot 1: two parts answer, the third one never does -----------------
   const first = await startGrimoireServer(pristineDir(), dataDir, testInfo.workerIndex);
@@ -225,7 +270,6 @@ test("a restart mid-run keeps the finished parts and fails the one in flight", a
     expect(parts(retried).map((part) => part.status)).toEqual(["done", "done", "running"]);
     // Nothing was written by any of it — only „Übernehmen“ writes.
     expect(await api.exists(draftPath(THREE_SCENES[0].id))).toBe(false);
-    void nonce;
   } finally {
     await second.proc.stop();
   }
