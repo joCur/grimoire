@@ -5,21 +5,21 @@
 // it sits as a quiet secondary action next to the fields it does not own,
 // while „name" is edited in the form like any other property.
 //
-// An id is a reference key, so renaming it is never a one-file edit — it is a
+// An id is a reference key, so renaming it is never a one-entry edit — it is a
 // cascade through scene properties, session logs and relationship lists. The
 // DM must SEE that before it happens, which is why the dialog has two steps:
 //
 //   1. new id -> „Vorschau" (a dryRun of the endpoint: the server computes
 //      the whole plan and writes nothing),
 //   2. the usage summary („12 Verwendungen: 3 Szenen, 2 Beziehungen …",
-//      issue #60) plus „betrifft N Dateien" and the file list ->
+//      issue #60) plus „betrifft N Einträge" and the entry list ->
 //      „Umbenennen" commits.
 //
 // The preview is the same code path as the commit, so a preview that
 // succeeded is a rename that will succeed. Editing the id after a preview
-// drops the plan — a stale file list would be a lie.
+// drops the plan — a stale entry list would be a lie.
 //
-// After the write the reading view follows the file to its new path and the
+// After the write the reading view follows the entry to its new path and the
 // campaign's tree/file/search queries are invalidated (paths and ids moved).
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -59,7 +59,7 @@ export function RenameDialog({
   onClose,
 }: {
   campaign: string;
-  /** The path of the file on screen — where the view has to follow to. */
+  /** The path of the entry on screen — where the view has to follow to. */
   currentPath: string;
   target: RenameTarget;
   onClose: () => void;
@@ -86,15 +86,15 @@ export function RenameDialog({
     mutationFn: (id: string) =>
       renameEntity(campaign, { kind: target.kind, oldId: target.oldId, newId: id }),
     onSuccess: (result) => {
-      // Follow the file to its new path FIRST — the view must not sit on a
+      // Follow the entry to its new path FIRST — the view must not sit on a
       // path that no longer exists while the caches are being refreshed.
       onClose();
       void navigate(`/${campaign}/file/${renamedPath(currentPath, result.renamed)}`);
       // Ids and paths moved, so the tree and the search results are stale …
       void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
       void queryClient.invalidateQueries({ queryKey: ["search", campaign] });
-      // … and so is every file the cascade rewrote. Invalidated by EXACT key,
-      // deliberately: a prefix invalidation would also hit the file we just
+      // … and so is every entry the cascade rewrote. Invalidated by EXACT key,
+      // deliberately: a prefix invalidation would also hit the entry we just
       // navigated away from and refetch a path that no longer exists.
       for (const changed of result.changed) {
         void queryClient.invalidateQueries({ queryKey: ["file", campaign, changed] });
@@ -198,8 +198,8 @@ export function RenameDialog({
 
 /**
  * The dry run's plan: the move, the USAGE summary (issue #60 — what hangs off
- * the id, counted by the same queries the cascade rewrites), the file count
- * and every file it touches.
+ * the id, counted by the same queries the cascade rewrites), the entry count
+ * and every entry it touches.
  */
 function RenamePlanPreview({ plan }: { plan: RenameResult }) {
   const { t } = useI18n();

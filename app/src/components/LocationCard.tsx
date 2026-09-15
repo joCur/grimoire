@@ -4,7 +4,7 @@
 // `location` was only a line in the scene header.
 //
 // Shown: the display name and the one line that is useful mid-sentence — the
-// first paragraph of `## Atmosphäre` when the file has one, else the Roll20
+// first paragraph of `## Atmosphäre` when the entry has one, else the Roll20
 // page reference (plain text: the format references Roll20 by name, it never
 // links it — README).
 //

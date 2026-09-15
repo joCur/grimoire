@@ -12,7 +12,7 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import type {
-  FileResponse,
+  EntryResponse,
   GenerateJob,
   GenerateNpcResult,
   GenerateUsage,
@@ -36,10 +36,10 @@ async function exists(rel: string): Promise<boolean> {
 }
 
 /** GET /file of an applied draft. */
-async function read(rel: string): Promise<FileResponse> {
+async function read(rel: string): Promise<EntryResponse> {
   const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 beforeAll(async () => {

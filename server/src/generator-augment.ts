@@ -34,7 +34,7 @@ import {
   type AugmentKind,
   type AugmentPropertyProposal,
   type AugmentResult,
-  type FileResponse,
+  type EntryResponse,
 } from "@grimoire/shared";
 import { ApiError } from "./api-error";
 import {
@@ -84,7 +84,7 @@ const FROZEN_KEYS = new Set(["id", "scenes_played", "reviewed", "pauses"]);
 export async function readAugmentTarget(
   campaign: string,
   rel: string,
-): Promise<{ kind: AugmentKind; file: FileResponse }> {
+): Promise<{ kind: AugmentKind; file: EntryResponse }> {
   const file = await readParsedFile(campaign, rel); // 400 unsafe, 404 unknown
   if (!isAugmentKind(file.kind)) {
     throw new ApiError(400, `"${file.kind}" cannot be augmented — npc, location or scene only`);
@@ -231,7 +231,7 @@ function kindErrors(
  */
 export function validateAugmentReply(
   raw: string,
-  target: { kind: AugmentKind; file: FileResponse },
+  target: { kind: AugmentKind; file: EntryResponse },
 ): { ok: true; result: AugmentResult } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   const reply = parseRawAugmentReply(raw, errors);
@@ -399,7 +399,7 @@ export async function runAugment(
 }
 
 /** The chapter segment of a scene address (`<chapter>/…`). */
-function chapterOf(file: FileResponse): string {
+function chapterOf(file: EntryResponse): string {
   return file.path.split("/")[0] ?? "";
 }
 
@@ -434,7 +434,7 @@ export async function applyAugment(
   campaign: string,
   body: { path?: unknown; rev?: unknown; properties?: unknown; body?: unknown },
   jobId?: string,
-): Promise<FileResponse> {
+): Promise<EntryResponse> {
   const rel = body.path;
   if (typeof rel !== "string" || rel === "") throw new ApiError(400, "path must be a string");
   const rev = body.rev;

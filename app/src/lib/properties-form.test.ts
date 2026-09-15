@@ -5,7 +5,7 @@
 // campaign-meta.test.ts).
 
 import { afterEach, describe, expect, test } from "bun:test";
-import type { CampaignTree, EntityKind, FileResponse } from "@grimoire/shared/types";
+import type { CampaignTree, EntityKind, EntryResponse } from "@grimoire/shared/types";
 
 import { ApiError } from "@/api";
 import {
@@ -692,7 +692,7 @@ function answer(
   return calls;
 }
 
-const FILE: FileResponse = {
+const FILE: EntryResponse = {
   path: "npcs/fenn",
   kind: "npc",
   properties: NPC_FM,

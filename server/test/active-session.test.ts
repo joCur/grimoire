@@ -21,7 +21,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { eq } from "drizzle-orm";
-import type { FileResponse } from "@grimoire/shared";
+import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { localDateTimeToMs, setNow } from "../src/clock";
 import type { GrimoireDb } from "../src/db/client";
@@ -51,10 +51,10 @@ async function fileStatus(rel: string): Promise<number> {
   return (await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`)).status;
 }
 
-async function getFile(rel: string): Promise<FileResponse> {
+async function getFile(rel: string): Promise<EntryResponse> {
   const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 /**
@@ -93,7 +93,7 @@ function sessionFile(id: string, properties: string): string {
 async function startSession(): Promise<string> {
   const res = await post("/api/beispiel/session/start");
   expect(res.status).toBe(200);
-  return ((await res.json()) as FileResponse).path;
+  return ((await res.json()) as EntryResponse).path;
 }
 
 /**
@@ -111,7 +111,7 @@ async function sessionCount(): Promise<number> {
 async function activePath(includeEnded = false): Promise<string> {
   const res = await app.request(`/api/beispiel/session${includeEnded ? "?includeEnded=1" : ""}`);
   expect(res.status).toBe(200);
-  return ((await res.json()) as FileResponse).path;
+  return ((await res.json()) as EntryResponse).path;
 }
 
 /**
@@ -279,7 +279,7 @@ describe("GET /api/:campaign/session", () => {
     const started = await startSession();
     const res = await app.request("/api/beispiel/session");
     expect(res.status).toBe(200);
-    const file = (await res.json()) as FileResponse;
+    const file = (await res.json()) as EntryResponse;
     expect(file.path).toBe(started);
     // The id is OPAQUE (issue #58): an address, nothing to read. What has to
     // hold is that it is addressable and says nothing about the calendar.
@@ -304,7 +304,7 @@ describe("GET /api/:campaign/session", () => {
     const yesterday = await startAt(new Date(2026, 7, 18, 22, 30), new Date(2026, 7, 19, 1, 15));
     const res = await app.request("/api/beispiel/session"); // 01:15, no row for today
     expect(res.status).toBe(200);
-    const file = (await res.json()) as FileResponse;
+    const file = (await res.json()) as EntryResponse;
     expect(file.path).toBe(yesterday);
     expect(file.startedMs).toBe(new Date(2026, 7, 18, 22, 30).getTime());
   });
@@ -324,7 +324,7 @@ describe("GET /api/:campaign/session", () => {
     });
     const res = await app.request("/api/beispiel/session");
     expect(res.status).toBe(200);
-    const file = (await res.json()) as FileResponse;
+    const file = (await res.json()) as EntryResponse;
     expect(file.properties.started).toBe("2026-08-19"); // the degraded string
     expect(file.startedMs).toBe(new Date(2026, 7, 19, 0, 0).getTime());
   });
@@ -350,7 +350,7 @@ describe("writes land in the ACTIVE session, not in today's", () => {
       sceneId: "lighthouse-arrival",
     });
     expect(res.status).toBe(200);
-    const file = (await res.json()) as FileResponse;
+    const file = (await res.json()) as EntryResponse;
     expect(file.path).toBe(yesterday);
     expect(file.body).toContain("- 01:20 (lighthouse-arrival) Nach Mitternacht weiter\n");
     expect(file.properties.scenes_played).toEqual(["lighthouse-arrival"]);
@@ -363,7 +363,7 @@ describe("writes land in the ACTIVE session, not in today's", () => {
     const yesterday = await startAt(new Date(2026, 7, 18, 22, 30), new Date(2026, 7, 19, 2, 0));
     const res = await post("/api/beispiel/session/end");
     expect(res.status).toBe(200);
-    const file = (await res.json()) as FileResponse;
+    const file = (await res.json()) as EntryResponse;
     expect(file.path).toBe(yesterday);
     expect(file.properties.ended).toBe("2026-08-19T02:00:00");
     expect(file.endedMs).toBe(new Date(2026, 7, 19, 2, 0).getTime());
@@ -417,7 +417,7 @@ describe("start — the state machine's edges (issues #40 review, #58)", () => {
     setNow(() => new Date(2026, 7, 19, 23, 30));
     const again = await post("/api/beispiel/session/start");
     expect(again.status).toBe(200);
-    const file = (await again.json()) as FileResponse;
+    const file = (await again.json()) as EntryResponse;
     // Two sessions on the SAME DAY are two different opaque ids, and both are
     // addressable — that is the whole contract on the id (issue #58).
     expect(file.path).not.toBe(firstPath);
@@ -500,7 +500,7 @@ describe("start — the state machine's edges (issues #40 review, #58)", () => {
     expect((await post("/api/beispiel/session/end")).status).toBe(200);
     const second = await startSession();
     expect(second).not.toBe(first);
-    const active = (await (await app.request("/api/beispiel/session")).json()) as FileResponse;
+    const active = (await (await app.request("/api/beispiel/session")).json()) as EntryResponse;
     expect(active.path).toBe(second);
     expect(active.properties.started).toBe("2026-08-19T21:05:00");
     const tree = (await (await app.request("/api/beispiel/tree")).json()) as {
@@ -599,7 +599,7 @@ describe("the review's session — GET /session?includeEnded=1", () => {
     expect((await app.request("/api/beispiel/session")).status).toBe(404); // nothing runs
     const res = await app.request("/api/beispiel/session?includeEnded=1");
     expect(res.status).toBe(200);
-    const file = (await res.json()) as FileResponse;
+    const file = (await res.json()) as EntryResponse;
     expect(file.path).toBe(yesterday);
     expect(file.endedMs).toBe(new Date(2026, 7, 19, 1, 40).getTime());
   });
@@ -640,7 +640,7 @@ describe("degraded session files never hijack the active session", () => {
     });
     const res = await app.request("/api/beispiel/session");
     expect(res.status).toBe(200);
-    expect(((await res.json()) as FileResponse).path).toBe("sessions/notizen");
+    expect(((await res.json()) as EntryResponse).path).toBe("sessions/notizen");
   });
 
   // Sessions written before issue #58 have a MINUTE-precise `started`. The
@@ -655,11 +655,11 @@ describe("degraded session files never hijack the active session", () => {
     });
     const res = await app.request("/api/beispiel/session");
     expect(res.status).toBe(200);
-    const file = (await res.json()) as FileResponse;
+    const file = (await res.json()) as EntryResponse;
     expect(file.properties.started).toBe("2026-08-19T20:00");
     expect(file.startedMs).toBe(new Date(2026, 7, 19, 20, 0).getTime());
     setNow(() => new Date(2026, 7, 19, 22, 0, 30));
-    const ended = (await (await post("/api/beispiel/session/end")).json()) as FileResponse;
+    const ended = (await (await post("/api/beispiel/session/end")).json()) as EntryResponse;
     // The end is written at the new width next to the old `started`.
     expect(ended.properties.started).toBe("2026-08-19T20:00");
     expect(ended.properties.ended).toBe("2026-08-19T22:00:30");
@@ -709,11 +709,11 @@ describe("degraded session files never hijack the active session", () => {
     });
     const res = await app.request("/api/beispiel/session");
     expect(res.status).toBe(200);
-    expect(((await res.json()) as FileResponse).path).toBe("sessions/2026-08-19");
+    expect(((await res.json()) as EntryResponse).path).toBe("sessions/2026-08-19");
     setNow(() => new Date(2026, 7, 19, 23, 50));
     const ended = await post("/api/beispiel/session/end");
     expect(ended.status).toBe(200);
-    expect(((await ended.json()) as FileResponse).properties.ended).toBe("2026-08-19T23:50:00");
+    expect(((await ended.json()) as EntryResponse).properties.ended).toBe("2026-08-19T23:50:00");
     expect((await app.request("/api/beispiel/session")).status).toBe(404);
   });
 });

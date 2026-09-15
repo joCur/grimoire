@@ -45,7 +45,7 @@ import {
   patchProperties,
   pauseSession,
   startSession,
-  writeFileBody,
+  writeEntryBody,
   writeGlossary,
   writeKnowledge,
 } from "../store/write";
@@ -179,14 +179,14 @@ api.put("/settings", async (c) => {
 // GET /api/:campaign/tree -> CampaignTree
 api.get("/:campaign/tree", async (c) => c.json(await buildTree(c.req.param("campaign"))));
 
-// GET /api/:campaign/file?path=... -> FileResponse (ParsedFile + raw)
+// GET /api/:campaign/file?path=... -> EntryResponse (ParsedFile + raw)
 api.get("/:campaign/file", async (c) => {
   const rel = c.req.query("path");
   if (rel === undefined) throw new ApiError(400, "missing path query parameter");
   return c.json(await readParsedFile(c.req.param("campaign"), rel));
 });
 
-// GET /api/:campaign/session -> FileResponse of the ACTIVE session (issue #40),
+// GET /api/:campaign/session -> EntryResponse of the ACTIVE session (issue #40),
 // 404 when no session is running. "Active" = the last STARTED session file
 // without `ended` — today's or an older one, so a session that runs past
 // midnight stays active instead of vanishing at 00:00.
@@ -262,7 +262,7 @@ api.get("/:campaign/knowledge", async (c) =>
 // --- write endpoints (issue #5) ---------------------------------------------------
 
 // PATCH /api/:campaign/properties { path, rev, patch, locationName? } ->
-// FileResponse
+// EntryResponse
 // patch is a flat object of properties keys to set; null deletes a key.
 // 409 { error, rev } when the file changed on disk since it was read.
 //
@@ -291,7 +291,7 @@ api.patch("/:campaign/properties", async (c) => {
   );
 });
 
-// PUT /api/:campaign/file { path, rev, body } -> FileResponse
+// PUT /api/:campaign/file { path, rev, body } -> EntryResponse
 // Writes the markdown BODY of an existing file — `body` is the markdown
 // WITHOUT the properties block, exactly what GET /file returns as `body`.
 // The properties block on disk stays byte-identical (keys are PATCH
@@ -309,7 +309,7 @@ api.put("/:campaign/file", async (c) => {
     throw new ApiError(400, "rev must be a number");
   }
   if (typeof markdown !== "string") throw new ApiError(400, "body must be a string");
-  return c.json(await writeFileBody(c.req.param("campaign"), rel, rev, markdown));
+  return c.json(await writeEntryBody(c.req.param("campaign"), rel, rev, markdown));
 });
 
 // POST /api/:campaign/campaign-meta is GONE (issue #62). It was the create
@@ -321,7 +321,7 @@ api.put("/:campaign/file", async (c) => {
 // are written like every other properties field now, through PATCH
 // /properties and its 409.
 
-// POST /api/:campaign/session/start -> FileResponse
+// POST /api/:campaign/session/start -> EntryResponse
 // Creates a NEW session — `sessions/<today>`, or `<today>-2`, `-3` … when
 // that day already has sessions (issue #58: "beenden" is FINAL, so a second
 // evening on the same day is a second session with its own empty log and a
@@ -337,14 +337,14 @@ api.post("/:campaign/session/start", async (c) =>
   c.json(await startSession(c.req.param("campaign"))),
 );
 
-// POST /api/:campaign/session/end -> FileResponse — ends the ACTIVE session
+// POST /api/:campaign/session/end -> EntryResponse — ends the ACTIVE session
 // (issue #40: that may be yesterday's file when the session ran past
 // midnight). Idempotent — with nothing running the LAST STARTED session is
 // returned with its existing `ended`; 404 when there is no session file at
 // all.
 api.post("/:campaign/session/end", async (c) => c.json(await endSession(c.req.param("campaign"))));
 
-// POST /api/:campaign/session/pause -> FileResponse — really STOPS the clock
+// POST /api/:campaign/session/pause -> EntryResponse — really STOPS the clock
 // (issue #40 AK8): opens a `{ from: … }` interval in the session's `pauses`
 // properties AND appends the `— Pause` log line in the same write. Idempotent
 // (already paused -> 200, file unchanged); 404 when no session is running.
@@ -352,7 +352,7 @@ api.post("/:campaign/session/pause", async (c) =>
   c.json(await pauseSession(c.req.param("campaign"))),
 );
 
-// POST /api/:campaign/session/continue -> FileResponse — closes the open pause
+// POST /api/:campaign/session/continue -> EntryResponse — closes the open pause
 // interval (`to`) and appends `— Weiter` — it ends a PAUSE, not a session
 // (an ended session is never re-opened, issue #58). Idempotent (not paused -> 200, file unchanged);
 // 404 when no session is running.
@@ -369,7 +369,7 @@ api.post("/:campaign/session/discard", async (c) =>
   c.json(await discardSession(c.req.param("campaign"))),
 );
 
-// POST /api/:campaign/log { text, sceneId? } -> FileResponse
+// POST /api/:campaign/log { text, sceneId? } -> EntryResponse
 // Appends `- HH:MM (sceneId) text` to the ACTIVE session (issue #40 — not
 // stubbornly to today's file); 404 when no session is running — including
 // right after "Session beenden", where a note used to land in the closed log.
@@ -385,7 +385,7 @@ api.post("/:campaign/log", async (c) => {
   return c.json(await appendLogEntry(c.req.param("campaign"), text, sceneId));
 });
 
-// POST /api/:campaign/inbox { text } -> FileResponse (creates inbox)
+// POST /api/:campaign/inbox { text } -> EntryResponse (creates inbox)
 api.post("/:campaign/inbox", async (c) => {
   const body = await jsonBody(c, ["text"]);
   const text = normalizeLineText(body.text);
@@ -461,7 +461,7 @@ api.put("/:campaign/knowledge", async (c) => {
 //
 // Five POSTs, one shape: the DM types a NAME, the server derives the id with
 // the shared slug rule (@grimoire/shared/slug) and answers with the created
-// DOCUMENT — the same `FileResponse` every other write returns, so the app can
+// DOCUMENT — the same `EntryResponse` every other write returns, so the app can
 // navigate straight into it. A taken id is
 // `409 { code: "slug_taken", id, suggestion, path }`; a name that yields no
 // slug at all is a 400 that says so (store/write.ts explains why neither is
@@ -494,7 +494,7 @@ api.post("/campaigns", async (c) => {
   return c.json(await createCampaign(name, description, optionalText(body.id, "id")), 201);
 });
 
-// POST /api/:campaign/chapters { title, goal? } -> 201 FileResponse
+// POST /api/:campaign/chapters { title, goal? } -> 201 EntryResponse
 api.post("/:campaign/chapters", async (c) => {
   const body = await jsonBody(c, ["title", "goal", "id"]);
   const title = requiredText(body.title, "title");
@@ -505,7 +505,7 @@ api.post("/:campaign/chapters", async (c) => {
   );
 });
 
-// POST /api/:campaign/scenes { title, chapter } -> 201 FileResponse
+// POST /api/:campaign/scenes { title, chapter } -> 201 EntryResponse
 // `chapter` is required and must exist (400) — a scene's chapter is part of
 // its address, and chapters are never created by being named (ADR #14).
 api.post("/:campaign/scenes", async (c) => {
@@ -518,7 +518,7 @@ api.post("/:campaign/scenes", async (c) => {
   );
 });
 
-// POST /api/:campaign/npcs { name } -> 201 FileResponse
+// POST /api/:campaign/npcs { name } -> 201 EntryResponse
 // An EMPTY entry for the derived id (one a reference created, issue #70) is
 // FILLED instead of colliding; an entry with content answers 409.
 api.post("/:campaign/npcs", async (c) => {
@@ -530,7 +530,7 @@ api.post("/:campaign/npcs", async (c) => {
   );
 });
 
-// POST /api/:campaign/locations { name } -> 201 FileResponse (same rules)
+// POST /api/:campaign/locations { name } -> 201 EntryResponse (same rules)
 api.post("/:campaign/locations", async (c) => {
   const body = await jsonBody(c, ["name", "id"]);
   const name = requiredText(body.name, "name");
@@ -610,7 +610,7 @@ function rawLine(v: unknown, what: string): string {
   return v;
 }
 
-// POST /api/:campaign/review/seen { path, line } -> FileResponse
+// POST /api/:campaign/review/seen { path, line } -> EntryResponse
 // Adds the short hash (first 8 hex chars of SHA-256) of the RAW log line to
 // the session's `reviewed` properties list iff absent. Idempotent; the line
 // is hashed exactly as sent — it is never written anywhere.
@@ -621,7 +621,7 @@ api.post("/:campaign/review/seen", async (c) => {
   return c.json(await markLogLineSeen(c.req.param("campaign"), body.path, line));
 });
 
-// POST /api/:campaign/review/thread { chapter, text } -> FileResponse
+// POST /api/:campaign/review/thread { chapter, text } -> EntryResponse
 // Appends `- [ ] text` under ## Offene Fäden of <chapter>/_chapter
 // (section/file created when missing; 404 when the chapter dir is missing).
 api.post("/:campaign/review/thread", async (c) => {
@@ -632,7 +632,7 @@ api.post("/:campaign/review/thread", async (c) => {
   return c.json(await appendThreadToChapter(c.req.param("campaign"), body.chapter, text));
 });
 
-// POST /api/:campaign/review/npc-stub { id, name?, note? } -> FileResponse
+// POST /api/:campaign/review/npc-stub { id, name?, note? } -> EntryResponse
 // Creates the npc entry (status: unknown) — or, when the id already has one,
 // answers with THAT entry (issue #70): the caller's goal is "this id has an
 // entry", so the call is idempotent. An entry that holds content is never
@@ -653,7 +653,7 @@ api.post("/:campaign/review/npc-stub", async (c) => {
   return c.json(await createNpcStub(c.req.param("campaign"), body.id, name, note));
 });
 
-// POST /api/:campaign/review/inbox-done { line } -> FileResponse
+// POST /api/:campaign/review/inbox-done { line } -> EntryResponse
 // Rewrites the FIRST exactly-matching inbox line to `- [x] …` (the one
 // documented append-only exception). Idempotent; 404 when not found.
 api.post("/:campaign/review/inbox-done", async (c) => {
@@ -806,7 +806,7 @@ api.post("/:campaign/generate/augment", async (c) => {
 });
 
 // POST /api/:campaign/generate/augment/apply
-// { path, rev, properties?, body?, jobId? } -> the written FileResponse.
+// { path, rev, properties?, body?, jobId? } -> the written EntryResponse.
 // Accepting the reviewed proposal (issue #36 AK3): the DM's chosen fields
 // and the body they assembled from the accepted blocks, written in ONE
 // transaction against `rev` — 409 { code: "rev_conflict", rev } when the

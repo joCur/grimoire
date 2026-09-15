@@ -7,12 +7,12 @@
 //           inside that job, generator/README.md)
 //   review  the drafts of a finished job: rendered through the SAME markdown
 //           pipeline as a real scene, editable as raw markdown, stubs
-//           accepted/rejected one by one. NOTHING is on disk yet.
+//           accepted/rejected one by one. NOTHING is written yet.
 //   done    the paths POST /generate/apply wrote — all as drafts
 //
 // Since issue #21 the route has TWO modes, picked by the quiet chip row above
 // the input form: „Szenen" (scene drafts for a chapter) and „NPC" (one npc
-// file from source material). Both run through the same four states, the same
+// entry from source material). Both run through the same four states, the same
 // background job (there is one generator job per campaign, whatever its kind)
 // and the same apply endpoint — the NPC mode only asks for less (source text
 // plus an optional id) and reviews exactly one card. The mode is not local
@@ -36,7 +36,7 @@
 // (mirrored into the job, debounced, so they survive too), which cards are
 // in edit mode, the stub decisions, and the paths a finished apply wrote.
 // Stub decisions are deliberately NOT persisted — re-deciding two rows is
-// cheap, and nothing is lost on disk.
+// cheap, and nothing written is lost.
 
 import type {
   CampaignTree,
@@ -154,7 +154,7 @@ export function GenerateRoute() {
     enabled: campaign !== "",
   });
   // Only for the context hint: the server sends glossary along with the
-  // prompt when it exists (generator/README.md step 1). A missing file is a
+  // prompt when it exists (generator/README.md step 1). A missing entry is a
   // 404 and means "no glossary" — not an error worth retrying.
   const glossary = useQuery({
     queryKey: ["file", campaign, "glossary"],
@@ -1674,7 +1674,7 @@ function SceneCard({
         onChange={onChange}
         onBlur={onBlur}
         label={t("generate.review.rawLabel", { title })}
-        // A draft is a whole file — the preview renders the body only.
+        // A draft is a whole entry — the preview renders the body only.
         preview={markdownBody(markdown)}
       />
       <PartActions
@@ -1756,13 +1756,13 @@ function PartActions({
 }
 
 /**
- * The generated NPC file as a card (issue #21): the generator's own card
+ * The generated NPC entry as a card (issue #21): the generator's own card
  * chrome (title, status pill, edit toggle, mono target path) with the NPC
  * facts of the reading view above the body — role, voice, appearance,
  * quickstats chips, statblock reference, in the same vocabulary and with the
  * same helpers as EntityArticle's NPC header (issue #26). The presentation is
  * rebuilt here rather than reused wholesale on purpose: EntityArticle takes a
- * FileResponse of a file that EXISTS, and nothing is on disk yet.
+ * EntryResponse of an entry that EXISTS, and nothing is written yet.
  *
  * Same two views as a scene draft: the rendered body through the normal
  * markdown pipeline, or the raw markdown in a mono textarea.
@@ -1846,7 +1846,7 @@ function NpcDraftCard({
         onChange={onChange}
         onBlur={onBlur}
         label={t("generate.review.rawLabel", { title: name })}
-        // A draft is a whole file — the preview renders the body only.
+        // A draft is a whole entry — the preview renders the body only.
         preview={markdownBody(markdown)}
       />
     </div>

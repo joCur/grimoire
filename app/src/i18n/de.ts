@@ -558,8 +558,8 @@ export const de = {
   "campaignMeta.field.description.placeholder": "Ein Satz, der die Kampagne einordnet",
   "campaignMeta.unreachable": "Kampagne nicht ladbar — Server prüfen",
 
-  // --- body editor (components/FileBodyEditor.tsx) -------------------------
-  "bodyEditor.raw.aria": "Markdown-Text von {path}",
+  // --- body editor (components/EntryBodyEditor.tsx) -------------------------
+  "bodyEditor.markdown.aria": "Markdown-Text von {path}",
   "bodyEditor.hint": "Nur der Textkörper — die Eigenschaften bleiben unverändert.",
   "bodyEditor.blocked": "Ein Block muss noch geklärt werden — siehe Hinweis am Block.",
   "bodyEditor.discard.title": "Änderungen verwerfen?",
@@ -799,7 +799,7 @@ export const de = {
   //     lib/composer.ts) ----------------------------------------------------
   "composer.mode.aria": "Editiermodus",
   "composer.mode.blocks": "Blöcke",
-  "composer.mode.raw": "Markdown",
+  "composer.mode.markdown": "Markdown",
   "composer.picker.title": "Block einfügen",
   "composer.picker.cancel.aria": "Einfügen abbrechen",
 
@@ -807,7 +807,7 @@ export const de = {
   "composer.blockType.ifSection": "Falls-Abschnitt",
   "composer.blockType.heading": "Überschrift",
   "composer.blockType.text": "Text",
-  "composer.blockType.raw": "Markdown-Block",
+  "composer.blockType.markdown": "Markdown-Block",
 
   // ONE key for both states of the level select: a hand-written level outside
   // the offered range reads exactly like an offered one.
@@ -821,8 +821,8 @@ export const de = {
     'Wird als „## If: …" geschrieben und in der Leseansicht einklappbar.',
   "composer.block.content.aria": "Inhalt: {label}",
   "composer.block.text.placeholder": "Text des Blocks",
-  "composer.block.raw.placeholder": "Markdown",
-  "composer.raw.hint": "Markdown mit Markern — wird unverändert übernommen.",
+  "composer.block.markdown.placeholder": "Markdown",
+  "composer.markdown.hint": "Markdown mit Markern — wird unverändert übernommen.",
   "composer.list.aria": "Blöcke: {label}",
   "composer.empty": 'Noch keine Blöcke — mit „+" den ersten anlegen.',
   // Two whole sentences instead of a glued-in fragment („… im Falls-Abschnitt"):
@@ -909,7 +909,7 @@ export const de = {
   "augment.body.heading": "Text",
   "augment.body.modeGroup": "Ansicht des Vorschlags",
   "augment.body.blocks": "Blöcke",
-  "augment.body.raw": "Markdown",
+  "augment.body.markdown": "Markdown",
   "augment.body.none": "Keine Änderung am Text vorgeschlagen.",
   "augment.body.showUnchanged": "Unveränderte Blöcke zeigen",
   "augment.body.hideUnchanged": "Unveränderte Blöcke ausblenden",

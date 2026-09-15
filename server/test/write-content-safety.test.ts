@@ -10,7 +10,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { CampaignTree, FileResponse } from "@grimoire/shared";
+import type { CampaignTree, EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { ApiError } from "../src/api-error";
 import { setNow } from "../src/clock";
@@ -22,10 +22,10 @@ import {
   tempCampaignRoot,
 } from "./support/store";
 
-async function getFile(rel: string): Promise<FileResponse> {
+async function getFile(rel: string): Promise<EntryResponse> {
   const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 async function putFile(body: unknown): Promise<Response> {
@@ -36,10 +36,10 @@ async function putFile(body: unknown): Promise<Response> {
   });
 }
 
-async function putOk(body: unknown): Promise<FileResponse> {
+async function putOk(body: unknown): Promise<EntryResponse> {
   const res = await putFile(body);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 async function patchReq(body: unknown): Promise<Response> {
@@ -50,10 +50,10 @@ async function patchReq(body: unknown): Promise<Response> {
   });
 }
 
-async function patchOk(body: unknown): Promise<FileResponse> {
+async function patchOk(body: unknown): Promise<EntryResponse> {
   const res = await patchReq(body);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 async function postJson(url: string, body?: unknown): Promise<Response> {
@@ -327,7 +327,7 @@ describe("POST /log — the scene marker is a parse column", () => {
     const start = await postJson("/api/beispiel/session/start");
     expect(start.status).toBe(200);
     // The session's id is opaque (issue #58), so its path comes from the start.
-    const rel = ((await start.json()) as FileResponse).path;
+    const rel = ((await start.json()) as EntryResponse).path;
     const before = await getFile(rel);
     // (An EMPTY sceneId is not in this list: the route normalises it away to
     // "no scene", which is the same thing as omitting the key.)
@@ -342,6 +342,6 @@ describe("POST /log — the scene marker is a parse column", () => {
       sceneId: "lighthouse-arrival",
     });
     expect(ok.status).toBe(200);
-    expect(((await ok.json()) as FileResponse).body).toContain("(lighthouse-arrival) Notiz");
+    expect(((await ok.json()) as EntryResponse).body).toContain("(lighthouse-arrival) Notiz");
   });
 });

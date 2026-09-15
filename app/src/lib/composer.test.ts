@@ -86,9 +86,9 @@ describe("the draft and its two surfaces", () => {
       const body = exampleBody(rel);
       const blocks = composerDraft(body);
       expect(draftBody(blocks)).toBe(body);
-      const raw = withDraftMode(blocks, "raw");
-      expect(raw.mode).toBe("raw");
-      if (raw.mode !== "raw") throw new Error("unreachable");
+      const raw = withDraftMode(blocks, "markdown");
+      expect(raw.mode).toBe("markdown");
+      if (raw.mode !== "markdown") throw new Error("unreachable");
       // What the textarea shows IS the file — no normalization on the way in.
       expect(raw.text).toBe(body);
       expect(draftBody(withDraftMode(raw, "blocks"))).toBe(body);
@@ -101,7 +101,7 @@ describe("the draft and its two surfaces", () => {
     // open form for a click that meant „stay here".
     expect(withDraftMode(draft, "blocks")).toBe(draft);
     const raw = withDraftText("## Flow\n");
-    expect(withDraftMode(raw, "raw")).toBe(raw);
+    expect(withDraftMode(raw, "markdown")).toBe(raw);
   });
 
   test("text typed in Roh survives the way back into the blocks", () => {
@@ -116,8 +116,8 @@ describe("the draft and its two surfaces", () => {
     const draft = composerDraft("> [!note] alt\n");
     if (draft.mode !== "blocks") throw new Error("unreachable");
     const edited = withDraftBlocks(setBlockText(draft.blocks, at(draft.blocks, 0).id, "neu"));
-    const raw = withDraftMode(edited, "raw");
-    if (raw.mode !== "raw") throw new Error("unreachable");
+    const raw = withDraftMode(edited, "markdown");
+    if (raw.mode !== "markdown") throw new Error("unreachable");
     expect(raw.text).toBe("> [!note] neu\n");
   });
 
@@ -328,7 +328,7 @@ describe("insert, move, remove", () => {
 
   test("removing the last block of a raw-only body leaves an empty draft", () => {
     const blocks = parseBlocks("> [!warning] unbekannt\n");
-    expect(at(blocks, 0).type).toBe("raw");
+    expect(at(blocks, 0).type).toBe("markdown");
     expect(removeAt(blocks, at(blocks, 0).id)).toEqual([]);
   });
 });

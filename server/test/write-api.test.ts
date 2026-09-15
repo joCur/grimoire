@@ -28,7 +28,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { eq } from "drizzle-orm";
-import type { FileResponse } from "@grimoire/shared";
+import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { setNow } from "../src/clock";
 import type { GrimoireDb } from "../src/db/client";
@@ -40,10 +40,10 @@ import {
   tempCampaignRoot,
 } from "./support/store";
 
-async function getFile(rel: string, campaign = "beispiel"): Promise<FileResponse> {
+async function getFile(rel: string, campaign = "beispiel"): Promise<EntryResponse> {
   const res = await app.request(`/api/${campaign}/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 async function fileStatus(rel: string, campaign = "beispiel"): Promise<number> {
@@ -58,10 +58,10 @@ async function patchReq(body: unknown): Promise<Response> {
   });
 }
 
-async function patchOk(body: unknown): Promise<FileResponse> {
+async function patchOk(body: unknown): Promise<EntryResponse> {
   const res = await patchReq(body);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 /** PATCH /properties of any campaign (patchReq is bound to `beispiel`). */
@@ -81,10 +81,10 @@ async function putFile(body: unknown): Promise<Response> {
   });
 }
 
-async function putOk(body: unknown): Promise<FileResponse> {
+async function putOk(body: unknown): Promise<EntryResponse> {
   const res = await putFile(body);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 async function postJson(url: string, body?: unknown): Promise<Response> {
@@ -95,10 +95,10 @@ async function postJson(url: string, body?: unknown): Promise<Response> {
   });
 }
 
-async function postOk(url: string, body?: unknown): Promise<FileResponse> {
+async function postOk(url: string, body?: unknown): Promise<EntryResponse> {
   const res = await postJson(url, body);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 /**
@@ -621,7 +621,7 @@ describe("POST /api/:campaign/inbox", () => {
       expect(await fileStatus("inbox", FRESH)).toBe(200);
       const res = await postJson(`/api/${FRESH}/inbox`, { text: "Erste Idee" });
       expect(res.status).toBe(200);
-      const file = (await res.json()) as FileResponse;
+      const file = (await res.json()) as EntryResponse;
       expect(file.body).toBe("\n# Inbox\n\n- Erste Idee\n");
       expect(file.raw).toBe("---\nid: inbox\n---\n\n# Inbox\n\n- Erste Idee\n");
     });
@@ -661,7 +661,7 @@ describe("naming a campaign that has none (issue #62)", () => {
         },
       });
       expect(res.status).toBe(200);
-      const file = (await res.json()) as FileResponse;
+      const file = (await res.json()) as EntryResponse;
       expect(file.path).toBe("_campaign");
       expect(file.kind).toBe("campaign");
       expect(file.properties.name).toBe("Die Aschekönige");
@@ -690,7 +690,7 @@ describe("naming a campaign that has none (issue #62)", () => {
         patch: { name: "Nur ein Name", description: null },
       });
       expect(res.status).toBe(200);
-      const file = (await res.json()) as FileResponse;
+      const file = (await res.json()) as EntryResponse;
       expect(Object.keys(file.properties)).toEqual(["id", "name"]);
       expect(file.raw).toBe("---\nid: frischling\nname: Nur ein Name\n---\n");
     });

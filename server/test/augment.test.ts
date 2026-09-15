@@ -12,7 +12,7 @@
 //   * accepting — ONE transaction with a `rev` guard, and the job gone.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import type { AugmentResult, FileResponse, GenerateJob } from "@grimoire/shared";
+import type { AugmentResult, EntryResponse, GenerateJob } from "@grimoire/shared";
 import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generate-jobs";
 import {
@@ -45,10 +45,10 @@ const NPC = "npcs/jorna";
 const LOCATION = "locations/leuchtturm";
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
-async function read(rel: string): Promise<FileResponse> {
+async function read(rel: string): Promise<EntryResponse> {
   const res = await app.request(`/api/${CAMPAIGN}/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 // --- fake provider ---------------------------------------------------------
@@ -630,7 +630,7 @@ describe("accept", () => {
       jobId: job.id,
     });
     expect(res.status).toBe(200);
-    const written = (await res.json()) as FileResponse;
+    const written = (await res.json()) as EntryResponse;
     expect(written.properties["roll20-page"]).toBe("Leuchtturm (neu)");
     expect(written.body).toContain("## Wer ist hier");
     // One transaction, two halves — both are on the stored row.
@@ -659,7 +659,7 @@ describe("accept", () => {
       body: JSON.stringify({ title: "Umzugsszene", chapter: "01-salzhafen", id: "moving-scene" }),
     });
     expect(sceneRes.status).toBe(201);
-    const scene = (await sceneRes.json()) as FileResponse;
+    const scene = (await sceneRes.json()) as EntryResponse;
 
     const res = await apply({
       path: scene.path,
@@ -668,7 +668,7 @@ describe("accept", () => {
       body: "## Flow\n\nSie ziehen um.\n",
     });
     expect(res.status).toBe(200);
-    const written = (await res.json()) as FileResponse;
+    const written = (await res.json()) as EntryResponse;
     // The answer is the FINAL render: the new address, and the new body.
     expect(written.path).toContain("02-umzug/");
     expect(written.body).toContain("Sie ziehen um.");
@@ -682,7 +682,7 @@ describe("accept", () => {
       `/api/${CAMPAIGN}/file?path=${encodeURIComponent(scene.path)}`,
     );
     expect(old.status).toBe(200);
-    expect(((await old.json()) as FileResponse).path).toBe(written.path);
+    expect(((await old.json()) as EntryResponse).path).toBe(written.path);
   });
 
   test("a stale rev is a 409 and writes NOTHING", async () => {

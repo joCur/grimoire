@@ -5,13 +5,13 @@
 // markup (pinning lucide-react/react-dom byte output would break on every
 // dependency bump without a single pixel moving).
 
-import type { FileResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
 import { PenLine, SlidersHorizontal } from "lucide-react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { CampaignMetaAction } from "./CampaignMetaAction";
-import { FileBodyEditAction } from "./FileBodyEditor";
+import { EntryBodyEditAction } from "./EntryBodyEditor";
 import { PropertiesAction } from "./PropertiesAction";
 import { HeaderAction } from "./HeaderAction";
 
@@ -43,7 +43,7 @@ describe("HeaderAction", () => {
 
 describe("the call sites", () => {
   test("Bearbeiten of the body editor is the shared trigger", () => {
-    expect(renderToStaticMarkup(<FileBodyEditAction onEdit={() => {}} />)).toBe(
+    expect(renderToStaticMarkup(<EntryBodyEditAction onEdit={() => {}} />)).toBe(
       headerAction("Bearbeiten"),
     );
   });
@@ -55,7 +55,7 @@ describe("the call sites", () => {
   });
 
   test("Eigenschaften (issue #42) is the shared trigger with its own glyph", () => {
-    const npc: FileResponse = {
+    const npc: EntryResponse = {
       path: "npcs/jorna",
       kind: "npc",
       properties: { id: "jorna", name: "Jorna" },
@@ -76,7 +76,7 @@ describe("the call sites", () => {
 
   test("no Eigenschaften where there is no typed properties (session, inbox, campaign)", () => {
     for (const kind of ["session", "inbox", "campaign", "glossary"] as const) {
-      const file: FileResponse = {
+      const file: EntryResponse = {
         path: "x",
         kind,
         properties: {},

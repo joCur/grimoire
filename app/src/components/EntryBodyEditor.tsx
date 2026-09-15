@@ -1,12 +1,12 @@
 // Edit mode of the reading view (issue #15): „Bearbeiten" in the header of a
-// scene/NPC/Ort/Kapitel swaps the rendered body for the editor.
+// scene/NPC/Ort/Kapitel swaps the rendered text of the entry for the editor.
 //
 // Since issue #43 that editor has TWO surfaces over ONE draft:
 //
 //   „Blöcke" (default)  the block composer — the scene as a list of typed
 //                       forms, the way a phone can edit it.
-//   „Roh"               the markdown textarea from issue #39, with its
-//                       „Vorschau" of the whole rendered document — the
+//   „Markdown"          the markdown textarea from issue #39, with its
+//                       „Vorschau" of the whole rendered text — the
 //                       fallback for everything a form does not model.
 //
 // Switching between them is lossless by construction: the draft is the
@@ -25,7 +25,7 @@
 //     the next „Speichern" carries the rev the re-read brought and works,
 //   * a failed write keeps the draft as well,
 //   * „Abbrechen" with unsaved changes asks first (Dialog, never window.confirm),
-//   * a body-neutral new version of the file (the status regler right next to
+//   * a body-neutral new version of the entry (the status regler right next to
 //     the editor writes one) is adopted silently instead of turning the DM's
 //     own click into a conflict,
 //   * a block list that would come back DIFFERENT from what it shows (a `##`
@@ -33,7 +33,7 @@
 //     parse) blocks the save until the DM decides — composerIssues, the same
 //     seam „Eigenschaften" uses for an unfinished quickstat row.
 
-import type { FileResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 import { PenLine } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -61,50 +61,50 @@ import {
   withDraftMode,
   withDraftText,
 } from "@/lib/composer";
-import { hasBodyChanges, shouldAdvanceBase } from "@/lib/file-body";
-import { useFileBodyMutation } from "@/lib/use-file-body";
+import { hasBodyChanges, shouldAdvanceBase } from "@/lib/entry-body";
+import { useEntryBodyMutation } from "@/lib/use-entry-body";
 
 /**
  * The quiet header trigger, in the same vocabulary as „Eigenschaften" and the
  * campaign metadata action next to it — hence the shared HeaderAction.
  */
-export function FileBodyEditAction({ onEdit }: { onEdit: () => void }) {
+export function EntryBodyEditAction({ onEdit }: { onEdit: () => void }) {
   const t = useT();
   return <HeaderAction icon={PenLine} label={t("common.edit")} onClick={onEdit} />;
 }
 
-/** One shared empty record — „Roh" has no per-block issues and needs no object. */
+/** One shared empty record — „Markdown" has no per-block issues and needs no object. */
 const EMPTY_ISSUES: Record<string, string> = {};
 
 /**
  * A DOM id that survives any path (same rule as the generator cards) — the
- * textarea's id in „Roh" and the prefix of the block forms' ids in „Blöcke".
+ * textarea's id in „Markdown" and the prefix of the block forms' ids in „Blöcke".
  */
 function textareaIdFor(path: string): string {
-  return `file-body-${path.replace(/[^a-zA-Z0-9-]/g, "-")}`;
+  return `entry-body-${path.replace(/[^a-zA-Z0-9-]/g, "-")}`;
 }
 
-export function FileBodyEditor({
+export function EntryBodyEditor({
   campaign,
   file,
   onClose,
 }: {
   campaign: string;
   /**
-   * The file on screen: its `body` seeds the editor once, its rev is what
+   * The entry on screen: its `body` seeds the editor once, its rev is what
    * the write is checked against. Later versions are adopted only when they
    * are body-neutral (see `base` below) — mount this component per path
    * (`key`) so a navigation reseeds it.
    */
-  file: FileResponse;
+  file: EntryResponse;
   onClose: () => void;
 }) {
   const t = useT();
   // The version this editor is working against — seeded once and deliberately
-  // NOT following the file query: the 5s version poll refetches while the
+  // NOT following the entry query: the 5s version poll refetches while the
   // editor is open, and inheriting its rev would turn a foreign edit into a
   // silent overwrite instead of a 409. It moves for exactly two reasons: after
-  // a conflict, to the file the re-read brought, and for a BODY-NEUTRAL new
+  // a conflict, to the entry the re-read brought, and for a BODY-NEUTRAL new
   // version (shouldAdvanceBase — the status regler next to the editor is the
   // one that produces those).
   const [base, setBase] = useState(file);
@@ -116,12 +116,12 @@ export function FileBodyEditor({
   useEffect(() => {
     if (shouldAdvanceBase(base, file)) setBase(file);
   }, [base, file]);
-  // Textarea (true) or rendered preview (false) — the „Roh" surface's own
+  // Textarea (true) or rendered preview (false) — the „Markdown" surface's own
   // toggle from issue #39, unchanged. „Blöcke" has no preview of its own: every
   // card already shows its content.
   const [editing, setEditing] = useState(true);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const { save, isSaving, message } = useFileBodyMutation(campaign, base.path, base.rev, {
+  const { save, isSaving, message } = useEntryBodyMutation(campaign, base.path, base.rev, {
     onSaved: onClose,
     onConflict: (reread) => {
       // The draft stays — only the version underneath it moves on, so the
@@ -135,7 +135,7 @@ export function FileBodyEditor({
   const dirty = hasBodyChanges(base.body, body);
   // What the block list would break if it were written now, per block — the
   // same seam „Eigenschaften" uses (PropertiesAction, issue #42): the card
-  // says it, the button waits. „Roh" has no such state: its text IS the file.
+  // says it, the button waits. „Markdown" has no such state: its text IS the entry.
   const issues = useMemo(
     () => (draft.mode === "blocks" ? composerIssues(draft.blocks, t) : EMPTY_ISSUES),
     [draft, t],
@@ -156,7 +156,7 @@ export function FileBodyEditor({
               mode={draft.mode}
               onModeChange={(mode) => setDraft(withDraftMode(draft, mode))}
             />
-            {draft.mode === "raw" && (
+            {draft.mode === "markdown" && (
               <MarkdownEditorToggle
                 editing={editing}
                 onToggleEditing={() => setEditing((wasEditing) => !wasEditing)}
@@ -202,7 +202,7 @@ export function FileBodyEditor({
             onChange={(text) => setDraft(withDraftText(text))}
             editing={editing}
             id={textareaId}
-            label={t("bodyEditor.raw.aria", { path: base.path })}
+            label={t("bodyEditor.markdown.aria", { path: base.path })}
           />
         )}
       </EditorShell>

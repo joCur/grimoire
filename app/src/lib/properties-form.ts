@@ -1,4 +1,4 @@
-// „Eigenschaften" — editing ALL properties fields of one file from the app
+// „Eigenschaften" — editing ALL properties fields of one entry from the app
 // (issue #42, slice 2a of #15). This module is the pure half: which fields a
 // kind has, what the open form starts with, and the PATCH body a save sends.
 // No react, no query imports, so every rule here is unit-testable.
@@ -9,18 +9,18 @@
 //      list per kind, `id` deliberately absent (the rename cascade of issue
 //      #30 owns it) and the kind itself as well (it is derived from the path).
 //   2. Only what the DM CHANGED is patched. PATCH /properties re-emits the
-//      whole YAML block from the parsed file, so every key we do not send
-//      keeps its value — unknown keys of a hand-edited file included. Sending
+//      whole YAML block from the parsed entry, so every key we do not send
+//      keeps its value — unknown keys of an imported entry included. Sending
 //      an unchanged field would be a no-op at best and a type/format change at
 //      worst (`quickstats: {wis: 2}` -> `{wis: '2'}`).
 //   3. Clearing a field DELETES the key (`null`, the server's delete marker)
 //      instead of writing an empty value — `tags: []` or `role: ''` is noise
-//      in a file the DM also reads in an editor. Same choice the campaign
+//      in an entry the DM also reads in an editor. Same choice the campaign
 //      metadata dialog made for a blank description (issue #34).
 //
 // The format DEGRADES (README): an unknown `status`/`type` value is offered as
 // its own option instead of being corrected away, a reference field takes a
-// free-text id that has no file yet, and a wrong-typed value is shown as text
+// free-text id that has no entry yet, and a wrong-typed value is shown as text
 // rather than throwing.
 
 import {
@@ -46,7 +46,7 @@ export type PropertiesKind = "scene" | "npc" | "location" | "chapter";
  * How one field is edited:
  *
  *   text / textarea   free string (textarea = the fields that hold a sentence)
- *   select            a known value set, plus whatever stands in the file
+ *   select            a known value set, plus whatever stands in the entry
  *   reference         ONE id of an existing entity, free text allowed
  *   references        MANY such ids, as chips
  *   chips             free string list (`tags`, `handouts`)
@@ -65,7 +65,7 @@ export type FieldControl =
 export type ReferenceSource = "npcs" | "locations" | "chapters";
 
 export interface FieldOption {
-  /** What is written to the file. */
+  /** What is written to the entry. */
   value: string;
   /** What the DM reads — the entity's name/title, or the value itself. */
   label: string;
@@ -398,7 +398,7 @@ function scalarText(value: unknown): string {
   return "";
 }
 
-/** What the form starts with — the file's current values, field by field. */
+/** What the form starts with — the entry's current values, field by field. */
 export function propertiesFormValues(
   fields: readonly PropertiesField[],
   properties: Record<string, unknown>,
@@ -517,7 +517,7 @@ function patchValue(value: FieldValue): unknown {
  * The PATCH /properties patch: ONLY the fields whose value actually moved.
  * A field that ended up empty is sent as `null` (the server deletes the key),
  * everything else as its value. Keys the form does not know are never in here,
- * so a hand-edited file keeps them.
+ * so an imported entry keeps them.
  */
 export function propertiesPatch(
   fields: readonly PropertiesField[],
@@ -577,8 +577,8 @@ export function propertiesPatch(
  * And an ID LIST (`npcs`, issue #70 audit): that list holds ids, not names —
  * every entry becomes a card and a reference the save creates — so the server
  * refuses a non-slug entry with a 400. Saying it here makes that a line under
- * the field before the click. `initial` is what the file already holds and is
- * EXEMPT: a campaign migrated from the file era may carry free text there, and
+ * the field before the click. `initial` is what the entry already holds and is
+ * EXEMPT: an imported campaign may carry free text there, and
  * such a scene has to stay savable (the server exempts the same values).
  */
 export function propertiesFormIssues(
@@ -643,7 +643,7 @@ export function hasPropertiesChanges(
   t: Translate,
 ): boolean {
   if (Object.keys(propertiesPatch(fields, initial, current)).length > 0) return true;
-  // With `initial`, so that free text a MIGRATED file already carries in
+  // With `initial`, so that free text an imported entry already carries in
   // `npcs` is not read as unsaved work by the discard guard.
   return Object.keys(propertiesFormIssues(fields, current, initial, t)).length > 0;
 }
@@ -688,7 +688,7 @@ export function commitPendingText(
 // --- reference lookups -------------------------------------------------------
 
 /**
- * What a reference field offers: the ids that HAVE a file, labelled with their
+ * What a reference field offers: the ids that HAVE an entry, labelled with their
  * name/title. Order is the tree's. A value outside this list is still valid —
  * the control is an input, not a closed list (README: references degrade).
  */
@@ -724,7 +724,7 @@ export function referenceLabel(
  *
  * Seeding from `initial` and not only from `current` is what makes it
  * RECOVERABLE: a DM who clicks through the list once must be able to put the
- * file's own value back, which a select cannot offer once it has dropped it.
+ * entry's own value back, which a select cannot offer once it has dropped it.
  */
 export function selectOptions(
   options: readonly FieldOption[],
@@ -746,7 +746,7 @@ export function selectOptions(
 // --- the write ---------------------------------------------------------------
 
 /**
- * Save the patch. The 409 handling — nothing was written, the file is re-read
+ * Save the patch. The 409 handling — nothing was written, the entry is re-read
  * once so the next „Speichern" carries the fresh rev — is the shared
  * protocol of write-with-rev.ts. Every other failure throws.
  */
