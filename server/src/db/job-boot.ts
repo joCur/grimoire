@@ -39,18 +39,69 @@ export const RESTART_FAILURE: GenerateJobError = {
  */
 export function failInterruptedJobs(db: GrimoireDb): number {
   const stale = db
-    .select({ id: generateJobs.id })
+    .select({ id: generateJobs.id, pipeline: generateJobs.pipeline })
     .from(generateJobs)
     .where(eq(generateJobs.status, "running"))
     .all();
   if (stale.length === 0) return 0;
-  db.update(generateJobs)
-    .set({
-      status: "failed",
-      error: JSON.stringify(RESTART_FAILURE),
-      finishedAt: now().toISOString(),
-    })
-    .where(eq(generateJobs.status, "running"))
-    .run();
+  const at = now().toISOString();
+  for (const row of stale) {
+    const parts = recoverParts(row.pipeline);
+    if (parts === null) {
+      // A single-call run (npc, augment) or a row from before issue #102:
+      // there is nothing to keep, so the whole job becomes the failed one the
+      // app already renders.
+      db.update(generateJobs)
+        .set({ status: "failed", error: JSON.stringify(RESTART_FAILURE), finishedAt: at })
+        .where(eq(generateJobs.id, row.id))
+        .run();
+      continue;
+    }
+    // A PIPELINED run (issue #102): the parts that were in flight — and the
+    // ones that were still waiting for a worker — died with the process, so
+    // they become `failed` and carry „Erneut versuchen". Parts that were
+    // already `done` are kept: their drafts are on the row and the DM can
+    // review and accept them (AK3). The job is `done` as soon as one part
+    // survived, and `failed` with the restart message when none did.
+    const anyDone = parts.parts.some((p) => p.status === "done");
+    db.update(generateJobs)
+      .set({
+        status: anyDone ? "done" : "failed",
+        pipeline: JSON.stringify(parts.pipeline),
+        finishedAt: at,
+        ...(anyDone ? {} : { error: JSON.stringify(RESTART_FAILURE) }),
+      })
+      .where(eq(generateJobs.id, row.id))
+      .run();
+  }
   return stale.length;
+}
+
+/**
+ * The pipeline of an interrupted row with every OPEN part failed, or null
+ * when the row has no parts (a single-call run, or one written before issue
+ * #102). Degrades like every other payload read: an unreadable column is
+ * treated as "no parts", which lands the row on the old whole-job failure.
+ */
+function recoverParts(
+  value: string,
+): { pipeline: Record<string, unknown>; parts: Array<{ status: string }> } | null {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(value) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== "object") return null;
+  const raw = parsed.parts;
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const parts = raw.map((item) => {
+    const part = { ...(item as Record<string, unknown>) };
+    if (part.status === "running" || part.status === "pending") {
+      part.status = "failed";
+      part.error = RESTART_FAILURE_MESSAGE;
+    }
+    return part as { status: string };
+  });
+  return { pipeline: { ...parsed, parts }, parts };
 }

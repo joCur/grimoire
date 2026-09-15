@@ -695,6 +695,10 @@ export const de = {
   "generate.review.conflicts": "Diese Einträge existieren schon — nichts geschrieben:",
   "generate.review.conflictsNpc": "Dieser Eintrag existiert schon — nichts geschrieben:",
   "generate.review.applyFailed": "Nicht geschrieben — Server prüfen.",
+  // Ein 409, der kein rev-Konflikt ist: der Lauf ist weiter, dieser Teil ist
+  // nicht mehr offen oder hat noch nichts fertig. Nichts wurde geschrieben.
+  "generate.review.applyStale":
+    "Nicht geschrieben — der Lauf hat sich geändert. Die Ansicht wird neu geladen.",
   "generate.review.discardFailed": "Nicht verworfen — Server prüfen.",
   "generate.review.apply": "Übernehmen ({count})",
   "generate.review.applyNpc": "Übernehmen",
@@ -723,6 +727,35 @@ export const de = {
   // (lib/generate.ts groups by hand — Intl would need full ICU data).
   "generate.usage": "~{tokens} Tokens · {attempts, plural, one {# Versuch} other {# Versuche}}",
   "generate.usage.group": ".",
+  // --- generator: the pipeline (issue #102) --------------------------------
+  // A run is the outline call plus one call per scene and per entry, so the
+  // review fills up while the run is still going. What the DM reads is the
+  // PARTS — the outline itself is never shown.
+  "generate.pipeline.cost":
+    "~{tokens} Tokens · {calls, plural, one {# Aufruf} other {# Aufrufe}}",
+  "generate.pipeline.progress":
+    "{done} von {total, plural, one {# Szene} other {# Szenen}} fertig",
+  // Counted over EVERY part of the run — so the wording says „Teile" as soon
+  // as the run has suggested entries next to its scenes.
+  "generate.pipeline.progressParts":
+    "{done} von {total, plural, one {# Teil} other {# Teilen}} fertig",
+  "generate.pipeline.partRunning": "wird geschrieben …",
+  "generate.pipeline.partPending": "wartet",
+  "generate.pipeline.partFailed": "nicht geschrieben",
+  "generate.pipeline.retry": "Erneut versuchen",
+  "generate.pipeline.retryFailed": "Nicht neu gestartet — Server prüfen.",
+  // The 409 of „Erneut versuchen": the part is already running or already
+  // fertig (ein zweiter Tab, ein Doppelklick) — kein Serverfehler.
+  "generate.pipeline.retryConflict":
+    "Nicht neu gestartet — dieser Teil läuft schon oder ist fertig. Die Ansicht wird neu geladen.",
+  // Why a part failed, in dieser Sprache: die Server-Meldung der Formprüfung
+  // ist Englisch und wäre sonst die einzige Überschrift.
+  "generate.pipeline.partInvalid":
+    "Formprüfung nicht bestanden — die Antwort blieb auch nach den Korrekturversuchen fehlerhaft.",
+  "generate.pipeline.partMissing":
+    "Als fertig gemeldet, aber ohne Entwurf — versuche diesen Teil erneut.",
+  "generate.pipeline.stillRunning":
+    "Der Lauf ist noch nicht fertig — was hier steht, kannst du schon übernehmen.",
 
   // --- generator: stub rows (routes/generate.tsx) -------------------------
   "generate.stub.reason.run": "aus diesem Lauf",

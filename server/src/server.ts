@@ -250,6 +250,12 @@
 //                                              transaction. `id` and the app-managed keys
 //                                              are refused (400) — an id change is
 //                                              POST /rename's job, with its cascade
+//   [x] POST /api/:campaign/generate/job/:id/parts/:key/retry -> 202 GenerateJob —
+//           „Erneut versuchen" for ONE part of a pipelined scene run (issue
+//           #102). Re-runs only that part; the outline and the finished parts
+//           stay. 404 unknown job/part, 409 for a part that already runs, has
+//           not run yet or is done and for a job without parts, 503 without a
+//           provider.
 //   [x] GET  /api/:campaign/generate/job       GenerateJob (running/done/failed incl.
 //                                              kind, result/npcResult/augmentResult,
 //                                              error body and draftEdits), 404 when
@@ -288,7 +294,10 @@
 //                                              ones not). ONE transaction with the target
 //                                              guards of the ordinary draft write, FTS and
 //                                              refs follow, and the job row disappears the
-//                                              moment nothing is left open
+//                                              moment nothing is left open. A pipelined run
+//                                              that is still `running` is acceptable part by
+//                                              part (issue #102 AK2); 409 only for a failed
+//                                              run and for one with no finished part yet
 //   [x] POST /api/:campaign/generate/apply     { scenes?, stubs?, npc?, chapter?,
 //                                              chapterTitle?, jobId? } -> { written }
 //                                              (drafts as rows; 409 { conflicts } when any
@@ -361,6 +370,17 @@
 // every leftover `running` row into a `failed` one carrying the German
 // sentence of db/job-boot.ts. The app renders that field, so an interrupted
 // run says "Job neu starten" instead of spinning forever.
+//
+// Since issue #102 a SCENE run is a PIPELINE of provider calls — an outline
+// call, then one call per scene and per suggested entry, three at a time — and
+// the job therefore carries PARTS with a status each (./generate-pipeline,
+// ADR #10). What that changes for this list: the run stays `running` while
+// parts are open and its result fills up, so a finished part is reviewable and
+// acceptable before the run is over; a failed part is retryable on its own
+// (POST …/parts/:key/retry); a restart fails only the parts that were in
+// flight. The 422 semantics above are unchanged — a run whose EVERY part
+// failed answers exactly that body. The npc and the augment run stay
+// single-call runs and carry no parts at all.
 //
 // Everything that is NOT under /api is served from the frontend build
 // (app/dist) with an index.html fallback for client-side routes — see

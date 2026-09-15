@@ -669,6 +669,22 @@ export const generateJobs = sqliteTable(
      * carries a stale rev and gets a 409 instead of overwriting the first.
      */
     rev: integer("rev").notNull().default(0),
+    /**
+     * The PIPELINE state of a scene run (issue #102) — JSON: the internal
+     * outline, the parts with their per-part status/error/usage, and the
+     * run's token and call totals. `{}` for the single-call runs (npc,
+     * augment) and for a row written before this deploy, which is what makes
+     * the column additive: a job without parts renders exactly as it did.
+     */
+    pipeline: text("pipeline").notNull().default("{}"),
+    /**
+     * The run's source material, kept because a per-part RETRY has to send
+     * the same excerpt again (issue #102) — and a retry may happen after a
+     * restart, when nothing but the row is left. Only a scene run stores it.
+     */
+    sourceText: text("source_text"),
+    /** The run's „Neues Kapitel" flag — a retry must not 404 on it. */
+    newChapter: integer("new_chapter").notNull().default(0),
   },
   (t) => [uniqueIndex("generate_jobs_campaign_unique").on(t.campaignId)],
 );

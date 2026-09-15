@@ -37,6 +37,27 @@ export interface GenerateRequest {
   };
   sourceText: string; // English source text ("" when a run has none — issue #36)
   /**
+   * The run's OUTLINE, rendered as prompt lines (issue #102): every scene id
+   * with its title/type/location and every suggested entry. It travels with
+   * each per-scene and per-entry call so cross references can only ever name
+   * ids that exist — and it is part of the CONSTANT prefix, which is what
+   * makes prompt caching worth having for a run with many parts.
+   *
+   * Absent for the single-call runs; then the prompt has no such section.
+   */
+  outline?: string;
+  /**
+   * WHICH part of the outline this one call writes (issue #102), as prompt
+   * lines. It belongs to the VARIABLE half on purpose: the outline block is
+   * identical for every call of a run and is therefore cacheable, and a
+   * per-part marker inside it would make every part's prefix a different
+   * one — which is exactly the saving prompt caching is for.
+   *
+   * Absent for the entry calls (their `vorgegebene id` already says it) and
+   * for the single-call runs.
+   */
+  assignment?: string;
+  /**
    * The entry an AUGMENT run works on (issue #36): its complete current
    * document, properties block included, under its address. Absent for the
    * two runs that create something — and then the prompt has no such section,
@@ -108,6 +129,28 @@ function normalizeUsage(
   return { inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
 }
 
+/**
+ * Claude's usage, with the CACHE buckets folded into the input count (issue
+ * #102): with `cache_control` in play the API reports the cached prefix under
+ * `cache_read_input_tokens` / `cache_creation_input_tokens` and leaves
+ * `input_tokens` with the uncached tail only. Summing them keeps the review's
+ * „~N Tokens" the honest size of what was sent — caching makes a run cheaper,
+ * it does not make it smaller.
+ */
+export function claudeUsage(raw: unknown): TokenUsage | undefined {
+  const base = normalizeUsage(raw, "input_tokens", "output_tokens");
+  if (base === undefined) return undefined;
+  const obj = raw as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return {
+    inputTokens:
+      base.inputTokens +
+      num(obj.cache_creation_input_tokens) +
+      num(obj.cache_read_input_tokens),
+    outputTokens: base.outputTokens,
+  };
+}
+
 // ---------------------------------------------------------------------------
 
 /**
@@ -132,15 +175,50 @@ export const EXISTING_ENTRY_HEADING = "## Bestehender Eintrag — ergänzen, nic
 /** Heading of the DM's free instruction of an augment run (issue #36). */
 export const INSTRUCTION_HEADING = "## Anweisung des DM";
 
+/**
+ * Heading of the run's outline block (issue #102). A constant for the same
+ * reason the others are: the prompt test asserts on it and the E2E stub reads
+ * the prompt by it — it is how the stub tells an outline call from a
+ * per-scene one.
+ */
+export const OUTLINE_HEADING = "## Gliederung des Durchlaufs — verbindlich, ids unverändert übernehmen";
+
+/**
+ * Heading of the line that says WHICH scene of the outline this call writes
+ * (issue #102). It stands in the VARIABLE half, above the excerpt: the
+ * outline block above it is byte-identical for every part of a run, which is
+ * what makes the cached prefix worth anything. A constant for the same reason
+ * the others are — the prompt test asserts on it and the E2E stub reads the
+ * prompt by it.
+ */
+export const ASSIGNMENT_HEADING = "## Diese Szene schreibst du jetzt";
+
 // The prompt content is German on purpose — the pipeline's target language
 // is German (see generator/system-prompt.md); only code and comments here
 // are English.
-export function buildPrompt(req: GenerateRequest): string {
+/**
+ * The prompt in TWO halves (issue #102) — the split prompt caching hangs off:
+ *
+ *   constant  everything that is the same for every call of a run: the
+ *             campaign knowledge, the glossary, the context lists, the
+ *             few-shot and the run's outline. It stands FIRST, so an
+ *             OpenAI-compatible endpoint's implicit prefix caching sees the
+ *             same prefix on every part of a run without being told.
+ *   variable  what this ONE call is about: the entry an augment run works on,
+ *             the DM's instruction, the source text (for a pipeline part: its
+ *             excerpt).
+ *
+ * The Claude provider marks the constant half (and the system prompt) with
+ * `cache_control: ephemeral`; everything else joins the two with the same
+ * blank line `buildPrompt` always used, so a single-call run sees a prompt
+ * that is byte for byte the one it saw before this ticket.
+ */
+export function buildPromptParts(req: GenerateRequest): { constant: string; variable: string } {
   const npcList = req.context.npcs.map((n) => `${n.id} (${n.name})`).join(", ");
   const locList = req.context.locations
     .map((l) => `${l.id} (${l.name})`)
     .join(", ");
-  return [
+  const constant = [
     // Nothing at all when there is no knowledge — an empty binding section
     // would be a heading the model has to interpret against no content.
     ...(req.knowledge.trim() === "" ? [] : [KNOWLEDGE_HEADING, req.knowledge]),
@@ -159,6 +237,19 @@ export function buildPrompt(req: GenerateRequest): string {
     "```markdown",
     req.fewShotTarget,
     "```",
+    // The outline stands below the few-shot and above what this call is
+    // about: the model has to know which ids exist before it reads the
+    // excerpt it has to write from (issue #102).
+    ...(req.outline === undefined || req.outline.trim() === ""
+      ? []
+      : [OUTLINE_HEADING, req.outline]),
+  ].join("\n\n");
+  const variable = [
+    // What this call is FOR, first thing in the variable half: the model has
+    // read the outline above and now learns which line of it is its job.
+    ...(req.assignment === undefined || req.assignment.trim() === ""
+      ? []
+      : [ASSIGNMENT_HEADING, req.assignment]),
     // The augment run's two extra sections (issue #36). They stand BELOW the
     // few-shot (which is the FORMAT reference) and ABOVE the source text: the
     // model has to know what the entry is before it reads what to add to it.
@@ -177,6 +268,15 @@ export function buildPrompt(req: GenerateRequest): string {
     // heading would be one the model has to interpret against nothing.
     ...(req.sourceText.trim() === "" ? [] : ["## Quelltext", req.sourceText]),
   ].join("\n\n");
+  return { constant, variable };
+}
+
+// The prompt content is German on purpose — the pipeline's target language
+// is German (see generator/system-prompt.md); only code and comments here
+// are English.
+export function buildPrompt(req: GenerateRequest): string {
+  const { constant, variable } = buildPromptParts(req);
+  return variable === "" ? constant : `${constant}\n\n${variable}`;
 }
 
 /** Chat turns: the initial prompt plus one assistant/user pair per retry. */
@@ -206,6 +306,34 @@ export const JSON_PREFILL = "{";
 
 // --- Claude API ------------------------------------------------------------
 
+/** The one cache breakpoint kind the Messages API offers. */
+export const EPHEMERAL = { type: "ephemeral" } as const;
+
+/**
+ * The Claude turns of one attempt: the first user turn is SPLIT into the
+ * cacheable constant prefix and this call's own variable tail; the replayed
+ * correction turns are plain strings — they are unique per attempt, so
+ * marking them would only spend cache writes.
+ */
+export function claudeMessages(
+  req: GenerateRequest,
+  corrections: CorrectionTurn[],
+): Array<{ role: "user" | "assistant"; content: unknown }> {
+  const { constant, variable } = buildPromptParts(req);
+  const first = [
+    { type: "text", text: constant, cache_control: EPHEMERAL },
+    ...(variable === "" ? [] : [{ type: "text", text: variable }]),
+  ];
+  const messages: Array<{ role: "user" | "assistant"; content: unknown }> = [
+    { role: "user", content: first },
+  ];
+  for (const turn of corrections) {
+    messages.push({ role: "assistant", content: turn.assistant });
+    messages.push({ role: "user", content: turn.correction });
+  }
+  return messages;
+}
+
 /** Output cap when nothing is configured — enough for a full scene batch. */
 export const DEFAULT_MAX_TOKENS = 8000;
 
@@ -232,11 +360,16 @@ export class ClaudeProvider implements LLMProvider {
       body: JSON.stringify({
         model: this.model,
         max_tokens: this.maxTokens,
-        system: req.systemPrompt,
+        // Prompt caching (issue #102): the system prompt and the CONSTANT
+        // half of the user turn are the same for every part of a run, so
+        // both carry an ephemeral cache breakpoint. A pipelined run with N
+        // scenes reads that prefix N+1 times — paying for it once is the
+        // difference between "per scene" being affordable and not.
+        system: [{ type: "text", text: req.systemPrompt, cache_control: EPHEMERAL }],
         // The prefill has to be the LAST turn of every attempt — after the
         // replayed correction turns, which end with a user message.
         messages: [
-          ...buildMessages(req, corrections),
+          ...claudeMessages(req, corrections),
           { role: "assistant", content: JSON_PREFILL },
         ],
       }),
@@ -255,7 +388,7 @@ export class ClaudeProvider implements LLMProvider {
       text: JSON_PREFILL + text,
       // Messages API: the reply stopped because it ran into max_tokens.
       truncated: data.stop_reason === "max_tokens",
-      usage: normalizeUsage(data.usage, "input_tokens", "output_tokens"),
+      usage: claudeUsage(data.usage),
     };
   }
 }

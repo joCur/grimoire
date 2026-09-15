@@ -42,13 +42,8 @@ import {
   parseCorrectionTurns,
   setProviderForTests,
 } from "../src/generator";
-import type {
-  CompletionResult,
-  CorrectionTurn,
-  GenerateRequest,
-  LLMProvider,
-  TokenUsage,
-} from "../src/llm-provider";
+import type { TokenUsage } from "../src/llm-provider";
+import { PipelineFake, type ScriptedReply } from "./support/pipeline-fake";
 
 /**
  * Whether an entity is there: the address resolves through GET /file. That
@@ -88,49 +83,19 @@ async function restartServer(): Promise<number> {
 }
 
 // --- fake provider ------------------------------------------------------------
-
-interface RecordedCall {
-  req: GenerateRequest;
-  corrections: CorrectionTurn[];
-}
-
-/** A scripted reply: raw text, or text plus truncation/usage signals. */
-type ScriptedReply = string | { text: string; truncated?: boolean; usage?: TokenUsage };
-
-/** Scripted provider: returns its replies in order and records every call. */
-class FakeProvider implements LLMProvider {
-  readonly name = "fake";
-  readonly calls: RecordedCall[] = [];
-  constructor(
-    private replies: ScriptedReply[],
-    readonly maxTokens?: number,
-    /** Awaited before the FIRST reply — the "still running" gate. */
-    private gate?: Promise<unknown>,
-  ) {}
-
-  async complete(
-    req: GenerateRequest,
-    corrections: CorrectionTurn[] = [],
-  ): Promise<CompletionResult> {
-    this.calls.push({ req, corrections: corrections.map((c) => ({ ...c })) });
-    if (this.gate !== undefined) {
-      const gate = this.gate;
-      this.gate = undefined;
-      await gate;
-    }
-    const reply = this.replies.shift();
-    if (reply === undefined) throw new Error("FakeProvider: no scripted reply left");
-    if (typeof reply === "string") return { text: reply, truncated: false };
-    return { text: reply.text, truncated: reply.truncated ?? false, usage: reply.usage };
-  }
-}
+//
+// Scripted and PIPELINE-AWARE since issue #102 (see support/pipeline-fake.ts):
+// a test still writes „first this reply, then that one", and the fake routes
+// the script over the outline call, the per-scene call and the per-entry call
+// of the run. `fake.calls` is therefore every call of the run; `fake.callsFor`
+// narrows it to one part — which is what a per-part correction turn is about.
 
 function useFake(
   replies: ScriptedReply[],
   maxTokens?: number,
   gate?: Promise<unknown>,
-): FakeProvider {
-  const fake = new FakeProvider(replies, maxTokens, gate);
+): PipelineFake {
+  const fake = new PipelineFake(replies, maxTokens, gate);
   setProviderForTests(fake);
   return fake;
 }
@@ -446,21 +411,41 @@ describe("POST /api/:campaign/generate", () => {
     // this provider reports no usage — then the field stays absent
     expect(result.usage).toBeUndefined();
 
-    // exactly one provider call, no correction turns
-    expect(fake.calls).toHaveLength(1);
-    expect(fake.calls[0]!.corrections).toEqual([]);
+    // Three provider calls since issue #102 — the outline, the one scene and
+    // the one suggested entry — and not a correction turn among them.
+    // Sorted: the parts run three at a time (PART_CONCURRENCY), so which of
+    // them reaches the provider first is not a promise — only that the
+    // outline came first and that each part cost exactly one call.
+    expect(fake.calls[0]!.part).toBe("outline");
+    expect(fake.calls.map((c) => c.part).sort()).toEqual([
+      "grella",
+      "outline",
+      "treffen-am-kai",
+    ]);
+    for (const call of fake.calls) expect(call.corrections).toEqual([]);
 
     // the prompt carried the campaign context and assets
-    const req = fake.calls[0]!.req;
+    const req = fake.callsFor("outline")[0]!.req;
     expect(req.context.chapter).toBe("01-salzhafen");
     expect(req.context.npcs.map((n) => n.id).sort()).toEqual(["fenn", "jorna"]);
     // `bucht` is an entry too since issue #100 — the contingency scene
     // names it, and a named location always has a row.
     expect(req.context.locations.map((l) => l.id).sort()).toEqual(["bucht", "leuchtturm"]);
     expect(req.glossary).toContain("Leuchtturmwärter");
-    expect(req.systemPrompt).toContain("System-Prompt: Szenen-Generator");
-    expect(req.fewShotTarget).toContain("id: smuggler-captured");
+    expect(req.systemPrompt).toContain("System-Prompt: Gliederung");
     expect(req.sourceText).toBe(generateBody.sourceText);
+    // The per-scene call is the one that carries the scene prompt — in its
+    // single-scene mode — plus the outline and the cut source passage.
+    const sceneReq = fake.callsFor("treffen-am-kai")[0]!.req;
+    expect(sceneReq.systemPrompt).toContain("System-Prompt: Szenen-Generator");
+    expect(sceneReq.systemPrompt).toContain("GENAU EINE Szene");
+    expect(sceneReq.fewShotTarget).toContain("id: smuggler-captured");
+    expect(sceneReq.outline).toContain("treffen-am-kai");
+    // WHICH scene this call writes is its own section of the variable half,
+    // not a marker inside the (cacheable) outline block.
+    expect(sceneReq.outline).not.toContain("DIESE Szene");
+    expect(sceneReq.assignment).toContain("treffen-am-kai");
+    expect(sceneReq.sourceText).toBe(generateBody.sourceText);
 
     // review preview only — NOTHING on disk
     expect(await exists(SCENE_PATH)).toBe(false);
@@ -476,12 +461,15 @@ describe("POST /api/:campaign/generate", () => {
     const res = await generate(generateBody);
     expect(res.status).toBe(200);
 
-    expect(fake.calls).toHaveLength(2);
+    // The SCENE part corrected itself; the outline call was untouched by it.
+    const scene = fake.callsFor("treffen-am-kai");
+    expect(scene).toHaveLength(2);
+    expect(fake.callsFor("outline")).toHaveLength(1);
     // the correction turn replays the failed reply verbatim ...
-    expect(fake.calls[1]!.corrections).toHaveLength(1);
-    expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad);
+    expect(scene[1]!.corrections).toHaveLength(1);
+    expect(scene[1]!.corrections[0]!.assistant).toBe(bad);
     // ... and names the mechanical error
-    expect(fake.calls[1]!.corrections[0]!.correction).toContain('npc "nobody"');
+    expect(scene[1]!.corrections[0]!.correction).toContain('npc "nobody"');
     expect(await exists(SCENE_PATH)).toBe(false);
   });
 
@@ -492,8 +480,9 @@ describe("POST /api/:campaign/generate", () => {
     const fake = useFake([bad, reply()]);
     const res = await generate(generateBody);
     expect(res.status).toBe(200);
-    expect(fake.calls).toHaveLength(2);
-    expect(fake.calls[1]!.corrections[0]!.correction).toContain("[!danger]");
+    const scene = fake.callsFor("treffen-am-kai");
+    expect(scene).toHaveLength(2);
+    expect(scene[1]!.corrections[0]!.correction).toContain("[!danger]");
   });
 
   // --- the id is the model's ONE addressing decision (issue #100 review) -------
@@ -510,12 +499,15 @@ describe("POST /api/:campaign/generate", () => {
     const fake = useFake([bad, reply()]);
     const res = await generate(generateBody);
     expect(res.status).toBe(200);
-    expect(fake.calls).toHaveLength(2);
-    const correction = fake.calls[1]!.corrections[0]!.correction;
+    const scene = fake.callsFor("treffen-am-kai");
+    expect(scene).toHaveLength(2);
+    const correction = scene[1]!.corrections[0]!.correction;
     expect(correction).toContain('"id" fehlt');
-    expect(correction).toContain("scenes[0]");
+    // The part is named by the id the OUTLINE gave it (issue #102), so the
+    // message says which scene is meant instead of an array index.
+    expect(correction).toContain('scene "treffen-am-kai"');
     // …and nothing was invented for it.
-    expect(correction).not.toContain("scenes[0]/");
+    expect(correction).not.toContain("treffen-am-kai/");
   });
 
   test("a suggested entry without an id triggers a correction turn", async () => {
@@ -526,8 +518,8 @@ describe("POST /api/:campaign/generate", () => {
     const fake = useFake([bad, reply()]);
     const res = await generate(generateBody);
     expect(res.status).toBe(200);
-    const correction = fake.calls[1]!.corrections[0]!.correction;
-    expect(correction).toContain('npc entry entries[0]: "id" fehlt');
+    const correction = fake.callsFor("grella")[1]!.corrections[0]!.correction;
+    expect(correction).toContain('"id" fehlt');
   });
 
   // --- stub status rules (issue #27) -------------------------------------------
@@ -540,9 +532,14 @@ describe("POST /api/:campaign/generate", () => {
     const res = await generate(generateBody);
     expect(res.status).toBe(200);
 
-    expect(fake.calls).toHaveLength(2);
-    expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad);
-    const correction = fake.calls[1]!.corrections[0]!.correction;
+    // The ENTRY part corrected itself — the scene part was right first time.
+    const entry = fake.callsFor("grella");
+    expect(entry).toHaveLength(2);
+    expect(fake.callsFor("treffen-am-kai")).toHaveLength(1);
+    // The replayed assistant turn is the ENTRY's own reply — the per-part
+    // call is what failed, so that is what goes back.
+    expect(entry[1]!.corrections[0]!.assistant).toContain("status: draft");
+    const correction = entry[1]!.corrections[0]!.correction;
     expect(correction).toContain('npc entry "grella"');
     expect(correction).toContain("alive, dead, missing, unknown");
     expect(correction).toContain('"alive"');
@@ -564,8 +561,9 @@ describe("POST /api/:campaign/generate", () => {
     });
     const fake = useFake([bad, reply()]);
     expect((await generate(generateBody)).status).toBe(200);
-    expect(fake.calls).toHaveLength(2);
-    expect(fake.calls[1]!.corrections[0]!.correction).toContain('"status" fehlt');
+    const entry = fake.callsFor("grella");
+    expect(entry).toHaveLength(2);
+    expect(entry[1]!.corrections[0]!.correction).toContain('"status" fehlt');
   });
 
   test("location stub with ANY status triggers a correction turn", async () => {
@@ -573,10 +571,14 @@ describe("POST /api/:campaign/generate", () => {
       const bad = reply({
         entries: [{ kind: "location", content: locationStub({ status }) }],
       });
-      const fake = useFake([bad, reply()]);
+      const fake = useFake([
+        bad,
+        reply({ entries: [{ kind: "location", content: locationStub() }] }),
+      ]);
       expect((await generate(generateBody)).status).toBe(200);
-      expect(fake.calls).toHaveLength(2);
-      const correction = fake.calls[1]!.corrections[0]!.correction;
+      const entry = fake.callsFor(LOCATION_STUB_ID);
+      expect(entry).toHaveLength(2);
+      const correction = entry[1]!.corrections[0]!.correction;
       expect(correction).toContain(`location entry "${LOCATION_STUB_ID}"`);
       expect(correction).toContain("locations haben keinen status");
     }
@@ -593,7 +595,15 @@ describe("POST /api/:campaign/generate", () => {
     ]);
     const res = await generate(generateBody);
     expect(res.status).toBe(200);
-    expect(fake.calls).toHaveLength(1);
+    // One call per part and not one more: the outline, the scene, the npc and
+    // the location. Sorted, because three parts run at once (PART_CONCURRENCY)
+    // and which of them reaches the provider first is not a promise.
+    expect(fake.calls.map((c) => c.part).sort()).toEqual([
+      "grella",
+      "outline",
+      LOCATION_STUB_ID,
+      "treffen-am-kai",
+    ]);
     const result = (await res.json()) as GenerateResult;
     expect(result.stubs.map((s) => `${s.kind}:${s.id}`)).toEqual([
       "npc:grella",
@@ -604,13 +614,18 @@ describe("POST /api/:campaign/generate", () => {
   test("422 with the remaining errors after 2 correction turns", async () => {
     // Two turns is the MAXIMUM, not the default any more (issue #19).
     process.env.LLM_CORRECTION_TURNS = "2";
+    // `entries: []` on purpose: the run then has exactly ONE part, so „every
+    // part failed" is what the 422 of this case is about. A run with a
+    // surviving part is `done` with a failed part — its own case below.
     const bad = reply({
       scenes: [{ content: sceneMarkdown({ status: "ready" }) }],
+      entries: [],
     });
     // same mechanical error, but distinguishable text — the 422 must carry
     // the LAST attempt's reply, not the first one's
     const last = reply({
       scenes: [{ content: sceneMarkdown({ status: "ready" }) }],
+      entries: [],
       warnings: ["letzter Versuch"],
     });
     const fake = useFake([
@@ -619,6 +634,8 @@ describe("POST /api/:campaign/generate", () => {
       { text: last, usage: usage(3000, 300) },
     ]);
     const res = await generate(generateBody);
+    // The run has exactly ONE part — the scene — and it failed, so the run
+    // failed (a run with a surviving part is `done`; see the pipeline cases).
     expect(res.status).toBe(422);
     const body = (await res.json()) as {
       error: string;
@@ -627,16 +644,22 @@ describe("POST /api/:campaign/generate", () => {
       usage: GenerateUsage;
     };
     expect(body.error).toContain("validation");
-    expect(body.validationErrors).toEqual([expect.stringContaining('"status" must be "draft"')]);
+    expect(body.validationErrors).toEqual(
+      expect.arrayContaining([expect.stringContaining('"status" must be "draft"')]),
+    );
     // the raw reply of the LAST attempt, not of the first one
     expect(body.rawReply).toBe(last);
-    // summed over all three attempts
-    expect(body.usage).toEqual({ inputTokens: 6000, outputTokens: 600, attempts: 3 });
 
-    // initial call + exactly 2 correction turns = 3 provider calls
-    expect(fake.calls).toHaveLength(3);
-    expect(fake.calls[1]!.corrections[0]!.correction).toContain("not valid JSON");
-    expect(fake.calls[2]!.corrections).toHaveLength(2);
+    // The SCENE part spent its initial call plus exactly 2 correction turns.
+    const scene = fake.callsFor("treffen-am-kai");
+    expect(scene).toHaveLength(3);
+    expect(scene[1]!.corrections[0]!.correction).toContain("not valid JSON");
+    expect(scene[2]!.corrections).toHaveLength(2);
+    // The OUTLINE step has correction turns of its own (Zuschnitt 1): the
+    // first scripted answer is not JSON, so it took two calls.
+    expect(fake.callsFor("outline")).toHaveLength(2);
+    // …and the run's usage is summed over every call of every part.
+    expect(body.usage.attempts).toBe(fake.calls.length);
     expect(await exists(SCENE_PATH)).toBe(false);
   });
 
@@ -727,8 +750,15 @@ describe("POST /api/:campaign/generate", () => {
     const res = await generate(generateBody);
     expect(res.status).toBe(200);
     const result = (await res.json()) as GenerateResult;
-    expect(result.usage).toEqual({ inputTokens: 11400, outputTokens: 2500, attempts: 2 });
-    expect(fake.calls).toHaveLength(2);
+    // Summed over every call of every part, the outline included (issue
+    // #102): outline (5000/1200, the script's first reply) + the scene's two
+    // attempts + the entry's one.
+    expect(result.usage).toEqual({
+      inputTokens: 16400,
+      outputTokens: 3700,
+      attempts: fake.calls.length,
+    });
+    expect(fake.callsFor("treffen-am-kai")).toHaveLength(2);
   });
 
   // --- prose around the JSON (issue #20) --------------------------------------
@@ -744,8 +774,9 @@ describe("POST /api/:campaign/generate", () => {
     expect(result.stubs).toEqual([
       { kind: "npc", id: "grella", name: "Grella", markdown: STUB_MARKDOWN },
     ]);
-    // no correction turn — that is the whole point of the fix
-    expect(fake.calls).toHaveLength(1);
+    // no correction turn on any part — that is the whole point of the fix
+    expect(fake.calls).toHaveLength(3);
+    for (const call of fake.calls) expect(call.corrections).toEqual([]);
     expect(await exists(SCENE_PATH)).toBe(false);
   });
 
@@ -757,7 +788,9 @@ describe("POST /api/:campaign/generate", () => {
       const fake = useFake([raw]);
       const res = await generate(generateBody);
       expect(res.status).toBe(200);
-      expect(fake.calls).toHaveLength(1);
+      // One call per part, no correction turn anywhere.
+      expect(fake.calls).toHaveLength(3);
+      for (const call of fake.calls) expect(call.corrections).toEqual([]);
     }
   });
 
@@ -768,22 +801,29 @@ describe("POST /api/:campaign/generate", () => {
     const fake = useFake([bad, reply()]);
     const res = await generate(generateBody);
     expect(res.status).toBe(200);
-    expect(fake.calls).toHaveLength(2);
-    expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad); // replayed verbatim
-    expect(fake.calls[1]!.corrections[0]!.correction).toContain('"status" must be "draft"');
+    const scene = fake.callsFor("treffen-am-kai");
+    expect(scene).toHaveLength(2);
+    expect(scene[1]!.corrections[0]!.assistant).toBe(bad); // replayed verbatim
+    expect(scene[1]!.corrections[0]!.correction).toContain('"status" must be "draft"');
   });
 
   test("garbage without any brace still triggers the correction turn", async () => {
     const fake = useFake(["Ich kann diese Aufgabe leider nicht erfüllen.", reply()]);
     const res = await generate(generateBody);
     expect(res.status).toBe(200);
-    expect(fake.calls).toHaveLength(2);
-    expect(fake.calls[1]!.corrections[0]!.correction).toContain("not valid JSON");
+    // Garbage reaches the OUTLINE call first: a run whose outline is not
+    // JSON has no parts yet, so that is where the correction turn happens.
+    const outline = fake.callsFor("outline");
+    expect(outline).toHaveLength(2);
+    expect(outline[1]!.corrections[0]!.correction).toContain("not valid JSON");
   });
 
   test("the 422 rawReply is the ORIGINAL reply text, not the extracted JSON", async () => {
     const bad = proseThenJson(
-      replyJson({ scenes: [{ content: sceneMarkdown({ status: "ready" }) }] }),
+      replyJson({
+        scenes: [{ content: sceneMarkdown({ status: "ready" }) }],
+        entries: [],
+      }),
     );
     const fake = useFake([bad, bad]);
     const res = await generate(generateBody);
@@ -791,9 +831,11 @@ describe("POST /api/:campaign/generate", () => {
     const body = (await res.json()) as { rawReply: string; validationErrors: string[] };
     expect(body.rawReply).toBe(bad);
     expect(body.rawReply.startsWith("I need to be careful")).toBe(true);
-    expect(body.validationErrors).toEqual([expect.stringContaining('"status" must be "draft"')]);
-    // initial call + the default single correction turn (issue #19)
-    expect(fake.calls).toHaveLength(2);
+    expect(body.validationErrors).toEqual(
+      expect.arrayContaining([expect.stringContaining('"status" must be "draft"')]),
+    );
+    // initial call + the default single correction turn (issue #19), per part
+    expect(fake.callsFor("treffen-am-kai")).toHaveLength(2);
   });
 
   test("truncation is still checked BEFORE extraction (issue #18 order)", async () => {
@@ -858,7 +900,7 @@ describe("POST /api/:campaign/generate", () => {
     expect(res.status).toBe(200);
     const result = (await res.json()) as GenerateResult;
     expect(result.scenes[0]!.path).toBe(SCENE_PATH);
-    expect(fake.calls).toHaveLength(1);
+    expect(fake.callsFor("treffen-am-kai")).toHaveLength(1);
   });
 
   test("400 on malformed bodies — provider never called", async () => {
@@ -981,7 +1023,8 @@ describe("POST /api/:campaign/generate/apply", () => {
     const fake = useFake([reply()]);
     const gen = await generate(generateBody);
     const result = (await gen.json()) as GenerateResult;
-    expect(fake.calls).toHaveLength(1);
+    // outline + scene + entry (issue #102)
+    expect(fake.calls).toHaveLength(3);
 
     const res = await postJson("/api/beispiel/generate/apply", {
       scenes: result.scenes,
@@ -1383,7 +1426,8 @@ describe("generate jobs", () => {
     expect(done.finishedAt).toEqual(expect.any(String));
     expect(done.result!.scenes[0]!.path).toBe(scenePath);
     expect(done.error).toBeUndefined();
-    expect(fake.calls).toHaveLength(1);
+    // outline + the one scene (this reply proposes no entries)
+    expect(fake.calls).toHaveLength(2);
 
     // Still there on the next GET: only apply/discard/a new start remove it.
     expect((await fetchJob())!.id).toBe(jobId);
@@ -1411,10 +1455,13 @@ describe("generate jobs", () => {
   });
 
   test("a failed run keeps the 422 body — rawReply, usage, validationErrors", async () => {
+    // One part only (`entries: []`), and it fails: then the whole run failed
+    // and answers exactly the 422 the synchronous endpoint used to answer.
     const bad = reply({
       scenes: [{ content: sceneMarkdown({ status: "ready" }) }],
+      entries: [],
     });
-    useFake([
+    const fake = useFake([
       { text: bad, usage: usage(1000, 100) },
       { text: bad, usage: usage(2000, 200) },
     ]);
@@ -1422,15 +1469,29 @@ describe("generate jobs", () => {
 
     const job = await waitForJob();
     expect(job.status).toBe("failed");
-    expect(job.result).toBeUndefined();
     expect(job.finishedAt).toEqual(expect.any(String));
     expect(job.error!.status).toBe(422);
     expect(job.error!.body.error).toContain("validation");
-    expect(job.error!.body.validationErrors).toEqual([
-      expect.stringContaining('"status" must be "draft"'),
-    ]);
+    expect(job.error!.body.validationErrors).toEqual(
+      expect.arrayContaining([expect.stringContaining('"status" must be "draft"')]),
+    );
     expect(job.error!.body.rawReply).toBe(bad);
-    expect(job.error!.body.usage).toEqual({ inputTokens: 3000, outputTokens: 300, attempts: 2 });
+    // Summed over every call of the run — the outline's included.
+    expect(job.error!.body.usage).toEqual({
+      inputTokens: 3000,
+      outputTokens: 300,
+      attempts: fake.calls.length,
+    });
+    // The part itself says what happened, which is what „Erneut versuchen"
+    // hangs off (issue #102).
+    expect(job.pipeline!.parts).toEqual([
+      expect.objectContaining({
+        key: "scene:treffen-am-kai",
+        kind: "scene",
+        status: "failed",
+        error: expect.stringContaining("validation"),
+      }),
+    ]);
   });
 
   test("a truncated run keeps the fail-fast 422 body (issue #18 through the job)", async () => {
@@ -1914,7 +1975,8 @@ describe("LLM_CORRECTION_TURNS", () => {
   /** One bad reply per attempt — the run can only end in a 422. */
   function badReplies(count: number): string[] {
     return Array.from({ length: count }, () =>
-      reply({ scenes: [{ content: sceneMarkdown({ status: "ready" }) }] }),
+      // `entries: []`: one part, so a failed part IS a failed run.
+      reply({ scenes: [{ content: sceneMarkdown({ status: "ready" }) }], entries: [] }),
     );
   }
 
@@ -1927,30 +1989,34 @@ describe("LLM_CORRECTION_TURNS", () => {
     expect(body.validationErrors).toEqual([
       expect.stringContaining('"status" must be "draft"'),
     ]);
-    expect(fake.calls).toHaveLength(1);
-    expect(fake.calls[0]!.corrections).toEqual([]);
+    // The SCENE part spent exactly one call — no correction turn at all.
+    expect(fake.callsFor("treffen-am-kai")).toHaveLength(1);
+    expect(fake.calls.every((call) => call.corrections.length === 0)).toBe(true);
   });
 
   test("1 (default): one correction turn", async () => {
     const fake = useFake(badReplies(2));
     expect((await generate(generateBody)).status).toBe(422);
-    expect(fake.calls).toHaveLength(2);
-    expect(fake.calls[1]!.corrections).toHaveLength(1);
+    // Per PART since issue #102 — the bound is the same, the unit is smaller.
+    const scene = fake.callsFor("treffen-am-kai");
+    expect(scene).toHaveLength(2);
+    expect(scene[1]!.corrections).toHaveLength(1);
   });
 
   test("2: two correction turns", async () => {
     process.env.LLM_CORRECTION_TURNS = "2";
     const fake = useFake(badReplies(3));
     expect((await generate(generateBody)).status).toBe(422);
-    expect(fake.calls).toHaveLength(3);
-    expect(fake.calls[2]!.corrections).toHaveLength(2);
+    const scene = fake.callsFor("treffen-am-kai");
+    expect(scene).toHaveLength(3);
+    expect(scene[2]!.corrections).toHaveLength(2);
   });
 
   test("junk keeps the default instead of raising the spend", async () => {
     process.env.LLM_CORRECTION_TURNS = "9";
     const fake = useFake(badReplies(2));
     expect((await generate(generateBody)).status).toBe(422);
-    expect(fake.calls).toHaveLength(2);
+    expect(fake.callsFor("treffen-am-kai")).toHaveLength(2);
   });
 });
 
@@ -1962,6 +2028,21 @@ describe("LLM_CORRECTION_TURNS", () => {
 // the finished drafts and lands in the result.
 
 describe("campaign knowledge", () => {
+  /**
+   * A reply whose suggested entry is one the campaign does NOT have yet. The
+   * database is shared by the whole file and the apply cases above already
+   * wrote `npcs/grella`; since issue #102 the OUTLINE step refuses an entry
+   * that exists (proposing it again would mean a second file for the same
+   * reference key), so these cases bring their own.
+   */
+  const FRESH_NPC = "grella-vom-kai";
+  function freshReply(over: { scenes?: Array<{ content: string }> } = {}): string {
+    return reply({
+      ...over,
+      entries: [{ kind: "npc", content: npcStub({ id: FRESH_NPC, name: "Grella" }) }],
+    });
+  }
+
   /** Write the campaign's knowledge list against its current rev. */
   async function setKnowledge(entries: unknown[]): Promise<void> {
     const current = await app.request("/api/beispiel/knowledge");
@@ -1992,7 +2073,7 @@ describe("campaign knowledge", () => {
       { kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" },
       { kind: "style", from: "", to: "", text: "Keine Würfelwerte im Read-Aloud." },
     ]);
-    const fake = useFake([reply()]);
+    const fake = useFake([freshReply()]);
     expect((await generate(generateBody)).status).toBe(200);
     const knowledge = fake.calls[0]!.req.knowledge;
     expect(knowledge).toContain('schreibe „Salt Harbour" immer als „Salzhafen"');
@@ -2010,7 +2091,7 @@ describe("campaign knowledge", () => {
       "Fenn wartet am Kai; Grella beobachtet aus dem Schatten.",
       "Fenn wartet am Kai von Salt Harbour.",
     );
-    useFake([reply({ scenes: [{ content: scene }] })]);
+    useFake([freshReply({ scenes: [{ content: scene }] })]);
     const result = (await (await generate(generateBody)).json()) as GenerateResult;
     // A HINT, not a failure: the run succeeded and the draft is in the result.
     expect(result.scenes).toHaveLength(1);
@@ -2028,15 +2109,15 @@ describe("campaign knowledge", () => {
 
   test("stubs are checked too — a stub is a file the run creates", async () => {
     await setKnowledge([{ kind: "naming", from: "Grella", to: "Grellwyn", text: "" }]);
-    useFake([reply({ scenes: [{ content: sceneWithId("kai-zwei") }] })]);
+    useFake([freshReply({ scenes: [{ content: sceneWithId("kai-zwei") }] })]);
     const result = (await (await generate(generateBody)).json()) as GenerateResult;
     const paths = (result.namingHints ?? []).map((h) => h.path);
-    expect(paths).toContain("npcs/grella");
+    expect(paths).toContain(`npcs/${FRESH_NPC}`);
   });
 
   test("a draft that FOLLOWS the convention produces no hint at all", async () => {
     await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
-    useFake([reply({ scenes: [{ content: sceneWithId("kai-drei") }] })]);
+    useFake([freshReply({ scenes: [{ content: sceneWithId("kai-drei") }] })]);
     const result = (await (await generate(generateBody)).json()) as GenerateResult;
     expect(result.namingHints).toBeUndefined();
   });

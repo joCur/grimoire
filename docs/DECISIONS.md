@@ -166,6 +166,44 @@ schreibt jede übrig gebliebene `running`-Zeile auf `failed` mit der Meldung
 „Server wurde während des Laufs neu gestartet — Job neu starten"
 (`server/src/db/job-boot.ts`), statt die App ins endlose Pollen zu schicken.
 
+**Nachtrag (#102):** Ein Szenen-Lauf ist kein einzelner Provider-Call mehr,
+sondern eine **Pipeline** — und damit besteht ein Job aus **Teilen**. Ein
+Gliederungs-Aufruf legt fest, welche Szenen es gibt (rein systeminterner
+Schritt zur Fehlerreduktion, dem Nutzer wird die Gliederung nie zum Bearbeiten
+angeboten — PO, 15.09.); danach ist jede Szene und jeder neue Eintrag ein
+eigener Aufruf, drei gleichzeitig.
+
+Konsequenzen für das Job-Modell:
+
+- Die Zeile trägt die Gliederung, die Teile mit Status je Teil
+  (`pending | running | done | failed`), Fehlertext und Token-Verbrauch je
+  Teil sowie Token- und Aufruf-Summe des Laufs (`pipeline`-Spalte, Migration
+  `0010_pipeline_parts`). Der Quelltext des Laufs steht mit in der Zeile, weil
+  ein Teil-Neustart denselben Ausschnitt erneut schicken muss.
+- Ein **fertiger Teil ist sofort prüfbar und übernehmbar**, während andere noch
+  laufen: der Job bleibt `running`, das Ergebnis füllt sich, und die Prüfseite
+  zeigt Teile in Gliederungsreihenfolge. Der Job wird `done`, sobald ein Teil
+  etwas produziert hat, und `failed` nur, wenn kein einziger Teil durchkam.
+  „Übernehmen" verlangt deshalb **kein fertiges Job**, sondern ein Ergebnis:
+  409 bleibt für einen gescheiterten Lauf und für einen, der noch keinen Teil
+  fertig hat (das ist auch, was einen laufenden Ein-Aufruf-Lauf weiterhin
+  unübernehmbar macht — er hat gar keine Teile).
+- **Neustart:** laufende (und noch wartende) Teile werden `failed` mit der
+  Neustart-Meldung, **fertige bleiben stehen** und übernehmbar. Ein Job ohne
+  Teile — der Ergänzen- und der NPC-Lauf bleiben Ein-Aufruf-Läufe — verhält
+  sich unverändert.
+- **„Erneut versuchen" je Teil:** `POST …/generate/job/:id/parts/:key/retry`
+  startet genau diesen Teil neu, aus der gespeicherten Gliederung — in **einer
+  Transaktion** über der neu gelesenen Zeile, die nur diesen Teil anfasst:
+  während der Kontext-Lesung kann ein Geschwister-Teil fertig werden, und ein
+  Rückschreiben der ganzen `pipeline`-Spalte hat dessen Ergebnis überschrieben.
+  Ein noch `pending` Teil wird abgelehnt (409) — er gehört dem Pool des Laufs
+  und würde sonst zweimal laufen. Abbruch
+  („Verwerfen") stoppt die offenen Teile; was schon übernommen wurde, ist ein
+  Eintrag und kein Job mehr.
+- Ein Lauf pro Kampagne wie bisher, und die Review-Zustände aus #97
+  (`written`/`dropped`/`entries`) behalten ihre Schlüssel.
+
 ## 11. App-first: Bearbeitung in der App ist das Ziel, der Editor Ausweichlösung
 
 > **Status: ersetzt durch #13.** Die Speicherformat-Konsequenz unten („Markdown

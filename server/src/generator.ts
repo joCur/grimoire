@@ -166,6 +166,17 @@ export const ASSET_FILES = {
     systemPrompt: "location-system-prompt.md",
     fewShotTarget: "location-example-output.md",
   },
+  // The OUTLINE step of a pipelined scene run (issue #102): its own prompt
+  // and its own few-shot (a worked example outline, not a target file).
+  outline: {
+    systemPrompt: "outline-system-prompt.md",
+    fewShotTarget: "outline-example-output.md",
+  },
+  // The output-schema section that turns the scene prompt into „genau eine
+  // Szene aus der Gliederung" mode (issue #102). No few-shot of its own — the
+  // per-scene call sends the scene example file — so, like `augment`, this
+  // entry carries a system prompt alone.
+  sceneSingle: { systemPrompt: "scene-single-output.md" },
   // The augment run's OWN system prompt (issue #36). It has no few-shot of
   // its own — the run sends the TARGET KIND's example file — so this entry
   // carries the system prompt alone and `loadPromptAssets` is not the right
@@ -175,8 +186,12 @@ export const ASSET_FILES = {
 
 const promptAssets = new Map<string, PromptAssets>();
 
-/** The kinds that have a prompt PAIR — the augment run has no few-shot. */
-type PromptPairKind = Exclude<keyof typeof ASSET_FILES, "augment">;
+/**
+ * The kinds that have a prompt PAIR. `augment` and `sceneSingle` do not: the
+ * first sends the target kind's example file, the second is only an output
+ * schema spliced into the scene prompt (issue #102).
+ */
+type PromptPairKind = Exclude<keyof typeof ASSET_FILES, "augment" | "sceneSingle">;
 
 export async function loadPromptAssets(kind: PromptPairKind): Promise<PromptAssets> {
   const cached = promptAssets.get(kind);
@@ -228,7 +243,7 @@ export interface CampaignContext {
 }
 
 /** A scene run additionally targets one chapter. */
-interface SceneContext extends CampaignContext {
+export interface SceneContext extends CampaignContext {
   chapter: string;
 }
 
@@ -312,7 +327,7 @@ async function collectNpcContext(campaign: string, npcId?: string): Promise<Camp
  * done them); the chapter contributes only its id to the context, so nothing
  * else changes when the chapter (and its `_chapter`) is still missing.
  */
-async function collectSceneContext(
+export async function collectSceneContext(
   campaign: string,
   chapter: string,
   allowMissingChapter = false,
@@ -597,7 +612,7 @@ export function npcStatusErrors(fm: Record<string, unknown>, subject: string): s
  * what it is, the properties `id` is its key, and the server addresses it as
  * `npcs/<id>` / `locations/<id>`. Returns the GeneratedStub or pushes errors.
  */
-function validateEntry(entry: RawEntry, index: number, errors: string[]): GeneratedStub | null {
+export function validateEntry(entry: RawEntry, index: number, errors: string[]): GeneratedStub | null {
   const kind = entry.kind;
   if (kind !== "npc" && kind !== "location") {
     errors.push(`entries[${index}]: "kind" must be "npc" or "location"`);
@@ -640,18 +655,130 @@ function validateEntry(entry: RawEntry, index: number, errors: string[]): Genera
  * Returns the mapped GenerateResult, or the list of errors for the
  * correction turn.
  */
-export function validateReply(
-  raw: string,
-  ctx: SceneContext,
-): { ok: true; result: GenerateResult } | { ok: false; errors: string[] } {
-  const errors: string[] = [];
-  const reply = parseRawReply(raw, errors);
-  if (reply === null) return { ok: false, errors };
+/**
+ * Which ids a scene document may REFERENCE (issue #102). Before this ticket
+ * the answer was "the campaign plus the stubs of the same reply"; with the
+ * pipeline the reply is one scene and the other ids come from the OUTLINE, so
+ * the allowed sets became a parameter instead of a local variable.
+ */
+export interface AllowedRefs {
+  npcIds: ReadonlySet<string>;
+  locationIds: ReadonlySet<string>;
+}
 
-  // Suggested entries first — scene references may point at them.
+/**
+ * Mechanical validation of ONE scene document (issue #102). Factored out of
+ * `validateReply` rather than duplicated: the batch reply and the pipeline's
+ * single-scene reply have to be judged by exactly the same rules, and the one
+ * way to guarantee that is one function.
+ *
+ * `label` is how the document is named in an error message; `seenIds` is the
+ * duplicate guard of the surrounding reply (a batch has several documents, a
+ * single-scene reply shares the set with the outline's ids).
+ *
+ * Returns the draft, or null with the errors pushed onto `errors`.
+ */
+export function validateSceneDocument(input: {
+  content: string;
+  label: string;
+  chapter: string;
+  allowed: AllowedRefs;
+  seenIds: Set<string>;
+  errors: string[];
+  /** The id the OUTLINE assigned — a pipeline part may not rename itself. */
+  expectedId?: string;
+}): GeneratedSceneDraft | null {
+  const { content, chapter, allowed, seenIds, errors } = input;
+  // The scene's ADDRESS is the server's: `<chapter>/<id>`, with the chapter
+  // taken from the run's CONTEXT and never from the model (issue #100). The
+  // id is the one thing the model decides here, so it is the one thing
+  // validated as an address would be.
+  const { parsed, error } = parseWithProperties(content, NO_ID_STEM);
+  if (error !== undefined) {
+    errors.push(`${input.label}: ${error}`);
+    return null;
+  }
+  const fm = parsed.properties;
+  const fmId = declaredId(parsed);
+  if (fmId === undefined) {
+    errors.push(`${input.label}: "id" fehlt — jede Szene nennt ihre kebab-case id`);
+    return null;
+  }
+  if (typeof fmId !== "string" || !ENTITY_ID_PATTERN.test(fmId)) {
+    errors.push(`${input.label}: "id" must be a kebab-case id (a-z, 0-9, single dashes)`);
+    return null;
+  }
+  const label = `scene "${fmId}"`;
+  if (input.expectedId !== undefined && fmId !== input.expectedId) {
+    errors.push(
+      `${label}: die id muss "${input.expectedId}" bleiben — sie kommt aus der Gliederung ` +
+        "und andere Szenen verweisen darauf",
+    );
+    return null;
+  }
+  if (seenIds.has(fmId)) {
+    errors.push(`${label}: duplicate id`);
+    return null;
+  }
+  seenIds.add(fmId);
+  const reparsed = reparseAtAddress(content, fmId, (id) => scenePath(chapter, "", id));
+
+  if (!(SCENE_TYPES as readonly string[]).includes(String(fm.type))) {
+    errors.push(`${label}: "type" must be one of ${SCENE_TYPES.join(", ")}`);
+  }
+  if (fm.status !== "draft") {
+    errors.push(`${label}: "status" must be "draft"`);
+  }
+
+  if (fm.npcs !== undefined && fm.npcs !== null) {
+    if (!Array.isArray(fm.npcs) || fm.npcs.some((n) => typeof n !== "string")) {
+      errors.push(`${label}: "npcs" must be an array of npc ids`);
+    } else {
+      for (const npc of fm.npcs as string[]) {
+        if (!allowed.npcIds.has(npc)) {
+          errors.push(
+            `${label}: npc "${npc}" does not exist in the campaign and no suggested entry provides it`,
+          );
+        }
+      }
+    }
+  }
+  if (typeof fm.location === "string" && fm.location !== "") {
+    if (!allowed.locationIds.has(fm.location)) {
+      errors.push(
+        `${label}: location "${fm.location}" does not exist in the campaign and ` +
+          `no suggested entry provides it`,
+      );
+    }
+  }
+
+  for (const kind of unknownCallouts(parsed.body)) {
+    errors.push(
+      `${label}: unknown callout "[!${kind}]" — allowed: ${CALLOUT_KINDS.map((k) => `[!${k}]`).join(", ")}`,
+    );
+  }
+
+  return {
+    path: scenePath(chapter, "", fmId),
+    markdown: content,
+    properties: reparsed.properties,
+  };
+}
+
+/**
+ * Validate the suggested ENTRIES of a reply: each one mapped, duplicates
+ * rejected, and the id sets a scene may reference collected from them.
+ * Shared by the batch reply and by nothing else yet — the pipeline validates
+ * one entry at a time — but it is where the "an entry resolves a scene's
+ * reference" rule lives, so it stays one function.
+ */
+function validateEntries(
+  entries: readonly RawEntry[],
+  errors: string[],
+): { stubs: GeneratedStub[]; npcIds: Set<string>; locationIds: Set<string> } {
   const stubs: GeneratedStub[] = [];
   const seenEntries = new Set<string>();
-  reply.entries.forEach((entry, index) => {
+  entries.forEach((entry, index) => {
     const stub = validateEntry(entry, index, errors);
     if (stub === null) return;
     const key = `${stub.kind}/${stub.id}`;
@@ -662,85 +789,55 @@ export function validateReply(
     seenEntries.add(key);
     stubs.push(stub);
   });
-  const stubNpcIds = new Set(stubs.filter((s) => s.kind === "npc").map((s) => s.id));
-  const stubLocationIds = new Set(stubs.filter((s) => s.kind === "location").map((s) => s.id));
+  return {
+    stubs,
+    npcIds: new Set(stubs.filter((s) => s.kind === "npc").map((s) => s.id)),
+    locationIds: new Set(stubs.filter((s) => s.kind === "location").map((s) => s.id)),
+  };
+}
+
+/**
+ * Mechanical validation of one raw model reply against the campaign context.
+ * Returns the mapped GenerateResult, or the list of errors for the
+ * correction turn.
+ *
+ * This is the BATCH shape — one reply carrying every scene and every
+ * suggested entry. Since issue #102 a scene run does not use it any more
+ * (the pipeline validates one document per call); it stays because it is the
+ * shape the single-call runs share their rules with, and because the rules
+ * themselves now live in `validateSceneDocument` / `validateEntries`.
+ */
+export function validateReply(
+  raw: string,
+  ctx: SceneContext,
+): { ok: true; result: GenerateResult } | { ok: false; errors: string[] } {
+  const errors: string[] = [];
+  const reply = parseRawReply(raw, errors);
+  if (reply === null) return { ok: false, errors };
+
+  // Suggested entries first — scene references may point at them.
+  const entries = validateEntries(reply.entries, errors);
+  const allowed: AllowedRefs = {
+    npcIds: new Set([...ctx.npcIds, ...entries.npcIds]),
+    locationIds: new Set([...ctx.locationIds, ...entries.locationIds]),
+  };
 
   const scenes: GeneratedSceneDraft[] = [];
   const seenIds = new Set<string>();
   reply.scenes.forEach((entry, index) => {
-    // The scene's ADDRESS is the server's: `<chapter>/<id>`, with the chapter
-    // taken from the run's CONTEXT and never from the model (issue #100). The
-    // id is the one thing the model decides here, so it is the one thing
-    // validated as an address would be.
-    const { parsed, error } = parseWithProperties(entry.content, NO_ID_STEM);
-    if (error !== undefined) {
-      errors.push(`scene scenes[${index}]: ${error}`);
-      return;
-    }
-    const fm = parsed.properties;
-    const fmId = declaredId(parsed);
-    if (fmId === undefined) {
-      errors.push(`scene scenes[${index}]: "id" fehlt — jede Szene nennt ihre kebab-case id`);
-      return;
-    }
-    if (typeof fmId !== "string" || !ENTITY_ID_PATTERN.test(fmId)) {
-      errors.push(
-        `scene scenes[${index}]: "id" must be a kebab-case id (a-z, 0-9, single dashes)`,
-      );
-      return;
-    }
-    const label = `scene "${fmId}"`;
-    if (seenIds.has(fmId)) {
-      errors.push(`${label}: duplicate id`);
-      return;
-    }
-    seenIds.add(fmId);
-    const reparsed = reparseAtAddress(entry.content, fmId, (id) => scenePath(ctx.chapter, "", id));
-
-    if (!(SCENE_TYPES as readonly string[]).includes(String(fm.type))) {
-      errors.push(`${label}: "type" must be one of ${SCENE_TYPES.join(", ")}`);
-    }
-    if (fm.status !== "draft") {
-      errors.push(`${label}: "status" must be "draft"`);
-    }
-
-    if (fm.npcs !== undefined && fm.npcs !== null) {
-      if (!Array.isArray(fm.npcs) || fm.npcs.some((n) => typeof n !== "string")) {
-        errors.push(`${label}: "npcs" must be an array of npc ids`);
-      } else {
-        for (const npc of fm.npcs as string[]) {
-          if (!ctx.npcIds.has(npc) && !stubNpcIds.has(npc)) {
-            errors.push(
-              `${label}: npc "${npc}" does not exist in the campaign and no suggested entry provides it`,
-            );
-          }
-        }
-      }
-    }
-    if (typeof fm.location === "string" && fm.location !== "") {
-      if (!ctx.locationIds.has(fm.location) && !stubLocationIds.has(fm.location)) {
-        errors.push(
-          `${label}: location "${fm.location}" does not exist in the campaign and ` +
-            `no suggested entry provides it`,
-        );
-      }
-    }
-
-    for (const kind of unknownCallouts(parsed.body)) {
-      errors.push(
-        `${label}: unknown callout "[!${kind}]" — allowed: ${CALLOUT_KINDS.map((k) => `[!${k}]`).join(", ")}`,
-      );
-    }
-
-    scenes.push({
-      path: scenePath(ctx.chapter, "", fmId),
-      markdown: entry.content,
-      properties: reparsed.properties,
+    const draft = validateSceneDocument({
+      content: entry.content,
+      label: `scene scenes[${index}]`,
+      chapter: ctx.chapter,
+      allowed,
+      seenIds,
+      errors,
     });
+    if (draft !== null) scenes.push(draft);
   });
 
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, result: { scenes, stubs, warnings: reply.warnings } };
+  return { ok: true, result: { scenes, stubs: entries.stubs, warnings: reply.warnings } };
 }
 
 // --- mechanical validation of an NPC reply (issue #21) -----------------------
@@ -906,6 +1003,17 @@ function parseRawNpcReply(raw: string, errors: string[]): RawNpcReply | null {
  * an empty `## Notizen`. An id that already exists is an error too — the DM
  * can pin a different one via the request's `id`.
  */
+/**
+ * The NPC FORMAT rules that live in the body (issue #21): `## Weiß` carries
+ * only `[!secret]`, `## Beziehungen` only existing npc ids, `## Notizen`
+ * stays empty. Exported since issue #102, where an npc is generated as a part
+ * of a scene run and has to be judged by the same rules as an npc RUN — minus
+ * the ones that are about the run (no chapter, the pinned id).
+ */
+export function npcBodyErrors(body: string, ctx: CampaignContext): string[] {
+  return [...knowledgeCalloutErrors(body), ...relationErrors(body, ctx), ...notesErrors(body)];
+}
+
 export function validateNpcReply(
   raw: string,
   ctx: CampaignContext,
@@ -995,7 +1103,7 @@ export function buildCorrectionMessage(errors: string[], tail: string): string {
   ].join("\n\n");
 }
 
-const SCENE_CORRECTION_TAIL = "alle Szenen und Stubs enthalten";
+export const SCENE_CORRECTION_TAIL = "alle Szenen und Stubs enthalten";
 const NPC_CORRECTION_TAIL = "die vollständige NPC-Datei enthalten";
 
 // --- run accounting (issue #18) -----------------------------------------------
@@ -1108,7 +1216,7 @@ export async function runGenerate(
 }
 
 /** Where a stub would be written — the address the hint has to name. */
-function stubPath(stub: GeneratedStub): string {
+export function stubPath(stub: GeneratedStub): string {
   return stub.kind === "npc" ? npcPath(stub.id) : locationPath(stub.id);
 }
 
@@ -1140,6 +1248,13 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
   provider: LLMProvider;
   validate: (raw: string) => { ok: true; result: T } | { ok: false; errors: string[] };
   correctionTail: string;
+  /**
+   * Called once per provider call (issue #102). The pipeline counts its own
+   * calls with it: `usage` is absent whenever the endpoint reports no tokens,
+   * so the run's „M Aufrufe" cannot be read off it — and a part that FAILED
+   * has to contribute its attempts to the total as well.
+   */
+  onCall?: () => void;
 }): Promise<T> {
   const { req, provider, validate } = input;
   const corrections: CorrectionTurn[] = [];
@@ -1148,6 +1263,7 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
   const spend = new RunUsage();
   for (;;) {
     const completion = await provider.complete(req, corrections);
+    input.onCall?.();
     spend.add(completion);
     const raw = completion.text;
 

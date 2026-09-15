@@ -158,8 +158,18 @@ keinen Zustand und kann mehrere Worker parallel bedienen:
   genau ein neuer `## If:`-Abschnitt dazu — jeder bestehende Block
   unverändert. Diese Verzweigung wird ZUERST geprüft: ein Szenen-Ergänzungs-
   Lauf trägt auch eine `chapter:`-Zeile.
-- `chapter: <id>` im Kontext-Block → Szenen-Lauf für genau dieses Kapitel
-- kein `chapter` → NPC-Lauf, `vorgegebene id: <id>` fixiert den Dateinamen
+- der System-Prompt ist der **Gliederungs-Prompt** („System-Prompt:
+  Gliederung") → der Gliederungs-Aufruf eines Szenen-Laufs (#102). Die Antwort
+  ist die Szenenliste; jede Szene zitiert den ersten und letzten Satz des
+  Quelltextes **wörtlich**, damit der Ausschnitt-Schnitt des Servers wirklich
+  greift (eine Fehlzuordnung wäre eine Warnung in jedem Spec).
+- der Prompt trägt eine **„## Gliederung des Durchlaufs"** und eine
+  `chapter:`-Zeile → ein **Szenen-Teil**; welche Szene, sagt die Markierung
+  „← DIESE Szene" im Gliederungsblock
+- der Prompt trägt die Gliederung, aber kein `chapter` → ein **Eintrags-Teil**
+  (NPC oder Ort, je nach System-Prompt)
+- kein `chapter` und keine Gliederung → NPC-Lauf (ein Aufruf),
+  `vorgegebene id: <id>` fixiert den Dateinamen
 - `E2E_SLOW` im Quelltext → der Stub antwortet **nie** (die Verbindung stirbt
   mit dem Server-Prozess, der gefragt hat). Das ist die einzige Möglichkeit,
   einen Job anzusehen, während er wirklich `running` ist — der Neustart-Fall
@@ -167,6 +177,21 @@ keinen Zustand und kann mehrere Worker parallel bedienen:
 - `E2E_INVALID` im Quelltext → Antwort, die die Validierung reißt (auch im
   Korrektur-Turn, der Lauf endet also in einem 422)
 - `E2E_TRUNCATED` im Quelltext → `finish_reason: "length"`
+- `E2E_THREE_SCENES` im Quelltext → die Gliederung hat **drei** Szenen und
+  keine Vorschläge — die Form, in der man Teile einzeln fertig werden,
+  fehlschlagen und wiederholen sehen kann (#102)
+- `E2E_PART_FAIL:<nonce>` → die **mittlere** der drei Szenen reißt ihre ganze
+  erste Runde (Erstaufruf **und** Korrektur-Turn) und gelingt ab der zweiten.
+  Erst das macht den Teil wirklich `failed` — ein Fehler, den der Korrektur-
+  Turn heilt, ist kein fehlgeschlagener Teil —, und genau das repariert dann
+  „Erneut versuchen". Der Rundenzähler ist der **einzige** Zustand des Stubs
+  und hängt an der `nonce`, die der Spec schreibt: so können parallele Worker
+  sich den Fehlschlag nicht gegenseitig wegnehmen.
+- `E2E_HOLD_LAST` → nur die **letzte** Szene wird gehalten, die anderen
+  antworten normal. Das ist die Lage, die ein Neustart mitten im Lauf braucht:
+  fertige Teile zum Behalten und einen in Flug. (Der Name beginnt bewusst
+  nicht mit `E2E_SLOW` — das wird als Teilstring geprüft und würde jeden
+  Aufruf halten.)
 
 Der Stub läuft auch allein, z. B. um einen Prompt von Hand anzuschauen:
 
@@ -194,7 +219,7 @@ mehrere Schreibwege auf ihm liegen:
 | 3 ⌘K-Suche         | `tests/search.e2e.ts`                                          |
 | 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`                                   |
 | 5 Nachbereitung    | `tests/review.e2e.ts`                                         |
-| 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-restart.e2e.ts`, `tests/augment.e2e.ts` |
+| 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-pipeline.e2e.ts`, `tests/generator-restart.e2e.ts`, `tests/augment.e2e.ts` |
 | 7 Eigenschaften/409 | `tests/status-control.e2e.ts`, `tests/properties-form.e2e.ts`, `tests/rename.e2e.ts` |
 | 8 Mobil            | `tests/mobile.e2e.ts`                                          |
 | 9 Datei bearbeiten | `tests/block-composer.e2e.ts`, `tests/file-edit.e2e.ts`        |
@@ -207,6 +232,16 @@ Ende, der zweite ist der Neustart. Ein **fertiger** Job ist danach vollständig
 da (Ergebnis, Review-Edits) und wird übernommen; ein **laufender** steht als
 `failed` mit „Server wurde während des Laufs neu gestartet — Job neu starten"
 statt als endloser Spinner.
+
+`tests/generator-pipeline.e2e.ts` ist die **Pipeline-Hälfte** von Pfad 6
+(#102): ein Lauf mit drei Szenen, von denen eine fehlschlägt — die anderen
+zwei sind prüfbar und einzeln übernehmbar, während der defekte Teil seinen
+Fehlertext und sein eigenes „Erneut versuchen" trägt; danach sind alle drei da
+und „Rest übernehmen" räumt den Lauf ab. Dazu „Verwerfen" mitten im Lauf und
+ein Neustart mitten im Lauf (zwei Server hintereinander, wie oben): fertige
+Teile bleiben, der Teil in Flug wird `failed` und ist auf dem neuen Prozess
+wieder startbar, weil die Gliederung mit der Zeile zurückkommt. Die Gliederung
+selbst kommt in keiner Zusicherung vor — sie wird dem Nutzer nie gezeigt.
 
 Seit Issue #97 deckt `tests/generator.e2e.ts` zusätzlich den **Prüfzustand**
 ab: Entwurf bearbeiten → Seite verlassen → zurück → der Text ist da; einen

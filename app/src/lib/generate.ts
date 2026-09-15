@@ -22,6 +22,7 @@
 
 import type {
   GenerateJob,
+  GenerateJobPart,
   GenerateJobReview,
   GenerateReviewDecision,
 } from "@grimoire/shared/types";
@@ -253,11 +254,21 @@ export function generatePhase(input: {
   jobChecked: boolean;
   /** Status of the campaign's job; undefined when there is none. */
   jobStatus?: GenerateJob["status"];
+  /**
+   * A RUNNING run already has something to review (issue #102): at least one
+   * part is done, or one has failed and needs „Erneut versuchen". Both are
+   * things the DM can act on, so the view is the review, not the spinner.
+   */
+  hasParts?: boolean;
 }): GeneratePhase {
   if (input.applied) return "done";
   if (input.starting) return "working";
   if (!input.jobChecked) return "checking";
-  if (input.jobStatus === "running") return "working";
+  // A pipelined run (issue #102) reaches the review BEFORE it is finished:
+  // the moment one part produced something, that part is reviewable and
+  // acceptable while the others are still going (AK2). Only a run with
+  // nothing to show yet is still the spinner.
+  if (input.jobStatus === "running") return input.hasParts === true ? "review" : "working";
   if (input.jobStatus === "done") return "review";
   return "input";
 }
@@ -441,7 +452,126 @@ export function jobProgress(job: GenerateJob | null | undefined): {
   };
 }
 
+/**
+ * „1 von 3 übernommen" — the same count, but measured against ALL parts of
+ * the RUN (issue #102 review).
+ *
+ * `jobProgress` counts what the run has PRODUCED, which is the whole truth
+ * for a single-call run and only half of it for a pipeline: while parts are
+ * still going, their drafts are not in the result yet, so a run of three
+ * scenes with two finished and one accepted reported „1 von 2 übernommen"
+ * right next to „2 von 3 Szenen fertig". The DM thinks in parts of the run,
+ * not in parts that happen to have answered already.
+ *
+ * `Math.max` because the two counts do not have to agree in the other
+ * direction either: a suggested entry the DM accepted is a part of the
+ * review without being a part of the outline, and „3 von 2" would be worse
+ * than the confusion this fixes.
+ */
+export function acceptProgress(job: GenerateJob | null | undefined): {
+  written: number;
+  total: number;
+} {
+  const progress = jobProgress(job);
+  const parts = jobPipelineParts(job);
+  if (parts.length === 0) return progress;
+  return { written: progress.written, total: Math.max(parts.length, progress.total) };
+}
+
 /** The parts „Alle übernehmen" would write: everything still open. */
 export function openParts(job: GenerateJob | null | undefined): string[] {
   return jobParts(job).filter((path) => partState(job, path) === "open");
+}
+
+// --- the pipeline of a scene run (issue #102) --------------------------------
+//
+// The run's parts are what the review is laid out by: a done part renders as
+// the draft it produced, a running one as a status card, a failed one as its
+// error plus „Erneut versuchen". The OUTLINE is never here — the server does
+// not send it, because it is an internal step and the DM never edits it.
+
+/** The parts of a run, in outline order; empty for a single-call run. */
+export function jobPipelineParts(job: GenerateJob | null | undefined): GenerateJobPart[] {
+  return job?.pipeline?.parts ?? [];
+}
+
+/** Is there anything in this run the DM can already look at or act on? */
+export function hasReviewableParts(job: GenerateJob | null | undefined): boolean {
+  return jobPipelineParts(job).some((part) => part.status === "done" || part.status === "failed");
+}
+
+/** Is any part of the run still waiting or in flight? */
+export function partsStillRunning(job: GenerateJob | null | undefined): boolean {
+  return jobPipelineParts(job).some(
+    (part) => part.status === "pending" || part.status === "running",
+  );
+}
+
+/**
+ * The part that produced a given draft path, or undefined. The review
+ * addresses a scene as `<chapter>/<id>` and an entry as `npcs/<id>`; a part
+ * knows its bare id and its kind, so the mapping is one place and not three.
+ */
+export function partForPath(
+  job: GenerateJob | null | undefined,
+  path: string,
+): GenerateJobPart | undefined {
+  const id = path.slice(path.lastIndexOf("/") + 1);
+  const kind = path.startsWith("npcs/") ? "npc" : path.startsWith("locations/") ? "location" : "scene";
+  return jobPipelineParts(job).find((part) => part.kind === kind && part.id === id);
+}
+
+/** The address the review uses for a part — the key an accept names. */
+export function partPath(job: GenerateJob | null | undefined, part: GenerateJobPart): string {
+  if (part.kind === "npc") return `npcs/${part.id}`;
+  if (part.kind === "location") return `locations/${part.id}`;
+  return `${job?.chapter ?? ""}/${part.id}`;
+}
+
+/**
+ * „2 von 3 Szenen fertig" — how far the RUN got, which is a different
+ * question from „2 von 3 übernommen" (jobProgress, issue #97). Undefined when
+ * the run has no parts or every part is settled: a finished run needs no
+ * progress line, it needs its drafts.
+ *
+ * It counts EVERY part, because that is what „is the run still going" is
+ * measured against. Counting only the scenes while the line was shown for as
+ * long as any part was open froze it at „3 von 3 Szenen fertig" for the whole
+ * entry half of a run — and that line REPLACES the review's own progress in
+ * the header, so the run looked stuck and the „N von M übernommen" was hidden
+ * behind it. The wording follows what is actually counted: „Szenen" only when
+ * every part is a scene, „Teile" as soon as suggested entries are among them.
+ */
+export function pipelineProgress(
+  job: GenerateJob | null | undefined,
+  t: Translate,
+): string | undefined {
+  const parts = jobPipelineParts(job);
+  if (parts.length === 0 || !partsStillRunning(job)) return undefined;
+  const allScenes = parts.every((part) => part.kind === "scene");
+  return t(allScenes ? "generate.pipeline.progress" : "generate.pipeline.progressParts", {
+    done: parts.filter((part) => part.status === "done").length,
+    total: parts.length,
+  });
+}
+
+/**
+ * „~12.400 Tokens · 5 Aufrufe" — what the whole run has cost so far, summed
+ * over every part INCLUDING the outline call (issue #102 AK5). Undefined when
+ * there is nothing to report; a run that made calls but whose endpoint reports
+ * no tokens still shows the call count, because that number is always true.
+ */
+export function pipelineCostLabel(
+  job: GenerateJob | null | undefined,
+  t: Translate,
+): string | undefined {
+  const totals = job?.pipeline?.totals;
+  if (totals === undefined) return undefined;
+  const tokens = Math.max(totals.inputTokens + totals.outputTokens, 0);
+  const calls = Math.max(totals.calls, 0);
+  if (tokens === 0 && calls === 0) return undefined;
+  return t("generate.pipeline.cost", {
+    tokens: groupedNumber(tokens, t("generate.usage.group")),
+    calls,
+  });
 }

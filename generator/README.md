@@ -2,7 +2,69 @@
 
 Pipeline: Quelltext (EN) → LLM → Szenen-Drafts (DE) → Review-Vorschau → Platte.
 
+## Ablauf eines Szenen-Laufs (Pipeline, Issue #102)
+
+Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
+
+1. **Gliederung** (ein Aufruf, `outline-system-prompt.md` +
+   `outline-example-output.md`): kleines JSON mit der Szenenliste — `id`,
+   `title`, `type`, `location`, Querverweise (`refs`) — und der Liste neuer
+   Figuren/Orte (`entries`). Jede Szene nennt zusätzlich den **ersten und
+   letzten Satz ihres Quelltext-Abschnitts wörtlich** (`sourceExcerpt`); der
+   Server schneidet den Abschnitt damit aus dem Quelltext. Findet er die
+   Zitate nicht wörtlich wieder (Whitespace wird normalisiert, sonst nichts),
+   bekommt die Szene den **ganzen** Quelltext und der Lauf eine Warnung —
+   teurer, aber nie falsch. Validierung und Korrektur-Turns gelten für diesen
+   Schritt allein.
+
+   **Obergrenze:** höchstens 12 Szenen und 12 neue Einträge je Lauf
+   (`MAX_OUTLINE_SCENES` / `MAX_OUTLINE_ENTRIES`). Jeder Teil ist ein
+   Provider-Aufruf, also entscheidet die Gliederung, was ein Lauf kostet;
+   darüber ist die Antwort ein Validierungsfehler und damit ein
+   Korrektur-Turn, der um Zusammenfassen bittet — kein fehlgeschlagener Lauf.
+
+   Die Gliederung ist ein **rein systeminterner** Schritt zur Fehlerreduktion.
+   Sie wird dem Nutzer nie angezeigt und nie zum Bearbeiten angeboten (PO,
+   15.09.) — interessant ist nur das Ergebnis je Szene/NPC/Ort. Der Server
+   speichert sie auf der Job-Zeile, weil „Erneut versuchen" und ein Neustart
+   sie brauchen.
+
+2. **Szenen** (je Szene ein Aufruf, Parallelität 3): `system-prompt.md` im
+   Modus „genau eine Szene aus der Gliederung" (`scene-single-output.md`
+   tauscht nur das Ausgabeformat — alle Regeln bleiben wörtlich dieselben) +
+   Gliederung + der geschnittene Quelltext-Abschnitt. Ausgabe: genau ein
+   Szenendokument. Validierung, Korrektur-Turns und Namensprüfung **je
+   Szene**; ein fehlgeschlagener Teil blockiert die anderen nicht.
+
+3. **Vorschläge** (je neuem Eintrag ein Aufruf): `npc-system-prompt.md` bzw.
+   `location-system-prompt.md`, mit der Gliederung und den Abschnitten der
+   Szenen, die den Eintrag referenzieren. Dedupliziert über die id.
+
+Was das dem DM bringt: ein Formfehler kostet nur den betroffenen Teil, fertige
+Szenen sind sofort prüfbar und übernehmbar, und ein defekter Teil lässt sich
+einzeln wiederholen (`POST …/generate/job/:id/parts/:key/retry`). Das
+Job-Modell dazu steht in `docs/DECISIONS.md` #10.
+
+**Prompt-Caching:** Der konstante Teil des Prompts — System-Prompt,
+Kampagnenwissen, Glossar, Kontextlisten, Few-Shot, Gliederung — steht bei
+jedem Aufruf **zuerst** und wird beim Claude-Provider mit
+`cache_control: ephemeral` markiert (System-Prompt und konstanter Block je
+eine Marke); OpenAI-kompatible Endpoints cachen denselben Prefix implizit. Nur
+der variable Rest wechselt je Teil: **welche Szene dieser Aufruf schreibt**
+(„## Diese Szene schreibst du jetzt"), der Ausschnitt, der bestehende Eintrag,
+die Anweisung. Der Gliederungs-Block selbst ist für jeden Teil eines Laufs
+**byteweise identisch** — deshalb steht die Zuweisung nicht darin.
+
+Die Anzeige „~N Tokens · M Aufrufe" summiert über alle Teile, die Gliederung
+eingeschlossen.
+
+**Ein Aufruf bleiben** (PO-Entscheid): der Ergänzen-Lauf (#36) und die
+NPC-Generierung (#21) — je ein Eintrag, nichts zu zerlegen.
+
 ## Ablauf pro Aufruf
+
+Gilt für jeden EINZELNEN Provider-Aufruf — den Gliederungs-Aufruf, jeden
+Szenen-Aufruf, jeden Eintrags-Aufruf und die beiden Ein-Aufruf-Läufe:
 
 1. Server sammelt Kontext: alle npc-/location-ids + Namen, Kapitel-id,
    **Kampagnenwissen** und Glossar (beides aus der Datenbank —
@@ -47,8 +109,9 @@ der Prompt sieht dann genauso aus wie vorher.
 
 ## Deutsche Orthografie (Issue #93)
 
-Alle vier System-Prompts (`system-prompt.md`, `npc-system-prompt.md`,
-`location-system-prompt.md`, `augment-system-prompt.md`) tragen **dieselbe**
+Alle System-Prompts (`system-prompt.md`, `npc-system-prompt.md`,
+`location-system-prompt.md`, `augment-system-prompt.md` und seit #102
+`outline-system-prompt.md`) tragen **dieselbe**
 Regel „Deutsche Orthografie": jeder echte Text — Fließtext, Read-Alouds,
 Callouts, `## If:`-Bedingungen, Überschriften, `warnings` und jeder
 Frontmatter-Wert, der Text ist (`title`, `name`, `role`, `voice`,
@@ -68,7 +131,10 @@ Prompt.
 ## Tabellen (Issue #96)
 
 Dieselbe Mechanik wie bei der Orthografie-Regel: **eine identische Regel
-„Tabellen"** in allen vier System-Prompts — in den drei Create-Prompts unter
+„Tabellen"** in allen System-Prompts, die Dokumente schreiben — **nicht** im
+Gliederungs-Prompt, der überhaupt kein Dokument ausgibt (keine Callouts, kein
+Frontmatter, keine Tabellen; die Orthografie-Regel steht dort trotzdem, weil
+Titel, Einzeiler und `warnings` Text sind) — in den drei Create-Prompts unter
 „## Regeln", im Ergänzen-Prompt in der Ergänzungsregel, also genau **einmal**
 in jedem zusammengesetzten Prompt (`formatContract` in
 `server/src/generator-augment.ts` schneidet aus den Create-Prompts nur

@@ -21,8 +21,10 @@ import {
   DEFAULT_MAX_TOKENS,
   JSON_PREFILL,
   KNOWLEDGE_HEADING,
+  OUTLINE_HEADING,
   OpenAICompatProvider,
   buildPrompt,
+  buildPromptParts,
   createProvider,
 } from "../src/llm-provider";
 import type { GenerateRequest } from "../src/llm-provider";
@@ -563,5 +565,109 @@ describe("ClaudeProvider reply", () => {
         expect(answer.usage).toEqual({ inputTokens: 100, outputTokens: 20 });
       },
     );
+  });
+});
+
+// --- prompt caching (issue #102, AK5) ----------------------------------------
+//
+// A pipelined run reads the SAME prefix once per part (outline + N scenes + the
+// suggested entries). The Claude provider therefore marks the system prompt and
+// the constant half of the first user turn with an ephemeral cache breakpoint;
+// the OpenAI-compatible path has no such field and relies on implicit prefix
+// caching, which only works if that prefix comes FIRST — so that is what these
+// tests pin down.
+
+describe("prompt caching", () => {
+  const CACHED: GenerateRequest = {
+    systemPrompt: "SYS",
+    fewShotTarget: "FEWSHOT",
+    knowledge: "- Salzhafen heißt immer Salzhafen",
+    glossary: "cove → Bucht",
+    context: { chapter: "01-salzhafen", npcs: [{ id: "fenn", name: "Fenn" }], locations: [] },
+    outline: "night-watch-quay — Nachtwache am Kai (planned)",
+    sourceText: "The party watches the quay.",
+  };
+
+  test("the constant half carries knowledge, glossary, context, few-shot and outline", () => {
+    const { constant, variable } = buildPromptParts(CACHED);
+    for (const marker of [KNOWLEDGE_HEADING, "## Glossar", "## Kontext", "FEWSHOT", OUTLINE_HEADING]) {
+      expect(constant).toContain(marker);
+    }
+    // …and the source text is NOT in it: it is what differs per part.
+    expect(constant).not.toContain("## Quelltext");
+    expect(variable).toContain("## Quelltext");
+    // The two halves joined are exactly the prompt buildPrompt produces, so a
+    // single-call run sees the prompt it always saw.
+    expect(buildPrompt(CACHED)).toBe(`${constant}\n\n${variable}`);
+  });
+
+  test("the constant prefix stands FIRST in the OpenAI-compatible prompt", () => {
+    const prompt = buildPrompt(CACHED);
+    expect(prompt.indexOf(KNOWLEDGE_HEADING)).toBeLessThan(prompt.indexOf("## Quelltext"));
+    expect(prompt.indexOf(OUTLINE_HEADING)).toBeLessThan(prompt.indexOf("## Quelltext"));
+  });
+
+  test("Claude marks the system prompt and the constant user block, and nothing else", async () => {
+    const original = globalThis.fetch;
+    let sent: Record<string, unknown> = {};
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      sent = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "}" }], stop_reason: "end_turn" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    try {
+      await new ClaudeProvider("sk-ant-test").complete(CACHED, [
+        { assistant: "{}", correction: "bitte korrigieren" },
+      ]);
+    } finally {
+      globalThis.fetch = original;
+    }
+
+    const system = sent.system as Array<Record<string, unknown>>;
+    expect(system).toEqual([
+      { type: "text", text: "SYS", cache_control: { type: "ephemeral" } },
+    ]);
+
+    const messages = sent.messages as Array<{ role: string; content: unknown }>;
+    const first = messages[0]!.content as Array<Record<string, unknown>>;
+    const { constant, variable } = buildPromptParts(CACHED);
+    expect(first[0]).toEqual({
+      type: "text",
+      text: constant,
+      cache_control: { type: "ephemeral" },
+    });
+    // The variable half is the second block and is NOT marked — it changes
+    // with every part, so a breakpoint there would only pay for cache writes.
+    expect(first[1]).toEqual({ type: "text", text: variable });
+    // Neither is the replayed correction turn: unique per attempt.
+    expect(messages[1]).toEqual({ role: "assistant", content: "{}" });
+    expect(messages[2]).toEqual({ role: "user", content: "bitte korrigieren" });
+    expect(JSON.stringify(messages.slice(1)).includes("cache_control")).toBe(false);
+  });
+
+  test("the cache buckets count towards the input tokens", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          content: [{ type: "text", text: "}" }],
+          stop_reason: "end_turn",
+          usage: {
+            input_tokens: 120,
+            output_tokens: 40,
+            cache_creation_input_tokens: 900,
+            cache_read_input_tokens: 4000,
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof fetch;
+    try {
+      const answer = await new ClaudeProvider("sk-ant-test").complete(CACHED);
+      expect(answer.usage).toEqual({ inputTokens: 5020, outputTokens: 40 });
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });

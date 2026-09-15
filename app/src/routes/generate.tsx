@@ -41,6 +41,7 @@
 import type {
   CampaignTree,
   GenerateJob,
+  GenerateJobPart,
   GenerateResult,
   GeneratedNpcDraft,
   GeneratedStub,
@@ -52,12 +53,13 @@ import {
   Check,
   GitFork,
   MapPin,
+  RotateCcw,
   Sparkles,
   SpellCheck,
   StickyNote,
   User,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
 import {
@@ -67,6 +69,7 @@ import {
   fetchFile,
   fetchKnowledge,
   fetchTree,
+  retryJobPart,
   startGenerateJob,
   startGenerateNpcJob,
 } from "@/api";
@@ -89,14 +92,19 @@ import {
   contextHint,
   knowledgeHint,
   generatePhase,
+  hasReviewableParts,
   jobErrorBody,
   jobMode,
+  jobPipelineParts,
   jobProgress,
   markdownBody,
   newChapterId,
   npcIdError,
   openParts,
   partState,
+  partsStillRunning,
+  pipelineCostLabel,
+  pipelineProgress,
   restoredMode,
   reviewOf,
   stringField,
@@ -223,9 +231,17 @@ export function GenerateRoute() {
   const [written, setWritten] = useState<string[]>();
 
   // The server's job IS the state of a run (issue #19).
-  const jobQuery = useGenerateJob(campaign);
+  //
+  // `expectJob` is on while „Entwürfe generieren" has been clicked and no job
+  // has shown up yet: a GET that overtakes the new row answers 404, and
+  // without this the poll loop would be switched off by that one `null` and
+  // never switched back on — the view would sit on the spinner until a
+  // reload, which is exactly the report this fixes.
+  const [awaitingJob, setAwaitingJob] = useState(false);
+  const jobQuery = useGenerateJob(campaign, { expectJob: awaitingJob });
   const job = jobQuery.data ?? null;
   const jobId = job?.id ?? null;
+  if (awaitingJob && jobId !== null) setAwaitingJob(false);
   // Every review change goes back to the job (issue #97): text debounced,
   // decisions immediately, both flushed before the view can go away.
   const review = useJobReview(campaign, job);
@@ -258,7 +274,13 @@ export function GenerateRoute() {
   // Which result field to read is the job's kind, never the local mode: a
   // done job of the other kind must not be rendered as this one's.
   const jobKind = jobMode(job);
-  const result = job?.status === "done" && jobKind === "scene" ? job.result : undefined;
+  // A pipelined run (issue #102) has a result WHILE it runs: every finished
+  // part is already in it, so the review fills up instead of appearing whole.
+  const result =
+    (job?.status === "done" || (job?.status === "running" && hasReviewableParts(job))) &&
+    jobKind === "scene"
+      ? job.result
+      : undefined;
   const npcResult = job?.status === "done" && jobKind === "npc" ? job.npcResult : undefined;
   const scenes = result?.scenes ?? [];
   const stubs = result?.stubs ?? [];
@@ -283,10 +305,18 @@ export function GenerateRoute() {
           }),
     // 202 (or an adopted 409 — the api client hands back the running job's
     // id): from here on the job query drives the view.
+    onMutate: () => {
+      // From here on a job is EXPECTED — see `awaitingJob` above.
+      setAwaitingJob(true);
+    },
     onSuccess: () => {
       setLostJob(false);
       setWritten(undefined);
       void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
+    },
+    onError: () => {
+      // The run never started: stop waiting for a job that is not coming.
+      setAwaitingJob(false);
     },
   });
 
@@ -325,6 +355,14 @@ export function GenerateRoute() {
       // so — the same protocol the review patch follows.
       if (error instanceof ApiError && error.status === 409 && error.details.code === "rev_conflict") {
         review.signalConflict();
+        return;
+      }
+      // Any OTHER 409 says the run moved on: a part that is not open any
+      // more, a run that has produced nothing yet (issue #102 AK2 allows an
+      // accept while it is still running, so „nichts fertig" is now a real
+      // answer). Nothing was written — re-read and say so in one line.
+      if (error instanceof ApiError && error.status === 409) {
+        void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
       }
     },
     onSuccess: (data) => {
@@ -358,6 +396,109 @@ export function GenerateRoute() {
     },
   });
 
+  /**
+   * The card that currently REPRESENTS each pipeline part, keyed by the
+   * part's key — the status card while the part is open, the draft card once
+   * it is done. Both register here, because a part changes which component
+   * it is rendered by while the focus is supposed to stay on it.
+   */
+  const partCards = useRef(new Map<string, HTMLElement | null>());
+  /**
+   * The part „Erneut versuchen" handed the focus to, until the focus is
+   * actually sitting on its card.
+   *
+   * Focusing once in `onSuccess` was not enough (issue #102 review): the
+   * button unmounts the moment the part goes `running`, and the status card
+   * itself unmounts the moment the part is `done` and becomes its draft card
+   * — with a fast model both happen within a poll of the click, so the focus
+   * fell to `body` and a keyboard DM landed at the top of the document
+   * (quality floor: focus stays visible and where the work is). So the focus
+   * FOLLOWS the part across those swaps, once per commit, and stops as soon
+   * as the part is settled or the DM has moved the focus themselves.
+   */
+  const focusPart = useRef<string | undefined>(undefined);
+
+  /** „Erneut versuchen" for one failed part (issue #102). */
+  const retry = useMutation({
+    mutationFn: (key: string) => retryJobPart(campaign, job?.id ?? "", key),
+    onSuccess: (updated, key) => {
+      // The answer IS the job, with the part back in `running` — seeding the
+      // cache with it means the next poll continues from the truth instead of
+      // from a stale "failed".
+      queryClient.setQueryData(generateJobKey(campaign), updated);
+      focusPart.current = key;
+    },
+    onError: (error) => {
+      // A 409 here is not „der Server ist kaputt": the part is already
+      // running or already finished, which a second tab or a double click
+      // produces. Whatever the state is, it is newer than this view's.
+      if (error instanceof ApiError && error.status === 409) {
+        void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
+    },
+  });
+  /**
+   * What a part's own card shows below its error — per part, because ONE
+   * `isError` rendered in a global spot said „nicht neu gestartet" next to
+   * every card and never cleared. `retry.variables` is the key of the last
+   * mutate, and react-query resets `isError` on the next one.
+   */
+  const retryError = (key: string): string | undefined => {
+    if (!retry.isError || retry.variables !== key) return undefined;
+    const status = retry.error instanceof ApiError ? retry.error.status : undefined;
+    return t(
+      status === 409 ? "generate.pipeline.retryConflict" : "generate.pipeline.retryFailed",
+    );
+  };
+  /** The part this retry is currently spending a call on — and only that one. */
+  const retryBusy = (key: string): boolean => retry.isPending && retry.variables === key;
+
+  const parts = jobPipelineParts(job);
+  const sceneParts = parts.filter((part) => part.kind === "scene");
+  const entryParts = parts.filter((part) => part.kind !== "scene");
+  const running = partsStillRunning(job);
+  /**
+   * Hand the focus to the card that NOW represents the retried part — after
+   * the commit, so it is handed to the card that is actually on the screen.
+   * No dependency list on purpose: the question is asked once per commit,
+   * which is exactly when the card behind a part can have been swapped.
+   */
+  useEffect(() => {
+    const key = focusPart.current;
+    if (key === undefined) return;
+    const card = partCards.current.get(key) ?? undefined;
+    const active = document.activeElement;
+    // The DM moved the focus themselves (clicked elsewhere, tabbed on) —
+    // never yank it back out of their hands.
+    const ours = active === null || active === document.body || card?.contains(active) === true;
+    if (!ours) {
+      focusPart.current = undefined;
+      return;
+    }
+    if (card === undefined) return;
+    if (active !== card) card.focus();
+    // Settled: this card is the last one the part will have, so stop
+    // following it — the next poll must not re-take the focus.
+    const part = parts.find((candidate) => candidate.key === key);
+    if (part === undefined || part.status === "done" || part.status === "failed") {
+      focusPart.current = undefined;
+    }
+  });
+  const runProgress = pipelineProgress(job, t);
+  const runCost = pipelineCostLabel(job, t);
+  /** The draft of a finished scene part, by the address the review uses. */
+  const sceneOfPart = (part: GenerateJobPart) =>
+    scenes.find((scene) => scene.path === `${job?.chapter ?? ""}/${part.id}`);
+  const stubOfPart = (part: GenerateJobPart) =>
+    stubs.find((stub) => stub.kind === part.kind && stub.id === part.id);
+  /** Stubs in the result that no entry PART accounts for (see the list below). */
+  const unclaimedStubs = stubs.filter(
+    (stub) => !entryParts.some((part) => part.kind === stub.kind && part.id === stub.id),
+  );
+
   const applied = written !== undefined;
   // The window between "POST /generate answered" and "the job shows up in
   // the query" is still the working state — nothing else would be honest.
@@ -367,6 +508,7 @@ export function GenerateRoute() {
     starting,
     jobChecked: jobQuery.isSuccess || jobQuery.isError,
     ...(job === null ? {} : { jobStatus: job.status }),
+    hasParts: hasReviewableParts(job),
   });
 
   const startError = start.error instanceof ApiError ? start.error : undefined;
@@ -739,35 +881,62 @@ export function GenerateRoute() {
 
         {phase === "working" && <Working />}
 
-        {phase === "review" && result !== undefined && (
+        {/* The review of a SCENE run — gated on the phase and the job's kind,
+            never on a result being there (issue #102 review): in a pipelined
+            run the parts are the review's spine and the drafts only fill it
+            in, so a run whose sole reviewable part FAILED has something to
+            show (its error and its „Erneut versuchen") while `result` is
+            still empty. Gating on the result rendered that state as an empty
+            page, and the run only became visible on a reload. */}
+        {phase === "review" && jobKind === "scene" && (
           <>
             <div className="mb-1.5 flex flex-wrap items-baseline gap-3">
               <h1 className="font-serif text-[26px] leading-[1.25] font-semibold text-foreground">
                 {t("generate.review.title")}
               </h1>
-              <span className="text-[13px] text-muted-foreground">
-                {progress.written === 0
-                  ? t("generate.review.pending", {
-                      summary: applySummary(scenes.length, stubs.length, t),
-                    })
-                  : t("generate.review.progress", progress)}
+              {/* THE live region of the review (quality floor): the run's
+                  progress is announced here and nowhere else. Every part card
+                  used to be one of its own, so a run with three parts read
+                  out three times per poll. */}
+              <span aria-live="polite" className="text-[13px] text-muted-foreground">
+                {/* While the RUN is still going its own progress is the more
+                    useful number — „2 von 3 Szenen fertig" (issue #102);
+                    once it is finished, the review's is (issue #97). */}
+                {runProgress ??
+                  (progress.written === 0
+                    ? t("generate.review.pending", {
+                        summary: applySummary(scenes.length, stubs.length, t),
+                      })
+                    : t("generate.review.progress", progress))}
               </span>
               <ReviewSaveStatus status={review.status} />
             </div>
             <p
               className={cn(
                 "text-[14px] leading-[1.6] text-body-secondary",
-                resultUsage === undefined ? "mb-[22px]" : "mb-1.5",
+                (runCost ?? resultUsage) === undefined ? "mb-[22px]" : "mb-1.5",
               )}
             >
               {t("generate.review.lead")}
             </p>
-            {/* What the run cost — quiet, but never invisible (issue #18). */}
-            {resultUsage !== undefined && (
-              <p className="mb-[22px] text-[12px] text-faint">{resultUsage}</p>
+            {/* What the run cost — quiet, but never invisible (issue #18).
+                A pipelined run reports its own totals, summed over every part
+                and every correction turn, and counts CALLS rather than
+                attempts (issue #102 AK5). */}
+            {(runCost ?? resultUsage) !== undefined && (
+              <p className="mb-[22px] text-[12px] text-faint">{runCost ?? resultUsage}</p>
+            )}
+            {/* The run is not done — say so once, and say that what is here
+                can already be accepted. */}
+            {/* Not a live region: the sentence never changes while it is
+                there, so announcing it belongs to the progress line above. */}
+            {running && (
+              <p className="mb-[18px] text-[13px] leading-[1.6] text-body-secondary">
+                {t("generate.pipeline.stillRunning")}
+              </p>
             )}
 
-            {result.warnings.map((warning) => (
+            {(result?.warnings ?? []).map((warning) => (
               <div
                 key={warning}
                 className="mb-2 flex items-start gap-2.5 rounded-md border border-[color-mix(in_srgb,var(--primary)_30%,transparent)] bg-[color-mix(in_srgb,var(--primary)_6%,transparent)] px-3.5 py-2.5"
@@ -777,9 +946,65 @@ export function GenerateRoute() {
               </div>
             ))}
 
-            <NamingHints hints={result.namingHints} t={t} />
+            <NamingHints hints={result?.namingHints} t={t} />
 
-            {scenes.map((scene) => (
+            {/* The parts in OUTLINE order (issue #102): a finished one is its
+                draft, an open one a status card, a failed one its error plus
+                „Erneut versuchen". A run without parts — an older job — falls
+                back to the plain draft list below. */}
+            {sceneParts.map((part) => {
+              const scene = part.status === "done" ? sceneOfPart(part) : undefined;
+              if (scene === undefined) {
+                return (
+                  <PartCard
+                    key={part.key}
+                    part={part}
+                    // A part that says `done` and has no draft in the result
+                    // is a broken run, not a waiting one — it used to render
+                    // as „wartet" forever, with nothing the DM could do.
+                    mismatch={part.status === "done"}
+                    busy={retryBusy(part.key)}
+                    error={retryError(part.key)}
+                    cardRef={(el) => partCards.current.set(part.key, el)}
+                    onRetry={() => retry.mutate(part.key)}
+                  />
+                );
+              }
+              return (
+                <SceneCard
+                  key={scene.path}
+                  cardRef={(el) => partCards.current.set(part.key, el)}
+                  campaign={campaign}
+                  path={scene.path}
+                  properties={scene.properties}
+                  markdown={draftText(scene.path, scene.markdown)}
+                  tree={tree.data}
+                  state={partState(job, scene.path)}
+                  writtenAt={reviewState.written[scene.path]}
+                  busy={apply.isPending}
+                  editing={editing[scene.path] === true}
+                  onToggleEditing={() =>
+                    setEditing((prev) => ({ ...prev, [scene.path]: prev[scene.path] !== true }))
+                  }
+                  onChange={(markdown) => {
+                    setEdits((prev) => ({ ...prev, [scene.path]: markdown }));
+                    review.edit(scene.path, markdown);
+                  }}
+                  onBlur={review.flush}
+                  onAccept={() => apply.mutate([scene.path])}
+                  onDrop={() =>
+                    review.decide({
+                      dropped: reviewState.dropped.includes(scene.path)
+                        ? reviewState.dropped.filter((path) => path !== scene.path)
+                        : [...reviewState.dropped, scene.path],
+                    })
+                  }
+                />
+              );
+            })}
+
+            {sceneParts.length === 0 &&
+              scenes.map((scene) => (
               <SceneCard
                 key={scene.path}
                 campaign={campaign}
@@ -813,10 +1038,48 @@ export function GenerateRoute() {
               />
             ))}
 
-            {stubs.length > 0 && (
+            {(stubs.length > 0 || entryParts.length > 0) && (
               <>
                 <div className={cn(OVERLINE, "mb-2.5")}>{t("generate.review.stubsHeading")}</div>
-                {stubs.map((stub) => (
+                {entryParts.map((part) => {
+                  const stub = part.status === "done" ? stubOfPart(part) : undefined;
+                  if (stub === undefined) {
+                    return (
+                      <PartCard
+                        key={part.key}
+                        part={part}
+                        mismatch={part.status === "done"}
+                        busy={retryBusy(part.key)}
+                        error={retryError(part.key)}
+                        cardRef={(el) => partCards.current.set(part.key, el)}
+                        onRetry={() => retry.mutate(part.key)}
+                      />
+                    );
+                  }
+                  return (
+                    <StubRow
+                      key={stubKey(stub)}
+                      cardRef={(el) => partCards.current.set(part.key, el)}
+                      campaign={campaign}
+                      stub={stub}
+                      reason={stubReason(scenes, t)}
+                      decision={decisions[stubKey(stub)]}
+                      state={partState(job, stubKey(stub))}
+                      writtenAt={reviewState.written[stubKey(stub)]}
+                      busy={apply.isPending}
+                      onDecide={(decision) =>
+                        review.decide({ entries: { [stubKey(stub)]: decision ?? null } })
+                      }
+                      onAccept={() => apply.mutate([stubKey(stub)])}
+                    />
+                  );
+                })}
+                {/* Stubs no entry part claims: a run whose outline proposed
+                    nothing but whose SCENE replies carried stubs (the pre-#102
+                    shape, and any older job), and a stub whose part id drifted.
+                    They used to be invisible as soon as the run had any entry
+                    part at all — proposed, generated, and never shown. */}
+                {unclaimedStubs.map((stub) => (
                   <StubRow
                     key={stubKey(stub)}
                     campaign={campaign}
@@ -851,7 +1114,11 @@ export function GenerateRoute() {
             )}
             {apply.isError && conflicts.length === 0 && (
               <p aria-live="polite" className="mb-3 text-[13px] text-destructive">
-                {t("generate.review.applyFailed")}
+                {t(
+                  apply.error instanceof ApiError && apply.error.status === 409
+                    ? "generate.review.applyStale"
+                    : "generate.review.applyFailed",
+                )}
               </p>
             )}
             {discard.isError && (
@@ -963,7 +1230,11 @@ export function GenerateRoute() {
             )}
             {apply.isError && conflicts.length === 0 && (
               <p aria-live="polite" className="mb-3 text-[13px] text-destructive">
-                {t("generate.review.applyFailed")}
+                {t(
+                  apply.error instanceof ApiError && apply.error.status === 409
+                    ? "generate.review.applyStale"
+                    : "generate.review.applyFailed",
+                )}
               </p>
             )}
             {discard.isError && (
@@ -1142,6 +1413,149 @@ function Working() {
 }
 
 /**
+ * One part of a pipelined run that has no draft to show yet (issue #102):
+ * waiting, being written, or failed.
+ *
+ * It is deliberately the SAME footprint as a draft card, in the same place in
+ * the list — the review is laid out in outline order, and a part that moves
+ * from „wird geschrieben" to a finished scene must not make everything below
+ * it jump. Quieter than a draft: a hairline card, the title the outline gave
+ * the part, and one line saying what is going on.
+ *
+ * A failed part is the only one with a button. WHY it failed is said in this
+ * language (the raw server sentence „generation failed mechanical validation
+ * after retries" is English and is the DM's only headline otherwise), with
+ * the mechanical error list unchanged below it and the raw reply behind the
+ * same disclosure the whole-run failure uses — the DM decides from it whether
+ * to retry or to drop the run.
+ *
+ * `mismatch` is the third failure there is: a part the server calls `done`
+ * whose draft is not in the result. It used to render as „wartet" with no
+ * action at all, forever.
+ */
+function PartCard({
+  part,
+  busy,
+  error,
+  mismatch = false,
+  cardRef,
+  onRetry,
+}: {
+  part: GenerateJobPart;
+  busy: boolean;
+  /** This part's own retry error, already translated (never a global one). */
+  error?: string;
+  mismatch?: boolean;
+  cardRef?: (el: HTMLElement | null) => void;
+  onRetry: () => void;
+}) {
+  const t = useT();
+  const failed = part.status === "failed" || mismatch;
+  const validationErrors = part.validationErrors ?? [];
+  return (
+    <section
+      ref={cardRef}
+      // Focusable only programmatically: „Erneut versuchen" unmounts its own
+      // button, so the retry hands the focus to the card instead of letting
+      // it fall to `body` (issue #102 review). Not a live region — the review
+      // has exactly one, on its progress line.
+      tabIndex={-1}
+      className={cn(
+        "mb-3 rounded-lg border bg-card px-4 py-3.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+        failed ? "border-destructive/40" : "border-border",
+      )}
+    >
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 className="font-serif text-[16px] leading-[1.3] font-semibold text-foreground">
+          {part.title}
+        </h2>
+        <span className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
+          {part.status === "running" && (
+            <>
+              {/* Motion is optional — a static ring stands in for it. */}
+              <span
+                aria-hidden
+                className="size-[13px] flex-none animate-spin rounded-full border-2 border-input border-t-primary motion-reduce:hidden"
+              />
+              <span
+                aria-hidden
+                className="hidden size-[13px] flex-none rounded-full border-2 border-primary motion-reduce:block"
+              />
+            </>
+          )}
+          {t(
+            failed
+              ? "generate.pipeline.partFailed"
+              : part.status === "running"
+                ? "generate.pipeline.partRunning"
+                : "generate.pipeline.partPending",
+          )}
+        </span>
+      </div>
+      {failed && (
+        <>
+          {/* The headline: this language's sentence when the failure IS the
+              form check (its server message is English), the server's own
+              text otherwise — a restart, a provider outage and a 500 all say
+              something the DM needs verbatim. */}
+          {mismatch ? (
+            <p className="mt-2 text-[13px] leading-[1.55] text-body-secondary">
+              {t("generate.pipeline.partMissing")}
+            </p>
+          ) : validationErrors.length > 0 ? (
+            <p className="mt-2 text-[13px] leading-[1.55] text-body-secondary">
+              {t("generate.pipeline.partInvalid")}
+            </p>
+          ) : (
+            part.error !== undefined && (
+              <p className="mt-2 text-[13px] leading-[1.55] text-body-secondary">{part.error}</p>
+            )
+          )}
+          {validationErrors.length > 0 && (
+            <ul className="mt-1.5 flex flex-col gap-1">
+              {validationErrors.map((message) => (
+                <li
+                  key={message}
+                  className="font-mono text-[11.5px] leading-[1.5] text-body-secondary"
+                >
+                  {message}
+                </li>
+              ))}
+            </ul>
+          )}
+          {/* WHAT came back — the same disclosure the whole-run failure uses
+              (issue #18). The part carries its own last raw reply. */}
+          {part.rawReply !== undefined && part.rawReply !== "" && (
+            <details className="mt-2.5">
+              <summary className="cursor-pointer text-[12.5px] text-body-secondary hover:text-foreground">
+                {t("generate.error.rawReply")}
+              </summary>
+              <pre className="mt-2 max-h-[260px] overflow-auto rounded-md border border-input bg-background px-3 py-2.5 font-mono text-[11.5px] leading-[1.55] whitespace-pre-wrap text-body-secondary">
+                {part.rawReply}
+              </pre>
+            </details>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={onRetry}
+            className="mt-3 h-auto gap-2 border-input bg-transparent px-3.5 py-2 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground [&_svg]:size-[14px]"
+          >
+            <RotateCcw aria-hidden />
+            {t("generate.pipeline.retry")}
+          </Button>
+          {/* The retry's own failure, next to the button that caused it. */}
+          {error !== undefined && (
+            <p className="mt-2 text-[13px] text-destructive">{error}</p>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+/**
  * One draft as a card: title/pill/edit toggle, mono target path, the chip row
  * from the properties, then either the rendered body (same markdown pipeline
  * as a real scene) or the raw markdown in a mono textarea. Title and chips
@@ -1158,6 +1572,7 @@ function SceneCard({
   writtenAt,
   busy,
   editing,
+  cardRef,
   onToggleEditing,
   onChange,
   onBlur,
@@ -1175,6 +1590,12 @@ function SceneCard({
   writtenAt: string | undefined;
   busy: boolean;
   editing: boolean;
+  /**
+   * Registers this card as what represents its pipeline part right now — the
+   * retry's focus follows the part across the swap from status card to draft
+   * card (issue #102 review).
+   */
+  cardRef?: (el: HTMLElement | null) => void;
   onToggleEditing: () => void;
   onChange: (markdown: string) => void;
   onBlur: () => void;
@@ -1195,8 +1616,11 @@ function SceneCard({
 
   return (
     <div
+      ref={cardRef}
+      // Focusable only programmatically, like the status card it replaces.
+      tabIndex={-1}
       className={cn(
-        "my-4 rounded-[10px] border border-border bg-[color-mix(in_srgb,var(--card)_60%,var(--background))] px-5 py-5 md:px-6",
+        "my-4 rounded-[10px] border border-border bg-[color-mix(in_srgb,var(--card)_60%,var(--background))] px-5 py-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:px-6",
         state === "dropped" && "opacity-55",
       )}
     >
@@ -1438,6 +1862,7 @@ function StubRow({
   state,
   writtenAt,
   busy,
+  cardRef,
   onDecide,
   onAccept,
 }: {
@@ -1448,6 +1873,8 @@ function StubRow({
   state: PartState;
   writtenAt: string | undefined;
   busy: boolean;
+  /** Same as SceneCard's: the retry's focus follows the part here too. */
+  cardRef?: (el: HTMLElement | null) => void;
   onDecide: (decision: StubDecision | undefined) => void;
   onAccept: () => void;
 }) {
@@ -1455,8 +1882,10 @@ function StubRow({
   const path = `${stub.kind}s/${stub.id}`;
   return (
     <div
+      ref={cardRef}
+      tabIndex={-1}
       className={cn(
-        "mb-[18px] flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3.5",
+        "mb-[18px] flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         (decision === "rejected" || state === "rejected") && "opacity-55",
       )}
     >

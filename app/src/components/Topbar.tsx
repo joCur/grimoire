@@ -123,7 +123,7 @@ import {
 import { NON_CAMPAIGN_SEGMENTS } from "@/lib/routes";
 import { sessionElapsedLabel, sessionIsPaused } from "@/lib/session";
 import { navSection } from "@/lib/topbar-nav";
-import { jobProgress } from "@/lib/generate";
+import { acceptProgress, pipelineProgress } from "@/lib/generate";
 import { useGenerateJob } from "@/lib/use-generate-job";
 import { cn } from "@/lib/utils";
 import { useReviewEntries } from "@/lib/use-review";
@@ -910,13 +910,26 @@ function GeneratorLink({ campaign }: { campaign: string }) {
   // A run the DM already took PART of is not „done" and not „running" — it
   // is half applied (issue #97), and the entry says how far it got so a
   // forgotten rest is findable from anywhere.
-  const progress = jobProgress(data);
-  const partial = !running && progress.written > 0 && progress.written < progress.total;
+  // Counted against ALL parts of the run (issue #102 review): while a
+  // pipelined run is still going, only the finished parts have produced a
+  // draft, so „1 von 2 übernommen" stood next to „2 von 3 Szenen fertig".
+  const progress = acceptProgress(data);
+  const partial = progress.written > 0 && progress.written < progress.total;
   const progressLabel = t("topbar.generator.progress", progress);
+  // A PIPELINED run (issue #102) is both at once: parts are still going while
+  // finished ones are already reviewable and acceptable. So the dot and the
+  // progress are no longer exclusive — the chip shows what is true.
+  const runProgress = pipelineProgress(data, t);
   return (
     <Link
       to={`/${campaign}/generate`}
-      title={running ? t("topbar.generator.running") : partial ? progressLabel : undefined}
+      title={
+        running
+          ? (runProgress ?? t("topbar.generator.running"))
+          : partial
+            ? progressLabel
+            : undefined
+      }
       className={cn(
         buttonVariants({ variant: "outline" }),
         "h-auto flex-none gap-[7px] border-input bg-card px-3.5 py-[7px] text-[13px] font-normal text-soft hover:border-border-hover hover:bg-card hover:text-foreground [&_svg]:size-[15px]",
@@ -934,13 +947,33 @@ function GeneratorLink({ campaign }: { campaign: string }) {
             aria-hidden
             className="size-1.5 flex-none rounded-full bg-primary motion-safe:animate-pulse"
           />
-          <span className="sr-only">{t("topbar.generator.running")}</span>
+          <span className="sr-only">{runProgress ?? t("topbar.generator.running")}</span>
         </>
       )}
+      {/* The progress number, and the width it is allowed to cost. A run that
+          is BOTH running and half accepted (a pipelined one — issue #102)
+          carries the dot AND this label, which is ~90px the row never had to
+          budget for: at 1280, where the nav trio, the full search chip and
+          this chip's reserved width all switch on at once, the row ran over
+          by 50px. So the pair is only spelled out from 2xl up; below that the
+          dot carries the state and the number stays in the accessible name
+          (and in the chip's `title`) — the same trade the label above makes
+          below xl. */}
+      {/* ONE element, whatever the width (issue #102 review): `sr-only` takes
+          the number off the row without taking it out of the accessible name,
+          so the second, screen-reader-only copy that used to stand next to it
+          only doubled the chip's name (and its innerText) below the
+          breakpoint. */}
       {partial && (
-        <span className="text-[12px] text-muted-foreground max-xl:sr-only">{progressLabel}</span>
+        <span
+          className={cn(
+            "text-[12px] text-muted-foreground",
+            running ? "max-2xl:sr-only" : "max-xl:sr-only",
+          )}
+        >
+          {progressLabel}
+        </span>
       )}
-      {partial && <span className="sr-only xl:hidden">{progressLabel}</span>}
     </Link>
   );
 }

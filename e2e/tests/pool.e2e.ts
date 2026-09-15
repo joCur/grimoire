@@ -12,6 +12,7 @@
 
 import type { Page } from "@playwright/test";
 
+import { THREE_SCENES, TRIGGER } from "../fixtures/replies";
 import { expect, test, todaySessionId } from "../support/test";
 
 /**
@@ -500,6 +501,81 @@ test("the topbar does not overflow at medium widths with no session running", as
       row: 0,
       page: 0,
     });
+    await widenGlyphs(page, "1px");
+    expect(
+      await topbarOverflow(page),
+      `pool at ${width}px with wider glyphs`,
+    ).toEqual({ row: 0, page: 0 });
+  }
+});
+
+/**
+ * The generator chip's fullest state (issue #102): a pipelined run that is
+ * still going AND has parts the DM already accepted — so the chip carries its
+ * pulsing dot and the „N von M übernommen" progress at the same time. That
+ * pair was never on the row before this ticket (a run was either running or
+ * reviewable, never both), so the guard above never saw it.
+ */
+test("the topbar does not overflow while a pipelined run fills up", async ({
+  page,
+  api,
+}) => {
+  // A run with three scenes whose LAST reply is held: two parts land, the
+  // third keeps the run `running` for as long as this test needs it.
+  const started = await api.send<{ jobId: string }>("POST", "beispiel/generate", {
+    chapter: "01-salzhafen",
+    sourceText: [
+      "The party watches the quay at low tide.",
+      TRIGGER.threeScenes,
+      TRIGGER.slowPart,
+    ].join("\n\n"),
+  });
+  interface JobShape {
+    rev: number;
+    status: string;
+    pipeline?: { parts: Array<{ status: string }> };
+  }
+  const job = async (): Promise<JobShape> =>
+    (await api.fetch("beispiel/generate/job").then((r) => r.json())) as JobShape;
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    const current = await job();
+    if ((current.pipeline?.parts ?? []).filter((part) => part.status === "done").length >= 2) break;
+    if (Date.now() > deadline) throw new Error("no part of the run ever finished");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  // Accepting one part while the run is still running is what fills
+  // `review.written` — and it is the endpoint half of AK2.
+  const current = await job();
+  expect(current.status).toBe("running");
+  await api.send("POST", `beispiel/generate/job/${started.jobId}/accept`, {
+    rev: current.rev,
+    paths: [`01-salzhafen/${THREE_SCENES[0].id}`],
+  });
+
+  for (const width of TOPBAR_WIDTHS) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/beispiel");
+    // Below md the topbar is hidden (the mobile start surface is the chrome
+    // there), so the chip is only on the row from 768 up.
+    if (width >= 768) {
+      const chip = page.getByRole("link", { name: /Generator/ });
+      await expect(chip).toBeVisible();
+      // The number is on the chip exactly ONCE, whatever the width does with
+      // it (issue #102 review): above 2xl it is spelled out, below it stands
+      // in the accessible name only — never both, which read as „1 von 3
+      // übernommen / 1 von 3 übernommen".
+      const text = await chip.innerText();
+      expect(
+        text.match(/übernommen/g)?.length ?? 0,
+        `chip text at ${width}px: ${JSON.stringify(text)}`,
+      ).toBe(1);
+      // And it counts against the PARTS OF THE RUN, not against the parts
+      // that happen to have answered already: one of three, next to „2 von 3
+      // Szenen fertig" on the generator page.
+      expect(text).toContain("1 von 3 übernommen");
+    }
+    expect(await topbarOverflow(page), `pool at ${width}px`).toEqual({ row: 0, page: 0 });
     await widenGlyphs(page, "1px");
     expect(
       await topbarOverflow(page),

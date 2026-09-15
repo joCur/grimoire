@@ -800,6 +800,23 @@ export function acceptJobParts(
 }
 
 /**
+ * „Erneut versuchen" for ONE part of a pipelined scene run (issue #102).
+ * Restarts that part only — the outline stays, the finished parts stay
+ * reviewable — and answers the job with the part back in `running`, so the
+ * view can seed its cache without an extra read.
+ */
+export function retryJobPart(
+  campaign: string,
+  jobId: string,
+  key: string,
+): Promise<GenerateJob> {
+  const path =
+    `/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}` +
+    `/parts/${encodeURIComponent(key)}/retry`;
+  return postJson<GenerateJob>(path, {});
+}
+
+/**
  * Write the reviewed drafts (all or nothing): the possibly edited scene
  * markdown plus the accepted stubs. With `chapter` + `chapterTitle` the
  * server also creates `<chapter>/_chapter` when it is missing.

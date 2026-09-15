@@ -47,6 +47,8 @@ import { and, eq } from "drizzle-orm";
 import type {
   AugmentResult,
   GenerateJob,
+  GenerateJobPart,
+  GenerateJobPipeline,
   GenerateJobReview,
   GenerateReviewDecision,
   GenerateJobError,
@@ -59,7 +61,16 @@ import { now } from "./clock";
 import type { GrimoireDb } from "./db/client";
 import { generateJobs } from "./db/schema";
 import { runAugment } from "./generator-augment";
-import { runGenerate, runGenerateNpc } from "./generator";
+import { capRawReply, runGenerateNpc } from "./generator";
+import {
+  replanStoredRun,
+  runPart,
+  runScenePipeline,
+  type PartOutcome,
+  type PartUsage,
+  type PipelineSink,
+  type RunOutline,
+} from "./generate-pipeline";
 import type { LLMProvider } from "./llm-provider";
 import { getDb } from "./store/handle";
 import { RESERVED_SEGMENTS } from "./store/paths";
@@ -86,6 +97,67 @@ interface Job {
   review: GenerateJobReview;
   /** Optimistic-concurrency token of that review state. */
   rev: number;
+  /**
+   * The pipeline of a scene run (issue #102): the internal outline, the parts
+   * with their status, and the run's totals. `undefined` for the single-call
+   * runs and for a row written before this deploy.
+   */
+  pipeline?: PipelineRecord;
+  /** The run's source material — a per-part retry sends it again. */
+  sourceText?: string;
+  newChapter: boolean;
+}
+
+/**
+ * What the `pipeline` column holds (issue #102). The OUTLINE is stored but
+ * never serialized: it is an internal step and is never shown to the DM (PO,
+ * 15.09.). A retry needs it, a restart needs it — the browser does not.
+ */
+export interface PipelineRecord {
+  outline?: RunOutline;
+  parts: StoredPart[];
+  totals: { inputTokens: number; outputTokens: number; calls: number };
+}
+
+/**
+ * One part on the row: the wire shape, what it cost, and the raw reply of its
+ * last failed attempt. The raw reply IS serialized per part (the shared type
+ * declares it and the failed part's card shows it behind the same disclosure
+ * the whole-run failure uses) — the job's error body still carries the last
+ * failed one, which is where the app has read it since issue #18, but that is
+ * one reply for a run with many parts.
+ */
+export type StoredPart = GenerateJobPart & { usage?: PartUsage; rawReply?: string };
+
+/** An empty pipeline — a run whose outline has not come back yet. */
+export function emptyPipeline(): PipelineRecord {
+  return { parts: [], totals: { inputTokens: 0, outputTokens: 0, calls: 0 } };
+}
+
+/**
+ * The client's half of the pipeline: the parts in outline order and the
+ * totals. Deliberately NOT the outline — see PipelineRecord.
+ */
+function serializePipeline(pipeline: PipelineRecord): GenerateJobPipeline {
+  return {
+    parts: pipeline.parts.map((part) => ({
+      key: part.key,
+      kind: part.kind,
+      id: part.id,
+      title: part.title,
+      status: part.status,
+      ...(part.error === undefined ? {} : { error: part.error }),
+      ...(part.validationErrors === undefined
+        ? {}
+        : { validationErrors: part.validationErrors }),
+      // Capped again on the way out: what a provider sent is already capped
+      // by `capRawReply`, but a row written by an older deploy (or a
+      // hand-edited database) must not be able to put a megabyte into every
+      // poll of the job.
+      ...(part.rawReply === undefined ? {} : { rawReply: capRawReply(part.rawReply) }),
+    })),
+    totals: pipeline.totals,
+  };
 }
 
 function timestamp(): string {
@@ -124,6 +196,7 @@ export function serializeJob(job: Job): GenerateJob {
     draftEdits: Object.fromEntries(job.draftEdits),
     review: job.review,
     rev: job.rev,
+    ...(job.pipeline === undefined ? {} : { pipeline: serializePipeline(job.pipeline) }),
   };
 }
 
@@ -273,6 +346,7 @@ function toJob(row: JobRow): Job {
   const augmentResult = unpackPayload<AugmentResult>(row.augmentResult);
   let error = unpackPayload<GenerateJobError>(row.error);
   normalizeDraftPaths(result, npcResult);
+  const pipeline = unpackPipeline(row.pipeline);
 
   // A finished job with nothing readable to show is degraded to `failed` with
   // an error body: `done` without a result would render review blocks that
@@ -302,6 +376,58 @@ function toJob(row: JobRow): Job {
     draftEdits: unpackEdits(row.draftEdits),
     review: unpackReview(row.review),
     rev: row.rev,
+    ...(pipeline === undefined ? {} : { pipeline }),
+    ...(row.sourceText === null ? {} : { sourceText: row.sourceText }),
+    newChapter: row.newChapter === 1,
+  };
+}
+
+/**
+ * Parse the pipeline column. Degrades like every other payload here: a column
+ * that cannot be read becomes "this run has no parts", which renders as the
+ * pre-#102 review of whatever result is stored instead of making the job
+ * unreachable.
+ */
+function unpackPipeline(value: string): PipelineRecord | undefined {
+  const parsed = unpackPayload<Record<string, unknown>>(value);
+  if (parsed === undefined) return undefined;
+  const rawParts = Array.isArray(parsed.parts) ? parsed.parts : [];
+  const parts: StoredPart[] = [];
+  for (const item of rawParts) {
+    if (item === null || typeof item !== "object") continue;
+    const part = item as Record<string, unknown>;
+    if (typeof part.key !== "string" || typeof part.id !== "string") continue;
+    const kind = part.kind;
+    if (kind !== "scene" && kind !== "npc" && kind !== "location") continue;
+    const status = part.status;
+    parts.push({
+      key: part.key,
+      kind,
+      id: part.id,
+      title: typeof part.title === "string" ? part.title : part.id,
+      status:
+        status === "pending" || status === "running" || status === "done" || status === "failed"
+          ? status
+          : "pending",
+      ...(typeof part.error === "string" ? { error: part.error } : {}),
+      ...(Array.isArray(part.validationErrors) &&
+      part.validationErrors.every((e) => typeof e === "string")
+        ? { validationErrors: part.validationErrors as string[] }
+        : {}),
+      ...(typeof part.rawReply === "string" ? { rawReply: part.rawReply } : {}),
+    });
+  }
+  if (parts.length === 0 && parsed.outline === undefined) return undefined;
+  const totals = (parsed.totals ?? {}) as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return {
+    ...(parsed.outline === undefined ? {} : { outline: parsed.outline as RunOutline }),
+    parts,
+    totals: {
+      inputTokens: num(totals.inputTokens),
+      outputTokens: num(totals.outputTokens),
+      calls: num(totals.calls),
+    },
   };
 }
 
@@ -361,6 +487,10 @@ export async function startJob(input: JobInput): Promise<Job> {
     draftEdits: new Map(),
     review: emptyReview(),
     rev: 0,
+    ...(input.kind === "scene"
+      ? { sourceText: input.sourceText, pipeline: emptyPipeline() }
+      : {}),
+    newChapter: input.kind === "scene" && input.newChapter,
   };
 
   db.transaction((handle) => {
@@ -387,6 +517,9 @@ export async function startJob(input: JobInput): Promise<Job> {
         draftEdits: "{}",
         review: "{}",
         rev: 0,
+        pipeline: input.kind === "scene" ? JSON.stringify(emptyPipeline()) : "{}",
+        sourceText: input.kind === "scene" ? input.sourceText : null,
+        newChapter: input.kind === "scene" && input.newChapter ? 1 : 0,
       })
       .run();
   });
@@ -415,14 +548,19 @@ export async function startJob(input: JobInput): Promise<Job> {
         await finish(job, { status: "done", npcResult: JSON.stringify(npcResult) });
         return;
       }
-      const result = await runGenerate(
-        input.campaign,
-        input.chapter,
-        input.sourceText,
-        input.newChapter,
-        () => input.provider,
-      );
-      await finish(job, { status: "done", result: JSON.stringify(result) });
+      // A scene run is a PIPELINE since issue #102: the outline call, then
+      // one call per scene and per suggested entry, three at a time. The sink
+      // writes every step onto this job's row — which is what makes a
+      // finished part reviewable while its siblings are still running, and
+      // what makes it survive a restart.
+      await runScenePipeline({
+        campaign: input.campaign,
+        chapter: input.chapter,
+        sourceText: input.sourceText,
+        newChapter: input.newChapter,
+        sink: await jobSink(job.campaign, job.id),
+        getProvider: () => input.provider,
+      });
     } catch (err) {
       // The last line of defense must not throw itself: `finish` touches the
       // database, and a database that is gone (a shutdown mid-run) would turn
@@ -475,6 +613,388 @@ async function finish(
       ),
     )
     .run();
+}
+
+// --- the pipeline sink (issue #102) -----------------------------------------
+//
+// Every step of a pipelined run is WRITTEN DOWN before the next one starts:
+// the outline's part list, each part going `running`, each part's result or
+// error, and the run's running totals. Two properties hang off that, and
+// neither is true of state kept in the process:
+//
+//   * a part that is `done` is in `result` and therefore reviewable and
+//     acceptable while its siblings are still going (AK2),
+//   * a restart keeps the done parts and fails only what was in flight
+//     (AK3, db/job-boot.ts).
+//
+// `cancelled()` asks the DATABASE, not a flag: the row is the only thing that
+// knows whether this run is still the campaign's run. „Verwerfen" deletes the
+// row and a new start replaces it — both make every open part of the old run
+// stop at its next checkpoint, and neither needs a message to reach the
+// worker.
+
+/**
+ * Read this job's row, or undefined once it is gone, was replaced, or is no
+ * longer `running`.
+ *
+ * The status check is the same guarantee `finish` gives: a run the DM
+ * discarded, one replaced by a new start and one a BOOT already declared
+ * failed must not come back to life when its provider call finally returns.
+ * A retry therefore puts the row back to `running` itself (see
+ * `retryJobPart`) before the worker's first checkpoint.
+ */
+function ownRow(db: GrimoireDb, campaign: string, jobId: string): JobRow | undefined {
+  const row = jobRow(db, campaign);
+  if (row === undefined || row.id !== jobId) return undefined;
+  return row.status === "running" ? row : undefined;
+}
+
+/** Merge a part's outcome into the job's result payload. */
+function mergeOutcome(result: GenerateResult, outcome: PartOutcome): GenerateResult {
+  const scenes = [...result.scenes];
+  const stubs = [...result.stubs];
+  if (outcome.scene !== undefined) {
+    const at = scenes.findIndex((s) => s.path === outcome.scene?.path);
+    if (at === -1) scenes.push(outcome.scene);
+    else scenes[at] = outcome.scene;
+  }
+  if (outcome.stub !== undefined) {
+    const stub = outcome.stub;
+    const at = stubs.findIndex((s) => s.kind === stub.kind && s.id === stub.id);
+    // Deduped by id (Zuschnitt 3): a retried part replaces its own entry
+    // rather than proposing the same npc twice.
+    if (at === -1) stubs.push(stub);
+    else stubs[at] = stub;
+  }
+  const warnings = [...result.warnings];
+  for (const warning of outcome.warnings) if (!warnings.includes(warning)) warnings.push(warning);
+  const namingHints = [...(result.namingHints ?? []), ...outcome.namingHints];
+  return {
+    scenes,
+    stubs,
+    warnings,
+    ...(namingHints.length === 0 ? {} : { namingHints }),
+  };
+}
+
+/**
+ * Order the result the way the OUTLINE ordered the parts: the review shows
+ * the parts in outline order (Zuschnitt 2), and parts finish out of order
+ * because three of them run at once.
+ */
+function inPartOrder(result: GenerateResult, parts: readonly StoredPart[]): GenerateResult {
+  const sceneRank = new Map(parts.filter((p) => p.kind === "scene").map((p, i) => [p.id, i]));
+  const entryRank = new Map(
+    parts.filter((p) => p.kind !== "scene").map((p, i) => [`${p.kind}:${p.id}`, i]),
+  );
+  const rank = (map: Map<string, number>, key: string): number => map.get(key) ?? Number.MAX_SAFE_INTEGER;
+  return {
+    ...result,
+    scenes: [...result.scenes].sort(
+      (a, b) =>
+        rank(sceneRank, a.path.slice(a.path.lastIndexOf("/") + 1)) -
+        rank(sceneRank, b.path.slice(b.path.lastIndexOf("/") + 1)),
+    ),
+    stubs: [...result.stubs].sort(
+      (a, b) => rank(entryRank, `${a.kind}:${a.id}`) - rank(entryRank, `${b.kind}:${b.id}`),
+    ),
+  };
+}
+
+/** The run is over when no part is waiting or in flight any more. */
+export function partsSettled(pipeline: PipelineRecord): boolean {
+  return !pipeline.parts.some((p) => p.status === "pending" || p.status === "running");
+}
+
+/**
+ * What a run whose every part failed answers. The shape is the 422 the
+ * synchronous endpoint would have given (issues #18/#20), because that is
+ * what the app's failure block renders — with the per-part messages as the
+ * error list, since that is what went wrong.
+ */
+function allPartsFailed(pipeline: PipelineRecord): GenerateJobError {
+  const errors: string[] = [];
+  let lastRawReply: string | undefined;
+  for (const part of pipeline.parts) {
+    for (const message of part.validationErrors ?? []) errors.push(message);
+    if ((part.validationErrors ?? []).length === 0 && part.error !== undefined) {
+      errors.push(`${part.key}: ${part.error}`);
+    }
+    if (part.rawReply !== undefined) lastRawReply = part.rawReply;
+  }
+  return {
+    status: 422,
+    body: {
+      code: "llm_invalid",
+      error: "generation failed mechanical validation after retries",
+      validationErrors: errors,
+      ...(pipeline.totals.inputTokens + pipeline.totals.outputTokens === 0
+        ? {}
+        : {
+            usage: {
+              inputTokens: pipeline.totals.inputTokens,
+              outputTokens: pipeline.totals.outputTokens,
+              attempts: pipeline.totals.calls,
+            },
+          }),
+      ...(lastRawReply === undefined ? {} : { rawReply: lastRawReply }),
+    },
+  };
+}
+
+/**
+ * Write one pipeline step onto the job's own row. Everything the sink does
+ * goes through here, so "the row still belongs to this run" is checked in
+ * exactly one place — and a step for a run that was discarded or replaced is
+ * dropped instead of resurrecting it (the rule `finish` follows).
+ */
+async function updatePipeline(
+  campaign: string,
+  jobId: string,
+  change: (pipeline: PipelineRecord, result: GenerateResult) => { result?: GenerateResult },
+): Promise<void> {
+  const db = await getDb();
+  db.transaction((handle) => {
+    const tx = handle as unknown as GrimoireDb;
+    const row = ownRow(tx, campaign, jobId);
+    if (row === undefined) return;
+    const pipeline = unpackPipeline(row.pipeline) ?? emptyPipeline();
+    const stored = unpackPayload<GenerateResult>(row.result);
+    const base: GenerateResult = stored ?? { scenes: [], stubs: [], warnings: [] };
+    const outcome = change(pipeline, base);
+    const result = inPartOrder(outcome.result ?? base, pipeline.parts);
+    const settled = partsSettled(pipeline);
+    const anyDone = pipeline.parts.some((p) => p.status === "done");
+    tx.update(generateJobs)
+      .set({
+        pipeline: JSON.stringify(pipeline),
+        // The result's `usage` keeps its old meaning: present only when the
+        // endpoint actually reported tokens (a local endpoint reports none,
+        // and claiming 0 would be a lie). The CALL COUNT always lives on the
+        // pipeline totals, which is what the review header reads.
+        result: JSON.stringify({
+          ...result,
+          ...(pipeline.totals.inputTokens + pipeline.totals.outputTokens === 0
+            ? {}
+            : {
+                usage: {
+                  inputTokens: pipeline.totals.inputTokens,
+                  outputTokens: pipeline.totals.outputTokens,
+                  attempts: pipeline.totals.calls,
+                },
+              }),
+        }),
+        // While parts are open the job stays `running`, so the app keeps
+        // polling and the review keeps filling up. Settled means finished:
+        // `done` as soon as ONE part produced something (the failed ones are
+        // retryable, the finished ones acceptable), `failed` only when the
+        // whole run produced nothing at all.
+        status: settled ? (anyDone ? "done" : "failed") : "running",
+        ...(settled ? { finishedAt: timestamp() } : {}),
+        ...(settled && !anyDone ? { error: JSON.stringify(allPartsFailed(pipeline)) } : {}),
+      })
+      .where(eq(generateJobs.id, row.id))
+      .run();
+  });
+}
+
+/** Add a part's usage to the run's totals. */
+function addUsage(pipeline: PipelineRecord, usage: PartUsage): void {
+  pipeline.totals = {
+    inputTokens: pipeline.totals.inputTokens + usage.inputTokens,
+    outputTokens: pipeline.totals.outputTokens + usage.outputTokens,
+    calls: pipeline.totals.calls + usage.calls,
+  };
+}
+
+function findPart(pipeline: PipelineRecord, key: string): StoredPart | undefined {
+  return pipeline.parts.find((p) => p.key === key);
+}
+
+/** The sink a run (or a single-part retry) reports into. */
+export async function jobSink(campaign: string, jobId: string): Promise<PipelineSink> {
+  const db = await getDb();
+  return {
+    async outlineReady(outline, parts, usage) {
+      await updatePipeline(campaign, jobId, (pipeline, result) => {
+        pipeline.outline = outline;
+        pipeline.parts = parts.map((part) => ({ ...part }));
+        addUsage(pipeline, usage);
+        // The outline's own warnings are the run's warnings: it is the step
+        // that read the whole source text, so „der Quelltext nennt keine
+        // Statblocks" can only come from here.
+        const warnings = outline.warnings.filter((w) => !result.warnings.includes(w));
+        return { result: { ...result, warnings: [...result.warnings, ...warnings] } };
+      });
+    },
+    async partRunning(key) {
+      await updatePipeline(campaign, jobId, (pipeline) => {
+        const part = findPart(pipeline, key);
+        if (part !== undefined) {
+          part.status = "running";
+          delete part.error;
+          delete part.validationErrors;
+          // The raw reply belongs to the attempt that failed; a part that is
+          // being written again has none, and leaving the old one there put
+          // „was kam zurück" under a running part (and into the next
+          // success, where nothing came back wrong at all).
+          delete part.rawReply;
+        }
+        return {};
+      });
+    },
+    async partDone(key, outcome, usage) {
+      await updatePipeline(campaign, jobId, (pipeline, result) => {
+        const part = findPart(pipeline, key);
+        if (part !== undefined) {
+          part.status = "done";
+          delete part.error;
+          delete part.validationErrors;
+          delete part.rawReply;
+          part.usage = usage;
+        }
+        addUsage(pipeline, usage);
+        return { result: mergeOutcome(result, outcome) };
+      });
+    },
+    async partFailed(key, failure, usage) {
+      await updatePipeline(campaign, jobId, (pipeline) => {
+        const part = findPart(pipeline, key);
+        if (part !== undefined) {
+          part.status = "failed";
+          part.error = failure.error;
+          if (failure.validationErrors !== undefined) {
+            part.validationErrors = failure.validationErrors;
+          }
+          if (failure.rawReply !== undefined) part.rawReply = failure.rawReply;
+          part.usage = usage;
+        }
+        addUsage(pipeline, usage);
+        return {};
+      });
+    },
+    cancelled() {
+      return ownRow(db, campaign, jobId) === undefined;
+    },
+  };
+}
+
+// --- „Erneut versuchen" per part (issue #102) --------------------------------
+
+/**
+ * Restart ONE part of a run. Only that part: the outline stays, the finished
+ * parts stay reviewable, and the retried part goes back through exactly the
+ * call it failed on (`runPart`) — same prompt, same excerpt, same validation.
+ *
+ * 404 when the campaign has no job, when `jobId` names a different one or
+ * when the run has no such part; 409 when the part is already running, still
+ * PENDING (the pool owns it — it has not had its turn yet) or already done (a
+ * double click is not a reason to spend tokens twice).
+ *
+ * The revive is ONE TRANSACTION over a re-read row, and that is not a detail:
+ * `replanStoredRun` awaits the campaign context, and while it does a sibling
+ * part of the very same run can report `partDone`. Writing back the pipeline
+ * this function read BEFORE that await used to clobber the sibling's status
+ * (it flipped from `done` to `running`) and with it the run's ability to ever
+ * settle. So the transaction re-reads the row, mutates ONLY the addressed
+ * part, and re-checks every guard against what it found — the losing racer
+ * gets its 409 instead of a lost write.
+ */
+export async function retryJobPart(
+  campaign: string,
+  jobId: string,
+  key: string,
+  provider: LLMProvider,
+): Promise<Job> {
+  const db = await getDb();
+  // Not `ownRow`: the job whose part is being retried is exactly one that is
+  // NOT running any more.
+  const preread = jobRow(db, campaign);
+  if (preread === undefined || preread.id !== jobId) {
+    throw new ApiError(404, "no generate job for this campaign");
+  }
+  const prejob = toJob(preread);
+  // The guards run TWICE: here, so a 404/409 costs no context read at all,
+  // and again inside the transaction, which is where they are binding.
+  assertRetryable(prejob, key);
+  const chapter = prejob.chapter!;
+  const plan = await replanStoredRun({
+    campaign,
+    chapter,
+    sourceText: prejob.sourceText ?? "",
+    newChapter: prejob.newChapter,
+    outline: prejob.pipeline!.outline!,
+  });
+
+  // Back to `running` BEFORE the answer — every sink write refuses a row that
+  // is not running (see ownRow) and this is the one place that revives one. A
+  // poll arriving between the 202 and the provider call then reads the job as
+  // running rather than as finished.
+  const part = db.transaction((handle) => {
+    const tx = handle as unknown as GrimoireDb;
+    const row = jobRow(tx, campaign);
+    if (row === undefined || row.id !== jobId) {
+      throw new ApiError(404, "no generate job for this campaign");
+    }
+    const job = toJob(row);
+    const target = assertRetryable(job, key);
+    const pipeline = job.pipeline!;
+    const revived: PipelineRecord = {
+      ...pipeline,
+      parts: pipeline.parts.map((p) => {
+        if (p.key !== key) return p;
+        const { error: _error, validationErrors: _errors, rawReply: _raw, ...rest } = p;
+        return { ...rest, status: "running" as const };
+      }),
+    };
+    tx.update(generateJobs)
+      .set({
+        status: "running",
+        pipeline: JSON.stringify(revived),
+        error: null,
+        // The run is open again, so it has no finish time: a `finishedAt`
+        // left over from the settled run would outlive its own truth and
+        // survive into the next settle only to be overwritten.
+        finishedAt: null,
+      })
+      .where(eq(generateJobs.id, row.id))
+      .run();
+    return target;
+  }) as StoredPart;
+
+  const sink = await jobSink(campaign, jobId);
+  void (async () => {
+    try {
+      await runPart(plan, { ...part, status: "pending" }, provider, sink);
+    } catch (err) {
+      console.error("could not record the retried part", err);
+    }
+  })();
+  const after = await getJob(campaign);
+  return after ?? prejob;
+}
+
+/**
+ * May this part be retried? Answers with the part, throws the endpoint's
+ * 404/409 otherwise. Called once before the context read and once INSIDE the
+ * revive transaction — the second call is the binding one, because the first
+ * one's row is already stale by the time the plan is ready.
+ */
+function assertRetryable(job: Job, key: string): StoredPart {
+  const pipeline = job.pipeline;
+  if (pipeline === undefined || pipeline.outline === undefined) {
+    throw new ApiError(409, "this job has no pipeline parts to retry");
+  }
+  const part = findPart(pipeline, key);
+  if (part === undefined) throw new ApiError(404, `unknown part: ${key}`);
+  if (part.status === "running") throw new ApiError(409, "this part is already running");
+  if (part.status === "done") throw new ApiError(409, "this part is already finished");
+  // A PENDING part still belongs to the run's own pool: it has not had its
+  // turn yet, and reviving it here would run it twice — once from the pool,
+  // once from this call, both writing the same part.
+  if (part.status === "pending") throw new ApiError(409, "this part has not run yet");
+  if (job.chapter === undefined) throw new ApiError(409, "this job has no target chapter");
+  return part;
 }
 
 // --- discard -----------------------------------------------------------------
@@ -692,6 +1212,12 @@ export function openPartPaths(job: Job): Set<string> {
  * #97 Zuschnitt 3) instead of leaving an empty review behind.
  */
 export function jobIsSettled(job: Job): boolean {
+  // A pipelined run with parts still pending, running or failed is NOT
+  // settled, however much of it the DM has accepted (issue #102): deleting
+  // the row would throw away the outline every open part still needs.
+  if (job.pipeline !== undefined && job.pipeline.parts.length > 0) {
+    if (job.pipeline.parts.some((p) => p.status !== "done")) return false;
+  }
   const written = job.review.written;
   const dropped = new Set(job.review.dropped);
   const scenes = job.result?.scenes ?? [];

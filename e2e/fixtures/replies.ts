@@ -50,7 +50,49 @@ export const TRIGGER = {
    * can only be shown to find nothing.
    */
   oldName: "E2E_OLD_NAME",
+  /**
+   * Issue #102: the run is decomposed into THREE scenes instead of one, so a
+   * spec can watch parts finish, fail and be retried one by one. The outline
+   * then proposes no new entries — the entry calls have their own coverage in
+   * the default (one-scene) run.
+   */
+  threeScenes: "E2E_THREE_SCENES",
+  /**
+   * The SECOND of those three scenes fails its first call and succeeds on
+   * every call after it — which is what „Erneut versuchen“ has to fix. The
+   * token is written as `E2E_PART_FAIL:<nonce>` and the nonce keys the stub's
+   * counter, so the one stub endpoint can serve several workers at once
+   * without their retries interfering.
+   */
+  partFail: "E2E_PART_FAIL",
+  /**
+   * The LAST scene's reply is held (SLOW_REPLY_MS) while the others answer
+   * normally — the shape a restart mid-run needs: finished parts to keep and
+   * one in flight to fail.
+   */
+  // Deliberately NOT "E2E_SLOW…": TRIGGER.slow is matched as a substring, so
+  // a name starting with it would hold every call of the run — the outline
+  // included — and no part would ever finish.
+  slowPart: "E2E_HOLD_LAST",
+  /**
+   * Every scene part answers LATE (LATE_REPLY_MS) while the outline answers
+   * at once — the only shape in which the browser sees a run that is
+   * `running` with NOTHING to review yet, and therefore the only one that
+   * exercises the switch from the spinner to the review on a POLLED update
+   * (issue #102 review). Without it the parts are finished before the first
+   * `GET …/generate/job` answers, and the review is simply the first thing
+   * ever rendered.
+   */
+  latePart: "E2E_LATE_PARTS",
+  // A part that FAILS answers at once even so — with `E2E_PART_FAIL` the run
+  // therefore reaches the state in which its only reviewable part is a failed
+  // one.
 } as const;
+
+/** The nonce of a `E2E_PART_FAIL:<nonce>` token, or "" when there is none. */
+export function partFailNonce(source: string): string {
+  return new RegExp(`${TRIGGER.partFail}:([A-Za-z0-9_-]+)`).exec(source)?.[1] ?? "";
+}
 
 /**
  * The spelling `TRIGGER.oldName` puts into the draft. The spec writes a
@@ -61,6 +103,12 @@ export const OLD_NAME = "Saltmarsh";
 
 /** How long a TRIGGER.slow request is held before it would answer. */
 export const SLOW_REPLY_MS = 60_000;
+
+/**
+ * How long a `TRIGGER.latePart` reply waits before it answers NORMALLY —
+ * longer than the app's first job poll, shorter than a test's patience.
+ */
+export const LATE_REPLY_MS = 5_000;
 
 // --- scene run ---------------------------------------------------------------
 
@@ -177,63 +225,6 @@ name: ${LOCATION_STUB_NAME}
 
 Die flache Bucht nördlich des Hafens — bei Ebbe zu Fuß erreichbar.
 `;
-
-/**
- * The good scene reply for the chapter the prompt names.
- *
- * `knowledge` is the campaign-knowledge block the prompt carried — echoed
- * back as a warning so a spec can see it (see contextEchoWarnings).
- * `oldName` is TRIGGER.oldName: the same well-formed reply, but written in
- * the spelling a naming convention forbids.
- */
-export function sceneReply(chapter: string, knowledge = "", oldName = false): unknown {
-  if (oldName) {
-    return {
-      scenes: [{ content: sceneDraft(chapter, true) }],
-      entries: [],
-      warnings: contextEchoWarnings(knowledge),
-    };
-  }
-  return {
-    scenes: [{ content: sceneDraft(chapter) }],
-    entries: [
-      { kind: "npc", content: npcStub },
-      { kind: "location", content: locationStub },
-    ],
-    warnings: [
-      "Der Frachtbrief ist erfunden — im Quelltext steht kein Siegel.",
-      ...contextEchoWarnings(knowledge),
-    ],
-  };
-}
-
-/**
- * A scene reply that FAILS validation, on purpose and in two ways at once:
- * `status: ready` (drafts only) and an unknown callout. Both messages end up
- * in the job's 422 body and thus in the UI's error block.
- */
-export function invalidSceneReply(chapter: string): unknown {
-  return {
-    scenes: [
-      {
-        content: `---
-id: ${SCENE_ID}
-title: ${SCENE_TITLE}
-type: planned
-chapter: ${chapter}
-status: ready
----
-
-## Flow
-
-> [!combat] Zwei Wachen, Initiative wie üblich.
-`,
-      },
-    ],
-    entries: [],
-    warnings: [],
-  };
-}
 
 // --- npc run -----------------------------------------------------------------
 
@@ -412,4 +403,203 @@ export function augmentReply(path: string, markdown: string, knowledge = ""): un
  */
 export function invalidAugmentReply(_path: string): unknown {
   return { entry: { content: "---\nid: not-the-entry\n---\n" }, warnings: [] };
+}
+
+// --- the pipelined scene run (issue #102) ------------------------------------
+//
+// A scene run is the OUTLINE call plus one call per scene and per suggested
+// entry. The stub answers all of them (see stub-llm.ts, which tells them apart
+// by the prompt), and these are the canned answers:
+//
+//   outline        the scene list with a verbatim `sourceExcerpt` per scene —
+//                  the server cuts the passage with it, so the fixture has to
+//                  quote the SOURCE TEXT and not paraphrase it.
+//   scene          one document, `{ scene: { content } }` — the same document
+//                  the batch reply used to carry.
+//   entry          `{ npc }` / `{ location }` — the npc/location prompt's own
+//                  schema, one file per call.
+//
+// The default run has ONE scene and the two entries the specs already know.
+// TRIGGER.threeScenes turns it into three scenes and no entries, which is what
+// „ein Teil schlägt fehl, zwei sind prüfbar“ needs.
+
+/** The three scenes of the pipelined run — ids asserted in the specs. */
+export const THREE_SCENES = [
+  // Ids of their own — none of them is SCENE_ID, so the rich one-scene draft
+  // (with its entry references) can never be served for a run whose outline
+  // proposes no entries.
+  { id: "night-watch", title: "Nachtwache an der Mole" },
+  { id: "smuggler-caught", title: "Von Schmugglern erwischt" },
+  { id: "dawn-escape", title: "Flucht im Morgengrauen" },
+] as const;
+
+/** The scene the failure trigger breaks — the middle one, so two survive. */
+export const FAILING_SCENE_ID = THREE_SCENES[1].id;
+
+/**
+ * The first and the last sentence of the source text, verbatim — what the
+ * outline quotes so the server's excerpt cut actually matches. Every scene
+ * gets the same pair here: the fixture is about the PARTS, not about which
+ * paragraph a scene came from, and a mismatch would add a warning to every
+ * single spec.
+ */
+function wholeSourceExcerpt(source: string): { first: string; last: string } {
+  const sentences = source
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.replace(/\s+/g, " ").trim())
+    .filter((part) => part !== "");
+  return { first: sentences[0] ?? source.trim(), last: sentences.at(-1) ?? source.trim() };
+}
+
+/** The outline reply: one scene plus two entries, or three scenes and none. */
+export function outlineReply(input: {
+  source: string;
+  knowledge?: string;
+  three?: boolean;
+  /**
+   * TRIGGER.oldName: the naming-check case. Its draft proposes no entries, so
+   * the outline must not either — otherwise „Übernehmen“ leaves two undecided
+   * entries behind and the run does not finish (the badly-behaved model this
+   * trigger stands for is about SPELLING, nothing else).
+   */
+  oldName?: boolean;
+}): unknown {
+  const sourceExcerpt = wholeSourceExcerpt(input.source);
+  // The outline is the step that reads the WHOLE source text, so the run's
+  // „der Quelltext gibt das nicht her“ notes belong to it.
+  const warnings = [
+    "Der Frachtbrief ist erfunden — im Quelltext steht kein Siegel.",
+    ...contextEchoWarnings(input.knowledge ?? ""),
+  ];
+  if (input.three === true) {
+    return {
+      scenes: THREE_SCENES.map((scene) => ({
+        id: scene.id,
+        title: scene.title,
+        type: "planned",
+        sourceExcerpt,
+        refs: [],
+      })),
+      entries: [],
+      warnings,
+    };
+  }
+  if (input.oldName === true) {
+    return {
+      scenes: [{ id: SCENE_ID, title: SCENE_TITLE, type: "planned", sourceExcerpt, refs: [] }],
+      entries: [],
+      warnings,
+    };
+  }
+  return {
+    scenes: [
+      {
+        id: SCENE_ID,
+        title: SCENE_TITLE,
+        type: "planned",
+        location: LOCATION_STUB_ID,
+        sourceExcerpt,
+        refs: [],
+      },
+    ],
+    entries: [
+      { kind: "npc", id: NPC_STUB_ID, name: NPC_STUB_NAME, summary: "Schmugglerin am Kai." },
+      {
+        kind: "location",
+        id: LOCATION_STUB_ID,
+        name: LOCATION_STUB_NAME,
+        summary: "Die flache Bucht nördlich des Hafens.",
+      },
+    ],
+    warnings,
+  };
+}
+
+/**
+ * An outline that FAILS validation (TRIGGER.invalid): one scene, no entries —
+ * so the broken scene document below is the run's only part and „jeder Teil
+ * ist fehlgeschlagen“ is what the DM sees. The outline itself is fine; the
+ * error is in the document, which is where the 422 block's messages come from.
+ */
+export function invalidRunOutline(source: string): unknown {
+  return {
+    scenes: [
+      {
+        id: SCENE_ID,
+        title: SCENE_TITLE,
+        type: "planned",
+        sourceExcerpt: wholeSourceExcerpt(source),
+        refs: [],
+      },
+    ],
+    entries: [],
+    warnings: [],
+  };
+}
+
+/** One finished scene document, as the per-scene call answers it. */
+export function scenePartReply(chapter: string, sceneId: string, oldName = false): unknown {
+  if (sceneId === SCENE_ID) {
+    return { scene: { content: sceneDraft(chapter, oldName) }, warnings: [] };
+  }
+  const scene = THREE_SCENES.find((s) => s.id === sceneId);
+  return {
+    scene: { content: plainSceneDraft(chapter, sceneId, scene?.title ?? sceneId) },
+    warnings: [],
+  };
+}
+
+/** A scene document that FAILS validation — `status: ready` is drafts only. */
+export function invalidScenePartReply(chapter: string, sceneId: string): unknown {
+  const title = THREE_SCENES.find((s) => s.id === sceneId)?.title ?? SCENE_TITLE;
+  return {
+    scene: {
+      content: `---
+id: ${sceneId}
+title: ${title}
+type: planned
+chapter: ${chapter}
+status: ready
+---
+
+## Flow
+
+> [!combat] Zwei Wachen, Initiative wie üblich.
+`,
+    },
+    warnings: [],
+  };
+}
+
+/**
+ * A plain, well-formed scene of the three-scene run. No entry references and
+ * no location: the pipelined specs are about the PARTS, and every reference a
+ * fixture adds is one more thing that can fail for another reason.
+ */
+function plainSceneDraft(chapter: string, id: string, title: string): string {
+  return `---
+id: ${id}
+title: ${title}
+type: planned
+chapter: ${chapter}
+npcs: [fenn]
+handouts: []
+tags: [stealth]
+status: draft
+---
+
+## Flow
+
+[[fenn]]s Leute räumen eine Ladung fort, bevor der Morgen kommt.
+
+> [!readaloud] Über der Mole hängt der Nebel, und irgendwo unter euch
+> knirscht ein Kiel gegen Stein.
+`;
+}
+
+/** One suggested entry, in the npc/location prompt's own reply schema. */
+export function entryPartReply(kind: "npc" | "location"): unknown {
+  return kind === "location"
+    ? { location: { content: locationStub }, warnings: [] }
+    : { npc: { content: npcStub }, warnings: [] };
 }

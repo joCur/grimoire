@@ -19,12 +19,7 @@ import { clearJobsForTests, markWrittenInTx } from "../src/generate-jobs";
 import { getDb } from "../src/store/handle";
 import { setProviderForTests } from "../src/generator";
 import { dropStore, seedStore } from "./support/store";
-import type {
-  CompletionResult,
-  CorrectionTurn,
-  GenerateRequest,
-  LLMProvider,
-} from "../src/llm-provider";
+import { PipelineFake } from "./support/pipeline-fake";
 
 // --- fixtures -----------------------------------------------------------------
 
@@ -84,16 +79,6 @@ const REPLY = JSON.stringify({
   warnings: [],
 });
 
-class FakeProvider implements LLMProvider {
-  readonly name = "fake";
-  async complete(
-    _req: GenerateRequest,
-    _corrections: CorrectionTurn[] = [],
-  ): Promise<CompletionResult> {
-    return { text: REPLY, truncated: false };
-  }
-}
-
 // --- plumbing -----------------------------------------------------------------
 
 async function send(method: string, url: string, body?: unknown): Promise<Response> {
@@ -147,7 +132,10 @@ async function exists(rel: string): Promise<boolean> {
 
 beforeEach(async () => {
   await seedStore();
-  setProviderForTests(new FakeProvider());
+  // Pipeline-aware since issue #102: a scene run is the outline call plus one
+  // call per scene and per suggested entry, and the fake routes this one
+  // scripted batch reply over all of them (support/pipeline-fake.ts).
+  setProviderForTests(new PipelineFake([REPLY]));
 });
 
 afterEach(async () => {
