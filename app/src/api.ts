@@ -430,6 +430,23 @@ export function createCampaign(input: {
 }
 
 /** A new chapter; `goal` lands under `## Ziel des Kapitels` when given. */
+/**
+ * „Als aktiv setzen" on a chapter (issue #115) — ONE call, because it is one
+ * decision about two rows: the chapter becomes `active` and the one that was
+ * active goes back to `planned`. Doing it as two properties patches from here
+ * would leave a window in which the campaign has two active chapters, and the
+ * session view picks the first it finds.
+ *
+ * No rev: there is nothing to overwrite (the pool carries no rev at all), and
+ * the action deliberately also changes a row the caller never read. Answers
+ * the chapter's document.
+ */
+export function setChapterActive(campaign: string, chapter: string): Promise<FileResponse> {
+  return postJson<FileResponse>(
+    `/${encodeURIComponent(campaign)}/chapters/${encodeURIComponent(chapter)}/active`,
+  );
+}
+
 export function createChapter(
   campaign: string,
   input: { title: string; goal?: string; id?: string },

@@ -353,6 +353,15 @@ export const en: Messages = {
   "pool.chapter.goal": "Goal: {goal}",
   "pool.chapter.empty": "No scenes in this chapter yet.",
   "pool.chapter.status.active": "active",
+  // --- chapter actions in the pool (issue #115) ----------------------------
+  "pool.chapter.setActive": "Set as active",
+  "pool.chapter.activating": "Setting \u2026",
+  "pool.chapter.setActive.failed": "Chapter not activated",
+  "chapterBody.title": "Edit chapter: {title}",
+  "chapterBody.description":
+    "The chapter's text as markdown \u2014 the heading \u201c## Ziel des Kapitels\u201d is the line the pool shows as its goal.",
+  "chapterBody.field.body": "Text",
+  "chapterBody.field.body.placeholder": "## Ziel des Kapitels\n\nWhat the party is meant to achieve here",
   "pool.contingencies.hint": "only when the trigger fires",
   "pool.scene.trigger": "When: {trigger}",
 

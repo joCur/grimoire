@@ -13,6 +13,7 @@ import { Link, useParams } from "react-router";
 
 import { fetchFile, fetchTree } from "@/api";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
+import { ChapterActions } from "@/components/ChapterActions";
 import { ChapterCreateAction, SceneCreateAction } from "@/components/CreateActions";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -179,6 +180,18 @@ function Chapter({
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="pt-4 pb-1 pl-[25px]">
+          {/* The chapter's own actions (issue #115). They sit INSIDE the
+              accordion and not in the trigger row: the trigger is the button
+              that opens the chapter, and a button inside a button is invalid
+              markup — the same reason the pool row keeps its status control
+              beside the link instead of inside it. */}
+          <ChapterActions
+            campaign={campaign}
+            chapter={chapter.id}
+            status={chapter.status}
+            file={chapterFile.data}
+            tree={tree}
+          />
           {goal !== undefined && (
             <p className="mb-3 text-[14px] leading-[1.6] text-body-secondary">
               {t("pool.chapter.goal", { goal })}

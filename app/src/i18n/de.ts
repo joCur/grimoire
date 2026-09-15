@@ -384,6 +384,17 @@ export const de = {
   // The chapter pill: only `active` gets a label, every other value degrades
   // to the raw string (README, "Format degradiert").
   "pool.chapter.status.active": "Aktiv",
+  // --- chapter actions in the Kapitelübersicht (issue #115) ----------------
+  // „Als aktiv setzen" am Kapitel: setzt `active` und nimmt es dem bisher
+  // aktiven Kapitel ab — ein Serveraufruf, eine Transaktion.
+  "pool.chapter.setActive": "Als aktiv setzen",
+  "pool.chapter.activating": "Setze …",
+  "pool.chapter.setActive.failed": "Kapitel nicht aktiviert",
+  "chapterBody.title": "Kapitel bearbeiten: {title}",
+  "chapterBody.description":
+    "Text des Kapitels als Markdown — die Überschrift „## Ziel des Kapitels“ ist die Zeile, die die Übersicht als Ziel zeigt.",
+  "chapterBody.field.body": "Text",
+  "chapterBody.field.body.placeholder": "## Ziel des Kapitels\n\nWas die Gruppe hier erreichen soll",
   // The quiet second half of the „Eventualszenen" heading row — the „· "
   // separator stays markup in the JSX.
   "pool.contingencies.hint": "nur wenn der Auslöser feuert",
