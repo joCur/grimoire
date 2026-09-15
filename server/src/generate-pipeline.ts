@@ -69,6 +69,7 @@ import {
   type AllowedRefs,
   type SceneContext,
 } from "./generator";
+export type { SceneContext } from "./generator";
 import { parseWithProperties, reparseAtAddress, unknownCallouts } from "./generator";
 import type { LLMProvider } from "./llm-provider";
 import { locationPath, npcPath } from "./store/paths";
@@ -519,8 +520,13 @@ export interface PartUsage {
  * parts survive a restart" (AK3) is only true of what was written down.
  */
 export interface PipelineSink {
-  /** The outline is in: the job now knows its parts (in outline order). */
-  outlineReady(parts: GenerateJobPart[], usage: PartUsage, warnings: string[]): Promise<void>;
+  /**
+   * The outline is in: the job now knows its parts (in outline order). The
+   * OUTLINE ITSELF is stored too — a per-part retry and a restart both need
+   * it, and neither has anything but the row to read it from. It is never
+   * serialized to the client (PipelineRecord).
+   */
+  outlineReady(outline: RunOutline, parts: GenerateJobPart[], usage: PartUsage): Promise<void>;
   partRunning(key: string): Promise<void>;
   partDone(key: string, outcome: PartOutcome, usage: PartUsage): Promise<void>;
   partFailed(
@@ -565,20 +571,46 @@ export function outlineParts(outline: RunOutline): GenerateJobPart[] {
   ];
 }
 
-/** A part's usage, from a successful result or from a thrown ApiError. */
-function usageOf(value: unknown): PartUsage {
+/**
+ * A part's usage, from a successful result or from a thrown ApiError, with the
+ * CALL COUNT taken from the counter rather than from `usage.attempts`: a local
+ * endpoint reports no usage at all, and „M Aufrufe" must be true anyway.
+ */
+function usageOf(value: unknown, calls: number): PartUsage {
   const usage = (value ?? {}) as Partial<GenerateUsage>;
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
   return {
     inputTokens: num(usage.inputTokens),
     outputTokens: num(usage.outputTokens),
-    // A part that reported no usage at all still made at least one call.
-    calls: Math.max(num(usage.attempts), 1),
+    calls: Math.max(calls, 1),
+  };
+}
+
+/**
+ * Counts the provider calls of one part (runPipeline `onCall`). Created by
+ * `runPart` and handed to the step, so a part that FAILS can report its
+ * attempts too — the error body carries no call count.
+ */
+export interface CallCounter {
+  onCall: () => void;
+  count: () => number;
+}
+
+export function callCounter(): CallCounter {
+  let calls = 0;
+  return {
+    onCall: () => {
+      calls += 1;
+    },
+    count: () => calls,
   };
 }
 
 /** The message and the error list the DM reads next to „Erneut versuchen". */
-function failureOf(err: unknown): {
+function failureOf(
+  err: unknown,
+  calls: number,
+): {
   error: string;
   validationErrors?: string[];
   rawReply?: string;
@@ -593,11 +625,14 @@ function failureOf(err: unknown): {
         ? { validationErrors: errors as string[] }
         : {}),
       ...(typeof extra.rawReply === "string" ? { rawReply: extra.rawReply } : {}),
-      usage: usageOf(extra.usage),
+      usage: usageOf(extra.usage, calls),
     };
   }
   console.error(err);
-  return { error: "internal server error", usage: { inputTokens: 0, outputTokens: 0, calls: 1 } };
+  return {
+    error: "internal server error",
+    usage: { inputTokens: 0, outputTokens: 0, calls: Math.max(calls, 1) },
+  };
 }
 
 /**
@@ -646,6 +681,7 @@ export async function runOutlineStep(
   sourceText: string,
   provider: LLMProvider,
 ): Promise<{ outline: RunOutline; usage: PartUsage }> {
+  const counter = callCounter();
   const assets = await loadPromptAssets("outline");
   const result = await runPipeline<{ outline: RunOutline; usage?: GenerateUsage }>({
     req: {
@@ -662,8 +698,9 @@ export async function runOutlineStep(
       return outcome.ok ? { ok: true, result: { outline: outcome.result } } : outcome;
     },
     correctionTail: OUTLINE_CORRECTION_TAIL,
+    onCall: counter.onCall,
   });
-  return { outline: result.outline, usage: usageOf(result.usage) };
+  return { outline: result.outline, usage: usageOf(result.usage, counter.count()) };
 }
 
 /** Step 2: one scene. */
@@ -671,6 +708,7 @@ export async function runScenePart(
   plan: RunPlan,
   scene: OutlineScene,
   provider: LLMProvider,
+  counter: CallCounter = callCounter(),
 ): Promise<{ outcome: PartOutcome; usage: PartUsage }> {
   const [systemPrompt, fewShotTarget] = await Promise.all([
     sceneSystemPrompt("single"),
@@ -694,6 +732,7 @@ export async function runScenePart(
     provider,
     validate: (raw) => validateSingleSceneReply({ raw, ctx: plan.ctx, scene, allowed: plan.allowed }),
     correctionTail: "die vollständige Szene enthalten",
+    onCall: counter.onCall,
   });
   return {
     outcome: {
@@ -716,7 +755,7 @@ export async function runScenePart(
       ),
       ...(cut.matched ? {} : { excerptFallback: true }),
     },
-    usage: usageOf(result.usage),
+    usage: usageOf(result.usage, counter.count()),
   };
 }
 
@@ -725,6 +764,7 @@ export async function runEntryPart(
   plan: RunPlan,
   entry: OutlineEntry,
   provider: LLMProvider,
+  counter: CallCounter = callCounter(),
 ): Promise<{ outcome: PartOutcome; usage: PartUsage }> {
   const assets = await loadPromptAssets(entry.kind);
   const result = await runPipeline<{
@@ -752,6 +792,7 @@ export async function runEntryPart(
     validate: (raw) => validateEntryReply(raw, entry, plan.ctx),
     correctionTail:
       entry.kind === "npc" ? "die vollständige NPC-Datei enthalten" : "die vollständige Ort-Datei enthalten",
+    onCall: counter.onCall,
   });
   return {
     outcome: {
@@ -762,7 +803,7 @@ export async function runEntryPart(
         plan.ctx.namingRules,
       ),
     },
-    usage: usageOf(result.usage),
+    usage: usageOf(result.usage, counter.count()),
   };
 }
 
@@ -803,16 +844,17 @@ export async function runPart(
 ): Promise<void> {
   if (sink.cancelled()) return;
   await sink.partRunning(part.key);
+  const counter = callCounter();
   try {
     const run =
       part.kind === "scene"
-        ? await runScenePart(plan, sceneOf(plan.outline, part.id), provider)
-        : await runEntryPart(plan, entryOf(plan.outline, part.kind, part.id), provider);
+        ? await runScenePart(plan, sceneOf(plan.outline, part.id), provider, counter)
+        : await runEntryPart(plan, entryOf(plan.outline, part.kind, part.id), provider, counter);
     if (sink.cancelled()) return;
     await sink.partDone(part.key, run.outcome, run.usage);
   } catch (err) {
     if (sink.cancelled()) return;
-    const failure = failureOf(err);
+    const failure = failureOf(err, counter.count());
     await sink.partFailed(
       part.key,
       {
@@ -880,7 +922,7 @@ export async function runScenePipeline(input: {
   const { outline, usage } = await runOutlineStep(ctx, input.sourceText, provider);
   if (input.sink.cancelled()) return;
   const parts = outlineParts(outline);
-  await input.sink.outlineReady(parts, usage, outline.warnings);
+  await input.sink.outlineReady(outline, parts, usage);
   const plan = planOf({
     campaign: input.campaign,
     ctx,

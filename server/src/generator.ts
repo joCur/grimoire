@@ -1248,6 +1248,13 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
   provider: LLMProvider;
   validate: (raw: string) => { ok: true; result: T } | { ok: false; errors: string[] };
   correctionTail: string;
+  /**
+   * Called once per provider call (issue #102). The pipeline counts its own
+   * calls with it: `usage` is absent whenever the endpoint reports no tokens,
+   * so the run's „M Aufrufe" cannot be read off it — and a part that FAILED
+   * has to contribute its attempts to the total as well.
+   */
+  onCall?: () => void;
 }): Promise<T> {
   const { req, provider, validate } = input;
   const corrections: CorrectionTurn[] = [];
@@ -1256,6 +1263,7 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
   const spend = new RunUsage();
   for (;;) {
     const completion = await provider.complete(req, corrections);
+    input.onCall?.();
     spend.add(completion);
     const raw = completion.text;
 

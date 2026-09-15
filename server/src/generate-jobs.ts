@@ -808,16 +808,16 @@ function findPart(pipeline: PipelineRecord, key: string): StoredPart | undefined
 export async function jobSink(campaign: string, jobId: string): Promise<PipelineSink> {
   const db = await getDb();
   return {
-    async outlineReady(parts, usage, warnings) {
+    async outlineReady(outline, parts, usage) {
       await updatePipeline(campaign, jobId, (pipeline, result) => {
+        pipeline.outline = outline;
         pipeline.parts = parts.map((part) => ({ ...part }));
         addUsage(pipeline, usage);
-        return {
-          result: {
-            ...result,
-            warnings: [...result.warnings, ...warnings.filter((w) => !result.warnings.includes(w))],
-          },
-        };
+        // The outline's own warnings are the run's warnings: it is the step
+        // that read the whole source text, so „der Quelltext nennt keine
+        // Statblocks" can only come from here.
+        const warnings = outline.warnings.filter((w) => !result.warnings.includes(w));
+        return { result: { ...result, warnings: [...result.warnings, ...warnings] } };
       });
     },
     async partRunning(key) {
