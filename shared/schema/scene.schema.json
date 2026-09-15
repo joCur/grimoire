@@ -1,5 +1,5 @@
 {
-  "title": "scene_document",
+  "title": "scene",
   "description": "Die fertige Szene: die Eigenschaften-Felder, der Fließtext und die Warnungen für den DM.",
   "type": "object",
   "additionalProperties": false,
@@ -101,7 +101,7 @@
     },
     "body": {
       "type": "string",
-      "description": "Der Fließtext des Dokuments, als EIN String mit echten Zeilenumbrüchen — Überschriften, Callouts und `## If:`-Abschnitte wie im Ziel-Format. Ohne Eigenschaften-Block: den baut der Server aus `properties`."
+      "description": "Der Text des Eintrags, als EIN String mit echten Zeilenumbrüchen — Überschriften, Callouts und `## If:`-Abschnitte wie im Prompt beschrieben. Den Eigenschaften-Block baut der Server aus `properties`."
     },
     "warnings": {
       "type": "array",

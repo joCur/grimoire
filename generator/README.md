@@ -19,10 +19,10 @@ und die Schnittstelle garantiert die Form, bevor der Server sie liest.
   fliegt unverändert nach oben, statt die erzwungene Form dauerhaft
   abzuschalten.
 
-**Dokument-Antworten — der Normalfall.** Szenen-Teil, Eintrags-Teil
-(NPC/Ort), NPC-Lauf und Ergänzen-Lauf antworten mit dem Objekt, das die
-gespeicherte Dokument **spiegelt**: die Eigenschaften unter `properties`,
-der ganze Fließtext als **ein** String unter `body`, die Hinweise für den DM
+**Eintrags-Antworten — der Normalfall.** Szenen-Teil, Eintrags-Teil
+(NPC/Ort), NPC-Lauf und Ergänzen-Lauf antworten mit dem Objekt, das den
+gespeicherten Eintrag **spiegelt**: die Eigenschaften unter `properties`,
+den ganzen Text als **ein** String unter `body`, die Hinweise für den DM
 unter `warnings`.
 
 ```json
@@ -42,19 +42,20 @@ unter `warnings`.
 der der Eigenschaften-Dialog gebaut wird (`shared/src/property-fields.ts`) —
 ein Modell kann also genau die Felder schreiben, die der DM auch bearbeiten
 kann, und keins mehr. Der **Eigenschaften-Block ist Sache des Servers**: er
-setzt ihn aus `properties` zusammen (`renderRaw`, derselbe Renderer, den jedes
-geschriebene Dokument durchläuft), weshalb `quickstats: { wis: "+2" }`
+setzt ihn aus `properties` zusammen (`renderRaw`, derselbe Renderer, den jeder
+geschriebene Eintrag durchläuft), weshalb `quickstats: { wis: "+2" }`
 gequotet ist, weil der Renderer quotet — nicht weil das Modell daran gedacht
 hat.
 
-Die Schemata sind **einfache Dateien** in `shared/schema/`, eine je Art und
-Lauf: `scene-document.schema.json`, `npc-document.schema.json`,
-`location-document.schema.json`, dazu `augmented-*-document.schema.json` für
-den Ergänzen-Lauf und `outline.schema.json`. Der Code lädt sie nur und gibt
-sie an den Provider weiter; `shared/test/document-schema.test.ts` prüft ihre
-Schlüssel und Wertelisten gegen die Feldliste und die Konstanten, die die
-Validierung liest, damit die beiden nicht auseinanderlaufen können. Der
-Unterschied zwischen den Läufen steht in den Dateien selbst: eine bestehende
+Die Schemata liegen als **lesbares JSON** in `shared/schema/`, eines je Art
+und Lauf: `scene.schema.json`, `npc.schema.json`, `location.schema.json`,
+dazu `augmented-scene.schema.json`, `augmented-npc.schema.json` und
+`augmented-location.schema.json` für den Ergänzen-Lauf sowie
+`outline.schema.json`. Der Code lädt sie nur und gibt sie an den Provider
+weiter; `shared/test/entry-schema.test.ts` prüft ihre Schlüssel und
+Wertelisten gegen die Feldliste und die Konstanten, die die Validierung
+liest, damit die beiden nicht auseinanderlaufen können. Der
+Unterschied zwischen den Läufen steht in den Schemata selbst: eine bestehende
 Szene behält den Status, den der DM ihr gegeben hat, während eine **neue**
 Szene nur `draft` sein kann.
 
@@ -73,7 +74,7 @@ Prozess):
   ausdrücken, also reist sie als **Liste** von `{ key, value }` und der Server
   faltet sie zurück in die Mapping-Form des Format-Vertrags.
 
-Warum nicht das gerenderte Dokument selbst als Antwort? Weil damit die
+Warum nicht den gerenderten Eintrag selbst als Antwort? Weil damit die
 JSON-Maskierung gegen **Text-Parsen** getauscht wäre: Code-Zaun drumherum, ein
 Satz davor, ein Abschiedssatz danach, zwei waagerechte Linien, die wie ein
 Eigenschaften-Block aussehen. Diese Hälfte kann keine API garantieren, sie
@@ -84,7 +85,7 @@ alles nicht: den `body` maskiert der **Transport**, und deshalb übersteht ein
 für Zeichen.
 
 **Der tolerante Leser** bleibt als Netz für Endpoints, die das Feld annehmen
-und ignorieren (`parseJsonReply` in `server/src/document-reply.ts`, von allen
+und ignorieren (`parseJsonReply` in `server/src/entry-reply.ts`, von allen
 Antworten benutzt): der ganze Text, dann ein ```json-Zaun, dann die Spanne von
 der ersten `{` bis zur letzten `}` — und **eine** deterministische Reparatur
 (`jsonrepair`, exakt gepinnt) für Komma am Ende oder einfache
@@ -101,13 +102,13 @@ bekommen hat. Sonst wird nichts nachkorrigiert: keine Typografie-Heuristik,
 kein stilles Ersetzen.
 
 **Die Gliederung** hat ihr eigenes Schema (`shared/schema/outline.schema.json`) und
-das einzige, das kein Dokument beschreibt: ein kleines, flaches Objekt aus
+das einzige, das keinen Eintrag beschreibt: ein kleines, flaches Objekt aus
 Szenenliste und neuen Einträgen. Die **semantischen** Prüfungen bleiben auch
 dort, wo sie sind: ein Schema kann nicht sagen „diese id kommt im ganzen
 Durchlauf nur einmal vor“, „dieser `refs`-Eintrag ist eine Szene DIESER
 Gliederung“ oder „das Kapitel kommt aus dem Kontext“.
 
-**Die Few-Shots sind Antworten**, keine Dateien: `example-output.json`,
+**Die Few-Shots sind Antworten**: `example-output.json`,
 `npc-example-output.json`, `location-example-output.json` und
 `outline-example-output.json` zeigen genau das Objekt, in das der jeweilige
 Aufruf gezwungen wird — derselbe Beispielinhalt wie vorher, nur in der Form,
@@ -145,7 +146,7 @@ Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
    Modus „genau eine Szene aus der Gliederung“ (`scene-single-output.md`
    tauscht nur das Ausgabeformat — alle Regeln bleiben wörtlich dieselben) +
    Gliederung + der geschnittene Quelltext-Abschnitt. Ausgabe: genau ein
-   Szenendokument, roh. Validierung, Korrektur-Turns und Namensprüfung **je
+   Szenen-Objekt. Validierung, Korrektur-Turns und Namensprüfung **je
    Szene**; ein fehlgeschlagener Teil blockiert die anderen nicht.
 
 3. **Vorschläge** (je neuem Eintrag ein Aufruf): `npc-system-prompt.md` bzw.
@@ -183,7 +184,7 @@ Szenen-Aufruf, jeden Eintrags-Aufruf und die beiden Ein-Aufruf-Läufe:
    `campaign_knowledge` bzw. `glossary`).
 2. Prompt = `system-prompt.md` + `example-output.json` (Few-Shot-Ziel)
    + Kampagnenwissen + Glossar + Kontext + Quelltext.
-3. LLM antwortet — mit dem **Dokument-Objekt** (Szene, NPC, Ort, Ergänzung)
+3. LLM antwortet — mit dem **Eintrags-Objekt** (Szene, NPC, Ort, Ergänzung)
    bzw. mit dem **Gliederungs-Objekt**, je per Schema erzwungen; siehe
    „Antwortformate“ oben.
 4. Server validiert mechanisch (das Schema deckt die Form ab, hier steht der
@@ -231,26 +232,26 @@ Alle System-Prompts (`system-prompt.md`, `npc-system-prompt.md`,
 Regel „Deutsche Orthografie“: jeder echte Text — Fließtext, Read-Alouds,
 Callouts, `## If:`-Bedingungen, Überschriften, `warnings` und jeder
 Eigenschafts-Wert, der Text ist (`title`, `name`, `role`, `voice`,
-`appearance`, `trigger`, `goal`, `statblock` …) — nutzt ä/ö/ü/ß, niemals die
-ASCII-Ersatzschreibung ae/oe/ue/ss. **Einzige Ausnahme**: `id`-Werte (und
+`appearance`, `trigger`, `goal`, `statblock` …) — nutzt ä/ö/ü/ß als genau
+diese Zeichen. **Einzige Ausnahme**: `id`-Werte (und
 `location`, das eine id ist), die bleiben kebab-case ASCII; Eigennamen aus
 dem Quelltext bleiben unverändert.
 
 **Die Anführungszeichen gehören dazu**, als **ein** identischer Satz
 in derselben Regel: deutsche typografische Anführungszeichen `„…“`
-(U+201E/U+201C), einfache `‚…‘`, Apostroph `’` — nie das ASCII-`"` und nie `'`
-als Apostroph. Die Mischform — U+201E geöffnet, mit dem ASCII-Zeichen
-geschlossen — stand vorher durchgehend in unseren Prompts, Few-Shots,
-Beispieldateien **und im UI-Katalog**, und das Modell hat sie imitiert; alle
-vier sind umgestellt (nur die Anführungszeichen, sonst nichts). Zwei Tests halten es so: `app/src/i18n/i18n.test.ts` über die
-Katalog-WERTE (im Quelltext ist das schließende ASCII-Zeichen nicht vom
-String-Begrenzer zu unterscheiden) und `server/test/typography.test.ts` über
-Prompts, Few-Shots und `examples/`.
+(U+201E/U+201C), einfache `‚…‘`, als Apostroph `’`. Die Mischform — U+201E
+geöffnet, mit dem ASCII-Zeichen geschlossen — stand vorher durchgehend in
+unseren Prompts, Few-Shots, Beispielen **und im UI-Katalog**, und das Modell
+hat sie imitiert; alle vier sind umgestellt (nur die Anführungszeichen).
+Zwei Tests halten es so: `app/src/i18n/i18n.test.ts` über die Katalog-WERTE
+(im Quelltext ist das schließende ASCII-Zeichen vom String-Begrenzer
+ununterscheidbar) und `server/test/typography.test.ts` über Prompts,
+Few-Shots und `examples/`.
 
 Die Regel steht in den drei Create-Prompts unter „## Regeln“ und im
 Ergänzen-Prompt in der Ergänzungsregel — also genau **einmal** in jedem
 zusammengesetzten Prompt, auch im Ergänzen-Modus, der von den Create-Prompts
-nur „## Ziel-Format der Datei“ einschneidet (`formatContract` in
+nur „## Eigenschaften und Text des Eintrags“ einschneidet (`formatContract` in
 `server/src/generator-augment.ts`). Der Server korrigiert nichts nach: es
 gibt keine Heuristik und kein stilles Ersetzen, die Regel wirkt allein im
 Prompt.
@@ -258,26 +259,27 @@ Prompt.
 ## Tabellen (Issue #96)
 
 Dieselbe Mechanik wie bei der Orthografie-Regel: **eine identische Regel
-„Tabellen“** in allen System-Prompts, die Dokumente schreiben — **nicht** im
-Gliederungs-Prompt, der überhaupt kein Dokument ausgibt (keine Callouts, kein
-Eigenschaften, keine Tabellen; die Orthografie-Regel steht dort trotzdem, weil
-Titel, Einzeiler und `warnings` Text sind) — in den drei Create-Prompts unter
+„Tabellen“** in allen System-Prompts, die Einträge schreiben — der
+Gliederungs-Prompt trägt sie nicht, weil er allein die Gliederung ausgibt
+(die Orthografie-Regel steht dort trotzdem, weil Titel, Einzeiler und
+`warnings` Text sind) — in den drei Create-Prompts unter
 „## Regeln“, im Ergänzen-Prompt in der Ergänzungsregel, also genau **einmal**
 in jedem zusammengesetzten Prompt (`formatContract` in
 `server/src/generator-augment.ts` schneidet aus den Create-Prompts nur
-„## Ziel-Format der Datei“ heraus).
+„## Eigenschaften und Text des Eintrags“ heraus).
 
 Inhalt der Regel: Tabellen aus dem Quellmaterial — Zufallstabellen,
 Begegnungs- und Würfellisten — werden als gültige GFM-Pipe-Tabelle
 ausgegeben (Kopfzeile, `|---|`-Trennzeile, Rand-Pipes) und stehen im
-passenden Callout, in jeder Zeile mit dessen `>`. **Sonst nichts aus GFM**:
-Durchgestrichen, Aufgabenlisten, Fußnoten und Auto-Links bleiben normaler
-Text — der Renderer kennt sie nicht (`app/src/markdown/remark-table.ts`).
+passenden Callout, in jeder Zeile mit dessen `>`. **Aus GFM nutzt der
+Generator ausschließlich diese Pipe-Tabelle**: Durchgestrichenes,
+Aufgabenlisten, Fußnoten und Auto-Links bleiben normaler Text — genau so
+rendert sie `app/src/markdown/remark-table.ts`.
 
 Der Szenen-Few-Shot (`example-output.json`) zeigt eine kleine W6-Tabelle in
-einem `[!note]`-Callout, damit das Modell die Form im Callout sieht und nicht
-nur beschrieben bekommt. Der Server validiert Tabellen nicht: eine kaputte
-Trennzeile ist keine Tabelle, sondern Text — Degradation statt Fehler.
+einem `[!note]`-Callout, damit das Modell die Form im Callout sieht statt sie
+nur beschrieben zu bekommen. Tabellen bleiben unvalidiert: eine kaputte
+Trennzeile ist Text — Degradation statt Fehler.
 
 ## NPC-Generator
 
@@ -310,10 +312,9 @@ Auth-Header. Fehlende Pflicht-Variablen und ein unbekannter
 antwortet `503` mit der Meldung im Klartext. Vollständige Variablen-Tabelle:
 docs/DEPLOYMENT.md Abschnitt 2.
 
-## Keine Adressen im Modell-Reply (Issue #100)
+## Adressen bildet der Server
 
-Das Modell vergibt keine Pfade mehr. Es liefert **Dokumente**, und der
-Server bildet die Adresse:
+Das Modell liefert **Einträge**, und der Server bildet die Adresse:
 
 * Szenen: `<kapitel>/<id>` — Kapitel aus dem Kontext des Laufs, `id` aus
   den Eigenschaften. Die **Gruppe** kommt aus `location`, also lautet die

@@ -27,7 +27,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** Repo root — this file sits in server/test/. */
+/** Repo root — this module sits in server/test/. */
 const ROOT = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../..");
 
 /** `„` and, later on the same line, an ASCII `"` with no `“` in between. */
@@ -43,13 +43,13 @@ async function promptFiles(dir: string, extensions: readonly string[]): Promise<
   return out;
 }
 
-/** Every offending `<file>:<line>` of one file. */
-async function offenders(file: string): Promise<string[]> {
-  const text = await readFile(file, "utf8");
+/** Every offending `<path>:<line>` of one source. */
+async function offenders(source: string): Promise<string[]> {
+  const text = await readFile(source, "utf8");
   return text
     .split("\n")
     .map((line, index) =>
-      MIXED_QUOTES.test(line) ? `${path.relative(ROOT, file)}:${index + 1}` : "",
+      MIXED_QUOTES.test(line) ? `${path.relative(ROOT, source)}:${index + 1}` : "",
     )
     .filter((hit) => hit !== "");
 }
@@ -71,7 +71,7 @@ describe("German quotation marks", () => {
     expect(hits).toEqual([]);
   });
 
-  test("no file of the example campaign mixes them", async () => {
+  test("nothing in the example campaign mixes them", async () => {
     const files = await promptFiles(path.join(ROOT, "examples"), [".md"]);
     expect(files.length).toBeGreaterThan(5);
     const hits = (await Promise.all(files.map(offenders))).flat();

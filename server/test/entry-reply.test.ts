@@ -1,4 +1,4 @@
-// The document reply: one schema-forced JSON object per kind.
+// The entry reply: one schema-forced JSON object per kind.
 //
 // What this suite is about is the SEAM between the model and the store: the
 // object comes in, the normalized properties and the composed markdown come
@@ -8,7 +8,7 @@
 //
 // So the cases here are the ones the schema cannot cover:
 //   * a reply that is not the object at all (an endpoint that ignored
-//     `response_format`, a model that answered prose or the raw document the
+//     `response_format`, a model that answered prose or the raw entry the
 //     earlier slices of this ticket asked for),
 //   * the tolerant way in — a fence, prose around it, one `jsonrepair` pass,
 //   * `null` read as „not given", so the rendered properties block has no empty
@@ -21,13 +21,13 @@
 import { describe, expect, test } from "bun:test";
 import { parseMarkdown } from "@grimoire/shared";
 import {
-  NOT_A_DOCUMENT_ERROR,
-  REPAIRED_DOCUMENT_WARNING,
-  composeDocument,
-  parseDocumentReply,
+  NOT_AN_ENTRY_ERROR,
+  REPAIRED_ENTRY_WARNING,
+  composeEntry,
+  parseEntryReply,
   parseJsonReply,
-  type DocumentReply,
-} from "../src/document-reply";
+  type EntryReply,
+} from "../src/entry-reply";
 
 /** The PO case: opening U+201E, closed with the ASCII `"`. */
 const PO_LINE = '„Wer nachts hier steht, hat was zu verbergen", murrt die Wache.';
@@ -58,8 +58,8 @@ function read(
   raw: string,
   kind: "scene" | "npc" | "location" = "scene",
   mode: "create" | "augment" = "create",
-): DocumentReply {
-  const outcome = parseDocumentReply(raw, kind, mode);
+): EntryReply {
+  const outcome = parseEntryReply(raw, kind, mode);
   if (!outcome.ok) throw new Error(`expected a reply, got: ${outcome.errors.join(" | ")}`);
   return outcome.reply;
 }
@@ -69,18 +69,18 @@ function errors(
   kind: "scene" | "npc" | "location" = "scene",
   mode: "create" | "augment" = "create",
 ): string[] {
-  const outcome = parseDocumentReply(raw, kind, mode);
+  const outcome = parseEntryReply(raw, kind, mode);
   if (outcome.ok) throw new Error("expected errors");
   return outcome.errors;
 }
 
-describe("parseDocumentReply", () => {
-  test("reads the object and composes the document the server stores", () => {
+describe("parseEntryReply", () => {
+  test("reads the object and composes the entry the server stores", () => {
     const reply = read(sceneObject());
     expect(reply.properties.id).toBe("night-watch-quay");
     expect(reply.warnings).toEqual(["Der Quelltext nennt keinen DC — DC 13 gesetzt."]);
 
-    const markdown = composeDocument(reply);
+    const markdown = composeEntry(reply);
     // A real properties block, built by the store's own renderer — and the
     // body below it, unchanged.
     expect(markdown.startsWith("---\nid: night-watch-quay\n")).toBe(true);
@@ -93,11 +93,11 @@ describe("parseDocumentReply", () => {
   test("the body survives the PO spelling byte for byte", () => {
     // The whole reason the reply is an object the TRANSPORT serializes: an
     // ASCII `"` inside a German quotation ends a hand-written JSON string,
-    // and answering with the rendered document instead would trade that for
+    // and answering with the rendered entry instead would trade that for
     // guessing where the properties block ends. Here it is simply a
     // character in a string.
     expect(read(sceneObject()).body).toContain(PO_LINE);
-    expect(composeDocument(read(sceneObject()))).toContain(PO_LINE);
+    expect(composeEntry(read(sceneObject()))).toContain(PO_LINE);
   });
 
   test("a null value means the key is left out of the block", () => {
@@ -106,7 +106,7 @@ describe("parseDocumentReply", () => {
     expect(Object.hasOwn(reply.properties, "trigger")).toBe(false);
     expect(Object.hasOwn(reply.properties, "location")).toBe(false);
     expect(Object.hasOwn(reply.properties, "handouts")).toBe(false);
-    expect(composeDocument(reply)).not.toContain("trigger:");
+    expect(composeEntry(reply)).not.toContain("trigger:");
   });
 
   test("the properties keep the field list's order", () => {
@@ -136,7 +136,7 @@ describe("parseDocumentReply", () => {
     expect(reply.properties.quickstats).toEqual({ wis: "+2", "passive-perception": "13" });
     // And the renderer quotes it, which is the whole point of the detour: a
     // bare `+2` would lose its plus to YAML.
-    expect(composeDocument(reply)).toContain("quickstats: {wis: '+2'");
+    expect(composeEntry(reply)).toContain("quickstats: {wis: '+2'");
   });
 
   test("a fence, prose around it and a single repair all cost no correction turn", () => {
@@ -146,23 +146,23 @@ describe("parseDocumentReply", () => {
     const repaired = read(sceneObject().replace(/}$/, ",}"));
     expect(repaired.properties.id).toBe("night-watch-quay");
     // …and the run says that it had to be repaired.
-    expect(repaired.warnings).toContain(REPAIRED_DOCUMENT_WARNING);
+    expect(repaired.warnings).toContain(REPAIRED_ENTRY_WARNING);
   });
 
   test("anything that is not the object is the ONE shape error", () => {
     for (const raw of [
       "",
       "kein Objekt",
-      // The raw-document format of this ticket's earlier slices.
+      // The raw-entry format of this ticket's earlier slices.
       "---\nid: night-watch-quay\nstatus: draft\n---\n\n## Flow\n",
       JSON.stringify([sceneObject()]),
       JSON.stringify({ body: "## Flow\n", warnings: [] }),
     ]) {
-      expect(errors(raw)).toEqual([NOT_A_DOCUMENT_ERROR]);
+      expect(errors(raw)).toEqual([NOT_AN_ENTRY_ERROR]);
     }
-    expect(NOT_A_DOCUMENT_ERROR).toContain("`properties`");
-    expect(NOT_A_DOCUMENT_ERROR).toContain("`body`");
-    expect(NOT_A_DOCUMENT_ERROR).toContain("`warnings`");
+    expect(NOT_AN_ENTRY_ERROR).toContain("`properties`");
+    expect(NOT_AN_ENTRY_ERROR).toContain("`body`");
+    expect(NOT_AN_ENTRY_ERROR).toContain("`warnings`");
   });
 
   test("a field the kind does not have, and a value of the wrong shape", () => {
@@ -188,10 +188,10 @@ describe("parseDocumentReply", () => {
     // Scene `type` and npc `status` are nullable in the schema (the prompt's
     // „nicht gegeben → null"), and the validators reject an absent one — so
     // „null" has to mean what the shared parser has always made of such a
-    // file, spelled out in the properties instead of left to every reader.
+    // entry, spelled out in the properties instead of left to every reader.
     const scene = read(sceneObject({ type: null }));
     expect(scene.properties.type).toBe("planned");
-    expect(composeDocument(scene)).toContain("type: planned");
+    expect(composeEntry(scene)).toContain("type: planned");
 
     const npc = JSON.stringify({
       properties: { id: "grella", name: "Grella", status: null },
@@ -226,16 +226,16 @@ describe("parseDocumentReply", () => {
   });
 
   test("an unknown key fails a create run and is dropped by an augment run", () => {
-    // In an augment run the key may be one the DM hand-wrote in the file the
+    // In an augment run the key may be one the DM hand-wrote in the entry the
     // model was SHOWN — the schema cannot let it propose one, so the only way
     // it gets here is an echo, and failing the run over that would make the
-    // button unusable for a file the DM is free to author that way.
+    // button unusable for an entry the DM is free to author that way.
     expect(errors(sceneObject({ mood: "düster" })).join(" ")).toContain(
       '"properties.mood" ist kein Feld dieser Entität',
     );
     const augmented = read(sceneObject({ mood: "düster" }), "scene", "augment");
     expect(Object.hasOwn(augmented.properties, "mood")).toBe(false);
-    expect(composeDocument(augmented)).not.toContain("mood");
+    expect(composeEntry(augmented)).not.toContain("mood");
     // …and it is still REPORTED, for the one validator that has a rule about
     // such a key (a location may not carry a `status`).
     expect(augmented.ignored).toEqual(["mood"]);

@@ -370,7 +370,7 @@ test("an entry's context is the passages that mention it — by name OR by id wo
 test("the single-scene mode swaps the output schema and keeps every rule", async () => {
   const single = await sceneSystemPrompt();
   // The reply object — the swapped section describes it, and
-  // nothing of the raw-document format is left.
+  // nothing of the raw-entry format is left.
   expect(single).toContain("Du antwortest mit **einem JSON-Objekt**");
   expect(single).toContain("`warnings`");
   expect(single).not.toContain("---warnings---");
@@ -382,7 +382,7 @@ test("the single-scene mode swaps the output schema and keeps every rule", async
   // second prompt file.
   expect(single.split("## Ausgabeformat").length - 1).toBe(1);
   for (const marker of [
-    "## Ziel-Format der Datei",
+    "## Eigenschaften und Text des Eintrags",
     "**Deutsche Orthografie**",
     "**Anführungszeichen**",
     "**Tabellen**",

@@ -3,8 +3,8 @@
 // Every reply is an OBJECT, exactly as the schema the server forces through
 // the provider describes it:
 //
-//   a document call   `{ properties, body, warnings }` — the properties of
-//                     the document, its whole text as one string, and the
+//   an entry call   `{ properties, body, warnings }` — the properties of
+//                     the entry, its whole text as one string, and the
 //                     notes the review shows the DM
 //   the outline call  the run's scene and entry list
 //
@@ -24,7 +24,7 @@
 //   entries        `kind: "npc" | "location"` plus the entry's `id`. An npc
 //                  entry carries a status (alive unless the source says
 //                  otherwise), a location entry carries none
-//   npc run        one document, kebab `id`, no `chapter`, quickstats values
+//   npc run        one entry, kebab `id`, no `chapter`, quickstats values
 //                  as STRINGS ("+2" — a number would lose the plus on the
 //                  way into the store), `## Weiß` only [!secret],
 //                  `## Beziehungen` only npc ids that exist, `## Notizen`
@@ -39,8 +39,8 @@
 // until the stub is applied) and `[[smuggler-captured]]` (a scene — the third
 // referenceable kind).
 
-/** One document reply, the shape the forced schema describes. */
-export interface DocumentReply {
+/** One entry reply, the shape the forced schema describes. */
+export interface EntryReply {
   properties: Record<string, unknown>;
   body: string;
   warnings: string[];
@@ -174,7 +174,7 @@ export const ASCII_QUOTE_LINE =
   '„Bleibt, wo ihr seid", ruft jemand aus dem Dunkeln — und die Stimme klingt';
 
 /** The scene draft of the default one-scene run, in its three variants. */
-function sceneDraft(chapter: string, oldName = false, asciiQuotes = false): DocumentReply {
+function sceneDraft(chapter: string, oldName = false, asciiQuotes = false): EntryReply {
   if (asciiQuotes) {
     // Deliberately WITHOUT the entry references of the rich draft below: this
     // case is about the quotation marks, and every reference is one more
@@ -264,7 +264,7 @@ er will reden, nicht kämpfen.
 }
 
 /** The npc stub a scene run's entry call answers with. */
-const npcStub: DocumentReply = {
+const npcStub: EntryReply = {
   properties: { id: NPC_STUB_ID, name: NPC_STUB_NAME, status: "alive" },
   body: `## Will
 
@@ -275,7 +275,7 @@ zwar von [[fenn]] persönlich.
 };
 
 /** The location stub a scene run's entry call answers with. */
-const locationStub: DocumentReply = {
+const locationStub: EntryReply = {
   properties: { id: LOCATION_STUB_ID, name: LOCATION_STUB_NAME },
   body: `Die flache Bucht nördlich des Hafens — bei Ebbe zu Fuß erreichbar.
 `,
@@ -291,7 +291,7 @@ export const NPC_ROLE = "Fischer, kennt jede Sandbank der Nordbucht";
 export const NPC_VOICE = "langsam, sucht Worte, lacht über eigene Witze";
 
 /** The good NPC reply; `id` is the DM's pin when there was one. */
-export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): DocumentReply {
+export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): EntryReply {
   return {
     properties: {
       id,
@@ -335,7 +335,7 @@ Nächten keinen Fang verkauft und traut [[fenn]] nicht.
  * An NPC reply that FAILS validation: a quickstats value that is a NUMBER
  * (the plus is gone), a missing status and an invented `chapter`.
  */
-export function invalidNpcReply(id: string = NPC_DEFAULT_ID): DocumentReply {
+export function invalidNpcReply(id: string = NPC_DEFAULT_ID): EntryReply {
   return {
     properties: {
       id,
@@ -389,14 +389,14 @@ export const AUGMENT_NPC_WILL =
 export const AUGMENT_NPC_SECRET = "Meldet [[fenn]], wann die Hafenwache wechselt.";
 
 /**
- * The existing entry as the PROMPT shows it — a rendered document with a
+ * The existing entry as the PROMPT shows it — a rendered entry with a
  * properties block on top. The augment run is the one case that has to read
  * that: its reply echoes the entry it was given.
  *
  * The block's scalars, flow lists (`[fenn, grella]`) and flow mappings
- * (`{ wis: "+2" }`) are the three shapes the campaign's documents use.
+ * (`{ wis: "+2" }`) are the three shapes the campaign's entries use.
  */
-function existingDocument(markdown: string): { properties: Record<string, unknown>; body: string } {
+function existingEntry(markdown: string): { properties: Record<string, unknown>; body: string } {
   const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(markdown);
   if (match === null) return { properties: {}, body: markdown };
   const properties: Record<string, unknown> = {};
@@ -443,8 +443,8 @@ function unquote(value: string): string {
  *   anything else (a prepared scene, a location)  ->  one NEW `## If:`
  *       section at the end; every existing block comes back unchanged.
  */
-export function augmentReply(path: string, markdown: string, knowledge = ""): DocumentReply {
-  const { properties, body } = existingDocument(markdown);
+export function augmentReply(path: string, markdown: string, knowledge = ""): EntryReply {
+  const { properties, body } = existingEntry(markdown);
   const id = String(properties.id ?? path.slice(path.lastIndexOf("/") + 1));
   const isEmptyNpc =
     path.startsWith("npcs/") && properties.role === undefined && body.trim() === "";
@@ -483,7 +483,7 @@ ${AUGMENT_NPC_WILL}
  * a shape a reply can have — rewriting the reference key is, and it is the
  * rule the augment run cares about most.
  */
-export function invalidAugmentReply(_path: string): DocumentReply {
+export function invalidAugmentReply(_path: string): EntryReply {
   return { properties: { id: "not-the-entry" }, body: "", warnings: [] };
 }
 
@@ -496,8 +496,8 @@ export function invalidAugmentReply(_path: string): DocumentReply {
 //   outline        the scene list with a verbatim `sourceExcerpt` per scene —
 //                  the server cuts the passage with it, so the fixture has to
 //                  quote the SOURCE TEXT and not paraphrase it
-//   scene          the scene as a document reply
-//   entry          the npc/location document, likewise
+//   scene          the scene as an entry reply
+//   entry          the npc/location entry, likewise
 //
 // The default run has ONE scene and the two entries the specs already know.
 // TRIGGER.threeScenes turns it into three scenes and no entries, which is what
@@ -629,14 +629,14 @@ export function scenePartReply(
   sceneId: string,
   oldName = false,
   asciiQuotes = false,
-): DocumentReply {
+): EntryReply {
   if (sceneId === SCENE_ID) return sceneDraft(chapter, oldName, asciiQuotes);
   const scene = THREE_SCENES.find((s) => s.id === sceneId);
   return plainSceneDraft(chapter, sceneId, scene?.title ?? sceneId);
 }
 
 /** A scene document that FAILS validation — `status: ready` is drafts only. */
-export function invalidScenePartReply(chapter: string, sceneId: string): DocumentReply {
+export function invalidScenePartReply(chapter: string, sceneId: string): EntryReply {
   const title = THREE_SCENES.find((s) => s.id === sceneId)?.title ?? SCENE_TITLE;
   return {
     properties: { id: sceneId, title, type: "planned", chapter, status: "ready" },
@@ -653,7 +653,7 @@ export function invalidScenePartReply(chapter: string, sceneId: string): Documen
  * no location: the pipelined specs are about the PARTS, and every reference a
  * fixture adds is one more thing that can fail for another reason.
  */
-function plainSceneDraft(chapter: string, id: string, title: string): DocumentReply {
+function plainSceneDraft(chapter: string, id: string, title: string): EntryReply {
   return {
     properties: {
       id,
@@ -675,7 +675,7 @@ function plainSceneDraft(chapter: string, id: string, title: string): DocumentRe
   };
 }
 
-/** One suggested entry — the document itself. */
-export function entryPartReply(kind: "npc" | "location"): DocumentReply {
+/** One suggested entry — the entry itself. */
+export function entryPartReply(kind: "npc" | "location"): EntryReply {
   return kind === "location" ? locationStub : npcStub;
 }

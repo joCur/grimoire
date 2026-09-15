@@ -20,8 +20,8 @@ import type {
 import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generate-jobs";
 import { setProviderForTests } from "../src/generator";
-import { composeDocument } from "../src/document-reply";
-import { documentReply } from "./support/pipeline-fake";
+import { composeEntry } from "../src/entry-reply";
+import { entryReply } from "./support/pipeline-fake";
 import { dropStore, seedStore } from "./support/store";
 import type {
   CompletionResult,
@@ -167,17 +167,17 @@ function npcMarkdown(
 }
 
 /**
- * The reply object: the document itself —
+ * The reply object: the entry itself —
  * no address (the server addresses the npc as `npcs/<id>` with the
- * id from the properties). Written from the DOCUMENT a case describes and
+ * id from the properties). Written from the ENTRY a case describes and
  * turned into the reply object (support/pipeline-fake
- * `documentReply`); a document that cannot be read is served verbatim,
+ * `entryReply`); an entry that cannot be read is served verbatim,
  * because that is what such a case is about.
  */
 function npcReply(over: { content?: string; warnings?: string[] } = {}): string {
-  const document = over.content ?? npcMarkdown();
+  const entry = over.content ?? npcMarkdown();
   const warnings = over.warnings ?? ["Quelltext nennt keinen Status — alive gesetzt"];
-  return documentReply(document, warnings, "npc") ?? document;
+  return entryReply(entry, warnings, "npc") ?? entry;
 }
 
 /** A reply for a specific id (so a test that WRITES does not collide later). */
@@ -256,7 +256,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     // sends properties and body, never a rendered block), so it is the
     // store's own rendering — same keys, same body, the renderer's quoting.
     expect(result.npc.markdown).toBe(
-      composeDocument({
+      composeEntry({
         properties: {
           id: "grella",
           name: "Grella",
@@ -391,7 +391,7 @@ describe("POST /api/:campaign/generate/npc", () => {
   test("a MISSING status is read as \"unknown\" — the schema allows null", async () => {
     // `status` is nullable in the reply schema (the prompt's „nicht gegeben →
     // null"), so an absent one is a legal answer and means what a status-less
-    // npc file has always meant to the shared parser: `unknown`. Hard-failing
+    // npc entry has always meant to the shared parser: `unknown`. Hard-failing
     // here would make a schema-conform reply cost a correction turn.
     const fake = useFake([npcReply({ content: npcMarkdown({ status: null }) })]);
     const res = await generateNpc(npcBody);
@@ -428,7 +428,7 @@ describe("POST /api/:campaign/generate/npc", () => {
   test("quickstats travel as key/value pairs — a mapping is a shape error", async () => {
     // The „quote the plus" rule is the SCHEMA's job now: a `pairs` field is a
     // list of `{ key, value }` with string values, and the server folds it
-    // into the mapping and renders it quoted (document-reply.ts). So what a
+    // into the mapping and renders it quoted (entry-reply.ts). So what a
     // reply can still get wrong is the SHAPE, and that is what it is told.
     const mapping = JSON.stringify({
       properties: { id: "grella", name: "Grella", status: "alive", quickstats: { insight: "+3" } },
@@ -477,7 +477,7 @@ describe("POST /api/:campaign/generate/npc", () => {
   });
 
   test("a reply that is not the reply object is a validation error", async () => {
-    // Prose, the raw-document format this ticket replaced, an empty reply, a
+    // Prose, the raw-entry format this ticket replaced, an empty reply, a
     // JSON value that is not the object: all of them are „das ist kein Objekt
     // des Schemas", and the message says which three keys one has.
     for (const raw of [
@@ -498,7 +498,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     // correction turn.
     const fake = useFake([
       [
-        "Hier ist die NPC-Datei — ich habe den Status auf alive gesetzt:",
+        "Hier ist der NPC-Eintrag — ich habe den Status auf alive gesetzt:",
         "",
         "```json",
         npcReply(),
@@ -509,7 +509,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(res.status).toBe(200);
     expect(fake.calls).toHaveLength(1);
     const result = (await res.json()) as GenerateNpcResult;
-    // The document is the SERVER's composition, and the warning is the run's.
+    // The entry is the SERVER's composition, and the warning is the run's.
     expect(result.npc.markdown.startsWith("---\nid: grella")).toBe(true);
     expect(result.npc.markdown).not.toContain("```");
     expect(result.warnings).toEqual(["Quelltext nennt keinen Status — alive gesetzt"]);

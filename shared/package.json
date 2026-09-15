@@ -11,7 +11,7 @@
     "./slug": "./src/slug.ts",
     "./outline-schema": "./src/outline-schema.ts",
     "./property-fields": "./src/property-fields.ts",
-    "./document-schema": "./src/document-schema.ts",
+    "./entry-schema": "./src/entry-schema.ts",
     "./session-state": "./src/session-state.ts"
   },
   "scripts": {

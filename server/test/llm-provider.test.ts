@@ -33,7 +33,7 @@ import {
   OUTLINE_SCHEMA_NAME,
   outlineJsonSchema,
 } from "@grimoire/shared/outline-schema";
-import { documentReplySchema, documentSchemaName } from "@grimoire/shared/document-schema";
+import { entryReplySchema, entrySchemaName } from "@grimoire/shared/entry-schema";
 
 // --- factory ------------------------------------------------------------------
 
@@ -129,7 +129,7 @@ const REQ: GenerateRequest = {
  * for exactly that reason: the transports must still behave when nothing is
  * forced, which is what `LLM_FORCE_JSON=0` and a future unforced call rely on.
  *
- * The OUTLINE request, and one DOCUMENT request per kind and mode below it.
+ * The OUTLINE request, and one ENTRY request per kind and mode below it.
  */
 const OUTLINE_REQ: GenerateRequest = {
   ...REQ,
@@ -140,13 +140,13 @@ const OUTLINE_REQ: GenerateRequest = {
   },
 };
 
-/** Every document request a run can make — kind x mode. */
-const DOCUMENT_REQS: Array<{ label: string; req: GenerateRequest; name: string }> = [
+/** Every entry request a run can make — kind x mode. */
+const ENTRY_REQS: Array<{ label: string; req: GenerateRequest; name: string }> = [
   ...(["scene", "npc", "location"] as const).flatMap((kind) =>
     (["create", "augment"] as const).map((mode) => ({
       label: `${kind}/${mode}`,
-      name: documentSchemaName(kind, mode),
-      req: { ...REQ, jsonSchema: documentReplySchema(kind, mode) } as GenerateRequest,
+      name: entrySchemaName(kind, mode),
+      req: { ...REQ, jsonSchema: entryReplySchema(kind, mode) } as GenerateRequest,
     })),
   ),
 ];
@@ -386,8 +386,8 @@ describe("OpenAICompatProvider request", () => {
     expect("response_format" in (await next).body).toBe(false);
   });
 
-  test("EVERY document call sends its own json_schema, strict", async () => {
-    for (const { label, req, name } of DOCUMENT_REQS) {
+  test("EVERY entry call sends its own json_schema, strict", async () => {
+    for (const { label, req, name } of ENTRY_REQS) {
       resetJsonSchemaSupportForTests();
       const { baseUrl, next } = await captureServer();
       const provider = createProvider({
@@ -495,7 +495,7 @@ describe("OpenAICompatProvider request", () => {
     expect(bodies).toHaveLength(3);
     expect((bodies[2]!.response_format as { type: string }).type).toBe("json_object");
 
-    // …and a document call is still forced into nothing at all.
+    // …and an entry call is still forced into nothing at all.
     await provider.complete(REQ);
     expect("response_format" in bodies[3]!).toBe(false);
     resetJsonSchemaSupportForTests();
@@ -824,12 +824,12 @@ describe("ClaudeProvider reply", () => {
   // --- the reply shape: a forced tool ----------------------------------------
 
   test("a request without a schema sends no tool and no prefill", async () => {
-    const document = "---\nid: night-watch-quay\n---\n\n## Flow\n\nText.\n";
+    const entry = "---\nid: night-watch-quay\n---\n\n## Flow\n\nText.\n";
     const sent = await withStubbedFetch(
-      { content: [{ type: "text", text: document }], stop_reason: "end_turn" },
+      { content: [{ type: "text", text: entry }], stop_reason: "end_turn" },
       async (p) => {
         // Byte for byte: a prefilled `{` in front of this would corrupt it.
-        expect((await p.complete(REQ)).text).toBe(document);
+        expect((await p.complete(REQ)).text).toBe(entry);
       },
     );
     const messages = sent.messages as Array<{ role: string; content: unknown }>;
@@ -866,8 +866,8 @@ describe("ClaudeProvider reply", () => {
     expect(messages.map((m) => m.role)).toEqual(["user"]);
   });
 
-  test("EVERY document call travels as a forced tool", async () => {
-    for (const { label, req, name } of DOCUMENT_REQS) {
+  test("EVERY entry call travels as a forced tool", async () => {
+    for (const { label, req, name } of ENTRY_REQS) {
       const reply = { properties: { id: "kai" }, body: "## Flow\n", warnings: [] };
       const sent = await withStubbedFetch(
         {
@@ -875,7 +875,7 @@ describe("ClaudeProvider reply", () => {
           stop_reason: "tool_use",
         },
         async (p) => {
-          // The tool INPUT is the reply — document-reply.ts parses JSON.
+          // The tool INPUT is the reply — entry-reply.ts parses JSON.
           expect(JSON.parse((await p.complete(req)).text), label).toEqual(reply);
         },
       );
@@ -911,7 +911,7 @@ describe("ClaudeProvider reply", () => {
       { content: [{ type: "text", text: "---\nid: x\n---\n" }], stop_reason: "end_turn" },
       async (p) => {
         await p.complete(REQ, [
-          { assistant: "kaputtes Dokument", correction: "bitte korrigieren" },
+          { assistant: "kaputter Eintrag", correction: "bitte korrigieren" },
           { assistant: "noch kaputt", correction: "nochmal" },
         ]);
       },

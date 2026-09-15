@@ -62,8 +62,8 @@ describe("the catalogs", () => {
 
 // The typographic guard: the catalog used to write German
 // quotation marks as an opening `„` closed by an ASCII `"`, and the generator
-// prompts imitated the catalog. Scanned over the VALUES, not over the file:
-// in the source the closing ASCII `"` is indistinguishable from the string
+// prompts imitated the catalog. Scanned over the VALUES, not over the source
+// text: there the closing ASCII `"` is indistinguishable from the string
 // delimiter. The markdown side of the same rule — prompts, few-shots,
 // examples/ — lives in server/test/typography.test.ts.
 describe("German quotation marks", () => {

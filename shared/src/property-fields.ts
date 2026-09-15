@@ -2,7 +2,7 @@
 // of value each one holds, and which of them an entity cannot lose.
 //
 // The list lives here, and not in the app's „Eigenschaften" dialog, because
-// the GENERATOR needs the very same list: a document reply is a JSON object
+// the GENERATOR needs the very same list: an entry reply is a JSON object
 // whose `properties` half is schema-enforced per kind (../schema), and a
 // schema that allowed a key the dialog does not know — or forgot one it
 // offers — would be a model writing fields the DM can never see or edit.
@@ -32,7 +32,7 @@ export function isPropertiesKind(value: string): value is PropertiesKind {
  *   text / textarea   a free string (textarea = the fields that hold a
  *                     sentence; the difference is presentation only)
  *   select            a string out of a known value set, plus whatever a
- *                     hand-edited file happens to say (the format degrades)
+ *                     hand-edited value happens to say (the format degrades)
  *   reference         ONE entity id
  *   references        MANY entity ids
  *   chips             a free string list (`tags`, `handouts`)
@@ -55,7 +55,7 @@ export interface PropertyFieldDef {
   /** The properties key, verbatim (`roll20-page` included). */
   key: string;
   control: FieldControl;
-  /** `select` only: the known value set. A file may still say more. */
+  /** `select` only: the known value set. An entry may still say more. */
   values?: readonly string[];
   /** `reference`/`references` only: which entity list the value names. */
   source?: ReferenceSource;
@@ -66,7 +66,7 @@ export interface PropertyFieldDef {
 /**
  * `id` is deliberately NOT in any list: in the app the rename cascade owns
  * it, and in a generator reply it is required separately
- * (./document-schema) because it is what the server builds the ADDRESS from —
+ * (./entry-schema) because it is what the server builds the ADDRESS from —
  * the one thing that is not an editable property.
  */
 export const PROPERTY_FIELDS: Record<PropertiesKind, readonly PropertyFieldDef[]> = {

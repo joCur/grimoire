@@ -42,8 +42,8 @@ import {
   setProviderForTests,
 } from "../src/generator";
 import type { TokenUsage } from "../src/llm-provider";
-import { parseJsonReply } from "../src/document-reply";
-import { PipelineFake, documentReply, type ScriptedReply } from "./support/pipeline-fake";
+import { parseJsonReply } from "../src/entry-reply";
+import { PipelineFake, entryReply, type ScriptedReply } from "./support/pipeline-fake";
 
 /**
  * Whether an entity is there: the address resolves through GET /file. That
@@ -225,14 +225,14 @@ function replyJson(over: ReplyOver = {}): string {
 /**
  * What the fake actually SENDS for the scene part of `reply(over)`: the reply
  * OBJECT — the scene's properties, its body and the script's
- * warnings. The script above keeps writing documents (it is how a test says
- * which documents a run is about); this is what the server sees, so it is what
+ * warnings. The script above keeps writing entries (it is how a test says
+ * which entries a run is about); this is what the server sees, so it is what
  * the correction-turn and `rawReply` assertions compare against.
  */
 function servedScene(over: ReplyOver = {}): string {
   const content = (over.scenes ?? [{ content: sceneMarkdown() }])[0]!.content;
   const warnings = over.warnings ?? ["Quelltext nennt keinen DC — DC 12 gesetzt"];
-  return documentReply(content, warnings, "scene") ?? content;
+  return entryReply(content, warnings, "scene") ?? content;
 }
 
 function reply(over: ReplyOver = {}): string {
@@ -580,7 +580,7 @@ describe("POST /api/:campaign/generate", () => {
   test("an npc entry without a status is read as \"unknown\", not corrected", async () => {
     // The schema types an npc `status` as NULLABLE (the prompt's „nicht
     // gegeben → null"), so „no status" is a legal reply — and it means what
-    // the shared parser has always made of a status-less npc file:
+    // the shared parser has always made of a status-less npc entry:
     // `unknown`. Never `alive`, which would be the run asserting something
     // the source text is silent about.
     const fake = useFake([reply({ entries: [{ kind: "npc", content: npcStub({ status: null }) }] })]);
@@ -692,7 +692,7 @@ describe("POST /api/:campaign/generate", () => {
     // turn is the ONE shape message — the three keys of the
     // reply object, and the schema it belongs to.
     expect(scene[1]!.corrections[0]!.correction).toContain("kein Objekt des Schemas");
-    expect(scene[1]!.corrections[0]!.correction).toContain("scene_document");
+    expect(scene[1]!.corrections[0]!.correction).toContain("scene");
     expect(scene[1]!.corrections[0]!.correction).toContain("`warnings`");
     expect(scene[2]!.corrections).toHaveLength(2);
     // The OUTLINE step has correction turns of its own (Zuschnitt 1): the
@@ -843,7 +843,7 @@ describe("POST /api/:campaign/generate", () => {
     expect(res.status).toBe(200);
     const scene = fake.callsFor("treffen-am-kai");
     expect(scene).toHaveLength(2);
-    // The document the part answered, replayed verbatim.
+    // The entry the part answered, replayed verbatim.
     expect(scene[1]!.corrections[0]!.assistant).toBe(
       servedScene({ scenes: [{ content: sceneMarkdown({ status: "ready" }) }] }),
     );
@@ -966,7 +966,7 @@ describe("POST /api/:campaign/generate", () => {
   });
 
   test("a scene whose chapter is not the run's triggers a correction turn", async () => {
-    // …and a reply that names a DIFFERENT one is not decoration: the file
+    // …and a reply that names a DIFFERENT one is not decoration: the entry
     // would sit in the run's chapter while claiming another, and the pool
     // groups by the key while the tree groups by the address. Cheaper as a
     // correction turn than as a scene the DM has to find by hand.

@@ -9,8 +9,8 @@
 // exception (generator/README.md step 4).
 //
 // EVERY request carries the schema of the object it wants
-// back — the outline its own (shared/outline-schema), a document call the
-// object that mirrors the stored row (shared/document-schema) — and the
+// back — the outline its own (shared/outline-schema), an entry call the
+// object that mirrors the stored row (shared/entry-schema) — and the
 // transports force it, because that is the one guarantee an API can give:
 //
 //   Claude — the schema travels as a TOOL and `tool_choice` forces the call,
@@ -89,7 +89,7 @@ export interface GenerateRequest {
   instruction?: string;
   /**
    * The JSON schema the reply must satisfy. Every call sets it —
-   * the outline its own, a document call its kind's. It stays OPTIONAL in the
+   * the outline its own, an entry call its kind's. It stays OPTIONAL in the
    * type so a caller that forces nothing (and a test that wants the unforced
    * transport) is still a legal request.
    */
@@ -292,10 +292,10 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
       ...(req.context.targetId === undefined ? [] : [`vorgegebene id: ${req.context.targetId}`]),
     ].join("\n"),
     "## Referenz-Zieldatei (Few-Shot)",
-    // The few-shot is a REPLY now, not a file: every prompt's
+    // The few-shot is a REPLY now: every prompt's
     // example is the JSON object its schema describes, so the fence says json
     // and the model sees the shape it will be forced into. (The augment run's
-    // „Bestehender Eintrag" below stays markdown — that one IS a file.)
+    // „Bestehender Eintrag" below stays markdown — that one IS an entry.)
     "```json",
     req.fewShotTarget,
     "```",
@@ -465,7 +465,7 @@ export class ClaudeProvider implements LLMProvider {
 /**
  * The Messages API request body. Split out of `complete` because the two
  * reply shapes differ HERE and nowhere else: a schema request
- * carries the schema as a forced tool, a document request carries nothing
+ * carries the schema as a forced tool, an entry request carries nothing
  * extra at all.
  */
 export function claudeBody(
@@ -676,7 +676,7 @@ export class OpenAICompatProvider implements LLMProvider {
    * the schema form, and nothing at all for a request without one.
    *
    * `LLM_FORCE_JSON=0` turns it off for endpoints that reject the field
-   * altogether; the tolerant reader in ./document-reply (fence, brace span,
+   * altogether; the tolerant reader in ./entry-reply (fence, brace span,
    * one `jsonrepair` pass) stays the safety net for endpoints that accept the
    * field and ignore it.
    */

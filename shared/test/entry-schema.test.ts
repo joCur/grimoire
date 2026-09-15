@@ -2,8 +2,8 @@
 //
 // The schemas are plain files, so nothing stops one of them from slowly
 // disagreeing with the code that reads the same data. This test is what
-// stops it. It never writes a schema and never builds one — it ASSERTS, file
-// by file, against the definitions the rest of the app already uses:
+// stops it. It never writes a schema and never builds one — it ASSERTS,
+// schema by schema, against the definitions the rest of the app already uses:
 //
 //   1. the `properties` of a kind ARE its property field list, in order —
 //      the same list the „Eigenschaften" dialog is built from. A schema that
@@ -40,14 +40,14 @@ import {
   outlineJsonSchema,
 } from "../src/outline-schema";
 import {
-  DOCUMENT_KINDS,
-  documentJsonSchema,
-  documentReplySchema,
-  documentSchemaName,
+  ENTRY_KINDS,
+  entryJsonSchema,
+  entryReplySchema,
+  entrySchemaName,
   PAIR_KEY,
   PAIR_VALUE,
-  type DocumentMode,
-} from "../src/document-schema";
+  type EntryMode,
+} from "../src/entry-schema";
 
 /** The keywords OpenAI's strict mode refuses — see point 3 above. */
 const UNSUPPORTED = ["pattern", "minItems", "maxItems", "minLength", "maxLength", "format"];
@@ -81,12 +81,12 @@ function at(schema: Record<string, unknown>, path: string[]): Record<string, unk
   return node;
 }
 
-/** The `properties` half of a document schema, field by field. */
-function documentFields(
-  kind: (typeof DOCUMENT_KINDS)[number],
-  mode: DocumentMode,
+/** The `properties` half of an entry schema, field by field. */
+function entryFields(
+  kind: (typeof ENTRY_KINDS)[number],
+  mode: EntryMode,
 ): Record<string, Record<string, unknown>> {
-  return at(documentJsonSchema(kind, mode), ["properties", "properties", "properties"]) as Record<
+  return at(entryJsonSchema(kind, mode), ["properties", "properties", "properties"]) as Record<
     string,
     Record<string, unknown>
   >;
@@ -103,13 +103,13 @@ const TYPE_OF_CONTROL: Record<FieldControl, string> = {
   pairs: "array",
 };
 
-const MODES: DocumentMode[] = ["create", "augment"];
+const MODES: EntryMode[] = ["create", "augment"];
 
-describe("the document schema files", () => {
+describe("the entry schemas", () => {
   test("the properties ARE the kind's field list, in order, plus the id", () => {
-    for (const kind of DOCUMENT_KINDS) {
+    for (const kind of ENTRY_KINDS) {
       for (const mode of MODES) {
-        expect(Object.keys(documentFields(kind, mode)), `${kind}/${mode}`).toEqual([
+        expect(Object.keys(entryFields(kind, mode)), `${kind}/${mode}`).toEqual([
           "id",
           ...PROPERTY_FIELDS[kind as PropertiesKind].map((field) => field.key),
         ]);
@@ -118,9 +118,9 @@ describe("the document schema files", () => {
   });
 
   test("every field carries its control's type, its values, and its nullability", () => {
-    for (const kind of DOCUMENT_KINDS) {
+    for (const kind of ENTRY_KINDS) {
       for (const mode of MODES) {
-        const fields = documentFields(kind, mode);
+        const fields = entryFields(kind, mode);
         for (const def of PROPERTY_FIELDS[kind as PropertiesKind]) {
           const label = `${kind}/${mode}/${def.key}`;
           const node = fields[def.key] as Record<string, unknown>;
@@ -151,38 +151,38 @@ describe("the document schema files", () => {
   });
 
   test("a NEW scene is a draft; an existing one keeps its status", () => {
-    expect(documentFields("scene", "create").status).toMatchObject({
+    expect(entryFields("scene", "create").status).toMatchObject({
       type: "string",
       enum: ["draft"],
     });
-    const existing = documentFields("scene", "augment").status as { enum: unknown[] };
+    const existing = entryFields("scene", "augment").status as { enum: unknown[] };
     expect(existing.enum).toEqual([...(propertyFieldDef("scene", "status")?.values ?? []), null]);
     expect(existing.enum).toContain("played");
   });
 
   test("the schema name says kind and run, and nothing else does", () => {
-    expect(documentSchemaName("scene", "create")).toBe("scene_document");
-    expect(documentSchemaName("npc", "create")).toBe("npc_document");
-    expect(documentSchemaName("location", "create")).toBe("location_document");
-    // The augment run is ONE name for all three kinds: the correction turn
-    // names it, and „augmented_document" is what the model was handed.
-    for (const kind of DOCUMENT_KINDS) {
-      expect(documentSchemaName(kind, "augment")).toBe("augmented_document");
+    expect(entrySchemaName("scene", "create")).toBe("scene");
+    expect(entrySchemaName("npc", "create")).toBe("npc");
+    expect(entrySchemaName("location", "create")).toBe("location");
+    // The augment run prefixes the same kind: the correction turn names the
+    // schema, so the name the model was handed says kind AND run.
+    for (const kind of ENTRY_KINDS) {
+      expect(entrySchemaName(kind, "augment")).toBe(`augmented_${kind}`);
     }
   });
 
   test("a copy every call — both transports serialize it into a body", () => {
-    const first = documentJsonSchema("scene", "create");
-    expect(documentJsonSchema("scene", "create")).not.toBe(first);
-    expect(documentJsonSchema("scene", "create")).toEqual(first);
-    const reply = documentReplySchema("npc", "create");
-    expect(reply.name).toBe("npc_document");
+    const first = entryJsonSchema("scene", "create");
+    expect(entryJsonSchema("scene", "create")).not.toBe(first);
+    expect(entryJsonSchema("scene", "create")).toEqual(first);
+    const reply = entryReplySchema("npc", "create");
+    expect(reply.name).toBe("npc");
     expect(reply.description).toContain("Figur");
-    expect(reply.schema).toEqual(documentJsonSchema("npc", "create"));
+    expect(reply.schema).toEqual(entryJsonSchema("npc", "create"));
   });
 });
 
-describe("the outline schema file", () => {
+describe("the outline schema", () => {
   const scenes = () => at(outlineJsonSchema(), ["properties", "scenes"]);
   const sceneProps = () => at(outlineJsonSchema(), ["properties", "scenes", "items", "properties"]);
   const entries = () => at(outlineJsonSchema(), ["properties", "entries"]);
@@ -211,10 +211,10 @@ describe("the outline schema file", () => {
   });
 });
 
-describe("every schema file", () => {
+describe("every schema", () => {
   const all = [
-    ...DOCUMENT_KINDS.flatMap((kind) =>
-      MODES.map((mode) => [`${kind}/${mode}`, documentJsonSchema(kind, mode)] as const),
+    ...ENTRY_KINDS.flatMap((kind) =>
+      MODES.map((mode) => [`${kind}/${mode}`, entryJsonSchema(kind, mode)] as const),
     ),
     ["outline", outlineJsonSchema()] as const,
   ];

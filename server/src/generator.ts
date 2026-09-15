@@ -5,9 +5,9 @@
 //   3. call the LLM provider
 //   4. read the reply and validate it MECHANICALLY. EVERY call answers a
 //      JSON object whose shape the provider forces: the outline
-//      its own small object (shared/outline-schema), a document call the
+//      its own small object (shared/outline-schema), an entry call the
 //      object that mirrors the stored row — `properties` per kind, `body`,
-//      `warnings` (shared/document-schema, read by ./document-reply). Errors
+//      `warnings` (shared/entry-schema, read by ./entry-reply). Errors
 //      go back to the model as a correction turn (LLM_CORRECTION_TURNS,
 //      default 1, max 2), never to the user; exhausted retries
 //      -> 422.
@@ -52,11 +52,11 @@ import {
   type NamingHint,
   type ParsedFile,
 } from "@grimoire/shared";
-import { documentReplySchema } from "@grimoire/shared/document-schema";
+import { entryReplySchema } from "@grimoire/shared/entry-schema";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
 import { ApiError } from "./api-error";
 import { assertSafeAddress } from "./addressing";
-import { composeDocument, parseDocumentReply, type DocumentReply } from "./document-reply";
+import { composeEntry, parseEntryReply, type EntryReply } from "./entry-reply";
 import { checkDraftsNaming, type NamingRule } from "./naming-check";
 // The generator reads its context and writes its drafts through the store
 // (issue #57) — the campaign file tree is not a data source any more.
@@ -371,9 +371,9 @@ export async function collectContext(campaign: string): Promise<CampaignContext>
 //
 // There is nothing left to extract here. Every reply is a JSON object the
 // provider was forced into, and the one tolerant reader both the
-// outline and the documents share — fence, brace span, ONE `jsonrepair`
-// attempt — lives in ./document-reply (`parseJsonReply`), next to the
-// document shape it is mostly used for.
+// outline and the entries share — fence, brace span, ONE `jsonrepair`
+// attempt — lives in ./entry-reply (`parseJsonReply`), next to the
+// entry shape it is mostly used for.
 
 // --- mechanical validation (generator/README.md step 4) ----------------------
 
@@ -389,8 +389,8 @@ export async function collectContext(campaign: string): Promise<CampaignContext>
  */
 export interface RawEntry {
   kind?: string;
-  /** The reply object of this entry (./document-reply). */
-  reply: DocumentReply;
+  /** The reply object of this entry (./entry-reply). */
+  reply: EntryReply;
 }
 
 const KNOWN_CALLOUTS = new Set<string>(CALLOUT_KINDS);
@@ -521,10 +521,10 @@ export function validateEntry(entry: RawEntry, index: number, errors: string[]):
     return null;
   }
   const id = fmId;
-  // The document the server would store, composed from the reply object
-  // (./document-reply) — the properties block is the renderer's, not the
+  // The entry the server would store, composed from the reply object
+  // (./entry-reply) — the properties block is the renderer's, not the
   // model's.
-  const markdown = composeDocument(entry.reply);
+  const markdown = composeEntry(entry.reply);
   const reparsed = reparseAtAddress(markdown, id, kind === "npc" ? npcPath : locationPath);
   const label = `${kind} entry "${id}"`;
   // A status error does not stop the mapping: the stub still resolves the
@@ -551,7 +551,7 @@ export interface AllowedRefs {
 }
 
 /**
- * Mechanical validation of ONE scene document, the rules of the
+ * Mechanical validation of ONE scene entry, the rules of the
  * data contract in one place: the pipeline's per-scene call and the apply
  * re-validation have to judge a scene by exactly the same rules, and the one
  * way to guarantee that is one function.
@@ -562,8 +562,8 @@ export interface AllowedRefs {
  *
  * Returns the draft, or null with the errors pushed onto `errors`.
  */
-export function validateSceneDocument(input: {
-  reply: DocumentReply;
+export function validateSceneEntry(input: {
+  reply: EntryReply;
   label: string;
   chapter: string;
   allowed: AllowedRefs;
@@ -578,7 +578,7 @@ export function validateSceneDocument(input: {
   // id is the one thing the model decides here, so it is the one thing
   // validated as an address would be.
   const fm = reply.properties;
-  const content = composeDocument(reply);
+  const content = composeEntry(reply);
   const fmId = declaredId(fm);
   if (fmId === undefined) {
     errors.push(`${input.label}: "id" fehlt — jede Szene nennt ihre kebab-case id`);
@@ -611,8 +611,8 @@ export function validateSceneDocument(input: {
   }
   // The `chapter` key and the scene's ADDRESS have to say the same thing. The
   // address is the run's (`<chapter>/<id>`, never the model's), so a reply
-  // that names a different chapter would produce a file sitting in one
-  // chapter while claiming another — the pool groups by the key, the file
+  // that names a different chapter would produce an entry sitting in one
+  // chapter while claiming another — the pool groups by the key, the entry
   // tree by the address, and the two would disagree forever after. Cheaper as
   // a correction turn than as a scene the DM has to find and fix by hand.
   if (typeof fm.chapter === "string" && fm.chapter !== "" && fm.chapter !== chapter) {
@@ -762,13 +762,13 @@ function notesErrors(body: string): string[] {
  *
  * A REPLY can no longer break the rule: `quickstats` travels
  * as a `{ key, value }` LIST whose values the schema types as strings, and
- * the server folds it into the mapping itself (document-reply.ts
+ * the server folds it into the mapping itself (entry-reply.ts
  * `pairsValue`). All three call sites — the npc run, a scene run's npc entry,
  * the augment run — pass exactly such a folded mapping, so the check fires on
  * none of them any more.
  *
  * It stays as a BACKSTOP, and the augment path is why: there the mapping does
- * not end up in a file the server just composed but in a properties PATCH the
+ * not end up in an entry the server just composed but in a properties PATCH the
  * DM accepts, next to the entry's own historical values (`sameValue` against
  * a campaign that carries bare numbers). A future way in that skips
  * `pairsValue` would otherwise write a `+2` that YAML eats — and this
@@ -796,7 +796,7 @@ export function quickstatsErrors(fm: Record<string, unknown>): string[] {
  * Same contract as every other validator: the mapped result, or the error
  * list for the correction turn.
  *
- * The reply is the schema-forced OBJECT (./document-reply):
+ * The reply is the schema-forced OBJECT (./entry-reply):
  * `properties` per kind, `body`, `warnings`. The rules below are the format
  * contract's and unchanged by that — they read the properties mapping and the
  * body, which is what they always did.
@@ -825,7 +825,7 @@ export function validateNpcReply(
   ctx: CampaignContext,
   pinnedId?: string,
 ): { ok: true; result: GenerateNpcResult } | { ok: false; errors: string[] } {
-  const read = parseDocumentReply(raw, "npc");
+  const read = parseEntryReply(raw, "npc");
   if (!read.ok) return { ok: false, errors: read.errors.map((e) => `npc: ${e}`) };
   const { reply, markdown } = read;
   const errors: string[] = [];
@@ -896,7 +896,7 @@ export function validateNpcReply(
  * `schemaName` is the schema the reply is forced into — it is
  * NAMED here so the model corrects inside the shape it was given instead of
  * starting a new one. Every call has one now, so the instruction is the same
- * sentence for the outline and for a document; an absent name (a provider
+ * sentence for the outline and for an entry; an absent name (a provider
  * that forces nothing) simply leaves the reference out.
  */
 export function buildCorrectionMessage(
@@ -1109,7 +1109,7 @@ export async function runGenerateNpc(
       sourceText,
       // The reply object, forced by the provider — the same
       // guarantee the outline call has always had.
-      jsonSchema: documentReplySchema("npc", "create"),
+      jsonSchema: entryReplySchema("npc", "create"),
     },
     provider: getProvider(),
     validate: (raw) => validateNpcReply(raw, ctx, npcId),

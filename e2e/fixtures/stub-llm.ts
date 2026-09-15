@@ -62,7 +62,7 @@
 //     have to arrive verbatim.
 //
 // REPLY SHAPE: every reply is an OBJECT and is serialized as
-// JSON into the message content — the outline its own, a document call
+// JSON into the message content — the outline its own, an entry call
 // `{ properties, body, warnings }` (replies.ts assembles both). A reply that
 // is a plain STRING is one a spec wrote to be unreadable, and it travels
 // verbatim.

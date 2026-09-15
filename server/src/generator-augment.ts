@@ -36,7 +36,7 @@ import {
   type AugmentResult,
   type FileResponse,
 } from "@grimoire/shared";
-import { documentReplySchema } from "@grimoire/shared/document-schema";
+import { entryReplySchema } from "@grimoire/shared/entry-schema";
 import { ApiError } from "./api-error";
 import {
   ASSET_FILES,
@@ -50,7 +50,7 @@ import {
   withNamingHints,
   type CampaignContext,
 } from "./generator";
-import { parseDocumentReply } from "./document-reply";
+import { parseEntryReply } from "./entry-reply";
 import type { LLMProvider } from "./llm-provider";
 import { readParsedFile } from "./store/read";
 import { renderRaw } from "./store/render";
@@ -92,22 +92,22 @@ export async function readAugmentTarget(
 
 // --- prompt --------------------------------------------------------------------
 
-/** The heading every create prompt describes the TARGET FILE under. */
-const FORMAT_HEADING = "## Ziel-Format der Datei";
+/** The heading every create prompt describes the TARGET ENTRY under. */
+const FORMAT_HEADING = "## Eigenschaften und Text des Eintrags";
 
 /**
- * The FILE-FORMAT half of a create prompt: its title line plus the
- * „## Ziel-Format der Datei" section, and nothing else.
+ * The FORMAT half of a create prompt: its title line plus the
+ * „## Eigenschaften und Text des Eintrags" section, and nothing else.
  *
  * Why the slice: a create prompt also carries its own „## Ausgabeformat" —
  * `scenes`/`entries` for a scene run, `npc` for an NPC run — and its
  * „## Regeln" speak of stubs the augment run can never produce. Embedding
- * the whole document put TWO contradictory output schemas in front of the
+ * the whole prompt put TWO contradictory output schemas in front of the
  * model, and „this prompt wins" is a sentence, not a guarantee. The augment
  * run brings its own output schema and its own rules; all it needs from the
- * create prompt is what the target file looks like.
+ * create prompt is the shape of the target entry.
  *
- * Degrades: a document without the heading travels whole rather than empty —
+ * Degrades: a prompt without the heading travels whole rather than empty —
  * a missing section must not silently strip the format contract.
  */
 export function formatContract(doc: string): string {
@@ -122,9 +122,9 @@ export function formatContract(doc: string): string {
 
 /**
  * The augment system prompt of one kind: the shared augmentation rule
- * (augment-system-prompt.md, which ends on the heading „## Format der
- * Ziel-Datei") followed by that kind's own FILE format contract — the format
- * is still described exactly ONCE, but only the half that is about the file.
+ * (augment-system-prompt.md, which ends on the heading „## Das Format der
+ * jeweiligen Art") followed by that kind's own format contract — the format
+ * is still described exactly ONCE, but only the half that is about the entry.
  */
 export async function augmentSystemPrompt(kind: AugmentKind): Promise<string> {
   const [rule, format] = await Promise.all([
@@ -209,7 +209,7 @@ export function validateAugmentReply(
   raw: string,
   target: { kind: AugmentKind; file: FileResponse },
 ): { ok: true; result: AugmentResult } | { ok: false; errors: string[] } {
-  // The reply is the schema-forced OBJECT (./document-reply):
+  // The reply is the schema-forced OBJECT (./entry-reply):
   // `properties` per kind, the whole `body` as it should look afterwards, and
   // the warnings. The augmentation rule („immer die GANZE Datei") is the rule
   // it always was — the shape around it is what changed.
@@ -223,7 +223,7 @@ export function validateAugmentReply(
   // Read in AUGMENT mode: an unknown property key is an echo of the file the
   // model was shown, not a proposal (see normalizeProperties) — it is dropped
   // instead of failing the run.
-  const read = parseDocumentReply(raw, kind, "augment");
+  const read = parseEntryReply(raw, kind, "augment");
   if (!read.ok) {
     return { ok: false, errors: read.errors.map((e) => `entry "${file.path}": ${e}`) };
   }
@@ -375,7 +375,7 @@ export async function runAugment(
       // Forced like every other reply — in „augment" mode, which
       // is the one difference: an existing scene's `status` is whatever the DM
       // made it, so the schema must not narrow it to `draft`.
-      jsonSchema: documentReplySchema(target.kind, "augment"),
+      jsonSchema: entryReplySchema(target.kind, "augment"),
     },
     provider: getProvider(),
     validate: (raw) => validateAugmentReply(raw, target),
@@ -386,7 +386,7 @@ export async function runAugment(
   // the text the DM is about to accept.
   return withNamingHints(
     result,
-    [{ path: result.path, markdown: proposedDocument(result) }],
+    [{ path: result.path, markdown: proposedEntry(result) }],
     ctx.namingRules,
   );
 }
@@ -406,7 +406,7 @@ function chapterOf(file: FileResponse): string {
  * nothing. Same renderer as a written file, so the check reads the document
  * the DM is about to accept.
  */
-function proposedDocument(result: AugmentResult): string {
+function proposedEntry(result: AugmentResult): string {
   const properties = Object.fromEntries(result.properties.map((p) => [p.key, p.proposed]));
   return renderRaw(properties, result.proposedBody);
 }

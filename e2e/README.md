@@ -6,54 +6,49 @@ Nichts im Browser ist gemockt — die einzige Attrappe ist das LLM: ein lokaler,
 OpenAI-kompatibler Stub (`fixtures/stub-llm.ts`), den der Server über den
 normalen `OpenAICompatProvider` per HTTP aufruft.
 
-## Seit dem SQLite-Cutover (#57)
-
-Die Datenbank ist die einzige Wahrheit; der Server liest und schreibt keine
-Kampagnen-Markdown-Dateien mehr. Für die Suite heißt das:
+## So sät die Suite
 
 - **Gesät wird über den echten Importer — `grimoire seed`.** Jeder Test
   bekommt ein leeres `GRIMOIRE_DATA`-Verzeichnis; die `server`-Fixture ruft
   darauf `grimoire seed <baum>` mit der pristinen Kopie von
-  `examples/beispiel` auf und startet DANN den Server. Seit Issue #79
-  importiert der Boot selbst nichts mehr; der Seed bleibt aber derselbe
-  Importer (Planung #52, PO-Entscheidung F5: kein zweites Datenformat für
-  Fixtures).
-- **Der Markdown-Baum ist nur noch EINGABE**, einmal pro Test gelesen. Ein
-  Test, der Inhalte braucht, die die Beispielkampagne nicht hat, sät sie VOR
-  dem Seed in seine eigene Kopie des Baums:
-  `test.use({ seed: { files: { "locations/hafen.md": "…" }, remove: ["_campaign.md"] } })`.
-  Ohne Seed wird die geteilte pristine Kopie direkt benutzt (niemand schreibt
-  hinein), die meisten Tests kopieren also gar nichts. Und ein Test, der eine
-  **leere Instanz** braucht — keine Kampagne, der Normalfall einer frischen
-  Installation seit #79 — schaltet den Seed-Lauf ganz ab:
-  `test.use({ seed: { skip: true } })` (Pfad 10, Issue #56).
-- **Zusicherungen laufen über die API** (`api`-Helfer, s. u.) — es gibt keine
-  Datei mehr, die man zurücklesen könnte. Der frühere `files`-Helfer ist weg;
-  eine Fixture, die von „der Datei auf der Platte" erzählt, wäre eine Lüge.
-- **Adressen tragen keine Dateiendung** (Issue #79) und ein Szenen-Segment
-  ist die `id`, nicht der frühere Dateiname.
-  Die Schlüssel des `seed`-Fixtures sind ebenfalls Adressen — das `.md` für
-  den Importer hängt die Fixture selbst an.
+  `examples/beispiel` auf und startet DANN den Server (der Boot selbst
+  importiert nichts). Derselbe Importer, kein zweites Fixture-Format
+  (PO-Entscheidung F5).
+- **Der Markdown-Baum ist EINGABE**, einmal pro Test gelesen. Ein Test, der
+  Inhalte braucht, die die Beispielkampagne nicht hat, sät sie VOR dem Seed
+  in seine eigene Kopie des Baums:
+  `test.use({ seed: { files: { "locations/hafen": "…" }, remove: ["_campaign"] } })`.
+  Die Schlüssel sind **Adressen** wie überall in der Suite — das `.md` für
+  den Importer hängt die Fixture selbst an (ein Schlüssel, der es schon
+  trägt, wird ebenso akzeptiert). Ohne Seed wird die geteilte pristine Kopie
+  direkt benutzt (niemand schreibt hinein), die meisten Tests kopieren also
+  gar nichts.
+- **Eine leere Instanz** — keine Kampagne, der Normalfall einer frischen
+  Installation — schaltet den Seed-Lauf ab: `test.use({ seed: { skip: true } })`
+  (Pfad 10, Issue #56).
+- **Zusicherungen laufen über die API** (`api`-Helfer, s. u.); wo eine
+  Zusicherung wirklich die Speicherung meint, über `db`.
+- **Adressen tragen keine Dateiendung** und ein Szenen-Segment ist die `id`.
 - **Das Wächter-Token heißt `rev`** (die Zeilenversion) und die Felder eines
-  Dokuments `properties`. Ein veraltetes `rev` antwortet weiter mit 409.
-- **„Extern geändert" gibt es nicht mehr.** Kritischer Pfad 9 prüft darum den
-  ZWEITEN SCHREIBER: während der Editor offen steht, schreibt der Test über
-  die API (`api.writeBody`), danach speichert die UI — und muss den Konflikt
-  zeigen und neu laden statt still zu überschreiben. Genauso in
-  `status-control`, `properties-form` und `block-composer`.
+  Dokuments `properties`. Ein veraltetes `rev` antwortet mit 409.
+- **Konflikte kommen vom ZWEITEN SCHREIBER**, nicht von außen: kritischer
+  Pfad 9 schreibt über die API (`api.writeBody`), während der Editor offen
+  steht, danach speichert die UI — und muss den Konflikt zeigen und neu laden
+  statt still zu überschreiben. Genauso in `status-control`,
+  `properties-form` und `block-composer`.
 
-## Seit „Gruppe = Ort" (#100)
+## Gruppe = Ort
 
-Die **Gruppe** einer Szene ist ihr `location`, es gibt kein eigenes
-Gruppenfeld mehr. Für die Suite heißt das drei Dinge:
+Die **Gruppe** einer Szene ist ihr `location` (#100), es gibt kein eigenes
+Gruppenfeld. Für die Suite heißt das drei Dinge:
 
-- **Die Adressen der Beispielszenen haben sich geändert.** Beide Dateien
-  liegen im Verzeichnis `hafen/`, nennen aber verschiedene Orte:
-  `01-salzhafen/leuchtturm/lighthouse-arrival` und
-  `01-salzhafen/bucht/smuggler-captured`. `hafen` ist keine Gruppe und
-  kommt in keiner Zusicherung mehr vor. `locations/bucht` gibt es im Baum
-  nicht — der Import legt den Eintrag an, weil eine Szene ihn nennt
-  („Referenzieren legt an", #70), die Kampagne hat also **zwei** Orte.
+- **Die Adressen der Beispielszenen folgen ihrem Ort, nicht dem Baum.** Beide
+  Quelldateien liegen im Verzeichnis `hafen/`, nennen aber verschiedene Orte,
+  also lauten die Adressen `01-salzhafen/leuchtturm/lighthouse-arrival` und
+  `01-salzhafen/bucht/smuggler-captured`. `hafen` ist keine Gruppe und kommt
+  in keiner Zusicherung vor. `locations/bucht` gibt es im Baum nicht — der
+  Import legt den Eintrag an, weil eine Szene ihn nennt („Referenzieren legt
+  an", #70), die Kampagne hat also **zwei** Orte.
 - **Eine veraltete Szenen-Adresse ist kein 404.** Sie nennt dieselbe id, der
   Server löst sie auf und antwortet mit der aktuellen Adresse (`path`); die
   App ersetzt die URL (ADR #17). `api.exists(<alte Adresse>)` ist deshalb
@@ -132,13 +127,13 @@ einsammelt (Bun matcht `*.test.ts` und `*.spec.ts`).
 ## Stub-Fixtures anpassen
 
 `fixtures/replies.ts` enthält die Modellantworten als **Objekte**, genau so,
-wie das erzwungene Schema sie beschreibt: ein Dokument-Aufruf antwortet
+wie das erzwungene Schema sie beschreibt: ein Eintrags-Aufruf antwortet
 `{ properties, body, warnings }`, die Gliederung ihr eigenes Format. Ein
 String, der kein Objekt ist, reist unverändert — das ist eine Antwort, die ein
 Test absichtlich unlesbar geschrieben hat. Der Stub serialisiert das Objekt als
 JSON in den Message-Content.
 
-Abgedeckt sind: der Szenen-Entwurf mit NPC- und Ort-Stub, das NPC-Dokument
+Abgedeckt sind: der Szenen-Entwurf mit NPC- und Ort-Stub, der NPC-Eintrag
 und je eine bewusst ungültige Variante. Sie erfüllen die aktuelle
 mechanische Validierung aus `server/src/generator.ts`.
 

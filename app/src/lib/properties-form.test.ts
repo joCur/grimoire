@@ -491,7 +491,7 @@ describe("the Ort field: free text in, a slug out (#100)", () => {
   });
 
   test("text that slugs to the STORED id is no change at all", () => {
-    // `location: bucht` is what the file holds; „Bucht“ means the same row,
+    // `location: bucht` is what the entry holds; „Bucht“ means the same row,
     // so there is nothing to patch and nothing to create.
     const current = withLocation("Bucht");
     expect(propertiesPatch(sceneFields, initial, current)).toEqual({});
@@ -641,7 +641,7 @@ describe("reference and select options", () => {
       ...known,
       { value: "onhold", label: "onhold" },
     ]);
-    // Cleared to „nicht gesetzt“ — same thing, the file's value is still there.
+    // Cleared to „nicht gesetzt“ — same thing, the entry's value is still there.
     expect(selectOptions(known, "", "onhold")).toEqual([
       ...known,
       { value: "onhold", label: "onhold" },

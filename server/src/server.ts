@@ -356,8 +356,8 @@
 //
 // EVERY generator call answers a JSON object whose schema
 // the providers FORCE (a tool call on the Claude path, `response_format:
-// json_schema` on the OpenAI path): a document call the object that mirrors
-// the stored row — `properties` per kind, `body`, `warnings` (./document-reply)
+// json_schema` on the OpenAI path): an entry call the object that mirrors
+// the stored row — `properties` per kind, `body`, `warnings` (./entry-reply)
 // — and the outline step its own small one. Nothing about these endpoints
 // changes with it: the drafts they carry, the 422 bodies and the review
 // payloads are the same shapes.

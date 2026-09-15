@@ -15,16 +15,16 @@
 //                  A reply that does not PARSE (garbage, a truncated one) is
 //                  served verbatim here instead: that is a run that dies
 //                  before it has parts, which is what those tests are about.
-//   scene part     the scripted reply's scene document, as the REPLY OBJECT
-//                  `properties` (the document's own properties,
+//   scene part     the scripted reply's scene entry, as the REPLY OBJECT
+//                  `properties` (the entry's own properties,
 //                  parsed), `body`, and the batch reply's `warnings`.
 //   entry part     the scripted reply's matching `entries` item, likewise.
-//   single call    the npc/augment run's scripted document, likewise — a
+//   single call    the npc/augment run's scripted entry, likewise — a
 //                  reply that does NOT parse as a batch / `{ npc }` /
 //                  `{ entry }` object travels verbatim, which is what the
 //                  garbage and the truncation cases are about.
 //
-// The script keeps writing DOCUMENTS (`content`: markdown with a properties
+// The script keeps writing ENTRIES (`content`: markdown with a properties
 // block), because that is how a test says what a run is about in one literal.
 // The fake is what turns them into the object a schema-forced provider
 // delivers — so the correction turns, the replayed assistant turns and the
@@ -108,17 +108,17 @@ function parseBatch(reply: ScriptedReply): BatchReply | null {
 }
 
 /**
- * The REPLY OBJECT, built out of a scripted document: the
+ * The REPLY OBJECT, built out of a scripted entry: the
  * properties block parsed into `properties`, everything below it as `body`,
- * plus the script's warnings. Returns null when the document has no parseable
+ * plus the script's warnings. Returns null when the entry has no parseable
  * properties block — such a script is served verbatim, because a reply the
  * server cannot read is exactly what those cases test.
  *
  * `quickstats` (and any other key/value field) is turned into the `{ key,
  * value }` LIST the schema asks for — a free mapping cannot be expressed in
- * strict mode (shared/document-schema.ts).
+ * strict mode (shared/entry-schema.ts).
  */
-export function documentReply(
+export function entryReply(
   content: string,
   warnings: readonly string[] = [],
   kind: "scene" | "npc" | "location" = "scene",
@@ -148,22 +148,22 @@ export function documentReply(
   });
 }
 
-/** The reply object of a scripted document, or the document verbatim. */
+/** The reply object of a scripted entry, or the entry verbatim. */
 function replyOrVerbatim(
   content: string,
   warnings: readonly string[],
   kind: "scene" | "npc" | "location",
 ): string {
-  return documentReply(content, warnings, kind) ?? content;
+  return entryReply(content, warnings, kind) ?? content;
 }
 
 /**
- * The ONE document a scripted single-call reply carries: `{ npc }` for an NPC
+ * The ONE entry a scripted single-call reply carries: `{ npc }` for an NPC
  * run, `{ entry }` for an augment run — plus `scene`/`location`, so a script
  * can say any of them. Null when the reply is not such an object, and then it
  * travels verbatim.
  */
-function singleDocument(reply: ScriptedReply): { content: string; warnings: string[] } | null {
+function singleEntry(reply: ScriptedReply): { content: string; warnings: string[] } | null {
   if (typeof reply !== "string" && reply.truncated === true) return null;
   const raw = textOf(reply);
   const start = raw.indexOf("{");
@@ -307,15 +307,15 @@ export class PipelineFake implements LLMProvider {
     if (scripted === undefined) throw new Error("PipelineFake: no scripted reply left");
 
     if (part.kind === "single") {
-      const document = singleDocument(scripted);
-      if (document === null) return completionOf(scripted);
+      const entry = singleEntry(scripted);
+      if (entry === null) return completionOf(scripted);
       return {
         ...completionOf(scripted),
         // Which kind the single call is about is not in the request; the npc
         // run and an npc augment are the ones with key/value fields, so npc
-        // is the honest default here (a scene/location document simply has
+        // is the honest default here (a scene/location entry simply has
         // no `pairs` field to convert).
-        text: replyOrVerbatim(document.content, document.warnings, "npc"),
+        text: replyOrVerbatim(entry.content, entry.warnings, "npc"),
       };
     }
 
@@ -324,7 +324,7 @@ export class PipelineFake implements LLMProvider {
       // Not a batch object at all (garbage, a truncated reply): served
       // verbatim, because that is a reply the run has to fail on.
       if (batch === null) return completionOf(scripted);
-      // The document this part is about — a batch with several scenes is
+      // The entry this part is about — a batch with several scenes is
       // narrowed to the assigned one; serving them all would fail every part
       // for a reason that is about the fake, not about the code under test.
       const scene =

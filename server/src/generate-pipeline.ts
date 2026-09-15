@@ -57,7 +57,7 @@ import {
   OUTLINE_SCHEMA_NAME,
   outlineJsonSchema,
 } from "@grimoire/shared/outline-schema";
-import { documentReplySchema } from "@grimoire/shared/document-schema";
+import { entryReplySchema } from "@grimoire/shared/entry-schema";
 import { ApiError } from "./api-error";
 import { checkDraftsNaming } from "./naming-check";
 import {
@@ -72,13 +72,13 @@ import {
   quickstatsErrors,
   stubPath,
   validateEntry,
-  validateSceneDocument,
+  validateSceneEntry,
   type AllowedRefs,
   type SceneContext,
 } from "./generator";
 export type { SceneContext } from "./generator";
 import { unknownCallouts } from "./generator";
-import { parseDocumentReply, parseJsonReply } from "./document-reply";
+import { parseEntryReply, parseJsonReply } from "./entry-reply";
 import type { LLMProvider } from "./llm-provider";
 import { locationPath, npcPath } from "./store/paths";
 
@@ -150,7 +150,7 @@ export const REPAIRED_REPLY_WARNING =
 
 /**
  * The outline reply as a JSON value — read by the tolerant reader every reply
- * shares (`parseJsonReply`, ./document-reply): the whole text first (which is
+ * shares (`parseJsonReply`, ./entry-reply): the whole text first (which is
  * what a schema-forced reply is), then a fence, then the brace span, and ONE
  * deterministic `jsonrepair` attempt before a correction turn is spent.
  *
@@ -434,9 +434,9 @@ function normalizeWithMap(source: string): { text: string; offsets: number[] } {
  * A swap rather than a second prompt file, for the reason the augment run's
  * `formatContract` exists: the rules (orthography and quotation marks,
  * tables, the callout list, the reference rules) must be the SAME text in
- * both, and the one way to guarantee that is to have them in one file.
+ * both, and the one way to guarantee that is to keep them side by side.
  *
- * Both sections describe the RAW document — the swap adds
+ * Both sections describe the RAW entry — the swap adds
  * what only the pipeline knows: the outline is binding, and every id of the
  * run is already decided.
  */
@@ -494,16 +494,16 @@ export function validateSingleSceneReply(input: {
   allowed: AllowedRefs;
 }): { ok: true; result: { scene: GeneratedSceneDraft; warnings: string[] } } | { ok: false; errors: string[] } {
   // The reply is the schema-forced OBJECT: `properties`,
-  // `body`, `warnings` (./document-reply reads it and composes the document
+  // `body`, `warnings` (./entry-reply reads it and composes the entry
   // the server would store). Everything below judges that object, by exactly
   // the rules it judged the markdown by before.
-  const read = parseDocumentReply(input.raw, "scene");
+  const read = parseEntryReply(input.raw, "scene");
   // Labelled like every other error of this part: the review shows the list
   // per part, and „which scene" is the first thing the DM looks for.
   if (!read.ok) return { ok: false, errors: read.errors.map((e) => `scene "${input.scene.id}": ${e}`) };
   const reply = read.reply;
   const errors: string[] = [];
-  const draft = validateSceneDocument({
+  const draft = validateSceneEntry({
     reply,
     label: `scene "${input.scene.id}"`,
     chapter: input.ctx.chapter,
@@ -532,7 +532,7 @@ export function validateEntryReply(
   entry: OutlineEntry,
   ctx: SceneContext,
 ): { ok: true; result: { stub: GeneratedStub; warnings: string[] } } | { ok: false; errors: string[] } {
-  const read = parseDocumentReply(raw, entry.kind);
+  const read = parseEntryReply(raw, entry.kind);
   if (!read.ok) {
     return { ok: false, errors: read.errors.map((e) => `${entry.kind} "${entry.id}": ${e}`) };
   }
@@ -817,7 +817,7 @@ export async function runScenePart(
       assignment: assignmentBlock(scene),
       sourceText: cut.text,
       // Forced like the outline: the reply is the scene object.
-      jsonSchema: documentReplySchema("scene", "create"),
+      jsonSchema: entryReplySchema("scene", "create"),
     },
     provider,
     validate: (raw) => validateSingleSceneReply({ raw, ctx: plan.ctx, scene, allowed: plan.allowed }),
@@ -877,7 +877,7 @@ export async function runEntryPart(
       // scenes that mention it (Zuschnitt 3). An entry used to fall out of
       // the batch reply with no context of its own at all.
       sourceText: entryContext(plan, entry),
-      jsonSchema: documentReplySchema(entry.kind, "create"),
+      jsonSchema: entryReplySchema(entry.kind, "create"),
     },
     provider,
     validate: (raw) => validateEntryReply(raw, entry, plan.ctx),

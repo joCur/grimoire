@@ -30,8 +30,8 @@ import {
   validateAugmentReply,
 } from "../src/generator-augment";
 import { sceneSystemPrompt } from "../src/generate-pipeline";
-import { documentReply } from "./support/pipeline-fake";
-import { parseDocumentReply } from "../src/document-reply";
+import { entryReply } from "./support/pipeline-fake";
+import { parseEntryReply } from "../src/entry-reply";
 import { propertyFieldsFor } from "@grimoire/shared";
 import { buildPrompt, EXISTING_ENTRY_HEADING, INSTRUCTION_HEADING } from "../src/llm-provider";
 import { failInterruptedJobs } from "../src/db/job-boot";
@@ -89,16 +89,16 @@ function useFake(replies: string[]): FakeProvider {
 /**
  * The reply object: the whole entry as it should
  * look afterwards — properties and body — plus the warnings. Written from the
- * DOCUMENT a case describes, because that is how a test says what the run
- * proposes in one literal (support/pipeline-fake `documentReply`).
+ * ENTRY a case describes, because that is how a test says what the run
+ * proposes in one literal (support/pipeline-fake `entryReply`).
  *
  * The `path` argument stays in the signature — every caller names the entry it
  * is about, and the ASSERTION that the model does not address anything is
  * that the path never reaches the reply.
  */
 function augmentReply(_path: string, content: string, warnings: string[] = []): string {
-  const reply = documentReply(content, warnings, "npc");
-  // A case that scripts an unreadable document means it: served verbatim.
+  const reply = entryReply(content, warnings, "npc");
+  // A case that scripts an unreadable entry means it: served verbatim.
   return reply ?? content;
 }
 
@@ -208,12 +208,12 @@ describe("prompt assembly", () => {
       // The output format is the reply OBJECT, and the
       // augmentation rule is what makes it the whole entry rather than a patch.
       expect(prompt).toContain("Du antwortest mit **einem JSON-Objekt**");
-      expect(prompt).toContain("immer die **ganze** Datei");
+      expect(prompt).toContain("immer den **ganzen** Eintrag");
     }
     expect(npc).toContain("System-Prompt: NPC-Generator");
     // The location prompt is NEW with this ticket — locations had none.
     expect(location).toContain("System-Prompt: Ort-Generator");
-    expect(location).toContain("kein `status`");
+    expect(location).toContain("`status` gehört zu Szene und Figur");
     expect(scene).toContain("System-Prompt: Szenen-Generator");
     expect(scene).toContain("## If:");
   });
@@ -222,14 +222,14 @@ describe("prompt assembly", () => {
     for (const kind of ["npc", "location", "scene"] as const) {
       const prompt = await augmentSystemPrompt(kind);
       // The augment output format…
-      expect(prompt).toContain("immer die **ganze** Datei");
+      expect(prompt).toContain("immer den **ganzen** Eintrag");
       // …and no JSON at all any more.
       expect(prompt).not.toContain("JSON-Block");
       expect(prompt).not.toContain('"scenes"');
       // Exactly one „## Ausgabeformat" heading: the augmentation rule's own.
       expect(prompt.split("## Ausgabeformat").length - 1).toBe(1);
-      // The file format itself is still there.
-      expect(prompt).toContain("## Ziel-Format der Datei");
+      // The format of the entry itself is still there.
+      expect(prompt).toContain("## Eigenschaften und Text des Eintrags");
     }
   });
 
@@ -258,8 +258,7 @@ describe("prompt assembly", () => {
     for (const [kind, prompt] of assembled) {
       expect(prompt.split(ORTHOGRAPHY_RULE).length - 1, kind).toBe(1);
       // The wording is the contract, not just the label.
-      expect(prompt, kind).toContain("ä, ö, ü und ß");
-      expect(prompt, kind).toContain("ae/oe/ue/ss");
+      expect(prompt, kind).toContain("ä, ö, ü und ß stehen als genau diese Zeichen");
       expect(prompt, kind).toContain("`id`-Werte und Adressen/Pfade");
     }
     // …and it is the SAME sentence everywhere: one rule, four prompts.
@@ -298,7 +297,7 @@ describe("prompt assembly", () => {
         expect(Object.hasOwn(reply.properties, field.key), `${kind}.${field.key}`).toBe(true);
       }
       // …and the whole example is a reply the server can read as it stands.
-      expect(parseDocumentReply(raw, kind).ok, kind).toBe(true);
+      expect(parseEntryReply(raw, kind).ok, kind).toBe(true);
     }
   });
 
@@ -308,7 +307,7 @@ describe("prompt assembly", () => {
   // what a table looks like, and that the rest of GFM is plain text.
   const TABLE_RULE = "**Tabellen**";
 
-  test("every prompt kind that writes documents carries the table rule once", async () => {
+  test("every prompt kind that writes entries carries the table rule once", async () => {
     const assembled: Array<[string, string]> = [
       ["scene", await loadAsset(ASSET_FILES.scene.systemPrompt)],
       ["npc", await loadAsset(ASSET_FILES.npc.systemPrompt)],
@@ -328,13 +327,13 @@ describe("prompt assembly", () => {
       expect(prompt, kind).toContain("`|---|`");
       expect(prompt, kind).toContain("Rand-Pipes");
       // …and the boundary: tables only.
-      expect(prompt, kind).toContain("**Sonst nichts\n   aus GFM**");
-      expect(prompt, kind).toContain("keine Aufgabenlisten (`- [x]`)");
+      expect(prompt, kind).toContain("**Aus GFM nutzt\n   du ausschließlich diese Pipe-Tabelle**");
+      expect(prompt, kind).toContain("Aufgabenlisten (`- [x]`)");
     }
     const wordings = new Set(assembled.map(([, doc]) => ruleParagraph(doc, TABLE_RULE)));
     expect(wordings.size).toBe(1);
 
-    // The OUTLINE prompt does NOT carry it: that call writes no document at
+    // The OUTLINE prompt does NOT carry it: that call writes no entry at
     // all — no callouts, no properties, no tables — so the rule was a rule
     // about nothing, and a rule the model cannot apply is one it can weigh
     // against the rules it can (the reason the "exactly once" above exists).
@@ -345,14 +344,14 @@ describe("prompt assembly", () => {
     expect(outline).toContain(ORTHOGRAPHY_RULE);
   });
 
-  // Every document prompt describes the REPLY OBJECT, and the
+  // Every entry prompt describes the REPLY OBJECT, and the
   // wording is load-bearing in the same way the rules above are — the schema
   // forces the shape, the prompt is what makes the model understand what goes
   // where (that `body` is one string, that an unknown field is `null`, that
   // the properties block is the server's).
   const OBJECT_RULE = "Du antwortest mit **einem JSON-Objekt**";
 
-  test("every document prompt kind describes the reply object, once", async () => {
+  test("every entry prompt kind describes the reply object, once", async () => {
     const assembled: Array<[string, string]> = [
       ["scene/single", await sceneSystemPrompt()],
       ["npc", await loadAsset(ASSET_FILES.npc.systemPrompt)],
@@ -367,12 +366,12 @@ describe("prompt assembly", () => {
       expect(prompt, kind).toContain("`properties`");
       expect(prompt, kind).toContain("`body`");
       expect(prompt, kind).toContain("`warnings`");
-      expect(prompt, kind).toContain("du schreibst kein YAML");
-      // No trace of the raw-document format this ticket replaced.
+      expect(prompt, kind).toContain("Den Eigenschaften-Block baut der Server daraus");
+      // No trace of the raw-entry format this ticket replaced.
       expect(prompt, kind).not.toContain("---warnings---");
       expect(prompt, kind).not.toContain("**das Dokument selbst**");
     }
-    // The SAME description everywhere — one shape, every document prompt.
+    // The SAME description everywhere — one shape, every entry prompt.
     const wordings = new Set(assembled.map(([, doc]) => ruleParagraph(doc, OBJECT_RULE)));
     expect(wordings.size).toBe(1);
 
@@ -384,14 +383,14 @@ describe("prompt assembly", () => {
   });
 
   test("the correction turn names the schema it wants corrected", () => {
-    const document = buildCorrectionMessage(
+    const entry = buildCorrectionMessage(
       ["scene: id fehlt"],
       "die Szene enthalten",
-      "scene_document",
+      "scene",
     );
-    expect(document).toContain("korrigierten JSON-Objekt");
-    expect(document).toContain("gleiches Schema (`scene_document`)");
-    expect(document).toContain("kein Text außerhalb des Objekts");
+    expect(entry).toContain("korrigierten JSON-Objekt");
+    expect(entry).toContain("gleiches Schema (`scene`)");
+    expect(entry).toContain("kein Text außerhalb des Objekts");
     // Without a schema (a provider that forces nothing) the sentence still
     // reads — it just has no name to point at.
     const bare = buildCorrectionMessage(["outline: leer"], "alle Szenen");
@@ -412,7 +411,7 @@ describe("prompt assembly", () => {
     expect(lines[delimiter + 1]).toMatch(/^>\s*\|.*\|\s*$/);
   });
 
-  test("a document without the format heading travels whole", () => {
+  test("a prompt without the format heading travels whole", () => {
     expect(formatContract("# Titel\n\n## Regeln\n\nnichts\n")).toContain("## Regeln");
   });
 
@@ -908,7 +907,7 @@ describe("naming check", () => {
   });
 
   test("a list value and a colon in a property do not derail the check", async () => {
-    // The proposal document is rendered with the store's own renderer:
+    // The proposal entry is rendered with the store's own renderer:
     // a `role: Hafenmeisterin: Salt Harbour` used to produce YAML
     // nothing could parse, and every hint then landed on `body` with a line
     // number pointing at nothing. The store's renderer is the ONLY
