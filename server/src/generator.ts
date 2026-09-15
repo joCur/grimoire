@@ -1001,6 +1001,10 @@ class RunUsage {
   private attempts = 0;
   private inputTokens = 0;
   private outputTokens = 0;
+  // Log-only (issue #110): how much of the input was a cache hit. It is NOT
+  // added to the reported usage — a cached token was still sent, and the
+  // review's „~N Tokens" is the size of the prompt, not its price.
+  private cachedInputTokens = 0;
   private reported = false;
 
   add(completion: CompletionResult): void {
@@ -1009,6 +1013,7 @@ class RunUsage {
     this.reported = true;
     this.inputTokens += completion.usage.inputTokens;
     this.outputTokens += completion.usage.outputTokens;
+    this.cachedInputTokens += completion.usage.cachedInputTokens ?? 0;
   }
 
   usage(): GenerateUsage | undefined {
@@ -1023,7 +1028,10 @@ class RunUsage {
     const tokens =
       usage === undefined
         ? "tokens unknown"
-        : `${usage.inputTokens} in / ${usage.outputTokens} out`;
+        : `${usage.inputTokens} in / ${usage.outputTokens} out` +
+          // Only when something was actually cached: on the paths without
+          // caching the line stays the one it always was.
+          (this.cachedInputTokens > 0 ? ` (${this.cachedInputTokens} cached)` : "");
     console.log(
       `generate: ${providerName}, ${this.attempts} attempt(s), ${tokens} — ${outcome}`,
     );

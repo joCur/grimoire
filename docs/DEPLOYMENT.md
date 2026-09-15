@@ -249,9 +249,9 @@ jeweils nur für den gewählten:
 | -------------------- | ------------ | ------------------------------ | ----------------------------------------------------- |
 | `LLM_PROVIDER`       | –            | `claude`                       | `claude`, `openrouter`, `openai`, `lmstudio`           |
 | `ANTHROPIC_API_KEY`  | `claude`     | –                              | **erforderlich** für `claude`                          |
-| `CLAUDE_MODEL`       | `claude`     | `claude-sonnet-4-6`            | Modell-Override                                        |
+| `CLAUDE_MODEL`       | `claude`     | `claude-sonnet-5`            | Modell-Override                                        |
 | `OPENROUTER_API_KEY` | `openrouter` | –                              | **erforderlich** für `openrouter`                      |
-| `LLM_MODEL`          | `openrouter`, `openai` | –                    | **erforderlich**, z. B. `anthropic/claude-sonnet-4.6`  |
+| `LLM_MODEL`          | `openrouter`, `openai` | –                    | **erforderlich**, z. B. `anthropic/claude-sonnet-5`  |
 | `LLM_BASE_URL`       | `openai` (Pflicht), `openrouter` (Override) | `https://openrouter.ai/api/v1` | API-Root eines OpenAI-kompatiblen Endpoints, **ohne** `/chat/completions` |
 | `LLM_API_KEY`        | `openai`     | –                              | optional, nur wenn der Endpoint Auth verlangt          |
 | `LMSTUDIO_URL`       | `lmstudio`   | `http://localhost:1234/v1`     | API-Root der lokalen LM-Studio-Instanz                 |
@@ -259,6 +259,17 @@ jeweils nur für den gewählten:
 | `LLM_MAX_TOKENS`     | alle         | `8000` (`claude`), sonst Endpoint-Default | Obergrenze der Antwortlänge (positive Ganzzahl; unbrauchbare Werte werden ignoriert) |
 | `LLM_CORRECTION_TURNS` | alle       | `1`                            | Korrektur-Turns nach dem ersten Aufruf (`0`–`2`; unbrauchbare Werte werden ignoriert) |
 | `LLM_FORCE_JSON`     | `openrouter`, `openai`, `lmstudio` | an              | Sendet für den **Gliederungs-Aufruf** `response_format` mit (`json_schema`, mit Rückfall auf `json_object` bei 400); `0` = aus, für Endpoints/Modelle ohne `response_format`-Unterstützung. Dokument-Aufrufe erzwingen seit #107 gar nichts (die Antwort ist Markdown), der `claude`-Pfad erzwingt die Gliederung per Tool-Aufruf und ist davon unberührt |
+| `LLM_PROMPT_CACHE`   | `openrouter`, `openai`, `lmstudio` | an bei `openrouter`, sonst aus | Markiert den konstanten Prompt-Teil als cachebar; `0` = aus (für Endpoints, die Content-Parts ablehnen), `1` = an (z. B. eigener Anthropic-Proxy). Der `claude`-Pfad cacht immer und ist davon unberührt |
+
+`LLM_PROMPT_CACHE` ist der Kostenhebel eines Kapitel-Durchlaufs: seit der
+Pipeline (ein Aufruf je Szene) wiederholt sich derselbe Prompt-Anfang —
+System-Prompt, Few-Shot, Kampagnenwissen, Glossar, Gliederung — bei jedem
+Aufruf. Markiert man ihn, zahlt man ihn einmal statt ein Dutzend Mal; bei
+einem Kapitel sind das grob 30 % der Kosten. Ob der Cache greift, steht in der
+Server-Zeile pro Durchlauf: `generate: openrouter, 14 attempt(s), 119000 in /
+31000 out (98000 cached) — ok`. Bleibt `cached` aus, unterstützt das Modell
+(oder der geroutete Anbieter) keine Cache-Breakpoints — dann kostet die
+Markierung nichts, bringt aber auch nichts.
 
 `LLM_MAX_TOKENS` lohnt sich beim Modellvergleich: schneidet ein Modell die
 Antwort ab, erkennt der Generator das an `finish_reason`/`stop_reason`
@@ -290,7 +301,7 @@ vorhanden (Server-Neustart?)".
 Fehlt eine erforderliche Variable, antwortet nur `POST
 /api/:campaign/generate` mit `503` und der Meldung im Klartext, z. B.
 `{"error":"ANTHROPIC_API_KEY fehlt"}`, `{"error":"OPENROUTER_API_KEY fehlt"}`
-oder `{"error":"LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-4.6)"}` (der
+oder `{"error":"LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-5)"}` (der
 Provider wird bewusst erst pro Request erzeugt). Ein Tippfehler in
 `LLM_PROVIDER` fällt genauso auf statt still auf Claude zurückzufallen:
 `{"error":"Unbekannter LLM_PROVIDER: …"}`. Lese- und Schreib-API sind von
@@ -301,7 +312,7 @@ all dem nicht betroffen.
 ```bash
 LLM_PROVIDER=openrouter
 OPENROUTER_API_KEY=sk-or-v1-…
-LLM_MODEL=anthropic/claude-sonnet-4.6
+LLM_MODEL=anthropic/claude-sonnet-5
 ```
 
 Modellwechsel = `LLM_MODEL` ändern und Container neu starten. Grimoire

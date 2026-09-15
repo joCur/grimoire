@@ -116,6 +116,14 @@ export interface CorrectionTurn {
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
+  /**
+   * How many of `inputTokens` came out of the prompt cache (issue #110).
+   * Reporting only — it is what tells us whether caching actually engages on
+   * a routed model, and it is absent when the endpoint says nothing about it.
+   * NOT part of the job totals: a cached token was still sent, so the run's
+   * „~N Tokens" must keep counting it (same reasoning as claudeUsage).
+   */
+  cachedInputTokens?: number;
 }
 
 /** One completion: the raw text plus what only the transport can know. */
@@ -179,6 +187,23 @@ export function claudeUsage(raw: unknown): TokenUsage | undefined {
       num(obj.cache_read_input_tokens),
     outputTokens: base.outputTokens,
   };
+}
+
+/**
+ * An OpenAI-compatible endpoint's usage. `prompt_tokens` already INCLUDES the
+ * cached prefix there (unlike the Messages API, which splits it out), so the
+ * only extra thing to pick up is how much of it was a cache hit — OpenRouter
+ * and OpenAI both report it under `prompt_tokens_details.cached_tokens`
+ * (issue #110). Absent on endpoints that do not cache, and never fatal.
+ */
+export function openAIUsage(raw: unknown): TokenUsage | undefined {
+  const base = normalizeUsage(raw, "prompt_tokens", "completion_tokens");
+  if (base === undefined) return undefined;
+  const details = (raw as Record<string, unknown>).prompt_tokens_details;
+  if (details === null || typeof details !== "object") return base;
+  const cached = (details as Record<string, unknown>).cached_tokens;
+  if (typeof cached !== "number" || !Number.isFinite(cached)) return base;
+  return { ...base, cachedInputTokens: cached };
 }
 
 // ---------------------------------------------------------------------------
@@ -324,6 +349,39 @@ function buildMessages(
   return messages;
 }
 
+/**
+ * The same turns as `buildMessages`, but with the first user turn SPLIT into
+ * content parts so the constant half can carry a `cache_control` breakpoint
+ * (issue #110). OpenRouter passes the field through to the provider; for the
+ * routed Anthropic models that breakpoint is the only way to get caching,
+ * and a run of a whole chapter re-sends that half once per scene.
+ *
+ * The split mirrors `claudeMessages` exactly — same halves, same order, same
+ * blank-line join when read as one text — so the model sees the prompt it saw
+ * before. Correction turns stay plain strings: they are unique per attempt,
+ * so marking them would only spend cache writes.
+ */
+export function cachedMessages(
+  req: GenerateRequest,
+  corrections: CorrectionTurn[],
+): Array<{ role: "user" | "assistant"; content: unknown }> {
+  const { constant, variable } = buildPromptParts(req);
+  const messages: Array<{ role: "user" | "assistant"; content: unknown }> = [
+    {
+      role: "user",
+      content: [
+        { type: "text", text: constant, cache_control: EPHEMERAL },
+        ...(variable === "" ? [] : [{ type: "text", text: variable }]),
+      ],
+    },
+  ];
+  for (const turn of corrections) {
+    messages.push({ role: "assistant", content: turn.assistant });
+    messages.push({ role: "user", content: turn.correction });
+  }
+  return messages;
+}
+
 // --- JSON forcing: the OUTLINE call only (issue #20, narrowed by #107) ------
 //
 // Issue #20 forced JSON on EVERY call — an assistant prefill of `{` on the
@@ -370,7 +428,7 @@ export class ClaudeProvider implements LLMProvider {
   readonly name = "claude";
   constructor(
     private apiKey: string,
-    private model = "claude-sonnet-4-6",
+    private model = "claude-sonnet-5",
     // The Messages API requires max_tokens, so this one is never undefined.
     readonly maxTokens: number = DEFAULT_MAX_TOKENS,
   ) {}
@@ -483,6 +541,14 @@ export interface OpenAICompatOptions {
    * never applies to a document call, which forces nothing either way.
    */
   forceJson?: boolean;
+  /**
+   * Mark the constant prompt half with an explicit `cache_control` breakpoint
+   * (issue #110). Default OFF, because a plain `/chat/completions` server is
+   * free to reject an unknown message field — the factory switches it on for
+   * OpenRouter, where it is what makes caching happen at all for the routed
+   * Anthropic models (they cache only on an explicit breakpoint).
+   */
+  promptCache?: boolean;
   /** Shown in error messages ("openrouter: 401 …"). */
   name?: string;
 }
@@ -499,6 +565,7 @@ export class OpenAICompatProvider implements LLMProvider {
   private apiKey?: string;
   private extraHeaders: Record<string, string>;
   private forceJson: boolean;
+  private promptCache: boolean;
   readonly maxTokens?: number;
 
   constructor(opts: OpenAICompatOptions) {
@@ -509,6 +576,7 @@ export class OpenAICompatProvider implements LLMProvider {
     this.apiKey = opts.apiKey;
     this.extraHeaders = opts.extraHeaders ?? {};
     this.forceJson = opts.forceJson ?? true;
+    this.promptCache = opts.promptCache ?? false;
     this.maxTokens = opts.maxTokens;
   }
 
@@ -567,7 +635,7 @@ export class OpenAICompatProvider implements LLMProvider {
       text: typeof content === "string" ? content : "",
       // OpenAI-compatible: "length" means the cap cut the reply off.
       truncated: choice?.finish_reason === "length",
-      usage: normalizeUsage(data.usage, "prompt_tokens", "completion_tokens"),
+      usage: openAIUsage(data.usage),
     };
   }
 
@@ -581,7 +649,14 @@ export class OpenAICompatProvider implements LLMProvider {
       model: this.model,
       messages: [
         { role: "system", content: req.systemPrompt },
-        ...buildMessages(req, corrections),
+        // Prompt caching (issue #110): with an explicit breakpoint the
+        // constant half of the prompt travels as its own content part, so a
+        // chapter run pays for it once instead of once per scene. Orthogonal
+        // to `response_format` — the split is about the message content, the
+        // format about the reply shape.
+        ...(this.promptCache
+          ? cachedMessages(req, corrections)
+          : buildMessages(req, corrections)),
       ],
       temperature: 0.3,
       // Unset means "endpoint default" — local servers and routed models
@@ -658,7 +733,7 @@ const OPENROUTER_HEADERS = {
 // vendor-prefixed and picking one for the user would silently bill the wrong
 // model.
 function requireModel(env: NodeJS.ProcessEnv): string {
-  if (!env.LLM_MODEL) throw new Error("LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-4.6)");
+  if (!env.LLM_MODEL) throw new Error("LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-5)");
   return env.LLM_MODEL;
 }
 
@@ -689,6 +764,21 @@ function parseForceJson(env: NodeJS.ProcessEnv): boolean {
   return !(raw === "0" || raw === "false" || raw === "off" || raw === "no");
 }
 
+/**
+ * `LLM_PROMPT_CACHE` (issue #110): explicit cache breakpoints are ON for
+ * OpenRouter and OFF for every other OpenAI-compatible endpoint, and this
+ * variable overrides that either way. Two reasons for a switch rather than a
+ * hard-coded yes: a routed model may reject the extra message field (same
+ * failure mode LLM_FORCE_JSON exists for), and a local server has no cache to
+ * hit anyway. Unrecognized values keep the default (as with parseForceJson).
+ */
+function parsePromptCache(env: NodeJS.ProcessEnv, fallback: boolean): boolean {
+  const raw = env.LLM_PROMPT_CACHE?.trim().toLowerCase();
+  if (raw === "0" || raw === "false" || raw === "off" || raw === "no") return false;
+  if (raw === "1" || raw === "true" || raw === "on" || raw === "yes") return true;
+  return fallback;
+}
+
 // The German "fehlt" messages are deliberate: they surface in the (German) UI
 // when the generate endpoint answers 503 because no provider is configured.
 export function createProvider(env: NodeJS.ProcessEnv): LLMProvider {
@@ -716,6 +806,9 @@ export function createProvider(env: NodeJS.ProcessEnv): LLMProvider {
         extraHeaders: OPENROUTER_HEADERS,
         maxTokens,
         forceJson,
+        // On by default: this is the one endpoint where the breakpoint pays
+        // for itself on every run (one call per scene, same constant half).
+        promptCache: parsePromptCache(env, true),
       });
     }
     case "openai": {
@@ -727,6 +820,7 @@ export function createProvider(env: NodeJS.ProcessEnv): LLMProvider {
         apiKey: env.LLM_API_KEY,
         maxTokens,
         forceJson,
+        promptCache: parsePromptCache(env, false),
       });
     }
     case "lmstudio": {
@@ -737,6 +831,7 @@ export function createProvider(env: NodeJS.ProcessEnv): LLMProvider {
         model: env.LMSTUDIO_MODEL ?? "local-model",
         maxTokens,
         forceJson,
+        promptCache: parsePromptCache(env, false),
       });
     }
     default:

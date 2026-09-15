@@ -283,7 +283,7 @@ Abstraktion in `server/src/llm-provider.ts`, Auswahl per Env-Var
 - `claude` (Default): Claude API direkt (`ANTHROPIC_API_KEY`, optional
   `CLAUDE_MODEL`).
 - `openrouter`: OpenRouter als Modell-Router (`OPENROUTER_API_KEY` +
-  `LLM_MODEL`, z. B. `anthropic/claude-sonnet-4.6`) — ein Key, viele
+  `LLM_MODEL`, z. B. `anthropic/claude-sonnet-5`) — ein Key, viele
   Modelle, damit lässt sich vergleichen, ohne die Konfiguration umzubauen.
 - `openai`: derselbe Transport für **jeden** OpenAI-kompatiblen Endpoint
   (`LLM_BASE_URL` + `LLM_MODEL`, `LLM_API_KEY` nur falls verlangt).
