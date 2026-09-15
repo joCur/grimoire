@@ -18,8 +18,29 @@ import {
   MAX_OUTLINE_ENTRIES,
   MAX_OUTLINE_SCENES,
   OUTLINE_ENTRY_KINDS,
+  OUTLINE_ID_DESCRIPTION,
   outlineJsonSchema,
 } from "@grimoire/shared/outline-schema";
+
+/**
+ * The keywords OpenAI's strict mode refuses. One of them anywhere in the
+ * schema is a 400 on every outline call and therefore a permanent, silent
+ * downgrade to plain `json_object` for the whole process — the guard would be
+ * gone and nothing would say so (issue #107 review).
+ */
+const UNSUPPORTED = ["pattern", "minItems", "maxItems", "minLength", "maxLength", "format"];
+
+/** Every place any of `UNSUPPORTED` appears, as a dotted path. */
+function unsupportedPaths(node: unknown, path: string[] = []): string[] {
+  if (Array.isArray(node)) return node.flatMap((item, i) => unsupportedPaths(item, [...path, `${i}`]));
+  if (node === null || typeof node !== "object") return [];
+  const entries = Object.entries(node as Record<string, unknown>);
+  return entries.flatMap(([key, value]) =>
+    UNSUPPORTED.includes(key)
+      ? [[...path, key].join(".")]
+      : unsupportedPaths(value, [...path, key]),
+  );
+}
 
 /** A nested property of the schema, by path. */
 function at(path: string[]): Record<string, unknown> {
@@ -35,10 +56,12 @@ const entries = () => at(["properties", "entries"]);
 describe("the outline schema", () => {
   test("names the same scene types, ids and bounds as the validation", () => {
     expect(sceneProps().type).toEqual({ type: "string", enum: [...SCENE_TYPES] });
-    expect(sceneProps().id).toEqual({ type: "string", pattern: ENTITY_SLUG.source });
-    expect(scenes().maxItems).toBe(MAX_OUTLINE_SCENES);
-    expect(scenes().minItems).toBe(1);
-    expect(entries().maxItems).toBe(MAX_OUTLINE_ENTRIES);
+    // The id rule and the bounds travel as PROSE (see the strict-mode test
+    // below) — but they are still built from the constants the server reads.
+    expect(sceneProps().id).toEqual({ type: "string", description: OUTLINE_ID_DESCRIPTION });
+    expect(OUTLINE_ID_DESCRIPTION).toContain(ENTITY_SLUG.source);
+    expect(scenes().description).toContain(String(MAX_OUTLINE_SCENES));
+    expect(entries().description).toContain(String(MAX_OUTLINE_ENTRIES));
     expect(at(["properties", "entries", "items", "properties", "kind"]).enum).toEqual([
       ...OUTLINE_ENTRY_KINDS,
     ]);
@@ -61,6 +84,14 @@ describe("the outline schema", () => {
     // what `stringField`/`isRecord` in the validation read as "not given".
     expect(sceneProps().location).toMatchObject({ type: ["string", "null"] });
     expect(sceneProps().sourceExcerpt).toMatchObject({ type: ["object", "null"] });
+  });
+
+  test("carries no keyword strict mode rejects — anywhere in the tree", () => {
+    expect(unsupportedPaths(outlineJsonSchema())).toEqual([]);
+    // The check itself has to be able to FIND one, or it guards nothing.
+    expect(unsupportedPaths({ properties: { a: { items: { pattern: "x" } } } })).toEqual([
+      "properties.a.items.pattern",
+    ]);
   });
 
   test("a fresh object every call — both transports serialize it into a body", () => {

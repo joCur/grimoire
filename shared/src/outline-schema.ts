@@ -9,7 +9,8 @@
 // (server/src/llm-provider.ts).
 //
 // The schema lives HERE, in shared, for the reason the entity types do: it is
-// described once. Its enums, patterns and bounds are the very constants the
+// described once. Its enums and — as prose in the descriptions — its id rule
+// and its bounds are built from the very constants the
 // server's semantic validation uses (`validateOutlineReply` in
 // server/src/generate-pipeline.ts), so the shape the model is forced into and
 // the shape the server accepts cannot drift apart — a schema that allowed a
@@ -32,8 +33,9 @@ import { ENTITY_SLUG } from "./slug";
  * Without the bound the outline decides how many provider calls a run makes,
  * and a source text that is a whole adventure turns one „Entwürfe
  * generieren" into dozens of calls the DM never asked for. Here rather than
- * in the server since #107: the schema states the bound (`maxItems`) and the
- * validation enforces it, and both read the same number.
+ * in the server since #107: the schema SAYS the bound (in the array's
+ * description — `maxItems` is not allowed in strict mode) and the validation
+ * enforces it, and both read the same number.
  */
 export const MAX_OUTLINE_SCENES = 12;
 export const MAX_OUTLINE_ENTRIES = 12;
@@ -42,11 +44,18 @@ export const MAX_OUTLINE_ENTRIES = 12;
 export const OUTLINE_ENTRY_KINDS = ["npc", "location"] as const;
 
 /**
- * The id pattern as a JSON-schema `pattern` string: the shared entity slug
- * rule, anchored, without the RegExp wrapper. Taken from ENTITY_SLUG itself
- * so the two can never say different things.
+ * The id rule as PROSE for the model. It is not a schema `pattern`: OpenAI's
+ * strict mode rejects `pattern` (and `minItems`/`maxItems`) outright, and a
+ * rejected schema means a permanent silent downgrade to plain `json_object`
+ * for the whole process — the guard would cost more than it buys (issue #107
+ * review). The rule itself is enforced where it always was, in
+ * `validateOutlineReply`; here it only has to be SAID.
+ *
+ * Built from ENTITY_SLUG so the sentence and the check cannot drift apart.
  */
-export const OUTLINE_ID_PATTERN = ENTITY_SLUG.source;
+export const OUTLINE_ID_DESCRIPTION =
+  "Kleinbuchstaben, Ziffern und Bindestriche, keine Umlaute " +
+  `(Muster: ${ENTITY_SLUG.source}).`;
 
 /** The tool / schema name both providers send the outline under. */
 export const OUTLINE_SCHEMA_NAME = "run_outline";
@@ -73,7 +82,7 @@ export type JsonSchema = Record<string, unknown>;
  * instead, and the server reads `null` as „not given“ (stringField).
  */
 export function outlineJsonSchema(): JsonSchema {
-  const id: JsonSchema = { type: "string", pattern: OUTLINE_ID_PATTERN };
+  const id: JsonSchema = { type: "string", description: OUTLINE_ID_DESCRIPTION };
   return {
     type: "object",
     additionalProperties: false,
@@ -81,8 +90,7 @@ export function outlineJsonSchema(): JsonSchema {
     properties: {
       scenes: {
         type: "array",
-        minItems: 1,
-        maxItems: MAX_OUTLINE_SCENES,
+        description: `Mindestens eine, höchstens ${MAX_OUTLINE_SCENES} Szenen.`,
         items: {
           type: "object",
           additionalProperties: false,
@@ -116,7 +124,7 @@ export function outlineJsonSchema(): JsonSchema {
       },
       entries: {
         type: "array",
-        maxItems: MAX_OUTLINE_ENTRIES,
+        description: `Höchstens ${MAX_OUTLINE_ENTRIES} neue Figuren und Orte.`,
         items: {
           type: "object",
           additionalProperties: false,
