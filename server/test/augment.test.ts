@@ -497,6 +497,47 @@ describe("proposal", () => {
     }
   });
 
+  test("an npc status the reply leaves out becomes a visible \"unknown\" proposal", async () => {
+    // `status` is nullable in the schema, so a reply may omit it — and the
+    // npc rule („present, and one of NPC_STATUSES") must not fail such a
+    // reply. It reads as `unknown`, the same degrade the shared parser
+    // applies, and the DM sees it as a CHANGED field in the review rather
+    // than as a silent overwrite or a dead run.
+    const file = await read(NPC);
+    expect(file.properties.status).toBe("alive");
+    const outcome = validateAugmentReply(
+      augmentReply(NPC, file.raw.replace("status: alive\n", "")),
+      { kind: "npc", file },
+    );
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      const status = outcome.result.properties.find((p) => p.key === "status");
+      expect(status).toEqual({
+        key: "status",
+        current: "alive",
+        proposed: "unknown",
+        state: "changed",
+      });
+    }
+  });
+
+  test("a key the kind does not have is an echo, not a failed run", async () => {
+    // The DM may have hand-written a key the schema has no field for
+    // (`roll20-page` on an npc). The model is SHOWN the whole entry, so it
+    // echoes the key back — and the run must not die on that: the key cannot
+    // be proposed anyway, and the proposal patches only the keys it lists, so
+    // the value the DM authored keeps standing.
+    const file = await read(NPC);
+    const outcome = validateAugmentReply(
+      augmentReply(NPC, file.raw.replace("status: alive", "status: alive\nroll20-page: Jorna")),
+      { kind: "npc", file },
+    );
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.result.properties.some((p) => p.key === "roll20-page")).toBe(false);
+    }
+  });
+
   test("a location may not carry a status", async () => {
     const file = await read(LOCATION);
     const outcome = validateAugmentReply(

@@ -377,7 +377,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(fake.calls).toHaveLength(1);
   });
 
-  test("an invalid or missing status triggers a correction turn, then succeeds", async () => {
+  test("an invalid status triggers a correction turn, then succeeds", async () => {
     const bad = npcReply({ content: npcMarkdown({ status: "draft" }) });
     const fake = useFake([bad, npcReply()]);
     expect((await generateNpc(npcBody)).status).toBe(200);
@@ -386,9 +386,20 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(correction).toContain("alive, dead, missing, unknown");
     expect(correction).toContain('"alive"');
     expect(correction.match(/^- /gm)).toHaveLength(1);
+  });
 
-    expect(await firstValidationError([npcReply({ content: npcMarkdown({ status: null }) })]))
-      .toContain('"status" fehlt');
+  test("a MISSING status is read as \"unknown\" — the schema allows null", async () => {
+    // `status` is nullable in the reply schema (the prompt's „nicht gegeben →
+    // null"), so an absent one is a legal answer and means what a status-less
+    // npc file has always meant to the shared parser: `unknown`. Hard-failing
+    // here would make a schema-conform reply cost a correction turn.
+    const fake = useFake([npcReply({ content: npcMarkdown({ status: null }) })]);
+    const res = await generateNpc(npcBody);
+    expect(res.status).toBe(200);
+    expect(fake.calls).toHaveLength(1);
+    const result = (await res.json()) as GenerateNpcResult;
+    expect(result.npc.markdown).toContain("status: unknown");
+    expect(result.npc.properties.status).toBe("unknown");
   });
 
   test("only [!secret] inside ## Weiß — other known callouts elsewhere are fine", async () => {

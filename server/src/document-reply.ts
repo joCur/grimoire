@@ -41,6 +41,7 @@ import {
   isNotGiven,
   propertyFieldsFor,
   type DocumentKind,
+  type DocumentMode,
   type PropertyFieldDef,
 } from "@grimoire/shared";
 import { renderRaw } from "./store/render";
@@ -57,6 +58,15 @@ export interface DocumentReply {
   body: string;
   /** One note per entry; empty when there was nothing to report. */
   warnings: string[];
+  /**
+   * The property keys the reply carried that the kind does NOT have — empty
+   * except in `augment` mode, which drops them instead of failing the run
+   * (see `normalizeProperties`). A validator that has a rule about such a key
+   * — a location must never carry a `status` — reads it here; everything else
+   * ignores it, which is the point. Optional, so a reply built in a test or a
+   * fixture does not have to carry an empty list.
+   */
+  ignored?: string[];
 }
 
 /**
@@ -178,6 +188,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function parseDocumentReply(
   raw: string,
   kind: DocumentKind,
+  mode: DocumentMode = "create",
 ): { ok: true; reply: DocumentReply; markdown: string } | { ok: false; errors: string[] } {
   const parsed = parseJsonReply(raw);
   if (parsed === null || !isRecord(parsed.value)) {
@@ -194,11 +205,12 @@ export function parseDocumentReply(
     errors.push('"body" muss der Fließtext als ein String sein');
   }
   const warnings = normalizeWarnings(obj.warnings, errors);
-  const properties = normalizeProperties(kind, obj.properties, errors);
+  const read = normalizeProperties(kind, mode, obj.properties, errors);
   if (errors.length > 0) return { ok: false, errors };
 
   const reply: DocumentReply = {
-    properties,
+    properties: read.properties,
+    ignored: read.ignored,
     // The body is stored the way a file is: one trailing newline, and the
     // blank line the renderer puts between the block and the first heading.
     body: `${(body as string).replace(/^\n+/, "").trimEnd()}\n`,
@@ -241,17 +253,33 @@ function normalizeWarnings(value: unknown, errors: string[]): string[] {
  */
 function normalizeProperties(
   kind: DocumentKind,
+  mode: DocumentMode,
   raw: Record<string, unknown>,
   errors: string[],
-): Record<string, unknown> {
+): { properties: Record<string, unknown>; ignored: string[] } {
   const fields = propertyFieldsFor(kind) ?? [];
   const known = new Set(["id", ...fields.map((field) => field.key)]);
+  // An unknown key is an error in a CREATE run — the document is new, so the
+  // only way a key the kind does not have gets here is an endpoint that
+  // ignored the schema, and naming it is the correction turn's job.
+  //
+  // In an AUGMENT run it is not: the entry EXISTS, so the key may be one the
+  // DM hand-wrote (`roll20-page` on an npc, app bookkeeping) that the model
+  // simply echoed back from the file it was shown. The schema cannot let it
+  // PROPOSE such a key, and dropping it here loses nothing — the proposal
+  // patches only the keys it lists, and every other key keeps its value.
+  // Failing the whole reply over an echo would make a run impossible for a
+  // file the DM is free to author that way.
+  const ignored: string[] = [];
   for (const key of Object.keys(raw)) {
-    if (!known.has(key)) {
+    if (known.has(key)) continue;
+    if (mode === "create") {
       errors.push(
         `"properties.${key}" ist kein Feld dieser Entität — erlaubt sind: ` +
           `${[...known].join(", ")}`,
       );
+    } else {
+      ignored.push(key);
     }
   }
   const out: Record<string, unknown> = {};
@@ -259,12 +287,44 @@ function normalizeProperties(
   if (typeof id === "string" && id.trim() !== "") out.id = id.trim();
   else if (!isNotGiven(id)) errors.push('"properties.id" muss ein String sein');
 
+  const defaults = PROPERTY_DEFAULTS[kind] ?? {};
   for (const field of fields) {
-    const value = fieldValue(field, raw[field.key], errors);
+    const before = errors.length;
+    const read = fieldValue(field, raw[field.key], errors);
+    const value = read ?? defaults[field.key];
+    // „Verpflichtend" is checked HERE, after the value was normalized: a
+    // required field whose value is whitespace only (`name: "   "`) trims to
+    // the empty string, and dropping that silently is how an npc ends up
+    // named after its id. A field whose SHAPE was already complained about
+    // (`title: 7`) is not reported twice.
+    if (value === undefined && field.required === true && errors.length === before) {
+      errors.push(`"properties.${field.key}" fehlt — das Feld ist verpflichtend`);
+    }
     if (value !== undefined) out[field.key] = value;
   }
-  return out;
+  return { properties: out, ignored };
 }
+
+/**
+ * The value a nullable field falls back to when the reply says „not given" —
+ * the SAME default the shared parser applies when it reads such a file
+ * (parse.ts `sceneSummary`/`npcSummary`), spelled out in the properties
+ * instead of left to every reader.
+ *
+ * The two fields exist because the schema and the validators disagreed
+ * otherwise: strict mode has no optional properties, so a field the prompt
+ * declares optional („nicht gegeben → null") is NULLABLE — and the
+ * validators, written against the pre-cutover format where the parser filled
+ * these in, reject an absent scene `type` / npc `status` outright. The
+ * default is the pre-cutover behaviour, restored where the key is composed.
+ */
+const PROPERTY_DEFAULTS: Partial<Record<DocumentKind, Record<string, string>>> = {
+  // "planned" is the unmarked case; a contingency scene says so explicitly.
+  scene: { type: "planned" },
+  // "unknown" is what a status-less npc means — never "alive", which would be
+  // the run asserting something about a figure the source text is silent on.
+  npc: { status: "unknown" },
+};
 
 /** One field's value, normalized — or undefined when the model gave none. */
 function fieldValue(
@@ -272,12 +332,9 @@ function fieldValue(
   value: unknown,
   errors: string[],
 ): unknown {
-  if (isNotGiven(value)) {
-    if (field.required === true) {
-      errors.push(`"properties.${field.key}" fehlt — das Feld ist verpflichtend`);
-    }
-    return undefined;
-  }
+  // „not given" and „given but empty" are one case here; whether the field
+  // may be missing is decided by the caller (see normalizeProperties).
+  if (isNotGiven(value)) return undefined;
   switch (field.control) {
     case "references":
     case "chips": {

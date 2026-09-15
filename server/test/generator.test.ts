@@ -577,15 +577,19 @@ describe("POST /api/:campaign/generate", () => {
     expect(await exists("npcs/grella")).toBe(false);
   });
 
-  test("npc stub without any status triggers a correction turn", async () => {
-    const bad = reply({
-      entries: [{ kind: "npc", content: npcStub({ status: null }) }],
-    });
-    const fake = useFake([bad, reply()]);
-    expect((await generate(generateBody)).status).toBe(200);
-    const entry = fake.callsFor("grella");
-    expect(entry).toHaveLength(2);
-    expect(entry[1]!.corrections[0]!.correction).toContain('"status" fehlt');
+  test("an npc entry without a status is read as \"unknown\", not corrected", async () => {
+    // The schema types an npc `status` as NULLABLE (the prompt's „nicht
+    // gegeben → null"), so „no status" is a legal reply — and it means what
+    // the shared parser has always made of a status-less npc file:
+    // `unknown`. Never `alive`, which would be the run asserting something
+    // the source text is silent about.
+    const fake = useFake([reply({ entries: [{ kind: "npc", content: npcStub({ status: null }) }] })]);
+    const res = await generate(generateBody);
+    expect(res.status).toBe(200);
+    expect(fake.callsFor("grella")).toHaveLength(1);
+    // …and the draft the review shows carries the default, not a gap.
+    const result = (await res.json()) as GenerateResult;
+    expect(result.stubs[0]!.markdown).toContain("status: unknown");
   });
 
   test("location stub with ANY status triggers a correction turn", async () => {

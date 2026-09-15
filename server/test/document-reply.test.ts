@@ -54,14 +54,22 @@ function sceneObject(over: Record<string, unknown> = {}): string {
   });
 }
 
-function read(raw: string, kind: "scene" | "npc" | "location" = "scene"): DocumentReply {
-  const outcome = parseDocumentReply(raw, kind);
+function read(
+  raw: string,
+  kind: "scene" | "npc" | "location" = "scene",
+  mode: "create" | "augment" = "create",
+): DocumentReply {
+  const outcome = parseDocumentReply(raw, kind, mode);
   if (!outcome.ok) throw new Error(`expected a reply, got: ${outcome.errors.join(" | ")}`);
   return outcome.reply;
 }
 
-function errors(raw: string, kind: "scene" | "npc" | "location" = "scene"): string[] {
-  const outcome = parseDocumentReply(raw, kind);
+function errors(
+  raw: string,
+  kind: "scene" | "npc" | "location" = "scene",
+  mode: "create" | "augment" = "create",
+): string[] {
+  const outcome = parseDocumentReply(raw, kind, mode);
   if (outcome.ok) throw new Error("expected errors");
   return outcome.errors;
 }
@@ -173,6 +181,63 @@ describe("parseDocumentReply", () => {
     expect(errors(sceneObject({ title: null })).join(" ")).toContain(
       '"properties.title" fehlt',
     );
+  });
+
+  test("a nullable field the schema HAS falls back to the parser's default", () => {
+    // Scene `type` and npc `status` are nullable in the schema (the prompt's
+    // „nicht gegeben → null"), and the validators reject an absent one — so
+    // „null" has to mean what the shared parser has always made of such a
+    // file, spelled out in the properties instead of left to every reader.
+    const scene = read(sceneObject({ type: null }));
+    expect(scene.properties.type).toBe("planned");
+    expect(composeDocument(scene)).toContain("type: planned");
+
+    const npc = JSON.stringify({
+      properties: { id: "grella", name: "Grella", status: null },
+      body: "## Will\n",
+      warnings: [],
+    });
+    expect(read(npc, "npc").properties.status).toBe("unknown");
+    // A key with no default is still simply dropped.
+    expect(Object.hasOwn(read(npc, "npc").properties, "role")).toBe(false);
+  });
+
+  test("a required field of whitespace only is missing, not empty", () => {
+    // It trims to "" — which used to be dropped silently, and the entity then
+    // fell back to being named after its id.
+    expect(errors(sceneObject({ title: "   " })).join(" ")).toContain(
+      '"properties.title" fehlt',
+    );
+    const npc = JSON.stringify({
+      properties: { id: "grella", name: " \t ", status: "alive" },
+      body: "## Will\n",
+      warnings: [],
+    });
+    expect(errors(npc, "npc").join(" ")).toContain('"properties.name" fehlt');
+    const location = JSON.stringify({
+      properties: { id: "bucht", name: "" },
+      body: "## Atmosphäre\n",
+      warnings: [],
+    });
+    expect(errors(location, "location").join(" ")).toContain('"properties.name" fehlt');
+    // …and a field whose SHAPE was wrong is not reported twice.
+    expect(errors(sceneObject({ title: 7 }))).toHaveLength(1);
+  });
+
+  test("an unknown key fails a create run and is dropped by an augment run", () => {
+    // In an augment run the key may be one the DM hand-wrote in the file the
+    // model was SHOWN — the schema cannot let it propose one, so the only way
+    // it gets here is an echo, and failing the run over that would make the
+    // button unusable for a file the DM is free to author that way.
+    expect(errors(sceneObject({ mood: "düster" })).join(" ")).toContain(
+      '"properties.mood" ist kein Feld dieser Entität',
+    );
+    const augmented = read(sceneObject({ mood: "düster" }), "scene", "augment");
+    expect(Object.hasOwn(augmented.properties, "mood")).toBe(false);
+    expect(composeDocument(augmented)).not.toContain("mood");
+    // …and it is still REPORTED, for the one validator that has a rule about
+    // such a key (a location may not carry a `status`).
+    expect(augmented.ignored).toEqual(["mood"]);
   });
 
   test("a body that is not a string, and warnings that are not strings", () => {

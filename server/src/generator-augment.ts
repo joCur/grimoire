@@ -163,6 +163,7 @@ function kindErrors(
   current: Record<string, unknown>,
   label: string,
   errors: string[],
+  ignored: readonly string[] = [],
 ): void {
   if (kind === "npc") {
     for (const msg of npcStatusErrors(fm, "NPC-Dateien")) errors.push(`${label}: ${msg}`);
@@ -177,7 +178,11 @@ function kindErrors(
     return;
   }
   if (kind === "location") {
-    if (Object.hasOwn(fm, "status")) {
+    // A location has no `status` — the schema has no such field for it, so a
+    // reply that names one had it DROPPED (`reply.ignored`) rather than
+    // normalized. Still an error, and not a silent one: the key is the data
+    // contract being broken, not a DM's own extra key.
+    if (Object.hasOwn(fm, "status") || ignored.includes("status")) {
       errors.push(`${label}: "status" ist nicht erlaubt — locations haben keinen status`);
     }
     return;
@@ -215,7 +220,10 @@ export function validateAugmentReply(
   // lists, so every other key keeps its value, which is exactly what
   // „nichts löschen" means here.
   const { kind, file } = target;
-  const read = parseDocumentReply(raw, kind);
+  // Read in AUGMENT mode: an unknown property key is an echo of the file the
+  // model was shown, not a proposal (see normalizeProperties) — it is dropped
+  // instead of failing the run.
+  const read = parseDocumentReply(raw, kind, "augment");
   if (!read.ok) {
     return { ok: false, errors: read.errors.map((e) => `entry "${file.path}": ${e}`) };
   }
@@ -242,7 +250,7 @@ export function validateAugmentReply(
         CALLOUT_KINDS.map((k) => `[!${k}]`).join(", "),
     );
   }
-  kindErrors(kind, fm, file.properties, label, errors);
+  kindErrors(kind, fm, file.properties, label, errors, reply.ignored ?? []);
   if (errors.length > 0) return { ok: false, errors };
 
   return {
