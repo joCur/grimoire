@@ -166,6 +166,15 @@ function SetActiveAction({ campaign, chapter }: { campaign: string; chapter: str
  * following it would turn a concurrent edit into a silent overwrite instead of
  * a 409. It moves only after a conflict, to the version the re-read brought,
  * and the typed text stays.
+ *
+ * The BASELINE the „nothing changed" check compares against is frozen in the
+ * same breath, and for the same reason (the properties dialog's `initial`
+ * does it too): it is the body that belongs to the frozen rev. Reading
+ * `file.body` live meant the poll could move the baseline under the dialog —
+ * a second writer whose text happened to equal what the DM had typed disabled
+ * „Speichern", so the DM's own version was never written and nothing said
+ * why; and after a conflict the re-read body became the baseline, which
+ * disabled the retry that was supposed to write on top of it.
  */
 function ChapterBodyDialog({
   campaign,
@@ -180,8 +189,10 @@ function ChapterBodyDialog({
 }) {
   const t = useT();
   const [body, setBody] = useState(file.body);
-  // Frozen at open, and moved only by a conflict re-read below.
+  // Both frozen at open, and moved only by a conflict re-read below — the
+  // baseline always belongs to the rev the next save is checked against.
   const [rev, setRev] = useState(file.rev);
+  const [baseline, setBaseline] = useState(file.body);
 
   const save = useRevWriteMutation<void>({
     write: () => writeChapterBody(campaign, chapter, body, rev),
@@ -190,7 +201,12 @@ function ChapterBodyDialog({
     invalidateOnSuccess: [["tree", campaign], ["search", campaign]],
     onSaved: onClose,
     onConflict: (reread) => {
-      if (reread !== undefined) setRev(reread.rev);
+      // The typed text stays; what moves is what the next attempt writes
+      // against — rev and baseline together.
+      if (reread !== undefined) {
+        setRev(reread.rev);
+        setBaseline(reread.body);
+      }
     },
   });
 
@@ -243,7 +259,7 @@ function ChapterBodyDialog({
             </DialogClose>
             <Button
               type="submit"
-              disabled={!canSubmit || !chapterBodyChanged(body, file.body)}
+              disabled={!canSubmit || !chapterBodyChanged(body, baseline)}
               className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
             >
               {save.isPending ? t("common.saving") : t("common.save")}
