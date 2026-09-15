@@ -253,8 +253,9 @@
 //   [x] POST /api/:campaign/generate/job/:id/parts/:key/retry -> 202 GenerateJob —
 //           „Erneut versuchen" for ONE part of a pipelined scene run (issue
 //           #102). Re-runs only that part; the outline and the finished parts
-//           stay. 404 unknown job/part, 409 for a part that already runs or
-//           is done and for a job without parts, 503 without a provider.
+//           stay. 404 unknown job/part, 409 for a part that already runs, has
+//           not run yet or is done and for a job without parts, 503 without a
+//           provider.
 //   [x] GET  /api/:campaign/generate/job       GenerateJob (running/done/failed incl.
 //                                              kind, result/npcResult/augmentResult,
 //                                              error body and draftEdits), 404 when
@@ -293,7 +294,10 @@
 //                                              ones not). ONE transaction with the target
 //                                              guards of the ordinary draft write, FTS and
 //                                              refs follow, and the job row disappears the
-//                                              moment nothing is left open
+//                                              moment nothing is left open. A pipelined run
+//                                              that is still `running` is acceptable part by
+//                                              part (issue #102 AK2); 409 only for a failed
+//                                              run and for one with no finished part yet
 //   [x] POST /api/:campaign/generate/apply     { scenes?, stubs?, npc?, chapter?,
 //                                              chapterTitle?, jobId? } -> { written }
 //                                              (drafts as rows; 409 { conflicts } when any

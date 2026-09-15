@@ -460,6 +460,72 @@ test("one failed part leaves the other two reviewable (AK1, AK2)", async () => {
   expect((await fetchJob())!.id).toBe(job.id);
 });
 
+test("a done part is acceptable while the run is still RUNNING (AK2)", async () => {
+  // The old gate asked for a finished JOB, which made the pipeline's central
+  // promise unkeepable: „was hier steht, kannst du schon übernehmen" while
+  // the run says `running`. The UI offers it, so the endpoint has to answer
+  // it (issue #102 review).
+  const gate = new Promise<void>(() => {});
+  class HoldsLast extends ThreeSceneProvider {
+    override async complete(
+      req: GenerateRequest,
+      corrections: CorrectionTurn[] = [],
+    ): Promise<CompletionResult> {
+      const answer = await super.complete(req, corrections);
+      if (req.assignment !== undefined && /^drei /.test(req.assignment)) await gate;
+      return answer;
+    }
+  }
+  setProviderForTests(new HoldsLast(null));
+  await send("POST", "/api/beispiel/generate", {
+    chapter: "01-salzhafen",
+    sourceText: "Fenn waits at the docks.",
+  });
+  const job = await waitForParts(
+    (parts) => parts.filter((p) => p.status === "done").length === 2,
+  );
+  expect(job.status).toBe("running");
+
+  const accepted = await send("POST", `/api/beispiel/generate/job/${job.id}/accept`, {
+    rev: job.rev,
+    paths: ["01-salzhafen/eins"],
+  });
+  expect(accepted.status).toBe(200);
+  expect(await accepted.json()).toEqual({
+    written: { "01-salzhafen/eins": "01-salzhafen/leuchtturm/eins" },
+    jobDeleted: false,
+  });
+  // The run is untouched by it: still running, still holding its third part.
+  const after = (await fetchJob())!;
+  expect(after.status).toBe("running");
+  expect(after.pipeline!.parts.map((p) => p.status)).toEqual(["done", "done", "running"]);
+});
+
+test("a run that has produced nothing yet is not acceptable", async () => {
+  // Every part held: the job is `running` with no `done` part, so there is
+  // nothing to accept and „Alle übernehmen" is a 409 rather than an empty
+  // write.
+  const gate = new Promise<void>(() => {});
+  class HoldsEverything extends ThreeSceneProvider {
+    override async complete(
+      req: GenerateRequest,
+      corrections: CorrectionTurn[] = [],
+    ): Promise<CompletionResult> {
+      const answer = await super.complete(req, corrections);
+      if (req.outline !== undefined) await gate;
+      return answer;
+    }
+  }
+  setProviderForTests(new HoldsEverything(null));
+  await send("POST", "/api/beispiel/generate", {
+    chapter: "01-salzhafen",
+    sourceText: "Fenn waits at the docks.",
+  });
+  const job = await waitForParts((parts) => parts.length === 3);
+  const res = await send("POST", `/api/beispiel/generate/job/${job.id}/accept`, { rev: job.rev });
+  expect(res.status).toBe(409);
+});
+
 test("„Erneut versuchen“ re-runs ONE part and leaves the rest alone (AK3)", async () => {
   setProviderForTests(new ThreeSceneProvider("zwei"));
   const first = await runJob();

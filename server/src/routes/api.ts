@@ -876,13 +876,18 @@ api.patch("/:campaign/generate/job/:id/review", async (c) => {
 // for an unknown path and for a BULK accept with nothing left to do. A
 // named selection that is already written is not an error — a double click
 // gets 200 with an empty `written`.
+//
+// A RUNNING pipelined run is acceptable part by part (issue #102 AK2): it
+// stays `running` while parts are open, and a `done` part is in the result
+// and therefore acceptable before its siblings are. The 409 „no result" is
+// kept for a failed run, and for a run that has not finished a single part.
 api.post("/:campaign/generate/job/:id/accept", async (c) => {
   const body = await jsonBody(c, ["rev", "paths", "chapter", "chapterTitle"]);
   const rev = requireRev(body.rev);
   return c.json(await acceptJobParts(c.req.param("campaign"), c.req.param("id"), rev, body));
 });
 
-// POST /api/:campaign/generate/job/parts/:key/retry -> the job (202)
+// POST /api/:campaign/generate/job/:id/parts/:key/retry -> the job (202)
 // „Erneut versuchen" for ONE part of a pipelined scene run (issue #102).
 // Only that part is re-run: the outline stays, the finished parts stay
 // reviewable and acceptable, and the retried part goes back through exactly
@@ -892,8 +897,9 @@ api.post("/:campaign/generate/job/:id/accept", async (c) => {
 //
 // 404 without a job, for a stale :id and for an unknown part key; 409 for a
 // job that has no pipeline (a single-call npc/augment run) and for a part
-// that is already running or already done — a double click must not spend
-// tokens twice; 503 when no provider is configured.
+// that is already running, has not run yet (`pending` — the run's own pool
+// still owns it) or is already done — a double click must not spend tokens
+// twice; 503 when no provider is configured.
 api.post("/:campaign/generate/job/:id/parts/:key/retry", async (c) => {
   const provider = obtainProvider(); // 503 when nothing is configured
   const job = await retryJobPart(

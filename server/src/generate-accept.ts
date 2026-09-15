@@ -57,7 +57,19 @@ export async function acceptJobParts(
   if (job === undefined || job.id !== jobId) {
     throw new ApiError(404, "no generate job for this campaign");
   }
-  if (job.status !== "done") throw new ApiError(409, "this job has no result to accept");
+  // A RUNNING job is acceptable too, part by part (AK2 of issue #102): a
+  // pipelined run stays `running` while parts are open, and the whole point
+  // of the pipeline is that a finished part is reviewable and acceptable
+  // before its siblings are. What is acceptable is what is IN the result, and
+  // only a `done` part ever lands there — so the gate asks for a result, not
+  // for a finished run. A `failed` job (no part produced anything) and a
+  // running one that has not produced anything yet keep their 409.
+  if (job.status === "failed") throw new ApiError(409, "this job has no result to accept");
+  // A running SINGLE-CALL run (npc, augment) has no parts at all, so this is
+  // also what keeps it unacceptable until it is done.
+  if (job.status === "running" && !(job.pipeline?.parts ?? []).some((p) => p.status === "done")) {
+    throw new ApiError(409, "this job has no finished part to accept");
+  }
 
   const review = job.review;
   const dropped = new Set(review.dropped);
