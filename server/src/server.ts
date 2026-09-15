@@ -367,6 +367,17 @@
 // sentence of db/job-boot.ts. The app renders that field, so an interrupted
 // run says "Job neu starten" instead of spinning forever.
 //
+// Since issue #102 a SCENE run is a PIPELINE of provider calls — an outline
+// call, then one call per scene and per suggested entry, three at a time — and
+// the job therefore carries PARTS with a status each (./generate-pipeline,
+// ADR #10). What that changes for this list: the run stays `running` while
+// parts are open and its result fills up, so a finished part is reviewable and
+// acceptable before the run is over; a failed part is retryable on its own
+// (POST …/parts/:key/retry); a restart fails only the parts that were in
+// flight. The 422 semantics above are unchanged — a run whose EVERY part
+// failed answers exactly that body. The npc and the augment run stay
+// single-call runs and carry no parts at all.
+//
 // Everything that is NOT under /api is served from the frontend build
 // (app/dist) with an index.html fallback for client-side routes — see
 // ./static-files (production only; in dev Vite does this and proxies /api).

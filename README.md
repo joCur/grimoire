@@ -336,3 +336,10 @@ aber sessionunabhängig. Wird im Review-Schritt zusammen mit dem Log gezeigt.
 Siehe `generator/README.md`. Kurzfassung: Quelltext (EN) rein →
 Szenen-Drafts (DE, dieses Format) raus, immer `status: draft`,
 immer mit Review-Vorschau vor dem Speichern.
+
+Ein Szenen-Lauf ist eine **Pipeline** (#102): ein Gliederungs-Aufruf legt die
+Szenen und ihre ids fest, danach wird jede Szene und jeder neue Eintrag
+einzeln geschrieben. Ein Formfehler kostet damit nur den betroffenen Teil,
+fertige Szenen sind sofort prüfbar, und ein defekter Teil lässt sich einzeln
+wiederholen. Die Gliederung ist ein systeminterner Schritt — sie wird nie
+angezeigt.
