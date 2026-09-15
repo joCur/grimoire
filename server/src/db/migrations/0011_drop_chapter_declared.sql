@@ -1,0 +1,1 @@
+ALTER TABLE `scenes` DROP COLUMN `chapter_declared`;
