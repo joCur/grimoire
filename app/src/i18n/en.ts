@@ -82,7 +82,7 @@ export const en: Messages = {
 
   "create.chapter.title": "Create chapter",
   "create.chapter.description":
-    "The title becomes the chapter's id — it appears in every scene address and stays as it is. The goal is optional and lands in the file under the heading “## Ziel des Kapitels” — the section shown as the chapter's goal.",
+    "The title becomes the chapter's id — it appears in every scene address and stays as it is. The goal is optional and lands in the chapter text under the heading “## Ziel des Kapitels” — the section shown as the chapter's goal.",
   "create.chapter.nameLabel": "Title",
   "create.chapter.namePlaceholder": "Chapter title",
   "create.chapter.goalLabel": "Goal of the chapter (optional)",

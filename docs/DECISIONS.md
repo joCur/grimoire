@@ -40,7 +40,8 @@ Schreibzugriffe laufen über den Server, kein persistenter Browser-State.
 - Inhalte werden extern editiert (VS Code Remote o. ä.). Ein simples
   Textarea-Edit als Notlösung ist erlaubt; ein vollwertiger MD-Editor
   ist bewusst KEIN Ziel von v1.
-- Konfliktschutz: Patch nur bei unverändertem mtime, sonst 409.
+- Konfliktschutz: Patch nur bei unveränderter Zeilenversion `rev`, sonst 409
+  (ursprünglich: unveränderte `mtime` der Datei — siehe Nachtrag).
 
 > **Teilweise überholt (#11, #13/#15):** Bearbeitet wird in der App; ein
 > externer Editor ist kein Datenpfad mehr, weil die Datenbank die Wahrheit
@@ -61,12 +62,10 @@ ließe sich nicht auf Tabellen beschränken (Aufgabenlisten würden die
 Inbox-Syntax `- [x]` vereinnahmen).
 Kein Electron/Tauri — Web-App hinter Tailscale reicht.
 
-**Backend:** Bun + Hono. Bibliotheken ursprünglich: gray-matter
-(Frontmatter), chokidar (Datei-Watcher für externe Edits), Fuse.js (Suche im
-Speicher — kein SQLite nötig bei ein paar hundert Dateien).
-**Seit #13:** Drizzle über SQLite (`server/src/db/`), Suche als FTS5-Index;
-chokidar und Fuse.js sind entfernt, gray-matter lebt nur noch im
-Import-/Parser-Pfad (`@grimoire/shared`).
+**Backend:** Bun + Hono, Drizzle über SQLite (`server/src/db/`), Suche als
+FTS5-Index. gray-matter gehört zum Importer/Parser (`@grimoire/shared`), nicht
+zum Laufzeit-Stack. (War mal: chokidar als Datei-Watcher und Fuse.js als
+In-Memory-Suche — beide seit #13 entfernt.)
 Hono statt Express/Fastify: minimal, typsicher, läuft auf Bun UND Node
 (Runtime-Wechsel bleibt möglich, siehe #7).
 

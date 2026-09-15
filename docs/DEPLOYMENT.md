@@ -377,12 +377,9 @@ kein In-App-Auth nachbauen.
 das Verfahren (`VACUUM INTO` im Betrieb, oder Container stoppen und das
 Verzeichnis kopieren) und die Wiederherstellung.
 
-Was hier früher stand, galt für die Markdown-Ära: „Backup ist Dateikopie",
-Git-Historie pro Szene, `rsync` über `campaigns/`. Seit ADR #13 ist das nicht
-mehr die Sicherung, sondern höchstens ein Archiv des Vor-Migrations-Stands —
-`campaigns/` wird vom Server überhaupt nicht mehr gelesen (nur noch von
-`grimoire seed`, wenn man es ihm ausdrücklich übergibt). Wer diesen Ordner
-weiter versioniert, sichert damit **keine** laufende Kampagne.
+Ein versionierter `campaigns/`-Ordner sichert **keine** laufende Kampagne —
+der Server liest ihn nicht (ADR #13); er ist höchstens ein Archiv des
+Vor-Migrations-Stands.
 
 ## 5. Betrieb & Fehlersuche
 
