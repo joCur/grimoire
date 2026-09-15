@@ -15,7 +15,6 @@ import { clearJobsForTests } from "../src/generate-jobs";
 import { failInterruptedJobs, RESTART_FAILURE_MESSAGE } from "../src/db/job-boot";
 import { getDb } from "../src/store/handle";
 import { setProviderForTests } from "../src/generator";
-import { WARNINGS_DELIMITER } from "../src/document-reply";
 import {
   assignmentBlock,
   cutExcerpt,
@@ -370,11 +369,11 @@ test("an entry's context is the passages that mention it — by name OR by id wo
 
 test("the single-scene mode swaps the output schema and keeps every rule", async () => {
   const single = await sceneSystemPrompt();
-  // No JSON anywhere (issue #107): the reply IS the document, and the
-  // warnings follow the delimiter line.
-  expect(single).not.toContain("JSON-Block zurück");
-  expect(single).toContain("**das Dokument selbst**");
-  expect(single).toContain(WARNINGS_DELIMITER);
+  // The reply object (issue #107) — the swapped section describes it, and
+  // nothing of the raw-document format is left.
+  expect(single).toContain("Du antwortest mit **einem JSON-Objekt**");
+  expect(single).toContain("`warnings`");
+  expect(single).not.toContain("---warnings---");
   // The outline-bound half of the swap: one scene per call, no entries.
   expect(single).toContain("GENAU EINE Szene");
   expect(single).toContain("Die Gliederung ist verbindlich.");
@@ -461,24 +460,21 @@ test("two parts of one run share a byte-identical constant prefix", () => {
 
 const SCENE_IDS = ["eins", "zwei", "drei"] as const;
 
+/** One scene as the REPLY OBJECT of issue #107 — what a part's call answers. */
 function sceneDoc(id: string, over: { status?: string } = {}): string {
-  return [
-    "---",
-    `id: ${id}`,
-    `title: Szene ${id}`,
-    "type: planned",
-    "location: leuchtturm",
-    "npcs: [fenn]",
-    "handouts: []",
-    "tags: [social]",
-    `status: ${over.status ?? "draft"}`,
-    "---",
-    "",
-    "## Flow",
-    "",
-    "Fenn wartet am Kai.",
-    "",
-  ].join("\n");
+  return JSON.stringify({
+    properties: {
+      id,
+      title: `Szene ${id}`,
+      type: "planned",
+      location: "leuchtturm",
+      npcs: ["fenn"],
+      tags: ["social"],
+      status: over.status ?? "draft",
+    },
+    body: "## Flow\n\nFenn wartet am Kai.\n",
+    warnings: [],
+  });
 }
 
 /**
@@ -519,8 +515,8 @@ class ThreeSceneProvider implements LLMProvider {
     }
     const id = /^([a-z0-9-]+) /.exec(req.assignment ?? "")?.[1] ?? "";
     this.calls.push(id);
-    // The RAW document reply of issue #107 — the scene part's answer IS the
-    // document, with no warnings block behind it.
+    // The reply object of issue #107 — the scene part's answer, with no
+    // warnings in it.
     return {
       text: sceneDoc(id, id === this.broken ? { status: "ready" } : {}),
       truncated: false,
@@ -599,7 +595,7 @@ test("one failed part leaves the other two reviewable (AK1, AK2)", async () => {
   expect(failed.error).toContain("validation");
   // The part carries its OWN last raw reply to the client (the job's error
   // body only ever has one, for a run that can have many parts).
-  expect(failed.rawReply).toContain("status: ready");
+  expect(failed.rawReply).toContain('"status":"ready"');
   expect(failed.validationErrors).toEqual(
     expect.arrayContaining([expect.stringContaining('"status" must be "draft"')]),
   );

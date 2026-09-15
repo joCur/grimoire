@@ -20,7 +20,8 @@ import type {
 import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generate-jobs";
 import { setProviderForTests } from "../src/generator";
-import { WARNINGS_DELIMITER } from "../src/document-reply";
+import { composeDocument } from "../src/document-reply";
+import { documentReply } from "./support/pipeline-fake";
 import { dropStore, seedStore } from "./support/store";
 import type {
   CompletionResult,
@@ -168,15 +169,15 @@ function npcMarkdown(
 /**
  * The reply, in the RAW document format of issue #107: the document itself —
  * no `path` (issue #100: the server addresses the npc as `npcs/<id>` with the
- * id from the properties) and no JSON wrapper — then the warnings after the
- * delimiter line.
+ * id from the properties). Written from the DOCUMENT a case describes and
+ * turned into the reply OBJECT of issue #107 (support/pipeline-fake
+ * `documentReply`); a document that cannot be read is served verbatim,
+ * because that is what such a case is about.
  */
 function npcReply(over: { content?: string; warnings?: string[] } = {}): string {
   const document = over.content ?? npcMarkdown();
   const warnings = over.warnings ?? ["Quelltext nennt keinen Status — alive gesetzt"];
-  return warnings.length === 0
-    ? document
-    : `${document}\n${WARNINGS_DELIMITER}\n${warnings.join("\n")}\n`;
+  return documentReply(document, warnings, "npc") ?? document;
 }
 
 /** A reply for a specific id (so a test that WRITES does not collide later). */
@@ -251,7 +252,25 @@ describe("POST /api/:campaign/generate/npc", () => {
     const result = (await res.json()) as GenerateNpcResult;
 
     expect(result.npc.path).toBe("npcs/grella");
-    expect(result.npc.markdown).toBe(npcMarkdown());
+    // The markdown is the SERVER's composition since issue #107 (the model
+    // sends properties and body, never a frontmatter block), so it is the
+    // store's own rendering — same keys, same body, the renderer's quoting.
+    expect(result.npc.markdown).toBe(
+      composeDocument({
+        properties: {
+          id: "grella",
+          name: "Grella",
+          role: "Schmugglerin mit eigenen Plänen",
+          status: "alive",
+          statblock: "Roll20: Grella",
+          quickstats: { insight: "+3", deception: "+5" },
+          voice: "schnell, spöttisch — wird höflich, wenn sie lügt",
+          appearance: "geflickter Ölmantel, rußige Finger",
+        },
+        body: npcMarkdown().split("---\n")[2]!.replace(/^\n+/, ""),
+        warnings: [],
+      }),
+    );
     expect(result.npc.properties.id).toBe("grella");
     expect(result.npc.properties.name).toBe("Grella");
     expect(result.npc.properties.status).toBe("alive");
@@ -267,7 +286,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     // the NPC prompt assets and the campaign context travelled
     const req = fake.calls[0]!.req;
     expect(req.systemPrompt).toContain("System-Prompt: NPC-Generator");
-    expect(req.fewShotTarget).toContain("id: fenn");
+    expect(req.fewShotTarget).toContain('"id": "fenn"');
     expect(req.context.npcs.map((n) => n.id).sort()).toEqual(["fenn", "jorna"]);
     expect(req.context.locations.map((l) => l.id).sort()).toEqual(["bucht", "leuchtturm"]);
     expect(req.glossary).toContain("Leuchtturmwärter");
@@ -395,13 +414,22 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(errors).toContain('unknown callout "[!danger]"');
   });
 
-  test("unquoted quickstats, an invented chapter and a filled ## Notizen are errors", async () => {
-    expect(
-      await firstValidationError([
-        npcReply({ content: npcMarkdown({ quickstats: "{ insight: +3 }" }) }),
-      ]),
-    ).toContain("Werte als Strings in Anführungszeichen");
+  test("quickstats travel as key/value pairs — a mapping is a shape error (#107)", async () => {
+    // The „quote the plus" rule is the SCHEMA's job now: a `pairs` field is a
+    // list of `{ key, value }` with string values, and the server folds it
+    // into the mapping and renders it quoted (document-reply.ts). So what a
+    // reply can still get wrong is the SHAPE, and that is what it is told.
+    const mapping = JSON.stringify({
+      properties: { id: "grella", name: "Grella", status: "alive", quickstats: { insight: "+3" } },
+      body: "## Will\n\nIhren Anteil.\n",
+      warnings: [],
+    });
+    expect(await firstValidationError([mapping])).toContain(
+      '"properties.quickstats" muss eine Liste von { key, value } sein',
+    );
+  });
 
+  test("an invented chapter and a filled ## Notizen are errors", async () => {
     expect(
       await firstValidationError([npcReply({ content: npcMarkdown({ chapter: true }) })]),
     ).toContain('kein "chapter"');
@@ -423,52 +451,69 @@ describe("POST /api/:campaign/generate/npc", () => {
     }
   });
 
-  test("a missing name degrades to the id — the shared parser fills it", async () => {
-    const fake = useFake([
-      npcReply({ content: npcMarkdown({ id: "namenlos", name: null }) }),
-    ]);
-    const res = await generateNpc(npcBody);
-    expect(res.status).toBe(200);
-    expect(((await res.json()) as GenerateNpcResult).npc.properties.name).toBe("namenlos");
-    expect(fake.calls).toHaveLength(1);
+  test("a missing name is a correction turn — the schema requires one (#107)", async () => {
+    // Until this ticket a nameless reply DEGRADED: the shared parser filled
+    // the display name from the address, so `npcs/namenlos` got „namenlos" as
+    // its name and nobody was asked. The reply schema requires the field
+    // (it is the one the properties dialog requires too), so the model is
+    // told instead of the server inventing — the degrade rule stays where it
+    // belongs, on the READ path for files a DM hand-wrote.
+    expect(
+      await firstValidationError([
+        npcReply({ content: npcMarkdown({ id: "namenlos", name: null }) }),
+      ]),
+    ).toContain('"properties.name" fehlt');
   });
 
-  test("a reply that is no document is a validation error (issue #107)", async () => {
-    // Prose without a properties block, the OLD JSON wrapper, an empty reply:
-    // all of them are „das ist kein Dokument", and the message says what one
-    // looks like instead of naming a JSON schema that no longer exists.
+  test("a reply that is not the reply object is a validation error (issue #107)", async () => {
+    // Prose, the raw-document format this ticket replaced, an empty reply, a
+    // JSON value that is not the object: all of them are „das ist kein Objekt
+    // des Schemas", and the message says which three keys one has.
     for (const raw of [
-      "kein Dokument",
-      JSON.stringify({ npc: { content: npcMarkdown() }, warnings: [] }),
+      "kein Objekt",
+      npcMarkdown(),
       "",
-      // A `---` with no second one is no frontmatter block.
-      "---\nid: grella\n\n## Will\n\nIrgendwas.\n",
+      JSON.stringify([{ properties: { id: "grella" } }]),
+      JSON.stringify({ npc: { content: npcMarkdown() } }),
     ]) {
-      expect(await firstValidationError([raw])).toContain("kein Dokument");
+      expect(await firstValidationError([raw])).toContain("kein Objekt des Schemas");
     }
   });
 
   test("a fence and a leading sentence cost ONE call (issue #107 tolerance)", async () => {
+    // An endpoint that accepts `response_format` and ignores it answers the
+    // object inside a fence, with a sentence in front. The tolerant reader
+    // (parseJsonReply) takes it, and the run costs one call instead of a
+    // correction turn.
     const fake = useFake([
       [
         "Hier ist die NPC-Datei — ich habe den Status auf alive gesetzt:",
         "",
-        "```markdown",
-        npcMarkdown(),
+        "```json",
+        npcReply(),
         "```",
-        "",
-        WARNINGS_DELIMITER,
-        "Quelltext nennt keinen Status — alive gesetzt",
       ].join("\n"),
     ]);
     const res = await generateNpc(npcBody);
     expect(res.status).toBe(200);
     expect(fake.calls).toHaveLength(1);
     const result = (await res.json()) as GenerateNpcResult;
-    // The document arrives unwrapped, and the warning is the run's.
+    // The document is the SERVER's composition, and the warning is the run's.
     expect(result.npc.markdown.startsWith("---\nid: grella")).toBe(true);
     expect(result.npc.markdown).not.toContain("```");
     expect(result.warnings).toEqual(["Quelltext nennt keinen Status — alive gesetzt"]);
+  });
+
+  test("an almost-JSON reply is repaired once, with a warning (issue #107)", async () => {
+    // A trailing comma is mechanical; `jsonrepair` fixes it deterministically
+    // and much more cheaply than a correction turn — and the run SAYS so.
+    const fake = useFake([`${npcReply().replace(/}$/, ",}")}`]);
+    const res = await generateNpc(npcBody);
+    expect(res.status).toBe(200);
+    expect(fake.calls).toHaveLength(1);
+    const result = (await res.json()) as GenerateNpcResult;
+    expect(result.npc.properties.id).toBe("grella");
+    expect(result.warnings.some((w) => w.includes("repariert"))).toBe(true);
   });
 
   // --- id collisions -------------------------------------------------------------

@@ -15,25 +15,28 @@
 //                  A reply that does not PARSE (garbage, a truncated one) is
 //                  served verbatim here instead: that is a run that dies
 //                  before it has parts, which is what those tests are about.
-//   scene part     the scripted reply's scene document, as the RAW document
-//                  reply of issue #107: the markdown itself, and the batch
-//                  reply's `warnings` after a `---warnings---` line.
-//   entry part     the scripted reply's matching `entries` item, likewise raw.
-//   single call    the npc/augment run's scripted document, likewise raw — a
+//   scene part     the scripted reply's scene document, as the REPLY OBJECT
+//                  of issue #107: `properties` (the document's frontmatter,
+//                  parsed), `body`, and the batch reply's `warnings`.
+//   entry part     the scripted reply's matching `entries` item, likewise.
+//   single call    the npc/augment run's scripted document, likewise — a
 //                  reply that does NOT parse as a batch / `{ npc }` /
 //                  `{ entry }` object travels verbatim, which is what the
 //                  garbage and the truncation cases are about.
 //
-// The script itself stays JSON: it is the test's way of saying WHICH documents
-// a run is about, and a batch object says that in one literal. What reaches
-// the server is the raw format, so the correction turns, the replayed
-// assistant turns and the `rawReply` of an error body are all in the shape a
-// real provider now delivers.
+// The script keeps writing DOCUMENTS (`content`: markdown with a properties
+// block), because that is how a test says what a run is about in one literal.
+// The fake is what turns them into the object a schema-forced provider
+// delivers — so the correction turns, the replayed assistant turns and the
+// `rawReply` of an error body are all in the real shape. A `content` whose
+// properties block does not parse travels VERBATIM: that is a reply the run
+// has to fail on, and the failure is the test's subject.
 //
 // Attempt N of a part reads script[N], so "bad, then good" still means one
 // correction turn — per part, which is the whole point of the ticket.
 
-import { WARNINGS_DELIMITER } from "../../src/document-reply";
+import { CORE_SCHEMA, load } from "js-yaml";
+import { PAIR_KEY, PAIR_VALUE, propertyFieldsFor } from "@grimoire/shared";
 import type {
   CompletionResult,
   CorrectionTurn,
@@ -104,12 +107,54 @@ function parseBatch(reply: ScriptedReply): BatchReply | null {
   };
 }
 
-/** The RAW document reply of issue #107 — document, then the warnings block. */
-export function rawDocument(content: string, warnings: readonly string[] = []): string {
-  const document = content.replace(/\n*$/, "\n");
-  return warnings.length === 0
-    ? document
-    : `${document}\n${WARNINGS_DELIMITER}\n${warnings.join("\n")}\n`;
+/**
+ * The REPLY OBJECT of issue #107, built out of a scripted document: the
+ * properties block parsed into `properties`, everything below it as `body`,
+ * plus the script's warnings. Returns null when the document has no parseable
+ * properties block — such a script is served verbatim, because a reply the
+ * server cannot read is exactly what those cases test.
+ *
+ * `quickstats` (and any other key/value field) is turned into the `{ key,
+ * value }` LIST the schema asks for — a free mapping cannot be expressed in
+ * strict mode (shared/document-schema.ts).
+ */
+export function documentReply(
+  content: string,
+  warnings: readonly string[] = [],
+  kind: "scene" | "npc" | "location" = "scene",
+): string | null {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(content);
+  if (match === null) return null;
+  let data: unknown;
+  try {
+    data = load(match[1]!, { schema: CORE_SCHEMA });
+  } catch {
+    return null;
+  }
+  if (data === null || typeof data !== "object" || Array.isArray(data)) return null;
+  const properties = { ...(data as Record<string, unknown>) };
+  for (const field of propertyFieldsFor(kind) ?? []) {
+    if (field.control !== "pairs") continue;
+    const value = properties[field.key];
+    if (value === null || typeof value !== "object" || Array.isArray(value)) continue;
+    properties[field.key] = Object.entries(value as Record<string, unknown>).map(
+      ([key, item]) => ({ [PAIR_KEY]: key, [PAIR_VALUE]: String(item) }),
+    );
+  }
+  return JSON.stringify({
+    properties,
+    body: (match[2] ?? "").replace(/^\n+/, "").replace(/\s*$/, "\n"),
+    warnings: [...warnings],
+  });
+}
+
+/** The reply object of a scripted document, or the document verbatim. */
+function replyOrVerbatim(
+  content: string,
+  warnings: readonly string[],
+  kind: "scene" | "npc" | "location",
+): string {
+  return documentReply(content, warnings, kind) ?? content;
 }
 
 /**
@@ -266,7 +311,11 @@ export class PipelineFake implements LLMProvider {
       if (document === null) return completionOf(scripted);
       return {
         ...completionOf(scripted),
-        text: rawDocument(document.content, document.warnings),
+        // Which kind the single call is about is not in the request; the npc
+        // run and an npc augment are the ones with key/value fields, so npc
+        // is the honest default here (a scene/location document simply has
+        // no `pairs` field to convert).
+        text: replyOrVerbatim(document.content, document.warnings, "npc"),
       };
     }
 
@@ -281,7 +330,7 @@ export class PipelineFake implements LLMProvider {
       const scene =
         batch.scenes.find((doc) => property(doc.content, "id") === part.id) ?? batch.scenes[0];
       return {
-        text: rawDocument(scene!.content, batch.warnings),
+        text: replyOrVerbatim(scene!.content, batch.warnings, "scene"),
         truncated: false,
         ...(typeof scripted === "string" || scripted.usage === undefined
           ? {}
@@ -314,7 +363,7 @@ export class PipelineFake implements LLMProvider {
       batch.entries.find(byId) ?? batch.entries[0] ?? this.lastBatch()?.entries.find(byId);
     if (entry === undefined) return completionOf(scripted);
     return {
-      text: rawDocument(entry.content),
+      text: replyOrVerbatim(entry.content, [], entry.kind === "location" ? "location" : "npc"),
       truncated: false,
       ...(typeof scripted === "string" || scripted.usage === undefined
         ? {}

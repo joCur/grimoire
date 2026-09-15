@@ -498,7 +498,9 @@ export function validateSingleSceneReply(input: {
   // the server would store). Everything below judges that object, by exactly
   // the rules it judged the markdown by before.
   const read = parseDocumentReply(input.raw, "scene");
-  if (!read.ok) return { ok: false, errors: read.errors };
+  // Labelled like every other error of this part: the review shows the list
+  // per part, and „which scene" is the first thing the DM looks for.
+  if (!read.ok) return { ok: false, errors: read.errors.map((e) => `scene "${input.scene.id}": ${e}`) };
   const reply = read.reply;
   const errors: string[] = [];
   const draft = validateSceneDocument({
@@ -531,7 +533,9 @@ export function validateEntryReply(
   ctx: SceneContext,
 ): { ok: true; result: { stub: GeneratedStub; warnings: string[] } } | { ok: false; errors: string[] } {
   const read = parseDocumentReply(raw, entry.kind);
-  if (!read.ok) return { ok: false, errors: read.errors };
+  if (!read.ok) {
+    return { ok: false, errors: read.errors.map((e) => `${entry.kind} "${entry.id}": ${e}`) };
+  }
   const reply = read.reply;
   const errors: string[] = [];
   const stub = validateEntry({ kind: entry.kind, reply }, 0, errors);

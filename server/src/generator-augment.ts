@@ -216,7 +216,9 @@ export function validateAugmentReply(
   // „nichts löschen" means here.
   const { kind, file } = target;
   const read = parseDocumentReply(raw, kind);
-  if (!read.ok) return { ok: false, errors: read.errors };
+  if (!read.ok) {
+    return { ok: false, errors: read.errors.map((e) => `entry "${file.path}": ${e}`) };
+  }
   const reply = read.reply;
   const errors: string[] = [];
 

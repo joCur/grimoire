@@ -1,201 +1,207 @@
-// The raw document reply (issue #107).
+// The document reply (issue #107): one schema-forced JSON object per kind.
 //
-// AK1 is the PO case of 15.09.: a scene whose body carries German quotation
-// marks closed with an ASCII `"`. As a JSON string value that `"` ended the
-// string and an inhaltlich correct scene cost the run a correction turn (and
-// then a „Formprüfung nicht bestanden"). As a raw document it is just text.
+// What this suite is about is the SEAM between the model and the store: the
+// object comes in, the normalized properties and the composed markdown come
+// out, and everything that is content — a kebab id, a known scene type,
+// references that resolve — belongs to the validators (generator.test.ts,
+// generate-pipeline.test.ts, augment.test.ts).
+//
+// So the cases here are the ones the schema cannot cover:
+//   * a reply that is not the object at all (an endpoint that ignored
+//     `response_format`, a model that answered prose or the raw document the
+//     earlier slices of this ticket asked for),
+//   * the tolerant way in — a fence, prose around it, one `jsonrepair` pass,
+//   * `null` read as „not given", so the composed frontmatter has no empty
+//     keys in it,
+//   * the `{ key, value }` list folded back into the `quickstats` mapping,
+//   * the PO case of 15.09.: a body whose German quotation marks are closed
+//     with an ASCII `"` travels byte for byte, because the transport escapes
+//     it and nobody hand-writes the JSON any more.
 
 import { describe, expect, test } from "bun:test";
+import { parseMarkdown } from "@grimoire/shared";
 import {
   NOT_A_DOCUMENT_ERROR,
-  WARNINGS_DELIMITER,
+  REPAIRED_DOCUMENT_WARNING,
+  composeDocument,
   parseDocumentReply,
+  parseJsonReply,
+  type DocumentReply,
 } from "../src/document-reply";
 
-/** The document of the PO example, ASCII closing quote included. */
-const PO_SCENE = `---
-id: night-watch-quay
-title: Nachtwache am Kai
-type: planned
-chapter: 01-salzhafen
-status: draft
----
+/** The PO case: opening U+201E, closed with the ASCII `"`. */
+const PO_LINE = '„Wer nachts hier steht, hat was zu verbergen", murrt die Wache.';
 
-## Flow
+const SCENE_BODY = `## Flow\n\n${PO_LINE}\n`;
 
-Die Wache am Kran murrt: „Wer nachts hier steht, hat was zu verbergen."
-Zwei Laternen wandern über die Mole.
+function sceneObject(over: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    properties: {
+      id: "night-watch-quay",
+      title: "Nachtwache am Kai",
+      type: "planned",
+      trigger: null,
+      chapter: "01-salzhafen",
+      location: null,
+      npcs: ["fenn"],
+      handouts: [],
+      tags: ["stealth"],
+      status: "draft",
+      ...over,
+    },
+    body: SCENE_BODY,
+    warnings: ["Der Quelltext nennt keinen DC — DC 13 gesetzt."],
+  });
+}
 
-> [!readaloud] „Bleibt, wo ihr seid", ruft jemand aus dem Dunkeln — und die
-> Stimme klingt jünger, als sie sein sollte.
-
-> [!check] Dexterity (Stealth) DC 13, um unter die Mole zu kommen.
-`;
-
-/** What the parser gave back, or the test fails with the error message. */
-function parse(raw: string): { content: string; warnings: string[] } {
-  const outcome = parseDocumentReply(raw);
-  if (!outcome.ok) throw new Error(`expected a document, got: ${outcome.error}`);
+function read(raw: string, kind: "scene" | "npc" | "location" = "scene"): DocumentReply {
+  const outcome = parseDocumentReply(raw, kind);
+  if (!outcome.ok) throw new Error(`expected a reply, got: ${outcome.errors.join(" | ")}`);
   return outcome.reply;
 }
 
-/** The error message, or the test fails because it parsed after all. */
-function error(raw: string): string {
-  const outcome = parseDocumentReply(raw);
-  if (outcome.ok) throw new Error("expected an error, got a document");
-  return outcome.error;
+function errors(raw: string, kind: "scene" | "npc" | "location" = "scene"): string[] {
+  const outcome = parseDocumentReply(raw, kind);
+  if (outcome.ok) throw new Error("expected errors");
+  return outcome.errors;
 }
 
 describe("parseDocumentReply", () => {
-  test("AK1: the PO scene with an ASCII closing quote parses unchanged", () => {
-    const reply = parse(PO_SCENE);
-    expect(reply.content).toBe(PO_SCENE);
-    expect(reply.warnings).toEqual([]);
-    // The quotation marks survive byte for byte — the server corrects nothing.
-    expect(reply.content).toContain('„Wer nachts hier steht, hat was zu verbergen."');
+  test("reads the object and composes the document the server stores", () => {
+    const reply = read(sceneObject());
+    expect(reply.properties.id).toBe("night-watch-quay");
+    expect(reply.warnings).toEqual(["Der Quelltext nennt keinen DC — DC 13 gesetzt."]);
+
+    const markdown = composeDocument(reply);
+    // A real frontmatter block, built by the store's own renderer — and the
+    // body below it, unchanged.
+    expect(markdown.startsWith("---\nid: night-watch-quay\n")).toBe(true);
+    const parsed = parseMarkdown(markdown, "01-salzhafen/night-watch-quay", 0);
+    expect(parsed.properties.title).toBe("Nachtwache am Kai");
+    expect(parsed.properties.status).toBe("draft");
+    expect(parsed.body.trim()).toBe(SCENE_BODY.trim());
   });
 
-  test("the warnings block is split off, one warning per line", () => {
-    const reply = parse(
-      `${PO_SCENE}\n${WARNINGS_DELIMITER}\nDer Quelltext nennt keinen DC — DC 13 gesetzt.\nDie Wache hat keinen Namen.\n`,
+  test("the body survives the PO spelling byte for byte", () => {
+    // The whole reason the reply is an object the TRANSPORT serializes: the
+    // ASCII `"` inside a German quotation used to end the hand-written JSON
+    // string, and the raw-document format traded that for frontmatter
+    // guessing. Here it is simply a character in a string.
+    expect(read(sceneObject()).body).toContain(PO_LINE);
+    expect(composeDocument(read(sceneObject()))).toContain(PO_LINE);
+  });
+
+  test("a null value means the key is left out of the block", () => {
+    const reply = read(sceneObject());
+    // `trigger` and `location` were null, `handouts` an empty list.
+    expect(Object.hasOwn(reply.properties, "trigger")).toBe(false);
+    expect(Object.hasOwn(reply.properties, "location")).toBe(false);
+    expect(Object.hasOwn(reply.properties, "handouts")).toBe(false);
+    expect(composeDocument(reply)).not.toContain("trigger:");
+  });
+
+  test("the properties keep the field list's order", () => {
+    const shuffled = JSON.stringify({
+      properties: { status: "draft", title: "Kai", type: "planned", id: "kai" },
+      body: "## Flow\n",
+      warnings: [],
+    });
+    expect(Object.keys(read(shuffled).properties)).toEqual(["id", "title", "type", "status"]);
+  });
+
+  test("a key/value list becomes the quickstats mapping", () => {
+    const npc = JSON.stringify({
+      properties: {
+        id: "grella",
+        name: "Grella",
+        status: "alive",
+        quickstats: [
+          { key: "wis", value: "+2" },
+          { key: "passive-perception", value: "13" },
+        ],
+      },
+      body: "## Will\n\nIhren Anteil.\n",
+      warnings: [],
+    });
+    const reply = read(npc, "npc");
+    expect(reply.properties.quickstats).toEqual({ wis: "+2", "passive-perception": "13" });
+    // And the renderer quotes it, which is the whole point of the detour: a
+    // bare `+2` would lose its plus to YAML.
+    expect(composeDocument(reply)).toContain("quickstats: {wis: '+2'");
+  });
+
+  test("a fence, prose around it and a single repair all cost no correction turn", () => {
+    expect(read(`Hier ist die Szene:\n\n\`\`\`json\n${sceneObject()}\n\`\`\`\n`).properties.id).toBe(
+      "night-watch-quay",
     );
-    expect(reply.content).toBe(PO_SCENE);
-    expect(reply.warnings).toEqual([
-      "Der Quelltext nennt keinen DC — DC 13 gesetzt.",
-      "Die Wache hat keinen Namen.",
-    ]);
+    const repaired = read(sceneObject().replace(/}$/, ",}"));
+    expect(repaired.properties.id).toBe("night-watch-quay");
+    // …and the run says that it had to be repaired.
+    expect(repaired.warnings).toContain(REPAIRED_DOCUMENT_WARNING);
   });
 
-  test("a warnings block that is bulleted, padded or empty still reads right", () => {
-    expect(parse(`${PO_SCENE}\n${WARNINGS_DELIMITER}\n\n- eins\n* zwei\n\n`).warnings).toEqual([
-      "eins",
-      "zwei",
-    ]);
-    // An EMPTY block is no warnings, not one empty warning.
-    expect(parse(`${PO_SCENE}\n${WARNINGS_DELIMITER}\n`).warnings).toEqual([]);
-    // A model that got the word right and the dashes wrong still said it.
-    expect(parse(`${PO_SCENE}\n--Warnings--\ndrei\n`).warnings).toEqual(["drei"]);
-  });
-
-  test("a surrounding fence and a leading sentence come off (both cost nothing)", () => {
-    const reply = parse(
-      [
-        "Hier ist die Szene — ich habe den DC gesetzt:",
-        "",
-        "```markdown",
-        PO_SCENE.trimEnd(),
-        "```",
-        "",
-        WARNINGS_DELIMITER,
-        "DC gesetzt.",
-      ].join("\n"),
-    );
-    expect(reply.content).toBe(PO_SCENE);
-    expect(reply.warnings).toEqual(["DC gesetzt."]);
-  });
-
-  test("a fence INSIDE the document does not cut it short", () => {
-    const withFence = `${PO_SCENE.trimEnd()}\n\n> [!note] Beispiel:\n\n\`\`\`\nein Block\n\`\`\`\n`;
-    expect(parse("```\n" + withFence + "```\n").content).toBe(withFence);
-    // …and without an outer fence the inner one is simply body text.
-    expect(parse(withFence).content).toBe(withFence);
-  });
-
-  test("trailing whitespace is normalized to exactly one newline", () => {
-    expect(parse(`${PO_SCENE}\n\n\n`).content).toBe(PO_SCENE);
-    expect(parse(PO_SCENE.trimEnd()).content).toBe(PO_SCENE);
-    // CRLF from a Windows-ish endpoint reads the same.
-    expect(parse(PO_SCENE.replace(/\n/g, "\r\n")).content).toBe(PO_SCENE);
-  });
-
-  test("no frontmatter start is the ONE error, and it says what a document is", () => {
+  test("anything that is not the object is the ONE shape error", () => {
     for (const raw of [
       "",
-      "   \n  ",
-      "Ich kann diese Aufgabe leider nicht erfüllen.",
-      // The old JSON wrapper: valid JSON, not a document.
-      JSON.stringify({ scene: { content: PO_SCENE }, warnings: [] }),
-      // A single `---` opens nothing.
-      "---\nid: night-watch-quay\n\n## Flow\n\nText.\n",
-      // …and a warnings block alone is not a document either.
-      `${WARNINGS_DELIMITER}\nnur eine Warnung\n`,
+      "kein Objekt",
+      // The raw-document format of this ticket's earlier slices.
+      "---\nid: night-watch-quay\nstatus: draft\n---\n\n## Flow\n",
+      JSON.stringify([sceneObject()]),
+      JSON.stringify({ body: "## Flow\n", warnings: [] }),
     ]) {
-      expect(error(raw)).toBe(NOT_A_DOCUMENT_ERROR);
+      expect(errors(raw)).toEqual([NOT_A_DOCUMENT_ERROR]);
     }
-    // The message names the delimiter, so the model can fix the one thing.
-    expect(NOT_A_DOCUMENT_ERROR).toContain(WARNINGS_DELIMITER);
-    expect(NOT_A_DOCUMENT_ERROR).toContain("Frontmatter-Block");
+    expect(NOT_A_DOCUMENT_ERROR).toContain("`properties`");
+    expect(NOT_A_DOCUMENT_ERROR).toContain("`body`");
+    expect(NOT_A_DOCUMENT_ERROR).toContain("`warnings`");
   });
 
-  test("trailing prose after the document is KEPT — nothing is cut (issue #107)", () => {
-    // There used to be a heuristic here that cut a structureless trailing
-    // block off an unfenced reply. It could not tell a sign-off from a plain
-    // closing sentence, so it silently deleted real content. Now the DM sees
-    // the chatter in the review and deletes it there; the prompts forbid it.
-    const signOff = `${PO_SCENE}\nIch hoffe, das passt so!\n`;
-    expect(parse(signOff).content).toBe(signOff);
-    expect(parse(signOff).content).toContain("Ich hoffe, das passt so!");
-    // The content this used to eat: a plain closing paragraph.
-    const closing = `${PO_SCENE}\nEin schlichter Schlussabsatz.\n`;
-    expect(parse(closing).content).toBe(closing);
-    // Anything with markdown structure was already safe and stays so.
-    for (const tail of [
-      "> [!note] Die Wache erinnert sich.",
-      "- Die Wache erinnert sich.",
-      "Die Wache erinnert sich an [[night-watch-quay]].",
-      "| Wurf | Folge |\n| --- | --- |",
-      "Nutze `Stealth` erneut.",
-      "## Nachwirkung\n\nDie Wache erinnert sich.",
-    ]) {
-      expect(parse(`${PO_SCENE}\n${tail}\n`).content).toBe(`${PO_SCENE}\n${tail}\n`);
-    }
-    // A fenced reply reads the same way — the warnings block is still the
-    // only thing that is ever split off.
-    const fenced = `\`\`\`markdown\n${PO_SCENE}\nIch hoffe, das passt so!\n\`\`\`\n`;
-    expect(parse(fenced).content).toContain("Ich hoffe, das passt so!");
-  });
+  test("a field the kind does not have, and a value of the wrong shape", () => {
+    // The message names the offending key AND the fields that exist — an
+    // endpoint that ignores the schema gets something to correct.
+    const unknown = errors(sceneObject({ mood: "düster" }));
+    expect(unknown.join(" ")).toContain('"properties.mood" ist kein Feld dieser Entität');
+    expect(unknown.join(" ")).toContain("title");
 
-  test("the frontmatter opener must be the FIRST `---` of the block", () => {
-    // A leading sentence is still dropped…
-    expect(parse(`Hier ist die Szene:\n\n${PO_SCENE}`).content).toBe(PO_SCENE);
-    // …but prose with a horizontal rule in it is prose, not a document.
-    expect(error(`Erst ein Absatz.\n\n---\n\n${PO_SCENE}`)).toBe(NOT_A_DOCUMENT_ERROR);
-  });
-
-  test("two horizontal rules are not a frontmatter block", () => {
-    expect(error("Ein Absatz.\n\n---\n\nNoch ein Absatz.\n\n---\n\nUnd Schluss.\n")).toBe(
-      NOT_A_DOCUMENT_ERROR,
+    expect(errors(sceneObject({ npcs: "fenn" })).join(" ")).toContain(
+      '"properties.npcs" muss eine Liste von Strings sein',
+    );
+    expect(errors(sceneObject({ title: 7 })).join(" ")).toContain(
+      '"properties.title" muss ein String sein',
+    );
+    // A required field the model left empty is an error; an optional one is not.
+    expect(errors(sceneObject({ title: null })).join(" ")).toContain(
+      '"properties.title" fehlt',
     );
   });
 
-  test("a `---warnings---` inside a fenced body block is example text", () => {
-    const withExample = `${PO_SCENE.trimEnd()}\n\n> [!note] So sieht das aus:\n\n\`\`\`\n${WARNINGS_DELIMITER}\nnur ein Beispiel\n\`\`\`\n`;
-    const reply = parse(withExample);
-    expect(reply.warnings).toEqual([]);
-    expect(reply.content).toBe(withExample);
-    // The REAL block, below the fenced example, still wins.
-    const both = parse(`${withExample}\n${WARNINGS_DELIMITER}\nechte Warnung\n`);
-    expect(both.warnings).toEqual(["echte Warnung"]);
-    expect(both.content).toBe(withExample);
+  test("a body that is not a string, and warnings that are not strings", () => {
+    const noBody = JSON.stringify({ properties: { id: "kai" }, body: 12, warnings: [] });
+    expect(errors(noBody).join(" ")).toContain('"body" muss der Fließtext');
+    const badWarnings = JSON.stringify({
+      properties: { id: "kai", title: "Kai" },
+      body: "## Flow\n",
+      warnings: [{ text: "nope" }],
+    });
+    expect(errors(badWarnings).join(" ")).toContain('"warnings" muss eine Liste von Strings sein');
+  });
+});
+
+describe("parseJsonReply", () => {
+  test("the whole text wins, then a fence, then the brace span", () => {
+    expect(parseJsonReply('{"a":1}')).toEqual({ value: { a: 1 }, repaired: false });
+    expect(parseJsonReply('```json\n{"a":1}\n```')).toEqual({ value: { a: 1 }, repaired: false });
+    expect(parseJsonReply('Also: {"a":1} — fertig.')).toEqual({
+      value: { a: 1 },
+      repaired: false,
+    });
   });
 
-  test("a leading BOM does not hide the frontmatter", () => {
-    expect(parse(`\uFEFF${PO_SCENE}`).content).toBe(PO_SCENE);
-  });
-
-  test("numbered and `+` warnings lose their marker too", () => {
-    expect(
-      parse(`${PO_SCENE}\n${WARNINGS_DELIMITER}\n1. eins\n2) zwei\n+ drei\n`).warnings,
-    ).toEqual(["eins", "zwei", "drei"]);
-  });
-
-  test("the delimiter is read from the END — a mention in the body is body", () => {
-    // The LAST occurrence wins, so a document that TALKS about the delimiter
-    // keeps its own text and only the real block becomes warnings.
-    const reply = parse(
-      `${PO_SCENE.trimEnd()}\n\n> [!note] Schreibe Warnungen nach ---warnings---.\n\n${WARNINGS_DELIMITER}\nletzte Warnung\n`,
-    );
-    expect(reply.warnings).toEqual(["letzte Warnung"]);
-    expect(reply.content).toContain("Schreibe Warnungen nach");
+  test("an almost-object is repaired once; prose is not", () => {
+    expect(parseJsonReply("{'a': 1,}")).toEqual({ value: { a: 1 }, repaired: true });
+    // A sentence would become a JSON string, and the run would then fail with
+    // a message about the wrong thing.
+    expect(parseJsonReply("kein Objekt")).toBeNull();
+    expect(parseJsonReply("")).toBeNull();
   });
 });

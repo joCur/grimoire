@@ -33,6 +33,7 @@ import {
   OUTLINE_SCHEMA_NAME,
   outlineJsonSchema,
 } from "@grimoire/shared/outline-schema";
+import { documentReplySchema, documentSchemaName } from "@grimoire/shared/document-schema";
 
 // --- factory ------------------------------------------------------------------
 
@@ -123,9 +124,12 @@ const REQ: GenerateRequest = {
 };
 
 /**
- * The OUTLINE request (issue #107): the one call that wants JSON back, and
- * therefore the only one either transport forces anything for. Every other
- * request — every DOCUMENT call — is REQ above, with no `jsonSchema`.
+ * REQ above carries NO schema — since issue #107 no caller sends such a
+ * request any more (every call forces its object), and it stays in this suite
+ * for exactly that reason: the transports must still behave when nothing is
+ * forced, which is what `LLM_FORCE_JSON=0` and a future unforced call rely on.
+ *
+ * The OUTLINE request, and one DOCUMENT request per kind and mode below it.
  */
 const OUTLINE_REQ: GenerateRequest = {
   ...REQ,
@@ -135,6 +139,17 @@ const OUTLINE_REQ: GenerateRequest = {
     schema: outlineJsonSchema(),
   },
 };
+
+/** Every document request a run can make (issue #107) — kind x mode. */
+const DOCUMENT_REQS: Array<{ label: string; req: GenerateRequest; name: string }> = [
+  ...(["scene", "npc", "location"] as const).flatMap((kind) =>
+    (["create", "augment"] as const).map((mode) => ({
+      label: `${kind}/${mode}`,
+      name: documentSchemaName(kind, mode),
+      req: { ...REQ, jsonSchema: documentReplySchema(kind, mode) } as GenerateRequest,
+    })),
+  ),
+];
 
 // --- prompt assembly (issue #53 AK2) --------------------------------------------
 //
@@ -360,7 +375,7 @@ describe("OpenAICompatProvider request", () => {
 
   // --- the reply shape (issue #20, rebuilt by #107) --------------------------
 
-  test("a DOCUMENT call forces nothing — no response_format at all", async () => {
+  test("a request without a schema forces nothing — no response_format", async () => {
     resetJsonSchemaSupportForTests();
     const { baseUrl, next } = await captureServer();
     const provider = createProvider({
@@ -368,9 +383,40 @@ describe("OpenAICompatProvider request", () => {
       LMSTUDIO_URL: baseUrl,
     } as NodeJS.ProcessEnv);
     await provider.complete(REQ);
-    // The reply is markdown: asking the endpoint for JSON would ask for the
-    // one thing the prompt forbids.
     expect("response_format" in (await next).body).toBe(false);
+  });
+
+  test("EVERY document call sends its own json_schema, strict (#107)", async () => {
+    for (const { label, req, name } of DOCUMENT_REQS) {
+      resetJsonSchemaSupportForTests();
+      const { baseUrl, next } = await captureServer();
+      const provider = createProvider({
+        LLM_PROVIDER: "openrouter",
+        OPENROUTER_API_KEY: "sk-or-test",
+        LLM_MODEL: "anthropic/claude-sonnet-5",
+        LLM_BASE_URL: baseUrl,
+      } as NodeJS.ProcessEnv);
+      await provider.complete(req);
+      const body = (await next).body;
+      const format = body.response_format as {
+        type: string;
+        json_schema: { name: string; strict: boolean; schema: Record<string, unknown> };
+      };
+      expect(format.type, label).toBe("json_schema");
+      expect(format.json_schema.name, label).toBe(name);
+      expect(format.json_schema.strict, label).toBe(true);
+      // The SHARED schema, not a copy assembled in the transport.
+      expect(format.json_schema.schema, label).toEqual(req.jsonSchema!.schema);
+      // The cache breakpoint is untouched by the forcing: the constant half
+      // is still its own content part (issue #110).
+      const first = (body.messages as Array<{ role: string; content: unknown }>)[1]!;
+      expect((first.content as Array<Record<string, unknown>>)[0]!.cache_control, label).toEqual({
+        type: "ephemeral",
+      });
+      const s = server;
+      server = null;
+      if (s !== null) await new Promise<void>((resolve) => s.close(() => resolve()));
+    }
   });
 
   test("the OUTLINE call sends json_schema with strict on every path", async () => {
@@ -777,7 +823,7 @@ describe("ClaudeProvider reply", () => {
 
   // --- the reply shape (issue #20's prefill, replaced by #107) ---------------
 
-  test("a DOCUMENT call sends no tool and no prefill — the reply is markdown", async () => {
+  test("a request without a schema sends no tool and no prefill", async () => {
     const document = "---\nid: night-watch-quay\n---\n\n## Flow\n\nText.\n";
     const sent = await withStubbedFetch(
       { content: [{ type: "text", text: document }], stop_reason: "end_turn" },
@@ -818,6 +864,34 @@ describe("ClaudeProvider reply", () => {
     // Still no prefill: the forced tool call is what guarantees the shape.
     const messages = sent.messages as Array<{ role: string }>;
     expect(messages.map((m) => m.role)).toEqual(["user"]);
+  });
+
+  test("EVERY document call travels as a forced tool (#107)", async () => {
+    for (const { label, req, name } of DOCUMENT_REQS) {
+      const reply = { properties: { id: "kai" }, body: "## Flow\n", warnings: [] };
+      const sent = await withStubbedFetch(
+        {
+          content: [{ type: "tool_use", name, input: reply }],
+          stop_reason: "tool_use",
+        },
+        async (p) => {
+          // The tool INPUT is the reply — document-reply.ts parses JSON.
+          expect(JSON.parse((await p.complete(req)).text), label).toEqual(reply);
+        },
+      );
+      expect(sent.tools, label).toEqual([
+        {
+          name,
+          description: req.jsonSchema!.description,
+          input_schema: req.jsonSchema!.schema,
+        },
+      ]);
+      expect(sent.tool_choice, label).toEqual({ type: "tool", name });
+      // The system prompt keeps its cache breakpoint (issue #102).
+      expect((sent.system as Array<Record<string, unknown>>)[0]!.cache_control, label).toEqual({
+        type: "ephemeral",
+      });
+    }
   });
 
   test("an outline reply with no tool block degrades to its text", async () => {

@@ -15,7 +15,6 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import type { AugmentResult, FileResponse, GenerateJob } from "@grimoire/shared";
 import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generate-jobs";
-import { NO_TEXT_AROUND_DOCUMENT_RULE, WARNINGS_DELIMITER } from "../src/document-reply";
 import {
   ASSET_FILES,
   MAX_CORRECTION_TURNS,
@@ -31,6 +30,7 @@ import {
   validateAugmentReply,
 } from "../src/generator-augment";
 import { sceneSystemPrompt } from "../src/generate-pipeline";
+import { documentReply } from "./support/pipeline-fake";
 import { buildPrompt, EXISTING_ENTRY_HEADING, INSTRUCTION_HEADING } from "../src/llm-provider";
 import { failInterruptedJobs } from "../src/db/job-boot";
 import { getDb } from "../src/store/handle";
@@ -85,16 +85,19 @@ function useFake(replies: string[]): FakeProvider {
 }
 
 /**
- * The reply in the RAW document format of issue #107: the whole file as it
- * should look afterwards, then the warnings after the delimiter line. The
- * `path` argument stays in the signature — every caller names the entry it is
- * about, and the ASSERTION that the model does not address anything is that
- * the path never reaches the reply.
+ * The reply in the object format of issue #107: the whole entry as it should
+ * look afterwards — properties and body — plus the warnings. Written from the
+ * DOCUMENT a case describes, because that is how a test says what the run
+ * proposes in one literal (support/pipeline-fake `documentReply`).
+ *
+ * The `path` argument stays in the signature — every caller names the entry it
+ * is about, and the ASSERTION that the model does not address anything is
+ * that the path never reaches the reply.
  */
 function augmentReply(_path: string, content: string, warnings: string[] = []): string {
-  return warnings.length === 0
-    ? content
-    : `${content}\n${WARNINGS_DELIMITER}\n${warnings.join("\n")}\n`;
+  const reply = documentReply(content, warnings, "npc");
+  // A case that scripts an unreadable document means it: served verbatim.
+  return reply ?? content;
 }
 
 /** Start a run and wait for the job to leave `running`. */
@@ -200,11 +203,10 @@ describe("prompt assembly", () => {
     for (const prompt of [npc, location, scene]) {
       expect(prompt).toContain("Die Ergänzungsregel");
       expect(prompt).toContain("Vorhandenes bleibt Wort für Wort stehen");
-      // The output format is the RAW document since issue #107 — the whole
-      // file, and the warnings after the delimiter line.
-      expect(prompt).toContain("**das Dokument selbst**");
+      // The output format is the reply OBJECT since issue #107, and the
+      // augmentation rule is what makes it the whole entry rather than a patch.
+      expect(prompt).toContain("Du antwortest mit **einem JSON-Objekt**");
       expect(prompt).toContain("immer die **ganze** Datei");
-      expect(prompt).toContain(WARNINGS_DELIMITER);
     }
     expect(npc).toContain("System-Prompt: NPC-Generator");
     // The location prompt is NEW with this ticket — locations had none.
@@ -263,12 +265,21 @@ describe("prompt assembly", () => {
     expect(wordings.size).toBe(1);
   });
 
-  test("the few-shot targets show umlauts in properties AND body", async () => {
+  test("the few-shot replies show umlauts in properties AND body", async () => {
+    // The few-shots are REPLY OBJECTS since issue #107, so the check reads
+    // them as such: the properties mapping and the body string, each in real
+    // German spelling — the model imitates what it reads (issue #93).
     for (const kind of ["scene", "npc", "location"] as const) {
-      const doc = await loadAsset(ASSET_FILES[kind].fewShotTarget);
-      const [, frontmatter = "", ...rest] = doc.split("---\n");
-      expect(frontmatter, `${kind} properties`).toMatch(/[äöüß]/);
-      expect(rest.join("---\n"), `${kind} body`).toMatch(/[äöüß]/);
+      const reply = JSON.parse(await loadAsset(ASSET_FILES[kind].fewShotTarget)) as {
+        properties: Record<string, unknown>;
+        body: string;
+        warnings: string[];
+      };
+      expect(JSON.stringify(reply.properties), `${kind} properties`).toMatch(/[äöüß]/);
+      expect(reply.body, `${kind} body`).toMatch(/[äöüß]/);
+      expect(Array.isArray(reply.warnings), `${kind} warnings`).toBe(true);
+      // No frontmatter in the body: the block is the server's.
+      expect(reply.body.startsWith("---"), `${kind} body`).toBe(false);
     }
   });
 
@@ -315,16 +326,14 @@ describe("prompt assembly", () => {
     expect(outline).toContain(ORTHOGRAPHY_RULE);
   });
 
-  // Issue #107: the „nothing around the document" rule. It replaces the
-  // trailing-chatter heuristic that used to cut a structureless last block
-  // off a reply — that could not tell a sign-off from a plain closing
-  // sentence and silently deleted content, so the prompt is now the ONLY
-  // place a sign-off is prevented. Which makes the wording load-bearing:
-  // once per document prompt kind, identical everywhere, and repeated by the
-  // correction turn.
-  const AROUND_RULE = "Vor dem Dokument und nach dem Dokument steht";
+  // Issue #107: every document prompt describes the REPLY OBJECT, and the
+  // wording is load-bearing in the same way the rules above are — the schema
+  // forces the shape, the prompt is what makes the model understand what goes
+  // where (that `body` is one string, that an unknown field is `null`, that
+  // the frontmatter block is the server's).
+  const OBJECT_RULE = "Du antwortest mit **einem JSON-Objekt**";
 
-  test("every document prompt kind forbids text around the document, once", async () => {
+  test("every document prompt kind describes the reply object, once", async () => {
     const assembled: Array<[string, string]> = [
       ["scene/single", await sceneSystemPrompt()],
       ["npc", await loadAsset(ASSET_FILES.npc.systemPrompt)],
@@ -334,42 +343,49 @@ describe("prompt assembly", () => {
       ["augment/scene", await augmentSystemPrompt("scene")],
     ];
     for (const [kind, prompt] of assembled) {
-      expect(prompt.split(AROUND_RULE).length - 1, kind).toBe(1);
-      // The wording is the contract: what is forbidden, and the ONE exception.
-      expect(prompt, kind).toContain("keine Anrede, keine");
-      expect(prompt, kind).toContain("kein Schlusssatz");
-      expect(prompt, kind).toContain(`ist der \`${WARNINGS_DELIMITER}\`-Block`);
-      // …and why it matters, in the model's own terms.
-      expect(prompt, kind).toContain("landet sonst als Fließtext in");
+      expect(prompt.split(OBJECT_RULE).length - 1, kind).toBe(1);
+      // The three keys, and the two things a model gets wrong without them.
+      expect(prompt, kind).toContain("`properties`");
+      expect(prompt, kind).toContain("`body`");
+      expect(prompt, kind).toContain("`warnings`");
+      expect(prompt, kind).toContain("du schreibst kein YAML");
+      // No trace of the raw-document format this ticket replaced.
+      expect(prompt, kind).not.toContain("---warnings---");
+      expect(prompt, kind).not.toContain("**das Dokument selbst**");
     }
-    // The SAME sentence everywhere — one rule, every document prompt.
-    const wordings = new Set(
-      assembled.map(([, doc]) => ruleParagraph(doc, AROUND_RULE)),
-    );
+    // The SAME description everywhere — one shape, every document prompt.
+    const wordings = new Set(assembled.map(([, doc]) => ruleParagraph(doc, OBJECT_RULE)));
     expect(wordings.size).toBe(1);
 
-    // The OUTLINE prompt does not carry it: that call answers JSON, has its
-    // own „kein Markdown drumherum" rule, and a document rule there would be
-    // a rule about nothing.
+    // The outline prompt describes its OWN object, so it must not carry this
+    // one: two output schemas in one prompt is the contradiction the augment
+    // run's `formatContract` exists to avoid.
     const outline = await loadAsset(ASSET_FILES.outline.systemPrompt);
-    expect(outline).not.toContain(AROUND_RULE);
-    expect(outline).not.toContain(NO_TEXT_AROUND_DOCUMENT_RULE);
+    expect(outline).not.toContain(OBJECT_RULE);
   });
 
-  test("the correction turn for a document repeats the same rule", () => {
-    const document = buildCorrectionMessage(["scene: id fehlt"], "die Szene enthalten");
-    expect(document).toContain(NO_TEXT_AROUND_DOCUMENT_RULE);
-    // …and the outline's correction turn does not: it asks for JSON back.
-    const outline = buildCorrectionMessage(["outline: leer"], "alle Szenen", "outline");
-    expect(outline).not.toContain(NO_TEXT_AROUND_DOCUMENT_RULE);
-    expect(outline).toContain("kein Text außerhalb des JSON-Blocks");
+  test("the correction turn names the schema it wants corrected", () => {
+    const document = buildCorrectionMessage(
+      ["scene: id fehlt"],
+      "die Szene enthalten",
+      "scene_document",
+    );
+    expect(document).toContain("korrigierten JSON-Objekt");
+    expect(document).toContain("gleiches Schema (`scene_document`)");
+    expect(document).toContain("kein Text außerhalb des Objekts");
+    // Without a schema (a provider that forces nothing) the sentence still
+    // reads — it just has no name to point at.
+    const bare = buildCorrectionMessage(["outline: leer"], "alle Szenen");
+    expect(bare).toContain("gleiches Schema,");
   });
 
   test("the scene few-shot shows a table inside a callout", async () => {
     // Described is not shown: the model gets one worked example of the form
     // it has to produce, `>` markers included.
-    const doc = await loadAsset(ASSET_FILES.scene.fewShotTarget);
-    const lines = doc.split("\n");
+    const reply = JSON.parse(await loadAsset(ASSET_FILES.scene.fewShotTarget)) as {
+      body: string;
+    };
+    const lines = reply.body.split("\n");
     const delimiter = lines.findIndex((line) => /^>\s*\|\s*-{3,}\s*\|/.test(line));
     expect(delimiter).toBeGreaterThan(0);
     // The row above it is the header row, and both carry the callout marker.
@@ -388,7 +404,7 @@ describe("prompt assembly", () => {
     await runAugmentJob({ path: LOCATION, instruction: "Ergänze, wer hier ist" });
     const req = fake.calls[0]!.req;
     expect(req.systemPrompt).toContain("System-Prompt: Ort-Generator");
-    expect(req.fewShotTarget).toContain("id: leuchtturm");
+    expect(req.fewShotTarget).toContain('"id": "leuchtturm"');
     expect(req.existingEntry?.path).toBe(LOCATION);
     expect(req.existingEntry?.markdown).toContain("roll20-page");
     // A location run has no target chapter in the context…
@@ -636,7 +652,14 @@ describe("one job per campaign, whatever its kind", () => {
 
   test("the proposal round-trips through the job row", async () => {
     const file = await read(NPC);
-    const content = file.raw.replace("voice:", "tags: [hafen, see]\nvoice:");
+    // A CHANGED field, so the proposal has something to carry through the
+    // row. A key the SCHEMA does not have (a `tags` on an npc) cannot be
+    // proposed at all since issue #107 — and cannot be lost either, it simply
+    // keeps the value it has.
+    const content = file.raw.replace(
+      "voice: knapp, wetterrau, duzt jeden",
+      "voice: knapp, wetterrau — duzt auch den Ratsherrn",
+    );
     useFake([augmentReply(NPC, content, ["geprüft"])]);
     const started = await runAugmentJob({ path: NPC, instruction: "x" });
 
@@ -646,7 +669,9 @@ describe("one job per campaign, whatever its kind", () => {
     expect(job.id).toBe(started.id);
     expect(job.augmentResult).toEqual(started.augmentResult as AugmentResult);
     const result = job.augmentResult as AugmentResult;
-    expect(result.properties.find((p) => p.key === "tags")?.proposed).toEqual(["hafen", "see"]);
+    expect(result.properties.find((p) => p.key === "voice")?.proposed).toBe(
+      "knapp, wetterrau — duzt auch den Ratsherrn",
+    );
     expect(result.warnings).toEqual(["geprüft"]);
     expect(result.rev).toBe(file.rev);
   });
@@ -824,16 +849,17 @@ describe("naming check", () => {
 
   test("a list value and a colon in a property do not derail the check", async () => {
     // The proposal document is rendered with the store's frontmatter
-    // renderer: `role: Hafenmeisterin: Salt Harbour` and a LIST value used to
-    // produce YAML nothing could parse, and every hint then landed on `body`
-    // with a line number pointing at nothing.
+    // renderer: a `role: Hafenmeisterin: Salt Harbour` used to produce YAML
+    // nothing could parse, and every hint then landed on `body` with a line
+    // number pointing at nothing. Since issue #107 that renderer is the ONLY
+    // way a block is built, which makes this structural rather than a rule
+    // about what a model happens to write.
     await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
     const file = await read(NPC);
-    const content = file.raw
-      .replace(
-        "role: Auftraggeberin, Hafenmeisterin von Salzhafen",
-        "role: \"Hafenmeisterin: Salt Harbour\"\ntags: [hafen, salt harbour]",
-      );
+    const content = file.raw.replace(
+      "role: Auftraggeberin, Hafenmeisterin von Salzhafen",
+      'role: "Hafenmeisterin: Salt Harbour"',
+    );
     useFake([augmentReply(NPC, content)]);
     const job = await runAugmentJob({ path: NPC, instruction: "Rolle schärfen" });
     expect(job.status).toBe("done");
