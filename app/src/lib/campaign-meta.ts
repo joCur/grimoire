@@ -55,7 +55,7 @@ export type CampaignMetaAnswer = { rev: number } | undefined;
  * poll (issue #8) invalidates it — so reading its token at save time would let
  * a concurrent edit of the campaign document advance the base silently: the
  * save would overwrite that edit instead of answering 409. Same trap the body
- * editor avoids (see `shouldAdvanceBase` in file-body.ts), same answer: freeze
+ * editor avoids (see `shouldAdvanceBase` in entry-body.ts), same answer: freeze
  * it.
  *
  * `undefined` in, `undefined` out means "no answer yet, nothing to write

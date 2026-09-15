@@ -2,7 +2,7 @@
 // companion of write-with-rev.ts, and the one place that knows how a write
 // touches the cache.
 //
-// The server file is the truth: the write sends the rev of the FileResponse
+// The server file is the truth: the write sends the rev of the EntryResponse
 // the UI is showing and seeds the RETURNED file into the cache — the cache is
 // never written with a guessed value, and never invalidated for a file the
 // server just handed us. A 409 means nothing was written: the quiet inline
@@ -13,7 +13,7 @@
 // itself, the file query key to seed, WHICH queries a successful write
 // invalidates (the paths deliberately differ) and the error wording.
 
-import type { FileResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
@@ -76,7 +76,7 @@ export interface RevWriteOptions<TVariables> {
    * Runs after a CONFLICT with the re-read file (undefined when even the
    * reload failed), for callers that hold their own base version.
    */
-  onConflict?: (file: FileResponse | undefined) => void;
+  onConflict?: (file: EntryResponse | undefined) => void;
 }
 
 export function useRevWriteMutation<TVariables>({

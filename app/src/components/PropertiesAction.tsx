@@ -34,7 +34,7 @@
 // would patch A's diff into B. So the open state IS the file (campaign + path),
 // and the content is keyed by it.
 
-import type { CampaignTree, FileResponse } from "@grimoire/shared/types";
+import type { CampaignTree, EntryResponse } from "@grimoire/shared/types";
 import { SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -79,7 +79,7 @@ export function PropertiesAction({
   tree,
 }: {
   campaign: string;
-  file: FileResponse;
+  file: EntryResponse;
   /** For the reference fields — the ids that already have a file. */
   tree: CampaignTree | undefined;
 }) {
@@ -156,7 +156,7 @@ function PropertiesDialog({
   onChangeId,
 }: {
   campaign: string;
-  file: FileResponse;
+  file: EntryResponse;
   tree: CampaignTree | undefined;
   fields: readonly PropertiesField[];
   kindLabel: string;
@@ -208,7 +208,7 @@ function PropertiesDialog({
 
   const id = fmString(file.properties.id);
   // Esc, the overlay, „Abbrechen" and the X all come through here: with
-  // something typed they ask first (house pattern of FileBodyEditor), an
+  // something typed they ask first (house pattern of EntryBodyEditor), an
   // untouched form just closes.
   const dirty = hasPropertiesChanges(fields, initial, effective, t);
   const requestClose = () => {

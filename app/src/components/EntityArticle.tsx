@@ -7,7 +7,7 @@
 // Reference lines (statblock, roll20-page) stay PLAIN TEXT on purpose: the
 // format references Roll20 by name, it never links or copies it (README).
 
-import type { FileResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 import type { ReactNode } from "react";
 
 import { entityHeaderKind, npcStatusLabel } from "@/lib/entity";
@@ -59,7 +59,7 @@ export function EntityArticle({
   actions,
   body,
 }: {
-  file: FileResponse;
+  file: EntryResponse;
   actions?: ReactNode;
   /**
    * Replaces the rendered body — edit mode (issue #15) puts its markdown
@@ -101,7 +101,7 @@ function NpcHeader({
   name,
   actions,
 }: {
-  file: FileResponse;
+  file: EntryResponse;
   name: string;
   actions?: ReactNode;
 }) {
@@ -162,7 +162,7 @@ function LocationHeader({
   name,
   actions,
 }: {
-  file: FileResponse;
+  file: EntryResponse;
   name: string;
   actions?: ReactNode;
 }) {

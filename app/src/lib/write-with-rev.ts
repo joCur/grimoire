@@ -1,6 +1,6 @@
 // The conflict protocol of ADR #4, in one place (issue #38).
 //
-// Every write the app does carries the guard token of the FileResponse the DM
+// Every write the app does carries the guard token of the EntryResponse the DM
 // was looking at, so a competing write answers 409 instead of being
 // overwritten silently. The 409 is not an error the user has to fix: nothing
 // was written, so the file is re-read once and the NEXT attempt carries the
@@ -17,7 +17,7 @@
 // only the request itself; the conflict handling is this module. Pure, no
 // react, no query imports.
 
-import type { FileResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 
 import { ApiError } from "@/api";
 import type { MessageKey } from "@/i18n";
@@ -47,13 +47,13 @@ export const WRITE_FAILED_MESSAGE: MessageKey = "write.failed";
 
 export type RevWriteResult =
   /** Written: the server's fresh file, ready to seed into the query cache. */
-  | { ok: true; file: FileResponse }
+  | { ok: true; file: EntryResponse }
   /**
    * NOT written — the file changed on disk (or appeared while a dialog was
    * open). `file` is the re-read file when the reload succeeded (its rev
    * makes the next attempt work); undefined when even the reload failed.
    */
-  | { ok: false; file?: FileResponse };
+  | { ok: false; file?: EntryResponse };
 
 /**
  * Run one rev-checked write. `write` is the API call including the rev;
@@ -62,8 +62,8 @@ export type RevWriteResult =
  * line belongs to those.
  */
 export async function writeWithRev(
-  write: () => Promise<FileResponse>,
-  reread: () => Promise<FileResponse>,
+  write: () => Promise<EntryResponse>,
+  reread: () => Promise<EntryResponse>,
 ): Promise<RevWriteResult> {
   try {
     return { ok: true, file: await write() };

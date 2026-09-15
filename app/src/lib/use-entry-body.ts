@@ -5,20 +5,20 @@
 // "is there a rev to write against at all?" gate is `withRev`. What is
 // specific here: a body write feeds the tree AND the search index, a conflict
 // keeps the editor open with the DM's text, and `rev` must be the version
-// the editor's text was SEEDED from — not whatever the file query holds right
-// now. The 5s version poll (issue #8) refetches this file while the editor is
+// the editor's text was SEEDED from — not whatever the entry query holds right
+// now. The 5s version poll (issue #8) refetches this entry while the editor is
 // open, and taking the poll's rev would make an external edit invisible: the
 // save would silently overwrite it instead of answering 409. Hence
-// `onConflict`, which hands the caller the re-read file so it can move its
+// `onConflict`, which hands the caller the re-read entry so it can move its
 // base version exactly once, knowingly.
 
-import type { FileResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 
-import { writeFileBody } from "@/lib/file-body";
+import { writeEntryBody } from "@/lib/entry-body";
 import { useRevWriteMutation } from "@/lib/use-rev-write";
 import { withRev } from "@/lib/write-with-rev";
 
-export interface FileBodyMutation {
+export interface EntryBodyMutation {
   /** Start a write; ignored while another one is in flight. */
   save: (body: string) => void;
   /** True while the write runs — the button reads „Speichere …". */
@@ -30,10 +30,10 @@ export interface FileBodyMutation {
 /**
  * `onSaved` runs after a SUCCESSFUL write only — that is where the route
  * leaves edit mode. A conflict or an error keeps the editor open on purpose;
- * `onConflict` then carries the re-read file (undefined when even the reload
+ * `onConflict` then carries the re-read entry (undefined when even the reload
  * failed) so the next attempt starts from the version on disk.
  */
-export function useFileBodyMutation(
+export function useEntryBodyMutation(
   campaign: string,
   path: string,
   rev: number | undefined,
@@ -42,11 +42,11 @@ export function useFileBodyMutation(
     onConflict,
   }: {
     onSaved: () => void;
-    onConflict: (file: FileResponse | undefined) => void;
+    onConflict: (file: EntryResponse | undefined) => void;
   },
-): FileBodyMutation {
+): EntryBodyMutation {
   const { write, isPending, message } = useRevWriteMutation<string>({
-    write: withRev(rev, (body, rev) => writeFileBody(campaign, path, body, rev)),
+    write: withRev(rev, (body, rev) => writeEntryBody(campaign, path, body, rev)),
     fileKey: ["file", campaign, path],
     // The body feeds the tree's counts/titles and the search index, so
     // neither the campaign's lists nor ⌘K may keep the old text.

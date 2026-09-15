@@ -14,13 +14,13 @@
 //     STARTED in, so after a session that ran past midnight the harvest — and
 //     every `review/seen` patch — looked at a file that does not exist.
 //
-// Every write endpoint returns the fresh FileResponse: it is written into the
+// Every write endpoint returns the fresh EntryResponse: it is written into the
 // cache immediately (keyed by the path the SERVER reports, never a guessed
 // one). No invalidation on top — the version poll (lib/use-campaign-version)
 // covers external changes, and re-fetching the same file per log line was one
 // redundant request per keystroke-sized write.
 
-import type { FileResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 import { isEnded } from "@grimoire/shared/session-state";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -111,8 +111,8 @@ export function conflictPath(error: unknown): string | undefined {
  */
 export function useSessionWrite<TVars = void>(
   campaign: string,
-  mutationFn: (vars: TVars) => Promise<FileResponse>,
-  onSuccess?: (data: FileResponse) => void,
+  mutationFn: (vars: TVars) => Promise<EntryResponse>,
+  onSuccess?: (data: EntryResponse) => void,
 ) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -162,7 +162,7 @@ export function useSessionDiscard(campaign: string, onDone?: () => void) {
  * after an ended session creates a NEW session (own id, empty log, runtime at
  * 0) instead of re-opening the last one.
  */
-export function useSessionStartFlow(campaign: string, onEnter?: (data: FileResponse) => void) {
+export function useSessionStartFlow(campaign: string, onEnter?: (data: EntryResponse) => void) {
   const start = useSessionWrite(campaign, () => startSession(campaign), onEnter);
   return {
     start,

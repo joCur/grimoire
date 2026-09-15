@@ -9,7 +9,7 @@
 // envelope seeds it, so the reading view behind the dialog shows the new chips,
 // header and NPC cards the moment it closes.
 
-import type { FileResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 
 import { writePropertiesForm } from "@/lib/properties-form";
 import { useRevWriteMutation, type RevWriteMutation } from "@/lib/use-rev-write";
@@ -33,7 +33,7 @@ export function usePropertiesFormMutation(
   handlers: {
     onSaved: () => void;
     /** The re-read file after a conflict; the dialog moves its base to it. */
-    onConflict: (file: FileResponse | undefined) => void;
+    onConflict: (file: EntryResponse | undefined) => void;
   },
 ): RevWriteMutation<PropertiesWrite> {
   return useRevWriteMutation<PropertiesWrite>({

@@ -1,5 +1,5 @@
-// The raw-markdown editor: a mono textarea and the rendered preview of the
-// SAME markdown pipeline a real file gets, switched by one quiet toggle.
+// The markdown editor: a mono textarea and the rendered preview of the SAME
+// markdown pipeline the reading view uses, switched by one quiet toggle.
 //
 // It grew in the generator review (issues #12/#21, one toggle per draft card)
 // and is now also the reading view's edit mode (issue #15) — same surface, so

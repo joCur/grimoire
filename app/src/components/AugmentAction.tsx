@@ -14,7 +14,7 @@
 //                                     Übernehmen/Behalten,
 //               body per BLOCK        the Block-Composer's own blocks, with a
 //                                     word diff INSIDE a changed block, plus a
-//                                     „Roh" tab carrying a line/word diff over
+//                                     „Markdown" tab carrying a line/word diff over
 //                                     the whole body.
 //
 // DEFAULTS are the ticket's own sentence, „nie stilles Überschreiben": what is
@@ -30,7 +30,7 @@
 import type {
   AugmentPropertyProposal,
   AugmentResult,
-  FileResponse,
+  EntryResponse,
   GenerateJob,
 } from "@grimoire/shared/types";
 import { isAugmentKind } from "@grimoire/shared/types";
@@ -70,7 +70,7 @@ const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-mute
  * a scene's `title`), never the wire address. „npcs/fenn" is how the entry is
  * addressed, not how it is known at the table.
  */
-function entryName(file: FileResponse): string {
+function entryName(file: EntryResponse): string {
   return fmString(file.properties.name) ?? fmString(file.properties.title) ?? file.path;
 }
 
@@ -93,9 +93,9 @@ function decidedSet(
 }
 
 /** The two review surfaces — blocks (default) and the raw text diff. */
-type ReviewMode = "blocks" | "raw";
+type ReviewMode = "blocks" | "markdown";
 
-export function AugmentAction({ campaign, file }: { campaign: string; file: FileResponse }) {
+export function AugmentAction({ campaign, file }: { campaign: string; file: EntryResponse }) {
   const t = useT();
   // Open-BY-FILE, like the properties dialog: the reading route stays mounted
   // across a navigation, and a dialog holding entry A while `file` already
@@ -132,7 +132,7 @@ function AugmentDialog({
   onClose,
 }: {
   campaign: string;
-  file: FileResponse;
+  file: EntryResponse;
   onClose: () => void;
 }) {
   const t = useT();
@@ -324,7 +324,7 @@ function AugmentReview({
   onDone,
 }: {
   campaign: string;
-  file: FileResponse;
+  file: EntryResponse;
   jobId: string | undefined;
   /** The job the proposal came from — it carries the DM's decisions (#97). */
   job: GenerateJob | null | undefined;
@@ -502,7 +502,7 @@ function AugmentReview({
           aria-label={t("augment.body.modeGroup")}
           className="ml-auto flex items-center gap-px rounded-md border border-input p-px"
         >
-          {(["blocks", "raw"] as const).map((candidate) => (
+          {(["blocks", "markdown"] as const).map((candidate) => (
             <Button
               key={candidate}
               type="button"
@@ -516,7 +516,7 @@ function AugmentReview({
                   : "text-body-secondary hover:bg-transparent hover:text-foreground",
               )}
             >
-              {t(candidate === "blocks" ? "augment.body.blocks" : "augment.body.raw")}
+              {t(candidate === "blocks" ? "augment.body.blocks" : "augment.body.markdown")}
             </Button>
           ))}
         </div>

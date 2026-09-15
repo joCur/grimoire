@@ -10,7 +10,7 @@
 // queries — the route owns both and passes them in, so the live view simply
 // passes nothing.
 
-import type { CampaignTree, FileResponse } from "@grimoire/shared/types";
+import type { CampaignTree, EntryResponse } from "@grimoire/shared/types";
 import { Bookmark, GitFork, MapPin } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -28,7 +28,7 @@ export function SceneArticle({
   actions,
   body,
 }: {
-  file: FileResponse;
+  file: EntryResponse;
   tree: CampaignTree | undefined;
   variant: "scene" | "live";
   statusControl?: ReactNode;

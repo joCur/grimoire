@@ -348,7 +348,7 @@ describe("degenerate input roundtrips", () => {
 
   test("an unknown callout kind stays a raw block and is never reformatted", () => {
     const block = parseBlocks("> [!warning] Kein bekannter Typ\n")[0];
-    if (block?.type !== "raw") throw new Error("expected a raw block");
+    if (block?.type !== "markdown") throw new Error("expected a raw block");
     expect(block.calloutKind).toBe("warning");
     // Raw text is verbatim markdown, markers included.
     expect(block.text).toBe("> [!warning] Kein bekannter Typ");
@@ -356,7 +356,7 @@ describe("degenerate input roundtrips", () => {
 
   test("a plain blockquote is a raw block without a callout kind", () => {
     const block = parseBlocks("> Nur ein Zitat\n")[0];
-    if (block?.type !== "raw") throw new Error("expected a raw block");
+    if (block?.type !== "markdown") throw new Error("expected a raw block");
     expect(block.calloutKind).toBeUndefined();
   });
 
@@ -387,7 +387,7 @@ describe("degenerate input roundtrips", () => {
 describe("an emptied block writes nothing at all", () => {
   // renderBlock gives "" for a text/raw block without text, and a block that
   // renders to nothing must not leave its separator behind: `A\n\n\n` is a
-  // stray blank line that would also disappear on the way through „Roh".
+  // stray blank line that would also disappear on the way through „Markdown".
   test("an edited-empty text block leaves no blank line behind", () => {
     const blocks = parseBlocks("A\n\nB\n");
     const b = blocks[1];

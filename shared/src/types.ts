@@ -263,7 +263,7 @@ export interface CampaignTree {
 }
 
 /** GET /api/:campaign/file?path=… (and GET /api/:campaign/session) */
-export interface FileResponse extends ParsedFile {
+export interface EntryResponse extends ParsedFile {
   /** Full file contents including the properties block. */
   raw: string;
   /**

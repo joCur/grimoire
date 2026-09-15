@@ -1762,7 +1762,7 @@ function PartActions({
  * quickstats chips, statblock reference, in the same vocabulary and with the
  * same helpers as EntityArticle's NPC header (issue #26). The presentation is
  * rebuilt here rather than reused wholesale on purpose: EntityArticle takes a
- * FileResponse of a file that EXISTS, and nothing is on disk yet.
+ * EntryResponse of a file that EXISTS, and nothing is on disk yet.
  *
  * Same two views as a scene draft: the rendered body through the normal
  * markdown pipeline, or the raw markdown in a mono textarea.

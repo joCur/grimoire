@@ -3,7 +3,7 @@
 //
 // What is UNCHANGED (this is the contract the ported tests pin):
 //
-//   * the response of every write is still the `FileResponse` of the row it
+//   * the response of every write is still the `EntryResponse` of the row it
 //     touched, rendered by ./render;
 //   * optimistic concurrency still answers `409 { error, rev }` — only
 //     the token behind `rev` is now the row's `rev` instead of a file
@@ -35,7 +35,7 @@ import {
   type CampaignSummary,
   type ErrorField,
   type ErrorKind,
-  type FileResponse,
+  type EntryResponse,
   type GlossaryResponse,
   type KnowledgeEntry,
   type KnowledgeResponse,
@@ -851,7 +851,7 @@ export async function patchProperties(
   rev: number,
   patch: Record<string, unknown>,
   options: PatchOptions = {},
-): Promise<FileResponse> {
+): Promise<EntryResponse> {
   assertSafeAddress(rel);
   const locator = locatorFromPath(rel);
   return mutate(campaign, (tx) => patchLocator(tx, campaign, locator, rev, patch, options));
@@ -864,7 +864,7 @@ function patchLocator(
   rev: number,
   patch: Record<string, unknown>,
   options: PatchOptions = {},
-): FileResponse {
+): EntryResponse {
   switch (locator.kind) {
     case "campaign": {
       const row = campaignRow(tx, campaign);
@@ -1171,12 +1171,12 @@ function patchSessionRow(
  * into term/explanation rows — the same parser the migration used, so what
  * the DM types and what a migrated file produced agree.
  */
-export async function writeFileBody(
+export async function writeEntryBody(
   campaign: string,
   rel: string,
   rev: number,
   markdown: string,
-): Promise<FileResponse> {
+): Promise<EntryResponse> {
   assertSafeAddress(rel);
   const locator = locatorFromPath(rel);
   if (locator.kind === "session" || locator.kind === "inbox") {
@@ -1193,7 +1193,7 @@ export async function writeFileBody(
 
 /**
  * The body write itself, INSIDE a caller's transaction. Split out of
- * `writeFileBody` for issue #36: „Mit KI ergänzen" accepts properties and
+ * `writeEntryBody` for issue #36: „Mit KI ergänzen" accepts properties and
  * body of one entry together, and the ticket's AK3 says that is ONE
  * transaction with one rev guard — two `mutate` calls would be two.
  */
@@ -1203,7 +1203,7 @@ function writeBodyIn(
   locator: Locator,
   rev: number,
   markdown: string,
-): FileResponse {
+): EntryResponse {
   const body = markdown === "" || markdown.endsWith("\n") ? markdown : `${markdown}\n`;
   switch (locator.kind) {
     case "campaign": {
@@ -1339,7 +1339,7 @@ export async function writePropertiesAndBody(
   patch: Record<string, unknown>,
   body: string | undefined,
   jobId?: string,
-): Promise<FileResponse> {
+): Promise<EntryResponse> {
   assertSafeAddress(rel);
   const locator = locatorFromPath(rel);
   if (locator.kind === "session" || locator.kind === "inbox") {
@@ -1565,7 +1565,7 @@ function nextCreatedAt(tx: GrimoireDb, campaign: string): number {
  *     an empty log and a runtime that starts at 0. The former 409
  *     `session_ended` and POST /session/resume are gone with it.
  */
-export async function startSession(campaign: string): Promise<FileResponse> {
+export async function startSession(campaign: string): Promise<EntryResponse> {
   return mutate(campaign, (tx) => {
     const d = now();
     const today = localDate(d);
@@ -1610,7 +1610,7 @@ export async function startSession(campaign: string): Promise<FileResponse> {
  * nothing running it falls back to the last started session and keeps its
  * existing `ended`; an OPEN pause is closed by the end (issue #40 AK8).
  */
-export async function endSession(campaign: string): Promise<FileResponse> {
+export async function endSession(campaign: string): Promise<EntryResponse> {
   return mutate(campaign, (tx) => {
     const row = pickSession(tx, campaign, false) ?? pickSession(tx, campaign, true);
     if (row === undefined) throw new ApiError(404, "no active session");
@@ -1674,7 +1674,7 @@ function appendLogRow(tx: GrimoireDb, campaign: string, sessionId: string, raw: 
  * `pauses` interval plus the `— Pause` log line, in the same transaction.
  * Idempotent: pausing a paused session changes nothing.
  */
-export async function pauseSession(campaign: string): Promise<FileResponse> {
+export async function pauseSession(campaign: string): Promise<EntryResponse> {
   return mutate(campaign, (tx) => {
     const row = requireActive(tx, campaign);
     const pauses = pauseRows(tx, campaign, row.id);
@@ -1696,7 +1696,7 @@ export async function pauseSession(campaign: string): Promise<FileResponse> {
 }
 
 /** POST /session/continue — close the open interval and log `— Weiter`. */
-export async function continueSession(campaign: string): Promise<FileResponse> {
+export async function continueSession(campaign: string): Promise<EntryResponse> {
   return mutate(campaign, (tx) => {
     const row = requireActive(tx, campaign);
     const d = now();
@@ -1745,7 +1745,7 @@ export async function appendLogEntry(
   campaign: string,
   text: string,
   sceneId?: string,
-): Promise<FileResponse> {
+): Promise<EntryResponse> {
   // The scene marker is a PARSE COLUMN of the log line (`- HH:MM (id) text`),
   // so an id carrying `)` — or a space, or a newline — would shift `text` and
   // `sceneId` apart on the way back in. Same slug rule as `createNpcStub`.
@@ -1781,7 +1781,7 @@ export async function appendLogEntry(
  * entry gets the `# Inbox` heading row the file format opened with, so the
  * rendered inbox still reads like the document it was.
  */
-export async function appendInboxEntry(campaign: string, text: string): Promise<FileResponse> {
+export async function appendInboxEntry(campaign: string, text: string): Promise<EntryResponse> {
   return mutate(campaign, (tx) => {
     const rows = inboxRows(tx, campaign);
     if (rows.length === 0) {
@@ -1819,7 +1819,7 @@ function bumpInboxRev(tx: GrimoireDb, campaign: string): number {
  * the line is not in the inbox. The line is matched against the row's `raw`,
  * which is the byte-for-byte line the file had.
  */
-export async function markInboxLineDone(campaign: string, line: string): Promise<FileResponse> {
+export async function markInboxLineDone(campaign: string, line: string): Promise<EntryResponse> {
   const doneForm = (l: string) =>
     l.startsWith("- [ ] ") ? `- [x] ${l.slice(6)}` : `- [x] ${l.slice(2)}`;
   return mutate(campaign, (tx) => {
@@ -1864,7 +1864,7 @@ export async function markLogLineSeen(
   campaign: string,
   rel: string,
   line: string,
-): Promise<FileResponse & { marked: boolean }> {
+): Promise<EntryResponse & { marked: boolean }> {
   assertSafeAddress(rel);
   const segments = rel.split("/");
   if (segments.length !== 2 || segments[0] !== "sessions") {
@@ -1947,7 +1947,7 @@ export async function appendThreadToChapter(
   campaign: string,
   chapter: string,
   text: string,
-): Promise<FileResponse> {
+): Promise<EntryResponse> {
   assertSafeChapterId(chapter);
   return mutate(campaign, (tx) => {
     const row = chapterRowOf(tx, campaign, chapter);
@@ -1997,7 +1997,7 @@ export async function createNpcStub(
   id: string,
   name?: string,
   note?: string,
-): Promise<FileResponse> {
+): Promise<EntryResponse> {
   if (!ENTITY_SLUG.test(id)) {
     throw new ApiError(400, "id must be a kebab-case slug (a-z, 0-9, single dashes)");
   }
@@ -2537,7 +2537,7 @@ export async function createChapter(
   title: string,
   goal?: string,
   explicitId?: string,
-): Promise<FileResponse> {
+): Promise<EntryResponse> {
   const id = resolveNewId(explicitId, title, "chapter", "title");
   assertSafeChapterId(id);
   // A reserved id would create an unreachable chapter — see the notes above.
@@ -2590,7 +2590,7 @@ export async function createScene(
   title: string,
   chapter: string,
   explicitId?: string,
-): Promise<FileResponse> {
+): Promise<EntryResponse> {
   const id = resolveNewId(explicitId, title, "scene", "title");
   assertSafeChapterId(chapter);
   return mutate(campaign, (tx) => {
@@ -2640,7 +2640,7 @@ export async function createNpc(
   campaign: string,
   name: string,
   explicitId?: string,
-): Promise<FileResponse> {
+): Promise<EntryResponse> {
   const id = resolveNewId(explicitId, name, "npc", "name");
   return mutate(campaign, (tx) => {
     const existing = npcRowOf(tx, campaign, id);
@@ -2674,7 +2674,7 @@ export async function createLocation(
   campaign: string,
   name: string,
   explicitId?: string,
-): Promise<FileResponse> {
+): Promise<EntryResponse> {
   const id = resolveNewId(explicitId, name, "location", "name");
   return mutate(campaign, (tx) => {
     const existing = locationRowOf(tx, campaign, id);

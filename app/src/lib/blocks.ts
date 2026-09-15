@@ -140,7 +140,7 @@ export interface TextBlock extends BlockCommon {
  * is never silently reformatted into something else.
  */
 export interface RawBlock extends BlockCommon {
-  type: "raw";
+  type: "markdown";
   text: string;
   /** The unknown callout kind as written (lowercased), for the UI to name it. */
   calloutKind?: string;
@@ -483,13 +483,13 @@ function blockquoteBlock(source: string, gap: string): CalloutBlock | RawBlock {
 
   if (marker === null) {
     // A plain blockquote — not modelled, kept verbatim.
-    return { id: nextId(), type: "raw", text: source, source, gap };
+    return { id: nextId(), type: "markdown", text: source, source, gap };
   }
 
   const kind = (marker[1] ?? "").toLowerCase();
   if (!isCalloutKind(kind)) {
     // Unknown kind: exactly what the renderer does — leave it alone.
-    return { id: nextId(), type: "raw", text: source, source, gap, calloutKind: kind };
+    return { id: nextId(), type: "markdown", text: source, source, gap, calloutKind: kind };
   }
 
   const body = [first.slice(marker[0].length), ...content.slice(firstIndex + 1)]
@@ -528,7 +528,7 @@ interface Unit {
  *     nothing at all — not even its separator. The card stays on screen (it is
  *     draft state, and a freshly inserted block is empty by definition), it
  *     just does not write a stray blank line into the file, and it therefore
- *     also cannot vanish differently on the way through „Roh" and back.
+ *     also cannot vanish differently on the way through „Markdown" and back.
  *     Parsing never produces such a block; only editing does.
  *   * An edited LAST block that ended the body without a newline gets one:
  *     every file in the data set ends with exactly one. A body that genuinely
@@ -868,6 +868,6 @@ export function blockLabel(block: SceneBlock, t: Translate): string {
     case "text":
       return t("composer.blockType.text");
     default:
-      return t("composer.blockType.raw");
+      return t("composer.blockType.markdown");
   }
 }

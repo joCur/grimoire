@@ -17,7 +17,7 @@
 // „Bearbeiten" in the header (issue #15) turns the body into the raw markdown
 // editor — header, chips and status regler keep standing, the properties is
 // not part of it. The route owns only the "which path is being edited" bit;
-// the write, the 409 and the discard guard live in FileBodyEditor.
+// the write, the 409 and the discard guard live in EntryBodyEditor.
 //
 // „Mit KI ergänzen" (issue #36) is the third one: source text and/or an
 // instruction go to a server job, and its proposal comes back as a review —
@@ -36,7 +36,7 @@ import { fetchFile, fetchTree } from "@/api";
 import { AugmentAction } from "@/components/AugmentAction";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
 import { EntityArticle } from "@/components/EntityArticle";
-import { FileBodyEditAction, FileBodyEditor } from "@/components/FileBodyEditor";
+import { EntryBodyEditAction, EntryBodyEditor } from "@/components/EntryBodyEditor";
 import { PropertiesAction } from "@/components/PropertiesAction";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/components/NpcCard";
@@ -45,7 +45,7 @@ import { SceneArticle } from "@/components/SceneArticle";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { useT } from "@/i18n";
 import { entityHeaderKind } from "@/lib/entity";
-import { canEditFileBody } from "@/lib/file-body";
+import { canEditEntryBody } from "@/lib/entry-body";
 import { fmString, fmStringArray } from "@/lib/properties";
 import { pageContextCrumbs } from "@/lib/page-context";
 
@@ -146,17 +146,17 @@ export function SceneRoute() {
   // The aside belongs to scenes: only they reference npcs in properties.
   const npcs = isScene ? fmStringArray(data.properties.npcs) : [];
   // „Bearbeiten" (issue #15) — the body editor, offered for the kinds whose
-  // prose the DM maintains (canEditFileBody). While it runs the trigger is
+  // prose the DM maintains (canEditEntryBody). While it runs the trigger is
   // gone: the editor's own toggle owns the mode from then on.
   const editAction =
-    canEditFileBody(data.kind) && !editing ? (
-      <FileBodyEditAction onEdit={() => setEditingId(docId)} />
+    canEditEntryBody(data.kind) && !editing ? (
+      <EntryBodyEditAction onEdit={() => setEditingId(docId)} />
     ) : null;
   // The body slot of the article — the editor while edit mode is on, seeded
   // from the file on screen (and re-keyed per path, so it never carries the
   // draft of another file).
   const bodyEditor = editing ? (
-    <FileBodyEditor
+    <EntryBodyEditor
       key={docId}
       campaign={campaign}
       file={data}
@@ -207,7 +207,7 @@ export function SceneRoute() {
               actions={articleActions}
               body={bodyEditor}
               // Issue #28: the status display IS the control here. The rev
-              // comes from the FileResponse on screen, so the patch carries
+              // comes from the EntryResponse on screen, so the patch carries
               // exactly the version the DM was looking at.
               statusControl={
                 <SceneStatusControl

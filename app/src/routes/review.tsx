@@ -6,13 +6,13 @@
 // pool affordance.
 //
 // The server files are the truth: every action writes through the review
-// endpoints, the returned FileResponse is seeded into the cache and the
+// endpoints, the returned EntryResponse is seeded into the cache and the
 // query invalidated on top. The ONLY client state is cosmetic — which action
 // a card got in this sitting (the server stores done/not-done, not which
 // action) and which threads were adopted here (the "neu" chip).
 // Mobile: the desk task stays usable — one column, stacked cards.
 
-import type { FileResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -117,8 +117,8 @@ export function ReviewRoute() {
   );
 
   const act = useMutation({
-    mutationFn: async ({ entry, action, npc }: ActVars): Promise<FileResponse[]> => {
-      const written: FileResponse[] = [];
+    mutationFn: async ({ entry, action, npc }: ActVars): Promise<EntryResponse[]> => {
+      const written: EntryResponse[] = [];
       if (action === "thread") {
         if (chapter === undefined) throw new Error("kein Kapitel");
         written.push(await adoptThread(campaign, chapter.id, entry.text));

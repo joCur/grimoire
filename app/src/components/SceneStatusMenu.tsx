@@ -4,7 +4,7 @@
 // small chevron on hover/focus.
 //
 // The write needs the rev of the file it is changing. The reading view has
-// the FileResponse on screen and hands its rev down; a pool row has only
+// the EntryResponse on screen and hands its rev down; a pool row has only
 // the tree (which carries no rev), so the control fetches the file LAZILY
 // when the menu opens — one GET, shared with the file query cache.
 //
@@ -44,7 +44,7 @@ export function SceneStatusControl({
   path: string;
   /** The status as it stands in the file/tree — unknown values pass through. */
   status: string;
-  /** From the loaded FileResponse; undefined means "fetch it when opening". */
+  /** From the loaded EntryResponse; undefined means "fetch it when opening". */
   rev?: number | undefined;
   variant: SceneStatusVariant;
 }) {

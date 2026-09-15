@@ -2,7 +2,7 @@
 // the NPC/location/titled headers and the one rule that started issue #26 —
 // the scene type overline never appears above a non-scene.
 
-import type { EntityKind, FileResponse } from "@grimoire/shared/types";
+import type { EntityKind, EntryResponse } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -12,11 +12,11 @@ function file(
   kind: EntityKind,
   properties: Record<string, unknown>,
   body = "",
-): FileResponse {
+): EntryResponse {
   return { path: `npcs/x`, kind, properties, body, rev: 1, raw: "" };
 }
 
-function render(f: FileResponse): string {
+function render(f: EntryResponse): string {
   return renderToStaticMarkup(<EntityArticle file={f} />);
 }
 

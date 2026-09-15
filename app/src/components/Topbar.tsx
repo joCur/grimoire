@@ -65,7 +65,7 @@
 // still has unharvested entries, and the "Generator" on the pool (issue #12)
 // with its run indicator (issue #19).
 
-import type { FileResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 import { isSessionEmpty } from "@grimoire/shared/session-state";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -421,7 +421,7 @@ export function Topbar() {
  * at its `ended` (the chip is gone by then, but a cache race must not tick
  * backwards).
  */
-function useElapsedLabel(session: FileResponse): string | undefined {
+function useElapsedLabel(session: EntryResponse): string | undefined {
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 1_000);
@@ -483,7 +483,7 @@ function sessionChipState({
   offersStart,
   showsError,
 }: {
-  session: { data: FileResponse | null | undefined; isError: boolean };
+  session: { data: EntryResponse | null | undefined; isError: boolean };
   offersStart: boolean;
   showsError: boolean;
 }): SessionChipState {
@@ -537,7 +537,7 @@ function SessionChip({
   mode,
 }: {
   campaign: string;
-  session: FileResponse | undefined;
+  session: EntryResponse | undefined;
   state: SessionChipState;
   mode: "link" | "menu";
 }) {
@@ -570,7 +570,7 @@ function SessionRunningChip({
   mode,
 }: {
   campaign: string;
-  session: FileResponse;
+  session: EntryResponse;
   mode: "link" | "menu";
 }) {
   const t = useT();
@@ -674,7 +674,7 @@ function SessionMenuChip({
   paused,
 }: {
   campaign: string;
-  session: FileResponse;
+  session: EntryResponse;
   label: string;
   elapsed: string | undefined;
   paused: boolean;
@@ -783,7 +783,7 @@ function MobileSessionRow({
   session,
 }: {
   campaign: string;
-  session: FileResponse;
+  session: EntryResponse;
 }) {
   const t = useT();
   return (

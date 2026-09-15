@@ -90,7 +90,7 @@ export function parseLocalDateTime(value: unknown): number | undefined {
 /**
  * Start / end of a session as epoch milliseconds (issue #40).
  *
- * The SERVER's reading wins (`startedMs`/`endedMs` of the FileResponse): the
+ * The SERVER's reading wins (`startedMs`/`endedMs` of the EntryResponse): the
  * file format is zone-less on purpose, and only the server knows the timezone
  * those wall-clock digits were written in — computing them in the browser
  * gave a runtime that was hours off whenever the two differ. The local parse
@@ -107,7 +107,7 @@ export function sessionEndMs(session: SessionTimes | undefined): number | undefi
   return session.endedMs ?? parseLocalDateTime(session.properties?.ended);
 }
 
-/** The bit of a session FileResponse the helpers here need. */
+/** The bit of a session EntryResponse the helpers here need. */
 export interface SessionTimes {
   startedMs?: number;
   endedMs?: number;

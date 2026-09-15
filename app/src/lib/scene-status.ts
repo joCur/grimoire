@@ -73,7 +73,7 @@ export function isSceneDone(status: string): boolean {
   return DONE_STATUSES.has(status);
 }
 
-/** Body of the status write — the rev comes from the FileResponse on screen. */
+/** Body of the status write — the rev comes from the EntryResponse on screen. */
 export interface PropertiesPatchBody {
   path: string;
   rev: number;

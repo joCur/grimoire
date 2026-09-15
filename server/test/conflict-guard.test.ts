@@ -28,17 +28,17 @@
 // point.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { FileResponse } from "@grimoire/shared";
+import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { setNow } from "../src/clock";
 import { dropStore, seedStore } from "./support/store";
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
-async function getFile(rel: string): Promise<FileResponse> {
+async function getFile(rel: string): Promise<EntryResponse> {
   const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 async function patchReq(rev: number, patch: Record<string, unknown>): Promise<Response> {
@@ -81,7 +81,7 @@ describe("two writes with the same guard token, same clock second", () => {
     // Both "tabs" hold the SAME token — the one read above.
     const first = await patchReq(read.rev, { status: "played" });
     expect(first.status).toBe(200);
-    const won = (await first.json()) as FileResponse;
+    const won = (await first.json()) as EntryResponse;
     expect(won.properties.status).toBe("played");
     expect(won.rev).toBe(read.rev + 1);
 
@@ -101,7 +101,7 @@ describe("two writes with the same guard token, same clock second", () => {
     // …and retrying with the token from the 409 succeeds, in the same second.
     const retry = await patchReq(conflict.rev, { status: "draft" });
     expect(retry.status).toBe(200);
-    const retried = (await retry.json()) as FileResponse;
+    const retried = (await retry.json()) as EntryResponse;
     expect(retried.properties.status).toBe("draft");
     expect(retried.rev).toBe(conflict.rev + 1);
   });
@@ -111,7 +111,7 @@ describe("two writes with the same guard token, same clock second", () => {
 
     const first = await putReq(read.rev, "\n## Flow\n\nVersion A.\n");
     expect(first.status).toBe(200);
-    const won = (await first.json()) as FileResponse;
+    const won = (await first.json()) as EntryResponse;
     expect(won.body).toBe("\n## Flow\n\nVersion A.\n");
     expect(won.rev).toBe(read.rev + 1);
 
@@ -128,7 +128,7 @@ describe("two writes with the same guard token, same clock second", () => {
 
     const retry = await putReq(conflict.rev, "\n## Flow\n\nVersion B.\n");
     expect(retry.status).toBe(200);
-    expect(((await retry.json()) as FileResponse).body).toBe("\n## Flow\n\nVersion B.\n");
+    expect(((await retry.json()) as EntryResponse).body).toBe("\n## Flow\n\nVersion B.\n");
   });
 
   test("fired together: exactly one lands, whichever the runtime schedules first", async () => {
@@ -147,7 +147,7 @@ describe("two writes with the same guard token, same clock second", () => {
 
     const okRes = responses[responses.findIndex((r) => r.status === 200)]!;
     const conflictRes = responses[responses.findIndex((r) => r.status === 409)]!;
-    const won = (await okRes.json()) as FileResponse;
+    const won = (await okRes.json()) as EntryResponse;
     const conflict = (await conflictRes.json()) as Conflict;
 
     expect(won.rev).toBe(read.rev + 1);
