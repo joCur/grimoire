@@ -117,7 +117,9 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
     }),
   ).toBeVisible();
 
-  // The chapter accordion: title, "Aktiv" pill, scene count, goal line.
+  // The chapter accordion: title, scene count, goal line — and the status
+  // regler BESIDE the trigger since issue #115 (a menu trigger cannot sit
+  // inside the accordion button).
   const chapter = page.getByRole("button", {
     name: /Kapitel 1: Der Leuchtturm von Salzhafen/,
   });
@@ -127,8 +129,11 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
   await expect(
     chapter.getByRole("heading", { level: 2, name: "Kapitel 1: Der Leuchtturm von Salzhafen" }),
   ).toBeVisible();
-  await expect(chapter).toContainText("Aktiv");
   await expect(chapter).toContainText("2 Szenen");
+  // The status is the localized label, and it is the control (issue #115).
+  await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toContainText(
+    "Aktiv",
+  );
   // Open by default (status: active) — the goal comes from _chapter.
   await expect(
     page.getByText(
@@ -833,10 +838,14 @@ test("the chapter body dialog shows the 409 instead of overwriting a second writ
   await expect(page.getByText("Ziel: Aus dem Dialog.")).toBeVisible();
 });
 
-// „Als aktiv setzen" (issue #115): the pool decides which chapter is the one
-// the session is in. ONE server call, so there is never a moment with two
-// active chapters.
-test("set-active moves the active flag and the pool follows", async ({
+// The chapter status regler (issue #115, critical path 1). The pool decides
+// which chapter is the one the session is in, and the status DISPLAY is that
+// control — there is no „Als aktiv setzen" button any more.
+//
+// „Aktiv" is the interesting value: ONE server call for ONE decision about TWO
+// rows, so there is never a moment with two active chapters. The other two
+// are an ordinary properties patch.
+test("the chapter status menu shows the German labels and swaps the active chapter", async ({
   page,
   api,
 }) => {
@@ -844,25 +853,92 @@ test("set-active moves the active flag and the pool follows", async ({
   const created = await api.send<{ path: string }>("POST", "beispiel/chapters", {
     title: "Kapitel 2: Die Bucht",
   });
-  // The server derives the id; the test asks it rather than guessing.
   const secondPath = created.path;
 
   await page.goto("/beispiel");
-  const second = page.getByRole("button", { name: /Kapitel 2: Die Bucht/ });
-  await expect(second).toBeVisible();
-  // The active chapter carries the pill and offers no „Als aktiv setzen".
+  // The button that was there before this ticket is gone for good.
   await expect(page.getByRole("button", { name: "Als aktiv setzen" })).toHaveCount(0);
 
-  await second.click();
-  await page.getByRole("button", { name: "Als aktiv setzen" }).click();
+  // The active chapter's regler names its current value for a screen reader…
+  const activeMenu = page.getByRole("button", { name: "Status ändern, aktuell Aktiv" });
+  await expect(activeMenu).toBeVisible();
+  // …and the label is the localized one, not the wire value.
+  await expect(activeMenu).toContainText("Aktiv");
+  await expect(activeMenu).not.toContainText("active");
 
-  // The pill moved, in both directions.
-  await expect(second).toContainText("Aktiv");
+  // The three options, in lifecycle order and in German.
+  await activeMenu.click();
+  const menu = page.getByRole("menu");
+  await expect(menu.getByRole("menuitemradio")).toHaveText([
+    "Geplant",
+    "Aktiv",
+    "Abgeschlossen",
+  ]);
+  await page.keyboard.press("Escape");
+
+  // --- the swap, from the OTHER chapter's regler ---
+  const second = page.getByRole("button", { name: /Kapitel 2: Die Bucht/ });
+  await expect(second).toBeVisible();
+  const secondMenu = page.getByRole("button", { name: "Status ändern, aktuell Geplant" });
+  await secondMenu.click();
+  await page.getByRole("menuitemradio", { name: "Aktiv" }).click();
+
+  // The flag moved in BOTH directions, in one call.
+  await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toHaveCount(1);
   await expect
     .poll(async () => (await api.file("01-salzhafen/_chapter")).properties.status)
     .toBe("planned");
   expect((await api.file(secondPath)).properties.status).toBe("active");
+});
 
-  // …and the chapter that is active now has nothing left to set.
-  await expect(page.getByRole("button", { name: "Als aktiv setzen" })).toHaveCount(1);
+// „Abgeschlossen" is the other branch: a rev-guarded properties patch on the
+// chapter document, which must NOT touch the active chapter.
+test("picking Abgeschlossen patches that chapter and leaves the active one alone", async ({
+  page,
+  api,
+}) => {
+  const created = await api.send<{ path: string }>("POST", "beispiel/chapters", {
+    title: "Kapitel 2: Die Bucht",
+  });
+
+  await page.goto("/beispiel");
+  await page.getByRole("button", { name: "Status ändern, aktuell Geplant" }).click();
+  await page.getByRole("menuitemradio", { name: "Abgeschlossen" }).click();
+
+  await expect(
+    page.getByRole("button", { name: "Status ändern, aktuell Abgeschlossen" }),
+  ).toBeVisible();
+  expect((await api.file(created.path)).properties.status).toBe("done");
+  // The evening's chapter is untouched.
+  expect((await api.file("01-salzhafen/_chapter")).properties.status).toBe("active");
+});
+
+// The „Kapitel-Eigenschaften" dialog is the second door onto the same value —
+// and it must not be a way past the one-active invariant (review finding 4).
+test("the properties dialog offers the enum and its Aktiv swaps too", async ({ page, api }) => {
+  const created = await api.send<{ path: string }>("POST", "beispiel/chapters", {
+    title: "Kapitel 2: Die Bucht",
+  });
+
+  await page.goto("/beispiel");
+  await page.getByRole("button", { name: /Kapitel 2: Die Bucht/ }).click();
+  // Two chapters are open now, so the actions are named per chapter — the
+  // second one belongs to „Kapitel 2".
+  await page.getByRole("button", { name: "Kapitel-Eigenschaften" }).nth(1).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Kapitel: Eigenschaften");
+
+  // A Select over the enum, not a free text field.
+  const status = dialog.getByLabel("Status");
+  await expect(status).toBeVisible();
+  await status.selectOption({ label: "Aktiv" });
+  await dialog.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  // The swap happened server-side: exactly one active chapter, and it is this one.
+  expect((await api.file(created.path)).properties.status).toBe("active");
+  await expect
+    .poll(async () => (await api.file("01-salzhafen/_chapter")).properties.status)
+    .toBe("planned");
+  await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toHaveCount(1);
 });
