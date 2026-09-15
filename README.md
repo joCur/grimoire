@@ -343,3 +343,9 @@ einzeln geschrieben. Ein Formfehler kostet damit nur den betroffenen Teil,
 fertige Szenen sind sofort prüfbar, und ein defekter Teil lässt sich einzeln
 wiederholen. Die Gliederung ist ein systeminterner Schritt — sie wird nie
 angezeigt.
+
+Jeder Aufruf, der ein **Dokument** liefert (Szene, NPC, Ort, Ergänzung),
+antwortet seit #107 mit dem Dokument selbst — Frontmatter plus Fließtext, so
+wie es gespeichert wird; Warnungen folgen hinter einer Zeile
+`---warnings---`. Nur die Gliederung ist noch JSON, und ihr Schema erzwingt
+der Server über die Provider-API. Details in `generator/README.md`.

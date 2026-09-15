@@ -2,12 +2,85 @@
 
 Pipeline: Quelltext (EN) → LLM → Szenen-Drafts (DE) → Review-Vorschau → Platte.
 
+## Antwortformate (Issue #107)
+
+Es gibt genau **zwei**, und der Unterschied ist die Begründung:
+
+**Dokument-Antworten — der Normalfall.** Szenen-Teil, Eintrags-Teil
+(NPC/Ort), NPC-Lauf und Ergänzen-Lauf antworten mit dem **Dokument selbst**:
+Frontmatter-Block plus Fließtext, genau so, wie es gespeichert wird. Warnungen
+folgen hinter einer Zeile `---warnings---`, eine je Zeile; fehlt der Block,
+gibt es keine Warnungen.
+
+```
+---
+id: night-watch-quay
+title: Nachtwache am Kai
+type: planned
+status: draft
+---
+
+## Flow
+
+Die Wache murrt: „Wer nachts hier steht, hat was zu verbergen.“
+
+---warnings---
+Der Quelltext nennt keinen DC — DC 13 gesetzt.
+```
+
+Warum: ein vollständiges Markdown-Dokument als JSON-String einzubetten war die
+fragilste Stelle der Pipeline. Zeilenumbrüche, Backslashes und
+Anführungszeichen müssen alle die JSON-Maskierung überleben, und der PO-Fall
+vom 15.09. zeigt, was das kostet — eine inhaltlich korrekte Szene, nicht
+parsebar, weil ein Anführungszeichen mit dem ASCII-`"` geschlossen war und
+damit den String beendete.
+
+Der Server trennt die beiden Hälften in `server/src/document-reply.ts`
+(`parseDocumentReply`, von allen vier Validierungen benutzt) und validiert wie
+immer über den Markdown-Parser aus `@grimoire/shared`. **Toleriert** werden
+eine umgebende Code-Zaun (```` ``` ````) und ein Satz davor oder danach —
+beides kostet sonst eine Korrekturrunde für nichts —, solange der
+Frontmatter-Start noch zu finden ist (eine Zeile `---`, mit einer zweiten
+darunter). Findet er ihn nicht, ist das der **eine** Formfehler, und die
+Korrekturrunde sagt genau, wie ein Dokument aussieht. Nachkorrigiert wird
+nichts: keine Typografie-Heuristik, kein stilles Ersetzen.
+
+**Die Gliederung — das einzige JSON.** Sie ist ein kleines, flaches Objekt,
+und deshalb die einzige Antwort, deren Form eine API *garantieren* kann:
+
+* **Claude**: das Schema reist als Tool mit, `tool_choice` erzwingt den
+  Aufruf; die Antwort ist der Tool-Input.
+* **OpenAI-kompatibel**: `response_format: { type: "json_schema", …, strict:
+  true }`, mit **einem** Rückfall auf `json_object`, wenn der Endpoint mit 400
+  antwortet (einmal je Prozess gemerkt, damit die Erkennung einmal bezahlt
+  wird).
+
+Das Schema steht **einmal** in `shared/src/outline-schema.ts` und ist aus
+denselben Konstanten gebaut, die die Validierung liest (Szenen-Typen,
+id-Muster, die 12/12-Obergrenzen, die Eintrags-Arten) — ein Schema, das mehr
+erlaubt als die Prüfung, wäre ein Lauf, der an einer Antwort scheitert, die
+die API als gültig zugesichert hat. Die **semantischen** Prüfungen bleiben, wo
+sie sind: ein Schema kann nicht sagen „diese id kommt im ganzen Durchlauf nur
+einmal vor“, „dieser `refs`-Eintrag ist eine Szene DIESER Gliederung“ oder
+„das Kapitel kommt aus dem Kontext“.
+
+Davor liegt eine **tolerante Reparatur** (`jsonrepair`, exakt gepinnt): findet
+`extractJsonReply` kein parsebares Objekt, sieht die Antwort aber wie eines
+aus, wird sie einmal deterministisch repariert (Komma am Ende, einfache
+Anführungszeichen) und **danach normal validiert** — die Reparatur lockert das
+Parsen, nie die Regeln. Ein reparierter Lauf trägt die Warnung „Antwort musste
+repariert werden“, damit ein Provider, der jedes Mal geflickt werden muss,
+sichtbar ist. Fließtext ohne Objekt wird *nicht* repariert: `jsonrepair` würde
+einen Satz in einen JSON-String verwandeln, und der Lauf scheiterte dann mit
+einer Meldung über die falsche Sache.
+
 ## Ablauf eines Szenen-Laufs (Pipeline, Issue #102)
 
 Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
 
 1. **Gliederung** (ein Aufruf, `outline-system-prompt.md` +
-   `outline-example-output.md`): kleines JSON mit der Szenenliste — `id`,
+   `outline-example-output.md`): kleines JSON, per Schema erzwungen (siehe
+   „Antwortformate“) — mit der Szenenliste: `id`,
    `title`, `type`, `location`, Querverweise (`refs`) — und der Liste neuer
    Figuren/Orte (`entries`). Jede Szene nennt zusätzlich den **ersten und
    letzten Satz ihres Quelltext-Abschnitts wörtlich** (`sourceExcerpt`); der
@@ -33,7 +106,7 @@ Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
    Modus „genau eine Szene aus der Gliederung“ (`scene-single-output.md`
    tauscht nur das Ausgabeformat — alle Regeln bleiben wörtlich dieselben) +
    Gliederung + der geschnittene Quelltext-Abschnitt. Ausgabe: genau ein
-   Szenendokument. Validierung, Korrektur-Turns und Namensprüfung **je
+   Szenendokument, roh. Validierung, Korrektur-Turns und Namensprüfung **je
    Szene**; ein fehlgeschlagener Teil blockiert die anderen nicht.
 
 3. **Vorschläge** (je neuem Eintrag ein Aufruf): `npc-system-prompt.md` bzw.
@@ -71,7 +144,8 @@ Szenen-Aufruf, jeden Eintrags-Aufruf und die beiden Ein-Aufruf-Läufe:
    `campaign_knowledge` bzw. `glossary`).
 2. Prompt = `system-prompt.md` + `example-output.md` (Few-Shot-Ziel)
    + Kampagnenwissen + Glossar + Kontext + Quelltext.
-3. LLM antwortet mit JSON (Schema siehe system-prompt.md).
+3. LLM antwortet — mit dem **Dokument** (Szene, NPC, Ort, Ergänzung) bzw.
+   mit dem **Gliederungs-JSON**; siehe „Antwortformate“ oben.
 4. Server validiert mechanisch:
    - Frontmatter-Block parsebar? `type`/`status` gültig? `status == draft`?
      Stubs: NPC-Status gültig (Normalfall `alive`), Orte ohne status-Key.
@@ -119,6 +193,17 @@ Frontmatter-Wert, der Text ist (`title`, `name`, `role`, `voice`,
 ASCII-Ersatzschreibung ae/oe/ue/ss. **Einzige Ausnahme**: `id`-Werte (und
 `location`, das eine id ist), die bleiben kebab-case ASCII; Eigennamen aus
 dem Quelltext bleiben unverändert.
+
+**Seit #107 gehören die Anführungszeichen dazu**, als **ein** identischer Satz
+in derselben Regel: deutsche typografische Anführungszeichen `„…“`
+(U+201E/U+201C), einfache `‚…‘`, Apostroph `’` — nie das ASCII-`"` und nie `'`
+als Apostroph. Die Mischform — U+201E geöffnet, mit dem ASCII-Zeichen
+geschlossen — stand vorher durchgehend in unseren Prompts, Few-Shots,
+Beispieldateien **und im UI-Katalog**, und das Modell hat sie imitiert; alle
+vier sind umgestellt (nur die Anführungszeichen, sonst nichts). Zwei Tests halten es so: `app/src/i18n/i18n.test.ts` über die
+Katalog-WERTE (im Quelltext ist das schließende ASCII-Zeichen nicht vom
+String-Begrenzer zu unterscheiden) und `server/test/typography.test.ts` über
+Prompts, Few-Shots und `examples/`.
 
 Die Regel steht in den drei Create-Prompts unter „## Regeln“ und im
 Ergänzen-Prompt in der Ergänzungsregel — also genau **einmal** in jedem

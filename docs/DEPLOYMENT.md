@@ -258,10 +258,10 @@ jeweils nur für den gewählten:
 | `LMSTUDIO_MODEL`     | `lmstudio`   | `local-model`                  | Modellname in LM Studio                                |
 | `LLM_MAX_TOKENS`     | alle         | `8000` (`claude`), sonst Endpoint-Default | Obergrenze der Antwortlänge (positive Ganzzahl; unbrauchbare Werte werden ignoriert) |
 | `LLM_CORRECTION_TURNS` | alle       | `1`                            | Korrektur-Turns nach dem ersten Aufruf (`0`–`2`; unbrauchbare Werte werden ignoriert) |
-| `LLM_FORCE_JSON`     | `openrouter`, `openai`, `lmstudio` | an              | Sendet `response_format: {"type":"json_object"}` mit; `0` = aus, für Endpoints/Modelle ohne `response_format`-Unterstützung (der `claude`-Pfad erzwingt JSON per Assistant-Prefill und ist davon unberührt) |
+| `LLM_FORCE_JSON`     | `openrouter`, `openai`, `lmstudio` | an              | Sendet für den **Gliederungs-Aufruf** `response_format` mit (`json_schema`, mit Rückfall auf `json_object` bei 400); `0` = aus, für Endpoints/Modelle ohne `response_format`-Unterstützung. Dokument-Aufrufe erzwingen seit #107 gar nichts (die Antwort ist Markdown), der `claude`-Pfad erzwingt die Gliederung per Tool-Aufruf und ist davon unberührt |
 
 `LLM_MAX_TOKENS` lohnt sich beim Modellvergleich: schneidet ein Modell die
-JSON-Antwort ab, erkennt der Generator das an `finish_reason`/`stop_reason`
+Antwort ab, erkennt der Generator das an `finish_reason`/`stop_reason`
 und bricht sofort mit `422` und der Meldung „Antwort wurde vom Modell
 abgeschnitten — LLM_MAX_TOKENS erhöhen (aktuell: …) oder Quelltext
 verkleinern" ab, statt zwei teure Korrektur-Turns zu drehen; dann das Limit
@@ -269,8 +269,9 @@ erhöhen oder den Quelltext verkleinern.
 
 `LLM_CORRECTION_TURNS` regelt, wie oft eine fehlgeschlagene Formprüfung als
 Fehlerliste ans Modell zurückgeht (Default `1`): die nicht heilbaren Auslöser
-sind weg (abgeschnittene Antworten brechen sofort ab, Prosa um das JSON wird
-toleriert), und was übrig bleibt, repariert ein Modell mit Fehlerliste fast
+sind weg (abgeschnittene Antworten brechen sofort ab, ein Code-Zaun oder ein
+Satz um das Dokument wird toleriert, fast-JSON in der Gliederung wird
+repariert), und was übrig bleibt, repariert ein Modell mit Fehlerliste fast
 immer im ersten Turn — ein zweiter kostet nur. `0` schaltet Korrektur-Turns
 ganz ab (billigster, strengster Modus), `2` ist das Maximum.
 

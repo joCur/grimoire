@@ -354,6 +354,13 @@
 //   [x] POST /api/:campaign/review/inbox-done  { line } -> rewrite the inbox line to `- [x] …`
 //                                              (documented append-only exception)
 //
+// Since issue #107 a DOCUMENT call answers the document itself — frontmatter
+// plus body, warnings after a `---warnings---` line (./document-reply) — and
+// only the outline step still answers JSON, whose schema both providers now
+// FORCE (a tool call on the Claude path, `response_format: json_schema` on
+// the OpenAI path). Nothing about these endpoints changes with it: the drafts
+// they carry, the 422 bodies and the review payloads are the same shapes.
+//
 // Validation after generate: properties parseable, status==draft, references
 // exist or ship as stubs, only known callouts. Errors -> correction turn to
 // the LLM (LLM_CORRECTION_TURNS, default 1, max 2 — issue #19), see
