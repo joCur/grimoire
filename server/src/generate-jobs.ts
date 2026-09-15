@@ -61,7 +61,7 @@ import { now } from "./clock";
 import type { GrimoireDb } from "./db/client";
 import { generateJobs } from "./db/schema";
 import { runAugment } from "./generator-augment";
-import { runGenerateNpc } from "./generator";
+import { capRawReply, runGenerateNpc } from "./generator";
 import {
   replanStoredRun,
   runPart,
@@ -121,9 +121,11 @@ export interface PipelineRecord {
 
 /**
  * One part on the row: the wire shape, what it cost, and the raw reply of its
- * last failed attempt. The raw reply is stored but not serialized per part —
- * the job's error body carries the LAST failed one, which is the same place
- * the app has read it since issue #18.
+ * last failed attempt. The raw reply IS serialized per part (the shared type
+ * declares it and the failed part's card shows it behind the same disclosure
+ * the whole-run failure uses) — the job's error body still carries the last
+ * failed one, which is where the app has read it since issue #18, but that is
+ * one reply for a run with many parts.
  */
 export type StoredPart = GenerateJobPart & { usage?: PartUsage; rawReply?: string };
 
@@ -148,6 +150,11 @@ function serializePipeline(pipeline: PipelineRecord): GenerateJobPipeline {
       ...(part.validationErrors === undefined
         ? {}
         : { validationErrors: part.validationErrors }),
+      // Capped again on the way out: what a provider sent is already capped
+      // by `capRawReply`, but a row written by an older deploy (or a
+      // hand-edited database) must not be able to put a megabyte into every
+      // poll of the job.
+      ...(part.rawReply === undefined ? {} : { rawReply: capRawReply(part.rawReply) }),
     })),
     totals: pipeline.totals,
   };
@@ -827,6 +834,11 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
           part.status = "running";
           delete part.error;
           delete part.validationErrors;
+          // The raw reply belongs to the attempt that failed; a part that is
+          // being written again has none, and leaving the old one there put
+          // „was kam zurück" under a running part (and into the next
+          // success, where nothing came back wrong at all).
+          delete part.rawReply;
         }
         return {};
       });
@@ -838,6 +850,7 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
           part.status = "done";
           delete part.error;
           delete part.validationErrors;
+          delete part.rawReply;
           part.usage = usage;
         }
         addUsage(pipeline, usage);

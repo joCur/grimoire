@@ -18,7 +18,11 @@ import { setProviderForTests } from "../src/generator";
 import {
   assignmentBlock,
   cutExcerpt,
+  MAX_OUTLINE_ENTRIES,
+  entryContext,
+  MAX_OUTLINE_SCENES,
   outlineBlock,
+  planOf,
   outlineParts,
   sceneSystemPrompt,
   validateOutlineReply,
@@ -155,6 +159,37 @@ test("an outline without a single scene is not an outline", () => {
   expect(outlineErrors("kein json")).toEqual(["reply is not valid JSON"]);
 });
 
+test("an outline over the part bound is a correction turn, not a run", () => {
+  // One provider call per part, so the outline decides what a run COSTS. Over
+  // the bound it is asked to consolidate (the errors are what the correction
+  // turn carries), rather than spending dozens of calls nobody asked for.
+  const many = Array.from({ length: MAX_OUTLINE_SCENES + 1 }, (_, i) => ({
+    id: `szene-${i}`,
+    title: `Szene ${i}`,
+    type: "planned",
+    refs: [],
+  }));
+  const tooMany = validateOutlineReply(outlineReply({ scenes: many }), CTX);
+  expect(tooMany.ok).toBe(false);
+  expect((tooMany as { errors: string[] }).errors.join("\n")).toContain(
+    `höchstens ${MAX_OUTLINE_SCENES}`,
+  );
+  // Exactly at the bound is fine — the bound is a bound, not a target.
+  expect(validateOutlineReply(outlineReply({ scenes: many.slice(1) }), CTX).ok).toBe(true);
+
+  const entries = Array.from({ length: MAX_OUTLINE_ENTRIES + 1 }, (_, i) => ({
+    kind: "npc",
+    id: `figur-${i}`,
+    name: `Figur ${i}`,
+    summary: "aus dem Quelltext",
+  }));
+  const tooManyEntries = validateOutlineReply(outlineReply({ entries }), CTX);
+  expect(tooManyEntries.ok).toBe(false);
+  expect((tooManyEntries as { errors: string[] }).errors.join("\n")).toContain(
+    `höchstens ${MAX_OUTLINE_ENTRIES}`,
+  );
+});
+
 // --- cutting the source passage ------------------------------------------------
 
 const SOURCE = [
@@ -204,6 +239,57 @@ test("the LAST sentence is searched from the first one on", () => {
   const cut = cutExcerpt(repeated, { first: "Beta.", last: "Alpha." });
   expect(cut.matched).toBe(true);
   expect(cut.text).toBe("Beta. Alpha.");
+});
+
+test("an entry's context is the passages that mention it — by name OR by id words", () => {
+  const source = [
+    "The harbour master counts crates at dawn.",
+    "Grella waits in the mudflats.",
+    "Nobody is here at all.",
+  ].join(" ");
+  const outline: RunOutline = {
+    scenes: [
+      {
+        id: "kai",
+        title: "Am Kai",
+        type: "planned",
+        sourceExcerpt: {
+          first: "The harbour master counts crates at dawn.",
+          last: "The harbour master counts crates at dawn.",
+        },
+        refs: [],
+      },
+      {
+        id: "watt",
+        title: "Im Watt",
+        type: "planned",
+        sourceExcerpt: {
+          first: "Grella waits in the mudflats.",
+          last: "Grella waits in the mudflats.",
+        },
+        refs: [],
+      },
+    ],
+    entries: [
+      { kind: "npc", id: "harbour-master", name: "Hafenmeisterin", summary: "zählt Kisten" },
+      { kind: "npc", id: "grella", name: "Grella", summary: "Schmugglerin" },
+    ],
+    warnings: [],
+  };
+  const plan = planOf({ campaign: "beispiel", ctx: CTX, outline, sourceText: source });
+  // The id is kebab-case English, the name German — so a source text that
+  // never writes „Hafenmeisterin" and never writes „harbour-master" still
+  // has to reach its entry, through the WORDS of the id.
+  const master = entryContext(plan, outline.entries[0]!);
+  expect(master).toContain("The harbour master counts crates");
+  expect(master).not.toContain("Grella waits in the mudflats");
+  // …and the plain name match still works, and matches only its own scene.
+  const grella = entryContext(plan, outline.entries[1]!);
+  expect(grella).toContain("Grella waits in the mudflats");
+  expect(grella).not.toContain("harbour master counts");
+  // The excerpts are cut ONCE for the whole run, not per entry × scene.
+  expect([...plan.excerpts.keys()]).toEqual(["kai", "watt"]);
+  expect(plan.excerpts.get("kai")!.matched).toBe(true);
 });
 
 // --- the per-part prompt -------------------------------------------------------
@@ -434,6 +520,9 @@ test("one failed part leaves the other two reviewable (AK1, AK2)", async () => {
   ]);
   const failed = job.pipeline!.parts[1]!;
   expect(failed.error).toContain("validation");
+  // The part carries its OWN last raw reply to the client (the job's error
+  // body only ever has one, for a run that can have many parts).
+  expect(failed.rawReply).toContain("status: ready");
   expect(failed.validationErrors).toEqual(
     expect.arrayContaining([expect.stringContaining('"status" must be "draft"')]),
   );

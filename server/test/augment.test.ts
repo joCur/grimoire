@@ -266,7 +266,7 @@ describe("prompt assembly", () => {
   // what a table looks like, and that the rest of GFM is plain text.
   const TABLE_RULE = "**Tabellen**";
 
-  test("every prompt kind carries the table rule exactly once", async () => {
+  test("every prompt kind that writes documents carries the table rule once", async () => {
     const assembled: Array<[string, string]> = [
       ["scene", await loadAsset(ASSET_FILES.scene.systemPrompt)],
       ["npc", await loadAsset(ASSET_FILES.npc.systemPrompt)],
@@ -274,11 +274,9 @@ describe("prompt assembly", () => {
       ["augment/npc", await augmentSystemPrompt("npc")],
       ["augment/location", await augmentSystemPrompt("location")],
       ["augment/scene", await augmentSystemPrompt("scene")],
-      // The two prompt kinds issue #102 adds: the outline step, and the
-      // scene prompt in „genau eine Szene aus der Gliederung" mode. The
-      // single-scene mode is an output-schema SWAP, not a second prompt
-      // file, so that these rules keep travelling exactly once.
-      ["outline", await loadAsset(ASSET_FILES.outline.systemPrompt)],
+      // The scene prompt in „genau eine Szene aus der Gliederung" mode
+      // (issue #102) — an output-schema SWAP, not a second prompt file, so
+      // that these rules keep travelling exactly once.
       ["scene/single", await sceneSystemPrompt("single")],
     ];
     for (const [kind, prompt] of assembled) {
@@ -293,6 +291,16 @@ describe("prompt assembly", () => {
     }
     const wordings = new Set(assembled.map(([, doc]) => ruleParagraph(doc, TABLE_RULE)));
     expect(wordings.size).toBe(1);
+
+    // The OUTLINE prompt does NOT carry it: that call writes no document at
+    // all — no callouts, no frontmatter, no tables — so the rule was a rule
+    // about nothing, and a rule the model cannot apply is one it can weigh
+    // against the rules it can (the reason the "exactly once" above exists).
+    const outline = await loadAsset(ASSET_FILES.outline.systemPrompt);
+    expect(outline).not.toContain(TABLE_RULE);
+    // The orthography rule stays, because the outline DOES write text: titles,
+    // one-liners and `warnings`.
+    expect(outline).toContain(ORTHOGRAPHY_RULE);
   });
 
   test("the scene few-shot shows a table inside a callout", async () => {

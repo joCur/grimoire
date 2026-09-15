@@ -77,6 +77,22 @@ import { locationPath, npcPath } from "./store/paths";
 /** How many scene/entry calls of one run are in flight at once (PO: 3). */
 export const PART_CONCURRENCY = 3;
 
+/**
+ * The most parts ONE outline may produce — 12 scenes and 12 suggested
+ * entries, counted separately.
+ *
+ * Without it the outline decides how many provider calls a run makes, and a
+ * source text that is a whole adventure (or a model that splits every
+ * paragraph) turns one „Entwürfe generieren" into dozens of calls the DM
+ * never asked for and cannot stop except by discarding the run. A chapter of
+ * twelve playable scenes is already a long evening — beyond that the honest
+ * answer is „cut the source text", so an outline over the bound is a
+ * VALIDATION ERROR and therefore a correction turn that asks the model to
+ * consolidate, not a failed run.
+ */
+export const MAX_OUTLINE_SCENES = 12;
+export const MAX_OUTLINE_ENTRIES = 12;
+
 // --- the outline --------------------------------------------------------------
 
 /** One scene of the outline — everything the per-scene call needs to know. */
@@ -246,6 +262,21 @@ export function validateOutlineReply(
   });
 
   if (scenes.length === 0) errors.push('"scenes" must contain at least one scene');
+  // The run's cost bound (MAX_OUTLINE_SCENES): one call per part, so an
+  // outline that is too long is asked to consolidate instead of being run.
+  if (scenes.length > MAX_OUTLINE_SCENES) {
+    errors.push(
+      `"scenes": ${scenes.length} Szenen sind zu viele für einen Durchlauf — ` +
+        `fasse sie zu höchstens ${MAX_OUTLINE_SCENES} tragfähigen Szenen zusammen ` +
+        "(Verzweigungen derselben Situation gehören in EINE Szene)",
+    );
+  }
+  if (entries.length > MAX_OUTLINE_ENTRIES) {
+    errors.push(
+      `"entries": ${entries.length} neue Figuren und Orte sind zu viele für einen ` +
+        `Durchlauf — nenne höchstens ${MAX_OUTLINE_ENTRIES}, die das Kapitel wirklich braucht`,
+    );
+  }
 
   // Cross references LAST: they can only be checked once every scene id is
   // known, and an unknown ref is the one outline error that would otherwise
@@ -653,6 +684,13 @@ export interface RunPlan {
   outline: RunOutline;
   sourceText: string;
   allowed: AllowedRefs;
+  /**
+   * The cut source passage per scene id, computed once for the whole run.
+   * `entryContext` needs every scene's passage for every entry it builds, and
+   * the cut normalizes the WHOLE source text per call — so an outline with
+   * ten scenes and ten entries used to normalize it a hundred times.
+   */
+  excerpts: Map<string, { text: string; matched: boolean }>;
 }
 
 /**
@@ -670,6 +708,12 @@ export function planOf(input: {
   const { ctx, outline } = input;
   return {
     ...input,
+    excerpts: new Map(
+      outline.scenes.map((scene) => [
+        scene.id,
+        cutExcerpt(input.sourceText, scene.sourceExcerpt),
+      ]),
+    ),
     allowed: {
       npcIds: new Set([
         ...ctx.npcIds,
@@ -722,7 +766,7 @@ export async function runScenePart(
     sceneSystemPrompt("single"),
     loadAsset(ASSET_FILES.scene.fewShotTarget),
   ]);
-  const cut = cutExcerpt(plan.sourceText, scene.sourceExcerpt);
+  const cut = excerptOf(plan, scene);
   const result = await runPipeline<{
     scene: GeneratedSceneDraft;
     warnings: string[];
@@ -823,15 +867,23 @@ export async function runEntryPart(
  * passage mentions its id or its name — the outline does not list npcs per
  * scene, and a text search over the passages is both cheap and honest.
  */
-function entryContext(plan: RunPlan, entry: OutlineEntry): string {
+export function entryContext(plan: RunPlan, entry: OutlineEntry): string {
   const blocks: string[] = [`${entry.name} (${entry.id}): ${entry.summary}`];
   const needle = entry.name.toLowerCase();
+  // The id is kebab-case ENGLISH while the name is German („harbour-master" /
+  // „Hafenmeisterin"), so the whole id rarely appears in an English source
+  // text but its WORDS do. Each word is required, in any order — matching on
+  // one word alone would pull „old" or „the" into every entry's context.
+  const idWords = entry.id.split("-").filter((word) => word.length > 2);
   for (const scene of plan.outline.scenes) {
-    const passage = cutExcerpt(plan.sourceText, scene.sourceExcerpt).text;
+    const passage = excerptOf(plan, scene).text;
+    const lower = passage.toLowerCase();
     const mentions =
       entry.kind === "location"
         ? scene.location === entry.id
-        : passage.toLowerCase().includes(needle) || passage.includes(entry.id);
+        : lower.includes(needle) ||
+          passage.includes(entry.id) ||
+          (idWords.length > 0 && idWords.every((word) => lower.includes(word)));
     if (!mentions) continue;
     blocks.push(`### Szene „${scene.title}" (${scene.id})\n\n${passage}`);
   }
@@ -839,6 +891,11 @@ function entryContext(plan: RunPlan, entry: OutlineEntry): string {
   // rule the excerpt cut follows.
   if (blocks.length === 1) blocks.push(plan.sourceText);
   return blocks.join("\n\n");
+}
+
+/** This scene's source passage — cut once per run (RunPlan.excerpts). */
+function excerptOf(plan: RunPlan, scene: OutlineScene): { text: string; matched: boolean } {
+  return plan.excerpts.get(scene.id) ?? cutExcerpt(plan.sourceText, scene.sourceExcerpt);
 }
 
 /**
