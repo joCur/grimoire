@@ -103,6 +103,29 @@ description: <Kurzbeschreibung, eine Zeile>
 Body = freier Notizraum für Kampagnenweites. Weitere Frontmatter-Keys
 (z. B. `system`) sind erlaubt und bleiben erhalten.
 
+## Entität: Kapitel
+
+`<kapitel>/_chapter.md` — Titel und Zustand eines Kapitels. Beim Import
+optional; fehlt die Datei, heißt das Kapitel wie sein Ordner.
+
+```yaml
+---
+id: 01-salzhafen            # = Ordnername, stabil
+title: "Kapitel 1: Der Leuchtturm von Salzhafen"
+status: planned | active | done
+---
+```
+
+`status: active` markiert das **eine** Kapitel, das die Session-Ansicht
+öffnet; der Server setzt es transaktional um und schaltet das vorherige auf
+`planned` zurück (ADR #18). Die API schreibt nur diese drei Werte (400
+sonst) — ein bereits gespeicherter anderer Wert wird weiterhin unverändert
+angezeigt, das Format degradiert wie überall.
+
+Body = Kapitelnotizen. `## Ziel des Kapitels` ist die Zielzeile, die die
+Kapitelübersicht anzeigt, `## Offene Fäden` die Liste, in die die Ernte
+einträgt.
+
 ## Entität: Szene
 
 ```yaml
