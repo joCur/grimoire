@@ -72,8 +72,6 @@ export const en: Messages = {
   "create.useSuggestion": "Use “{id}”",
 
   "create.campaign.title": "Create campaign",
-  "create.campaign.description":
-    "Chapters and scenes come into being inside it afterwards.",
   "create.campaign.nameLabel": "Campaign name",
   "create.campaign.namePlaceholder": "Campaign name",
   "create.campaign.idPrefix": "id: ",

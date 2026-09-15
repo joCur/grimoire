@@ -85,8 +85,6 @@ export const de = {
   "create.useSuggestion": '„{id}" verwenden',
 
   "create.campaign.title": "Kampagne anlegen",
-  "create.campaign.description":
-    "Danach entstehen darin Kapitel und Szenen.",
   "create.campaign.nameLabel": "Name der Kampagne",
   "create.campaign.namePlaceholder": "Name der Kampagne",
   "create.campaign.idPrefix": "id: ",
