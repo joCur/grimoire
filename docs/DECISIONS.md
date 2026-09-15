@@ -184,12 +184,21 @@ Konsequenzen für das Job-Modell:
   laufen: der Job bleibt `running`, das Ergebnis füllt sich, und die Prüfseite
   zeigt Teile in Gliederungsreihenfolge. Der Job wird `done`, sobald ein Teil
   etwas produziert hat, und `failed` nur, wenn kein einziger Teil durchkam.
+  „Übernehmen" verlangt deshalb **kein fertiges Job**, sondern ein Ergebnis:
+  409 bleibt für einen gescheiterten Lauf und für einen, der noch keinen Teil
+  fertig hat (das ist auch, was einen laufenden Ein-Aufruf-Lauf weiterhin
+  unübernehmbar macht — er hat gar keine Teile).
 - **Neustart:** laufende (und noch wartende) Teile werden `failed` mit der
   Neustart-Meldung, **fertige bleiben stehen** und übernehmbar. Ein Job ohne
   Teile — der Ergänzen- und der NPC-Lauf bleiben Ein-Aufruf-Läufe — verhält
   sich unverändert.
 - **„Erneut versuchen" je Teil:** `POST …/generate/job/:id/parts/:key/retry`
-  startet genau diesen Teil neu, aus der gespeicherten Gliederung. Abbruch
+  startet genau diesen Teil neu, aus der gespeicherten Gliederung — in **einer
+  Transaktion** über der neu gelesenen Zeile, die nur diesen Teil anfasst:
+  während der Kontext-Lesung kann ein Geschwister-Teil fertig werden, und ein
+  Rückschreiben der ganzen `pipeline`-Spalte hat dessen Ergebnis überschrieben.
+  Ein noch `pending` Teil wird abgelehnt (409) — er gehört dem Pool des Laufs
+  und würde sonst zweimal laufen. Abbruch
   („Verwerfen") stoppt die offenen Teile; was schon übernommen wurde, ist ein
   Eintrag und kein Job mehr.
 - Ein Lauf pro Kampagne wie bisher, und die Review-Zustände aus #97

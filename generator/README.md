@@ -17,6 +17,12 @@ Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
    teurer, aber nie falsch. Validierung und Korrektur-Turns gelten für diesen
    Schritt allein.
 
+   **Obergrenze:** höchstens 12 Szenen und 12 neue Einträge je Lauf
+   (`MAX_OUTLINE_SCENES` / `MAX_OUTLINE_ENTRIES`). Jeder Teil ist ein
+   Provider-Aufruf, also entscheidet die Gliederung, was ein Lauf kostet;
+   darüber ist die Antwort ein Validierungsfehler und damit ein
+   Korrektur-Turn, der um Zusammenfassen bittet — kein fehlgeschlagener Lauf.
+
    Die Gliederung ist ein **rein systeminterner** Schritt zur Fehlerreduktion.
    Sie wird dem Nutzer nie angezeigt und nie zum Bearbeiten angeboten (PO,
    15.09.) — interessant ist nur das Ergebnis je Szene/NPC/Ort. Der Server
@@ -44,9 +50,13 @@ Kampagnenwissen, Glossar, Kontextlisten, Few-Shot, Gliederung — steht bei
 jedem Aufruf **zuerst** und wird beim Claude-Provider mit
 `cache_control: ephemeral` markiert (System-Prompt und konstanter Block je
 eine Marke); OpenAI-kompatible Endpoints cachen denselben Prefix implizit. Nur
-der variable Rest (Ausschnitt, bestehender Eintrag, Anweisung) wechselt je
-Teil. Die Anzeige „~N Tokens · M Aufrufe" summiert über alle Teile, die
-Gliederung eingeschlossen.
+der variable Rest wechselt je Teil: **welche Szene dieser Aufruf schreibt**
+(„## Diese Szene schreibst du jetzt"), der Ausschnitt, der bestehende Eintrag,
+die Anweisung. Der Gliederungs-Block selbst ist für jeden Teil eines Laufs
+**byteweise identisch** — deshalb steht die Zuweisung nicht darin.
+
+Die Anzeige „~N Tokens · M Aufrufe" summiert über alle Teile, die Gliederung
+eingeschlossen.
 
 **Ein Aufruf bleiben** (PO-Entscheid): der Ergänzen-Lauf (#36) und die
 NPC-Generierung (#21) — je ein Eintrag, nichts zu zerlegen.
@@ -121,8 +131,10 @@ Prompt.
 ## Tabellen (Issue #96)
 
 Dieselbe Mechanik wie bei der Orthografie-Regel: **eine identische Regel
-„Tabellen"** in allen System-Prompts (den Gliederungs-Prompt eingeschlossen,
-#102) — in den drei Create-Prompts unter
+„Tabellen"** in allen System-Prompts, die Dokumente schreiben — **nicht** im
+Gliederungs-Prompt, der überhaupt kein Dokument ausgibt (keine Callouts, kein
+Frontmatter, keine Tabellen; die Orthografie-Regel steht dort trotzdem, weil
+Titel, Einzeiler und `warnings` Text sind) — in den drei Create-Prompts unter
 „## Regeln", im Ergänzen-Prompt in der Ergänzungsregel, also genau **einmal**
 in jedem zusammengesetzten Prompt (`formatContract` in
 `server/src/generator-augment.ts` schneidet aus den Create-Prompts nur
