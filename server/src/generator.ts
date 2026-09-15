@@ -620,6 +620,18 @@ export function validateSceneDocument(input: {
   if (fm.status !== "draft") {
     errors.push(`${label}: "status" must be "draft"`);
   }
+  // The `chapter` key and the scene's ADDRESS have to say the same thing. The
+  // address is the run's (`<chapter>/<id>`, never the model's), so a reply
+  // that names a different chapter would produce a file sitting in one
+  // chapter while claiming another — the pool groups by the key, the file
+  // tree by the address, and the two would disagree forever after. Cheaper as
+  // a correction turn than as a scene the DM has to find and fix by hand.
+  if (typeof fm.chapter === "string" && fm.chapter !== "" && fm.chapter !== chapter) {
+    errors.push(
+      `${label}: "chapter" muss "${chapter}" sein — das Kapitel kommt aus dem Kontext ` +
+        "dieses Durchlaufs, nicht aus der Antwort",
+    );
+  }
 
   if (fm.npcs !== undefined && fm.npcs !== null) {
     if (!Array.isArray(fm.npcs) || fm.npcs.some((n) => typeof n !== "string")) {

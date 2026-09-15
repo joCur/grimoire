@@ -936,11 +936,11 @@ describe("POST /api/:campaign/generate", () => {
   });
 
   test("the chapter of a draft's address comes from the RUN, not the reply (#100)", async () => {
-    // `chapter:` in the properties is decoration; the address is built from
-    // the chapter the request named.
+    // The address is built from the chapter the REQUEST named — a reply that
+    // names no chapter at all changes nothing about it.
     const fake = useFake([
       reply({
-        scenes: [{ content: sceneMarkdown().replace("chapter: 01-salzhafen", "chapter: 99-weg") }],
+        scenes: [{ content: sceneMarkdown().replace("chapter: 01-salzhafen\n", "") }],
       }),
     ]);
     const res = await generate(generateBody);
@@ -948,6 +948,38 @@ describe("POST /api/:campaign/generate", () => {
     const result = (await res.json()) as GenerateResult;
     expect(result.scenes[0]!.path).toBe(SCENE_PATH);
     expect(fake.callsFor("treffen-am-kai")).toHaveLength(1);
+  });
+
+  test("a scene without a type is a planned one — no correction turn", async () => {
+    // `type` is nullable in the reply schema (the prompt's „nicht gegeben →
+    // null") while the scene validator demands a known one, so „null" has to
+    // mean what an unmarked scene has always meant: `planned` (contingency is
+    // the exception, and it says so). Hard-failing would make a
+    // schema-conform reply cost a turn.
+    const fake = useFake([
+      reply({ scenes: [{ content: sceneMarkdown().replace("type: planned\n", "") }] }),
+    ]);
+    const res = await generate(generateBody);
+    expect(res.status).toBe(200);
+    expect(fake.callsFor("treffen-am-kai")).toHaveLength(1);
+    expect(((await res.json()) as GenerateResult).scenes[0]!.markdown).toContain("type: planned");
+  });
+
+  test("a scene whose chapter is not the run's triggers a correction turn", async () => {
+    // …and a reply that names a DIFFERENT one is not decoration: the file
+    // would sit in the run's chapter while claiming another, and the pool
+    // groups by the key while the tree groups by the address. Cheaper as a
+    // correction turn than as a scene the DM has to find by hand.
+    const bad = reply({
+      scenes: [{ content: sceneMarkdown().replace("chapter: 01-salzhafen", "chapter: 99-weg") }],
+    });
+    const fake = useFake([bad, reply()]);
+    const res = await generate(generateBody);
+    expect(res.status).toBe(200);
+    const scene = fake.callsFor("treffen-am-kai");
+    expect(scene).toHaveLength(2);
+    expect(scene[1]!.corrections[0]!.correction).toContain('"chapter" muss "01-salzhafen" sein');
+    expect(((await res.json()) as GenerateResult).scenes[0]!.path).toBe(SCENE_PATH);
   });
 
   test("400 on malformed bodies — provider never called", async () => {
