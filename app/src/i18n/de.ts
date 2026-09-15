@@ -207,9 +207,11 @@ export const de = {
 
   "properties.chapter.title.label": "Titel",
   "properties.chapter.status.label": "Status",
-  "properties.chapter.status.placeholder": "active",
+  "properties.chapter.status.planned": "Geplant",
+  "properties.chapter.status.active": "Aktiv",
+  "properties.chapter.status.done": "Abgeschlossen",
   "properties.chapter.status.hint":
-    "Der Wert active markiert das Kapitel, das die Session-Ansicht öffnet.",
+    "Aktiv markiert das Kapitel, das die Session-Ansicht öffnet — es gibt genau eins; das vorherige wird wieder geplant.",
 
   // --- rename dialog --------------------------------------------------------
   "rename.title": "{kind}: id ändern",
@@ -383,15 +385,11 @@ export const de = {
   "pool.chapter.empty": "Noch keine Szenen in diesem Kapitel.",
   // The chapter pill: only `active` gets a label, every other value degrades
   // to the raw string (README, "Format degradiert").
-  "pool.chapter.status.active": "Aktiv",
   // --- chapter actions in the Kapitelübersicht (issue #115) ----------------
   // „Als aktiv setzen" am Kapitel: setzt `active` und nimmt es dem bisher
   // aktiven Kapitel ab — ein Serveraufruf, eine Transaktion.
-  "pool.chapter.setActive": "Als aktiv setzen",
-  "pool.chapter.activating": "Setze …",
   "pool.chapter.properties": "Kapitel-Eigenschaften",
   "pool.chapter.edit": "Kapitel bearbeiten",
-  "pool.chapter.setActive.failed": "Kapitel nicht aktiviert",
   "chapterBody.title": "Kapitel bearbeiten: {title}",
   "chapterBody.description":
     "Text des Kapitels als Markdown — die Überschrift „## Ziel des Kapitels“ ist die Zeile, die die Übersicht als Ziel zeigt.",

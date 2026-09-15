@@ -1,0 +1,88 @@
+// The chapter status enum in the app (issue #115): labels from the catalog,
+// the degrade rule, and WHICH write one value takes.
+//
+// The last one is the point of this file. Two of the three values are an
+// ordinary rev-guarded properties patch; `active` is the swap endpoint,
+// because it is one decision about two rows. Getting that branch wrong is
+// invisible in the UI and produces a campaign with two active chapters.
+
+import { CHAPTER_STATUSES } from "@grimoire/shared/types";
+import { describe, expect, test } from "bun:test";
+
+import { translator } from "@/i18n";
+import {
+  chapterStatusMeta,
+  chapterStatusNeedsSwap,
+  chapterStatusOptions,
+  chapterStatusValue,
+  chapterStatusWritable,
+  isChapterStatus,
+  CHAPTER_STATUS_DEFAULT,
+} from "@/lib/chapter-status";
+
+const t = translator("de");
+const tEn = translator("en");
+
+describe("the enum", () => {
+  test("is exactly the trio the API accepts, in lifecycle order", () => {
+    expect([...CHAPTER_STATUSES]).toEqual(["planned", "active", "done"]);
+    expect(CHAPTER_STATUS_DEFAULT).toBe("planned");
+  });
+
+  test("knows its own members and nothing else", () => {
+    for (const status of CHAPTER_STATUSES) expect(isChapterStatus(status)).toBe(true);
+    expect(isChapterStatus("laeuft")).toBe(false);
+    expect(isChapterStatus("")).toBe(false);
+  });
+});
+
+describe("labels", () => {
+  test("the German labels the PO asked for", () => {
+    expect(chapterStatusOptions(t).map((o) => o.label)).toEqual([
+      "Geplant",
+      "Aktiv",
+      "Abgeschlossen",
+    ]);
+  });
+
+  test("and the English ones", () => {
+    expect(chapterStatusOptions(tEn).map((o) => o.label)).toEqual(["Planned", "Active", "Done"]);
+  });
+
+  test("the option VALUES are the wire values, never translated", () => {
+    expect(chapterStatusOptions(t).map((o) => o.value)).toEqual([...CHAPTER_STATUSES]);
+    expect(chapterStatusOptions(tEn).map((o) => o.value)).toEqual([...CHAPTER_STATUSES]);
+  });
+
+  test("an unknown stored value degrades to its raw text", () => {
+    // The format degrades (README): a row from an import or a pre-#115 hand
+    // edit stays readable, verbatim, in whatever language the UI is in.
+    expect(chapterStatusMeta("laeuft", t).label).toBe("laeuft");
+    expect(chapterStatusMeta("laeuft", tEn).label).toBe("laeuft");
+  });
+
+  test("no status reads as planned — every creation path writes it", () => {
+    expect(chapterStatusValue(undefined)).toBe("planned");
+    expect(chapterStatusValue("")).toBe("planned");
+    expect(chapterStatusValue("   ")).toBe("planned");
+    expect(chapterStatusValue("done")).toBe("done");
+    expect(chapterStatusValue("laeuft")).toBe("laeuft");
+  });
+});
+
+describe("which write a value takes", () => {
+  test("only „Aktiv\" is the swap", () => {
+    expect(chapterStatusNeedsSwap("active")).toBe(true);
+    expect(chapterStatusNeedsSwap("planned")).toBe(false);
+    expect(chapterStatusNeedsSwap("done")).toBe(false);
+  });
+
+  test("the swap needs no rev, a patch does", () => {
+    // A pool row carries no rev until its menu opens and fetches the chapter
+    // document — „Aktiv\" must stay available even if that read fails.
+    expect(chapterStatusWritable("active", undefined)).toBe(true);
+    expect(chapterStatusWritable("planned", undefined)).toBe(false);
+    expect(chapterStatusWritable("done", undefined)).toBe(false);
+    expect(chapterStatusWritable("planned", 3)).toBe(true);
+  });
+});

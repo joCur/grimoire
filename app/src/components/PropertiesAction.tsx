@@ -191,12 +191,19 @@ function PropertiesDialog({
   // hand over to the rename dialog. undefined = nothing pending.
   const [discardIntent, setDiscardIntent] = useState<"close" | "rename">();
 
-  const save = usePropertiesFormMutation(campaign, file.path, base, {
-    onSaved: onClose,
-    onConflict: (reread) => {
-      if (reread !== undefined) setBase(reread.rev);
+  const save = usePropertiesFormMutation(
+    campaign,
+    file.path,
+    base,
+    {
+      onSaved: onClose,
+      onConflict: (reread) => {
+        if (reread !== undefined) setBase(reread.rev);
+      },
     },
-  });
+    // A chapter patch can swap the active chapter server-side — see the hook.
+    file.kind,
+  );
 
   // What a save would send: the values plus the pending chip text.
   const effective = commitPendingText(fields, values, pending);

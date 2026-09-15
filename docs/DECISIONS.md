@@ -796,6 +796,33 @@ zusammengesetzten Fremdschlüssel von 0012 also verletzen. Der Reparaturschritt
 setzt solche Werte in derselben Transaktion auf `NULL` (was „keine
 Kapitel-Referenz" seit immer bedeutet) und meldet sie ebenfalls beim Start.
 
+**Der Kapitel-Status ist ein Enum** (Nachforderung des PO zu #115):
+`planned | active | done`, definiert genau einmal in `shared/`
+(`CHAPTER_STATUSES`), Labels de „Geplant / Aktiv / Abgeschlossen", en
+„Planned / Active / Done". Die API schreibt nur diese drei Werte und antwortet
+sonst **400**; gespeicherte Fremdwerte werden weiterhin **verbatim angezeigt**
+und es gibt **keinen CHECK-Constraint** auf der Spalte — das Format degradiert
+wie überall, nur der Schreibweg ist eng. Ein neu angelegtes Kapitel startet auf
+`planned` (wie die Zeilen aus `ensureChapterRow` und dem Reparaturschritt); ein
+`NULL` überlebt nur auf Zeilen von vor #115 und wird in der App als `planned`
+gelesen.
+
+`active` ist dabei **eine Entscheidung über zwei Zeilen**, und die Invariante
+„genau ein aktives Kapitel" gehört der **Spalte, nicht einem Endpoint**:
+`POST /chapters/:id/active` und ein `PATCH /properties`, dessen Status auf
+`active` landet, führen denselben Tausch in derselben Transaktion aus
+(`clearOtherActiveChapters`). Sonst wäre der Dialog „Kapitel-Eigenschaften"
+eine zweite Tür daran vorbei.
+
+In der Kapitelübersicht ist die Status-Pille deshalb **das Bedienelement**
+(wie der Szenen-Regler aus #28, gemeinsames Markup in
+`components/StatusMenu`): „Aktiv" ruft den Tausch-Endpoint, „Geplant" und
+„Abgeschlossen" patchen das Kapitel. Der separate Knopf „Als aktiv setzen" ist
+entfallen — zwei Bedienelemente für einen Wert sind der Weg, auf dem sie sich
+widersprechen. Mobil bleibt der Status **Anzeige**: unter `md` rendert die
+Route die Startfläche statt der Kapitelübersicht, die Regel steht also genau
+an einer Stelle.
+
 **Konsequenz für Migration 0012:** `PRAGMA foreign_keys=OFF`, das drizzle-kit
 um den Tabellen-Neubau generiert, ist im Migrator wirkungslos — der läuft in
 einer Transaktion, und dort ist das Pragma ein No-op. Mit aktiver Durchsetzung

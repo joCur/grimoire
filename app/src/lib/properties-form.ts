@@ -36,6 +36,7 @@ import type { Translate } from "@/i18n/format";
 import type { MessageKey } from "@/i18n/messages";
 import { isEntityId, npcStatusLabel } from "@/lib/entity";
 import { fmQuickstats, fmStringArray } from "@/lib/properties";
+import { chapterStatusOptions } from "@/lib/chapter-status";
 import { sceneStatusOptions } from "@/lib/scene-status";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
@@ -245,10 +246,16 @@ function chapterFields(t: Translate): readonly PropertiesField[] {
   return [
     { key: "title", label: t("properties.chapter.title.label"), control: "text", required: true },
     {
+      // A SELECT since issue #115: the chapter status is a three-value enum
+      // the API enforces (400 for anything else), so a free text field could
+      // only produce a rejected save. Picking „Aktiv" here is the same swap
+      // the pool's regler makes — the server performs it for a properties
+      // patch too, so the one-active invariant does not depend on which door
+      // the write came through.
       key: "status",
       label: t("properties.chapter.status.label"),
-      control: "text",
-      placeholder: t("properties.chapter.status.placeholder"),
+      control: "select",
+      options: chapterStatusOptions(t),
       hint: t("properties.chapter.status.hint"),
     },
   ];

@@ -17,9 +17,11 @@
 //                      reading view's inline editor — the pool is a list, it
 //                      does not turn into an editing surface), same rev
 //                      protocol.
-//   „Als aktiv setzen" ONE call that sets `active` here and clears it on the
-//                      chapter that had it. Absent on the chapter that is
-//                      already active — there is nothing to set.
+// „Als aktiv setzen" USED to be a third action here. It is gone: the status
+// regler in the chapter's heading row (components/ChapterStatusMenu) already
+// offers „Aktiv" and calls the same swap endpoint, so the button was the same
+// decision said twice — and two controls for one value is how they end up
+// disagreeing about what the chapter's status is.
 //
 // MOBILE IS READ-ONLY, and it comes for free: below md the route renders the
 // mobile start surface instead of the pool (routes/pool.tsx), so this whole
@@ -32,11 +34,9 @@
 // fetched twice.
 
 import type { CampaignTree, FileResponse } from "@grimoire/shared/types";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { PenLine, Play } from "lucide-react";
+import { PenLine } from "lucide-react";
 import { useState } from "react";
 
-import { setChapterActive } from "@/api";
 import { HeaderAction } from "@/components/HeaderAction";
 import { PropertiesAction } from "@/components/PropertiesAction";
 import { Button } from "@/components/ui/button";
@@ -60,14 +60,11 @@ function chapterLabel(file: FileResponse, chapter: string): string {
 export function ChapterActions({
   campaign,
   chapter,
-  status,
   file,
   tree,
 }: {
   campaign: string;
   chapter: string;
-  /** The chapter's stored status — decides whether „Als aktiv setzen" shows. */
-  status: string | undefined;
   /**
    * The chapter's document. Undefined while the pool's lazy query is still
    * running (or when the chapter has no document to read): the two editing
@@ -82,7 +79,6 @@ export function ChapterActions({
 
   return (
     <div className="mb-3 flex flex-wrap items-center gap-1">
-      {status !== "active" && <SetActiveAction campaign={campaign} chapter={chapter} />}
       {file !== undefined && (
         <>
           {/* Named „Kapitel-…" rather than plain „Eigenschaften"/„Bearbeiten":
@@ -112,48 +108,6 @@ export function ChapterActions({
         />
       )}
     </div>
-  );
-}
-
-/**
- * „Als aktiv setzen". No dialog and no confirmation: it is one reversible
- * value, and the chapter it takes the flag from is visible in the same list.
- * A failure is said inline and quietly — the same register as the status
- * regler, which is the other one-click write in this app.
- */
-function SetActiveAction({ campaign, chapter }: { campaign: string; chapter: string }) {
-  const t = useT();
-  const queryClient = useQueryClient();
-  const [failed, setFailed] = useState(false);
-  const activate = useMutation({
-    mutationFn: () => setChapterActive(campaign, chapter),
-    onMutate: () => setFailed(false),
-    onSuccess: async () => {
-      // The TREE carries every chapter's status (the pool's pill and the
-      // session view read it), and BOTH chapter documents moved — so the
-      // whole tree and the file cache go, not one seeded entry.
-      await queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
-      await queryClient.invalidateQueries({ queryKey: ["file", campaign] });
-      await queryClient.invalidateQueries({ queryKey: ["session", campaign] });
-    },
-    onError: () => setFailed(true),
-  });
-
-  return (
-    <>
-      <HeaderAction
-        icon={Play}
-        label={activate.isPending ? t("pool.chapter.activating") : t("pool.chapter.setActive")}
-        onClick={() => {
-          if (!activate.isPending) activate.mutate();
-        }}
-      />
-      {failed && (
-        <span aria-live="polite" className="text-[12px] text-destructive">
-          {t("pool.chapter.setActive.failed")}
-        </span>
-      )}
-    </>
   );
 }
 

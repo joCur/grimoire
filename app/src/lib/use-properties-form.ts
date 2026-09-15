@@ -35,6 +35,14 @@ export function usePropertiesFormMutation(
     /** The re-read file after a conflict; the dialog moves its base to it. */
     onConflict: (file: FileResponse | undefined) => void;
   },
+  /**
+   * The kind on screen. Only one value changes anything: a CHAPTER patch can
+   * set `status: active`, which the server answers by ALSO putting the
+   * previously active chapter back to `planned` (issue #115) — a second
+   * document this dialog never read. Its cached copy would keep the old pill,
+   * so the whole file cache goes for that kind and not just the seeded entry.
+   */
+  kind?: string,
 ): RevWriteMutation<PropertiesWrite> {
   return useRevWriteMutation<PropertiesWrite>({
     write: withRev(rev, (write, rev) =>
@@ -42,6 +50,7 @@ export function usePropertiesFormMutation(
     ),
     fileKey: ["file", campaign, path],
     invalidateOnSuccess: [
+      ...(kind === "chapter" ? [["file", campaign]] : []),
       ["tree", campaign],
       ["search", campaign],
     ],
