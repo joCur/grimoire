@@ -370,11 +370,8 @@ ein Spiegel erzeugt, wird nicht gebaut.
   Abfederung der Einbahnstraße, zusammen mit „manueller Export" als bekanntem
   Später-Pfad.
 - **Die Migration verliert nie still Inhalt.** Was nicht zu Zeilen wird,
-  liegt wörtlich in `unknown_files` — Textdateien in `content`, Nicht-Text
-  (Karten-PNG, PDF-Handout) als Bytes in `content_blob`, denn eine als UTF-8
-  verstümmelte Kopie unter der Überschrift „unverändert übernommen" wäre
-  schlimmer als eine ehrliche Absage. Jede Degradierung steht mit Grund und
-  Lauf-Id (`migration_report.run_id`) daneben.
+  nennt der Lauf mit Pfad und Grund im Bericht auf stdout; die Datei bleibt
+  unverändert im Baum, der ohnehin nur Eingabe ist.
 - **Die Migration ist wiederaufnehmbar.** Neben `meta['migrated_at']` (Lauf
   fertig) markiert `meta['migrated_campaign:<id>']` jede einzelne, in ihrer
   eigenen Transaktion committete Kampagne. Ein Abbruch zwischen zwei

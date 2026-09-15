@@ -39,7 +39,6 @@
 
 import { sql } from "drizzle-orm";
 import {
-  blob,
   foreignKey,
   integer,
   primaryKey,
@@ -689,66 +688,7 @@ export const generateJobs = sqliteTable(
   (t) => [uniqueIndex("generate_jobs_campaign_unique").on(t.campaignId)],
 );
 
-// --- migration bookkeeping --------------------------------------------------
-
-/**
- * A file the one-time migration could not turn into rows, kept VERBATIM.
- * This is the promise "nothing is lost": whatever the importer did not
- * understand is still readable here, byte for byte, next to a
- * `migration_report` row saying why.
- *
- * TEXT files live in `content`, non-text files (a map png, a pdf handout) in
- * `content_blob` — decoding those as UTF-8 would replace unmappable bytes
- * with U+FFFD, and a mangled copy under the label "verbatim" is worse than
- * an honest one.
- */
-export const unknownFiles = sqliteTable(
-  "unknown_files",
-  {
-    campaignId: text("campaign_id").notNull(),
-    /** Campaign-relative path the file had, forward slashes. */
-    path: text("path").notNull(),
-    /** The complete file contents, frontmatter block included; "" for a blob. */
-    content: text("content").notNull(),
-    /** The raw bytes of a NON-TEXT file; NULL when `content` holds the file. */
-    contentBlob: blob("content_blob", { mode: "buffer" }),
-    /** ISO timestamp of the import. */
-    at: text("at").notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.campaignId, t.path] }),
-    foreignKey({
-      columns: [t.campaignId],
-      foreignColumns: [campaigns.id],
-      name: "unknown_files_campaign_fk",
-    })
-      .onUpdate("cascade")
-      .onDelete("cascade"),
-  ],
-);
-
-/**
- * Everything the migration had to degrade, one row per incident — surfaced by
- * `GET /api/:campaign/migration-report` and once in the UI (Scheibe 2). An
- * EMPTY report is the success criterion of a clean import.
- */
-export const migrationReport = sqliteTable("migration_report", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  campaignId: text("campaign_id").notNull(),
-  /** Campaign-relative path the incident happened in; "" when campaign-wide. */
-  path: text("path").notNull().default(""),
-  /** Human-readable German reason — this is read by the DM, not by code. */
-  reason: text("reason").notNull(),
-  at: text("at").notNull(),
-  /**
-   * Which migration RUN produced this row. The table is cumulative (a run
-   * interrupted mid-way is resumed by a later one), so "the findings of this
-   * run" needs an id of its own — two runs can share an `at` to the
-   * millisecond, and reading someone else's findings as fresh is how a
-   * report stops being trusted.
-   */
-  runId: text("run_id").notNull().default(""),
-});
+// --- bookkeeping ------------------------------------------------------------
 
 /**
  * Key/value bookkeeping of the database itself. Known keys:
@@ -849,7 +789,5 @@ export const schema = {
   glossary,
   campaignKnowledge,
   generateJobs,
-  unknownFiles,
-  migrationReport,
   meta,
 };

@@ -253,11 +253,8 @@ api.get("/:campaign/knowledge", async (c) =>
   c.json(await readKnowledge(c.req.param("campaign"))),
 );
 
-// GET /api/:campaign/migration-report is GONE (issue #79 AK6). The markdown
-// import is no longer part of the production path — it is the dev/E2E tool
-// `grimoire seed`, which prints its own report — so there is nothing for the
-// app to surface any more. The `migration_report` table stays: it is the
-// importer's own bookkeeping (server/src/db/).
+// There is no migration-report endpoint: the markdown import is the dev/E2E
+// tool `grimoire seed`, which prints its own report on stdout.
 
 // --- write endpoints (issue #5) ---------------------------------------------------
 
