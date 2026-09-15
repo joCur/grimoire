@@ -54,15 +54,17 @@ export function ChapterStatusControl({
     enabled: open && campaign !== "" && chapter !== "",
     retry: false,
   });
+  const shown = chapterStatusValue(status);
   const { setStatus, pendingStatus, message } = useChapterStatusMutation(
     campaign,
     chapter,
     file.data?.rev,
+    shown,
   );
 
   return (
     <ChapterStatusMenu
-      status={chapterStatusValue(status)}
+      status={shown}
       pendingStatus={pendingStatus}
       message={message}
       open={open}

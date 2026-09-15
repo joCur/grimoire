@@ -877,6 +877,18 @@ test("the chapter status menu shows the German labels and swaps the active chapt
   await page.keyboard.press("Escape");
 
   // --- the swap, from the OTHER chapter's regler ---
+  // From here on every swap call is counted: ONE decision about two rows is
+  // ONE request. A second one bounced the flag straight back to the chapter
+  // the DM had just left (issue #115 hotfix) — the pill said „Aktiv\" on both
+  // rows for a moment, and re-asserting it for the previously active chapter
+  // is a swap of its own.
+  const swaps: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().includes("/active")) {
+      swaps.push(request.url().replace(/^.*\/api\//, ""));
+    }
+  });
+
   const second = page.getByRole("button", { name: /Kapitel 2: Die Bucht/ });
   await expect(second).toBeVisible();
   const secondMenu = page.getByRole("button", { name: "Status ändern, aktuell Geplant" });
@@ -889,6 +901,54 @@ test("the chapter status menu shows the German labels and swaps the active chapt
     .poll(async () => (await api.file("01-salzhafen/_chapter")).properties.status)
     .toBe("planned");
   expect((await api.file(secondPath)).properties.status).toBe("active");
+
+  // Exactly ONE call, and it named the chapter the DM picked — no second one
+  // from the row that lost the flag.
+  expect(swaps).toEqual([`beispiel/chapters/${secondPath.split("/")[0]}/active`]);
+
+  // …and it stays that way with the invalidation and a version poll behind it:
+  // the tree shows B active and A planned two seconds later, still one call.
+  await page.waitForTimeout(2_000);
+  expect(swaps).toHaveLength(1);
+  await expect(page.getByRole("button", { name: "Status ändern, aktuell Aktiv" })).toHaveCount(1);
+  await expect(second).toBeVisible();
+  // Per CHAPTER row (the regler beside its h2) — the scene rows in the open
+  // accordion carry reglers of their own.
+  const rows = await page
+    .locator('xpath=//h2/ancestor::div[1]//button[starts-with(@aria-label,"Status ändern")]')
+    .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
+  expect(rows).toEqual([
+    "Status ändern, aktuell Geplant",
+    "Status ändern, aktuell Aktiv",
+  ]);
+  expect((await api.file("01-salzhafen/_chapter")).properties.status).toBe("planned");
+  expect((await api.file(secondPath)).properties.status).toBe("active");
+});
+
+// The other half of that hotfix: the regler is a RADIO group, so the checked
+// option is the state — selecting it is nothing to write. „Aktiv\" on the
+// chapter that already holds the flag used to call the swap endpoint anyway,
+// which is how a stray select on the previously active row (its pill still
+// reads „Aktiv\" until the invalidation lands) could take the flag back.
+test("re-selecting the value a chapter already has writes nothing", async ({ page, api }) => {
+  await api.send("POST", "beispiel/chapters", { title: "Kapitel 2: Die Bucht" });
+
+  const writes: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" || request.method() === "PATCH") {
+      writes.push(`${request.method()} ${request.url().replace(/^.*\/api\//, "")}`);
+    }
+  });
+
+  await page.goto("/beispiel");
+  const activeMenu = page.getByRole("button", { name: "Status ändern, aktuell Aktiv" });
+  await activeMenu.click();
+  await page.getByRole("menuitemradio", { name: "Aktiv" }).click();
+  await page.waitForTimeout(1_000);
+
+  expect(writes).toEqual([]);
+  await expect(activeMenu).toBeVisible();
+  expect((await api.file("01-salzhafen/_chapter")).properties.status).toBe("active");
 });
 
 // „Abgeschlossen" is the other branch: a rev-guarded properties patch on the
@@ -911,6 +971,68 @@ test("picking Abgeschlossen patches that chapter and leaves the active one alone
   expect((await api.file(created.path)).properties.status).toBe("done");
   // The evening's chapter is untouched.
   expect((await api.file("01-salzhafen/_chapter")).properties.status).toBe("active");
+});
+
+// The dialog is a FORM over the same value, and a form sends its DIFF: a
+// status field the DM never touched must not be written, no matter what the
+// cache behind the dialog happened to hold when it opened. That is the other
+// half of the #115 bounce-back: the app's copy of a chapter document goes
+// stale the moment another writer moves the flag (up to one version poll), and
+// an untouched „Aktiv" in the form would put it back — from a dialog that was
+// only opened to fix a title.
+test("an untouched status field is not written, not even a stale Aktiv", async ({
+  page,
+  api,
+}) => {
+  const patches: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "PATCH") patches.push(request.postData() ?? "");
+  });
+
+  await page.goto("/beispiel");
+  // The active chapter is open by default: its document is in the app's cache
+  // now, with `status: active`.
+  const properties = page.getByRole("button", { name: "Kapitel-Eigenschaften" });
+  await expect(properties).toBeVisible();
+
+  // Another writer moves the flag. The app does not know yet — the version
+  // poll is what tells it, and the dialog opens before that.
+  const created = await api.send<{ path: string }>("POST", "beispiel/chapters", {
+    title: "Kapitel 2: Die Bucht",
+    id: "02",
+  });
+  await api.send("POST", "beispiel/chapters/02/active");
+  expect((await api.file("01-salzhafen/_chapter")).properties.status).toBe("planned");
+
+  await properties.click();
+  const dialog = page.getByRole("dialog");
+  // The scenario, spelled out: the form opened on the STALE value.
+  await expect(dialog.getByLabel("Status")).toHaveValue("active");
+
+  // Only the title is touched.
+  await dialog.getByLabel("Titel").fill("Kapitel 1: Salzhafen");
+  await dialog.getByRole("button", { name: "Speichern" }).click();
+  // The other writer moved the chapter document, so the frozen rev is stale:
+  // the first attempt is the 409 of ADR #4, nothing written. The typed title
+  // stays and the next attempt writes on top of what is stored — with the
+  // status STILL untouched, which is the point of this test.
+  await expect(dialog).toContainText("Inzwischen geändert");
+  await dialog.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  // The title is written, the status is not even mentioned — and the chapter
+  // the other writer activated keeps the flag.
+  const stored = await api.file("01-salzhafen/_chapter");
+  expect(stored.properties.title).toBe("Kapitel 1: Salzhafen");
+  expect(stored.properties.status).toBe("planned");
+  expect((await api.file(created.path)).properties.status).toBe("active");
+  // Both attempts sent the title and nothing else — „status" never appears on
+  // the wire, so no stale „Aktiv" can ride along.
+  expect(patches).toHaveLength(2);
+  for (const body of patches) {
+    expect(body).toContain("Kapitel 1: Salzhafen");
+    expect(body).not.toContain("status");
+  }
 });
 
 // The „Kapitel-Eigenschaften" dialog is the second door onto the same value —

@@ -125,10 +125,23 @@ export async function writeChapterStatus(
 }
 
 /**
- * Can this value be written with what we have? The swap always can; a patch
- * needs the rev of the chapter document, which a pool row only fetches once
- * the menu opens.
+ * Can this value be written with what we have? A patch needs the rev of the
+ * chapter document, which a pool row only fetches once the menu opens; the
+ * swap needs no rev at all.
+ *
+ * `current` is what the row SHOWS (issue #115 hotfix): a chapter that already
+ * holds the flag is never set active again. The endpoint would happily
+ * re-assert it, and that is the damage — the swap moves a SECOND row, so
+ * „Aktiv" on the chapter whose pill still reads „Aktiv" (the previously active
+ * one, until the invalidation lands) pulls the flag back off the chapter the
+ * DM just picked. The domain rule, next to the control's own no-op filter
+ * (`statusSelectionWrites`): this one holds for every caller of the write.
  */
-export function chapterStatusWritable(status: string, rev: number | undefined): boolean {
-  return chapterStatusNeedsSwap(status) || rev !== undefined;
+export function chapterStatusWritable(
+  status: string,
+  rev: number | undefined,
+  current?: string | undefined,
+): boolean {
+  if (chapterStatusNeedsSwap(status)) return current !== "active";
+  return rev !== undefined;
 }

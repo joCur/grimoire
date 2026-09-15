@@ -56,6 +56,35 @@ export interface StatusMenuProps {
   onSelect: (status: string) => void;
 }
 
+/**
+ * Does selecting `next` mean a WRITE — or is it the value the control already
+ * shows? (Issue #115 hotfix.)
+ *
+ * A radio group reports EVERY select, the one of the already-checked option
+ * included, and Radix's menu item selects on `click` (and on a `pointerup`
+ * whose `pointerdown` happened elsewhere, e.g. a press on the trigger dragged
+ * onto an item). So a stray or repeated select of the current value used to
+ * reach the write layer as an ordinary status change.
+ *
+ * For a scene that was a pointless rev bump. For a CHAPTER it was a bug with
+ * teeth: „Aktiv" is a SWAP of two rows, so re-asserting it for the chapter
+ * whose pill still reads „Aktiv" — the previously active one, whose tree data
+ * is only refreshed once the invalidation lands — pulls the flag straight back
+ * off the chapter the DM just picked. The regler is a radio group: the checked
+ * option IS the state, and selecting it is nothing to write.
+ *
+ * `pendingStatus` counts as the current value on purpose: while a write runs
+ * the trigger already shows the target, so selecting it again is the same
+ * no-op (and `useRevWriteMutation` would drop it anyway).
+ */
+export function statusSelectionWrites(
+  next: string,
+  status: string,
+  pendingStatus?: string | undefined,
+): boolean {
+  return next !== (pendingStatus ?? status);
+}
+
 export function StatusMenu({
   status,
   pendingStatus,
@@ -108,7 +137,15 @@ export function StatusMenu({
           </span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-[170px]">
-          <DropdownMenuRadioGroup value={status} onValueChange={onSelect}>
+          <DropdownMenuRadioGroup
+            value={status}
+            onValueChange={(next) => {
+              // Selecting what is already selected is not a change — see
+              // `statusSelectionWrites`. One guard for both domains: the
+              // chapter's swap must never be re-asserted by a stray select.
+              if (statusSelectionWrites(next, status, pendingStatus)) onSelect(next);
+            }}
+          >
             {options.map((option) => {
               const optionMeta = meta(option.value);
               return (

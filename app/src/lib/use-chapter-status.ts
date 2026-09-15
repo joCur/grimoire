@@ -25,6 +25,12 @@ export function useChapterStatusMutation(
   chapter: string,
   /** Rev of `<chapter>/_chapter` — only the patch branch needs it. */
   rev: number | undefined,
+  /**
+   * The status this chapter is SHOWN with. It gates the swap: a chapter that
+   * already holds the flag is never set active again — see
+   * `chapterStatusWritable`.
+   */
+  current?: string | undefined,
 ): ChapterStatusMutation {
   const mutation: RevWriteMutation<string> = useRevWriteMutation<string>({
     write: (status) => writeChapterStatus(campaign, chapter, status, rev),
@@ -41,7 +47,7 @@ export function useChapterStatusMutation(
 
   return {
     setStatus: (status: string) => {
-      if (!chapterStatusWritable(status, rev)) return;
+      if (!chapterStatusWritable(status, rev, current)) return;
       mutation.write(status);
     },
     pendingStatus: mutation.pendingVariables,

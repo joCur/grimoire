@@ -85,4 +85,20 @@ describe("which write a value takes", () => {
     expect(chapterStatusWritable("done", undefined)).toBe(false);
     expect(chapterStatusWritable("planned", 3)).toBe(true);
   });
+
+  test("the chapter that already holds the flag is never set active again", () => {
+    // The bounce-back of the #115 hotfix: the swap moves a SECOND row, so
+    // re-asserting „Aktiv" for the chapter whose pill still reads „Aktiv"
+    // takes the flag away from the chapter the DM just picked.
+    expect(chapterStatusWritable("active", undefined, "active")).toBe(false);
+    expect(chapterStatusWritable("active", 3, "active")).toBe(false);
+    // Every other row may still ask for it, with or without a rev.
+    expect(chapterStatusWritable("active", undefined, "planned")).toBe(true);
+    expect(chapterStatusWritable("active", undefined, "done")).toBe(true);
+    // An unknown stored value degrades to „not active" here as well.
+    expect(chapterStatusWritable("active", undefined, "laeuft")).toBe(true);
+    // The patch branch is unaffected — „Abgeschlossen" on the active chapter
+    // is an ordinary, legitimate write.
+    expect(chapterStatusWritable("done", 3, "active")).toBe(true);
+  });
 });
