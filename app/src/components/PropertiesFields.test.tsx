@@ -77,14 +77,26 @@ describe("reference fields", () => {
     expect(html).toContain("Neu — wird beim Speichern angelegt.");
   });
 
-  test("a value that is no slug names the id to use instead", () => {
-    // `location` IS the group the scene sits under (issue #100), so there is
-    // no free-text half of the field any more: the line names the slug the
-    // server would suggest, and the save is blocked (propertiesFormIssues).
+  test("free text in the Ort field promises the entry BY NAME (#100)", () => {
+    // `location` IS the group the scene sits under (issue #100) and it stores
+    // an id — but the DM types a name and the save slugs it, so the line says
+    // what will happen instead of handing over the slug as homework.
     const html = render(sceneField("location"), { kind: "text", text: "Der alte Hafen" });
-    expect(html).toContain("Keine Orts-id");
-    expect(html).toContain("der-alte-hafen");
+    expect(html).toContain("Neu — wird als Ort „Der alte Hafen");
+    expect(html).not.toContain("Keine Orts-id");
+  });
+
+  test("text that SLUGS to a known Ort resolves to that Ort's name (#100)", () => {
+    // Typing the name lands on the entry that is already there — no „neu".
+    const html = render(sceneField("location"), { kind: "text", text: "Leuchtturm" });
+    expect(html).toContain("Der Leuchtturm");
     expect(html).not.toContain("angelegt");
+  });
+
+  test("text no slug can be derived from says nothing — the issue does (#100)", () => {
+    const html = render(sceneField("location"), { kind: "text", text: "???" });
+    expect(html).not.toContain("angelegt");
+    expect(html).not.toContain("Keine Orts-id");
   });
 
   test("an unknown CHAPTER is not promised — chapters are never auto-created", () => {

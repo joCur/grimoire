@@ -215,30 +215,52 @@ test("scene properties: chips, reference and status land in the file — nothing
   expect(after.body).toBe(pristine.body);
 });
 
-test('free text in the Ort field names the id and blocks the save (#100)', async ({
+test('free text in the Ort field creates the Ort under the typed NAME (#100)', async ({
   page,
   api,
 }) => {
-  // The group a scene sits under IS its `location`, so the field takes an id
-  // and nothing else. The form used to annotate free text „Freier Text —
-  // kein Eintrag" and let the DM click Speichern into a 400.
+  // The group a scene sits under IS its `location`, and the column holds an
+  // id — but that is the app's problem, not the DM's. The form used to refuse
+  // free text („Keine Orts-id — „der-alte-hafen" verwenden.") and disable
+  // Speichern; it now slugs what was typed and sends the text as the new
+  // entry's NAME, in the same write.
   await page.goto(SCENE_URL);
   const dialog = await openProperties(page);
+  const ort = dialog.getByLabel("Ort");
   const save = dialog.getByRole("button", { name: "Speichern" });
 
-  await dialog.getByLabel("Ort").fill("Der alte Hafen");
-  // The line names the id the server would suggest — same transliteration.
-  await expect(referenceHint(dialog, 'Keine Orts-id — „der-alte-hafen" verwenden.')).toBeVisible();
-  await expect(dialog.getByText('ist keine id — „der-alte-hafen"')).toBeVisible();
+  // Typing the NAME of an existing Ort resolves to that Ort — the save would
+  // land on the entry that is already there, so nothing is promised.
+  await ort.fill("Leuchtturm");
+  await expect(referenceHint(dialog, "Der Leuchtturm von Salzhafen")).toBeVisible();
+
+  // Text no slug can be derived from is the one thing that still blocks.
+  await ort.fill("???");
+  await expect(dialog.getByText('„???" ergibt keine Orts-id')).toBeVisible();
   await expect(save).toBeDisabled();
 
-  // The id it proposes is accepted, and the save is available again.
-  await dialog.getByLabel("Ort").fill("der-alte-hafen");
-  await expect(referenceHint(dialog, "Neu — wird beim Speichern angelegt.")).toBeVisible();
+  // And a new name says what saving will do with it.
+  await ort.fill("Der alte Hafen");
+  await expect(
+    referenceHint(dialog, 'Neu — wird als Ort „Der alte Hafen" angelegt.'),
+  ).toBeVisible();
   await expect(save).toBeEnabled();
+  await save.click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  // Nothing was written by any of it.
-  expect(await api.raw(SCENE)).toContain("location: leuchtturm");
+  // The scene moved into the new group, and the slug is what the file holds.
+  await expect(page).toHaveURL(
+    /\/beispiel\/file\/01-salzhafen\/der-alte-hafen\/lighthouse-arrival$/,
+  );
+  await expect.poll(() => api.raw(SCENE)).toContain("location: der-alte-hafen");
+
+  // The Ort exists and is called what the DM typed — not by its own id.
+  expect(await api.exists("locations/der-alte-hafen")).toBe(true);
+  expect((await api.file("locations/der-alte-hafen")).properties.name).toBe("Der alte Hafen");
+
+  // …and the chapter overview heads the group with that name.
+  await page.goto("/beispiel");
+  await expect(page.getByRole("heading", { level: 3, name: "Der alte Hafen" })).toBeVisible();
 });
 
 test('a rejected save shows the SERVER sentence, not the generic one (#100)', async ({

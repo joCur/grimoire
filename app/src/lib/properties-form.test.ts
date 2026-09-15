@@ -11,16 +11,20 @@ import { ApiError } from "@/api";
 import {
   canSubmitProperties,
   commitPendingText,
+  locationRef,
+  locationRefId,
   propertiesFieldsFor,
   propertiesFormIssues,
   propertiesFormValues,
   propertiesKindLabel,
+  propertiesLocationName,
   propertiesPatch,
   hasPropertiesChanges,
   referenceLabel,
   referenceOptions,
   selectOptions,
   writePropertiesForm,
+  type FieldOption,
   type FormValues,
   type PropertiesField,
 } from "./properties-form";
@@ -410,38 +414,115 @@ describe("the npcs list holds ids, not names (#70 audit)", () => {
   });
 });
 
-describe("a location is an id, never free text (#100)", () => {
+describe("the Ort field: free text in, a slug out (#100)", () => {
   const sceneFields = fields("scene");
   const initial = propertiesFormValues(sceneFields, SCENE_FM);
   const withLocation = (text: string): FormValues => ({
     ...initial,
     location: { kind: "text", text },
   });
+  /** The Orte that HAVE an entry, as the dialog offers them. */
+  const known: readonly FieldOption[] = [
+    { value: "bucht", label: "Die Nordbucht" },
+    { value: "leuchtturm", label: "Der Leuchtturm von Salzhafen" },
+    { value: "namenlos", label: "namenlos" },
+  ];
 
-  test("free text blocks the save and names the id to use", () => {
-    // `location` IS the group the scene sits under, so the server answers
-    // `400 location_not_an_id` with the slug it would have used. The form
-    // says the same thing before the click — and with the same slug.
-    const issues = propertiesFormIssues(sceneFields, withLocation("Der alte Hafen"), initial, t);
-    expect(issues.location).toBe(
-      'Ort „Der alte Hafen" ist keine id — „der-alte-hafen" verwenden (wird beim Speichern angelegt).',
-    );
+  test("an existing id resolves to the Ort's name", () => {
+    expect(locationRef("leuchtturm", known)).toEqual({
+      kind: "known",
+      id: "leuchtturm",
+      name: "Der Leuchtturm von Salzhafen",
+    });
+    // An entry without a name has nothing to say under the field.
+    expect(locationRef("namenlos", known)).toEqual({ kind: "known", id: "namenlos" });
   });
 
-  test("an id is fine, known or not — an unknown one is created on save", () => {
+  test("text that SLUGS to an existing id resolves to the same Ort", () => {
+    // The DM types the name, not the key — and lands on the entry that is
+    // already there instead of being told to look up its id.
+    expect(locationRef("Leuchtturm", known)).toEqual({
+      kind: "known",
+      id: "leuchtturm",
+      name: "Der Leuchtturm von Salzhafen",
+    });
+  });
+
+  test("text that slugs to a NEW id promises the entry, by its NAME", () => {
+    expect(locationRef("Der alte Hafen", known)).toEqual({
+      kind: "new",
+      id: "der-alte-hafen",
+      name: "Der alte Hafen",
+    });
+    // A bare id typed as an id has no display name of its own: the entry is
+    // called by its id, which is the older „Neu — wird angelegt" line.
+    expect(locationRef("nordbucht", known)).toEqual({ kind: "new", id: "nordbucht" });
+  });
+
+  test("nothing typed is nothing said; unslugable text is the one problem", () => {
+    expect(locationRef("   ", known)).toEqual({ kind: "empty" });
+    expect(locationRef("???", known)).toEqual({ kind: "unusable", value: "???" });
+  });
+
+  test("only unslugable text blocks the save, and it says so", () => {
+    // Everything a slug can be derived from is accepted — the save converts.
+    expect(propertiesFormIssues(sceneFields, withLocation("Der alte Hafen"), initial, t)).toEqual(
+      {},
+    );
     expect(propertiesFormIssues(sceneFields, withLocation("leuchtturm"), initial, t)).toEqual({});
-    expect(propertiesFormIssues(sceneFields, withLocation("nordbucht"), initial, t)).toEqual({});
-    // …and so is no location at all.
     expect(propertiesFormIssues(sceneFields, withLocation("  "), initial, t)).toEqual({});
+    expect(propertiesFormIssues(sceneFields, withLocation("???"), initial, t).location).toBe(
+      'Kein verwendbarer Name — „???" ergibt keine Orts-id.',
+    );
   });
 
-  test("NO exemption for what the file already holds", () => {
-    // Unlike `npcs`, the server ensures this reference on EVERY patch — a
-    // stored non-slug cannot be re-sent, so the form must not pretend it can.
-    const stored = withLocation("Der alte Hafen");
-    expect(propertiesFormIssues(sceneFields, stored, stored, t).location).toContain(
-      "der-alte-hafen",
-    );
+  test("the patch carries the SLUG, and the name rides alongside", () => {
+    const current = withLocation("Der alte Hafen");
+    expect(propertiesPatch(sceneFields, initial, current)).toEqual({
+      location: "der-alte-hafen",
+    });
+    expect(propertiesLocationName(sceneFields, current)).toBe("Der alte Hafen");
+  });
+
+  test("a typed ID sends no name — the entry is called by its id", () => {
+    const current = withLocation("nordbucht");
+    expect(propertiesPatch(sceneFields, initial, current)).toEqual({ location: "nordbucht" });
+    expect(propertiesLocationName(sceneFields, current)).toBeUndefined();
+  });
+
+  test("text that slugs to the STORED id is no change at all", () => {
+    // `location: bucht` is what the file holds; „Bucht" means the same row,
+    // so there is nothing to patch and nothing to create.
+    const current = withLocation("Bucht");
+    expect(propertiesPatch(sceneFields, initial, current)).toEqual({});
+    expect(hasPropertiesChanges(sceneFields, initial, current, t)).toBe(false);
+    // The name still rides along — the server ignores it for an existing row,
+    // which is what keeps a scene from renaming an Ort it only references.
+    expect(propertiesLocationName(sceneFields, current)).toBe("Bucht");
+  });
+
+  test("unslugable text patches nothing but counts as unsaved work", () => {
+    const current = withLocation("???");
+    expect(propertiesPatch(sceneFields, initial, current)).toEqual({});
+    expect(hasPropertiesChanges(sceneFields, initial, current, t)).toBe(true);
+  });
+
+  test("clearing the Ort deletes the key (the scene moves to chapter level)", () => {
+    expect(propertiesPatch(sceneFields, initial, withLocation(""))).toEqual({ location: null });
+    expect(propertiesLocationName(sceneFields, withLocation(""))).toBeUndefined();
+  });
+
+  test("locationRefId is the one derivation both halves use", () => {
+    expect(locationRefId("  Der alte Hafen ")).toBe("der-alte-hafen");
+    expect(locationRefId("Grüße aus Salzhafen")).toBe("gruesse-aus-salzhafen");
+    expect(locationRefId("leuchtturm")).toBe("leuchtturm");
+    expect(locationRefId("???")).toBe("");
+    expect(locationRefId("")).toBe("");
+  });
+
+  test("a kind without an Ort field has no name to send", () => {
+    expect(propertiesLocationName(fields("npc"), propertiesFormValues(fields("npc"), NPC_FM))).
+      toBeUndefined();
   });
 });
 
@@ -632,6 +713,26 @@ describe("writePropertiesForm", () => {
       path: "npcs/fenn",
       rev: 42,
       patch: { role: "Kundschafter" },
+    });
+  });
+
+  test("the Ort's display name rides along in the same request (#100)", async () => {
+    // One write, one transaction: the slug in `location`, the typed text as
+    // `locationName`. The server names the entry it CREATES with it and
+    // ignores it for a row that exists.
+    const calls = answer({ status: 200, body: FILE });
+    await writePropertiesForm(
+      "beispiel",
+      "01-salzhafen/bucht/smuggler-captured",
+      7,
+      { location: "der-alte-hafen" },
+      "Der alte Hafen",
+    );
+    expect(calls[0]?.body).toEqual({
+      path: "01-salzhafen/bucht/smuggler-captured",
+      rev: 7,
+      patch: { location: "der-alte-hafen" },
+      locationName: "Der alte Hafen",
     });
   });
 
