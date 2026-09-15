@@ -188,12 +188,15 @@ function withExtra(
   return out;
 }
 
-/** `raw` of a file: the YAML block plus the body (rule 2 above). */
+/**
+ * An entry as ONE markdown text — YAML block plus body. Not part of the API:
+ * the augment run hands the LLM the existing entry this way and validates the
+ * proposal against the same rendering (generator-augment.ts).
+ */
 export function renderRaw(properties: Record<string, unknown>, body: string): string {
   if (Object.keys(properties).length === 0) return body;
-  // Same dump options as the write layer used for files: flowLevel 1 keeps
-  // nested collections inline ([a, b]) and CORE_SCHEMA leaves timestamp-like
-  // strings unquoted.
+  // flowLevel 1 keeps nested collections inline ([a, b]) and CORE_SCHEMA
+  // leaves timestamp-like strings unquoted.
   const yaml = dump(properties, { schema: CORE_SCHEMA, flowLevel: 1, lineWidth: -1 });
   return `---\n${yaml}---\n${body}`;
 }
@@ -205,7 +208,7 @@ function parsed(
   body: string,
   rev: number,
 ): EntryResponse {
-  return { path, kind, properties, body, rev: rev, raw: renderRaw(properties, body) };
+  return { path, kind, properties, body, rev };
 }
 
 // --- per-kind rendering -----------------------------------------------------

@@ -68,7 +68,6 @@ const FILE: EntryResponse = {
   properties: { id: "beispiel", name: "Neuer Name" },
   body: "",
   rev: 42,
-  raw: "---\nid: beispiel\nname: Neuer Name\n---\n",
 };
 
 describe("campaignMetaPatch", () => {

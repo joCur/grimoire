@@ -116,22 +116,22 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   );
 
   // Nothing is written before the accept.
-  expect(await api.raw(NPC_PATH)).not.toContain(AUGMENT_NPC_ROLE);
+  expect((await api.properties(NPC_PATH)).role).not.toBe(AUGMENT_NPC_ROLE);
 
   await acceptButton(page).click();
   await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
 
   // AK3: one transaction. The holes are filled …
-  const raw = await api.raw(NPC_PATH);
-  expect(raw).toContain(`role: ${AUGMENT_NPC_ROLE}`);
-  expect(raw).toContain(AUGMENT_NPC_VOICE);
-  expect(raw).toContain(AUGMENT_NPC_WILL);
-  expect(raw).toContain("> [!secret]");
+  const npc = await api.file(NPC_PATH);
+  expect(npc.properties.role).toBe(AUGMENT_NPC_ROLE);
+  expect(npc.properties.voice).toBe(AUGMENT_NPC_VOICE);
+  expect(npc.body).toContain(AUGMENT_NPC_WILL);
+  expect(npc.body).toContain("> [!secret]");
   // … and what the entry already carried was NOT silently replaced.
-  expect(raw).toContain(`name: ${EMPTY_NPC}`);
-  expect(raw).not.toContain(AUGMENT_NPC_NAME);
-  expect(raw).toContain("status: unknown");
-  expect(raw).not.toContain(`status: ${AUGMENT_NPC_STATUS}`);
+  expect(npc.properties.name).toBe(EMPTY_NPC);
+  expect(npc.properties.name).not.toBe(AUGMENT_NPC_NAME);
+  expect(npc.properties.status).toBe("unknown");
+  expect(npc.properties.status).not.toBe(AUGMENT_NPC_STATUS);
   // The job is gone with the same transaction.
   expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
 
@@ -147,7 +147,7 @@ test("prepared scene: the new thread is added, every existing block survives", a
   page,
   api,
 }) => {
-  const before = await api.raw(SCENE);
+  const before = await api.file(SCENE);
 
   await page.goto(SCENE_URL);
   await startAugment(page);
@@ -189,13 +189,13 @@ test("prepared scene: the new thread is added, every existing block survives", a
 
   // The whole point: the scene GREW. Everything that stood there before
   // stands there unchanged, character for character.
-  const after = await api.raw(SCENE);
-  expect(after).toContain(`## If: ${AUGMENT_THREAD_CONDITION}`);
-  expect(after).toContain(AUGMENT_THREAD_TEXT);
-  expect(after.startsWith(before.replace(/\n+$/, ""))).toBe(true);
+  const after = await api.file(SCENE);
+  expect(after.body).toContain(`## If: ${AUGMENT_THREAD_CONDITION}`);
+  expect(after.body).toContain(AUGMENT_THREAD_TEXT);
+  expect(after.body.startsWith(before.body.replace(/\n+$/, ""))).toBe(true);
   // The prepared status is not reset to `draft` (that would undo the DM's
   // pool state — the augment validation is narrower than the create run's).
-  expect(after).toContain("status: ready");
+  expect(after.properties.status).toBe("ready");
 
   // Path 2: the added branch renders as a real `## If:` section.
   await expect(page.locator("details[data-if-section]")).toHaveCount(3);
@@ -267,7 +267,8 @@ test("rejecting the proposal writes nothing and takes the job with it", async ({
 
   // Nothing written — not even a new row version — and the job is gone.
   const after = await api.file(SCENE);
-  expect(after.raw).toBe(before.raw);
+  expect(after.properties).toEqual(before.properties);
+  expect(after.body).toBe(before.body);
   expect(after.rev).toBe(before.rev);
   expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
 
@@ -293,7 +294,7 @@ test("409: the entry moves while the review is open — nothing is written", asy
   await acceptButton(page).click();
   await expect(page.getByText("Inzwischen geändert — neu laden")).toBeVisible();
   // The dialog stays open with the decisions intact, and NOTHING was written.
-  const conflicted = await api.raw(SCENE);
+  const conflicted = await api.body(SCENE);
   expect(conflicted).toContain("Jemand anderes hat die Szene umgeschrieben.");
   expect(conflicted).not.toContain(AUGMENT_THREAD_TEXT);
 
@@ -302,7 +303,7 @@ test("409: the entry moves while the review is open — nothing is written", asy
   // a detour, not a dead end…
   await acceptButton(page).click();
   await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
-  const written = await api.raw(SCENE);
+  const written = await api.body(SCENE);
   expect(written).toContain(AUGMENT_THREAD_TEXT);
   // …and the other writer is NOT overwritten by a decision that was cut
   // against the body they replaced.

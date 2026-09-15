@@ -61,7 +61,6 @@ describe("the call sites", () => {
       properties: { id: "jorna", name: "Jorna" },
       body: "",
       rev: 1,
-      raw: "",
     };
     expect(
       renderToStaticMarkup(
@@ -82,7 +81,6 @@ describe("the call sites", () => {
         properties: {},
         body: "",
         rev: 1,
-        raw: "",
       };
       expect(
         renderToStaticMarkup(

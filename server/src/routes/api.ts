@@ -179,7 +179,7 @@ api.put("/settings", async (c) => {
 // GET /api/:campaign/tree -> CampaignTree
 api.get("/:campaign/tree", async (c) => c.json(await buildTree(c.req.param("campaign"))));
 
-// GET /api/:campaign/file?path=... -> EntryResponse (ParsedFile + raw)
+// GET /api/:campaign/file?path=... -> EntryResponse (properties, body, rev)
 api.get("/:campaign/file", async (c) => {
   const rel = c.req.query("path");
   if (rel === undefined) throw new ApiError(400, "missing path query parameter");

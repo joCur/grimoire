@@ -88,7 +88,6 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(scene.properties.status).toBe("ready");
   expect(scene.body).toContain("> [!readaloud]");
   expect(scene.body).toContain("Der Turm ragt schwarz gegen den Abendhimmel auf.");
-  expect(scene.raw.startsWith("---\n")).toBe(true);
 
   // --- an npc: typed properties (voice, quickstats) and its prose ----------
   const npc = await api.file("npcs/jorna");

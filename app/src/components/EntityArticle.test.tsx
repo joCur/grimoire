@@ -13,7 +13,7 @@ function file(
   properties: Record<string, unknown>,
   body = "",
 ): EntryResponse {
-  return { path: `npcs/x`, kind, properties, body, rev: 1, raw: "" };
+  return { path: `npcs/x`, kind, properties, body, rev: 1 };
 }
 
 function render(f: EntryResponse): string {

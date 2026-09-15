@@ -37,21 +37,10 @@ const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 /** aria-label of the raw-markdown textarea (EntryBodyEditor). */
 const TEXTAREA = "Markdown-Text von";
 
-/**
- * The properties block including both fences and the newline after the
- * closing one — what PUT /file promises to leave alone.
- */
-function propertiesBlock(raw: string): string {
-  const match = /^---\n[\s\S]*?\n---\n/.exec(raw);
-  expect(match, "the fixture file has no properties block").not.toBeNull();
-  return match?.[0] ?? "";
-}
-
-/** Read the file and hand back its properties block and the rest. */
+/** Read the entry: its properties and its text — the two halves every assertion looks at. */
 async function split(api: Api, rel: string) {
-  const raw = await api.raw(rel);
-  const properties = propertiesBlock(raw);
-  return { raw, properties, body: raw.slice(properties.length) };
+  const { properties, body } = await api.file(rel);
+  return { properties, body };
 }
 
 /**
@@ -114,9 +103,9 @@ test("editing the body: save writes the entry and the reading view shows it", as
   );
 
   // On disk: properties block byte-identical, body exactly what was typed.
-  await expect.poll(() => api.raw(SCENE)).toContain(added);
+  await expect.poll(() => api.body(SCENE)).toContain(added);
   const after = await split(api, SCENE);
-  expect(after.properties).toBe(before.properties);
+  expect(after.properties).toEqual(before.properties);
   expect(after.body).toBe(`${before.body}\n${added}\n`);
 });
 
@@ -145,10 +134,10 @@ test("a scene that MOVED is still editable under its old address (#100)", async 
 
   await expect(textarea).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(added);
-  await expect.poll(() => api.raw(moved)).toContain(added);
+  await expect.poll(() => api.body(moved)).toContain(added);
   // …and the properties are untouched, the moved `location` included.
   const after = await split(api, moved);
-  expect(after.properties).toBe(before.properties);
+  expect(after.properties).toEqual(before.properties);
 });
 
 test("the preview toggle renders the draft through the real markdown pipeline", async ({
@@ -199,7 +188,7 @@ test("the preview toggle renders the draft through the real markdown pipeline", 
     "Eine angelaufene Messingpfeife",
   );
   const after = await split(api, SCENE);
-  expect(after.properties).toBe(before.properties);
+  expect(after.properties).toEqual(before.properties);
   expect(after.body).toContain(loot);
 });
 
@@ -234,7 +223,7 @@ test("a concurrent second write: the save reports the conflict, the second one w
   // Nothing was written: the other writer's body stands, untouched.
   const conflicted = await split(api, SCENE);
   expect(conflicted.body).toBe(otherBody);
-  expect(conflicted.properties).toBe(before.properties);
+  expect(conflicted.properties).toEqual(before.properties);
 
   // The editor re-read the file, so the SAME click works now — deliberately
   // on top of the other writer's body: the DM saw the message and decided.
@@ -243,9 +232,9 @@ test("a concurrent second write: the save reports the conflict, the second one w
   await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(mine);
 
-  await expect.poll(() => api.raw(SCENE)).toContain(mine);
+  await expect.poll(() => api.body(SCENE)).toContain(mine);
   const after = await split(api, SCENE);
-  expect(after.properties).toBe(before.properties);
+  expect(after.properties).toEqual(before.properties);
   expect(after.body).toBe(`${before.body}\n${mine}\n`);
   expect(after.body).not.toContain("Von einem zweiten Schreiber");
 });
@@ -269,7 +258,7 @@ test("the status regler next to the editor is no conflict for the own save", asy
   await trigger.click();
   await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
   await expect(trigger).toHaveText(/Gespielt/);
-  await expect.poll(() => api.raw(SCENE)).toContain("status: played");
+  await expect.poll(() => api.properties(SCENE)).toHaveProperty("status", "played");
 
   // The DM's OWN change must not come back as „Inzwischen geändert": a new
   // version with an identical body is adopted, a changed body still 409s.
@@ -278,10 +267,10 @@ test("the status regler next to the editor is no conflict for the own save", asy
   await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(mine);
 
-  await expect.poll(() => api.raw(SCENE)).toContain(mine);
+  await expect.poll(() => api.body(SCENE)).toContain(mine);
   const after = await split(api, SCENE);
   expect(after.body).toBe(`${before.body}\n${mine}\n`);
-  expect(after.properties).toContain("status: played");
+  expect(after.properties.status).toBe("played");
 });
 
 test("navigating away ends edit mode — coming back never re-opens it", async ({ page, api }) => {
@@ -305,7 +294,7 @@ test("navigating away ends edit mode — coming back never re-opens it", async (
   await expect(textarea).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Bearbeiten" })).toBeVisible();
   await expect(page.locator("[data-callout='readaloud']")).toBeVisible();
-  expect(await api.raw(SCENE)).toBe(before.raw);
+  expect(await split(api, SCENE)).toEqual(before);
 });
 
 test("a failing background refetch leaves the open editor standing", async ({ page, api }) => {
@@ -377,7 +366,7 @@ test("Abbrechen asks before it throws work away", async ({ page, api }) => {
   );
   await expect(page.getByRole("article")).not.toContainText("nie gespeichert wird");
   // Nothing reached the disk.
-  expect(await api.raw(SCENE)).toBe(before.raw);
+  expect(await split(api, SCENE)).toEqual(before);
 });
 
 test("the NPC reading view edits its body the same way", async ({ page, api }) => {
@@ -398,9 +387,9 @@ test("the NPC reading view edits its body the same way", async ({ page, api }) =
   await expect(page.getByRole("article")).toContainText("knapp, wetterrau, duzt jeden");
   await expect(page.getByRole("article")).toContainText("schuldet Jorna einen Gefallen");
 
-  await expect.poll(() => api.raw(NPC)).toContain(added);
+  await expect.poll(() => api.body(NPC)).toContain(added);
   const after = await split(api, NPC);
-  expect(after.properties).toBe(before.properties);
+  expect(after.properties).toEqual(before.properties);
 });
 
 test("location and chapter offer the editor, session and inbox do not", async ({ page, api }) => {
@@ -433,12 +422,12 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   // And the rule belongs to the ENDPOINT, not to the hidden button: a
   // hand-made PUT on an append-only file is refused, nothing is written.
   for (const rel of ["sessions/2026-01-15", "inbox"]) {
-    const rawBefore = await api.raw(rel);
+    const before = await split(api, rel);
     const res = await page.request.put("/api/beispiel/file", {
       data: { path: rel, rev: Date.now(), body: "\nAlles neu.\n" },
     });
     expect(res.status()).toBe(400);
-    expect(await api.raw(rel)).toBe(rawBefore);
+    expect(await split(api, rel)).toEqual(before);
   }
 });
 
@@ -484,7 +473,7 @@ test("the glossary stays saveable while a session writes next to it", async ({ p
   await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
   await expect(textarea).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText("Gezeitentümpel");
-  await expect.poll(() => api.raw("glossary")).toContain(added);
+  await expect.poll(() => api.body("glossary")).toContain(added);
   // The structured endpoint agrees — the body was decomposed into rows.
   const glossary = await api.get<{ entries: Array<{ term: string }> }>("beispiel/glossary");
   expect(glossary.entries.map((e) => e.term)).toContain("tide pool");

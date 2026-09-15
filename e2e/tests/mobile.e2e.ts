@@ -49,10 +49,10 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
 
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
   await expect(inbox).toHaveValue("");
-  await expect.poll(() => api.raw("inbox")).toContain(`- ${IDEA}`);
+  await expect.poll(() => api.body("inbox")).toContain(`- ${IDEA}`);
   // Append-only: the line that was already there survives.
   await expect
-    .poll(() => api.raw("inbox"))
+    .poll(() => api.body("inbox"))
     .toContain("- 2026-01-10 Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug");
 
   // --- search and reading view ---------------------------------------------
