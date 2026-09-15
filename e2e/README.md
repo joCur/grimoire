@@ -131,23 +131,27 @@ einsammelt (Bun matcht `*.test.ts` und `*.spec.ts`).
 
 ## Stub-Fixtures anpassen
 
-`fixtures/replies.ts` enthält die Modellantworten als lesbare Markdown-Blöcke:
+`fixtures/replies.ts` enthält die Modellantworten als lesbare Markdown-Blöcke
+(daraus baut `documentReply()` das Antwort-Objekt):
 den Szenen-Entwurf mit NPC- und Ort-Stub, die NPC-Datei und je eine bewusst
 ungültige Variante. Sie erfüllen die aktuelle mechanische Validierung aus
 `server/src/generator.ts`.
 
-**Antwortformate (Issue #107).** Eine **Dokument-Antwort ist ein String** —
-das Dokument selbst, Warnungen danach hinter einer Zeile `---warnings---`;
-`rawDocument()` baut sie an einer Stelle, und der Stub schreibt einen String
-unverändert in den Message-Content. Das gilt für den Szenen-Teil, den
-Eintrags-Teil, den NPC-Lauf und den Ergänzungs-Lauf. Die **Gliederung** ist
-das einzige Objekt, das übrig ist: sie wird als JSON serialisiert, und der
-Server erzwingt ihr Schema über den Provider (der Stub ist ein
-OpenAI-kompatibler Endpoint und ignoriert `response_format` — damit läuft
-nebenbei der Fallback-Pfad echt).
+**Antwortformate (Issue #107).** Jede Antwort ist ein **Objekt** und wird als
+JSON in den Message-Content geschrieben: die Gliederung ihr eigenes, ein
+Dokument-Aufruf `{ properties, body, warnings }`. Die Fixtures schreiben
+weiterhin **Dokumente** — so sagt eine Fixture, was eine Szene *ist* — und
+`documentReply()` ist die eine Stelle, die daraus die Antwort baut. Ein
+String, der kein Objekt ist, reist unverändert: das ist eine Antwort, die ein
+Test absichtlich unlesbar geschrieben hat.
 
-Seit Issue #100 enthält **keine** Antwort einen `path`: die `id` im
-Frontmatter ist alles, was das Modell über die Adressierung entscheidet.
+Der Stub ist ein OpenAI-kompatibler Endpoint und **ignoriert**
+`response_format`. Genau das ist der Wert dieses Pfades: der Lauf muss auch
+dort funktionieren, wo das Schema nicht wirklich erzwungen wird — dafür ist
+der tolerante Leser im Server (`parseJsonReply`) das Netz.
+
+Seit Issue #100 enthält **keine** Antwort einen `path`: die `id` in
+`properties` ist alles, was das Modell über die Adressierung entscheidet.
 Die inhaltlichen Regeln bleiben (Szene:
 `status: draft`, nur bekannte Callouts, `location` ist eine id, Referenzen
 existieren oder kommen als Eintrag mit; NPC-Eintrag *mit* Status,

@@ -344,8 +344,10 @@ fertige Szenen sind sofort prüfbar, und ein defekter Teil lässt sich einzeln
 wiederholen. Die Gliederung ist ein systeminterner Schritt — sie wird nie
 angezeigt.
 
-Jeder Aufruf, der ein **Dokument** liefert (Szene, NPC, Ort, Ergänzung),
-antwortet seit #107 mit dem Dokument selbst — Frontmatter plus Fließtext, so
-wie es gespeichert wird; Warnungen folgen hinter einer Zeile
-`---warnings---`. Nur die Gliederung ist noch JSON, und ihr Schema erzwingt
-der Server über die Provider-API. Details in `generator/README.md`.
+Seit #107 antwortet **jeder** Aufruf mit einem JSON-Objekt, dessen Schema der
+Server über die Provider-API **erzwingt**. Ein Dokument-Aufruf (Szene, NPC,
+Ort, Ergänzung) liefert das Objekt, das die gespeicherte Zeile spiegelt: die
+Frontmatter-Felder unter `properties` — je Art getypt aus derselben Feldliste,
+aus der der Eigenschaften-Dialog gebaut wird —, den Fließtext als einen String
+unter `body` und die Hinweise für den DM unter `warnings`. Den
+Frontmatter-Block baut der Server selbst. Details in `generator/README.md`.
