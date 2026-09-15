@@ -377,13 +377,6 @@ kein In-App-Auth nachbauen.
 das Verfahren (`VACUUM INTO` im Betrieb, oder Container stoppen und das
 Verzeichnis kopieren) und die Wiederherstellung.
 
-Was hier früher stand, galt für die Markdown-Ära: „Backup ist Dateikopie",
-Git-Historie pro Szene, `rsync` über `campaigns/`. Seit ADR #13 ist das nicht
-mehr die Sicherung, sondern höchstens ein Archiv des Vor-Migrations-Stands —
-`campaigns/` wird vom Server überhaupt nicht mehr gelesen (nur noch von
-`grimoire seed`, wenn man es ihm ausdrücklich übergibt). Wer diesen Ordner
-weiter versioniert, sichert damit **keine** laufende Kampagne.
-
 ## 5. Betrieb & Fehlersuche
 
 - Logs: `docker logs -f grimoire`. Beim Start erscheinen der Pfad der

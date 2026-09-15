@@ -88,7 +88,7 @@ Keine Ausrufezeichen, kein Fantasy-Sprech in Funktionstexten
 
 Jede Ansicht und jede Aktion heißt nach ihrer Funktion — keine internen
 Namen, keine Metaphern, keine Anglizismen, wo ein deutsches Wort trägt.
-Routen, Query-Keys, Katalog-Keys und Format-Token (`inbox`-Datei, Hashtags,
+Routen, Query-Keys, Katalog-Keys und Format-Token (`inbox`-Liste, Hashtags,
 Callout-Typen, Status-Werte) bleiben davon unberührt.
 
 | UI sagt (de) | UI sagt (en) | früher |

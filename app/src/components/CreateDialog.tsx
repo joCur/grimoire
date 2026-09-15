@@ -49,8 +49,12 @@ export interface CreateValues {
 interface CreateDialogProps {
   /** Dialog heading, e.g. „Kapitel anlegen". */
   title: string;
-  /** One sentence saying what is created and what happens next. */
-  description: string;
+  /**
+   * One sentence saying what is created and what happens next. Left out where
+   * there is nothing to say beyond the field labels — a filler subtitle is
+   * worse than none (PO feedback on issue #118).
+   */
+  description?: string;
   /** Label of the required field („Titel" for a chapter/scene, „Name" else). */
   nameLabel: string;
   /**
@@ -125,7 +129,9 @@ export function CreateDialog({
     >
       <DialogContent aria-describedby={undefined} className="max-w-[460px]">
         <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>{description}</DialogDescription>
+        {description === undefined ? null : (
+          <DialogDescription>{description}</DialogDescription>
+        )}
 
         <form
           onSubmit={(e) => {
