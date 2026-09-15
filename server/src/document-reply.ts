@@ -1,23 +1,22 @@
-// The DOCUMENT reply (issue #107, PO decision of 15.09.): ONE JSON object per
-// kind, mirroring the object the database stores.
+// The DOCUMENT reply: ONE JSON object per kind, mirroring the document the
+// database stores.
 //
 //     { "properties": { "id": "night-watch-quay", "title": "Nachtwache am Kai",
 //                       "type": "planned", "status": "draft", … },
 //       "body": "## Flow\n\nDie Wache murrt: „Wer nachts hier steht …“\n",
 //       "warnings": ["Der Quelltext nennt keinen DC — DC 13 gesetzt."] }
 //
-// Two earlier shapes are gone, and the reasons are worth keeping:
+// Two shapes it is deliberately NOT, and the reasons are worth keeping:
 //
-//   the JSON WRAPPER around a whole markdown file — the PO case of 15.09.:
-//       the model hand-wrote the escaping of a complete document and a German
-//       quotation mark closed with an ASCII `"` ended the string. A correct
-//       scene, unparseable.
-//   the RAW document — this branch's first answer to that. It removed the
-//       escaping but put FRONTMATTER PARSING in its place, and that half
-//       could not be forced by any API: a fence, a leading sentence, a
-//       sign-off, two horizontal rules that look like a properties block. All
-//       of it had to be tolerated by hand here, and a miss was a correction
-//       turn or silent data loss.
+//   a JSON WRAPPER the model fills with a whole rendered document: it would
+//       hand-write the escaping of that document, and a German quotation mark
+//       closed with an ASCII `"` ends the string. A correct scene,
+//       unparseable.
+//   the RENDERED DOCUMENT itself: that removes the escaping but puts TEXT
+//       PARSING in its place, and that half cannot be forced by any API — a
+//       fence, a leading sentence, a sign-off, two horizontal rules that look
+//       like a properties block. All of it would have to be tolerated by hand
+//       here, and a miss is a correction turn or silent data loss.
 //
 // The object is forced by the provider for every document call now — Claude
 // gets the schema as a tool with `tool_choice`, an OpenAI-compatible endpoint
@@ -49,7 +48,7 @@ import { renderRaw } from "./store/render";
 /** One document reply, normalized: the object the server stores plus notes. */
 export interface DocumentReply {
   /**
-   * The frontmatter mapping, in contract order, with „not given" (`null`)
+   * The properties mapping, in contract order, with „not given" (`null`)
    * dropped: strict mode has no optional properties, so the schema asks for
    * every field and `null` is how a model says it has nothing to put there.
    */
@@ -86,7 +85,7 @@ export const REPAIRED_DOCUMENT_WARNING =
  */
 export const NOT_A_DOCUMENT_ERROR =
   "die Antwort ist kein Objekt des Schemas — sie braucht genau die drei " +
-  "Schlüssel `properties` (die Frontmatter-Felder), `body` (der Fließtext als " +
+  "Schlüssel `properties` (die Eigenschaften), `body` (der Fließtext als " +
   "ein String) und `warnings` (eine Liste von Hinweisen). Kein Markdown-Dokument, " +
   "keine Code-Zäune, kein Text außerhalb des Objekts.";
 
@@ -181,8 +180,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * markdown out — or the error list for the correction turn.
  *
  * The markdown is the server's own rendering (`renderRaw`, the same one every
- * written file goes through), which is what makes the frontmatter block the
- * server's business again: `quickstats: { wis: "+2" }` is quoted because the
+ * written document goes through), which is what makes the properties block the
+ * server's business: `quickstats: { wis: "+2" }` is quoted because the
  * renderer quotes it, not because the model remembered to.
  */
 export function parseDocumentReply(

@@ -209,7 +209,7 @@ export function validateAugmentReply(
   raw: string,
   target: { kind: AugmentKind; file: FileResponse },
 ): { ok: true; result: AugmentResult } | { ok: false; errors: string[] } {
-  // Since issue #107 the reply is the schema-forced OBJECT (./document-reply):
+  // The reply is the schema-forced OBJECT (./document-reply):
   // `properties` per kind, the whole `body` as it should look afterwards, and
   // the warnings. The augmentation rule („immer die GANZE Datei") is the rule
   // it always was — the shape around it is what changed.
@@ -372,7 +372,7 @@ export async function runAugment(
       sourceText,
       existingEntry: { path: target.file.path, markdown: target.file.raw },
       ...(instruction === "" ? {} : { instruction }),
-      // Forced like every other reply (issue #107) — in „augment" mode, which
+      // Forced like every other reply — in „augment" mode, which
       // is the one difference: an existing scene's `status` is whatever the DM
       // made it, so the schema must not narrow it to `draft`.
       jsonSchema: documentReplySchema(target.kind, "augment"),
@@ -399,7 +399,7 @@ function chapterOf(file: FileResponse): string {
 /**
  * The proposed body under the proposed properties — what the check reads.
  *
- * The properties go through the STORE'S OWN frontmatter renderer, not through
+ * The properties go through the STORE'S OWN renderer, not through
  * `String(value)`: a list, a mapping or a `role` that contains „: " produced
  * YAML the parser could not read, and the whole block then degraded into the
  * body — every hint landed on `body` with a line number that pointed at

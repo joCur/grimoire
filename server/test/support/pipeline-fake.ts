@@ -16,7 +16,7 @@
 //                  served verbatim here instead: that is a run that dies
 //                  before it has parts, which is what those tests are about.
 //   scene part     the scripted reply's scene document, as the REPLY OBJECT
-//                  of issue #107: `properties` (the document's frontmatter,
+//                  `properties` (the document's own properties,
 //                  parsed), `body`, and the batch reply's `warnings`.
 //   entry part     the scripted reply's matching `entries` item, likewise.
 //   single call    the npc/augment run's scripted document, likewise — a
@@ -108,7 +108,7 @@ function parseBatch(reply: ScriptedReply): BatchReply | null {
 }
 
 /**
- * The REPLY OBJECT of issue #107, built out of a scripted document: the
+ * The REPLY OBJECT, built out of a scripted document: the
  * properties block parsed into `properties`, everything below it as `body`,
  * plus the script's warnings. Returns null when the document has no parseable
  * properties block — such a script is served verbatim, because a reply the

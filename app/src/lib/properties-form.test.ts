@@ -1,4 +1,4 @@
-// The rules of the „Eigenschaften“ form (issue #42): the field list per kind,
+// The rules of the „Eigenschaften“ form: the field list per kind,
 // the diff that decides what is patched at all, and the representation a
 // cleared field is written in. Everything here is pure except the last block,
 // which drives the write through a faked fetch (same shape as

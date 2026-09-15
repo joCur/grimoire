@@ -1,4 +1,4 @@
-// The document reply (issue #107): one schema-forced JSON object per kind.
+// The document reply: one schema-forced JSON object per kind.
 //
 // What this suite is about is the SEAM between the model and the store: the
 // object comes in, the normalized properties and the composed markdown come
@@ -11,10 +11,10 @@
 //     `response_format`, a model that answered prose or the raw document the
 //     earlier slices of this ticket asked for),
 //   * the tolerant way in — a fence, prose around it, one `jsonrepair` pass,
-//   * `null` read as „not given", so the composed frontmatter has no empty
+//   * `null` read as „not given", so the rendered properties block has no empty
 //     keys in it,
 //   * the `{ key, value }` list folded back into the `quickstats` mapping,
-//   * the PO case of 15.09.: a body whose German quotation marks are closed
+//   * the PO case: a body whose German quotation marks are closed
 //     with an ASCII `"` travels byte for byte, because the transport escapes
 //     it and nobody hand-writes the JSON any more.
 
@@ -81,7 +81,7 @@ describe("parseDocumentReply", () => {
     expect(reply.warnings).toEqual(["Der Quelltext nennt keinen DC — DC 13 gesetzt."]);
 
     const markdown = composeDocument(reply);
-    // A real frontmatter block, built by the store's own renderer — and the
+    // A real properties block, built by the store's own renderer — and the
     // body below it, unchanged.
     expect(markdown.startsWith("---\nid: night-watch-quay\n")).toBe(true);
     const parsed = parseMarkdown(markdown, "01-salzhafen/night-watch-quay", 0);
@@ -91,10 +91,11 @@ describe("parseDocumentReply", () => {
   });
 
   test("the body survives the PO spelling byte for byte", () => {
-    // The whole reason the reply is an object the TRANSPORT serializes: the
-    // ASCII `"` inside a German quotation used to end the hand-written JSON
-    // string, and the raw-document format traded that for frontmatter
-    // guessing. Here it is simply a character in a string.
+    // The whole reason the reply is an object the TRANSPORT serializes: an
+    // ASCII `"` inside a German quotation ends a hand-written JSON string,
+    // and answering with the rendered document instead would trade that for
+    // guessing where the properties block ends. Here it is simply a
+    // character in a string.
     expect(read(sceneObject()).body).toContain(PO_LINE);
     expect(composeDocument(read(sceneObject()))).toContain(PO_LINE);
   });

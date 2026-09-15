@@ -8,7 +8,7 @@
 // validation error that goes back to the model as a correction turn, not an
 // exception (generator/README.md step 4).
 //
-// Since issue #107 EVERY request carries the schema of the object it wants
+// EVERY request carries the schema of the object it wants
 // back — the outline its own (shared/outline-schema), a document call the
 // object that mirrors the stored row (shared/document-schema) — and the
 // transports force it, because that is the one guarantee an API can give:
@@ -21,7 +21,7 @@
 //       the field (detected once per process, and only on a 400 that actually
 //       blames the format).
 //
-// The assistant prefill of `{` from issue #20 is gone for good: a forced tool
+// The assistant prefill of `{` is gone for good: a forced tool
 // and a forced `response_format` do the job, and a prefilled brace in front
 // of a reply the API already shapes is only in the way.
 //
@@ -88,7 +88,7 @@ export interface GenerateRequest {
    */
   instruction?: string;
   /**
-   * The JSON schema the reply must satisfy (issue #107). Every call sets it —
+   * The JSON schema the reply must satisfy. Every call sets it —
    * the outline its own, a document call its kind's. It stays OPTIONAL in the
    * type so a caller that forces nothing (and a test that wants the unforced
    * transport) is still a legal request.
@@ -292,7 +292,7 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
       ...(req.context.targetId === undefined ? [] : [`vorgegebene id: ${req.context.targetId}`]),
     ].join("\n"),
     "## Referenz-Zieldatei (Few-Shot)",
-    // The few-shot is a REPLY now, not a file (issue #107): every prompt's
+    // The few-shot is a REPLY now, not a file: every prompt's
     // example is the JSON object its schema describes, so the fence says json
     // and the model sees the shape it will be forced into. (The augment run's
     // „Bestehender Eintrag" below stays markdown — that one IS a file.)
@@ -389,9 +389,9 @@ export function cachedMessages(
   return messages;
 }
 
-// --- JSON forcing: every call (issue #20, by schema since #107) ------------
+// --- JSON forcing: every call, by schema ------------------------------------
 //
-// Issue #20 forced JSON by prefilling `{` and by `response_format:
+// An earlier shape forced JSON by prefilling `{` and by `response_format:
 // json_object`. Both are replaced by the SCHEMA of the request: a forced tool
 // on the Messages API, `json_schema` with `strict: true` on the OpenAI path —
 // the shape is guaranteed rather than merely asked for.
@@ -464,7 +464,7 @@ export class ClaudeProvider implements LLMProvider {
 
 /**
  * The Messages API request body. Split out of `complete` because the two
- * reply shapes differ HERE and nowhere else (issue #107): a schema request
+ * reply shapes differ HERE and nowhere else: a schema request
  * carries the schema as a forced tool, a document request carries nothing
  * extra at all.
  */
@@ -478,14 +478,14 @@ export function claudeBody(
   return {
     model,
     max_tokens: maxTokens,
-    // Prompt caching (issue #102): the system prompt and the CONSTANT half of
+    // Prompt caching: the system prompt and the CONSTANT half of
     // the user turn are the same for every part of a run, so both carry an
     // ephemeral cache breakpoint. A pipelined run with N scenes reads that
     // prefix N+1 times — paying for it once is the difference between "per
     // scene" being affordable and not.
     system: [{ type: "text", text: req.systemPrompt, cache_control: EPHEMERAL }],
     messages: claudeMessages(req, corrections),
-    // The reply's schema (issue #107): it travels as a TOOL and the call is
+    // The reply's schema: it travels as a TOOL and the call is
     // forced, so the reply cannot be prose and cannot miss a required key —
     // the API validates it before we do. Absent only for a request that
     // deliberately forces nothing.
@@ -538,7 +538,7 @@ export interface OpenAICompatOptions {
   /** Output cap; omitted from the body when unset (endpoint's own default). */
   maxTokens?: number;
   /**
-   * Force the reply shape of every call that carries a schema (issue #107):
+   * Force the reply shape of every call that carries a schema:
    * `response_format: json_schema` with a fallback to `json_object`. Default
    * on; the factory turns it off for `LLM_FORCE_JSON=0`, because some routed
    * endpoints reject the field and would fail every single run.
@@ -606,7 +606,7 @@ export class OpenAICompatProvider implements LLMProvider {
     let res = await send(wanted);
     // An endpoint that rejects `json_schema` (400) gets ONE retry with plain
     // `json_object` — and the downgrade is remembered for the process, so the
-    // next outline call does not pay for the discovery again (issue #107).
+    // next outline call does not pay for the discovery again.
     // Only a 400 counts: a 401 or a 500 says nothing about the field, and
     // retrying those would double every failing request.
     //
@@ -614,7 +614,7 @@ export class OpenAICompatProvider implements LLMProvider {
     // request that was too long, a model id that does not exist, a content
     // filter all answer 400 too, and latching on those would throw the
     // forced shape away for the rest of the process over an unrelated error
-    // (issue #107 review). So the downgrade is only remembered when the error
+    // — so the downgrade is only remembered when the error
     // body actually talks about the format — or when the plain retry proves
     // it by succeeding. Otherwise the original 400 is what the caller sees.
     if (!res.ok && res.status === 400 && isJsonSchemaFormat(wanted)) {
@@ -652,7 +652,7 @@ export class OpenAICompatProvider implements LLMProvider {
       model: this.model,
       messages: [
         { role: "system", content: req.systemPrompt },
-        // Prompt caching (issue #110): with an explicit breakpoint the
+        // Prompt caching: with an explicit breakpoint the
         // constant half of the prompt travels as its own content part, so a
         // chapter run pays for it once instead of once per scene. Orthogonal
         // to `response_format` — the split is about the message content, the
@@ -670,7 +670,7 @@ export class OpenAICompatProvider implements LLMProvider {
   }
 
   /**
-   * What this call asks the endpoint to guarantee (issue #107):
+   * What this call asks the endpoint to guarantee:
    * `json_schema` with `strict: true` for every request that carries a
    * schema — or plain `json_object` once an endpoint has been seen to reject
    * the schema form, and nothing at all for a request without one.

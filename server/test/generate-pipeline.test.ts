@@ -132,7 +132,7 @@ test("prose without an object is NOT repaired — it is a correction turn", () =
   expect(clean.ok && clean.result.warnings).toEqual([]);
 });
 
-test("the schema's nullable optionals read as „not given“ (issue #107)", () => {
+test("the schema's nullable optionals read as „not given“", () => {
   // `strict: true` has no optional properties, so the schema makes `location`
   // and `sourceExcerpt` NULLABLE and the provider will hand back explicit
   // nulls. The validation has to read those as absent — otherwise the very
@@ -369,7 +369,7 @@ test("an entry's context is the passages that mention it — by name OR by id wo
 
 test("the single-scene mode swaps the output schema and keeps every rule", async () => {
   const single = await sceneSystemPrompt();
-  // The reply object (issue #107) — the swapped section describes it, and
+  // The reply object — the swapped section describes it, and
   // nothing of the raw-document format is left.
   expect(single).toContain("Du antwortest mit **einem JSON-Objekt**");
   expect(single).toContain("`warnings`");
@@ -460,7 +460,7 @@ test("two parts of one run share a byte-identical constant prefix", () => {
 
 const SCENE_IDS = ["eins", "zwei", "drei"] as const;
 
-/** One scene as the REPLY OBJECT of issue #107 — what a part's call answers. */
+/** One scene as the REPLY OBJECT — what a part's call answers. */
 function sceneDoc(id: string, over: { status?: string } = {}): string {
   return JSON.stringify({
     properties: {
@@ -515,7 +515,7 @@ class ThreeSceneProvider implements LLMProvider {
     }
     const id = /^([a-z0-9-]+) /.exec(req.assignment ?? "")?.[1] ?? "";
     this.calls.push(id);
-    // The reply object of issue #107 — the scene part's answer, with no
+    // The reply object — the scene part's answer, with no
     // warnings in it.
     return {
       text: sceneDoc(id, id === this.broken ? { status: "ready" } : {}),

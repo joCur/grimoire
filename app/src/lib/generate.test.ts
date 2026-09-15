@@ -327,7 +327,7 @@ describe("generatePhase", () => {
   });
 });
 
-describe("runJobArrived (issue #107)", () => {
+describe("runJobArrived", () => {
   const staleJobId = "job-before-the-click";
 
   test("nothing in the cache is never the run's job", () => {
@@ -353,7 +353,7 @@ describe("runJobArrived (issue #107)", () => {
 });
 
 /**
- * The sequence of the stall reported on 15.09. (issue #107): the click, a GET
+ * The sequence of the stall reported on 15.09.: the click, a GET
  * that overtakes the new row (404 -> null), and then a poll that already sees
  * the finished run — all while `POST /generate` is STILL in flight, which is
  * the normal case with a fast model. The review has to be on the screen at
@@ -682,7 +682,7 @@ describe("the run's parts", () => {
     expect(generateJobPollMs(undefined, true)).toBe(GENERATE_JOB_POLL_MS);
     // …and a caller that is waiting for a run's OWN job keeps polling even
     // though something settled sits in the cache: that is either the previous
-    // run's job or a `null` (issue #107). Switching the loop off there is how
+    // run's job or a `null`. Switching the loop off there is how
     // the spinner became terminal.
     expect(generateJobPollMs({ ...job(["done"]), status: "done" }, true)).toBe(
       GENERATE_JOB_POLL_MS,

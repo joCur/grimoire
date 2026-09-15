@@ -69,16 +69,17 @@ chokidar und Fuse.js sind entfernt, gray-matter lebt nur noch im
 Import-/Parser-Pfad (`@grimoire/shared`).
 **Seit #107:** `jsonrepair` (exakt gepinnt) im Generator. **Jede**
 Modell-Antwort ist ein per Schema erzwungenes JSON-Objekt — die Gliederung ihr
-eigenes, ein Dokument-Aufruf das Objekt, das die gespeicherte Zeile spiegelt
-(`properties` je Art, `body`, `warnings`; Schemata in `shared/src/`). Ein
+eigenes, ein Dokument-Aufruf das Objekt, das das gespeicherte Dokument
+spiegelt (`properties` je Art, `body`, `warnings`; die Schemata liegen als
+einfache Dateien in `shared/schema/`). Ein
 Endpoint, der `response_format` annimmt und ignoriert, liefert trotzdem
 Handgeschriebenes, und dort sind die Fehler mechanisch (Komma am Ende,
 einfache Anführungszeichen): eine deterministische Reparatur vor der
 Validierung ist deutlich billiger als eine Korrekturrunde, die den ganzen
 Prompt erneut sendet. Die Regeln selbst bleiben unangetastet, und ein
 reparierter Lauf trägt eine Warnung. Keine weitere Abhängigkeit — den
-Frontmatter-Block baut der Server mit dem Renderer, den jede geschriebene
-Datei durchläuft.
+Eigenschaften-Block des gespeicherten Dokuments rendert der Server mit dem
+Renderer des Stores.
 Hono statt Express/Fastify: minimal, typsicher, läuft auf Bun UND Node
 (Runtime-Wechsel bleibt möglich, siehe #7).
 

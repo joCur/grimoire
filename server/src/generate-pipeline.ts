@@ -98,7 +98,7 @@ export const PART_CONCURRENCY = 3;
  * VALIDATION ERROR and therefore a correction turn that asks the model to
  * consolidate, not a failed run.
  *
- * The numbers live in the SCHEMA module since issue #107 (`maxItems` states
+ * The numbers live in the SCHEMA module (`maxItems` states
  * them to the provider, the validation below enforces them) and are
  * re-exported here, where every caller already reads them.
  */
@@ -135,7 +135,7 @@ export interface RunOutline {
 const OUTLINE_CORRECTION_TAIL = "die vollständige Gliederung enthalten";
 
 /**
- * The run warning a REPAIRED outline earns (issue #107, Zuschnitt 4). German,
+ * The run warning a REPAIRED outline earns. German,
  * like the excerpt-fallback warning next to it: it rides along in the run's
  * `warnings` and the review shows those verbatim.
  *
@@ -161,7 +161,7 @@ export function parseOutlineJson(raw: string): { value: unknown; repaired: boole
   return parseJsonReply(raw);
 }
 
-/** One of the schema's entry kinds (#107) — the list is the schema's own. */
+/** One of the schema's entry kinds — the list is the schema's own. */
 function isOutlineEntryKind(v: unknown): v is (typeof OUTLINE_ENTRY_KINDS)[number] {
   return typeof v === "string" && (OUTLINE_ENTRY_KINDS as readonly string[]).includes(v);
 }
@@ -209,7 +209,7 @@ export function validateOutlineReply(
       return;
     }
     const kind = item.kind;
-    // The schema's own list (#107): the shape the provider is forced into and
+    // The schema's own list: the shape the provider is forced into and
     // the shape the validation accepts read the same constant.
     if (!isOutlineEntryKind(kind)) {
       errors.push(`${label}: "kind" must be ${OUTLINE_ENTRY_KINDS.join(" or ")}`);
@@ -432,11 +432,11 @@ function normalizeWithMap(source: string): { text: string; offsets: number[] } {
  * (`scene-single-output.md`).
  *
  * A swap rather than a second prompt file, for the reason the augment run's
- * `formatContract` exists: the rules (#93 orthography and quotation marks,
- * #96 tables, the callout list, the reference rules) must be the SAME text in
+ * `formatContract` exists: the rules (orthography and quotation marks,
+ * tables, the callout list, the reference rules) must be the SAME text in
  * both, and the one way to guarantee that is to have them in one file.
  *
- * Both sections describe the RAW document since issue #107 — the swap adds
+ * Both sections describe the RAW document — the swap adds
  * what only the pipeline knows: the outline is binding, and every id of the
  * run is already decided.
  */
@@ -493,7 +493,7 @@ export function validateSingleSceneReply(input: {
   scene: OutlineScene;
   allowed: AllowedRefs;
 }): { ok: true; result: { scene: GeneratedSceneDraft; warnings: string[] } } | { ok: false; errors: string[] } {
-  // Since issue #107 the reply is the schema-forced OBJECT: `properties`,
+  // The reply is the schema-forced OBJECT: `properties`,
   // `body`, `warnings` (./document-reply reads it and composes the document
   // the server would store). Everything below judges that object, by exactly
   // the rules it judged the markdown by before.
@@ -771,7 +771,7 @@ export async function runOutlineStep(
       context: { chapter: ctx.chapter, npcs: ctx.npcs, locations: ctx.locations },
       sourceText,
       // The one call of a run that still answers JSON — so it is the one
-      // call whose shape the API can GUARANTEE (issue #107): Claude gets a
+      // call whose shape the API can GUARANTEE: Claude gets a
       // forced tool, an OpenAI-compatible endpoint `json_schema`.
       jsonSchema: {
         name: OUTLINE_SCHEMA_NAME,
@@ -816,7 +816,7 @@ export async function runScenePart(
       outline: outlineBlock(plan.outline),
       assignment: assignmentBlock(scene),
       sourceText: cut.text,
-      // Forced like the outline (issue #107): the reply is the scene object.
+      // Forced like the outline: the reply is the scene object.
       jsonSchema: documentReplySchema("scene", "create"),
     },
     provider,

@@ -451,7 +451,7 @@ export const de = {
   "live.session.olderRunning.withPath": "Eine ältere Session läuft noch ({path}) — erst beenden.",
   "live.session.endOld": "Alte Session beenden",
 
-  // The „Für die Spieler“ reminder list of the aside (issue #86).
+  // The „Für die Spieler“ reminder list of the aside.
   "live.pc.heading": "Für die Spieler",
   "live.pc.done": "„{text}“ erledigt",
   "live.pc.allDone": "Alles erledigt.",
@@ -875,7 +875,7 @@ export const de = {
   "harness.lead": "Rendert die Referenz-Fixtures aus examples/ ohne laufenden Server.",
   "harness.properties": "Eigenschaften anzeigen",
 
-  // --- „Mit KI ergänzen“ (components/AugmentAction.tsx, issue #36) ---------
+  // --- „Mit KI ergänzen“ (components/AugmentAction.tsx) --------------------
   "augment.action": "Mit KI ergänzen",
   "augment.title": "Mit KI ergänzen",
   "augment.description":

@@ -118,8 +118,8 @@ const usage = (inputTokens: number, outputTokens: number): TokenUsage => ({
 // --- fixtures -------------------------------------------------------------------
 
 /**
- * The address the server builds for the draft (issue #100): the run's
- * chapter plus the frontmatter `id`. The model names none.
+ * The address the server builds for the draft: the run's chapter plus the
+ * `id` property. The model names none.
  */
 const SCENE_PATH = "01-salzhafen/treffen-am-kai";
 /**
@@ -224,7 +224,7 @@ function replyJson(over: ReplyOver = {}): string {
 
 /**
  * What the fake actually SENDS for the scene part of `reply(over)`: the reply
- * OBJECT of issue #107 — the scene's properties, its body and the script's
+ * OBJECT — the scene's properties, its body and the script's
  * warnings. The script above keeps writing documents (it is how a test says
  * which documents a run is about); this is what the server sees, so it is what
  * the correction-turn and `rawReply` assertions compare against.
@@ -331,7 +331,7 @@ async function generate(body?: unknown, campaign = "beispiel"): Promise<Generate
   return { status: job.error?.status ?? 500, json: async () => job.error?.body };
 }
 
-// --- reading a reply (issue #20, by schema since #107) -------------------------------------------------
+// --- reading a reply: by schema ---------------------------------------------
 
 describe("parseJsonReply", () => {
   const OBJ = { scenes: [{ path: "a.md" }], warnings: ["w"] };
@@ -393,7 +393,7 @@ describe("parseJsonReply", () => {
   });
 
   test("an almost-object is repaired once, and says so", () => {
-    // The one thing this reader does beyond extracting (issue #107): the
+    // The one thing this reader does beyond extracting: the
     // mechanical mistakes of a hand-written object — a trailing comma, a
     // single-quoted key — cost no correction turn.
     expect(parseJsonReply('{"scenes": [], "warnings": [],}')).toEqual({
@@ -606,7 +606,7 @@ describe("POST /api/:campaign/generate", () => {
       expect(entry).toHaveLength(2);
       const correction = entry[1]!.corrections[0]!.correction;
       expect(correction).toContain(`location "${LOCATION_STUB_ID}"`);
-      // Since issue #107 the FIELD LIST catches it before the status rule
+      // The FIELD LIST catches it before the status rule
       // does: a location has no `status` field at all, so the message names
       // the fields it does have — which is more to go on, not less.
       expect(correction).toContain("ist kein Feld dieser Entität");
@@ -689,7 +689,7 @@ describe("POST /api/:campaign/generate", () => {
     const scene = fake.callsFor("treffen-am-kai");
     expect(scene).toHaveLength(3);
     // The scene part got the un-parseable text verbatim, so its correction
-    // turn is the ONE shape message of issue #107 — the three keys of the
+    // turn is the ONE shape message — the three keys of the
     // reply object, and the schema it belongs to.
     expect(scene[1]!.corrections[0]!.correction).toContain("kein Objekt des Schemas");
     expect(scene[1]!.corrections[0]!.correction).toContain("scene_document");
@@ -872,7 +872,7 @@ describe("POST /api/:campaign/generate", () => {
     const res = await generate(generateBody);
     expect(res.status).toBe(422);
     const body = (await res.json()) as { rawReply: string; validationErrors: string[] };
-    // The part's own last reply — the reply OBJECT since issue #107, not the
+    // The part's own last reply — the reply OBJECT, not the
     // run's outline call and not an extracted fragment of it.
     expect(body.rawReply).toBe(
       servedScene({ scenes: [{ content: sceneMarkdown({ status: "ready" }) }] }),

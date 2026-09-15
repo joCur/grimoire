@@ -4,12 +4,12 @@
 //   2. prompt = system-prompt.md + example-output.json + context + source text
 //   3. call the LLM provider
 //   4. read the reply and validate it MECHANICALLY. EVERY call answers a
-//      JSON object whose shape the provider forces (issue #107): the outline
+//      JSON object whose shape the provider forces: the outline
 //      its own small object (shared/outline-schema), a document call the
 //      object that mirrors the stored row — `properties` per kind, `body`,
 //      `warnings` (shared/document-schema, read by ./document-reply). Errors
 //      go back to the model as a correction turn (LLM_CORRECTION_TURNS,
-//      default 1, max 2 — issue #19), never to the user; exhausted retries
+//      default 1, max 2), never to the user; exhausted retries
 //      -> 422.
 //      A TRUNCATED reply (the provider saw finish_reason/stop_reason) skips
 //      the correction turns entirely: re-asking for the same oversized JSON
@@ -369,7 +369,7 @@ export async function collectContext(campaign: string): Promise<CampaignContext>
 // --- reading a reply --------------------------------------------------------
 //
 // There is nothing left to extract here. Every reply is a JSON object the
-// provider was forced into (issue #107), and the one tolerant reader both the
+// provider was forced into, and the one tolerant reader both the
 // outline and the documents share — fence, brace span, ONE `jsonrepair`
 // attempt — lives in ./document-reply (`parseJsonReply`), next to the
 // document shape it is mostly used for.
@@ -521,8 +521,8 @@ export function validateEntry(entry: RawEntry, index: number, errors: string[]):
   }
   const id = fmId;
   // The document the server would store, composed from the reply object
-  // (./document-reply) — the frontmatter block is the renderer's, not the
-  // model's, since issue #107.
+  // (./document-reply) — the properties block is the renderer's, not the
+  // model's.
   const markdown = composeDocument(entry.reply);
   const reparsed = reparseAtAddress(markdown, id, kind === "npc" ? npcPath : locationPath);
   const label = `${kind} entry "${id}"`;
@@ -550,7 +550,7 @@ export interface AllowedRefs {
 }
 
 /**
- * Mechanical validation of ONE scene document (issue #102), the rules of the
+ * Mechanical validation of ONE scene document, the rules of the
  * data contract in one place: the pipeline's per-scene call and the apply
  * re-validation have to judge a scene by exactly the same rules, and the one
  * way to guarantee that is one function.
@@ -759,7 +759,7 @@ function notesErrors(body: string): string[] {
  * number 2 and the plus — the whole point of a social modifier — is gone
  * before anyone sees the file.
  *
- * Since issue #107 a REPLY can no longer break the rule: `quickstats` travels
+ * A REPLY can no longer break the rule: `quickstats` travels
  * as a `{ key, value }` LIST whose values the schema types as strings, and
  * the server folds it into the mapping itself (document-reply.ts
  * `pairsValue`). All three call sites — the npc run, a scene run's npc entry,
@@ -795,7 +795,7 @@ export function quickstatsErrors(fm: Record<string, unknown>): string[] {
  * Same contract as every other validator: the mapped result, or the error
  * list for the correction turn.
  *
- * Since issue #107 the reply is the schema-forced OBJECT (./document-reply):
+ * The reply is the schema-forced OBJECT (./document-reply):
  * `properties` per kind, `body`, `warnings`. The rules below are the format
  * contract's and unchanged by that — they read the properties mapping and the
  * body, which is what they always did.
@@ -892,7 +892,7 @@ export function validateNpcReply(
  * (German) prompt conversation. The tail names what the corrected reply must
  * still contain, which is the only part that differs between the run kinds.
  *
- * `schemaName` is the schema the reply is forced into (issue #107) — it is
+ * `schemaName` is the schema the reply is forced into — it is
  * NAMED here so the model corrects inside the shape it was given instead of
  * starting a new one. Every call has one now, so the instruction is the same
  * sentence for the outline and for a document; an absent name (a provider
@@ -1106,8 +1106,8 @@ export async function runGenerateNpc(
         ...(npcId === undefined ? {} : { targetId: npcId }),
       },
       sourceText,
-      // The reply object, forced by the provider (issue #107) — the same
-      // guarantee the outline has had since Zuschnitt 1.
+      // The reply object, forced by the provider — the same
+      // guarantee the outline call has always had.
       jsonSchema: documentReplySchema("npc", "create"),
     },
     provider: getProvider(),

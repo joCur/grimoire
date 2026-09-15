@@ -84,6 +84,11 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Markdown-Importer unter `server/src/db/` (Issue #79).
 - Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
   Code, Kommentare, Commits: Englisch.
+- Kommentare erklären den Code und stehen für sich: keine Verweise auf Issues,
+  PRs oder Reviews, kein „seit #NN" — nur Englisch, ohne deutsche Einschübe.
+- Schemata und Fixtures sind einfache Dateien in ihrem Zielformat (JSON-Schema
+  als `.json`, eine Antwort-Fixture als das Objekt selbst), nicht im Code
+  zusammengebaut.
 - Nutzersichtbare Texte NIE direkt in Komponenten, sondern in den Katalog
   `app/src/i18n/` (`de.ts` = Key-Satz, `en.ts` muss vollständig sein, sonst
   Typfehler). `t()` kommt aus `useT()`/`useI18n()`; reine Helfer in

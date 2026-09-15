@@ -35,7 +35,7 @@ export function generateJobKey(campaign: string): [string, string] {
  *     or the settled job of the PREVIOUS run. Both used to switch the
  *     interval off, and nothing switched it back on: the view sat on
  *     „Entwürfe werden generiert …" until the DM reloaded, while the run
- *     finished on the server (issues #102, #107).
+ *     finished on the server.
  *
  * The invariant behind it: the view may not claim „working" without a live
  * poll loop — the server is the truth, so something has to keep asking it.

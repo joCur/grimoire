@@ -1,21 +1,20 @@
 // The PROPERTIES FIELDS of an entity kind — which keys a kind has, what kind
 // of value each one holds, and which of them an entity cannot lose.
 //
-// This list used to live in the app (`app/src/lib/properties-form.ts`), where
-// it was built for the „Eigenschaften"-dialog. Since issue #107 the GENERATOR
-// needs the very same list: a document reply is a JSON object whose
-// `properties` half is schema-enforced per kind (./document-schema), and a
+// The list lives here, and not in the app's „Eigenschaften" dialog, because
+// the GENERATOR needs the very same list: a document reply is a JSON object
+// whose `properties` half is schema-enforced per kind (../schema), and a
 // schema that allowed a key the dialog does not know — or forgot one it
 // offers — would be a model writing fields the DM can never see or edit.
 //
-// So the definitions moved DOWN here, to the one place server and app both
-// import, and they carry only what both need: the key, the shape of its
-// value, and the known value set of a `select`. Everything that is UI —
+// This is the one place server and app both import, and the definitions carry
+// only what both need: the key, the shape of its value, and the known value
+// set of a `select`. Everything that is UI —
 // German labels, hints, placeholders, which tree list a reference field
 // offers to pick from — stays in the app, where the translator lives.
 //
-// The order is the order the dialog shows (and the order a composed
-// frontmatter block is written in): a contract of its own, not an accident.
+// The order is the order the dialog shows (and the order the rendered
+// properties block is written in): a contract of its own, not an accident.
 
 import { NPC_STATUSES, SCENE_STATUSES, SCENE_TYPES } from "./types";
 
@@ -65,8 +64,8 @@ export interface PropertyFieldDef {
 }
 
 /**
- * `id` is deliberately NOT in any list: in the app the rename cascade of
- * issue #30 owns it, and in a generator reply it is required separately
+ * `id` is deliberately NOT in any list: in the app the rename cascade owns
+ * it, and in a generator reply it is required separately
  * (./document-schema) because it is what the server builds the ADDRESS from —
  * the one thing that is not an editable property.
  */

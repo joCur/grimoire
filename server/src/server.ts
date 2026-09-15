@@ -354,7 +354,7 @@
 //   [x] POST /api/:campaign/review/inbox-done  { line } -> rewrite the inbox line to `- [x] …`
 //                                              (documented append-only exception)
 //
-// Since issue #107 EVERY generator call answers a JSON object whose schema
+// EVERY generator call answers a JSON object whose schema
 // the providers FORCE (a tool call on the Claude path, `response_format:
 // json_schema` on the OpenAI path): a document call the object that mirrors
 // the stored row — `properties` per kind, `body`, `warnings` (./document-reply)

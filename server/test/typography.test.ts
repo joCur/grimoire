@@ -1,4 +1,4 @@
-// The typographic guard of issue #107.
+// The typographic guard of the German quotation marks.
 //
 // The PO case: a model wrote German quotation marks as the opening U+201E
 // closed by an ASCII `"`. Inside a JSON string that `"` ended the string, and
@@ -9,7 +9,7 @@
 // wrote it that way throughout, and the model imitates what it reads.
 //
 // So this test forbids the mixed form everywhere the model can see it: the
-// system prompts (`.md`), the few-shot REPLIES (`.json` since issue #107) and
+// system prompts (`.md`), the few-shot REPLIES (`.json`) and
 // the reference campaign in `examples/`. A few-shot is one JSON object whose
 // body is a single string, so a whole scene sits on one line — the rule still
 // reads it correctly, because a correctly closed `„…“` cannot be crossed and
@@ -54,7 +54,7 @@ async function offenders(file: string): Promise<string[]> {
     .filter((hit) => hit !== "");
 }
 
-describe("German quotation marks (issue #107)", () => {
+describe("German quotation marks", () => {
   test("the rule catches the PO spelling and passes the correct one", () => {
     expect(MIXED_QUOTES.test('er sagt „Salzhafen" und meint es')).toBe(true);
     expect(MIXED_QUOTES.test("er sagt „Salzhafen“ und meint es")).toBe(false);

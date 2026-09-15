@@ -87,7 +87,7 @@ function useFake(replies: string[]): FakeProvider {
 }
 
 /**
- * The reply in the object format of issue #107: the whole entry as it should
+ * The reply object: the whole entry as it should
  * look afterwards — properties and body — plus the warnings. Written from the
  * DOCUMENT a case describes, because that is how a test says what the run
  * proposes in one literal (support/pipeline-fake `documentReply`).
@@ -205,7 +205,7 @@ describe("prompt assembly", () => {
     for (const prompt of [npc, location, scene]) {
       expect(prompt).toContain("Die Ergänzungsregel");
       expect(prompt).toContain("Vorhandenes bleibt Wort für Wort stehen");
-      // The output format is the reply OBJECT since issue #107, and the
+      // The output format is the reply OBJECT, and the
       // augmentation rule is what makes it the whole entry rather than a patch.
       expect(prompt).toContain("Du antwortest mit **einem JSON-Objekt**");
       expect(prompt).toContain("immer die **ganze** Datei");
@@ -223,7 +223,7 @@ describe("prompt assembly", () => {
       const prompt = await augmentSystemPrompt(kind);
       // The augment output format…
       expect(prompt).toContain("immer die **ganze** Datei");
-      // …and no JSON at all any more (issue #107).
+      // …and no JSON at all any more.
       expect(prompt).not.toContain("JSON-Block");
       expect(prompt).not.toContain('"scenes"');
       // Exactly one „## Ausgabeformat" heading: the augmentation rule's own.
@@ -268,9 +268,9 @@ describe("prompt assembly", () => {
   });
 
   test("the few-shot replies show umlauts in properties AND body", async () => {
-    // The few-shots are REPLY OBJECTS since issue #107, so the check reads
+    // The few-shots are REPLY OBJECTS, so the check reads
     // them as such: the properties mapping and the body string, each in real
-    // German spelling — the model imitates what it reads (issue #93).
+    // German spelling — the model imitates what it reads.
     for (const kind of ["scene", "npc", "location"] as const) {
       const reply = JSON.parse(await loadAsset(ASSET_FILES[kind].fewShotTarget)) as {
         properties: Record<string, unknown>;
@@ -280,7 +280,7 @@ describe("prompt assembly", () => {
       expect(JSON.stringify(reply.properties), `${kind} properties`).toMatch(/[äöüß]/);
       expect(reply.body, `${kind} body`).toMatch(/[äöüß]/);
       expect(Array.isArray(reply.warnings), `${kind} warnings`).toBe(true);
-      // No frontmatter in the body: the block is the server's.
+      // No properties block in the body: the block is the server's.
       expect(reply.body.startsWith("---"), `${kind} body`).toBe(false);
     }
   });
@@ -289,7 +289,7 @@ describe("prompt assembly", () => {
     // Strict mode has no optional properties: the schema asks for every field
     // and `null` is how a model says „nicht gegeben" (system-prompt.md). A
     // few-shot that simply omits a key teaches the opposite of the schema,
-    // and the model imitates what it reads (issue #93) — so the examples show
+    // and the model imitates what it reads — so the examples show
     // the convention, `null` included.
     for (const kind of ["scene", "npc", "location"] as const) {
       const raw = await loadAsset(ASSET_FILES[kind].fewShotTarget);
@@ -335,7 +335,7 @@ describe("prompt assembly", () => {
     expect(wordings.size).toBe(1);
 
     // The OUTLINE prompt does NOT carry it: that call writes no document at
-    // all — no callouts, no frontmatter, no tables — so the rule was a rule
+    // all — no callouts, no properties, no tables — so the rule was a rule
     // about nothing, and a rule the model cannot apply is one it can weigh
     // against the rules it can (the reason the "exactly once" above exists).
     const outline = await loadAsset(ASSET_FILES.outline.systemPrompt);
@@ -345,11 +345,11 @@ describe("prompt assembly", () => {
     expect(outline).toContain(ORTHOGRAPHY_RULE);
   });
 
-  // Issue #107: every document prompt describes the REPLY OBJECT, and the
+  // Every document prompt describes the REPLY OBJECT, and the
   // wording is load-bearing in the same way the rules above are — the schema
   // forces the shape, the prompt is what makes the model understand what goes
   // where (that `body` is one string, that an unknown field is `null`, that
-  // the frontmatter block is the server's).
+  // the properties block is the server's).
   const OBJECT_RULE = "Du antwortest mit **einem JSON-Objekt**";
 
   test("every document prompt kind describes the reply object, once", async () => {
@@ -596,7 +596,7 @@ describe("the job", () => {
   test("a body without properties comes back as a correction turn", async () => {
     const file = await read(NPC);
     const fake = useFake([
-      augmentReply(NPC, "## Will\n\nkein Frontmatter\n"),
+      augmentReply(NPC, "## Will\n\nkein Eigenschaften-Block\n"),
       augmentReply(NPC, file.raw),
     ]);
     const job = await runAugmentJob({ path: NPC, instruction: "x" });
@@ -714,7 +714,7 @@ describe("one job per campaign, whatever its kind", () => {
     const file = await read(NPC);
     // A CHANGED field, so the proposal has something to carry through the
     // row. A key the SCHEMA does not have (a `tags` on an npc) cannot be
-    // proposed at all since issue #107 — and cannot be lost either, it simply
+    // proposed at all — and cannot be lost either, it simply
     // keeps the value it has.
     const content = file.raw.replace(
       "voice: knapp, wetterrau, duzt jeden",
@@ -908,10 +908,10 @@ describe("naming check", () => {
   });
 
   test("a list value and a colon in a property do not derail the check", async () => {
-    // The proposal document is rendered with the store's frontmatter
-    // renderer: a `role: Hafenmeisterin: Salt Harbour` used to produce YAML
+    // The proposal document is rendered with the store's own renderer:
+    // a `role: Hafenmeisterin: Salt Harbour` used to produce YAML
     // nothing could parse, and every hint then landed on `body` with a line
-    // number pointing at nothing. Since issue #107 that renderer is the ONLY
+    // number pointing at nothing. The store's renderer is the ONLY
     // way a block is built, which makes this structural rather than a rule
     // about what a model happens to write.
     await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
@@ -925,7 +925,7 @@ describe("naming check", () => {
     expect(job.status).toBe("done");
     const hints = (job.augmentResult as AugmentResult).namingHints ?? [];
     // The hint knows WHICH field it is about — that is only true when the
-    // frontmatter parsed.
+    // properties block parsed.
     expect(hints.map((h) => h.field)).toContain("role");
     expect(hints.every((h) => h.field !== "body")).toBe(true);
   });

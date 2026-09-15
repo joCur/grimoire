@@ -167,10 +167,10 @@ function npcMarkdown(
 }
 
 /**
- * The reply, in the RAW document format of issue #107: the document itself —
- * no `path` (issue #100: the server addresses the npc as `npcs/<id>` with the
+ * The reply object: the document itself —
+ * no address (the server addresses the npc as `npcs/<id>` with the
  * id from the properties). Written from the DOCUMENT a case describes and
- * turned into the reply OBJECT of issue #107 (support/pipeline-fake
+ * turned into the reply object (support/pipeline-fake
  * `documentReply`); a document that cannot be read is served verbatim,
  * because that is what such a case is about.
  */
@@ -252,8 +252,8 @@ describe("POST /api/:campaign/generate/npc", () => {
     const result = (await res.json()) as GenerateNpcResult;
 
     expect(result.npc.path).toBe("npcs/grella");
-    // The markdown is the SERVER's composition since issue #107 (the model
-    // sends properties and body, never a frontmatter block), so it is the
+    // The markdown is the SERVER's composition (the model
+    // sends properties and body, never a rendered block), so it is the
     // store's own rendering — same keys, same body, the renderer's quoting.
     expect(result.npc.markdown).toBe(
       composeDocument({
@@ -425,7 +425,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(errors).toContain('unknown callout "[!danger]"');
   });
 
-  test("quickstats travel as key/value pairs — a mapping is a shape error (#107)", async () => {
+  test("quickstats travel as key/value pairs — a mapping is a shape error", async () => {
     // The „quote the plus" rule is the SCHEMA's job now: a `pairs` field is a
     // list of `{ key, value }` with string values, and the server folds it
     // into the mapping and renders it quoted (document-reply.ts). So what a
@@ -462,7 +462,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     }
   });
 
-  test("a missing name is a correction turn — the schema requires one (#107)", async () => {
+  test("a missing name is a correction turn — the schema requires one", async () => {
     // Until this ticket a nameless reply DEGRADED: the shared parser filled
     // the display name from the address, so `npcs/namenlos` got „namenlos" as
     // its name and nobody was asked. The reply schema requires the field
@@ -476,7 +476,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     ).toContain('"properties.name" fehlt');
   });
 
-  test("a reply that is not the reply object is a validation error (issue #107)", async () => {
+  test("a reply that is not the reply object is a validation error", async () => {
     // Prose, the raw-document format this ticket replaced, an empty reply, a
     // JSON value that is not the object: all of them are „das ist kein Objekt
     // des Schemas", and the message says which three keys one has.
@@ -491,7 +491,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     }
   });
 
-  test("a fence and a leading sentence cost ONE call (issue #107 tolerance)", async () => {
+  test("a fence and a leading sentence cost ONE call", async () => {
     // An endpoint that accepts `response_format` and ignores it answers the
     // object inside a fence, with a sentence in front. The tolerant reader
     // (parseJsonReply) takes it, and the run costs one call instead of a
@@ -515,7 +515,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(result.warnings).toEqual(["Quelltext nennt keinen Status — alive gesetzt"]);
   });
 
-  test("an almost-JSON reply is repaired once, with a warning (issue #107)", async () => {
+  test("an almost-JSON reply is repaired once, with a warning", async () => {
     // A trailing comma is mechanical; `jsonrepair` fixes it deterministically
     // and much more cheaply than a correction turn — and the run SAYS so.
     const fake = useFake([`${npcReply().replace(/}$/, ",}")}`]);

@@ -258,7 +258,7 @@ jeweils nur für den gewählten:
 | `LMSTUDIO_MODEL`     | `lmstudio`   | `local-model`                  | Modellname in LM Studio                                |
 | `LLM_MAX_TOKENS`     | alle         | `8000` (`claude`), sonst Endpoint-Default | Obergrenze der Antwortlänge (positive Ganzzahl; unbrauchbare Werte werden ignoriert) |
 | `LLM_CORRECTION_TURNS` | alle       | `1`                            | Korrektur-Turns nach dem ersten Aufruf (`0`–`2`; unbrauchbare Werte werden ignoriert) |
-| `LLM_FORCE_JSON`     | `openrouter`, `openai`, `lmstudio` | an              | Sendet für den **Gliederungs-Aufruf** `response_format` mit (`json_schema`, mit Rückfall auf `json_object` bei 400); `0` = aus, für Endpoints/Modelle ohne `response_format`-Unterstützung. Dokument-Aufrufe erzwingen seit #107 gar nichts (die Antwort ist Markdown), der `claude`-Pfad erzwingt die Gliederung per Tool-Aufruf und ist davon unberührt |
+| `LLM_FORCE_JSON`     | `openrouter`, `openai`, `lmstudio` | an              | Sendet `response_format` mit (`json_schema`, strict, mit Rückfall auf `json_object` bei 400); `0` = aus, für Endpoints/Modelle ohne `response_format`-Unterstützung. Betrifft **jeden** Aufruf — Gliederung und Dokumente —, weil jede Antwort ein Objekt mit eigenem Schema ist; der `claude`-Pfad erzwingt jede Antwort per Tool-Aufruf und ist davon unberührt |
 | `LLM_PROMPT_CACHE`   | `openrouter`, `openai`, `lmstudio` | an bei `openrouter`, sonst aus | Markiert den konstanten Prompt-Teil als cachebar; `0` = aus (für Endpoints, die Content-Parts ablehnen), `1` = an (z. B. eigener Anthropic-Proxy). Der `claude`-Pfad cacht immer und ist davon unberührt |
 
 `LLM_PROMPT_CACHE` ist der Kostenhebel eines Kapitel-Durchlaufs: seit der

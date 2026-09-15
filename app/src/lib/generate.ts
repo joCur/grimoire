@@ -239,7 +239,7 @@ function groupedNumber(n: number, separator: string): string {
 export type GeneratePhase = "checking" | "input" | "working" | "review" | "done";
 
 /**
- * Has the job of the run we just started shown up (issue #107)?
+ * Has the job of the run we just started shown up?
  *
  * The view shows „Entwürfe werden generiert …" for exactly as long as the
  * answer is no — and THAT is the whole question the stall got wrong. It used

@@ -344,10 +344,11 @@ fertige Szenen sind sofort prüfbar, und ein defekter Teil lässt sich einzeln
 wiederholen. Die Gliederung ist ein systeminterner Schritt — sie wird nie
 angezeigt.
 
-Seit #107 antwortet **jeder** Aufruf mit einem JSON-Objekt, dessen Schema der
-Server über die Provider-API **erzwingt**. Ein Dokument-Aufruf (Szene, NPC,
-Ort, Ergänzung) liefert das Objekt, das die gespeicherte Zeile spiegelt: die
-Frontmatter-Felder unter `properties` — je Art getypt aus derselben Feldliste,
-aus der der Eigenschaften-Dialog gebaut wird —, den Fließtext als einen String
+**Jeder** Aufruf antwortet mit einem JSON-Objekt, dessen Schema der Server
+über die Provider-API **erzwingt**. Ein Dokument-Aufruf (Szene, NPC, Ort,
+Ergänzung) liefert das Objekt, das das gespeicherte Dokument spiegelt: die
+Eigenschaften unter `properties` — je Art getypt aus derselben Feldliste, aus
+der der Eigenschaften-Dialog gebaut wird —, den Fließtext als einen String
 unter `body` und die Hinweise für den DM unter `warnings`. Den
-Frontmatter-Block baut der Server selbst. Details in `generator/README.md`.
+Eigenschaften-Block schreibt der Server selbst. Die Schemata liegen als
+lesbare Dateien in `shared/schema/`; Details in `generator/README.md`.

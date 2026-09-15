@@ -2,7 +2,7 @@
 
 Pipeline: Quelltext (EN) → LLM → Szenen-Drafts (DE) → Review-Vorschau → Platte.
 
-## Antwortformate (Issue #107)
+## Antwortformate
 
 **Jede Antwort ist ein JSON-Objekt, und jedes Objekt ist per Schema
 erzwungen.** Das ist der ganze Vertrag: der Provider schickt das Schema mit
@@ -21,7 +21,7 @@ und die Schnittstelle garantiert die Form, bevor der Server sie liest.
 
 **Dokument-Antworten — der Normalfall.** Szenen-Teil, Eintrags-Teil
 (NPC/Ort), NPC-Lauf und Ergänzen-Lauf antworten mit dem Objekt, das die
-gespeicherte Zeile **spiegelt**: die Frontmatter-Felder unter `properties`,
+gespeicherte Dokument **spiegelt**: die Eigenschaften unter `properties`,
 der ganze Fließtext als **ein** String unter `body`, die Hinweise für den DM
 unter `warnings`.
 
@@ -41,16 +41,22 @@ unter `warnings`.
 `properties` ist **je Art** getypt, und zwar aus **derselben** Feldliste, aus
 der der Eigenschaften-Dialog gebaut wird (`shared/src/property-fields.ts`) —
 ein Modell kann also genau die Felder schreiben, die der DM auch bearbeiten
-kann, und keins mehr. Der **Frontmatter-Block ist Sache des Servers**: er
-setzt ihn aus `properties` zusammen (`renderRaw`, derselbe Renderer wie bei
-jeder geschriebenen Datei), weshalb `quickstats: { wis: "+2" }` gequotet ist,
-weil der Renderer quotet — nicht weil das Modell daran gedacht hat.
+kann, und keins mehr. Der **Eigenschaften-Block ist Sache des Servers**: er
+setzt ihn aus `properties` zusammen (`renderRaw`, derselbe Renderer, den jedes
+geschriebene Dokument durchläuft), weshalb `quickstats: { wis: "+2" }`
+gequotet ist, weil der Renderer quotet — nicht weil das Modell daran gedacht
+hat.
 
-Die Schemata stehen **einmal** in `shared/src/document-schema.ts`, gebaut aus
-der Feldliste und den Konstanten, die die Validierung liest. Für den
-Ergänzen-Lauf gibt es denselben Bau im Modus `augment`: eine bestehende Szene
-behält den Status, den der DM ihr gegeben hat, während eine **neue** Szene nur
-`draft` sein kann.
+Die Schemata sind **einfache Dateien** in `shared/schema/`, eine je Art und
+Lauf: `scene-document.schema.json`, `npc-document.schema.json`,
+`location-document.schema.json`, dazu `augmented-*-document.schema.json` für
+den Ergänzen-Lauf und `outline.schema.json`. Der Code lädt sie nur und gibt
+sie an den Provider weiter; `shared/test/document-schema.test.ts` prüft ihre
+Schlüssel und Wertelisten gegen die Feldliste und die Konstanten, die die
+Validierung liest, damit die beiden nicht auseinanderlaufen können. Der
+Unterschied zwischen den Läufen steht in den Dateien selbst: eine bestehende
+Szene behält den Status, den der DM ihr gegeben hat, während eine **neue**
+Szene nur `draft` sein kann.
 
 Drei Eigenheiten des **strict mode** (der OpenAI-Pfad schickt `strict: true`,
 und ein abgelehntes Schema ist ein dauerhafter Rückfall für den ganzen
@@ -67,16 +73,15 @@ Prozess):
   ausdrücken, also reist sie als **Liste** von `{ key, value }` und der Server
   faltet sie zurück in die Mapping-Form des Format-Vertrags.
 
-Warum nicht das Dokument selbst? Genau das war der Zwischenschritt dieses
-Tickets — die Antwort IST die Markdown-Datei — und er hat die JSON-Maskierung
-gegen **Frontmatter-Parsen** getauscht: Code-Zaun drumherum, ein Satz davor,
-ein Abschiedssatz danach, zwei waagerechte Linien, die wie ein
-Frontmatter-Block aussehen. Diese Hälfte kann keine API garantieren, also
-musste sie hier von Hand toleriert werden — und jeder Fehlgriff war eine
+Warum nicht das gerenderte Dokument selbst als Antwort? Weil damit die
+JSON-Maskierung gegen **Text-Parsen** getauscht wäre: Code-Zaun drumherum, ein
+Satz davor, ein Abschiedssatz danach, zwei waagerechte Linien, die wie ein
+Eigenschaften-Block aussehen. Diese Hälfte kann keine API garantieren, sie
+müsste also von Hand toleriert werden — und jeder Fehlgriff ist eine
 Korrekturrunde oder stiller Datenverlust. Ein erzwungenes Objekt kann das
-alles nicht: den `body` maskiert der **Transport**, und deshalb übersteht der
-PO-Fall vom 15.09. (ein `„…“`, dessen schließendes Zeichen das ASCII-`"` war) die
-Übertragung Zeichen für Zeichen.
+alles nicht: den `body` maskiert der **Transport**, und deshalb übersteht ein
+`„…“`, dessen schließendes Zeichen das ASCII-`"` ist, die Übertragung Zeichen
+für Zeichen.
 
 **Der tolerante Leser** bleibt als Netz für Endpoints, die das Feld annehmen
 und ignorieren (`parseJsonReply` in `server/src/document-reply.ts`, von allen
@@ -95,7 +100,7 @@ Die **Korrekturrunde** nennt das Schema, in dem korrigiert werden soll
 bekommen hat. Sonst wird nichts nachkorrigiert: keine Typografie-Heuristik,
 kein stilles Ersetzen.
 
-**Die Gliederung** ist das vierte Schema (`shared/src/outline-schema.ts`) und
+**Die Gliederung** hat ihr eigenes Schema (`shared/schema/outline.schema.json`) und
 das einzige, das kein Dokument beschreibt: ein kleines, flaches Objekt aus
 Szenenliste und neuen Einträgen. Die **semantischen** Prüfungen bleiben auch
 dort, wo sie sind: ein Schema kann nicht sagen „diese id kommt im ganzen
@@ -225,13 +230,13 @@ Alle System-Prompts (`system-prompt.md`, `npc-system-prompt.md`,
 `outline-system-prompt.md`) tragen **dieselbe**
 Regel „Deutsche Orthografie“: jeder echte Text — Fließtext, Read-Alouds,
 Callouts, `## If:`-Bedingungen, Überschriften, `warnings` und jeder
-Frontmatter-Wert, der Text ist (`title`, `name`, `role`, `voice`,
+Eigenschafts-Wert, der Text ist (`title`, `name`, `role`, `voice`,
 `appearance`, `trigger`, `goal`, `statblock` …) — nutzt ä/ö/ü/ß, niemals die
 ASCII-Ersatzschreibung ae/oe/ue/ss. **Einzige Ausnahme**: `id`-Werte (und
 `location`, das eine id ist), die bleiben kebab-case ASCII; Eigennamen aus
 dem Quelltext bleiben unverändert.
 
-**Seit #107 gehören die Anführungszeichen dazu**, als **ein** identischer Satz
+**Die Anführungszeichen gehören dazu**, als **ein** identischer Satz
 in derselben Regel: deutsche typografische Anführungszeichen `„…“`
 (U+201E/U+201C), einfache `‚…‘`, Apostroph `’` — nie das ASCII-`"` und nie `'`
 als Apostroph. Die Mischform — U+201E geöffnet, mit dem ASCII-Zeichen
@@ -255,7 +260,7 @@ Prompt.
 Dieselbe Mechanik wie bei der Orthografie-Regel: **eine identische Regel
 „Tabellen“** in allen System-Prompts, die Dokumente schreiben — **nicht** im
 Gliederungs-Prompt, der überhaupt kein Dokument ausgibt (keine Callouts, kein
-Frontmatter, keine Tabellen; die Orthografie-Regel steht dort trotzdem, weil
+Eigenschaften, keine Tabellen; die Orthografie-Regel steht dort trotzdem, weil
 Titel, Einzeiler und `warnings` Text sind) — in den drei Create-Prompts unter
 „## Regeln“, im Ergänzen-Prompt in der Ergänzungsregel, also genau **einmal**
 in jedem zusammengesetzten Prompt (`formatContract` in
@@ -311,11 +316,11 @@ Das Modell vergibt keine Pfade mehr. Es liefert **Dokumente**, und der
 Server bildet die Adresse:
 
 * Szenen: `<kapitel>/<id>` — Kapitel aus dem Kontext des Laufs, `id` aus
-  dem Frontmatter. Die **Gruppe** kommt aus `location`, also lautet die
+  den Eigenschaften. Die **Gruppe** kommt aus `location`, also lautet die
   gespeicherte Adresse `<kapitel>/<location>/<id>` (ohne `location`:
   Kapitelebene).
 * Vorgeschlagene Einträge: ein gemeinsames Array `entries` mit
-  `kind: "npc" | "location"`; die `id` steht im Frontmatter des Eintrags,
+  `kind: "npc" | "location"`; die `id` steht in den Eigenschaften des Eintrags,
   adressiert wird als `npcs/<id>` bzw. `locations/<id>`.
 * NPC-Lauf und Ergänzen-Lauf: ein Objekt ohne `path`; beim Ergänzen steht
   die Zieladresse ohnehin serverseitig fest.

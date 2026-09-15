@@ -156,7 +156,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
 });
 
 /**
- * Issue #107, the stall the PO hit on 15.09.: „Entwürfe generieren" was
+ * The stall the PO hit on 15.09.: „Entwürfe generieren" was
  * clicked, the run finished on the server — and the page stayed on „Entwürfe
  * werden generiert …" until it was reloaded.
  *
@@ -205,7 +205,7 @@ test("the review appears as soon as the job is done — even with the start requ
 });
 
 /**
- * Issue #107 AK5, the PO case of 15.09.: the scene body carries German
+ * The scene body carries German
  * quotation marks closed with an ASCII `"`. When the model hand-wrote the
  * JSON wrapper, that quote ended the `content` string and an otherwise
  * correct scene cost the run a correction turn — and often a „Formprüfung

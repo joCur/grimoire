@@ -60,7 +60,7 @@ describe("the catalogs", () => {
   });
 });
 
-// The typographic guard of issue #107: the catalog used to write German
+// The typographic guard: the catalog used to write German
 // quotation marks as an opening `„` closed by an ASCII `"`, and the generator
 // prompts imitated the catalog. Scanned over the VALUES, not over the file:
 // in the source the closing ASCII `"` is indistinguishable from the string

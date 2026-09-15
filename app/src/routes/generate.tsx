@@ -241,7 +241,7 @@ export function GenerateRoute() {
   // a GET that overtakes the new row answers 404 and the previous run's job
   // is settled, so without it the interval was switched off and nothing
   // switched it back on — the spinner stood until a reload while the run
-  // finished on the server (issues #102, #107).
+  // finished on the server.
   const [awaitingJob, setAwaitingJob] = useState<{
     staleJobId: string | null;
     startedJobId?: string;
@@ -515,7 +515,7 @@ export function GenerateRoute() {
 
   const applied = written !== undefined;
   // The window between the click and „this run's job is readable" is the
-  // working state — and NOTHING else is (issue #107): the moment the job
+  // working state — and NOTHING else is: the moment the job
   // answers, the job decides, even while its own 202 is still on the way.
   // A fast run is finished before that response arrives, and making the
   // request's lifetime the spinner's left the DM in front of a done run.

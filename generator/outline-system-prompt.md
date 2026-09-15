@@ -47,7 +47,7 @@ Antworte ausschließlich mit dem JSON-Objekt — kein Text davor oder danach.
 
 **Keine Adressen und keine Inhalte.** Du vergibst keine Pfade, keine
 Verzeichnisse und schreibst keine Szenentexte, keine Callouts und kein
-Frontmatter. Die Adresse bildet der Server aus dem Kapitel im Kontext und der
+Eigenschaften. Die Adresse bildet der Server aus dem Kapitel im Kontext und der
 `id`.
 
 ## Regeln
@@ -89,7 +89,7 @@ Frontmatter. Die Adresse bildet der Server aus dem Kapitel im Kontext und der
    Rechtschreibung mit ä, ö, ü und ß — niemals die ASCII-Ersatzschreibung
    ae/oe/ue/ss. Das gilt für Fließtext, Read-Alouds, alle Callouts,
    `## If:`-Bedingungen, Überschriften, `warnings` und für jeden
-   Frontmatter-Wert, der Text ist (`title`, `name`, `role`, `voice`,
+   Eigenschafts-Wert, der Text ist (`title`, `name`, `role`, `voice`,
    `appearance`, `trigger`, `goal`, `statblock` …). **Einzige Ausnahme**:
    `id`-Werte und Adressen/Pfade — die bleiben kebab-case ASCII. Eigennamen
    aus dem Quelltext bleiben genau so geschrieben, wie sie dort stehen.

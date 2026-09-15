@@ -44,7 +44,7 @@ import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
 /**
  * The kinds, the controls and the reference sources come from
- * @grimoire/shared/property-fields since issue #107 — the generator's reply
+ * @grimoire/shared/property-fields — the generator's reply
  * schemas are built from the SAME field list, so „which fields does an npc
  * have" is answered once for the whole repo. Re-exported here because every
  * caller in the app already imports them from this module.
@@ -77,16 +77,22 @@ export interface PropertiesField {
 
 // --- the field tables ------------------------------------------------------
 //
-// Labels, hints and placeholders come from the CATALOG since issue #69: the
-// tables are built per call with the translator the dialog is rendered with,
-// so a language switch changes them on the spot. The KEYS (`title`, `npcs`,
-// `roll20-page`) are frontmatter and never translated, and neither are the
-// option VALUES — `active`, `planned`, `insight +2` are data.
+// Labels, hints and placeholders come from the CATALOG: the tables are built
+// per call with the translator the dialog is rendered with, so a language
+// switch changes them on the spot.
 //
-// The enum option LABELS (scene status, npc status) still come from
-// lib/scene-status.ts and lib/entity.ts, which the pool, the lists and the
-// cards share: they belong to Scheibe 2 of #69, and a signature change here
-// would drag half of those views into this slice.
+// Three kinds of string, three different owners:
+//
+//   field KEYS      `title`, `npcs`, `roll20-page` — wire names. They travel
+//                   to the server and back and are never translated.
+//   option VALUES   `active`, `planned`, `insight +2` — data. Not copy.
+//   LABELS          the only translated half: every one of them is a catalog
+//                   key here (FIELD_COPY), resolved through the translator.
+//
+// The enum option LABELS (scene status, npc status) come from
+// lib/scene-status.ts and lib/entity.ts instead, which the pool, the lists
+// and the cards share: a signature change here would drag half of those
+// views along.
 
 /** Catalog keys of a field's copy — label, and the optional two below it. */
 interface FieldCopy {
@@ -101,9 +107,10 @@ interface FieldCopy {
  * sets live in @grimoire/shared/property-fields, and what is left here is
  * what a translator owns.
  *
- * The keys (`title`, `npcs`, `roll20-page`) are frontmatter and never
- * translated, and neither are the option VALUES — `active`, `planned`,
- * `insight +2` are data.
+ * The field KEYS (`title`, `npcs`, `roll20-page`) are wire names and stay
+ * untranslated, and so do the option VALUES — `active`, `planned`,
+ * `insight +2` are data. Only the LABELS are translated, and every one of
+ * them is a catalog key here.
  */
 const FIELD_COPY: Record<PropertiesKind, Record<string, FieldCopy>> = {
   scene: {

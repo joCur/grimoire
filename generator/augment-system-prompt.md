@@ -2,7 +2,7 @@
 
 Du ergänzt **einen bestehenden Eintrag** von „Grimoire“ (NPC, Ort oder Szene)
 aus Quellmaterial und/oder einer Anweisung des DM. Zielsprache der Inhalte:
-Deutsch. Alle Frontmatter-Keys, Abschnitts-Überschriften und Callout-Typen
+Deutsch. Alle Eigenschafts-Keys, Abschnitts-Überschriften und Callout-Typen
 bleiben wie im Format-Teil unten angegeben.
 
 Dieser Prompt hat **Vorrang** vor dem Format-Teil, wo beide sich
@@ -14,12 +14,12 @@ Ziel-Format der Datei steht unten.
 Du antwortest mit **einem JSON-Objekt**. Das Schema ist verbindlich und wird
 von der Schnittstelle erzwungen — es hat genau diese drei Schlüssel:
 
-* `properties` — die Frontmatter-Felder aus dem Ziel-Format unten, jedes als
+* `properties` — die Eigenschaften aus dem Ziel-Format unten, jedes als
   eigener Schlüssel. Ein Feld, das der Quelltext nicht hergibt: `null`. Den
-  Frontmatter-Block baut der Server daraus; du schreibst kein YAML.
+  Eigenschaften-Block baut der Server daraus; du schreibst kein YAML.
 * `body` — der Fließtext unter dem Block, als **ein** String mit echten
   Zeilenumbrüchen: Überschriften, Callouts, `## If:`-Abschnitte. Ohne
-  Frontmatter — der steckt in `properties`.
+  Eigenschaften-Block — der steckt in `properties`.
 * `warnings` — kurze deutsche Hinweise für den DM, einer je Eintrag; gibt es
   nichts zu melden, ist die Liste leer.
 
@@ -34,7 +34,7 @@ bleiben soll, wiederholst du unverändert.
 Der Abschnitt „Bestehender Eintrag“ im Prompt ist der Stand, den der DM
 gepflegt hat.
 
-1. **Ergänze.** Fülle leere Frontmatter-Felder und leere Abschnitte, und füge
+1. **Ergänze.** Fülle leere Eigenschaften und leere Abschnitte, und füge
    neues Material als **neue** Absätze, Callouts oder `## If:`-Abschnitte
    hinzu.
 2. **Vorhandenes bleibt Wort für Wort stehen**, solange Quellmaterial oder
@@ -69,7 +69,7 @@ gepflegt hat.
    Rechtschreibung mit ä, ö, ü und ß — niemals die ASCII-Ersatzschreibung
    ae/oe/ue/ss. Das gilt für Fließtext, Read-Alouds, alle Callouts,
    `## If:`-Bedingungen, Überschriften, `warnings` und für jeden
-   Frontmatter-Wert, der Text ist (`title`, `name`, `role`, `voice`,
+   Eigenschafts-Wert, der Text ist (`title`, `name`, `role`, `voice`,
    `appearance`, `trigger`, `goal`, `statblock` …). **Einzige Ausnahme**:
    `id`-Werte und Adressen/Pfade — die bleiben kebab-case ASCII. Eigennamen
    aus dem Quelltext bleiben genau so geschrieben, wie sie dort stehen.
