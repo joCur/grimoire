@@ -349,3 +349,58 @@ describe("creating next to imported stock", () => {
     expect(found.results.map((r) => r.path)).toContain("npcs/brunhild-wellenbrecher");
   });
 });
+
+// „Als aktiv setzen" (issue #115): the pool action that decides which chapter
+// is the one the session is in. It is ONE transaction over TWO rows, which is
+// the only thing worth testing about it — an app doing it in two calls would
+// have a window with two active chapters, and the session view picks the
+// first it finds.
+describe("POST /api/:campaign/chapters/:id/active", () => {
+  beforeEach(async () => {
+    await emptyStore();
+    await created<CampaignSummary>("/campaigns", { name: "Nordwind" });
+    await created<FileResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
+    await created<FileResponse>("/nordwind/chapters", { title: "02 Tiefe" });
+  });
+  afterEach(() => {
+    dropStore();
+  });
+
+  const statuses = async (): Promise<Record<string, string | undefined>> => {
+    const tree = (await (await app.request("/api/nordwind/tree")).json()) as {
+      chapters: Array<{ id: string; status?: string }>;
+    };
+    return Object.fromEntries(tree.chapters.map((c) => [c.id, c.status]));
+  };
+
+  test("sets active here and puts the previous one back to planned — in one call", async () => {
+    const first = await post("/nordwind/chapters/01-salzhafen/active", {});
+    expect(first.status).toBe(200);
+    expect(await statuses()).toMatchObject({ "01-salzhafen": "active" });
+
+    const second = await post("/nordwind/chapters/02-tiefe/active", {});
+    expect(second.status).toBe(200);
+    // The swap, which is the whole point: never two active chapters.
+    expect(await statuses()).toEqual({ "01-salzhafen": "planned", "02-tiefe": "active" });
+  });
+
+  test("is idempotent and answers the chapter document", async () => {
+    expect((await post("/nordwind/chapters/01-salzhafen/active", {})).status).toBe(200);
+    const res = await post("/nordwind/chapters/01-salzhafen/active", {});
+    expect(res.status).toBe(200);
+    const doc = (await res.json()) as FileResponse;
+    expect(doc.path).toBe("01-salzhafen/_chapter");
+    expect(doc.properties.status).toBe("active");
+    expect(await statuses()).toMatchObject({ "01-salzhafen": "active" });
+  });
+
+  test("404 for a chapter that does not exist, and nothing changes", async () => {
+    await post("/nordwind/chapters/01-salzhafen/active", {});
+    expect((await post("/nordwind/chapters/99-nichts/active", {})).status).toBe(404);
+    expect(await statuses()).toMatchObject({ "01-salzhafen": "active" });
+  });
+
+  test("400 for an unsafe chapter id", async () => {
+    expect((await post("/nordwind/chapters/..%2Fetc/active", {})).status).toBe(400);
+  });
+});

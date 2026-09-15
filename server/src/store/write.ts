@@ -127,6 +127,13 @@ export { logLineShortHash };
  * same commit. The driver is synchronous (db/driver.ts), so `fn` must be too
  * — no `await` may happen inside a transaction.
  */
+/**
+ * The ONE chapter status the app acts on (the pool's pill, the live view's
+ * „welches Kapitel läuft"). Everything else a chapter carries in `status` is
+ * free text the reading view shows verbatim.
+ */
+const CHAPTER_ACTIVE = "active";
+
 async function mutate<T>(campaign: string, fn: (db: GrimoireDb) => T): Promise<T> {
   await requireCampaign(campaign);
   const db = await getDb();
@@ -2622,6 +2629,62 @@ export async function createChapter(
     const row = chapterRowOf(tx, campaign, id);
     if (row === undefined) throw new ApiError(500, "chapter could not be created");
     indexChapter(tx, campaign, row);
+    return renderChapter(row);
+  });
+}
+
+/**
+ * POST /api/:campaign/chapters/:id/active -> the chapter document.
+ *
+ * „Als aktiv setzen" from the pool (issue #115). ONE call, ONE transaction,
+ * because it is ONE decision about two rows: the chapter named here becomes
+ * `active` and whatever was active before goes back to `planned`. Two
+ * requests from the app would have a window in which the campaign has two
+ * active chapters — and the live view picks the FIRST one it finds, so that
+ * window is a wrong session view, not a cosmetic race.
+ *
+ * `planned` and not NULL for the previous one: the status pill renders a
+ * chapter's status verbatim and NULL renders nothing, so clearing the status
+ * would make a chapter that was active look less planned than its siblings.
+ * Every other status a chapter carries is left alone — this action decides
+ * which chapter is active, nothing else.
+ *
+ * NO rev guard, deliberately, and it is the one write here without one: there
+ * is nothing to overwrite. The pool shows no rev (the tree carries none), the
+ * action sets a value rather than editing text, and its whole point is that it
+ * also changes a row the caller never read. Two DMs racing on it end with one
+ * active chapter either way — which is the invariant that matters.
+ * `PATCH /properties` on `<chapter>/_chapter` keeps its rev guard for the
+ * status FIELD, so the „Eigenschaften" dialog is unchanged.
+ *
+ * 404 for a chapter that does not exist; idempotent for one that is already
+ * active.
+ */
+export async function setActiveChapter(campaign: string, id: string): Promise<FileResponse> {
+  assertSafeChapterId(id);
+  return mutate(campaign, (tx) => {
+    const target = chapterRowOf(tx, campaign, id);
+    if (target === undefined) throw new ApiError(404, `unknown chapter: ${id}`);
+    const previous = tx
+      .select()
+      .from(chapters)
+      .where(and(eq(chapters.campaignId, campaign), eq(chapters.status, CHAPTER_ACTIVE)))
+      .all() as ChapterRow[];
+    for (const row of previous) {
+      if (row.id === id) continue;
+      tx.update(chapters)
+        .set({ status: "planned", rev: row.rev + 1 })
+        .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, row.id)))
+        .run();
+    }
+    if (target.status !== CHAPTER_ACTIVE) {
+      tx.update(chapters)
+        .set({ status: CHAPTER_ACTIVE, rev: target.rev + 1 })
+        .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, id)))
+        .run();
+    }
+    const row = chapterRowOf(tx, campaign, id);
+    if (row === undefined) throw new ApiError(500, "chapter could not be updated");
     return renderChapter(row);
   });
 }
