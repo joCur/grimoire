@@ -249,9 +249,9 @@ jeweils nur für den gewählten:
 | -------------------- | ------------ | ------------------------------ | ----------------------------------------------------- |
 | `LLM_PROVIDER`       | –            | `claude`                       | `claude`, `openrouter`, `openai`, `lmstudio`           |
 | `ANTHROPIC_API_KEY`  | `claude`     | –                              | **erforderlich** für `claude`                          |
-| `CLAUDE_MODEL`       | `claude`     | `claude-sonnet-4-6`            | Modell-Override                                        |
+| `CLAUDE_MODEL`       | `claude`     | `claude-sonnet-5`            | Modell-Override                                        |
 | `OPENROUTER_API_KEY` | `openrouter` | –                              | **erforderlich** für `openrouter`                      |
-| `LLM_MODEL`          | `openrouter`, `openai` | –                    | **erforderlich**, z. B. `anthropic/claude-sonnet-4.6`  |
+| `LLM_MODEL`          | `openrouter`, `openai` | –                    | **erforderlich**, z. B. `anthropic/claude-sonnet-5`  |
 | `LLM_BASE_URL`       | `openai` (Pflicht), `openrouter` (Override) | `https://openrouter.ai/api/v1` | API-Root eines OpenAI-kompatiblen Endpoints, **ohne** `/chat/completions` |
 | `LLM_API_KEY`        | `openai`     | –                              | optional, nur wenn der Endpoint Auth verlangt          |
 | `LMSTUDIO_URL`       | `lmstudio`   | `http://localhost:1234/v1`     | API-Root der lokalen LM-Studio-Instanz                 |
@@ -289,7 +289,7 @@ vorhanden (Server-Neustart?)".
 Fehlt eine erforderliche Variable, antwortet nur `POST
 /api/:campaign/generate` mit `503` und der Meldung im Klartext, z. B.
 `{"error":"ANTHROPIC_API_KEY fehlt"}`, `{"error":"OPENROUTER_API_KEY fehlt"}`
-oder `{"error":"LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-4.6)"}` (der
+oder `{"error":"LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-5)"}` (der
 Provider wird bewusst erst pro Request erzeugt). Ein Tippfehler in
 `LLM_PROVIDER` fällt genauso auf statt still auf Claude zurückzufallen:
 `{"error":"Unbekannter LLM_PROVIDER: …"}`. Lese- und Schreib-API sind von
@@ -300,7 +300,7 @@ all dem nicht betroffen.
 ```bash
 LLM_PROVIDER=openrouter
 OPENROUTER_API_KEY=sk-or-v1-…
-LLM_MODEL=anthropic/claude-sonnet-4.6
+LLM_MODEL=anthropic/claude-sonnet-5
 ```
 
 Modellwechsel = `LLM_MODEL` ändern und Container neu starten. Grimoire

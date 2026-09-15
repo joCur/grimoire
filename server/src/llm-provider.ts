@@ -341,7 +341,7 @@ export class ClaudeProvider implements LLMProvider {
   readonly name = "claude";
   constructor(
     private apiKey: string,
-    private model = "claude-sonnet-4-6",
+    private model = "claude-sonnet-5",
     // The Messages API requires max_tokens, so this one is never undefined.
     readonly maxTokens: number = DEFAULT_MAX_TOKENS,
   ) {}
@@ -496,7 +496,7 @@ const OPENROUTER_HEADERS = {
 // vendor-prefixed and picking one for the user would silently bill the wrong
 // model.
 function requireModel(env: NodeJS.ProcessEnv): string {
-  if (!env.LLM_MODEL) throw new Error("LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-4.6)");
+  if (!env.LLM_MODEL) throw new Error("LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-5)");
   return env.LLM_MODEL;
 }
 
