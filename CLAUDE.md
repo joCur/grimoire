@@ -32,9 +32,6 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   für Dev/Tests/E2E (der echte Import liest sie, es gibt keine zweiten
   Fixtures) und die Referenz des Import-Formats. NIE umformatieren oder
   „aufräumen"; das Format ist Vertrag.
-- `campaigns/` — lokaler Altbestand ohne Funktion (gitignored): kein
-  Produktionspfad liest ihn, nur `grimoire seed <dir>`, wenn man ihm den
-  Ordner ausdrücklich übergibt. Im Code nie fest verdrahten.
 - `GRIMOIRE_DATA` (Default `./data`, gitignored) — hier liegt
   `grimoire.db` samt `-wal`/`-shm`: die eigentlichen Daten. Kein Code liest
   Kampagneninhalte von woanders.

@@ -377,10 +377,6 @@ kein In-App-Auth nachbauen.
 das Verfahren (`VACUUM INTO` im Betrieb, oder Container stoppen und das
 Verzeichnis kopieren) und die Wiederherstellung.
 
-Ein versionierter `campaigns/`-Ordner sichert **keine** laufende Kampagne —
-der Server liest ihn nicht (ADR #13); er ist höchstens ein Archiv des
-Vor-Migrations-Stands.
-
 ## 5. Betrieb & Fehlersuche
 
 - Logs: `docker logs -f grimoire`. Beim Start erscheinen der Pfad der

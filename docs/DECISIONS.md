@@ -40,14 +40,13 @@ Schreibzugriffe laufen über den Server, kein persistenter Browser-State.
 - Inhalte werden extern editiert (VS Code Remote o. ä.). Ein simples
   Textarea-Edit als Notlösung ist erlaubt; ein vollwertiger MD-Editor
   ist bewusst KEIN Ziel von v1.
-- Konfliktschutz: Patch nur bei unveränderter Zeilenversion `rev`, sonst 409
-  (ursprünglich: unveränderte `mtime` der Datei — siehe Nachtrag).
+- Konfliktschutz: Patch nur bei unveränderter Zeilenversion `rev`, sonst 409.
 
 > **Teilweise überholt (#11, #13/#15):** Bearbeitet wird in der App; ein
 > externer Editor ist kein Datenpfad mehr, weil die Datenbank die Wahrheit
 > ist. Was GILT: das Append-only von Session-Log und Inbox (samt der einen
-> Ausnahme, dem Abhaken erledigter Inbox-Zeilen) und die Konfliktregel —
-> nur heißt der Guard jetzt `rev`, die Zeilenversion, statt der Dateizeit.
+> Ausnahme, dem Abhaken erledigter Inbox-Zeilen) und die Konfliktregel auf
+> `rev`.
 
 ## 5. Tech-Stack
 
@@ -64,8 +63,7 @@ Kein Electron/Tauri — Web-App hinter Tailscale reicht.
 
 **Backend:** Bun + Hono, Drizzle über SQLite (`server/src/db/`), Suche als
 FTS5-Index. gray-matter gehört zum Importer/Parser (`@grimoire/shared`), nicht
-zum Laufzeit-Stack. (War mal: chokidar als Datei-Watcher und Fuse.js als
-In-Memory-Suche — beide seit #13 entfernt.)
+zum Laufzeit-Stack.
 Hono statt Express/Fastify: minimal, typsicher, läuft auf Bun UND Node
 (Runtime-Wechsel bleibt möglich, siehe #7).
 
@@ -74,7 +72,7 @@ game-icons.net (CC BY) für thematische Marker (Entitäts- und
 Callout-Typen). Benötigte SVGs als eigene Komponenten einchecken.
 
 **Deployment:** ein Docker-Container (Bun-Image), Volume auf
-`GRIMOIRE_DATA` (seit #13; vorher `campaigns/`), erreichbar nur über
+`GRIMOIRE_DATA`, erreichbar nur über
 Tailscale. Details: docs/DEPLOYMENT.md.
 
 ## 6. LLM-Generator

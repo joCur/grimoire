@@ -86,7 +86,7 @@ export const de = {
 
   "create.campaign.title": "Kampagne anlegen",
   "create.campaign.description":
-    "Der Name wird zur id der Kampagne — sie steht in jeder Adresse und bleibt, wie sie ist. Danach entstehen darin Kapitel und Szenen.",
+    "Danach entstehen darin Kapitel und Szenen.",
   "create.campaign.nameLabel": "Name der Kampagne",
   "create.campaign.namePlaceholder": "Name der Kampagne",
   "create.campaign.idPrefix": "id: ",
@@ -95,7 +95,7 @@ export const de = {
 
   "create.chapter.title": "Kapitel anlegen",
   "create.chapter.description":
-    'Der Titel wird zur id des Kapitels — sie steht in jeder Szenen-Adresse und bleibt, wie sie ist. Das Ziel ist optional und landet im Kapiteltext unter der Überschrift „## Ziel des Kapitels" — dem Abschnitt, der als Ziel des Kapitels angezeigt wird.',
+    'Das Ziel ist optional und erscheint im Kapitel als Abschnitt „Ziel des Kapitels".',
   "create.chapter.nameLabel": "Titel",
   "create.chapter.namePlaceholder": "Titel des Kapitels",
   "create.chapter.goalLabel": "Ziel des Kapitels (optional)",
@@ -103,19 +103,19 @@ export const de = {
 
   "create.scene.title": "Szene anlegen",
   "create.scene.description":
-    "Die Szene entsteht als Entwurf in diesem Kapitel und öffnet gleich im Editor. Der Titel wird zur id — sie bleibt, wie sie ist.",
+    "Die Szene entsteht als Entwurf in diesem Kapitel und öffnet gleich im Editor.",
   "create.scene.nameLabel": "Titel",
   "create.scene.namePlaceholder": "Titel der Szene",
 
   "create.npc.title": "NPC anlegen",
   "create.npc.description":
-    "Nur der Name — Rolle, Status und alles Weitere stehen danach im Eigenschaften-Dialog. Aus dem Namen wird die id, und die bleibt.",
+    "Nur der Name — Rolle, Status und alles Weitere stehen danach im Eigenschaften-Dialog.",
   "create.npc.nameLabel": "Name",
   "create.npc.namePlaceholder": "Name des NPCs",
 
   "create.location.title": "Ort anlegen",
   "create.location.description":
-    "Nur der Name — alles Weitere steht danach im Eigenschaften-Dialog. Aus dem Namen wird die id, und die bleibt.",
+    "Nur der Name — alles Weitere steht danach im Eigenschaften-Dialog.",
   "create.location.nameLabel": "Name",
   "create.location.namePlaceholder": "Name des Orts",
 
