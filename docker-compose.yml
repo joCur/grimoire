@@ -27,5 +27,5 @@ services:
       # alles andere läuft. Provider-Matrix: docs/DEPLOYMENT.md Abschnitt 2.
       LLM_PROVIDER: openrouter
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      LLM_MODEL: anthropic/claude-sonnet-4.6
+      LLM_MODEL: anthropic/claude-sonnet-5
       # LLM_MAX_TOKENS: "12000"  # falls ein Modell die JSON-Antwort abschneidet

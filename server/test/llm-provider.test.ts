@@ -52,12 +52,12 @@ describe("createProvider", () => {
     const base = { LLM_PROVIDER: "openrouter" } as NodeJS.ProcessEnv;
     expect(() => createProvider(base)).toThrow("OPENROUTER_API_KEY fehlt");
     expect(() => createProvider({ ...base, OPENROUTER_API_KEY: "sk-or-test" })).toThrow(
-      "LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-4.6)",
+      "LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-5)",
     );
     const p = createProvider({
       ...base,
       OPENROUTER_API_KEY: "sk-or-test",
-      LLM_MODEL: "anthropic/claude-sonnet-4.6",
+      LLM_MODEL: "anthropic/claude-sonnet-5",
     });
     expect(p).toBeInstanceOf(OpenAICompatProvider);
     expect(p.name).toBe("openrouter");
@@ -67,7 +67,7 @@ describe("createProvider", () => {
     const base = { LLM_PROVIDER: "openai" } as NodeJS.ProcessEnv;
     expect(() => createProvider(base)).toThrow("LLM_BASE_URL fehlt");
     expect(() => createProvider({ ...base, LLM_BASE_URL: "http://x/v1" })).toThrow(
-      "LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-4.6)",
+      "LLM_MODEL fehlt (z. B. anthropic/claude-sonnet-5)",
     );
     const p = createProvider({ ...base, LLM_BASE_URL: "http://x/v1", LLM_MODEL: "m" });
     expect(p).toBeInstanceOf(OpenAICompatProvider);
@@ -251,7 +251,7 @@ describe("OpenAICompatProvider request", () => {
     const provider = createProvider({
       LLM_PROVIDER: "openrouter",
       OPENROUTER_API_KEY: "sk-or-test",
-      LLM_MODEL: "anthropic/claude-sonnet-4.6",
+      LLM_MODEL: "anthropic/claude-sonnet-5",
       LLM_BASE_URL: baseUrl, // point the OpenRouter path at the local capture
       LLM_MAX_TOKENS: "12000",
     } as NodeJS.ProcessEnv);
@@ -266,7 +266,7 @@ describe("OpenAICompatProvider request", () => {
     expect(cap.headers.authorization).toBe("Bearer sk-or-test");
     expect(cap.headers["http-referer"]).toBe("https://github.com/joCur/grimoire");
     expect(cap.headers["x-title"]).toBe("Grimoire");
-    expect(cap.body.model).toBe("anthropic/claude-sonnet-4.6");
+    expect(cap.body.model).toBe("anthropic/claude-sonnet-5");
     expect(cap.body.temperature).toBe(0.3);
     expect(cap.body.max_tokens).toBe(12000);
 
@@ -341,7 +341,7 @@ describe("OpenAICompatProvider request", () => {
       {
         LLM_PROVIDER: "openrouter",
         OPENROUTER_API_KEY: "sk-or-test",
-        LLM_MODEL: "anthropic/claude-sonnet-4.6",
+        LLM_MODEL: "anthropic/claude-sonnet-5",
       } as NodeJS.ProcessEnv,
       { LLM_PROVIDER: "openai", LLM_MODEL: "m" } as NodeJS.ProcessEnv,
     ];
@@ -399,7 +399,7 @@ describe("OpenAICompatProvider request", () => {
     const provider = new OpenAICompatProvider({
       name: "openrouter",
       baseUrl: `http://127.0.0.1:${addr.port}/v1`,
-      model: "anthropic/claude-sonnet-4.6",
+      model: "anthropic/claude-sonnet-5",
       apiKey: "sk-or-test",
     });
     await expect(provider.complete(REQ)).rejects.toThrow('openrouter: 401 {"error":"no credits"}');
