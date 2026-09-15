@@ -27,6 +27,7 @@
 
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
+  CHAPTER_STATUSES,
   ENTITY_SLUG,
   freeSlug,
   isEnded,
@@ -123,11 +124,71 @@ export { logLineShortHash };
 // --- transaction plumbing ----------------------------------------------------
 
 /**
- * The ONE chapter status the app acts on (the pool's pill, the live view's
- * „welches Kapitel läuft"). Everything else a chapter carries in `status` is
- * free text the reading view shows verbatim.
+ * The ONE chapter status the app acts on (the pool's status menu, the live
+ * view's „welches Kapitel läuft"). There is at most one per campaign, and
+ * every write that sets it clears the previous one in the same transaction.
  */
 const CHAPTER_ACTIVE = "active";
+
+/**
+ * Where a chapter starts, and where the swap puts the one it takes `active`
+ * from. Not NULL: the pool renders a chapter's status and nothing renders
+ * nothing, so a chapter without a status would look less planned than its
+ * siblings. A NULL only survives on a pre-#115 row; the app reads it as
+ * `planned` (lib/chapter-status.ts).
+ */
+const CHAPTER_PLANNED = "planned";
+
+/**
+ * A chapter status a WRITE may carry (issue #115): the known trio, or nothing
+ * (`null` deletes the key, which is how a chapter loses its status).
+ *
+ * This is the one place the format's degrade rule does not extend to the API.
+ * A stored value outside the trio still renders verbatim — the pool's menu
+ * shows it and the reading view prints it, exactly like an unknown scene
+ * status — but the chapter status is a three-position regler now, so a fourth
+ * value arriving on the wire can only be a typo in a hand-written request,
+ * and the honest answer to a typo is the 400.
+ */
+/**
+ * Take `active` off every OTHER chapter of the campaign — the swap half of
+ * „exactly one active chapter".
+ *
+ * `planned` and not NULL for the one it takes the flag from: the pool renders
+ * a chapter's status verbatim and NULL renders nothing, so clearing it would
+ * make a chapter that was active look less planned than its siblings.
+ *
+ * Both writes that can set `active` call this in their own transaction:
+ * `POST /chapters/:id/active` (the pool's status menu) and a
+ * `PATCH /properties` whose status ends up `active` (the „Kapitel-
+ * Eigenschaften" dialog). The invariant belongs to the COLUMN, not to one
+ * endpoint — otherwise the dialog is a second door past it.
+ */
+function clearOtherActiveChapters(tx: GrimoireDb, campaign: string, keep: string): void {
+  const previous = tx
+    .select()
+    .from(chapters)
+    .where(and(eq(chapters.campaignId, campaign), eq(chapters.status, CHAPTER_ACTIVE)))
+    .all() as ChapterRow[];
+  for (const row of previous) {
+    if (row.id === keep) continue;
+    tx.update(chapters)
+      .set({ status: CHAPTER_PLANNED, rev: row.rev + 1 })
+      .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, row.id)))
+      .run();
+  }
+}
+
+function assertChapterStatus(patch: Record<string, unknown>): void {
+  if (!("status" in patch)) return;
+  const value = patch.status;
+  if (value === null || value === undefined) return;
+  if (typeof value === "string" && (CHAPTER_STATUSES as readonly string[]).includes(value)) return;
+  throw new ApiError(
+    400,
+    `invalid chapter status: ${String(value)} — one of ${CHAPTER_STATUSES.join(", ")}`,
+  );
+}
 
 /**
  * Run `fn` in one transaction and bump the campaign's version counter in the
@@ -947,6 +1008,9 @@ function patchLocator(
       if (row === undefined) throw new ApiError(404, "file not found");
       guardRev(row.rev, rev, "chapter changed");
       rejectIdPatch(patch, row.id);
+      // Only the known trio may be WRITTEN (issue #115); what is already
+      // stored still renders verbatim.
+      assertChapterStatus(patch);
       const fm = applyPatch(renderChapter(row).properties, patch);
       const next: ChapterRow = {
         ...row,
@@ -955,6 +1019,10 @@ function patchLocator(
         extra: extraOf(fm, CHAPTER_KEYS),
         rev: row.rev + 1,
       };
+      // Setting `active` HERE performs the same swap the dedicated endpoint
+      // does, in this transaction: the „Eigenschaften" dialog must not be a
+      // way past the one-active invariant (issue #115 review, finding 4).
+      if (next.status === CHAPTER_ACTIVE) clearOtherActiveChapters(tx, campaign, row.id);
       tx.update(chapters)
         .set({ title: next.title, status: next.status, extra: next.extra, rev: next.rev })
         .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, row.id)))
@@ -2632,6 +2700,11 @@ export async function createChapter(
         campaignId: campaign,
         id,
         title: title.trim(),
+        // A chapter is born `planned` (issue #115), like the one the boot
+        // repair and `ensureChapterRow` create: the status is a three-position
+        // regler now, and every chapter should start at a position the DM can
+        // read instead of at "no status at all".
+        status: CHAPTER_PLANNED,
         body,
         pos: nextPos(
           tx.select({ pos: chapters.pos }).from(chapters).where(eq(chapters.campaignId, campaign)).all(),
@@ -2655,9 +2728,11 @@ export async function createChapter(
  * active chapters — and the live view picks the FIRST one it finds, so that
  * window is a wrong session view, not a cosmetic race.
  *
- * `planned` and not NULL for the previous one: the status pill renders a
- * chapter's status verbatim and NULL renders nothing, so clearing the status
- * would make a chapter that was active look less planned than its siblings.
+ * The swap itself is `clearOtherActiveChapters`, which a
+ * `PATCH /properties` setting `active` runs too: the invariant belongs to the
+ * column, not to this endpoint, or the „Kapitel-Eigenschaften" dialog would be
+ * a second door past it (issue #115 review, finding 4).
+ *
  * Every other status a chapter carries is left alone — this action decides
  * which chapter is active, nothing else.
  *
@@ -2666,8 +2741,8 @@ export async function createChapter(
  * action sets a value rather than editing text, and its whole point is that it
  * also changes a row the caller never read. Two DMs racing on it end with one
  * active chapter either way — which is the invariant that matters.
- * `PATCH /properties` on `<chapter>/_chapter` keeps its rev guard for the
- * status FIELD, so the „Eigenschaften" dialog is unchanged.
+ * `PATCH /properties` on `<chapter>/_chapter` keeps its rev guard, so the
+ * „Eigenschaften" dialog is a guarded write that happens to also swap.
  *
  * 404 for a chapter that does not exist; idempotent for one that is already
  * active.
@@ -2677,18 +2752,7 @@ export async function setActiveChapter(campaign: string, id: string): Promise<Fi
   return mutate(campaign, (tx) => {
     const target = chapterRowOf(tx, campaign, id);
     if (target === undefined) throw new ApiError(404, `unknown chapter: ${id}`);
-    const previous = tx
-      .select()
-      .from(chapters)
-      .where(and(eq(chapters.campaignId, campaign), eq(chapters.status, CHAPTER_ACTIVE)))
-      .all() as ChapterRow[];
-    for (const row of previous) {
-      if (row.id === id) continue;
-      tx.update(chapters)
-        .set({ status: "planned", rev: row.rev + 1 })
-        .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, row.id)))
-        .run();
-    }
+    clearOtherActiveChapters(tx, campaign, id);
     if (target.status !== CHAPTER_ACTIVE) {
       tx.update(chapters)
         .set({ status: CHAPTER_ACTIVE, rev: target.rev + 1 })
