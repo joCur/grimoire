@@ -37,25 +37,37 @@ damit den String beendete.
 
 Der Server trennt die beiden Hälften in `server/src/document-reply.ts`
 (`parseDocumentReply`, von allen vier Validierungen benutzt) und validiert wie
-immer über den Markdown-Parser aus `@grimoire/shared`. **Toleriert** werden
-eine umgebende Code-Zaun (```` ``` ````) und ein Satz davor oder danach —
-beides kostet sonst eine Korrekturrunde für nichts —, solange der
-Frontmatter-Start noch zu finden ist: das **erste** `---` des Blocks, mit
-einem zweiten `---` darunter und mindestens einer `key:`-Zeile dazwischen.
-Zwei waagerechte Linien in Prosa sind also kein Frontmatter, und ein Absatz
-oberhalb fällt nur weg, wenn vor dem Frontmatter kein `---` steht. Findet der
-Server keinen Frontmatter-Start, ist das der **eine** Formfehler, und die
-Korrekturrunde sagt genau, wie ein Dokument aussieht.
+immer über den Markdown-Parser aus `@grimoire/shared`.
 
-Ein **nachgestellter** Satz fällt nur bei einer *unverzäunten* Antwort weg,
-und nur wenn er der letzte Block ist, hinter einer Leerzeile steht und keine
-Markdown-Struktur enthält (`#`, `>`, `-`, `*`, `|`, Backtick, `[[`) — das ist
-das „Ich hoffe, das passt so!“ am Ende. Ein Schlussabsatz mit Struktur bleibt,
-ein strukturloser Absatz direkt unter einer Überschrift (`## Will` plus ein
-Satz) bleibt ebenfalls, und verzäunter Inhalt bleibt unangetastet. Der Preis:
-ein schlichter Schlussabsatz, der *nicht* unter einer Überschrift steht, ist
-von einem Abschiedssatz nicht zu unterscheiden und fällt weg. Sonst wird nichts nachkorrigiert: keine Typografie-Heuristik, kein
-stilles Ersetzen.
+**Was vor dem Dokument steht, fällt weg.** Toleriert werden eine umgebende
+Code-Zaun (```` ``` ````) und ein Satz davor („Hier ist die Szene:“) — beides
+kostet sonst eine Korrekturrunde für nichts —, solange der Frontmatter-Start
+noch zu finden ist: das **erste** `---` des Blocks, mit einem zweiten `---`
+darunter und mindestens einer `key:`-Zeile dazwischen. Zwei waagerechte Linien
+in Prosa sind also kein Frontmatter, und ein Absatz oberhalb fällt nur weg,
+wenn vor dem Frontmatter kein `---` steht. Findet der Server keinen
+Frontmatter-Start, ist das der **eine** Formfehler, und die Korrekturrunde
+sagt genau, wie ein Dokument aussieht.
+
+**Was nach dem Dokument steht, ist Teil des Dokuments.** Vom Frontmatter-Start
+an wird jede Zeile wörtlich übernommen; nur der `---warnings---`-Block wird
+abgetrennt. Ein „Ich hoffe, das passt so!“ am Ende landet also als Fließtext in
+der Datei — sichtbar in der Review-Vorschau, wo der DM es in einem Zug löscht.
+
+Das war einmal anders: eine Heuristik schnitt bei unverzäunten Antworten einen
+letzten Block ohne Markdown-Struktur ab. Sie ist entfernt (Issue #107), weil
+sie einen Abschiedssatz nicht von einem schlichten Schlusssatz nach einem
+Callout oder einer Tabelle unterscheiden kann — und stiller Datenverlust ist
+teurer als sichtbares Geplauder, das der DM in der Review löscht. Verhindert
+wird das Geplauder jetzt auf der Prompt-Seite: jeder Dokument-Prompt
+(`scene-single-output.md`, `npc-`, `location-`, `augment-system-prompt.md`)
+trägt genau einmal den Satz „Vor dem Dokument und nach dem Dokument steht
+nichts …“, und die Korrekturrunde für Dokumente wiederholt ihn wörtlich
+(`NO_TEXT_AROUND_DOCUMENT_RULE`). Der Gliederungs-Prompt trägt ihn nicht — der
+antwortet JSON.
+
+Sonst wird nichts nachkorrigiert: keine Typografie-Heuristik, kein stilles
+Ersetzen.
 
 **Die Gliederung — das einzige JSON.** Sie ist ein kleines, flaches Objekt,
 und deshalb die einzige Antwort, deren Form eine API *garantieren* kann:

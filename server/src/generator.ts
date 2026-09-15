@@ -54,7 +54,11 @@ import {
 } from "@grimoire/shared";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
 import { ApiError, assertSafeAddress } from "./campaign-fs";
-import { WARNINGS_DELIMITER, parseDocumentReply } from "./document-reply";
+import {
+  NO_TEXT_AROUND_DOCUMENT_RULE,
+  WARNINGS_DELIMITER,
+  parseDocumentReply,
+} from "./document-reply";
 import { checkDraftsNaming, type NamingRule } from "./naming-check";
 // The generator reads its context and writes its drafts through the store
 // (issue #57) — the campaign file tree is not a data source any more.
@@ -966,8 +970,12 @@ export function buildCorrectionMessage(
       ? `Antworte erneut mit dem vollständigen, korrigierten JSON — gleiches Schema, ${tail}, ` +
         "kein Text außerhalb des JSON-Blocks."
       : `Antworte erneut mit dem vollständigen, korrigierten Dokument — Frontmatter-Block ` +
-        `und Fließtext, ${tail}. Kein JSON, keine Code-Zäune, kein Text außerhalb des ` +
-        `Dokuments; Warnungen erst nach einer Zeile \`${WARNINGS_DELIMITER}\`.`;
+        `und Fließtext, ${tail}. Kein JSON, keine Code-Zäune. ` +
+        // The same wording the document prompts carry: nothing around the
+        // document, and the warnings block is the one exception. Trailing
+        // chatter is kept verbatim now (./document-reply), so this is where
+        // it has to be said — every time.
+        NO_TEXT_AROUND_DOCUMENT_RULE;
   return [
     "Deine letzte Antwort hat die mechanische Validierung nicht bestanden:",
     errors.map((e) => `- ${e}`).join("\n"),

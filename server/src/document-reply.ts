@@ -35,6 +35,12 @@
 // both are stripped — but only as long as the frontmatter start is still
 // findable, which is the one thing a document cannot do without.
 //
+// What it does NOT touch is anything AFTER the document: a trailing sentence
+// is kept verbatim as body text. Guessing there means guessing whether a
+// closing sentence is the model signing off or the last line of the scene,
+// and a wrong guess deletes the DM's content without a trace. The prompts
+// forbid the sign-off instead (generator/*-system-prompt.md).
+//
 // `extractJsonReply` (generator.ts) survives for the OUTLINE alone: that step
 // answers a small, flat object and is the one call where JSON is the honest
 // shape (issue #107, Zuschnitt 1).
@@ -63,20 +69,27 @@ const FRONTMATTER_LINE = /^[ \t]*-{3}[ \t]*$/;
  * frontmatter (issue #107 review).
  */
 const KEY_LINE = /^[ \t]*[A-Za-z_][A-Za-z0-9_-]*[ \t]*:/;
-/**
- * Anything that makes a line MARKDOWN rather than a sentence — a heading, a
- * callout or quote, a list bullet, a table, code, a wiki link. A trailing
- * block that carries none of it is the model talking about its answer
- * („Ich hoffe, das passt so!"), and that is not part of the document.
- */
-const STRUCTURE = /[#>\-*|`]|\[\[/;
-
 export interface DocumentReply {
   /** The document, frontmatter block included, exactly as it will be stored. */
   content: string;
   /** One warning per line of the warnings block; empty when there was none. */
   warnings: string[];
 }
+
+/**
+ * The one rule that keeps a reply a document, in the exact wording the
+ * document prompts carry („## Ausgabeformat" in scene-single-output.md,
+ * npc-, location- and augment-system-prompt.md — minus their `**` emphasis).
+ *
+ * It exists as a constant because the CORRECTION turn has to say the same
+ * thing (generator.buildCorrectionMessage): trailing chatter is no longer
+ * stripped, so the prompt is the only place it is prevented, and a correction
+ * turn that repeated a softer rule would teach the model the softer rule.
+ */
+export const NO_TEXT_AROUND_DOCUMENT_RULE =
+  "Vor dem Dokument und nach dem Dokument steht nichts — keine Anrede, keine " +
+  "Erklärung, kein Schlusssatz: das Einzige, was nach dem Dokument stehen darf, " +
+  `ist der \`${WARNINGS_DELIMITER}\`-Block.`;
 
 /**
  * The error a reply that is not a document gets back — German, because it
@@ -126,10 +139,17 @@ export function parseDocumentReply(
 
   const start = frontmatterStart(documentLines);
   if (start === -1) return { ok: false, error: NOT_A_DOCUMENT_ERROR };
+  // Everything from the frontmatter start on IS the document, trailing prose
+  // included. There used to be a heuristic here that cut a structureless
+  // trailing block off an unfenced reply („Ich hoffe, das passt so!"), and it
+  // could not tell a sign-off from a plain closing sentence after a callout or
+  // a table — so it silently deleted real content. Visible chatter the DM
+  // deletes in the review is the cheaper failure; the prompt side is where
+  // this is prevented (generator/README.md).
+  //
   // The document keeps its trailing newline: that is how a file is stored,
   // and the renderer's own output ends that way too.
-  const kept = tail.length > 0 ? documentLines.slice(start) : withoutChatter(documentLines.slice(start));
-  const content = `${kept.join("\n").trimEnd()}\n`;
+  const content = `${documentLines.slice(start).join("\n").trimEnd()}\n`;
   return { ok: true, reply: { content, warnings } };
 }
 
@@ -187,48 +207,6 @@ function insideFence(lines: readonly string[], i: number): boolean {
     if (FENCE_LINE.test(lines[j] as string)) open = !open;
   }
   return open;
-}
-
-/**
- * The document without a trailing block of model chatter.
- *
- * Only for an UNFENCED reply, and only for the LAST block: a block that
- * follows a blank line and carries no markdown structure at all is the model
- * signing off („Ich hoffe, das passt so!"), which used to be stored as body
- * text and passed every validator. A fenced reply is left alone — there the
- * fence already said where the document ends — and so is a closing paragraph
- * that has any structure in it.
- *
- * One exception keeps real documents whole: a structureless block whose
- * PREVIOUS block is nothing but a heading is that section's text (`## Will`
- * followed by one sentence is how an npc stub ends), never a sign-off.
- * Chatter stands after a finished section, not under an empty heading.
- */
-function withoutChatter(lines: readonly string[]): readonly string[] {
-  let end = lines.length;
-  while (end > 0 && (lines[end - 1] as string).trim() === "") end -= 1;
-  let begin = end;
-  while (begin > 0 && (lines[begin - 1] as string).trim() !== "") begin -= 1;
-  // No blank line above it means the reply is ONE block — the document.
-  if (begin === 0) return lines;
-  const block = lines.slice(begin, end);
-  if (block.some((line) => STRUCTURE.test(line))) return lines;
-  if (isHeadingBlock(previousBlock(lines, begin))) return lines;
-  return lines.slice(0, begin);
-}
-
-/** The block above line `begin`, blank lines in between skipped. */
-function previousBlock(lines: readonly string[], begin: number): readonly string[] {
-  let end = begin;
-  while (end > 0 && (lines[end - 1] as string).trim() === "") end -= 1;
-  let start = end;
-  while (start > 0 && (lines[start - 1] as string).trim() !== "") start -= 1;
-  return lines.slice(start, end);
-}
-
-/** A block that is nothing but an ATX heading line. */
-function isHeadingBlock(block: readonly string[]): boolean {
-  return block.length === 1 && /^[ \t]*#{1,6}[ \t]+\S/.test(block[0] as string);
 }
 
 /**

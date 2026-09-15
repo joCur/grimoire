@@ -30,6 +30,11 @@ Der Quelltext nennt keinen DC — DC 13 gesetzt.
 
 Gibt es nichts zu melden, lässt du den Block ganz weg.
 
+Vor dem Dokument und nach dem Dokument steht **nichts** — keine Anrede, keine
+Erklärung, kein Schlusssatz: das Einzige, was nach dem Dokument stehen darf,
+ist der `---warnings---`-Block. Ein Satz danach landet sonst als Fließtext in
+der Datei.
+
 ## Ziel-Format der Datei
 
 ```yaml

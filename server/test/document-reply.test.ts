@@ -127,31 +127,30 @@ describe("parseDocumentReply", () => {
     expect(NOT_A_DOCUMENT_ERROR).toContain("Frontmatter-Block");
   });
 
-  test("trailing model chatter after an unfenced document comes off", () => {
-    const reply = parse(`${PO_SCENE}\nIch hoffe, das passt so!\n`);
-    expect(reply.content).toBe(PO_SCENE);
-    expect(reply.content).not.toContain("Ich hoffe");
-  });
-
-  test("a closing paragraph WITH structure stays — only structureless chatter goes", () => {
-    for (const closing of [
+  test("trailing prose after the document is KEPT — nothing is cut (issue #107)", () => {
+    // There used to be a heuristic here that cut a structureless trailing
+    // block off an unfenced reply. It could not tell a sign-off from a plain
+    // closing sentence, so it silently deleted real content. Now the DM sees
+    // the chatter in the review and deletes it there; the prompts forbid it.
+    const signOff = `${PO_SCENE}\nIch hoffe, das passt so!\n`;
+    expect(parse(signOff).content).toBe(signOff);
+    expect(parse(signOff).content).toContain("Ich hoffe, das passt so!");
+    // The content this used to eat: a plain closing paragraph.
+    const closing = `${PO_SCENE}\nEin schlichter Schlussabsatz.\n`;
+    expect(parse(closing).content).toBe(closing);
+    // Anything with markdown structure was already safe and stays so.
+    for (const tail of [
       "> [!note] Die Wache erinnert sich.",
       "- Die Wache erinnert sich.",
       "Die Wache erinnert sich an [[night-watch-quay]].",
       "| Wurf | Folge |\n| --- | --- |",
       "Nutze `Stealth` erneut.",
+      "## Nachwirkung\n\nDie Wache erinnert sich.",
     ]) {
-      const reply = parse(`${PO_SCENE}\n${closing}\n`);
-      expect(reply.content).toBe(`${PO_SCENE}\n${closing}\n`);
+      expect(parse(`${PO_SCENE}\n${tail}\n`).content).toBe(`${PO_SCENE}\n${tail}\n`);
     }
-    // A structureless block under a bare HEADING is that section's text —
-    // `## Will` plus one sentence is how an npc stub ends.
-    const section = `${PO_SCENE}\n## Nachwirkung\n\nDie Wache erinnert sich.\n`;
-    expect(parse(section).content).toBe(section);
-    // The price of the rule: a plain closing paragraph that does NOT sit
-    // under a heading cannot be told apart from a sign-off and is cut.
-    expect(parse(`${PO_SCENE}\nEin schlichter Schlussabsatz.\n`).content).toBe(PO_SCENE);
-    // A FENCED reply is left alone: the fence already said where it ends.
+    // A fenced reply reads the same way — the warnings block is still the
+    // only thing that is ever split off.
     const fenced = `\`\`\`markdown\n${PO_SCENE}\nIch hoffe, das passt so!\n\`\`\`\n`;
     expect(parse(fenced).content).toContain("Ich hoffe, das passt so!");
   });

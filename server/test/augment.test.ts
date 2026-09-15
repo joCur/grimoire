@@ -15,10 +15,11 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import type { AugmentResult, FileResponse, GenerateJob } from "@grimoire/shared";
 import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generate-jobs";
-import { WARNINGS_DELIMITER } from "../src/document-reply";
+import { NO_TEXT_AROUND_DOCUMENT_RULE, WARNINGS_DELIMITER } from "../src/document-reply";
 import {
   ASSET_FILES,
   MAX_CORRECTION_TURNS,
+  buildCorrectionMessage,
   loadAsset,
   setProviderForTests,
 } from "../src/generator";
@@ -312,6 +313,56 @@ describe("prompt assembly", () => {
     // The orthography rule stays, because the outline DOES write text: titles,
     // one-liners and `warnings`.
     expect(outline).toContain(ORTHOGRAPHY_RULE);
+  });
+
+  // Issue #107: the „nothing around the document" rule. It replaces the
+  // trailing-chatter heuristic that used to cut a structureless last block
+  // off a reply — that could not tell a sign-off from a plain closing
+  // sentence and silently deleted content, so the prompt is now the ONLY
+  // place a sign-off is prevented. Which makes the wording load-bearing:
+  // once per document prompt kind, identical everywhere, and repeated by the
+  // correction turn.
+  const AROUND_RULE = "Vor dem Dokument und nach dem Dokument steht";
+
+  test("every document prompt kind forbids text around the document, once", async () => {
+    const assembled: Array<[string, string]> = [
+      ["scene/single", await sceneSystemPrompt()],
+      ["npc", await loadAsset(ASSET_FILES.npc.systemPrompt)],
+      ["location", await loadAsset(ASSET_FILES.location.systemPrompt)],
+      ["augment/npc", await augmentSystemPrompt("npc")],
+      ["augment/location", await augmentSystemPrompt("location")],
+      ["augment/scene", await augmentSystemPrompt("scene")],
+    ];
+    for (const [kind, prompt] of assembled) {
+      expect(prompt.split(AROUND_RULE).length - 1, kind).toBe(1);
+      // The wording is the contract: what is forbidden, and the ONE exception.
+      expect(prompt, kind).toContain("keine Anrede, keine");
+      expect(prompt, kind).toContain("kein Schlusssatz");
+      expect(prompt, kind).toContain(`ist der \`${WARNINGS_DELIMITER}\`-Block`);
+      // …and why it matters, in the model's own terms.
+      expect(prompt, kind).toContain("landet sonst als Fließtext in");
+    }
+    // The SAME sentence everywhere — one rule, every document prompt.
+    const wordings = new Set(
+      assembled.map(([, doc]) => ruleParagraph(doc, AROUND_RULE)),
+    );
+    expect(wordings.size).toBe(1);
+
+    // The OUTLINE prompt does not carry it: that call answers JSON, has its
+    // own „kein Markdown drumherum" rule, and a document rule there would be
+    // a rule about nothing.
+    const outline = await loadAsset(ASSET_FILES.outline.systemPrompt);
+    expect(outline).not.toContain(AROUND_RULE);
+    expect(outline).not.toContain(NO_TEXT_AROUND_DOCUMENT_RULE);
+  });
+
+  test("the correction turn for a document repeats the same rule", () => {
+    const document = buildCorrectionMessage(["scene: id fehlt"], "die Szene enthalten");
+    expect(document).toContain(NO_TEXT_AROUND_DOCUMENT_RULE);
+    // …and the outline's correction turn does not: it asks for JSON back.
+    const outline = buildCorrectionMessage(["outline: leer"], "alle Szenen", "outline");
+    expect(outline).not.toContain(NO_TEXT_AROUND_DOCUMENT_RULE);
+    expect(outline).toContain("kein Text außerhalb des JSON-Blocks");
   });
 
   test("the scene few-shot shows a table inside a callout", async () => {
