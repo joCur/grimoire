@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.7.0](https://github.com/joCur/grimoire/compare/v0.6.0...v0.7.0) (2026-09-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* `EntryResponse.raw` ist aus GET/PUT/PATCH-Antworten entfernt. Einziger Client ist die App im Repo, die es nicht las.
+
+### Features
+
+* **generator:** schema-forced JSON object replies, typographic quotes ([#107](https://github.com/joCur/grimoire/issues/107)) ([#116](https://github.com/joCur/grimoire/issues/116)) ([3fa5dbe](https://github.com/joCur/grimoire/commit/3fa5dbe701f1e140af36c668ce9197498b643fff))
+* **server:** cache the constant prompt half on the OpenRouter path ([#110](https://github.com/joCur/grimoire/issues/110)) ([#113](https://github.com/joCur/grimoire/issues/113)) ([e8a42b0](https://github.com/joCur/grimoire/commit/e8a42b0b7489903cacf9aa6132767b12b3455f83))
+
+
+### Bug Fixes
+
+* **deploy:** keep /data a bind mount instead of an anonymous volume ([#119](https://github.com/joCur/grimoire/issues/119)) ([#121](https://github.com/joCur/grimoire/issues/121)) ([a24b773](https://github.com/joCur/grimoire/commit/a24b773652c7fbbf86c8145daea29b1e029d8f44))
+
+
+### Code Refactoring
+
+* raw aus dem API-Vertrag — ein Eintrag ist properties + body ([#118](https://github.com/joCur/grimoire/issues/118)) ([#128](https://github.com/joCur/grimoire/issues/128)) ([4e3e730](https://github.com/joCur/grimoire/commit/4e3e73016e819d206b3c53ab54ea7401cad39375))
+
 ## [0.6.0](https://github.com/joCur/grimoire/compare/v0.5.0...v0.6.0) (2026-09-15)
 
 
