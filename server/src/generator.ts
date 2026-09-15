@@ -51,7 +51,8 @@ import {
   type ParsedFile,
 } from "@grimoire/shared";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
-import { ApiError, assertSafeAddress } from "./campaign-fs";
+import { ApiError } from "./api-error";
+import { assertSafeAddress } from "./addressing";
 import { checkDraftsNaming, type NamingRule } from "./naming-check";
 // The generator reads its context and writes its drafts through the store
 // (issue #57) — the campaign file tree is not a data source any more.

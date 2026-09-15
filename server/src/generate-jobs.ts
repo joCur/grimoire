@@ -56,7 +56,7 @@ import type {
   GenerateNpcResult,
   GenerateResult,
 } from "@grimoire/shared";
-import { ApiError } from "./campaign-fs";
+import { ApiError } from "./api-error";
 import { now } from "./clock";
 import type { GrimoireDb } from "./db/client";
 import { generateJobs } from "./db/schema";

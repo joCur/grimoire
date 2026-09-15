@@ -40,7 +40,8 @@ import {
   type KnowledgeEntry,
   type KnowledgeResponse,
 } from "@grimoire/shared";
-import { ApiError, assertSafeAddress, assertSafeCampaignId } from "../campaign-fs";
+import { ApiError } from "../api-error";
+import { assertSafeAddress, assertSafeCampaignId } from "../addressing";
 import { localDate, localDateTimeSeconds, localTime, now } from "../clock";
 import type { GrimoireDb } from "../db/client";
 import {

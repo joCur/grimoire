@@ -14,7 +14,7 @@
 import { eq } from "drizzle-orm";
 import { isUiLocale, type InstanceSettings } from "@grimoire/shared";
 
-import { ApiError } from "../campaign-fs";
+import { ApiError } from "../api-error";
 import { meta } from "../db/schema";
 import { getDb } from "./handle";
 
