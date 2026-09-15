@@ -179,7 +179,9 @@ interface Captured {
     temperature: number;
     max_tokens?: number;
     response_format?: { type: string };
-    messages: Array<{ role: string; content: string }>;
+    // `content` is a string on the uncached path and content PARTS when a
+    // cache breakpoint is in play (issue #110) — hence unknown here.
+    messages: Array<{ role: string; content: unknown }>;
   };
 }
 
@@ -278,8 +280,12 @@ describe("OpenAICompatProvider request", () => {
       "user",
     ]);
     expect(cap.body.messages[0]!.content).toBe("System-Prompt");
-    expect(cap.body.messages[1]!.content).toContain("Fenn waits at the docks.");
-    expect(cap.body.messages[1]!.content).toContain("fenn (Fenn)");
+    // On the OpenRouter path the first user turn arrives as content parts
+    // (issue #110); read as one text it is the prompt it always was.
+    const parts = cap.body.messages[1]!.content as Array<{ text: string }>;
+    const prompt = parts.map((part) => part.text).join("\n\n");
+    expect(prompt).toContain("Fenn waits at the docks.");
+    expect(prompt).toContain("fenn (Fenn)");
     expect(cap.body.messages[2]!.content).toBe("kaputte Antwort");
     expect(cap.body.messages[3]!.content).toBe("bitte korrigieren");
   });
@@ -386,6 +392,71 @@ describe("OpenAICompatProvider request", () => {
     }
   });
 
+  // --- prompt caching (issue #110) ------------------------------------------
+
+  test("openrouter marks the constant prompt half with a cache breakpoint", async () => {
+    const { baseUrl, next } = await captureServer();
+    const provider = createProvider({
+      LLM_PROVIDER: "openrouter",
+      OPENROUTER_API_KEY: "sk-or-test",
+      LLM_MODEL: "anthropic/claude-sonnet-5",
+      LLM_BASE_URL: baseUrl,
+    } as NodeJS.ProcessEnv);
+    await provider.complete(REQ, [
+      { assistant: "kaputte Antwort", correction: "bitte korrigieren" },
+    ]);
+
+    const cap = await next;
+    const parts = cap.body.messages[1]!.content as Array<{
+      type: string;
+      text: string;
+      cache_control?: { type: string };
+    }>;
+    // The constant half stands first and is the ONLY marked part: it is what
+    // repeats across the calls of one chapter run.
+    expect(parts[0]!.type).toBe("text");
+    expect(parts[0]!.cache_control).toEqual({ type: "ephemeral" });
+    expect(parts[0]!.text).toContain("fenn (Fenn)");
+    expect(parts[1]!.cache_control).toBeUndefined();
+    expect(parts[1]!.text).toContain("Fenn waits at the docks.");
+    // The two halves joined are byte for byte the prompt buildPrompt builds —
+    // caching must not change a single character the model reads.
+    expect(parts.map((part) => part.text).join("\n\n")).toBe(buildPrompt(REQ));
+    // A correction turn is unique per attempt: marking it would only ever
+    // spend a cache write.
+    expect(cap.body.messages[3]!.content).toBe("bitte korrigieren");
+  });
+
+  test("LLM_PROMPT_CACHE overrides the per-provider default in both directions", async () => {
+    for (const [env, raw, cached] of [
+      // OpenRouter caches by default, and only an explicit no turns it off
+      [{ LLM_PROVIDER: "openrouter", OPENROUTER_API_KEY: "k", LLM_MODEL: "m" }, undefined, true],
+      [{ LLM_PROVIDER: "openrouter", OPENROUTER_API_KEY: "k", LLM_MODEL: "m" }, "0", false],
+      [{ LLM_PROVIDER: "openrouter", OPENROUTER_API_KEY: "k", LLM_MODEL: "m" }, "nonsense", true],
+      // a local or generic endpoint has no cache to hit: off unless asked
+      [{ LLM_PROVIDER: "lmstudio" }, undefined, false],
+      [{ LLM_PROVIDER: "lmstudio" }, "1", true],
+      [{ LLM_PROVIDER: "openai", LLM_MODEL: "m" }, undefined, false],
+      [{ LLM_PROVIDER: "openai", LLM_MODEL: "m" }, "on", true],
+    ] as Array<[NodeJS.ProcessEnv, string | undefined, boolean]>) {
+      const { baseUrl, next } = await captureServer();
+      const provider = createProvider({
+        ...env,
+        LMSTUDIO_URL: baseUrl,
+        LLM_BASE_URL: baseUrl,
+        ...(raw === undefined ? {} : { LLM_PROMPT_CACHE: raw }),
+      } as NodeJS.ProcessEnv);
+      await provider.complete(REQ);
+      const content = (await next).body.messages[1]!.content;
+      // Off means the plain string every OpenAI-compatible server accepts.
+      expect(Array.isArray(content)).toBe(cached);
+      if (!cached) expect(content).toBe(buildPrompt(REQ));
+      const s = server;
+      server = null;
+      if (s !== null) await new Promise<void>((resolve) => s.close(() => resolve()));
+    }
+  });
+
   test("an error status surfaces provider name, status and body", async () => {
     const s = createServer((_req, res) => {
       res.writeHead(401, { "content-type": "application/json" });
@@ -438,6 +509,32 @@ describe("OpenAICompatProvider reply", () => {
     const answer = await provider(baseUrl).complete(REQ);
     expect(answer.truncated).toBe(false);
     expect(answer.usage).toBeUndefined();
+  });
+
+  test("cached prompt tokens are reported but NOT added to the input count", async () => {
+    const { baseUrl } = await captureServer("ganzes JSON", {
+      // OpenRouter/OpenAI shape: prompt_tokens already INCLUDES the cache hit
+      usage: {
+        prompt_tokens: 9000,
+        completion_tokens: 2000,
+        prompt_tokens_details: { cached_tokens: 7000 },
+      },
+    });
+    expect((await provider(baseUrl).complete(REQ)).usage).toEqual({
+      inputTokens: 9000,
+      outputTokens: 2000,
+      cachedInputTokens: 7000,
+    });
+  });
+
+  test("an endpoint without cache details reports no cached bucket", async () => {
+    const { baseUrl } = await captureServer("ganzes JSON", {
+      usage: { prompt_tokens: 9000, completion_tokens: 2000 },
+    });
+    expect((await provider(baseUrl).complete(REQ)).usage).toEqual({
+      inputTokens: 9000,
+      outputTokens: 2000,
+    });
   });
 
   test("a partial usage object counts the missing half as zero", async () => {

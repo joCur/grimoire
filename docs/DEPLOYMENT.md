@@ -259,6 +259,17 @@ jeweils nur für den gewählten:
 | `LLM_MAX_TOKENS`     | alle         | `8000` (`claude`), sonst Endpoint-Default | Obergrenze der Antwortlänge (positive Ganzzahl; unbrauchbare Werte werden ignoriert) |
 | `LLM_CORRECTION_TURNS` | alle       | `1`                            | Korrektur-Turns nach dem ersten Aufruf (`0`–`2`; unbrauchbare Werte werden ignoriert) |
 | `LLM_FORCE_JSON`     | `openrouter`, `openai`, `lmstudio` | an              | Sendet `response_format: {"type":"json_object"}` mit; `0` = aus, für Endpoints/Modelle ohne `response_format`-Unterstützung (der `claude`-Pfad erzwingt JSON per Assistant-Prefill und ist davon unberührt) |
+| `LLM_PROMPT_CACHE`   | `openrouter`, `openai`, `lmstudio` | an bei `openrouter`, sonst aus | Markiert den konstanten Prompt-Teil als cachebar; `0` = aus (für Endpoints, die Content-Parts ablehnen), `1` = an (z. B. eigener Anthropic-Proxy). Der `claude`-Pfad cacht immer und ist davon unberührt |
+
+`LLM_PROMPT_CACHE` ist der Kostenhebel eines Kapitel-Durchlaufs: seit der
+Pipeline (ein Aufruf je Szene) wiederholt sich derselbe Prompt-Anfang —
+System-Prompt, Few-Shot, Kampagnenwissen, Glossar, Gliederung — bei jedem
+Aufruf. Markiert man ihn, zahlt man ihn einmal statt ein Dutzend Mal; bei
+einem Kapitel sind das grob 30 % der Kosten. Ob der Cache greift, steht in der
+Server-Zeile pro Durchlauf: `generate: openrouter, 14 attempt(s), 119000 in /
+31000 out (98000 cached) — ok`. Bleibt `cached` aus, unterstützt das Modell
+(oder der geroutete Anbieter) keine Cache-Breakpoints — dann kostet die
+Markierung nichts, bringt aber auch nichts.
 
 `LLM_MAX_TOKENS` lohnt sich beim Modellvergleich: schneidet ein Modell die
 JSON-Antwort ab, erkennt der Generator das an `finish_reason`/`stop_reason`
