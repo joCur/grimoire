@@ -343,10 +343,15 @@ export function GenerateRoute() {
       const current = queryClient.getQueryData<GenerateJob | null>(generateJobKey(campaign));
       return acceptJobParts(campaign, job?.id ?? "", current?.rev ?? job?.rev ?? 0, {
         ...(paths === undefined ? {} : { paths }),
-        // The new chapter's _chapter is created in the same batch — only
-        // for a chapter that really is new: for an existing id the pair
-        // stays out of the body so an accept cannot touch its _chapter.
-        ...(creatingChapter && chapterId !== undefined
+        // The new chapter's _chapter is created in the same batch — but the
+        // JOB decides it (issue #115), and this pair is only the compatibility
+        // override. It therefore travels ONLY when the form on screen is
+        // still the form that STARTED this run: since #97 the review is
+        // persistent, so the DM can pick another chapter in the form while a
+        // finished job waits — and sending that other id here used to create
+        // a stray chapter the run has nothing to do with. When the two
+        // disagree, the job is right and nothing is sent.
+        ...(creatingChapter && chapterId !== undefined && job?.chapter === chapterId
           ? { chapter: chapterId, chapterTitle: newTitle.trim() }
           : {}),
       });
