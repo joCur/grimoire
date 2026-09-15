@@ -85,6 +85,13 @@
       "when": 1789498006261,
       "tag": "0011_job_new_chapter_title",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1789498228286,
+      "tag": "0012_scenes_chapter_fk",
+      "breakpoints": true
     }
   ]
 }

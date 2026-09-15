@@ -552,6 +552,51 @@ function ensureLocationRow(
 }
 
 /**
+ * The same for a CHAPTER a scene names (issue #115).
+ *
+ * The chapter used to be the one reference nothing created: ADR #14 said
+ * chapters are not created by naming them, and the properties patch and
+ * `POST /scenes` still hold that rule — those are DIALOGS, where an unknown
+ * chapter is a typo and a 400 is the honest answer.
+ *
+ * What is NOT allowed any more is a scene ROW whose chapter has none. The
+ * generator's accept step wrote exactly that (the browser held the chapter,
+ * the job did not), and the result was twelve scenes nobody could see. So the
+ * one path that writes scene rows without a dialog in front of it — the draft
+ * apply — closes the hole in the SAME transaction, like `ensureLocationRow`
+ * does for the Ort. Since migration 0012 the database enforces it too; this
+ * is what keeps that constraint from turning an apply into a 409.
+ *
+ * `title` is the run's chapter title when one is known, the id otherwise —
+ * never empty, because an empty title renders as the id anyway and a real one
+ * is what the DM typed.
+ */
+function ensureChapterRow(
+  tx: GrimoireDb,
+  campaign: string,
+  id: string,
+  title?: string,
+): boolean {
+  if (!ENTITY_SLUG.test(id)) return false;
+  if (chapterRowOf(tx, campaign, id) !== undefined) return false;
+  const display = title?.trim();
+  tx.insert(chapters)
+    .values({
+      campaignId: campaign,
+      id,
+      title: display === undefined || display === "" ? id : display,
+      status: "planned",
+      pos: nextPos(
+        tx.select({ pos: chapters.pos }).from(chapters).where(eq(chapters.campaignId, campaign)).all(),
+      ),
+    })
+    .run();
+  const row = chapterRowOf(tx, campaign, id);
+  if (row !== undefined) indexChapter(tx, campaign, row);
+  return true;
+}
+
+/**
  * An entry that holds NOTHING but its id — what `ensureNpcRow` creates, and
  * what a DM leaves behind by creating an entry and not filling it in.
  *
@@ -2066,6 +2111,16 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           .orderBy(desc(scenes.pos))
           .limit(1)
           .all()[0]?.pos ?? -1) + 1;
+      // The chapter row FIRST — `scenes.chapter_id` is a foreign key since
+      // migration 0012, and a generated scene is the one write that can name
+      // a chapter the campaign does not have yet (issue #115).
+      // A new-chapter run puts its `_chapter` draft FIRST in the same batch
+      // (generator.ts `jobChapterTarget`), so the row normally exists with
+      // the title the DM typed; this is the net under it, and it names the
+      // chapter by its id.
+      if (locator.chapterId !== null && locator.chapterId !== undefined) {
+        ensureChapterRow(tx, campaign, locator.chapterId);
+      }
       tx.insert(scenes)
         .values({
           campaignId: campaign,

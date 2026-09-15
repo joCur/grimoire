@@ -212,6 +212,12 @@ test("a composite primary key cascades on update", async () => {
   const { db, close } = await openDb(":memory:");
   try {
     db.insert(campaigns).values({ id: "beispiel", name: "Beispiel" }).run();
+    // The chapter FIRST: `scenes.chapter_id` is a real foreign key since
+    // issue #115, so a scene under a chapter that has no row is rejected by
+    // the database — which is the whole point of that migration.
+    db.run(
+      sql`insert into chapters (campaign_id, id, title, pos) values ('beispiel', '01', 'Salzhafen', 0)`,
+    );
     db.run(
       sql`insert into scenes (campaign_id, id, chapter_id, location, title, pos) values ('beispiel', 'alt', '01', 'hafen', 'Szene', 0)`,
     );

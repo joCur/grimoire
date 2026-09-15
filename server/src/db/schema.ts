@@ -132,10 +132,22 @@ export const scenes = sqliteTable(
     campaignId: text("campaign_id").notNull(),
     id: text("id").notNull(),
     /**
-     * Owning chapter. A SOFT reference (rule 3): a scene may name a chapter
-     * that has no `_chapter.md` and, in the file tree, a scene's `chapter`
-     * frontmatter could disagree with its directory. The migration fills it
-     * from the directory, which is what the tree was actually built from.
+     * Owning chapter — a HARD reference since issue #115 (ADR #18): the
+     * foreign key at the bottom of this table.
+     *
+     * It was a soft one (rule 3) so the importer could stay order-independent
+     * and a chapter without `_chapter.md` could still own scenes. That
+     * licence is what production used up: the generator's accept step wrote
+     * twelve scenes under `03-dragon-hatchery` with no such chapter, and the
+     * pool lists chapters from the chapter TABLE — so the chapter and every
+     * scene in it were invisible. The chapter is part of a scene's ADDRESS,
+     * not a note about it, and an address that points nowhere is not a
+     * degraded format, it is lost data.
+     *
+     * NULL is still allowed and still means "no chapter": a composite
+     * foreign key with a NULL column is satisfied, which is what keeps a
+     * chapterless scene legal. `location` stays SOFT, with
+     * `ensureLocationRow` in front of it (ADR #18).
      */
     chapterId: text("chapter_id"),
     /**
@@ -189,6 +201,17 @@ export const scenes = sqliteTable(
     })
       .onUpdate("cascade")
       .onDelete("cascade"),
+    // ON UPDATE CASCADE, and deliberately NO delete cascade (issue #115):
+    // renaming a chapter is a primary-key update the database carries into
+    // its scenes (rule 5), but deleting a chapter that still owns scenes must
+    // FAIL — dropping a chapter is blocked as a matter of product rules while
+    // scenes live in it, and a silent cascade would be the one way to delete
+    // a dozen scenes by accident.
+    foreignKey({
+      columns: [t.campaignId, t.chapterId],
+      foreignColumns: [chapters.campaignId, chapters.id],
+      name: "scenes_chapter_fk",
+    }).onUpdate("cascade"),
   ],
 );
 
