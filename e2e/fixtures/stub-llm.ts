@@ -52,6 +52,9 @@
 //     so parallel workers cannot consume each other's failure.
 //   - TRIGGER.slowPart -> only the LAST scene's reply is held, so a spec can
 //     restart a run that has finished parts AND one in flight.
+//   - TRIGGER.latePart -> the scene PARTS (and an augment reply) answer late
+//     but normally, so a spec can watch a job that is genuinely running
+//     finish on a poll instead of being done before the first one answers.
 //   - TRIGGER.asciiQuotes -> the scene body carries German quotation marks
 //     closed with an ASCII `"`. Under the hand-written JSON
 //     wrapper that ended the string; as the `body` of a forced object the run
@@ -230,6 +233,11 @@ export function decide(messages: ChatMessage[]): StubDecision {
       kind: "augment",
       truncated,
       delayMs,
+      // TRIGGER.latePart on an augment run: the reply COMES, just later than
+      // the browser's first job poll — the only shape in which the dialog
+      // really sees its own job as `running` and has to leave the spinner on
+      // a polled update.
+      pauseMs: latePart,
       reply: invalid
         ? invalidAugmentReply(existing.path)
         : augmentReply(existing.path, existing.markdown, knowledge),
