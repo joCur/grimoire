@@ -59,7 +59,7 @@ import {
   StickyNote,
   User,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
 import {
@@ -381,13 +381,26 @@ export function GenerateRoute() {
   });
 
   /**
-   * The card of each pipeline part, so „Erneut versuchen" can hand the focus
-   * somewhere: the button unmounts the moment the part goes `running`, and
-   * focus on an unmounted node falls to `body` — a keyboard DM would land at
-   * the top of the document (quality floor: focus stays visible and where
-   * the work is).
+   * The card that currently REPRESENTS each pipeline part, keyed by the
+   * part's key — the status card while the part is open, the draft card once
+   * it is done. Both register here, because a part changes which component
+   * it is rendered by while the focus is supposed to stay on it.
    */
   const partCards = useRef(new Map<string, HTMLElement | null>());
+  /**
+   * The part „Erneut versuchen" handed the focus to, until the focus is
+   * actually sitting on its card.
+   *
+   * Focusing once in `onSuccess` was not enough (issue #102 review): the
+   * button unmounts the moment the part goes `running`, and the status card
+   * itself unmounts the moment the part is `done` and becomes its draft card
+   * — with a fast model both happen within a poll of the click, so the focus
+   * fell to `body` and a keyboard DM landed at the top of the document
+   * (quality floor: focus stays visible and where the work is). So the focus
+   * FOLLOWS the part across those swaps, once per commit, and stops as soon
+   * as the part is settled or the DM has moved the focus themselves.
+   */
+  const focusPart = useRef<string | undefined>(undefined);
 
   /** „Erneut versuchen" for one failed part (issue #102). */
   const retry = useMutation({
@@ -397,7 +410,7 @@ export function GenerateRoute() {
       // cache with it means the next poll continues from the truth instead of
       // from a stale "failed".
       queryClient.setQueryData(generateJobKey(campaign), updated);
-      partCards.current.get(key)?.focus();
+      focusPart.current = key;
     },
     onError: (error) => {
       // A 409 here is not „der Server ist kaputt": the part is already
@@ -431,6 +444,33 @@ export function GenerateRoute() {
   const sceneParts = parts.filter((part) => part.kind === "scene");
   const entryParts = parts.filter((part) => part.kind !== "scene");
   const running = partsStillRunning(job);
+  /**
+   * Hand the focus to the card that NOW represents the retried part — after
+   * the commit, so it is handed to the card that is actually on the screen.
+   * No dependency list on purpose: the question is asked once per commit,
+   * which is exactly when the card behind a part can have been swapped.
+   */
+  useEffect(() => {
+    const key = focusPart.current;
+    if (key === undefined) return;
+    const card = partCards.current.get(key) ?? undefined;
+    const active = document.activeElement;
+    // The DM moved the focus themselves (clicked elsewhere, tabbed on) —
+    // never yank it back out of their hands.
+    const ours = active === null || active === document.body || card?.contains(active) === true;
+    if (!ours) {
+      focusPart.current = undefined;
+      return;
+    }
+    if (card === undefined) return;
+    if (active !== card) card.focus();
+    // Settled: this card is the last one the part will have, so stop
+    // following it — the next poll must not re-take the focus.
+    const part = parts.find((candidate) => candidate.key === key);
+    if (part === undefined || part.status === "done" || part.status === "failed") {
+      focusPart.current = undefined;
+    }
+  });
   const runProgress = pipelineProgress(job, t);
   const runCost = pipelineCostLabel(job, t);
   /** The draft of a finished scene part, by the address the review uses. */
@@ -910,6 +950,7 @@ export function GenerateRoute() {
               return (
                 <SceneCard
                   key={scene.path}
+                  cardRef={(el) => partCards.current.set(part.key, el)}
                   campaign={campaign}
                   path={scene.path}
                   properties={scene.properties}
@@ -995,6 +1036,7 @@ export function GenerateRoute() {
                   return (
                     <StubRow
                       key={stubKey(stub)}
+                      cardRef={(el) => partCards.current.set(part.key, el)}
                       campaign={campaign}
                       stub={stub}
                       reason={stubReason(scenes, t)}
@@ -1507,6 +1549,7 @@ function SceneCard({
   writtenAt,
   busy,
   editing,
+  cardRef,
   onToggleEditing,
   onChange,
   onBlur,
@@ -1524,6 +1567,12 @@ function SceneCard({
   writtenAt: string | undefined;
   busy: boolean;
   editing: boolean;
+  /**
+   * Registers this card as what represents its pipeline part right now — the
+   * retry's focus follows the part across the swap from status card to draft
+   * card (issue #102 review).
+   */
+  cardRef?: (el: HTMLElement | null) => void;
   onToggleEditing: () => void;
   onChange: (markdown: string) => void;
   onBlur: () => void;
@@ -1544,8 +1593,11 @@ function SceneCard({
 
   return (
     <div
+      ref={cardRef}
+      // Focusable only programmatically, like the status card it replaces.
+      tabIndex={-1}
       className={cn(
-        "my-4 rounded-[10px] border border-border bg-[color-mix(in_srgb,var(--card)_60%,var(--background))] px-5 py-5 md:px-6",
+        "my-4 rounded-[10px] border border-border bg-[color-mix(in_srgb,var(--card)_60%,var(--background))] px-5 py-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:px-6",
         state === "dropped" && "opacity-55",
       )}
     >
@@ -1787,6 +1839,7 @@ function StubRow({
   state,
   writtenAt,
   busy,
+  cardRef,
   onDecide,
   onAccept,
 }: {
@@ -1797,6 +1850,8 @@ function StubRow({
   state: PartState;
   writtenAt: string | undefined;
   busy: boolean;
+  /** Same as SceneCard's: the retry's focus follows the part here too. */
+  cardRef?: (el: HTMLElement | null) => void;
   onDecide: (decision: StubDecision | undefined) => void;
   onAccept: () => void;
 }) {
@@ -1804,8 +1859,10 @@ function StubRow({
   const path = `${stub.kind}s/${stub.id}`;
   return (
     <div
+      ref={cardRef}
+      tabIndex={-1}
       className={cn(
-        "mb-[18px] flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3.5",
+        "mb-[18px] flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         (decision === "rejected" || state === "rejected") && "opacity-55",
       )}
     >

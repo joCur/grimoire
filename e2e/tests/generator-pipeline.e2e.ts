@@ -87,9 +87,20 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
 
   // --- (3) „Erneut versuchen“ restarts THAT part only ---------------------
   await failedCard.getByRole("button", { name: "Erneut versuchen" }).click();
+  // The focus went with the click (issue #102 review): the button unmounts
+  // the moment the part runs again, and the status card itself is replaced by
+  // the draft card the moment the part is done — so the focus FOLLOWS the
+  // part across both swaps instead of falling to `body`.
+  const retriedCard = page
+    .locator("[tabindex='-1']")
+    .filter({ hasText: failedTitle })
+    .last();
+  await expect(retriedCard).toBeFocused();
   await expect(page.getByRole("heading", { level: 2, name: failedTitle })).toBeVisible({
     timeout: 30_000,
   });
+  // …and it is still on the card once the retried part is its draft.
+  await expect(retriedCard).toBeFocused();
   // All three are there now; the one already accepted stayed accepted.
   for (const scene of THREE_SCENES) {
     await expect(page.getByRole("heading", { level: 2, name: scene.title })).toBeVisible();
