@@ -123,17 +123,17 @@ export { logLineShortHash };
 // --- transaction plumbing ----------------------------------------------------
 
 /**
- * Run `fn` in one transaction and bump the campaign's version counter in the
- * same commit. The driver is synchronous (db/driver.ts), so `fn` must be too
- * — no `await` may happen inside a transaction.
- */
-/**
  * The ONE chapter status the app acts on (the pool's pill, the live view's
  * „welches Kapitel läuft"). Everything else a chapter carries in `status` is
  * free text the reading view shows verbatim.
  */
 const CHAPTER_ACTIVE = "active";
 
+/**
+ * Run `fn` in one transaction and bump the campaign's version counter in the
+ * same commit. The driver is synchronous (db/driver.ts), so `fn` must be too
+ * — no `await` may happen inside a transaction.
+ */
 async function mutate<T>(campaign: string, fn: (db: GrimoireDb) => T): Promise<T> {
   await requireCampaign(campaign);
   const db = await getDb();

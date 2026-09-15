@@ -429,7 +429,6 @@ export function createCampaign(input: {
   });
 }
 
-/** A new chapter; `goal` lands under `## Ziel des Kapitels` when given. */
 /**
  * „Als aktiv setzen" on a chapter (issue #115) — ONE call, because it is one
  * decision about two rows: the chapter becomes `active` and the one that was
@@ -447,6 +446,7 @@ export function setChapterActive(campaign: string, chapter: string): Promise<Fil
   );
 }
 
+/** A new chapter; `goal` lands under `## Ziel des Kapitels` when given. */
 export function createChapter(
   campaign: string,
   input: { title: string; goal?: string; id?: string },
