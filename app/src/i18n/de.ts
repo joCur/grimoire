@@ -93,7 +93,7 @@ export const de = {
 
   "create.chapter.title": "Kapitel anlegen",
   "create.chapter.description":
-    'Der Titel wird zur id des Kapitels — sie steht in jeder Szenen-Adresse und bleibt, wie sie ist. Das Ziel ist optional und erscheint im Kapitel als Abschnitt „Ziel des Kapitels“.',
+    'Das Ziel ist optional und erscheint im Kapitel als Abschnitt „Ziel des Kapitels“.',
   "create.chapter.nameLabel": "Titel",
   "create.chapter.namePlaceholder": "Titel des Kapitels",
   "create.chapter.goalLabel": "Ziel des Kapitels (optional)",
