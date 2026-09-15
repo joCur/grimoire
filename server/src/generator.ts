@@ -411,18 +411,6 @@ export function unknownCallouts(body: string): string[] {
  */
 const ENTITY_ID_PATTERN = ENTITY_SLUG;
 
-/**
- * The stem a still-UNADDRESSED reply document is parsed under.
- *
- * The shared parser fills a missing `id` from the address's last segment
- * (parse.ts, the degrade rule for a properties-less file), so a reply that
- * names no `id` would silently inherit one from whatever label it happened to
- * be parsed under. Parsing under a stem that can NEVER be an id keeps the
- * omission visible — and a missing `id` is exactly the kind of error a
- * correction turn fixes (issue #100 review).
- */
-const NO_ID_STEM = "\u0000no-id";
-
 /** The `id` a reply DECLARED, or undefined — the schema's `null` read as what it means. */
 function declaredId(properties: Record<string, unknown>): string | undefined {
   const id = properties.id;
@@ -770,6 +758,20 @@ function notesErrors(body: string): string[] {
  * Quickstats values must be quoted STRINGS: YAML reads a bare `+2` as the
  * number 2 and the plus — the whole point of a social modifier — is gone
  * before anyone sees the file.
+ *
+ * Since issue #107 a REPLY can no longer break the rule: `quickstats` travels
+ * as a `{ key, value }` LIST whose values the schema types as strings, and
+ * the server folds it into the mapping itself (document-reply.ts
+ * `pairsValue`). All three call sites — the npc run, a scene run's npc entry,
+ * the augment run — pass exactly such a folded mapping, so the check fires on
+ * none of them any more.
+ *
+ * It stays as a BACKSTOP, and the augment path is why: there the mapping does
+ * not end up in a file the server just composed but in a properties PATCH the
+ * DM accepts, next to the entry's own historical values (`sameValue` against
+ * a campaign that carries bare numbers). A future way in that skips
+ * `pairsValue` would otherwise write a `+2` that YAML eats — and this
+ * function is the only place that says so.
  */
 export function quickstatsErrors(fm: Record<string, unknown>): string[] {
   const quickstats = fm.quickstats;
