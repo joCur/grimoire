@@ -111,9 +111,9 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   await page.getByRole("button", { name: /^Rest übernehmen/ }).click();
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
   for (const scene of THREE_SCENES) {
-    const stored = await api.raw(draftPath(scene.id));
-    expect(stored).toContain(`title: ${scene.title}`);
-    expect(stored).toContain("status: draft");
+    const stored = await api.properties(draftPath(scene.id));
+    expect(stored.title).toBe(scene.title);
+    expect(stored.status).toBe("draft");
   }
   expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
 });

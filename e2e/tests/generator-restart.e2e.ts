@@ -169,9 +169,9 @@ test("a finished job survives a restart whole and is still applyable", async ({}
       jobId: after.id,
     });
     expect(written.written).toEqual([SCENE_PATH]);
-    const stored = await api.raw(SCENE_PATH);
-    expect(stored).toContain(`title: ${SCENE_TITLE}`);
-    expect(stored).toContain("status: draft");
+    const stored = await api.properties(SCENE_PATH);
+    expect(stored.title).toBe(SCENE_TITLE);
+    expect(stored.status).toBe("draft");
     // Applied means done: the job is discarded, as after any successful apply.
     expect(await job(api)).toBeNull();
   } finally {

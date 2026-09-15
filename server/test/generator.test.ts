@@ -1079,7 +1079,8 @@ describe("POST /api/:campaign/generate/apply", () => {
     // nothing written, nothing overwritten
     expect(await exists("01-salzhafen/leuchtturm/ganz-neu")).toBe(false);
     const after = await read("01-salzhafen/leuchtturm/lighthouse-arrival");
-    expect(after.raw).toBe(before.raw);
+    expect(after.properties).toEqual(before.properties);
+    expect(after.body).toBe(before.body);
     expect(after.rev).toBe(before.rev); // the row's rev never moved
   });
 

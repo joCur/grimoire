@@ -108,8 +108,8 @@ inklusive des Generator-Jobs, der seit #23 selbst eine Zeile ist.
 
 **Die zwei Zusicherungs-Helfer:**
 
-- `api` — getippte Aufrufe gegen den Server dieses Tests: `api.raw(rel)` (die
-  serialisierte Datei — der Nachfolger von `files.read`), `api.file`,
+- `api` — getippte Aufrufe gegen den Server dieses Tests: `api.file(rel)` (der Eintrag:
+  `properties`, `body`, `rev`), `api.body`, `api.properties`,
   `api.exists`, `api.get`/`api.send` und die beiden Schreibwege
   `api.writeBody` / `api.patchProperties`, die sich frisch ein Token holen
   und damit den „zweiten Schreiber" spielen.

@@ -93,7 +93,7 @@ describe("POST /api/:campaign/review/seen", () => {
       "scenes_played",
       "reviewed",
     ]);
-    expect(file.raw).toContain(`reviewed: [${sha8(LINE)}]\n`);
+    expect(file.properties.reviewed).toEqual([sha8(LINE)]);
     // The body (## Log, ## Threads) is untouched — marking a line as read
     // never rewrites it.
     expect(file.body).toBe(before.body);
@@ -105,7 +105,7 @@ describe("POST /api/:campaign/review/seen", () => {
     expect(expected).toHaveLength(8);
     expect(expected).toMatch(/^[0-9a-f]{8}$/);
     const file = await postOk("/api/beispiel/review/seen", { path: SESSION, line: LINE });
-    expect(file.raw).toContain(`reviewed: [${expected}]\n`);
+    expect(file.properties.reviewed).toEqual([expected]);
   });
 
   test("idempotent: the same line does not add a second entry", async () => {
@@ -125,7 +125,6 @@ describe("POST /api/:campaign/review/seen", () => {
     expect(second.properties.reviewed).toEqual([sha8(LINE2)]);
     const both = await postOk("/api/beispiel/review/seen", { path: SESSION, line: LINE });
     expect(both.properties.reviewed).toEqual([sha8(LINE), sha8(LINE2)]);
-    expect(both.raw).toContain(`reviewed: [${sha8(LINE)}, ${sha8(LINE2)}]\n`);
   });
 
   test("a line that is not in the log changes nothing and says so", async () => {
@@ -296,9 +295,8 @@ describe("POST /api/:campaign/review/npc-stub", () => {
     // the entry must not claim "alive" (issue #70; the route always
     // documented "unknown", the insert said otherwise).
     expect(file.properties.status).toBe("unknown");
-    expect(file.raw).toBe(
-      "---\nid: old-metta\nname: Old Metta\nstatus: unknown\n---\n\n## Notizen\n\n- Fischerin am Steg, kennt die Gezeiten #npc\n",
-    );
+    expect(file.properties).toEqual({ id: "old-metta", name: "Old Metta", status: "unknown" });
+    expect(file.body).toBe("\n## Notizen\n\n- Fischerin am Steg, kennt die Gezeiten #npc\n");
     // A fresh row starts at rev 1 — the token the app sends with its first edit.
     expect(file.rev).toBe(1);
     expect(await getFile("npcs/old-metta")).toEqual(file);
@@ -306,7 +304,8 @@ describe("POST /api/:campaign/review/npc-stub", () => {
 
   test("name defaults to the id; without a note the section stays empty", async () => {
     const file = await postOk("/api/beispiel/review/npc-stub", { id: "kai" });
-    expect(file.raw).toBe("---\nid: kai\nname: kai\nstatus: unknown\n---\n\n## Notizen\n");
+    expect(file.properties).toEqual({ id: "kai", name: "kai", status: "unknown" });
+    expect(file.body).toBe("\n## Notizen\n");
   });
 
   test("an existing entry is ANSWERED, not overwritten and not refused", async () => {
@@ -324,7 +323,7 @@ describe("POST /api/:campaign/review/npc-stub", () => {
     // and a stub created in this run is linked the same way
     const first = await postOk("/api/beispiel/review/npc-stub", { id: "old-metta" });
     const second = await postOk("/api/beispiel/review/npc-stub", { id: "old-metta" });
-    expect(second.raw).toBe(first.raw);
+    expect(second).toEqual(first);
   });
 
   test("an EMPTY entry — one a reference created — is filled in", async () => {

@@ -622,14 +622,11 @@ test("editing the campaign metadata updates header, switcher and the file", asyn
     page.getByRole("button", { name: "Kampagne: Salzhafen, zweite Fassung" }),
   ).toBeVisible();
 
-  // On disk: the properties changed, the body did not.
-  const raw = await api.raw("_campaign");
-  expect(raw).toContain("name: Salzhafen, zweite Fassung");
-  expect(raw).toContain(
-    "description: Jetzt mit mehr Schmuggel und weniger Möwen.",
-  );
-  expect(raw).toContain("Kampagnenweite Notizen:");
-  expect(raw).not.toContain("Eine Küstenkampagne");
+  // Stored: the properties changed, the text did not.
+  const campaign = await api.file("_campaign");
+  expect(campaign.properties.name).toBe("Salzhafen, zweite Fassung");
+  expect(campaign.properties.description).toBe("Jetzt mit mehr Schmuggel und weniger Möwen.");
+  expect(campaign.body).toContain("Kampagnenweite Notizen:");
 });
 
 test.describe("imported without a _campaign", () => {
@@ -668,10 +665,10 @@ test.describe("imported without a _campaign", () => {
       "Salzhafen von vorn",
     );
     // The id stays the DIRECTORY name — the server sets it, never the client.
-    const raw = await api.raw("_campaign");
-    expect(raw).toContain("id: beispiel");
-    expect(raw).toContain("name: Salzhafen von vorn");
-    expect(raw).toContain("description: Frisch angelegt aus der App.");
+    const campaign = await api.properties("_campaign");
+    expect(campaign.id).toBe("beispiel");
+    expect(campaign.name).toBe("Salzhafen von vorn");
+    expect(campaign.description).toBe("Frisch angelegt aus der App.");
   });
 });
 
@@ -692,9 +689,7 @@ test("the campaign reading view carries the same edit action", async ({
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Aus der Leseansicht",
   );
-  await expect
-    .poll(() => api.raw("_campaign"))
-    .toContain("name: Aus der Leseansicht");
+  await expect.poll(() => api.properties("_campaign")).toHaveProperty("name", "Aus der Leseansicht");
 });
 // The dialog's 409 path is the SAME write flow as the status control's
 // (lib/campaign-meta.ts mirrors lib/scene-status.ts: conflict -> inline

@@ -78,10 +78,10 @@ test("rename with usage preview: count first, then the cascade", async ({ page, 
   expect(await api.exists(RENAMED)).toBe(true);
   const scene = await api.file(SCENE);
   expect(scene.properties.npcs).toEqual(["hafenmeisterin"]);
-  expect(await api.raw("npcs/fenn")).toContain("- hafenmeisterin:");
+  expect(await api.body("npcs/fenn")).toContain("- hafenmeisterin:");
   // The prose of the other scene still says "Jorna" — a mention is not a
   // reference (README).
-  expect(await api.raw("01-salzhafen/bucht/smuggler-captured")).toContain("Jorna");
+  expect(await api.body("01-salzhafen/bucht/smuggler-captured")).toContain("Jorna");
 
   // The endpoint behind the preview agrees, for the new id: the rows moved,
   // and nothing points at the old one any more.

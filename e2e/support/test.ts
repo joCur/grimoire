@@ -13,7 +13,7 @@
 //
 // Since the cutover (issue #57) the database is the only truth: NOTHING writes
 // campaign markdown any more, so there is no file to read an assertion back
-// from. Every claim about stored state goes through the API (`api.raw` is the
+// from. Every claim about stored state goes through the API (`api.file` is the
 // old `files.read`) or, where a spec really means storage, through `db`.
 //
 // The markdown tree is therefore only an INPUT, read exactly once per test —
@@ -111,7 +111,7 @@ export interface Seed {
   skip?: boolean;
 }
 
-/** One file as GET /api/:campaign/file answers it. */
+/** One entry as GET /api/:campaign/file answers it. */
 export interface ApiFile {
   path: string;
   kind: string;
@@ -119,8 +119,6 @@ export interface ApiFile {
   body: string;
   /** The row version (`rev`) — an opaque guard token since the cutover. */
   rev: number;
-  /** The file as the server serializes it: properties block plus body. */
-  raw: string;
 }
 
 /**
@@ -139,8 +137,10 @@ export interface Api {
   send<T>(method: "POST" | "PATCH" | "PUT" | "DELETE", apiPath: string, body?: unknown): Promise<T>;
   /** GET /file for a campaign-relative path; throws when it does not exist. */
   file(rel: string): Promise<ApiFile>;
-  /** The serialized file — the successor of the old `files.read`. */
-  raw(rel: string): Promise<string>;
+  /** The markdown text of an entry. */
+  body(rel: string): Promise<string>;
+  /** The properties of an entry. */
+  properties(rel: string): Promise<Record<string, unknown>>;
   /** Whether the path addresses an existing row (404 = no). */
   exists(rel: string): Promise<boolean>;
   /**
@@ -306,8 +306,11 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
     file(rel) {
       return api.get<ApiFile>(`${campaign}/file?path=${encodeURIComponent(rel)}`);
     },
-    async raw(rel) {
-      return (await api.file(rel)).raw;
+    async body(rel) {
+      return (await api.file(rel)).body;
+    },
+    async properties(rel) {
+      return (await api.file(rel)).properties;
     },
     async exists(rel) {
       const response = await fetchApi(`${campaign}/file?path=${encodeURIComponent(rel)}`);

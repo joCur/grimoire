@@ -381,7 +381,10 @@ export async function runAugment(
         ...(target.kind === "scene" ? { chapter: chapterOf(target.file) } : {}),
       },
       sourceText,
-      existingEntry: { path: target.file.path, markdown: target.file.raw },
+      existingEntry: {
+        path: target.file.path,
+        markdown: renderRaw(target.file.properties, target.file.body),
+      },
       ...(instruction === "" ? {} : { instruction }),
     },
     provider: getProvider(),

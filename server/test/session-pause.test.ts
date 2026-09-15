@@ -123,8 +123,8 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
     expect(running.pausedSinceMs).toBeUndefined();
     expect(running.pausedMs).toBe((17 * 60 + 51) * 1000);
     expect(logLines(running)).toEqual(["- 21:40 — Pause", "- 21:58 — Weiter"]);
-    // Seconds survive into the rendered document, so a hand-edit sees them.
-    expect(running.raw).toContain("2026-08-19T21:40:12");
+    // Seconds survive into the stored intervals.
+    expect(JSON.stringify(running.properties.pauses)).toContain("2026-08-19T21:40:12");
     // …and the state is in the database, not in the response: a plain GET
     // answers with the same intervals.
     expect((await session()).properties.pauses).toEqual(running.properties.pauses);
