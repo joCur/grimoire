@@ -41,6 +41,7 @@
 import type {
   CampaignTree,
   GenerateJob,
+  GenerateJobPart,
   GenerateResult,
   GeneratedNpcDraft,
   GeneratedStub,
@@ -52,6 +53,7 @@ import {
   Check,
   GitFork,
   MapPin,
+  RotateCcw,
   Sparkles,
   SpellCheck,
   StickyNote,
@@ -67,6 +69,7 @@ import {
   fetchFile,
   fetchKnowledge,
   fetchTree,
+  retryJobPart,
   startGenerateJob,
   startGenerateNpcJob,
 } from "@/api";
@@ -89,14 +92,19 @@ import {
   contextHint,
   knowledgeHint,
   generatePhase,
+  hasReviewableParts,
   jobErrorBody,
   jobMode,
+  jobPipelineParts,
   jobProgress,
   markdownBody,
   newChapterId,
   npcIdError,
   openParts,
   partState,
+  partsStillRunning,
+  pipelineCostLabel,
+  pipelineProgress,
   restoredMode,
   reviewOf,
   stringField,
@@ -258,7 +266,13 @@ export function GenerateRoute() {
   // Which result field to read is the job's kind, never the local mode: a
   // done job of the other kind must not be rendered as this one's.
   const jobKind = jobMode(job);
-  const result = job?.status === "done" && jobKind === "scene" ? job.result : undefined;
+  // A pipelined run (issue #102) has a result WHILE it runs: every finished
+  // part is already in it, so the review fills up instead of appearing whole.
+  const result =
+    (job?.status === "done" || (job?.status === "running" && hasReviewableParts(job))) &&
+    jobKind === "scene"
+      ? job.result
+      : undefined;
   const npcResult = job?.status === "done" && jobKind === "npc" ? job.npcResult : undefined;
   const scenes = result?.scenes ?? [];
   const stubs = result?.stubs ?? [];
@@ -358,6 +372,32 @@ export function GenerateRoute() {
     },
   });
 
+  /** „Erneut versuchen" for one failed part (issue #102). */
+  const retry = useMutation({
+    mutationFn: (key: string) => retryJobPart(campaign, job?.id ?? "", key),
+    onSuccess: (updated) => {
+      // The answer IS the job, with the part back in `running` — seeding the
+      // cache with it means the next poll continues from the truth instead of
+      // from a stale "failed".
+      queryClient.setQueryData(generateJobKey(campaign), updated);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
+    },
+  });
+
+  const parts = jobPipelineParts(job);
+  const sceneParts = parts.filter((part) => part.kind === "scene");
+  const entryParts = parts.filter((part) => part.kind !== "scene");
+  const running = partsStillRunning(job);
+  const runProgress = pipelineProgress(job, t);
+  const runCost = pipelineCostLabel(job, t);
+  /** The draft of a finished scene part, by the address the review uses. */
+  const sceneOfPart = (part: GenerateJobPart) =>
+    scenes.find((scene) => scene.path === `${job?.chapter ?? ""}/${part.id}`);
+  const stubOfPart = (part: GenerateJobPart) =>
+    stubs.find((stub) => stub.kind === part.kind && stub.id === part.id);
+
   const applied = written !== undefined;
   // The window between "POST /generate answered" and "the job shows up in
   // the query" is still the working state — nothing else would be honest.
@@ -367,6 +407,7 @@ export function GenerateRoute() {
     starting,
     jobChecked: jobQuery.isSuccess || jobQuery.isError,
     ...(job === null ? {} : { jobStatus: job.status }),
+    hasParts: hasReviewableParts(job),
   });
 
   const startError = start.error instanceof ApiError ? start.error : undefined;
@@ -746,25 +787,39 @@ export function GenerateRoute() {
                 {t("generate.review.title")}
               </h1>
               <span className="text-[13px] text-muted-foreground">
-                {progress.written === 0
-                  ? t("generate.review.pending", {
-                      summary: applySummary(scenes.length, stubs.length, t),
-                    })
-                  : t("generate.review.progress", progress)}
+                {/* While the RUN is still going its own progress is the more
+                    useful number — „2 von 3 Szenen fertig" (issue #102);
+                    once it is finished, the review's is (issue #97). */}
+                {runProgress ??
+                  (progress.written === 0
+                    ? t("generate.review.pending", {
+                        summary: applySummary(scenes.length, stubs.length, t),
+                      })
+                    : t("generate.review.progress", progress))}
               </span>
               <ReviewSaveStatus status={review.status} />
             </div>
             <p
               className={cn(
                 "text-[14px] leading-[1.6] text-body-secondary",
-                resultUsage === undefined ? "mb-[22px]" : "mb-1.5",
+                (runCost ?? resultUsage) === undefined ? "mb-[22px]" : "mb-1.5",
               )}
             >
               {t("generate.review.lead")}
             </p>
-            {/* What the run cost — quiet, but never invisible (issue #18). */}
-            {resultUsage !== undefined && (
-              <p className="mb-[22px] text-[12px] text-faint">{resultUsage}</p>
+            {/* What the run cost — quiet, but never invisible (issue #18).
+                A pipelined run reports its own totals, summed over every part
+                and every correction turn, and counts CALLS rather than
+                attempts (issue #102 AK5). */}
+            {(runCost ?? resultUsage) !== undefined && (
+              <p className="mb-[22px] text-[12px] text-faint">{runCost ?? resultUsage}</p>
+            )}
+            {/* The run is not done — say so once, and say that what is here
+                can already be accepted. */}
+            {running && (
+              <p aria-live="polite" className="mb-[18px] text-[13px] leading-[1.6] text-body-secondary">
+                {t("generate.pipeline.stillRunning")}
+              </p>
             )}
 
             {result.warnings.map((warning) => (
@@ -779,7 +834,62 @@ export function GenerateRoute() {
 
             <NamingHints hints={result.namingHints} t={t} />
 
-            {scenes.map((scene) => (
+            {/* The parts in OUTLINE order (issue #102): a finished one is its
+                draft, an open one a status card, a failed one its error plus
+                „Erneut versuchen". A run without parts — an older job — falls
+                back to the plain draft list below. */}
+            {sceneParts.map((part) => {
+              const scene = part.status === "done" ? sceneOfPart(part) : undefined;
+              if (scene === undefined) {
+                return (
+                  <PartCard
+                    key={part.key}
+                    part={part}
+                    busy={retry.isPending}
+                    onRetry={() => retry.mutate(part.key)}
+                  />
+                );
+              }
+              return (
+                <SceneCard
+                  key={scene.path}
+                  campaign={campaign}
+                  path={scene.path}
+                  properties={scene.properties}
+                  markdown={draftText(scene.path, scene.markdown)}
+                  tree={tree.data}
+                  state={partState(job, scene.path)}
+                  writtenAt={reviewState.written[scene.path]}
+                  busy={apply.isPending}
+                  editing={editing[scene.path] === true}
+                  onToggleEditing={() =>
+                    setEditing((prev) => ({ ...prev, [scene.path]: prev[scene.path] !== true }))
+                  }
+                  onChange={(markdown) => {
+                    setEdits((prev) => ({ ...prev, [scene.path]: markdown }));
+                    review.edit(scene.path, markdown);
+                  }}
+                  onBlur={review.flush}
+                  onAccept={() => apply.mutate([scene.path])}
+                  onDrop={() =>
+                    review.decide({
+                      dropped: reviewState.dropped.includes(scene.path)
+                        ? reviewState.dropped.filter((path) => path !== scene.path)
+                        : [...reviewState.dropped, scene.path],
+                    })
+                  }
+                />
+              );
+            })}
+
+            {retry.isError && (
+              <p aria-live="polite" className="mb-3 text-[13px] text-destructive">
+                {t("generate.pipeline.retryFailed")}
+              </p>
+            )}
+
+            {sceneParts.length === 0 &&
+              scenes.map((scene) => (
               <SceneCard
                 key={scene.path}
                 campaign={campaign}
@@ -813,10 +923,40 @@ export function GenerateRoute() {
               />
             ))}
 
-            {stubs.length > 0 && (
+            {(stubs.length > 0 || entryParts.length > 0) && (
               <>
                 <div className={cn(OVERLINE, "mb-2.5")}>{t("generate.review.stubsHeading")}</div>
-                {stubs.map((stub) => (
+                {entryParts.map((part) => {
+                  const stub = part.status === "done" ? stubOfPart(part) : undefined;
+                  if (stub === undefined) {
+                    return (
+                      <PartCard
+                        key={part.key}
+                        part={part}
+                        busy={retry.isPending}
+                        onRetry={() => retry.mutate(part.key)}
+                      />
+                    );
+                  }
+                  return (
+                    <StubRow
+                      key={stubKey(stub)}
+                      campaign={campaign}
+                      stub={stub}
+                      reason={stubReason(scenes, t)}
+                      decision={decisions[stubKey(stub)]}
+                      state={partState(job, stubKey(stub))}
+                      writtenAt={reviewState.written[stubKey(stub)]}
+                      busy={apply.isPending}
+                      onDecide={(decision) =>
+                        review.decide({ entries: { [stubKey(stub)]: decision ?? null } })
+                      }
+                      onAccept={() => apply.mutate([stubKey(stub)])}
+                    />
+                  );
+                })}
+                {entryParts.length === 0 &&
+                  stubs.map((stub) => (
                   <StubRow
                     key={stubKey(stub)}
                     campaign={campaign}
@@ -1138,6 +1278,97 @@ function Working() {
         {t("generate.working.background")}
       </p>
     </div>
+  );
+}
+
+/**
+ * One part of a pipelined run that has no draft to show yet (issue #102):
+ * waiting, being written, or failed.
+ *
+ * It is deliberately the SAME footprint as a draft card, in the same place in
+ * the list — the review is laid out in outline order, and a part that moves
+ * from „wird geschrieben" to a finished scene must not make everything below
+ * it jump. Quieter than a draft: a hairline card, the title the outline gave
+ * the part, and one line saying what is going on.
+ *
+ * A failed part is the only one with a button. Its error text is the server's
+ * (the part's `error`, with the mechanical errors below it when there were
+ * any) — the DM decides from it whether to retry or to drop the run, so it is
+ * shown rather than summarized.
+ */
+function PartCard({
+  part,
+  busy,
+  onRetry,
+}: {
+  part: GenerateJobPart;
+  busy: boolean;
+  onRetry: () => void;
+}) {
+  const t = useT();
+  const failed = part.status === "failed";
+  return (
+    <section
+      aria-live="polite"
+      className={cn(
+        "mb-3 rounded-lg border bg-card px-4 py-3.5",
+        failed ? "border-destructive/40" : "border-border",
+      )}
+    >
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 className="font-serif text-[16px] leading-[1.3] font-semibold text-foreground">
+          {part.title}
+        </h2>
+        <span className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
+          {part.status === "running" && (
+            <>
+              {/* Motion is optional — a static ring stands in for it. */}
+              <span
+                aria-hidden
+                className="size-[13px] flex-none animate-spin rounded-full border-2 border-input border-t-primary motion-reduce:hidden"
+              />
+              <span
+                aria-hidden
+                className="hidden size-[13px] flex-none rounded-full border-2 border-primary motion-reduce:block"
+              />
+            </>
+          )}
+          {t(
+            failed
+              ? "generate.pipeline.partFailed"
+              : part.status === "running"
+                ? "generate.pipeline.partRunning"
+                : "generate.pipeline.partPending",
+          )}
+        </span>
+      </div>
+      {failed && (
+        <>
+          {part.error !== undefined && (
+            <p className="mt-2 text-[13px] leading-[1.55] text-body-secondary">{part.error}</p>
+          )}
+          {(part.validationErrors ?? []).length > 0 && (
+            <ul className="mt-1.5 flex flex-col gap-1">
+              {part.validationErrors!.map((error) => (
+                <li key={error} className="font-mono text-[11.5px] leading-[1.5] text-body-secondary">
+                  {error}
+                </li>
+              ))}
+            </ul>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={onRetry}
+            className="mt-3 h-auto gap-2 border-input bg-transparent px-3.5 py-2 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground [&_svg]:size-[14px]"
+          >
+            <RotateCcw aria-hidden />
+            {t("generate.pipeline.retry")}
+          </Button>
+        </>
+      )}
+    </section>
   );
 }
 

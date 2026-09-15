@@ -667,6 +667,19 @@ export const en: Messages = {
   "generate.review.rawLabel": "Markdown of {title}",
   "generate.usage": "~{tokens} tokens · {attempts, plural, one {# attempt} other {# attempts}}",
   "generate.usage.group": ",",
+  // --- generator: the pipeline (issue #102) --------------------------------
+  "generate.pipeline.cost": "~{tokens} tokens · {calls, plural, one {# call} other {# calls}}",
+  "generate.pipeline.progress":
+    "{done} of {total, plural, one {# scene} other {# scenes}} finished",
+  "generate.pipeline.progressEntries":
+    "{done} of {total, plural, one {# suggestion} other {# suggestions}} finished",
+  "generate.pipeline.partRunning": "being written …",
+  "generate.pipeline.partPending": "waiting",
+  "generate.pipeline.partFailed": "not written",
+  "generate.pipeline.retry": "Try again",
+  "generate.pipeline.retryFailed": "Not restarted — check the server.",
+  "generate.pipeline.stillRunning":
+    "The run is not finished yet — whatever is here can already be accepted.",
 
   // --- generator: stub rows (routes/generate.tsx) -------------------------
   "generate.stub.reason.run": "from this run",

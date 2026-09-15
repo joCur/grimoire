@@ -723,6 +723,23 @@ export const de = {
   // (lib/generate.ts groups by hand — Intl would need full ICU data).
   "generate.usage": "~{tokens} Tokens · {attempts, plural, one {# Versuch} other {# Versuche}}",
   "generate.usage.group": ".",
+  // --- generator: the pipeline (issue #102) --------------------------------
+  // A run is the outline call plus one call per scene and per entry, so the
+  // review fills up while the run is still going. What the DM reads is the
+  // PARTS — the outline itself is never shown.
+  "generate.pipeline.cost":
+    "~{tokens} Tokens · {calls, plural, one {# Aufruf} other {# Aufrufe}}",
+  "generate.pipeline.progress":
+    "{done} von {total, plural, one {# Szene} other {# Szenen}} fertig",
+  "generate.pipeline.progressEntries":
+    "{done} von {total, plural, one {# Vorschlag} other {# Vorschlägen}} fertig",
+  "generate.pipeline.partRunning": "wird geschrieben …",
+  "generate.pipeline.partPending": "wartet",
+  "generate.pipeline.partFailed": "nicht geschrieben",
+  "generate.pipeline.retry": "Erneut versuchen",
+  "generate.pipeline.retryFailed": "Nicht neu gestartet — Server prüfen.",
+  "generate.pipeline.stillRunning":
+    "Der Lauf ist noch nicht fertig — was hier steht, kannst du schon übernehmen.",
 
   // --- generator: stub rows (routes/generate.tsx) -------------------------
   "generate.stub.reason.run": "aus diesem Lauf",

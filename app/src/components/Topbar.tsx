@@ -123,7 +123,7 @@ import {
 import { NON_CAMPAIGN_SEGMENTS } from "@/lib/routes";
 import { sessionElapsedLabel, sessionIsPaused } from "@/lib/session";
 import { navSection } from "@/lib/topbar-nav";
-import { jobProgress } from "@/lib/generate";
+import { jobProgress, pipelineProgress } from "@/lib/generate";
 import { useGenerateJob } from "@/lib/use-generate-job";
 import { cn } from "@/lib/utils";
 import { useReviewEntries } from "@/lib/use-review";
@@ -911,12 +911,22 @@ function GeneratorLink({ campaign }: { campaign: string }) {
   // is half applied (issue #97), and the entry says how far it got so a
   // forgotten rest is findable from anywhere.
   const progress = jobProgress(data);
-  const partial = !running && progress.written > 0 && progress.written < progress.total;
+  const partial = progress.written > 0 && progress.written < progress.total;
   const progressLabel = t("topbar.generator.progress", progress);
+  // A PIPELINED run (issue #102) is both at once: parts are still going while
+  // finished ones are already reviewable and acceptable. So the dot and the
+  // progress are no longer exclusive — the chip shows what is true.
+  const runProgress = pipelineProgress(data, t);
   return (
     <Link
       to={`/${campaign}/generate`}
-      title={running ? t("topbar.generator.running") : partial ? progressLabel : undefined}
+      title={
+        running
+          ? (runProgress ?? t("topbar.generator.running"))
+          : partial
+            ? progressLabel
+            : undefined
+      }
       className={cn(
         buttonVariants({ variant: "outline" }),
         "h-auto flex-none gap-[7px] border-input bg-card px-3.5 py-[7px] text-[13px] font-normal text-soft hover:border-border-hover hover:bg-card hover:text-foreground [&_svg]:size-[15px]",
@@ -934,7 +944,7 @@ function GeneratorLink({ campaign }: { campaign: string }) {
             aria-hidden
             className="size-1.5 flex-none rounded-full bg-primary motion-safe:animate-pulse"
           />
-          <span className="sr-only">{t("topbar.generator.running")}</span>
+          <span className="sr-only">{runProgress ?? t("topbar.generator.running")}</span>
         </>
       )}
       {partial && (

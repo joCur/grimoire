@@ -21,6 +21,7 @@ import {
   reviewOf,
   knowledgeHint,
   generatePhase,
+  hasReviewableParts,
   jobErrorBody,
   jobMode,
   markdownBody,
@@ -31,6 +32,11 @@ import {
   slugify,
   stringField,
   stringList,
+  partForPath,
+  partPath,
+  partsStillRunning,
+  pipelineCostLabel,
+  pipelineProgress,
   usageLabel,
 } from "./generate";
 
@@ -558,5 +564,101 @@ describe("review state mapping", () => {
       },
     });
     expect(openParts(decided)).toEqual(["01-x/a"]);
+  });
+});
+
+// --- the pipeline of a scene run (issue #102) --------------------------------
+
+describe("the run's parts", () => {
+  /** A scene job with three scene parts in outline order. */
+  function job(
+    statuses: Array<"pending" | "running" | "done" | "failed">,
+    over: Partial<GenerateJob> = {},
+  ): GenerateJob {
+    return {
+      id: "j1",
+      campaign: "beispiel",
+      kind: "scene",
+      chapter: "01-salzhafen",
+      status: "running",
+      startedAt: "2026-09-15T10:00:00.000Z",
+      draftEdits: {},
+      pipeline: {
+        parts: statuses.map((status, i) => ({
+          key: `scene:s${i}`,
+          kind: "scene" as const,
+          id: `s${i}`,
+          title: `Szene ${i}`,
+          status,
+        })),
+        totals: { inputTokens: 11_000, outputTokens: 1_400, calls: 5 },
+      },
+      ...over,
+    };
+  }
+
+  test("a RUNNING run with a finished part is already the review (AK2)", () => {
+    const base = { applied: false, starting: false, jobChecked: true, jobStatus: "running" as const };
+    // Nothing done yet: the spinner is still the honest answer.
+    expect(generatePhase({ ...base, hasParts: false })).toBe("working");
+    expect(generatePhase({ ...base, hasParts: true })).toBe("review");
+    expect(hasReviewableParts(job(["running", "pending", "pending"]))).toBe(false);
+    expect(hasReviewableParts(job(["done", "running", "pending"]))).toBe(true);
+    // A FAILED part is reviewable too — it carries „Erneut versuchen“.
+    expect(hasReviewableParts(job(["failed", "running", "pending"]))).toBe(true);
+  });
+
+  test("„noch offen“ is pending or running, never failed", () => {
+    expect(partsStillRunning(job(["done", "running", "pending"]))).toBe(true);
+    // A failed part is settled: it waits for the DM, not for the model.
+    expect(partsStillRunning(job(["done", "failed", "done"]))).toBe(false);
+    expect(partsStillRunning(null)).toBe(false);
+  });
+
+  test("the progress line counts the SCENES and disappears when the run is over", () => {
+    expect(pipelineProgress(job(["done", "running", "pending"]), t)).toBe(
+      "1 von 3 Szenen fertig",
+    );
+    expect(pipelineProgress(job(["done", "done", "running"]), tEn)).toBe(
+      "2 of 3 scenes finished",
+    );
+    // Nothing open any more, and a single-call run: no line at all.
+    expect(pipelineProgress(job(["done", "done", "failed"]), t)).toBeUndefined();
+    expect(pipelineProgress(null, t)).toBeUndefined();
+  });
+
+  test("the cost line sums the run's tokens and COUNTS CALLS (AK5)", () => {
+    expect(pipelineCostLabel(job(["done"]), t)).toBe("~12.400 Tokens · 5 Aufrufe");
+    expect(pipelineCostLabel(job(["done"]), tEn)).toBe("~12,400 tokens · 5 calls");
+    // A run whose endpoint reports no tokens still reports its calls.
+    const quiet = job(["done"]);
+    quiet.pipeline!.totals = { inputTokens: 0, outputTokens: 0, calls: 2 };
+    expect(pipelineCostLabel(quiet, t)).toBe("~0 Tokens · 2 Aufrufe");
+    // …and a run with nothing at all reports nothing.
+    quiet.pipeline!.totals = { inputTokens: 0, outputTokens: 0, calls: 0 };
+    expect(pipelineCostLabel(quiet, t)).toBeUndefined();
+    expect(pipelineCostLabel(null, t)).toBeUndefined();
+  });
+
+  test("a part and the address the review uses for it map both ways", () => {
+    const scenes = job(["done", "done", "done"]);
+    expect(partPath(scenes, scenes.pipeline!.parts[1]!)).toBe("01-salzhafen/s1");
+    expect(partForPath(scenes, "01-salzhafen/s1")?.key).toBe("scene:s1");
+    // An entry is addressed by its kind's directory.
+    const withEntry = job(["done"], {
+      pipeline: {
+        parts: [
+          { key: "npc:grella", kind: "npc", id: "grella", title: "Grella", status: "done" },
+          { key: "location:bucht", kind: "location", id: "bucht", title: "Bucht", status: "done" },
+        ],
+        totals: { inputTokens: 0, outputTokens: 0, calls: 3 },
+      },
+    });
+    expect(partPath(withEntry, withEntry.pipeline!.parts[0]!)).toBe("npcs/grella");
+    expect(partPath(withEntry, withEntry.pipeline!.parts[1]!)).toBe("locations/bucht");
+    expect(partForPath(withEntry, "npcs/grella")?.key).toBe("npc:grella");
+    expect(partForPath(withEntry, "locations/bucht")?.key).toBe("location:bucht");
+    // A path no part produced simply has none.
+    expect(partForPath(scenes, "npcs/fenn")).toBeUndefined();
   });
 });
