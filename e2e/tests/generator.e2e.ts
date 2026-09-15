@@ -82,8 +82,9 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
     timeout: 30_000,
   });
   await expect(page.getByText("1 Szene · 2 vorgeschlagene Einträge · noch nichts geschrieben")).toBeVisible();
-  // Token spend of the run (the stub reports usage like a real endpoint).
-  await expect(page.getByText(/~[\d.]+ Tokens · 1 Versuch/)).toBeVisible();
+  // What the run cost: since issue #102 it is summed over every CALL of the
+  // pipeline — the outline plus the one scene plus the two entries.
+  await expect(page.getByText(/~[\d.]+ Tokens · 4 Aufrufe/)).toBeVisible();
   // The model's warning is shown, not swallowed.
   await expect(page.getByText("Der Frachtbrief ist erfunden", { exact: false })).toBeVisible();
 
@@ -210,8 +211,10 @@ test("failure path: an invalid model reply shows the 422 block with the raw repl
   await expect(
     page.getByText("Quelltext kürzen oder klarer strukturieren und erneut generieren."),
   ).toBeVisible();
-  // Two attempts: the first call plus the correction turn.
-  await expect(page.getByText(/~[\d.]+ Tokens · 2 Versuche/)).toBeVisible();
+  // Three calls: the outline, then the scene part's initial call plus its
+  // correction turn. The failure block still reports „Versuche", because it
+  // reads the run's usage out of the error body (issue #18).
+  await expect(page.getByText(/~[\d.]+ Tokens · 3 Versuche/)).toBeVisible();
 
   // The raw reply is one click away — that is what makes a 422 debuggable.
   await page.getByText("Unverarbeitete Antwort anzeigen").click();

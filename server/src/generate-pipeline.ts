@@ -163,15 +163,11 @@ export function validateOutlineReply(
       errors.push(`${label}: duplicate id "${id}" — jede id kommt im Durchlauf nur einmal vor`);
       return;
     }
-    // An entry the campaign already has is not a new entry: proposing it
-    // again would create a second file for the same reference key.
-    if ((kind === "npc" ? ctx.npcIds : ctx.locationIds).has(id)) {
-      errors.push(
-        `${label}: "${id}" existiert in der Kampagne schon — ` +
-          "nur wirklich neue Figuren/Orte gehören in \"entries\"",
-      );
-      return;
-    }
+    // An id the campaign ALREADY has is deliberately not an error here: since
+    // issue #70 a reference creates an empty row, so „locations/bucht exists“
+    // routinely means „a scene mentioned it and nobody has written it yet“ —
+    // exactly the entry this run should fill. The apply path is what decides
+    // whether a write collides, and it always was.
     seen.add(id);
     entries.push({
       kind,

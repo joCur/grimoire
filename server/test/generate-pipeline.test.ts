@@ -93,12 +93,16 @@ test("the outline's ids are kebab slugs and unique across scenes AND entries", (
   ).toEqual(expect.arrayContaining([expect.stringContaining("duplicate id")]));
 });
 
-test("an entry the campaign already has is refused", () => {
+test("an id the campaign already has is NOT an outline error", () => {
+  // Since issue #70 a reference creates an EMPTY row, so „fenn exists“ can
+  // mean „a scene mentions him and nobody has written him yet“ — which is
+  // exactly the entry this run should fill. Collisions are the apply path's
+  // question, and they always were.
   expect(
     outlineErrors(
       outlineReply({ entries: [{ kind: "npc", id: "fenn", name: "Fenn", summary: "x" }] }),
     ),
-  ).toEqual([expect.stringContaining("existiert in der Kampagne schon")]);
+  ).toEqual([]);
 });
 
 test("the chapter is the RUN's — an invented one is a correction turn", () => {
