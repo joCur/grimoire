@@ -53,17 +53,21 @@
 //   - TRIGGER.slowPart -> only the LAST scene's reply is held, so a spec can
 //     restart a run that has finished parts AND one in flight.
 //   - TRIGGER.asciiQuotes -> the scene body carries German quotation marks
-//     closed with an ASCII `"` (issue #107 AK5). Under the old JSON wrapper
-//     that ended the string; as a raw document the run must reach `done`
-//     without a single correction turn.
+//     closed with an ASCII `"` (issue #107 AK5). Under the hand-written JSON
+//     wrapper that ended the string; as the `body` of a forced object the run
+//     must reach `done` without a single correction turn, and the characters
+//     have to arrive verbatim.
 //
-// REPLY SHAPE (issue #107): a DOCUMENT reply is a STRING — the document plus
-// its warnings block, exactly as replies.ts assembles it — and goes into the
-// message content verbatim. The OUTLINE is the one object left, and it is
-// serialized as JSON. The stub answers the schema-forced request of the
-// Claude path in neither form: it is an OpenAI-compatible endpoint and simply
-// ignores `response_format`, which is also what the real fallback path
-// exercises.
+// REPLY SHAPE (issue #107): every reply is an OBJECT and is serialized as
+// JSON into the message content — the outline its own, a document call
+// `{ properties, body, warnings }` (replies.ts assembles both). A reply that
+// is a plain STRING is one a spec wrote to be unreadable, and it travels
+// verbatim.
+//
+// The stub is an OpenAI-compatible endpoint and simply IGNORES the
+// `response_format` the server sends, which is exactly what the tolerant
+// reader on the server (parseJsonReply) is the net for: the E2E path proves
+// the run works even where the schema is not actually enforced.
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
@@ -177,9 +181,9 @@ function existingEntry(prompt: string): { path: string; markdown: string } | nul
 
 export interface StubDecision {
   /**
-   * The reply. A STRING goes into the message content verbatim — that is a
-   * document reply (issue #107); anything else is serialized as JSON, which
-   * is the outline and only the outline.
+   * The reply object (issue #107), serialized as JSON into the message
+   * content. A plain STRING travels verbatim — that is a reply a spec wrote
+   * to be unreadable.
    */
   reply: unknown;
   /** The endpoint reports the reply as cut off. */
@@ -367,8 +371,8 @@ export function startStubLlm(port = 0): Promise<{ port: number; close: () => Pro
               index: 0,
               message: {
                 role: "assistant",
-                // A document reply IS the content (issue #107); the outline
-                // is the one reply left that gets serialized.
+                // Every reply is an object since issue #107; a string is a
+                // deliberately unreadable one and goes out as it stands.
                 content:
                   typeof decision.reply === "string"
                     ? decision.reply

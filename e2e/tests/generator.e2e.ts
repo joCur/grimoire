@@ -206,11 +206,15 @@ test("the review appears as soon as the job is done — even with the start requ
 
 /**
  * Issue #107 AK5, the PO case of 15.09.: the scene body carries German
- * quotation marks closed with an ASCII `"`. Under the old JSON wrapper that
- * quote ended the `content` string and an inhaltlich correct scene cost the
- * run a correction turn — and often a „Formprüfung nicht bestanden". As a raw
- * document it is text, so the run reaches the review in ONE call per part and
- * the quotation marks arrive byte for byte.
+ * quotation marks closed with an ASCII `"`. When the model hand-wrote the
+ * JSON wrapper, that quote ended the `content` string and an otherwise
+ * correct scene cost the run a correction turn — and often a „Formprüfung
+ * nicht bestanden".
+ *
+ * The body is a string of a schema-forced object now, so the ESCAPING is the
+ * transport's: the run reaches the review in one call per part and the
+ * characters arrive byte for byte, through a real HTTP endpoint and the real
+ * provider.
  */
 test("a scene with ASCII closing quotes is accepted without a correction turn", async ({
   page,

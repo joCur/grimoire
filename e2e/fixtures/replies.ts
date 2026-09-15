@@ -31,10 +31,11 @@
 // literal text until the stub is applied) and `[[smuggler-captured]]` (a
 // scene — the third referenceable kind).
 //
-// REPLY SHAPE (issue #107): every DOCUMENT reply here is the document itself,
-// with its warnings after a `---warnings---` line — `rawDocument()` below is
-// the one place that assembles it. Only the OUTLINE is still a JSON object,
-// and the server forces its schema through the provider.
+// REPLY SHAPE (issue #107): every reply is a JSON OBJECT whose schema the
+// server forces through the provider — the outline its own, a document call
+// `{ properties, body, warnings }`. The fixtures keep writing DOCUMENTS
+// (that is how a fixture says what a scene is) and `documentReply()` below is
+// the one place that turns one into the reply object.
 
 /** Trigger tokens a test puts into the source text to steer the stub. */
 export const TRIGGER = {
@@ -123,20 +124,73 @@ export const SLOW_REPLY_MS = 60_000;
  */
 export const LATE_REPLY_MS = 5_000;
 
-/** The delimiter the server splits a document reply at (server/src/document-reply.ts). */
-export const WARNINGS_DELIMITER = "---warnings---";
+/**
+ * One DOCUMENT reply (issue #107): the object the server's schema forces —
+ * `properties` (the frontmatter fields), `body` (the text below them) and
+ * `warnings`.
+ *
+ * The fixtures keep WRITING documents, because a document is how a fixture
+ * says what a scene or an npc IS, and this is the one place that turns one
+ * into the reply. Duplicated rather than imported from the server, like
+ * KNOWLEDGE_HEADING in the stub: the fixture is a fake MODEL and writes what
+ * a model writes, so the server agrees with it by ASSERTION, not by
+ * construction.
+ *
+ * A document with no properties block travels as a plain string — that is a
+ * reply the server has to fail on, and a spec that writes one means it.
+ */
+export function documentReply(content: string, warnings: readonly string[] = []): unknown {
+  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(content);
+  if (match === null) return content;
+  return {
+    properties: parseProperties(match[1]!.split("\n")),
+    body: (match[2] ?? "").replace(/^\n+/, "").replace(/\s*$/, "\n"),
+    warnings: [...warnings],
+  };
+}
 
 /**
- * One raw document reply: the document, then the warnings block. Duplicated
- * rather than imported from the server, like KNOWLEDGE_HEADING in the stub:
- * the fixture is a fake MODEL and writes what a model writes, so the server
- * agrees with it by ASSERTION and not by construction.
+ * The frontmatter of a fixture document as the reply's `properties`: scalars,
+ * flow lists (`[fenn, grella]`) and flow mappings (`{ wis: "+2" }`) — the
+ * three shapes our documents use. A key/value field travels as the `{ key,
+ * value }` LIST the schema asks for (a free mapping cannot be expressed in
+ * strict mode).
  */
-export function rawDocument(content: string, warnings: readonly string[] = []): string {
-  const document = content.replace(/\n*$/, "\n");
-  return warnings.length === 0
-    ? document
-    : `${document}\n${WARNINGS_DELIMITER}\n${warnings.join("\n")}\n`;
+function parseProperties(lines: readonly string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const line of lines) {
+    const match = /^([A-Za-z_][A-Za-z0-9_-]*):[ \t]*(.*)$/.exec(line);
+    if (match === null) continue;
+    const key = match[1]!;
+    const raw = match[2]!.trim();
+    if (raw.startsWith("[")) {
+      out[key] = splitFlow(raw).map(unquote);
+      continue;
+    }
+    if (raw.startsWith("{")) {
+      out[key] = splitFlow(raw).map((pair) => {
+        const at = pair.indexOf(":");
+        return { key: pair.slice(0, at).trim(), value: unquote(pair.slice(at + 1)) };
+      });
+      continue;
+    }
+    out[key] = unquote(raw);
+  }
+  return out;
+}
+
+/** The comma-separated items inside a `[...]` / `{...}` flow collection. */
+function splitFlow(raw: string): string[] {
+  return raw
+    .slice(1, -1)
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item !== "");
+}
+
+function unquote(value: string): string {
+  const text = value.trim();
+  return /^".*"$/.test(text) || /^'.*'$/.test(text) ? text.slice(1, -1) : text;
 }
 
 // --- scene run ---------------------------------------------------------------
@@ -184,7 +238,6 @@ title: ${SCENE_TITLE}
 type: planned
 chapter: ${chapter}
 npcs: [fenn]
-handouts: []
 tags: [stealth]
 status: draft
 ---
@@ -204,7 +257,6 @@ id: ${SCENE_ID}
 title: Nachtwache in ${OLD_NAME}
 type: planned
 chapter: ${chapter}
-handouts: []
 tags: [stealth]
 status: draft
 ---
@@ -223,7 +275,6 @@ type: planned
 chapter: ${chapter}
 location: ${LOCATION_STUB_ID}
 npcs: [fenn, ${NPC_STUB_ID}]
-handouts: []
 tags: [stealth, social]
 status: draft
 ---
@@ -328,16 +379,16 @@ Nächten keinen Fang verkauft und traut [[fenn]] nicht.
 }
 
 /** The good NPC reply; `id` is the DM's pin when there was one. */
-export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): string {
-  return rawDocument(npcFile(id), contextEchoWarnings(knowledge));
+export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): unknown {
+  return documentReply(npcFile(id), contextEchoWarnings(knowledge));
 }
 
 /**
  * An NPC reply that FAILS validation: unquoted quickstats (YAML eats the
  * plus), a missing status and an invented `chapter`.
  */
-export function invalidNpcReply(id: string = NPC_DEFAULT_ID): string {
-  return rawDocument(`---
+export function invalidNpcReply(id: string = NPC_DEFAULT_ID): unknown {
+  return documentReply(`---
 id: ${id}
 name: ${NPC_DEFAULT_NAME}
 chapter: 01-salzhafen
@@ -412,7 +463,7 @@ function propertyValue(properties: string[], key: string): string | undefined {
  *   anything else (a prepared scene, a location)       ->  one NEW `## If:`
  *       section at the end; every existing block comes back unchanged.
  */
-export function augmentReply(path: string, markdown: string, knowledge = ""): string {
+export function augmentReply(path: string, markdown: string, knowledge = ""): unknown {
   const { properties, body } = splitEntry(markdown);
   const id = propertyValue(properties, "id") ?? path.slice(path.lastIndexOf("/") + 1);
   const isEmptyNpc =
@@ -445,7 +496,7 @@ export function augmentReply(path: string, markdown: string, knowledge = ""): st
         AUGMENT_THREAD_TEXT,
         "",
       ].join("\n");
-  return rawDocument(content, contextEchoWarnings(knowledge));
+  return documentReply(content, contextEchoWarnings(knowledge));
 }
 
 /**
@@ -454,8 +505,8 @@ export function augmentReply(path: string, markdown: string, knowledge = ""): st
  * is no longer a shape a reply can have — rewriting the reference key is,
  * and it is the rule the augment run cares about most.
  */
-export function invalidAugmentReply(_path: string): string {
-  return rawDocument("---\nid: not-the-entry\n---\n");
+export function invalidAugmentReply(_path: string): unknown {
+  return documentReply("---\nid: not-the-entry\n---\n");
 }
 
 // --- the pipelined scene run (issue #102) ------------------------------------
@@ -468,9 +519,9 @@ export function invalidAugmentReply(_path: string): string {
 //                  the server cuts the passage with it, so the fixture has to
 //                  quote the SOURCE TEXT and not paraphrase it. Still JSON:
 //                  the server forces its schema through the provider (#107).
-//   scene          the scene document itself (#107) — raw markdown, warnings
-//                  after `---warnings---`.
-//   entry          the npc/location document itself, likewise raw.
+//   scene          the scene as the reply OBJECT (#107): `properties`,
+//                  `body`, `warnings` — the server composes the frontmatter.
+//   entry          the npc/location document, likewise as an object.
 //
 // The default run has ONE scene and the two entries the specs already know.
 // TRIGGER.threeScenes turns it into three scenes and no entries, which is what
@@ -602,18 +653,18 @@ export function scenePartReply(
   sceneId: string,
   oldName = false,
   asciiQuotes = false,
-): string {
+): unknown {
   if (sceneId === SCENE_ID) {
-    return rawDocument(sceneDraft(chapter, oldName, asciiQuotes));
+    return documentReply(sceneDraft(chapter, oldName, asciiQuotes));
   }
   const scene = THREE_SCENES.find((s) => s.id === sceneId);
-  return rawDocument(plainSceneDraft(chapter, sceneId, scene?.title ?? sceneId));
+  return documentReply(plainSceneDraft(chapter, sceneId, scene?.title ?? sceneId));
 }
 
 /** A scene document that FAILS validation — `status: ready` is drafts only. */
-export function invalidScenePartReply(chapter: string, sceneId: string): string {
+export function invalidScenePartReply(chapter: string, sceneId: string): unknown {
   const title = THREE_SCENES.find((s) => s.id === sceneId)?.title ?? SCENE_TITLE;
-  return rawDocument(`---
+  return documentReply(`---
 id: ${sceneId}
 title: ${title}
 type: planned
@@ -639,7 +690,6 @@ title: ${title}
 type: planned
 chapter: ${chapter}
 npcs: [fenn]
-handouts: []
 tags: [stealth]
 status: draft
 ---
@@ -654,6 +704,6 @@ status: draft
 }
 
 /** One suggested entry — the document itself (issue #107). */
-export function entryPartReply(kind: "npc" | "location"): string {
-  return rawDocument(kind === "location" ? locationStub : npcStub);
+export function entryPartReply(kind: "npc" | "location"): unknown {
+  return documentReply(kind === "location" ? locationStub : npcStub);
 }
