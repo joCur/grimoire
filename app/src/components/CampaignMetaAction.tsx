@@ -1,5 +1,5 @@
 // „Bearbeiten" for the campaign's name and description (issue #34) — offered
-// on the pool header and in the campaign file's reading view, the two places
+// on the pool header and in the campaign entry's reading view, the two places
 // where those two values are on screen.
 //
 // The dialog writes through the documented API: PATCH /properties with the
@@ -107,7 +107,7 @@ function CampaignMetaDialog({
     write:
       base === undefined ? undefined : () => writeCampaignMeta(campaign, values, base.rev),
     fileKey: ["file", campaign, CAMPAIGN_META_PATH],
-    // The switcher and the pool header read the campaign list; the file also
+    // The switcher and the pool header read the campaign list; the entry also
     // sits in the tree/search surfaces.
     invalidateOnSuccess: [["campaigns"], ["tree", campaign], ["search", campaign]],
     onSaved: onClose,

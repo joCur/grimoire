@@ -1,7 +1,7 @@
 // Critical path 9, second spec: the BLOCK COMPOSER (issue #43) — since that
 // slice „Bearbeiten" no longer opens a wall of markdown but the scene as a list
 // of typed cards, and the raw textarea of issue #39 is one click away as the
-// fallback („Roh"). `tests/file-edit.e2e.ts` owns that fallback and the whole
+// fallback („Markdown"). `tests/entry-edit.e2e.ts` owns that fallback and the whole
 // save/409/discard machinery seen from it; this spec owns the composer.
 //
 // What has to hold, and why every test below reads the file back through the API:
@@ -86,7 +86,7 @@ function composer(page: Page): Locator {
   return page.getByRole("region", { name: /^Blöcke: / });
 }
 
-/** The raw textarea of „Roh" (FileBodyEditor labels it with the file's path). */
+/** The raw textarea of „Markdown" (EntryBodyEditor labels it with the file's path). */
 function rawTextarea(page: Page): Locator {
   return page.getByRole("textbox", { name: /^Markdown-Text von/ });
 }
@@ -140,7 +140,7 @@ test("Bearbeiten opens the block composer — one card per block, no textarea", 
   await page.getByRole("button", { name: "Bearbeiten" }).click();
 
   // The DEFAULT surface is the block list — there is no textarea on the page
-  // at all, and „Vorschau" (which belongs to „Roh") is not offered.
+  // at all, and „Vorschau" (which belongs to „Markdown") is not offered.
   await expect(composer(page)).toBeVisible();
   await expect(page.locator("textarea")).toHaveCount(0);
   await expect(rawTextarea(page)).toHaveCount(0);

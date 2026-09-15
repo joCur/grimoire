@@ -76,7 +76,7 @@ describe("MarkdownEditorSurface", () => {
 
 describe("EditorShell", () => {
   // The frame the callers compose themselves: the reading view puts its mode
-  // switch and its Speichern/Abbrechen in here (FileBodyEditor), the generator
+  // switch and its Speichern/Abbrechen in here (EntryBodyEditor), the generator
   // its chips and its own actions. The shell owns the toolbar row, nothing else.
   const shell = (editing: boolean) =>
     renderToStaticMarkup(
@@ -85,7 +85,7 @@ describe("EditorShell", () => {
           <MarkdownEditorToggle
             editing={editing}
             onToggleEditing={() => {}}
-            controlsId="file-body-scene"
+            controlsId="entry-body-scene"
           />
         }
         // Stand-in caller markup, not app copy — hence the literal (in an
@@ -96,7 +96,7 @@ describe("EditorShell", () => {
           value={BODY}
           onChange={() => {}}
           editing={editing}
-          id="file-body-scene"
+          id="entry-body-scene"
           label="Markdown-Text der Datei"
         />
       </EditorShell>,
@@ -106,8 +106,8 @@ describe("EditorShell", () => {
     const html = shell(true);
     expect(html).toContain("Vorschau");
     expect(html).toContain("Speichern");
-    expect(html).toContain('id="file-body-scene"');
-    expect(html).toContain('aria-controls="file-body-scene"');
+    expect(html).toContain('id="entry-body-scene"');
+    expect(html).toContain('aria-controls="entry-body-scene"');
   });
 
   test("the toggle flips the surface to the rendered preview", () => {

@@ -20,7 +20,7 @@
 //     included: filling one of those is the DM's own decision about that id.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { CampaignSummary, FileResponse } from "@grimoire/shared";
+import type { CampaignSummary, EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { dropStore, emptyStore, seedStore } from "./support/store";
 
@@ -65,7 +65,7 @@ describe("POST /api/campaigns — the cold start", () => {
     expect(list.map((c) => c.id)).toEqual(["die-kueste-von-salzhafen"]);
     const doc = (await (
       await app.request("/api/die-kueste-von-salzhafen/file?path=_campaign")
-    ).json()) as FileResponse;
+    ).json()) as EntryResponse;
     expect(doc.properties.name).toBe("Die Küste von Salzhafen");
     expect(doc.rev).toBe(1);
   });
@@ -131,7 +131,7 @@ describe("the per-campaign creates", () => {
   });
 
   test("a chapter takes its id from the title and its goal into the section", async () => {
-    const chapter = await created<FileResponse>("/nordwind/chapters", {
+    const chapter = await created<EntryResponse>("/nordwind/chapters", {
       title: "01 Salzhafen",
       goal: "Die Gruppe kommt an",
     });
@@ -141,12 +141,12 @@ describe("the per-campaign creates", () => {
   });
 
   test("a chapter without a goal has an empty body, not an empty section", async () => {
-    const chapter = await created<FileResponse>("/nordwind/chapters", { title: "Prolog" });
+    const chapter = await created<EntryResponse>("/nordwind/chapters", { title: "Prolog" });
     expect(chapter.body).toBe("");
   });
 
   test("a second chapter with the same title is a 409 with a suggestion", async () => {
-    await created<FileResponse>("/nordwind/chapters", { title: "Prolog" });
+    await created<EntryResponse>("/nordwind/chapters", { title: "Prolog" });
     const res = await post("/nordwind/chapters", { title: "Prolog" });
     expect(res.status).toBe(409);
     const body = await errorBody(res);
@@ -177,7 +177,7 @@ describe("the per-campaign creates", () => {
     expect((await app.request("/api/nordwind/file?path=npcs/_chapter")).status).toBe(404);
 
     // The proposal itself works, and the reserved ids are all three of them.
-    expect((await created<FileResponse>("/nordwind/chapters", { title: "NPCs", id: "npcs-2" })).path).toBe(
+    expect((await created<EntryResponse>("/nordwind/chapters", { title: "NPCs", id: "npcs-2" })).path).toBe(
       "npcs-2/_chapter",
     );
     expect((await post("/nordwind/chapters", { title: "Locations" })).status).toBe(409);
@@ -192,9 +192,9 @@ describe("the per-campaign creates", () => {
   });
 
   test("a proposal never lands on an empty row someone else references (#70)", async () => {
-    await created<FileResponse>("/nordwind/npcs", { name: "Holm" });
-    await created<FileResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
-    const scene = await created<FileResponse>("/nordwind/scenes", {
+    await created<EntryResponse>("/nordwind/npcs", { name: "Holm" });
+    await created<EntryResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
+    const scene = await created<EntryResponse>("/nordwind/scenes", {
       title: "Am Steg",
       chapter: "01-salzhafen",
     });
@@ -216,14 +216,14 @@ describe("the per-campaign creates", () => {
     expect((await errorBody(res)).suggestion).toBe("holm-3");
 
     // Filling that entry stays possible — for the DM who types exactly its id.
-    const filled = await created<FileResponse>("/nordwind/npcs", { name: "Holm 2" });
+    const filled = await created<EntryResponse>("/nordwind/npcs", { name: "Holm 2" });
     expect(filled.path).toBe("npcs/holm-2");
     expect(filled.properties.name).toBe("Holm 2");
   });
 
   test("a scene lands in its chapter as a draft with an empty body", async () => {
-    await created<FileResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
-    const scene = await created<FileResponse>("/nordwind/scenes", {
+    await created<EntryResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
+    const scene = await created<EntryResponse>("/nordwind/scenes", {
       title: "Ankunft am Leuchtturm",
       chapter: "01-salzhafen",
     });
@@ -253,7 +253,7 @@ describe("the per-campaign creates", () => {
   });
 
   test("an npc is created from the name alone", async () => {
-    const npc = await created<FileResponse>("/nordwind/npcs", { name: "Alte Fischerin" });
+    const npc = await created<EntryResponse>("/nordwind/npcs", { name: "Alte Fischerin" });
     expect(npc.path).toBe("npcs/alte-fischerin");
     expect(npc.properties.name).toBe("Alte Fischerin");
     // Nothing is claimed beyond the name — the properties dialog carries the rest.
@@ -263,7 +263,7 @@ describe("the per-campaign creates", () => {
   });
 
   test("a filled npc collides; the suggestion skips it", async () => {
-    await created<FileResponse>("/nordwind/npcs", { name: "Holm" });
+    await created<EntryResponse>("/nordwind/npcs", { name: "Holm" });
     const res = await post("/nordwind/npcs", { name: "Holm" });
     expect(res.status).toBe(409);
     const body = await errorBody(res);
@@ -272,15 +272,15 @@ describe("the per-campaign creates", () => {
   });
 
   test("an ort is created from the name alone and collides the same way", async () => {
-    const location = await created<FileResponse>("/nordwind/locations", { name: "Hafen" });
+    const location = await created<EntryResponse>("/nordwind/locations", { name: "Hafen" });
     expect(location.path).toBe("locations/hafen");
     expect(location.properties.name).toBe("Hafen");
     expect((await post("/nordwind/locations", { name: "Hafen" })).status).toBe(409);
   });
 
   test("an EMPTY row a reference created is filled, not collided with (#70)", async () => {
-    await created<FileResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
-    const scene = await created<FileResponse>("/nordwind/scenes", {
+    await created<EntryResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
+    const scene = await created<EntryResponse>("/nordwind/scenes", {
       title: "Am Steg",
       chapter: "01-salzhafen",
     });
@@ -297,10 +297,10 @@ describe("the per-campaign creates", () => {
     expect(patched.status).toBe(200);
 
     // „NPC anlegen" for exactly that id now FILLS the entry.
-    const npc = await created<FileResponse>("/nordwind/npcs", { name: "Holm" });
+    const npc = await created<EntryResponse>("/nordwind/npcs", { name: "Holm" });
     expect(npc.path).toBe("npcs/holm");
     expect(npc.properties.name).toBe("Holm");
-    const location = await created<FileResponse>("/nordwind/locations", { name: "Bucht" });
+    const location = await created<EntryResponse>("/nordwind/locations", { name: "Bucht" });
     expect(location.properties.name).toBe("Bucht");
   });
 
@@ -318,7 +318,7 @@ describe("the per-campaign creates", () => {
     const before = (await (await app.request("/api/nordwind/version")).json()) as {
       version: number;
     };
-    await created<FileResponse>("/nordwind/npcs", { name: "Holm" });
+    await created<EntryResponse>("/nordwind/npcs", { name: "Holm" });
     const after = (await (await app.request("/api/nordwind/version")).json()) as {
       version: number;
     };
@@ -342,7 +342,7 @@ describe("creating next to imported stock", () => {
   });
 
   test("the search index knows a freshly created npc", async () => {
-    await created<FileResponse>("/beispiel/npcs", { name: "Brunhild Wellenbrecher" });
+    await created<EntryResponse>("/beispiel/npcs", { name: "Brunhild Wellenbrecher" });
     const found = (await (
       await app.request("/api/beispiel/search?q=Wellenbrecher")
     ).json()) as { results: Array<{ path: string }> };

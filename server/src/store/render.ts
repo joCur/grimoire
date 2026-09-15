@@ -1,6 +1,6 @@
 // Rows → the API's document shapes (issues #57/#79).
 //
-// Every read endpoint answers `ParsedFile`/`FileResponse`: an address, a
+// Every read endpoint answers `ParsedFile`/`EntryResponse`: an address, a
 // `properties` mapping, a markdown body, and the concurrency token the client
 // sends back.
 //
@@ -24,7 +24,7 @@
 // the same text they always saw.
 
 import { CORE_SCHEMA, dump } from "js-yaml";
-import type { FileResponse, ParsedFile } from "@grimoire/shared";
+import type { EntryResponse, ParsedFile } from "@grimoire/shared";
 import { localDateTimeToMs } from "../clock";
 import { unpackJson, unpackStringArray } from "../db/schema";
 import {
@@ -204,7 +204,7 @@ function parsed(
   properties: Record<string, unknown>,
   body: string,
   rev: number,
-): FileResponse {
+): EntryResponse {
   return { path, kind, properties, body, rev: rev, raw: renderRaw(properties, body) };
 }
 
@@ -235,7 +235,7 @@ export function campaignProperties(row: CampaignRow): Record<string, unknown> {
   );
 }
 
-export function renderCampaign(row: CampaignRow): FileResponse {
+export function renderCampaign(row: CampaignRow): EntryResponse {
   return parsed(CAMPAIGN_PATH, "campaign", campaignProperties(row), row.body, row.rev);
 }
 
@@ -250,7 +250,7 @@ export function chapterProperties(row: ChapterRow): Record<string, unknown> {
   );
 }
 
-export function renderChapter(row: ChapterRow): FileResponse {
+export function renderChapter(row: ChapterRow): EntryResponse {
   return parsed(chapterPath(row.id), "chapter", chapterProperties(row), row.body, row.rev);
 }
 
@@ -284,7 +284,7 @@ export function sceneProperties(
   );
 }
 
-export function renderScene(row: SceneRow, npcs: string[], tags: string[]): FileResponse {
+export function renderScene(row: SceneRow, npcs: string[], tags: string[]): EntryResponse {
   return parsed(
     sceneAddress(row),
     "scene",
@@ -361,7 +361,7 @@ export function npcProperties(row: NpcRow): Record<string, unknown> {
 export function renderNpc(
   row: NpcRow,
   relations: Array<{ otherNpcId: string; note: string }>,
-): FileResponse {
+): EntryResponse {
   return parsed(npcPath(row.id), "npc", npcProperties(row), renderNpcBody(row, relations), row.rev);
 }
 
@@ -377,7 +377,7 @@ export function locationProperties(row: LocationRow): Record<string, unknown> {
   );
 }
 
-export function renderLocation(row: LocationRow): FileResponse {
+export function renderLocation(row: LocationRow): EntryResponse {
   return parsed(locationPath(row.id), "location", locationProperties(row), row.body, row.rev);
 }
 
@@ -431,7 +431,7 @@ export function renderSessionBody(row: SessionRow, log: LogRow[]): string {
 export function sessionTimes(
   row: SessionRow,
   pauses: PauseRow[],
-): Pick<FileResponse, "startedMs" | "endedMs" | "pausedMs" | "pausedSinceMs"> {
+): Pick<EntryResponse, "startedMs" | "endedMs" | "pausedMs" | "pausedSinceMs"> {
   const startedMs = localDateTimeToMs(row.started);
   const endedMs = localDateTimeToMs(row.ended);
   let pausedMs = 0;
@@ -460,7 +460,7 @@ export function renderSession(
   pauses: PauseRow[],
   log: LogRow[],
   played: string[],
-): FileResponse {
+): EntryResponse {
   const properties = sessionProperties(row, pauses, log, played);
   const body = renderSessionBody(row, log);
   return {
@@ -487,7 +487,7 @@ export function renderInboxBody(rows: InboxRow[]): string {
   return `\n${out.join("\n")}\n`;
 }
 
-export function renderInbox(campaignId: string, rows: InboxRow[], rev: number): FileResponse {
+export function renderInbox(campaignId: string, rows: InboxRow[], rev: number): EntryResponse {
   // The parser gave a properties-less inbox the file stem as its id; the
   // format's own `inbox` carries exactly that.
   return parsed(INBOX_PATH, "inbox", { id: "inbox" }, renderInboxBody(rows), rev);
@@ -519,7 +519,7 @@ export function renderGlossary(
   rows: GlossaryRow[],
   rev: number,
   intro = "",
-): FileResponse {
+): EntryResponse {
   return parsed(
     GLOSSARY_PATH,
     "glossary",

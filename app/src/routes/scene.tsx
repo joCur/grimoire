@@ -17,7 +17,7 @@
 // „Bearbeiten" in the header (issue #15) turns the body into the raw markdown
 // editor — header, chips and status regler keep standing, the properties is
 // not part of it. The route owns only the "which path is being edited" bit;
-// the write, the 409 and the discard guard live in FileBodyEditor.
+// the write, the 409 and the discard guard live in EntryBodyEditor.
 //
 // „Mit KI ergänzen" (issue #36) is the third one: source text and/or an
 // instruction go to a server job, and its proposal comes back as a review —
@@ -36,7 +36,7 @@ import { fetchFile, fetchTree } from "@/api";
 import { AugmentAction } from "@/components/AugmentAction";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
 import { EntityArticle } from "@/components/EntityArticle";
-import { FileBodyEditAction, FileBodyEditor } from "@/components/FileBodyEditor";
+import { EntryBodyEditAction, EntryBodyEditor } from "@/components/EntryBodyEditor";
 import { PropertiesAction } from "@/components/PropertiesAction";
 import { MobileBackRow } from "@/components/MobileBackRow";
 import { NpcCard } from "@/components/NpcCard";
@@ -45,7 +45,7 @@ import { SceneArticle } from "@/components/SceneArticle";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { useT } from "@/i18n";
 import { entityHeaderKind } from "@/lib/entity";
-import { canEditFileBody } from "@/lib/file-body";
+import { canEditEntryBody } from "@/lib/entry-body";
 import { fmString, fmStringArray } from "@/lib/properties";
 import { pageContextCrumbs } from "@/lib/page-context";
 
@@ -56,7 +56,7 @@ export function SceneRoute() {
   const path = params["*"] ?? "";
   // Edit mode (issue #15) is remembered BY DOCUMENT, not as a plain boolean:
   // this route stays mounted across a navigation, and an editor seeded from
-  // another file would be a lie. Opening a different file simply leaves edit
+  // another entry would be a lie. Opening a different entry simply leaves edit
   // mode.
   //
   // The document is identified by its `id`, NOT by its address (issue #100):
@@ -78,15 +78,15 @@ export function SceneRoute() {
     enabled: campaign !== "",
   });
 
-  // What the file on screen IS, across every address it may have: the
+  // What the entry on screen IS, across every address it may have: the
   // properties `id`, which the format calls stable („id … NIE ändern"), with
   // the canonical address as the fallback for a document whose properties
   // carries none.
   const docId = data === undefined ? undefined : (fmString(data.properties.id) ?? data.path);
   const editing = editingId !== undefined && editingId === docId;
-  // Edit mode ENDS at a navigation. Leaving the file drops the draft
+  // Edit mode ENDS at a navigation. Leaving the entry drops the draft
   // (accepted for this slice), so coming back must not re-open the editor
-  // unasked: an editor seeded from disk looks exactly like the one the DM
+  // unasked: an editor seeded from the server looks exactly like the one the DM
   // left, and the paragraph they typed would be silently gone from it.
   useEffect(() => {
     setEditingId(undefined);
@@ -116,7 +116,7 @@ export function SceneRoute() {
   const navigate = useNavigate();
   useEffect(() => {
     if (canonical === undefined || canonical === path) return;
-    // Encoded PER SEGMENT, like every other file link the app builds
+    // Encoded PER SEGMENT, like every other entry link the app builds
     // (lib/search.ts): the slashes are the address, everything else is a
     // segment that may carry anything an id may carry.
     const target = canonical.split("/").map(encodeURIComponent).join("/");
@@ -132,7 +132,7 @@ export function SceneRoute() {
   }
   // The error screen only when there is NOTHING to show. A failing BACKGROUND
   // refetch (server restarted, network blip) also flips the query to 'error'
-  // while the cached file is still there — swapping the page for an error line
+  // while the cached entry is still there — swapping the page for an error line
   // then would unmount an open editor and take the DM's unsaved text with it.
   if (data === undefined) {
     return (
@@ -146,17 +146,17 @@ export function SceneRoute() {
   // The aside belongs to scenes: only they reference npcs in properties.
   const npcs = isScene ? fmStringArray(data.properties.npcs) : [];
   // „Bearbeiten" (issue #15) — the body editor, offered for the kinds whose
-  // prose the DM maintains (canEditFileBody). While it runs the trigger is
+  // prose the DM maintains (canEditEntryBody). While it runs the trigger is
   // gone: the editor's own toggle owns the mode from then on.
   const editAction =
-    canEditFileBody(data.kind) && !editing ? (
-      <FileBodyEditAction onEdit={() => setEditingId(docId)} />
+    canEditEntryBody(data.kind) && !editing ? (
+      <EntryBodyEditAction onEdit={() => setEditingId(docId)} />
     ) : null;
   // The body slot of the article — the editor while edit mode is on, seeded
-  // from the file on screen (and re-keyed per path, so it never carries the
-  // draft of another file).
+  // from the entry on screen (and re-keyed per path, so it never carries the
+  // draft of another entry).
   const bodyEditor = editing ? (
-    <FileBodyEditor
+    <EntryBodyEditor
       key={docId}
       campaign={campaign}
       file={data}
@@ -184,7 +184,7 @@ export function SceneRoute() {
       {augmentAction}
     </>
   );
-  // The campaign file's header carries the metadata „Bearbeiten" instead
+  // The campaign entry's header carries the metadata „Bearbeiten" instead
   // (issue #34): its name/description are what this page shows, and its id is
   // the campaign directory — not renameable from here.
   const headerActions =
@@ -195,7 +195,7 @@ export function SceneRoute() {
       <MobileBackRow campaign={campaign} />
       <div className="mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 pb-[100px] md:px-7 md:pt-10 lg:flex-row">
         <div className="w-full min-w-0 flex-1 lg:max-w-[680px]">
-          {/* Where this file sits — the context the topbar breadcrumb used to
+          {/* Where this entry sits — the context the topbar breadcrumb used to
               carry (issue #34): chapter › group for a scene, the list for an
               npc/location, nothing for the rest. */}
           <PageContext crumbs={pageContextCrumbs(campaign, data.path, tree.data, t)} />
@@ -207,7 +207,7 @@ export function SceneRoute() {
               actions={articleActions}
               body={bodyEditor}
               // Issue #28: the status display IS the control here. The rev
-              // comes from the FileResponse on screen, so the patch carries
+              // comes from the EntryResponse on screen, so the patch carries
               // exactly the version the DM was looking at.
               statusControl={
                 <SceneStatusControl

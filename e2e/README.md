@@ -232,7 +232,7 @@ mehrere Schreibwege auf ihm liegen:
 | 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-pipeline.e2e.ts`, `tests/generator-restart.e2e.ts`, `tests/augment.e2e.ts` |
 | 7 Eigenschaften/409 | `tests/status-control.e2e.ts`, `tests/properties-form.e2e.ts`, `tests/rename.e2e.ts` |
 | 8 Mobil            | `tests/mobile.e2e.ts`                                          |
-| 9 Datei bearbeiten | `tests/block-composer.e2e.ts`, `tests/file-edit.e2e.ts`        |
+| 9 Eintrag bearbeiten | `tests/block-composer.e2e.ts`, `tests/entry-edit.e2e.ts`        |
 | 10 Kaltstart       | `tests/cold-start.e2e.ts`                                       |
 
 `tests/generator-restart.e2e.ts` ist die Neustart-Hälfte von Pfad 6 (#23) und
@@ -316,11 +316,11 @@ Block-Composer ab — Standardmodus, eine Karte pro Block, Anlegen/Verschieben,
 Kinder eines `## If:`-Abschnitts, unbekannte Konstrukte als Roh-Block, die
 Save-Sperre bei einem `##` in einem If-Kind (Hinweis an der Karte, „Speichern"
 aus, Datei unverändert), der 409 mit offenem Blockformular und die Bedienung
-bei 390px. `file-edit.e2e.ts` deckt
-den „Roh"-Fallback ab: die Textarea aus #39, ihre „Vorschau" (die es nur dort
+bei 390px. `entry-edit.e2e.ts` deckt
+den „Markdown"-Fallback ab: die Textarea aus #39, ihre „Vorschau" (die es nur dort
 gibt), die Kinds mit und ohne Editor und die Verlustpfade (Navigation,
 fehlgeschlagener Refetch, Status-Regler daneben). Jeder Test dort betritt den
-Editor über `openRawEditor` — erst „Bearbeiten", dann der Umschalter „Roh" —,
+Editor über `openMarkdownEditor` — erst „Bearbeiten", dann der Umschalter „Markdown" —,
 weil „Bearbeiten" allein seit #43 im Composer landet. Ein Test dort deckt
 zusätzlich Issue #100 ab: eine Szene, deren `location` sich geändert hat,
 wird über ihre ALTE Adresse geöffnet, bearbeitet und gespeichert — der

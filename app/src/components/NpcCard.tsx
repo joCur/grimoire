@@ -7,9 +7,7 @@
 // away from the running session, it opens the detail drawer instead. Same
 // card, same hover, only the element differs (link vs. button).
 //
-// Degradation (issue #26, revised by #70): a referenced npc used to be able
-// to have NO file — the card showed "NPC-Eintrag fehlt" plus a "Stub
-// anlegen" button. In the database a reference CREATES the entry it names
+// Degradation (issue #26, #70): a reference CREATES the entry it names
 // (server store/write.ts), so an npc in a scene always has a row; it may be
 // empty, and then this card is simply thin — name (the id, until somebody
 // types one) and nothing else. What is left is the honest failure line for a
@@ -24,7 +22,7 @@ import { isEntityId } from "@/lib/entity";
 import { fmQuickstats, fmString } from "@/lib/properties";
 import { firstParagraphOfSection } from "@/lib/md-section";
 
-/** Campaign-relative path of an npc file — the reference key is the id. */
+/** Campaign-relative path of an NPC entry — the reference key is the id. */
 function npcPath(id: string): string {
   return `npcs/${id}`;
 }
@@ -46,12 +44,11 @@ export function NpcCard({
 }) {
   const { t, tNode } = useI18n();
   const path = npcPath(id);
-  // A NON-SLUG entry is no id and therefore no entry (#70 audit): `npcs:`
-  // holds ids, and the server now refuses new free text there. What can still
-  // stand in the list is what a migrated file era campaign brought along —
-  // and asking for `npcs/Alte Fischerin` answers 404, which this card
-  // reported as "Server prüfen", blaming the server for data it was handed.
-  // It is not asked at all now, and the line says what is actually the case.
+  // A NON-SLUG value is no id and therefore no entry (#70): `npcs:` holds
+  // ids, the server refuses free text there, and only the importer can still
+  // bring some in. Asking for `npcs/Alte Fischerin` would answer 404 and
+  // blame the server for data it was handed — so it is not asked at all, and
+  // the line says what is actually the case.
   const isId = isEntityId(id);
   const { data, isPending, isError } = useQuery({
     queryKey: ["file", campaign, path],

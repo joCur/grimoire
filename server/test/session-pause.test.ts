@@ -1,11 +1,11 @@
 // Pausing the session for real (issue #40 AK8): POST /session/pause opens a
-// `pauses` interval, POST /session/continue closes it, and the FileResponse
+// `pauses` interval, POST /session/continue closes it, and the EntryResponse
 // carries the epoch arithmetic (pausedMs / pausedSinceMs) so the client only
 // ever subtracts numbers.
 //
 // After the SQLite cutover (issue #57) an interval is a `session_pauses` row
 // and a `— Pause` line is a `log_entries` row; both are rendered back into
-// the same FileResponse the client always read (store/render.ts). So the
+// the same EntryResponse the client always read (store/render.ts). So the
 // assertions read the RESPONSE instead of the file on disk, and each case
 // gets a fresh in-memory database seeded from examples/
 // (test/support/store.ts). The clock is still overridden via setNow().
@@ -19,7 +19,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { FileResponse } from "@grimoire/shared";
+import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { setNow } from "../src/clock";
 import {
@@ -50,21 +50,21 @@ async function post(url: string, body?: unknown): Promise<Response> {
 }
 
 /** POST that must succeed, with the session it answers with. */
-async function ok(url: string): Promise<FileResponse> {
+async function ok(url: string): Promise<EntryResponse> {
   const res = await post(url);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 /** The session as the API renders it right now. */
-async function session(): Promise<FileResponse> {
+async function session(): Promise<EntryResponse> {
   const res = await app.request("/api/beispiel/session");
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 /** Log lines of the rendered session body, in order. */
-function logLines(file: FileResponse): string[] {
+function logLines(file: EntryResponse): string[] {
   return file.body
     .split("\n")
     .map((l) => l.trim())

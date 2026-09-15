@@ -71,7 +71,7 @@ test("content the APP just wrote is findable right away (issue #57 AK5)", async 
   );
   expect(before.results).toEqual([]);
 
-  // The DM writes it in the editor: „Bearbeiten" → „Roh" → save.
+  // The DM writes it in the editor: „Bearbeiten" → „Markdown" → save.
   await page.goto(`/beispiel/file/${SCENE}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await page.getByRole("button", { name: "Bearbeiten" }).click();

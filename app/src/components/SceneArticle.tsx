@@ -10,7 +10,7 @@
 // queries — the route owns both and passes them in, so the live view simply
 // passes nothing.
 
-import type { CampaignTree, FileResponse } from "@grimoire/shared/types";
+import type { CampaignTree, EntryResponse } from "@grimoire/shared/types";
 import { Bookmark, GitFork, MapPin } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -28,7 +28,7 @@ export function SceneArticle({
   actions,
   body,
 }: {
-  file: FileResponse;
+  file: EntryResponse;
   tree: CampaignTree | undefined;
   variant: "scene" | "live";
   statusControl?: ReactNode;
@@ -36,14 +36,14 @@ export function SceneArticle({
   /**
    * Replaces the rendered body — the reading view's edit mode (issue #15)
    * puts its markdown editor here, header and chips keep standing. Nothing
-   * passed means the file's body, which is what the live view wants.
+   * passed means the entry's body, which is what the live view wants.
    */
   body?: ReactNode;
 }) {
   const t = useT();
   const live = variant === "live";
   const fm = file.properties;
-  // npc/location files opened as a file view carry `name` instead of `title`.
+  // npc/location entries opened as an entry view carry `name` instead of `title`.
   const title = fmString(fm.title) ?? fmString(fm.name) ?? file.path;
   // Everything that is not explicitly a contingency reads as a planned
   // scene (degrade — "planned" is the unmarked case).

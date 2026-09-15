@@ -340,7 +340,7 @@
 //                                              DOCUMENTS; an entity's own outgoing relations
 //                                              are not references TO it. 404 unknown campaign/
 //                                              entity, 400 unknown kind/empty id (issue #60)
-//   [x] POST /api/:campaign/review/seen        { path, line } -> FileResponse &
+//   [x] POST /api/:campaign/review/seen        { path, line } -> EntryResponse &
 //                                              { marked } — flags the log ROW whose short
 //                                              hash the line has (idempotent). marked=false
 //                                              means NO row hashes to the line that was

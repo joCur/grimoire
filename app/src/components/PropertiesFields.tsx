@@ -7,7 +7,7 @@
 // button, chips are added with Enter and removed with their own button (or
 // Backspace in an empty add-input), and the reference inputs offer the existing
 // ids through a native <datalist> — a list that SUGGESTS but never closes the
-// field, because a reference to a file that does not exist yet must stay
+// field, because a reference to an entry that does not exist yet must stay
 // typeable (README: the format degrades).
 //
 // Two keyboard details that only look like details: Enter NEVER submits from

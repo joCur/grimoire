@@ -15,7 +15,7 @@ import { campaignDescription, campaignLabel, findCampaign } from "@/lib/campaign
 export interface CampaignMeta {
   /** Display name; falls back to the id (URLs always keep the id). */
   label: string;
-  /** One-liner from the file, or undefined. */
+  /** One-liner from the entry, or undefined. */
   description: string | undefined;
 }
 

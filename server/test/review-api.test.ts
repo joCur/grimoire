@@ -21,7 +21,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import type { FileResponse } from "@grimoire/shared";
+import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import {
   dropStore,
@@ -38,19 +38,19 @@ async function postJson(url: string, body?: unknown): Promise<Response> {
   });
 }
 
-async function postOk(url: string, body?: unknown): Promise<FileResponse> {
+async function postOk(url: string, body?: unknown): Promise<EntryResponse> {
   const res = await postJson(url, body);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
-async function getFile(rel: string, campaign = "beispiel"): Promise<FileResponse> {
+async function getFile(rel: string, campaign = "beispiel"): Promise<EntryResponse> {
   const res = await app.request(`/api/${campaign}/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
-async function putBody(rel: string, body: string): Promise<FileResponse> {
+async function putBody(rel: string, body: string): Promise<EntryResponse> {
   const before = await getFile(rel);
   const res = await app.request("/api/beispiel/file", {
     method: "PUT",
@@ -58,7 +58,7 @@ async function putBody(rel: string, body: string): Promise<FileResponse> {
     body: JSON.stringify({ path: rel, rev: before.rev, body }),
   });
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 /** The documented short-hash: first 8 hex chars of SHA-256 over the raw line. */
@@ -138,7 +138,7 @@ describe("POST /api/:campaign/review/seen", () => {
     const after = (await postOk("/api/beispiel/review/seen", {
       path: SESSION,
       line: "- 23:59 gibt es in diesem Log nicht",
-    })) as FileResponse & { marked?: boolean };
+    })) as EntryResponse & { marked?: boolean };
     expect(after.marked).toBe(false);
     expect(after.properties.reviewed).toBeUndefined();
     const { marked: _marked, ...file } = after;
@@ -149,12 +149,12 @@ describe("POST /api/:campaign/review/seen", () => {
     const first = (await postOk("/api/beispiel/review/seen", {
       path: SESSION,
       line: LINE,
-    })) as FileResponse & { marked?: boolean };
+    })) as EntryResponse & { marked?: boolean };
     expect(first.marked).toBe(true);
     const again = (await postOk("/api/beispiel/review/seen", {
       path: SESSION,
       line: LINE,
-    })) as FileResponse & { marked?: boolean };
+    })) as EntryResponse & { marked?: boolean };
     expect(again.marked).toBe(true);
   });
 

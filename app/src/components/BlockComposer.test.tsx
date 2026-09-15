@@ -329,7 +329,7 @@ describe("the mode toggle", () => {
   });
 
   test("…and Markdown is pressed on the fallback surface", () => {
-    const html = renderToStaticMarkup(<ComposerModeToggle mode="raw" onModeChange={() => {}} />);
+    const html = renderToStaticMarkup(<ComposerModeToggle mode="markdown" onModeChange={() => {}} />);
     expect(html).toContain('aria-pressed="false">Blöcke</button>');
     expect(html).toContain('aria-pressed="true">Markdown</button>');
   });

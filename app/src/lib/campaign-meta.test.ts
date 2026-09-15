@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { FileResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 
 import { ApiError } from "@/api";
 import {
@@ -62,7 +62,7 @@ function answerOnce(
   return calls;
 }
 
-const FILE: FileResponse = {
+const FILE: EntryResponse = {
   path: "_campaign",
   kind: "campaign",
   properties: { id: "beispiel", name: "Neuer Name" },

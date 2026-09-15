@@ -15,7 +15,7 @@
 // (AK5) means once the values live in columns.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { CampaignTree, FileResponse } from "@grimoire/shared";
+import type { CampaignTree, EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import type { UsageReport } from "../src/store/usage";
 import { dropStore, seedStore } from "./support/store";
@@ -62,10 +62,10 @@ async function usageOf(kind: string, id: string): Promise<UsageReport> {
 }
 
 /** GET /file — the way the app sees an entity. */
-async function read(rel: string): Promise<FileResponse> {
+async function read(rel: string): Promise<EntryResponse> {
   const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 /** Whether an address resolves at all (404 = the entity is not there). */
@@ -260,7 +260,7 @@ describe("POST /api/:campaign/rename — scene", () => {
       }),
     });
     expect(logged.status).toBe(200);
-    const sessionPath = ((await logged.json()) as FileResponse).path;
+    const sessionPath = ((await logged.json()) as EntryResponse).path;
 
     await renameOk({ kind: "scene", oldId: "smuggler-captured", newId: "in-der-bucht-erwischt" });
 

@@ -4,7 +4,7 @@
 // Three jobs, all pure and therefore unit-testable without a DOM:
 //
 //   1. THE DRAFT. Edit mode has two surfaces — the block list („Blöcke", the
-//      default) and the raw textarea („Roh", the fallback from issue #39) — and
+//      default) and the markdown textarea („Markdown", issue #39) — and
 //      exactly ONE state behind them: this module's ComposerDraft is a
 //      discriminated union, so at any moment either the blocks or the text are
 //      authoritative and there is nothing to diverge. Switching modes goes
@@ -53,26 +53,26 @@ import { endsIfSection } from "@/markdown/grammar";
 
 // --- the draft ---------------------------------------------------------------
 
-/** „Blöcke" (the block list) or „Roh" (the markdown textarea). */
-export type ComposerMode = "blocks" | "raw";
+/** „Blöcke" (the block list) or „Markdown" (the markdown textarea). */
+export type ComposerMode = "blocks" | "markdown";
 
 /**
  * The one editing state. In "blocks" mode the block list is the truth and the
- * markdown is derived; in "raw" mode the text is the truth and the blocks do
+ * markdown is derived; in "markdown" mode the text is the truth and the blocks do
  * not exist. There is no third field that could drift out of sync.
  */
 export type ComposerDraft =
   | { mode: "blocks"; blocks: SceneBlock[] }
-  | { mode: "raw"; text: string };
+  | { mode: "markdown"; text: string };
 
-/** Seed the draft from a file body — the composer is the default mode. */
+/** Seed the draft from a body — the composer is the default mode. */
 export function composerDraft(body: string): ComposerDraft {
   return { mode: "blocks", blocks: parseBlocks(body) };
 }
 
 /** The markdown body the draft stands for — what „Speichern" writes. */
 export function draftBody(draft: ComposerDraft): string {
-  return draft.mode === "raw" ? draft.text : serializeBlocks(draft.blocks);
+  return draft.mode === "markdown" ? draft.text : serializeBlocks(draft.blocks);
 }
 
 /**
@@ -83,12 +83,12 @@ export function draftBody(draft: ComposerDraft): string {
 export function withDraftMode(draft: ComposerDraft, mode: ComposerMode): ComposerDraft {
   if (draft.mode === mode) return draft;
   const body = draftBody(draft);
-  return mode === "raw" ? { mode: "raw", text: body } : composerDraft(body);
+  return mode === "markdown" ? { mode: "markdown", text: body } : composerDraft(body);
 }
 
-/** The textarea typed (raw mode). */
+/** The textarea typed (markdown mode). */
 export function withDraftText(text: string): ComposerDraft {
-  return { mode: "raw", text };
+  return { mode: "markdown", text };
 }
 
 /** A block list edit (blocks mode). */
@@ -178,8 +178,8 @@ export function setHeadingDepth(
 
 /**
  * An `## If:` heading can sit on a gap of a single newline — as the last line
- * of a file (`## If: a\n`), or with its first child glued right underneath it
- * (`## If: a\ndrin\n`, valid markdown that a hand-written file may well hold).
+ * of a body (`## If: a\n`), or with its first child glued right underneath it
+ * (`## If: a\ndrin\n`, valid markdown that hand-written text may well hold).
  * A block inserted at the TOP of that section would then land directly under
  * the heading line, which is not the house style of examples/. Dropping the gap
  * hands the separator back to the serializer, which puts one blank line there.
@@ -243,7 +243,7 @@ export function moveBy(blocks: SceneBlock[], id: string, delta: number): SceneBl
  * an `## If:` section whose markdown holds a heading that ENDS the section
  * (`#` or `##` at the start of a line — endsIfSectionText uses the parser's own
  * reading, so a `##` inside a code fence or a blockquote is fine). Saving that
- * writes a file whose next parse puts the child — and everything below it —
+ * writes a body whose next parse puts the child — and everything below it —
  * OUTSIDE the branch, while the composer still shows it nested. The DM would
  * have moved a whole branch by typing two characters.
  */

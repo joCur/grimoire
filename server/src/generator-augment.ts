@@ -34,7 +34,7 @@ import {
   type AugmentKind,
   type AugmentPropertyProposal,
   type AugmentResult,
-  type FileResponse,
+  type EntryResponse,
 } from "@grimoire/shared";
 import { entryReplySchema } from "@grimoire/shared/entry-schema";
 import { ApiError } from "./api-error";
@@ -82,7 +82,7 @@ const FROZEN_KEYS = new Set(["id", "scenes_played", "reviewed", "pauses"]);
 export async function readAugmentTarget(
   campaign: string,
   rel: string,
-): Promise<{ kind: AugmentKind; stored: FileResponse }> {
+): Promise<{ kind: AugmentKind; stored: EntryResponse }> {
   const stored = await readParsedFile(campaign, rel); // 400 unsafe, 404 unknown
   if (!isAugmentKind(stored.kind)) {
     throw new ApiError(400, `"${stored.kind}" cannot be augmented — npc, location or scene only`);
@@ -207,7 +207,7 @@ function kindErrors(
  */
 export function validateAugmentReply(
   raw: string,
-  target: { kind: AugmentKind; stored: FileResponse },
+  target: { kind: AugmentKind; stored: EntryResponse },
 ): { ok: true; result: AugmentResult } | { ok: false; errors: string[] } {
   // The reply is the schema-forced OBJECT (./entry-reply):
   // `properties` per kind, the whole `body` as it should look afterwards, and
@@ -392,7 +392,7 @@ export async function runAugment(
 }
 
 /** The chapter segment of a scene address (`<chapter>/…`). */
-function chapterOf(stored: FileResponse): string {
+function chapterOf(stored: EntryResponse): string {
   return stored.path.split("/")[0] ?? "";
 }
 
@@ -427,7 +427,7 @@ export async function applyAugment(
   campaign: string,
   body: { path?: unknown; rev?: unknown; properties?: unknown; body?: unknown },
   jobId?: string,
-): Promise<FileResponse> {
+): Promise<EntryResponse> {
   const rel = body.path;
   if (typeof rel !== "string" || rel === "") throw new ApiError(400, "path must be a string");
   const rev = body.rev;

@@ -162,7 +162,7 @@ Die Pfade:
    ihn und bleibt übernehmbar, laufender wird als `failed` gemeldet)
 7. Eigenschaften-Patch (`PATCH /properties`)/Status-Regler inkl. 409-Konflikt
 8. Mobil-Startfläche + Ideen-Einwurf bei 390px
-9. Datei bearbeiten: öffnen → Body ändern → speichern → gerendert
+9. Eintrag bearbeiten: öffnen → Text ändern → speichern → gerendert
    sichtbar; 409 bei konkurrierendem Zweit-Write → neu laden statt still
    überschreiben (seit ADR #13 gibt es keine externe Dateiänderung mehr —
    der Guard ist die Zeilenversion `rev`)

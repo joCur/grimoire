@@ -2,7 +2,7 @@
 // database queries.
 //
 // The shapes are unchanged — `CampaignSummary[]`, `CampaignTree`,
-// `FileResponse` — and so is every ordering rule the file-tree reader had
+// `EntryResponse` — and so is every ordering rule the file-tree reader had
 // (chapters by their migration order, npcs/locations by name, sessions newest
 // first, scene groups by slug). What changed is that the orderings are now
 // SQL instead of a directory walk, and that the guard token `rev` is the
@@ -21,7 +21,7 @@ import {
   type CampaignSummary,
   type CampaignTree,
   type ChapterNode,
-  type FileResponse,
+  type EntryResponse,
   type GlossaryResponse,
   type KnowledgeEntry,
   type KnowledgeResponse,
@@ -448,7 +448,7 @@ export function renderSessionRow(
   db: GrimoireDb,
   campaign: string,
   row: SessionRow,
-): FileResponse {
+): EntryResponse {
   return renderSession(
     row,
     pauseRows(db, campaign, row.id),
@@ -465,7 +465,7 @@ export function renderSessionRow(
 export async function readActiveSession(
   campaign: string,
   includeEnded = false,
-): Promise<FileResponse> {
+): Promise<EntryResponse> {
   await requireCampaign(campaign);
   const db = await getDb();
   const row = pickSession(db, campaign, includeEnded);
@@ -557,7 +557,7 @@ export function readByLocator(
   db: GrimoireDb,
   campaignRowValue: CampaignRow,
   locator: Locator,
-): FileResponse {
+): EntryResponse {
   const campaign = campaignRowValue.id;
   switch (locator.kind) {
     case "campaign":
@@ -640,7 +640,7 @@ export function readByLocator(
 }
 
 /** GET /api/:campaign/file?path=<address> */
-export async function readParsedFile(campaign: string, rel: string): Promise<FileResponse> {
+export async function readParsedFile(campaign: string, rel: string): Promise<EntryResponse> {
   const row = await requireCampaign(campaign);
   assertSafeAddress(rel); // 400 unsafe id/address
   const db = await getDb();

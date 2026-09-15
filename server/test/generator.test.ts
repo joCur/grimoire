@@ -26,7 +26,7 @@
 // the same database. That is why the restart cases below call it directly.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import type { FileResponse, GenerateJob, GenerateResult, GenerateUsage } from "@grimoire/shared";
+import type { EntryResponse, GenerateJob, GenerateResult, GenerateUsage } from "@grimoire/shared";
 import { app } from "../src/server";
 import { eq } from "drizzle-orm";
 import { clearJobsForTests, UNREADABLE_PAYLOAD_MESSAGE } from "../src/generate-jobs";
@@ -56,10 +56,10 @@ async function exists(rel: string): Promise<boolean> {
 }
 
 /** GET /file of an applied draft. */
-async function read(rel: string): Promise<FileResponse> {
+async function read(rel: string): Promise<EntryResponse> {
   const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 beforeAll(async () => {
