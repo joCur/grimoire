@@ -239,6 +239,36 @@ function groupedNumber(n: number, separator: string): string {
 export type GeneratePhase = "checking" | "input" | "working" | "review" | "done";
 
 /**
+ * Has the job of the run we just started shown up (issue #107)?
+ *
+ * The view shows „Entwürfe werden generiert …" for exactly as long as the
+ * answer is no — and THAT is the whole question the stall got wrong. It used
+ * the START REQUEST's lifetime instead: while `POST /generate` was in flight
+ * the spinner won, even though the job it created was already readable and
+ * `done`. With a fast model the run finishes before its own 202 arrives, so
+ * the DM sat in front of a finished run for as long as that response took —
+ * and when it took long enough, „indefinitely" (the report of 15.09.). The
+ * job is the truth about the run; the request that started it is not.
+ *
+ * Telling the run's job from the one that was there BEFORE the click needs no
+ * response either: the id at the moment of the click is what the new job is
+ * NOT (`startJob` replaces the row with a new id). `startedJobId` covers the
+ * one case that id cannot decide — a 409 the app ADOPTS hands back the id of
+ * the job that is already running, which may well be the one in the cache.
+ */
+export function runJobArrived(input: {
+  /** Id of the job in the cache; null when there is none. */
+  jobId: string | null;
+  /** Id of the job that was in the cache when „Entwürfe generieren" was clicked. */
+  staleJobId: string | null;
+  /** The id the start request answered with — a 202's or an adopted 409's. */
+  startedJobId?: string;
+}): boolean {
+  if (input.jobId === null) return false;
+  return input.jobId !== input.staleJobId || input.jobId === input.startedJobId;
+}
+
+/**
  * Which state the view is in. The server's job decides everything except
  * the two purely local outcomes: an apply that wrote (done) and a start
  * request still in flight (working — the job does not exist yet).
@@ -248,7 +278,10 @@ export type GeneratePhase = "checking" | "input" | "working" | "review" | "done"
 export function generatePhase(input: {
   /** An apply wrote drafts — the run is over, whatever the job says. */
   applied: boolean;
-  /** POST /generate is in flight (or its job has not shown up yet). */
+  /**
+   * A run was started and its OWN job has not shown up yet (runJobArrived).
+   * Deliberately not „the POST is in flight": see runJobArrived.
+   */
   starting: boolean;
   /** The job lookup answered at least once (data or error). */
   jobChecked: boolean;

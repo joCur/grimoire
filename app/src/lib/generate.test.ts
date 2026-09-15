@@ -23,6 +23,7 @@ import {
   reviewOf,
   knowledgeHint,
   generatePhase,
+  runJobArrived,
   hasReviewableParts,
   jobErrorBody,
   jobMode,
@@ -326,6 +327,65 @@ describe("generatePhase", () => {
   });
 });
 
+describe("runJobArrived (issue #107)", () => {
+  const staleJobId = "job-before-the-click";
+
+  test("nothing in the cache is never the run's job", () => {
+    expect(runJobArrived({ jobId: null, staleJobId })).toBe(false);
+    expect(runJobArrived({ jobId: null, staleJobId: null })).toBe(false);
+  });
+
+  test("the job that was there at the click is not the new run's", () => {
+    expect(runJobArrived({ jobId: staleJobId, staleJobId })).toBe(false);
+    expect(runJobArrived({ jobId: "job-of-the-new-run", staleJobId })).toBe(true);
+    // Nothing there at the click: any job is the new one.
+    expect(runJobArrived({ jobId: "job-of-the-new-run", staleJobId: null })).toBe(true);
+  });
+
+  test("an ADOPTED job is the run's job although it was there before", () => {
+    // A 409 hands back the id of the job that is already running and the app
+    // adopts it (api.ts startGenerateJob) — the only case in which the id
+    // from before the click IS what this run is about.
+    expect(
+      runJobArrived({ jobId: staleJobId, staleJobId, startedJobId: staleJobId }),
+    ).toBe(true);
+  });
+});
+
+/**
+ * The sequence of the stall reported on 15.09. (issue #107): the click, a GET
+ * that overtakes the new row (404 -> null), and then a poll that already sees
+ * the finished run — all while `POST /generate` is STILL in flight, which is
+ * the normal case with a fast model. The review has to be on the screen at
+ * the end of it, and the poll loop has to be alive for every step before.
+ */
+describe("start pending -> 404/null -> done", () => {
+  const phaseOf = (jobId: string | null, status?: GenerateJob["status"]) => {
+    const arrived = runJobArrived({ jobId, staleJobId: null });
+    return generatePhase({
+      applied: false,
+      starting: !arrived,
+      jobChecked: true,
+      ...(status === undefined ? {} : { jobStatus: status }),
+    });
+  };
+
+  test("the spinner stands until the run's job answers — and not one step longer", () => {
+    // 1. the click: no job yet, the POST is on its way.
+    expect(phaseOf(null)).toBe("working");
+    expect(generateJobPollMs(null, true)).toBe(GENERATE_JOB_POLL_MS);
+    // 2. the GET that overtook the row: still no job, still polling.
+    expect(phaseOf(null)).toBe("working");
+    // 3. the first poll that answers already carries the FINISHED run. The
+    //    202 of the same run has not arrived yet — and it must not matter:
+    //    the job is the truth about the run, the request that started it is
+    //    not. This is the step that used to keep the spinner up.
+    expect(phaseOf("job-of-the-new-run", "done")).toBe("review");
+    // 4. …and with the run's job on the table, nothing has to be polled.
+    expect(generateJobPollMs({ status: "done" } as GenerateJob)).toBe(false);
+  });
+});
+
 describe("jobErrorBody", () => {
   const failed = (error: unknown) =>
     ({
@@ -620,8 +680,15 @@ describe("the run's parts", () => {
     expect(generateJobPollMs(undefined)).toBe(false);
     expect(generateJobPollMs(null, true)).toBe(GENERATE_JOB_POLL_MS);
     expect(generateJobPollMs(undefined, true)).toBe(GENERATE_JOB_POLL_MS);
-    // A settled job needs no poll, whatever the caller is waiting for.
-    expect(generateJobPollMs({ ...job(["done"]), status: "done" }, true)).toBe(false);
+    // …and a caller that is waiting for a run's OWN job keeps polling even
+    // though something settled sits in the cache: that is either the previous
+    // run's job or a `null` (issue #107). Switching the loop off there is how
+    // the spinner became terminal.
+    expect(generateJobPollMs({ ...job(["done"]), status: "done" }, true)).toBe(
+      GENERATE_JOB_POLL_MS,
+    );
+    // Nobody waiting: a settled job needs no poll.
+    expect(generateJobPollMs({ ...job(["done"]), status: "done" })).toBe(false);
   });
 
   test("„noch offen“ is pending or running, never failed", () => {

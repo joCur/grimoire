@@ -156,6 +156,55 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
 });
 
 /**
+ * Issue #107, the stall the PO hit on 15.09.: „Entwürfe generieren" was
+ * clicked, the run finished on the server — and the page stayed on „Entwürfe
+ * werden generiert …" until it was reloaded.
+ *
+ * The cause was the view taking the START REQUEST's lifetime for the run's:
+ * with a fast model the job is `done` before its own 202 arrives, so the
+ * first poll that answers already carries the finished run while the POST is
+ * still in flight. That state has to BE the review.
+ *
+ * The 202 is therefore held here — the REAL response of the real server,
+ * fetched by the real route and handed on late (nothing is mocked, see
+ * README: the stub LLM stays the only attrappe). Holding it is the only way
+ * to pin the claim „the job decides, not the request": with a response that
+ * comes back in 30ms the test would pass either way.
+ */
+test("the review appears as soon as the job is done — even with the start request still in flight", async ({
+  page,
+}) => {
+  let released = false;
+  const start = page.route("**/api/*/generate", async (route) => {
+    const response = await route.fetch();
+    const body = await response.text();
+    await new Promise((resolve) => setTimeout(resolve, 8_000));
+    released = true;
+    await route.fulfill({ status: response.status(), body, contentType: "application/json" });
+  });
+  await start;
+
+  await page.goto("/beispiel/generate");
+  await page.getByLabel("Quelltext (EN)").fill(SOURCE);
+  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+  // The honest state right after the click: no job of this run is readable yet.
+  await expect(page.getByText("Entwürfe werden generiert", { exact: false })).toBeVisible();
+
+  // …and the first poll that answers carries the finished run, so THIS is the
+  // review — no reload, and long before the 202 of the same run.
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+    timeout: 6_000,
+  });
+  expect(released).toBe(false);
+  await expect(page.getByRole("heading", { level: 2, name: SCENE_TITLE })).toBeVisible();
+
+  // Let the held response go, so nothing is left hanging when the test ends —
+  // and the arrival of the 202 must not throw the review away again.
+  await expect(async () => expect(released).toBe(true)).toPass({ timeout: 10_000 });
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen");
+});
+
+/**
  * Issue #107 AK5, the PO case of 15.09.: the scene body carries German
  * quotation marks closed with an ASCII `"`. Under the old JSON wrapper that
  * quote ended the `content` string and an inhaltlich correct scene cost the

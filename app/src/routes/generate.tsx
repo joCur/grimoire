@@ -92,6 +92,7 @@ import {
   contextHint,
   knowledgeHint,
   generatePhase,
+  runJobArrived,
   hasReviewableParts,
   jobErrorBody,
   jobMode,
@@ -232,16 +233,22 @@ export function GenerateRoute() {
 
   // The server's job IS the state of a run (issue #19).
   //
-  // `expectJob` is on while „Entwürfe generieren" has been clicked and no job
-  // has shown up yet: a GET that overtakes the new row answers 404, and
-  // without this the poll loop would be switched off by that one `null` and
-  // never switched back on — the view would sit on the spinner until a
-  // reload, which is exactly the report this fixes.
-  const [awaitingJob, setAwaitingJob] = useState(false);
-  const jobQuery = useGenerateJob(campaign, { expectJob: awaitingJob });
+  // `awaitingJob` is on from the click on „Entwürfe generieren" until the job
+  // of THAT run is readable — it carries the id that was in the cache at the
+  // click, because that is what the new job is not (lib/generate.ts
+  // runJobArrived). It is the view's whole „working" state and the poll
+  // loop's reason to live at the same time, and those two must be ONE flag:
+  // a GET that overtakes the new row answers 404 and the previous run's job
+  // is settled, so without it the interval was switched off and nothing
+  // switched it back on — the spinner stood until a reload while the run
+  // finished on the server (issues #102, #107).
+  const [awaitingJob, setAwaitingJob] = useState<{
+    staleJobId: string | null;
+    startedJobId?: string;
+  }>();
+  const jobQuery = useGenerateJob(campaign, { expectJob: awaitingJob !== undefined });
   const job = jobQuery.data ?? null;
   const jobId = job?.id ?? null;
-  if (awaitingJob && jobId !== null) setAwaitingJob(false);
   // Every review change goes back to the job (issue #97): text debounced,
   // decisions immediately, both flushed before the view can go away.
   const review = useJobReview(campaign, job);
@@ -306,17 +313,24 @@ export function GenerateRoute() {
     // 202 (or an adopted 409 — the api client hands back the running job's
     // id): from here on the job query drives the view.
     onMutate: () => {
-      // From here on a job is EXPECTED — see `awaitingJob` above.
-      setAwaitingJob(true);
+      // From here on this run's job is EXPECTED — see `awaitingJob` above.
+      // The id in the cache right now is the one it will NOT have.
+      setAwaitingJob({ staleJobId: jobId });
     },
-    onSuccess: () => {
+    onSuccess: (started) => {
+      // The id the start answered with belongs to THIS wait — kept here and
+      // not read off `start.data`, which outlives it: a second run over a
+      // failed one would otherwise recognise the OLD run's job as its own.
+      setAwaitingJob((waiting) =>
+        waiting === undefined ? waiting : { ...waiting, startedJobId: started.jobId },
+      );
       setLostJob(false);
       setWritten(undefined);
       void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
     },
     onError: () => {
       // The run never started: stop waiting for a job that is not coming.
-      setAwaitingJob(false);
+      setAwaitingJob(undefined);
     },
   });
 
@@ -500,9 +514,22 @@ export function GenerateRoute() {
   );
 
   const applied = written !== undefined;
-  // The window between "POST /generate answered" and "the job shows up in
-  // the query" is still the working state — nothing else would be honest.
-  const starting = start.isPending || (start.isSuccess && job === null && !applied);
+  // The window between the click and „this run's job is readable" is the
+  // working state — and NOTHING else is (issue #107): the moment the job
+  // answers, the job decides, even while its own 202 is still on the way.
+  // A fast run is finished before that response arrives, and making the
+  // request's lifetime the spinner's left the DM in front of a done run.
+  const arrived =
+    awaitingJob !== undefined &&
+    runJobArrived({
+      jobId,
+      staleJobId: awaitingJob.staleJobId,
+      ...(awaitingJob.startedJobId === undefined
+        ? {}
+        : { startedJobId: awaitingJob.startedJobId }),
+    });
+  if (arrived) setAwaitingJob(undefined);
+  const starting = awaitingJob !== undefined && !arrived && !applied;
   const phase = generatePhase({
     applied,
     starting,
