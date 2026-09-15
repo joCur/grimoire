@@ -63,6 +63,7 @@ import {
   npcRelations,
   npcs,
   packJson,
+  unpackJson,
   sceneNpcs,
   sceneTags,
   scenes,
@@ -633,7 +634,7 @@ function ensureLocationRow(
  * the job did not), and the result was twelve scenes nobody could see. So the
  * one path that writes scene rows without a dialog in front of it — the draft
  * apply — closes the hole in the SAME transaction, like `ensureLocationRow`
- * does for the Ort. Since migration 0012 the database enforces it too; this
+ * does for the Ort. Since migration 0013 the database enforces it too; this
  * is what keeps that constraint from turning an apply into a 409.
  *
  * `title` is the run's chapter title when one is known, the id otherwise —
@@ -941,6 +942,23 @@ const SESSION_KEYS = ["id", "started", "ended", "scenes_played", "pauses", "revi
  * `POST /rename` does — as an update with a cascade, which is the whole point
  * of the migration (issues #29/#30).
  */
+/**
+ * Unknown keys come from the importer only (schema.ts `extra`): a patch may
+ * change or delete one the row already carries, but never add one — there is
+ * no field behind it, and a typo would otherwise become a silent new key.
+ */
+function rejectUnknownKeys(
+  patch: Record<string, unknown>,
+  contract: readonly string[],
+  extra: string,
+): void {
+  const present = unpackJson(extra);
+  for (const key of Object.keys(patch)) {
+    if (contract.includes(key) || key in present) continue;
+    throw new ApiError(400, `unknown property "${key}" — the entry has no such field`);
+  }
+}
+
 function rejectIdPatch(patch: Record<string, unknown>, current: string): void {
   if (!("id" in patch)) return;
   const next = patch.id;
@@ -984,6 +1002,7 @@ function patchLocator(
       if (row === undefined) throw new ApiError(404, "file not found");
       guardRev(row.rev, rev, "campaign changed");
       rejectIdPatch(patch, row.id);
+      rejectUnknownKeys(patch, CAMPAIGN_KEYS, row.extra);
       const fm = applyPatch(renderCampaign(row).properties, patch);
       const name = asStr(fm.name);
       // Accepted by design: a name that EQUALS the id is stored as "" — the
@@ -1009,8 +1028,10 @@ function patchLocator(
       if (row === undefined) throw new ApiError(404, "file not found");
       guardRev(row.rev, rev, "chapter changed");
       rejectIdPatch(patch, row.id);
-      // Only the known trio may be WRITTEN (issue #115); what is already
-      // stored still renders verbatim.
+      rejectUnknownKeys(patch, CHAPTER_KEYS, row.extra);
+      // A known key with an unknown VALUE is the other half of the same
+      // guard: only the three declared statuses may be WRITTEN, while a
+      // value already stored still renders back verbatim.
       assertChapterStatus(patch);
       const fm = applyPatch(renderChapter(row).properties, patch);
       const next: ChapterRow = {
@@ -1035,6 +1056,7 @@ function patchLocator(
       const row = sceneRowAt(tx, campaign, locator);
       guardRev(row.rev, rev, "scene changed");
       rejectIdPatch(patch, row.id);
+      rejectUnknownKeys(patch, SCENE_KEYS, row.extra);
       const npcsBefore = refNpcs(tx, campaign, row.id);
       const before = renderScene(row, npcsBefore, refTags(tx, campaign, row.id));
       const fm = applyPatch(before.properties, patch);
@@ -1043,17 +1065,19 @@ function patchLocator(
       // The chapter a scene belongs to is part of its ADDRESS (the path), so
       // a patch may MOVE the scene — but only into a chapter that exists
       // (400 otherwise: a scene under an unknown chapter has no node to hang
-      // in and would drop out of the tree). `{ chapter: null }` deletes the
-      // KEY, as it always could, and leaves the address alone.
+      // in and would drop out of the tree). It cannot be removed: a scene
+      // without a chapter has no address.
       const declared = asOptStr(fm.chapter);
+      if (declared === null || declared === undefined) {
+        throw new ApiError(400, "chapter cannot be removed — a scene belongs to a chapter");
+      }
       assertChapterRef(tx, campaign, declared, row.chapterId);
       const next: SceneRow = {
         ...row,
         title: asStr(fm.title, row.id),
         type: asStr(fm.type, "planned"),
         trigger: asOptStr(fm.trigger),
-        chapterId: declared ?? row.chapterId,
-        chapterDeclared: declared === null ? 0 : 1,
+        chapterId: declared,
         location: sceneLocation(fm.location),
         status: asStr(fm.status, "draft"),
         handouts: packJson(asStrArray(fm.handouts)),
@@ -1066,7 +1090,6 @@ function patchLocator(
           type: next.type,
           trigger: next.trigger,
           chapterId: next.chapterId,
-          chapterDeclared: next.chapterDeclared,
           location: next.location,
           status: next.status,
           handouts: next.handouts,
@@ -1101,6 +1124,7 @@ function patchLocator(
       if (row === undefined) throw new ApiError(404, "file not found");
       guardRev(row.rev, rev, "npc changed");
       rejectIdPatch(patch, row.id);
+      rejectUnknownKeys(patch, NPC_KEYS, row.extra);
       const fm = applyPatch(renderNpc(row, relationRows(tx, campaign, row.id)).properties, patch);
       const quickstats = asMap(fm.quickstats);
       const npcChapter = asOptStr(fm.chapter);
@@ -1142,6 +1166,7 @@ function patchLocator(
       if (row === undefined) throw new ApiError(404, "file not found");
       guardRev(row.rev, rev, "location changed");
       rejectIdPatch(patch, row.id);
+      rejectUnknownKeys(patch, LOCATION_KEYS, row.extra);
       const fm = applyPatch(renderLocation(row).properties, patch);
       const locationChapter = asOptStr(fm.chapter);
       assertChapterRef(tx, campaign, locationChapter, row.chapterId);
@@ -1171,6 +1196,7 @@ function patchLocator(
       if (row === undefined) throw new ApiError(404, "file not found");
       guardRev(row.rev, rev, "session changed");
       rejectIdPatch(patch, row.id);
+      rejectUnknownKeys(patch, SESSION_KEYS, row.extra);
       const fm = applyPatch(renderSessionRow(tx, campaign, row).properties, patch);
       patchSessionRow(tx, campaign, row, fm);
       const updated = sessionRow(tx, campaign, row.id);
@@ -2188,7 +2214,7 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           .limit(1)
           .all()[0]?.pos ?? -1) + 1;
       // The chapter row FIRST — `scenes.chapter_id` is a foreign key since
-      // migration 0012, and a generated scene is the one write that can name
+      // migration 0013, and a generated scene is the one write that can name
       // a chapter the campaign does not have yet (issue #115).
       // A new-chapter run puts its `_chapter` draft FIRST in the same batch
       // (generator.ts `jobChapterTarget`), so the row normally exists with
@@ -2214,7 +2240,6 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           campaignId: campaign,
           id,
           chapterId: locator.chapterId,
-          chapterDeclared: fm.chapter === undefined || fm.chapter === null ? 0 : 1,
           title,
           type: asStr(fm.type, "planned"),
           trigger: asOptStr(fm.trigger),
@@ -2813,9 +2838,6 @@ export async function createScene(
         campaignId: campaign,
         id,
         chapterId: chapter,
-        // The chapter was CHOSEN here, so it is a declared value: it belongs
-        // in the properties the reading view and the properties form show.
-        chapterDeclared: 1,
         title: title.trim(),
         pos: nextPos(
           tx.select({ pos: scenes.pos }).from(scenes).where(eq(scenes.campaignId, campaign)).all(),

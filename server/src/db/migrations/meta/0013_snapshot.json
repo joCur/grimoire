@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "63d3f7f1-f0e0-4a54-b421-66291880ab61",
-  "prevId": "a3eb0a50-1b50-4775-b4cb-da11cd5ea992",
+  "id": "685cd30c-2220-4460-89b5-914ed69c3ee8",
+  "prevId": "63d3f7f1-f0e0-4a54-b421-66291880ab61",
   "tables": {
     "campaign_knowledge": {
       "name": "campaign_knowledge",
@@ -1299,6 +1299,21 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "cascade"
+        },
+        "scenes_chapter_fk": {
+          "name": "scenes_chapter_fk",
+          "tableFrom": "scenes",
+          "tableTo": "chapters",
+          "columnsFrom": [
+            "campaign_id",
+            "chapter_id"
+          ],
+          "columnsTo": [
+            "campaign_id",
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "cascade"
         }
       },

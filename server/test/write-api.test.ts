@@ -27,12 +27,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { setNow } from "../src/clock";
 import type { GrimoireDb } from "../src/db/client";
-import { sessions as sessionsTable } from "../src/db/schema";
+import { scenes as scenesTable, sessions as sessionsTable } from "../src/db/schema";
+import { getDb } from "../src/store/handle";
 import {
   dropStore,
   removeTempRoot,
@@ -168,37 +169,42 @@ describe("PATCH /api/:campaign/properties", () => {
     expect(again.rev).toBe(after.rev);
   });
 
-  test("new keys are appended after the existing ones", async () => {
+  test("400 for a key the entry has no field for — nothing is written", async () => {
     const before = await getFile(SCENE);
-    const after = await patchOk({
-      path: SCENE,
-      rev: before.rev,
-      patch: { review_note: "nochmal lesen" },
+    const res = await app.request("/api/beispiel/properties", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: SCENE, rev: before.rev, patch: { review_note: "x" } }),
     });
-    // A key the schema has no column for is preserved in `extra` and rendered
-    // AFTER the contract keys — the successor of "appended to the block".
-    const keys = Object.keys(after.properties);
-    expect(keys[keys.length - 1]).toBe("review_note");
-    expect(after.properties.review_note).toBe("nochmal lesen");
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain("review_note");
+    expect((await getFile(SCENE)).rev).toBe(before.rev);
   });
 
-  test("null deletes a key, everything else untouched", async () => {
+  test("an imported unknown key is rendered after the contract keys, changeable and deletable", async () => {
+    // Only the importer puts keys into `extra`; stand in for it here.
+    (await getDb())
+      .update(scenesTable)
+      .set({ extra: JSON.stringify({ review_note: "nochmal lesen" }) })
+      .where(and(eq(scenesTable.campaignId, "beispiel"), eq(scenesTable.id, "lighthouse-arrival")))
+      .run();
     const before = await getFile(SCENE);
-    // Set it first: every case starts from the untouched fixture now, so the
-    // key to delete has to be created here rather than inherited.
-    const withKey = await patchOk({
+    const keys = Object.keys(before.properties);
+    expect(keys[keys.length - 1]).toBe("review_note");
+    expect(before.properties.review_note).toBe("nochmal lesen");
+
+    const changed = await patchOk({
       path: SCENE,
       rev: before.rev,
-      patch: { review_note: "nochmal lesen" },
+      patch: { review_note: "gelesen" },
     });
+    expect(changed.properties.review_note).toBe("gelesen");
     const after = await patchOk({
       path: SCENE,
-      rev: withKey.rev,
+      rev: changed.rev,
       patch: { review_note: null },
     });
     expect(Object.keys(after.properties)).not.toContain("review_note");
-    // …and nothing else moved: this is the untouched fixture again.
-    expect(after.properties).toEqual(before.properties);
     expect(after.body).toBe(before.body);
   });
 

@@ -82,15 +82,22 @@
     {
       "idx": 11,
       "version": "6",
-      "when": 1789498006261,
-      "tag": "0011_job_new_chapter_title",
+      "when": 1789510860953,
+      "tag": "0011_drop_chapter_declared",
       "breakpoints": true
     },
     {
       "idx": 12,
       "version": "6",
-      "when": 1789498228286,
-      "tag": "0012_scenes_chapter_fk",
+      "when": 1789512278696,
+      "tag": "0012_job_new_chapter_title",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1789512291569,
+      "tag": "0013_scenes_chapter_fk",
       "breakpoints": true
     }
   ]

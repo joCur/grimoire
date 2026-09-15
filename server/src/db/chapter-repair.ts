@@ -12,7 +12,7 @@
 //
 // WHY IT RUNS BEFORE THE SCHEMA MIGRATOR
 //
-// Migration 0012 turns that reference into a real FOREIGN KEY, and it copies
+// Migration 0013 turns that reference into a real FOREIGN KEY, and it copies
 // the scene rows into the new table — which is exactly the statement an orphan
 // `chapter_id` would fail. So the holes have to be closed while the old,
 // unconstrained schema is still in place: `openDb` runs this on the raw client
@@ -31,7 +31,7 @@
 //
 // A `chapter_id` that is present but EMPTY (`''`, or nothing but whitespace)
 // names no chapter at all, so there is nothing to create for it — and it is
-// not NULL either, so migration 0012's composite foreign key would demand a
+// not NULL either, so migration 0013's composite foreign key would demand a
 // chapters row with the empty id and fail the boot. Such a value is therefore
 // set to NULL in the SAME transaction as the creates: NULL is what "this scene
 // has no chapter" has always meant, the scene stays where the DM can see it,
@@ -40,8 +40,16 @@
 // discovered.
 //
 // It is a no-op on every database that has no orphan and no blank — which,
-// after the FK of migration 0012, is every database the server itself ever
+// after the FK of migration 0013, is every database the server itself ever
 // writes.
+//
+// WHAT SHAPE IT HAS TO COPE WITH
+//
+// Whatever the last migration a database went through left behind. It reads
+// and writes `scenes.campaign_id` and `scenes.chapter_id` and nothing else,
+// so the column set around them is none of its business — which is what lets
+// it run unchanged on a database still carrying `scenes.chapter_declared`
+// (before migration 0011 dropped it) and on one that already lost it.
 
 import type { SqliteClient } from "./driver";
 
@@ -113,7 +121,7 @@ export function repairOrphanChapters(client: SqliteClient): ChapterRepairOutcome
     .all() as unknown as OrphanRow[];
 
   // Present but empty: names no chapter, and is not NULL either — so it has
-  // nothing to create and would still fail migration 0012's foreign key.
+  // nothing to create and would still fail migration 0013's foreign key.
   const blanks = client
     .prepare(
       `select s.campaign_id as campaign_id, count(*) as n
@@ -150,7 +158,7 @@ export function repairOrphanChapters(client: SqliteClient): ChapterRepairOutcome
   const blanked: ChapterBlankEntry[] = [];
   client
     .transaction(() => {
-      // The blanks first: they are the rows migration 0012 would trip over,
+      // The blanks first: they are the rows migration 0013 would trip over,
       // and neither half depends on the other.
       for (const row of blanks) {
         blankOut.run(row.campaign_id);

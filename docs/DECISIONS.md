@@ -448,6 +448,13 @@ Entscheidung selbst bleibt; das hier ist ihre Vollendung.
   wo ein Frontmatter-Block wirklich das Thema ist) und als echte Datei-`mtime`
   im Static-Serving (ETag/Last-Modified eines gebauten Assets).
 
+**Nachtrag — Schema ohne Datei-Buchhaltung:** `scenes.chapter_declared` ist
+weg (Migration 0011). Das Flag hielt fest, ob ein Frontmatter-Block `chapter:`
+nannte, damit `PATCH { chapter: null }` den Key ausblenden konnte; das Kapitel
+ist Fremdschlüssel und Teil der Adresse, also immer gerendert, und `null` ist
+ein 400. `extra` gehört dem Importer: die API ändert und löscht dort vorhandene
+Keys, legt aber keine neuen an (unbekannter Key im Patch → 400).
+
 **Nachtrag zu ADR #10 (eingelöst in #62):** Generator-Jobs sind persistent
 (`generate_jobs`); der dort akzeptierte Verlust bei Neustart entfällt für
 fertige Jobs, laufende werden beim Boot auf `failed` mit einer klaren deutschen
@@ -767,7 +774,7 @@ der Fehler verbraucht.
 
 - `scenes(campaign_id, chapter_id)` hat einen **echten Fremdschlüssel** auf
   `chapters(campaign_id, id)`, `ON UPDATE CASCADE`, **ohne** Delete-Cascade
-  (Migration 0012). Ein Kapitel zu löschen, das noch Szenen trägt, schlägt
+  (Migration 0013). Ein Kapitel zu löschen, das noch Szenen trägt, schlägt
   damit fehl — fachlich ist das Löschen ohnehin gesperrt, und ein stilles
   Cascade wäre der einzige Weg, ein Dutzend Szenen versehentlich zu
   verlieren. `NULL` bleibt erlaubt: ein zusammengesetzter Fremdschlüssel mit
@@ -779,7 +786,7 @@ der Fehler verbraucht.
   **Adresse**. Eine Adresse, die ins Nichts zeigt, ist kein degradiertes
   Format, sondern verlorene Daten.
 - **Der Titel gehört auf den Job**, nicht in den Browser:
-  `generate_jobs.new_chapter_title` (Migration 0011) wird beim **Start** des
+  `generate_jobs.new_chapter_title` (Migration 0012) wird beim **Start** des
   Laufs geschrieben, und `acceptJobParts` legt das Kapitel aus dem
   Job-Zustand an (`jobChapterTarget`, idempotent). Die Body-Felder
   `chapter`/`chapterTitle` bleiben Override für Kompatibilität.
@@ -793,7 +800,7 @@ der Fehler verbraucht.
 **Migration in zwei Schritten**, dieselbe Reihenfolge wie bei #100: der
 Reparaturschritt (`db/chapter-repair.ts`) läuft **vor** dem Migrator auf dem
 rohen Client und legt für jede verwaiste `chapter_id` ein Kapitel
-`{id, title: id, status: planned}` an — sonst würde Migration 0012 genau an
+`{id, title: id, status: planned}` an — sonst würde Migration 0013 genau an
 diesen Zeilen scheitern. Er meldet beim Start, was er angelegt hat (Form wie
 #100), weil ein Kapitel, das unter seinem Slug auftaucht, umbenannt werden
 will.
@@ -831,7 +838,7 @@ widersprechen. Mobil bleibt der Status **Anzeige**: unter `md` rendert die
 Route die Startfläche statt der Kapitelübersicht, die Regel steht also genau
 an einer Stelle.
 
-**Konsequenz für Migration 0012:** `PRAGMA foreign_keys=OFF`, das drizzle-kit
+**Konsequenz für Migration 0013:** `PRAGMA foreign_keys=OFF`, das drizzle-kit
 um den Tabellen-Neubau generiert, ist im Migrator wirkungslos — der läuft in
 einer Transaktion, und dort ist das Pragma ein No-op. Mit aktiver Durchsetzung
 würde `DROP TABLE scenes` über `scene_npcs`/`scene_tags` cascaden. Die

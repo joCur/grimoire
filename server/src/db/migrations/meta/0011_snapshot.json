@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "59e9a393-31d8-4a17-9e7c-10069f99fb1a",
+  "id": "a3eb0a50-1b50-4775-b4cb-da11cd5ea992",
   "prevId": "4fc5ed18-95e5-48e4-90a5-556bee873c48",
   "tables": {
     "campaign_knowledge": {
@@ -413,13 +413,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
-        },
-        "new_chapter_title": {
-          "name": "new_chapter_title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {
@@ -1206,14 +1199,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "chapter_declared": {
-          "name": "chapter_declared",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
         },
         "title": {
           "name": "title",

@@ -42,7 +42,7 @@ export interface OpenDb {
   /**
    * The chapter rows the pre-migration step of issue #115 had to create for
    * scenes whose `chapter_id` had none. Empty on every database that never
-   * had a hole — which, after migration 0012's foreign key, is every database
+   * had a hole — which, after migration 0013's foreign key, is every database
    * this server has written.
    */
   chapterRepair: ChapterRepairOutcome;
@@ -115,7 +115,7 @@ export async function openDb(filename: string): Promise<OpenDb> {
   // into `location`. It is a no-op once the column is gone.
   const groupMigration = migrateGroupsToLocations(client);
   // Also BEFORE the migrator, and for a sharper reason (issue #115):
-  // migration 0012 gives `scenes.chapter_id` a real foreign key by copying
+  // migration 0013 gives `scenes.chapter_id` a real foreign key by copying
   // the rows into a new table, and an orphan `chapter_id` is exactly what
   // that copy would fail on. The holes are closed here, while the old
   // unconstrained schema still allows them to be read.

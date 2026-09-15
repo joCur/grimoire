@@ -91,9 +91,11 @@
 //                                              409 { code: "rev_conflict", rev }.
 //                                              A scene's `chapter` may be SET (400 when
 //                                              the chapter does not exist — a scene must
-//                                              never fall out of the tree) or DELETED with
-//                                              null, which drops the key and leaves the
-//                                              scene's address alone.
+//                                              never fall out of the tree), never removed
+//                                              (400: a scene belongs to a chapter). A key
+//                                              the entry has no field for is 400 too;
+//                                              unknown keys an import brought along may
+//                                              be changed or deleted with null.
 //                                              `locationName` is the display name for the
 //                                              Ort a scene's `location` CREATES — applied
 //                                              only on insert, never a rename (#100)
