@@ -874,8 +874,18 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
  * call it failed on (`runPart`) — same prompt, same excerpt, same validation.
  *
  * 404 when the campaign has no job, when `jobId` names a different one or
- * when the run has no such part; 409 when the part is already running or
- * already done (a double click is not a reason to spend tokens twice).
+ * when the run has no such part; 409 when the part is already running, still
+ * PENDING (the pool owns it — it has not had its turn yet) or already done (a
+ * double click is not a reason to spend tokens twice).
+ *
+ * The revive is ONE TRANSACTION over a re-read row, and that is not a detail:
+ * `replanStoredRun` awaits the campaign context, and while it does a sibling
+ * part of the very same run can report `partDone`. Writing back the pipeline
+ * this function read BEFORE that await used to clobber the sibling's status
+ * (it flipped from `done` to `running`) and with it the run's ability to ever
+ * settle. So the transaction re-reads the row, mutates ONLY the addressed
+ * part, and re-checks every guard against what it found — the losing racer
+ * gets its 409 instead of a lost write.
  */
 export async function retryJobPart(
   campaign: string,
@@ -886,46 +896,59 @@ export async function retryJobPart(
   const db = await getDb();
   // Not `ownRow`: the job whose part is being retried is exactly one that is
   // NOT running any more.
-  const row = jobRow(db, campaign);
-  if (row === undefined || row.id !== jobId) {
+  const preread = jobRow(db, campaign);
+  if (preread === undefined || preread.id !== jobId) {
     throw new ApiError(404, "no generate job for this campaign");
   }
-  const job = toJob(row);
-  const pipeline = job.pipeline;
-  const outline = pipeline?.outline;
-  if (pipeline === undefined || outline === undefined) {
-    throw new ApiError(409, "this job has no pipeline parts to retry");
-  }
-  const part = findPart(pipeline, key);
-  if (part === undefined) throw new ApiError(404, `unknown part: ${key}`);
-  if (part.status === "running") throw new ApiError(409, "this part is already running");
-  if (part.status === "done") throw new ApiError(409, "this part is already finished");
-  if (job.chapter === undefined) throw new ApiError(409, "this job has no target chapter");
-
-  const chapter = job.chapter;
+  const prejob = toJob(preread);
+  // The guards run TWICE: here, so a 404/409 costs no context read at all,
+  // and again inside the transaction, which is where they are binding.
+  assertRetryable(prejob, key);
+  const chapter = prejob.chapter!;
   const plan = await replanStoredRun({
     campaign,
     chapter,
-    sourceText: job.sourceText ?? "",
-    newChapter: job.newChapter,
-    outline,
+    sourceText: prejob.sourceText ?? "",
+    newChapter: prejob.newChapter,
+    outline: prejob.pipeline!.outline!,
   });
-  // Back to `running` BEFORE the answer — in one statement, because every
-  // sink write refuses a row that is not running (see ownRow) and this is the
-  // one place that revives one. A poll arriving between the 202 and the
-  // provider call then reads the job as running rather than as finished.
-  const revived: PipelineRecord = {
-    ...pipeline,
-    parts: pipeline.parts.map((p) => {
-      if (p.key !== key) return p;
-      const { error: _error, validationErrors: _errors, rawReply: _raw, ...rest } = p;
-      return { ...rest, status: "running" as const };
-    }),
-  };
-  db.update(generateJobs)
-    .set({ status: "running", pipeline: JSON.stringify(revived), error: null })
-    .where(eq(generateJobs.id, row.id))
-    .run();
+
+  // Back to `running` BEFORE the answer — every sink write refuses a row that
+  // is not running (see ownRow) and this is the one place that revives one. A
+  // poll arriving between the 202 and the provider call then reads the job as
+  // running rather than as finished.
+  const part = db.transaction((handle) => {
+    const tx = handle as unknown as GrimoireDb;
+    const row = jobRow(tx, campaign);
+    if (row === undefined || row.id !== jobId) {
+      throw new ApiError(404, "no generate job for this campaign");
+    }
+    const job = toJob(row);
+    const target = assertRetryable(job, key);
+    const pipeline = job.pipeline!;
+    const revived: PipelineRecord = {
+      ...pipeline,
+      parts: pipeline.parts.map((p) => {
+        if (p.key !== key) return p;
+        const { error: _error, validationErrors: _errors, rawReply: _raw, ...rest } = p;
+        return { ...rest, status: "running" as const };
+      }),
+    };
+    tx.update(generateJobs)
+      .set({
+        status: "running",
+        pipeline: JSON.stringify(revived),
+        error: null,
+        // The run is open again, so it has no finish time: a `finishedAt`
+        // left over from the settled run would outlive its own truth and
+        // survive into the next settle only to be overwritten.
+        finishedAt: null,
+      })
+      .where(eq(generateJobs.id, row.id))
+      .run();
+    return target;
+  }) as StoredPart;
+
   const sink = await jobSink(campaign, jobId);
   void (async () => {
     try {
@@ -935,7 +958,30 @@ export async function retryJobPart(
     }
   })();
   const after = await getJob(campaign);
-  return after ?? job;
+  return after ?? prejob;
+}
+
+/**
+ * May this part be retried? Answers with the part, throws the endpoint's
+ * 404/409 otherwise. Called once before the context read and once INSIDE the
+ * revive transaction — the second call is the binding one, because the first
+ * one's row is already stale by the time the plan is ready.
+ */
+function assertRetryable(job: Job, key: string): StoredPart {
+  const pipeline = job.pipeline;
+  if (pipeline === undefined || pipeline.outline === undefined) {
+    throw new ApiError(409, "this job has no pipeline parts to retry");
+  }
+  const part = findPart(pipeline, key);
+  if (part === undefined) throw new ApiError(404, `unknown part: ${key}`);
+  if (part.status === "running") throw new ApiError(409, "this part is already running");
+  if (part.status === "done") throw new ApiError(409, "this part is already finished");
+  // A PENDING part still belongs to the run's own pool: it has not had its
+  // turn yet, and reviving it here would run it twice — once from the pool,
+  // once from this call, both writing the same part.
+  if (part.status === "pending") throw new ApiError(409, "this part has not run yet");
+  if (job.chapter === undefined) throw new ApiError(409, "this job has no target chapter");
+  return part;
 }
 
 // --- discard -----------------------------------------------------------------

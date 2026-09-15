@@ -47,6 +47,17 @@ export interface GenerateRequest {
    */
   outline?: string;
   /**
+   * WHICH part of the outline this one call writes (issue #102), as prompt
+   * lines. It belongs to the VARIABLE half on purpose: the outline block is
+   * identical for every call of a run and is therefore cacheable, and a
+   * per-part marker inside it would make every part's prefix a different
+   * one — which is exactly the saving prompt caching is for.
+   *
+   * Absent for the entry calls (their `vorgegebene id` already says it) and
+   * for the single-call runs.
+   */
+  assignment?: string;
+  /**
    * The entry an AUGMENT run works on (issue #36): its complete current
    * document, properties block included, under its address. Absent for the
    * two runs that create something — and then the prompt has no such section,
@@ -172,6 +183,16 @@ export const INSTRUCTION_HEADING = "## Anweisung des DM";
  */
 export const OUTLINE_HEADING = "## Gliederung des Durchlaufs — verbindlich, ids unverändert übernehmen";
 
+/**
+ * Heading of the line that says WHICH scene of the outline this call writes
+ * (issue #102). It stands in the VARIABLE half, above the excerpt: the
+ * outline block above it is byte-identical for every part of a run, which is
+ * what makes the cached prefix worth anything. A constant for the same reason
+ * the others are — the prompt test asserts on it and the E2E stub reads the
+ * prompt by it.
+ */
+export const ASSIGNMENT_HEADING = "## Diese Szene schreibst du jetzt";
+
 // The prompt content is German on purpose — the pipeline's target language
 // is German (see generator/system-prompt.md); only code and comments here
 // are English.
@@ -224,6 +245,11 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
       : [OUTLINE_HEADING, req.outline]),
   ].join("\n\n");
   const variable = [
+    // What this call is FOR, first thing in the variable half: the model has
+    // read the outline above and now learns which line of it is its job.
+    ...(req.assignment === undefined || req.assignment.trim() === ""
+      ? []
+      : [ASSIGNMENT_HEADING, req.assignment]),
     // The augment run's two extra sections (issue #36). They stand BELOW the
     // few-shot (which is the FORMAT reference) and ABOVE the source text: the
     // model has to know what the entry is before it reads what to add to it.

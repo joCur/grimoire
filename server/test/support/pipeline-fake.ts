@@ -160,7 +160,10 @@ function classify(req: GenerateRequest): { kind: "outline" | "scene" | "entry" |
   if (req.context.chapter === undefined) {
     return { kind: "entry", id: req.context.targetId ?? "" };
   }
-  const assigned = /^- ([a-z0-9-]+) .*← DIESE Szene/m.exec(req.outline);
+  // Which scene this call writes is its own section of the prompt's VARIABLE
+  // half since the review of issue #102 — inside the outline block it made
+  // every part a different cached prefix.
+  const assigned = /^([a-z0-9-]+) /.exec(req.assignment ?? "");
   return { kind: "scene", id: assigned?.[1] ?? "" };
 }
 

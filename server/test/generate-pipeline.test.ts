@@ -16,6 +16,7 @@ import { failInterruptedJobs, RESTART_FAILURE_MESSAGE } from "../src/db/job-boot
 import { getDb } from "../src/store/handle";
 import { setProviderForTests } from "../src/generator";
 import {
+  assignmentBlock,
   cutExcerpt,
   outlineBlock,
   outlineParts,
@@ -26,11 +27,13 @@ import {
 } from "../src/generate-pipeline";
 import { dropStore, seedStore } from "./support/store";
 import { PipelineFake } from "./support/pipeline-fake";
-import type {
-  CompletionResult,
-  CorrectionTurn,
-  GenerateRequest,
-  LLMProvider,
+import {
+  ASSIGNMENT_HEADING,
+  buildPromptParts,
+  type CompletionResult,
+  type CorrectionTurn,
+  type GenerateRequest,
+  type LLMProvider,
 } from "../src/llm-provider";
 
 // --- the outline validation ---------------------------------------------------
@@ -225,7 +228,7 @@ test("the single-scene mode swaps the output schema and keeps every rule", async
   }
 });
 
-test("the outline block names every id and marks the assigned scene", () => {
+test("the outline block names every id — and nothing about the assigned part", () => {
   const outline: RunOutline = {
     scenes: [
       { id: "night-watch", title: "Nachtwache", type: "planned", location: "hafen", refs: ["captured"] },
@@ -234,13 +237,14 @@ test("the outline block names every id and marks the assigned scene", () => {
     entries: [{ kind: "npc", id: "grella", name: "Grella", summary: "Schmugglerin" }],
     warnings: [],
   };
-  const block = outlineBlock(outline, "captured");
+  const block = outlineBlock(outline);
   expect(block).toContain("night-watch — Nachtwache (planned, location: hafen)");
   expect(block).toContain("→ verweist auf: captured");
   expect(block).toContain("npc: grella (Grella) — Schmugglerin");
-  // Exactly one scene is the one this call writes.
-  expect(block.match(/← DIESE Szene/g)).toHaveLength(1);
-  expect(/- captured .*← DIESE Szene/.test(block)).toBe(true);
+  // Which scene THIS call writes is NOT in here — it is a section of its own
+  // in the variable half, so the block stays cacheable (issue #102 review).
+  expect(block).not.toContain("DIESE Szene");
+  expect(assignmentBlock(outline.scenes[1]!)).toBe("captured — Erwischt");
 
   // The part list follows the outline's order: scenes first, then entries.
   expect(outlineParts(outline).map((p) => p.key)).toEqual([
@@ -248,6 +252,45 @@ test("the outline block names every id and marks the assigned scene", () => {
     "scene:captured",
     "npc:grella",
   ]);
+});
+
+test("two parts of one run share a byte-identical constant prefix", () => {
+  // The saving the whole split exists for (issue #102): everything above the
+  // excerpt is the same text for every part, so an endpoint with prefix
+  // caching sees the run's prompt once. One marker in the outline block used
+  // to break that for every part at once.
+  const outline: RunOutline = {
+    scenes: [
+      { id: "eins", title: "Eins", type: "planned", location: "hafen", refs: [] },
+      { id: "zwei", title: "Zwei", type: "contingency", refs: ["eins"] },
+    ],
+    entries: [],
+    warnings: [],
+  };
+  const base = {
+    systemPrompt: "sys",
+    fewShotTarget: "few",
+    knowledge: "",
+    glossary: "g",
+    context: { chapter: CTX.chapter, npcs: CTX.npcs, locations: CTX.locations },
+    outline: outlineBlock(outline),
+  };
+  const first = buildPromptParts({
+    ...base,
+    assignment: assignmentBlock(outline.scenes[0]!),
+    sourceText: "Passage one.",
+  });
+  const second = buildPromptParts({
+    ...base,
+    assignment: assignmentBlock(outline.scenes[1]!),
+    sourceText: "Passage two.",
+  });
+  expect(first.constant).toBe(second.constant);
+  // …and the variable half is what tells the two calls apart.
+  expect(first.variable).not.toBe(second.variable);
+  expect(first.variable).toContain(ASSIGNMENT_HEADING);
+  expect(first.variable).toContain("eins — Eins");
+  expect(second.variable).toContain("zwei — Zwei");
 });
 
 // --- the run through the endpoints ---------------------------------------------
@@ -282,7 +325,11 @@ function sceneDoc(id: string, over: { status?: string } = {}): string {
 class ThreeSceneProvider implements LLMProvider {
   readonly name = "fake";
   readonly calls: string[] = [];
-  constructor(private broken: string | null = null) {}
+  constructor(
+    private broken: string | null = null,
+    /** The outline's scenes — four of them when a case needs a PENDING part. */
+    private ids: readonly string[] = SCENE_IDS,
+  ) {}
 
   async complete(
     req: GenerateRequest,
@@ -292,7 +339,7 @@ class ThreeSceneProvider implements LLMProvider {
       this.calls.push("outline");
       return {
         text: JSON.stringify({
-          scenes: SCENE_IDS.map((id) => ({
+          scenes: this.ids.map((id) => ({
             id,
             title: `Szene ${id}`,
             type: "planned",
@@ -306,7 +353,7 @@ class ThreeSceneProvider implements LLMProvider {
         truncated: false,
       };
     }
-    const id = /^- ([a-z0-9-]+) .*← DIESE Szene/m.exec(req.outline)?.[1] ?? "";
+    const id = /^([a-z0-9-]+) /.exec(req.assignment ?? "")?.[1] ?? "";
     this.calls.push(id);
     return {
       text: JSON.stringify({
@@ -349,6 +396,18 @@ async function runJob(): Promise<GenerateJob> {
     await new Promise((resolve) => setTimeout(resolve, 2));
   }
   throw new Error("job never finished");
+}
+
+/** Poll the job until its parts look the way a case needs them to. */
+async function waitForParts(
+  ready: (parts: NonNullable<GenerateJob["pipeline"]>["parts"]) => boolean,
+): Promise<GenerateJob> {
+  for (let i = 0; i < 4000; i += 1) {
+    const job = await fetchJob();
+    if (job !== null && ready(job.pipeline?.parts ?? [])) return job;
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
+  throw new Error("the parts never reached the expected shape");
 }
 
 beforeEach(async () => {
@@ -433,6 +492,86 @@ test("„Erneut versuchen“ re-runs ONE part and leaves the rest alone (AK3)", 
   expect(retryProvider.calls).toEqual(["zwei"]);
 });
 
+test("a retry that races a sibling's result does not clobber it", async () => {
+  // The shape: part „zwei" failed, part „drei" is still in flight, and the DM
+  // presses „Erneut versuchen" on „zwei" in exactly the moment „drei"
+  // answers. The retry has to revive ITS part and nothing else — a revive
+  // that writes back the whole pipeline column as it read it before the
+  // context read puts „drei" back to `running`, and then the run has no
+  // worker left that could ever settle it.
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  class HoldsLast extends ThreeSceneProvider {
+    override async complete(
+      req: GenerateRequest,
+      corrections: CorrectionTurn[] = [],
+    ): Promise<CompletionResult> {
+      const answer = await super.complete(req, corrections);
+      if (req.assignment !== undefined && req.assignment.includes("drei")) await gate;
+      return answer;
+    }
+  }
+  setProviderForTests(new HoldsLast("zwei"));
+  expect(
+    (
+      await send("POST", "/api/beispiel/generate", {
+        chapter: "01-salzhafen",
+        sourceText: "Fenn waits at the docks.",
+      })
+    ).status,
+  ).toBe(202);
+  const before = await waitForParts((parts) =>
+    parts.map((p) => p.status).join() === "done,failed,running",
+  );
+  expect(before.status).toBe("running");
+
+  // Fire the retry and let „drei" answer INTO its context read.
+  setProviderForTests(new HoldsLast(null));
+  const retry = send("POST", `/api/beispiel/generate/job/${before.id}/parts/scene:zwei/retry`);
+  release?.();
+  expect((await retry).status).toBe(202);
+
+  const after = await waitForParts((parts) => parts.every((p) => p.status === "done"));
+  expect(after.pipeline!.parts.map((p) => p.status)).toEqual(["done", "done", "done"]);
+  // …and the run settled, which is the property the clobber destroyed.
+  expect(after.status).toBe("done");
+  expect(after.result!.scenes.map((s) => s.path)).toEqual([
+    "01-salzhafen/eins",
+    "01-salzhafen/zwei",
+    "01-salzhafen/drei",
+  ]);
+});
+
+test("a PENDING part is the pool's, not the retry's", async () => {
+  // Four scenes and three workers, every call held: the fourth part is
+  // `pending` — it has not had its turn yet. Reviving it here would run it
+  // twice, once from this call and once from the pool that still owns it.
+  const gate = new Promise<void>(() => {});
+  class HoldsEverything extends ThreeSceneProvider {
+    override async complete(
+      req: GenerateRequest,
+      corrections: CorrectionTurn[] = [],
+    ): Promise<CompletionResult> {
+      const answer = await super.complete(req, corrections);
+      if (req.outline !== undefined) await gate;
+      return answer;
+    }
+  }
+  setProviderForTests(new HoldsEverything(null, [...SCENE_IDS, "vier"]));
+  await send("POST", "/api/beispiel/generate", {
+    chapter: "01-salzhafen",
+    sourceText: "Fenn waits at the docks.",
+  });
+  const job = await waitForParts(
+    (parts) => parts.length === 4 && parts[3]!.status === "pending",
+  );
+  const res = await send("POST", `/api/beispiel/generate/job/${job.id}/parts/scene:vier/retry`);
+  expect(res.status).toBe(409);
+  expect((await fetchJob())!.pipeline!.parts[3]!.status).toBe("pending");
+});
+
 test("a retry is refused for a part that is done, and for an unknown key", async () => {
   setProviderForTests(new ThreeSceneProvider(null));
   const job = await runJob();
@@ -460,7 +599,7 @@ test("a restart fails the open parts and keeps the finished ones (AK3)", async (
       corrections: CorrectionTurn[] = [],
     ): Promise<CompletionResult> {
       const answer = await super.complete(req, corrections);
-      if (req.outline !== undefined && /^- drei .*← DIESE Szene/m.test(req.outline)) {
+      if (req.assignment !== undefined && /^drei /.test(req.assignment)) {
         await gate;
       }
       return answer;

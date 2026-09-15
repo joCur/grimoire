@@ -441,7 +441,10 @@ describe("POST /api/:campaign/generate", () => {
     expect(sceneReq.systemPrompt).toContain("GENAU EINE Szene");
     expect(sceneReq.fewShotTarget).toContain("id: smuggler-captured");
     expect(sceneReq.outline).toContain("treffen-am-kai");
-    expect(sceneReq.outline).toContain("← DIESE Szene");
+    // WHICH scene this call writes is its own section of the variable half,
+    // not a marker inside the (cacheable) outline block.
+    expect(sceneReq.outline).not.toContain("DIESE Szene");
+    expect(sceneReq.assignment).toContain("treffen-am-kai");
     expect(sceneReq.sourceText).toBe(generateBody.sourceText);
 
     // review preview only — NOTHING on disk

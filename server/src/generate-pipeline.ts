@@ -363,16 +363,23 @@ export async function sceneSystemPrompt(mode: "batch" | "single"): Promise<strin
   return `${doc.slice(0, start)}${replacement.trimEnd()}\n\n${tail}`;
 }
 
-/** The outline block every per-part prompt carries (llm-provider OUTLINE_HEADING). */
-export function outlineBlock(outline: RunOutline, assigned?: string): string {
+/**
+ * The outline block every per-part prompt carries (llm-provider
+ * OUTLINE_HEADING) — and it carries NOTHING about which part this call is
+ * about. That marker used to live here, which silently defeated the prompt
+ * caching this ticket built: the block is part of the CONSTANT half, so one
+ * changed character per part made every part a cache miss. Which scene is
+ * assigned is now a line of its own in the variable half
+ * (`assignmentBlock`, llm-provider ASSIGNMENT_HEADING).
+ */
+export function outlineBlock(outline: RunOutline): string {
   const lines: string[] = [];
   lines.push("Szenen dieses Durchlaufs (in dieser Reihenfolge):");
   for (const scene of outline.scenes) {
     const bits = [`- ${scene.id} — ${scene.title} (${scene.type}`];
     bits.push(scene.location === undefined ? ")" : `, location: ${scene.location})`);
     const refs = scene.refs.length === 0 ? "" : ` → verweist auf: ${scene.refs.join(", ")}`;
-    const mark = assigned === scene.id ? "  ← DIESE Szene schreibst du jetzt" : "";
-    lines.push(`${bits.join("")}${refs}${mark}`);
+    lines.push(`${bits.join("")}${refs}`);
   }
   if (outline.entries.length > 0) {
     lines.push("");
@@ -382,6 +389,11 @@ export function outlineBlock(outline: RunOutline, assigned?: string): string {
     }
   }
   return lines.join("\n");
+}
+
+/** Which scene of the outline THIS call writes (llm-provider ASSIGNMENT_HEADING). */
+export function assignmentBlock(scene: OutlineScene): string {
+  return `${scene.id} — ${scene.title}`;
 }
 
 // --- per-part validation -------------------------------------------------------
@@ -722,7 +734,8 @@ export async function runScenePart(
       knowledge: plan.ctx.knowledge,
       glossary: plan.ctx.glossary,
       context: { chapter: plan.ctx.chapter, npcs: plan.ctx.npcs, locations: plan.ctx.locations },
-      outline: outlineBlock(plan.outline, scene.id),
+      outline: outlineBlock(plan.outline),
+      assignment: assignmentBlock(scene),
       sourceText: cut.text,
     },
     provider,

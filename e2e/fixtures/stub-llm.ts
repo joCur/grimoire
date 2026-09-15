@@ -126,12 +126,14 @@ const KNOWLEDGE_HEADING =
 
 /**
  * The heading the run's OUTLINE travels under (server/src/llm-provider.ts
- * OUTLINE_HEADING) and the marker that says which scene THIS call writes
- * (server/src/generate-pipeline.ts outlineBlock). Duplicated on purpose, like
- * KNOWLEDGE_HEADING: the stub reads the prompt the way a model does.
+ * OUTLINE_HEADING) and the one that says which scene THIS call writes
+ * (ASSIGNMENT_HEADING — its own section in the prompt's VARIABLE half, so the
+ * outline block stays byte-identical across a run and stays cacheable).
+ * Duplicated on purpose, like KNOWLEDGE_HEADING: the stub reads the prompt
+ * the way a model does.
  */
 const OUTLINE_HEADING = "## Gliederung des Durchlaufs";
-const ASSIGNED_SCENE = /^- ([a-z0-9-]+) .*← DIESE Szene/m;
+const ASSIGNED_SCENE = /## Diese Szene schreibst du jetzt\n+([a-z0-9-]+) /;
 
 /**
  * How many ROUNDS a scene part has been asked for, per failure nonce. The stub's
