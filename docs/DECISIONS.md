@@ -67,6 +67,14 @@ Speicher — kein SQLite nötig bei ein paar hundert Dateien).
 **Seit #13:** Drizzle über SQLite (`server/src/db/`), Suche als FTS5-Index;
 chokidar und Fuse.js sind entfernt, gray-matter lebt nur noch im
 Import-/Parser-Pfad (`@grimoire/shared`).
+**Seit #107:** `jsonrepair` (exakt gepinnt) im Generator — die Gliederung ist
+der einzige Aufruf, der noch JSON antwortet, und ein Modell schreibt dort
+mechanische Fehler (Komma am Ende, einfache Anführungszeichen). Eine
+deterministische Reparatur vor der Validierung ist deutlich billiger als eine
+Korrekturrunde, die den ganzen Prompt erneut sendet; die Regeln selbst bleiben
+unangetastet, und ein reparierter Lauf trägt eine Warnung. Keine weitere
+Abhängigkeit: die Dokument-Antworten sind rohes Markdown und gehen durch den
+bestehenden Parser.
 Hono statt Express/Fastify: minimal, typsicher, läuft auf Bun UND Node
 (Runtime-Wechsel bleibt möglich, siehe #7).
 

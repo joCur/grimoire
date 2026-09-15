@@ -27,6 +27,7 @@ import {
   outlineParts,
   sceneSystemPrompt,
   validateOutlineReply,
+  REPAIRED_REPLY_WARNING,
   type RunOutline,
   type SceneContext,
 } from "../src/generate-pipeline";
@@ -84,6 +85,52 @@ test("a well-formed outline validates and keeps its order", () => {
   if (!outcome.ok) return;
   expect(outcome.result.scenes.map((s) => s.id)).toEqual(["night-watch"]);
   expect(outcome.result.scenes[0]!.sourceExcerpt).toEqual({ first: "One.", last: "Two." });
+});
+
+test("an almost-JSON outline is repaired instead of costing a correction turn", () => {
+  // The errors a model makes when it hand-writes JSON: a trailing comma, a
+  // single-quoted key, an unquoted one. `jsonrepair` fixes them
+  // deterministically — far cheaper than resending the whole prompt.
+  const almost = `{
+    scenes: [
+      {
+        'id': 'night-watch',
+        "title": "Nachtwache am Kai",
+        "type": "planned",
+        "refs": [],
+      },
+    ],
+    "entries": [],
+    "warnings": ["Der Quelltext nennt keinen DC."],
+  }`;
+  const outcome = validateOutlineReply(almost, CTX);
+  expect(outcome.ok).toBe(true);
+  if (!outcome.ok) return;
+  expect(outcome.result.scenes.map((sc) => sc.id)).toEqual(["night-watch"]);
+  // …and the run says so, so a provider that needs patching every time is
+  // visible to the DM instead of silently tolerated.
+  expect(outcome.result.warnings).toEqual([
+    "Der Quelltext nennt keinen DC.",
+    REPAIRED_REPLY_WARNING,
+  ]);
+});
+
+test("a repaired outline is still VALIDATED — the repair loosens only parsing", () => {
+  // Parseable after the repair, and still wrong: the type is not a scene type.
+  expect(
+    outlineErrors('{ "scenes": [{ "id": "night-watch", "type": "kampf", "refs": [] },], }'),
+  ).toEqual(expect.arrayContaining([expect.stringContaining('"type" must be one of')]));
+});
+
+test("prose without an object is NOT repaired — it is a correction turn", () => {
+  // jsonrepair would happily turn a sentence into a JSON string, and the run
+  // would then fail with a message about the wrong thing.
+  for (const raw of ["Ich kann diese Aufgabe nicht erfüllen.", "", "   "]) {
+    expect(outlineErrors(raw)).toEqual(["reply is not valid JSON"]);
+  }
+  // A well-formed reply reports no repair at all.
+  const clean = validateOutlineReply(outlineReply(), CTX);
+  expect(clean.ok && clean.result.warnings).toEqual([]);
 });
 
 test("the schema's nullable optionals read as „not given“ (issue #107)", () => {

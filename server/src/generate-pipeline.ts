@@ -79,6 +79,7 @@ import {
 export type { SceneContext } from "./generator";
 import { parseWithProperties, reparseAtAddress, unknownCallouts } from "./generator";
 import { parseDocumentReply } from "./document-reply";
+import { jsonrepair } from "jsonrepair";
 import type { LLMProvider } from "./llm-provider";
 import { locationPath, npcPath } from "./store/paths";
 
@@ -134,6 +135,52 @@ export interface RunOutline {
 
 const OUTLINE_CORRECTION_TAIL = "die vollständige Gliederung enthalten";
 
+/**
+ * The run warning a REPAIRED outline earns (issue #107, Zuschnitt 4). German,
+ * like the excerpt-fallback warning next to it: it rides along in the run's
+ * `warnings` and the review shows those verbatim.
+ *
+ * Why it is a warning at all: the repair is silent otherwise, and „the model
+ * answered something JSON.parse could not read" is exactly the kind of thing
+ * a DM wants to see once — a provider whose replies need patching every run
+ * is a provider to reconsider, and without the note nobody would ever know.
+ */
+export const REPAIRED_REPLY_WARNING =
+  "Antwort musste repariert werden — das Modell hat die Gliederung nicht als " +
+  "gültiges JSON geliefert.";
+
+/**
+ * The outline reply as a JSON value — with ONE tolerant repair attempt before
+ * a correction turn is spent (issue #107, Zuschnitt 4).
+ *
+ * `extractJsonReply` already handles prose and fences around a WELL-FORMED
+ * object. What it cannot do is read an object that is merely almost JSON: a
+ * trailing comma, a single-quoted key, an unescaped newline inside a string.
+ * Those are the errors a model makes when it hand-writes JSON, and they are
+ * mechanical — `jsonrepair` fixes them deterministically and much more
+ * cheaply than a correction turn, which resends the whole prompt.
+ *
+ * `repaired` says which way in it was, so the run can say so too. The result
+ * goes through the UNCHANGED validation either way: the repair loosens the
+ * parsing, never the rules (the same line issue #20 drew for the extraction).
+ */
+export function parseOutlineJson(raw: string): { value: unknown; repaired: boolean } | null {
+  const extracted = extractJsonReply(raw);
+  if (extracted !== null) return { value: extracted.value, repaired: false };
+  // A model that wrote no JSON at all is not repairable — jsonrepair would
+  // happily turn prose into a string, which then fails validation with a
+  // message about the wrong thing. So the repair only runs on a candidate
+  // that at least LOOKS like an object.
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start === -1 || end <= start) return null;
+  try {
+    return { value: JSON.parse(jsonrepair(raw.slice(start, end + 1))), repaired: true };
+  } catch {
+    return null;
+  }
+}
+
 /** One of the schema's entry kinds (#107) — the list is the schema's own. */
 function isOutlineEntryKind(v: unknown): v is (typeof OUTLINE_ENTRY_KINDS)[number] {
   return typeof v === "string" && (OUTLINE_ENTRY_KINDS as readonly string[]).includes(v);
@@ -163,10 +210,10 @@ export function validateOutlineReply(
   ctx: SceneContext,
 ): { ok: true; result: RunOutline } | { ok: false; errors: string[] } {
   const errors: string[] = [];
-  const extracted = extractJsonReply(raw);
-  if (extracted === null) return { ok: false, errors: ["reply is not valid JSON"] };
-  if (!isRecord(extracted.value)) return { ok: false, errors: ["reply must be a JSON object"] };
-  const obj = extracted.value;
+  const parsedReply = parseOutlineJson(raw);
+  if (parsedReply === null) return { ok: false, errors: ["reply is not valid JSON"] };
+  if (!isRecord(parsedReply.value)) return { ok: false, errors: ["reply must be a JSON object"] };
+  const obj = parsedReply.value;
 
   const rawScenes = obj.scenes ?? [];
   if (!Array.isArray(rawScenes)) return { ok: false, errors: ['"scenes" must be an array'] };
@@ -316,7 +363,15 @@ export function validateOutlineReply(
   const warnings = Array.isArray(obj.warnings)
     ? obj.warnings.filter((w): w is string => typeof w === "string")
     : [];
-  return { ok: true, result: { scenes, entries, warnings } };
+  return {
+    ok: true,
+    result: {
+      scenes,
+      entries,
+      // The repair is recorded as a run warning, not swallowed.
+      warnings: parsedReply.repaired ? [...warnings, REPAIRED_REPLY_WARNING] : warnings,
+    },
+  };
 }
 
 // --- cutting the source passage ----------------------------------------------
