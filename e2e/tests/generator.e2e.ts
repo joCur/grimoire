@@ -4,7 +4,7 @@
 // path.
 //
 // One thing the cutover (issue #57) changed here: the draft is REVIEWED under
-// the file name the model chose (`SCENE_SLUG`) but STORED under its id
+// the file name the model chose (`SCENE_ID`) but STORED under its id
 // (`SCENE_ID`), because a scene's address is `<chapter>/<id>` now. So the
 // review assertions use the slug and everything after „Übernehmen" the id.
 //
@@ -21,14 +21,22 @@ import {
   NPC_STUB_ID,
   NPC_STUB_NAME,
   SCENE_ID,
-  SCENE_SLUG,
   SCENE_TITLE,
   TRIGGER,
 } from "../fixtures/replies";
 import { expect, test } from "../support/test";
 
-/** Where the applied scene draft LIVES: `<chapter>/<id>` (issue #57). */
-const SCENE_PATH = `01-salzhafen/${SCENE_ID}`;
+/**
+ * How the REVIEW addresses the draft: `<chapter>/<id>`, built by the server
+ * from the run's chapter and the frontmatter id (issue #100).
+ */
+const DRAFT_PATH = `01-salzhafen/${SCENE_ID}`;
+/**
+ * …and where it LIVES once accepted: the group segment is the draft's
+ * `location`, which the reply fixture sets to the `bucht` entry it proposes
+ * in the same run (issue #100, AK1).
+ */
+const SCENE_PATH = `01-salzhafen/${LOCATION_STUB_ID}/${SCENE_ID}`;
 
 const SOURCE = `The party watches the quay at low tide. Two lanterns move along the
 mole while Fenn's crew shifts a cargo before dawn.`;
@@ -51,9 +59,9 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   // The knowledge count is part of that line since issue #53; the example
   // campaign has none, so it says so. The knowledge path itself is
   // campaign-knowledge.e2e.ts.
-  await expect(
-    page.getByText("2 NPCs · 1 Ort"),
-  ).toBeVisible();
+  // Two locations: `bucht` is a scene's location in the example campaign, so
+  // the import created an entry for it (#100).
+  await expect(page.getByText("2 NPCs · 2 Orte")).toBeVisible();
   // The knowledge and the glossary halves are LINKS to their own pages now
   // (issue #53, PO feedback on PR #87) — this line is where the DM notices a
   // rule is missing, so the fix is one click from here.
@@ -80,7 +88,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   await expect(page.getByText("Der Frachtbrief ist erfunden", { exact: false })).toBeVisible();
 
   // The draft card: title, target path, status pill, rendered body.
-  const card = page.locator("div").filter({ hasText: `01-salzhafen/${SCENE_SLUG}` }).last();
+  const card = page.locator("div").filter({ hasText: DRAFT_PATH }).last();
   await expect(page.getByRole("heading", { level: 2, name: SCENE_TITLE })).toBeVisible();
   // The status chip shows the LABEL, not the raw frontmatter value (#88).
   await expect(card.getByText("Entwurf", { exact: true })).toBeVisible();
@@ -94,7 +102,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   await expect(card).toContainText("[[grella]]");
 
   // Nothing is stored before "Übernehmen" — under neither name.
-  expect(await api.exists(`01-salzhafen/${SCENE_SLUG}`)).toBe(false);
+  expect(await api.exists(DRAFT_PATH)).toBe(false);
   expect(await api.exists(SCENE_PATH)).toBe(false);
 
   // Suggested entries are decided one by one. An undecided row is the innermost div that
@@ -129,8 +137,10 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   expect(npcFile).toContain("status: alive");
   const locationFile = await api.raw(`locations/${LOCATION_STUB_ID}`);
   expect(locationFile).not.toContain("status:");
-  // The model's file name addresses nothing.
-  expect(await api.exists(`01-salzhafen/${SCENE_SLUG}`)).toBe(false);
+  // The review's own address is a STALE address for the scene now, not a
+  // dead one: it names the same id, so it resolves and reports where the
+  // scene actually is (issue #100, ADR #17).
+  expect((await api.file(DRAFT_PATH)).path).toBe(SCENE_PATH);
 
   // Back in the pool the draft shows up with the German status label.
   await page.getByRole("button", { name: "Zu den Kapiteln" }).click();
@@ -208,7 +218,7 @@ test("failure path: an invalid model reply shows the 422 block with the raw repl
   await expect(page.locator("pre")).toContainText("night-watch-quay");
 
   // Nothing was written, and the form is usable again.
-  expect(await api.exists(`01-salzhafen/${SCENE_SLUG}`)).toBe(false);
+  expect(await api.exists(DRAFT_PATH)).toBe(false);
   expect(await api.exists(SCENE_PATH)).toBe(false);
   await expect(page.getByRole("button", { name: "Entwürfe generieren" })).toBeEnabled();
 });
@@ -228,7 +238,7 @@ test("review state survives navigation and reload; parts are accepted one by one
 
   // (1) Edit the draft, leave the page, come back: the text is there. This is
   // the loss the ticket is about — it used to live in component state only.
-  const card = page.locator("div").filter({ hasText: `01-salzhafen/${SCENE_SLUG}` }).last();
+  const card = page.locator("div").filter({ hasText: DRAFT_PATH }).last();
   await card.getByRole("button", { name: "Bearbeiten" }).click();
   const textarea = page.getByRole("textbox", { name: `Markdown von ${SCENE_TITLE}` });
   const edited = (await textarea.inputValue()).replace(
@@ -262,7 +272,7 @@ test("review state survives navigation and reload; parts are accepted one by one
   expect(await api.exists(SCENE_PATH)).toBe(false);
   await page
     .locator("div")
-    .filter({ hasText: `01-salzhafen/${SCENE_SLUG}` })
+    .filter({ hasText: DRAFT_PATH })
     .last()
     .getByRole("button", { name: "Diesen übernehmen" })
     .click();
@@ -301,7 +311,7 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
 
   await page
     .locator("div")
-    .filter({ hasText: `01-salzhafen/${SCENE_SLUG}` })
+    .filter({ hasText: DRAFT_PATH })
     .last()
     .getByRole("button", { name: "Diesen übernehmen" })
     .click();

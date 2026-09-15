@@ -40,6 +40,7 @@ import {
   chapterPath,
   locationPath,
   npcPath,
+  sceneAddress,
   scenePath,
   sessionPath,
 } from "./paths";
@@ -115,11 +116,11 @@ export function pathOf(db: GrimoireDb, campaign: string, kind: UsageKind, id: st
   if (kind === "location") return locationPath(id);
   if (kind === "chapter") return chapterPath(id);
   const row = db
-    .select({ chapterId: scenes.chapterId, groupSlug: scenes.groupSlug })
+    .select({ chapterId: scenes.chapterId, location: scenes.location })
     .from(scenes)
     .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, id)))
     .all()[0];
-  return scenePath(row?.chapterId ?? "", row?.groupSlug ?? "", id);
+  return sceneAddress({ chapterId: row?.chapterId ?? null, location: row?.location ?? null, id });
 }
 
 const TABLE_OF = { npc: npcs, location: locations, chapter: chapters, scene: scenes } as const;
@@ -159,13 +160,13 @@ function sceneSite(row: {
   id: string;
   title: string;
   chapterId: string | null;
-  groupSlug: string;
+  location: string | null;
 }): UsageSite {
   return {
     kind: "scene",
     id: row.id,
     title: row.title === "" ? row.id : row.title,
-    path: scenePath(row.chapterId ?? "", row.groupSlug, row.id),
+    path: sceneAddress(row),
     count: 1,
   };
 }
@@ -174,7 +175,7 @@ const SCENE_SITE_COLS = {
   id: scenes.id,
   title: scenes.title,
   chapterId: scenes.chapterId,
-  groupSlug: scenes.groupSlug,
+  location: scenes.location,
 };
 
 /** Scenes whose `npcs:` list names the npc, in scene order. */

@@ -29,6 +29,7 @@ import { randomUUID } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { kindFromPath, parseMarkdown, sessionPauses } from "@grimoire/shared";
+import { toSlug } from "@grimoire/shared/slug";
 import { isDbEmpty, type GrimoireDb } from "./client";
 import {
   parseGlossaryBody,
@@ -674,6 +675,8 @@ function importCampaign(
   }
 
   // 4. scenes plus their ordered npc and tag references.
+  /** Location id -> the text the scene named it with, for the entries below. */
+  const sceneLocationNames = new Map<string, string>();
   const sceneIds = new Set<string>();
   let scenePos = 0;
   for (const p of find("scene")) {
@@ -692,6 +695,25 @@ function importCampaign(
     const title = asString(p.frontmatter.title, id);
     const npcRefs = asStringArray(p.frontmatter.npcs);
     const tags = asStringArray(p.frontmatter.tags);
+    const rawLocation = (asOptionalString(p.frontmatter.location) ?? cls.groupSlug).trim();
+    const locationSlug = rawLocation === "" ? "" : toSlug(rawLocation);
+    // A `location` that transliterates to NOTHING („???", an emoji): the
+    // field is imported empty, and that is a degrade the DM has to read —
+    // it used to happen in silence (issue #100 review).
+    if (rawLocation !== "" && locationSlug === "") {
+      degrade(
+        p.file,
+        `location „${rawLocation}" ergibt keine Orts-id — Feld leer übernommen.`,
+      );
+    }
+    const sceneLocation = locationSlug === "" ? null : locationSlug;
+    if (sceneLocation !== null && sceneLocation !== rawLocation) {
+      degrade(
+        p.file,
+        `location „${rawLocation}" ist keine Orts-id — als Ort „${sceneLocation}" angelegt.`,
+      );
+    }
+    if (sceneLocation !== null) sceneLocationNames.set(sceneLocation, rawLocation);
     tx.insert(scenesTable)
       .values({
         campaignId,
@@ -700,11 +722,15 @@ function importCampaign(
         // what the tree the DM has been looking at was built from. A
         // disagreeing `chapter:` key is kept in `extra` rather than dropped.
         chapterId: cls.chapterId,
-        groupSlug: cls.groupSlug,
         title,
         type: asString(p.frontmatter.type, "planned"),
         trigger: asOptionalString(p.frontmatter.trigger) ?? null,
-        location: asOptionalString(p.frontmatter.location) ?? null,
+        // `location` IS the group since issue #100, so the import derives
+        // it the way the file tree meant it: an explicit value wins, an
+        // empty one inherits the group DIRECTORY the file sat in. Free text
+        // becomes the slug of that text (`Die Bucht` -> `die-bucht`) and the
+        // entry is created below — the format's free-text location is gone.
+        location: sceneLocation,
         status: asString(p.frontmatter.status, "draft"),
         handouts: packJson(asStringArray(p.frontmatter.handouts)),
         body: p.body,
@@ -743,6 +769,19 @@ function importCampaign(
       tx.insert(sceneTagsTable).values({ campaignId, sceneId: id, tag, pos }).run();
     });
     indexForSearch(tx, campaignId, "scene", id, title, id, tags.join(" "), p.body);
+  }
+
+  // 4b. Referencing creates (#70, #100): a scene's `location` is its group,
+  // so an id without an entry would be a heading the campaign cannot name.
+  // The entry gets the text the scene used as its `name` when that text was
+  // not already the id — the file tree's `hafen/` directory and its free-text
+  // locations become real entries here, and nowhere else.
+  for (const [id, named] of [...sceneLocationNames].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+    if (locationIds.has(id)) continue;
+    locationIds.add(id);
+    const name = named === id ? "" : named;
+    tx.insert(locationsTable).values({ campaignId, id, name }).run();
+    indexForSearch(tx, campaignId, "location", id, name === "" ? id : name, id, "", "");
   }
 
   // 5. sessions with pauses, log lines and played scenes.

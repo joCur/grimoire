@@ -155,8 +155,10 @@ export const de = {
   "properties.field.row.name.aria": "{label}, Zeile {row}: Name",
   "properties.field.row.value.aria": "{label}, Zeile {row}: Wert",
   "properties.ref.unknownChapter": "Unbekannt — Kapitel muss existieren.",
-  "properties.ref.freeText": "Freier Text — kein Eintrag.",
   "properties.ref.new": "Neu — wird beim Speichern angelegt.",
+  "properties.ref.locationNew": 'Neu — wird als Ort „{name}" angelegt.',
+  "properties.issue.locationUnusable":
+    'Kein verwendbarer Name — „{value}" ergibt keine Orts-id.',
   "properties.issue.notAnId":
     '„{id}" ist keine id — nur Kleinbuchstaben, Ziffern und Bindestriche.',
   "properties.issue.namelessRow": "Zeile ohne Namen — Name ergänzen oder Zeile entfernen.",
@@ -172,7 +174,8 @@ export const de = {
   "properties.scene.trigger.hint": "Nur bei Eventualszenen: wann feuert die Szene?",
   "properties.scene.chapter.label": "Kapitel",
   "properties.scene.location.label": "Ort",
-  "properties.scene.location.hint": "id aus Orte oder freier Text.",
+  "properties.scene.location.hint":
+    "Ort aus der Liste oder ein neuer Name — die Szene steht im Kapitel unter diesem Ort.",
   "properties.scene.npcs.label": "NPCs",
   "properties.scene.npcs.hint": "Nur ids — unbekannte werden beim Speichern angelegt.",
   "properties.scene.handouts.label": "Handouts",
@@ -318,6 +321,10 @@ export const de = {
   "server.slug_taken": '{kind} „{id}" existiert schon — Vorschlag: „{suggestion}"',
   "server.slug_reserved": '„{id}" ist ein reservierter Name — Vorschlag: „{suggestion}"',
   "server.slug_empty": "{field} ergibt keine id — bitte Buchstaben oder Ziffern verwenden.",
+  "server.location_not_an_id":
+    'Der Ort „{value}" ist keine Orts-id — „{suggestion}" verwenden, der Eintrag wird angelegt.',
+  "server.location_not_an_id.noSuggestion":
+    'Der Ort „{value}" ist keine Orts-id — bitte Kleinbuchstaben, Ziffern und Bindestriche verwenden.',
   "server.glossary_duplicate_term":
     'Glossar-Begriff „{term}" kommt mehrfach vor — bitte zusammenfassen.',
   "server.session_running": "Eine ältere Session läuft noch — erst beenden.",
@@ -369,6 +376,8 @@ export const de = {
   // one form for both plural categories here — the ICU shape stays, so `en`
   // can differ without a second call site.
   "pool.chapterCount": "{count, plural, one {# Kapitel} other {# Kapitel}}",
+  // Die Restsektion eines Kapitels: Szenen, die keinen Ort nennen (#100).
+  "pool.group.noLocation": "Ohne Ort",
   "pool.sceneCount": "{count, plural, =0 {keine Szenen} one {# Szene} other {# Szenen}}",
   "pool.chapter.goal": "Ziel: {goal}",
   "pool.chapter.empty": "Noch keine Szenen in diesem Kapitel.",

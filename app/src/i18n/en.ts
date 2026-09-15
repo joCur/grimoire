@@ -140,8 +140,10 @@ export const en: Messages = {
   "properties.field.row.name.aria": "{label}, row {row}: name",
   "properties.field.row.value.aria": "{label}, row {row}: value",
   "properties.ref.unknownChapter": "Unknown — the chapter has to exist.",
-  "properties.ref.freeText": "Free text — no entry.",
   "properties.ref.new": "New — will be created on save.",
+  "properties.ref.locationNew": 'New — will be created as location “{name}”.',
+  "properties.issue.locationUnusable":
+    'Not a usable name — “{value}” yields no location id.',
   "properties.issue.notAnId": "“{id}” is not an id — lowercase letters, digits and hyphens only.",
   "properties.issue.namelessRow": "Row without a name — add a name or remove the row.",
   "properties.issue.duplicateName": "Name “{name}” twice — every name may appear only once.",
@@ -154,7 +156,8 @@ export const en: Messages = {
   "properties.scene.trigger.hint": "Contingency scenes only: when does the scene fire?",
   "properties.scene.chapter.label": "Chapter",
   "properties.scene.location.label": "Location",
-  "properties.scene.location.hint": "An id from Locations, or free text.",
+  "properties.scene.location.hint":
+    "A location from the list or a new name — the chapter groups the scene under it.",
   "properties.scene.npcs.label": "NPCs",
   "properties.scene.npcs.hint": "Ids only — unknown ones are created on save.",
   "properties.scene.handouts.label": "Handouts",
@@ -289,6 +292,10 @@ export const en: Messages = {
   "server.slug_taken": '{kind} “{id}” already exists — suggestion: “{suggestion}”',
   "server.slug_reserved": '“{id}” is a reserved name — suggestion: “{suggestion}”',
   "server.slug_empty": "{field} yields no id — please use letters or digits.",
+  "server.location_not_an_id":
+    'Location “{value}” is not a location id — use “{suggestion}”; the entry is created for you.',
+  "server.location_not_an_id.noSuggestion":
+    'Location “{value}” is not a location id — please use lowercase letters, digits and dashes.',
   "server.glossary_duplicate_term":
     'Glossary term “{term}” appears more than once — please merge the entries.',
   "server.session_running": "An older session is still running — end it first.",
@@ -340,6 +347,8 @@ export const en: Messages = {
   "pool.empty":
     "No chapters yet. A chapter is the bracket around scenes — the first scene goes inside one.",
   "pool.chapterCount": "{count, plural, one {# chapter} other {# chapters}}",
+  // The chapter's leftovers section: the scenes that name no location (#100).
+  "pool.group.noLocation": "No location",
   "pool.sceneCount": "{count, plural, =0 {no scenes} one {# scene} other {# scenes}}",
   "pool.chapter.goal": "Goal: {goal}",
   "pool.chapter.empty": "No scenes in this chapter yet.",

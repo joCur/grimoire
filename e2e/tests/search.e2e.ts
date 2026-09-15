@@ -48,7 +48,9 @@ test("⌘K finds \"leucht\" and Enter opens the hit", async ({ page }) => {
   await expect(scene).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Enter");
 
-  await expect(page).toHaveURL(/\/beispiel\/file\/01-salzhafen\/hafen\/lighthouse-arrival$/);
+  await expect(page).toHaveURL(
+    /\/beispiel\/file\/01-salzhafen\/leuchtturm\/lighthouse-arrival$/,
+  );
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   // The palette closed on pick.
   await expect(page.getByRole("combobox")).toHaveCount(0);
@@ -61,7 +63,7 @@ test("content the APP just wrote is findable right away (issue #57 AK5)", async 
   // A word that appears nowhere in examples/beispiel, so a hit can only come
   // from the paragraph typed below.
   const WORD = "Zwirbelmuschel";
-  const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+  const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
   // Not findable before — proven through the search endpoint itself.
   const before = await api.get<{ results: unknown[] }>(

@@ -260,20 +260,34 @@ api.get("/:campaign/knowledge", async (c) =>
 
 // --- write endpoints (issue #5) ---------------------------------------------------
 
-// PATCH /api/:campaign/properties { path, rev, patch } -> FileResponse
+// PATCH /api/:campaign/properties { path, rev, patch, locationName? } ->
+// FileResponse
 // patch is a flat object of properties keys to set; null deletes a key.
 // 409 { error, rev } when the file changed on disk since it was read.
+//
+// `locationName` is the one value that is NOT a properties key: the display
+// name for the Ort a scene's `location` CREATES (issue #100 follow-up). The
+// properties form takes free text in the Ort field, slugs it into `location`
+// and sends the typed text here, so the new entry is called what the DM
+// typed. It is applied only when the row is inserted — an existing location
+// is never renamed through a scene.
 api.patch("/:campaign/properties", async (c) => {
-  const body = await jsonBody(c, ["path", "rev", "patch"]);
+  const body = await jsonBody(c, ["path", "rev", "patch", "locationName"]);
   const rel = body.path;
   const rev = body.rev;
   const patch = body.patch;
+  const locationName = body.locationName;
   if (typeof rel !== "string") throw new ApiError(400, "path must be a string");
   if (typeof rev !== "number" || !Number.isFinite(rev)) {
     throw new ApiError(400, "rev must be a number");
   }
   if (!isPlainObject(patch)) throw new ApiError(400, "patch must be an object");
-  return c.json(await patchProperties(c.req.param("campaign"), rel, rev, patch));
+  if (locationName !== undefined && typeof locationName !== "string") {
+    throw new ApiError(400, "locationName must be a string");
+  }
+  return c.json(
+    await patchProperties(c.req.param("campaign"), rel, rev, patch, { locationName }),
+  );
 });
 
 // PUT /api/:campaign/file { path, rev, body } -> FileResponse

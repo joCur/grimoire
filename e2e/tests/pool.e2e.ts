@@ -67,16 +67,25 @@ async function widenGlyphs(page: Page, spacing: string) {
  */
 const TOPBAR_WIDTHS = [640, 768, 900, 1000, 1024, 1040, 1100, 1280, 1300, 1536];
 
-/** A location file for the `hafen` group directory of the fixture campaign. */
-const HAFEN_LOCATION = `---
-id: hafen
-name: Hafenviertel von Salzhafen
+/**
+ * A scene that names NO location — it belongs under the pool's neutral
+ * „Ohne Ort" section (issue #100). The example campaign has none, so the
+ * test that needs one seeds it.
+ */
+const SCENE_WITHOUT_LOCATION = `---
+id: ohne-ort-szene
+title: Irgendwo unterwegs
+type: planned
 chapter: 01-salzhafen
+npcs: []
+handouts: []
+tags: [travel]
+status: draft
 ---
 
-## Beim ersten Betreten
+## Flow
 
-Möwen, Salz und Teer; an der Kaimauer liegen drei Kutter.
+Die Gruppe ist auf der Straße, der Ort steht noch nicht fest.
 `;
 
 /** Today's session, started at 19:30 and never ended. */
@@ -112,6 +121,11 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
     name: /Kapitel 1: Der Leuchtturm von Salzhafen/,
   });
   await expect(chapter).toBeVisible();
+  // The chapter is a HEADING inside that trigger (issue #100 review): the
+  // outline used to jump from the pool's h1 straight to the group h3s.
+  await expect(
+    chapter.getByRole("heading", { level: 2, name: "Kapitel 1: Der Leuchtturm von Salzhafen" }),
+  ).toBeVisible();
   await expect(chapter).toContainText("Aktiv");
   await expect(chapter).toContainText("2 Szenen");
   // Open by default (status: active) — the goal comes from _chapter.
@@ -122,9 +136,13 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
   ).toBeVisible();
 
   // Planned scene in its location group, with the status control's label.
-  // The fixture has NO `locations/hafen` — group directories are a loose
-  // convention, so the header shows the raw slug (issue #34, fallback).
-  await expect(page.getByText("hafen", { exact: true })).toBeVisible();
+  // The group IS the scene's `location` since issue #100, so the header is
+  // the location's NAME — `hafen`, the group DIRECTORY of the import format,
+  // is not a grouping and appears nowhere.
+  await expect(
+    page.getByRole("heading", { level: 3, name: "Der Leuchtturm von Salzhafen" }),
+  ).toBeVisible();
+  await expect(page.getByText("hafen", { exact: true })).toHaveCount(0);
   const planned = page.getByRole("link", { name: /Ankunft am Leuchtturm/ });
   await expect(planned).toBeVisible();
   await expect(planned).toContainText(
@@ -134,8 +152,9 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
     page.getByRole("button", { name: "Status ändern, aktuell Bereit" }).first(),
   ).toBeVisible();
 
-  // Contingencies live in their own group.
-  await expect(page.getByText("Eventualszenen")).toBeVisible();
+  // Contingencies live in their own group — a section of the chapter, so the
+  // same heading level as a location group.
+  await expect(page.getByRole("heading", { level: 3, name: "Eventualszenen" })).toBeVisible();
   const contingency = page.getByRole("link", {
     name: /Von den Schmugglern erwischt/,
   });
@@ -147,25 +166,30 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
   // Opening a row is the pool's job — the reading view takes over from here.
   await planned.click();
   await expect(page).toHaveURL(
-    /\/beispiel\/file\/01-salzhafen\/hafen\/lighthouse-arrival$/,
+    /\/beispiel\/file\/01-salzhafen\/leuchtturm\/lighthouse-arrival$/,
   );
 });
 
-test.describe("with a location for the group directory", () => {
-  test.use({ seed: { files: { "locations/hafen": HAFEN_LOCATION } } });
+test.describe("a scene without a location", () => {
+  test.use({
+    seed: { files: { "01-salzhafen/ohne-ort": SCENE_WITHOUT_LOCATION } },
+  });
 
-  test("a group header shows the location NAME once the location file exists", async ({
-    page,
-  }) => {
-    // Same group directory as above, but now with a location file behind it —
-    // this is the pair the display-name rule of issue #34 is about (seeded into
-    // the tree this test's database is imported from).
+  test('scenes that name no location get the neutral „Ohne Ort" section', async ({ page }) => {
     await page.goto("/beispiel");
-    await expect(
-      page.getByText("Hafenviertel von Salzhafen", { exact: true }),
-    ).toBeVisible();
-    // The slug itself is no longer on screen anywhere.
-    await expect(page.getByText("hafen", { exact: true })).toHaveCount(0);
+    // A section, not a location with a blank name — and it comes LAST, after
+    // every real location of the chapter. („Eventualszenen" is a section of
+    // the chapter too and follows the location groups.)
+    const headings = page.getByRole("heading", { level: 3 });
+    await expect(headings).toHaveText([
+      "Der Leuchtturm von Salzhafen",
+      "Ohne Ort",
+      "Eventualszenen",
+    ]);
+    const scene = page.getByRole("link", { name: /Irgendwo unterwegs/ });
+    await expect(scene).toBeVisible();
+    // …and the scene sits at chapter level, address included.
+    await expect(scene).toHaveAttribute("href", "/beispiel/file/01-salzhafen/ohne-ort-szene");
   });
 });
 
@@ -255,7 +279,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   // --- file views: same chrome, section marking follows the entity ----------
   // A scene belongs to Kapitel; its hierarchy lives in the page's context
   // line, not in the topbar.
-  await page.goto("/beispiel/file/01-salzhafen/hafen/lighthouse-arrival");
+  await page.goto("/beispiel/file/01-salzhafen/leuchtturm/lighthouse-arrival");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Ankunft am Leuchtturm",
   );

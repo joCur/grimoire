@@ -59,6 +59,7 @@ import {
   locationPath,
   locatorFromPath,
   npcPath,
+  sceneAddress,
   scenePath,
   sessionPath,
   type Locator,
@@ -182,7 +183,7 @@ function sceneSummaryRow(db: GrimoireDb, row: SceneRow): SceneSummary {
     .all()
     .map((r) => r.tag);
   const summary: SceneSummary = {
-    path: scenePath(row.chapterId ?? "", row.groupSlug, row.id),
+    path: sceneAddress(row),
     id: row.id,
     title: row.title === "" ? row.id : row.title,
     type: row.type === "" ? "planned" : row.type,
@@ -213,17 +214,40 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
     .orderBy(asc(scenes.pos), asc(scenes.id))
     .all() as SceneRow[];
 
+  // Location id -> display name, for the scene GROUPS below: the heading is
+  // the name, so the groups have to be ordered by it (issue #100 review).
+  const locationRows = db
+    .select()
+    .from(locations)
+    .where(eq(locations.campaignId, campaign))
+    .all() as LocationRow[];
+  const locationNames = new Map(
+    locationRows.map((row) => [row.id, row.name === "" ? row.id : row.name] as const),
+  );
+
   const chapterNodes: ChapterNode[] = chapterRows.map((chapter) => {
     const own = sceneRows.filter((s) => (s.chapterId ?? "") === chapter.id);
+    // The group IS the scene's location (issue #100) — "" means the scene
+    // names none and renders under the app's neutral "Ohne Ort" section.
     const bySlug = new Map<string, SceneSummary[]>();
     for (const scene of own) {
-      const list = bySlug.get(scene.groupSlug) ?? [];
+      const group = scene.location ?? "";
+      const list = bySlug.get(group) ?? [];
       list.push(sceneSummaryRow(db, scene));
-      bySlug.set(scene.groupSlug, list);
+      bySlug.set(group, list);
     }
     const groups: SceneGroup[] = [...bySlug.entries()]
-      .map(([slug, list]) => ({ slug, scenes: list.sort((a, b) => cmp(a.path, b.path)) }))
-      .sort((a, b) => cmp(a.slug, b.slug));
+      .map(([slug, list]) => ({
+        slug,
+        // An entry always exists (referencing one creates it, #70), and an
+        // unnamed one degrades to its id — still the word the DM typed.
+        name: slug === "" ? "" : (locationNames.get(slug) ?? slug),
+        scenes: list.sort((a, b) => cmp(a.path, b.path)),
+      }))
+      // By the NAME the heading shows, not by the id behind it. "" — the
+      // scenes that name no location — goes LAST: it is the leftovers section
+      // the app labels „Ohne Ort", not the first location.
+      .sort((a, b) => (a.slug === "" ? 1 : b.slug === "" ? -1 : cmp(a.name, b.name)));
     const node: ChapterNode = {
       id: chapter.id,
       title: chapter.title === "" ? chapter.id : chapter.title,
@@ -253,9 +277,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
     })
     .sort((a, b) => cmp(a.name, b.name));
 
-  const locationList: LocationSummary[] = (
-    db.select().from(locations).where(eq(locations.campaignId, campaign)).all() as LocationRow[]
-  )
+  const locationList: LocationSummary[] = locationRows
     .map((row) => {
       const summary: LocationSummary = {
         path: locationPath(row.id),
@@ -555,9 +577,13 @@ export function readByLocator(
         .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, locator.id)))
         .all()[0] as SceneRow | undefined;
       if (row === undefined) throw new ApiError(404, "file not found");
-      if ((row.chapterId ?? "") !== locator.chapterId || row.groupSlug !== locator.groupSlug) {
-        throw new ApiError(404, "file not found");
-      }
+      // A scene is resolved by its ID alone (issue #100). The chapter and
+      // group segments used to have to match, which was right while a group
+      // was an independent value — but the group is `location` now and moves
+      // whenever the DM corrects it, so an old link is a STALE ADDRESS for a
+      // scene that still exists, not a wrong one. The answer carries the
+      // CURRENT address in `path` (renderScene builds it from the row) and
+      // the app replaces the URL with it. See ADR #17.
       const summary = sceneSummaryRow(db, row);
       return renderScene(row, summary.npcs, summary.tags);
     }

@@ -460,7 +460,7 @@ test.describe("played/dropped scenes in the live nav (issue #73)", () => {
   // Stored paths come from the scene ID, not from the markdown file name (the
   // import derives them) — so the seed key and the API path differ.
   const SEED_FILE = "01-salzhafen/hafen/zweites-gespraech";
-  const ARRIVAL = "01-salzhafen/hafen/lighthouse-arrival";
+  const ARRIVAL = "01-salzhafen/leuchtturm/lighthouse-arrival";
   // The seeded scene sorts BEFORE the example's own one in the nav
   // ("harbor-office-talk" < "lighthouse-arrival"), which is exactly what AK3
   // needs: the scene that gets played is the FIRST row, so a default selection
@@ -504,10 +504,14 @@ test.describe("played/dropped scenes in the live nav (issue #73)", () => {
     const seededRow = nav.getByRole("button", { name: /Gespräch im Hafenkontor/ });
     const heading = page.getByRole("article").getByRole("heading", { level: 1 });
 
-    // Before: both are planned, the FIRST row is the default selection …
+    // Before: both are planned, the FIRST row is the default selection. That
+    // is „Ankunft am Leuchtturm": the nav walks the chapter's groups, and
+    // they are ordered by the NAME their heading shows (issue #100 review) —
+    // „Der Leuchtturm von Salzhafen" before the unnamed `hafen`.
     await expect(arrivalRow).toBeVisible();
     await expect(seededRow).toBeVisible();
-    await expect(heading).toHaveText("Gespräch im Hafenkontor");
+    await expect(heading).toHaveText("Ankunft am Leuchtturm");
+    await expect(arrivalRow).toHaveAttribute("aria-current", "true");
     // … and there is no "Gespielt" group at all yet.
     await expect(nav.getByRole("button", { name: /^Gespielt/ })).toHaveCount(0);
 
@@ -570,7 +574,9 @@ test.describe("played/dropped scenes in the live nav (issue #73)", () => {
     await page.reload();
     await expect(nav).toContainText("Keine geplanten Szenen in diesem Kapitel.");
     await expect(nav.getByRole("button", { name: /^Gespielt/ })).toContainText("(2)");
-    await expect(heading).toHaveText("Gespräch im Hafenkontor");
+    // The fallback is the FIRST done scene, i.e. the chapter's scene order
+    // again (groups by name, issue #100 review).
+    await expect(heading).toHaveText("Ankunft am Leuchtturm");
     await expect(page.getByLabel("Schnellnotiz")).toBeVisible();
   });
 });

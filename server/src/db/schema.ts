@@ -148,18 +148,22 @@ export const scenes = sqliteTable(
      * stays.
      */
     chapterDeclared: integer("chapter_declared").notNull().default(1),
-    /**
-     * The location-slug subfolder the scene sat in ("" for scenes directly in
-     * the chapter directory). Purely a DISPLAY grouping — the tree renders
-     * `SceneGroup`s from it. It is not a reference to `locations`.
-     */
-    groupSlug: text("group_slug").notNull().default(""),
     title: text("title").notNull().default(""),
     /** "planned" | "contingency" | anything else a file carried. */
     type: text("type").notNull().default("planned"),
     /** Free-text firing condition — only meaningful for contingency scenes. */
     trigger: text("trigger"),
-    /** A location id OR a free string (README) — soft reference, rule 3. */
+    /**
+     * The scene's location — a location ID or null, never free text
+     * (issue #100). Soft reference (rule 3) in the database sense: the write
+     * layer CREATES the row when the id has none (`ensureLocationRow`), so a
+     * dangling value is impossible from the API side, but the column carries
+     * no foreign key so the importer stays order-independent.
+     *
+     * It is also the scene's GROUP: the address `<chapter>/<location>/<id>`
+     * and the tree's `SceneGroup`s are derived from this column, which is why
+     * the old independent `group_slug` is gone (migration 0009, ADR #17).
+     */
     location: text("location"),
     /** "draft" | "ready" | "played" | "dropped" | anything else. */
     status: text("status").notNull().default("draft"),

@@ -77,7 +77,7 @@ async function version(): Promise<number> {
 }
 
 const NPC = "npcs/fenn";
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const GLOSSARY = "glossary";
 
 beforeEach(async () => {
@@ -231,7 +231,9 @@ describe("PATCH /properties — a scene's `chapter`", () => {
     // alone drop it out of the tree.
     expect(after.path).toBe(SCENE);
     const chapter = (await tree()).chapters[0]!;
-    expect(chapter.groups[0]!.scenes.map((s) => s.id)).toContain("lighthouse-arrival");
+    expect(chapter.groups.flatMap((g) => g.scenes.map((s) => s.id))).toContain(
+      "lighthouse-arrival",
+    );
     expect((await getFile(SCENE)).properties.chapter).toBeUndefined();
   });
 
@@ -265,7 +267,8 @@ describe("PATCH /properties — a scene's `chapter`", () => {
         patch: { chapter: "02-nordbucht" },
       });
       expect(after.properties.chapter).toBe("02-nordbucht");
-      expect(after.path).toBe("02-nordbucht/hafen/lighthouse-arrival");
+      // the CHAPTER changed; the group is the scene's location and stays
+      expect(after.path).toBe("02-nordbucht/leuchtturm/lighthouse-arrival");
       const chapters = (await tree()).chapters;
       const moved = chapters.find((c) => c.id === "02-nordbucht");
       expect(moved?.groups[0]?.scenes.map((s) => s.id)).toEqual(["lighthouse-arrival"]);
@@ -283,7 +286,7 @@ describe("applyDrafts — the conflict check is IN the insert transaction", () =
     properties: Record<string, unknown>;
     body: string;
   } {
-    const rel = `01-salzhafen/hafen/${id}`;
+    const rel = `01-salzhafen/${id}`;
     return {
       rel,
       address: rel,
@@ -305,7 +308,8 @@ describe("applyDrafts — the conflict check is IN the insert transaction", () =
     expect(thrown).toBeInstanceOf(ApiError);
     const api = thrown as ApiError;
     expect(api.status).toBe(409);
-    expect(api.extra?.conflicts).toEqual(["01-salzhafen/hafen/lighthouse-arrival"]);
+    // reported under the path the CALLER sent (`<chapter>/<id>`)
+    expect(api.extra?.conflicts).toEqual(["01-salzhafen/lighthouse-arrival"]);
   });
 
   test("all or nothing: a conflict late in the batch writes none of it", async () => {

@@ -36,13 +36,20 @@
 > | `glossary` | das Glossar |
 > | `<kapitel>/_chapter` | ein Kapitel |
 > | `<kapitel>/<szenen-id>` | eine Szene |
-> | `<kapitel>/<gruppe>/<szenen-id>` | eine Szene in einer Ort-Gruppe |
+> | `<kapitel>/<orts-id>/<szenen-id>` | eine Szene, die diesen Ort nennt |
 > | `npcs/<id>` | ein NPC |
 > | `locations/<id>` | ein Ort |
 > | `sessions/<id>` | eine Session |
 >
 > Die Dateinamen unten sind also die des **Import-Formats**; die Adresse einer
 > Szene ist ihre `id`, nicht ihr früherer Dateiname.
+>
+> **Die Gruppe einer Szene IST ihr `location` (Issue #100).** Es gibt kein
+> eigenes Gruppenfeld mehr: Adresse und Kapitelübersicht werden aus
+> `location` abgeleitet, eine Szene ohne `location` liegt auf Kapitelebene
+> (die App zeigt sie unter „Ohne Ort"). Ändert der DM `location`, zieht die
+> Szene um — die alte Adresse zeigt weiter auf dieselbe Szene, der Server
+> antwortet mit der neuen und die App ersetzt die URL.
 >
 > **Kein Dokument, sondern eine Liste:** das **Kampagnenwissen** (Issue #53 —
 > Namenskonventionen, Fakten, Stilregeln für den Generator) hat keine Adresse
@@ -67,7 +74,8 @@ campaigns/                 # ECHTE Kampagnendaten — in .gitignore, bleiben lok
     _campaign.md            # optional: Anzeigename, Beschreibung
     <chapter>/              # z. B. 01-salzhafen
       _chapter.md           # Kapitelnotizen, offene Fäden
-      <location-slug>/      # grobe Orts-Gruppierung (max. 2 Ebenen!)
+      <orts-id>/            # Ort-Gruppierung; der Import setzt daraus
+                            # `location`, wenn die Szene keines nennt
         <scene>.md
     npcs/<id>.md
     locations/<id>.md
@@ -104,7 +112,7 @@ title: Ankunft am Leuchtturm  # Anzeigename, frei änderbar
 type: planned | contingency
 trigger: <Freitext>         # nur bei contingency: wann feuert sie?
 chapter: 01-salzhafen
-location: leuchtturm        # id aus locations/ ODER freier String
+location: leuchtturm        # id aus locations/ — zugleich die Gruppe der Szene
 npcs: [jorna, fenn]         # ids aus npcs/
 handouts: ["Karte von Salzhafen"]  # Name des Roll20-Handouts, nur Verweis
 tags: [social, travel]      # frei; empfohlen: combat, social, stealth, travel
@@ -216,13 +224,12 @@ Szenentext oder `#npc`-Lognotiz.
 > `## Beziehungen` eine unbekannte id ein, entsteht im selben Schreibvorgang
 > ein LEERER Eintrag (id, Name = id, Status Default). Ein referenzierter
 > Eintrag ist damit nie „fehlt", höchstens leer — leere Einträge rendern als
-> normale, dünne Karten und sind normal befüllbar. Ausnahme und Grenze:
-> `location:` darf auch freier Text sein; ein Wert, der KEIN Kebab-Slug ist
-> (Leerzeichen, Großschreibung), bleibt reiner Text und bekommt keinen
-> Eintrag. `npcs:` hat diese Freitext-Hälfte NICHT — dort steht eine id,
-> ein neuer Eintrag ohne Slug-Form wird mit 400 abgelehnt (Bestand, den die
-> Migration mitgebracht hat, bleibt lesbar und speicherbar). `chapter:` legt
-> nichts an: ein unbekanntes Kapitel ist 400, bei Szene, NPC und Ort gleich.
+> normale, dünne Karten und sind normal befüllbar. Das gilt für `npcs:` und
+> für `location:` gleichermaßen: dort steht eine id, ein Wert ohne Slug-Form
+> wird mit 400 abgelehnt (Issue #100 — die frühere Freitext-Ausnahme für
+> `location:` ist weg, weil die id zugleich die Gruppe der Szene ist; der
+> Bestand wurde einmalig in echte Orte überführt). `chapter:` legt nichts an:
+> ein unbekanntes Kapitel ist 400, bei Szene, NPC und Ort gleich.
 
 ## Entität: Ort
 

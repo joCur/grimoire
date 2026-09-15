@@ -61,7 +61,7 @@ describe("usage per reference kind", () => {
           kind: "scene",
           id: "lighthouse-arrival",
           title: "Ankunft am Leuchtturm",
-          path: "01-salzhafen/hafen/lighthouse-arrival",
+          path: "01-salzhafen/leuchtturm/lighthouse-arrival",
           count: 1,
         },
       ],
@@ -91,7 +91,7 @@ describe("usage per reference kind", () => {
           kind: "scene",
           id: "lighthouse-arrival",
           title: "Ankunft am Leuchtturm",
-          path: "01-salzhafen/hafen/lighthouse-arrival",
+          path: "01-salzhafen/leuchtturm/lighthouse-arrival",
           count: 1,
         },
       ],
@@ -167,16 +167,19 @@ describe("usage per reference kind", () => {
     const report = await usage("scene", "smuggler-captured");
     expect(report.groups).toEqual([]);
     expect(report.total).toBe(0);
-    expect(report.path).toBe("01-salzhafen/hafen/smuggler-captured");
+    expect(report.path).toBe("01-salzhafen/bucht/smuggler-captured");
   });
 
-  test("a free-string location is not an entity — 404, not an empty report", async () => {
-    // `location: bucht` is legal (README: an id OR free text) but has no
-    // locations/bucht, so there is nothing to report ON. The scenes that
-    // carry it stay countable through their chapter.
-    expect((await usageRes("kind=location&id=bucht")).status).toBe(404);
-    const report = await usage("chapter", "01-salzhafen");
-    expect(group(report, "chapterScenes")?.count).toBe(2);
+  test("a location the import had to create reports like any other (#100)", async () => {
+    // `location: bucht` had no `locations/bucht.md` in the example tree. It
+    // is not free text any more (#100): the import created the entry,
+    // because the value is the scene's GROUP and a group has to be nameable.
+    expect((await usageRes("kind=location&id=bucht")).status).toBe(200);
+    const report = await usage("location", "bucht");
+    expect(report.path).toBe("locations/bucht");
+    expect(group(report, "sceneLocation")?.count).toBe(1);
+    const chapter = await usage("chapter", "01-salzhafen");
+    expect(group(chapter, "chapterScenes")?.count).toBe(2);
   });
 });
 

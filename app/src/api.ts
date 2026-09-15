@@ -186,10 +186,21 @@ export function putKnowledge(
  * the one from the FileResponse the UI is showing — when the file changed on
  * disk since, the server answers 409 with the current `rev` in
  * `ApiError.details` and writes nothing.
+ *
+ * `locationName` is the only field that is not a properties key: the display
+ * name for the Ort a scene's `location` creates (issue #100 follow-up — the
+ * properties form slugs free text into `location` and sends the typed text
+ * here). The server applies it when it INSERTS the row and ignores it
+ * otherwise, so an existing location is never renamed through a scene.
  */
 export async function patchProperties(
   campaign: string,
-  input: { path: string; rev: number; patch: Record<string, unknown> },
+  input: {
+    path: string;
+    rev: number;
+    patch: Record<string, unknown>;
+    locationName?: string;
+  },
 ): Promise<FileResponse> {
   const path = `/${encodeURIComponent(campaign)}/properties`;
   const response = await fetch(`/api${path}`, {

@@ -42,7 +42,7 @@ import {
 import { expect, test, type Api } from "../support/test";
 
 /** The prepared scene of the example campaign — the augment target of (b). */
-const SCENE = "01-salzhafen/hafen/smuggler-captured";
+const SCENE = "01-salzhafen/bucht/smuggler-captured";
 const SCENE_URL = `/beispiel/file/${SCENE}`;
 
 /** The empty npc: created by REFERENCING it from that scene (issue #70). */

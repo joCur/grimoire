@@ -213,7 +213,7 @@ test("a composite primary key cascades on update", async () => {
   try {
     db.insert(campaigns).values({ id: "beispiel", name: "Beispiel" }).run();
     db.run(
-      sql`insert into scenes (campaign_id, id, chapter_id, group_slug, title, pos) values ('beispiel', 'alt', '01', 'hafen', 'Szene', 0)`,
+      sql`insert into scenes (campaign_id, id, chapter_id, location, title, pos) values ('beispiel', 'alt', '01', 'hafen', 'Szene', 0)`,
     );
     db.run(
       sql`insert into scene_tags (campaign_id, scene_id, tag, pos) values ('beispiel', 'alt', 'social', 0)`,

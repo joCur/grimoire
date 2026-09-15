@@ -11,14 +11,22 @@
 //   inbox                            the campaign's inbox list
 //   glossary                         the campaign's glossary list
 //   <chapter>/_chapter               a chapter row
-//   <chapter>/<scene-id>             a scene with group_slug ""
-//   <chapter>/<group>/<scene-id>     a scene inside a location group
+//   <chapter>/<scene-id>             a scene without a `location`
+//   <chapter>/<location>/<scene-id>  a scene whose `location` names that location
 //   npcs/<id>                        an npc row
 //   locations/<id>                   a location row
 //   sessions/<id>                    a session row
 //
 // Two things to know about the segments:
 //
+//   * a SCENE's GROUP segment is its `location` and nothing else (issue #100).
+//     There is no independent grouping any more: the group is derived, so a
+//     scene can never sit in a group that contradicts the location it names.
+//     The consequence is that a scene's address MOVES when its `location`
+//     does, and an address that names the right scene with a stale group is
+//     therefore not an error — the store resolves a scene by ID and answers
+//     with the CURRENT address in `ParsedFile.path`, which the app follows
+//     (redirect strategy, ADR #17).
 //   * a SCENE's last segment is its ID, not a former file name. The id is the
 //     key the format calls stable ("id … NIE ändern"); the file name never
 //     was, and `scenes.file_slug` was dropped with the cutover.
@@ -74,6 +82,19 @@ export function scenePath(chapterId: string, groupSlug: string, id: string): str
   return groupSlug === "" ? `${chapterId}/${id}` : `${chapterId}/${groupSlug}/${id}`;
 }
 
+/**
+ * The address of a scene ROW — the one place that knows the group segment is
+ * the scene's `location` (issue #100). Structural on purpose: paths.ts must
+ * not depend on the schema.
+ */
+export function sceneAddress(row: {
+  chapterId: string | null;
+  location: string | null;
+  id: string;
+}): string {
+  return scenePath(row.chapterId ?? "", row.location ?? "", row.id);
+}
+
 export function npcPath(id: string): string {
   return `npcs/${id}`;
 }
@@ -84,6 +105,25 @@ export function locationPath(id: string): string {
 
 export function sessionPath(id: string): string {
   return `sessions/${id}`;
+}
+
+/**
+ * The ROW one address names, as a comparable key: `<kind>/<id>`.
+ *
+ * Two addresses that differ can still name the same row — a scene's group
+ * segment is its `location` (issue #100), so `01-x/hafen/ankunft` and
+ * `01-x/bucht/ankunft` are the same scene under two different locations. The
+ * primary key is `(campaign, id)`, so anything asking "is this the same
+ * target?" has to ask by identity and not by address; an address the schema
+ * does not describe is its own key (it names nothing and cannot collide).
+ */
+export function addressIdentity(rel: string): string {
+  try {
+    const locator = locatorFromPath(rel);
+    return "id" in locator ? `${locator.kind}/${locator.id}` : locator.kind;
+  } catch {
+    return rel;
+  }
 }
 
 /**

@@ -15,6 +15,16 @@ import { writePropertiesForm } from "@/lib/properties-form";
 import { useRevWriteMutation, type RevWriteMutation } from "@/lib/use-rev-write";
 import { withRev } from "@/lib/write-with-rev";
 
+/**
+ * What one save carries: the diff, plus the display name for the Ort the
+ * scene's `location` may CREATE (issue #100 follow-up — the Ort field takes
+ * free text, `propertiesPatch` stores the slug and this carries the name).
+ */
+export interface PropertiesWrite {
+  patch: Record<string, unknown>;
+  locationName?: string;
+}
+
 export function usePropertiesFormMutation(
   campaign: string,
   path: string,
@@ -25,10 +35,10 @@ export function usePropertiesFormMutation(
     /** The re-read file after a conflict; the dialog moves its base to it. */
     onConflict: (file: FileResponse | undefined) => void;
   },
-): RevWriteMutation<Record<string, unknown>> {
-  return useRevWriteMutation<Record<string, unknown>>({
-    write: withRev(rev, (patch, rev) =>
-      writePropertiesForm(campaign, path, rev, patch),
+): RevWriteMutation<PropertiesWrite> {
+  return useRevWriteMutation<PropertiesWrite>({
+    write: withRev(rev, (write, rev) =>
+      writePropertiesForm(campaign, path, rev, write.patch, write.locationName),
     ),
     fileKey: ["file", campaign, path],
     invalidateOnSuccess: [

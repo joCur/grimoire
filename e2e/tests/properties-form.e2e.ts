@@ -37,7 +37,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import { expect, test, type Api } from "../support/test";
 
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const SCENE_URL = `/beispiel/file/${SCENE}`;
 const NPC = "npcs/jorna";
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
@@ -85,6 +85,9 @@ test("scene properties: chips, reference and status land in the file — nothing
   // the only way to put it there now — nobody hand-edits a row.)
   await api.patchProperties(SCENE, { "x-custom": "bleibt" });
 
+  // Entered from the pool, so there is a history entry BEHIND the scene —
+  // the „zurück" assertion after the move below needs one.
+  await page.goto("/beispiel");
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
 
@@ -117,8 +120,9 @@ test("scene properties: chips, reference and status land in the file — nothing
   // option, so this is the one place the spec uses the DOM id the field
   // builds for its list.)
   const suggestions = dialog.locator("#fm-location-options option");
-  await expect(suggestions).toHaveCount(1);
-  await expect(suggestions).toHaveAttribute("value", "leuchtturm");
+  // Two since issue #100: `bucht` is a scene's location, so it is an entry.
+  await expect(suggestions).toHaveCount(2);
+  await expect(suggestions.first()).toHaveAttribute("value", "leuchtturm");
   // A reference CHIP names its entity next to the raw id.
   const npcChip = dialog.getByRole("listitem").filter({ hasText: "jorna" });
   await expect(npcChip).toContainText("Hafenmeisterin Jorna");
@@ -140,7 +144,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   // An unknown id stays typeable, and the hint says what saving will do:
   // since issue #70 the write CREATES the entry, so a typo is visible as a
   // new entry called that instead of a silent nothing.
-  await location.fill("bucht");
+  await location.fill("nordbucht");
   await expect(referenceHint(dialog, "Neu — wird beim Speichern angelegt.")).toBeVisible();
   await expect(referenceHint(dialog, "Der Leuchtturm von Salzhafen")).toHaveCount(0);
 
@@ -162,16 +166,42 @@ test("scene properties: chips, reference and status land in the file — nothing
   const article = page.getByRole("article");
   await expect(article).toContainText("#stealth");
   await expect(article).toContainText("#nachtszene");
-  await expect(article.getByText("bucht", { exact: true })).toBeVisible();
+  await expect(article.getByText("nordbucht", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Entwurf" })).toBeVisible();
+  // The location IS the group since issue #100, so the scene MOVED — and the
+  // URL follows it (replace, so „zurück" does not return to the old address).
+  await expect(page).toHaveURL(
+    /\/beispiel\/file\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
+  );
+  // „Zurück" must not return to the address the scene just left: the redirect
+  // REPLACES the history entry, so the step back is the page the DM came from
+  // (the pool), never `…/leuchtturm/lighthouse-arrival` — which would reload,
+  // redirect forward again and trap the button.
+  await page.goBack();
+  await expect(page).toHaveURL(/\/beispiel$/);
+  await page.goForward();
+  await expect(page).toHaveURL(
+    /\/beispiel\/file\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
+  );
+
+  // The chapter overview re-sorts: a „nordbucht" section, no „leuchtturm" one.
+  await page.goto("/beispiel");
+  await expect(page.getByRole("heading", { level: 3, name: "nordbucht" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 3, name: "Der Leuchtturm von Salzhafen" }),
+  ).toHaveCount(0);
+  // The old address still names the scene and reports the new one.
+  expect((await api.file(SCENE)).path).toBe("01-salzhafen/nordbucht/lighthouse-arrival");
+  // `[[…]]` references resolve over ids, so the session log is untouched.
+  expect(await api.raw("sessions/2026-01-15")).toContain("lighthouse-arrival");
 
   // On disk: the three changed keys …
   await expect.poll(() => api.raw(SCENE)).toContain("status: draft");
   const after = await split(api, SCENE);
   expect(after.properties).toContain("tags: [social, travel, stealth, nachtszene]");
-  expect(after.properties).toContain("location: bucht");
+  expect(after.properties).toContain("location: nordbucht");
   // …and the referenced Ort now has its own (empty) entry — issue #70.
-  expect(await api.exists("locations/bucht")).toBe(true);
+  expect(await api.exists("locations/nordbucht")).toBe(true);
   expect(after.properties).toContain("status: draft");
   // … the untouched ones with their values, the unknown one byte-identically …
   expect(after.properties).toContain("x-custom: bleibt");
@@ -183,6 +213,74 @@ test("scene properties: chips, reference and status land in the file — nothing
   expect(after.properties).toContain("Karte von Salzhafen");
   // … and the body untouched, byte for byte.
   expect(after.body).toBe(pristine.body);
+});
+
+test('free text in the Ort field creates the Ort under the typed NAME (#100)', async ({
+  page,
+  api,
+}) => {
+  // The group a scene sits under IS its `location`, and the column holds an
+  // id — but that is the app's problem, not the DM's. The form used to refuse
+  // free text („Keine Orts-id — „der-alte-hafen" verwenden.") and disable
+  // Speichern; it now slugs what was typed and sends the text as the new
+  // entry's NAME, in the same write.
+  await page.goto(SCENE_URL);
+  const dialog = await openProperties(page);
+  const ort = dialog.getByLabel("Ort");
+  const save = dialog.getByRole("button", { name: "Speichern" });
+
+  // Typing the NAME of an existing Ort resolves to that Ort — the save would
+  // land on the entry that is already there, so nothing is promised.
+  await ort.fill("Leuchtturm");
+  await expect(referenceHint(dialog, "Der Leuchtturm von Salzhafen")).toBeVisible();
+
+  // Text no slug can be derived from is the one thing that still blocks.
+  await ort.fill("???");
+  await expect(dialog.getByText('„???" ergibt keine Orts-id')).toBeVisible();
+  await expect(save).toBeDisabled();
+
+  // And a new name says what saving will do with it.
+  await ort.fill("Der alte Hafen");
+  await expect(
+    referenceHint(dialog, 'Neu — wird als Ort „Der alte Hafen" angelegt.'),
+  ).toBeVisible();
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  // The scene moved into the new group, and the slug is what the file holds.
+  await expect(page).toHaveURL(
+    /\/beispiel\/file\/01-salzhafen\/der-alte-hafen\/lighthouse-arrival$/,
+  );
+  await expect.poll(() => api.raw(SCENE)).toContain("location: der-alte-hafen");
+
+  // The Ort exists and is called what the DM typed — not by its own id.
+  expect(await api.exists("locations/der-alte-hafen")).toBe(true);
+  expect((await api.file("locations/der-alte-hafen")).properties.name).toBe("Der alte Hafen");
+
+  // …and the chapter overview heads the group with that name.
+  await page.goto("/beispiel");
+  await expect(page.getByRole("heading", { level: 3, name: "Der alte Hafen" })).toBeVisible();
+});
+
+test('a rejected save shows the SERVER sentence, not the generic one (#100)', async ({
+  page,
+}) => {
+  // The shared write layer answered every non-conflict rejection with its
+  // caller's generic wording, so a 400 that names exactly what is wrong —
+  // `location_not_an_id` with its suggestion, or this unknown chapter — was
+  // invisible to the DM. An unknown CHAPTER is the reachable case: it is the
+  // one reference the app deliberately does not block (ADR #14), because
+  // only the server knows which chapters exist.
+  await page.goto(SCENE_URL);
+  const dialog = await openProperties(page);
+  await dialog.getByLabel("Kapitel").fill("99-nirgendwo");
+  await dialog.getByRole("button", { name: "Speichern" }).click();
+
+  // The server's own text, and the dialog stays open on the typed value.
+  await expect(dialog.getByText("unknown chapter: 99-nirgendwo")).toBeVisible();
+  await expect(dialog.getByText("Eigenschaften nicht gespeichert")).toHaveCount(0);
+  await expect(dialog.getByLabel("Kapitel")).toHaveValue("99-nirgendwo");
 });
 
 test("a second writer: the save reports the conflict, the second click writes", async ({
@@ -435,7 +533,7 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
 }) => {
   // The four kinds with typed properties offer it …
   const withForm: [string, string, string][] = [
-    ["01-salzhafen/hafen/smuggler-captured", "Von den Schmugglern erwischt", "Szene"],
+    ["01-salzhafen/bucht/smuggler-captured", "Von den Schmugglern erwischt", "Szene"],
     ["npcs/fenn", "Fenn", "NPC"],
     ["locations/leuchtturm", "Der Leuchtturm von Salzhafen", "Ort"],
     ["01-salzhafen/_chapter", "Kapitel 1: Der Leuchtturm von Salzhafen", "Kapitel"],

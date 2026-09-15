@@ -48,7 +48,7 @@ interface GlossaryResponse {
   entries: { term: string; explanation: string }[];
 }
 
-const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
 const COUNTS =
   "SELECT (SELECT count(*) FROM campaigns) AS campaigns, " +
@@ -67,12 +67,19 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(tree.chapters.map((c) => c.id)).toEqual(["01-salzhafen"]);
   const scenes = tree.chapters.flatMap((c) => c.groups.flatMap((g) => g.scenes));
   // The scene's path segment is its ID since the cutover.
+  // The group segment is the scene's `location` (issue #100), so the two
+  // scenes of the `hafen/` directory land under DIFFERENT groups.
   expect(scenes.map((s) => s.path).sort()).toEqual([
-    "01-salzhafen/hafen/lighthouse-arrival",
-    "01-salzhafen/hafen/smuggler-captured",
+    "01-salzhafen/bucht/smuggler-captured",
+    "01-salzhafen/leuchtturm/lighthouse-arrival",
   ]);
   expect(tree.npcs.map((n) => n.id).sort()).toEqual(["fenn", "jorna"]);
-  expect(tree.locations.map((l) => l.path)).toEqual(["locations/leuchtturm"]);
+  // `locations/bucht.md` does not exist in the tree — the import created the
+  // entry because a scene names `bucht` as its location (#100).
+  expect(tree.locations.map((l) => l.path).sort()).toEqual([
+    "locations/bucht",
+    "locations/leuchtturm",
+  ]);
   expect(tree.sessions.map((s) => s.path)).toEqual(["sessions/2026-01-15"]);
 
   // --- a scene body, callouts and If-sections included ----------------------

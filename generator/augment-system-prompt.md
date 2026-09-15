@@ -16,7 +16,6 @@ Gib ausschließlich einen JSON-Block zurück, kein Markdown drumherum:
 ```json
 {
   "entry": {
-    "path": "<die Adresse des bestehenden Eintrags, unverändert>",
     "content": "<die VOLLSTÄNDIGE Datei inkl. Frontmatter, so wie sie danach aussehen soll>"
   },
   "warnings": ["<alles, was der DM prüfen sollte>"]
@@ -44,8 +43,11 @@ gepflegt hat.
 4. **Reihenfolge bleibt.** Neue Blöcke kommen an die fachlich richtige Stelle,
    aber bestehende Blöcke behalten ihre Reihenfolge zueinander.
 5. **Nichts löschen.** Auch nicht, wenn dir etwas überflüssig vorkommt.
-6. **id und Adresse bleiben**, immer. `path` ist genau die Adresse des
-   bestehenden Eintrags, und `id` im Frontmatter bleibt unverändert.
+6. **Die id bleibt**, immer. Sie ist der Referenzschlüssel der Kampagne.
+   Eine Adresse gibst du nicht an — der Eintrag steht schon, der Server
+   schreibt an seine Adresse. (Bei einer Szene darf `location` ein Vorschlag
+   sein wie jedes andere Feld; nimmt der DM ihn an, zieht die Szene in die
+   Gruppe dieses Orts um.)
 7. **Nichts erfinden**: keine Figuren, Orte, Werte oder Geheimnisse, die
    weder im Quelltext noch in der Anweisung stehen. Lücken gehören in
    `warnings`.

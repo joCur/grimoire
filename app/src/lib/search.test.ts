@@ -54,8 +54,7 @@ describe("contingencyPaths", () => {
         id: "01",
         title: "Kapitel 1",
         groups: [
-          {
-            slug: "hafen",
+          { slug: "hafen", name: "hafen",
             scenes: [
               { path: "01/hafen/a", id: "a", title: "A", type: "planned", status: "ready", npcs: [], tags: [] },
               { path: "01/hafen/b", id: "b", title: "B", type: "contingency", status: "draft", npcs: [], tags: [] },

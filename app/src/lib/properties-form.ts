@@ -29,6 +29,7 @@ import {
   type CampaignTree,
   type EntityKind,
 } from "@grimoire/shared/types";
+import { toSlug } from "@grimoire/shared/slug";
 
 import { fetchFile, patchProperties } from "@/api";
 import type { Translate } from "@/i18n/format";
@@ -291,6 +292,77 @@ export function propertiesKindLabel(kind: EntityKind, t: Translate): string | un
   }
 }
 
+// --- the Ort field: free text in, a slug out (issue #100 follow-up) ----------
+//
+// `location` IS the group a scene sits under in its chapter, so it holds an
+// entity id — and for a while the form said exactly that and nothing else:
+// free text was refused with „Keine Orts-id — „der-alte-hafen" verwenden."
+// and a disabled Speichern. That put the slug rule in front of the DM as
+// homework. It is the app's job instead: the field takes what a DM types, the
+// hint says what saving will DO with it, and the save sends the slug plus the
+// typed text as the new entry's name.
+//
+// The one case that still blocks is text no slug can be derived from („???"):
+// an id is never invented out of nothing (shared/slug.ts).
+
+/** The id the typed text stands for — "" when nothing usable is left. */
+export function locationRefId(text: string): string {
+  const typed = text.trim();
+  if (typed === "") return "";
+  return isEntityId(typed) ? typed : toSlug(typed);
+}
+
+/** What the Ort field's text means right now — the hint, and the one issue. */
+export type LocationRef =
+  /** Nothing typed: the scene sits on chapter level. */
+  | { kind: "empty" }
+  /** An entry that exists; `name` is its name, absent when it has none. */
+  | { kind: "known"; id: string; name?: string }
+  /**
+   * An entry the save CREATES. `name` is the typed display name — absent when
+   * the DM typed the bare id, which is then the entry's name by fallback.
+   */
+  | { kind: "new"; id: string; name?: string }
+  /** Text that yields no id at all — the only state that blocks the save. */
+  | { kind: "unusable"; value: string };
+
+export function locationRef(text: string, options: readonly FieldOption[]): LocationRef {
+  const typed = text.trim();
+  if (typed === "") return { kind: "empty" };
+  const id = locationRefId(typed);
+  if (id === "") return { kind: "unusable", value: typed };
+  const hit = options.find((option) => option.value === id);
+  // A label that equals the id is no name (referenceOptions labels a nameless
+  // entry with its own id), so it is not worth a line under the field.
+  const name = typed === id ? undefined : typed;
+  return hit === undefined
+    ? { kind: "new", id, name }
+    : { kind: "known", id, name: hit.label === id ? undefined : hit.label };
+}
+
+/**
+ * The display name a save sends alongside the patch (`locationName`): the
+ * text the DM typed, whenever that text is not already the id itself. The
+ * server uses it ONLY when it inserts the row, so this is always safe to send
+ * — an existing Ort is never renamed by a scene — and the form does not need
+ * to know which ids exist to decide.
+ */
+export function propertiesLocationName(
+  fields: readonly PropertiesField[],
+  values: FormValues,
+): string | undefined {
+  for (const field of fields) {
+    if (field.source !== "locations" || field.control !== "reference") continue;
+    const value = values[field.key];
+    if (value === undefined || value.kind !== "text") continue;
+    const typed = value.text.trim();
+    const id = locationRefId(typed);
+    if (id === "" || id === typed) continue;
+    return typed;
+  }
+  return undefined;
+}
+
 // --- form state --------------------------------------------------------------
 
 /** One field's edit state; the shape follows the control, not the value. */
@@ -356,10 +428,18 @@ export function propertiesFormValues(
  * Normalizing both sides of the comparison is what keeps a field the DM only
  * clicked into out of the patch.
  */
-function normalize(value: FieldValue): FieldValue {
+function normalize(value: FieldValue, field?: PropertiesField): FieldValue {
   switch (value.kind) {
     case "text":
-      return { kind: "text", text: value.text.trim() };
+      // The Ort field is the one control whose normalized form is not the
+      // typed text: it takes free text and STORES the slug (issue #100
+      // follow-up), so slugging here is what makes „Der Leuchtturm von
+      // Salzhafen" over a stored `leuchtturm`… well, a different id — but
+      // „leuchtturm " or a re-typed „der-alte-hafen" no change at all, and
+      // it is the same value the patch writes.
+      return field?.source === "locations" && field.control === "reference"
+        ? { kind: "text", text: locationRefId(value.text) }
+        : { kind: "text", text: value.text.trim() };
     case "list":
       return {
         kind: "list",
@@ -449,9 +529,23 @@ export function propertiesPatch(
     const before = initial[field.key];
     const after = current[field.key];
     if (before === undefined || after === undefined) continue;
-    const from = normalize(before);
-    const to = normalize(after);
+    const from = normalize(before, field);
+    const to = normalize(after, field);
     if (valueKey(from) === valueKey(to)) continue;
+    // Text in the Ort field that yields NO id is not a cleared field: it
+    // normalizes to "" (there is no slug), and sending `location: null` would
+    // silently move the scene to chapter level instead of writing what the DM
+    // typed. `propertiesFormIssues` blocks the save on it; the patch is empty
+    // either way, so neither half can turn a typo into a move.
+    if (
+      field.source === "locations" &&
+      field.control === "reference" &&
+      after.kind === "text" &&
+      after.text.trim() !== "" &&
+      isEmpty(to)
+    ) {
+      continue;
+    }
     patch[field.key] = isEmpty(to) ? null : patchValue(to);
   }
   return patch;
@@ -474,6 +568,12 @@ export function propertiesPatch(
  * A row that is completely empty (or holds only a name, which means „delete
  * this key") is fine and produces nothing here.
  *
+ * A `location` that yields NO id (issue #100 follow-up): the field takes free
+ * text and the save slugs it, so „Der alte Hafen" is fine — but „???" leaves
+ * nothing an id could be made of (shared/slug.ts never invents one), and
+ * there is no value to send. The hint under the field says what every other
+ * text WILL do; this is the one that cannot be done.
+ *
  * And an ID LIST (`npcs`, issue #70 audit): that list holds ids, not names —
  * every entry becomes a card and a reference the save creates — so the server
  * refuses a non-slug entry with a 400. Saying it here makes that a line under
@@ -491,6 +591,13 @@ export function propertiesFormIssues(
   for (const field of fields) {
     const value = values[field.key];
     if (value === undefined) continue;
+    if (field.source === "locations" && value.kind === "text") {
+      const ref = locationRef(value.text, []);
+      if (ref.kind === "unusable") {
+        issues[field.key] = t("properties.issue.locationUnusable", { value: ref.value });
+      }
+      continue;
+    }
     if (field.control === "references" && value.kind === "list") {
       const stored = initial?.[field.key];
       const known = stored !== undefined && stored.kind === "list" ? stored.items : [];
@@ -648,9 +755,11 @@ export function writePropertiesForm(
   path: string,
   rev: number,
   patch: Record<string, unknown>,
+  /** The name for the Ort `location` creates — see propertiesLocationName. */
+  locationName?: string,
 ): Promise<RevWriteResult> {
   return writeWithRev(
-    () => patchProperties(campaign, { path, rev, patch }),
+    () => patchProperties(campaign, { path, rev, patch, locationName }),
     () => fetchFile(campaign, path),
   );
 }

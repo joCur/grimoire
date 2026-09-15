@@ -88,11 +88,13 @@ import {
   sessionRow,
 } from "./read";
 import {
+  addressIdentity,
   chapterPath,
   locationPath,
   locatorFromPath,
   npcPath,
   RESERVED_SEGMENTS,
+  sceneAddress,
   scenePath,
   sessionPath,
   CAMPAIGN_PATH,
@@ -369,12 +371,17 @@ function sceneRowOf(tx: GrimoireDb, campaign: string, id: string): SceneRow | un
 }
 
 /**
- * The scene a `{ kind: "scene" }` locator addresses — 404 unless the path
- * names the scene's CURRENT chapter and group too. Same rule as the read side
- * (read.ts `readByLocator`): a path with the wrong chapter is a stale link,
- * and a write must not silently land on the row it happens to share an id
- * with. Without this a write through a stale link answered 200 while the
- * matching GET answered 404.
+ * The scene a `{ kind: "scene" }` locator addresses — by ID, which is the
+ * key (issue #100). The chapter and group segments used to have to match the
+ * row, because a group was an independent value and a link with the wrong
+ * one was a link to nothing. The group is `location` now: it MOVES when the
+ * DM corrects the location, so every address handed out before that move is
+ * a stale address for a scene that still exists. Resolving by id is what
+ * makes the correction non-destructive — the response carries the current
+ * address in `path`, and the app replaces the URL with it (ADR #17).
+ *
+ * The write is not unguarded by this: `rev` is the guard that a write which
+ * has not seen the current document is refused (ADR #4).
  */
 function sceneRowAt(
   tx: GrimoireDb,
@@ -383,9 +390,6 @@ function sceneRowAt(
 ): SceneRow {
   const row = sceneRowOf(tx, campaign, locator.id);
   if (row === undefined) throw new ApiError(404, "file not found");
-  if ((row.chapterId ?? "") !== locator.chapterId || row.groupSlug !== locator.groupSlug) {
-    throw new ApiError(404, "file not found");
-  }
   return row;
 }
 
@@ -451,17 +455,18 @@ function nextPos(rows: Array<{ pos: number }>): number {
 // step alike.
 //
 // THE BOUNDARY, and it is deliberate: only a KEBAB-CASE SLUG is a reference.
-// `location: Der alte Hafen` (spaces, capitals) is free text the format
-// explicitly allows (README) and stays exactly that — text, no row, no card.
-// A slug-shaped free text (`location: hafen`) is indistinguishable from a
-// reference and is therefore treated as one; that is the price of the
-// format's one ambiguous field, and it is why there is no blanket backfill of
-// existing data (see `backfillReferencedNpcs`).
+// For `location` that is the ONLY legal value since issue #100 — the group a
+// scene sits in IS its location, so `location: Der alte Hafen` cannot be
+// text-that-means-nothing any more and is rejected with
+// `400 location_not_an_id`, suggestion included. The format's one ambiguous
+// field is gone; what the file era left behind was carried over ONCE by the
+// data step (db/group-migration.ts), not by a blanket backfill.
 //
-// ONLY NEW references are created on a properties patch: an unrelated
-// `PATCH { status }` re-sends the scene's existing `location`, and
-// materialising THAT would retroactively turn every legacy free-text place
-// name into an entity nobody authored.
+// ONLY NEW references are created on a properties patch — for `npcs`, whose
+// stored values may still be legacy names: materialising THOSE would turn a
+// name nobody meant as an id into an entity nobody authored. A scene's
+// `location` is ensured on EVERY patch (#70 audit), because since #100 an
+// unusable value cannot be stored in the first place.
 
 /**
  * The `npcs.status` column default (schema.ts) — "nothing is claimed". Named
@@ -482,11 +487,65 @@ function ensureNpcRow(tx: GrimoireDb, campaign: string, id: string): boolean {
   return true;
 }
 
-/** The same for a location — a scene's `location` when it is a slug. */
-function ensureLocationRow(tx: GrimoireDb, campaign: string, id: string): boolean {
+/**
+ * A scene's `location`, validated (issue #100): an entity id, or null.
+ *
+ * The free-text exception the README used to grant is gone. `location` is a
+ * REFERENCE — it is the scene's group and its address — so a value that
+ * cannot be an id cannot be a group either; naming an id that has no row
+ * CREATES the row (`ensureLocationRow`, the „Referenzieren legt an" rule of
+ * #70), and anything else is a 400 the app turns into a sentence with the
+ * slug it would have used.
+ */
+function sceneLocation(value: unknown): string | null {
+  const raw = asOptStr(value);
+  if (raw === null) return null;
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  if (!ENTITY_SLUG.test(trimmed)) {
+    const suggestion = toSlug(trimmed);
+    throw new ApiError(
+      400,
+      `location "${trimmed}" is not a location id — a scene's location is a reference` +
+        (suggestion === "" ? "" : `; use "${suggestion}" (the entry is created for you)`),
+      suggestion === ""
+        ? { code: "location_not_an_id", value: trimmed }
+        : { code: "location_not_an_id", value: trimmed, suggestion },
+    );
+  }
+  return trimmed;
+}
+
+/**
+ * The same for a location — a scene's `location` when it is a slug.
+ *
+ * `name` is the DISPLAY NAME the creator typed, and it is used ONLY when the
+ * row is actually inserted (issue #100 follow-up): the properties form accepts
+ * free text in the Ort field, slugs it and sends the slug in `location` plus
+ * the typed text as `locationName`, so „Der alte Hafen" becomes the entry
+ * `der-alte-hafen` CALLED „Der alte Hafen" instead of one called by its own
+ * id. One write, one transaction — the app never has to create the location
+ * first and patch second.
+ *
+ * An EXISTING location is never renamed by it. A name is a location's own
+ * property, edited in its own dialog; a scene naming its group must not be
+ * able to rewrite it (and two scenes spelling the same group differently
+ * would otherwise fight over it on every save).
+ */
+function ensureLocationRow(
+  tx: GrimoireDb,
+  campaign: string,
+  id: string,
+  name?: string,
+): boolean {
   if (!ENTITY_SLUG.test(id)) return false;
   if (locationRowOf(tx, campaign, id) !== undefined) return false;
-  tx.insert(locations).values({ campaignId: campaign, id }).run();
+  // A name that IS the id is stored as "" — the empty name means "fall back
+  // to the id" everywhere it is rendered, same rule as the campaign row.
+  const display = name === undefined ? "" : name.trim();
+  tx.insert(locations)
+    .values({ campaignId: campaign, id, name: display === id ? "" : display })
+    .run();
   const row = locationRowOf(tx, campaign, id);
   if (row !== undefined) indexLocation(tx, campaign, row);
   return true;
@@ -571,12 +630,11 @@ function isEmptyJsonObject(packed: string): boolean {
  *   * `npc_relations.other_npc_id` — the counterpart of a `## Beziehungen`
  *     line, likewise an id by format.
  *
- * NOT `scenes.location`. That field holds an id OR a free string (README),
- * and a slug-shaped free text (`location: bucht`) is indistinguishable from
- * a reference. A blanket pass would invent Orte the DM never wrote, into a
- * list the DM has to look at, with no undo in the tool — so the location
- * half stays LAZY: the next write that touches the field creates the row,
- * because there a human has just typed the value and meant it.
+ * NOT `scenes.location`, and for a different reason than it used to be: the
+ * field holds an id or nothing at all since issue #100, and the stock was
+ * carried over ONCE by the data step that derived it (db/group-migration.ts),
+ * which creates every entry a scene references and reports it. There is
+ * nothing left for a per-boot pass to close.
  *
  * Idempotent by construction (it only inserts what has no row) and cheap: two
  * anti-joins per campaign. Returns the ids it created, for the boot log.
@@ -776,15 +834,26 @@ function rejectIdPatch(patch: Record<string, unknown>, current: string): void {
   throw new ApiError(400, "id is the primary key — use POST /rename to change it");
 }
 
+/**
+ * Side values a patch may carry that are NOT properties keys (issue #100
+ * follow-up). `locationName` is the display name for the location a scene's
+ * `location` CREATES — see `ensureLocationRow`; it is ignored when the row
+ * already exists, so it can never rename anything.
+ */
+export interface PatchOptions {
+  locationName?: string;
+}
+
 export async function patchProperties(
   campaign: string,
   rel: string,
   rev: number,
   patch: Record<string, unknown>,
+  options: PatchOptions = {},
 ): Promise<FileResponse> {
   assertSafeAddress(rel);
   const locator = locatorFromPath(rel);
-  return mutate(campaign, (tx) => patchLocator(tx, campaign, locator, rev, patch));
+  return mutate(campaign, (tx) => patchLocator(tx, campaign, locator, rev, patch, options));
 }
 
 function patchLocator(
@@ -793,6 +862,7 @@ function patchLocator(
   locator: Locator,
   rev: number,
   patch: Record<string, unknown>,
+  options: PatchOptions = {},
 ): FileResponse {
   switch (locator.kind) {
     case "campaign": {
@@ -863,7 +933,7 @@ function patchLocator(
         trigger: asOptStr(fm.trigger),
         chapterId: declared ?? row.chapterId,
         chapterDeclared: declared === null ? 0 : 1,
-        location: asOptStr(fm.location),
+        location: sceneLocation(fm.location),
         status: asStr(fm.status, "draft"),
         handouts: packJson(asStrArray(fm.handouts)),
         extra: extraOf(fm, SCENE_KEYS),
@@ -890,12 +960,17 @@ function patchLocator(
         if (!npcsBefore.includes(npcId)) ensureNpcRow(tx, campaign, npcId);
       }
       // `location`, in contrast, is ensured on EVERY patch, changed or not.
+      // It is also the scene's GROUP since issue #100, so this is the write
+      // that MOVES the scene: the address in the response is built from the
+      // new value and the app follows it.
       // The properties dialog promises "wird beim Speichern angelegt" for a
       // slug-shaped value, and with the change-guard a save left a dangling
       // OLD slug exactly as it was — the hint lied about the stock the DM is
       // most likely to look at. Idempotent and cheap (one lookup), and it
       // creates nothing the field does not already name.
-      if (next.location !== null) ensureLocationRow(tx, campaign, next.location);
+      if (next.location !== null) {
+        ensureLocationRow(tx, campaign, next.location, options.locationName);
+      }
       replaceSceneRefs(tx, campaign, row.id, npcRefs, tags, npcsBefore);
       indexScene(tx, campaign, next, tags);
       return renderScene(next, refNpcs(tx, campaign, row.id), refTags(tx, campaign, row.id));
@@ -1982,7 +2057,7 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       const title = asStr(fm.title, id);
       const npcRefs = asStrArray(fm.npcs);
       const tags = asStrArray(fm.tags);
-      const draftLocation = asOptStr(fm.location);
+      const draftLocation = sceneLocation(fm.location);
       const pos =
         (tx
           .select({ pos: scenes.pos })
@@ -1997,7 +2072,6 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           id,
           chapterId: locator.chapterId,
           chapterDeclared: fm.chapter === undefined || fm.chapter === null ? 0 : 1,
-          groupSlug: locator.groupSlug,
           title,
           type: asStr(fm.type, "planned"),
           trigger: asOptStr(fm.trigger),
@@ -2204,18 +2278,24 @@ export async function applyDrafts(
 }
 
 /**
- * The `rel`s of every draft whose ADDRESS another draft in the batch claims
- * too — `rel` because that is what the review shows, `address` because that
- * is the row the write lands in (`rel` can differ from it when the draft's
- * properties carries another id).
+ * The `rel`s of every draft whose ROW another draft in the batch claims too
+ * — `rel` because that is what the review shows.
+ *
+ * Keyed by IDENTITY (`addressIdentity`), not by address: a scene's address
+ * carries its `location` (issue #100), so two drafts with the same id and
+ * different locations have different addresses and the same primary key.
+ * Keying on the address let that pair through, and the insert then filled
+ * the row twice — last write wins, and the review reported a clean apply for
+ * content it had silently dropped.
  */
 function duplicateDraftRels(drafts: EntityDraft[]): string[] {
   const seen = new Map<string, number>();
   for (const draft of drafts) {
-    seen.set(draft.address, (seen.get(draft.address) ?? 0) + 1);
+    const key = addressIdentity(draft.address);
+    seen.set(key, (seen.get(key) ?? 0) + 1);
   }
   return drafts
-    .filter((draft) => (seen.get(draft.address) ?? 0) > 1)
+    .filter((draft) => (seen.get(addressIdentity(draft.address)) ?? 0) > 1)
     .map((draft) => draft.rel)
     .sort();
 }
@@ -2499,9 +2579,10 @@ export async function createChapter(
  * hang in — the same rule `assertChapterRef` enforces for a properties patch
  * (ADR #14, chapters are not created by naming them).
  *
- * `group_slug` is "" — the location subfolder of the file era is a loose
- * grouping convention, and a scene created here has no location yet. Setting
- * one later is `PATCH /properties`, which is also where the group comes from.
+ * A scene created here has no `location`, so it sits at chapter level and
+ * the app lists it under „Ohne Ort". Setting one later is `PATCH /properties`
+ * — and since issue #100 that patch is also what moves the scene into the
+ * location's group, address included.
  */
 export async function createScene(
   campaign: string,
@@ -2525,7 +2606,11 @@ export async function createScene(
         "scene",
         id,
         suggestion,
-        scenePath(existing.chapterId ?? chapter, existing.groupSlug, existing.id),
+        sceneAddress({
+          chapterId: existing.chapterId ?? chapter,
+          location: existing.location,
+          id: existing.id,
+        }),
       );
     }
     tx.insert(scenes)
@@ -2536,7 +2621,6 @@ export async function createScene(
         // The chapter was CHOSEN here, so it is a declared value: it belongs
         // in the properties the reading view and the properties form show.
         chapterDeclared: 1,
-        groupSlug: "",
         title: title.trim(),
         pos: nextPos(
           tx.select({ pos: scenes.pos }).from(scenes).where(eq(scenes.campaignId, campaign)).all(),

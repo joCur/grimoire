@@ -434,20 +434,21 @@ einer `## Beziehungen`-Zeile.
   zurückgeben. Das alte `409` ließ den DM eine id korrigieren, die richtig war.
   Der Status ist der Default `unknown` (die Zeile schrieb vorher `alive`,
   gegen ihre eigene Doku).
-- **Die Grenze, bewusst gezogen:** `location:` darf laut README freier Text
-  sein. Ein Wert, der KEIN Kebab-Slug ist (Leerzeichen, Großschreibung),
-  bleibt reiner Text und bekommt keinen Eintrag. Ein slug-FÖRMIGER freier Text
-  (`location: hafen`) ist von einer Referenz nicht unterscheidbar und wird als
-  Referenz behandelt — das ist der Preis des einen mehrdeutigen Feldes, und der
-  Grund für den nächsten Punkt.
+- **Die Grenze, bewusst gezogen** — *ersetzt durch #17:* `location:` durfte
+  laut README freier Text sein, und ein Wert, der KEIN Kebab-Slug war, blieb
+  reiner Text ohne Eintrag. Seit #17 ist `location` immer eine Orts-id oder
+  leer: Freitext wird mit `400 location_not_an_id` abgelehnt, eine unbekannte
+  id legt den Eintrag nach der Regel oben an. Das mehrdeutige Feld gibt es
+  nicht mehr.
 - **Bestandsdaten: Boot-Pass nur für NPCs.** Beim Boot legt ein idempotenter
   Pass leere Zeilen für alle noch hängenden `scene_npcs.npc_id` und
   `npc_relations.other_npc_id` an (`store/ref-backfill.ts`) und meldet sie im
-  Boot-Log. `scenes.location` bleibt bewusst AUSSEN: ein pauschaler Lauf würde
-  aus slug-förmigem Freitext Orte erfinden, die der DM nie geschrieben hat, in
-  eine Liste, die er ansehen muss, ohne Rückweg im Werkzeug. Dort greift die
-  Lazy-Regel — der nächste Schreibvorgang, der das Feld anfasst, legt an, denn
-  dann hat ein Mensch den Wert gerade getippt.
+  Boot-Log. Die Begründung, `scenes.location` auszunehmen (ein pauschaler Lauf
+  würde aus slug-förmigem Freitext Orte erfinden) ist mit #17 **ersetzt**:
+  dort legt der Einmal-Datenschritt genau einmal für jedes referenzierte
+  `location` einen Eintrag an und meldet jeden im Boot-Log. Für neue Werte
+  gilt weiter die Lazy-Regel — der nächste Schreibvorgang, der das Feld
+  anfasst, legt an.
 - **Keine Foreign Keys** auf diesen Spalten. Sie halten Freitext und
   Importbestand legal; die Konsistenz kommt aus den Schreibwegen, nicht aus
   einem Constraint, der einen legalen Import scheitern lassen würde.
@@ -474,10 +475,12 @@ tat, oder umgekehrt. Verbindlich ist ab jetzt:
 - **`location:` wird bei JEDEM Patch sichergestellt**, nicht nur bei einer
   Änderung. Der Eigenschaften-Dialog verspricht „wird beim Speichern
   angelegt"; mit der alten „nur NEUE Referenzen"-Regel blieb ein hängender
-  Alt-Slug beim Speichern genau so hängen. Die Freitext-Grenze bleibt
-  unverändert. Für `npcs:` gilt weiter „nur neue" (siehe nächster Punkt).
+  Alt-Slug beim Speichern genau so hängen. Der Satz „die Freitext-Grenze
+  bleibt unverändert" ist mit #17 **ersetzt**: es gibt keine Freitext-Hälfte
+  mehr, ein Nicht-Slug ist `400 location_not_an_id`. Für `npcs:` gilt weiter
+  „nur neue" (siehe nächster Punkt).
 - **`npcs:` nimmt ids, keine Namen.** Ein NEUER Eintrag ohne Slug-Form wird
-  mit 400 abgelehnt (`npcs` hat, anders als `location`, keine Freitext-Hälfte:
+  mit 400 abgelehnt (seit #17 gilt dasselbe für `location`:
   jeder Eintrag wird eine Karte und eine Referenz). Bereits GESPEICHERTE
   Werte sind ausgenommen — die Migration importiert, was da ist, und eine
   Alt-Szene muss speicherbar bleiben. Die Karte einer solchen Alt-Referenz
@@ -486,10 +489,12 @@ tat, oder umgekehrt. Verbindlich ist ab jetzt:
   Szene abgelehnt, bei NPC und Ort still gespeichert; jetzt gilt für alle drei
   dasselbe (nur bei geändertem Wert, wegen Bestandsdaten), und der Hinweis im
   Dialog sagt „Kapitel muss existieren" statt „wird angelegt".
-- **Zwei Drafts auf dieselbe Adresse sind 409** (`{ conflicts }`) statt
+- **Zwei Drafts auf dieselbe ZEILE sind 409** (`{ conflicts }`) statt
   last-write-win: seit eine leere Zeile kein Konflikt mehr ist, hat der
   zweite Draft den ersten befüllt, und das Review meldete einen sauberen
-  Apply für weggeworfenen Inhalt.
+  Apply für weggeworfenen Inhalt. „Dieselbe Zeile" und nicht „dieselbe
+  Adresse" — seit #17 trägt die Szenen-Adresse ihr `location`, dieselbe id
+  unter zwei Orten sind zwei Adressen und ein Primärschlüssel.
 - **Rename merged in eine LEERE Zielzeile** statt 409. Genau dieser Zustand
   entsteht jetzt regulär (eine Szene listet alte und neue id → die neue hat
   eine leere Zeile), und der Merge der Referenzlisten war sonst toter Code.
@@ -642,3 +647,57 @@ Server ist die Wahrheit).
 - Kein Undo-Verlauf und kein Merge zwischen zwei Bearbeitern. Grimoire ist
   einbenutzerig; „zwei Tabs" ist ein Konflikt, den man meldet, keiner, den man
   zusammenführt.
+
+## 17. Die Gruppe einer Szene IST ihr `location` — kein eigenes Feld
+
+**Entscheidung:** `scenes.group_slug` entfällt ersatzlos (Migration 0009).
+Adresse und Kapitelgruppierung einer Szene werden aus der Spalte `location`
+abgeleitet: `<kapitel>/<location>/<id>`, ohne `location` `<kapitel>/<id>`.
+`location` ist damit immer eine Orts-id oder leer — Freitext wird mit
+`400 location_not_an_id` abgelehnt, eine unbekannte id legt den Eintrag an
+(ADR #14).
+
+**Warum:** `group_slug` („rein eine Anzeige-Gruppierung") und `location`
+waren zwei unabhängige Werte für dieselbe Sache — ein Erbe der
+Verzeichnisstruktur aus der Markdown-Zeit. Sobald der DM im Prüfschritt oder
+in den Eigenschaften den Ort korrigierte, blieb die Gruppe stehen: Anzeige
+und Adresse widersprachen dem Feld, das der DM gerade gesetzt hatte. Zwei
+Quellen für eine Wahrheit driften immer; die Reparatur ist, eine davon
+abzuschaffen, nicht sie zu synchronisieren.
+
+**Abgeleitete Spalte vs. Entfernen:** Eine beibehaltene, abgeleitete Spalte
+hätte jeden Schreibpfad (Patch, Roh-Editor, Import, Generator-Übernahme,
+Ergänzen) verpflichtet, sie mitzuziehen — also genau die Drift-Möglichkeit
+konserviert, die das Ticket beseitigt. Sie fällt weg; `store/paths.ts`
+`sceneAddress(row)` ist die eine Stelle, die die Ableitung kennt.
+
+**Konsequenzen:**
+
+- **Eine Szenen-Adresse ist nicht stabil, die id ist es.** Der Store löst
+  eine Szene über ihre **id** auf und ignoriert das Gruppen-Segment der
+  Adresse; die Antwort trägt in `path` die aktuelle Adresse. Die App
+  vergleicht und ersetzt die URL (`replace`, kein History-Eintrag). Ein
+  3xx-Redirect wäre die andere Möglichkeit gewesen — dagegen spricht, dass
+  `fetch` ihm folgt, ohne dass die App die Ziel-URL erfährt: die Adresszeile
+  bliebe dann falsch. `[[id]]`-Referenzen, `scenes_played` und die
+  Log-Marker adressieren ohnehin über ids und sind nicht betroffen.
+- **Der Schreibschutz bleibt `rev`** (ADR #4), nicht die Adresse. Dass ein
+  Schreibzugriff über eine veraltete Adresse die richtige Zeile trifft, ist
+  gewollt; dass er einen Stand überschreibt, den er nicht gesehen hat, fängt
+  weiterhin der Rev-Check ab.
+- **Der Generator vergibt keine Pfade mehr** (Issue #100, generator/README):
+  das Modell liefert Dokumente, der Server bildet die Adresse aus Kapitel +
+  `id` und die Gruppe aus `location`. Der Prüfschritt adressiert Teile über
+  `<kapitel>/<id>`; die tatsächlich geschriebene Adresse steht in der
+  Antwort (`written`).
+- **Migration in zwei Schritten.** Der Datenschritt braucht `group_slug`,
+  Migration 0009 löscht die Spalte — also läuft er **vor** dem Migrator, auf
+  dem rohen Client (`db/group-migration.ts`, aufgerufen aus `openDb`). In
+  SQL ginge er nicht: aus Freitext eine id zu machen ist die deutsche
+  Transliteration aus `@grimoire/shared/slug`. Er ist idempotent (die Spalte
+  ist danach weg) und meldet beim Start jede Szene, deren Adresse sich
+  geändert hat.
+- **Der Import** (`grimoire seed`) liest weiter `<kapitel>/<gruppe>/<szene>.md`
+  und setzt `location` aus der Gruppe, wenn das Frontmatter keines nennt —
+  `examples/` bleibt unverändert lesbar, die Beispielszenen landen unter
+  ihren Orten statt unter `hafen`.

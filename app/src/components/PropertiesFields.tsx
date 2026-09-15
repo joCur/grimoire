@@ -22,8 +22,9 @@ import type { KeyboardEvent, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { INPUT_CLASS } from "@/components/ui/field";
 import { useT } from "@/i18n";
-import { isEntityId } from "@/lib/entity";
+
 import {
+  locationRef,
   referenceLabel,
   referenceOptions,
   selectOptions,
@@ -226,10 +227,14 @@ function ReferenceOptions({ id, options }: { id: string; options: readonly Field
  *
  * Two exceptions, and both are about telling the truth about the save:
  *
- *   * the format's one ambiguous field: a value that is no kebab-case slug
- *     (spaces, capitals) is free text — `location: Der alte Hafen` stays text
- *     and gets no entry. Saying so is the whole documentation of that boundary
- *     the DM ever sees.
+ *   * `location` is the group the scene sits under in its chapter (issue
+ *     #100), so it STORES an id — but the DM types a name, and the form
+ *     slugs it (issue #100 follow-up). This line therefore names the entry
+ *     the save will land on: the existing Ort's name, or „Neu — wird als Ort
+ *     „…" angelegt" for a name that has none yet. It used to hand the DM the
+ *     slug as homework („Keine Orts-id — „der-alte-hafen" verwenden.") and
+ *     block the save; the only text that still blocks is text no slug can be
+ *     derived from, and `propertiesFormIssues` says that one.
  *   * CHAPTERS are not created by naming them (ADR #14, #70 audit): a scene
  *     under an unknown chapter would fall out of the tree, so the server
  *     answers 400 for every kind. This line used to promise the entry anyway
@@ -248,6 +253,31 @@ function ReferenceHint({
   const t = useT();
   const id = value.trim();
   if (id === "") return null;
+  if (field.source === "locations") {
+    // Resolved over the SLUG, so typing the name of an existing Ort shows
+    // that Ort's name — the save would land on exactly this entry.
+    const ref = locationRef(id, options);
+    switch (ref.kind) {
+      case "empty":
+        return null;
+      // The save is blocked and `propertiesFormIssues` already says why —
+      // one line under the field, not two.
+      case "unusable":
+        return null;
+      case "known":
+        return ref.name === undefined ? null : (
+          <p className="text-[11.5px] text-faint">{ref.name}</p>
+        );
+      case "new":
+        return (
+          <p className="text-[11.5px] text-faint">
+            {ref.name === undefined
+              ? t("properties.ref.new")
+              : t("properties.ref.locationNew", { name: ref.name })}
+          </p>
+        );
+    }
+  }
   const name = referenceLabel(options, id);
   if (name !== undefined) return <p className="text-[11.5px] text-faint">{name}</p>;
   if (options.some((option) => option.value === id)) return null;
@@ -256,9 +286,7 @@ function ReferenceHint({
       <p className="text-[11.5px] text-faint">{t("properties.ref.unknownChapter")}</p>
     );
   }
-  if (!isEntityId(id)) {
-    return <p className="text-[11.5px] text-faint">{t("properties.ref.freeText")}</p>;
-  }
+  // An unknown id is not a hole: the save creates the entry (#70).
   return <p className="text-[11.5px] text-faint">{t("properties.ref.new")}</p>;
 }
 

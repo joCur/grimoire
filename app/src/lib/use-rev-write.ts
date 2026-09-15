@@ -19,6 +19,7 @@ import { useRef, useState } from "react";
 
 import { useT } from "@/i18n";
 import type { MessageKey } from "@/i18n";
+import { serverErrorMessage } from "@/i18n/server-errors";
 import {
   STALE_FILE_MESSAGE,
   WRITE_FAILED_MESSAGE,
@@ -64,6 +65,9 @@ export interface RevWriteOptions<TVariables> {
    * Catalog KEY of the inline message when the write failed for any reason
    * other than a conflict (issue #69) — a key, not a sentence, so the message
    * follows a language switch like everything else.
+   *
+   * It is the FALLBACK: a rejection that carries a server error code shows
+   * that code's sentence (i18n/server-errors.ts), which is the specific one.
    */
   errorMessage?: MessageKey;
   /** Runs after a SUCCESSFUL write — where a dialog closes or a mode ends. */
@@ -117,8 +121,13 @@ export function useRevWriteMutation<TVariables>({
       }
       onSaved?.();
     },
-    onError: () => {
-      setMessage(t(errorMessage));
+    onError: (error) => {
+      // The SERVER'S sentence when it sent one (issue #69's catalog), the
+      // caller's wording only as the fallback. Without this every rejection
+      // read „… — Server prüfen", including the ones that name exactly what
+      // is wrong and what to type instead — `location_not_an_id` with its
+      // suggestion was invisible to the DM (issue #100 review).
+      setMessage(serverErrorMessage(error, t, errorMessage));
     },
   });
 

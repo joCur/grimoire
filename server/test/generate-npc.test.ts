@@ -165,12 +165,11 @@ function npcMarkdown(
 }
 
 /** The reply's JSON, in a fence like real models tend to send it. */
-function npcReply(
-  over: { path?: string; content?: string; warnings?: string[] } = {},
-): string {
+function npcReply(over: { content?: string; warnings?: string[] } = {}): string {
   const body = {
+    // No `path` since issue #100 — the server addresses the npc as
+    // `npcs/<id>` with the id from the properties.
     npc: {
-      path: over.path ?? "npcs/grella",
       content: over.content ?? npcMarkdown(),
     },
     warnings: over.warnings ?? ["Quelltext nennt keinen Status — alive gesetzt"],
@@ -180,7 +179,7 @@ function npcReply(
 
 /** A reply for a specific id (so a test that WRITES does not collide later). */
 function replyFor(id: string, over: Parameters<typeof npcMarkdown>[0] = {}): string {
-  return npcReply({ path: `npcs/${id}`, content: npcMarkdown({ id, ...over }) });
+  return npcReply({ content: npcMarkdown({ id, ...over }) });
 }
 
 async function postJson(url: string, body?: unknown): Promise<Response> {
@@ -268,7 +267,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(req.systemPrompt).toContain("System-Prompt: NPC-Generator");
     expect(req.fewShotTarget).toContain("id: fenn");
     expect(req.context.npcs.map((n) => n.id).sort()).toEqual(["fenn", "jorna"]);
-    expect(req.context.locations.map((l) => l.id)).toEqual(["leuchtturm"]);
+    expect(req.context.locations.map((l) => l.id).sort()).toEqual(["bucht", "leuchtturm"]);
     expect(req.glossary).toContain("Leuchtturmwärter");
     // an NPC run has no chapter and (without a pinned id) no target id
     expect(req.context.chapter).toBeUndefined();
@@ -300,9 +299,27 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(fake.calls).toHaveLength(2);
     expect(fake.calls[0]!.req.context.targetId).toBe("die-graue");
     expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad);
-    expect(fake.calls[1]!.corrections[0]!.correction).toContain('"npcs/die-graue"');
+    expect(fake.calls[1]!.corrections[0]!.correction).toContain('"die-graue"');
     // the correction turn names the NPC file, not "alle Szenen und Stubs"
     expect(fake.calls[1]!.corrections[0]!.correction).toContain("vollständige NPC-Datei");
+  });
+
+  test("an npc reply without an id is a correction turn, not the id npc", async () => {
+    // The reply carries NO `id`. The shared parser degrades a missing id to
+    // the address's last segment, and the validation used to parse the reply
+    // under the label `"npc"` — a kebab slug that passed the id pattern, so
+    // the run silently produced `npcs/npc` (issue #100 review).
+    const bad = npcReply({ content: npcMarkdown().replace("id: grella\n", "") });
+    const fake = useFake([bad, npcReply()]);
+    const res = await generateNpc(npcBody);
+    expect(res.status).toBe(200);
+    expect(fake.calls).toHaveLength(2);
+    const correction = fake.calls[1]!.corrections[0]!.correction;
+    expect(correction).toContain('"id" fehlt');
+    expect(correction).not.toContain("npcs/npc");
+    // …and the accepted reply is addressed by ITS id, as always.
+    const result = (await res.json()) as GenerateNpcResult;
+    expect(result.npc.path).toBe("npcs/grella");
   });
 
   // --- the validation rules (each one a correction turn) ------------------------
@@ -394,24 +411,19 @@ describe("POST /api/:campaign/generate/npc", () => {
     ).toContain("## Notizen bleibt leer");
   });
 
-  test("a mismatched id and a broken path are errors", async () => {
-    expect(
-      await firstValidationError([
-        npcReply({ path: "npcs/grella", content: npcMarkdown({ id: "andere" }) }),
-      ]),
-    ).toContain("passt nicht zum Dateinamen");
-
-    // not under npcs/, not kebab, not a .md file
-    for (const badPath of ["locations/grella", "npcs/Grella", "npcs/grella.txt"]) {
-      expect(await firstValidationError([npcReply({ path: badPath })])).toContain(
-        'path muss "npcs/<kebab-id>" sein',
-      );
+  test("an id that is no kebab slug is an error (#100)", async () => {
+    // The address is the server's; the `id` is what the model decides, so
+    // that is what has to be usable as one.
+    for (const badId of ["Grella", "grella.txt", "grella/2", "trailing-"]) {
+      expect(
+        await firstValidationError([npcReply({ content: npcMarkdown({ id: badId }) })]),
+      ).toContain("kebab-case id");
     }
   });
 
   test("a missing name degrades to the id — the shared parser fills it", async () => {
     const fake = useFake([
-      npcReply({ path: "npcs/namenlos", content: npcMarkdown({ id: "namenlos", name: null }) }),
+      npcReply({ content: npcMarkdown({ id: "namenlos", name: null }) }),
     ]);
     const res = await generateNpc(npcBody);
     expect(res.status).toBe(200);
@@ -424,7 +436,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(await firstValidationError(['{"warnings": []}'])).toContain('"npc" must be an object');
     expect(await firstValidationError(["[1, 2]"])).toContain("must be a JSON object");
     expect(
-      await firstValidationError([JSON.stringify({ npc: { path: "npcs/x" } })]),
+      await firstValidationError([JSON.stringify({ npc: { id: "x" } })]),
     ).toContain('"npc" must be an object');
   });
 
@@ -434,7 +446,7 @@ describe("POST /api/:campaign/generate/npc", () => {
         "I need to be careful about characters inside string values — the markdown",
         "content contains quotes and newlines that must be escaped properly.",
         "",
-        JSON.stringify({ npc: { path: "npcs/grella", content: npcMarkdown() }, warnings: [] }),
+        JSON.stringify({ npc: { content: npcMarkdown() }, warnings: [] }),
       ].join("\n"),
     ]);
     expect((await generateNpc(npcBody)).status).toBe(200);

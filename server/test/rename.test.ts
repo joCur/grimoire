@@ -28,8 +28,8 @@ afterEach(() => {
   dropStore();
 });
 
-const SCENE_A = "01-salzhafen/hafen/lighthouse-arrival";
-const SCENE_B = "01-salzhafen/hafen/smuggler-captured";
+const SCENE_A = "01-salzhafen/leuchtturm/lighthouse-arrival";
+const SCENE_B = "01-salzhafen/bucht/smuggler-captured";
 const SESSION = "sessions/2026-01-15";
 
 interface RenameResponse {
@@ -205,10 +205,10 @@ describe("POST /api/:campaign/rename — scene", () => {
     });
     expect(result.renamed).toEqual({
       from: SCENE_A,
-      to: "01-salzhafen/hafen/ankunft-am-leuchtturm",
+      to: "01-salzhafen/leuchtturm/ankunft-am-leuchtturm",
     });
     expect(result.changed).toEqual([
-      "01-salzhafen/hafen/ankunft-am-leuchtturm",
+      "01-salzhafen/leuchtturm/ankunft-am-leuchtturm",
       SESSION,
     ]);
 
@@ -240,7 +240,7 @@ describe("POST /api/:campaign/rename — scene", () => {
 
     // the tree names the scene by its new id, under its new path
     const chapter = (await tree()).chapters[0]!;
-    expect(chapter.groups[0]!.scenes.map((s) => s.id)).toEqual([
+    expect(chapter.groups.flatMap((g) => g.scenes.map((s) => s.id)).sort()).toEqual([
       "ankunft-am-leuchtturm",
       "smuggler-captured",
     ]);
@@ -288,8 +288,8 @@ describe("POST /api/:campaign/rename — chapter", () => {
     });
     expect(result.changed).toEqual([
       "01-salzbucht/_chapter",
-      "01-salzbucht/hafen/lighthouse-arrival",
-      "01-salzbucht/hafen/smuggler-captured",
+      "01-salzbucht/bucht/smuggler-captured",
+      "01-salzbucht/leuchtturm/lighthouse-arrival",
       "locations/leuchtturm",
       "npcs/fenn",
       "npcs/jorna",
@@ -318,12 +318,15 @@ describe("POST /api/:campaign/rename — chapter", () => {
     expect(campaignTree.chapters.map((ch) => ch.id)).toEqual(["01-salzbucht"]);
     const chapter = campaignTree.chapters[0]!;
     expect(chapter.path).toBe("01-salzbucht/_chapter");
+    // Groups ordered by their NAME (issue #100 review): „Der Leuchtturm von
+    // Salzhafen" before the unnamed `bucht`.
     expect(chapter.groups.flatMap((g) => g.scenes.map((s) => s.path))).toEqual([
-      "01-salzbucht/hafen/lighthouse-arrival",
-      "01-salzbucht/hafen/smuggler-captured",
+      "01-salzbucht/leuchtturm/lighthouse-arrival",
+      "01-salzbucht/bucht/smuggler-captured",
     ]);
-    // scene ids are untouched by a chapter rename
-    expect(chapter.groups[0]!.scenes.map((s) => s.id)).toEqual([
+    // scene ids are untouched by a chapter rename (one group per location
+    // since issue #100, so the ids are collected across the groups)
+    expect(chapter.groups.flatMap((g) => g.scenes.map((s) => s.id)).sort()).toEqual([
       "lighthouse-arrival",
       "smuggler-captured",
     ]);

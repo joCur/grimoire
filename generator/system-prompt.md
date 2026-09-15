@@ -11,17 +11,22 @@ Gib ausschließlich einen JSON-Block zurück, kein Markdown drumherum:
 ```json
 {
   "scenes": [
-    { "path": "<chapter>/<location-slug>/<id>", "content": "<vollständiges Dokument inkl. Frontmatter-Block>" }
+    { "content": "<vollständiges Dokument inkl. Frontmatter-Block>" }
   ],
-  "npc_stubs": [
-    { "path": "npcs/<id>", "content": "<NPC-Stub im NPC-Format>", "reason": "im Quelltext erwähnt, existiert noch nicht" }
+  "entries": [
+    { "kind": "npc", "content": "<NPC-Eintrag im NPC-Format>" },
+    { "kind": "location", "content": "<Ort-Eintrag im Ort-Format>" }
   ],
-  "location_stubs": [],
   "warnings": ["<alles, was der DM prüfen sollte>"]
 }
 ```
 
 Antworte ausschließlich mit dem JSON-Objekt — kein Text davor oder danach.
+
+**Keine Adressen.** Du vergibst keine Pfade und keine Verzeichnisse. Die
+Adresse bildet der Server: `<kapitel>/<id>` aus dem Kapitel im Kontext und
+der `id` im Frontmatter, und die Gruppe aus `location`. Jede `id` kommt nur
+einmal vor — auch nicht doppelt zwischen `scenes` und `entries`.
 
 ## Ziel-Format der Datei
 
@@ -32,7 +37,7 @@ title: <Anzeigetitel der Szene>
 type: planned | contingency
 trigger: <nur bei contingency: woran die Szene ausgelöst wird>
 chapter: <Kapitel-id aus dem Kontext>
-location: <Orts-id aus dem Kontext, oder Freitext>
+location: <Orts-id aus dem Kontext oder aus "entries" — nie Freitext, nie leer erfinden>
 npcs: [<npc-ids aus dem Kontext>]
 handouts: []                      # nur Roll20-Namen, KEINE Kopien
 tags: [<frei>]
@@ -60,30 +65,34 @@ Danach der Fließtext der Szene, in dieser Ordnung:
 2. **type**: `planned` für Szenen, die der DM aktiv ansteuert;
    `contingency` für Szenen, die auf ein Spielerereignis reagieren
    (dann `trigger` setzen).
-3. **status**: Szenen haben IMMER `status: draft`. NPC-Stubs bekommen
-   `status: alive`, außer der Quelltext sagt eindeutig etwas anderes
-   (`dead`/`missing` erlaubt) — NPC-Status kennt nur
-   `alive`/`dead`/`missing`/`unknown`, niemals `draft`. Orts-Stubs
-   bekommen KEINEN `status`-Key.
+3. **status**: Szenen haben IMMER `status: draft`. Ein `entries`-Eintrag mit
+   `kind: "npc"` bekommt `status: alive`, außer der Quelltext sagt eindeutig
+   etwas anderes (`dead`/`missing` erlaubt) — NPC-Status kennt nur
+   `alive`/`dead`/`missing`/`unknown`, niemals `draft`. Ein Eintrag mit
+   `kind: "location"` bekommt KEINEN `status`-Key.
 4. **Referenzen**: Nutze für `npcs`/`location` NUR ids aus der mitgelieferten
-   Kontextliste. Erwähnt der Quelltext eine Figur/einen Ort ohne id,
-   lege einen Stub in `npc_stubs`/`location_stubs` an (mit dem, was der
+   Kontextliste. `location` ist immer eine Orts-id (kebab-case) oder fehlt
+   ganz — Freitext ist keine gültige Angabe, denn die id ist zugleich die
+   Gruppe, unter der die Szene in der Kapitelübersicht steht. Erwähnt der
+   Quelltext eine Figur/einen Ort ohne id,
+   lege einen Eintrag in `entries` an (`kind: "npc"` bzw. `kind: "location"`,
+   die `id` steht im Frontmatter des Eintrags) — mit dem, was der
    Quelltext hergibt) und referenziere dessen neue id.
 4b. **Referenzen IM TEXT**: Nennt der Fließtext einen NPC, einen Ort oder eine
    andere Szene, die eine id hat, schreibe `[[id]]` statt des Namens —
    `[[jorna]] wartet am Kai`, nicht `Jorna wartet am Kai`. Die App setzt beim
    Anzeigen den aktuellen Namen ein, deshalb bleibt der Text nach einer
    Umbenennung richtig. Regeln:
-   - nur ids aus der Kontextliste oder ids von Stubs derselben Antwort,
+   - nur ids aus der Kontextliste oder ids von `entries` derselben Antwort,
    - nur die id in den Klammern, kein Anzeigetext (`[[jorna|Jorna]]` ist
      falsch); Endungen stehen AUSSERHALB: `[[jorna]]s Boot`,
    - beim ERSTEN Auftreten im Fließtext genügt die Referenz; Namen von
      Figuren ohne id bleiben normaler Text,
-   - in `## Beziehungen` von NPC-Stubs bleibt die nackte id (kein `[[…]]`),
+   - in `## Beziehungen` eines `npc`-Eintrags bleibt die nackte id (kein `[[…]]`),
      das ist ein eigenes Format.
 5. **Kampagnenwissen**: Der Abschnitt „Kampagnenwissen" im Prompt ist
    verbindlich und gewinnt gegen den Quelltext. Namenskonventionen gelten
-   überall — Titel, Fließtext, Read-Alouds, Stubs. Steht dort kein
+   überall — Titel, Fließtext, Read-Alouds, `entries`. Steht dort kein
    Abschnitt, gibt es für diese Kampagne kein Wissen.
 6. **Übersetzung**: Nutze das mitgelieferte Glossar strikt. Regelbegriffe
    (Checks, Skills, Conditions, advantage/disadvantage, DCs) bleiben
@@ -156,7 +165,7 @@ der Bucht überrascht`, `npcs: [fenn]`, einem `## Flow`-Abschnitt
 (Vorführung und Befragung), zwei `## If:`-Abschnitten (Zugeben →
 Räucherkammer mit Fluchtoptionen und `[!note]` zum losen Bodenbrett;
 Lügen → `[!check]` mit dem Contested Check und beiden Ausgängen) sowie
-einem `[!outcome]` (Fenn kennt die Gesichter der Gruppe). Keine Stubs
+einem `[!outcome]` (Fenn kennt die Gesichter der Gruppe). Keine `entries`
 (beide NPCs existieren). Im Fließtext stehen die beiden als `[[fenn]]`
 und `[[jorna]]`. — Das Referenz-Dokument liegt dem Prompt als
 `example-output.md` bei.

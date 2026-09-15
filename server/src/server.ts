@@ -56,8 +56,8 @@
 //                                              `goal` lands under `## Ziel des Kapitels`, the
 //                                              heading the pool reads its goal line from
 //   [x] POST /api/:campaign/scenes             { title, chapter } -> 201 the scene document
-//                                              (type planned, status draft, empty body,
-//                                              group_slug ""). `chapter` is REQUIRED and must
+//                                              (type planned, status draft, empty body, no
+//                                              `location`). `chapter` is REQUIRED and must
 //                                              exist — 400 otherwise: a scene's chapter is
 //                                              part of its address and chapters are never
 //                                              created by being named (ADR #14)
@@ -81,14 +81,17 @@
 //                                              reasoning, it had been left behind.
 //                                              `rev` of glossary/inbox is that
 //                                              DOCUMENT's own counter, not campaigns.version
-//   [x] PATCH /api/:campaign/properties        { path, rev, patch } — only if rev is
+//   [x] PATCH /api/:campaign/properties        { path, rev, patch, locationName? } — only if rev is
 //                                              unchanged, otherwise
 //                                              409 { code: "rev_conflict", rev }.
 //                                              A scene's `chapter` may be SET (400 when
 //                                              the chapter does not exist — a scene must
 //                                              never fall out of the tree) or DELETED with
 //                                              null, which drops the key and leaves the
-//                                              scene's address alone
+//                                              scene's address alone.
+//                                              `locationName` is the display name for the
+//                                              Ort a scene's `location` CREATES — applied
+//                                              only on insert, never a rename (#100)
 //   [x] PUT  /api/:campaign/file               { path, rev, body } — write the markdown
 //                                              BODY of an existing document (issue #15);
 //                                              its properties are untouched (they are
@@ -403,6 +406,41 @@ if (import.meta.main) {
     console.log(
       `${info.backfilledNpcs.length} referenced npc(s) had no entry and got an empty one: ` +
         info.backfilledNpcs.join(", "),
+    );
+  }
+  // Issue #100: the one-time step that turned the file era's group
+  // directories into `location` references. It names EVERY scene whose
+  // address moved — an old link still resolves (the app follows the
+  // response's `path`), but a DM who wrote one down should see it.
+  const groupMigration = info?.groupMigration;
+  if (groupMigration !== undefined && groupMigration.moved.length > 0) {
+    console.log(
+      `${groupMigration.moved.length} scene(s) moved to the group their location names:`,
+    );
+    for (const move of groupMigration.moved) {
+      console.log(
+        `  · [${move.campaignId}] ${move.sceneId}: ` +
+          `${move.from === "" ? "(chapter level)" : move.from} -> ` +
+          `${move.to === "" ? "(chapter level)" : move.to}`,
+      );
+    }
+  }
+  // …and the scenes it did NOT touch: a `location` nothing can be derived
+  // from stays exactly as it was, and only the DM can decide what it should
+  // be. Loud on purpose — it is the one case the step cannot finish.
+  if (groupMigration !== undefined && groupMigration.unresolved.length > 0) {
+    console.log(
+      `${groupMigration.unresolved.length} scene(s) name a location that yields no id — ` +
+        `left unchanged, please set one:`,
+    );
+    for (const open of groupMigration.unresolved) {
+      console.log(`  · [${open.campaignId}] ${open.sceneId}: "${open.location}"`);
+    }
+  }
+  if (groupMigration !== undefined && groupMigration.createdLocations.length > 0) {
+    console.log(
+      `${groupMigration.createdLocations.length} location(s) referenced by a scene had no ` +
+        `entry and got one: ${groupMigration.createdLocations.join(", ")}`,
     );
   }
   // Issue #23: jobs are rows now, so a restart no longer loses a finished

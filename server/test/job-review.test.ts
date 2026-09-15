@@ -28,13 +28,15 @@ import type {
 
 // --- fixtures -----------------------------------------------------------------
 
-// The paths the MODEL proposes. A scene's stored ADDRESS takes its id from
-// the properties (`<chapter>/<group>/<id>`), which here is the same string —
-// the review reports the path it was sent, the write reports the address.
-const SCENE_A = "01-salzhafen/hafen/treffen-am-kai";
-const SCENE_B = "01-salzhafen/hafen/nacht-am-kai";
-const ADDRESS_A = SCENE_A;
-const ADDRESS_B = SCENE_B;
+// The paths the REVIEW addresses the drafts with — `<chapter>/<id>`, built
+// by the server from the run's chapter and the draft's id (issue #100; the
+// model names no address at all). The stored ADDRESS adds the group, which
+// is the draft's `location` — so the two differ here on purpose, and the
+// accept answers `{ <review path>: <written address> }`.
+const SCENE_A = "01-salzhafen/treffen-am-kai";
+const SCENE_B = "01-salzhafen/nacht-am-kai";
+const ADDRESS_A = "01-salzhafen/leuchtturm/treffen-am-kai";
+const ADDRESS_B = "01-salzhafen/leuchtturm/nacht-am-kai";
 const STUB_PATH = "npcs/grella";
 
 function sceneMarkdown(id: string, title: string): string {
@@ -75,11 +77,10 @@ const STUB_MARKDOWN = [
 
 const REPLY = JSON.stringify({
   scenes: [
-    { path: SCENE_A, content: sceneMarkdown("treffen-am-kai", "Treffen am Kai") },
-    { path: SCENE_B, content: sceneMarkdown("nacht-am-kai", "Nacht am Kai") },
+    { content: sceneMarkdown("treffen-am-kai", "Treffen am Kai") },
+    { content: sceneMarkdown("nacht-am-kai", "Nacht am Kai") },
   ],
-  npc_stubs: [{ path: STUB_PATH, content: STUB_MARKDOWN, reason: "im Quelltext erwähnt" }],
-  location_stubs: [],
+  entries: [{ kind: "npc", content: STUB_MARKDOWN }],
   warnings: [],
 });
 

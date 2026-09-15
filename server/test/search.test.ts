@@ -161,7 +161,7 @@ describe("reference queries (issue #57 AK5)", () => {
     expect(results.find((r) => r.kind === "scene" && r.id === "lighthouse-arrival")).toMatchObject({
       id: "lighthouse-arrival",
       title: "Ankunft am Leuchtturm",
-      path: "01-salzhafen/hafen/lighthouse-arrival",
+      path: "01-salzhafen/leuchtturm/lighthouse-arrival",
     });
   });
 
@@ -208,7 +208,7 @@ describe("the index follows every write", () => {
     // The guarantee that replaced invalidateCampaign(): the write and the
     // index row are one transaction, so there is no window in which the DM
     // cannot find what they just typed.
-    const rel = "01-salzhafen/hafen/lighthouse-arrival";
+    const rel = "01-salzhafen/leuchtturm/lighthouse-arrival";
     expect(await search("nachtwache")).toEqual([]);
 
     const file = await readFile(rel);

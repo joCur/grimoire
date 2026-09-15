@@ -282,7 +282,7 @@ describe("POST /api/:campaign/review/thread", () => {
 });
 
 describe("POST /api/:campaign/review/npc-stub", () => {
-  const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+  const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
   test("creates the npc with the documented shape", async () => {
     const file = await postOk("/api/beispiel/review/npc-stub", {

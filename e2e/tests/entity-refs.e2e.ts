@@ -23,11 +23,11 @@ import { FIXTURES_DIR } from "../support/paths";
 import { expect, test } from "../support/test";
 
 const SCENE = {
-  path: "01-salzhafen/hafen/entity-refs",
+  path: "01-salzhafen/leuchtturm/entity-refs",
   content: readFileSync(path.join(FIXTURES_DIR, "entity-refs-scene.md"), "utf8"),
 };
 
-const SCENE_URL = "/beispiel/file/01-salzhafen/hafen/entity-refs";
+const SCENE_URL = "/beispiel/file/01-salzhafen/leuchtturm/entity-refs";
 const SCENE_TITLE = "Referenzen am Kai";
 const JORNA = "Hafenmeisterin Jorna";
 

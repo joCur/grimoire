@@ -58,6 +58,7 @@ import {
   propertiesFormIssues,
   propertiesFormValues,
   propertiesKindLabel,
+  propertiesLocationName,
   propertiesPatch,
   hasPropertiesChanges,
   type FormValues,
@@ -189,6 +190,10 @@ function PropertiesDialog({
   // What a save would send: the values plus the pending chip text.
   const effective = commitPendingText(fields, values, pending);
   const patch = propertiesPatch(fields, initial, effective);
+  // The Ort field takes free text and STORES the slug (#100 follow-up), so a
+  // new group needs the typed text as its name. Always computed, never
+  // conditional: the server applies it only when it inserts the row.
+  const locationName = propertiesLocationName(fields, effective);
   // What is unfinished, per field — an unnamed or a doubled quickstat row.
   // Saving over one of those would lose what the DM typed, so it blocks the
   // save and says why under the field itself.
@@ -235,7 +240,7 @@ function PropertiesDialog({
           onSubmit={(e) => {
             e.preventDefault();
             if (!canSubmit) return;
-            save.write(patch);
+            save.write({ patch, locationName });
           }}
           className="mt-4 flex min-h-0 flex-1 flex-col"
         >

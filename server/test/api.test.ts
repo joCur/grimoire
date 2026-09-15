@@ -9,7 +9,7 @@
 //     not a filesystem rev — so there is nothing left to `stat`.
 //   - a scene's path segment is its ID, not its former file name
 //     (store/paths.ts): ankunft-leuchtturm.md is addressed as
-//     01-salzhafen/hafen/lighthouse-arrival.
+//     01-salzhafen/leuchtturm/lighthouse-arrival.
 // Every status code, ordering and response field below is the one the
 // file-tree reader answered with.
 
@@ -175,24 +175,38 @@ describe("GET /api/:campaign/tree", () => {
     expect(chapter!.path).toBe("01-salzhafen/_chapter");
   });
 
-  test("scenes grouped by location slug, sorted by path", async () => {
+  test("scenes grouped by their LOCATION (#100)", async () => {
     const t = await tree();
     const chapter = t.chapters.find((c) => c.id === "01-salzhafen")!;
-    const hafen = chapter.groups.find((g) => g.slug === "hafen");
-    expect(hafen).toBeDefined();
-    expect(hafen!.scenes.map((s) => s.id)).toEqual(["lighthouse-arrival", "smuggler-captured"]);
-    expect(hafen!.scenes.map((s) => s.status)).toEqual(["ready", "ready"]);
+    // The `hafen/` directory of the import format is not a group: the group
+    // is what the scene's `location` names, so the two example scenes sit
+    // apart even though they shared a directory.
+    //
+    // Ordered by the NAME the heading shows (issue #100 review), not by the
+    // id behind it: `leuchtturm` has an entry called „Der Leuchtturm von
+    // Salzhafen", `bucht` has none and falls back to its id.
+    expect(chapter.groups.map((g) => g.slug)).toEqual(["leuchtturm", "bucht"]);
+    expect(chapter.groups.map((g) => g.name)).toEqual([
+      "Der Leuchtturm von Salzhafen",
+      "bucht",
+    ]);
+    const leuchtturm = chapter.groups.find((g) => g.slug === "leuchtturm")!;
+    expect(leuchtturm.scenes.map((s) => s.id)).toEqual(["lighthouse-arrival"]);
+    expect(leuchtturm.scenes[0]!.status).toBe("ready");
     // The path segment is the scene ID now (store/paths.ts) — the file stem
     // ("ankunft-leuchtturm") does not exist anywhere any more.
-    expect(hafen!.scenes[0]!.path).toBe("01-salzhafen/hafen/lighthouse-arrival");
-    expect(hafen!.scenes[1]!.type).toBe("contingency");
+    expect(leuchtturm.scenes[0]!.path).toBe("01-salzhafen/leuchtturm/lighthouse-arrival");
+    const bucht = chapter.groups.find((g) => g.slug === "bucht")!;
+    expect(bucht.scenes[0]!.type).toBe("contingency");
   });
 
   test("npcs sorted by name, locations and sessions present", async () => {
     const t = await tree();
     expect(t.npcs.map((n) => n.id)).toEqual(["fenn", "jorna"]); // Fenn < Hafenmeisterin Jorna
     expect(t.npcs[0]!.name).toBe("Fenn");
-    expect(t.locations.map((l) => l.id)).toEqual(["leuchtturm"]);
+    // `bucht` has no file in examples/ — the import created the entry,
+    // because the contingency scene names it as its location (#100).
+    expect(t.locations.map((l) => l.id).sort()).toEqual(["bucht", "leuchtturm"]);
     expect(t.sessions.map((s) => s.id)).toEqual(["2026-01-15"]);
     expect(t.sessions[0]!.scenes_played).toEqual(["lighthouse-arrival"]);
     // sessions sort newest first
@@ -239,7 +253,7 @@ describe("GET /api/:campaign/file", () => {
   });
 
   test("returns raw + parsed + the rev as rev", async () => {
-    const rel = "01-salzhafen/hafen/lighthouse-arrival";
+    const rel = "01-salzhafen/leuchtturm/lighthouse-arrival";
     const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as FileResponse;
@@ -286,15 +300,24 @@ describe("GET /api/:campaign/file", () => {
     expect((await app.request("/api/nope/file?path=inbox")).status).toBe(404);
   });
 
-  test("404 for a scene addressed under the wrong chapter or group", async () => {
-    // A stale link: the id exists, the address does not (store/read.ts). It
-    // used to be a missing file and it still reads as one.
-    expect(
-      (await app.request("/api/beispiel/file?path=01-salzhafen/lighthouse-arrival")).status,
-    ).toBe(404);
-    expect(
-      (await app.request("/api/beispiel/file?path=02-nope/hafen/lighthouse-arrival.md")).status,
-    ).toBe(404);
+  test("a STALE scene address resolves and answers with the current one (#100)", async () => {
+    // The group segment is the scene's `location` and moves with it, so an
+    // address written down before a correction names the right scene with
+    // the wrong group. It resolves by id and reports the address it has now
+    // — that is what the app follows (ADR #17).
+    for (const stale of [
+      "01-salzhafen/lighthouse-arrival",
+      "01-salzhafen/hafen/lighthouse-arrival",
+      "02-nope/lighthouse-arrival",
+    ]) {
+      const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(stale)}`);
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as { path: string }).path).toBe(
+        "01-salzhafen/leuchtturm/lighthouse-arrival",
+      );
+    }
+    // An unknown ID is still a 404 — nothing to redirect to.
+    expect((await app.request("/api/beispiel/file?path=01-salzhafen/nirgends")).status).toBe(404);
   });
 
   test("400 without path parameter", async () => {

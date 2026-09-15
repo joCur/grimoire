@@ -13,7 +13,6 @@ Gib ausschließlich einen JSON-Block zurück, kein Markdown drumherum:
 ```json
 {
   "location": {
-    "path": "locations/<id>",
     "content": "<vollständige Markdown-Datei inkl. Frontmatter>"
   },
   "warnings": ["<alles, was der DM prüfen sollte>"]
@@ -52,9 +51,9 @@ Abschnitte sind frei; empfohlen und in dieser Reihenfolge:
    Endungen außerhalb (`[[jorna]]s Boot`).
 1. **id**: kebab-case, kurz, stabil gedacht (`leuchtturm`, nicht
    `der-alte-leuchtturm-oben-am-kap`). Die ASCII-Beschränkung gilt
-   AUSSCHLIESSLICH für die `id` und den `path` — `name`, Überschriften und der
-   Fließtext bleiben deutsch geschrieben (siehe Regel 10). Der Dateiname ist die id:
-   `path` = `locations/<id>`, und `id` im Frontmatter ist identisch dazu.
+   AUSSCHLIESSLICH für die `id` — `name`, Überschriften und der
+   Fließtext bleiben deutsch geschrieben (siehe Regel 10). Eine Adresse gibst
+   du nicht an: der Server adressiert den Eintrag als `locations/<id>`.
 2. **kein `status`**: Orte haben keinen Status-Key. Setze ihn nie.
 3. **`chapter`**: nur eine id aus der Kontextliste, und nur wenn der Ort
    eindeutig dorthin gehört. Sonst Key weglassen — der DM setzt ihn später.

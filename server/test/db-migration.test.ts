@@ -128,13 +128,13 @@ describe("AK1 — examples/beispiel imports completely and cleanly", () => {
     expect(chapterRows[0]?.status).toBe("active");
     expect(chapterRows[0]?.body).toContain("Offene Fäden");
 
-    // scenes — contract fields as columns, the location-slug folder as the
-    // display grouping, handouts as an ordered JSON list.
+    // scenes — contract fields as columns, `location` as the group (#100:
+    // the group directory only fills in when the frontmatter names none),
+    // handouts as an ordered JSON list.
     const sceneRows = db.select().from(scenes).all();
     expect(sceneRows.map((s) => s.id).sort()).toEqual(["lighthouse-arrival", "smuggler-captured"]);
     const arrival = sceneRows.find((s) => s.id === "lighthouse-arrival");
     expect(arrival?.chapterId).toBe("01-salzhafen");
-    expect(arrival?.groupSlug).toBe("hafen");
     expect(arrival?.title).toBe("Ankunft am Leuchtturm");
     expect(arrival?.type).toBe("planned");
     expect(arrival?.status).toBe("ready");
@@ -617,6 +617,29 @@ describe("no silent content loss", () => {
         .sort((a, b) => a.pos - b.pos)
         .map((r) => r.sceneId),
     ).toEqual(["hafen", "leuchtturm", "hafen"]);
+  });
+
+  test("a `location` that yields no id is imported empty and reported", async () => {
+    const id = await campaignWith({
+      "_campaign.md": "---\nid: review\n---\n",
+      "01-x/_chapter.md": "---\nid: 01-x\ntitle: Kapitel\n---\n",
+      // Nothing survives the transliteration, so there is no id to derive —
+      // and the field used to be dropped in silence (issue #100 review).
+      "01-x/szene.md": "---\nid: szene\ntitle: Szene\nlocation: \"???\"\n---\n\nText.\n",
+    });
+    const { db } = await freshDb();
+    await runInitialMigration(db, tmpRoot);
+    const scene = db.select().from(scenes).where(eq(scenes.campaignId, id)).all()[0];
+    expect(scene?.location).toBeNull();
+    expect(
+      db
+        .select()
+        .from(migrationReport)
+        .where(eq(migrationReport.campaignId, id))
+        .all()
+        .map((r) => r.reason)
+        .join(" "),
+    ).toContain("ergibt keine Orts-id");
   });
 
   test("a `quickstats` that is not a map is kept in extra and reported", async () => {

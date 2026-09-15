@@ -11,7 +11,7 @@
 //     grows by one per write, and still a deliberately opaque guard token.
 //     "nothing was written" is now "the rev did not move".
 //   * A SCENE'S PATH SEGMENT IS ITS ID (store/paths.ts), so the reference
-//     scenes are addressed as `01-salzhafen/hafen/lighthouse-arrival` and
+//     scenes are addressed as `01-salzhafen/leuchtturm/lighthouse-arrival` and
 //     `.../smuggler-captured.md` instead of by their former file names.
 //   * `raw` IS A DETERMINISTIC RENDERING (YAML block + body), not stored
 //     bytes. Byte assertions about `raw` are still meaningful — the rendering
@@ -134,7 +134,7 @@ afterEach(() => {
 });
 
 describe("PATCH /api/:campaign/properties", () => {
-  const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+  const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
   test("happy path: only named keys change, key order stable, body untouched", async () => {
     const before = await getFile(SCENE);
@@ -717,8 +717,8 @@ describe("naming a campaign that has none (issue #62)", () => {
 // properties of the row comes back unchanged, key for key and value for
 // value ("the properties block stays byte-identical" of the file version).
 describe("PUT /api/:campaign/file", () => {
-  const REFERENCE = "01-salzhafen/hafen/smuggler-captured";
-  const SCENE = "01-salzhafen/hafen/lighthouse-arrival";
+  const REFERENCE = "01-salzhafen/bucht/smuggler-captured";
+  const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
   /** The rendered prefix up to and including the YAML block's closing `---\n`. */
   function fmBlock(raw: string): string {
