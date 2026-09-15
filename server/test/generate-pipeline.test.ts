@@ -86,6 +86,32 @@ test("a well-formed outline validates and keeps its order", () => {
   expect(outcome.result.scenes[0]!.sourceExcerpt).toEqual({ first: "One.", last: "Two." });
 });
 
+test("the schema's nullable optionals read as „not given“ (issue #107)", () => {
+  // `strict: true` has no optional properties, so the schema makes `location`
+  // and `sourceExcerpt` NULLABLE and the provider will hand back explicit
+  // nulls. The validation has to read those as absent — otherwise the very
+  // shape the API guarantees would fail the run.
+  const outcome = validateOutlineReply(
+    outlineReply({
+      scenes: [
+        {
+          id: "night-watch",
+          title: "Nachtwache am Kai",
+          type: "planned",
+          location: null,
+          sourceExcerpt: null,
+          refs: [],
+        },
+      ],
+    }),
+    CTX,
+  );
+  expect(outcome.ok).toBe(true);
+  if (!outcome.ok) return;
+  expect(outcome.result.scenes[0]!.location).toBeUndefined();
+  expect(outcome.result.scenes[0]!.sourceExcerpt).toBeUndefined();
+});
+
 test("the outline's ids are kebab slugs and unique across scenes AND entries", () => {
   expect(
     outlineErrors(outlineReply({ scenes: [{ id: "Night Watch", type: "planned", refs: [] }] })),

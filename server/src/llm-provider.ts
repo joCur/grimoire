@@ -3,18 +3,33 @@
 // config change, not a code change (DECISIONS #6).
 //
 // Providers are pure transports: they build the prompt, replay prior
-// correction turns, force JSON the way their API allows (issue #20:
-// `response_format` on the OpenAI-compatible path, an assistant prefill on
-// the Messages API) and return the model's RAW text reply. Parsing and
+// correction turns and return the model's RAW text reply. Parsing and
 // mechanical validation live in generator.ts — a malformed reply is a
 // validation error that goes back to the model as a correction turn, not an
 // exception (generator/README.md step 4).
+//
+// Since issue #107 a request says WHAT SHAPE it wants back, and the two are
+// handled very differently:
+//
+//   a DOCUMENT (no `jsonSchema`) — the scene part, the entry part, the NPC
+//       run, the augment run. Nothing is forced at all: the reply is markdown
+//       and every JSON-forcing knob the transports have would fight it. The
+//       `{` prefill of issue #20 and `response_format` are gone from this
+//       path for exactly that reason.
+//   a JSON OBJECT (`jsonSchema` set) — the outline, and only the outline.
+//       Here the API can GUARANTEE the shape, so it is made to: Claude gets
+//       the schema as a tool with `tool_choice` forcing the call, an
+//       OpenAI-compatible endpoint gets `response_format: json_schema` with
+//       `strict: true` (and falls back to plain `json_object` for endpoints
+//       that reject it — detected once per process).
 //
 // Two facts travel WITH the text, because only the transport can see them
 // (issue #18): whether the model hit its output cap (`finish_reason: length`
 // / `stop_reason: max_tokens` — a truncated reply is unfixable by a
 // correction turn, so the generator fails fast on it) and the API's token
 // usage, normalized so the generator can sum it over a whole run.
+
+import type { JsonSchema } from "@grimoire/shared/outline-schema";
 
 export interface GenerateRequest {
   systemPrompt: string; // generator/system-prompt.md (npc run: npc-system-prompt.md)
@@ -70,6 +85,21 @@ export interface GenerateRequest {
    * the dialog requires at least one of them.
    */
   instruction?: string;
+  /**
+   * The JSON schema the reply must satisfy (issue #107). Set by the OUTLINE
+   * step alone; every document call leaves it absent, and then the transport
+   * forces nothing and the reply is the document itself.
+   */
+  jsonSchema?: ReplySchema;
+}
+
+/** A schema a provider can force a reply into — see GenerateRequest.jsonSchema. */
+export interface ReplySchema {
+  /** Tool name (Claude) / `json_schema.name` (OpenAI). */
+  name: string;
+  /** What the tool is for; only the Claude path sends it. */
+  description: string;
+  schema: JsonSchema;
 }
 
 /**
@@ -294,15 +324,14 @@ function buildMessages(
   return messages;
 }
 
-// --- JSON forcing (issue #20, AK 6) -----------------------------------------
-
-/**
- * Assistant prefill for the Messages API: an open brace as the last turn
- * forces the model to CONTINUE a JSON object instead of writing an explainer
- * sentence first. The API returns only the continuation, so the provider puts
- * the brace back in front of the reply (see ClaudeProvider.complete).
- */
-export const JSON_PREFILL = "{";
+// --- JSON forcing: the OUTLINE call only (issue #20, narrowed by #107) ------
+//
+// Issue #20 forced JSON on EVERY call — an assistant prefill of `{` on the
+// Messages API, `response_format: json_object` on the OpenAI path. Both are
+// now bound to a request that actually wants JSON, i.e. to the outline: a
+// prefilled `{` in front of a markdown document is a corrupted document, and
+// `response_format` on a document call asks the endpoint for the one thing
+// the prompt forbids.
 
 // --- Claude API ------------------------------------------------------------
 
@@ -357,40 +386,81 @@ export class ClaudeProvider implements LLMProvider {
         "x-api-key": this.apiKey,
         "anthropic-version": "2023-06-01",
       },
-      body: JSON.stringify({
-        model: this.model,
-        max_tokens: this.maxTokens,
-        // Prompt caching (issue #102): the system prompt and the CONSTANT
-        // half of the user turn are the same for every part of a run, so
-        // both carry an ephemeral cache breakpoint. A pipelined run with N
-        // scenes reads that prefix N+1 times — paying for it once is the
-        // difference between "per scene" being affordable and not.
-        system: [{ type: "text", text: req.systemPrompt, cache_control: EPHEMERAL }],
-        // The prefill has to be the LAST turn of every attempt — after the
-        // replayed correction turns, which end with a user message.
-        messages: [
-          ...claudeMessages(req, corrections),
-          { role: "assistant", content: JSON_PREFILL },
-        ],
-      }),
+      body: JSON.stringify(claudeBody(req, corrections, this.model, this.maxTokens)),
     });
     if (!res.ok) throw new Error(`Claude API: ${res.status} ${await res.text()}`);
     const data = await res.json();
-    const text = data.content
-      .filter((b: { type: string }) => b.type === "text")
-      .map((b: { text: string }) => b.text)
-      .join("\n");
     return {
-      // What came back is the CONTINUATION of the prefill, so exactly what
-      // was prefilled goes back in front — never conditionally on the reply's
-      // first character: a nested object legitimately continues with `{`, and
-      // dropping the brace there would corrupt a perfectly good reply.
-      text: JSON_PREFILL + text,
+      text: claudeText(data, req.jsonSchema !== undefined),
       // Messages API: the reply stopped because it ran into max_tokens.
       truncated: data.stop_reason === "max_tokens",
       usage: claudeUsage(data.usage),
     };
   }
+}
+
+/**
+ * The Messages API request body. Split out of `complete` because the two
+ * reply shapes differ HERE and nowhere else (issue #107): a schema request
+ * carries the schema as a forced tool, a document request carries nothing
+ * extra at all.
+ */
+export function claudeBody(
+  req: GenerateRequest,
+  corrections: CorrectionTurn[],
+  model: string,
+  maxTokens: number,
+): Record<string, unknown> {
+  const schema = req.jsonSchema;
+  return {
+    model,
+    max_tokens: maxTokens,
+    // Prompt caching (issue #102): the system prompt and the CONSTANT half of
+    // the user turn are the same for every part of a run, so both carry an
+    // ephemeral cache breakpoint. A pipelined run with N scenes reads that
+    // prefix N+1 times — paying for it once is the difference between "per
+    // scene" being affordable and not.
+    system: [{ type: "text", text: req.systemPrompt, cache_control: EPHEMERAL }],
+    messages: claudeMessages(req, corrections),
+    // The outline (issue #107): the schema travels as a TOOL and the call is
+    // forced, so the reply cannot be prose, cannot be truncated JSON and
+    // cannot miss a required key — the API validates it before we do. A
+    // document call sends neither, and therefore no `{` prefill either: a
+    // prefilled brace in front of markdown is a corrupted document.
+    ...(schema === undefined
+      ? {}
+      : {
+          tools: [
+            {
+              name: schema.name,
+              description: schema.description,
+              input_schema: schema.schema,
+            },
+          ],
+          tool_choice: { type: "tool", name: schema.name },
+        }),
+  };
+}
+
+/**
+ * The reply text of one Messages API answer. For a forced tool call that is
+ * the tool INPUT re-serialized — the validation downstream reads JSON, and
+ * the API hands the arguments over as a parsed object. `text` blocks are the
+ * fallback: an API that answered prose anyway must reach the validation as
+ * prose, not as an empty reply the run cannot explain.
+ */
+export function claudeText(data: unknown, wantsTool: boolean): string {
+  const blocks = Array.isArray((data as { content?: unknown }).content)
+    ? ((data as { content: Array<Record<string, unknown>> }).content)
+    : [];
+  if (wantsTool) {
+    const call = blocks.find((b) => b.type === "tool_use" && b.input !== undefined);
+    if (call !== undefined) return JSON.stringify(call.input);
+  }
+  return blocks
+    .filter((b) => b.type === "text" && typeof b.text === "string")
+    .map((b) => b.text as string)
+    .join("\n");
 }
 
 // --- OpenAI-compatible endpoints (OpenRouter, LM Studio, vLLM, …) -----------
@@ -406,9 +476,11 @@ export interface OpenAICompatOptions {
   /** Output cap; omitted from the body when unset (endpoint's own default). */
   maxTokens?: number;
   /**
-   * Send `response_format: { type: "json_object" }` (issue #20). Default on;
-   * the factory turns it off for `LLM_FORCE_JSON=0`, because some routed
-   * models reject the field and would fail every single run.
+   * Force the reply shape of a call that wants JSON — the outline (issue
+   * #107): `response_format: json_schema` with a fallback to `json_object`.
+   * Default on; the factory turns it off for `LLM_FORCE_JSON=0`, because some
+   * routed endpoints reject the field and would fail every single run. It
+   * never applies to a document call, which forces nothing either way.
    */
   forceJson?: boolean;
   /** Shown in error messages ("openrouter: 401 …"). */
@@ -452,24 +524,28 @@ export class OpenAICompatProvider implements LLMProvider {
     // ignore a bogus one).
     if (this.apiKey) headers.authorization = `Bearer ${this.apiKey}`;
 
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: this.model,
-        messages: [
-          { role: "system", content: req.systemPrompt },
-          ...buildMessages(req, corrections),
-        ],
-        temperature: 0.3,
-        // Unset means "endpoint default" — local servers and routed models
-        // disagree about sensible caps, so we do not invent one.
-        ...(this.maxTokens === undefined ? {} : { max_tokens: this.maxTokens }),
-        // JSON mode (issue #20): the extraction in generator.ts stays the
-        // safety net for endpoints that accept the field and ignore it.
-        ...(this.forceJson ? { response_format: { type: "json_object" } } : {}),
-      }),
-    });
+    const send = (responseFormat: JsonSchema | undefined): Promise<Response> =>
+      fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(this.body(req, corrections, responseFormat)),
+      });
+
+    const wanted = this.responseFormat(req);
+    let res = await send(wanted);
+    // An endpoint that rejects `json_schema` (400) gets ONE retry with plain
+    // `json_object` — and the downgrade is remembered for the process, so the
+    // next outline call does not pay for the discovery again (issue #107).
+    // Only a 400 counts: a 401 or a 500 says nothing about the field, and
+    // retrying those would double every failing request.
+    if (!res.ok && res.status === 400 && isJsonSchemaFormat(wanted)) {
+      jsonSchemaRejected = true;
+      console.log(
+        `${this.name}: response_format json_schema was rejected (400) — ` +
+          "falling back to json_object for this process",
+      );
+      res = await send(JSON_OBJECT_FORMAT);
+    }
     if (!res.ok) throw new Error(`${this.name}: ${res.status} ${await res.text()}`);
     const data = await res.json();
     const choice = data.choices[0];
@@ -481,6 +557,69 @@ export class OpenAICompatProvider implements LLMProvider {
       usage: normalizeUsage(data.usage, "prompt_tokens", "completion_tokens"),
     };
   }
+
+  /** The request body, `response_format` included as given. */
+  body(
+    req: GenerateRequest,
+    corrections: CorrectionTurn[],
+    responseFormat: JsonSchema | undefined,
+  ): Record<string, unknown> {
+    return {
+      model: this.model,
+      messages: [
+        { role: "system", content: req.systemPrompt },
+        ...buildMessages(req, corrections),
+      ],
+      temperature: 0.3,
+      // Unset means "endpoint default" — local servers and routed models
+      // disagree about sensible caps, so we do not invent one.
+      ...(this.maxTokens === undefined ? {} : { max_tokens: this.maxTokens }),
+      ...(responseFormat === undefined ? {} : { response_format: responseFormat }),
+    };
+  }
+
+  /**
+   * What this call asks the endpoint to guarantee (issue #107):
+   *
+   *   a document call        nothing. The reply is markdown.
+   *   the outline            `json_schema` with `strict: true` — or
+   *                          `json_object` once an endpoint has been seen to
+   *                          reject the schema form.
+   *
+   * `LLM_FORCE_JSON=0` turns both off for endpoints that reject the field
+   * altogether; the extraction and the tolerant repair in generate-pipeline
+   * stay the safety net for endpoints that accept it and ignore it.
+   */
+  responseFormat(req: GenerateRequest): JsonSchema | undefined {
+    const schema = req.jsonSchema;
+    if (schema === undefined || !this.forceJson) return undefined;
+    if (jsonSchemaRejected) return JSON_OBJECT_FORMAT;
+    return {
+      type: "json_schema",
+      json_schema: { name: schema.name, schema: schema.schema, strict: true },
+    };
+  }
+}
+
+/** `response_format` of an endpoint that only does plain JSON mode. */
+const JSON_OBJECT_FORMAT: JsonSchema = { type: "json_object" };
+
+/**
+ * Whether ANY endpoint of this process has rejected `json_schema`. One flag
+ * for the process, not per instance: a provider is built per request
+ * (`obtainProvider`), so an instance-local memory would forget the answer
+ * immediately and every single outline call would pay for the discovery.
+ * A deployment talks to one endpoint — that is what makes one flag honest.
+ */
+let jsonSchemaRejected = false;
+
+/** Test-only: forget the downgrade, so a case can exercise either path. */
+export function resetJsonSchemaSupportForTests(): void {
+  jsonSchemaRejected = false;
+}
+
+function isJsonSchemaFormat(format: JsonSchema | undefined): boolean {
+  return format?.type === "json_schema";
 }
 
 // --- factory ----------------------------------------------------------------

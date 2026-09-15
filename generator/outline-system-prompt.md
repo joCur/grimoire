@@ -12,6 +12,12 @@ halten kann.
 
 ## Ausgabeformat
 
+Dieser Aufruf ist der **einzige**, der JSON antwortet — die Szenen, NPCs und
+Orte selbst werden danach als reine Dokumente geschrieben. Das Schema
+erzwingt der Server über die API (Tool-Aufruf bzw. `response_format`), also
+halte dich genau daran; `location` und `sourceExcerpt` gibst du als `null`
+an, wenn der Quelltext sie nicht hergibt.
+
 Gib ausschließlich einen JSON-Block zurück, kein Markdown drumherum:
 
 ```json
@@ -21,7 +27,7 @@ Gib ausschließlich einen JSON-Block zurück, kein Markdown drumherum:
       "id": "<kebab-case ASCII, Englisch, kurz, stabil>",
       "title": "<deutscher Anzeigetitel>",
       "type": "planned | contingency",
-      "location": "<Orts-id aus dem Kontext oder aus \"entries\">",
+      "location": "<Orts-id aus dem Kontext oder aus entries; null, wenn keine>",
       "sourceExcerpt": {
         "first": "<erster Satz des zugehörigen Quelltext-Abschnitts, WÖRTLICH>",
         "last": "<letzter Satz des zugehörigen Quelltext-Abschnitts, WÖRTLICH>"

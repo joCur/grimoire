@@ -49,6 +49,14 @@ import {
   type NamingHint,
 } from "@grimoire/shared";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
+import {
+  MAX_OUTLINE_ENTRIES,
+  MAX_OUTLINE_SCENES,
+  OUTLINE_ENTRY_KINDS,
+  OUTLINE_SCHEMA_DESCRIPTION,
+  OUTLINE_SCHEMA_NAME,
+  outlineJsonSchema,
+} from "@grimoire/shared/outline-schema";
 import { ApiError } from "./campaign-fs";
 import { checkDraftsNaming } from "./naming-check";
 import {
@@ -89,9 +97,12 @@ export const PART_CONCURRENCY = 3;
  * answer is „cut the source text“, so an outline over the bound is a
  * VALIDATION ERROR and therefore a correction turn that asks the model to
  * consolidate, not a failed run.
+ *
+ * The numbers live in the SCHEMA module since issue #107 (`maxItems` states
+ * them to the provider, the validation below enforces them) and are
+ * re-exported here, where every caller already reads them.
  */
-export const MAX_OUTLINE_SCENES = 12;
-export const MAX_OUTLINE_ENTRIES = 12;
+export { MAX_OUTLINE_ENTRIES, MAX_OUTLINE_SCENES } from "@grimoire/shared/outline-schema";
 
 // --- the outline --------------------------------------------------------------
 
@@ -122,6 +133,11 @@ export interface RunOutline {
 }
 
 const OUTLINE_CORRECTION_TAIL = "die vollständige Gliederung enthalten";
+
+/** One of the schema's entry kinds (#107) — the list is the schema's own. */
+function isOutlineEntryKind(v: unknown): v is (typeof OUTLINE_ENTRY_KINDS)[number] {
+  return typeof v === "string" && (OUTLINE_ENTRY_KINDS as readonly string[]).includes(v);
+}
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -166,8 +182,10 @@ export function validateOutlineReply(
       return;
     }
     const kind = item.kind;
-    if (kind !== "npc" && kind !== "location") {
-      errors.push(`${label}: "kind" must be "npc" or "location"`);
+    // The schema's own list (#107): the shape the provider is forced into and
+    // the shape the validation accepts read the same constant.
+    if (!isOutlineEntryKind(kind)) {
+      errors.push(`${label}: "kind" must be ${OUTLINE_ENTRY_KINDS.join(" or ")}`);
       return;
     }
     const id = stringField(item, "id");
@@ -714,6 +732,14 @@ export async function runOutlineStep(
       glossary: ctx.glossary,
       context: { chapter: ctx.chapter, npcs: ctx.npcs, locations: ctx.locations },
       sourceText,
+      // The one call of a run that still answers JSON — so it is the one
+      // call whose shape the API can GUARANTEE (issue #107): Claude gets a
+      // forced tool, an OpenAI-compatible endpoint `json_schema`.
+      jsonSchema: {
+        name: OUTLINE_SCHEMA_NAME,
+        description: OUTLINE_SCHEMA_DESCRIPTION,
+        schema: outlineJsonSchema(),
+      },
     },
     provider,
     validate: (raw) => {
