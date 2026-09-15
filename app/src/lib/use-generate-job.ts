@@ -49,6 +49,39 @@ export function generateJobPollMs(
   return false;
 }
 
+/** Options accepted by the job query. */
+export type GenerateJobOptions = { enabled?: boolean; expectJob?: boolean };
+
+/**
+ * The query options behind `useGenerateJob`, exported so the polling
+ * contract can be asserted without mounting a component.
+ *
+ * `refetchIntervalInBackground: true` is the load-bearing part. TanStack
+ * Query suspends refetch intervals while `document.visibilityState` is
+ * "hidden" unless this flag is set, so a run that finishes while the DM is
+ * reading something in another tab would sit unnoticed on the server until
+ * this tab regained focus — the view keeps claiming "working" in the
+ * meantime. A run's completion has to be picked up on its own, so this
+ * loop must survive a hidden tab. Unlike the version poll, it is bounded:
+ * the interval exists only while a run is in flight (see
+ * `generateJobPollMs`), so a background tab with no run polls nothing.
+ */
+export function generateJobQueryOptions(
+  campaign: string,
+  { enabled = true, expectJob = false }: GenerateJobOptions = {},
+) {
+  return {
+    queryKey: generateJobKey(campaign),
+    queryFn: () => fetchGenerateJob(campaign),
+    enabled: enabled && campaign !== "",
+    // Poll only as long as there is something to wait for.
+    refetchInterval: (query: { state: { data: GenerateJob | null | undefined } }) =>
+      generateJobPollMs(query.state.data, expectJob),
+    refetchIntervalInBackground: true,
+    retry: false,
+  };
+}
+
 /**
  * The campaign's generate job, or null when there is none. Polls while the
  * job is running — and while `expectJob` says a run was just started and its
@@ -57,14 +90,7 @@ export function generateJobPollMs(
  */
 export function useGenerateJob(
   campaign: string,
-  { enabled = true, expectJob = false }: { enabled?: boolean; expectJob?: boolean } = {},
+  options: GenerateJobOptions = {},
 ): UseQueryResult<GenerateJob | null> {
-  return useQuery({
-    queryKey: generateJobKey(campaign),
-    queryFn: () => fetchGenerateJob(campaign),
-    enabled: enabled && campaign !== "",
-    // Poll only as long as there is something to wait for.
-    refetchInterval: (query) => generateJobPollMs(query.state.data, expectJob),
-    retry: false,
-  });
+  return useQuery(generateJobQueryOptions(campaign, options));
 }

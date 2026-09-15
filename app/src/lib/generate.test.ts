@@ -8,7 +8,11 @@ import { describe, expect, test } from "bun:test";
 import type { GenerateJob } from "@grimoire/shared/types";
 
 import { translator } from "@/i18n/format";
-import { GENERATE_JOB_POLL_MS, generateJobPollMs } from "@/lib/use-generate-job";
+import {
+  GENERATE_JOB_POLL_MS,
+  generateJobPollMs,
+  generateJobQueryOptions,
+} from "@/lib/use-generate-job";
 import {
   applySummary,
   chapterIdError,
@@ -689,6 +693,27 @@ describe("the run's parts", () => {
     );
     // Nobody waiting: a settled job needs no poll.
     expect(generateJobPollMs({ ...job(["done"]), status: "done" })).toBe(false);
+  });
+
+  test("the poll keeps running while the tab is hidden", () => {
+    // A run lives on the server, so it finishes whether or not this tab is
+    // in front. TanStack Query suspends refetch intervals on a hidden tab
+    // unless refetchIntervalInBackground is set, which meant a run that
+    // completed while the DM was reading another tab was only noticed when
+    // this one regained focus — the view kept showing "working" until then.
+    const options = generateJobQueryOptions("beispiel", { expectJob: true });
+    expect(options.refetchIntervalInBackground).toBe(true);
+    // The interval itself stays bounded: no run, no polling.
+    expect(
+      generateJobQueryOptions("beispiel").refetchInterval({
+        state: { data: { ...job(["done"]), status: "done" } },
+      }),
+    ).toBe(false);
+    expect(options.refetchInterval({ state: { data: null } })).toBe(
+      GENERATE_JOB_POLL_MS,
+    );
+    // An empty campaign has nothing to ask about.
+    expect(generateJobQueryOptions("").enabled).toBe(false);
   });
 
   test("„noch offen“ is pending or running, never failed", () => {
