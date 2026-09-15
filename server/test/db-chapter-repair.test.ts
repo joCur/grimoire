@@ -122,6 +122,76 @@ describe("the boot repair of orphan chapters (#115)", () => {
     client.close();
   });
 
+  // A BLANK `chapter_id` (#115 review, finding 1): it names no chapter, so the
+  // create half has nothing to do — and it is not NULL either, so migration
+  // 0012's composite foreign key would demand a chapters row with the empty id
+  // and fail the boot. It becomes NULL, which is what "no chapter" means.
+  test("a blank chapter_id becomes NULL and is reported", async () => {
+    const client = await oldSchemaDb();
+    addScene(client, "szene-a", "");
+    addScene(client, "szene-b", "   ");
+    addScene(client, "szene-c", null);
+
+    const outcome = repairOrphanChapters(client);
+
+    expect(outcome.created).toEqual([]);
+    expect(outcome.blanked).toEqual([{ campaignId: "beispiel", scenes: 2 }]);
+    // No chapter was invented for the empty name.
+    expect(chapters(client)).toEqual([]);
+    expect(
+      client.prepare("select id from scenes where chapter_id is null order by id").all(),
+    ).toEqual([{ id: "szene-a" }, { id: "szene-b" }, { id: "szene-c" }]);
+    // And a second pass finds nothing left.
+    expect(repairOrphanChapters(client)).toBe(NO_CHAPTER_REPAIR);
+    client.close();
+  });
+
+  test("blanks and orphans are closed in the same pass", async () => {
+    const client = await oldSchemaDb();
+    addScene(client, "szene-a", "");
+    addScene(client, "szene-b", "03-dragon-hatchery");
+
+    const outcome = repairOrphanChapters(client);
+
+    expect(outcome.created).toEqual([
+      { campaignId: "beispiel", chapterId: "03-dragon-hatchery", scenes: 1 },
+    ]);
+    expect(outcome.blanked).toEqual([{ campaignId: "beispiel", scenes: 1 }]);
+    client.close();
+  });
+
+  // The promise the blank half exists for, end to end: the same pre-0012
+  // database, once with the repair and once without. A blank left in place is
+  // exactly the row migration 0012 fails on.
+  test("migration 0012 goes through after the repair and fails without it", async () => {
+    async function upTo0011(): Promise<SqliteClient> {
+      const client = await openSqlite(":memory:");
+      client.exec("PRAGMA foreign_keys = ON");
+      for (const tag of journalTags().filter((t) => t < "0012")) applyMigration(client, tag);
+      client.prepare("insert into campaigns (id, name) values ('beispiel', 'Beispiel')").run();
+      client
+        .prepare("insert into scenes (campaign_id, id, chapter_id, title, pos) values ('beispiel', 'szene', '', 'Szene', 0)")
+        .run();
+      return client;
+    }
+
+    const unrepaired = await upTo0011();
+    expect(() =>
+      unrepaired.transaction(() => applyMigration(unrepaired, "0012_scenes_chapter_fk")).immediate(),
+    ).toThrow();
+    unrepaired.close();
+
+    const repaired = await upTo0011();
+    expect(repairOrphanChapters(repaired).blanked).toEqual([
+      { campaignId: "beispiel", scenes: 1 },
+    ]);
+    repaired.transaction(() => applyMigration(repaired, "0012_scenes_chapter_fk")).immediate();
+    expect(repaired.prepare("select id, chapter_id from scenes").all()).toEqual([
+      { id: "szene", chapter_id: null },
+    ]);
+    repaired.close();
+  });
+
   test("keeps two campaigns apart", async () => {
     const client = await oldSchemaDb();
     client

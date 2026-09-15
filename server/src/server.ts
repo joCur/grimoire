@@ -484,6 +484,15 @@ if (import.meta.main) {
       );
     }
   }
+  if (chapterRepair !== undefined && chapterRepair.blanked.length > 0) {
+    // A blank `chapter_id` named no chapter, so nothing could be created for
+    // it — it is now NULL, which is what "no chapter" has always meant. The
+    // scenes are listed under „Ohne Kapitel"; say so, they moved.
+    console.log("scene(s) carried an EMPTY chapter reference and now carry none:");
+    for (const entry of chapterRepair.blanked) {
+      console.log(`  · [${entry.campaignId}] ${entry.scenes} scene(s)`);
+    }
+  }
   // Issue #23: jobs are rows now, so a restart no longer loses a finished
   // generation — but a run that was in flight died with the old process and
   // is reported as failed. Say so, it explains the app's message.

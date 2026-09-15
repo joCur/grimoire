@@ -790,6 +790,12 @@ diesen Zeilen scheitern. Er meldet beim Start, was er angelegt hat (Form wie
 #100), weil ein Kapitel, das unter seinem Slug auftaucht, umbenannt werden
 will.
 
+Ein **leeres** `chapter_id` (`''` oder nur Leerzeichen) nennt kein Kapitel, es
+kann also keines angelegt werden — und es ist auch nicht `NULL`, würde den
+zusammengesetzten Fremdschlüssel von 0012 also verletzen. Der Reparaturschritt
+setzt solche Werte in derselben Transaktion auf `NULL` (was „keine
+Kapitel-Referenz" seit immer bedeutet) und meldet sie ebenfalls beim Start.
+
 **Konsequenz für Migration 0012:** `PRAGMA foreign_keys=OFF`, das drizzle-kit
 um den Tabellen-Neubau generiert, ist im Migrator wirkungslos — der läuft in
 einer Transaktion, und dort ist das Pragma ein No-op. Mit aktiver Durchsetzung

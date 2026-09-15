@@ -27,8 +27,21 @@
 // shape issue #100 established), because a chapter appearing out of nowhere is
 // something the DM should read rather than discover.
 //
-// It is a no-op on every database that has no orphan — which, after the FK of
-// migration 0012, is every database the server itself ever writes.
+// WHAT IT BLANKS
+//
+// A `chapter_id` that is present but EMPTY (`''`, or nothing but whitespace)
+// names no chapter at all, so there is nothing to create for it — and it is
+// not NULL either, so migration 0012's composite foreign key would demand a
+// chapters row with the empty id and fail the boot. Such a value is therefore
+// set to NULL in the SAME transaction as the creates: NULL is what "this scene
+// has no chapter" has always meant, the scene stays where the DM can see it,
+// and the FK is satisfied. It is reported too, for the same reason the creates
+// are — a scene that lost its chapter reference should be read, not
+// discovered.
+//
+// It is a no-op on every database that has no orphan and no blank — which,
+// after the FK of migration 0012, is every database the server itself ever
+// writes.
 
 import type { SqliteClient } from "./driver";
 
@@ -41,12 +54,21 @@ export interface ChapterRepairEntry {
   scenes: number;
 }
 
+/** One campaign whose scenes carried a blank `chapter_id`, now NULL. */
+export interface ChapterBlankEntry {
+  campaignId: string;
+  /** How many scenes were holding the empty value. */
+  scenes: number;
+}
+
 export interface ChapterRepairOutcome {
   /** The chapters created, ordered by campaign and id. */
   created: ChapterRepairEntry[];
+  /** The campaigns whose blank `chapter_id`s became NULL, ordered by id. */
+  blanked: ChapterBlankEntry[];
 }
 
-export const NO_CHAPTER_REPAIR: ChapterRepairOutcome = { created: [] };
+export const NO_CHAPTER_REPAIR: ChapterRepairOutcome = { created: [], blanked: [] };
 
 function hasTable(client: SqliteClient, name: string): boolean {
   return (
@@ -62,10 +84,16 @@ interface OrphanRow {
   n: number;
 }
 
+interface BlankRow {
+  campaign_id: string;
+  n: number;
+}
+
 /**
- * Create the missing chapter rows. Returns what it created, which the boot
- * log reports; `NO_CHAPTER_REPAIR` on a database without the tables (a fresh
- * file before the migrator has run) or without a hole.
+ * Close both kinds of hole: create the missing chapter rows, and NULL the
+ * `chapter_id`s that are blank. Returns what it did, which the boot log
+ * reports; `NO_CHAPTER_REPAIR` on a database without the tables (a fresh file
+ * before the migrator has run) or without a hole.
  */
 export function repairOrphanChapters(client: SqliteClient): ChapterRepairOutcome {
   if (!hasTable(client, "scenes") || !hasTable(client, "chapters")) return NO_CHAPTER_REPAIR;
@@ -83,7 +111,21 @@ export function repairOrphanChapters(client: SqliteClient): ChapterRepairOutcome
         order by s.campaign_id, s.chapter_id`,
     )
     .all() as unknown as OrphanRow[];
-  if (orphans.length === 0) return NO_CHAPTER_REPAIR;
+
+  // Present but empty: names no chapter, and is not NULL either — so it has
+  // nothing to create and would still fail migration 0012's foreign key.
+  const blanks = client
+    .prepare(
+      `select s.campaign_id as campaign_id, count(*) as n
+         from scenes s
+        where s.chapter_id is not null
+          and trim(s.chapter_id) = ''
+        group by s.campaign_id
+        order by s.campaign_id`,
+    )
+    .all() as unknown as BlankRow[];
+
+  if (orphans.length === 0 && blanks.length === 0) return NO_CHAPTER_REPAIR;
 
   const insertChapter = client.prepare(
     // `title = id` on purpose — see the note at the top. `pos` puts the
@@ -99,9 +141,21 @@ export function repairOrphanChapters(client: SqliteClient): ChapterRepairOutcome
   // over an index the search will rebuild anyway.
   let indexChapter: ReturnType<SqliteClient["prepare"]> | undefined;
 
+  const blankOut = client.prepare(
+    `update scenes set chapter_id = null
+      where campaign_id = ? and chapter_id is not null and trim(chapter_id) = ''`,
+  );
+
   const created: ChapterRepairEntry[] = [];
+  const blanked: ChapterBlankEntry[] = [];
   client
     .transaction(() => {
+      // The blanks first: they are the rows migration 0012 would trip over,
+      // and neither half depends on the other.
+      for (const row of blanks) {
+        blankOut.run(row.campaign_id);
+        blanked.push({ campaignId: row.campaign_id, scenes: Number(row.n) });
+      }
       for (const row of orphans) {
         insertChapter.run(row.campaign_id, row.chapter_id, row.chapter_id, row.campaign_id);
         try {
@@ -121,5 +175,5 @@ export function repairOrphanChapters(client: SqliteClient): ChapterRepairOutcome
       }
     })
     .immediate();
-  return { created };
+  return { created, blanked };
 }
