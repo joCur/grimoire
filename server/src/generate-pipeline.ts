@@ -49,7 +49,7 @@ import {
   type NamingHint,
 } from "@grimoire/shared";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
-import { ApiError } from "./campaign-fs";
+import { ApiError } from "./api-error";
 import { checkDraftsNaming } from "./naming-check";
 import {
   ASSET_FILES,

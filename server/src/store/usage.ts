@@ -19,7 +19,7 @@
 //     count — that is the "Referenzort" the DM can actually open.
 
 import { and, eq } from "drizzle-orm";
-import { ApiError } from "../campaign-fs";
+import { ApiError } from "../api-error";
 import type { GrimoireDb } from "../db/client";
 import {
   campaigns,

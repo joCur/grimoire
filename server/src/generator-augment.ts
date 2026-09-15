@@ -36,7 +36,7 @@ import {
   type AugmentResult,
   type FileResponse,
 } from "@grimoire/shared";
-import { ApiError } from "./campaign-fs";
+import { ApiError } from "./api-error";
 import {
   ASSET_FILES,
   collectContext,

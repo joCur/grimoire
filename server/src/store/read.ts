@@ -31,7 +31,8 @@ import {
   type SceneSummary,
   type SessionSummary,
 } from "@grimoire/shared";
-import { ApiError, assertSafeCampaignId, assertSafeAddress } from "../campaign-fs";
+import { ApiError } from "../api-error";
+import { assertSafeCampaignId, assertSafeAddress } from "../addressing";
 import { localDateTimeToMs } from "../clock";
 import type { GrimoireDb } from "../db/client";
 import {

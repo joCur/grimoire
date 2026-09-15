@@ -12,7 +12,7 @@ import {
   type KnowledgeEntry,
 } from "@grimoire/shared";
 import { getBuildId } from "../config";
-import { ApiError } from "../campaign-fs";
+import { ApiError } from "../api-error";
 import {
   buildTree,
   campaignVersion,
