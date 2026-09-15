@@ -15,18 +15,25 @@
 //                  A reply that does not PARSE (garbage, a truncated one) is
 //                  served verbatim here instead: that is a run that dies
 //                  before it has parts, which is what those tests are about.
-//   scene part     the scripted reply VERBATIM. The single-scene validation
-//                  accepts a one-element `scenes` array, so a batch reply
-//                  with one scene is a legal single-scene reply — which keeps
-//                  the correction-turn assertions (the replayed assistant
-//                  text, the raw reply in the error body) byte-exact.
-//   entry part     the scripted reply's matching `entries` item, rewrapped as
-//                  the npc/location prompt's own `{ npc }` / `{ location }`
-//                  schema.
+//   scene part     the scripted reply's scene document, as the RAW document
+//                  reply of issue #107: the markdown itself, and the batch
+//                  reply's `warnings` after a `---warnings---` line.
+//   entry part     the scripted reply's matching `entries` item, likewise raw.
+//   single call    the npc/augment run's scripted document, likewise raw — a
+//                  reply that does NOT parse as a batch / `{ npc }` /
+//                  `{ entry }` object travels verbatim, which is what the
+//                  garbage and the truncation cases are about.
+//
+// The script itself stays JSON: it is the test's way of saying WHICH documents
+// a run is about, and a batch object says that in one literal. What reaches
+// the server is the raw format, so the correction turns, the replayed
+// assistant turns and the `rawReply` of an error body are all in the shape a
+// real provider now delivers.
 //
 // Attempt N of a part reads script[N], so "bad, then good" still means one
 // correction turn — per part, which is the whole point of the ticket.
 
+import { WARNINGS_DELIMITER } from "../../src/document-reply";
 import type {
   CompletionResult,
   CorrectionTurn,
@@ -95,6 +102,49 @@ function parseBatch(reply: ScriptedReply): BatchReply | null {
       ? obj.warnings.filter((w): w is string => typeof w === "string")
       : [],
   };
+}
+
+/** The RAW document reply of issue #107 — document, then the warnings block. */
+export function rawDocument(content: string, warnings: readonly string[] = []): string {
+  const document = content.replace(/\n*$/, "\n");
+  return warnings.length === 0
+    ? document
+    : `${document}\n${WARNINGS_DELIMITER}\n${warnings.join("\n")}\n`;
+}
+
+/**
+ * The ONE document a scripted single-call reply carries: `{ npc }` for an NPC
+ * run, `{ entry }` for an augment run — plus `scene`/`location`, so a script
+ * can say any of them. Null when the reply is not such an object, and then it
+ * travels verbatim.
+ */
+function singleDocument(reply: ScriptedReply): { content: string; warnings: string[] } | null {
+  if (typeof reply !== "string" && reply.truncated === true) return null;
+  const raw = textOf(reply);
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start === -1 || end <= start) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const obj = parsed as Record<string, unknown>;
+  for (const key of ["npc", "entry", "location", "scene"]) {
+    const value = obj[key];
+    if (value === null || typeof value !== "object") continue;
+    const content = (value as { content?: unknown }).content;
+    if (typeof content !== "string") continue;
+    return {
+      content,
+      warnings: Array.isArray(obj.warnings)
+        ? obj.warnings.filter((w): w is string => typeof w === "string")
+        : [],
+    };
+  }
+  return null;
 }
 
 /** One `key: value` line of a document's properties block. */
@@ -211,21 +261,27 @@ export class PipelineFake implements LLMProvider {
     const scripted = this.replies[Math.min(attempt, this.replies.length - 1)];
     if (scripted === undefined) throw new Error("PipelineFake: no scripted reply left");
 
-    if (part.kind === "single") return completionOf(scripted);
+    if (part.kind === "single") {
+      const document = singleDocument(scripted);
+      if (document === null) return completionOf(scripted);
+      return {
+        ...completionOf(scripted),
+        text: rawDocument(document.content, document.warnings),
+      };
+    }
 
     if (part.kind === "scene") {
       const batch = parseBatch(scripted);
-      // A one-scene batch reply IS a legal single-scene reply, so it travels
-      // VERBATIM — which is what keeps the replayed assistant turn and the
-      // raw reply in an error body byte-exact. A batch with several scenes is
-      // narrowed to the one this part is about; serving it whole would fail
-      // every part with „genau EINE Szene", which is a statement about the
-      // fake and not about the code under test.
-      if (batch === null || batch.scenes.length <= 1) return completionOf(scripted);
+      // Not a batch object at all (garbage, a truncated reply): served
+      // verbatim, because that is a reply the run has to fail on.
+      if (batch === null) return completionOf(scripted);
+      // The document this part is about — a batch with several scenes is
+      // narrowed to the assigned one; serving them all would fail every part
+      // for a reason that is about the fake, not about the code under test.
       const scene =
         batch.scenes.find((doc) => property(doc.content, "id") === part.id) ?? batch.scenes[0];
       return {
-        text: JSON.stringify({ scene: { content: scene!.content }, warnings: batch.warnings }),
+        text: rawDocument(scene!.content, batch.warnings),
         truncated: false,
         ...(typeof scripted === "string" || scripted.usage === undefined
           ? {}
@@ -257,9 +313,8 @@ export class PipelineFake implements LLMProvider {
     const entry =
       batch.entries.find(byId) ?? batch.entries[0] ?? this.lastBatch()?.entries.find(byId);
     if (entry === undefined) return completionOf(scripted);
-    const key = entry.kind === "location" ? "location" : "npc";
     return {
-      text: JSON.stringify({ [key]: { content: entry.content }, warnings: [] }),
+      text: rawDocument(entry.content),
       truncated: false,
       ...(typeof scripted === "string" || scripted.usage === undefined
         ? {}

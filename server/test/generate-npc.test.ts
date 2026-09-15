@@ -20,6 +20,7 @@ import type {
 import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generate-jobs";
 import { setProviderForTests } from "../src/generator";
+import { WARNINGS_DELIMITER } from "../src/document-reply";
 import { dropStore, seedStore } from "./support/store";
 import type {
   CompletionResult,
@@ -164,17 +165,18 @@ function npcMarkdown(
   ].join("\n");
 }
 
-/** The reply's JSON, in a fence like real models tend to send it. */
+/**
+ * The reply, in the RAW document format of issue #107: the document itself —
+ * no `path` (issue #100: the server addresses the npc as `npcs/<id>` with the
+ * id from the properties) and no JSON wrapper — then the warnings after the
+ * delimiter line.
+ */
 function npcReply(over: { content?: string; warnings?: string[] } = {}): string {
-  const body = {
-    // No `path` since issue #100 — the server addresses the npc as
-    // `npcs/<id>` with the id from the properties.
-    npc: {
-      content: over.content ?? npcMarkdown(),
-    },
-    warnings: over.warnings ?? ["Quelltext nennt keinen Status — alive gesetzt"],
-  };
-  return "```json\n" + JSON.stringify(body, null, 2) + "\n```";
+  const document = over.content ?? npcMarkdown();
+  const warnings = over.warnings ?? ["Quelltext nennt keinen Status — alive gesetzt"];
+  return warnings.length === 0
+    ? document
+    : `${document}\n${WARNINGS_DELIMITER}\n${warnings.join("\n")}\n`;
 }
 
 /** A reply for a specific id (so a test that WRITES does not collide later). */
@@ -431,26 +433,42 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(fake.calls).toHaveLength(1);
   });
 
-  test("a reply without a usable npc object is a validation error", async () => {
-    expect(await firstValidationError(["kein json"])).toContain("not valid JSON");
-    expect(await firstValidationError(['{"warnings": []}'])).toContain('"npc" must be an object');
-    expect(await firstValidationError(["[1, 2]"])).toContain("must be a JSON object");
-    expect(
-      await firstValidationError([JSON.stringify({ npc: { id: "x" } })]),
-    ).toContain('"npc" must be an object');
+  test("a reply that is no document is a validation error (issue #107)", async () => {
+    // Prose without a properties block, the OLD JSON wrapper, an empty reply:
+    // all of them are „das ist kein Dokument", and the message says what one
+    // looks like instead of naming a JSON schema that no longer exists.
+    for (const raw of [
+      "kein Dokument",
+      JSON.stringify({ npc: { content: npcMarkdown() }, warnings: [] }),
+      "",
+      // A `---` with no second one is no frontmatter block.
+      "---\nid: grella\n\n## Will\n\nIrgendwas.\n",
+    ]) {
+      expect(await firstValidationError([raw])).toContain("kein Dokument");
+    }
   });
 
-  test("prose around the JSON costs ONE call (issue #20 extraction, npc path)", async () => {
+  test("a fence and a leading sentence cost ONE call (issue #107 tolerance)", async () => {
     const fake = useFake([
       [
-        "I need to be careful about characters inside string values — the markdown",
-        "content contains quotes and newlines that must be escaped properly.",
+        "Hier ist die NPC-Datei — ich habe den Status auf alive gesetzt:",
         "",
-        JSON.stringify({ npc: { content: npcMarkdown() }, warnings: [] }),
+        "```markdown",
+        npcMarkdown(),
+        "```",
+        "",
+        WARNINGS_DELIMITER,
+        "Quelltext nennt keinen Status — alive gesetzt",
       ].join("\n"),
     ]);
-    expect((await generateNpc(npcBody)).status).toBe(200);
+    const res = await generateNpc(npcBody);
+    expect(res.status).toBe(200);
     expect(fake.calls).toHaveLength(1);
+    const result = (await res.json()) as GenerateNpcResult;
+    // The document arrives unwrapped, and the warning is the run's.
+    expect(result.npc.markdown.startsWith("---\nid: grella")).toBe(true);
+    expect(result.npc.markdown).not.toContain("```");
+    expect(result.warnings).toEqual(["Quelltext nennt keinen Status — alive gesetzt"]);
   });
 
   // --- id collisions -------------------------------------------------------------

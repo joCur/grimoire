@@ -56,7 +56,6 @@ import {
   buildCorrectionMessage,
   collectSceneContext,
   extractJsonReply,
-  isRawEntry,
   loadAsset,
   loadPromptAssets,
   obtainProvider,
@@ -71,6 +70,7 @@ import {
 } from "./generator";
 export type { SceneContext } from "./generator";
 import { parseWithProperties, reparseAtAddress, unknownCallouts } from "./generator";
+import { parseDocumentReply } from "./document-reply";
 import type { LLMProvider } from "./llm-provider";
 import { locationPath, npcPath } from "./store/paths";
 
@@ -374,17 +374,21 @@ function normalizeWithMap(source: string): { text: string; offsets: number[] } {
 // --- the per-call prompt assets ----------------------------------------------
 
 /**
- * The scene system prompt in „single scene from outline“ mode: the existing
- * document with its BATCH output schema swapped for the single-scene one.
+ * The scene system prompt in „genau eine Szene aus der Gliederung“ mode: the
+ * scene prompt with its own output section swapped for the outline-bound one
+ * (`scene-single-output.md`).
  *
  * A swap rather than a second prompt file, for the reason the augment run's
- * `formatContract` exists: the rules (#93 orthography, #96 tables, the
- * callout list, the reference rules) must be the SAME text in both modes, and
- * the one way to guarantee that is to have them in one file.
+ * `formatContract` exists: the rules (#93 orthography and quotation marks,
+ * #96 tables, the callout list, the reference rules) must be the SAME text in
+ * both, and the one way to guarantee that is to have them in one file.
+ *
+ * Both sections describe the RAW document since issue #107 — the swap adds
+ * what only the pipeline knows: the outline is binding, and every id of the
+ * run is already decided.
  */
-export async function sceneSystemPrompt(mode: "batch" | "single"): Promise<string> {
+export async function sceneSystemPrompt(): Promise<string> {
   const doc = await loadAsset(ASSET_FILES.scene.systemPrompt);
-  if (mode === "batch") return doc;
   const replacement = await loadAsset(ASSET_FILES.sceneSingle.systemPrompt);
   const start = doc.indexOf("## Ausgabeformat");
   if (start === -1) return `${doc.trimEnd()}\n\n${replacement}`;
@@ -436,32 +440,16 @@ export function validateSingleSceneReply(input: {
   scene: OutlineScene;
   allowed: AllowedRefs;
 }): { ok: true; result: { scene: GeneratedSceneDraft; warnings: string[] } } | { ok: false; errors: string[] } {
-  const extracted = extractJsonReply(input.raw);
-  if (extracted === null) return { ok: false, errors: ["reply is not valid JSON"] };
-  if (!isRecord(extracted.value)) return { ok: false, errors: ["reply must be a JSON object"] };
-  const obj = extracted.value;
-  // Tolerant about the WRAPPER, strict about the document: a model that puts
-  // its one scene into the batch array has made a form error a correction
-  // turn would fix at full price for no gain.
-  const candidate = isRawEntry(obj.scene)
-    ? obj.scene
-    : Array.isArray(obj.scenes) && isRawEntry(obj.scenes[0])
-      ? obj.scenes[0]
-      : undefined;
-  if (candidate === undefined) {
-    return { ok: false, errors: ['"scene" must be an object with a string "content"'] };
-  }
-  if (Array.isArray(obj.scenes) && obj.scenes.length > 1) {
-    return {
-      ok: false,
-      errors: [
-        'diese Antwort enthält genau EINE Szene — jede weitere Szene der Gliederung ist ein eigener Aufruf',
-      ],
-    };
-  }
+  // Since issue #107 the reply IS the document: no wrapper to be tolerant
+  // about any more, only the document itself and — after `---warnings---` —
+  // the warnings. `parseDocumentReply` strips a fence and a leading sentence;
+  // everything below judges the markdown, exactly as it did before.
+  const split = parseDocumentReply(input.raw);
+  if (!split.ok) return { ok: false, errors: [split.error] };
+  const reply = split.reply;
   const errors: string[] = [];
   const draft = validateSceneDocument({
-    content: candidate.content,
+    content: reply.content,
     label: `scene "${input.scene.id}"`,
     chapter: input.ctx.chapter,
     allowed: input.allowed,
@@ -470,10 +458,7 @@ export function validateSingleSceneReply(input: {
     expectedId: input.scene.id,
   });
   if (draft === null || errors.length > 0) return { ok: false, errors };
-  const warnings = Array.isArray(obj.warnings)
-    ? obj.warnings.filter((w): w is string => typeof w === "string")
-    : [];
-  return { ok: true, result: { scene: draft, warnings } };
+  return { ok: true, result: { scene: draft, warnings: reply.warnings } };
 }
 
 /**
@@ -492,22 +477,11 @@ export function validateEntryReply(
   entry: OutlineEntry,
   ctx: SceneContext,
 ): { ok: true; result: { stub: GeneratedStub; warnings: string[] } } | { ok: false; errors: string[] } {
-  const extracted = extractJsonReply(raw);
-  if (extracted === null) return { ok: false, errors: ["reply is not valid JSON"] };
-  if (!isRecord(extracted.value)) return { ok: false, errors: ["reply must be a JSON object"] };
-  const obj = extracted.value;
-  // The npc prompt answers `{ npc }`, the location prompt `{ location }`;
-  // `entry` is tolerated because that is what the augment prompt calls it and
-  // a model that has seen all three will mix them up once.
-  const candidate = [obj[entry.kind], obj.entry].find(isRawEntry);
-  if (candidate === undefined) {
-    return {
-      ok: false,
-      errors: [`"${entry.kind}" must be an object with a string "content"`],
-    };
-  }
+  const split = parseDocumentReply(raw);
+  if (!split.ok) return { ok: false, errors: [split.error] };
+  const reply = split.reply;
   const errors: string[] = [];
-  const stub = validateEntry({ kind: entry.kind, content: candidate.content }, 0, errors);
+  const stub = validateEntry({ kind: entry.kind, content: reply.content }, 0, errors);
   if (stub === null || errors.length > 0) return { ok: false, errors };
   const label = `${entry.kind} "${entry.id}"`;
   if (stub.id !== entry.id) {
@@ -519,7 +493,7 @@ export function validateEntryReply(
       ],
     };
   }
-  const { parsed } = parseWithProperties(candidate.content, entryAddress(entry.kind, entry.id));
+  const { parsed } = parseWithProperties(reply.content, entryAddress(entry.kind, entry.id));
   for (const callout of unknownCallouts(parsed.body)) {
     errors.push(`${label}: unknown callout "[!${callout}]"`);
   }
@@ -528,10 +502,7 @@ export function validateEntryReply(
     for (const msg of npcBodyErrors(parsed.body, ctx)) errors.push(`${label}: ${msg}`);
   }
   if (errors.length > 0) return { ok: false, errors };
-  const warnings = Array.isArray(obj.warnings)
-    ? obj.warnings.filter((w): w is string => typeof w === "string")
-    : [];
-  return { ok: true, result: { stub, warnings } };
+  return { ok: true, result: { stub, warnings: reply.warnings } };
 }
 
 // --- the run ------------------------------------------------------------------
@@ -750,6 +721,7 @@ export async function runOutlineStep(
       return outcome.ok ? { ok: true, result: { outline: outcome.result } } : outcome;
     },
     correctionTail: OUTLINE_CORRECTION_TAIL,
+    correctionFormat: "outline",
     onCall: counter.onCall,
   });
   return { outline: result.outline, usage: usageOf(result.usage, counter.count()) };
@@ -763,7 +735,7 @@ export async function runScenePart(
   counter: CallCounter = callCounter(),
 ): Promise<{ outcome: PartOutcome; usage: PartUsage }> {
   const [systemPrompt, fewShotTarget] = await Promise.all([
-    sceneSystemPrompt("single"),
+    sceneSystemPrompt(),
     loadAsset(ASSET_FILES.scene.fewShotTarget),
   ]);
   const cut = excerptOf(plan, scene);

@@ -1,20 +1,32 @@
 ## Ausgabeformat
 
 Dieser Aufruf schreibt GENAU EINE Szene — die, die die Gliederung dir zuweist.
-Gib ausschließlich einen JSON-Block zurück, kein Markdown drumherum:
 
-```json
-{
-  "scene": { "content": "<vollständiges Dokument inkl. Frontmatter-Block>" },
-  "warnings": ["<alles, was der DM prüfen sollte>"]
-}
+Gib **das Dokument selbst** zurück — kein JSON, keine Code-Zäune, kein Text
+davor oder danach. Die Antwort beginnt mit der Zeile `---` des
+Frontmatter-Blocks und ist genau das, was danach in der Datei steht:
+
+```
+---
+<Frontmatter-Schlüssel, siehe Ziel-Format>
+---
+
+<Fließtext der Szene>
 ```
 
-Antworte ausschließlich mit dem JSON-Objekt — kein Text davor oder danach.
-Es gibt in dieser Antwort **kein `entries`-Array**: Figuren und Orte werden in
-eigenen Aufrufen angelegt, und die Gliederung nennt ihre ids schon. Schreibe
-auch **keine zweite Szene** — jede weitere Szene der Gliederung ist ein
-eigener Aufruf.
+Hinweise für den DM kommen **danach**, hinter einer Zeile `---warnings---`,
+eine Warnung je Zeile:
+
+```
+---warnings---
+Der Quelltext nennt keinen DC — DC 13 gesetzt.
+```
+
+Gibt es nichts zu melden, lässt du den Block ganz weg.
+
+Schreibe **keine zweite Szene** — jede weitere Szene der Gliederung ist ein
+eigener Aufruf — und **keinen NPC- oder Ort-Eintrag**: Figuren und Orte werden
+in eigenen Aufrufen angelegt, und die Gliederung nennt ihre ids schon.
 
 **Die Gliederung ist verbindlich.** `id`, `title`, `type` und `location` der
 zugewiesenen Szene übernimmst du unverändert; `[[id]]`-Verweise nutzen nur

@@ -15,6 +15,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import type { AugmentResult, FileResponse, GenerateJob } from "@grimoire/shared";
 import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generate-jobs";
+import { WARNINGS_DELIMITER } from "../src/document-reply";
 import {
   ASSET_FILES,
   MAX_CORRECTION_TURNS,
@@ -82,9 +83,17 @@ function useFake(replies: string[]): FakeProvider {
   return fake;
 }
 
-/** The reply JSON in a fence, as real models tend to send it. */
-function augmentReply(path: string, content: string, warnings: string[] = []): string {
-  return "```json\n" + JSON.stringify({ entry: { path, content }, warnings }, null, 2) + "\n```";
+/**
+ * The reply in the RAW document format of issue #107: the whole file as it
+ * should look afterwards, then the warnings after the delimiter line. The
+ * `path` argument stays in the signature — every caller names the entry it is
+ * about, and the ASSERTION that the model does not address anything is that
+ * the path never reaches the reply.
+ */
+function augmentReply(_path: string, content: string, warnings: string[] = []): string {
+  return warnings.length === 0
+    ? content
+    : `${content}\n${WARNINGS_DELIMITER}\n${warnings.join("\n")}\n`;
 }
 
 /** Start a run and wait for the job to leave `running`. */
@@ -190,7 +199,11 @@ describe("prompt assembly", () => {
     for (const prompt of [npc, location, scene]) {
       expect(prompt).toContain("Die Ergänzungsregel");
       expect(prompt).toContain("Vorhandenes bleibt Wort für Wort stehen");
-      expect(prompt).toContain('"entry"');
+      // The output format is the RAW document since issue #107 — the whole
+      // file, and the warnings after the delimiter line.
+      expect(prompt).toContain("**das Dokument selbst**");
+      expect(prompt).toContain("immer die **ganze** Datei");
+      expect(prompt).toContain(WARNINGS_DELIMITER);
     }
     expect(npc).toContain("System-Prompt: NPC-Generator");
     // The location prompt is NEW with this ticket — locations had none.
@@ -203,12 +216,10 @@ describe("prompt assembly", () => {
   test("only ONE output schema travels — the create runs' is sliced off", async () => {
     for (const kind of ["npc", "location", "scene"] as const) {
       const prompt = await augmentSystemPrompt(kind);
-      // The augment schema…
-      expect(prompt).toContain('"entry"');
-      // …and neither of the two create schemas that used to ride along.
-      expect(prompt).not.toContain("npc_stubs");
-      expect(prompt).not.toContain("location_stubs");
-      expect(prompt).not.toContain('"npc":');
+      // The augment output format…
+      expect(prompt).toContain("immer die **ganze** Datei");
+      // …and no JSON at all any more (issue #107).
+      expect(prompt).not.toContain("JSON-Block");
       expect(prompt).not.toContain('"scenes"');
       // Exactly one „## Ausgabeformat" heading: the augmentation rule's own.
       expect(prompt.split("## Ausgabeformat").length - 1).toBe(1);
@@ -237,7 +248,7 @@ describe("prompt assembly", () => {
       // single-scene mode is an output-schema SWAP, not a second prompt
       // file, so that these rules keep travelling exactly once.
       ["outline", await loadAsset(ASSET_FILES.outline.systemPrompt)],
-      ["scene/single", await sceneSystemPrompt("single")],
+      ["scene/single", await sceneSystemPrompt()],
     ];
     for (const [kind, prompt] of assembled) {
       expect(prompt.split(ORTHOGRAPHY_RULE).length - 1, kind).toBe(1);
@@ -277,7 +288,7 @@ describe("prompt assembly", () => {
       // The scene prompt in „genau eine Szene aus der Gliederung" mode
       // (issue #102) — an output-schema SWAP, not a second prompt file, so
       // that these rules keep travelling exactly once.
-      ["scene/single", await sceneSystemPrompt("single")],
+      ["scene/single", await sceneSystemPrompt()],
     ];
     for (const [kind, prompt] of assembled) {
       expect(prompt.split(TABLE_RULE).length - 1, kind).toBe(1);

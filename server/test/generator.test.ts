@@ -43,7 +43,7 @@ import {
   setProviderForTests,
 } from "../src/generator";
 import type { TokenUsage } from "../src/llm-provider";
-import { PipelineFake, type ScriptedReply } from "./support/pipeline-fake";
+import { PipelineFake, rawDocument, type ScriptedReply } from "./support/pipeline-fake";
 
 /**
  * Whether an entity is there: the address resolves through GET /file. That
@@ -221,6 +221,18 @@ function replyJson(over: ReplyOver = {}): string {
     warnings: over.warnings ?? ["Quelltext nennt keinen DC — DC 12 gesetzt"],
   };
   return JSON.stringify(body, null, 2);
+}
+
+/**
+ * What the fake actually SENDS for the scene part of `reply(over)`: the RAW
+ * document reply of issue #107 — the scene document, then the warnings block.
+ * The script above stays JSON (it is how a test says which documents a run is
+ * about); this is what the server sees, so it is what the correction-turn and
+ * `rawReply` assertions compare against.
+ */
+function servedScene(over: ReplyOver = {}): string {
+  const content = (over.scenes ?? [{ content: sceneMarkdown() }])[0]!.content;
+  return rawDocument(content, over.warnings ?? ["Quelltext nennt keinen DC — DC 12 gesetzt"]);
 }
 
 function reply(over: ReplyOver = {}): string {
@@ -467,7 +479,9 @@ describe("POST /api/:campaign/generate", () => {
     expect(fake.callsFor("outline")).toHaveLength(1);
     // the correction turn replays the failed reply verbatim ...
     expect(scene[1]!.corrections).toHaveLength(1);
-    expect(scene[1]!.corrections[0]!.assistant).toBe(bad);
+    expect(scene[1]!.corrections[0]!.assistant).toBe(
+      servedScene({ scenes: [{ content: sceneMarkdown({ npcs: "fenn, nobody" }) }] }),
+    );
     // ... and names the mechanical error
     expect(scene[1]!.corrections[0]!.correction).toContain('npc "nobody"');
     expect(await exists(SCENE_PATH)).toBe(false);
@@ -648,12 +662,20 @@ describe("POST /api/:campaign/generate", () => {
       expect.arrayContaining([expect.stringContaining('"status" must be "draft"')]),
     );
     // the raw reply of the LAST attempt, not of the first one
-    expect(body.rawReply).toBe(last);
+    expect(body.rawReply).toBe(
+      servedScene({
+        scenes: [{ content: sceneMarkdown({ status: "ready" }) }],
+        warnings: ["letzter Versuch"],
+      }),
+    );
 
     // The SCENE part spent its initial call plus exactly 2 correction turns.
     const scene = fake.callsFor("treffen-am-kai");
     expect(scene).toHaveLength(3);
-    expect(scene[1]!.corrections[0]!.correction).toContain("not valid JSON");
+    // The scene part got the un-parseable text verbatim, so its correction
+    // turn is the DOCUMENT message of issue #107 — not a JSON schema note.
+    expect(scene[1]!.corrections[0]!.correction).toContain("kein Dokument");
+    expect(scene[1]!.corrections[0]!.correction).toContain("---warnings---");
     expect(scene[2]!.corrections).toHaveLength(2);
     // The OUTLINE step has correction turns of its own (Zuschnitt 1): the
     // first scripted answer is not JSON, so it took two calls.
@@ -803,7 +825,10 @@ describe("POST /api/:campaign/generate", () => {
     expect(res.status).toBe(200);
     const scene = fake.callsFor("treffen-am-kai");
     expect(scene).toHaveLength(2);
-    expect(scene[1]!.corrections[0]!.assistant).toBe(bad); // replayed verbatim
+    // The document the part answered, replayed verbatim.
+    expect(scene[1]!.corrections[0]!.assistant).toBe(
+      servedScene({ scenes: [{ content: sceneMarkdown({ status: "ready" }) }] }),
+    );
     expect(scene[1]!.corrections[0]!.correction).toContain('"status" must be "draft"');
   });
 
@@ -818,7 +843,7 @@ describe("POST /api/:campaign/generate", () => {
     expect(outline[1]!.corrections[0]!.correction).toContain("not valid JSON");
   });
 
-  test("the 422 rawReply is the ORIGINAL reply text, not the extracted JSON", async () => {
+  test("the 422 rawReply is the reply the failing PART got, verbatim", async () => {
     const bad = proseThenJson(
       replyJson({
         scenes: [{ content: sceneMarkdown({ status: "ready" }) }],
@@ -829,8 +854,12 @@ describe("POST /api/:campaign/generate", () => {
     const res = await generate(generateBody);
     expect(res.status).toBe(422);
     const body = (await res.json()) as { rawReply: string; validationErrors: string[] };
-    expect(body.rawReply).toBe(bad);
-    expect(body.rawReply.startsWith("I need to be careful")).toBe(true);
+    // The part's own last reply — the RAW document since issue #107, not the
+    // run's outline call and not an extracted fragment of it.
+    expect(body.rawReply).toBe(
+      servedScene({ scenes: [{ content: sceneMarkdown({ status: "ready" }) }] }),
+    );
+    expect(body.rawReply.startsWith("---\nid: treffen-am-kai")).toBe(true);
     expect(body.validationErrors).toEqual(
       expect.arrayContaining([expect.stringContaining('"status" must be "draft"')]),
     );
@@ -1475,7 +1504,9 @@ describe("generate jobs", () => {
     expect(job.error!.body.validationErrors).toEqual(
       expect.arrayContaining([expect.stringContaining('"status" must be "draft"')]),
     );
-    expect(job.error!.body.rawReply).toBe(bad);
+    expect(job.error!.body.rawReply).toBe(
+      servedScene({ scenes: [{ content: sceneMarkdown({ status: "ready" }) }] }),
+    );
     // Summed over every call of the run — the outline's included.
     expect(job.error!.body.usage).toEqual({
       inputTokens: 3000,

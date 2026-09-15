@@ -15,6 +15,7 @@ import { clearJobsForTests } from "../src/generate-jobs";
 import { failInterruptedJobs, RESTART_FAILURE_MESSAGE } from "../src/db/job-boot";
 import { getDb } from "../src/store/handle";
 import { setProviderForTests } from "../src/generator";
+import { WARNINGS_DELIMITER } from "../src/document-reply";
 import {
   assignmentBlock,
   cutExcerpt,
@@ -295,22 +296,26 @@ test("an entry's context is the passages that mention it — by name OR by id wo
 // --- the per-part prompt -------------------------------------------------------
 
 test("the single-scene mode swaps the output schema and keeps every rule", async () => {
-  const single = await sceneSystemPrompt("single");
-  const batch = await sceneSystemPrompt("batch");
-  // The batch schema is gone…
-  expect(single).not.toContain('"scenes": [');
-  expect(single).not.toContain('"entries": [');
-  // …replaced by the one-document one, and the `entries` array is explicitly
-  // NOT part of this answer any more.
-  expect(single).toContain('"scene": { "content"');
-  expect(single).toContain("kein `entries`-Array");
+  const single = await sceneSystemPrompt();
+  // No JSON anywhere (issue #107): the reply IS the document, and the
+  // warnings follow the delimiter line.
+  expect(single).not.toContain("JSON-Block zurück");
+  expect(single).toContain("**das Dokument selbst**");
+  expect(single).toContain(WARNINGS_DELIMITER);
+  // The outline-bound half of the swap: one scene per call, no entries.
+  expect(single).toContain("GENAU EINE Szene");
+  expect(single).toContain("Die Gliederung ist verbindlich.");
   // Exactly one output-format heading, and the file format and the rules of
-  // the batch prompt are untouched — that is why this is a swap and not a
+  // the scene prompt are untouched — that is why this is a swap and not a
   // second prompt file.
   expect(single.split("## Ausgabeformat").length - 1).toBe(1);
-  for (const marker of ["## Ziel-Format der Datei", "**Deutsche Orthografie**", "**Tabellen**"]) {
+  for (const marker of [
+    "## Ziel-Format der Datei",
+    "**Deutsche Orthografie**",
+    "**Anführungszeichen**",
+    "**Tabellen**",
+  ]) {
     expect(single).toContain(marker);
-    expect(batch).toContain(marker);
   }
 });
 
@@ -441,11 +446,10 @@ class ThreeSceneProvider implements LLMProvider {
     }
     const id = /^([a-z0-9-]+) /.exec(req.assignment ?? "")?.[1] ?? "";
     this.calls.push(id);
+    // The RAW document reply of issue #107 — the scene part's answer IS the
+    // document, with no warnings block behind it.
     return {
-      text: JSON.stringify({
-        scene: { content: sceneDoc(id, id === this.broken ? { status: "ready" } : {}) },
-        warnings: [],
-      }),
+      text: sceneDoc(id, id === this.broken ? { status: "ready" } : {}),
       truncated: false,
     };
   }

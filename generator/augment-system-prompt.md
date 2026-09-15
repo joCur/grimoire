@@ -11,19 +11,30 @@ Ziel-Format der Datei steht unten.
 
 ## Ausgabeformat
 
-Gib ausschließlich einen JSON-Block zurück, kein Markdown drumherum:
+Gib **das Dokument selbst** zurück — kein JSON, keine Code-Zäune, kein Text
+davor oder danach. Die Antwort beginnt mit der Zeile `---` des
+Frontmatter-Blocks und ist genau das, was danach in der Datei steht:
 
-```json
-{
-  "entry": {
-    "content": "<die VOLLSTÄNDIGE Datei inkl. Frontmatter, so wie sie danach aussehen soll>"
-  },
-  "warnings": ["<alles, was der DM prüfen sollte>"]
-}
+```
+---
+<Frontmatter-Schlüssel, siehe Ziel-Format>
+---
+
+<Fließtext des Dokuments>
 ```
 
-Antworte ausschließlich mit dem JSON-Objekt — kein Text davor oder danach.
-`content` ist immer die **ganze** Datei, nie ein Patch und nie ein Ausschnitt.
+Hinweise für den DM kommen **danach**, hinter einer Zeile `---warnings---`,
+eine Warnung je Zeile:
+
+```
+---warnings---
+Der Quelltext nennt keinen DC — DC 13 gesetzt.
+```
+
+Gibt es nichts zu melden, lässt du den Block ganz weg.
+
+Das Dokument ist immer die **ganze** Datei, so wie sie danach aussehen soll —
+nie ein Patch und nie ein Ausschnitt.
 
 ## Die Ergänzungsregel
 

@@ -40,8 +40,6 @@ import { ApiError } from "./campaign-fs";
 import {
   ASSET_FILES,
   collectContext,
-  extractJsonReply,
-  isRawEntry,
   loadAsset,
   npcStatusErrors,
   obtainProvider,
@@ -51,8 +49,8 @@ import {
   unknownCallouts,
   withNamingHints,
   type CampaignContext,
-  type RawEntry,
 } from "./generator";
+import { parseDocumentReply } from "./document-reply";
 import type { LLMProvider } from "./llm-provider";
 import { readParsedFile } from "./store/read";
 import { renderRaw } from "./store/render";
@@ -143,33 +141,6 @@ export function augmentFewShotFile(kind: AugmentKind): string {
 
 // --- validation ------------------------------------------------------------------
 
-interface RawAugmentReply {
-  entry: RawEntry;
-  warnings: string[];
-}
-
-function parseRawAugmentReply(raw: string, errors: string[]): RawAugmentReply | null {
-  const extracted = extractJsonReply(raw);
-  if (extracted === null) {
-    errors.push("reply is not valid JSON");
-    return null;
-  }
-  const parsed = extracted.value;
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    errors.push("reply must be a JSON object");
-    return null;
-  }
-  const obj = parsed as Record<string, unknown>;
-  if (!isRawEntry(obj.entry)) {
-    errors.push('"entry" must be an object with a string "content"');
-    return null;
-  }
-  const warnings = Array.isArray(obj.warnings)
-    ? obj.warnings.filter((w): w is string => typeof w === "string")
-    : [];
-  return { entry: obj.entry, warnings };
-}
-
 /**
  * The kind's own mechanical rules, as far as they apply to an entry that
  * already exists. Deliberately NARROWER than the create runs':
@@ -233,18 +204,22 @@ export function validateAugmentReply(
   raw: string,
   target: { kind: AugmentKind; file: FileResponse },
 ): { ok: true; result: AugmentResult } | { ok: false; errors: string[] } {
+  // The reply IS the document since issue #107 (../document-reply): the whole
+  // file as it should look afterwards, warnings after `---warnings---`. The
+  // augmentation rule („content ist immer die GANZE Datei") is the same rule
+  // it always was — only the wrapper is gone.
+  const split = parseDocumentReply(raw);
+  if (!split.ok) return { ok: false, errors: [split.error] };
+  const reply = split.reply;
   const errors: string[] = [];
-  const reply = parseRawAugmentReply(raw, errors);
-  if (reply === null) return { ok: false, errors };
 
   const { kind, file } = target;
-  const entry = reply.entry;
   // The target address is the SERVER's and always was — since issue #100 the
   // model is not even asked for one: an augment run rewrites the document at
   // `file.path`, full stop. (Its `location`, on the other hand, is an
   // ordinary proposal: accepting one moves the scene like any other write.)
   const label = `entry "${file.path}"`;
-  const { parsed, error } = parseWithProperties(entry.content, file.path);
+  const { parsed, error } = parseWithProperties(reply.content, file.path);
   if (error !== undefined) return { ok: false, errors: [`${label}: ${error}`] };
   const fm = parsed.properties;
 

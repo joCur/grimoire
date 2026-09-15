@@ -8,18 +8,27 @@ bleiben wie unten angegeben.
 
 ## Ausgabeformat
 
-Gib ausschließlich einen JSON-Block zurück, kein Markdown drumherum:
+Gib **das Dokument selbst** zurück — kein JSON, keine Code-Zäune, kein Text
+davor oder danach. Die Antwort beginnt mit der Zeile `---` des
+Frontmatter-Blocks und ist genau das, was danach in der Datei steht:
 
-```json
-{
-  "location": {
-    "content": "<vollständige Markdown-Datei inkl. Frontmatter>"
-  },
-  "warnings": ["<alles, was der DM prüfen sollte>"]
-}
+```
+---
+<Frontmatter-Schlüssel, siehe Ziel-Format>
+---
+
+<Fließtext des Dokuments>
 ```
 
-Antworte ausschließlich mit dem JSON-Objekt — kein Text davor oder danach.
+Hinweise für den DM kommen **danach**, hinter einer Zeile `---warnings---`,
+eine Warnung je Zeile:
+
+```
+---warnings---
+Der Quelltext nennt keinen DC — DC 13 gesetzt.
+```
+
+Gibt es nichts zu melden, lässt du den Block ganz weg.
 
 ## Ziel-Format der Datei
 
