@@ -1,0 +1,115 @@
+{
+  "title": "npc",
+  "description": "Die fertige Figur: die Eigenschaften-Felder, der Fließtext und die Warnungen für den DM.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "properties",
+    "body",
+    "warnings"
+  ],
+  "properties": {
+    "properties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "role",
+        "chapter",
+        "status",
+        "statblock",
+        "quickstats",
+        "voice",
+        "appearance"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Kleinbuchstaben, Ziffern und Bindestriche, keine Umlaute (Muster: ^[a-z0-9]+(-[a-z0-9]+)*$)."
+        },
+        "name": {
+          "type": "string"
+        },
+        "role": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "chapter": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "id aus der Kontextliste oder der Gliederung. Kleinbuchstaben, Ziffern und Bindestriche, keine Umlaute (Muster: ^[a-z0-9]+(-[a-z0-9]+)*$)."
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "alive",
+            "dead",
+            "missing",
+            "unknown",
+            null
+          ]
+        },
+        "statblock": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "quickstats": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "description": "Schlüssel/Wert-Paare; die Werte sind immer Strings („+2\", nicht 2 — sonst verschluckt YAML das Plus).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "value"
+            ],
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "voice": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "appearance": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "body": {
+      "type": "string",
+      "description": "Der Text des Eintrags, als EIN String mit echten Zeilenumbrüchen — Überschriften, Callouts und `## If:`-Abschnitte wie im Prompt beschrieben. Den Eigenschaften-Block baut der Server aus `properties`."
+    },
+    "warnings": {
+      "type": "array",
+      "description": "Kurze deutsche Hinweise für den DM; leer, wenn es nichts zu melden gibt.",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -1,4 +1,4 @@
-// The live mode's detail drawer (issue #40): the full NPC or location file
+// The live mode's detail drawer (issue #40): the full NPC or location entry
 // WITHOUT leaving the running session.
 //
 // Before this, an NPC card in the live aside was a link — one click and the
@@ -28,7 +28,7 @@ export function LiveEntityDrawer({
   onClose,
 }: {
   campaign: string;
-  /** Campaign-relative file path, or undefined while the drawer is closed. */
+  /** Campaign-relative entry path, or undefined while the drawer is closed. */
   path: string | undefined;
   onClose: () => void;
 }) {

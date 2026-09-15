@@ -26,7 +26,7 @@
 // the same database. That is why the restart cases below call it directly.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import type { FileResponse, GenerateJob, GenerateResult, GenerateUsage } from "@grimoire/shared";
+import type { EntryResponse, GenerateJob, GenerateResult, GenerateUsage } from "@grimoire/shared";
 import { app } from "../src/server";
 import { eq } from "drizzle-orm";
 import { clearJobsForTests, UNREADABLE_PAYLOAD_MESSAGE } from "../src/generate-jobs";
@@ -38,12 +38,12 @@ import {
   DEFAULT_CORRECTION_TURNS,
   MAX_CORRECTION_TURNS,
   RAW_REPLY_LIMIT,
-  extractJsonReply,
   parseCorrectionTurns,
   setProviderForTests,
 } from "../src/generator";
 import type { TokenUsage } from "../src/llm-provider";
-import { PipelineFake, type ScriptedReply } from "./support/pipeline-fake";
+import { parseJsonReply } from "../src/entry-reply";
+import { PipelineFake, entryReply, type ScriptedReply } from "./support/pipeline-fake";
 
 /**
  * Whether an entity is there: the address resolves through GET /file. That
@@ -56,10 +56,10 @@ async function exists(rel: string): Promise<boolean> {
 }
 
 /** GET /file of an applied draft. */
-async function read(rel: string): Promise<FileResponse> {
+async function read(rel: string): Promise<EntryResponse> {
   const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 beforeAll(async () => {
@@ -85,7 +85,7 @@ async function restartServer(): Promise<number> {
 // --- fake provider ------------------------------------------------------------
 //
 // Scripted and PIPELINE-AWARE since issue #102 (see support/pipeline-fake.ts):
-// a test still writes „first this reply, then that one", and the fake routes
+// a test still writes „first this reply, then that one“, and the fake routes
 // the script over the outline call, the per-scene call and the per-entry call
 // of the run. `fake.calls` is therefore every call of the run; `fake.callsFor`
 // narrows it to one part — which is what a per-part correction turn is about.
@@ -118,8 +118,8 @@ const usage = (inputTokens: number, outputTokens: number): TokenUsage => ({
 // --- fixtures -------------------------------------------------------------------
 
 /**
- * The address the server builds for the draft (issue #100): the run's
- * chapter plus the frontmatter `id`. The model names none.
+ * The address the server builds for the draft: the run's chapter plus the
+ * `id` property. The model names none.
  */
 const SCENE_PATH = "01-salzhafen/treffen-am-kai";
 /**
@@ -138,7 +138,6 @@ function sceneMarkdown(over: { status?: string; npcs?: string; callout?: string 
     "chapter: 01-salzhafen",
     "location: leuchtturm",
     `npcs: [${over.npcs ?? "fenn, grella"}]`,
-    "handouts: []",
     "tags: [social]",
     `status: ${over.status ?? "draft"}`,
     "---",
@@ -221,6 +220,19 @@ function replyJson(over: ReplyOver = {}): string {
     warnings: over.warnings ?? ["Quelltext nennt keinen DC — DC 12 gesetzt"],
   };
   return JSON.stringify(body, null, 2);
+}
+
+/**
+ * What the fake actually SENDS for the scene part of `reply(over)`: the reply
+ * OBJECT — the scene's properties, its body and the script's
+ * warnings. The script above keeps writing entries (it is how a test says
+ * which entries a run is about); this is what the server sees, so it is what
+ * the correction-turn and `rawReply` assertions compare against.
+ */
+function servedScene(over: ReplyOver = {}): string {
+  const content = (over.scenes ?? [{ content: sceneMarkdown() }])[0]!.content;
+  const warnings = over.warnings ?? ["Quelltext nennt keinen DC — DC 12 gesetzt"];
+  return entryReply(content, warnings, "scene") ?? content;
 }
 
 function reply(over: ReplyOver = {}): string {
@@ -319,13 +331,13 @@ async function generate(body?: unknown, campaign = "beispiel"): Promise<Generate
   return { status: job.error?.status ?? 500, json: async () => job.error?.body };
 }
 
-// --- JSON extraction (issue #20) -------------------------------------------------
+// --- reading a reply: by schema ---------------------------------------------
 
-describe("extractJsonReply", () => {
+describe("parseJsonReply", () => {
   const OBJ = { scenes: [{ path: "a.md" }], warnings: ["w"] };
   const JSON_TEXT = JSON.stringify(OBJ, null, 2);
   /** Convenience: the extracted value, or undefined when nothing parsed. */
-  const value = (raw: string) => extractJsonReply(raw)?.value;
+  const value = (raw: string) => parseJsonReply(raw)?.value;
 
   test("stage (a): the whole text, leading/trailing whitespace included", () => {
     expect(value(JSON_TEXT)).toEqual(OBJ);
@@ -333,7 +345,7 @@ describe("extractJsonReply", () => {
     // a parseable non-object still wins the stage — the validation below
     // rejects it with "reply must be a JSON object", not with a parse error
     expect(value("[1, 2]")).toEqual([1, 2]);
-    expect(extractJsonReply("null")).toEqual({ value: null });
+    expect(parseJsonReply("null")).toEqual({ value: null, repaired: false });
   });
 
   test("the exact PO case: explainer paragraph, blank line, then the object", () => {
@@ -372,21 +384,29 @@ describe("extractJsonReply", () => {
   });
 
   test("garbage without a single brace does not parse", () => {
-    expect(extractJsonReply("Ich kann diese Aufgabe nicht erfüllen.")).toBeNull();
-    expect(extractJsonReply("")).toBeNull();
-    expect(extractJsonReply("   \n  ")).toBeNull();
+    // Prose is deliberately NOT handed to the repair: jsonrepair would turn a
+    // sentence into a JSON string, and the run would fail with a message
+    // about the wrong thing.
+    expect(parseJsonReply("Ich kann diese Aufgabe nicht erfüllen.")).toBeNull();
+    expect(parseJsonReply("")).toBeNull();
+    expect(parseJsonReply("   \n  ")).toBeNull();
   });
 
-  test("a brace span that is not JSON does not parse either", () => {
-    expect(extractJsonReply("Nimm { diesen } Hinweis.")).toBeNull();
-    expect(extractJsonReply("```json\nnicht wirklich json\n```")).toBeNull();
+  test("an almost-object is repaired once, and says so", () => {
+    // The one thing this reader does beyond extracting: the
+    // mechanical mistakes of a hand-written object — a trailing comma, a
+    // single-quoted key — cost no correction turn.
+    expect(parseJsonReply('{"scenes": [], "warnings": [],}')).toEqual({
+      value: { scenes: [], warnings: [] },
+      repaired: true,
+    });
   });
 
-  test("a truncated object fails extraction (all three stages)", () => {
-    const cut = '{\n  "scenes": [\n    { "path": "01-salzhafen/kai", "content": "---\\nid: k';
-    expect(extractJsonReply(cut)).toBeNull();
+  test("a truncated object does not parse (all three stages)", () => {
+    const cut = '{\n  "properties": {\n    "id": "kai",\n    "title": "Am K';
+    expect(parseJsonReply(cut)).toBeNull();
     // …also when the model prefixed it with prose and opened a fence
-    expect(extractJsonReply(`Los geht's:\n\n\`\`\`json\n${cut}`)).toBeNull();
+    expect(parseJsonReply(`Los geht's:\n\n\`\`\`json\n${cut}`)).toBeNull();
   });
 });
 
@@ -439,7 +459,7 @@ describe("POST /api/:campaign/generate", () => {
     const sceneReq = fake.callsFor("treffen-am-kai")[0]!.req;
     expect(sceneReq.systemPrompt).toContain("System-Prompt: Szenen-Generator");
     expect(sceneReq.systemPrompt).toContain("GENAU EINE Szene");
-    expect(sceneReq.fewShotTarget).toContain("id: smuggler-captured");
+    expect(sceneReq.fewShotTarget).toContain('"id": "smuggler-captured"');
     expect(sceneReq.outline).toContain("treffen-am-kai");
     // WHICH scene this call writes is its own section of the variable half,
     // not a marker inside the (cacheable) outline block.
@@ -467,7 +487,9 @@ describe("POST /api/:campaign/generate", () => {
     expect(fake.callsFor("outline")).toHaveLength(1);
     // the correction turn replays the failed reply verbatim ...
     expect(scene[1]!.corrections).toHaveLength(1);
-    expect(scene[1]!.corrections[0]!.assistant).toBe(bad);
+    expect(scene[1]!.corrections[0]!.assistant).toBe(
+      servedScene({ scenes: [{ content: sceneMarkdown({ npcs: "fenn, nobody" }) }] }),
+    );
     // ... and names the mechanical error
     expect(scene[1]!.corrections[0]!.correction).toContain('npc "nobody"');
     expect(await exists(SCENE_PATH)).toBe(false);
@@ -538,7 +560,7 @@ describe("POST /api/:campaign/generate", () => {
     expect(fake.callsFor("treffen-am-kai")).toHaveLength(1);
     // The replayed assistant turn is the ENTRY's own reply — the per-part
     // call is what failed, so that is what goes back.
-    expect(entry[1]!.corrections[0]!.assistant).toContain("status: draft");
+    expect(entry[1]!.corrections[0]!.assistant).toContain('"status":"draft"');
     const correction = entry[1]!.corrections[0]!.correction;
     expect(correction).toContain('npc entry "grella"');
     expect(correction).toContain("alive, dead, missing, unknown");
@@ -555,15 +577,19 @@ describe("POST /api/:campaign/generate", () => {
     expect(await exists("npcs/grella")).toBe(false);
   });
 
-  test("npc stub without any status triggers a correction turn", async () => {
-    const bad = reply({
-      entries: [{ kind: "npc", content: npcStub({ status: null }) }],
-    });
-    const fake = useFake([bad, reply()]);
-    expect((await generate(generateBody)).status).toBe(200);
-    const entry = fake.callsFor("grella");
-    expect(entry).toHaveLength(2);
-    expect(entry[1]!.corrections[0]!.correction).toContain('"status" fehlt');
+  test("an npc entry without a status is read as \"unknown\", not corrected", async () => {
+    // The schema types an npc `status` as NULLABLE (the prompt's „nicht
+    // gegeben → null"), so „no status" is a legal reply — and it means what
+    // the shared parser has always made of a status-less npc entry:
+    // `unknown`. Never `alive`, which would be the run asserting something
+    // the source text is silent about.
+    const fake = useFake([reply({ entries: [{ kind: "npc", content: npcStub({ status: null }) }] })]);
+    const res = await generate(generateBody);
+    expect(res.status).toBe(200);
+    expect(fake.callsFor("grella")).toHaveLength(1);
+    // …and the draft the review shows carries the default, not a gap.
+    const result = (await res.json()) as GenerateResult;
+    expect(result.stubs[0]!.markdown).toContain("status: unknown");
   });
 
   test("location stub with ANY status triggers a correction turn", async () => {
@@ -579,8 +605,12 @@ describe("POST /api/:campaign/generate", () => {
       const entry = fake.callsFor(LOCATION_STUB_ID);
       expect(entry).toHaveLength(2);
       const correction = entry[1]!.corrections[0]!.correction;
-      expect(correction).toContain(`location entry "${LOCATION_STUB_ID}"`);
-      expect(correction).toContain("locations haben keinen status");
+      expect(correction).toContain(`location "${LOCATION_STUB_ID}"`);
+      // The FIELD LIST catches it before the status rule
+      // does: a location has no `status` field at all, so the message names
+      // the fields it does have — which is more to go on, not less.
+      expect(correction).toContain("ist kein Feld dieser Entität");
+      expect(correction).toContain("roll20-page");
     }
   });
 
@@ -648,12 +678,22 @@ describe("POST /api/:campaign/generate", () => {
       expect.arrayContaining([expect.stringContaining('"status" must be "draft"')]),
     );
     // the raw reply of the LAST attempt, not of the first one
-    expect(body.rawReply).toBe(last);
+    expect(body.rawReply).toBe(
+      servedScene({
+        scenes: [{ content: sceneMarkdown({ status: "ready" }) }],
+        warnings: ["letzter Versuch"],
+      }),
+    );
 
     // The SCENE part spent its initial call plus exactly 2 correction turns.
     const scene = fake.callsFor("treffen-am-kai");
     expect(scene).toHaveLength(3);
-    expect(scene[1]!.corrections[0]!.correction).toContain("not valid JSON");
+    // The scene part got the un-parseable text verbatim, so its correction
+    // turn is the ONE shape message — the three keys of the
+    // reply object, and the schema it belongs to.
+    expect(scene[1]!.corrections[0]!.correction).toContain("kein Objekt des Schemas");
+    expect(scene[1]!.corrections[0]!.correction).toContain("scene");
+    expect(scene[1]!.corrections[0]!.correction).toContain("`warnings`");
     expect(scene[2]!.corrections).toHaveLength(2);
     // The OUTLINE step has correction turns of its own (Zuschnitt 1): the
     // first scripted answer is not JSON, so it took two calls.
@@ -803,7 +843,10 @@ describe("POST /api/:campaign/generate", () => {
     expect(res.status).toBe(200);
     const scene = fake.callsFor("treffen-am-kai");
     expect(scene).toHaveLength(2);
-    expect(scene[1]!.corrections[0]!.assistant).toBe(bad); // replayed verbatim
+    // The entry the part answered, replayed verbatim.
+    expect(scene[1]!.corrections[0]!.assistant).toBe(
+      servedScene({ scenes: [{ content: sceneMarkdown({ status: "ready" }) }] }),
+    );
     expect(scene[1]!.corrections[0]!.correction).toContain('"status" must be "draft"');
   });
 
@@ -818,7 +861,7 @@ describe("POST /api/:campaign/generate", () => {
     expect(outline[1]!.corrections[0]!.correction).toContain("not valid JSON");
   });
 
-  test("the 422 rawReply is the ORIGINAL reply text, not the extracted JSON", async () => {
+  test("the 422 rawReply is the reply the failing PART got, verbatim", async () => {
     const bad = proseThenJson(
       replyJson({
         scenes: [{ content: sceneMarkdown({ status: "ready" }) }],
@@ -829,8 +872,12 @@ describe("POST /api/:campaign/generate", () => {
     const res = await generate(generateBody);
     expect(res.status).toBe(422);
     const body = (await res.json()) as { rawReply: string; validationErrors: string[] };
-    expect(body.rawReply).toBe(bad);
-    expect(body.rawReply.startsWith("I need to be careful")).toBe(true);
+    // The part's own last reply — the reply OBJECT, not the
+    // run's outline call and not an extracted fragment of it.
+    expect(body.rawReply).toBe(
+      servedScene({ scenes: [{ content: sceneMarkdown({ status: "ready" }) }] }),
+    );
+    expect(JSON.parse(body.rawReply).properties.id).toBe("treffen-am-kai");
     expect(body.validationErrors).toEqual(
       expect.arrayContaining([expect.stringContaining('"status" must be "draft"')]),
     );
@@ -889,11 +936,11 @@ describe("POST /api/:campaign/generate", () => {
   });
 
   test("the chapter of a draft's address comes from the RUN, not the reply (#100)", async () => {
-    // `chapter:` in the properties is decoration; the address is built from
-    // the chapter the request named.
+    // The address is built from the chapter the REQUEST named — a reply that
+    // names no chapter at all changes nothing about it.
     const fake = useFake([
       reply({
-        scenes: [{ content: sceneMarkdown().replace("chapter: 01-salzhafen", "chapter: 99-weg") }],
+        scenes: [{ content: sceneMarkdown().replace("chapter: 01-salzhafen\n", "") }],
       }),
     ]);
     const res = await generate(generateBody);
@@ -901,6 +948,38 @@ describe("POST /api/:campaign/generate", () => {
     const result = (await res.json()) as GenerateResult;
     expect(result.scenes[0]!.path).toBe(SCENE_PATH);
     expect(fake.callsFor("treffen-am-kai")).toHaveLength(1);
+  });
+
+  test("a scene without a type is a planned one — no correction turn", async () => {
+    // `type` is nullable in the reply schema (the prompt's „nicht gegeben →
+    // null") while the scene validator demands a known one, so „null" has to
+    // mean what an unmarked scene has always meant: `planned` (contingency is
+    // the exception, and it says so). Hard-failing would make a
+    // schema-conform reply cost a turn.
+    const fake = useFake([
+      reply({ scenes: [{ content: sceneMarkdown().replace("type: planned\n", "") }] }),
+    ]);
+    const res = await generate(generateBody);
+    expect(res.status).toBe(200);
+    expect(fake.callsFor("treffen-am-kai")).toHaveLength(1);
+    expect(((await res.json()) as GenerateResult).scenes[0]!.markdown).toContain("type: planned");
+  });
+
+  test("a scene whose chapter is not the run's triggers a correction turn", async () => {
+    // …and a reply that names a DIFFERENT one is not decoration: the entry
+    // would sit in the run's chapter while claiming another, and the pool
+    // groups by the key while the tree groups by the address. Cheaper as a
+    // correction turn than as a scene the DM has to find by hand.
+    const bad = reply({
+      scenes: [{ content: sceneMarkdown().replace("chapter: 01-salzhafen", "chapter: 99-weg") }],
+    });
+    const fake = useFake([bad, reply()]);
+    const res = await generate(generateBody);
+    expect(res.status).toBe(200);
+    const scene = fake.callsFor("treffen-am-kai");
+    expect(scene).toHaveLength(2);
+    expect(scene[1]!.corrections[0]!.correction).toContain('"chapter" muss "01-salzhafen" sein');
+    expect(((await res.json()) as GenerateResult).scenes[0]!.path).toBe(SCENE_PATH);
   });
 
   test("400 on malformed bodies — provider never called", async () => {
@@ -1079,7 +1158,8 @@ describe("POST /api/:campaign/generate/apply", () => {
     // nothing written, nothing overwritten
     expect(await exists("01-salzhafen/leuchtturm/ganz-neu")).toBe(false);
     const after = await read("01-salzhafen/leuchtturm/lighthouse-arrival");
-    expect(after.raw).toBe(before.raw);
+    expect(after.properties).toEqual(before.properties);
+    expect(after.body).toBe(before.body);
     expect(after.rev).toBe(before.rev); // the row's rev never moved
   });
 
@@ -1475,14 +1555,16 @@ describe("generate jobs", () => {
     expect(job.error!.body.validationErrors).toEqual(
       expect.arrayContaining([expect.stringContaining('"status" must be "draft"')]),
     );
-    expect(job.error!.body.rawReply).toBe(bad);
+    expect(job.error!.body.rawReply).toBe(
+      servedScene({ scenes: [{ content: sceneMarkdown({ status: "ready" }) }] }),
+    );
     // Summed over every call of the run — the outline's included.
     expect(job.error!.body.usage).toEqual({
       inputTokens: 3000,
       outputTokens: 300,
       attempts: fake.calls.length,
     });
-    // The part itself says what happened, which is what „Erneut versuchen"
+    // The part itself says what happened, which is what „Erneut versuchen“
     // hangs off (issue #102).
     expect(job.pipeline!.parts).toEqual([
       expect.objectContaining({
@@ -1866,7 +1948,7 @@ describe("generate jobs", () => {
     // An npc draft path keeps its two segments — only scenes collapse.
     expect(Object.keys(job.draftEdits).every((k) => !k.startsWith("npcs/"))).toBe(true);
 
-    // The point of all of it: „Übernehmen" works again.
+    // The point of all of it: „Übernehmen“ works again.
     const res = await postJson("/api/beispiel/generate/apply", {
       scenes: job.result!.scenes,
       stubs: [],
@@ -2076,7 +2158,7 @@ describe("campaign knowledge", () => {
     const fake = useFake([freshReply()]);
     expect((await generate(generateBody)).status).toBe(200);
     const knowledge = fake.calls[0]!.req.knowledge;
-    expect(knowledge).toContain('schreibe „Salt Harbour" immer als „Salzhafen"');
+    expect(knowledge).toContain('schreibe „Salt Harbour“ immer als „Salzhafen“');
     expect(knowledge).toContain("- Stilregel: Keine Würfelwerte im Read-Aloud.");
   });
 

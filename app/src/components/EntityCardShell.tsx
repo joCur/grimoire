@@ -1,7 +1,7 @@
 // The one interactive surface shared by the aside cards (NPC, location).
 //
 // Two variants, deliberately identical in looks: a LINK into the reading view
-// (scene aside — issue #26) or, with `onOpen`, a BUTTON that hands the file
+// (scene aside — issue #26) or, with `onOpen`, a BUTTON that hands the entry
 // path back to the caller (live mode — issue #40: a card click must open the
 // detail drawer, never navigate away from the running session). Both are
 // keyboard-focusable and carry the app's global focus outline.
@@ -19,7 +19,7 @@ export function EntityCardShell({
   children,
 }: {
   campaign: string;
-  /** Campaign-relative file path of the entity (e.g. `npcs/jorna`). */
+  /** Campaign-relative entry path of the entity (e.g. `npcs/jorna`). */
   path: string;
   className?: string;
   onOpen?: (path: string) => void;

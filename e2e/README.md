@@ -6,54 +6,49 @@ Nichts im Browser ist gemockt — die einzige Attrappe ist das LLM: ein lokaler,
 OpenAI-kompatibler Stub (`fixtures/stub-llm.ts`), den der Server über den
 normalen `OpenAICompatProvider` per HTTP aufruft.
 
-## Seit dem SQLite-Cutover (#57)
-
-Die Datenbank ist die einzige Wahrheit; der Server liest und schreibt keine
-Kampagnen-Markdown-Dateien mehr. Für die Suite heißt das:
+## So sät die Suite
 
 - **Gesät wird über den echten Importer — `grimoire seed`.** Jeder Test
   bekommt ein leeres `GRIMOIRE_DATA`-Verzeichnis; die `server`-Fixture ruft
   darauf `grimoire seed <baum>` mit der pristinen Kopie von
-  `examples/beispiel` auf und startet DANN den Server. Seit Issue #79
-  importiert der Boot selbst nichts mehr; der Seed bleibt aber derselbe
-  Importer (Planung #52, PO-Entscheidung F5: kein zweites Datenformat für
-  Fixtures).
-- **Der Markdown-Baum ist nur noch EINGABE**, einmal pro Test gelesen. Ein
-  Test, der Inhalte braucht, die die Beispielkampagne nicht hat, sät sie VOR
-  dem Seed in seine eigene Kopie des Baums:
-  `test.use({ seed: { files: { "locations/hafen.md": "…" }, remove: ["_campaign.md"] } })`.
-  Ohne Seed wird die geteilte pristine Kopie direkt benutzt (niemand schreibt
-  hinein), die meisten Tests kopieren also gar nichts. Und ein Test, der eine
-  **leere Instanz** braucht — keine Kampagne, der Normalfall einer frischen
-  Installation seit #79 — schaltet den Seed-Lauf ganz ab:
-  `test.use({ seed: { skip: true } })` (Pfad 10, Issue #56).
-- **Zusicherungen laufen über die API** (`api`-Helfer, s. u.) — es gibt keine
-  Datei mehr, die man zurücklesen könnte. Der frühere `files`-Helfer ist weg;
-  eine Fixture, die von „der Datei auf der Platte" erzählt, wäre eine Lüge.
-- **Adressen tragen keine Dateiendung** (Issue #79) und ein Szenen-Segment
-  ist die `id`, nicht der frühere Dateiname.
-  Die Schlüssel des `seed`-Fixtures sind ebenfalls Adressen — das `.md` für
-  den Importer hängt die Fixture selbst an.
+  `examples/beispiel` auf und startet DANN den Server (der Boot selbst
+  importiert nichts). Derselbe Importer, kein zweites Fixture-Format
+  (PO-Entscheidung F5).
+- **Der Markdown-Baum ist EINGABE**, einmal pro Test gelesen. Ein Test, der
+  Inhalte braucht, die die Beispielkampagne nicht hat, sät sie VOR dem Seed
+  in seine eigene Kopie des Baums:
+  `test.use({ seed: { files: { "locations/hafen": "…" }, remove: ["_campaign"] } })`.
+  Die Schlüssel sind **Adressen** wie überall in der Suite — das `.md` für
+  den Importer hängt die Fixture selbst an (ein Schlüssel, der es schon
+  trägt, wird ebenso akzeptiert). Ohne Seed wird die geteilte pristine Kopie
+  direkt benutzt (niemand schreibt hinein), die meisten Tests kopieren also
+  gar nichts.
+- **Eine leere Instanz** — keine Kampagne, der Normalfall einer frischen
+  Installation — schaltet den Seed-Lauf ab: `test.use({ seed: { skip: true } })`
+  (Pfad 10, Issue #56).
+- **Zusicherungen laufen über die API** (`api`-Helfer, s. u.); wo eine
+  Zusicherung wirklich die Speicherung meint, über `db`.
+- **Adressen tragen keine Dateiendung** und ein Szenen-Segment ist die `id`.
 - **Das Wächter-Token heißt `rev`** (die Zeilenversion) und die Felder eines
-  Dokuments `properties`. Ein veraltetes `rev` antwortet weiter mit 409.
-- **„Extern geändert" gibt es nicht mehr.** Kritischer Pfad 9 prüft darum den
-  ZWEITEN SCHREIBER: während der Editor offen steht, schreibt der Test über
-  die API (`api.writeBody`), danach speichert die UI — und muss den Konflikt
-  zeigen und neu laden statt still zu überschreiben. Genauso in
-  `status-control`, `properties-form` und `block-composer`.
+  Dokuments `properties`. Ein veraltetes `rev` antwortet mit 409.
+- **Konflikte kommen vom ZWEITEN SCHREIBER**, nicht von außen: kritischer
+  Pfad 9 schreibt über die API (`api.writeBody`), während der Editor offen
+  steht, danach speichert die UI — und muss den Konflikt zeigen und neu laden
+  statt still zu überschreiben. Genauso in `status-control`,
+  `properties-form` und `block-composer`.
 
-## Seit „Gruppe = Ort" (#100)
+## Gruppe = Ort
 
-Die **Gruppe** einer Szene ist ihr `location`, es gibt kein eigenes
-Gruppenfeld mehr. Für die Suite heißt das drei Dinge:
+Die **Gruppe** einer Szene ist ihr `location` (#100), es gibt kein eigenes
+Gruppenfeld. Für die Suite heißt das drei Dinge:
 
-- **Die Adressen der Beispielszenen haben sich geändert.** Beide Dateien
-  liegen im Verzeichnis `hafen/`, nennen aber verschiedene Orte:
-  `01-salzhafen/leuchtturm/lighthouse-arrival` und
-  `01-salzhafen/bucht/smuggler-captured`. `hafen` ist keine Gruppe und
-  kommt in keiner Zusicherung mehr vor. `locations/bucht` gibt es im Baum
-  nicht — der Import legt den Eintrag an, weil eine Szene ihn nennt
-  („Referenzieren legt an", #70), die Kampagne hat also **zwei** Orte.
+- **Die Adressen der Beispielszenen folgen ihrem Ort, nicht dem Baum.** Beide
+  Quelldateien liegen im Verzeichnis `hafen/`, nennen aber verschiedene Orte,
+  also lauten die Adressen `01-salzhafen/leuchtturm/lighthouse-arrival` und
+  `01-salzhafen/bucht/smuggler-captured`. `hafen` ist keine Gruppe und kommt
+  in keiner Zusicherung vor. `locations/bucht` gibt es im Baum nicht — der
+  Import legt den Eintrag an, weil eine Szene ihn nennt („Referenzieren legt
+  an", #70), die Kampagne hat also **zwei** Orte.
 - **Eine veraltete Szenen-Adresse ist kein 404.** Sie nennt dieselbe id, der
   Server löst sie auf und antwortet mit der aktuellen Adresse (`path`); die
   App ersetzt die URL (ADR #17). `api.exists(<alte Adresse>)` ist deshalb
@@ -113,8 +108,8 @@ inklusive des Generator-Jobs, der seit #23 selbst eine Zeile ist.
 
 **Die zwei Zusicherungs-Helfer:**
 
-- `api` — getippte Aufrufe gegen den Server dieses Tests: `api.raw(rel)` (die
-  serialisierte Datei — der Nachfolger von `files.read`), `api.file`,
+- `api` — getippte Aufrufe gegen den Server dieses Tests: `api.file(rel)` (der Eintrag:
+  `properties`, `body`, `rev`), `api.body`, `api.properties`,
   `api.exists`, `api.get`/`api.send` und die beiden Schreibwege
   `api.writeBody` / `api.patchProperties`, die sich frisch ein Token holen
   und damit den „zweiten Schreiber" spielen.
@@ -131,19 +126,28 @@ einsammelt (Bun matcht `*.test.ts` und `*.spec.ts`).
 
 ## Stub-Fixtures anpassen
 
-`fixtures/replies.ts` enthält die Modellantworten als lesbare Markdown-Blöcke:
-den Szenen-Entwurf mit NPC- und Ort-Stub, die NPC-Datei und je eine bewusst
-ungültige Variante. Sie erfüllen die aktuelle mechanische Validierung aus
-`server/src/generator.ts`. Seit Issue #100 enthält **keine** Antwort mehr
-einen `path`: Szenen kommen als `{ content }` (die `id` im Frontmatter ist
-alles, was das Modell über die Adressierung entscheidet), vorgeschlagene
-Einträge als ein gemeinsames Array `entries` mit
-`{ kind: "npc" | "location", content }`, und NPC- wie Ergänzungs-Lauf
-liefern ein Dokument ohne Adresse. Die inhaltlichen Regeln bleiben (Szene:
-`status: draft`, nur bekannte Callouts, `location` ist eine id, Referenzen
-existieren oder kommen als Eintrag mit; NPC-Eintrag *mit* Status,
+`fixtures/replies.ts` enthält die Modellantworten als **Objekte**, genau so,
+wie das erzwungene Schema sie beschreibt: ein Eintrags-Aufruf antwortet
+`{ properties, body, warnings }`, die Gliederung ihr eigenes Format. Ein
+String, der kein Objekt ist, reist unverändert — das ist eine Antwort, die ein
+Test absichtlich unlesbar geschrieben hat. Der Stub serialisiert das Objekt als
+JSON in den Message-Content.
+
+Abgedeckt sind: der Szenen-Entwurf mit NPC- und Ort-Stub, der NPC-Eintrag
+und je eine bewusst ungültige Variante. Sie erfüllen die aktuelle
+mechanische Validierung aus `server/src/generator.ts`.
+
+Der Stub ist ein OpenAI-kompatibler Endpoint und **ignoriert**
+`response_format`. Genau das ist der Wert dieses Pfades: der Lauf muss auch
+dort funktionieren, wo das Schema nicht wirklich erzwungen wird — dafür ist
+der tolerante Leser im Server (`parseJsonReply`) das Netz.
+
+Keine Antwort enthält eine Adresse: die `id` in `properties` ist alles, was das
+Modell über die Adressierung entscheidet. Die inhaltlichen Regeln bleiben
+(Szene: `status: draft`, nur bekannte Callouts, `location` ist eine id,
+Referenzen existieren oder kommen als Eintrag mit; NPC-Eintrag *mit* Status,
 Ort-Eintrag *ohne*; NPC-Lauf: kebab-`id`, kein `chapter`, Quickstats als
-Strings in Anführungszeichen, `## Notizen` leer).
+`{ key, value }`-Liste mit String-Werten, `## Notizen` leer).
 
 Wenn sich eine Validierungsregel ändert, ist diese Datei die Stelle, die
 mitwandert. Die Specs behaupten die dort definierten Titel und ids.
@@ -187,6 +191,12 @@ keinen Zustand und kann mehrere Worker parallel bedienen:
   „Erneut versuchen". Der Rundenzähler ist der **einzige** Zustand des Stubs
   und hängt an der `nonce`, die der Spec schreibt: so können parallele Worker
   sich den Fehlschlag nicht gegenseitig wegnehmen.
+- `E2E_ASCII_QUOTES` → der Szenen-Körper trägt deutsche Anführungszeichen mit
+  dem **ASCII-Zeichen `"`** als Schlusszeichen. Eine Antwort, die das Modell
+  selbst einpacken musste, bezahlte dieses `"` mit einer Korrekturrunde; als
+  `body` eines erzwungenen Objekts ist es Text, der Lauf muss also ohne eine
+  einzige Korrekturrunde `done` erreichen (zwei Aufrufe: Gliederung + eine
+  Szene).
 - `E2E_HOLD_LAST` → nur die **letzte** Szene wird gehalten, die anderen
   antworten normal. Das ist die Lage, die ein Neustart mitten im Lauf braucht:
   fertige Teile zum Behalten und einen in Flug. (Der Name beginnt bewusst
@@ -222,7 +232,7 @@ mehrere Schreibwege auf ihm liegen:
 | 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-pipeline.e2e.ts`, `tests/generator-restart.e2e.ts`, `tests/augment.e2e.ts` |
 | 7 Eigenschaften/409 | `tests/status-control.e2e.ts`, `tests/properties-form.e2e.ts`, `tests/rename.e2e.ts` |
 | 8 Mobil            | `tests/mobile.e2e.ts`                                          |
-| 9 Datei bearbeiten | `tests/block-composer.e2e.ts`, `tests/file-edit.e2e.ts`        |
+| 9 Eintrag bearbeiten | `tests/block-composer.e2e.ts`, `tests/entry-edit.e2e.ts`        |
 | 10 Kaltstart       | `tests/cold-start.e2e.ts`                                       |
 
 `tests/generator-restart.e2e.ts` ist die Neustart-Hälfte von Pfad 6 (#23) und
@@ -306,11 +316,11 @@ Block-Composer ab — Standardmodus, eine Karte pro Block, Anlegen/Verschieben,
 Kinder eines `## If:`-Abschnitts, unbekannte Konstrukte als Roh-Block, die
 Save-Sperre bei einem `##` in einem If-Kind (Hinweis an der Karte, „Speichern"
 aus, Datei unverändert), der 409 mit offenem Blockformular und die Bedienung
-bei 390px. `file-edit.e2e.ts` deckt
-den „Roh"-Fallback ab: die Textarea aus #39, ihre „Vorschau" (die es nur dort
+bei 390px. `entry-edit.e2e.ts` deckt
+den „Markdown"-Fallback ab: die Textarea aus #39, ihre „Vorschau" (die es nur dort
 gibt), die Kinds mit und ohne Editor und die Verlustpfade (Navigation,
 fehlgeschlagener Refetch, Status-Regler daneben). Jeder Test dort betritt den
-Editor über `openRawEditor` — erst „Bearbeiten", dann der Umschalter „Roh" —,
+Editor über `openMarkdownEditor` — erst „Bearbeiten", dann der Umschalter „Markdown" —,
 weil „Bearbeiten" allein seit #43 im Composer landet. Ein Test dort deckt
 zusätzlich Issue #100 ab: eine Szene, deren `location` sich geändert hat,
 wird über ihre ALTE Adresse geöffnet, bearbeitet und gespeichert — der
@@ -354,7 +364,7 @@ unsichtbar, weil die Kapitelübersicht Kapitel aus der Kapiteltabelle listet.
   waren nach der Navigation weg — seit #97 ist der Prüfschritt persistent,
   also ist genau das der Normalfall. Der Titel liegt jetzt am Job
   (`generate_jobs.new_chapter_title`, beim **Start** geschrieben), und der
-  Spec prüft ihn am Kapitel-Dokument UND in der Übersicht.
+  Spec prüft ihn am Kapitel-Eintrag UND in der Übersicht.
   Zu beachten: ein Bulk-„Übernehmen" lässt **unentschiedene** vorgeschlagene
   Einträge offen (Regel aus #97), der Prüfschritt bleibt also stehen und
   meldet „1 von 3 übernommen" — das Kapitel schreibt schon der erste Accept.

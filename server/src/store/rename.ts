@@ -19,7 +19,7 @@
 // their own.
 
 import { and, eq, sql } from "drizzle-orm";
-import { ApiError } from "../campaign-fs";
+import { ApiError } from "../api-error";
 import { logLineShortHash } from "../db/import-markdown";
 import type { GrimoireDb } from "../db/client";
 import {

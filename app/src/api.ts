@@ -5,7 +5,7 @@
 import type {
   CampaignSummary,
   CampaignTree,
-  FileResponse,
+  EntryResponse,
   GenerateJob,
   GenerateJobStarted,
   GeneratedStub,
@@ -95,8 +95,8 @@ export function fetchTree(campaign: string): Promise<CampaignTree> {
   return getJson<CampaignTree>(`/${encodeURIComponent(campaign)}/tree`);
 }
 
-export function fetchFile(campaign: string, path: string): Promise<FileResponse> {
-  return getJson<FileResponse>(
+export function fetchFile(campaign: string, path: string): Promise<EntryResponse> {
+  return getJson<EntryResponse>(
     `/${encodeURIComponent(campaign)}/file?path=${encodeURIComponent(path)}`,
   );
 }
@@ -113,8 +113,8 @@ export function fetchSearch(campaign: string, q: string): Promise<SearchResponse
 
 /**
  * Campaign version counter (issue #8) — bumped by every server-side write, in
- * the same transaction as the change (the file watcher is gone with the SQLite
- * cutover, DECISIONS #9/#13); polled by useCampaignVersion.
+ * the same transaction as the change (DECISIONS #9/#13); polled by
+ * useCampaignVersion.
  *
  * `build` (issue #24) is the server's build id, riding along on this poll so
  * the handshake costs no extra request. Optional in the type because an older
@@ -180,10 +180,10 @@ export function putKnowledge(
 // --- write endpoints (session/log, issue #9) --------------------------------
 
 /**
- * Set/delete properties keys of one file (issue #5 endpoint, used by the
+ * Set/delete properties keys of one entry (issue #5 endpoint, used by the
  * scene-status control of issue #28). `patch` is flat: a value sets the key,
  * `null` deletes it. `rev` is the optimistic-concurrency token and must be
- * the one from the FileResponse the UI is showing — when the file changed on
+ * the one from the EntryResponse the UI is showing — when the entry changed on
  * disk since, the server answers 409 with the current `rev` in
  * `ApiError.details` and writes nothing.
  *
@@ -201,7 +201,7 @@ export async function patchProperties(
     patch: Record<string, unknown>;
     locationName?: string;
   },
-): Promise<FileResponse> {
+): Promise<EntryResponse> {
   const path = `/${encodeURIComponent(campaign)}/properties`;
   const response = await fetch(`/api${path}`, {
     method: "PATCH",
@@ -209,23 +209,23 @@ export async function patchProperties(
     body: JSON.stringify(input),
   });
   if (!response.ok) throw await failure(`PATCH /api${path}`, response);
-  return (await response.json()) as FileResponse;
+  return (await response.json()) as EntryResponse;
 }
 
 /**
- * Replace the markdown BODY of one file, properties untouched (issue #15 —
+ * Replace the markdown BODY of one entry, properties untouched (issue #15 —
  * the reading view's edit mode). `body` is what GET /file hands out: the file
  * without its properties block. `rev` is the same optimistic-concurrency
- * token as above and must come from the FileResponse the editor was seeded
+ * token as above and must come from the EntryResponse the editor was seeded
  * from — on a mismatch the server answers 409 with the current `rev` in
  * `ApiError.details` and writes nothing.
  */
-export async function putFileBody(
+export async function putEntryBody(
   campaign: string,
   path: string,
   body: string,
   rev: number,
-): Promise<FileResponse> {
+): Promise<EntryResponse> {
   const url = `/${encodeURIComponent(campaign)}/file`;
   const response = await fetch(`/api${url}`, {
     method: "PUT",
@@ -233,7 +233,7 @@ export async function putFileBody(
     body: JSON.stringify({ path, rev, body }),
   });
   if (!response.ok) throw await failure(`PUT /api${url}`, response);
-  return (await response.json()) as FileResponse;
+  return (await response.json()) as EntryResponse;
 }
 
 async function postJson<T>(path: string, body?: unknown): Promise<T> {
@@ -251,35 +251,35 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
  * The ACTIVE session (issue #40), or null when none is running — the server's
  * 404 is the normal "no session" answer, never an error state in the UI.
  *
- * The app must NOT derive the session file from its own date: a session that
- * runs past midnight lives in yesterday's file, and a browser in another
+ * The app must NOT derive the session from its own date: a session that
+ * runs past midnight lives in yesterday's session, and a browser in another
  * timezone than the server would guess wrong. The response carries
  * `startedMs`/`endedMs` (epoch, resolved by the server), which is what makes
  * the live runtime correct.
  */
-export async function fetchActiveSession(campaign: string): Promise<FileResponse | null> {
+export async function fetchActiveSession(campaign: string): Promise<EntryResponse | null> {
   return fetchSession(campaign, false);
 }
 
 /**
  * The LAST STARTED session, ended or not (`?includeEnded=1`) — the REVIEW's
  * session. Same reason the app must not guess it: an evening that ran past
- * midnight was ended in yesterday's file, so "today's file" would harvest
+ * midnight was ended in yesterday's session, so "today's session" would harvest
  * nothing (or the wrong log). null when the campaign has no session at all.
  */
-export async function fetchLastStartedSession(campaign: string): Promise<FileResponse | null> {
+export async function fetchLastStartedSession(campaign: string): Promise<EntryResponse | null> {
   return fetchSession(campaign, true);
 }
 
 async function fetchSession(
   campaign: string,
   includeEnded: boolean,
-): Promise<FileResponse | null> {
+): Promise<EntryResponse | null> {
   const path = `/${encodeURIComponent(campaign)}/session${includeEnded ? "?includeEnded=1" : ""}`;
   const response = await fetch(`/api${path}`);
   if (response.status === 404) return null;
   if (!response.ok) throw await failure(`GET /api${path}`, response);
-  return (await response.json()) as FileResponse;
+  return (await response.json()) as EntryResponse;
 }
 
 /**
@@ -289,13 +289,13 @@ async function fetchSession(
  * single 409 left is `session_running` — an OLDER session is still open (see
  * sessionStartConflict).
  */
-export function startSession(campaign: string): Promise<FileResponse> {
-  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/start`);
+export function startSession(campaign: string): Promise<EntryResponse> {
+  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/session/start`);
 }
 
-/** Set `ended` in the ACTIVE session file (404 when there is none). */
-export function endSession(campaign: string): Promise<FileResponse> {
-  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/end`);
+/** Set `ended` in the ACTIVE session (404 when there is none). */
+export function endSession(campaign: string): Promise<EntryResponse> {
+  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/session/end`);
 }
 
 /**
@@ -303,23 +303,23 @@ export function endSession(campaign: string): Promise<FileResponse> {
  * interval — the runtime really stops — and writes the `— Pause` log line.
  * Idempotent; 404 when no session is running.
  */
-export function pauseSession(campaign: string): Promise<FileResponse> {
-  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/pause`);
+export function pauseSession(campaign: string): Promise<EntryResponse> {
+  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/session/pause`);
 }
 
 /**
  * "Weiter" — close the open pause interval and log `— Weiter`. It ends a
  * PAUSE; an ENDED session is never re-opened (issue #58).
  */
-export function continueSession(campaign: string): Promise<FileResponse> {
-  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/session/continue`);
+export function continueSession(campaign: string): Promise<EntryResponse> {
+  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/session/continue`);
 }
 
 /**
- * DELETE the active session's file — the undo of a mis-clicked "Session
+ * DELETE the active session — the undo of a mis-clicked "Session
  * starten" (issue #40 AK7). Only an EMPTY session may be discarded; the
  * server answers 409 (`code: "session_not_empty"`) otherwise and 404 when
- * nothing is running. Returns the path of the file that is gone.
+ * nothing is running. Returns the path of the entry that is gone.
  */
 export function discardSession(campaign: string): Promise<{ path: string }> {
   return postJson<{ path: string }>(`/${encodeURIComponent(campaign)}/session/discard`);
@@ -327,23 +327,23 @@ export function discardSession(campaign: string): Promise<{ path: string }> {
 
 /**
  * Append a line to the campaign's inbox (mobile capture, issue #11);
- * the server creates the file on the first entry.
+ * the server creates the session on the first log entry.
  */
-export function appendInbox(campaign: string, text: string): Promise<FileResponse> {
-  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/inbox`, { text });
+export function appendInbox(campaign: string, text: string): Promise<EntryResponse> {
+  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/inbox`, { text });
 }
 
 /**
  * Append a log line to the ACTIVE session (404 when none runs) — which may be
- * yesterday's file when the session ran past midnight; the server picks it.
+ * yesterday's session when the session ran past midnight; the server picks it.
  * With a sceneId the server also maintains `scenes_played`.
  */
 export function appendLog(
   campaign: string,
   text: string,
   sceneId?: string,
-): Promise<FileResponse> {
-  return postJson<FileResponse>(
+): Promise<EntryResponse> {
+  return postJson<EntryResponse>(
     `/${encodeURIComponent(campaign)}/log`,
     sceneId === undefined ? { text } : { text, sceneId },
   );
@@ -353,26 +353,26 @@ export function appendLog(
 
 /**
  * Mark a log line as reviewed: the server adds the short hash of the RAW
- * line to the session's `reviewed` list (idempotent). Returns the session file.
+ * line to the session's `reviewed` list (idempotent). Returns the session.
  */
 export function markLogLineSeen(
   campaign: string,
   path: string,
   line: string,
-): Promise<FileResponse> {
-  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/review/seen`, { path, line });
+): Promise<EntryResponse> {
+  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/review/seen`, { path, line });
 }
 
 /**
  * Append `- [ ] text` under `## Offene Fäden` of the chapter's _chapter
- * (section created when missing). Returns the chapter file.
+ * (section created when missing). Returns the chapter entry.
  */
 export function adoptThread(
   campaign: string,
   chapter: string,
   text: string,
-): Promise<FileResponse> {
-  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/review/thread`, {
+): Promise<EntryResponse> {
+  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/review/thread`, {
     chapter,
     text,
   });
@@ -389,8 +389,8 @@ export function ensureNpc(
   id: string,
   name?: string,
   note?: string,
-): Promise<FileResponse> {
-  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/review/npc-stub`, {
+): Promise<EntryResponse> {
+  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/review/npc-stub`, {
     id,
     ...(name === undefined ? {} : { name }),
     ...(note === undefined ? {} : { note }),
@@ -402,8 +402,8 @@ export function ensureNpc(
  * inbox's append-only rule). Idempotent; the line must match byte for byte.
  * Returns inbox.
  */
-export function markInboxLineDone(campaign: string, line: string): Promise<FileResponse> {
-  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/review/inbox-done`, { line });
+export function markInboxLineDone(campaign: string, line: string): Promise<EntryResponse> {
+  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/review/inbox-done`, { line });
 }
 
 // --- creating content (issue #56) --------------------------------------------
@@ -440,8 +440,8 @@ export function createCampaign(input: {
  * the action deliberately also changes a row the caller never read. Answers
  * the chapter's document.
  */
-export function setChapterActive(campaign: string, chapter: string): Promise<FileResponse> {
-  return postJson<FileResponse>(
+export function setChapterActive(campaign: string, chapter: string): Promise<EntryResponse> {
+  return postJson<EntryResponse>(
     `/${encodeURIComponent(campaign)}/chapters/${encodeURIComponent(chapter)}/active`,
   );
 }
@@ -450,8 +450,8 @@ export function setChapterActive(campaign: string, chapter: string): Promise<Fil
 export function createChapter(
   campaign: string,
   input: { title: string; goal?: string; id?: string },
-): Promise<FileResponse> {
-  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/chapters`, {
+): Promise<EntryResponse> {
+  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/chapters`, {
     title: input.title,
     ...(input.goal === undefined ? {} : { goal: input.goal }),
     ...(input.id === undefined ? {} : { id: input.id }),
@@ -462,8 +462,8 @@ export function createChapter(
 export function createScene(
   campaign: string,
   input: { title: string; chapter: string; id?: string },
-): Promise<FileResponse> {
-  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/scenes`, {
+): Promise<EntryResponse> {
+  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/scenes`, {
     title: input.title,
     chapter: input.chapter,
     ...(input.id === undefined ? {} : { id: input.id }),
@@ -474,8 +474,8 @@ export function createScene(
 export function createNpc(
   campaign: string,
   input: { name: string; id?: string },
-): Promise<FileResponse> {
-  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/npcs`, {
+): Promise<EntryResponse> {
+  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/npcs`, {
     name: input.name,
     ...(input.id === undefined ? {} : { id: input.id }),
   });
@@ -485,8 +485,8 @@ export function createNpc(
 export function createLocation(
   campaign: string,
   input: { name: string; id?: string },
-): Promise<FileResponse> {
-  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/locations`, {
+): Promise<EntryResponse> {
+  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/locations`, {
     name: input.name,
     ...(input.id === undefined ? {} : { id: input.id }),
   });
@@ -498,8 +498,8 @@ export function createLocation(
 export type RenameKind = "npc" | "location" | "scene" | "chapter";
 
 /**
- * The answer of POST /:campaign/rename — the moved file (or, for a chapter,
- * the moved DIRECTORY) plus every file whose bytes changed, named by its path
+ * The answer of POST /:campaign/rename — the moved entry (or, for a chapter,
+ * the chapter itself) plus every entry whose bytes changed, named by its path
  * AFTER the rename. With `dryRun` nothing was written and this is the plan
  * the dialog previews. (Declared here rather than in @grimoire/shared: the
  * rename ticket keeps its footprint to server/ and app/.)
@@ -642,15 +642,15 @@ export async function startGenerateJob(
 }
 
 /**
- * Start an NPC run (issue #21): source material in, ONE npc file draft out.
+ * Start an NPC run (issue #21): source material in, ONE NPC draft out.
  * Same job model as the scene run — 202 { jobId }, the result is fetched via
  * fetchGenerateJob (`kind: "npc"`, `npcResult`), and a 409 that carries a
  * jobId means "a generator job is already running for this campaign" and is
  * adopted instead of shown as an error.
  *
  * `id` is optional: empty means the model picks the id. A 409 WITHOUT a jobId
- * is the other collision — the pinned id's file already exists (never
- * overwritten); its `details.path` names the file.
+ * is the other collision — the pinned id's entry already exists (never
+ * overwritten); its `details.path` names the entry.
  */
 export async function startGenerateNpcJob(
   campaign: string,
@@ -731,8 +731,8 @@ export function applyAugment(
     body?: string;
     jobId?: string;
   },
-): Promise<FileResponse> {
-  return postJson<FileResponse>(`/${encodeURIComponent(campaign)}/generate/augment/apply`, {
+): Promise<EntryResponse> {
+  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/generate/augment/apply`, {
     path: input.path,
     rev: input.rev,
     ...(input.properties === undefined ? {} : { properties: input.properties }),
@@ -849,7 +849,7 @@ export function retryJobPart(
  * was written then.
  *
  * `jobId` hands the server the job these drafts came from: a successful
- * apply discards it (the drafts are on disk — nothing left to restore).
+ * apply discards it (the drafts are written — nothing left to restore).
  */
 export function applyDrafts(
   campaign: string,
@@ -874,7 +874,7 @@ export function applyDrafts(
 /**
  * Write the reviewed NPC draft (issue #21) — the same apply endpoint as the
  * scene drafts: it re-validates server-side (path, id, status, parseable
- * properties), answers 409 with `details.conflicts` when the file already
+ * properties), answers 409 with `details.conflicts` when the entry already
  * exists (nothing written), and drops the job the draft came from.
  */
 export function applyNpcDraft(

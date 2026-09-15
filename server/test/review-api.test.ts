@@ -21,7 +21,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import type { FileResponse } from "@grimoire/shared";
+import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import {
   dropStore,
@@ -38,19 +38,19 @@ async function postJson(url: string, body?: unknown): Promise<Response> {
   });
 }
 
-async function postOk(url: string, body?: unknown): Promise<FileResponse> {
+async function postOk(url: string, body?: unknown): Promise<EntryResponse> {
   const res = await postJson(url, body);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
-async function getFile(rel: string, campaign = "beispiel"): Promise<FileResponse> {
+async function getFile(rel: string, campaign = "beispiel"): Promise<EntryResponse> {
   const res = await app.request(`/api/${campaign}/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
-async function putBody(rel: string, body: string): Promise<FileResponse> {
+async function putBody(rel: string, body: string): Promise<EntryResponse> {
   const before = await getFile(rel);
   const res = await app.request("/api/beispiel/file", {
     method: "PUT",
@@ -58,7 +58,7 @@ async function putBody(rel: string, body: string): Promise<FileResponse> {
     body: JSON.stringify({ path: rel, rev: before.rev, body }),
   });
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 /** The documented short-hash: first 8 hex chars of SHA-256 over the raw line. */
@@ -77,7 +77,7 @@ afterEach(() => {
 describe("POST /api/:campaign/review/seen", () => {
   const SESSION = "sessions/2026-01-15";
   const LINE = "- 19:52 (lighthouse-arrival) Spuren gefunden, Gruppe will sofort zur Bucht #decision";
-  const LINE2 = '- 21:10 (lighthouse-arrival) Improvisiert: Fischerin "Old Metta" am Steg #npc';
+  const LINE2 = '- 21:10 (lighthouse-arrival) Improvisiert: Fischerin „Old Metta“ am Steg #npc';
 
   test("adds the short hash once; Log unchanged; key rendered last", async () => {
     const before = await getFile(SESSION);
@@ -93,7 +93,7 @@ describe("POST /api/:campaign/review/seen", () => {
       "scenes_played",
       "reviewed",
     ]);
-    expect(file.raw).toContain(`reviewed: [${sha8(LINE)}]\n`);
+    expect(file.properties.reviewed).toEqual([sha8(LINE)]);
     // The body (## Log, ## Threads) is untouched — marking a line as read
     // never rewrites it.
     expect(file.body).toBe(before.body);
@@ -105,7 +105,7 @@ describe("POST /api/:campaign/review/seen", () => {
     expect(expected).toHaveLength(8);
     expect(expected).toMatch(/^[0-9a-f]{8}$/);
     const file = await postOk("/api/beispiel/review/seen", { path: SESSION, line: LINE });
-    expect(file.raw).toContain(`reviewed: [${expected}]\n`);
+    expect(file.properties.reviewed).toEqual([expected]);
   });
 
   test("idempotent: the same line does not add a second entry", async () => {
@@ -125,7 +125,6 @@ describe("POST /api/:campaign/review/seen", () => {
     expect(second.properties.reviewed).toEqual([sha8(LINE2)]);
     const both = await postOk("/api/beispiel/review/seen", { path: SESSION, line: LINE });
     expect(both.properties.reviewed).toEqual([sha8(LINE), sha8(LINE2)]);
-    expect(both.raw).toContain(`reviewed: [${sha8(LINE)}, ${sha8(LINE2)}]\n`);
   });
 
   test("a line that is not in the log changes nothing and says so", async () => {
@@ -138,7 +137,7 @@ describe("POST /api/:campaign/review/seen", () => {
     const after = (await postOk("/api/beispiel/review/seen", {
       path: SESSION,
       line: "- 23:59 gibt es in diesem Log nicht",
-    })) as FileResponse & { marked?: boolean };
+    })) as EntryResponse & { marked?: boolean };
     expect(after.marked).toBe(false);
     expect(after.properties.reviewed).toBeUndefined();
     const { marked: _marked, ...file } = after;
@@ -149,12 +148,12 @@ describe("POST /api/:campaign/review/seen", () => {
     const first = (await postOk("/api/beispiel/review/seen", {
       path: SESSION,
       line: LINE,
-    })) as FileResponse & { marked?: boolean };
+    })) as EntryResponse & { marked?: boolean };
     expect(first.marked).toBe(true);
     const again = (await postOk("/api/beispiel/review/seen", {
       path: SESSION,
       line: LINE,
-    })) as FileResponse & { marked?: boolean };
+    })) as EntryResponse & { marked?: boolean };
     expect(again.marked).toBe(true);
   });
 
@@ -296,9 +295,8 @@ describe("POST /api/:campaign/review/npc-stub", () => {
     // the entry must not claim "alive" (issue #70; the route always
     // documented "unknown", the insert said otherwise).
     expect(file.properties.status).toBe("unknown");
-    expect(file.raw).toBe(
-      "---\nid: old-metta\nname: Old Metta\nstatus: unknown\n---\n\n## Notizen\n\n- Fischerin am Steg, kennt die Gezeiten #npc\n",
-    );
+    expect(file.properties).toEqual({ id: "old-metta", name: "Old Metta", status: "unknown" });
+    expect(file.body).toBe("\n## Notizen\n\n- Fischerin am Steg, kennt die Gezeiten #npc\n");
     // A fresh row starts at rev 1 — the token the app sends with its first edit.
     expect(file.rev).toBe(1);
     expect(await getFile("npcs/old-metta")).toEqual(file);
@@ -306,7 +304,8 @@ describe("POST /api/:campaign/review/npc-stub", () => {
 
   test("name defaults to the id; without a note the section stays empty", async () => {
     const file = await postOk("/api/beispiel/review/npc-stub", { id: "kai" });
-    expect(file.raw).toBe("---\nid: kai\nname: kai\nstatus: unknown\n---\n\n## Notizen\n");
+    expect(file.properties).toEqual({ id: "kai", name: "kai", status: "unknown" });
+    expect(file.body).toBe("\n## Notizen\n");
   });
 
   test("an existing entry is ANSWERED, not overwritten and not refused", async () => {
@@ -324,7 +323,7 @@ describe("POST /api/:campaign/review/npc-stub", () => {
     // and a stub created in this run is linked the same way
     const first = await postOk("/api/beispiel/review/npc-stub", { id: "old-metta" });
     const second = await postOk("/api/beispiel/review/npc-stub", { id: "old-metta" });
-    expect(second.raw).toBe(first.raw);
+    expect(second).toEqual(first);
   });
 
   test("an EMPTY entry — one a reference created — is filled in", async () => {

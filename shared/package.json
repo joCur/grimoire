@@ -9,6 +9,9 @@
     "./kind": "./src/kind.ts",
     "./refs": "./src/refs.ts",
     "./slug": "./src/slug.ts",
+    "./outline-schema": "./src/outline-schema.ts",
+    "./property-fields": "./src/property-fields.ts",
+    "./entry-schema": "./src/entry-schema.ts",
     "./session-state": "./src/session-state.ts"
   },
   "scripts": {

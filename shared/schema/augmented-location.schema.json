@@ -1,0 +1,56 @@
+{
+  "title": "augmented_location",
+  "description": "Der vollständige ergänzte Eintrag (Ort): die Eigenschaften-Felder, der ganze Fließtext und die Warnungen für den DM.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "properties",
+    "body",
+    "warnings"
+  ],
+  "properties": {
+    "properties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "chapter",
+        "roll20-page"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Kleinbuchstaben, Ziffern und Bindestriche, keine Umlaute (Muster: ^[a-z0-9]+(-[a-z0-9]+)*$)."
+        },
+        "name": {
+          "type": "string"
+        },
+        "chapter": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "id aus der Kontextliste oder der Gliederung. Kleinbuchstaben, Ziffern und Bindestriche, keine Umlaute (Muster: ^[a-z0-9]+(-[a-z0-9]+)*$)."
+        },
+        "roll20-page": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "body": {
+      "type": "string",
+      "description": "Der Text des Eintrags, als EIN String mit echten Zeilenumbrüchen — Überschriften, Callouts und `## If:`-Abschnitte wie im Prompt beschrieben. Den Eigenschaften-Block baut der Server aus `properties`."
+    },
+    "warnings": {
+      "type": "array",
+      "description": "Kurze deutsche Hinweise für den DM; leer, wenn es nichts zu melden gibt.",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

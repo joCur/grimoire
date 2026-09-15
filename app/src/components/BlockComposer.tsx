@@ -1,6 +1,6 @@
 // The Block-Composer (issue #43, phase 2): a scene as a vertical list of
 // editable blocks instead of a wall of markdown syntax. This is the DEFAULT
-// edit mode of the reading view; „Roh" (the textarea from issue #39) stays one
+// edit mode of the reading view; „Markdown" (the textarea from issue #39) stays one
 // click away for everything a form cannot express.
 //
 // The shape follows the job (UI-BRIEF: „die nächste Information in unter drei
@@ -52,7 +52,7 @@ const ICON_BUTTON_CLASS =
   "size-8 flex-none rounded-md p-0 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30 [&_svg]:size-[15px]";
 
 /**
- * „Blöcke" ⇄ „Roh" — the mode switch of edit mode. A two-button group with
+ * „Blöcke" ⇄ „Markdown" — the mode switch of edit mode. A two-button group with
  * aria-pressed instead of a select: both surfaces stay visible and one tap
  * away, which is what a fallback has to be.
  */
@@ -70,7 +70,7 @@ export function ComposerModeToggle({
       aria-label={t("composer.mode.aria")}
       className="flex flex-none items-center gap-px rounded-md border border-input p-px"
     >
-      {(["blocks", "raw"] as const).map((candidate) => {
+      {(["blocks", "markdown"] as const).map((candidate) => {
         const active = candidate === mode;
         return (
           <Button
@@ -86,7 +86,7 @@ export function ComposerModeToggle({
                 : "text-body-secondary hover:bg-transparent hover:text-foreground",
             )}
           >
-            {candidate === "blocks" ? t("composer.mode.blocks") : t("composer.mode.raw")}
+            {candidate === "blocks" ? t("composer.mode.blocks") : t("composer.mode.markdown")}
           </Button>
         );
       })}
@@ -244,7 +244,7 @@ export function BlockFields({
         placeholder={
           block.type === "callout"
             ? t("composer.block.text.placeholder")
-            : t("composer.block.raw.placeholder")
+            : t("composer.block.markdown.placeholder")
         }
         onChange={(event) => onText(event.target.value)}
         className={cn(
@@ -253,11 +253,11 @@ export function BlockFields({
           // browser has it (a wrapped paragraph on a 390px screen is four
           // visual lines, not one); `rows` stays the fallback everywhere else.
           "field-sizing-content resize-y leading-[1.55]",
-          block.type === "raw" && "font-mono text-[12.5px]",
+          block.type === "markdown" && "font-mono text-[12.5px]",
         )}
       />
-      {block.type === "raw" && (
-        <p className="mt-1 text-[11.5px] text-faint">{t("composer.raw.hint")}</p>
+      {block.type === "markdown" && (
+        <p className="mt-1 text-[11.5px] text-faint">{t("composer.markdown.hint")}</p>
       )}
     </div>
   );
@@ -270,7 +270,7 @@ function textareaRows(text: string): number {
 
 /**
  * The composer. `blocks` and `onChange` are the draft: every edit hands back a
- * new list, the caller (FileBodyEditor) owns it and serializes it for the save.
+ * new list, the caller (EntryBodyEditor) owns it and serializes it for the save.
  */
 export function BlockComposer({
   blocks,
@@ -547,7 +547,7 @@ export const BlockCard = memo(function BlockCard({
       <div className="flex items-center gap-2 px-2.5 pt-2 md:px-3">
         <p className="min-w-0 truncate text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
           {label}
-          {block.type === "raw" && block.calloutKind !== undefined && (
+          {block.type === "markdown" && block.calloutKind !== undefined && (
             <span className="ml-1.5 font-mono text-[10.5px] tracking-normal normal-case text-faint">
               [!{block.calloutKind}]
             </span>
@@ -627,7 +627,7 @@ export const BlockCard = memo(function BlockCard({
 /**
  * What a collapsed card shows: the first two lines of the block's own text —
  * plain, not rendered. The composer is a structure view; the rendered document
- * lives one click away in „Roh" → „Vorschau" and, after saving, in the reading
+ * lives one click away in „Markdown" → „Vorschau" and, after saving, in the reading
  * view itself.
  */
 function BlockSummary({ block }: { block: SceneBlock }) {
@@ -641,7 +641,7 @@ function BlockSummary({ block }: { block: SceneBlock }) {
       className={cn(
         "mt-0.5 line-clamp-2 text-[13px] leading-[1.5] break-words whitespace-pre-line",
         block.type === "ifSection" ? "text-body-secondary italic" : "text-body-secondary",
-        block.type === "raw" && "font-mono text-[12px]",
+        block.type === "markdown" && "font-mono text-[12px]",
       )}
     >
       {text}

@@ -40,13 +40,13 @@ Schreibzugriffe laufen über den Server, kein persistenter Browser-State.
 - Inhalte werden extern editiert (VS Code Remote o. ä.). Ein simples
   Textarea-Edit als Notlösung ist erlaubt; ein vollwertiger MD-Editor
   ist bewusst KEIN Ziel von v1.
-- Konfliktschutz: Patch nur bei unverändertem mtime, sonst 409.
+- Konfliktschutz: Patch nur bei unveränderter Zeilenversion `rev`, sonst 409.
 
 > **Teilweise überholt (#11, #13/#15):** Bearbeitet wird in der App; ein
 > externer Editor ist kein Datenpfad mehr, weil die Datenbank die Wahrheit
 > ist. Was GILT: das Append-only von Session-Log und Inbox (samt der einen
-> Ausnahme, dem Abhaken erledigter Inbox-Zeilen) und die Konfliktregel —
-> nur heißt der Guard jetzt `rev`, die Zeilenversion, statt der Dateizeit.
+> Ausnahme, dem Abhaken erledigter Inbox-Zeilen) und die Konfliktregel auf
+> `rev`.
 
 ## 5. Tech-Stack
 
@@ -61,12 +61,20 @@ ließe sich nicht auf Tabellen beschränken (Aufgabenlisten würden die
 Inbox-Syntax `- [x]` vereinnahmen).
 Kein Electron/Tauri — Web-App hinter Tailscale reicht.
 
-**Backend:** Bun + Hono. Bibliotheken ursprünglich: gray-matter
-(Frontmatter), chokidar (Datei-Watcher für externe Edits), Fuse.js (Suche im
-Speicher — kein SQLite nötig bei ein paar hundert Dateien).
-**Seit #13:** Drizzle über SQLite (`server/src/db/`), Suche als FTS5-Index;
-chokidar und Fuse.js sind entfernt, gray-matter lebt nur noch im
-Import-/Parser-Pfad (`@grimoire/shared`).
+**Backend:** Bun + Hono, Drizzle über SQLite (`server/src/db/`), Suche als
+FTS5-Index. gray-matter gehört zum Importer/Parser (`@grimoire/shared`), nicht
+zum Laufzeit-Stack. `jsonrepair` (exakt gepinnt) im Generator: **jede**
+Modell-Antwort ist ein per Schema erzwungenes JSON-Objekt — die Gliederung ihr
+eigenes, ein Eintrags-Aufruf das Objekt, das den gespeicherten Eintrag
+spiegelt (`properties` je Art, `body`, `warnings`; die Schemata liegen als
+lesbares JSON in `shared/schema/`). Ein Endpoint, der `response_format`
+annimmt und ignoriert, liefert trotzdem Handgeschriebenes, und dort sind die
+Fehler mechanisch (Komma am Ende, einfache Anführungszeichen): eine
+deterministische Reparatur vor der Validierung ist deutlich billiger als eine
+Korrekturrunde, die den ganzen Prompt erneut sendet. Die Regeln selbst bleiben
+unangetastet, und ein reparierter Lauf trägt eine Warnung. Weitere
+Abhängigkeiten braucht es nicht — den Eigenschaften-Block eines Eintrags
+rendert der Server mit dem Renderer des Stores.
 Hono statt Express/Fastify: minimal, typsicher, läuft auf Bun UND Node
 (Runtime-Wechsel bleibt möglich, siehe #7).
 
@@ -75,7 +83,7 @@ game-icons.net (CC BY) für thematische Marker (Entitäts- und
 Callout-Typen). Benötigte SVGs als eigene Komponenten einchecken.
 
 **Deployment:** ein Docker-Container (Bun-Image), Volume auf
-`GRIMOIRE_DATA` (seit #13; vorher `campaigns/`), erreichbar nur über
+`GRIMOIRE_DATA`, erreichbar nur über
 Tailscale. Details: docs/DEPLOYMENT.md.
 
 ## 6. LLM-Generator
@@ -828,4 +836,4 @@ um den Tabellen-Neubau generiert, ist im Migrator wirkungslos — der läuft in
 einer Transaktion, und dort ist das Pragma ein No-op. Mit aktiver Durchsetzung
 würde `DROP TABLE scenes` über `scene_npcs`/`scene_tags` cascaden. Die
 Kindzeilen werden deshalb in derselben Transaktion beiseitegelegt und
-zurückgeschrieben; die Datei erklärt es an ihrem Kopf.
+zurückgeschrieben; die Migration erklärt es an ihrem Kopf.

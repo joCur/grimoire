@@ -1,21 +1,20 @@
 // Issue #38: the rev protocol of ADR #4 has exactly one implementation, so
 // it is tested exactly once here — with plain stub functions, no fetch, no
-// react. The three per-path suites (scene-status, file-body, campaign-meta)
+// react. The three per-path suites (scene-status, entry-body, campaign-meta)
 // then only have to show that they wire the right request into it.
 
-import type { FileResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";
 import { isStaleFileError, withRev, writeWithRev } from "./write-with-rev";
 
-function fileAt(rev: number): FileResponse {
+function fileAt(rev: number): EntryResponse {
   return {
     path: "01-salzhafen/hafen/ankunft-leuchtturm",
     kind: "scene",
     properties: { id: "arrival", status: "ready" },
     body: "Text",
-    raw: "---\nid: arrival\n---\n\nText",
     rev,
   };
 }

@@ -28,7 +28,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { eq } from "drizzle-orm";
-import type { FileResponse } from "@grimoire/shared";
+import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { setNow } from "../src/clock";
 import type { GrimoireDb } from "../src/db/client";
@@ -40,10 +40,10 @@ import {
   tempCampaignRoot,
 } from "./support/store";
 
-async function getFile(rel: string, campaign = "beispiel"): Promise<FileResponse> {
+async function getFile(rel: string, campaign = "beispiel"): Promise<EntryResponse> {
   const res = await app.request(`/api/${campaign}/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 async function fileStatus(rel: string, campaign = "beispiel"): Promise<number> {
@@ -58,10 +58,10 @@ async function patchReq(body: unknown): Promise<Response> {
   });
 }
 
-async function patchOk(body: unknown): Promise<FileResponse> {
+async function patchOk(body: unknown): Promise<EntryResponse> {
   const res = await patchReq(body);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 /** PATCH /properties of any campaign (patchReq is bound to `beispiel`). */
@@ -81,10 +81,10 @@ async function putFile(body: unknown): Promise<Response> {
   });
 }
 
-async function putOk(body: unknown): Promise<FileResponse> {
+async function putOk(body: unknown): Promise<EntryResponse> {
   const res = await putFile(body);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 async function postJson(url: string, body?: unknown): Promise<Response> {
@@ -95,10 +95,10 @@ async function postJson(url: string, body?: unknown): Promise<Response> {
   });
 }
 
-async function postOk(url: string, body?: unknown): Promise<FileResponse> {
+async function postOk(url: string, body?: unknown): Promise<EntryResponse> {
   const res = await postJson(url, body);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 /**
@@ -160,7 +160,7 @@ describe("PATCH /api/:campaign/properties", () => {
     expect(after.properties.npcs).toEqual(["jorna"]);
     // The body is not a patch's business — unchanged, character for character.
     expect(after.body).toBe(before.body);
-    expect(after.raw).toBe(before.raw.replace("status: ready", "status: played"));
+    expect(after.properties).toEqual({ ...before.properties, status: "played" });
     // Fresh guard token (exactly one write) and a subsequent GET sees both.
     expect(after.rev).toBe(before.rev + 1);
     const again = await getFile(SCENE);
@@ -180,7 +180,6 @@ describe("PATCH /api/:campaign/properties", () => {
     const keys = Object.keys(after.properties);
     expect(keys[keys.length - 1]).toBe("review_note");
     expect(after.properties.review_note).toBe("nochmal lesen");
-    expect(after.raw).toContain("review_note: nochmal lesen\n");
   });
 
   test("null deletes a key, everything else untouched", async () => {
@@ -198,7 +197,6 @@ describe("PATCH /api/:campaign/properties", () => {
       patch: { review_note: null },
     });
     expect(Object.keys(after.properties)).not.toContain("review_note");
-    expect(after.raw).not.toContain("review_note");
     // …and nothing else moved: this is the untouched fixture again.
     expect(after.properties).toEqual(before.properties);
     expect(after.body).toBe(before.body);
@@ -253,7 +251,7 @@ describe("PATCH /api/:campaign/properties", () => {
     expect(after.properties.description).toBe("Neue Kurzbeschreibung.");
     expect(after.properties.name).toBe("Der Leuchtturm von Salzhafen");
     expect(Object.keys(after.properties)).toEqual(["id", "name", "description"]); // order stable
-    expect(after.raw).toContain("description: Neue Kurzbeschreibung.\n");
+    expect(after.properties.description).toBe("Neue Kurzbeschreibung.");
     // the list endpoint picks the new value up right away
     const list = (await (await app.request("/api/campaigns")).json()) as Array<{
       id: string;
@@ -331,11 +329,10 @@ describe("POST /api/:campaign/session/start", () => {
     expect(file.path).toBe(`sessions/${id}`);
     expect(file.properties.started).toBe("2026-08-19T21:05:00");
     expect(file.properties.scenes_played).toEqual([]);
-    // The rendered skeleton is the one the format prescribes — the `## Log`
-    // section is rendered from (still zero) log rows.
-    expect(file.raw).toBe(
-      `---\nid: ${id}\nstarted: 2026-08-19T21:05:00\nscenes_played: []\n---\n\n## Log\n`,
-    );
+    // The skeleton is the one the format prescribes — the `## Log` section is
+    // rendered from (still zero) log rows.
+    expect(file.properties).toEqual({ id, started: "2026-08-19T21:05:00", scenes_played: [] });
+    expect(file.body).toBe("\n## Log\n");
     // A fresh row starts at rev 1, and the GET agrees.
     expect(file.rev).toBe(1);
     expect((await getFile(file.path)).rev).toBe(1);
@@ -355,8 +352,6 @@ describe("POST /api/:campaign/session/start", () => {
     setNow(() => new Date(2026, 7, 19, 21, 5, 50));
     const file = await postOk("/api/beispiel/session/start");
     expect(file.properties.started).toBe("2026-08-19T21:05:50");
-    // The seconds survive the YAML rendering the editor is shown, too.
-    expect(file.raw).toContain("started: 2026-08-19T21:05:50\n");
     // …and what the app actually clocks — startedMs vs. the same instant — is
     // zero, not 50 seconds.
     expect(file.startedMs).toBe(new Date(2026, 7, 19, 21, 5, 50).getTime());
@@ -390,9 +385,12 @@ describe("POST /api/:campaign/session/start", () => {
     expect(second.path).not.toBe(first.path);
     // Own id, own `started`, and the log skeleton is EMPTY — the runtime of
     // the new session starts at 0 instead of inheriting the first evening's.
-    expect(second.raw).toBe(
-      `---\nid: ${String(second.properties.id)}\nstarted: 2026-08-19T23:30:00\nscenes_played: []\n---\n\n## Log\n`,
-    );
+    expect(second.properties).toEqual({
+      id: second.properties.id,
+      started: "2026-08-19T23:30:00",
+      scenes_played: [],
+    });
+    expect(second.body).toBe("\n## Log\n");
     expect(second.rev).toBe(1);
   });
 
@@ -497,7 +495,6 @@ describe("scenes_played maintenance (POST log with sceneId)", () => {
       sceneId: "lighthouse-arrival",
     });
     expect(file.properties.scenes_played).toEqual(["lighthouse-arrival"]);
-    expect(file.raw).toContain("scenes_played: [lighthouse-arrival]\n");
     // The played scene is a row, and rendering it back did not disturb the log
     expect(file.body).toBe("\n## Log\n\n- 21:05 (lighthouse-arrival) Ankunft\n");
   });
@@ -530,7 +527,6 @@ describe("scenes_played maintenance (POST log with sceneId)", () => {
       sceneId: "lighthouse-arrival",
     });
     expect(file.properties.scenes_played).toEqual(["lighthouse-arrival", "smuggler-captured"]);
-    expect(file.raw).toContain("scenes_played: [lighthouse-arrival, smuggler-captured]\n");
   });
 
   test("log without sceneId leaves scenes_played untouched", async () => {
@@ -621,9 +617,9 @@ describe("POST /api/:campaign/inbox", () => {
       expect(await fileStatus("inbox", FRESH)).toBe(200);
       const res = await postJson(`/api/${FRESH}/inbox`, { text: "Erste Idee" });
       expect(res.status).toBe(200);
-      const file = (await res.json()) as FileResponse;
+      const file = (await res.json()) as EntryResponse;
       expect(file.body).toBe("\n# Inbox\n\n- Erste Idee\n");
-      expect(file.raw).toBe("---\nid: inbox\n---\n\n# Inbox\n\n- Erste Idee\n");
+      expect(file.properties).toEqual({ id: "inbox" });
     });
   });
 
@@ -661,14 +657,17 @@ describe("naming a campaign that has none (issue #62)", () => {
         },
       });
       expect(res.status).toBe(200);
-      const file = (await res.json()) as FileResponse;
+      const file = (await res.json()) as EntryResponse;
       expect(file.path).toBe("_campaign");
       expect(file.kind).toBe("campaign");
       expect(file.properties.name).toBe("Die Aschekönige");
       // The id is the CAMPAIGN key — never client input.
-      expect(file.raw).toBe(
-        "---\nid: frischling\nname: Die Aschekönige\ndescription: Eine Wüstenkampagne um verschüttete Städte.\n---\n",
-      );
+      expect(file.properties).toEqual({
+        id: "frischling",
+        name: "Die Aschekönige",
+        description: "Eine Wüstenkampagne um verschüttete Städte.",
+      });
+      expect(file.body).toBe("");
 
       // The campaign list serves the new metadata right away.
       const list = (await (await app.request("/api/campaigns")).json()) as Array<
@@ -690,9 +689,10 @@ describe("naming a campaign that has none (issue #62)", () => {
         patch: { name: "Nur ein Name", description: null },
       });
       expect(res.status).toBe(200);
-      const file = (await res.json()) as FileResponse;
+      const file = (await res.json()) as EntryResponse;
       expect(Object.keys(file.properties)).toEqual(["id", "name"]);
-      expect(file.raw).toBe("---\nid: frischling\nname: Nur ein Name\n---\n");
+      expect(file.properties).toEqual({ id: "frischling", name: "Nur ein Name" });
+      expect(file.body).toBe("");
     });
   });
 
@@ -720,11 +720,6 @@ describe("PUT /api/:campaign/file", () => {
   const REFERENCE = "01-salzhafen/bucht/smuggler-captured";
   const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
-  /** The rendered prefix up to and including the YAML block's closing `---\n`. */
-  function fmBlock(raw: string): string {
-    return raw.slice(0, raw.indexOf("\n---\n") + "\n---\n".length);
-  }
-
   test("roundtrip: writing the read body back changes nothing but the token", async () => {
     const before = await getFile(REFERENCE);
     // the reference scene carries callouts and `## If:` sections
@@ -734,10 +729,8 @@ describe("PUT /api/:campaign/file", () => {
     const after = await putOk({ path: REFERENCE, rev: before.rev, body: before.body });
     expect(after.body).toBe(before.body);
     expect(after.properties).toEqual(before.properties);
-    expect(after.raw).toBe(before.raw);
-    // The file writer could skip an identical write and keep the rev; a row
-    // write is a write, so the rev moves — the token is opaque and monotonic,
-    // never a content hash.
+    // A write is a write, so the rev moves — the token is opaque and
+    // monotonic, never a content hash.
     expect(after.rev).toBe(before.rev + 1);
     expect((await getFile(REFERENCE)).rev).toBe(after.rev);
   });
@@ -749,7 +742,8 @@ describe("PUT /api/:campaign/file", () => {
     expect(after.body).toBe(body);
     // and back again, character for character
     const back = await putOk({ path: REFERENCE, rev: after.rev, body: before.body });
-    expect(back.raw).toBe(before.raw);
+    expect(back.body).toBe(before.body);
+    expect(back.properties).toEqual(before.properties);
   });
 
   test("happy path: new body, properties untouched", async () => {
@@ -763,8 +757,6 @@ describe("PUT /api/:campaign/file", () => {
     // properties untouched — same keys, same values, same order
     expect(after.properties).toEqual(before.properties);
     expect(Object.keys(after.properties)).toEqual(Object.keys(before.properties));
-    expect(fmBlock(after.raw)).toBe(fmBlock(before.raw));
-    expect(after.raw).toBe(fmBlock(before.raw) + body);
     // fresh token, and a GET sees the write
     expect(after.rev).toBe(before.rev + 1);
     expect((await getFile(SCENE)).body).toBe(body);
@@ -774,8 +766,6 @@ describe("PUT /api/:campaign/file", () => {
     const before = await getFile(SCENE);
     const after = await putOk({ path: SCENE, rev: before.rev, body: "\nOhne Newline" });
     expect(after.body).toBe("\nOhne Newline\n");
-    expect(after.raw.endsWith("\nOhne Newline\n")).toBe(true);
-    expect(after.raw.endsWith("\n\n")).toBe(false);
   });
 
   test("an empty body leaves the properties alone", async () => {
@@ -783,7 +773,6 @@ describe("PUT /api/:campaign/file", () => {
     const after = await putOk({ path: SCENE, rev: before.rev, body: "" });
     expect(after.body).toBe("");
     expect(after.properties).toEqual(before.properties);
-    expect(after.raw).toBe(fmBlock(before.raw));
   });
 
   test("glossary: the edited markdown is parsed back into rows", async () => {

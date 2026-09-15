@@ -12,12 +12,13 @@
 //   * accepting — ONE transaction with a `rev` guard, and the job gone.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import type { AugmentResult, FileResponse, GenerateJob } from "@grimoire/shared";
+import type { AugmentResult, EntryResponse, GenerateJob } from "@grimoire/shared";
 import { app } from "../src/server";
 import { clearJobsForTests } from "../src/generate-jobs";
 import {
   ASSET_FILES,
   MAX_CORRECTION_TURNS,
+  buildCorrectionMessage,
   loadAsset,
   setProviderForTests,
 } from "../src/generator";
@@ -29,9 +30,13 @@ import {
   validateAugmentReply,
 } from "../src/generator-augment";
 import { sceneSystemPrompt } from "../src/generate-pipeline";
+import { entryReply } from "./support/pipeline-fake";
+import { parseEntryReply } from "../src/entry-reply";
+import { propertyFieldsFor } from "@grimoire/shared";
 import { buildPrompt, EXISTING_ENTRY_HEADING, INSTRUCTION_HEADING } from "../src/llm-provider";
 import { failInterruptedJobs } from "../src/db/job-boot";
 import { getDb } from "../src/store/handle";
+import { renderRaw } from "../src/store/render";
 import { dropStore, seedStore } from "./support/store";
 import type {
   CompletionResult,
@@ -45,10 +50,10 @@ const NPC = "npcs/jorna";
 const LOCATION = "locations/leuchtturm";
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
-async function read(rel: string): Promise<FileResponse> {
+async function read(rel: string): Promise<EntryResponse> {
   const res = await app.request(`/api/${CAMPAIGN}/file?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
-  return (await res.json()) as FileResponse;
+  return (await res.json()) as EntryResponse;
 }
 
 // --- fake provider ---------------------------------------------------------
@@ -82,9 +87,20 @@ function useFake(replies: string[]): FakeProvider {
   return fake;
 }
 
-/** The reply JSON in a fence, as real models tend to send it. */
-function augmentReply(path: string, content: string, warnings: string[] = []): string {
-  return "```json\n" + JSON.stringify({ entry: { path, content }, warnings }, null, 2) + "\n```";
+/**
+ * The reply object: the whole entry as it should
+ * look afterwards — properties and body — plus the warnings. Written from the
+ * ENTRY a case describes, because that is how a test says what the run
+ * proposes in one literal (support/pipeline-fake `entryReply`).
+ *
+ * The `path` argument stays in the signature — every caller names the entry it
+ * is about, and the ASSERTION that the model does not address anything is
+ * that the path never reaches the reply.
+ */
+function augmentReply(_path: string, content: string, warnings: string[] = []): string {
+  const reply = entryReply(content, warnings, "npc");
+  // A case that scripts an unreadable entry means it: served verbatim.
+  return reply ?? content;
 }
 
 /** Start a run and wait for the job to leave `running`. */
@@ -190,12 +206,15 @@ describe("prompt assembly", () => {
     for (const prompt of [npc, location, scene]) {
       expect(prompt).toContain("Die Ergänzungsregel");
       expect(prompt).toContain("Vorhandenes bleibt Wort für Wort stehen");
-      expect(prompt).toContain('"entry"');
+      // The output format is the reply OBJECT, and the
+      // augmentation rule is what makes it the whole entry rather than a patch.
+      expect(prompt).toContain("Du antwortest mit **einem JSON-Objekt**");
+      expect(prompt).toContain("immer den **ganzen** Eintrag");
     }
     expect(npc).toContain("System-Prompt: NPC-Generator");
     // The location prompt is NEW with this ticket — locations had none.
     expect(location).toContain("System-Prompt: Ort-Generator");
-    expect(location).toContain("kein `status`");
+    expect(location).toContain("`status` gehört zu Szene und Figur");
     expect(scene).toContain("System-Prompt: Szenen-Generator");
     expect(scene).toContain("## If:");
   });
@@ -203,17 +222,15 @@ describe("prompt assembly", () => {
   test("only ONE output schema travels — the create runs' is sliced off", async () => {
     for (const kind of ["npc", "location", "scene"] as const) {
       const prompt = await augmentSystemPrompt(kind);
-      // The augment schema…
-      expect(prompt).toContain('"entry"');
-      // …and neither of the two create schemas that used to ride along.
-      expect(prompt).not.toContain("npc_stubs");
-      expect(prompt).not.toContain("location_stubs");
-      expect(prompt).not.toContain('"npc":');
+      // The augment output format…
+      expect(prompt).toContain("immer den **ganzen** Eintrag");
+      // …and no JSON at all any more.
+      expect(prompt).not.toContain("JSON-Block");
       expect(prompt).not.toContain('"scenes"');
       // Exactly one „## Ausgabeformat" heading: the augmentation rule's own.
       expect(prompt.split("## Ausgabeformat").length - 1).toBe(1);
-      // The file format itself is still there.
-      expect(prompt).toContain("## Ziel-Format der Datei");
+      // The format of the entry itself is still there.
+      expect(prompt).toContain("## Eigenschaften und Text des Eintrags");
     }
   });
 
@@ -237,13 +254,12 @@ describe("prompt assembly", () => {
       // single-scene mode is an output-schema SWAP, not a second prompt
       // file, so that these rules keep travelling exactly once.
       ["outline", await loadAsset(ASSET_FILES.outline.systemPrompt)],
-      ["scene/single", await sceneSystemPrompt("single")],
+      ["scene/single", await sceneSystemPrompt()],
     ];
     for (const [kind, prompt] of assembled) {
       expect(prompt.split(ORTHOGRAPHY_RULE).length - 1, kind).toBe(1);
       // The wording is the contract, not just the label.
-      expect(prompt, kind).toContain("ä, ö, ü und ß");
-      expect(prompt, kind).toContain("ae/oe/ue/ss");
+      expect(prompt, kind).toContain("ä, ö, ü und ß stehen als genau diese Zeichen");
       expect(prompt, kind).toContain("`id`-Werte und Adressen/Pfade");
     }
     // …and it is the SAME sentence everywhere: one rule, four prompts.
@@ -251,12 +267,38 @@ describe("prompt assembly", () => {
     expect(wordings.size).toBe(1);
   });
 
-  test("the few-shot targets show umlauts in properties AND body", async () => {
+  test("the few-shot replies show umlauts in properties AND body", async () => {
+    // The few-shots are REPLY OBJECTS, so the check reads
+    // them as such: the properties mapping and the body string, each in real
+    // German spelling — the model imitates what it reads.
     for (const kind of ["scene", "npc", "location"] as const) {
-      const doc = await loadAsset(ASSET_FILES[kind].fewShotTarget);
-      const [, frontmatter = "", ...rest] = doc.split("---\n");
-      expect(frontmatter, `${kind} properties`).toMatch(/[äöüß]/);
-      expect(rest.join("---\n"), `${kind} body`).toMatch(/[äöüß]/);
+      const reply = JSON.parse(await loadAsset(ASSET_FILES[kind].fewShotTarget)) as {
+        properties: Record<string, unknown>;
+        body: string;
+        warnings: string[];
+      };
+      expect(JSON.stringify(reply.properties), `${kind} properties`).toMatch(/[äöüß]/);
+      expect(reply.body, `${kind} body`).toMatch(/[äöüß]/);
+      expect(Array.isArray(reply.warnings), `${kind} warnings`).toBe(true);
+      // No properties block in the body: the block is the server's.
+      expect(reply.body.startsWith("---"), `${kind} body`).toBe(false);
+    }
+  });
+
+  test("the few-shot replies name EVERY key of their kind and pass the reader", async () => {
+    // Strict mode has no optional properties: the schema asks for every field
+    // and `null` is how a model says „nicht gegeben" (system-prompt.md). A
+    // few-shot that simply omits a key teaches the opposite of the schema,
+    // and the model imitates what it reads — so the examples show
+    // the convention, `null` included.
+    for (const kind of ["scene", "npc", "location"] as const) {
+      const raw = await loadAsset(ASSET_FILES[kind].fewShotTarget);
+      const reply = JSON.parse(raw) as { properties: Record<string, unknown> };
+      for (const field of propertyFieldsFor(kind) ?? []) {
+        expect(Object.hasOwn(reply.properties, field.key), `${kind}.${field.key}`).toBe(true);
+      }
+      // …and the whole example is a reply the server can read as it stands.
+      expect(parseEntryReply(raw, kind).ok, kind).toBe(true);
     }
   });
 
@@ -266,7 +308,7 @@ describe("prompt assembly", () => {
   // what a table looks like, and that the rest of GFM is plain text.
   const TABLE_RULE = "**Tabellen**";
 
-  test("every prompt kind that writes documents carries the table rule once", async () => {
+  test("every prompt kind that writes entries carries the table rule once", async () => {
     const assembled: Array<[string, string]> = [
       ["scene", await loadAsset(ASSET_FILES.scene.systemPrompt)],
       ["npc", await loadAsset(ASSET_FILES.npc.systemPrompt)],
@@ -277,7 +319,7 @@ describe("prompt assembly", () => {
       // The scene prompt in „genau eine Szene aus der Gliederung" mode
       // (issue #102) — an output-schema SWAP, not a second prompt file, so
       // that these rules keep travelling exactly once.
-      ["scene/single", await sceneSystemPrompt("single")],
+      ["scene/single", await sceneSystemPrompt()],
     ];
     for (const [kind, prompt] of assembled) {
       expect(prompt.split(TABLE_RULE).length - 1, kind).toBe(1);
@@ -286,14 +328,14 @@ describe("prompt assembly", () => {
       expect(prompt, kind).toContain("`|---|`");
       expect(prompt, kind).toContain("Rand-Pipes");
       // …and the boundary: tables only.
-      expect(prompt, kind).toContain("**Sonst nichts\n   aus GFM**");
-      expect(prompt, kind).toContain("keine Aufgabenlisten (`- [x]`)");
+      expect(prompt, kind).toContain("**Aus GFM nutzt\n   du ausschließlich diese Pipe-Tabelle**");
+      expect(prompt, kind).toContain("Aufgabenlisten (`- [x]`)");
     }
     const wordings = new Set(assembled.map(([, doc]) => ruleParagraph(doc, TABLE_RULE)));
     expect(wordings.size).toBe(1);
 
-    // The OUTLINE prompt does NOT carry it: that call writes no document at
-    // all — no callouts, no frontmatter, no tables — so the rule was a rule
+    // The OUTLINE prompt does NOT carry it: that call writes no entry at
+    // all — no callouts, no properties, no tables — so the rule was a rule
     // about nothing, and a rule the model cannot apply is one it can weigh
     // against the rules it can (the reason the "exactly once" above exists).
     const outline = await loadAsset(ASSET_FILES.outline.systemPrompt);
@@ -303,11 +345,65 @@ describe("prompt assembly", () => {
     expect(outline).toContain(ORTHOGRAPHY_RULE);
   });
 
+  // Every entry prompt describes the REPLY OBJECT, and the
+  // wording is load-bearing in the same way the rules above are — the schema
+  // forces the shape, the prompt is what makes the model understand what goes
+  // where (that `body` is one string, that an unknown field is `null`, that
+  // the properties block is the server's).
+  const OBJECT_RULE = "Du antwortest mit **einem JSON-Objekt**";
+
+  test("every entry prompt kind describes the reply object, once", async () => {
+    const assembled: Array<[string, string]> = [
+      ["scene/single", await sceneSystemPrompt()],
+      ["npc", await loadAsset(ASSET_FILES.npc.systemPrompt)],
+      ["location", await loadAsset(ASSET_FILES.location.systemPrompt)],
+      ["augment/npc", await augmentSystemPrompt("npc")],
+      ["augment/location", await augmentSystemPrompt("location")],
+      ["augment/scene", await augmentSystemPrompt("scene")],
+    ];
+    for (const [kind, prompt] of assembled) {
+      expect(prompt.split(OBJECT_RULE).length - 1, kind).toBe(1);
+      // The three keys, and the two things a model gets wrong without them.
+      expect(prompt, kind).toContain("`properties`");
+      expect(prompt, kind).toContain("`body`");
+      expect(prompt, kind).toContain("`warnings`");
+      expect(prompt, kind).toContain("Den Eigenschaften-Block baut der Server daraus");
+      // No trace of the raw-entry format this ticket replaced.
+      expect(prompt, kind).not.toContain("---warnings---");
+    }
+    // The SAME description everywhere — one shape, every entry prompt.
+    const wordings = new Set(assembled.map(([, doc]) => ruleParagraph(doc, OBJECT_RULE)));
+    expect(wordings.size).toBe(1);
+
+    // The outline prompt describes its OWN object, so it must not carry this
+    // one: two output schemas in one prompt is the contradiction the augment
+    // run's `formatContract` exists to avoid.
+    const outline = await loadAsset(ASSET_FILES.outline.systemPrompt);
+    expect(outline).not.toContain(OBJECT_RULE);
+  });
+
+  test("the correction turn names the schema it wants corrected", () => {
+    const entry = buildCorrectionMessage(
+      ["scene: id fehlt"],
+      "die Szene enthalten",
+      "scene",
+    );
+    expect(entry).toContain("korrigierten JSON-Objekt");
+    expect(entry).toContain("gleiches Schema (`scene`)");
+    expect(entry).toContain("kein Text außerhalb des Objekts");
+    // Without a schema (a provider that forces nothing) the sentence still
+    // reads — it just has no name to point at.
+    const bare = buildCorrectionMessage(["outline: leer"], "alle Szenen");
+    expect(bare).toContain("gleiches Schema,");
+  });
+
   test("the scene few-shot shows a table inside a callout", async () => {
     // Described is not shown: the model gets one worked example of the form
     // it has to produce, `>` markers included.
-    const doc = await loadAsset(ASSET_FILES.scene.fewShotTarget);
-    const lines = doc.split("\n");
+    const reply = JSON.parse(await loadAsset(ASSET_FILES.scene.fewShotTarget)) as {
+      body: string;
+    };
+    const lines = reply.body.split("\n");
     const delimiter = lines.findIndex((line) => /^>\s*\|\s*-{3,}\s*\|/.test(line));
     expect(delimiter).toBeGreaterThan(0);
     // The row above it is the header row, and both carry the callout marker.
@@ -315,18 +411,18 @@ describe("prompt assembly", () => {
     expect(lines[delimiter + 1]).toMatch(/^>\s*\|.*\|\s*$/);
   });
 
-  test("a document without the format heading travels whole", () => {
+  test("a prompt without the format heading travels whole", () => {
     expect(formatContract("# Titel\n\n## Regeln\n\nnichts\n")).toContain("## Regeln");
   });
 
   test("the run sends the kind's own system prompt and few-shot", async () => {
-    const file = await read(LOCATION);
-    const content = `${file.raw}\n## Wer ist hier\n\n- niemand\n`;
+    const stored = await read(LOCATION);
+    const content = `${renderRaw(stored.properties, stored.body)}\n## Wer ist hier\n\n- niemand\n`;
     const fake = useFake([augmentReply(LOCATION, content)]);
     await runAugmentJob({ path: LOCATION, instruction: "Ergänze, wer hier ist" });
     const req = fake.calls[0]!.req;
     expect(req.systemPrompt).toContain("System-Prompt: Ort-Generator");
-    expect(req.fewShotTarget).toContain("id: leuchtturm");
+    expect(req.fewShotTarget).toContain('"id": "leuchtturm"');
     expect(req.existingEntry?.path).toBe(LOCATION);
     expect(req.existingEntry?.markdown).toContain("roll20-page");
     // A location run has no target chapter in the context…
@@ -334,8 +430,8 @@ describe("prompt assembly", () => {
   });
 
   test("a scene run carries its chapter in the context", async () => {
-    const file = await read(SCENE);
-    const fake = useFake([augmentReply(SCENE, file.raw)]);
+    const stored = await read(SCENE);
+    const fake = useFake([augmentReply(SCENE, renderRaw(stored.properties, stored.body))]);
     await runAugmentJob({ path: SCENE, instruction: "nichts ändern" });
     expect(fake.calls[0]!.req.context.chapter).toBe("01-salzhafen");
   });
@@ -381,36 +477,37 @@ describe("proposal", () => {
   });
 
   test("a changed id is rejected — it is the reference key", async () => {
-    const file = await read(NPC);
+    const stored = await read(NPC);
+    const markdown = renderRaw(stored.properties, stored.body);
     const outcome = validateAugmentReply(
-      augmentReply(NPC, file.raw.replace("id: jorna", "id: jorna-die-hafenmeisterin")),
-      { kind: "npc", file },
+      augmentReply(NPC, markdown.replace("id: jorna", "id: jorna-die-hafenmeisterin")),
+      { kind: "npc", stored },
     );
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) expect(outcome.errors.join(" ")).toContain("die id bleibt");
   });
 
   test("an unknown callout is a correction turn, a known one is not", async () => {
-    const file = await read(NPC);
+    const stored = await read(NPC);
     const bad = validateAugmentReply(
-      augmentReply(NPC, `${file.raw}\n> [!spoiler] nope\n`),
-      { kind: "npc", file },
+      augmentReply(NPC, `${renderRaw(stored.properties, stored.body)}\n> [!spoiler] nope\n`),
+      { kind: "npc", stored },
     );
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.errors.join(" ")).toContain("[!spoiler]");
     const good = validateAugmentReply(
-      augmentReply(NPC, `${file.raw}\n> [!note] fine\n`),
-      { kind: "npc", file },
+      augmentReply(NPC, `${renderRaw(stored.properties, stored.body)}\n> [!note] fine\n`),
+      { kind: "npc", stored },
     );
     expect(good.ok).toBe(true);
   });
 
   test("a scene keeps the status the DM gave it", async () => {
-    const file = await read(SCENE);
-    expect(file.properties.status).toBe("ready");
-    const outcome = validateAugmentReply(augmentReply(SCENE, file.raw), {
+    const stored = await read(SCENE);
+    expect(stored.properties.status).toBe("ready");
+    const outcome = validateAugmentReply(augmentReply(SCENE, renderRaw(stored.properties, stored.body)), {
       kind: "scene",
-      file,
+      stored,
     });
     expect(outcome.ok).toBe(true);
     // `ready` is not `draft` and must not be reported as a change at all.
@@ -419,11 +516,54 @@ describe("proposal", () => {
     }
   });
 
-  test("a location may not carry a status", async () => {
-    const file = await read(LOCATION);
+  test("an npc status the reply leaves out becomes a visible \"unknown\" proposal", async () => {
+    // `status` is nullable in the schema, so a reply may omit it — and the
+    // npc rule („present, and one of NPC_STATUSES") must not fail such a
+    // reply. It reads as `unknown`, the same degrade the shared parser
+    // applies, and the DM sees it as a CHANGED field in the review rather
+    // than as a silent overwrite or a dead run.
+    const stored = await read(NPC);
+    expect(stored.properties.status).toBe("alive");
     const outcome = validateAugmentReply(
-      augmentReply(LOCATION, file.raw.replace("---\n\n", "status: alive\n---\n\n")),
-      { kind: "location", file },
+      augmentReply(NPC, renderRaw(stored.properties, stored.body).replace("status: alive\n", "")),
+      { kind: "npc", stored },
+    );
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      const status = outcome.result.properties.find((p) => p.key === "status");
+      expect(status).toEqual({
+        key: "status",
+        current: "alive",
+        proposed: "unknown",
+        state: "changed",
+      });
+    }
+  });
+
+  test("a key the kind does not have is an echo, not a failed run", async () => {
+    // The DM may have hand-written a key the schema has no field for
+    // (`roll20-page` on an npc). The model is SHOWN the whole entry, so it
+    // echoes the key back — and the run must not die on that: the key cannot
+    // be proposed anyway, and the proposal patches only the keys it lists, so
+    // the value the DM authored keeps standing.
+    const stored = await read(NPC);
+    const markdown = renderRaw(stored.properties, stored.body);
+    const outcome = validateAugmentReply(
+      augmentReply(NPC, markdown.replace("status: alive", "status: alive\nroll20-page: Jorna")),
+      { kind: "npc", stored },
+    );
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.result.properties.some((p) => p.key === "roll20-page")).toBe(false);
+    }
+  });
+
+  test("a location may not carry a status", async () => {
+    const stored = await read(LOCATION);
+    const markdown = renderRaw(stored.properties, stored.body);
+    const outcome = validateAugmentReply(
+      augmentReply(LOCATION, markdown.replace("---\n\n", "status: alive\n---\n\n")),
+      { kind: "location", stored },
     );
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) expect(outcome.errors.join(" ")).toContain("status");
@@ -434,8 +574,8 @@ describe("proposal", () => {
 
 describe("the job", () => {
   test("a run answers 202 and leaves an augment job with the proposal", async () => {
-    const file = await read(NPC);
-    const content = file.raw.replace(
+    const stored = await read(NPC);
+    const content = renderRaw(stored.properties, stored.body).replace(
       "## Notizen",
       "> [!secret] Der Spitzel sitzt in der Hafenwache.\n\n## Notizen",
     );
@@ -447,19 +587,19 @@ describe("the job", () => {
     const result = job.augmentResult as AugmentResult;
     expect(result.path).toBe(NPC);
     expect(result.kind).toBe("npc");
-    expect(result.rev).toBe(file.rev);
-    expect(result.currentBody).toBe(file.body);
+    expect(result.rev).toBe(stored.rev);
+    expect(result.currentBody).toBe(stored.body);
     expect(result.proposedBody).toContain("Der Spitzel sitzt in der Hafenwache");
     expect(result.warnings).toEqual(["Neuer Handlungsstrang ergänzt"]);
     // Nothing is written by a run.
-    expect((await read(NPC)).body).toBe(file.body);
+    expect((await read(NPC)).body).toBe(stored.body);
   });
 
   test("a body without properties comes back as a correction turn", async () => {
-    const file = await read(NPC);
+    const stored = await read(NPC);
     const fake = useFake([
-      augmentReply(NPC, "## Will\n\nkein Frontmatter\n"),
-      augmentReply(NPC, file.raw),
+      augmentReply(NPC, "## Will\n\nkein Eigenschaften-Block\n"),
+      augmentReply(NPC, renderRaw(stored.properties, stored.body)),
     ]);
     const job = await runAugmentJob({ path: NPC, instruction: "x" });
     expect(job.status).toBe("done");
@@ -542,15 +682,15 @@ describe("one job per campaign, whatever its kind", () => {
   });
 
   test("Vorschlag verwerfen discards a finished augment job", async () => {
-    const file = await read(NPC);
-    useFake([augmentReply(NPC, file.raw)]);
+    const stored = await read(NPC);
+    useFake([augmentReply(NPC, renderRaw(stored.properties, stored.body))]);
     await runAugmentJob({ path: NPC, instruction: "x" });
     expect(await jobStatus()).toBe(200);
     const res = await app.request(`/api/${CAMPAIGN}/generate/job`, { method: "DELETE" });
     expect(res.status).toBe(200);
     expect(await jobStatus()).toBe(404);
     // Nothing was written by the run, and nothing by the reject.
-    expect((await read(NPC)).rev).toBe(file.rev);
+    expect((await read(NPC)).rev).toBe(stored.rev);
   });
 
   test("a leftover `running` augment row becomes a failed job at the next boot", async () => {
@@ -573,8 +713,15 @@ describe("one job per campaign, whatever its kind", () => {
   });
 
   test("the proposal round-trips through the job row", async () => {
-    const file = await read(NPC);
-    const content = file.raw.replace("voice:", "tags: [hafen, see]\nvoice:");
+    const stored = await read(NPC);
+    // A CHANGED field, so the proposal has something to carry through the
+    // row. A key the SCHEMA does not have (a `tags` on an npc) cannot be
+    // proposed at all — and cannot be lost either, it simply
+    // keeps the value it has.
+    const content = renderRaw(stored.properties, stored.body).replace(
+      "voice: knapp, wetterrau, duzt jeden",
+      "voice: knapp, wetterrau — duzt auch den Ratsherrn",
+    );
     useFake([augmentReply(NPC, content, ["geprüft"])]);
     const started = await runAugmentJob({ path: NPC, instruction: "x" });
 
@@ -584,9 +731,11 @@ describe("one job per campaign, whatever its kind", () => {
     expect(job.id).toBe(started.id);
     expect(job.augmentResult).toEqual(started.augmentResult as AugmentResult);
     const result = job.augmentResult as AugmentResult;
-    expect(result.properties.find((p) => p.key === "tags")?.proposed).toEqual(["hafen", "see"]);
+    expect(result.properties.find((p) => p.key === "voice")?.proposed).toBe(
+      "knapp, wetterrau — duzt auch den Ratsherrn",
+    );
     expect(result.warnings).toEqual(["geprüft"]);
-    expect(result.rev).toBe(file.rev);
+    expect(result.rev).toBe(stored.rev);
   });
 
   test("every reply malformed is a terminal 422 llm_invalid", async () => {
@@ -618,7 +767,7 @@ describe("accept", () => {
 
   test("properties and body land in ONE write, and the job is gone", async () => {
     const before = await read(LOCATION);
-    useFake([augmentReply(LOCATION, before.raw)]);
+    useFake([augmentReply(LOCATION, renderRaw(before.properties, before.body))]);
     const job = await runAugmentJob({ path: LOCATION, instruction: "x" });
 
     const body = `${before.body}\n## Wer ist hier\n\n- niemand\n`;
@@ -630,7 +779,7 @@ describe("accept", () => {
       jobId: job.id,
     });
     expect(res.status).toBe(200);
-    const written = (await res.json()) as FileResponse;
+    const written = (await res.json()) as EntryResponse;
     expect(written.properties["roll20-page"]).toBe("Leuchtturm (neu)");
     expect(written.body).toContain("## Wer ist hier");
     // One transaction, two halves — both are on the stored row.
@@ -659,7 +808,7 @@ describe("accept", () => {
       body: JSON.stringify({ title: "Umzugsszene", chapter: "01-salzhafen", id: "moving-scene" }),
     });
     expect(sceneRes.status).toBe(201);
-    const scene = (await sceneRes.json()) as FileResponse;
+    const scene = (await sceneRes.json()) as EntryResponse;
 
     const res = await apply({
       path: scene.path,
@@ -668,7 +817,7 @@ describe("accept", () => {
       body: "## Flow\n\nSie ziehen um.\n",
     });
     expect(res.status).toBe(200);
-    const written = (await res.json()) as FileResponse;
+    const written = (await res.json()) as EntryResponse;
     // The answer is the FINAL render: the new address, and the new body.
     expect(written.path).toContain("02-umzug/");
     expect(written.body).toContain("Sie ziehen um.");
@@ -682,7 +831,7 @@ describe("accept", () => {
       `/api/${CAMPAIGN}/file?path=${encodeURIComponent(scene.path)}`,
     );
     expect(old.status).toBe(200);
-    expect(((await old.json()) as FileResponse).path).toBe(written.path);
+    expect(((await old.json()) as EntryResponse).path).toBe(written.path);
   });
 
   test("a stale rev is a 409 and writes NOTHING", async () => {
@@ -742,8 +891,8 @@ describe("naming check", () => {
 
   test("a proposal that keeps the old spelling is a HINT, never a failure", async () => {
     await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
-    const file = await read(NPC);
-    const content = file.raw.replace(
+    const stored = await read(NPC);
+    const content = renderRaw(stored.properties, stored.body).replace(
       "## Notizen",
       "> [!secret] Sie kam aus Salt Harbour zurück.\n\n## Notizen",
     );
@@ -761,31 +910,33 @@ describe("naming check", () => {
   });
 
   test("a list value and a colon in a property do not derail the check", async () => {
-    // The proposal document is rendered with the store's frontmatter
-    // renderer: `role: Hafenmeisterin: Salt Harbour` and a LIST value used to
-    // produce YAML nothing could parse, and every hint then landed on `body`
-    // with a line number pointing at nothing.
+    // The proposal entry is rendered with the store's own renderer:
+    // a `role: Hafenmeisterin: Salt Harbour` used to produce YAML
+    // nothing could parse, and every hint then landed on `body` with a line
+    // number pointing at nothing. The store's renderer is the ONLY
+    // way a block is built, which makes this structural rather than a rule
+    // about what a model happens to write.
     await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
-    const file = await read(NPC);
-    const content = file.raw
-      .replace(
-        "role: Auftraggeberin, Hafenmeisterin von Salzhafen",
-        "role: \"Hafenmeisterin: Salt Harbour\"\ntags: [hafen, salt harbour]",
-      );
+    const stored = await read(NPC);
+    const content = renderRaw(stored.properties, stored.body).replace(
+      "role: Auftraggeberin, Hafenmeisterin von Salzhafen",
+      'role: "Hafenmeisterin: Salt Harbour"',
+    );
     useFake([augmentReply(NPC, content)]);
     const job = await runAugmentJob({ path: NPC, instruction: "Rolle schärfen" });
     expect(job.status).toBe("done");
     const hints = (job.augmentResult as AugmentResult).namingHints ?? [];
     // The hint knows WHICH field it is about — that is only true when the
-    // frontmatter parsed.
+    // properties block parsed.
     expect(hints.map((h) => h.field)).toContain("role");
     expect(hints.every((h) => h.field !== "body")).toBe(true);
   });
 
   test("a proposal that follows the convention produces no hint", async () => {
     await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
-    const file = await read(NPC);
-    useFake([augmentReply(NPC, file.raw.replace("## Notizen", "## Notizen\n\nSalzhafen."))]);
+    const stored = await read(NPC);
+    const markdown = renderRaw(stored.properties, stored.body);
+    useFake([augmentReply(NPC, markdown.replace("## Notizen", "## Notizen\n\nSalzhafen."))]);
     const job = await runAugmentJob({ path: NPC, instruction: "x" });
     expect(job.status).toBe("done");
     expect((job.augmentResult as AugmentResult).namingHints).toBeUndefined();

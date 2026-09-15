@@ -33,7 +33,7 @@ export interface ResolvedEntityRef {
   kind: EntityRefKind;
   slug: string;
   name: string;
-  /** Campaign-relative file path — the tree's own, never re-derived. */
+  /** Campaign-relative entry path — the tree's own, never re-derived. */
   path: string;
 }
 

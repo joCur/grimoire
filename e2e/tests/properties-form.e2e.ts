@@ -42,17 +42,10 @@ const SCENE_URL = `/beispiel/file/${SCENE}`;
 const NPC = "npcs/jorna";
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 
-/**
- * The properties block including both fences and the newline after the
- * closing one, and the body behind it — the two halves every assertion here
- * looks at separately.
- */
+/** Read the entry: its properties and its text — the two halves every assertion looks at. */
 async function split(api: Api, rel: string) {
-  const raw = await api.raw(rel);
-  const match = /^---\n[\s\S]*?\n---\n/.exec(raw);
-  expect(match, "the fixture file has no properties block").not.toBeNull();
-  const properties = match?.[0] ?? "";
-  return { raw, properties, body: raw.slice(properties.length) };
+  const { properties, body } = await api.file(rel);
+  return { properties, body };
 }
 
 /**
@@ -105,7 +98,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   // belongs to the rename dialog (with its cascade), the kind comes from the
   // path — and the footer says where to change it (issue #77).
   await expect(dialog).toContainText("lighthouse-arrival");
-  await expect(dialog).toContainText('unten über „id ändern"');
+  await expect(dialog).toContainText('unten über „id ändern“');
   await expect(dialog.getByRole("button", { name: "id ändern" })).toBeVisible();
   await expect(dialog.getByLabel("Titel")).toHaveValue("Ankunft am Leuchtturm");
   await expect(dialog.getByLabel("Status")).toHaveValue("ready");
@@ -193,24 +186,24 @@ test("scene properties: chips, reference and status land in the file — nothing
   // The old address still names the scene and reports the new one.
   expect((await api.file(SCENE)).path).toBe("01-salzhafen/nordbucht/lighthouse-arrival");
   // `[[…]]` references resolve over ids, so the session log is untouched.
-  expect(await api.raw("sessions/2026-01-15")).toContain("lighthouse-arrival");
+  expect(await api.body("sessions/2026-01-15")).toContain("lighthouse-arrival");
 
-  // On disk: the three changed keys …
-  await expect.poll(() => api.raw(SCENE)).toContain("status: draft");
+  // Stored: the three changed fields …
+  await expect.poll(() => api.properties(SCENE)).toHaveProperty("status", "draft");
   const after = await split(api, SCENE);
-  expect(after.properties).toContain("tags: [social, travel, stealth, nachtszene]");
-  expect(after.properties).toContain("location: nordbucht");
+  expect(after.properties.tags).toEqual(["social", "travel", "stealth", "nachtszene"]);
+  expect(after.properties.location).toBe("nordbucht");
   // …and the referenced Ort now has its own (empty) entry — issue #70.
   expect(await api.exists("locations/nordbucht")).toBe(true);
-  expect(after.properties).toContain("status: draft");
-  // … the untouched ones with their values, the unknown one byte-identically …
-  expect(after.properties).toContain("x-custom: bleibt");
-  expect(after.properties).toContain("id: lighthouse-arrival");
-  expect(after.properties).toContain("title: Ankunft am Leuchtturm\n");
-  expect(after.properties).toContain("type: planned");
-  expect(after.properties).toContain("chapter: 01-salzhafen");
-  expect(after.properties).toContain("npcs: [jorna]");
-  expect(after.properties).toContain("Karte von Salzhafen");
+  expect(after.properties.status).toBe("draft");
+  // … the untouched ones with their values, the unknown one included …
+  expect(after.properties["x-custom"]).toBe("bleibt");
+  expect(after.properties.id).toBe("lighthouse-arrival");
+  expect(after.properties.title).toBe("Ankunft am Leuchtturm");
+  expect(after.properties.type).toBe("planned");
+  expect(after.properties.chapter).toBe("01-salzhafen");
+  expect(after.properties.npcs).toEqual(["jorna"]);
+  expect(after.properties.handouts).toEqual(["Karte von Salzhafen"]);
   // … and the body untouched, byte for byte.
   expect(after.body).toBe(pristine.body);
 });
@@ -236,13 +229,13 @@ test('free text in the Ort field creates the Ort under the typed NAME (#100)', a
 
   // Text no slug can be derived from is the one thing that still blocks.
   await ort.fill("???");
-  await expect(dialog.getByText('„???" ergibt keine Orts-id')).toBeVisible();
+  await expect(dialog.getByText('„???“ ergibt keine Orts-id')).toBeVisible();
   await expect(save).toBeDisabled();
 
   // And a new name says what saving will do with it.
   await ort.fill("Der alte Hafen");
   await expect(
-    referenceHint(dialog, 'Neu — wird als Ort „Der alte Hafen" angelegt.'),
+    referenceHint(dialog, 'Neu — wird als Ort „Der alte Hafen“ angelegt.'),
   ).toBeVisible();
   await expect(save).toBeEnabled();
   await save.click();
@@ -252,7 +245,7 @@ test('free text in the Ort field creates the Ort under the typed NAME (#100)', a
   await expect(page).toHaveURL(
     /\/beispiel\/file\/01-salzhafen\/der-alte-hafen\/lighthouse-arrival$/,
   );
-  await expect.poll(() => api.raw(SCENE)).toContain("location: der-alte-hafen");
+  await expect.poll(() => api.properties(SCENE)).toHaveProperty("location", "der-alte-hafen");
 
   // The Ort exists and is called what the DM typed — not by its own id.
   expect(await api.exists("locations/der-alte-hafen")).toBe(true);
@@ -319,8 +312,8 @@ test("a second writer: the save reports the conflict, the second click writes", 
   await expect(dialog.getByLabel("Titel")).toHaveValue("Ankunft am Leuchtturm");
   // Nothing was written: the external content stands, untouched.
   const conflicted = await split(api, SCENE);
-  expect(conflicted.properties).not.toContain("konflikt");
-  expect(conflicted.properties).toContain(`title: ${externalTitle}`);
+  expect(conflicted.properties.tags).not.toContain("konflikt");
+  expect(conflicted.properties.title).toBe(externalTitle);
   expect(conflicted.body).toBe(externalBody);
 
   // The dialog re-read the file, so the SAME click works now — and it is a
@@ -330,10 +323,10 @@ test("a second writer: the save reports the conflict, the second click writes", 
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(dialog.getByText(STALE_MESSAGE)).toHaveCount(0);
 
-  await expect.poll(() => api.raw(SCENE)).toContain("konflikt");
+  await expect.poll(async () => (await api.properties(SCENE)).tags).toContain("konflikt");
   const after = await split(api, SCENE);
-  expect(after.properties).toContain("tags: [social, travel, konflikt]");
-  expect(after.properties).toContain(`title: ${externalTitle}`);
+  expect(after.properties.tags).toEqual(["social", "travel", "konflikt"]);
+  expect(after.properties.title).toBe(externalTitle);
   expect(after.body).toBe(externalBody);
   // And the reading view shows the file as it now is — external title
   // included, since the patch response is the whole file.
@@ -346,8 +339,8 @@ test("clearing a field deletes the key instead of writing an empty value", async
   api,
 }) => {
   const before = await split(api, SCENE);
-  expect(before.properties).toContain("location: leuchtturm");
-  expect(before.properties).toContain("handouts:");
+  expect(before.properties.location).toBe("leuchtturm");
+  expect(before.properties.handouts).toBeDefined();
 
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
@@ -373,12 +366,12 @@ test("clearing a field deletes the key instead of writing an empty value", async
   // `handouts: []` left behind. (The dialog closes only after the write
   // answered, so the file is settled here.)
   const after = await split(api, SCENE);
-  expect(after.properties).not.toMatch(/^location:/m);
-  expect(after.properties).not.toMatch(/^handouts:/m);
+  expect(after.properties.location).toBeUndefined();
+  expect(after.properties.handouts).toBeUndefined();
   // Everything else stands, the body byte-identical.
-  expect(after.properties).toContain("tags: [social, travel]");
-  expect(after.properties).toContain("status: ready");
-  expect(after.properties).toContain("npcs: [jorna]");
+  expect(after.properties.tags).toEqual(["social", "travel"]);
+  expect(after.properties.status).toBe("ready");
+  expect(after.properties.npcs).toEqual(["jorna"]);
   expect(after.body).toBe(before.body);
 });
 
@@ -415,7 +408,7 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
   await expect(dialog).toContainText("Zeile ohne Namen");
   await expect(save).toBeDisabled();
   await statName.fill("insight");
-  await expect(dialog).toContainText('Name „insight" doppelt');
+  await expect(dialog).toContainText('Name „insight“ doppelt');
   await expect(save).toBeDisabled();
   await statName.fill("deception");
   await expect(dialog).not.toContainText("Zeile ohne Namen");
@@ -437,17 +430,15 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
   await expect(article).toContainText("knapp, wetterrau, duzt jeden");
   await expect(article).toContainText("Statblock: Roll20: Jorna");
 
-  await expect.poll(() => api.raw(NPC)).toContain("status: missing");
+  await expect.poll(() => api.properties(NPC)).toHaveProperty("status", "missing");
   const after = await split(api, NPC);
-  expect(after.properties).toContain(`role: ${role}`);
-  // A DM-typed „+1" stays the STRING it was typed as (YAML would read it as
-  // 1); the numbers already in the file stay numbers.
-  expect(after.properties).toContain(
-    "quickstats: {insight: 2, passive-perception: 12, deception: '+1'}",
-  );
-  expect(after.properties).toContain("id: jorna");
-  expect(after.properties).toContain("name: Hafenmeisterin Jorna");
-  expect(after.properties).toContain("voice: knapp, wetterrau, duzt jeden");
+  expect(after.properties.role).toBe(role);
+  // A DM-typed „+1" stays the STRING it was typed as; the numbers already
+  // stored stay numbers.
+  expect(after.properties.quickstats).toEqual({ insight: 2, "passive-perception": 12, deception: "+1" });
+  expect(after.properties.id).toBe("jorna");
+  expect(after.properties.name).toBe("Hafenmeisterin Jorna");
+  expect(after.properties.voice).toBe("knapp, wetterrau, duzt jeden");
   expect(after.body).toBe(before.body);
 });
 
@@ -481,7 +472,7 @@ test("Abbrechen and Esc ask before they throw typed values away", async ({ page,
 
   // The reading view is as it was, and nothing reached the disk.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
-  expect(await api.raw(SCENE)).toBe(before.raw);
+  expect(await split(api, SCENE)).toEqual(before);
 });
 
 test("navigating away closes the dialog — no diff of file A lands in file B", async ({
@@ -524,8 +515,8 @@ test("navigating away closes the dialog — no diff of file A lands in file B", 
   await npcDialog.getByRole("button", { name: "Speichern" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  await expect.poll(() => api.raw(NPC)).toContain(`role: ${role}`);
-  expect(await api.raw(SCENE)).toBe(scene.raw);
+  await expect.poll(() => api.properties(NPC)).toHaveProperty("role", role);
+  expect(await split(api, SCENE)).toEqual(scene);
 });
 
 test("Ort and Kapitel have the form too — campaign file, session and inbox do not", async ({
@@ -602,9 +593,9 @@ test.describe("at 390px", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
 
-    await expect.poll(() => api.raw(SCENE)).toContain(`title: ${title}`);
+    await expect.poll(() => api.properties(SCENE)).toHaveProperty("title", title);
     const after = await split(api, SCENE);
-    expect(after.properties).toContain("status: ready");
+    expect(after.properties.status).toBe("ready");
     expect(after.body).toBe(before.body);
   });
 });

@@ -72,8 +72,6 @@ export const en: Messages = {
   "create.useSuggestion": "Use “{id}”",
 
   "create.campaign.title": "Create campaign",
-  "create.campaign.description":
-    "The name becomes the campaign's id — it appears in every address and stays as it is. Chapters and scenes come into being inside it afterwards.",
   "create.campaign.nameLabel": "Campaign name",
   "create.campaign.namePlaceholder": "Campaign name",
   "create.campaign.idPrefix": "id: ",
@@ -82,7 +80,7 @@ export const en: Messages = {
 
   "create.chapter.title": "Create chapter",
   "create.chapter.description":
-    "The title becomes the chapter's id — it appears in every scene address and stays as it is. The goal is optional and lands in the file under the heading “## Ziel des Kapitels” — the section shown as the chapter's goal.",
+    "The goal is optional and appears in the chapter as the “Ziel des Kapitels” section.",
   "create.chapter.nameLabel": "Title",
   "create.chapter.namePlaceholder": "Chapter title",
   "create.chapter.goalLabel": "Goal of the chapter (optional)",
@@ -90,19 +88,19 @@ export const en: Messages = {
 
   "create.scene.title": "Create scene",
   "create.scene.description":
-    "The scene is created as a draft in this chapter and opens straight in the editor. The title becomes the id — and it stays.",
+    "The scene is created as a draft in this chapter and opens straight in the editor.",
   "create.scene.nameLabel": "Title",
   "create.scene.namePlaceholder": "Scene title",
 
   "create.npc.title": "Create NPC",
   "create.npc.description":
-    "Just the name — role, status and everything else follow in the properties dialog. The name becomes the id, and that id stays.",
+    "Just the name — role, status and everything else follow in the properties dialog.",
   "create.npc.nameLabel": "Name",
   "create.npc.namePlaceholder": "NPC name",
 
   "create.location.title": "Create location",
   "create.location.description":
-    "Just the name — everything else follows in the properties dialog. The name becomes the id, and that id stays.",
+    "Just the name — everything else follows in the properties dialog.",
   "create.location.nameLabel": "Name",
   "create.location.namePlaceholder": "Location name",
 
@@ -535,8 +533,8 @@ export const en: Messages = {
   "campaignMeta.field.description.placeholder": "One sentence that places the campaign",
   "campaignMeta.unreachable": "Campaign not loadable — check the server",
 
-  // --- body editor (components/FileBodyEditor.tsx) -------------------------
-  "bodyEditor.raw.aria": "Markdown text of {path}",
+  // --- body editor (components/EntryBodyEditor.tsx) -------------------------
+  "bodyEditor.markdown.aria": "Markdown text of {path}",
   "bodyEditor.hint": "The body only — the properties stay unchanged.",
   "bodyEditor.blocked": "One block still needs a decision — see the note on the block.",
   "bodyEditor.discard.title": "Discard changes?",
@@ -739,14 +737,14 @@ export const en: Messages = {
   //     lib/composer.ts) ----------------------------------------------------
   "composer.mode.aria": "Edit mode",
   "composer.mode.blocks": "Blocks",
-  "composer.mode.raw": "Markdown",
+  "composer.mode.markdown": "Markdown",
   "composer.picker.title": "Insert block",
   "composer.picker.cancel.aria": "Cancel insert",
 
   "composer.blockType.ifSection": "If-section",
   "composer.blockType.heading": "Heading",
   "composer.blockType.text": "Text",
-  "composer.blockType.raw": "Markdown block",
+  "composer.blockType.markdown": "Markdown block",
 
   "composer.heading.level": "Level {depth}",
   "composer.heading.level.aria": "Heading level",
@@ -758,8 +756,8 @@ export const en: Messages = {
     'Written as "## If: …" and collapsible in the reading view.',
   "composer.block.content.aria": "Content: {label}",
   "composer.block.text.placeholder": "Text of the block",
-  "composer.block.raw.placeholder": "Markdown",
-  "composer.raw.hint": "Markdown with its markers — taken over unchanged.",
+  "composer.block.markdown.placeholder": "Markdown",
+  "composer.markdown.hint": "Markdown with its markers — taken over unchanged.",
   "composer.list.aria": "Blocks: {label}",
   "composer.empty": 'No blocks yet — add the first one with "+".',
   "composer.insert.aria": "Insert block at position {position}",
@@ -839,7 +837,7 @@ export const en: Messages = {
   "augment.body.heading": "Text",
   "augment.body.modeGroup": "Proposal view",
   "augment.body.blocks": "Blocks",
-  "augment.body.raw": "Markdown",
+  "augment.body.markdown": "Markdown",
   "augment.body.none": "No change to the text proposed.",
   "augment.body.showUnchanged": "Show unchanged blocks",
   "augment.body.hideUnchanged": "Hide unchanged blocks",

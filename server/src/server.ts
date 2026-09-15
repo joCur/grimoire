@@ -76,7 +76,7 @@
 //   [x] POST /api/:campaign/locations          { name } -> 201 the location document, same
 //                                              rules as npcs
 //   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (properties parsed)
-//   [x] GET  /api/:campaign/file?path=...      one document (raw + parsed + rev). glossary
+//   [x] GET  /api/:campaign/file?path=...      one entry (properties + body + rev). glossary
 //                                              answers 200 with an EMPTY body when the
 //                                              campaign has no terms — it is an empty
 //                                              document, not a missing one (#57 review:
@@ -345,7 +345,7 @@
 //                                              DOCUMENTS; an entity's own outgoing relations
 //                                              are not references TO it. 404 unknown campaign/
 //                                              entity, 400 unknown kind/empty id (issue #60)
-//   [x] POST /api/:campaign/review/seen        { path, line } -> FileResponse &
+//   [x] POST /api/:campaign/review/seen        { path, line } -> EntryResponse &
 //                                              { marked } — flags the log ROW whose short
 //                                              hash the line has (idempotent). marked=false
 //                                              means NO row hashes to the line that was
@@ -358,6 +358,14 @@
 //                                              id already has — idempotent since #70
 //   [x] POST /api/:campaign/review/inbox-done  { line } -> rewrite the inbox line to `- [x] …`
 //                                              (documented append-only exception)
+//
+// EVERY generator call answers a JSON object whose schema
+// the providers FORCE (a tool call on the Claude path, `response_format:
+// json_schema` on the OpenAI path): an entry call the object that mirrors
+// the stored row — `properties` per kind, `body`, `warnings` (./entry-reply)
+// — and the outline step its own small one. Nothing about these endpoints
+// changes with it: the drafts they carry, the 422 bodies and the review
+// payloads are the same shapes.
 //
 // Validation after generate: properties parseable, status==draft, references
 // exist or ship as stubs, only known callouts. Errors -> correction turn to

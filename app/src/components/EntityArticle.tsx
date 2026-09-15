@@ -7,7 +7,7 @@
 // Reference lines (statblock, roll20-page) stay PLAIN TEXT on purpose: the
 // format references Roll20 by name, it never links or copies it (README).
 
-import type { FileResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 import type { ReactNode } from "react";
 
 import { entityHeaderKind, npcStatusLabel } from "@/lib/entity";
@@ -59,7 +59,7 @@ export function EntityArticle({
   actions,
   body,
 }: {
-  file: FileResponse;
+  file: EntryResponse;
   actions?: ReactNode;
   /**
    * Replaces the rendered body — edit mode (issue #15) puts its markdown
@@ -70,7 +70,7 @@ export function EntityArticle({
   const t = useT();
   const header = entityHeaderKind(file.kind);
   const fm = file.properties;
-  // npc/location files carry `name`, chapter/campaign files `title` — either
+  // npc/location entries carry `name`, chapter/campaign entries `title` — either
   // may be missing (degrade), then the path is the honest fallback.
   // A SESSION has no `title` and its id is opaque noise since issue #58, so
   // the heading is derived from `started` ("Session vom 15.01.2026") instead
@@ -101,7 +101,7 @@ function NpcHeader({
   name,
   actions,
 }: {
-  file: FileResponse;
+  file: EntryResponse;
   name: string;
   actions?: ReactNode;
 }) {
@@ -162,7 +162,7 @@ function LocationHeader({
   name,
   actions,
 }: {
-  file: FileResponse;
+  file: EntryResponse;
   name: string;
   actions?: ReactNode;
 }) {

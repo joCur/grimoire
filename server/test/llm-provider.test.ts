@@ -19,15 +19,21 @@ import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import {
   ClaudeProvider,
   DEFAULT_MAX_TOKENS,
-  JSON_PREFILL,
   KNOWLEDGE_HEADING,
   OUTLINE_HEADING,
   OpenAICompatProvider,
   buildPrompt,
   buildPromptParts,
   createProvider,
+  resetJsonSchemaSupportForTests,
 } from "../src/llm-provider";
 import type { GenerateRequest } from "../src/llm-provider";
+import {
+  OUTLINE_SCHEMA_DESCRIPTION,
+  OUTLINE_SCHEMA_NAME,
+  outlineJsonSchema,
+} from "@grimoire/shared/outline-schema";
+import { entryReplySchema, entrySchemaName } from "@grimoire/shared/entry-schema";
 
 // --- factory ------------------------------------------------------------------
 
@@ -117,6 +123,34 @@ const REQ: GenerateRequest = {
   sourceText: "Fenn waits at the docks.",
 };
 
+/**
+ * REQ above carries NO schema — no caller sends such a
+ * request any more (every call forces its object), and it stays in this suite
+ * for exactly that reason: the transports must still behave when nothing is
+ * forced, which is what `LLM_FORCE_JSON=0` and a future unforced call rely on.
+ *
+ * The OUTLINE request, and one ENTRY request per kind and mode below it.
+ */
+const OUTLINE_REQ: GenerateRequest = {
+  ...REQ,
+  jsonSchema: {
+    name: OUTLINE_SCHEMA_NAME,
+    description: OUTLINE_SCHEMA_DESCRIPTION,
+    schema: outlineJsonSchema(),
+  },
+};
+
+/** Every entry request a run can make — kind x mode. */
+const ENTRY_REQS: Array<{ label: string; req: GenerateRequest; name: string }> = [
+  ...(["scene", "npc", "location"] as const).flatMap((kind) =>
+    (["create", "augment"] as const).map((mode) => ({
+      label: `${kind}/${mode}`,
+      name: entrySchemaName(kind, mode),
+      req: { ...REQ, jsonSchema: entryReplySchema(kind, mode) } as GenerateRequest,
+    })),
+  ),
+];
+
 // --- prompt assembly (issue #53 AK2) --------------------------------------------
 //
 // The ORDER of the prompt's sections is the contract the ticket writes down:
@@ -126,7 +160,7 @@ const REQ: GenerateRequest = {
 // decided for BOTH run kinds.
 
 describe("buildPrompt", () => {
-  const KNOWLEDGE = '- Namenskonvention: schreibe „Salt Harbour" immer als „Salzhafen".';
+  const KNOWLEDGE = '- Namenskonvention: schreibe „Salt Harbour“ immer als „Salzhafen“.';
 
   test("no knowledge: the prompt starts with the glossary, exactly as before", () => {
     const prompt = buildPrompt(REQ);
@@ -339,9 +373,53 @@ describe("OpenAICompatProvider request", () => {
     expect((await next).path).toBe("/v1/chat/completions");
   });
 
-  // --- JSON mode (issue #20, AK 6) ------------------------------------------
+  // --- the reply shape: forced by schema -------------------------------------
 
-  test("response_format is sent by default on every OpenAI-compatible path", async () => {
+  test("a request without a schema forces nothing — no response_format", async () => {
+    resetJsonSchemaSupportForTests();
+    const { baseUrl, next } = await captureServer();
+    const provider = createProvider({
+      LLM_PROVIDER: "lmstudio",
+      LMSTUDIO_URL: baseUrl,
+    } as NodeJS.ProcessEnv);
+    await provider.complete(REQ);
+    expect("response_format" in (await next).body).toBe(false);
+  });
+
+  test("EVERY entry call sends its own json_schema, strict", async () => {
+    for (const { label, req, name } of ENTRY_REQS) {
+      resetJsonSchemaSupportForTests();
+      const { baseUrl, next } = await captureServer();
+      const provider = createProvider({
+        LLM_PROVIDER: "openrouter",
+        OPENROUTER_API_KEY: "sk-or-test",
+        LLM_MODEL: "anthropic/claude-sonnet-5",
+        LLM_BASE_URL: baseUrl,
+      } as NodeJS.ProcessEnv);
+      await provider.complete(req);
+      const body = (await next).body;
+      const format = body.response_format as {
+        type: string;
+        json_schema: { name: string; strict: boolean; schema: Record<string, unknown> };
+      };
+      expect(format.type, label).toBe("json_schema");
+      expect(format.json_schema.name, label).toBe(name);
+      expect(format.json_schema.strict, label).toBe(true);
+      // The SHARED schema, not a copy assembled in the transport.
+      expect(format.json_schema.schema, label).toEqual(req.jsonSchema!.schema);
+      // The cache breakpoint is untouched by the forcing: the constant half
+      // is still its own content part.
+      const first = (body.messages as Array<{ role: string; content: unknown }>)[1]!;
+      expect((first.content as Array<Record<string, unknown>>)[0]!.cache_control, label).toEqual({
+        type: "ephemeral",
+      });
+      const s = server;
+      server = null;
+      if (s !== null) await new Promise<void>((resolve) => s.close(() => resolve()));
+    }
+  });
+
+  test("the OUTLINE call sends json_schema with strict on every path", async () => {
     const envs: NodeJS.ProcessEnv[] = [
       { LLM_PROVIDER: "lmstudio" } as NodeJS.ProcessEnv,
       {
@@ -352,6 +430,7 @@ describe("OpenAICompatProvider request", () => {
       { LLM_PROVIDER: "openai", LLM_MODEL: "m" } as NodeJS.ProcessEnv,
     ];
     for (const env of envs) {
+      resetJsonSchemaSupportForTests();
       const { baseUrl, next } = await captureServer();
       // every path takes its base url from a different variable
       const provider = createProvider({
@@ -359,15 +438,166 @@ describe("OpenAICompatProvider request", () => {
         LMSTUDIO_URL: baseUrl,
         LLM_BASE_URL: baseUrl,
       });
-      await provider.complete(REQ);
-      expect((await next).body.response_format).toEqual({ type: "json_object" });
+      await provider.complete(OUTLINE_REQ);
+      const format = (await next).body.response_format as {
+        type: string;
+        json_schema: { name: string; strict: boolean; schema: Record<string, unknown> };
+      };
+      expect(format.type).toBe("json_schema");
+      expect(format.json_schema.name).toBe(OUTLINE_SCHEMA_NAME);
+      expect(format.json_schema.strict).toBe(true);
+      // The SHARED schema, not a copy assembled in the transport.
+      expect(format.json_schema.schema).toEqual(outlineJsonSchema());
       const s = server;
       server = null;
       if (s !== null) await new Promise<void>((resolve) => s.close(() => resolve()));
     }
   });
 
-  test("LLM_FORCE_JSON=0 drops response_format, junk keeps it on", async () => {
+  test("a 400 on json_schema falls back to json_object — once per process", async () => {
+    resetJsonSchemaSupportForTests();
+    const bodies: Array<Record<string, unknown>> = [];
+    const s = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (c: Buffer) => chunks.push(c));
+      req.on("end", () => {
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+        bodies.push(body);
+        const format = body.response_format as { type?: string } | undefined;
+        if (format?.type === "json_schema") {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end('{"error":"response_format.type json_schema is not supported"}');
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ choices: [{ message: { content: "{}" } }] }));
+      });
+    });
+    server = s;
+    await new Promise<void>((resolve) => s.listen(0, "127.0.0.1", () => resolve()));
+    const addr = s.address();
+    if (addr === null || typeof addr === "string") throw new Error("no port");
+    const provider = new OpenAICompatProvider({
+      name: "lmstudio",
+      baseUrl: `http://127.0.0.1:${addr.port}/v1`,
+      model: "local-model",
+    });
+
+    // First outline call: the schema is tried, refused, and retried plain.
+    expect((await provider.complete(OUTLINE_REQ)).text).toBe("{}");
+    expect(bodies.map((b) => (b.response_format as { type: string }).type)).toEqual([
+      "json_schema",
+      "json_object",
+    ]);
+
+    // The downgrade is remembered: the NEXT call costs one request, not two.
+    expect((await provider.complete(OUTLINE_REQ)).text).toBe("{}");
+    expect(bodies).toHaveLength(3);
+    expect((bodies[2]!.response_format as { type: string }).type).toBe("json_object");
+
+    // …and an entry call is still forced into nothing at all.
+    await provider.complete(REQ);
+    expect("response_format" in bodies[3]!).toBe(false);
+    resetJsonSchemaSupportForTests();
+  });
+
+  test("a 400 that is NOT about the format does not latch the downgrade", async () => {
+    resetJsonSchemaSupportForTests();
+    const bodies: Array<Record<string, unknown>> = [];
+    const s = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (c: Buffer) => chunks.push(c));
+      req.on("end", () => {
+        bodies.push(JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>);
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end('{"error":{"message":"prompt is too long: 250000 tokens"}}');
+      });
+    });
+    server = s;
+    await new Promise<void>((resolve) => s.listen(0, "127.0.0.1", () => resolve()));
+    const addr = s.address();
+    if (addr === null || typeof addr === "string") throw new Error("no port");
+    const provider = new OpenAICompatProvider({
+      name: "lmstudio",
+      baseUrl: `http://127.0.0.1:${addr.port}/v1`,
+      model: "local-model",
+    });
+
+    // The caller sees the REAL error, body included — not a schema verdict.
+    await expect(provider.complete(OUTLINE_REQ)).rejects.toThrow("prompt is too long");
+    // …and the next outline call still asks for the schema.
+    await expect(provider.complete(OUTLINE_REQ)).rejects.toThrow("lmstudio: 400");
+    expect(bodies.map((b) => (b.response_format as { type: string }).type)).toEqual([
+      "json_schema",
+      "json_object",
+      "json_schema",
+      "json_object",
+    ]);
+    resetJsonSchemaSupportForTests();
+  });
+
+  test("a 400 with no format hint latches when the json_object retry SUCCEEDS", async () => {
+    resetJsonSchemaSupportForTests();
+    const bodies: Array<Record<string, unknown>> = [];
+    const s = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (c: Buffer) => chunks.push(c));
+      req.on("end", () => {
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+        bodies.push(body);
+        const format = body.response_format as { type?: string } | undefined;
+        if (format?.type === "json_schema") {
+          res.writeHead(400, { "content-type": "application/json" });
+          // No mention of the field at all — only the retry can tell.
+          res.end('{"error":{"message":"Bad Request"}}');
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ choices: [{ message: { content: "{}" } }] }));
+      });
+    });
+    server = s;
+    await new Promise<void>((resolve) => s.listen(0, "127.0.0.1", () => resolve()));
+    const addr = s.address();
+    if (addr === null || typeof addr === "string") throw new Error("no port");
+    const provider = new OpenAICompatProvider({
+      name: "lmstudio",
+      baseUrl: `http://127.0.0.1:${addr.port}/v1`,
+      model: "local-model",
+    });
+
+    expect((await provider.complete(OUTLINE_REQ)).text).toBe("{}");
+    expect((await provider.complete(OUTLINE_REQ)).text).toBe("{}");
+    expect(bodies.map((b) => (b.response_format as { type: string }).type)).toEqual([
+      "json_schema",
+      "json_object",
+      "json_object",
+    ]);
+    resetJsonSchemaSupportForTests();
+  });
+
+  test("an error status that is NOT 400 is not retried", async () => {
+    resetJsonSchemaSupportForTests();
+    let requests = 0;
+    const s = createServer((_req, res) => {
+      requests += 1;
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end('{"error":"boom"}');
+    });
+    server = s;
+    await new Promise<void>((resolve) => s.listen(0, "127.0.0.1", () => resolve()));
+    const addr = s.address();
+    if (addr === null || typeof addr === "string") throw new Error("no port");
+    const provider = new OpenAICompatProvider({
+      name: "lmstudio",
+      baseUrl: `http://127.0.0.1:${addr.port}/v1`,
+      model: "local-model",
+    });
+    await expect(provider.complete(OUTLINE_REQ)).rejects.toThrow("lmstudio: 500");
+    expect(requests).toBe(1);
+  });
+
+  test("LLM_FORCE_JSON=0 drops the outline's response_format, junk keeps it on", async () => {
     for (const [raw, expected] of [
       ["0", false],
       ["false", false],
@@ -378,13 +608,14 @@ describe("OpenAICompatProvider request", () => {
       ["nonsense", true],
       [undefined, true],
     ] as Array<[string | undefined, boolean]>) {
+      resetJsonSchemaSupportForTests();
       const { baseUrl, next } = await captureServer();
       const provider = createProvider({
         LLM_PROVIDER: "lmstudio",
         LMSTUDIO_URL: baseUrl,
         ...(raw === undefined ? {} : { LLM_FORCE_JSON: raw }),
       } as NodeJS.ProcessEnv);
-      await provider.complete(REQ);
+      await provider.complete(OUTLINE_REQ);
       expect("response_format" in (await next).body).toBe(expected);
       const s = server;
       server = null;
@@ -580,8 +811,7 @@ describe("ClaudeProvider reply", () => {
       },
       async (p) => {
         const answer = await p.complete(REQ);
-        // the prefilled brace is part of the reply (issue #20)
-        expect(answer.text).toBe(`${JSON_PREFILL}halbes JSON`);
+        expect(answer.text).toBe("halbes JSON");
         expect(answer.truncated).toBe(true);
         expect(answer.usage).toEqual({ inputTokens: 9123, outputTokens: 8000 });
       },
@@ -591,60 +821,112 @@ describe("ClaudeProvider reply", () => {
     expect(sent.model).toBe("claude-sonnet-4-6");
   });
 
-  // --- JSON mode: assistant prefill (issue #20, AK 6) ------------------------
+  // --- the reply shape: a forced tool ----------------------------------------
 
-  test("the assistant prefill is the last turn and comes back in front of the reply", async () => {
+  test("a request without a schema sends no tool and no prefill", async () => {
+    const entry = "---\nid: night-watch-quay\n---\n\n## Flow\n\nText.\n";
     const sent = await withStubbedFetch(
-      {
-        // the API returns the CONTINUATION of the prefill, without the brace
-        content: [{ type: "text", text: '"scenes": [], "warnings": []}' }],
-        stop_reason: "end_turn",
-      },
+      { content: [{ type: "text", text: entry }], stop_reason: "end_turn" },
       async (p) => {
-        const answer = await p.complete(REQ);
-        expect(answer.text).toBe('{"scenes": [], "warnings": []}');
-        expect(JSON.parse(answer.text)).toEqual({ scenes: [], warnings: [] });
+        // Byte for byte: a prefilled `{` in front of this would corrupt it.
+        expect((await p.complete(REQ)).text).toBe(entry);
       },
     );
-    const messages = sent.messages as Array<{ role: string; content: string }>;
-    expect(messages.map((m) => m.role)).toEqual(["user", "assistant"]);
-    expect(messages[1]).toEqual({ role: "assistant", content: JSON_PREFILL });
+    const messages = sent.messages as Array<{ role: string; content: unknown }>;
+    expect(messages.map((m) => m.role)).toEqual(["user"]);
+    expect("tools" in sent).toBe(false);
+    expect("tool_choice" in sent).toBe(false);
   });
 
-  test("the prefill stays the LAST turn after replayed correction turns", async () => {
+  test("the OUTLINE call sends the schema as a tool and FORCES the call", async () => {
+    const outline = { scenes: [], entries: [], warnings: [] };
     const sent = await withStubbedFetch(
-      { content: [{ type: "text", text: '"scenes": []}' }], stop_reason: "end_turn" },
+      {
+        content: [
+          { type: "text", text: "Ich gliedere den Quelltext:" },
+          { type: "tool_use", name: OUTLINE_SCHEMA_NAME, input: outline },
+        ],
+        stop_reason: "tool_use",
+      },
       async (p) => {
-        const answer = await p.complete(REQ, [
-          { assistant: '{"scenes": "kaputt"}', correction: "bitte korrigieren" },
-          { assistant: '{"scenes": 0}', correction: "nochmal" },
-        ]);
-        expect(answer.text).toBe('{"scenes": []}');
+        // The tool INPUT is the reply — the validation downstream parses JSON.
+        expect(JSON.parse((await p.complete(OUTLINE_REQ)).text)).toEqual(outline);
       },
     );
-    const messages = sent.messages as Array<{ role: string; content: string }>;
-    // initial user prompt + two replayed pairs + the prefill at the very end
+    expect(sent.tools).toEqual([
+      {
+        name: OUTLINE_SCHEMA_NAME,
+        description: OUTLINE_SCHEMA_DESCRIPTION,
+        input_schema: outlineJsonSchema(),
+      },
+    ]);
+    expect(sent.tool_choice).toEqual({ type: "tool", name: OUTLINE_SCHEMA_NAME });
+    // Still no prefill: the forced tool call is what guarantees the shape.
+    const messages = sent.messages as Array<{ role: string }>;
+    expect(messages.map((m) => m.role)).toEqual(["user"]);
+  });
+
+  test("EVERY entry call travels as a forced tool", async () => {
+    for (const { label, req, name } of ENTRY_REQS) {
+      const reply = { properties: { id: "kai" }, body: "## Flow\n", warnings: [] };
+      const sent = await withStubbedFetch(
+        {
+          content: [{ type: "tool_use", name, input: reply }],
+          stop_reason: "tool_use",
+        },
+        async (p) => {
+          // The tool INPUT is the reply — entry-reply.ts parses JSON.
+          expect(JSON.parse((await p.complete(req)).text), label).toEqual(reply);
+        },
+      );
+      expect(sent.tools, label).toEqual([
+        {
+          name,
+          description: req.jsonSchema!.description,
+          input_schema: req.jsonSchema!.schema,
+        },
+      ]);
+      expect(sent.tool_choice, label).toEqual({ type: "tool", name });
+      // The system prompt keeps its cache breakpoint.
+      expect((sent.system as Array<Record<string, unknown>>)[0]!.cache_control, label).toEqual({
+        type: "ephemeral",
+      });
+    }
+  });
+
+  test("an outline reply with no tool block degrades to its text", async () => {
+    // A refusal, or an endpoint that ignored `tool_choice`: the text has to
+    // reach the validation as text, so the run fails with a message that says
+    // what came back — never with an empty reply nobody can explain.
+    await withStubbedFetch(
+      { content: [{ type: "text", text: "Ich kann das nicht." }], stop_reason: "end_turn" },
+      async (p) => {
+        expect((await p.complete(OUTLINE_REQ)).text).toBe("Ich kann das nicht.");
+      },
+    );
+  });
+
+  test("the replayed correction turns are the last turns of every attempt", async () => {
+    const sent = await withStubbedFetch(
+      { content: [{ type: "text", text: "---\nid: x\n---\n" }], stop_reason: "end_turn" },
+      async (p) => {
+        await p.complete(REQ, [
+          { assistant: "kaputter Eintrag", correction: "bitte korrigieren" },
+          { assistant: "noch kaputt", correction: "nochmal" },
+        ]);
+      },
+    );
+    const messages = sent.messages as Array<{ role: string; content: unknown }>;
+    // initial user prompt + two replayed pairs, ending on the correction
     expect(messages.map((m) => m.role)).toEqual([
       "user",
       "assistant",
       "user",
       "assistant",
       "user",
-      "assistant",
     ]);
-    expect(messages.at(-1)).toEqual({ role: "assistant", content: JSON_PREFILL });
-    expect(messages[3]!.content).toBe('{"scenes": 0}');
-  });
-
-  test("exactly what was prefilled is prepended — a nested continuation keeps both braces", async () => {
-    await withStubbedFetch(
-      { content: [{ type: "text", text: '{"a": 1}}' }], stop_reason: "end_turn" },
-      async (p) => {
-        // the model continued with a nested object; dropping the brace here
-        // would corrupt a perfectly good reply
-        expect((await p.complete(REQ)).text).toBe('{{"a": 1}}');
-      },
-    );
+    expect(messages[3]!.content).toBe("noch kaputt");
+    expect(messages.at(-1)!.content).toBe("nochmal");
   });
 
   test('stop_reason "end_turn" is a complete reply', async () => {
@@ -656,8 +938,8 @@ describe("ClaudeProvider reply", () => {
       },
       async (p) => {
         const answer = await p.complete(REQ);
-        // only text blocks, joined — behind the prefilled brace
-        expect(answer.text).toBe(`${JSON_PREFILL}ganzes \nJSON`);
+        // only text blocks, joined — thinking blocks are not the reply
+        expect(answer.text).toBe("ganzes \nJSON");
         expect(answer.truncated).toBe(false);
         expect(answer.usage).toEqual({ inputTokens: 100, outputTokens: 20 });
       },

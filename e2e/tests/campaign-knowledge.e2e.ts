@@ -1,6 +1,6 @@
 // Critical path 6, extended (issue #53, PO feedback on PR #87): the campaign
 // knowledge and the glossary as the DM maintains them on their own PAGES, and
-// what the generator then does with them. See CLAUDE.md, „Kritische Pfade".
+// what the generator then does with them. See CLAUDE.md, „Kritische Pfade“.
 //
 // Nothing here is mocked except the model (e2e/fixtures/stub-llm.ts), and the
 // two claims that only the real stack can show are:
@@ -13,7 +13,7 @@
 //      the path that runs in production.
 //   2. THE POST-RUN CHECK FIRES AND DOES NOT BLOCK. With TRIGGER.oldName the
 //      stub answers in exactly the spelling the convention forbids; the review
-//      has to name it, with its position, AND still let „Übernehmen" write the
+//      has to name it, with its position, AND still let „Übernehmen“ write the
 //      draft.
 //
 // Plus what the PAGES have to do that the old inline settings sections did
@@ -28,7 +28,7 @@ import { expect, test } from "../support/test";
 
 const SOURCE = "The party watches the quay at low tide.";
 
-/** The knowledge page, reached from the pool's „Nachschlagen" line. */
+/** The knowledge page, reached from the pool's „Nachschlagen“ line. */
 async function openKnowledge(page: Page): Promise<void> {
   await page.goto("/beispiel");
   await page.getByRole("link", { name: "Kampagnenwissen" }).click();
@@ -71,7 +71,7 @@ test("the knowledge page: add, edit, reorder, delete — one entry at a time", a
 
   // --- anlegen: a naming convention -----------------------------------------
   await page.getByRole("button", { name: "Neuer Eintrag" }).click();
-  // „Namenskonvention" is the default kind, so the Alt/Neu pair is there —
+  // „Namenskonvention“ is the default kind, so the Alt/Neu pair is there —
   // each on its own full-width line (PO feedback on PR #87).
   await expect(page.getByLabel("Art")).toHaveValue("naming");
   await page.getByLabel("Alt (im Quellmaterial)").fill(OLD_NAME);
@@ -216,7 +216,7 @@ test("a competing write is a conflict, not a silent overwrite", async ({ page, a
   // What the DM typed is still on screen — theirs to keep or to discard.
   await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveValue("Alt");
 
-  // Retrying blindly is not offered: „Speichern" is off until the DM decides.
+  // Retrying blindly is not offered: „Speichern“ is off until the DM decides.
   await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
 
   // Reloading is their decision — and it costs the draft, so it asks first
@@ -234,7 +234,7 @@ test("a competing write is a conflict, not a silent overwrite", async ({ page, a
 });
 
 test("leaving with an unsaved entry asks first — and only then", async ({ page }) => {
-  // At 390px the way out is the „‹ Kapitel" row — a plain router link, which is
+  // At 390px the way out is the „‹ Kapitel“ row — a plain router link, which is
   // exactly the exit that would otherwise drop the open entry without a word.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/beispiel/knowledge");
@@ -273,7 +273,7 @@ test("switching the kind carries the text into the new form", async ({ page, api
   await page.getByLabel("Art").selectOption("fact");
   await expect(page.getByLabel("Fakt, der gilt")).toHaveValue("Salt Harbour → Salzhafen");
 
-  // fact -> naming: the sentence lands in „Alt", where it is visible.
+  // fact -> naming: the sentence lands in „Alt“, where it is visible.
   await page.getByLabel("Art").selectOption("naming");
   await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveValue("Salt Harbour → Salzhafen");
   await expect(page.getByLabel("Neu (in dieser Kampagne)")).toHaveValue("");
@@ -291,7 +291,7 @@ test("switching the kind carries the text into the new form", async ({ page, api
 // --- how the pages are REACHED ------------------------------------------------
 
 test("four ways in: the pool line, the phone, ⌘K and the generator", async ({ page }) => {
-  // (a) The pool's quiet „Nachschlagen" line — and the topbar is UNCHANGED
+  // (a) The pool's quiet „Nachschlagen“ line — and the topbar is UNCHANGED
   //     (PO feedback on PR #87: the two pages are deliberately not up there).
   await page.goto("/beispiel");
   const lookup = page.getByRole("navigation", { name: "Nachschlagen" });
@@ -350,7 +350,7 @@ test("(b) the phone: the two rows in „Nachschlagen“, and the pages at 390px"
   );
   expect(noOverflow).toBe(true);
 
-  // „‹ Kapitel" is the way back, as on every other campaign view below md.
+  // „‹ Kapitel“ is the way back, as on every other campaign view below md.
   await page.getByRole("link", { name: "Kapitel" }).first().click();
   await expect(page).toHaveURL(/\/beispiel$/);
 });
@@ -372,7 +372,7 @@ test("the generator run: the knowledge travels, the naming check flags the draft
   await page.getByLabel("Fakt, der gilt").fill("[[fenn]] führt die Schmuggler.");
   await saveEntry(page);
 
-  // --- the generator names the COUNT in „Mitgeschickter Kontext" (AK5) ------
+  // --- the generator names the COUNT in „Mitgeschickter Kontext“ (AK5) ------
   await page.goto("/beispiel/generate");
   await expect(page.getByRole("link", { name: "2 Wissens-Einträge" })).toBeVisible();
 
@@ -388,7 +388,7 @@ test("the generator run: the knowledge travels, the naming check flags the draft
   //    NPC's NAME, not as a slug (AK4).
   const echo = page.getByText(CONTEXT_ECHO, { exact: false });
   await expect(echo).toBeVisible();
-  await expect(echo).toContainText(`schreibe „${OLD_NAME}" immer als „Salzmarsch"`);
+  await expect(echo).toContainText(`schreibe „${OLD_NAME}“ immer als „Salzmarsch“`);
   await expect(echo).toContainText("Fakt: Fenn führt die Schmuggler.");
   await expect(echo).not.toContainText("[[fenn]]");
 
@@ -397,7 +397,7 @@ test("the generator run: the knowledge travels, the naming check flags the draft
   const hints = page.getByRole("heading", { name: /Namens-Hinweis/ });
   await expect(hints).toBeVisible();
   await expect(hints).toContainText("kein Blocker");
-  const rows = page.getByText(`„${OLD_NAME}" steht noch da — vereinbart ist „Salzmarsch"`);
+  const rows = page.getByText(`„${OLD_NAME}“ steht noch da — vereinbart ist „Salzmarsch“`);
   await expect(rows.first()).toBeVisible();
   // One row per PLACE the spelling stands — the title and the two body lines
   // of the stub's draft; that is what makes a hint actionable.
@@ -408,8 +408,8 @@ test("the generator run: the knowledge travels, the naming check flags the draft
   // 3. NOT A BLOCKER: apply writes the draft exactly as it would without it.
   await page.getByRole("button", { name: /^Übernehmen/ }).click();
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
-  const scene = await api.raw(`01-salzhafen/${SCENE_ID}`);
-  expect(scene).toContain(OLD_NAME);
+  const scene = await api.file(`01-salzhafen/${SCENE_ID}`);
+  expect(`${JSON.stringify(scene.properties)}\n${scene.body}`).toContain(OLD_NAME);
 });
 
 test("without naming conventions nothing is flagged and the prompt is unchanged", async ({
@@ -447,7 +447,7 @@ test("an open row is its ENTRY, not a position — and the guard token is the on
     "beispiel/glossary",
   );
   // Two terms that are not the same row: one is edited, the other is deleted
-  // from underneath by „another tab".
+  // from underneath by „another tab“.
   const edited = before.entries.at(-1)!;
   const deleted = before.entries[0]!;
   expect(edited.term).not.toBe(deleted.term);
@@ -482,12 +482,12 @@ test("an open row is its ENTRY, not a position — and the guard token is the on
   }>("beispiel/glossary");
   expect(afterConflict.entries.map((e) => e.explanation)).not.toContain("Von mir bearbeitet.");
 
-  // And „Speichern" is OFF until the DM decides — retrying against a list
+  // And „Speichern“ is OFF until the DM decides — retrying against a list
   // that moved is exactly how a draft lands on a neighbouring entry.
   await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
   await expect(explanation).toHaveValue("Von mir bearbeitet.");
 
-  // „Draft behalten" re-aims it at the list that came back — offered because
+  // „Draft behalten“ re-aims it at the list that came back — offered because
   // the opened entry is still there, unchanged.
   await page.getByRole("button", { name: /Entwurf behalten/ }).click();
   await page.getByRole("button", { name: "Speichern" }).click();
@@ -518,7 +518,7 @@ test("a dirty draft is never thrown away by a click — moving on asks first", a
   await rows.first().click();
   await page.getByLabel("Erklärung").fill("Nicht verlieren.");
 
-  // Another ROW: the question is asked, and „Weiter bearbeiten" leaves the
+  // Another ROW: the question is asked, and „Weiter bearbeiten“ leaves the
   // draft exactly where it was.
   await page.getByRole("button", { name: second }).click();
   let dialog = page.getByRole("dialog");
@@ -526,14 +526,14 @@ test("a dirty draft is never thrown away by a click — moving on asks first", a
   await dialog.getByRole("button", { name: "Weiter bearbeiten" }).click();
   await expect(page.getByLabel("Erklärung")).toHaveValue("Nicht verlieren.");
 
-  // „Neuer Begriff" is the same exit and asks the same question.
+  // „Neuer Begriff“ is the same exit and asks the same question.
   await page.getByRole("button", { name: "Neuer Begriff" }).click();
   dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Änderungen verwerfen?");
   await dialog.getByRole("button", { name: "Weiter bearbeiten" }).click();
   await expect(page.getByLabel("Erklärung")).toHaveValue("Nicht verlieren.");
 
-  // Only „Verwerfen" moves on — and then the OTHER row is the open one.
+  // Only „Verwerfen“ moves on — and then the OTHER row is the open one.
   await page.getByRole("button", { name: second }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);

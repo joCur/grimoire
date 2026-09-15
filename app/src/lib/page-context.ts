@@ -1,4 +1,4 @@
-// The hierarchical context of a file view (issue #34, PO rework of PR #35).
+// The hierarchical context of an entry view (issue #34, PO rework of PR #35).
 //
 // This is what the topbar breadcrumbs used to say — moved into the page, where
 // it sits next to the title it describes instead of competing with the global
@@ -29,8 +29,8 @@ export interface ContextCrumb {
 }
 
 /**
- * Context crumbs for one file view, outermost first. Empty for everything
- * that has no place in the hierarchy (the campaign file, sessions, inbox,
+ * Context crumbs for one entry view, outermost first. Empty for everything
+ * that has no place in the hierarchy (the campaign entry, sessions, inbox,
  * glossary) — the nav's section marking is context enough there.
  *
  * Scene: `<chapter title> › <group>`, the chapter linking to the pool. The
@@ -38,7 +38,7 @@ export interface ContextCrumb {
  * location's name when `locations/<slug>` exists, otherwise the slug as
  * written — never prettified), and is absent for a scene that sits directly
  * in the chapter directory.
- * Chapter file: just the chapter, unlinked — it IS the chapter.
+ * Chapter entry: just the chapter, unlinked — it IS the chapter.
  * NPC / location: their list.
  *
  * The two list labels come from the CATALOG via `t` (issue #69) — the crumb

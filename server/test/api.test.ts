@@ -17,7 +17,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { CampaignSummary, CampaignTree, FileResponse } from "@grimoire/shared";
+import type { CampaignSummary, CampaignTree, EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { dropStore, emptyStore, seedStore } from "./support/store";
 
@@ -252,16 +252,15 @@ describe("GET /api/:campaign/file", () => {
     dropStore();
   });
 
-  test("returns raw + parsed + the rev as rev", async () => {
+  test("returns properties, body and the rev", async () => {
     const rel = "01-salzhafen/leuchtturm/lighthouse-arrival";
     const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as FileResponse;
+    const body = (await res.json()) as EntryResponse;
     expect(body.path).toBe(rel);
     expect(body.kind).toBe("scene");
     expect(body.properties.id).toBe("lighthouse-arrival");
     expect(body.properties.status).toBe("ready");
-    expect(body.raw.startsWith("---")).toBe(true);
     expect(body.body).toContain("## Flow");
     expect(body.body).not.toContain("id: lighthouse-arrival");
     // `rev` is the ROW VERSION (store/render.ts rule 3): an opaque
@@ -274,11 +273,10 @@ describe("GET /api/:campaign/file", () => {
   test("serves _campaign as kind campaign (no new endpoint needed)", async () => {
     const res = await app.request("/api/beispiel/file?path=_campaign");
     expect(res.status).toBe(200);
-    const body = (await res.json()) as FileResponse;
+    const body = (await res.json()) as EntryResponse;
     expect(body.kind).toBe("campaign");
     expect(body.properties.id).toBe("beispiel");
     expect(body.properties.name).toBe("Der Leuchtturm von Salzhafen");
-    expect(body.raw.startsWith("---")).toBe(true);
   });
 
   test("serves the two list files from their rows: inbox and glossary", async () => {
@@ -286,13 +284,13 @@ describe("GET /api/:campaign/file", () => {
     // their guard token (store/read.ts readByLocator).
     const inbox = await app.request("/api/beispiel/file?path=inbox");
     expect(inbox.status).toBe(200);
-    const inboxBody = (await inbox.json()) as FileResponse;
+    const inboxBody = (await inbox.json()) as EntryResponse;
     expect(inboxBody.kind).toBe("inbox");
     expect(inboxBody.body).toContain("- ");
 
     const glossary = await app.request("/api/beispiel/file?path=glossary");
     expect(glossary.status).toBe(200);
-    expect(((await glossary.json()) as FileResponse).kind).toBe("glossary");
+    expect(((await glossary.json()) as EntryResponse).kind).toBe("glossary");
   });
 
   test("404 for unknown file and unknown campaign", async () => {

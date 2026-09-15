@@ -33,7 +33,7 @@
 // the query the pool already runs for the goal line, passed in rather than
 // fetched twice.
 
-import type { CampaignTree, FileResponse } from "@grimoire/shared/types";
+import type { CampaignTree, EntryResponse } from "@grimoire/shared/types";
 import { PenLine } from "lucide-react";
 import { useState } from "react";
 
@@ -52,7 +52,7 @@ import { chapterBodyChanged, chapterMetaPath, writeChapterBody } from "@/lib/cha
 import { useRevWriteMutation } from "@/lib/use-rev-write";
 
 /** The chapter's display name — its id when the title is missing or empty. */
-function chapterLabel(file: FileResponse, chapter: string): string {
+function chapterLabel(file: EntryResponse, chapter: string): string {
   const title = file.properties.title;
   return typeof title === "string" && title.trim() !== "" ? title : chapter;
 }
@@ -70,7 +70,7 @@ export function ChapterActions({
    * running (or when the chapter has no document to read): the two editing
    * actions need its rev, so they simply are not offered yet.
    */
-  file: FileResponse | undefined;
+  file: EntryResponse | undefined;
   /** For the properties dialog's reference fields. */
   tree: CampaignTree | undefined;
 }) {
@@ -138,7 +138,7 @@ function ChapterBodyDialog({
 }: {
   campaign: string;
   chapter: string;
-  file: FileResponse;
+  file: EntryResponse;
   onClose: () => void;
 }) {
   const t = useT();

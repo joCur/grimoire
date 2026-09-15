@@ -7,10 +7,10 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 
 ## Pflichtlektüre vor jeder Aufgabe
 
-1. `README.md` — Datenformat und Konventionen. Achtung auf die Zweiteilung
-   (ADR #13): Ordnerstruktur/Dateinamen sind das **Import-Format
-   (historisch)**, das Body-Vokabular (Callouts, `If:`-Abschnitte, Hashtags)
-   und die Frontmatter-Keys sind **normativ**
+1. `README.md` — Datenmodell und Konventionen: Einträge, ihre
+   Eigenschaften und Adressen, das Text-Vokabular (Callouts,
+   `If:`-Abschnitte, Hashtags) und die Schreibregeln. Alles davon ist
+   normativ.
 2. `docs/DECISIONS.md` — Architektur-Entscheidungen inkl. Tech-Stack. Entscheidungen dort sind bindend; Abweichungen nur mit neuem Eintrag.
 3. `docs/UI-BRIEF.md` — Design-Richtung für alles Sichtbare
 
@@ -19,7 +19,7 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Frontend: Vite + React 19 + Tailwind v4 + shadcn/ui, TanStack Query,
   react-markdown + eigenes Remark-Plugin für Callouts und `## If:`
 - Backend: Bun + Hono, SQLite über Drizzle (`server/src/db/`), Suche als
-  FTS5-Index, gray-matter nur noch im Import-/Parser-Pfad
+  FTS5-Index
 - Speicher: **eine SQLite-Datei ist die Quelle der Wahrheit** (ADR #13),
   `GRIMOIRE_DATA/grimoire.db`
 - Regel: Keine Bun-only-APIs ohne Eintrag in docs/DECISIONS.md
@@ -32,18 +32,14 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   für Dev/Tests/E2E (der echte Import liest sie, es gibt keine zweiten
   Fixtures) und die Referenz des Import-Formats. NIE umformatieren oder
   „aufräumen"; das Format ist Vertrag.
-- `campaigns/` — echte Kampagnendaten als Markdown-Baum, in `.gitignore`
-  (Nutzungsdaten, ggf. urheberrechtlich geschütztes Quellmaterial). Seit
-  Issue #79 liest der Server **keinen** Kampagnen-Dateibaum mehr — nur
-  `grimoire seed <dir>` tut es, wenn man es ihm ausdrücklich sagt. Im Code
-  nie fest verdrahten.
 - `GRIMOIRE_DATA` (Default `./data`, gitignored) — hier liegt
   `grimoire.db` samt `-wal`/`-shm`: die eigentlichen Daten. Kein Code liest
   Kampagneninhalte von woanders.
-- `shared/` — Entitäts-Typen und Markdown-Parser (`@grimoire/shared`),
-  von Server und App gemeinsam genutzt. Das Datenformat ist hier genau
-  einmal in Code beschrieben (Spiegel von README.md — beides synchron halten);
-  die Speicherform steht genau einmal in `server/src/db/schema.ts`.
+- `shared/` — Entitäts-Typen und der Importer-Parser (`@grimoire/shared`),
+  von Server und App gemeinsam genutzt. Autorität über das Format sind
+  `server/src/db/schema.ts` (Speicherform) und `server/src/store/paths.ts`
+  (Adressen), beschrieben in README.md — die drei synchron halten;
+  `shared/src/parse.ts` liest nur den Markdown-Baum ein.
 - `server/` — Hono-API. Geplante Endpoints sind in `server/src/server.ts`
   dokumentiert und dort abzuhaken, wenn implementiert. Datenzugriff
   ausschließlich über `server/src/store/` (Queries), nie direkt SQL aus einer
@@ -77,13 +73,17 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Schreibzugriffe der App nur über die dokumentierte API; Patches tragen das
   Guard-Token des Lesevorgangs mit (`rev`, die Zeilenversion) — 409 bei
   Konflikt, nie stilles Überschreiben.
-- Adressen tragen keine Dateiendung (`npcs/jorna`, `<kapitel>/<szenen-id>`,
+- Jeder Eintrag hat eine Adresse (`npcs/jorna`, `<kapitel>/<szenen-id>`,
   `sessions/<id>`, `_campaign`, `glossary`); das Schema steht in
   `server/src/store/paths.ts`. Auf der Leitung heißen die Felder eines
-  Dokuments `properties` — `frontmatter`/`mtime` gibt es nur noch im
-  Markdown-Importer unter `server/src/db/` (Issue #79).
+  Eintrags `properties`, sein Markdown `body`.
 - Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
   Code, Kommentare, Commits: Englisch.
+- Kommentare erklären den Code und stehen für sich: Englisch, ohne Verweise
+  auf Issues, PRs oder Reviews.
+- Schemata und Fixtures liegen in ihrem Zielformat vor (ein JSON-Schema als
+  `.json`, eine Antwort-Fixture als das Objekt selbst), statt im Code
+  zusammengebaut zu werden.
 - Nutzersichtbare Texte NIE direkt in Komponenten, sondern in den Katalog
   `app/src/i18n/` (`de.ts` = Key-Satz, `en.ts` muss vollständig sein, sonst
   Typfehler). `t()` kommt aus `useT()`/`useI18n()`; reine Helfer in
@@ -152,7 +152,7 @@ Die Pfade:
 3. ⌘K-Suche findet und öffnet
 4. Session-Zyklus: starten → Schnellnotiz → Log + scenes_played →
    Pause → beenden → Nachbereitung
-5. Nachbereitung: Handlungsstrang übernehmen → _chapter.md; Ideen abhaken
+5. Nachbereitung: Handlungsstrang übernehmen → Kapiteltext; Ideen abhaken
 6. Generator-Zyklus (Stub-LLM): Job → Entwürfe prüfen → Übernehmen → Entwurf
    in den Kapiteln; plus 409-/Fehlerpfad. Dazu (Issue #53) Kampagnenwissen und
    Glossar auf `/settings` pflegen — anlegen, bearbeiten, löschen,
@@ -162,7 +162,7 @@ Die Pfade:
    ihn und bleibt übernehmbar, laufender wird als `failed` gemeldet)
 7. Eigenschaften-Patch (`PATCH /properties`)/Status-Regler inkl. 409-Konflikt
 8. Mobil-Startfläche + Ideen-Einwurf bei 390px
-9. Datei bearbeiten: öffnen → Body ändern → speichern → gerendert
+9. Eintrag bearbeiten: öffnen → Text ändern → speichern → gerendert
    sichtbar; 409 bei konkurrierendem Zweit-Write → neu laden statt still
    überschreiben (seit ADR #13 gibt es keine externe Dateiänderung mehr —
    der Guard ist die Zeilenversion `rev`)

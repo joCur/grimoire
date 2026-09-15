@@ -2,11 +2,11 @@
 // prototype: left the planned scenes and contingencies of the ACTIVE
 // chapter, center the selected scene through the same article pipeline as
 // the reading view, right the location and NPC cards plus the log panel and
-// the Schnellnotiz. The session file on the server is the truth: every write
-// returns the fresh file, the "played" checkmark comes from scenes_played
+// the Schnellnotiz. The session on the server is the truth: every write
+// returns the fresh entry, the "played" checkmark comes from scenes_played
 // (server-maintained — never faked client-side). WHICH session is running is
 // the server's answer too (GET /:campaign/session, issue #40) — a session
-// past midnight lives in yesterday's file.
+// past midnight lives in yesterday's session.
 //
 // Client state is exactly two things: the selected scene and which entity the
 // detail drawer shows (issue #40). Aside cards therefore do NOT navigate here
@@ -120,7 +120,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   const selected =
     scenes.find((s) => s.id === selectedId) ?? planned[0] ?? done[0] ?? scenes[0];
 
-  // Which entity file the drawer shows — undefined = closed. Sitting HERE
+  // Which entry the drawer shows — undefined = closed. Sitting HERE
   // (not inside the aside) is what keeps scene selection and note draft
   // untouched while the drawer opens and closes.
   const [drawerPath, setDrawerPath] = useState<string>();
@@ -129,7 +129,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
 
   // Only the tree decides whether a scene's `location` is an entity: the
   // format allows a free string there, and that must stay plain text instead
-  // of claiming a missing file (degrade, README).
+  // of claiming a missing entry (degrade, README).
   const locationId = selected?.location;
   const knownLocation = tree.data?.locations.find((l) => l.id === locationId);
 
@@ -231,7 +231,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
                 {t("live.scene.locationHeading")}
               </p>
               {knownLocation !== undefined ? (
-                // The tree knows the REAL path of the file — the card must not
+                // The tree knows the REAL path of the entry — the card must not
                 // re-derive `locations/<id>` (finding 10).
                 <LocationCard
                   campaign={campaign}
@@ -240,7 +240,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
                   onOpen={setDrawerPath}
                 />
               ) : (
-                // A free-text location (no entity file behind it) is exactly
+                // A free-text location (no entry behind it) is exactly
                 // what the format allows — show it, claim nothing.
                 <p className="text-[12.5px] leading-[1.5] text-body-secondary">{locationId}</p>
               )}

@@ -21,7 +21,7 @@
 // open editor down.
 //
 // Since issue #43 „Bearbeiten" opens the BLOCK COMPOSER, so this spec covers
-// the „Roh" half of edit mode: the textarea, its „Vorschau" and the whole
+// the „Markdown" half of edit mode: the textarea, its „Vorschau" and the whole
 // save/409/discard machinery as seen from the fallback surface. The composer
 // itself — and the fact that it is the default — is
 // `tests/block-composer.e2e.ts`, on the same critical path.
@@ -34,43 +34,32 @@ const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const SCENE_URL = `/beispiel/file/${SCENE}`;
 const NPC = "npcs/jorna";
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
-/** aria-label of the raw-markdown textarea (FileBodyEditor). */
+/** aria-label of the raw-markdown textarea (EntryBodyEditor). */
 const TEXTAREA = "Markdown-Text von";
 
-/**
- * The properties block including both fences and the newline after the
- * closing one — what PUT /file promises to leave alone.
- */
-function propertiesBlock(raw: string): string {
-  const match = /^---\n[\s\S]*?\n---\n/.exec(raw);
-  expect(match, "the fixture file has no properties block").not.toBeNull();
-  return match?.[0] ?? "";
-}
-
-/** Read the file and hand back its properties block and the rest. */
+/** Read the entry: its properties and its text — the two halves every assertion looks at. */
 async function split(api: Api, rel: string) {
-  const raw = await api.raw(rel);
-  const properties = propertiesBlock(raw);
-  return { raw, properties, body: raw.slice(properties.length) };
+  const { properties, body } = await api.file(rel);
+  return { properties, body };
 }
 
 /**
  * Enter edit mode and switch to the raw markdown surface.
  *
  * „Bearbeiten" opens the block composer since issue #43, so everything the
- * fallback surface owns costs one more click: the „Roh" side of the mode
+ * fallback surface owns costs one more click: the „Markdown" side of the mode
  * toggle. Switching is lossless by construction (the draft round-trips through
  * serializeBlocks/parseBlocks), which is why the textarea below is still
  * seeded with the file's body byte for byte and „Speichern" is still disabled
  * right after opening.
  */
-async function openRawEditor(page: Page): Promise<void> {
+async function openMarkdownEditor(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Bearbeiten" }).click();
   // exact: the composer's per-card controls are named „Markdown-Block 1 …".
   await page.getByRole("button", { name: "Markdown", exact: true }).click();
 }
 
-test("editing the body: save writes the file and the reading view shows it", async ({
+test("editing the body: save writes the entry and the reading view shows it", async ({
   page,
   api,
 }) => {
@@ -80,9 +69,9 @@ test("editing the body: save writes the file and the reading view shows it", asy
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
 
-  // The trigger sits in the header action row, next to „Eigenschaften"; „Roh" is
+  // The trigger sits in the header action row, next to „Eigenschaften"; „Markdown" is
   // the fallback surface this spec is about.
-  await openRawEditor(page);
+  await openMarkdownEditor(page);
 
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toBeVisible();
@@ -114,9 +103,9 @@ test("editing the body: save writes the file and the reading view shows it", asy
   );
 
   // On disk: properties block byte-identical, body exactly what was typed.
-  await expect.poll(() => api.raw(SCENE)).toContain(added);
+  await expect.poll(() => api.body(SCENE)).toContain(added);
   const after = await split(api, SCENE);
-  expect(after.properties).toBe(before.properties);
+  expect(after.properties).toEqual(before.properties);
   expect(after.body).toBe(`${before.body}\n${added}\n`);
 });
 
@@ -138,17 +127,17 @@ test("a scene that MOVED is still editable under its old address (#100)", async 
 
   const before = await split(api, moved);
   const added = "Der Weg zur Nordbucht ist bei Ebbe trocken.";
-  await openRawEditor(page);
+  await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await textarea.fill(`${before.body}\n${added}\n`);
   await page.getByRole("button", { name: "Speichern" }).click();
 
   await expect(textarea).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(added);
-  await expect.poll(() => api.raw(moved)).toContain(added);
+  await expect.poll(() => api.body(moved)).toContain(added);
   // …and the properties are untouched, the moved `location` included.
   const after = await split(api, moved);
-  expect(after.properties).toBe(before.properties);
+  expect(after.properties).toEqual(before.properties);
 });
 
 test("the preview toggle renders the draft through the real markdown pipeline", async ({
@@ -161,7 +150,7 @@ test("the preview toggle renders the draft through the real markdown pipeline", 
   await page.goto(SCENE_URL);
   // The rendered body is on screen before edit mode …
   await expect(page.locator("[data-callout='readaloud']")).toHaveCount(1);
-  await openRawEditor(page);
+  await openMarkdownEditor(page);
 
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toBeVisible();
@@ -186,7 +175,7 @@ test("the preview toggle renders the draft through the real markdown pipeline", 
   await expect(page.getByRole("button", { name: "Abbrechen" })).toBeVisible();
 
   // Back to the text, unchanged by the round trip. This „Bearbeiten" is the
-  // „Roh" surface's own toggle (Vorschau ⇄ Bearbeiten), not the header trigger
+  // „Markdown" surface's own toggle (Vorschau ⇄ Bearbeiten), not the header trigger
   // — that one is gone while edit mode runs, and „Blöcke" is a button of its
   // own, so the name stays unambiguous.
   await page.getByRole("button", { name: "Bearbeiten" }).click();
@@ -199,7 +188,7 @@ test("the preview toggle renders the draft through the real markdown pipeline", 
     "Eine angelaufene Messingpfeife",
   );
   const after = await split(api, SCENE);
-  expect(after.properties).toBe(before.properties);
+  expect(after.properties).toEqual(before.properties);
   expect(after.body).toContain(loot);
 });
 
@@ -214,7 +203,7 @@ test("a concurrent second write: the save reports the conflict, the second one w
   const otherBody = "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n";
 
   await page.goto(SCENE_URL);
-  await openRawEditor(page);
+  await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toHaveValue(before.body);
 
@@ -234,7 +223,7 @@ test("a concurrent second write: the save reports the conflict, the second one w
   // Nothing was written: the other writer's body stands, untouched.
   const conflicted = await split(api, SCENE);
   expect(conflicted.body).toBe(otherBody);
-  expect(conflicted.properties).toBe(before.properties);
+  expect(conflicted.properties).toEqual(before.properties);
 
   // The editor re-read the file, so the SAME click works now — deliberately
   // on top of the other writer's body: the DM saw the message and decided.
@@ -243,9 +232,9 @@ test("a concurrent second write: the save reports the conflict, the second one w
   await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(mine);
 
-  await expect.poll(() => api.raw(SCENE)).toContain(mine);
+  await expect.poll(() => api.body(SCENE)).toContain(mine);
   const after = await split(api, SCENE);
-  expect(after.properties).toBe(before.properties);
+  expect(after.properties).toEqual(before.properties);
   expect(after.body).toBe(`${before.body}\n${mine}\n`);
   expect(after.body).not.toContain("Von einem zweiten Schreiber");
 });
@@ -258,7 +247,7 @@ test("the status regler next to the editor is no conflict for the own save", asy
   const mine = "Während des Statuswechsels geschrieben.";
 
   await page.goto(SCENE_URL);
-  await openRawEditor(page);
+  await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toHaveValue(before.body);
   await textarea.fill(`${before.body}\n${mine}\n`);
@@ -269,7 +258,7 @@ test("the status regler next to the editor is no conflict for the own save", asy
   await trigger.click();
   await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
   await expect(trigger).toHaveText(/Gespielt/);
-  await expect.poll(() => api.raw(SCENE)).toContain("status: played");
+  await expect.poll(() => api.properties(SCENE)).toHaveProperty("status", "played");
 
   // The DM's OWN change must not come back as „Inzwischen geändert": a new
   // version with an identical body is adopted, a changed body still 409s.
@@ -278,17 +267,17 @@ test("the status regler next to the editor is no conflict for the own save", asy
   await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText(mine);
 
-  await expect.poll(() => api.raw(SCENE)).toContain(mine);
+  await expect.poll(() => api.body(SCENE)).toContain(mine);
   const after = await split(api, SCENE);
   expect(after.body).toBe(`${before.body}\n${mine}\n`);
-  expect(after.properties).toContain("status: played");
+  expect(after.properties.status).toBe("played");
 });
 
 test("navigating away ends edit mode — coming back never re-opens it", async ({ page, api }) => {
   const before = await split(api, SCENE);
 
   await page.goto(SCENE_URL);
-  await openRawEditor(page);
+  await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await textarea.fill(`${before.body}\nEin Satz, der die Navigation nicht überlebt.\n`);
 
@@ -305,7 +294,7 @@ test("navigating away ends edit mode — coming back never re-opens it", async (
   await expect(textarea).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Bearbeiten" })).toBeVisible();
   await expect(page.locator("[data-callout='readaloud']")).toBeVisible();
-  expect(await api.raw(SCENE)).toBe(before.raw);
+  expect(await split(api, SCENE)).toEqual(before);
 });
 
 test("a failing background refetch leaves the open editor standing", async ({ page, api }) => {
@@ -313,7 +302,7 @@ test("a failing background refetch leaves the open editor standing", async ({ pa
   const draft = `${before.body}\nGeschrieben, während der Server weg war.\n`;
 
   await page.goto(SCENE_URL);
-  await openRawEditor(page);
+  await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toHaveValue(before.body);
   await textarea.fill(draft);
@@ -349,8 +338,8 @@ test("Abbrechen asks before it throws work away", async ({ page, api }) => {
   await page.goto(SCENE_URL);
 
   // Without changes there is nothing to lose: no dialog, straight out — the
-  // detour through „Roh" and back is no change either (lossless round trip).
-  await openRawEditor(page);
+  // detour through „Markdown" and back is no change either (lossless round trip).
+  await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toBeVisible();
   await page.getByRole("button", { name: "Abbrechen" }).click();
@@ -358,7 +347,7 @@ test("Abbrechen asks before it throws work away", async ({ page, api }) => {
   await expect(textarea).toHaveCount(0);
 
   // With changes it asks — and „Weiter bearbeiten" keeps the text.
-  await openRawEditor(page);
+  await openMarkdownEditor(page);
   await textarea.fill(`${before.body}\nEin Satz, der nie gespeichert wird.\n`);
   await page.getByRole("button", { name: "Abbrechen" }).click();
   const dialog = page.getByRole("dialog");
@@ -377,7 +366,7 @@ test("Abbrechen asks before it throws work away", async ({ page, api }) => {
   );
   await expect(page.getByRole("article")).not.toContainText("nie gespeichert wird");
   // Nothing reached the disk.
-  expect(await api.raw(SCENE)).toBe(before.raw);
+  expect(await split(api, SCENE)).toEqual(before);
 });
 
 test("the NPC reading view edits its body the same way", async ({ page, api }) => {
@@ -387,7 +376,7 @@ test("the NPC reading view edits its body the same way", async ({ page, api }) =
   await page.goto(`/beispiel/file/${NPC}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
 
-  await openRawEditor(page);
+  await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toHaveValue(before.body);
   await textarea.fill(before.body.replace("## Notizen", `${added}\n\n## Notizen`));
@@ -398,16 +387,16 @@ test("the NPC reading view edits its body the same way", async ({ page, api }) =
   await expect(page.getByRole("article")).toContainText("knapp, wetterrau, duzt jeden");
   await expect(page.getByRole("article")).toContainText("schuldet Jorna einen Gefallen");
 
-  await expect.poll(() => api.raw(NPC)).toContain(added);
+  await expect.poll(() => api.body(NPC)).toContain(added);
   const after = await split(api, NPC);
-  expect(after.properties).toBe(before.properties);
+  expect(after.properties).toEqual(before.properties);
 });
 
 test("location and chapter offer the editor, session and inbox do not", async ({ page, api }) => {
   // The kinds whose prose the DM maintains offer the body editor …
   for (const rel of ["locations/leuchtturm", "01-salzhafen/_chapter"]) {
     await page.goto(`/beispiel/file/${rel}`);
-    await openRawEditor(page);
+    await openMarkdownEditor(page);
     await expect(page.getByRole("textbox", { name: TEXTAREA })).toBeVisible();
     // Clean exit — no dialog, nothing written.
     await page.getByRole("button", { name: "Abbrechen" }).click();
@@ -433,12 +422,12 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   // And the rule belongs to the ENDPOINT, not to the hidden button: a
   // hand-made PUT on an append-only file is refused, nothing is written.
   for (const rel of ["sessions/2026-01-15", "inbox"]) {
-    const rawBefore = await api.raw(rel);
+    const before = await split(api, rel);
     const res = await page.request.put("/api/beispiel/file", {
       data: { path: rel, rev: Date.now(), body: "\nAlles neu.\n" },
     });
     expect(res.status()).toBe(400);
-    expect(await api.raw(rel)).toBe(rawBefore);
+    expect(await split(api, rel)).toEqual(before);
   }
 });
 
@@ -466,7 +455,7 @@ test("the glossary stays saveable while a session writes next to it", async ({ p
   await page.goto("/beispiel/file/glossary");
   await expect(page.getByRole("article")).toContainText("Leuchtturmwärter");
 
-  await openRawEditor(page);
+  await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toBeVisible();
 
@@ -484,13 +473,13 @@ test("the glossary stays saveable while a session writes next to it", async ({ p
   await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
   await expect(textarea).toHaveCount(0);
   await expect(page.getByRole("article")).toContainText("Gezeitentümpel");
-  await expect.poll(() => api.raw("glossary")).toContain(added);
+  await expect.poll(() => api.body("glossary")).toContain(added);
   // The structured endpoint agrees — the body was decomposed into rows.
   const glossary = await api.get<{ entries: Array<{ term: string }> }>("beispiel/glossary");
   expect(glossary.entries.map((e) => e.term)).toContain("tide pool");
 
   // A REAL second writer still conflicts — the token did not become toothless.
-  await openRawEditor(page);
+  await openMarkdownEditor(page);
   await expect(page.getByRole("textbox", { name: TEXTAREA })).toBeVisible();
   await api.writeBody("glossary", "\n- harbour master → Hafenmeisterin\n");
   await page.getByRole("textbox", { name: TEXTAREA }).fill("\n- ganz was anderes → nope\n");

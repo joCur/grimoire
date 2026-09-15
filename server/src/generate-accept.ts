@@ -7,7 +7,7 @@
 // exists for.
 
 import { parseMarkdown } from "@grimoire/shared";
-import { ApiError } from "./campaign-fs";
+import { ApiError } from "./api-error";
 import { getJob, markWrittenInTx, openPartPaths } from "./generate-jobs";
 import {
   applyNpcTarget,

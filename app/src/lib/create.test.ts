@@ -98,13 +98,13 @@ describe("createErrorMessage", () => {
         conflictError({ code: "slug_taken", kind: "npc", id: "holm", suggestion: "holm-2" }),
         t,
       ),
-    ).toBe('NPC „holm" existiert schon — Vorschlag: „holm-2"');
+    ).toBe('NPC „holm“ existiert schon — Vorschlag: „holm-2“');
     expect(
       createErrorMessage(
         conflictError({ code: "slug_reserved", kind: "chapter", id: "npcs", suggestion: "npcs-2" }),
         t,
       ),
-    ).toBe('„npcs" ist ein reservierter Name — Vorschlag: „npcs-2"');
+    ).toBe('„npcs“ ist ein reservierter Name — Vorschlag: „npcs-2“');
     expect(
       createErrorMessage(
         new ApiError(400, "x", {
@@ -119,12 +119,12 @@ describe("createErrorMessage", () => {
   });
 
   test("a body with no kind reads as a GRAMMATICAL German sentence", () => {
-    // The generic kind carries its article („Der Eintrag"), so the sentence
-    // has to be built around a nominative — „… gibt es schon" wanted an
+    // The generic kind carries its article („Der Eintrag“), so the sentence
+    // has to be built around a nominative — „… gibt es schon“ wanted an
     // accusative and read wrong (PR #83 review).
     expect(
       createErrorMessage(conflictError({ code: "slug_taken", id: "holm", suggestion: "holm-2" }), t),
-    ).toBe('Der Eintrag „holm" existiert schon — Vorschlag: „holm-2"');
+    ).toBe('Der Eintrag „holm“ existiert schon — Vorschlag: „holm-2“');
     expect(
       createErrorMessage(
         conflictError({ code: "slug_taken", id: "holm", suggestion: "holm-2" }),

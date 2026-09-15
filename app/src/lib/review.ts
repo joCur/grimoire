@@ -91,12 +91,12 @@ const LEADING_DATE = /^(\d{4}-\d{2}-\d{2})\s+/;
 
 /**
  * All top-level `- ` list lines of inbox (properties-stripped body), in
- * file order. Indented lines are skipped: the write API only accepts lines
+ * log order. Indented lines are skipped: the write API only accepts lines
  * starting with `- `. Nothing is filtered here — see harvestInboxEntries.
  */
 export function parseInboxEntries(body: string): InboxLine[] {
   const out: InboxLine[] = [];
-  // Exact split (not /\r?\n/): the raw line has to match the file byte for byte.
+  // Exact split (not /\r?\n/): the raw line has to match the log byte for byte.
   body.split("\n").forEach((raw, index) => {
     if (!raw.startsWith("- ")) return;
     let rest = raw.slice(2);

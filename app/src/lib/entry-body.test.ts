@@ -3,21 +3,20 @@
 // wrote NOTHING then, so the UI re-reads the file and the next attempt carries
 // the fresh rev, WITHOUT the editor losing the typed text.
 
-import type { FileResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";
-import { canEditFileBody, hasBodyChanges, shouldAdvanceBase, writeFileBody } from "./file-body";
+import { canEditEntryBody, hasBodyChanges, shouldAdvanceBase, writeEntryBody } from "./entry-body";
 
 const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm";
 
-function fileAt(rev: number, body: string): FileResponse {
+function fileAt(rev: number, body: string): EntryResponse {
   return {
     path: SCENE,
     kind: "scene",
     properties: { id: "arrival", title: "Ankunft", status: "ready" },
     body,
-    raw: `---\nid: arrival\nstatus: ready\n---\n\n${body}`,
     rev,
   };
 }
@@ -53,10 +52,10 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
-describe("writeFileBody", () => {
+describe("writeEntryBody", () => {
   test("PUTs path, rev and body to the file endpoint", async () => {
     const calls = mockFetch([{ status: 200, body: fileAt(222, "Neuer Text.\n") }]);
-    const result = await writeFileBody("beispiel", SCENE, "Neuer Text.\n", 111);
+    const result = await writeEntryBody("beispiel", SCENE, "Neuer Text.\n", 111);
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("PUT");
@@ -70,7 +69,7 @@ describe("writeFileBody", () => {
       { status: 409, body: { error: "file changed on disk", rev: 999 } },
       { status: 200, body: fileAt(999, "Fremder Text.\n") },
     ]);
-    const result = await writeFileBody("beispiel", SCENE, "Mein Text.\n", 111);
+    const result = await writeEntryBody("beispiel", SCENE, "Mein Text.\n", 111);
 
     expect(result.ok).toBe(false);
     // The re-read file rides along — the view seeds it into the cache, which
@@ -86,10 +85,10 @@ describe("writeFileBody", () => {
       { status: 409, body: { error: "file changed on disk", rev: 999 } },
       { status: 200, body: fileAt(999, "Fremder Text.\n") },
     ]);
-    const conflict = await writeFileBody("beispiel", SCENE, "Mein Text.\n", 111);
+    const conflict = await writeEntryBody("beispiel", SCENE, "Mein Text.\n", 111);
 
     const calls = mockFetch([{ status: 200, body: fileAt(1000, "Mein Text.\n") }]);
-    const retry = await writeFileBody(
+    const retry = await writeEntryBody(
       "beispiel",
       SCENE,
       "Mein Text.\n",
@@ -105,17 +104,17 @@ describe("writeFileBody", () => {
       { status: 409, body: { error: "file changed on disk", rev: 999 } },
       { status: 500, body: { error: "boom" } },
     ]);
-    expect(await writeFileBody("beispiel", SCENE, "Mein Text.\n", 111)).toEqual({ ok: false });
+    expect(await writeEntryBody("beispiel", SCENE, "Mein Text.\n", 111)).toEqual({ ok: false });
   });
 
   test("every other failure throws (the editor shows its quiet line)", async () => {
     mockFetch([{ status: 500, body: { error: "boom" } }]);
-    await expect(writeFileBody("beispiel", SCENE, "x", 111)).rejects.toBeInstanceOf(ApiError);
+    await expect(writeEntryBody("beispiel", SCENE, "x", 111)).rejects.toBeInstanceOf(ApiError);
   });
 
   test("an empty body is a legal write, not a no-op", async () => {
     const calls = mockFetch([{ status: 200, body: fileAt(222, "") }]);
-    await writeFileBody("beispiel", SCENE, "", 111);
+    await writeEntryBody("beispiel", SCENE, "", 111);
     expect(calls[0]?.body).toEqual({ path: SCENE, rev: 111, body: "" });
   });
 });
@@ -164,18 +163,18 @@ describe("shouldAdvanceBase", () => {
   });
 });
 
-describe("canEditFileBody", () => {
+describe("canEditEntryBody", () => {
   test("the maintained prose kinds are editable", () => {
     for (const kind of ["scene", "npc", "location", "chapter", "glossary", "unknown"] as const) {
-      expect(canEditFileBody(kind)).toBe(true);
+      expect(canEditEntryBody(kind)).toBe(true);
     }
   });
 
   test("append-only files and the campaign metadata file are not", () => {
     // Logs/inbox are append-only by design; `_campaign` has its own
     // „Bearbeiten" for name/description (issue #34).
-    expect(canEditFileBody("session")).toBe(false);
-    expect(canEditFileBody("inbox")).toBe(false);
-    expect(canEditFileBody("campaign")).toBe(false);
+    expect(canEditEntryBody("session")).toBe(false);
+    expect(canEditEntryBody("inbox")).toBe(false);
+    expect(canEditEntryBody("campaign")).toBe(false);
   });
 });

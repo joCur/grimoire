@@ -14,6 +14,7 @@
 // validates the reply mechanically exactly as in production.
 
 import {
+  ASCII_QUOTE_LINE,
   LOCATION_STUB_ID,
   LOCATION_STUB_NAME,
   NPC_DEFAULT_NAME,
@@ -130,14 +131,12 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   await expect(page.getByText(SCENE_PATH)).toBeVisible();
 
   // Stored: the draft plus both stubs, and a location stub without a status.
-  const scene = await api.raw(SCENE_PATH);
-  expect(scene).toContain("status: draft");
-  expect(scene).toContain(`title: ${SCENE_TITLE}`);
-  expect(scene).toContain("> [!loot]");
-  const npcFile = await api.raw(`npcs/${NPC_STUB_ID}`);
-  expect(npcFile).toContain("status: alive");
-  const locationFile = await api.raw(`locations/${LOCATION_STUB_ID}`);
-  expect(locationFile).not.toContain("status:");
+  const scene = await api.file(SCENE_PATH);
+  expect(scene.properties.status).toBe("draft");
+  expect(scene.properties.title).toBe(SCENE_TITLE);
+  expect(scene.body).toContain("> [!loot]");
+  expect((await api.properties(`npcs/${NPC_STUB_ID}`)).status).toBe("alive");
+  expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).status).toBeUndefined();
   // The review's own address is a STALE address for the scene now, not a
   // dead one: it names the same id, so it resolves and reports where the
   // scene actually is (issue #100, ADR #17).
@@ -152,6 +151,100 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
     page.getByRole("button", { name: "Status ändern, aktuell Entwurf" }),
   ).toBeVisible();
   await expect(page.getByText("1 Kapitel · 3 Szenen")).toBeVisible();
+});
+
+/**
+ * The stall the PO hit on 15.09.: „Entwürfe generieren" was
+ * clicked, the run finished on the server — and the page stayed on „Entwürfe
+ * werden generiert …" until it was reloaded.
+ *
+ * The cause was the view taking the START REQUEST's lifetime for the run's:
+ * with a fast model the job is `done` before its own 202 arrives, so the
+ * first poll that answers already carries the finished run while the POST is
+ * still in flight. That state has to BE the review.
+ *
+ * The 202 is therefore held here — the REAL response of the real server,
+ * fetched by the real route and handed on late (nothing is mocked, see
+ * README: the stub LLM stays the only attrappe). Holding it is the only way
+ * to pin the claim „the job decides, not the request": with a response that
+ * comes back in 30ms the test would pass either way.
+ */
+test("the review appears as soon as the job is done — even with the start request still in flight", async ({
+  page,
+}) => {
+  let released = false;
+  const start = page.route("**/api/*/generate", async (route) => {
+    const response = await route.fetch();
+    const body = await response.text();
+    await new Promise((resolve) => setTimeout(resolve, 8_000));
+    released = true;
+    await route.fulfill({ status: response.status(), body, contentType: "application/json" });
+  });
+  await start;
+
+  await page.goto("/beispiel/generate");
+  await page.getByLabel("Quelltext (EN)").fill(SOURCE);
+  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+  // The honest state right after the click: no job of this run is readable yet.
+  await expect(page.getByText("Entwürfe werden generiert", { exact: false })).toBeVisible();
+
+  // …and the first poll that answers carries the finished run, so THIS is the
+  // review — no reload, and long before the 202 of the same run.
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+    timeout: 6_000,
+  });
+  expect(released).toBe(false);
+  await expect(page.getByRole("heading", { level: 2, name: SCENE_TITLE })).toBeVisible();
+
+  // Let the held response go, so nothing is left hanging when the test ends —
+  // and the arrival of the 202 must not throw the review away again.
+  await expect(async () => expect(released).toBe(true)).toPass({ timeout: 10_000 });
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen");
+});
+
+/**
+ * The scene body carries German
+ * quotation marks closed with an ASCII `"`. When the model hand-wrote the
+ * JSON wrapper, that quote ended the `content` string and an otherwise
+ * correct scene cost the run a correction turn — and often a „Formprüfung
+ * nicht bestanden".
+ *
+ * The body is a string of a schema-forced object now, so the ESCAPING is the
+ * transport's: the run reaches the review in one call per part and the
+ * characters arrive byte for byte, through a real HTTP endpoint and the real
+ * provider.
+ */
+test("a scene with ASCII closing quotes is accepted without a correction turn", async ({
+  page,
+  api,
+}) => {
+  await page.goto("/beispiel/generate");
+  await page.getByLabel("Quelltext (EN)").fill(`${SOURCE}\n\n${TRIGGER.asciiQuotes}`);
+  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+    timeout: 30_000,
+  });
+  // One scene, no suggested entries — and, the point of the case, exactly TWO
+  // calls: the outline and the one scene. A correction turn would be a third.
+  await expect(
+    page.getByText("1 Szene · 0 vorgeschlagene Einträge · noch nichts geschrieben"),
+  ).toBeVisible();
+  await expect(page.getByText(/~[\d.]+ Tokens · 2 Aufrufe/)).toBeVisible();
+  // Nothing failed, so no error block and no „Erneut versuchen".
+  await expect(page.getByRole("button", { name: "Erneut versuchen" })).toHaveCount(0);
+
+  // The read-aloud carries the mixed quotation marks, rendered as written.
+  const card = page.locator("div").filter({ hasText: DRAFT_PATH }).last();
+  await expect(card.locator("[data-callout='readaloud']")).toContainText(ASCII_QUOTE_LINE);
+
+  await page
+    .getByRole("button", { name: /^Übernehmen \(1 Szene · 0 vorgeschlagene Einträge\)$/ })
+    .click();
+  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
+  // …and they are stored byte for byte: the server corrects no typography.
+  const stored = await api.body(`01-salzhafen/${SCENE_ID}`);
+  expect(stored).toContain(ASCII_QUOTE_LINE);
 });
 
 test("npc run: pinned id, review, apply", async ({ page, api }) => {
@@ -181,12 +274,11 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
 
   await expect(page.getByText("Geschrieben — NPC-Eintrag angelegt")).toBeVisible();
-  const npc = await api.raw("npcs/brakk");
-  expect(npc).toContain("id: brakk");
-  expect(npc).toContain("status: alive");
-  // Quoted quickstats stay STRINGS; the YAML the store emits quotes them in
-  // its own style (documented normalization — server/src/store/render.ts).
-  expect(npc).toContain("insight: '+1'");
+  const npc = await api.properties("npcs/brakk");
+  expect(npc.id).toBe("brakk");
+  expect(npc.status).toBe("alive");
+  // Quoted quickstats stay STRINGS — a „+1" is not read as the number 1.
+  expect(npc.quickstats).toMatchObject({ insight: "+1" });
 
   // "NPC ansehen" opens the file that now exists.
   await page.getByRole("button", { name: "NPC ansehen" }).click();
@@ -286,10 +378,10 @@ test("review state survives navigation and reload; parts are accepted one by one
   await expect(written.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: SCENE_PATH })).toBeVisible();
   // The edit really is what was written.
-  expect(await api.raw(SCENE_PATH)).toContain("Die Flut zieht sich im Regen");
+  expect(await api.body(SCENE_PATH)).toContain("Die Flut zieht sich im Regen");
   // Writing the scene creates EMPTY rows for the ids it references (#70), so
   // „exists" cannot answer whether a stub landed — its CONTENT can.
-  expect(await api.raw(`locations/${LOCATION_STUB_ID}`)).not.toContain(LOCATION_STUB_NAME);
+  expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).name).not.toBe(LOCATION_STUB_NAME);
   // The undecided location stub is still open — a bulk accept would skip it,
   // so it is decided explicitly here.
   await stubRow(`locations/${LOCATION_STUB_ID}`)
@@ -299,8 +391,8 @@ test("review state survives navigation and reload; parts are accepted one by one
   // (4) „Rest übernehmen" writes what is left — and the job is gone.
   await page.getByRole("button", { name: /^Rest übernehmen/ }).click();
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
-  expect(await api.raw(`npcs/${NPC_STUB_ID}`)).toContain(NPC_STUB_NAME);
-  expect(await api.raw(`locations/${LOCATION_STUB_ID}`)).toContain(LOCATION_STUB_NAME);
+  expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).toBe(NPC_STUB_NAME);
+  expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).name).toBe(LOCATION_STUB_NAME);
   expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
 });
 
@@ -325,7 +417,7 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
   // The accepted scene is an entry now; the suggested entries never landed —
   // their ids exist only as the empty rows the scene's references leave (#70).
   expect(await api.exists(SCENE_PATH)).toBe(true);
-  expect(await api.raw(`npcs/${NPC_STUB_ID}`)).not.toContain(NPC_STUB_NAME);
+  expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).not.toBe(NPC_STUB_NAME);
   expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
 });
 

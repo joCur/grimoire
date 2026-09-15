@@ -1,35 +1,50 @@
 // The canned LLM replies the stub endpoint serves (e2e/fixtures/stub-llm.ts).
 //
-// These are FIXTURES, meant to be read and adjusted: they are exactly what a
-// well-behaved model would answer for the scene run and the NPC run, and they
-// are written to pass the CURRENT mechanical validation of
-// server/src/generator.ts:
+// Every reply is an OBJECT, exactly as the schema the server forces through
+// the provider describes it:
 //
-//   scenes         no path at all (issue #100 — the server builds the
-//                  address from the run's chapter and the frontmatter `id`),
-//                  parseable properties, a kebab `id` used only once,
-//                  type planned|contingency, status draft, only known
+//   an entry call   `{ properties, body, warnings }` — the properties of
+//                     the entry, its whole text as one string, and the
+//                     notes the review shows the DM
+//   the outline call  the run's scene and entry list
+//
+// The fixtures write those objects DIRECTLY. A reply that is a plain STRING
+// is one a spec wrote to be unreadable on purpose, and it travels verbatim.
+//
+// These are FIXTURES, meant to be read and adjusted: they are what a
+// well-behaved model would answer, written to pass the CURRENT mechanical
+// validation of server/src/generator.ts:
+//
+//   scenes         no address at all — the server builds it from the run's
+//                  chapter and the `id` property — a kebab `id` used only
+//                  once, type planned|contingency, status draft, only known
 //                  callouts, npc/location references either existing in the
-//                  campaign or shipped as an entry in the same reply, and a
+//                  campaign or shipped as an entry in the same run, and a
 //                  `location` that is an id (it IS the scene's group)
-//   entries        one array for both kinds, `kind: "npc" | "location"` plus
-//                  the `id` in the entry's frontmatter. An npc entry carries
-//                  a status (alive unless the source says otherwise), a
-//                  location entry carries none (issue #27)
-//   npc run        one document, no path, kebab `id` in the properties, no
-//                  `chapter`, quickstats values QUOTED ("+2" — YAML would eat
-//                  the plus otherwise), `## Weiß` only [!secret],
+//   entries        `kind: "npc" | "location"` plus the entry's `id`. An npc
+//                  entry carries a status (alive unless the source says
+//                  otherwise), a location entry carries none
+//   npc run        one entry, kebab `id`, no `chapter`, quickstats values
+//                  as STRINGS ("+2" — a number would lose the plus on the
+//                  way into the store), `## Weiß` only [!secret],
 //                  `## Beziehungen` only npc ids that exist, `## Notizen`
 //                  empty
 //
 // When a validation rule changes, THIS file is the place to follow along —
-// the specs assert on the titles/ids defined here.
+// the specs assert on the titles and ids defined here.
 //
-// The prose uses `[[slug]]` ENTITY REFERENCES (issue #68), because that is
-// what the prompt asks a well-behaved model for: `[[fenn]]` (exists in the
-// campaign), `[[grella]]` (shipped as a stub in the same reply, so it stays
-// literal text until the stub is applied) and `[[smuggler-captured]]` (a
-// scene — the third referenceable kind).
+// The prose uses `[[slug]]` ENTITY REFERENCES, because that is what the
+// prompt asks a well-behaved model for: `[[fenn]]` (exists in the campaign),
+// `[[grella]]` (shipped as a stub in the same run, so it stays literal text
+// until the stub is applied) and `[[smuggler-captured]]` (a scene — the third
+// referenceable kind).
+
+/** One entry reply, the shape the forced schema describes. */
+export interface EntryReply {
+  properties: Record<string, unknown>;
+  body: string;
+  warnings: string[];
+}
 
 /** Trigger tokens a test puts into the source text to steer the stub. */
 export const TRIGGER = {
@@ -40,21 +55,21 @@ export const TRIGGER = {
   /**
    * The stub HOLDS the reply (see SLOW_REPLY_MS) instead of answering — the
    * only way a spec can look at a job while it is genuinely `running`, which
-   * is what the restart case of issue #23 needs.
+   * is what a restart mid-run needs.
    */
   slow: "E2E_SLOW",
   /**
    * The stub answers with a draft that IGNORES the campaign's naming
-   * convention — it writes `OLD_NAME` where the rule says otherwise (issue
-   * #53 AK3). A badly-behaved model, on demand: without it the post-run check
-   * can only be shown to find nothing.
+   * convention — it writes `OLD_NAME` where the rule says otherwise. A
+   * badly-behaved model, on demand: without it the post-run check can only
+   * be shown to find nothing.
    */
   oldName: "E2E_OLD_NAME",
   /**
-   * Issue #102: the run is decomposed into THREE scenes instead of one, so a
-   * spec can watch parts finish, fail and be retried one by one. The outline
-   * then proposes no new entries — the entry calls have their own coverage in
-   * the default (one-scene) run.
+   * The run is decomposed into THREE scenes instead of one, so a spec can
+   * watch parts finish, fail and be retried one by one. The outline then
+   * proposes no new entries — the entry calls have their own coverage in the
+   * default (one-scene) run.
    */
   threeScenes: "E2E_THREE_SCENES",
   /**
@@ -78,12 +93,18 @@ export const TRIGGER = {
    * Every scene part answers LATE (LATE_REPLY_MS) while the outline answers
    * at once — the only shape in which the browser sees a run that is
    * `running` with NOTHING to review yet, and therefore the only one that
-   * exercises the switch from the spinner to the review on a POLLED update
-   * (issue #102 review). Without it the parts are finished before the first
-   * `GET …/generate/job` answers, and the review is simply the first thing
-   * ever rendered.
+   * exercises the switch from the spinner to the review on a POLLED update.
+   * Without it the parts are finished before the first `GET …/generate/job`
+   * answers, and the review is simply the first thing ever rendered.
    */
   latePart: "E2E_LATE_PARTS",
+  /**
+   * The scene body carries German quotation marks closed with an ASCII `"`.
+   * A reply the model had to escape itself paid for that `"` with a
+   * correction turn; as the `body` of a forced object it is just text, so
+   * the run has to reach `done` with no correction at all.
+   */
+  asciiQuotes: "E2E_ASCII_QUOTES",
   // A part that FAILS answers at once even so — with `E2E_PART_FAIL` the run
   // therefore reaches the state in which its only reviewable part is a failed
   // one.
@@ -115,24 +136,24 @@ export const LATE_REPLY_MS = 5_000;
 /** Title of the generated scene draft — asserted in the specs. */
 export const SCENE_TITLE = "Nachtwache am Kai";
 /**
- * The draft's `id` — the ONE thing the model decides about addressing since
- * issue #100. The review addresses the draft as `<chapter>/<id>`; the address
- * it is WRITTEN to is `<chapter>/<location>/<id>`, because a scene's group is
- * its location (server/src/generator.ts, draftAddress).
+ * The draft's `id` — the ONE thing the model decides about addressing. The
+ * review addresses the draft as `<chapter>/<id>`; the address it is WRITTEN
+ * to is `<chapter>/<location>/<id>`, because a scene's group is its location
+ * (server/src/generator.ts, draftAddress).
  */
 export const SCENE_ID = "night-watch-quay";
-/** The npc stub the scene reply ships (does not exist in examples/beispiel). */
+/** The npc stub the scene run ships (does not exist in examples/beispiel). */
 export const NPC_STUB_ID = "grella";
 export const NPC_STUB_NAME = "Grella";
-/** The location stub the scene reply ships. */
+/** The location stub the scene run ships. */
 export const LOCATION_STUB_ID = "bucht";
 export const LOCATION_STUB_NAME = "Nordbucht";
 
 /**
- * How the stub reports back WHAT CONTEXT it was sent (issue #53 AK2). The
- * echo rides along as a `warning`, because that is the one field of the reply
- * the review shows verbatim — so a spec can assert on the prompt's knowledge
- * block through the BROWSER instead of reaching into the server.
+ * How the stub reports back WHAT CONTEXT it was sent. The echo rides along as
+ * a `warning`, because that is the one field of the reply the review shows
+ * verbatim — so a spec can assert on the prompt's knowledge block through the
+ * BROWSER instead of reaching into the server.
  *
  * Only emitted when the campaign actually has knowledge, so every other spec
  * sees exactly the warnings it saw before.
@@ -144,38 +165,72 @@ export function contextEchoWarnings(knowledge: string): string[] {
   return trimmed === "" ? [] : [`${CONTEXT_ECHO} ${trimmed.replace(/\n/g, " | ")}`];
 }
 
-function sceneDraft(chapter: string, oldName = false): string {
-  if (oldName) {
-    return `---
-id: ${SCENE_ID}
-title: Nachtwache in ${OLD_NAME}
-type: planned
-chapter: ${chapter}
-handouts: []
-tags: [stealth]
-status: draft
----
+/**
+ * The read-aloud the ASCII-quote case adds — opening `„`, closing with the
+ * ASCII `"`. A spec asserts it survives into the review character for
+ * character.
+ */
+export const ASCII_QUOTE_LINE =
+  '„Bleibt, wo ihr seid", ruft jemand aus dem Dunkeln — und die Stimme klingt';
 
-## Flow
+/** The scene draft of the default one-scene run, in its three variants. */
+function sceneDraft(chapter: string, oldName = false, asciiQuotes = false): EntryReply {
+  if (asciiQuotes) {
+    // Deliberately WITHOUT the entry references of the rich draft below: this
+    // case is about the quotation marks, and every reference is one more
+    // thing that could fail for another reason.
+    return {
+      properties: {
+        id: SCENE_ID,
+        title: SCENE_TITLE,
+        type: "planned",
+        chapter,
+        npcs: ["fenn"],
+        tags: ["stealth"],
+        status: "draft",
+      },
+      body: `## Flow
+
+Die Wache am Kran murrt: „Wer nachts hier steht, hat was zu verbergen".
+[[fenn]]s Leute räumen eine Ladung fort, bevor der Morgen kommt.
+
+> [!readaloud] ${ASCII_QUOTE_LINE}
+> jünger, als sie sein sollte.
+`,
+      warnings: [],
+    };
+  }
+  if (oldName) {
+    return {
+      properties: {
+        id: SCENE_ID,
+        title: `Nachtwache in ${OLD_NAME}`,
+        type: "planned",
+        chapter,
+        tags: ["stealth"],
+        status: "draft",
+      },
+      body: `## Flow
 
 Die Gruppe beobachtet den Kai von ${OLD_NAME}, während die Flut fällt.
 
 > [!readaloud] Über den Dächern von ${OLD_NAME} hängt der Nebel.
-`;
+`,
+      warnings: [],
+    };
   }
-  return `---
-id: ${SCENE_ID}
-title: ${SCENE_TITLE}
-type: planned
-chapter: ${chapter}
-location: ${LOCATION_STUB_ID}
-npcs: [fenn, ${NPC_STUB_ID}]
-handouts: []
-tags: [stealth, social]
-status: draft
----
-
-## Flow
+  return {
+    properties: {
+      id: SCENE_ID,
+      title: SCENE_TITLE,
+      type: "planned",
+      chapter,
+      location: LOCATION_STUB_ID,
+      npcs: ["fenn", NPC_STUB_ID],
+      tags: ["stealth", "social"],
+      status: "draft",
+    },
+    body: `## Flow
 
 Die Gruppe beobachtet den Kai, während die Flut fällt. Zwei Laternen
 wandern über die Mole — [[fenn]]s Leute räumen eine Ladung fort, bevor
@@ -203,28 +258,29 @@ die Ladung ins Dorf bringt.
 
 [[fenn]] ruft seine Leute zurück und stellt sich selbst auf die Mole —
 er will reden, nicht kämpfen.
-`;
+`,
+    warnings: [],
+  };
 }
 
-const npcStub = `---
-id: ${NPC_STUB_ID}
-name: ${NPC_STUB_NAME}
-status: alive
----
-
-## Will
+/** The npc stub a scene run's entry call answers with. */
+const npcStub: EntryReply = {
+  properties: { id: NPC_STUB_ID, name: NPC_STUB_NAME, status: "alive" },
+  body: `## Will
 
 Ihren Anteil an der Ladung, ohne dafür in den Kerker zu gehen — und
 zwar von [[fenn]] persönlich.
-`;
+`,
+  warnings: [],
+};
 
-const locationStub = `---
-id: ${LOCATION_STUB_ID}
-name: ${LOCATION_STUB_NAME}
----
-
-Die flache Bucht nördlich des Hafens — bei Ebbe zu Fuß erreichbar.
-`;
+/** The location stub a scene run's entry call answers with. */
+const locationStub: EntryReply = {
+  properties: { id: LOCATION_STUB_ID, name: LOCATION_STUB_NAME },
+  body: `Die flache Bucht nördlich des Hafens — bei Ebbe zu Fuß erreichbar.
+`,
+  warnings: [],
+};
 
 // --- npc run -----------------------------------------------------------------
 
@@ -234,19 +290,26 @@ export const NPC_DEFAULT_NAME = "Brakk Sturmhand";
 export const NPC_ROLE = "Fischer, kennt jede Sandbank der Nordbucht";
 export const NPC_VOICE = "langsam, sucht Worte, lacht über eigene Witze";
 
-function npcFile(id: string): string {
-  return `---
-id: ${id}
-name: ${NPC_DEFAULT_NAME}
-role: ${NPC_ROLE}
-status: alive
-statblock: "Roll20: Commoner"
-quickstats: { insight: "+1", passive-perception: "11" }
-voice: ${NPC_VOICE}
-appearance: geflickter Ölmantel, Hände voller Angelschnüre
----
-
-## Will
+/** The good NPC reply; `id` is the DM's pin when there was one. */
+export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): EntryReply {
+  return {
+    properties: {
+      id,
+      name: NPC_DEFAULT_NAME,
+      role: NPC_ROLE,
+      status: "alive",
+      statblock: "Roll20: Commoner",
+      // A key/value field travels as the `{ key, value }` LIST the schema
+      // asks for — strict mode cannot express a free mapping — and the
+      // values are strings, plus sign included.
+      quickstats: [
+        { key: "insight", value: "+1" },
+        { key: "passive-perception", value: "11" },
+      ],
+      voice: NPC_VOICE,
+      appearance: "geflickter Ölmantel, Hände voller Angelschnüre",
+    },
+    body: `## Will
 
 Dass die Boote wieder sicher rausfahren können — er hat seit drei
 Nächten keinen Fang verkauft und traut [[fenn]] nicht.
@@ -263,41 +326,32 @@ Nächten keinen Fang verkauft und traut [[fenn]] nicht.
 ## Notizen
 
 <!-- wird von der App im Review-Schritt befüllt -->
-`;
-}
-
-/** The good NPC reply; `id` is the DM's pin when there was one. */
-export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): unknown {
-  return {
-    npc: { content: npcFile(id) },
+`,
     warnings: contextEchoWarnings(knowledge),
   };
 }
 
 /**
- * An NPC reply that FAILS validation: unquoted quickstats (YAML eats the
- * plus), a missing status and an invented `chapter`.
+ * An NPC reply that FAILS validation: a quickstats value that is a NUMBER
+ * (the plus is gone), a missing status and an invented `chapter`.
  */
-export function invalidNpcReply(id: string = NPC_DEFAULT_ID): unknown {
+export function invalidNpcReply(id: string = NPC_DEFAULT_ID): EntryReply {
   return {
-    npc: {
-      content: `---
-id: ${id}
-name: ${NPC_DEFAULT_NAME}
-chapter: 01-salzhafen
-quickstats: { insight: +1 }
----
-
-## Will
+    properties: {
+      id,
+      name: NPC_DEFAULT_NAME,
+      chapter: "01-salzhafen",
+      quickstats: [{ key: "insight", value: 1 }],
+    },
+    body: `## Will
 
 Irgendwas.
 `,
-    },
     warnings: [],
   };
 }
 
-// --- augment run (issue #36) ---------------------------------------------
+// --- augment run -------------------------------------------------------------
 
 /**
  * The heading the „Mit KI ergänzen" prompt puts the existing entry under —
@@ -315,9 +369,9 @@ export const AUGMENT_THREAD_TEXT =
   "[[jorna]] wird einsilbig und schiebt die Frage auf den nächsten Morgen.";
 
 /**
- * What an augment run proposes for an EMPTY npc (the kind issue #70's
- * „Referenzieren legt an" leaves behind: id, name == id, `status: unknown`,
- * no body). Deliberately a MIX, because the default rule of AK2 is what the
+ * What an augment run proposes for an EMPTY npc (the kind „Referenzieren
+ * legt an" leaves behind: id, name == id, `status: unknown`, no body).
+ * Deliberately a MIX, because the default rule of the accept step is what the
  * spec is about:
  *
  *   role, voice   the entry has nothing there  -> `new`,     preselected
@@ -334,90 +388,116 @@ export const AUGMENT_NPC_WILL =
   "Nicht auffliegen — und trotzdem bezahlt werden. Beides geht nicht mehr lange gut.";
 export const AUGMENT_NPC_SECRET = "Meldet [[fenn]], wann die Hafenwache wechselt.";
 
-/** Everything above the properties' closing `---`, and the body below it. */
-function splitEntry(markdown: string): { properties: string[]; body: string } {
-  const lines = markdown.split("\n");
-  if (lines[0] !== "---") return { properties: [], body: markdown };
-  const end = lines.indexOf("---", 1);
-  if (end === -1) return { properties: [], body: markdown };
-  return { properties: lines.slice(1, end), body: lines.slice(end + 1).join("\n") };
+/**
+ * The existing entry as the PROMPT shows it — a rendered entry with a
+ * properties block on top. The augment run is the one case that has to read
+ * that: its reply echoes the entry it was given.
+ *
+ * The block's scalars, flow lists (`[fenn, grella]`) and flow mappings
+ * (`{ wis: "+2" }`) are the three shapes the campaign's entries use.
+ */
+function existingEntry(markdown: string): { properties: Record<string, unknown>; body: string } {
+  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(markdown);
+  if (match === null) return { properties: {}, body: markdown };
+  const properties: Record<string, unknown> = {};
+  for (const line of match[1]!.split("\n")) {
+    const pair = /^([A-Za-z_][A-Za-z0-9_-]*):[ \t]*(.*)$/.exec(line);
+    if (pair === null) continue;
+    const key = pair[1]!;
+    const raw = pair[2]!.trim();
+    if (raw.startsWith("[")) {
+      properties[key] = splitFlow(raw).map(unquote);
+    } else if (raw.startsWith("{")) {
+      properties[key] = splitFlow(raw).map((item) => {
+        const at = item.indexOf(":");
+        return { key: item.slice(0, at).trim(), value: unquote(item.slice(at + 1)) };
+      });
+    } else {
+      properties[key] = unquote(raw);
+    }
+  }
+  return { properties, body: match[2] ?? "" };
 }
 
-/** `key: value` of the properties block, or undefined. */
-function propertyValue(properties: string[], key: string): string | undefined {
-  const line = properties.find((l) => l.startsWith(`${key}:`));
-  return line?.slice(key.length + 1).trim();
+/** The comma-separated items inside a `[...]` / `{...}` flow collection. */
+function splitFlow(raw: string): string[] {
+  return raw
+    .slice(1, -1)
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item !== "");
+}
+
+function unquote(value: string): string {
+  const text = value.trim();
+  return /^".*"$/.test(text) || /^'.*'$/.test(text) ? text.slice(1, -1) : text;
 }
 
 /**
- * The augment reply: the existing entry, byte for byte, plus what the run
- * adds. Which addition depends on what the entry IS — that is the whole
- * point of the two E2E cases:
+ * The augment reply: the existing entry, unchanged, plus what the run adds.
+ * Which addition depends on what the entry IS — that is the whole point of
+ * the two E2E cases:
  *
- *   an EMPTY npc (one a reference created, issue #70)  ->  properties and
- *       the two body sections are filled,
- *   anything else (a prepared scene, a location)       ->  one NEW `## If:`
+ *   an EMPTY npc (one a reference created)  ->  properties and the two body
+ *       sections are filled,
+ *   anything else (a prepared scene, a location)  ->  one NEW `## If:`
  *       section at the end; every existing block comes back unchanged.
  */
-export function augmentReply(path: string, markdown: string, knowledge = ""): unknown {
-  const { properties, body } = splitEntry(markdown);
-  const id = propertyValue(properties, "id") ?? path.slice(path.lastIndexOf("/") + 1);
+export function augmentReply(path: string, markdown: string, knowledge = ""): EntryReply {
+  const { properties, body } = existingEntry(markdown);
+  const id = String(properties.id ?? path.slice(path.lastIndexOf("/") + 1));
   const isEmptyNpc =
-    path.startsWith("npcs/") &&
-    propertyValue(properties, "role") === undefined &&
-    body.trim() === "";
-  const content = isEmptyNpc
-    ? [
-        "---",
-        `id: ${id}`,
-        `name: ${AUGMENT_NPC_NAME}`,
-        `role: ${AUGMENT_NPC_ROLE}`,
-        `status: ${AUGMENT_NPC_STATUS}`,
-        `voice: ${AUGMENT_NPC_VOICE}`,
-        "---",
-        "",
-        "## Will",
-        "",
-        AUGMENT_NPC_WILL,
-        "",
-        "## Weiß",
-        "",
-        `> [!secret] ${AUGMENT_NPC_SECRET}`,
-        "",
-      ].join("\n")
-    : [
-        markdown.replace(/\n*$/, "\n"),
-        `## If: ${AUGMENT_THREAD_CONDITION}`,
-        "",
-        AUGMENT_THREAD_TEXT,
-        "",
-      ].join("\n");
-  return { entry: { content }, warnings: contextEchoWarnings(knowledge) };
+    path.startsWith("npcs/") && properties.role === undefined && body.trim() === "";
+  const warnings = contextEchoWarnings(knowledge);
+  if (isEmptyNpc) {
+    return {
+      properties: {
+        id,
+        name: AUGMENT_NPC_NAME,
+        role: AUGMENT_NPC_ROLE,
+        status: AUGMENT_NPC_STATUS,
+        voice: AUGMENT_NPC_VOICE,
+      },
+      body: `## Will
+
+${AUGMENT_NPC_WILL}
+
+## Weiß
+
+> [!secret] ${AUGMENT_NPC_SECRET}
+`,
+      warnings,
+    };
+  }
+  const kept = body.replace(/^\n+/, "").replace(/\n*$/, "\n");
+  return {
+    properties,
+    body: `${kept}\n## If: ${AUGMENT_THREAD_CONDITION}\n\n${AUGMENT_THREAD_TEXT}\n`,
+    warnings,
+  };
 }
 
 /**
  * An augment reply that FAILS validation: it CHANGES the id. The model does
- * not address anything any more (issue #100), so "answers for another entry"
- * is no longer a shape a reply can have — rewriting the reference key is,
- * and it is the rule the augment run cares about most.
+ * not address anything any more, so "answers for another entry" is no longer
+ * a shape a reply can have — rewriting the reference key is, and it is the
+ * rule the augment run cares about most.
  */
-export function invalidAugmentReply(_path: string): unknown {
-  return { entry: { content: "---\nid: not-the-entry\n---\n" }, warnings: [] };
+export function invalidAugmentReply(_path: string): EntryReply {
+  return { properties: { id: "not-the-entry" }, body: "", warnings: [] };
 }
 
-// --- the pipelined scene run (issue #102) ------------------------------------
+// --- the pipelined scene run -------------------------------------------------
 //
 // A scene run is the OUTLINE call plus one call per scene and per suggested
-// entry. The stub answers all of them (see stub-llm.ts, which tells them apart
-// by the prompt), and these are the canned answers:
+// entry. The stub answers all of them (see stub-llm.ts, which tells them
+// apart by the prompt), and these are the canned answers:
 //
 //   outline        the scene list with a verbatim `sourceExcerpt` per scene —
 //                  the server cuts the passage with it, so the fixture has to
-//                  quote the SOURCE TEXT and not paraphrase it.
-//   scene          one document, `{ scene: { content } }` — the same document
-//                  the batch reply used to carry.
-//   entry          `{ npc }` / `{ location }` — the npc/location prompt's own
-//                  schema, one file per call.
+//                  quote the SOURCE TEXT and not paraphrase it
+//   scene          the scene as an entry reply
+//   entry          the npc/location entry, likewise
 //
 // The default run has ONE scene and the two entries the specs already know.
 // TRIGGER.threeScenes turns it into three scenes and no entries, which is what
@@ -463,6 +543,12 @@ export function outlineReply(input: {
    * trigger stands for is about SPELLING, nothing else).
    */
   oldName?: boolean;
+  /**
+   * TRIGGER.asciiQuotes: same reasoning as `oldName` — the draft has no entry
+   * references, so the outline proposes none and the run is exactly one part.
+   * The case is about the quotation marks.
+   */
+  asciiQuotes?: boolean;
 }): unknown {
   const sourceExcerpt = wholeSourceExcerpt(input.source);
   // The outline is the step that reads the WHOLE source text, so the run's
@@ -484,7 +570,7 @@ export function outlineReply(input: {
       warnings,
     };
   }
-  if (input.oldName === true) {
+  if (input.oldName === true || input.asciiQuotes === true) {
     return {
       scenes: [{ id: SCENE_ID, title: SCENE_TITLE, type: "planned", sourceExcerpt, refs: [] }],
       entries: [],
@@ -538,35 +624,26 @@ export function invalidRunOutline(source: string): unknown {
 }
 
 /** One finished scene document, as the per-scene call answers it. */
-export function scenePartReply(chapter: string, sceneId: string, oldName = false): unknown {
-  if (sceneId === SCENE_ID) {
-    return { scene: { content: sceneDraft(chapter, oldName) }, warnings: [] };
-  }
+export function scenePartReply(
+  chapter: string,
+  sceneId: string,
+  oldName = false,
+  asciiQuotes = false,
+): EntryReply {
+  if (sceneId === SCENE_ID) return sceneDraft(chapter, oldName, asciiQuotes);
   const scene = THREE_SCENES.find((s) => s.id === sceneId);
-  return {
-    scene: { content: plainSceneDraft(chapter, sceneId, scene?.title ?? sceneId) },
-    warnings: [],
-  };
+  return plainSceneDraft(chapter, sceneId, scene?.title ?? sceneId);
 }
 
 /** A scene document that FAILS validation — `status: ready` is drafts only. */
-export function invalidScenePartReply(chapter: string, sceneId: string): unknown {
+export function invalidScenePartReply(chapter: string, sceneId: string): EntryReply {
   const title = THREE_SCENES.find((s) => s.id === sceneId)?.title ?? SCENE_TITLE;
   return {
-    scene: {
-      content: `---
-id: ${sceneId}
-title: ${title}
-type: planned
-chapter: ${chapter}
-status: ready
----
-
-## Flow
+    properties: { id: sceneId, title, type: "planned", chapter, status: "ready" },
+    body: `## Flow
 
 > [!combat] Zwei Wachen, Initiative wie üblich.
 `,
-    },
     warnings: [],
   };
 }
@@ -576,30 +653,29 @@ status: ready
  * no location: the pipelined specs are about the PARTS, and every reference a
  * fixture adds is one more thing that can fail for another reason.
  */
-function plainSceneDraft(chapter: string, id: string, title: string): string {
-  return `---
-id: ${id}
-title: ${title}
-type: planned
-chapter: ${chapter}
-npcs: [fenn]
-handouts: []
-tags: [stealth]
-status: draft
----
-
-## Flow
+function plainSceneDraft(chapter: string, id: string, title: string): EntryReply {
+  return {
+    properties: {
+      id,
+      title,
+      type: "planned",
+      chapter,
+      npcs: ["fenn"],
+      tags: ["stealth"],
+      status: "draft",
+    },
+    body: `## Flow
 
 [[fenn]]s Leute räumen eine Ladung fort, bevor der Morgen kommt.
 
 > [!readaloud] Über der Mole hängt der Nebel, und irgendwo unter euch
 > knirscht ein Kiel gegen Stein.
-`;
+`,
+    warnings: [],
+  };
 }
 
-/** One suggested entry, in the npc/location prompt's own reply schema. */
-export function entryPartReply(kind: "npc" | "location"): unknown {
-  return kind === "location"
-    ? { location: { content: locationStub }, warnings: [] }
-    : { npc: { content: npcStub }, warnings: [] };
+/** One suggested entry — the entry itself. */
+export function entryPartReply(kind: "npc" | "location"): EntryReply {
+  return kind === "location" ? locationStub : npcStub;
 }

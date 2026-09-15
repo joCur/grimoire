@@ -1,13 +1,16 @@
 // Generator pipeline (GitHub issue #6, generator/README.md):
 //
 //   1. collect campaign context (npc/location ids+names, chapter, glossary)
-//   2. prompt = system-prompt.md + example-output.md + context + source text
+//   2. prompt = system-prompt.md + example-output.json + context + source text
 //   3. call the LLM provider
-//   4. extract the JSON object from the reply (issue #20 — prose around the
-//      object is tolerated, the validation itself is not loosened) and
-//      validate it MECHANICALLY; errors go back to the model as a
-//      correction turn (LLM_CORRECTION_TURNS, default 1, max 2 — issue
-//      #19), never to the user; exhausted retries -> 422.
+//   4. read the reply and validate it MECHANICALLY. EVERY call answers a
+//      JSON object whose shape the provider forces: the outline
+//      its own small object (shared/outline-schema), an entry call the
+//      object that mirrors the stored row — `properties` per kind, `body`,
+//      `warnings` (shared/entry-schema, read by ./entry-reply). Errors
+//      go back to the model as a correction turn (LLM_CORRECTION_TURNS,
+//      default 1, max 2), never to the user; exhausted retries
+//      -> 422.
 //      A TRUNCATED reply (the provider saw finish_reason/stop_reason) skips
 //      the correction turns entirely: re-asking for the same oversized JSON
 //      cannot succeed and a correction turn resends the whole prompt plus
@@ -24,7 +27,7 @@
 // Since issue #21 there is a SECOND run kind next to scenes: one NPC file
 // from source material (runGenerateNpc, POST /generate/npc). It shares
 // everything that is mechanics — provider factory, correction turns,
-// truncation fail-fast, usage accounting, JSON extraction (runPipeline) and
+// truncation fail-fast, usage accounting, the reply split (runPipeline) and
 // the apply endpoint — and differs only in its prompt assets
 // (generator/npc-*.md), its context (no chapter) and its validation rules
 // (validateNpcReply). Still ONE job per campaign, whatever its kind.
@@ -43,15 +46,17 @@ import {
   kindFromPath,
   parseMarkdown,
   type GenerateNpcResult,
-  type GenerateResult,
   type GenerateUsage,
   type GeneratedSceneDraft,
   type GeneratedStub,
   type NamingHint,
   type ParsedFile,
 } from "@grimoire/shared";
+import { entryReplySchema } from "@grimoire/shared/entry-schema";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
-import { ApiError, assertSafeAddress } from "./campaign-fs";
+import { ApiError } from "./api-error";
+import { assertSafeAddress } from "./addressing";
+import { composeEntry, parseEntryReply, type EntryReply } from "./entry-reply";
 import { checkDraftsNaming, type NamingRule } from "./naming-check";
 // The generator reads its context and writes its drafts through the store
 // (issue #57) — the campaign file tree is not a data source any more.
@@ -157,20 +162,20 @@ export interface PromptAssets {
  * their own few-shot target file, cached per kind after the first read.
  */
 export const ASSET_FILES = {
-  scene: { systemPrompt: "system-prompt.md", fewShotTarget: "example-output.md" },
-  npc: { systemPrompt: "npc-system-prompt.md", fewShotTarget: "npc-example-output.md" },
+  scene: { systemPrompt: "system-prompt.md", fewShotTarget: "example-output.json" },
+  npc: { systemPrompt: "npc-system-prompt.md", fewShotTarget: "npc-example-output.json" },
   // Issue #36: locations had no prompt of their own — the augment run is the
   // first caller, and the pair is written so a future „Ort generieren" can
   // use it unchanged.
   location: {
     systemPrompt: "location-system-prompt.md",
-    fewShotTarget: "location-example-output.md",
+    fewShotTarget: "location-example-output.json",
   },
   // The OUTLINE step of a pipelined scene run (issue #102): its own prompt
   // and its own few-shot (a worked example outline, not a target file).
   outline: {
     systemPrompt: "outline-system-prompt.md",
-    fewShotTarget: "outline-example-output.md",
+    fewShotTarget: "outline-example-output.json",
   },
   // The output-schema section that turns the scene prompt into „genau eine
   // Szene aus der Gliederung" mode (issue #102). No few-shot of its own — the
@@ -362,62 +367,13 @@ export async function collectContext(campaign: string): Promise<CampaignContext>
   };
 }
 
-// --- JSON extraction (generator/README.md step 4, issue #20) -----------------
-
-/**
- * ```json fence (labelled wins) or a bare ``` fence. Non-greedy: the FIRST
- * fence of the reply. The bare variant requires the newline right after the
- * backticks, so it can never swallow a "json" label as content.
- */
-const LABELLED_FENCE = /```json\b[ \t]*\r?\n?([\s\S]*?)```/i;
-const BARE_FENCE = /```[ \t]*\r?\n([\s\S]*?)```/;
-
-function fenceContent(raw: string): string | null {
-  const labelled = LABELLED_FENCE.exec(raw);
-  if (labelled !== null) return labelled[1]!;
-  const bare = BARE_FENCE.exec(raw);
-  return bare === null ? null : bare[1]!;
-}
-
-/** Substring from the first `{` to the last `}` — prose on both sides falls off. */
-function braceSpan(raw: string): string | null {
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start === -1 || end <= start) return null;
-  return raw.slice(start, end + 1);
-}
-
-/**
- * Get the JSON value out of a raw model reply (issue #20). Models like to
- * put an explainer sentence in front of the object ("I need to be careful
- * about characters inside string values…"); that must not cost two
- * correction turns for an otherwise usable reply.
- *
- * Three stages, first one that PARSES wins:
- *   (a) the whole text — what a well-behaved model returns,
- *   (b) the content of a ```json (or bare ```) fence,
- *   (c) the substring from the first `{` to the last `}` (braces inside
- *       string values cannot confuse this — only the outermost pair counts).
- *
- * The extraction loosens ONLY the parsing: whatever comes out goes through
- * the unchanged full validation below. Returns null when no stage parses —
- * then, and only then, the reply "is not valid JSON" and the correction turn
- * runs as before. Wrapped in an object because a parsed value may itself be
- * `null` (the validation rejects that, the extractor must not swallow it).
- */
-export function extractJsonReply(raw: string): { value: unknown } | null {
-  for (const candidate of [raw, fenceContent(raw), braceSpan(raw)]) {
-    if (candidate === null) continue;
-    const trimmed = candidate.trim();
-    if (trimmed === "") continue;
-    try {
-      return { value: JSON.parse(trimmed) };
-    } catch {
-      // next stage
-    }
-  }
-  return null;
-}
+// --- reading a reply --------------------------------------------------------
+//
+// There is nothing left to extract here. Every reply is a JSON object the
+// provider was forced into, and the one tolerant reader both the
+// outline and the entries share — fence, brace span, ONE `jsonrepair`
+// attempt — lives in ./entry-reply (`parseJsonReply`), next to the
+// entry shape it is mostly used for.
 
 // --- mechanical validation (generator/README.md step 4) ----------------------
 
@@ -433,13 +389,8 @@ export function extractJsonReply(raw: string): { value: unknown } | null {
  */
 export interface RawEntry {
   kind?: string;
-  content: string;
-}
-
-interface RawReply {
-  scenes: RawEntry[];
-  entries: RawEntry[];
-  warnings: string[];
+  /** The reply object of this entry (./entry-reply). */
+  reply: EntryReply;
 }
 
 const KNOWN_CALLOUTS = new Set<string>(CALLOUT_KINDS);
@@ -461,29 +412,10 @@ export function unknownCallouts(body: string): string[] {
  */
 const ENTITY_ID_PATTERN = ENTITY_SLUG;
 
-/**
- * The stem a still-UNADDRESSED reply document is parsed under.
- *
- * The shared parser fills a missing `id` from the address's last segment
- * (parse.ts, the degrade rule for a properties-less file), so a reply that
- * names no `id` silently inherited one from whatever label it happened to be
- * parsed under — for an NPC reply that label was `"npc"`, which is a kebab
- * slug and passed the id pattern. The run then wrote `npcs/npc`.
- *
- * Parsing under a stem that can NEVER be an id makes the omission visible,
- * and a missing `id` is exactly the kind of error a correction turn fixes
- * (issue #100 review): the model is told „id fehlt" instead of having one
- * invented for it.
- */
-const NO_ID_STEM = "\u0000no-id";
-
-/**
- * The `id` the document DECLARED, or undefined when it declared none — the
- * parser's fallback (NO_ID_STEM) read back as what it means.
- */
-function declaredId(parsed: ParsedFile): unknown {
-  const id = parsed.properties.id;
-  return id === NO_ID_STEM ? undefined : id;
+/** The `id` a reply DECLARED, or undefined — the schema's `null` read as what it means. */
+function declaredId(properties: Record<string, unknown>): string | undefined {
+  const id = properties.id;
+  return typeof id === "string" && id !== "" ? id : undefined;
 }
 
 /** Last segment of a campaign-relative address — the entity's id. */
@@ -522,49 +454,6 @@ export function parseWithProperties(
   }
   if (parsed.body === content) return { parsed, error: "properties is not parseable YAML" };
   return { parsed };
-}
-
-/** Shape check for one scenes/stubs entry of the raw reply. */
-export function isRawEntry(v: unknown): v is RawEntry {
-  return v !== null && typeof v === "object" && typeof (v as RawEntry).content === "string";
-}
-
-function parseRawReply(raw: string, errors: string[]): RawReply | null {
-  const extracted = extractJsonReply(raw);
-  if (extracted === null) {
-    errors.push("reply is not valid JSON");
-    return null;
-  }
-  const parsed = extracted.value;
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    errors.push("reply must be a JSON object");
-    return null;
-  }
-  const obj = parsed as Record<string, unknown>;
-  const entryList = (key: "scenes" | "entries"): RawEntry[] => {
-    const v = obj[key] ?? [];
-    if (!Array.isArray(v)) {
-      errors.push(`"${key}" must be an array`);
-      return [];
-    }
-    const good: RawEntry[] = [];
-    v.forEach((item, i) => {
-      if (isRawEntry(item)) good.push(item);
-      else errors.push(`"${key}[${i}]" must be an object with a string "content"`);
-    });
-    return good;
-  };
-  const scenes = entryList("scenes");
-  const entries = entryList("entries");
-  if (errors.length > 0) return null;
-  if (scenes.length === 0) {
-    errors.push('"scenes" must contain at least one scene');
-    return null;
-  }
-  const warnings = Array.isArray(obj.warnings)
-    ? obj.warnings.filter((w): w is string => typeof w === "string")
-    : [];
-  return { scenes, entries, warnings };
 }
 
 /**
@@ -619,42 +508,37 @@ export function validateEntry(entry: RawEntry, index: number, errors: string[]):
     return null;
   }
   const preview = `entries[${index}]`;
-  const { parsed, error } = parseWithProperties(entry.content, NO_ID_STEM);
-  if (error !== undefined) {
-    errors.push(`${kind} entry ${preview}: ${error}`);
-    return null;
-  }
-  const fmId = declaredId(parsed);
+  const fm = entry.reply.properties;
+  const fmId = declaredId(fm);
   if (fmId === undefined) {
     errors.push(`${kind} entry ${preview}: "id" fehlt — jeder Eintrag nennt seine kebab-case id`);
     return null;
   }
-  if (typeof fmId !== "string" || !ENTITY_ID_PATTERN.test(fmId)) {
+  if (!ENTITY_ID_PATTERN.test(fmId)) {
     errors.push(
       `${kind} entry ${preview}: "id" must be a kebab-case id (a-z, 0-9, single dashes)`,
     );
     return null;
   }
   const id = fmId;
-  const reparsed = reparseAtAddress(entry.content, id, kind === "npc" ? npcPath : locationPath);
+  // The entry the server would store, composed from the reply object
+  // (./entry-reply) — the properties block is the renderer's, not the
+  // model's.
+  const markdown = composeEntry(entry.reply);
+  const reparsed = reparseAtAddress(markdown, id, kind === "npc" ? npcPath : locationPath);
   const label = `${kind} entry "${id}"`;
   // A status error does not stop the mapping: the stub still resolves the
   // scene's reference, so the correction turn gets the ONE real error
   // instead of a cascade of "npc does not exist".
-  for (const msg of stubStatusErrors(kind, parsed.properties)) errors.push(`${label}: ${msg}`);
+  for (const msg of stubStatusErrors(kind, fm)) errors.push(`${label}: ${msg}`);
   return {
     kind,
     id,
     name: typeof reparsed.properties.name === "string" ? reparsed.properties.name : id,
-    markdown: entry.content,
+    markdown,
   };
 }
 
-/**
- * Mechanical validation of one raw model reply against the campaign context.
- * Returns the mapped GenerateResult, or the list of errors for the
- * correction turn.
- */
 /**
  * Which ids a scene document may REFERENCE (issue #102). Before this ticket
  * the answer was "the campaign plus the stubs of the same reply"; with the
@@ -667,19 +551,19 @@ export interface AllowedRefs {
 }
 
 /**
- * Mechanical validation of ONE scene document (issue #102). Factored out of
- * `validateReply` rather than duplicated: the batch reply and the pipeline's
- * single-scene reply have to be judged by exactly the same rules, and the one
+ * Mechanical validation of ONE scene entry, the rules of the
+ * data contract in one place: the pipeline's per-scene call and the apply
+ * re-validation have to judge a scene by exactly the same rules, and the one
  * way to guarantee that is one function.
  *
  * `label` is how the document is named in an error message; `seenIds` is the
- * duplicate guard of the surrounding reply (a batch has several documents, a
- * single-scene reply shares the set with the outline's ids).
+ * duplicate guard of the surrounding run (the single-scene reply shares the
+ * set with the outline's ids).
  *
  * Returns the draft, or null with the errors pushed onto `errors`.
  */
-export function validateSceneDocument(input: {
-  content: string;
+export function validateSceneEntry(input: {
+  reply: EntryReply;
   label: string;
   chapter: string;
   allowed: AllowedRefs;
@@ -688,23 +572,19 @@ export function validateSceneDocument(input: {
   /** The id the OUTLINE assigned — a pipeline part may not rename itself. */
   expectedId?: string;
 }): GeneratedSceneDraft | null {
-  const { content, chapter, allowed, seenIds, errors } = input;
+  const { reply, chapter, allowed, seenIds, errors } = input;
   // The scene's ADDRESS is the server's: `<chapter>/<id>`, with the chapter
   // taken from the run's CONTEXT and never from the model (issue #100). The
   // id is the one thing the model decides here, so it is the one thing
   // validated as an address would be.
-  const { parsed, error } = parseWithProperties(content, NO_ID_STEM);
-  if (error !== undefined) {
-    errors.push(`${input.label}: ${error}`);
-    return null;
-  }
-  const fm = parsed.properties;
-  const fmId = declaredId(parsed);
+  const fm = reply.properties;
+  const content = composeEntry(reply);
+  const fmId = declaredId(fm);
   if (fmId === undefined) {
     errors.push(`${input.label}: "id" fehlt — jede Szene nennt ihre kebab-case id`);
     return null;
   }
-  if (typeof fmId !== "string" || !ENTITY_ID_PATTERN.test(fmId)) {
+  if (!ENTITY_ID_PATTERN.test(fmId)) {
     errors.push(`${input.label}: "id" must be a kebab-case id (a-z, 0-9, single dashes)`);
     return null;
   }
@@ -729,6 +609,18 @@ export function validateSceneDocument(input: {
   if (fm.status !== "draft") {
     errors.push(`${label}: "status" must be "draft"`);
   }
+  // The `chapter` key and the scene's ADDRESS have to say the same thing. The
+  // address is the run's (`<chapter>/<id>`, never the model's), so a reply
+  // that names a different chapter would produce an entry sitting in one
+  // chapter while claiming another — the pool groups by the key, the entry
+  // tree by the address, and the two would disagree forever after. Cheaper as
+  // a correction turn than as a scene the DM has to find and fix by hand.
+  if (typeof fm.chapter === "string" && fm.chapter !== "" && fm.chapter !== chapter) {
+    errors.push(
+      `${label}: "chapter" muss "${chapter}" sein — das Kapitel kommt aus dem Kontext ` +
+        "dieses Durchlaufs, nicht aus der Antwort",
+    );
+  }
 
   if (fm.npcs !== undefined && fm.npcs !== null) {
     if (!Array.isArray(fm.npcs) || fm.npcs.some((n) => typeof n !== "string")) {
@@ -752,7 +644,7 @@ export function validateSceneDocument(input: {
     }
   }
 
-  for (const kind of unknownCallouts(parsed.body)) {
+  for (const kind of unknownCallouts(reply.body)) {
     errors.push(
       `${label}: unknown callout "[!${kind}]" — allowed: ${CALLOUT_KINDS.map((k) => `[!${k}]`).join(", ")}`,
     );
@@ -765,88 +657,7 @@ export function validateSceneDocument(input: {
   };
 }
 
-/**
- * Validate the suggested ENTRIES of a reply: each one mapped, duplicates
- * rejected, and the id sets a scene may reference collected from them.
- * Shared by the batch reply and by nothing else yet — the pipeline validates
- * one entry at a time — but it is where the "an entry resolves a scene's
- * reference" rule lives, so it stays one function.
- */
-function validateEntries(
-  entries: readonly RawEntry[],
-  errors: string[],
-): { stubs: GeneratedStub[]; npcIds: Set<string>; locationIds: Set<string> } {
-  const stubs: GeneratedStub[] = [];
-  const seenEntries = new Set<string>();
-  entries.forEach((entry, index) => {
-    const stub = validateEntry(entry, index, errors);
-    if (stub === null) return;
-    const key = `${stub.kind}/${stub.id}`;
-    if (seenEntries.has(key)) {
-      errors.push(`${stub.kind} entry "${stub.id}": duplicate id`);
-      return;
-    }
-    seenEntries.add(key);
-    stubs.push(stub);
-  });
-  return {
-    stubs,
-    npcIds: new Set(stubs.filter((s) => s.kind === "npc").map((s) => s.id)),
-    locationIds: new Set(stubs.filter((s) => s.kind === "location").map((s) => s.id)),
-  };
-}
-
-/**
- * Mechanical validation of one raw model reply against the campaign context.
- * Returns the mapped GenerateResult, or the list of errors for the
- * correction turn.
- *
- * This is the BATCH shape — one reply carrying every scene and every
- * suggested entry. Since issue #102 a scene run does not use it any more
- * (the pipeline validates one document per call); it stays because it is the
- * shape the single-call runs share their rules with, and because the rules
- * themselves now live in `validateSceneDocument` / `validateEntries`.
- */
-export function validateReply(
-  raw: string,
-  ctx: SceneContext,
-): { ok: true; result: GenerateResult } | { ok: false; errors: string[] } {
-  const errors: string[] = [];
-  const reply = parseRawReply(raw, errors);
-  if (reply === null) return { ok: false, errors };
-
-  // Suggested entries first — scene references may point at them.
-  const entries = validateEntries(reply.entries, errors);
-  const allowed: AllowedRefs = {
-    npcIds: new Set([...ctx.npcIds, ...entries.npcIds]),
-    locationIds: new Set([...ctx.locationIds, ...entries.locationIds]),
-  };
-
-  const scenes: GeneratedSceneDraft[] = [];
-  const seenIds = new Set<string>();
-  reply.scenes.forEach((entry, index) => {
-    const draft = validateSceneDocument({
-      content: entry.content,
-      label: `scene scenes[${index}]`,
-      chapter: ctx.chapter,
-      allowed,
-      seenIds,
-      errors,
-    });
-    if (draft !== null) scenes.push(draft);
-  });
-
-  if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, result: { scenes, stubs: entries.stubs, warnings: reply.warnings } };
-}
-
 // --- mechanical validation of an NPC reply (issue #21) -----------------------
-
-/** The NPC reply schema the npc system prompt demands: one file, warnings. */
-interface RawNpcReply {
-  npc: RawEntry;
-  warnings: string[];
-}
 
 /** The only legal target of an NPC run — the id IS the file name. */
 const NPC_PATH_PATTERN = /^npcs\/[a-z0-9][a-z0-9-]*$/;
@@ -948,6 +759,20 @@ function notesErrors(body: string): string[] {
  * Quickstats values must be quoted STRINGS: YAML reads a bare `+2` as the
  * number 2 and the plus — the whole point of a social modifier — is gone
  * before anyone sees the file.
+ *
+ * A REPLY can no longer break the rule: `quickstats` travels
+ * as a `{ key, value }` LIST whose values the schema types as strings, and
+ * the server folds it into the mapping itself (entry-reply.ts
+ * `pairsValue`). All three call sites — the npc run, a scene run's npc entry,
+ * the augment run — pass exactly such a folded mapping, so the check fires on
+ * none of them any more.
+ *
+ * It stays as a BACKSTOP, and the augment path is why: there the mapping does
+ * not end up in an entry the server just composed but in a properties PATCH the
+ * DM accepts, next to the entry's own historical values (`sameValue` against
+ * a campaign that carries bare numbers). A future way in that skips
+ * `pairsValue` would otherwise write a `+2` that YAML eats — and this
+ * function is the only place that says so.
  */
 export function quickstatsErrors(fm: Record<string, unknown>): string[] {
   const quickstats = fm.quickstats;
@@ -966,34 +791,15 @@ export function quickstatsErrors(fm: Record<string, unknown>): string[] {
       ];
 }
 
-function parseRawNpcReply(raw: string, errors: string[]): RawNpcReply | null {
-  const extracted = extractJsonReply(raw);
-  if (extracted === null) {
-    errors.push("reply is not valid JSON");
-    return null;
-  }
-  const parsed = extracted.value;
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    errors.push("reply must be a JSON object");
-    return null;
-  }
-  const obj = parsed as Record<string, unknown>;
-  if (!isRawEntry(obj.npc)) {
-    // No `path`: the model writes a DOCUMENT and the server addresses it
-    // (issue #100), so `content` is the only member left to ask for.
-    errors.push('"npc" must be an object with a string "content"');
-    return null;
-  }
-  const warnings = Array.isArray(obj.warnings)
-    ? obj.warnings.filter((w): w is string => typeof w === "string")
-    : [];
-  return { npc: obj.npc, warnings };
-}
-
 /**
- * Mechanical validation of one raw NPC reply against the campaign context —
- * the NPC counterpart of validateReply. Same contract: the mapped result, or
- * the error list for the correction turn.
+ * Mechanical validation of one raw NPC reply against the campaign context.
+ * Same contract as every other validator: the mapped result, or the error
+ * list for the correction turn.
+ *
+ * The reply is the schema-forced OBJECT (./entry-reply):
+ * `properties` per kind, `body`, `warnings`. The rules below are the format
+ * contract's and unchanged by that — they read the properties mapping and the
+ * body, which is what they always did.
  *
  * The rules, all from the format contract (README "Entität: NPC"):
  * parseable properties whose `id` is a kebab-case id — the ADDRESS is the
@@ -1019,25 +825,20 @@ export function validateNpcReply(
   ctx: CampaignContext,
   pinnedId?: string,
 ): { ok: true; result: GenerateNpcResult } | { ok: false; errors: string[] } {
+  const read = parseEntryReply(raw, "npc");
+  if (!read.ok) return { ok: false, errors: read.errors.map((e) => `npc: ${e}`) };
+  const { reply, markdown } = read;
   const errors: string[] = [];
-  const reply = parseRawNpcReply(raw, errors);
-  if (reply === null) return { ok: false, errors };
 
-  const entry = reply.npc;
-  // Without usable properties nothing else can be judged (the id is in them).
-  const { parsed, error } = parseWithProperties(entry.content, NO_ID_STEM);
-  if (error !== undefined) {
-    return { ok: false, errors: [`npc: ${error}`] };
-  }
-  const fm = parsed.properties;
-  const fmId = declaredId(parsed);
+  const fm = reply.properties;
+  const fmId = declaredId(fm);
   if (fmId === undefined) {
     return {
       ok: false,
       errors: ['npc: "id" fehlt — die Datei muss ihre kebab-case id nennen'],
     };
   }
-  if (typeof fmId !== "string" || !ENTITY_ID_PATTERN.test(fmId)) {
+  if (!ENTITY_ID_PATTERN.test(fmId)) {
     return {
       ok: false,
       errors: ['npc: "id" muss eine kebab-case id sein (a-z, 0-9, einzelne Bindestriche)'],
@@ -1047,7 +848,7 @@ export function validateNpcReply(
   // Re-parsed under the address the server will use, so the shared parser's
   // degrade rules (a missing `name` falls back to the address's last
   // segment) see the same address they always did — see reparseAtAddress.
-  const reparsed = reparseAtAddress(entry.content, id, npcPath);
+  const reparsed = reparseAtAddress(markdown, id, npcPath);
   const label = `npc "${id}"`;
   if (pinnedId !== undefined && id !== pinnedId) {
     errors.push(`${label}: die id ist vorgegeben — "id" muss "${pinnedId}" sein`);
@@ -1068,16 +869,12 @@ export function validateNpcReply(
   for (const msg of npcStatusErrors(fm, "NPC-Dateien")) errors.push(`${label}: ${msg}`);
   for (const msg of quickstatsErrors(fm)) errors.push(`${label}: ${msg}`);
 
-  for (const kind of unknownCallouts(parsed.body)) {
+  for (const kind of unknownCallouts(reply.body)) {
     errors.push(
       `${label}: unknown callout "[!${kind}]" — allowed: ${CALLOUT_KINDS.map((k) => `[!${k}]`).join(", ")}`,
     );
   }
-  for (const msg of [
-    ...knowledgeCalloutErrors(parsed.body),
-    ...relationErrors(parsed.body, ctx),
-    ...notesErrors(parsed.body),
-  ]) {
+  for (const msg of npcBodyErrors(reply.body, ctx)) {
     errors.push(`${label}: ${msg}`);
   }
 
@@ -1085,25 +882,39 @@ export function validateNpcReply(
   return {
     ok: true,
     result: {
-      npc: { path: npcPath(id), markdown: entry.content, properties: reparsed.properties },
+      npc: { path: npcPath(id), markdown, properties: reparsed.properties },
       warnings: reply.warnings,
     },
   };
 }
 
-// German on purpose: it is part of the (German) prompt conversation. The tail
-// names what the corrected reply must still contain — the only part that
-// differs between a scene run and an NPC run (issue #21).
-export function buildCorrectionMessage(errors: string[], tail: string): string {
+/**
+ * The correction turn's message — German on purpose: it is part of the
+ * (German) prompt conversation. The tail names what the corrected reply must
+ * still contain, which is the only part that differs between the run kinds.
+ *
+ * `schemaName` is the schema the reply is forced into — it is
+ * NAMED here so the model corrects inside the shape it was given instead of
+ * starting a new one. Every call has one now, so the instruction is the same
+ * sentence for the outline and for an entry; an absent name (a provider
+ * that forces nothing) simply leaves the reference out.
+ */
+export function buildCorrectionMessage(
+  errors: string[],
+  tail: string,
+  schemaName?: string,
+): string {
+  const schema = schemaName === undefined ? "gleiches Schema" : `gleiches Schema (\`${schemaName}\`)`;
+  const instruction =
+    `Antworte erneut mit dem vollständigen, korrigierten JSON-Objekt — ${schema}, ` +
+    `${tail}, kein Text außerhalb des Objekts.`;
   return [
     "Deine letzte Antwort hat die mechanische Validierung nicht bestanden:",
     errors.map((e) => `- ${e}`).join("\n"),
-    `Antworte erneut mit dem vollständigen, korrigierten JSON — gleiches Schema, ${tail}, ` +
-      "kein Text außerhalb des JSON-Blocks.",
+    instruction,
   ].join("\n\n");
 }
 
-export const SCENE_CORRECTION_TAIL = "alle Szenen und Stubs enthalten";
 const NPC_CORRECTION_TAIL = "die vollständige NPC-Datei enthalten";
 
 // --- run accounting (issue #18) -----------------------------------------------
@@ -1171,56 +982,6 @@ export function truncationMessage(maxTokens: number | undefined): string {
     `the model's reply was cut off — raise LLM_MAX_TOKENS ` +
     `(currently: ${current}) or shorten the source text.`
   );
-}
-
-// --- POST /api/:campaign/generate ---------------------------------------------
-
-/**
- * Run the pipeline: context -> prompt -> provider -> mechanical validation,
- * with up to `LLM_CORRECTION_TURNS` correction turns (default 1, hard bound
- * MAX_CORRECTION_TURNS — see parseCorrectionTurns). Writes NOTHING.
- *
- * Two ways out with 422, both carrying the last raw reply (capped) and the
- * run's token usage so the DM sees WHAT came back and what it cost:
- * a truncated reply (immediately, no correction turn) and exhausted retries.
- *
- * `getProvider` is called lazily after the request-level checks (unknown
- * campaign/chapter answer 404 before an unconfigured provider answers 503);
- * tests inject a fake here.
- *
- * `newChapter` marks the app's "new chapter" flow: the chapter directory
- * does not exist yet and is created by apply, so a missing one is not a 404.
- */
-export async function runGenerate(
-  campaign: string,
-  chapter: string,
-  sourceText: string,
-  newChapter = false,
-  getProvider: () => LLMProvider = obtainProvider,
-): Promise<GenerateResult> {
-  const ctx = await collectSceneContext(campaign, chapter, newChapter);
-  const assets = await loadPromptAssets("scene");
-  const result = await runPipeline({
-    req: {
-      systemPrompt: assets.systemPrompt,
-      fewShotTarget: assets.fewShotTarget,
-      knowledge: ctx.knowledge,
-      glossary: ctx.glossary,
-      context: { chapter: ctx.chapter, npcs: ctx.npcs, locations: ctx.locations },
-      sourceText,
-    },
-    provider: getProvider(),
-    validate: (raw) => validateReply(raw, ctx),
-    correctionTail: SCENE_CORRECTION_TAIL,
-  });
-  // The naming check runs on the FINISHED drafts (issue #53 AK3) — after the
-  // correction turns, because only the reply that survived validation is the
-  // text the DM will read. Stubs are checked too: a stub is a file the run
-  // creates, and a convention applies to it exactly as much.
-  return withNamingHints(result, [
-    ...result.scenes.map((s) => ({ path: s.path, markdown: s.markdown })),
-    ...result.stubs.map((s) => ({ path: stubPath(s), markdown: s.markdown })),
-  ], ctx.namingRules);
 }
 
 /** Where a stub would be written — the address the hint has to name. */
@@ -1304,7 +1065,12 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
     }
     corrections.push({
       assistant: raw,
-      correction: buildCorrectionMessage(outcome.errors, input.correctionTail),
+      correction: buildCorrectionMessage(
+        outcome.errors,
+        input.correctionTail,
+        // The schema the request itself carries — no caller has to repeat it.
+        req.jsonSchema?.name,
+      ),
     });
   }
 }
@@ -1341,6 +1107,9 @@ export async function runGenerateNpc(
         ...(npcId === undefined ? {} : { targetId: npcId }),
       },
       sourceText,
+      // The reply object, forced by the provider — the same
+      // guarantee the outline call has always had.
+      jsonSchema: entryReplySchema("npc", "create"),
     },
     provider: getProvider(),
     validate: (raw) => validateNpcReply(raw, ctx, npcId),

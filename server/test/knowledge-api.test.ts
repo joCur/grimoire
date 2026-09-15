@@ -184,7 +184,7 @@ describe("the prompt block (store/read.ts knowledgeText)", () => {
     ]);
     expect(await knowledgeText(CAMPAIGN)).toBe(
       [
-        '- Namenskonvention: schreibe „Salt Harbour" immer als „Salzhafen".',
+        '- Namenskonvention: schreibe „Salt Harbour“ immer als „Salzhafen“.',
         "- Fakt: Der Leuchtturm ist unbesetzt.",
         "- Stilregel: Keine Würfelwerte im Read-Aloud.",
       ].join("\n"),
@@ -239,12 +239,12 @@ describe("the prompt block (store/read.ts knowledgeText)", () => {
   });
 
   test("namingRules are ref-expanded like the prompt lines", async () => {
-    // The model is told „schreibe Fenn immer als Fennwyn", so the post-run
-    // check has to look for „Fenn" — searching for „[[fenn]]" would never
+    // The model is told „schreibe Fenn immer als Fennwyn“, so the post-run
+    // check has to look for „Fenn“ — searching for „[[fenn]]“ would never
     // match and make the rule look obeyed (naming-check.ts).
     await save([naming("[[fenn]]", "Fennwyn")]);
     expect(await knowledgeText(CAMPAIGN)).toBe(
-      '- Namenskonvention: schreibe „Fenn" immer als „Fennwyn".',
+      '- Namenskonvention: schreibe „Fenn“ immer als „Fennwyn“.',
     );
     expect(await namingRules(CAMPAIGN)).toEqual([{ from: "Fenn", to: "Fennwyn" }]);
   });

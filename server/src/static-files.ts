@@ -60,7 +60,7 @@ function contentType(abs: string): string {
  * Map a URL pathname (already percent-decoded) to an absolute path inside
  * `distDir`, or null when the path is not acceptable.
  *
- * Same lexical-first approach as campaign-fs.ts: reject NUL, backslashes,
+ * Same lexical-first approach as addressing.ts: reject NUL, backslashes,
  * absolute/Windows paths, empty/`.`/`..`/hidden segments — then resolve and
  * verify the result is still inside distDir. WHATWG URL parsing already
  * collapses `..` (including its encoded spellings) before a request reaches

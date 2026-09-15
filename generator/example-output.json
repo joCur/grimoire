@@ -1,0 +1,21 @@
+{
+  "properties": {
+    "id": "smuggler-captured",
+    "title": "Von den Schmugglern erwischt",
+    "type": "contingency",
+    "trigger": "Charaktere werden beim Auskundschaften der Bucht überrascht",
+    "chapter": "01-salzhafen",
+    "location": "bucht",
+    "npcs": [
+      "fenn"
+    ],
+    "handouts": null,
+    "tags": [
+      "social",
+      "escape"
+    ],
+    "status": "draft"
+  },
+  "body": "## Flow\n\nEntwaffnet und gefesselt werden die Charaktere vor [[fenn]] gebracht,\nden Anführer der Schmuggler. Er befragt jeden einzeln: Wer schickt euch?\nWie viel wisst ihr?\n\n## If: sie geben zu, für [[jorna]] zu arbeiten\n\n[[fenn]] lässt sie in die alte Räucherkammer sperren — er will erst mit\nseinem Auftraggeber sprechen, bevor er entscheidet. Die Gruppe hat bis\nzum Morgengrauen Zeit zu entkommen.\n\n- die morschen Bretter der Rückwand aufbrechen\n- den gelangweilten Wachposten becircen oder bestechen\n- clevere Verwendung für einen Cantrip\n\n> [!note] Notfall-Ventil: Der gefangene Leuchtturmwärter in der\n> Nachbarkammer kennt ein loses Bodenbrett.\n>\n> | W6 | Wer die Nachtwache schiebt |\n> | --- | --- |\n> | 1–3 | Ein mürrischer Rudergast, halb betrunken |\n> | 4–5 | Zwei Schmuggler, die Würfel spielen |\n> | 6 | [[fenn]] selbst, wach und misstrauisch |\n\n## If: sie lügen (Schiffbrüchige, verirrte Reisende ...)\n\n> [!check] Charisma (Deception) jedes Charakters vs. [[fenn]]s\n> Wisdom (Insight) +2. Advantage/Disadvantage nach Plausibilität,\n> für jeden Charakter einzeln.\n\n- **Geglaubt** → sie werden zum Dorf eskortiert und beobachtet\n- **Nicht geglaubt** → Räucherkammer wie oben\n\n> [!outcome] [[fenn]] kennt nach dieser Szene die Gesichter der Gruppe —\n> egal wie sie ausgeht.\n",
+  "warnings": []
+}

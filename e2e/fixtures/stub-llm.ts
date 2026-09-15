@@ -52,6 +52,25 @@
 //     so parallel workers cannot consume each other's failure.
 //   - TRIGGER.slowPart -> only the LAST scene's reply is held, so a spec can
 //     restart a run that has finished parts AND one in flight.
+//   - TRIGGER.latePart -> the scene PARTS (and an augment reply) answer late
+//     but normally, so a spec can watch a job that is genuinely running
+//     finish on a poll instead of being done before the first one answers.
+//   - TRIGGER.asciiQuotes -> the scene body carries German quotation marks
+//     closed with an ASCII `"`. Under the hand-written JSON
+//     wrapper that ended the string; as the `body` of a forced object the run
+//     must reach `done` without a single correction turn, and the characters
+//     have to arrive verbatim.
+//
+// REPLY SHAPE: every reply is an OBJECT and is serialized as
+// JSON into the message content — the outline its own, an entry call
+// `{ properties, body, warnings }` (replies.ts assembles both). A reply that
+// is a plain STRING is one a spec wrote to be unreadable, and it travels
+// verbatim.
+//
+// The stub is an OpenAI-compatible endpoint and simply IGNORES the
+// `response_format` the server sends, which is exactly what the tolerant
+// reader on the server (parseJsonReply) is the net for: the E2E path proves
+// the run works even where the schema is not actually enforced.
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
@@ -164,7 +183,11 @@ function existingEntry(prompt: string): { path: string; markdown: string } | nul
 }
 
 export interface StubDecision {
-  /** The reply body (a JSON object, serialized into the message content). */
+  /**
+   * The reply object, serialized as JSON into the message
+   * content. A plain STRING travels verbatim — that is a reply a spec wrote
+   * to be unreadable.
+   */
   reply: unknown;
   /** The endpoint reports the reply as cut off. */
   truncated: boolean;
@@ -196,6 +219,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
   const knowledge = knowledgeBlock(prompt);
   const oldName = source.includes(TRIGGER.oldName);
   const three = source.includes(TRIGGER.threeScenes);
+  const asciiQuotes = source.includes(TRIGGER.asciiQuotes);
   // Only the PARTS are late; the outline answers at once, so the run reaches
   // `running` with its parts still pending (issue #102 review).
   const latePart = source.includes(TRIGGER.latePart) ? LATE_REPLY_MS : 0;
@@ -209,6 +233,11 @@ export function decide(messages: ChatMessage[]): StubDecision {
       kind: "augment",
       truncated,
       delayMs,
+      // TRIGGER.latePart on an augment run: the reply COMES, just later than
+      // the browser's first job poll — the only shape in which the dialog
+      // really sees its own job as `running` and has to leave the spinner on
+      // a polled update.
+      pauseMs: latePart,
       reply: invalid
         ? invalidAugmentReply(existing.path)
         : augmentReply(existing.path, existing.markdown, knowledge),
@@ -226,7 +255,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
       // it gets is a well-formed one with a single part.
       reply: invalid
         ? invalidRunOutline(source)
-        : outlineReply({ source, knowledge, three, oldName }),
+        : outlineReply({ source, knowledge, three, oldName, asciiQuotes }),
     };
   }
 
@@ -266,7 +295,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
         reply:
           invalid || fails
             ? invalidScenePartReply(chapter, assigned)
-            : scenePartReply(chapter, assigned, oldName),
+            : scenePartReply(chapter, assigned, oldName, asciiQuotes),
       };
     }
     const kind = system.includes("System-Prompt: Ort-Generator") ? "location" : "npc";
@@ -348,7 +377,15 @@ export function startStubLlm(port = 0): Promise<{ port: number; close: () => Pro
           choices: [
             {
               index: 0,
-              message: { role: "assistant", content: JSON.stringify(decision.reply, null, 2) },
+              message: {
+                role: "assistant",
+                // Every reply is an object; a string is a
+                // deliberately unreadable one and goes out as it stands.
+                content:
+                  typeof decision.reply === "string"
+                    ? decision.reply
+                    : JSON.stringify(decision.reply, null, 2),
+              },
               finish_reason: decision.truncated ? "length" : "stop",
             },
           ],

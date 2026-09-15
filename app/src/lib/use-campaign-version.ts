@@ -1,6 +1,6 @@
 // Client half of issue #8: poll GET /api/:campaign/version and invalidate
 // the campaign's read queries when the counter changes (every server-side
-// write bumps it in its own transaction — there is no file watcher any more,
+// write bumps it in its own transaction — nothing else changes the campaign,
 // DECISIONS #9/#13). No UI — data just refreshes.
 //
 // The same response carries the server's build id (issue #24), so this one
@@ -41,17 +41,17 @@ export function useCampaignVersion(campaign: string): void {
     if (data === undefined) return;
     // Build handshake first — it must run on EVERY poll, including the very
     // first one and polls where the counter did not move (a deploy changes
-    // the build id, not the campaign files).
+    // the build id, not the campaign entries).
     reportServerBuild(data.build);
     const previous = last.current;
     last.current = { campaign, version: data.version };
     if (previous === null || previous.campaign !== campaign) return;
     if (previous.version === data.version) return;
-    // Something changed on disk — refetch everything read from this campaign.
+    // Something changed on the server — refetch everything read from this campaign.
     // "active-session" rides along (issue #40): a session ended in another
     // tab, a hand-edited `ended`, or simply midnight passing must reach the
     // global live indicator without a reload.
-    // "last-session" is the review's file (ended or not) — same reasoning.
+    // "last-session" is the review's session (ended or not) — same reasoning.
     // "knowledge"/"glossary" (issue #53) are campaign reads like the rest:
     // the two content pages have to learn about a write from another tab.
     // NOTE what that means for an OPEN row there: the list under it changes.

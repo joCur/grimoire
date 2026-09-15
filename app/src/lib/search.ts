@@ -67,7 +67,7 @@ export function contingencyPaths(tree: CampaignTree | undefined): Set<string> {
 }
 
 /**
- * Route for a picked result. Every kind opens as a file view
+ * Route for a picked result. Every kind opens as an entry view
  * (/:campaign/file/<path>) — except the campaign itself, whose "view" is the
  * pool. Path segments are encoded individually so umlauts/spaces in filenames
  * survive, but the slashes stay routable.

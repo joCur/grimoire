@@ -1,6 +1,6 @@
 // The review model (issue #10, app half): the union of the harvested
 // session's tagged log lines and the tagged inbox lines, plus the done-state that
-// comes from the server files ONLY — log lines via the session's `reviewed`
+// comes from the server ONLY — log lines via the session's `reviewed`
 // short hashes, inbox lines via their `- [x]` marker. Used by the review
 // route and by the topbar (progress, pool affordance); both share the same
 // query cache, so nothing fetches twice.
@@ -41,7 +41,7 @@ import { useLastStartedSession } from "@/lib/use-session";
 export const INBOX_PATH = "inbox";
 
 export interface ReviewEntry {
-  /** Stable identity: the line index in its file (log is append-only, the
+  /** Stable identity: the line index in its session (log is append-only, the
    *  inbox rewrite happens in place). */
   key: string;
   source: "log" | "inbox";
@@ -65,7 +65,7 @@ export interface ReviewEntry {
   tag: string;
   /** Display text — hashtags stripped. */
   text: string;
-  /** The line as it stands in the file: hashed for `reviewed` (log) or
+  /** The line as it stands in the log: hashed for `reviewed` (log) or
    *  matched byte for byte by `inbox-done` (inbox). */
   rawLine: string;
   /** Short hash of rawLine — log entries only. */
@@ -86,9 +86,9 @@ export interface ReviewModel {
   progressLabel: string;
   /** Still loading session/inbox/hashes — nothing decided yet. */
   isPending: boolean;
-  /** No session file at all (the review has nothing to harvest). */
+  /** No session at all (the review has nothing to harvest). */
   noSession: boolean;
-  /** The session file could not be loaded at all (server down …). */
+  /** The session could not be loaded at all (server down …). */
   isError: boolean;
   /** WebCrypto unavailable (insecure origin) — log done-states unknown. */
   hashUnavailable: boolean;
@@ -136,8 +136,8 @@ export function useReviewEntries(
     [acted],
   );
   // WHICH session is harvested is the server's answer: the last STARTED one,
-  // ended or not (finding 1). Deriving today's file name here broke every
-  // session that ran past midnight — `end` writes into the file the session
+  // ended or not (finding 1). Deriving today's session id here broke every
+  // session that ran past midnight — `end` writes into the session that
   // started in, so the harvest was empty and `review/seen` patched a path
   // that does not exist.
   const session = useLastStartedSession(campaign, enabled);

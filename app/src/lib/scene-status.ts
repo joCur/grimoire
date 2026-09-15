@@ -7,7 +7,7 @@
 // (CLAUDE.md/i18n/index.ts: the lib layer takes `Translate` as a parameter).
 // The colors stay here: they are design tokens, not copy.
 //
-// Degrade rule (README): an unknown status value is shown VERBATIM — the file
+// Degrade rule (README): an unknown status value is shown VERBATIM — the entry
 // stays the truth. The menu only ever offers the known quartet, and picking
 // one replaces whatever stood there.
 
@@ -73,7 +73,7 @@ export function isSceneDone(status: string): boolean {
   return DONE_STATUSES.has(status);
 }
 
-/** Body of the status write — the rev comes from the FileResponse on screen. */
+/** Body of the status write — the rev comes from the EntryResponse on screen. */
 export interface PropertiesPatchBody {
   path: string;
   rev: number;
@@ -90,7 +90,7 @@ export function sceneStatusPatchBody(
 }
 
 /**
- * Write `status` into the file's properties. The 409 handling — nothing
+ * Write `status` into the entry's properties. The 409 handling — nothing
  * written, re-read once so the next attempt carries the fresh rev — is the
  * shared protocol of write-with-rev.ts. Every other failure throws.
  */

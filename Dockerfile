@@ -60,9 +60,11 @@ COPY app/package.json ./app/
 RUN bun install --frozen-lockfile --production \
       --filter '@grimoire/server' --filter '@grimoire/shared'
 
-# Sources (run as-is by Bun) + the generator's prompt assets, which the
-# generate endpoint reads from ../generator relative to the server package.
+# Sources (run as-is by Bun), the reply schema files the generator hands to
+# the provider, and the generator's prompt assets, which the generate endpoint
+# reads from ../generator relative to the server package.
 COPY shared/src ./shared/src
+COPY shared/schema ./shared/schema
 COPY server/src ./server/src
 COPY generator ./generator
 COPY --from=build /app/app/dist ./app/dist
@@ -77,11 +79,12 @@ COPY --chown=bun:bun examples /examples
 ENV GRIMOIRE_DATA=/data \
     PORT=3000
 
-# The database directory — this is the state of the deployment and the volume
+# The database directory — this is the state of the deployment and the path
 # that must be mounted (docs/DEPLOYMENT.md, section 2a). Created here so the
-# first boot without a mount still works.
+# first boot without a mount still works. Mounted by the operator
+# (`-v …:/data`); no VOLUME declaration, so a missing mount is never hidden
+# by an anonymous volume.
 RUN mkdir -p /data && chown bun:bun /data
-VOLUME ["/data"]
 # ANTHROPIC_API_KEY is optional — without it the read/write API works and only
 # POST /api/:campaign/generate answers 503.
 

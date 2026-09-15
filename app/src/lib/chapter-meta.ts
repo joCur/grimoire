@@ -15,7 +15,7 @@
 // them would mean one dialog issuing two guarded writes, i.e. one of them
 // landing while the other 409s.
 
-import { putFileBody } from "@/api";
+import { putEntryBody } from "@/api";
 import { fetchFile } from "@/api";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
@@ -56,7 +56,7 @@ export function writeChapterBody(
 ): Promise<RevWriteResult> {
   const path = chapterMetaPath(chapter);
   return writeWithRev(
-    () => putFileBody(campaign, path, chapterBodyToWrite(body), rev),
+    () => putEntryBody(campaign, path, chapterBodyToWrite(body), rev),
     () => fetchFile(campaign, path),
   );
 }

@@ -63,7 +63,7 @@ import {
 import { eq, sql } from "drizzle-orm";
 import { expandIndexedRefs } from "../store/refs";
 
-/** Directories under a campaign that are NOT chapters (mirror of campaign-fs). */
+/** Directories under a campaign that are NOT chapters. */
 const RESERVED_DIRS = new Set(["npcs", "locations", "sessions"]);
 
 /** File names that hold the glossary — both spellings are in the wild. */
@@ -498,7 +498,7 @@ function importCampaign(
     .values({
       id: campaignId,
       // `parseMarkdown` falls a missing `name` back to the id; that is a
-      // parser artifact, not an authored display name (see campaign-fs.ts).
+      // parser artifact, not an authored display name.
       name: campaignName === campaignId ? "" : campaignName,
       description: asOptionalString(campaignFm?.frontmatter.description) ?? null,
       body: campaignFm?.body.trim() === "" ? "" : (campaignFm?.body ?? ""),

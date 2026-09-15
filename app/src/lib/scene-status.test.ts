@@ -3,7 +3,7 @@
 // wrote NOTHING then, so the UI must re-read the file and let the next
 // attempt carry the fresh rev.
 
-import type { FileResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";
@@ -24,13 +24,12 @@ const tEn = translator("en");
 
 const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm";
 
-function fileAt(rev: number, status: string): FileResponse {
+function fileAt(rev: number, status: string): EntryResponse {
   return {
     path: SCENE,
     kind: "scene",
     properties: { id: "arrival", title: "Ankunft", status },
     body: "",
-    raw: `---\nid: arrival\nstatus: ${status}\n---\n`,
     rev,
   };
 }

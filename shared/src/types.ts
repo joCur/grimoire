@@ -277,28 +277,26 @@ export interface CampaignTree {
 }
 
 /** GET /api/:campaign/file?path=… (and GET /api/:campaign/session) */
-export interface FileResponse extends ParsedFile {
-  /** Full file contents including the properties block. */
-  raw: string;
+export interface EntryResponse extends ParsedFile {
   /**
-   * SESSION FILES ONLY (issue #40): `started` as epoch milliseconds, read in
+   * SESSIONS ONLY (issue #40): `started` as epoch milliseconds, read in
    * the SERVER's timezone. The properties value stays the zone-less string
    * the format uses — this is the server's interpretation of it, so a client
    * in a different timezone still computes the right session runtime.
    * Undefined when there is no usable `started`.
    */
   startedMs?: number;
-  /** SESSION FILES ONLY: `ended` as epoch milliseconds (see startedMs). */
+  /** SESSIONS ONLY: `ended` as epoch milliseconds (see startedMs). */
   endedMs?: number;
   /**
-   * SESSION FILES ONLY (issue #40 AK8): the total length of the session's
+   * SESSIONS ONLY (issue #40 AK8): the total length of the session's
    * CLOSED `pauses` intervals in milliseconds, computed by the server for the
    * same reason as startedMs — the strings are zone-less. Absent when the
    * session has no usable closed pause.
    */
   pausedMs?: number;
   /**
-   * SESSION FILES ONLY: start of the OPEN pause interval as epoch
+   * SESSIONS ONLY: start of the OPEN pause interval as epoch
    * milliseconds — present exactly while the session is paused, so the client
    * needs no parsing of its own to freeze the clock.
    */

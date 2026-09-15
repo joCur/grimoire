@@ -1,4 +1,4 @@
-// Entity-kind helpers for the file reading view (issue #26).
+// Entity-kind helpers for the entry reading view (issue #26).
 //
 // GET /file answers with the entity `kind` (path-derived, see
 // shared/src/parse.ts). The reading view picks its header from that kind —
@@ -49,7 +49,7 @@ export { isEntityId } from "@grimoire/shared/slug";
  * no copy of its own (i18n/index.ts, the lib-layer rule).
  *
  * The format degrades: an unknown value is shown verbatim instead of being
- * swallowed or corrected — the file stays the truth.
+ * swallowed or corrected — the entry stays the truth.
  */
 const NPC_STATUS_KEYS: Record<string, MessageKey> = {
   alive: "status.npc.alive",

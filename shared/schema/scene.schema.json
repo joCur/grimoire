@@ -1,0 +1,114 @@
+{
+  "title": "scene",
+  "description": "Die fertige Szene: die Eigenschaften-Felder, der Fließtext und die Warnungen für den DM.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "properties",
+    "body",
+    "warnings"
+  ],
+  "properties": {
+    "properties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "type",
+        "trigger",
+        "chapter",
+        "location",
+        "npcs",
+        "handouts",
+        "tags",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Kleinbuchstaben, Ziffern und Bindestriche, keine Umlaute (Muster: ^[a-z0-9]+(-[a-z0-9]+)*$)."
+        },
+        "title": {
+          "type": "string"
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "planned",
+            "contingency",
+            null
+          ]
+        },
+        "trigger": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "chapter": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "id aus der Kontextliste oder der Gliederung. Kleinbuchstaben, Ziffern und Bindestriche, keine Umlaute (Muster: ^[a-z0-9]+(-[a-z0-9]+)*$)."
+        },
+        "location": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "id aus der Kontextliste oder der Gliederung. Kleinbuchstaben, Ziffern und Bindestriche, keine Umlaute (Muster: ^[a-z0-9]+(-[a-z0-9]+)*$)."
+        },
+        "npcs": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "handouts": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "tags": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft"
+          ],
+          "description": "Neue Szenen sind immer Entwürfe."
+        }
+      }
+    },
+    "body": {
+      "type": "string",
+      "description": "Der Text des Eintrags, als EIN String mit echten Zeilenumbrüchen — Überschriften, Callouts und `## If:`-Abschnitte wie im Prompt beschrieben. Den Eigenschaften-Block baut der Server aus `properties`."
+    },
+    "warnings": {
+      "type": "array",
+      "description": "Kurze deutsche Hinweise für den DM; leer, wenn es nichts zu melden gibt.",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

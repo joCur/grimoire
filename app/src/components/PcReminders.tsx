@@ -12,7 +12,7 @@
 // fall to the body — it becomes a focusable "Alles erledigt" line that takes
 // the focus over.
 
-import type { FileResponse } from "@grimoire/shared/types";
+import type { EntryResponse } from "@grimoire/shared/types";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
@@ -32,7 +32,7 @@ export function PcReminders({ campaign }: { campaign: string }) {
   const [cleared, setCleared] = useState(false);
 
   const done = useMutation({
-    mutationFn: (entry: ReviewEntry): Promise<FileResponse> => {
+    mutationFn: (entry: ReviewEntry): Promise<EntryResponse> => {
       if (entry.source === "inbox") return markInboxLineDone(campaign, entry.rawLine);
       if (model.sessionPath === "") throw new Error("keine Session");
       return markLogLineSeen(campaign, model.sessionPath, entry.rawLine);
@@ -41,7 +41,7 @@ export function PcReminders({ campaign }: { campaign: string }) {
       setCleared(true);
       queryClient.setQueryData(["file", campaign, file.path], file);
       void queryClient.invalidateQueries({ queryKey: ["file", campaign, file.path] });
-      // The done-state of a log line lives in the session file's frontmatter
+      // The done-state of a log line lives in the session's properties
       // — both session queries have to see the fresh one.
       void queryClient.invalidateQueries({ queryKey: activeSessionKey(campaign) });
       void queryClient.invalidateQueries({ queryKey: lastStartedSessionKey(campaign) });

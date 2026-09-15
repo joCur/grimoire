@@ -34,16 +34,18 @@ const ADDRESS_A = "01-salzhafen/leuchtturm/treffen-am-kai";
 const ADDRESS_B = "01-salzhafen/leuchtturm/nacht-am-kai";
 const STUB_PATH = "npcs/grella";
 
-function sceneMarkdown(id: string, title: string): string {
+// The reply's `chapter` must be the chapter the RUN was started with — the
+// generator rejects any other value, so a new-chapter run needs its own
+// scripted reply rather than this one.
+function sceneMarkdown(id: string, title: string, chapter = "01-salzhafen"): string {
   return [
     "---",
     `id: ${id}`,
     `title: ${title}`,
     "type: planned",
-    "chapter: 01-salzhafen",
+    `chapter: ${chapter}`,
     "location: leuchtturm",
     "npcs: [fenn]",
-    "handouts: []",
     "tags: [social]",
     "status: draft",
     "---",
@@ -78,6 +80,18 @@ const REPLY = JSON.stringify({
   entries: [{ kind: "npc", content: STUB_MARKDOWN }],
   warnings: [],
 });
+
+/** The same batch reply, for a run whose chapter does not exist yet. */
+function replyForChapter(chapter: string): string {
+  return JSON.stringify({
+    scenes: [
+      { content: sceneMarkdown("treffen-am-kai", "Treffen am Kai", chapter) },
+      { content: sceneMarkdown("nacht-am-kai", "Nacht am Kai", chapter) },
+    ],
+    entries: [{ kind: "npc", content: STUB_MARKDOWN }],
+    warnings: [],
+  });
+}
 
 // --- plumbing -----------------------------------------------------------------
 
@@ -431,6 +445,7 @@ test("markWrittenInTx throws for a lost job instead of reporting false", async (
 
 /** Start a „Neues Kapitel" run and wait for it, like `runJob`. */
 async function runNewChapterJob(title?: string): Promise<GenerateJob> {
+  setProviderForTests(new PipelineFake([replyForChapter("03-dragon-hatchery")]));
   const res = await send("POST", "/api/beispiel/generate", {
     chapter: "03-dragon-hatchery",
     sourceText: "Eggs in the dark.",
