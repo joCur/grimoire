@@ -386,8 +386,9 @@ export const de = {
   // The chapter pill: only `active` gets a label, every other value degrades
   // to the raw string (README, "Format degradiert").
   // --- chapter actions in the Kapitelübersicht (issue #115) ----------------
-  // „Als aktiv setzen" am Kapitel: setzt `active` und nimmt es dem bisher
-  // aktiven Kapitel ab — ein Serveraufruf, eine Transaktion.
+  // Der Status-Regler am Kapitel („Aktiv" setzt `active` und nimmt es dem
+  // bisher aktiven Kapitel ab — ein Serveraufruf, eine Transaktion) trägt
+  // seine Labels unter `properties.chapter.status.*`.
   "pool.chapter.properties": "Kapitel-Eigenschaften",
   "pool.chapter.edit": "Kapitel bearbeiten",
   "chapterBody.title": "Kapitel bearbeiten: {title}",

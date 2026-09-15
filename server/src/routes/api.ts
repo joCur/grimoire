@@ -507,7 +507,7 @@ api.post("/:campaign/chapters", async (c) => {
 });
 
 // POST /api/:campaign/chapters/:id/active -> FileResponse of that chapter
-// „Als aktiv setzen" from the Kapitelübersicht (issue #115): the chapter
+// „Aktiv" in the Kapitelübersicht's status regler (issue #115): the chapter
 // becomes `active` and the one that was active goes back to `planned`, in ONE
 // transaction — two calls from the app would leave a window with two active
 // chapters, and the session view picks the first it finds. Idempotent, 404

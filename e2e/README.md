@@ -361,8 +361,9 @@ unsichtbar, weil die Kapitelübersicht Kapitel aus der Kapiteltabelle listet.
 - **Pfad 1** (`pool.e2e.ts`): ein Kapitel ist dort bearbeitbar, wo es gelesen
   wird — „Kapitel-Eigenschaften" (Titel/Status, der geteilte Dialog aus #42),
   „Kapitel bearbeiten" (`_chapter`-Text, aus dem die Zielzeile kommt, inkl.
-  409 gegen einen zweiten Schreiber) und „Als aktiv setzen", das die Fahne in
-  **einem** Serveraufruf umhängt.
+  409 gegen einen zweiten Schreiber) und der **Status-Regler** in der
+  Kapitelzeile, dessen „Aktiv" die Fahne in **einem** Serveraufruf umhängt
+  („Als aktiv setzen" als eigener Knopf ist entfallen).
 
 Zwei Fallen für neue Specs auf diesen Pfaden:
 

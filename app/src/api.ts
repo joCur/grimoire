@@ -430,7 +430,7 @@ export function createCampaign(input: {
 }
 
 /**
- * „Als aktiv setzen" on a chapter (issue #115) — ONE call, because it is one
+ * „Aktiv" on a chapter's status regler (issue #115) — ONE call, because it is one
  * decision about two rows: the chapter becomes `active` and the one that was
  * active goes back to `planned`. Doing it as two properties patches from here
  * would leave a window in which the campaign has two active chapters, and the

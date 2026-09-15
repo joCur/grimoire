@@ -2721,7 +2721,7 @@ export async function createChapter(
 /**
  * POST /api/:campaign/chapters/:id/active -> the chapter document.
  *
- * „Als aktiv setzen" from the pool (issue #115). ONE call, ONE transaction,
+ * „Aktiv" in the pool's status regler (issue #115). ONE call, ONE transaction,
  * because it is ONE decision about two rows: the chapter named here becomes
  * `active` and whatever was active before goes back to `planned`. Two
  * requests from the app would have a window in which the campaign has two

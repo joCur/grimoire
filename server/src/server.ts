@@ -55,8 +55,8 @@
 //                                              Same id derivation and same 400/409 as above;
 //                                              `goal` lands under `## Ziel des Kapitels`, the
 //                                              heading the pool reads its goal line from
-//   [x] POST /api/:campaign/chapters/:id/active -> that chapter's document. „Als aktiv
-//                                              setzen" (issue #115): sets `active` here and
+//   [x] POST /api/:campaign/chapters/:id/active -> that chapter's document. „Aktiv" in the
+//                                              pool's status regler (#115): sets `active` here and
 //                                              puts the previously active chapter back to
 //                                              `planned`, in ONE transaction. Idempotent,
 //                                              404 for an unknown chapter, no rev guard
