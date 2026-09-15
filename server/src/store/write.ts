@@ -516,11 +516,36 @@ function sceneLocation(value: unknown): string | null {
   return trimmed;
 }
 
-/** The same for a location — a scene's `location` when it is a slug. */
-function ensureLocationRow(tx: GrimoireDb, campaign: string, id: string): boolean {
+/**
+ * The same for a location — a scene's `location` when it is a slug.
+ *
+ * `name` is the DISPLAY NAME the creator typed, and it is used ONLY when the
+ * row is actually inserted (issue #100 follow-up): the properties form accepts
+ * free text in the Ort field, slugs it and sends the slug in `location` plus
+ * the typed text as `locationName`, so „Der alte Hafen" becomes the entry
+ * `der-alte-hafen` CALLED „Der alte Hafen" instead of one called by its own
+ * id. One write, one transaction — the app never has to create the location
+ * first and patch second.
+ *
+ * An EXISTING location is never renamed by it. A name is a location's own
+ * property, edited in its own dialog; a scene naming its group must not be
+ * able to rewrite it (and two scenes spelling the same group differently
+ * would otherwise fight over it on every save).
+ */
+function ensureLocationRow(
+  tx: GrimoireDb,
+  campaign: string,
+  id: string,
+  name?: string,
+): boolean {
   if (!ENTITY_SLUG.test(id)) return false;
   if (locationRowOf(tx, campaign, id) !== undefined) return false;
-  tx.insert(locations).values({ campaignId: campaign, id }).run();
+  // A name that IS the id is stored as "" — the empty name means "fall back
+  // to the id" everywhere it is rendered, same rule as the campaign row.
+  const display = name === undefined ? "" : name.trim();
+  tx.insert(locations)
+    .values({ campaignId: campaign, id, name: display === id ? "" : display })
+    .run();
   const row = locationRowOf(tx, campaign, id);
   if (row !== undefined) indexLocation(tx, campaign, row);
   return true;
@@ -809,15 +834,26 @@ function rejectIdPatch(patch: Record<string, unknown>, current: string): void {
   throw new ApiError(400, "id is the primary key — use POST /rename to change it");
 }
 
+/**
+ * Side values a patch may carry that are NOT properties keys (issue #100
+ * follow-up). `locationName` is the display name for the location a scene's
+ * `location` CREATES — see `ensureLocationRow`; it is ignored when the row
+ * already exists, so it can never rename anything.
+ */
+export interface PatchOptions {
+  locationName?: string;
+}
+
 export async function patchProperties(
   campaign: string,
   rel: string,
   rev: number,
   patch: Record<string, unknown>,
+  options: PatchOptions = {},
 ): Promise<FileResponse> {
   assertSafeAddress(rel);
   const locator = locatorFromPath(rel);
-  return mutate(campaign, (tx) => patchLocator(tx, campaign, locator, rev, patch));
+  return mutate(campaign, (tx) => patchLocator(tx, campaign, locator, rev, patch, options));
 }
 
 function patchLocator(
@@ -826,6 +862,7 @@ function patchLocator(
   locator: Locator,
   rev: number,
   patch: Record<string, unknown>,
+  options: PatchOptions = {},
 ): FileResponse {
   switch (locator.kind) {
     case "campaign": {
@@ -931,7 +968,9 @@ function patchLocator(
       // OLD slug exactly as it was — the hint lied about the stock the DM is
       // most likely to look at. Idempotent and cheap (one lookup), and it
       // creates nothing the field does not already name.
-      if (next.location !== null) ensureLocationRow(tx, campaign, next.location);
+      if (next.location !== null) {
+        ensureLocationRow(tx, campaign, next.location, options.locationName);
+      }
       replaceSceneRefs(tx, campaign, row.id, npcRefs, tags, npcsBefore);
       indexScene(tx, campaign, next, tags);
       return renderScene(next, refNpcs(tx, campaign, row.id), refTags(tx, campaign, row.id));

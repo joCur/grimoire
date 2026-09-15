@@ -35,12 +35,17 @@ async function fileStatus(rel: string, campaign = "beispiel"): Promise<number> {
   return (await app.request(`/api/${campaign}/file?path=${encodeURIComponent(rel)}`)).status;
 }
 
-async function patchFm(rel: string, patch: Record<string, unknown>): Promise<FileResponse> {
+async function patchFm(
+  rel: string,
+  patch: Record<string, unknown>,
+  /** The display name for the Ort `location` may create (issue #100). */
+  locationName?: string,
+): Promise<FileResponse> {
   const before = await getFile(rel);
   const res = await app.request("/api/beispiel/properties", {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: rel, rev: before.rev, patch }),
+    body: JSON.stringify({ path: rel, rev: before.rev, patch, locationName }),
   });
   expect(res.status).toBe(200);
   return (await res.json()) as FileResponse;
@@ -96,6 +101,70 @@ describe("a reference creates the entry it names", () => {
     const created = await getFile("locations/alte-mole");
     expect(created.properties.name).toBe("alte-mole");
     expect((await tree()).locations.some((l) => l.id === "alte-mole")).toBe(true);
+  });
+
+  test("locationName names the entry the patch CREATES (#100)", async () => {
+    // The properties form takes free text in the Ort field, slugs it into
+    // `location` and sends the typed text along: one write, and the new entry
+    // is called what the DM typed instead of being called by its own id.
+    expect(await fileStatus("locations/der-alte-hafen")).toBe(404);
+    await patchFm(SCENE, { location: "der-alte-hafen" }, "Der alte Hafen");
+
+    const created = await getFile("locations/der-alte-hafen");
+    expect(created.kind).toBe("location");
+    expect(created.properties.id).toBe("der-alte-hafen");
+    expect(created.properties.name).toBe("Der alte Hafen");
+    // It is a normal, otherwise EMPTY entry — the name is all it claims.
+    expect(created.body.trim()).toBe("");
+    // And the group the scene now sits in is headed by that name.
+    const chapter = (await tree()).chapters.find((c) => c.id === "01-salzhafen");
+    expect(chapter?.groups.find((g) => g.slug === "der-alte-hafen")?.name).toBe(
+      "Der alte Hafen",
+    );
+  });
+
+  test("locationName is used ONCE and never renames an existing Ort (#100)", async () => {
+    // A name belongs to the location and is edited in its own dialog. Two
+    // scenes spelling the same group differently must not fight over it, and
+    // a scene that merely references „Leuchtturm" must not rewrite the name
+    // somebody wrote — so the value is applied only on INSERT.
+    expect((await getFile("locations/leuchtturm")).properties.name).toBe(
+      "Der Leuchtturm von Salzhafen",
+    );
+    await patchFm(SCENE, { location: "leuchtturm", status: "played" }, "Leuchtturm");
+    expect((await getFile("locations/leuchtturm")).properties.name).toBe(
+      "Der Leuchtturm von Salzhafen",
+    );
+
+    // Same for one the patch created a moment ago: the second scene to name
+    // it keeps the name the first one gave it.
+    await patchFm(SCENE, { location: "der-alte-hafen" }, "Der alte Hafen");
+    const other = "01-salzhafen/bucht/smuggler-captured";
+    await patchFm(other, { location: "der-alte-hafen" }, "Der Alte HAFEN");
+    expect((await getFile("locations/der-alte-hafen")).properties.name).toBe("Der alte Hafen");
+  });
+
+  test("a locationName that IS the id leaves the entry nameless (#100)", async () => {
+    // The empty name means "fall back to the id" everywhere it is rendered,
+    // so the row carries no redundant copy of its own key.
+    await patchFm(SCENE, { location: "nordbucht" }, "nordbucht");
+    expect((await getFile("locations/nordbucht")).properties.name).toBe("nordbucht");
+  });
+
+  test("locationName must be a string (#100)", async () => {
+    const before = await getFile(SCENE);
+    const res = await app.request("/api/beispiel/properties", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        path: SCENE,
+        rev: before.rev,
+        patch: { location: "alte-mole" },
+        locationName: 7,
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(await fileStatus("locations/alte-mole")).toBe(404);
   });
 
   test("free text in location is a 400 — it is a reference, not a label (#100)", async () => {

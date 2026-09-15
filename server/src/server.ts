@@ -81,14 +81,17 @@
 //                                              reasoning, it had been left behind.
 //                                              `rev` of glossary/inbox is that
 //                                              DOCUMENT's own counter, not campaigns.version
-//   [x] PATCH /api/:campaign/properties        { path, rev, patch } — only if rev is
+//   [x] PATCH /api/:campaign/properties        { path, rev, patch, locationName? } — only if rev is
 //                                              unchanged, otherwise
 //                                              409 { code: "rev_conflict", rev }.
 //                                              A scene's `chapter` may be SET (400 when
 //                                              the chapter does not exist — a scene must
 //                                              never fall out of the tree) or DELETED with
 //                                              null, which drops the key and leaves the
-//                                              scene's address alone
+//                                              scene's address alone.
+//                                              `locationName` is the display name for the
+//                                              Ort a scene's `location` CREATES — applied
+//                                              only on insert, never a rename (#100)
 //   [x] PUT  /api/:campaign/file               { path, rev, body } — write the markdown
 //                                              BODY of an existing document (issue #15);
 //                                              its properties are untouched (they are
