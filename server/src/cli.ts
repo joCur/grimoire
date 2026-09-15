@@ -15,10 +15,8 @@
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { eq } from "drizzle-orm";
 import { openDb } from "./db/client";
 import { runInitialMigration } from "./db/migrate-campaigns";
-import { migrationReport } from "./db/schema";
 import { backfillReferences } from "./store/ref-backfill";
 import { getDbFile } from "./config";
 
@@ -92,25 +90,19 @@ async function seed(args: string[]): Promise<number> {
       console.log(`  resumed — already migrated earlier: ${outcome.resumedFrom.join(", ")}`);
     }
     console.log(`  imported: ${outcome.campaigns.join(", ") || "(nothing left to do)"}`);
-    if (outcome.reportEntries === 0) {
-      console.log("  clean import — the migration report is empty");
+    if (outcome.report.length === 0) {
+      console.log("  clean import — nothing to report");
       return 0;
     }
     console.log(
-      `  ${outcome.reportEntries} report entr${outcome.reportEntries === 1 ? "y" : "ies"}, ` +
-        `${outcome.unknownFiles} file(s) kept verbatim in unknown_files:`,
+      `  ${outcome.report.length} report entr${outcome.report.length === 1 ? "y" : "ies"} — ` +
+        "these files were not (fully) imported and stay in the tree:",
     );
-    // THIS run's entries only. The table is cumulative — printing all of it
-    // would present an earlier run's findings as if they just happened.
-    for (const row of db
-      .select()
-      .from(migrationReport)
-      .where(eq(migrationReport.runId, outcome.runId ?? ""))
-      .all()) {
-      console.log(`   · [${row.campaignId}] ${row.path}: ${row.reason}`);
+    for (const entry of outcome.report) {
+      console.log(`   · [${entry.campaignId}] ${entry.path}: ${entry.reason}`);
     }
-    // Degradation is not a failure (the files are untouched and the content is
-    // preserved) — but it IS something to read, so it is not silent either.
+    // Degradation is not a failure (the tree is untouched) — but it IS
+    // something to read, so it is not silent either.
     return 0;
   } finally {
     close();

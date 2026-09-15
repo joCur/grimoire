@@ -2213,7 +2213,7 @@ describe("a scene draft whose chapter has no row (#115)", () => {
     // and it is what produced the production bug: twelve scenes under
     // `03-dragon-hatchery` with no such chapter, invisible in the pool.
     // `ensureChapterRow` closes it the way `ensureLocationRow` closes the Ort
-    // — and since migration 0013 it has to, or the foreign key would turn the
+    // — and since migration 0014 it has to, or the foreign key would turn the
     // apply into a 409.
     const markdown = sceneMarkdown()
       .replace("id: treffen-am-kai", "id: brut-im-dunkeln")

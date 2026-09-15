@@ -28,7 +28,7 @@
 --
 -- The column list is the scene columns as of migration 0011, which dropped
 -- `chapter_declared`: the rebuilt table and the explicit INSERT list have to
--- name exactly the columns the previous migration left behind, so the copy
+-- name exactly the columns the migrations up to 0013 left behind, so the copy
 -- is spelled out rather than a `SELECT *`.
 CREATE TABLE `__keep_scene_npcs` AS SELECT * FROM `scene_npcs`;--> statement-breakpoint
 CREATE TABLE `__keep_scene_tags` AS SELECT * FROM `scene_tags`;--> statement-breakpoint

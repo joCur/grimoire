@@ -27,7 +27,6 @@ import {
   locations,
   logEntries,
   meta,
-  migrationReport,
   npcRelations,
   npcs,
   sceneNpcs,
@@ -36,12 +35,19 @@ import {
   sessionPauses,
   sessionScenesPlayed,
   sessions,
-  unknownFiles,
   unpackJson,
   unpackStringArray,
 } from "../src/db/schema";
 
 const EXAMPLES = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../../examples");
+
+/** All report reasons of one campaign in this run, joined for substring checks. */
+function reasons(outcome: Awaited<ReturnType<typeof runInitialMigration>>, id: string): string {
+  return outcome.report
+    .filter((r) => r.campaignId === id)
+    .map((r) => r.reason)
+    .join(" ");
+}
 
 let tmpRoot = "";
 let open: OpenDb | undefined;
@@ -105,12 +111,8 @@ describe("AK1 — examples/beispiel imports completely and cleanly", () => {
     expect(outcome.migrated).toBe(true);
     expect(outcome.campaigns).toEqual(["beispiel"]);
 
-    // The headline assertion of AK1: a clean import leaves NOTHING to report
-    // and nothing in the verbatim bucket.
-    expect(db.select().from(migrationReport).all()).toEqual([]);
-    expect(db.select().from(unknownFiles).all()).toEqual([]);
-    expect(outcome.reportEntries).toBe(0);
-    expect(outcome.unknownFiles).toBe(0);
+    // The headline assertion of AK1: a clean import leaves NOTHING to report.
+    expect(outcome.report).toEqual([]);
 
     // campaign — name/description from _campaign.md, body preserved.
     const campaign = db.select().from(campaigns).all();
@@ -390,21 +392,15 @@ Freitext ganz oben, der zu keinem Begriff gehört.
     // No abort: BOTH campaigns are in, the good one still clean.
     expect(outcome.migrated).toBe(true);
     expect(outcome.campaigns).toEqual(["beispiel", "kaputt"]);
-    expect(
-      db.select().from(migrationReport).where(eq(migrationReport.campaignId, "beispiel")).all(),
-    ).toEqual([]);
+    expect(outcome.report.filter((r) => r.campaignId === "beispiel")).toEqual([]);
 
-    const report = db
-      .select()
-      .from(migrationReport)
-      .where(eq(migrationReport.campaignId, "kaputt"))
-      .all();
+    const report = outcome.report.filter((r) => r.campaignId === "kaputt");
     const reasonFor = (rel: string) =>
       report.filter((r) => r.path === rel).map((r) => r.reason);
 
-    // 1. broken YAML -> unknown_files, verbatim.
+    // 1. broken YAML -> reported, left out.
     expect(reasonFor("01-kapitel/ort/kaputt.md").join(" ")).toContain("kaputtes YAML");
-    // 2. missing properties -> unknown_files, verbatim.
+    // 2. missing properties -> reported, left out.
     expect(reasonFor("01-kapitel/ort/nackt.md").join(" ")).toContain("ohne Eigenschaften-Block");
     // 3. id collision -> the first file wins.
     expect(reasonFor("01-kapitel/zzz-kollision.md").join(" ")).toContain("doppelt");
@@ -421,26 +417,18 @@ Freitext ganz oben, der zu keinem Begriff gehört.
     expect(reasonFor("notizen.txt").join(" ")).toContain("Keine Markdown-Datei");
     expect(reasonFor("npcs/alt/fenn.md").join(" ")).toContain("Unterordner");
 
-    // NOTHING IS LOST: every degraded file is in unknown_files byte for byte.
-    const stored = new Map(
-      db
-        .select()
-        .from(unknownFiles)
-        .where(eq(unknownFiles.campaignId, "kaputt"))
-        .all()
-        .map((r) => [r.path, r.content]),
+    // NOTHING IS TOUCHED: the files stay in the tree, the report names them.
+    expect(new Set(report.map((r) => r.path))).toEqual(
+      new Set([
+        "01-kapitel/ort/kaputt.md",
+        "01-kapitel/ort/nackt.md",
+        "01-kapitel/zzz-kollision.md",
+        "sessions/2026-02-01.md",
+        "glossary.md",
+        "notizen.txt",
+        "npcs/alt/fenn.md",
+      ]),
     );
-    for (const [rel, expected] of [
-      ["01-kapitel/ort/kaputt.md", BROKEN_YAML],
-      ["01-kapitel/ort/nackt.md", NO_FRONTMATTER],
-      ["01-kapitel/zzz-kollision.md", COLLIDING],
-      ["sessions/2026-02-01.md", BROKEN_SESSION],
-      ["glossary.md", BROKEN_GLOSSARY],
-      ["notizen.txt", "lose Notizen"],
-      ["npcs/alt/fenn.md", "---\nid: fenn\n---\nalt"],
-    ] as const) {
-      expect(stored.get(rel)).toBe(expected);
-    }
 
     // The first file wins the id collision — content proves which one.
     const winner = db
@@ -516,7 +504,7 @@ describe("no silent content loss", () => {
       "inbox.md": "# Inbox\n\n- eine Idee aus der App #thread\n- [x] schon erledigt\n",
     });
     const { db } = await freshDb();
-    await runInitialMigration(db, tmpRoot);
+    const outcome = await runInitialMigration(db, tmpRoot);
 
     const rows = db
       .select()
@@ -531,11 +519,8 @@ describe("no silent content loss", () => {
     ]);
     expect(rows[1]?.text).toBe("eine Idee aus der App #thread");
     expect(rows[2]?.done).toBe(1);
-    // And it is NOT a degradation: no report entry, nothing in unknown_files.
-    expect(db.select().from(migrationReport).where(eq(migrationReport.campaignId, id)).all()).toEqual(
-      [],
-    );
-    expect(db.select().from(unknownFiles).where(eq(unknownFiles.campaignId, id)).all()).toEqual([]);
+    // And it is NOT a degradation: no report entry.
+    expect(outcome.report.filter((r) => r.campaignId === id)).toEqual([]);
   });
 
   test("a glossary without properties is imported too", async () => {
@@ -544,13 +529,11 @@ describe("no silent content loss", () => {
       "glossary.md": "# Glossar\n\n- cove -> Bucht\n",
     });
     const { db } = await freshDb();
-    await runInitialMigration(db, tmpRoot);
+    const outcome = await runInitialMigration(db, tmpRoot);
     expect(
       db.select().from(glossary).where(eq(glossary.campaignId, id)).all().map((t) => t.term),
     ).toContain("cove");
-    expect(db.select().from(migrationReport).where(eq(migrationReport.campaignId, id)).all()).toEqual(
-      [],
-    );
+    expect(outcome.report.filter((r) => r.campaignId === id)).toEqual([]);
   });
 
   test("an inbox with a BROKEN properties block still degrades verbatim", async () => {
@@ -560,11 +543,9 @@ describe("no silent content loss", () => {
       "inbox.md": broken,
     });
     const { db } = await freshDb();
-    await runInitialMigration(db, tmpRoot);
+    const outcome = await runInitialMigration(db, tmpRoot);
     expect(db.select().from(inboxEntries).where(eq(inboxEntries.campaignId, id)).all()).toEqual([]);
-    expect(
-      db.select().from(unknownFiles).where(eq(unknownFiles.campaignId, id)).all()[0]?.content,
-    ).toBe(broken);
+    expect(outcome.report.filter((r) => r.campaignId === id).map((r) => r.path)).toEqual(["inbox.md"]);
   });
 
   test("a `### ` subsection under `## Log` survives in the session body", async () => {
@@ -628,18 +609,10 @@ describe("no silent content loss", () => {
       "01-x/szene.md": "---\nid: szene\ntitle: Szene\nlocation: \"???\"\n---\n\nText.\n",
     });
     const { db } = await freshDb();
-    await runInitialMigration(db, tmpRoot);
+    const outcome = await runInitialMigration(db, tmpRoot);
     const scene = db.select().from(scenes).where(eq(scenes.campaignId, id)).all()[0];
     expect(scene?.location).toBeNull();
-    expect(
-      db
-        .select()
-        .from(migrationReport)
-        .where(eq(migrationReport.campaignId, id))
-        .all()
-        .map((r) => r.reason)
-        .join(" "),
-    ).toContain("ergibt keine Orts-id");
+    expect(reasons(outcome, id)).toContain("ergibt keine Orts-id");
   });
 
   test("a `quickstats` that is not a map is kept in extra and reported", async () => {
@@ -648,23 +621,15 @@ describe("no silent content loss", () => {
       "npcs/fenn.md": "---\nid: fenn\nname: Fenn\nquickstats: [ac 12, hp 9]\n---\n\nText.\n",
     });
     const { db } = await freshDb();
-    await runInitialMigration(db, tmpRoot);
+    const outcome = await runInitialMigration(db, tmpRoot);
     const fenn = db.select().from(npcs).where(eq(npcs.campaignId, id)).all()[0];
     expect(unpackJson(fenn?.quickstats)).toEqual({});
     // The value itself is not gone — it moved to the extra fields.
     expect(unpackJson(fenn?.extra).quickstats).toEqual(["ac 12", "hp 9"]);
-    expect(
-      db
-        .select()
-        .from(migrationReport)
-        .where(eq(migrationReport.campaignId, id))
-        .all()
-        .map((r) => r.reason)
-        .join(" "),
-    ).toContain("quickstats");
+    expect(reasons(outcome, id)).toContain("quickstats");
   });
 
-  test("a binary file is stored as BYTES and the report says so", async () => {
+  test("a binary file is left in the tree and the report says so", async () => {
     // A png header — not valid UTF-8, so decoding it would mangle it.
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff, 0xfe]);
     const id = await campaignWith({
@@ -672,45 +637,23 @@ describe("no silent content loss", () => {
       "karte.png": png,
     });
     const { db } = await freshDb();
-    await runInitialMigration(db, tmpRoot);
-    const row = db
-      .select()
-      .from(unknownFiles)
-      .where(and(eq(unknownFiles.campaignId, id), eq(unknownFiles.path, "karte.png")))
-      .all()[0];
-    // The bytes are byte-for-byte what was on disk …
-    expect(row?.contentBlob).not.toBeNull();
-    expect(Array.from(row?.contentBlob ?? new Uint8Array())).toEqual(Array.from(png));
-    // … and no mangled text pretends to be the file.
-    expect(row?.content).toBe("");
-    const reason = db
-      .select()
-      .from(migrationReport)
-      .where(eq(migrationReport.campaignId, id))
-      .all()
-      .map((r) => r.reason)
-      .join(" ");
-    expect(reason).toContain("binär");
-    expect(reason).toContain("content_blob");
-    // The old claim was a lie and must not come back.
-    expect(reason).not.toContain("Inhalt unverändert übernommen");
+    const outcome = await runInitialMigration(db, tmpRoot);
+    const entry = outcome.report.find((r) => r.campaignId === id && r.path === "karte.png");
+    expect(entry?.reason).toContain("binär");
+    expect(entry?.reason).toContain("bleibt im Baum");
+    // No mangled text pretends to be the file.
+    expect(entry?.reason).not.toContain("übernommen.");
   });
 
-  test("a UTF-8 text file with non-ASCII characters is still stored as text", async () => {
-    const text = "lose Notizen über Salzhäfen — mit Gedankenstrich\n";
+  test("a text file the format does not describe is named, not imported", async () => {
     const id = await campaignWith({
       "_campaign.md": "---\nid: review\n---\n",
-      "notizen.txt": text,
+      "notizen.txt": "lose Notizen über Salzhäfen — mit Gedankenstrich\n",
     });
     const { db } = await freshDb();
-    await runInitialMigration(db, tmpRoot);
-    const row = db
-      .select()
-      .from(unknownFiles)
-      .where(and(eq(unknownFiles.campaignId, id), eq(unknownFiles.path, "notizen.txt")))
-      .all()[0];
-    expect(row?.content).toBe(text);
-    expect(row?.contentBlob).toBeNull();
+    const outcome = await runInitialMigration(db, tmpRoot);
+    const entry = outcome.report.find((r) => r.campaignId === id && r.path === "notizen.txt");
+    expect(entry?.reason).toContain("Keine Markdown-Datei");
   });
 });
 
@@ -772,9 +715,7 @@ describe("AK3 — a second run does nothing", () => {
     expect(third.skipped).toBe("already-migrated");
   });
 
-  test("the report is attributable to ONE run — `outcome.runId` is the filter", async () => {
-    // The CLI printed the whole cumulative table, so a resumed run presented
-    // an earlier run's findings as if they had just happened.
+  test("the report names THIS run's findings only — a resumed run does not repeat old ones", async () => {
     const first = path.join(tmpRoot, "eins");
     await mkdir(first, { recursive: true });
     await writeFile(path.join(first, "_campaign.md"), "---\nid: eins\n---\n", "utf8");
@@ -782,8 +723,7 @@ describe("AK3 — a second run does nothing", () => {
 
     const { db } = await freshDb();
     const run1 = await runInitialMigration(db, tmpRoot);
-    expect(run1.reportEntries).toBe(1);
-    expect(run1.runId).toBeDefined();
+    expect(run1.report.map((r) => r.path)).toEqual(["notizen.txt"]);
 
     // A second campaign appears and the run is re-opened (the resume path).
     const second = path.join(tmpRoot, "zwei");
@@ -794,19 +734,8 @@ describe("AK3 — a second run does nothing", () => {
 
     const run2 = await runInitialMigration(db, tmpRoot);
     expect(run2.campaigns).toEqual(["zwei"]);
-    // A run id, not a timestamp: two runs can share an `at` to the millisecond.
-    expect(run2.runId).not.toBe(run1.runId);
-    expect(run2.reportEntries).toBe(1);
-
-    // The table is cumulative …
-    expect(db.select().from(migrationReport).all()).toHaveLength(2);
-    // … but this run's rows are exactly the ones the CLI prints.
-    const thisRun = db
-      .select()
-      .from(migrationReport)
-      .where(eq(migrationReport.runId, run2.runId ?? ""))
-      .all();
-    expect(thisRun.map((r) => r.path)).toEqual(["andere.txt"]);
+    // Exactly this run's findings — the ones the CLI prints.
+    expect(run2.report.map((r) => r.path)).toEqual(["andere.txt"]);
   });
 
   test("a non-empty database without a marker is never overwritten", async () => {

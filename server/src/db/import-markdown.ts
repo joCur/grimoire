@@ -5,7 +5,7 @@
 // The same design rule as everywhere else applies (DECISIONS #1): NOTHING
 // here throws, and nothing is silently dropped. A line the grammar does not
 // recognise keeps its `raw` and travels on with its parsed fields empty; the
-// caller decides whether that is worth a `migration_report` entry.
+// caller decides whether that is worth a report entry.
 //
 // The log and inbox parsers deliberately mirror app/src/lib/session.ts and
 // app/src/lib/review.ts LINE FOR LINE, including the trimming. They have to:
@@ -375,9 +375,8 @@ export interface RelationParseResult {
 
 /**
  * The `## Beziehungen` section as rows. A line without a colon is not a
- * relation — it is reported and kept (the caller puts the file in
- * `unknown_files`), because guessing an npc id out of prose would invent a
- * reference that never existed.
+ * relation — it is reported and left out, because guessing an npc id out of
+ * prose would invent a reference that never existed.
  */
 export function parseRelationsSection(body: string): RelationParseResult {
   // Level 2 exactly — the same heading the rename cascade rewrites
@@ -458,8 +457,7 @@ export interface GlossaryParseResult {
   entries: ImportedGlossaryEntry[];
   /**
    * Reasons the file did not decompose cleanly — one per incident, ready for
-   * `migration_report`. Non-empty means the caller ALSO keeps the file
-   * verbatim in `unknown_files` (planning section 2).
+   * the run's report.
    */
   problems: string[];
   /**

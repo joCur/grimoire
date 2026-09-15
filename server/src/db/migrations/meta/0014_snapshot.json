@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b8cfa432-7525-4a71-b6fe-d6f95b100573",
-  "prevId": "a3eb0a50-1b50-4775-b4cb-da11cd5ea992",
+  "id": "391fec57-70c2-4bda-8c82-60192962ba8d",
+  "prevId": "57a0fa1f-6617-4099-a7b5-0304d78494ae",
   "tables": {
     "campaign_knowledge": {
       "name": "campaign_knowledge",
@@ -413,6 +413,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
+        },
+        "new_chapter_title": {
+          "name": "new_chapter_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -1238,6 +1245,21 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "cascade"
+        },
+        "scenes_chapter_fk": {
+          "name": "scenes_chapter_fk",
+          "tableFrom": "scenes",
+          "tableTo": "chapters",
+          "columnsFrom": [
+            "campaign_id",
+            "chapter_id"
+          ],
+          "columnsTo": [
+            "campaign_id",
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "cascade"
         }
       },

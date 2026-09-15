@@ -6,7 +6,7 @@
 //   * the repair on the RAW client against a pre-#115 database (no foreign
 //     key, orphans allowed), because that is the only state it ever sees —
 //     `openDb` calls it before the migrator for exactly that reason;
-//   * the foreign key of migration 0013 on a fully migrated database, at SQL
+//   * the foreign key of migration 0014 on a fully migrated database, at SQL
 //     level, because that is the promise "no scene without a chapter row" is
 //     made of now.
 
@@ -91,12 +91,14 @@ function applyMigrationsThrough(client: SqliteClient, tag: string): void {
  * one that took `scenes.chapter_declared` away, so it is the boundary the
  * rebuild's column list has to agree with; `CHAPTER_FK` is the rebuild
  * itself, and `BEFORE_CHAPTER_FK` the state a database is in when it reaches
- * it.
+ * it. `DROP_IMPORT_BOOKKEEPING` took the two import tables away and is the
+ * newest state a production database can already be in.
  */
 const PIPELINE_PARTS = "0010_pipeline_parts";
 const DROP_CHAPTER_DECLARED = "0011_drop_chapter_declared";
-const BEFORE_CHAPTER_FK = "0012_job_new_chapter_title";
-const CHAPTER_FK = "0013_scenes_chapter_fk";
+const DROP_IMPORT_BOOKKEEPING = "0012_drop_import_bookkeeping";
+const BEFORE_CHAPTER_FK = "0013_job_new_chapter_title";
+const CHAPTER_FK = "0014_scenes_chapter_fk";
 
 /** Apply one committed migration file the way drizzle's migrator does. */
 function applyMigration(client: SqliteClient, tag: string): void {
@@ -206,8 +208,8 @@ describe("the boot repair of orphan chapters (#115)", () => {
 
   // The promise the blank half exists for, end to end: the same pre-0012
   // database, once with the repair and once without. A blank left in place is
-  // exactly the row migration 0013 fails on.
-  test("migration 0013 goes through after the repair and fails without it", async () => {
+  // exactly the row migration 0014 fails on.
+  test("migration 0014 goes through after the repair and fails without it", async () => {
     async function upToChapterFk(): Promise<SqliteClient> {
       const client = await openSqlite(":memory:");
       client.exec("PRAGMA foreign_keys = ON");
@@ -251,7 +253,7 @@ describe("the boot repair of orphan chapters (#115)", () => {
   });
 });
 
-describe("the chapter foreign key of migration 0013 (#115)", () => {
+describe("the chapter foreign key of migration 0014 (#115)", () => {
   test("rejects a scene whose chapter has no row", async () => {
     const { db, close } = await openDb(":memory:");
     try {
@@ -298,7 +300,7 @@ describe("the chapter foreign key of migration 0013 (#115)", () => {
   });
 
   test("the rebuild keeps the scene child rows", async () => {
-    // The hand-edited half of migration 0013 (see its header): the migrator
+    // The hand-edited half of migration 0014 (see its header): the migrator
     // runs every file in ONE transaction, where `PRAGMA foreign_keys=OFF` is
     // a no-op — so a plain `DROP TABLE scenes` would cascade through
     // `scene_npcs`/`scene_tags` and delete every scene's references. The
@@ -442,6 +444,14 @@ describe("upgrading an existing database through the chapter foreign key", () =>
           name: string;
         }>).map((row) => row.name),
       ).toContain("new_chapter_title");
+      // Whatever the starting point was, the two import bookkeeping tables
+      // main dropped are gone afterwards — the rebuild does not bring them
+      // back and the boot does not miss them.
+      const tables = (db.all(sql`select name from sqlite_master where type = 'table'`) as Array<{
+        name: string;
+      }>).map((row) => row.name);
+      expect(tables).not.toContain("unknown_files");
+      expect(tables).not.toContain("migration_report");
       // The foreign key the whole slice is for is enforcing now.
       expect(() =>
         db.run(
@@ -484,6 +494,27 @@ describe("upgrading an existing database through the chapter foreign key", () =>
     const dir = mkdtempSync(path.join(tmpdir(), "grimoire-mig-0011-"));
     try {
       await expectUpgraded(await dbStoppedAt(dir, DROP_CHAPTER_DECLARED, seedCampaign));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a database at 0012 has lost the import tables and still takes the rebuild", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "grimoire-mig-0012-"));
+    try {
+      // The state this starting point is about: the two import bookkeeping
+      // tables are already gone, so the boot has nothing but the rebuild left
+      // to do and must not stumble over their absence.
+      const before = await openSqlite(path.join(dir, "probe.db"));
+      applyMigrationsThrough(before, DROP_IMPORT_BOOKKEEPING);
+      expect(
+        (before.prepare("select name from sqlite_master where type = 'table'").all() as Array<{
+          name: string;
+        }>).map((row) => row.name),
+      ).not.toContain("unknown_files");
+      before.close();
+
+      await expectUpgraded(await dbStoppedAt(dir, DROP_IMPORT_BOOKKEEPING, seedCampaign));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -634,7 +634,7 @@ function ensureLocationRow(
  * the job did not), and the result was twelve scenes nobody could see. So the
  * one path that writes scene rows without a dialog in front of it — the draft
  * apply — closes the hole in the SAME transaction, like `ensureLocationRow`
- * does for the Ort. Since migration 0013 the database enforces it too; this
+ * does for the Ort. Since migration 0014 the database enforces it too; this
  * is what keeps that constraint from turning an apply into a 409.
  *
  * `title` is the run's chapter title when one is known, the id otherwise —
@@ -2214,7 +2214,7 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           .limit(1)
           .all()[0]?.pos ?? -1) + 1;
       // The chapter row FIRST — `scenes.chapter_id` is a foreign key since
-      // migration 0013, and a generated scene is the one write that can name
+      // migration 0014, and a generated scene is the one write that can name
       // a chapter the campaign does not have yet (issue #115).
       // A new-chapter run puts its `_chapter` draft FIRST in the same batch
       // (generator.ts `jobChapterTarget`), so the row normally exists with

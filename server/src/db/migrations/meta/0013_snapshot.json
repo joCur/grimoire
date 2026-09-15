@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "685cd30c-2220-4460-89b5-914ed69c3ee8",
-  "prevId": "63d3f7f1-f0e0-4a54-b421-66291880ab61",
+  "id": "57a0fa1f-6617-4099-a7b5-0304d78494ae",
+  "prevId": "b8cfa432-7525-4a71-b6fe-d6f95b100573",
   "tables": {
     "campaign_knowledge": {
       "name": "campaign_knowledge",
@@ -803,60 +803,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "migration_report": {
-      "name": "migration_report",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "campaign_id": {
-          "name": "campaign_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "path": {
-          "name": "path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "''"
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "at": {
-          "name": "at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "run_id": {
-          "name": "run_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "''"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "npc_relations": {
       "name": "npc_relations",
       "columns": {
@@ -1300,21 +1246,6 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "cascade"
-        },
-        "scenes_chapter_fk": {
-          "name": "scenes_chapter_fk",
-          "tableFrom": "scenes",
-          "tableTo": "chapters",
-          "columnsFrom": [
-            "campaign_id",
-            "chapter_id"
-          ],
-          "columnsTo": [
-            "campaign_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "cascade"
         }
       },
       "compositePrimaryKeys": {
@@ -1549,73 +1480,6 @@
             "id"
           ],
           "name": "sessions_campaign_id_id_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "unknown_files": {
-      "name": "unknown_files",
-      "columns": {
-        "campaign_id": {
-          "name": "campaign_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "path": {
-          "name": "path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "content": {
-          "name": "content",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "content_blob": {
-          "name": "content_blob",
-          "type": "blob",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "at": {
-          "name": "at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "unknown_files_campaign_fk": {
-          "name": "unknown_files_campaign_fk",
-          "tableFrom": "unknown_files",
-          "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "cascade"
-        }
-      },
-      "compositePrimaryKeys": {
-        "unknown_files_campaign_id_path_pk": {
-          "columns": [
-            "campaign_id",
-            "path"
-          ],
-          "name": "unknown_files_campaign_id_path_pk"
         }
       },
       "uniqueConstraints": {},

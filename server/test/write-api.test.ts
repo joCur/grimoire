@@ -821,9 +821,8 @@ describe("PUT /api/:campaign/file", () => {
   // the writer had to reattach a properties block it could not always find,
   // and refused rather than delete it. There is no split any more — the
   // properties is columns and the body is a column — so the failure mode is
-  // gone with it. What a malformed file can still do is fail the one-time
-  // migration's parse, which is `unknown_files` plus a `migration_report`
-  // entry (covered by test/db-migration.test.ts).
+  // gone with it. What a malformed file can still do is fail the importer's
+  // parse, which names it in the seed report (test/db-migration.test.ts).
 
   test("400 for the append-only kinds — session logs and inbox", async () => {
     // DECISIONS #4: they grow by ROWS through POST /log and POST /inbox; a

@@ -341,5 +341,5 @@ Im Baum stehen die Eigenschaften eines Eintrags als YAML-Block (`---` …
 ```
 
 Die `id` im YAML-Block gewinnt gegen den Dateinamen. Was der Import nicht
-versteht, landet unverändert in `unknown_files` samt Zeile im Report — nichts
-geht verloren.
+versteht, übernimmt er nicht und nennt es im Bericht auf stdout — die Datei
+bleibt unverändert im Baum.
