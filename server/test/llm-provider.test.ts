@@ -662,7 +662,7 @@ describe("prompt caching", () => {
           },
         }),
         { status: 200, headers: { "content-type": "application/json" } },
-      )) as typeof fetch;
+      )) as unknown as typeof fetch;
     try {
       const answer = await new ClaudeProvider("sk-ant-test").complete(CACHED);
       expect(answer.usage).toEqual({ inputTokens: 5020, outputTokens: 40 });

@@ -505,6 +505,8 @@ export interface GenerateJobPart {
   error?: string;
   /** The mechanical validation errors of a failed part, when there were any. */
   validationErrors?: string[];
+  /** The raw reply of the failed attempt (capped) — the „was kam zurück" block. */
+  rawReply?: string;
 }
 
 export const GENERATE_JOB_PART_STATUSES = ["pending", "running", "done", "failed"] as const;

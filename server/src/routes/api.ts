@@ -61,6 +61,7 @@ import {
   deleteJob,
   getJob,
   patchJobReview,
+  retryJobPart,
   serializeJob,
   type ReviewPatch,
   startJob,
@@ -879,6 +880,29 @@ api.post("/:campaign/generate/job/:id/accept", async (c) => {
   const body = await jsonBody(c, ["rev", "paths", "chapter", "chapterTitle"]);
   const rev = requireRev(body.rev);
   return c.json(await acceptJobParts(c.req.param("campaign"), c.req.param("id"), rev, body));
+});
+
+// POST /api/:campaign/generate/job/parts/:key/retry -> the job (202)
+// „Erneut versuchen" for ONE part of a pipelined scene run (issue #102).
+// Only that part is re-run: the outline stays, the finished parts stay
+// reviewable and acceptable, and the retried part goes back through exactly
+// the call it failed on — same outline, same source excerpt, same
+// validation. The answer is the job with the part back in `running`, so the
+// app needs no extra read before its next poll.
+//
+// 404 without a job, for a stale :id and for an unknown part key; 409 for a
+// job that has no pipeline (a single-call npc/augment run) and for a part
+// that is already running or already done — a double click must not spend
+// tokens twice; 503 when no provider is configured.
+api.post("/:campaign/generate/job/:id/parts/:key/retry", async (c) => {
+  const provider = obtainProvider(); // 503 when nothing is configured
+  const job = await retryJobPart(
+    c.req.param("campaign"),
+    c.req.param("id"),
+    c.req.param("key"),
+    provider,
+  );
+  return c.json(serializeJob(job), 202);
 });
 
 // GET /api/:campaign/generate/job -> GenerateJob (404 when there is none).

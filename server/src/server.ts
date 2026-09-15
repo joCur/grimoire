@@ -250,6 +250,11 @@
 //                                              transaction. `id` and the app-managed keys
 //                                              are refused (400) — an id change is
 //                                              POST /rename's job, with its cascade
+//   [x] POST /api/:campaign/generate/job/:id/parts/:key/retry -> 202 GenerateJob —
+//           „Erneut versuchen" for ONE part of a pipelined scene run (issue
+//           #102). Re-runs only that part; the outline and the finished parts
+//           stay. 404 unknown job/part, 409 for a part that already runs or
+//           is done and for a job without parts, 503 without a provider.
 //   [x] GET  /api/:campaign/generate/job       GenerateJob (running/done/failed incl.
 //                                              kind, result/npcResult/augmentResult,
 //                                              error body and draftEdits), 404 when

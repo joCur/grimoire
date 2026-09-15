@@ -166,6 +166,17 @@ export const ASSET_FILES = {
     systemPrompt: "location-system-prompt.md",
     fewShotTarget: "location-example-output.md",
   },
+  // The OUTLINE step of a pipelined scene run (issue #102): its own prompt
+  // and its own few-shot (a worked example outline, not a target file).
+  outline: {
+    systemPrompt: "outline-system-prompt.md",
+    fewShotTarget: "outline-example-output.md",
+  },
+  // The output-schema section that turns the scene prompt into „genau eine
+  // Szene aus der Gliederung" mode (issue #102). No few-shot of its own — the
+  // per-scene call sends the scene example file — so, like `augment`, this
+  // entry carries a system prompt alone.
+  sceneSingle: { systemPrompt: "scene-single-output.md" },
   // The augment run's OWN system prompt (issue #36). It has no few-shot of
   // its own — the run sends the TARGET KIND's example file — so this entry
   // carries the system prompt alone and `loadPromptAssets` is not the right
@@ -175,8 +186,12 @@ export const ASSET_FILES = {
 
 const promptAssets = new Map<string, PromptAssets>();
 
-/** The kinds that have a prompt PAIR — the augment run has no few-shot. */
-type PromptPairKind = Exclude<keyof typeof ASSET_FILES, "augment">;
+/**
+ * The kinds that have a prompt PAIR. `augment` and `sceneSingle` do not: the
+ * first sends the target kind's example file, the second is only an output
+ * schema spliced into the scene prompt (issue #102).
+ */
+type PromptPairKind = Exclude<keyof typeof ASSET_FILES, "augment" | "sceneSingle">;
 
 export async function loadPromptAssets(kind: PromptPairKind): Promise<PromptAssets> {
   const cached = promptAssets.get(kind);
@@ -988,6 +1003,17 @@ function parseRawNpcReply(raw: string, errors: string[]): RawNpcReply | null {
  * an empty `## Notizen`. An id that already exists is an error too — the DM
  * can pin a different one via the request's `id`.
  */
+/**
+ * The NPC FORMAT rules that live in the body (issue #21): `## Weiß` carries
+ * only `[!secret]`, `## Beziehungen` only existing npc ids, `## Notizen`
+ * stays empty. Exported since issue #102, where an npc is generated as a part
+ * of a scene run and has to be judged by the same rules as an npc RUN — minus
+ * the ones that are about the run (no chapter, the pinned id).
+ */
+export function npcBodyErrors(body: string, ctx: CampaignContext): string[] {
+  return [...knowledgeCalloutErrors(body), ...relationErrors(body, ctx), ...notesErrors(body)];
+}
+
 export function validateNpcReply(
   raw: string,
   ctx: CampaignContext,

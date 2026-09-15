@@ -28,6 +28,7 @@ import {
   propertyProposals,
   validateAugmentReply,
 } from "../src/generator-augment";
+import { sceneSystemPrompt } from "../src/generate-pipeline";
 import { buildPrompt, EXISTING_ENTRY_HEADING, INSTRUCTION_HEADING } from "../src/llm-provider";
 import { failInterruptedJobs } from "../src/db/job-boot";
 import { getDb } from "../src/store/handle";
@@ -231,6 +232,12 @@ describe("prompt assembly", () => {
       ["augment/npc", await augmentSystemPrompt("npc")],
       ["augment/location", await augmentSystemPrompt("location")],
       ["augment/scene", await augmentSystemPrompt("scene")],
+      // The two prompt kinds issue #102 adds: the outline step, and the
+      // scene prompt in „genau eine Szene aus der Gliederung" mode. The
+      // single-scene mode is an output-schema SWAP, not a second prompt
+      // file, so that these rules keep travelling exactly once.
+      ["outline", await loadAsset(ASSET_FILES.outline.systemPrompt)],
+      ["scene/single", await sceneSystemPrompt("single")],
     ];
     for (const [kind, prompt] of assembled) {
       expect(prompt.split(ORTHOGRAPHY_RULE).length - 1, kind).toBe(1);
@@ -267,6 +274,12 @@ describe("prompt assembly", () => {
       ["augment/npc", await augmentSystemPrompt("npc")],
       ["augment/location", await augmentSystemPrompt("location")],
       ["augment/scene", await augmentSystemPrompt("scene")],
+      // The two prompt kinds issue #102 adds: the outline step, and the
+      // scene prompt in „genau eine Szene aus der Gliederung" mode. The
+      // single-scene mode is an output-schema SWAP, not a second prompt
+      // file, so that these rules keep travelling exactly once.
+      ["outline", await loadAsset(ASSET_FILES.outline.systemPrompt)],
+      ["scene/single", await sceneSystemPrompt("single")],
     ];
     for (const [kind, prompt] of assembled) {
       expect(prompt.split(TABLE_RULE).length - 1, kind).toBe(1);
