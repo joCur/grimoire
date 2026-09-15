@@ -13,6 +13,7 @@
 
 import { getDbFile } from "../config";
 import { openDb, type GrimoireDb, type OpenDb } from "../db/client";
+import type { ChapterRepairOutcome } from "../db/chapter-repair";
 import type { GroupMigrationOutcome } from "../db/group-migration";
 import { failInterruptedJobs } from "../db/job-boot";
 import { backfillReferences } from "./ref-backfill";
@@ -41,6 +42,12 @@ export interface StoreInfo {
    * and were left untouched. Empty on every boot after the first.
    */
   groupMigration: GroupMigrationOutcome;
+  /**
+   * The chapters the one-time repair of issue #115 created for scenes whose
+   * `chapter_id` had no row (db/chapter-repair.ts) — a chapter that was
+   * INVISIBLE in the pool until this boot. Empty on every later boot.
+   */
+  chapterRepair: ChapterRepairOutcome;
 }
 
 let opened: OpenDb | null = null;
@@ -76,6 +83,7 @@ export async function initStore(options: { file?: string } = {}): Promise<Grimoi
       interruptedJobs,
       backfilledNpcs: refBackfill.created,
       groupMigration: handle.groupMigration,
+      chapterRepair: handle.chapterRepair,
     };
     return handle.db;
   })();

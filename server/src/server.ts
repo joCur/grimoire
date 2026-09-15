@@ -463,6 +463,22 @@ if (import.meta.main) {
         `entry and got one: ${groupMigration.createdLocations.join(", ")}`,
     );
   }
+  // Issue #115: a `chapter_id` without a chapters row made the chapter AND
+  // its scenes invisible in the pool. The repair gives it a row named by its
+  // own slug, so it is loud on purpose — a chapter showing up under a slug is
+  // something the DM wants to go and rename.
+  const chapterRepair = info?.chapterRepair;
+  if (chapterRepair !== undefined && chapterRepair.created.length > 0) {
+    console.log(
+      `${chapterRepair.created.length} chapter(s) named by a scene had no entry and got one ` +
+        "(titled by their id — rename them in the pool):",
+    );
+    for (const entry of chapterRepair.created) {
+      console.log(
+        `  · [${entry.campaignId}] ${entry.chapterId} (${entry.scenes} scene(s) were invisible)`,
+      );
+    }
+  }
   // Issue #23: jobs are rows now, so a restart no longer loses a finished
   // generation — but a run that was in flight died with the old process and
   // is reported as failed. Say so, it explains the app's message.

@@ -20,6 +20,7 @@ import { SQLiteBunSession } from "drizzle-orm/bun-sqlite/session";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { mkdirSync } from "node:fs";
+import { repairOrphanChapters, type ChapterRepairOutcome } from "./chapter-repair";
 import { openSqlite, type SqliteClient } from "./driver";
 import { migrateGroupsToLocations, type GroupMigrationOutcome } from "./group-migration";
 import { schema } from "./schema";
@@ -38,6 +39,13 @@ export interface OpenDb {
    * ./group-migration.ts for why it cannot run after the migrator.
    */
   groupMigration: GroupMigrationOutcome;
+  /**
+   * The chapter rows the pre-migration step of issue #115 had to create for
+   * scenes whose `chapter_id` had none. Empty on every database that never
+   * had a hole — which, after migration 0012's foreign key, is every database
+   * this server has written.
+   */
+  chapterRepair: ChapterRepairOutcome;
 }
 
 /** Directory of the committed migration SQL files. */
@@ -106,9 +114,15 @@ export async function openDb(filename: string): Promise<OpenDb> {
   // `scenes.group_slug`, and this step is what carries the old grouping over
   // into `location`. It is a no-op once the column is gone.
   const groupMigration = migrateGroupsToLocations(client);
+  // Also BEFORE the migrator, and for a sharper reason (issue #115):
+  // migration 0012 gives `scenes.chapter_id` a real foreign key by copying
+  // the rows into a new table, and an orphan `chapter_id` is exactly what
+  // that copy would fail on. The holes are closed here, while the old
+  // unconstrained schema still allows them to be read.
+  const chapterRepair = repairOrphanChapters(client);
   const db = buildDrizzle(client);
   migrateDb(db);
-  return { db, client, close: () => client.close(), groupMigration };
+  return { db, client, close: () => client.close(), groupMigration, chapterRepair };
 }
 
 /**
