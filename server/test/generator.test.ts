@@ -85,7 +85,7 @@ async function restartServer(): Promise<number> {
 // --- fake provider ------------------------------------------------------------
 //
 // Scripted and PIPELINE-AWARE since issue #102 (see support/pipeline-fake.ts):
-// a test still writes „first this reply, then that one", and the fake routes
+// a test still writes „first this reply, then that one“, and the fake routes
 // the script over the outline call, the per-scene call and the per-entry call
 // of the run. `fake.calls` is therefore every call of the run; `fake.callsFor`
 // narrows it to one part — which is what a per-part correction turn is about.
@@ -1482,7 +1482,7 @@ describe("generate jobs", () => {
       outputTokens: 300,
       attempts: fake.calls.length,
     });
-    // The part itself says what happened, which is what „Erneut versuchen"
+    // The part itself says what happened, which is what „Erneut versuchen“
     // hangs off (issue #102).
     expect(job.pipeline!.parts).toEqual([
       expect.objectContaining({
@@ -1866,7 +1866,7 @@ describe("generate jobs", () => {
     // An npc draft path keeps its two segments — only scenes collapse.
     expect(Object.keys(job.draftEdits).every((k) => !k.startsWith("npcs/"))).toBe(true);
 
-    // The point of all of it: „Übernehmen" works again.
+    // The point of all of it: „Übernehmen“ works again.
     const res = await postJson("/api/beispiel/generate/apply", {
       scenes: job.result!.scenes,
       stubs: [],
@@ -2076,7 +2076,7 @@ describe("campaign knowledge", () => {
     const fake = useFake([freshReply()]);
     expect((await generate(generateBody)).status).toBe(200);
     const knowledge = fake.calls[0]!.req.knowledge;
-    expect(knowledge).toContain('schreibe „Salt Harbour" immer als „Salzhafen"');
+    expect(knowledge).toContain('schreibe „Salt Harbour“ immer als „Salzhafen“');
     expect(knowledge).toContain("- Stilregel: Keine Würfelwerte im Read-Aloud.");
   });
 

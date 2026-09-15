@@ -26,11 +26,11 @@ Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
    Die Gliederung ist ein **rein systeminterner** Schritt zur Fehlerreduktion.
    Sie wird dem Nutzer nie angezeigt und nie zum Bearbeiten angeboten (PO,
    15.09.) — interessant ist nur das Ergebnis je Szene/NPC/Ort. Der Server
-   speichert sie auf der Job-Zeile, weil „Erneut versuchen" und ein Neustart
+   speichert sie auf der Job-Zeile, weil „Erneut versuchen“ und ein Neustart
    sie brauchen.
 
 2. **Szenen** (je Szene ein Aufruf, Parallelität 3): `system-prompt.md` im
-   Modus „genau eine Szene aus der Gliederung" (`scene-single-output.md`
+   Modus „genau eine Szene aus der Gliederung“ (`scene-single-output.md`
    tauscht nur das Ausgabeformat — alle Regeln bleiben wörtlich dieselben) +
    Gliederung + der geschnittene Quelltext-Abschnitt. Ausgabe: genau ein
    Szenendokument. Validierung, Korrektur-Turns und Namensprüfung **je
@@ -51,11 +51,11 @@ jedem Aufruf **zuerst** und wird beim Claude-Provider mit
 `cache_control: ephemeral` markiert (System-Prompt und konstanter Block je
 eine Marke); OpenAI-kompatible Endpoints cachen denselben Prefix implizit. Nur
 der variable Rest wechselt je Teil: **welche Szene dieser Aufruf schreibt**
-(„## Diese Szene schreibst du jetzt"), der Ausschnitt, der bestehende Eintrag,
+(„## Diese Szene schreibst du jetzt“), der Ausschnitt, der bestehende Eintrag,
 die Anweisung. Der Gliederungs-Block selbst ist für jeden Teil eines Laufs
 **byteweise identisch** — deshalb steht die Zuweisung nicht darin.
 
-Die Anzeige „~N Tokens · M Aufrufe" summiert über alle Teile, die Gliederung
+Die Anzeige „~N Tokens · M Aufrufe“ summiert über alle Teile, die Gliederung
 eingeschlossen.
 
 **Ein Aufruf bleiben** (PO-Entscheid): der Ergänzen-Lauf (#36) und die
@@ -87,7 +87,7 @@ Szenen-Aufruf, jeden Eintrags-Aufruf und die beiden Ein-Aufruf-Läufe:
    und legt Treffer als `namingHints` ins Job-Ergebnis.
 6. App zeigt Review-Vorschau: Szenen editierbar, Stubs einzeln
    annehmen/ablehnen, Namens-Hinweise dezent daneben (kein Blocker).
-   Erst „Übernehmen" schreibt auf die Platte.
+   Erst „Übernehmen“ schreibt auf die Platte.
 
 ## Kampagnenwissen (Issue #53)
 
@@ -98,7 +98,7 @@ unter einer bindenden Überschrift:
 ```
 ## Kampagnenwissen — immer anwenden, auch wenn das Quellmaterial anders lautet
 
-- Namenskonvention: schreibe „Salt Harbour" immer als „Salzhafen".
+- Namenskonvention: schreibe „Salt Harbour“ immer als „Salzhafen“.
 - Fakt: Der Leuchtturm ist seit zwei Wintern unbesetzt.
 - Stilregel: Keine Würfelwerte im Read-Aloud-Text.
 ```
@@ -112,7 +112,7 @@ der Prompt sieht dann genauso aus wie vorher.
 Alle System-Prompts (`system-prompt.md`, `npc-system-prompt.md`,
 `location-system-prompt.md`, `augment-system-prompt.md` und seit #102
 `outline-system-prompt.md`) tragen **dieselbe**
-Regel „Deutsche Orthografie": jeder echte Text — Fließtext, Read-Alouds,
+Regel „Deutsche Orthografie“: jeder echte Text — Fließtext, Read-Alouds,
 Callouts, `## If:`-Bedingungen, Überschriften, `warnings` und jeder
 Frontmatter-Wert, der Text ist (`title`, `name`, `role`, `voice`,
 `appearance`, `trigger`, `goal`, `statblock` …) — nutzt ä/ö/ü/ß, niemals die
@@ -120,10 +120,10 @@ ASCII-Ersatzschreibung ae/oe/ue/ss. **Einzige Ausnahme**: `id`-Werte (und
 `location`, das eine id ist), die bleiben kebab-case ASCII; Eigennamen aus
 dem Quelltext bleiben unverändert.
 
-Die Regel steht in den drei Create-Prompts unter „## Regeln" und im
+Die Regel steht in den drei Create-Prompts unter „## Regeln“ und im
 Ergänzen-Prompt in der Ergänzungsregel — also genau **einmal** in jedem
 zusammengesetzten Prompt, auch im Ergänzen-Modus, der von den Create-Prompts
-nur „## Ziel-Format der Datei" einschneidet (`formatContract` in
+nur „## Ziel-Format der Datei“ einschneidet (`formatContract` in
 `server/src/generator-augment.ts`). Der Server korrigiert nichts nach: es
 gibt keine Heuristik und kein stilles Ersetzen, die Regel wirkt allein im
 Prompt.
@@ -131,14 +131,14 @@ Prompt.
 ## Tabellen (Issue #96)
 
 Dieselbe Mechanik wie bei der Orthografie-Regel: **eine identische Regel
-„Tabellen"** in allen System-Prompts, die Dokumente schreiben — **nicht** im
+„Tabellen“** in allen System-Prompts, die Dokumente schreiben — **nicht** im
 Gliederungs-Prompt, der überhaupt kein Dokument ausgibt (keine Callouts, kein
 Frontmatter, keine Tabellen; die Orthografie-Regel steht dort trotzdem, weil
 Titel, Einzeiler und `warnings` Text sind) — in den drei Create-Prompts unter
-„## Regeln", im Ergänzen-Prompt in der Ergänzungsregel, also genau **einmal**
+„## Regeln“, im Ergänzen-Prompt in der Ergänzungsregel, also genau **einmal**
 in jedem zusammengesetzten Prompt (`formatContract` in
 `server/src/generator-augment.ts` schneidet aus den Create-Prompts nur
-„## Ziel-Format der Datei" heraus).
+„## Ziel-Format der Datei“ heraus).
 
 Inhalt der Regel: Tabellen aus dem Quellmaterial — Zufallstabellen,
 Begegnungs- und Würfellisten — werden als gültige GFM-Pipe-Tabelle

@@ -77,7 +77,7 @@ afterEach(() => {
 describe("POST /api/:campaign/review/seen", () => {
   const SESSION = "sessions/2026-01-15";
   const LINE = "- 19:52 (lighthouse-arrival) Spuren gefunden, Gruppe will sofort zur Bucht #decision";
-  const LINE2 = '- 21:10 (lighthouse-arrival) Improvisiert: Fischerin "Old Metta" am Steg #npc';
+  const LINE2 = '- 21:10 (lighthouse-arrival) Improvisiert: Fischerin „Old Metta“ am Steg #npc';
 
   test("adds the short hash once; Log unchanged; key rendered last", async () => {
     const before = await getFile(SESSION);

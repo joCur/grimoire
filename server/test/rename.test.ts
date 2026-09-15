@@ -227,7 +227,7 @@ describe("POST /api/:campaign/rename — scene", () => {
       "- 19:52 (ankunft-am-leuchtturm) Spuren gefunden, Gruppe will sofort zur Bucht #decision",
     );
     expect(session.body).toContain(
-      '- 21:10 (ankunft-am-leuchtturm) Improvisiert: Fischerin "Old Metta" am Steg #npc',
+      '- 21:10 (ankunft-am-leuchtturm) Improvisiert: Fischerin „Old Metta“ am Steg #npc',
     );
     // the untimed lines survived verbatim
     expect(session.body).toContain("- 20:30 — Pause");

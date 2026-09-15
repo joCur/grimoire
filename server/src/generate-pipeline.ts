@@ -29,7 +29,7 @@
 //      the DM is interested in is the finished scene (PO, 15.09.).
 //
 //   2. SCENES — one call per outline scene, three at a time. Prompt =
-//      the scene prompt in „single scene from outline" mode + the outline +
+//      the scene prompt in „single scene from outline“ mode + the outline +
 //      the excerpt. Validation, correction turns and the naming check happen
 //      PER SCENE, so a form error costs that scene and nothing else, and a
 //      finished scene is reviewable while its siblings are still running.
@@ -83,10 +83,10 @@ export const PART_CONCURRENCY = 3;
  *
  * Without it the outline decides how many provider calls a run makes, and a
  * source text that is a whole adventure (or a model that splits every
- * paragraph) turns one „Entwürfe generieren" into dozens of calls the DM
+ * paragraph) turns one „Entwürfe generieren“ into dozens of calls the DM
  * never asked for and cannot stop except by discarding the run. A chapter of
  * twelve playable scenes is already a long evening — beyond that the honest
- * answer is „cut the source text", so an outline over the bound is a
+ * answer is „cut the source text“, so an outline over the bound is a
  * VALIDATION ERROR and therefore a correction turn that asks the model to
  * consolidate, not a failed run.
  */
@@ -374,7 +374,7 @@ function normalizeWithMap(source: string): { text: string; offsets: number[] } {
 // --- the per-call prompt assets ----------------------------------------------
 
 /**
- * The scene system prompt in „single scene from outline" mode: the existing
+ * The scene system prompt in „single scene from outline“ mode: the existing
  * document with its BATCH output schema swapped for the single-scene one.
  *
  * A swap rather than a second prompt file, for the reason the augment run's
@@ -546,7 +546,7 @@ export interface PartOutcome {
   excerptFallback?: boolean;
 }
 
-/** Usage of one part — `calls` is what the review header sums into „M Aufrufe". */
+/** Usage of one part — `calls` is what the review header sums into „M Aufrufe“. */
 export interface PartUsage {
   inputTokens: number;
   outputTokens: number;
@@ -573,7 +573,7 @@ export interface PipelineSink {
     failure: { error: string; validationErrors?: string[]; rawReply?: string },
     usage: PartUsage,
   ): Promise<void>;
-  /** True once the run was cancelled („Verwerfen") or replaced. */
+  /** True once the run was cancelled („Verwerfen“) or replaced. */
   cancelled(): boolean;
 }
 
@@ -613,7 +613,7 @@ export function outlineParts(outline: RunOutline): GenerateJobPart[] {
 /**
  * A part's usage, from a successful result or from a thrown ApiError, with the
  * CALL COUNT taken from the counter rather than from `usage.attempts`: a local
- * endpoint reports no usage at all, and „M Aufrufe" must be true anyway.
+ * endpoint reports no usage at all, and „M Aufrufe“ must be true anyway.
  */
 function usageOf(value: unknown, calls: number): PartUsage {
   const usage = (value ?? {}) as Partial<GenerateUsage>;
@@ -645,7 +645,7 @@ export function callCounter(): CallCounter {
   };
 }
 
-/** The message and the error list the DM reads next to „Erneut versuchen". */
+/** The message and the error list the DM reads next to „Erneut versuchen“. */
 function failureOf(
   err: unknown,
   calls: number,
@@ -798,7 +798,7 @@ export async function runScenePart(
         ...(cut.matched
           ? []
           : [
-              `Der Quelltext-Ausschnitt für „${scene.title}" ließ sich nicht wörtlich ` +
+              `Der Quelltext-Ausschnitt für „${scene.title}“ ließ sich nicht wörtlich ` +
                 "zuordnen — diese Szene wurde aus dem ganzen Quelltext geschrieben.",
             ]),
       ],
@@ -870,10 +870,10 @@ export async function runEntryPart(
 export function entryContext(plan: RunPlan, entry: OutlineEntry): string {
   const blocks: string[] = [`${entry.name} (${entry.id}): ${entry.summary}`];
   const needle = entry.name.toLowerCase();
-  // The id is kebab-case ENGLISH while the name is German („harbour-master" /
-  // „Hafenmeisterin"), so the whole id rarely appears in an English source
+  // The id is kebab-case ENGLISH while the name is German („harbour-master“ /
+  // „Hafenmeisterin“), so the whole id rarely appears in an English source
   // text but its WORDS do. Each word is required, in any order — matching on
-  // one word alone would pull „old" or „the" into every entry's context.
+  // one word alone would pull „old“ or „the“ into every entry's context.
   const idWords = entry.id.split("-").filter((word) => word.length > 2);
   for (const scene of plan.outline.scenes) {
     const passage = excerptOf(plan, scene).text;
@@ -885,7 +885,7 @@ export function entryContext(plan: RunPlan, entry: OutlineEntry): string {
           passage.includes(entry.id) ||
           (idWords.length > 0 && idWords.every((word) => lower.includes(word)));
     if (!mentions) continue;
-    blocks.push(`### Szene „${scene.title}" (${scene.id})\n\n${passage}`);
+    blocks.push(`### Szene „${scene.title}“ (${scene.id})\n\n${passage}`);
   }
   // Nothing matched: the whole source text is the honest fallback — the same
   // rule the excerpt cut follows.
@@ -900,7 +900,7 @@ function excerptOf(plan: RunPlan, scene: OutlineScene): { text: string; matched:
 
 /**
  * Run one part and report it into the sink. The ONE place a part's outcome
- * becomes job state, so a fresh run and a „Erneut versuchen" cannot drift.
+ * becomes job state, so a fresh run and a „Erneut versuchen“ cannot drift.
  */
 export async function runPart(
   plan: RunPlan,
@@ -973,7 +973,7 @@ export async function runPartsPooled(
 
 /**
  * The whole scene run: outline, then every part. Writes NOTHING — the drafts
- * land in the job and only „Übernehmen" touches the store.
+ * land in the job and only „Übernehmen“ touches the store.
  */
 export async function runScenePipeline(input: {
   campaign: string;

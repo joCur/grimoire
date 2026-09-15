@@ -356,7 +356,7 @@ test("a server error is read in the selected language", async ({
   // The whole sentence, built from the code: the kind, the taken id, the free
   // proposal. Nothing here comes off the wire as prose.
   await expect(
-    page.getByText('NPC „jorna" existiert schon — Vorschlag: „jorna-2"'),
+    page.getByText('NPC „jorna“ existiert schon — Vorschlag: „jorna-2“'),
   ).toBeVisible();
   // …and the 409 wrote nothing.
   expect(await api.exists("npcs/jorna-2")).toBe(false);

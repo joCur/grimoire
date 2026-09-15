@@ -15,5 +15,5 @@ Eigennamen ohne Eintrag bleiben unübersetzt.
 ## Stil
 
 - Regelbegriffe (Checks, Skills, Conditions) bleiben Englisch:
-  „Charisma (Deception) check", „advantage/disadvantage".
-- Du-Anrede in Read-Alouds vermeiden; „ihr" für die Gruppe.
+  „Charisma (Deception) check“, „advantage/disadvantage“.
+- Du-Anrede in Read-Alouds vermeiden; „ihr“ für die Gruppe.

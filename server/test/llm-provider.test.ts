@@ -126,7 +126,7 @@ const REQ: GenerateRequest = {
 // decided for BOTH run kinds.
 
 describe("buildPrompt", () => {
-  const KNOWLEDGE = '- Namenskonvention: schreibe „Salt Harbour" immer als „Salzhafen".';
+  const KNOWLEDGE = '- Namenskonvention: schreibe „Salt Harbour“ immer als „Salzhafen“.';
 
   test("no knowledge: the prompt starts with the glossary, exactly as before", () => {
     const prompt = buildPrompt(REQ);

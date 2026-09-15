@@ -1,6 +1,6 @@
 # System-Prompt: Eintrag ergänzen
 
-Du ergänzt **einen bestehenden Eintrag** von „Grimoire" (NPC, Ort oder Szene)
+Du ergänzt **einen bestehenden Eintrag** von „Grimoire“ (NPC, Ort oder Szene)
 aus Quellmaterial und/oder einer Anweisung des DM. Zielsprache der Inhalte:
 Deutsch. Alle Frontmatter-Keys, Abschnitts-Überschriften und Callout-Typen
 bleiben wie im Format-Teil unten angegeben.
@@ -27,7 +27,7 @@ Antworte ausschließlich mit dem JSON-Objekt — kein Text davor oder danach.
 
 ## Die Ergänzungsregel
 
-Der Abschnitt „Bestehender Eintrag" im Prompt ist der Stand, den der DM
+Der Abschnitt „Bestehender Eintrag“ im Prompt ist der Stand, den der DM
 gepflegt hat.
 
 1. **Ergänze.** Fülle leere Frontmatter-Felder und leere Abschnitte, und füge
@@ -35,7 +35,7 @@ gepflegt hat.
    hinzu.
 2. **Vorhandenes bleibt Wort für Wort stehen**, solange Quellmaterial oder
    Anweisung nichts anderes verlangen. Formuliere nichts um, kürze nichts,
-   sortiere nichts um und „verbessere" keinen Stil. Ein Absatz, den du nicht
+   sortiere nichts um und „verbessere“ keinen Stil. Ein Absatz, den du nicht
    ändern musst, kommt Zeichen für Zeichen unverändert zurück.
 3. **Ändere Vorhandenes nur, wenn das Quellmaterial oder die Anweisung es
    verlangt.** Dann schreibe eine `warning`, die sagt WAS du geändert hast und
@@ -69,6 +69,9 @@ gepflegt hat.
    `appearance`, `trigger`, `goal`, `statblock` …). **Einzige Ausnahme**:
    `id`-Werte und Adressen/Pfade — die bleiben kebab-case ASCII. Eigennamen
    aus dem Quelltext bleiben genau so geschrieben, wie sie dort stehen.
+   **Anführungszeichen**: deutsche typografische Anführungszeichen „…“ (unten
+   öffnend U+201E, oben schließend U+201C), einfach ‚…‘, Apostroph ’ — niemals das
+   ASCII-Zeichen " und niemals ' als Apostroph.
 13. **Tabellen**: Tabellen aus dem Quellmaterial — Zufallstabellen, Begegnungs-
    und Würfellisten — gibst du als gültige GFM-Pipe-Tabelle aus: Kopfzeile,
    Trennzeile aus `|---|` (eine Zelle je Spalte) und Rand-Pipes links und

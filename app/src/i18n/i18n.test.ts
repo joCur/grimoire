@@ -60,6 +60,27 @@ describe("the catalogs", () => {
   });
 });
 
+// The typographic guard of issue #107: the catalog used to write German
+// quotation marks as an opening `„` closed by an ASCII `"`, and the generator
+// prompts imitated the catalog. Scanned over the VALUES, not over the file:
+// in the source the closing ASCII `"` is indistinguishable from the string
+// delimiter. The markdown side of the same rule — prompts, few-shots,
+// examples/ — lives in server/test/typography.test.ts.
+describe("German quotation marks", () => {
+  /** `„` and, later in the same message, an ASCII `"` with no `“` between. */
+  const MIXED = /\u201E[^\u201C]*"/;
+
+  test("no German message closes a quotation with an ASCII quote", () => {
+    const bad = KEYS.filter((key) => MIXED.test(de[key]));
+    expect(bad).toEqual([]);
+  });
+
+  test("English closes with `“…”`, never with a stray `„`", () => {
+    const bad = KEYS.filter((key) => en[key].includes("\u201E"));
+    expect(bad).toEqual([]);
+  });
+});
+
 describe("plural", () => {
   test("German picks singular and plural per count", () => {
     const t = translator("de");

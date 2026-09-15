@@ -833,7 +833,7 @@ describe("campaign knowledge", () => {
     expect(req.knowledge).toBe(
       [
         "- Fakt: Fenn lügt über die Ladung.",
-        '- Namenskonvention: schreibe „Salt Harbour" immer als „Salzhafen".',
+        '- Namenskonvention: schreibe „Salt Harbour“ immer als „Salzhafen“.',
       ].join("\n"),
     );
   });
@@ -846,7 +846,7 @@ describe("campaign knowledge", () => {
     const result = (await (
       await generateNpc({ sourceText: "A wharf hand.", id: "wharf-hand" })
     ).json()) as GenerateNpcResult;
-    // The fixture's `role` is „Schmugglerin mit eigenen Plänen".
+    // The fixture's `role` is „Schmugglerin mit eigenen Plänen“.
     const hint = (result.namingHints ?? []).find((h) => h.field === "role");
     expect(hint).toMatchObject({
       from: "Schmugglerin",

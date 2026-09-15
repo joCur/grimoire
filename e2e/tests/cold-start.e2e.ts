@@ -193,7 +193,7 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   // Still exactly one entry — the 409 wrote nothing.
   expect(await api.exists("npcs/hafenmeisterin-jorna-2")).toBe(false);
 
-  await page.getByRole("button", { name: /„hafenmeisterin-jorna-2" verwenden/ }).click();
+  await page.getByRole("button", { name: /„hafenmeisterin-jorna-2“ verwenden/ }).click();
   await expect(page).toHaveURL(/\/npcs\/hafenmeisterin-jorna-2$/);
   // The NAME is the one that was typed; only the id came from the proposal.
   expect((await api.file("npcs/hafenmeisterin-jorna-2")).properties.name).toBe(

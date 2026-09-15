@@ -1,4 +1,4 @@
-// The rules of the „Eigenschaften" form (issue #42): the field list per kind,
+// The rules of the „Eigenschaften“ form (issue #42): the field list per kind,
 // the diff that decides what is patched at all, and the representation a
 // cleared field is written in. Everything here is pure except the last block,
 // which drives the write through a faked fetch (same shape as
@@ -260,7 +260,7 @@ describe("propertiesPatch", () => {
           { key: "insight", value: "+2" },
           // A row that cannot be written (no name). It is not IN the patch —
           // and it never gets there, because propertiesFormIssues blocks the
-          // save while it stands (see „unfinished quickstat rows" below).
+          // save while it stands (see „unfinished quickstat rows“ below).
           { key: "", value: "wird nicht geschrieben" },
         ],
       },
@@ -337,7 +337,7 @@ describe("unfinished quickstat rows block the save", () => {
 
   test("a file's own rows are fine — nothing to complain about", () => {
     expect(propertiesFormIssues(npcFields, values, undefined, t)).toEqual({});
-    // An empty row (the „Zeile hinzufügen" state) and a name whose value was
+    // An empty row (the „Zeile hinzufügen“ state) and a name whose value was
     // cleared (= delete this key) are both legitimate.
     expect(
       propertiesFormIssues(
@@ -371,7 +371,7 @@ describe("unfinished quickstat rows block the save", () => {
       ]), undefined, t,
     );
     expect(issues.quickstats).toBe(
-      'Name „insight" doppelt — jeder Name darf nur einmal vorkommen.',
+      'Name „insight“ doppelt — jeder Name darf nur einmal vorkommen.',
     );
   });
 
@@ -396,7 +396,7 @@ describe("the npcs list holds ids, not names (#70 audit)", () => {
     // under the field instead of a failed save.
     const issues = propertiesFormIssues(sceneFields, withNpcs(["fenn", "Alte Fischerin"]), initial, t);
     expect(issues.npcs).toBe(
-      '„Alte Fischerin" ist keine id — nur Kleinbuchstaben, Ziffern und Bindestriche.',
+      '„Alte Fischerin“ ist keine id — nur Kleinbuchstaben, Ziffern und Bindestriche.',
     );
   });
 
@@ -455,7 +455,7 @@ describe("the Ort field: free text in, a slug out (#100)", () => {
       name: "Der alte Hafen",
     });
     // A bare id typed as an id has no display name of its own: the entry is
-    // called by its id, which is the older „Neu — wird angelegt" line.
+    // called by its id, which is the older „Neu — wird angelegt“ line.
     expect(locationRef("nordbucht", known)).toEqual({ kind: "new", id: "nordbucht" });
   });
 
@@ -472,7 +472,7 @@ describe("the Ort field: free text in, a slug out (#100)", () => {
     expect(propertiesFormIssues(sceneFields, withLocation("leuchtturm"), initial, t)).toEqual({});
     expect(propertiesFormIssues(sceneFields, withLocation("  "), initial, t)).toEqual({});
     expect(propertiesFormIssues(sceneFields, withLocation("???"), initial, t).location).toBe(
-      'Kein verwendbarer Name — „???" ergibt keine Orts-id.',
+      'Kein verwendbarer Name — „???“ ergibt keine Orts-id.',
     );
   });
 
@@ -491,7 +491,7 @@ describe("the Ort field: free text in, a slug out (#100)", () => {
   });
 
   test("text that slugs to the STORED id is no change at all", () => {
-    // `location: bucht` is what the file holds; „Bucht" means the same row,
+    // `location: bucht` is what the file holds; „Bucht“ means the same row,
     // so there is nothing to patch and nothing to create.
     const current = withLocation("Bucht");
     expect(propertiesPatch(sceneFields, initial, current)).toEqual({});
@@ -570,7 +570,7 @@ describe("commitPendingText", () => {
   test("text still standing in a chip input is folded into its list", () => {
     const committed = commitPendingText(sceneFields, values, { tags: "combat" });
     expect(committed.tags).toEqual({ kind: "list", items: ["social", "escape", "combat"] });
-    // …and the patch sees it, so „Speichern" straight after typing works.
+    // …and the patch sees it, so „Speichern“ straight after typing works.
     expect(propertiesPatch(sceneFields, values, committed)).toEqual({
       tags: ["social", "escape", "combat"],
     });
@@ -641,7 +641,7 @@ describe("reference and select options", () => {
       ...known,
       { value: "onhold", label: "onhold" },
     ]);
-    // Cleared to „nicht gesetzt" — same thing, the file's value is still there.
+    // Cleared to „nicht gesetzt“ — same thing, the file's value is still there.
     expect(selectOptions(known, "", "onhold")).toEqual([
       ...known,
       { value: "onhold", label: "onhold" },

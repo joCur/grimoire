@@ -246,7 +246,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
       }))
       // By the NAME the heading shows, not by the id behind it. "" — the
       // scenes that name no location — goes LAST: it is the leftovers section
-      // the app labels „Ohne Ort", not the first location.
+      // the app labels „Ohne Ort“, not the first location.
       .sort((a, b) => (a.slug === "" ? 1 : b.slug === "" ? -1 : cmp(a.name, b.name)));
     const node: ChapterNode = {
       id: chapter.id,
@@ -711,7 +711,7 @@ export async function readKnowledge(campaign: string): Promise<KnowledgeResponse
  * The KNOWLEDGE lines of the prompt (issue #53 AK2) — the list the generator
  * puts above the glossary, in stored order, one line per entry:
  *
- *     - Namenskonvention: schreibe „Alt" immer als „Neu".
+ *     - Namenskonvention: schreibe „Alt“ immer als „Neu“.
  *     - Fakt: <Satz>
  *     - Stilregel: <Satz>
  *
@@ -720,8 +720,8 @@ export async function readKnowledge(campaign: string): Promise<KnowledgeResponse
  * belong in the app's catalog.
  *
  * `[[slug]]` references are RESOLVED here (AK4) with the same expansion the
- * search index uses (store/refs.ts): a fact written as „[[fenn]] lügt immer"
- * must reach the model as „Fenn lügt immer" — the model has never seen a
+ * search index uses (store/refs.ts): a fact written as „[[fenn]] lügt immer“
+ * must reach the model as „Fenn lügt immer“ — the model has never seen a
  * slug table and would otherwise copy the brackets into the prose.
  *
  * `undefined` when the campaign has no knowledge at all, so the prompt keeps
@@ -738,7 +738,7 @@ export async function knowledgeText(campaign: string): Promise<string | undefine
     if (entry.kind === "naming") {
       if (entry.from.trim() === "" || entry.to.trim() === "") continue;
       lines.push(
-        `- Namenskonvention: schreibe „${resolve(entry.from)}" immer als „${resolve(entry.to)}".`,
+        `- Namenskonvention: schreibe „${resolve(entry.from)}“ immer als „${resolve(entry.to)}“.`,
       );
       continue;
     }
@@ -754,9 +754,9 @@ export async function knowledgeText(campaign: string): Promise<string | undefine
  * check (naming-check.ts).
  *
  * REF-EXPANDED like the prompt lines (review of #53): a rule written as
- * „[[fenn]]" → „Fennwyn" reaches the model as „Fenn" → „Fennwyn", so the
- * check has to search the drafts for „Fenn" too — searching for the literal
- * „[[fenn]]" would silently never match and make the rule look obeyed. Both
+ * „[[fenn]]“ → „Fennwyn“ reaches the model as „Fenn“ → „Fennwyn“, so the
+ * check has to search the drafts for „Fenn“ too — searching for the literal
+ * „[[fenn]]“ would silently never match and make the rule look obeyed. Both
  * sides are expanded, because `to` is what the check uses to recognise the
  * already-correct spelling (naming-check.ts findRuleHits).
  */
@@ -783,8 +783,8 @@ export async function namingRules(campaign: string): Promise<Array<{ from: strin
  *
  *   * all whitespace collapses to single spaces, so no entry can open a line
  *     of its own;
- *   * a leading „#" is escaped to „\#", so no entry can become a HEADING and
- *     pose as a section of the prompt („## Kampagnenwissen" is the section
+ *   * a leading „#“ is escaped to „\#“, so no entry can become a HEADING and
+ *     pose as a section of the prompt („## Kampagnenwissen“ is the section
  *     the prompt itself writes, and it is binding).
  *
  * Defensive, not decorative: the DM is the only author, but the source text

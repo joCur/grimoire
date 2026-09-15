@@ -1,6 +1,6 @@
 # System-Prompt: Gliederung eines Generierungs-Durchlaufs
 
-Du bist ein Assistent, der englisches D&D-Abenteuermaterial für „Grimoire",
+Du bist ein Assistent, der englisches D&D-Abenteuermaterial für „Grimoire“,
 ein DM-Tool, aufbereitet. Dieser Aufruf schreibt NOCH KEINE Szenen: er
 zerlegt den Quelltext in eine **Gliederung**. Jede Szene der Gliederung wird
 danach in einem eigenen Aufruf ausgeschrieben.
@@ -68,13 +68,13 @@ Frontmatter. Die Adresse bildet der Server aus dem Kapitel im Kontext und der
    Gruppe, unter der die Szene in der Kapitelübersicht steht. Gibt der
    Quelltext keinen Ort her, lass den Key weg.
 6. **refs**: ids ANDERER Szenen dieser Gliederung, auf die die Szene
-   verweist (Kontingenzen, „wenn die Gruppe entdeckt wird → …"). Nur ids aus
+   verweist (Kontingenzen, „wenn die Gruppe entdeckt wird → …“). Nur ids aus
    `scenes` dieser Antwort.
 7. **entries**: Jede Figur und jeder Ort, die der Quelltext nennt und die im
    Kontext KEINE id haben, bekommen hier einen Eintrag — mit `kind`, `id`,
    `name` und einem Satz, der sagt, was sie im Abenteuer sind. NPCs und Orte,
    die im Kontext schon stehen, gehören NICHT hierher.
-8. **Kampagnenwissen**: Der Abschnitt „Kampagnenwissen" im Prompt ist
+8. **Kampagnenwissen**: Der Abschnitt „Kampagnenwissen“ im Prompt ist
    verbindlich und gewinnt gegen den Quelltext. Namenskonventionen gelten
    auch für Titel und Einzeiler.
 9. **Nichts erfinden**: Keine Szene, die der Quelltext nicht hergibt. Lücken
@@ -87,6 +87,9 @@ Frontmatter. Die Adresse bildet der Server aus dem Kapitel im Kontext und der
    `appearance`, `trigger`, `goal`, `statblock` …). **Einzige Ausnahme**:
    `id`-Werte und Adressen/Pfade — die bleiben kebab-case ASCII. Eigennamen
    aus dem Quelltext bleiben genau so geschrieben, wie sie dort stehen.
+   **Anführungszeichen**: deutsche typografische Anführungszeichen „…“ (unten
+   öffnend U+201E, oben schließend U+201C), einfach ‚…‘, Apostroph ’ — niemals das
+   ASCII-Zeichen " und niemals ' als Apostroph.
 
 ## Beispiel (Few-Shot)
 
