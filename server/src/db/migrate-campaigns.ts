@@ -552,8 +552,12 @@ function importCampaign(
   });
 
   // 3. npcs and locations before scenes — not required by a foreign key
-  //    (scene references are soft, schema.ts rule 3) but it keeps the
-  //    id-collision reports in a readable order.
+  //    (those references are soft, schema.ts rule 3) but it keeps the
+  //    id-collision reports in a readable order. The CHAPTERS above are a
+  //    different matter since issue #115: `scenes.chapter_id` carries a real
+  //    foreign key now, so step 2 has to come first — and it does, for every
+  //    scene, because a chapter exists by virtue of its DIRECTORY and a
+  //    scene's chapter IS the directory it was read from.
   const npcIds = new Set<string>();
   for (const p of find("npc")) {
     const id = asString(p.frontmatter.id);

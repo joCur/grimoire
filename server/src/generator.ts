@@ -1250,6 +1250,40 @@ export function applyStubTarget(item: unknown, index: number): ApplyTarget {
 }
 
 /**
+ * The `_chapter` target of a „Neues Kapitel" run, decided from the JOB
+ * (issue #115).
+ *
+ * This is the fix for the production bug: the app used to send
+ * `chapter`/`chapterTitle` from its own state on accept, and since #97 made
+ * the review persistent that state is gone after a navigation or a reload —
+ * so the scenes were written with a `chapter_id` whose chapter had no row and
+ * the whole chapter was invisible in the pool. The run knows what chapter it
+ * is for (`generate_jobs.chapter`) and, since the migration next to this,
+ * what it is CALLED (`new_chapter_title`), so the decision is made here and
+ * needs no browser.
+ *
+ * The body fields stay an OVERRIDE for compatibility (an older app build, and
+ * the whole-run `POST /generate/apply` which has no job to read): sent, they
+ * decide; absent, the job does. Idempotent either way — an existing chapter
+ * yields null.
+ */
+export async function jobChapterTarget(
+  campaign: string,
+  job: { newChapter: boolean; chapter?: string; newChapterTitle?: string },
+  bodyChapter: unknown,
+  bodyChapterTitle: unknown,
+): Promise<ApplyTarget | null> {
+  if (bodyChapter !== undefined || bodyChapterTitle !== undefined) {
+    return newChapterTarget(campaign, bodyChapter, bodyChapterTitle);
+  }
+  if (!job.newChapter || job.chapter === undefined) return null;
+  // No stored title (a run started before this deploy) falls back to the id —
+  // the same rule the boot repair uses. A chapter called by its slug is
+  // renameable in the pool; an invisible one is not.
+  return newChapterTarget(campaign, job.chapter, job.newChapterTitle ?? job.chapter);
+}
+
+/**
  * The new-chapter flow (issue #12): `chapter` + `chapterTitle` mean "the
  * drafts go into a chapter that does not exist yet". Returns the
  * `<chapter>/_chapter` target to create in the same batch, or null when the

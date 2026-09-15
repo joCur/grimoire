@@ -34,13 +34,16 @@ const ADDRESS_A = "01-salzhafen/leuchtturm/treffen-am-kai";
 const ADDRESS_B = "01-salzhafen/leuchtturm/nacht-am-kai";
 const STUB_PATH = "npcs/grella";
 
-function sceneMarkdown(id: string, title: string): string {
+// The reply's `chapter` must be the chapter the RUN was started with — the
+// generator rejects any other value, so a new-chapter run needs its own
+// scripted reply rather than this one.
+function sceneMarkdown(id: string, title: string, chapter = "01-salzhafen"): string {
   return [
     "---",
     `id: ${id}`,
     `title: ${title}`,
     "type: planned",
-    "chapter: 01-salzhafen",
+    `chapter: ${chapter}`,
     "location: leuchtturm",
     "npcs: [fenn]",
     "tags: [social]",
@@ -77,6 +80,18 @@ const REPLY = JSON.stringify({
   entries: [{ kind: "npc", content: STUB_MARKDOWN }],
   warnings: [],
 });
+
+/** The same batch reply, for a run whose chapter does not exist yet. */
+function replyForChapter(chapter: string): string {
+  return JSON.stringify({
+    scenes: [
+      { content: sceneMarkdown("treffen-am-kai", "Treffen am Kai", chapter) },
+      { content: sceneMarkdown("nacht-am-kai", "Nacht am Kai", chapter) },
+    ],
+    entries: [{ kind: "npc", content: STUB_MARKDOWN }],
+    warnings: [],
+  });
+}
 
 // --- plumbing -----------------------------------------------------------------
 
@@ -414,4 +429,121 @@ test("markWrittenInTx throws for a lost job instead of reporting false", async (
     ),
   ).toThrow();
   expect((await fetchJob())?.review?.written).toEqual({});
+});
+
+// --- the new chapter (issue #115) ------------------------------------------------
+//
+// The production bug: the app sent `chapter`/`chapterTitle` on accept from its
+// OWN state, and since #97 made the review persistent the accept regularly
+// happens in a tab that never saw the start form — so the scenes were written
+// under a `chapter_id` that had no chapters row, and the pool (which lists
+// chapters from the chapter TABLE) showed neither the chapter nor its scenes.
+//
+// „Reload" is modelled exactly as it reaches the server: an accept with NO
+// chapter fields in the body. Nothing else about these cases is special —
+// same run, same accept endpoint.
+
+/** Start a „Neues Kapitel" run and wait for it, like `runJob`. */
+async function runNewChapterJob(title?: string): Promise<GenerateJob> {
+  setProviderForTests(new PipelineFake([replyForChapter("03-dragon-hatchery")]));
+  const res = await send("POST", "/api/beispiel/generate", {
+    chapter: "03-dragon-hatchery",
+    sourceText: "Eggs in the dark.",
+    newChapter: true,
+    ...(title === undefined ? {} : { chapterTitle: title }),
+  });
+  expect(res.status).toBe(202);
+  for (let i = 0; i < 2000; i++) {
+    const job = await fetchJob();
+    if (job === null) throw new Error("job disappeared");
+    if (job.status !== "running") return job;
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
+  throw new Error("job never finished");
+}
+
+async function chapterTitles(): Promise<Record<string, string>> {
+  const res = await app.request("/api/beispiel/tree");
+  expect(res.status).toBe(200);
+  const tree = (await res.json()) as { chapters: Array<{ id: string; title: string }> };
+  return Object.fromEntries(tree.chapters.map((chapter) => [chapter.id, chapter.title]));
+}
+
+test("an accept with NO chapter fields creates the chapter from the job's title", async () => {
+  const job = await runNewChapterJob("Die Drachenbrut");
+  // Exactly what the app sends after a navigation or a reload: a rev and
+  // nothing else. Before this ticket the chapter was simply not written.
+  const res = await accept(job, {});
+  expect(res.status).toBe(200);
+
+  expect(await chapterTitles()).toMatchObject({ "03-dragon-hatchery": "Die Drachenbrut" });
+  expect(await exists("03-dragon-hatchery/_chapter")).toBe(true);
+});
+
+test("the accepted scenes hang in that chapter and are visible in the tree", async () => {
+  const job = await runNewChapterJob("Die Drachenbrut");
+  expect((await accept(job, {})).status).toBe(200);
+
+  const res = await app.request("/api/beispiel/tree");
+  const tree = (await res.json()) as {
+    chapters: Array<{ id: string; groups: Array<{ scenes: Array<{ title: string }> }> }>;
+  };
+  const chapter = tree.chapters.find((c) => c.id === "03-dragon-hatchery");
+  const scenes = chapter?.groups.flatMap((g) => g.scenes) ?? [];
+  expect(scenes.length).toBeGreaterThan(0);
+});
+
+test("a run started without a title falls back to the chapter id", async () => {
+  // An older app build, or a job row from before the column existed.
+  const job = await runNewChapterJob();
+  expect((await accept(job, {})).status).toBe(200);
+  expect(await chapterTitles()).toMatchObject({
+    "03-dragon-hatchery": "03-dragon-hatchery",
+  });
+});
+
+test("the body fields still override the job — compatibility", async () => {
+  const job = await runNewChapterJob("Die Drachenbrut");
+  expect(
+    (await accept(job, { chapter: "03-dragon-hatchery", chapterTitle: "Anders benannt" })).status,
+  ).toBe(200);
+  expect(await chapterTitles()).toMatchObject({ "03-dragon-hatchery": "Anders benannt" });
+});
+
+test("creating the chapter is idempotent across two partial accepts", async () => {
+  let job = await runNewChapterJob("Die Drachenbrut");
+  const first = await accept(job, { paths: ["03-dragon-hatchery/treffen-am-kai"] });
+  expect(first.status).toBe(200);
+  const again = await fetchJob();
+  expect(again).not.toBeNull();
+  job = again as GenerateJob;
+  // The second accept must not trip over the chapter it created itself.
+  expect((await accept(job, {})).status).toBe(200);
+  expect(await chapterTitles()).toMatchObject({ "03-dragon-hatchery": "Die Drachenbrut" });
+});
+
+// #115 review, finding 4: a partial accept of the NPC stub ALONE — no scene in
+// the batch, so nothing in it names the chapter. The chapter row is still
+// created, and that is intended: `jobChapterTarget` is decided from the job,
+// not from what the accept happens to contain, so the chapter the run is for
+// exists from the first accept onwards — and the scenes accepted afterwards
+// have the row their foreign key needs. The alternative (create it only
+// together with a scene) is exactly the ordering bug #115 is about.
+test("accepting only the npc stub already creates the run's chapter", async () => {
+  const job = await runNewChapterJob("Die Drachenbrut");
+  const res = await accept(job, { paths: [STUB_PATH] });
+  expect(res.status).toBe(200);
+
+  expect(await exists(STUB_PATH)).toBe(true);
+  // The chapter is there, with the title the run carries…
+  expect(await chapterTitles()).toMatchObject({ "03-dragon-hatchery": "Die Drachenbrut" });
+  expect(await exists("03-dragon-hatchery/_chapter")).toBe(true);
+  // …and no scene was written by this accept.
+  expect(await exists("03-dragon-hatchery/leuchtturm/treffen-am-kai")).toBe(false);
+
+  // The scenes still accept afterwards, into the row that now exists.
+  const rest = (await fetchJob()) as GenerateJob;
+  expect(rest).not.toBeNull();
+  expect((await accept(rest, {})).status).toBe(200);
+  expect(await chapterTitles()).toMatchObject({ "03-dragon-hatchery": "Die Drachenbrut" });
 });

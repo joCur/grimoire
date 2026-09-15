@@ -77,11 +77,22 @@ export function PropertiesAction({
   campaign,
   file,
   tree,
+  triggerLabel,
 }: {
   campaign: string;
   file: EntryResponse;
   /** For the reference fields — the ids that already have an entry. */
   tree: CampaignTree | undefined;
+  /**
+   * What the trigger is CALLED. „Eigenschaften" everywhere the action stands
+   * in the header of the one thing on screen. The pool's chapter rows pass
+   * „Kapitel-Eigenschaften" instead (issue #115): there the pool header's own
+   * „Bearbeiten" is on the same page, and two actions with the same name on
+   * one surface are ambiguous for a screen reader and for a keyboard user
+   * counting Tab stops. The DIALOG is untouched either way — same form, same
+   * frozen rev, same 409.
+   */
+  triggerLabel?: string;
 }) {
   const t = useT();
   // Open-BY-FILE, not a boolean: navigating away closes the dialog instead of
@@ -111,7 +122,7 @@ export function PropertiesAction({
     <>
       <HeaderAction
         icon={SlidersHorizontal}
-        label={t("properties.action")}
+        label={triggerLabel ?? t("properties.action")}
         onClick={() => setOpenFile(fileKey)}
       />
       {open && (
@@ -180,12 +191,19 @@ function PropertiesDialog({
   // hand over to the rename dialog. undefined = nothing pending.
   const [discardIntent, setDiscardIntent] = useState<"close" | "rename">();
 
-  const save = usePropertiesFormMutation(campaign, file.path, base, {
-    onSaved: onClose,
-    onConflict: (reread) => {
-      if (reread !== undefined) setBase(reread.rev);
+  const save = usePropertiesFormMutation(
+    campaign,
+    file.path,
+    base,
+    {
+      onSaved: onClose,
+      onConflict: (reread) => {
+        if (reread !== undefined) setBase(reread.rev);
+      },
     },
-  });
+    // A chapter patch can swap the active chapter server-side — see the hook.
+    file.kind,
+  );
 
   // What a save would send: the values plus the pending chip text.
   const effective = commitPendingText(fields, values, pending);

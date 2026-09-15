@@ -74,11 +74,18 @@ Der Text ist freier Notizraum für Kampagnenweites.
 | ---- | --------- |
 | `id` | stabil; erstes Segment jeder Szenen-Adresse |
 | `title` | Anzeigename |
-| `status` | `active` markiert das aktive Kapitel |
+| `status` | `planned`, `active` oder `done` |
+
+`status: active` markiert das **eine** Kapitel, das die Session-Ansicht
+öffnet. Der Status-Regler der Kapitelübersicht und ein Eigenschaften-Patch
+gehen durch denselben Vorgang: der Server setzt das Kapitel transaktional
+auf `active` und das bisher aktive zurück auf `planned`. Andere Werte weist
+die API ab (400); ein Wert, der schon gespeichert ist, wird weiterhin
+unverändert angezeigt — das Format degradiert wie überall.
 
 Im Text liegen das Kapitelziel (Abschnitt `## Ziel des Kapitels`) und die
 Handlungsstränge (`## Offene Fäden`, Checkliste), die die Nachbereitung
-befüllt.
+befüllt. Titel und Ziel bearbeitet die App im Kapitel-Dialog.
 
 ### Szene
 

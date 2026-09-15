@@ -754,3 +754,93 @@ konserviert, die das Ticket beseitigt. Sie fällt weg; `store/paths.ts`
   und setzt `location` aus der Gruppe, wenn das Frontmatter keines nennt —
   `examples/` bleibt unverändert lesbar, die Beispielszenen landen unter
   ihren Orten statt unter `hafen`.
+
+## 18. Die Kapitel-Referenz einer Szene ist hart — `location` bleibt weich
+
+**Kontext:** Issue #115. Nach einer Generierung mit „Neues Kapitel" standen in
+Produktion zwölf Szenen mit `chapter_id: 03-dragon-hatchery` in der Datenbank
+— **ohne Kapitel-Zeile**. Die Kapitelübersicht listet Kapitel aus der
+Kapiteltabelle, also war das Kapitel samt allen Szenen unsichtbar. Ursache war
+die App: Titel und id des neuen Kapitels reisten nur im Browser-Zustand und
+gingen beim Übernehmen mit, seit #97 den Prüfschritt persistent gemacht hat —
+nach Navigation oder Reload war beides weg.
+
+`scenes.chapter_id` war seit #57 bewusst eine **weiche** Referenz
+(schema.ts Regel 3): der Import sollte reihenfolgeunabhängig bleiben, und ein
+Kapitel ohne `_chapter.md` sollte Szenen tragen dürfen. Genau diese Lizenz hat
+der Fehler verbraucht.
+
+**Entscheidung:**
+
+- `scenes(campaign_id, chapter_id)` hat einen **echten Fremdschlüssel** auf
+  `chapters(campaign_id, id)`, `ON UPDATE CASCADE`, **ohne** Delete-Cascade
+  (Migration 0014). Ein Kapitel zu löschen, das noch Szenen trägt, schlägt
+  damit fehl — fachlich ist das Löschen ohnehin gesperrt, und ein stilles
+  Cascade wäre der einzige Weg, ein Dutzend Szenen versehentlich zu
+  verlieren. `NULL` bleibt erlaubt: ein zusammengesetzter Fremdschlüssel mit
+  einer NULL-Spalte ist erfüllt, also bleibt eine Szene ohne Kapitel legal.
+- `scenes.location`, `scene_npcs.npc_id` und `npc_relations.other_npc_id`
+  bleiben **weich**, mit `ensureLocationRow`/`ensureNpcRow` davor (ADR #14).
+  Der Unterschied ist nicht Bequemlichkeit: ein Ort oder NPC ist eine
+  *Notiz über* die Szene und darf leer sein, das Kapitel ist Teil ihrer
+  **Adresse**. Eine Adresse, die ins Nichts zeigt, ist kein degradiertes
+  Format, sondern verlorene Daten.
+- **Der Titel gehört auf den Job**, nicht in den Browser:
+  `generate_jobs.new_chapter_title` (Migration 0013) wird beim **Start** des
+  Laufs geschrieben, und `acceptJobParts` legt das Kapitel aus dem
+  Job-Zustand an (`jobChapterTarget`, idempotent). Die Body-Felder
+  `chapter`/`chapterTitle` bleiben Override für Kompatibilität.
+- **„Referenzieren legt an" gilt jetzt auch fürs Kapitel** — aber nur auf dem
+  Pfad ohne Dialog: `insertDraft` legt die Kapitel-Zeile im selben
+  Schreibvorgang an (`ensureChapterRow`, Titel = Job-Titel, sonst id).
+  `PATCH /properties` und `POST /scenes` bleiben bei ihrem 400 auf ein
+  unbekanntes Kapitel: dort ist ein unbekanntes Kapitel ein Tippfehler, und
+  die ehrliche Antwort ist der Fehler, nicht ein erfundenes Kapitel.
+
+**Migration in zwei Schritten**, dieselbe Reihenfolge wie bei #100: der
+Reparaturschritt (`db/chapter-repair.ts`) läuft **vor** dem Migrator auf dem
+rohen Client und legt für jede verwaiste `chapter_id` ein Kapitel
+`{id, title: id, status: planned}` an — sonst würde Migration 0014 genau an
+diesen Zeilen scheitern. Er meldet beim Start, was er angelegt hat (Form wie
+#100), weil ein Kapitel, das unter seinem Slug auftaucht, umbenannt werden
+will.
+
+Ein **leeres** `chapter_id` (`''` oder nur Leerzeichen) nennt kein Kapitel, es
+kann also keines angelegt werden — und es ist auch nicht `NULL`, würde den
+zusammengesetzten Fremdschlüssel von 0012 also verletzen. Der Reparaturschritt
+setzt solche Werte in derselben Transaktion auf `NULL` (was „keine
+Kapitel-Referenz" seit immer bedeutet) und meldet sie ebenfalls beim Start.
+
+**Der Kapitel-Status ist ein Enum** (Nachforderung des PO zu #115):
+`planned | active | done`, definiert genau einmal in `shared/`
+(`CHAPTER_STATUSES`), Labels de „Geplant / Aktiv / Abgeschlossen", en
+„Planned / Active / Done". Die API schreibt nur diese drei Werte und antwortet
+sonst **400**; gespeicherte Fremdwerte werden weiterhin **verbatim angezeigt**
+und es gibt **keinen CHECK-Constraint** auf der Spalte — das Format degradiert
+wie überall, nur der Schreibweg ist eng. Ein neu angelegtes Kapitel startet auf
+`planned` (wie die Zeilen aus `ensureChapterRow` und dem Reparaturschritt); ein
+`NULL` überlebt nur auf Zeilen von vor #115 und wird in der App als `planned`
+gelesen.
+
+`active` ist dabei **eine Entscheidung über zwei Zeilen**, und die Invariante
+„genau ein aktives Kapitel" gehört der **Spalte, nicht einem Endpoint**:
+`POST /chapters/:id/active` und ein `PATCH /properties`, dessen Status auf
+`active` landet, führen denselben Tausch in derselben Transaktion aus
+(`clearOtherActiveChapters`). Sonst wäre der Dialog „Kapitel-Eigenschaften"
+eine zweite Tür daran vorbei.
+
+In der Kapitelübersicht ist die Status-Pille deshalb **das Bedienelement**
+(wie der Szenen-Regler aus #28, gemeinsames Markup in
+`components/StatusMenu`): „Aktiv" ruft den Tausch-Endpoint, „Geplant" und
+„Abgeschlossen" patchen das Kapitel. Der separate Knopf „Als aktiv setzen" ist
+entfallen — zwei Bedienelemente für einen Wert sind der Weg, auf dem sie sich
+widersprechen. Mobil bleibt der Status **Anzeige**: unter `md` rendert die
+Route die Startfläche statt der Kapitelübersicht, die Regel steht also genau
+an einer Stelle.
+
+**Konsequenz für Migration 0014:** `PRAGMA foreign_keys=OFF`, das drizzle-kit
+um den Tabellen-Neubau generiert, ist im Migrator wirkungslos — der läuft in
+einer Transaktion, und dort ist das Pragma ein No-op. Mit aktiver Durchsetzung
+würde `DROP TABLE scenes` über `scene_npcs`/`scene_tags` cascaden. Die
+Kindzeilen werden deshalb in derselben Transaktion beiseitegelegt und
+zurückgeschrieben; die Migration erklärt es an ihrem Kopf.

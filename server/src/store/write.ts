@@ -27,6 +27,7 @@
 
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
+  CHAPTER_STATUSES,
   ENTITY_SLUG,
   freeSlug,
   isEnded,
@@ -123,6 +124,73 @@ import {
 export { logLineShortHash };
 
 // --- transaction plumbing ----------------------------------------------------
+
+/**
+ * The ONE chapter status the app acts on (the pool's status menu, the live
+ * view's „welches Kapitel läuft"). There is at most one per campaign, and
+ * every write that sets it clears the previous one in the same transaction.
+ */
+const CHAPTER_ACTIVE = "active";
+
+/**
+ * Where a chapter starts, and where the swap puts the one it takes `active`
+ * from. Not NULL: the pool renders a chapter's status and nothing renders
+ * nothing, so a chapter without a status would look less planned than its
+ * siblings. A NULL only survives on a pre-#115 row; the app reads it as
+ * `planned` (lib/chapter-status.ts).
+ */
+const CHAPTER_PLANNED = "planned";
+
+/**
+ * A chapter status a WRITE may carry (issue #115): the known trio, or nothing
+ * (`null` deletes the key, which is how a chapter loses its status).
+ *
+ * This is the one place the format's degrade rule does not extend to the API.
+ * A stored value outside the trio still renders verbatim — the pool's menu
+ * shows it and the reading view prints it, exactly like an unknown scene
+ * status — but the chapter status is a three-position regler now, so a fourth
+ * value arriving on the wire can only be a typo in a hand-written request,
+ * and the honest answer to a typo is the 400.
+ */
+/**
+ * Take `active` off every OTHER chapter of the campaign — the swap half of
+ * „exactly one active chapter".
+ *
+ * `planned` and not NULL for the one it takes the flag from: the pool renders
+ * a chapter's status verbatim and NULL renders nothing, so clearing it would
+ * make a chapter that was active look less planned than its siblings.
+ *
+ * Both writes that can set `active` call this in their own transaction:
+ * `POST /chapters/:id/active` (the pool's status menu) and a
+ * `PATCH /properties` whose status ends up `active` (the „Kapitel-
+ * Eigenschaften" dialog). The invariant belongs to the COLUMN, not to one
+ * endpoint — otherwise the dialog is a second door past it.
+ */
+function clearOtherActiveChapters(tx: GrimoireDb, campaign: string, keep: string): void {
+  const previous = tx
+    .select()
+    .from(chapters)
+    .where(and(eq(chapters.campaignId, campaign), eq(chapters.status, CHAPTER_ACTIVE)))
+    .all() as ChapterRow[];
+  for (const row of previous) {
+    if (row.id === keep) continue;
+    tx.update(chapters)
+      .set({ status: CHAPTER_PLANNED, rev: row.rev + 1 })
+      .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, row.id)))
+      .run();
+  }
+}
+
+function assertChapterStatus(patch: Record<string, unknown>): void {
+  if (!("status" in patch)) return;
+  const value = patch.status;
+  if (value === null || value === undefined) return;
+  if (typeof value === "string" && (CHAPTER_STATUSES as readonly string[]).includes(value)) return;
+  throw new ApiError(
+    400,
+    `invalid chapter status: ${String(value)} — one of ${CHAPTER_STATUSES.join(", ")}`,
+  );
+}
 
 /**
  * Run `fn` in one transaction and bump the campaign's version counter in the
@@ -554,6 +622,51 @@ function ensureLocationRow(
 }
 
 /**
+ * The same for a CHAPTER a scene names (issue #115).
+ *
+ * The chapter used to be the one reference nothing created: ADR #14 said
+ * chapters are not created by naming them, and the properties patch and
+ * `POST /scenes` still hold that rule — those are DIALOGS, where an unknown
+ * chapter is a typo and a 400 is the honest answer.
+ *
+ * What is NOT allowed any more is a scene ROW whose chapter has none. The
+ * generator's accept step wrote exactly that (the browser held the chapter,
+ * the job did not), and the result was twelve scenes nobody could see. So the
+ * one path that writes scene rows without a dialog in front of it — the draft
+ * apply — closes the hole in the SAME transaction, like `ensureLocationRow`
+ * does for the Ort. Since migration 0014 the database enforces it too; this
+ * is what keeps that constraint from turning an apply into a 409.
+ *
+ * `title` is the run's chapter title when one is known, the id otherwise —
+ * never empty, because an empty title renders as the id anyway and a real one
+ * is what the DM typed.
+ */
+function ensureChapterRow(
+  tx: GrimoireDb,
+  campaign: string,
+  id: string,
+  title?: string,
+): boolean {
+  if (!ENTITY_SLUG.test(id)) return false;
+  if (chapterRowOf(tx, campaign, id) !== undefined) return false;
+  const display = title?.trim();
+  tx.insert(chapters)
+    .values({
+      campaignId: campaign,
+      id,
+      title: display === undefined || display === "" ? id : display,
+      status: "planned",
+      pos: nextPos(
+        tx.select({ pos: chapters.pos }).from(chapters).where(eq(chapters.campaignId, campaign)).all(),
+      ),
+    })
+    .run();
+  const row = chapterRowOf(tx, campaign, id);
+  if (row !== undefined) indexChapter(tx, campaign, row);
+  return true;
+}
+
+/**
  * An entry that holds NOTHING but its id — what `ensureNpcRow` creates, and
  * what a DM leaves behind by creating an entry and not filling it in.
  *
@@ -916,6 +1029,10 @@ function patchLocator(
       guardRev(row.rev, rev, "chapter changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, CHAPTER_KEYS, row.extra);
+      // A known key with an unknown VALUE is the other half of the same
+      // guard: only the three declared statuses may be WRITTEN, while a
+      // value already stored still renders back verbatim.
+      assertChapterStatus(patch);
       const fm = applyPatch(renderChapter(row).properties, patch);
       const next: ChapterRow = {
         ...row,
@@ -924,6 +1041,10 @@ function patchLocator(
         extra: extraOf(fm, CHAPTER_KEYS),
         rev: row.rev + 1,
       };
+      // Setting `active` HERE performs the same swap the dedicated endpoint
+      // does, in this transaction: the „Eigenschaften" dialog must not be a
+      // way past the one-active invariant (issue #115 review, finding 4).
+      if (next.status === CHAPTER_ACTIVE) clearOtherActiveChapters(tx, campaign, row.id);
       tx.update(chapters)
         .set({ title: next.title, status: next.status, extra: next.extra, rev: next.rev })
         .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, row.id)))
@@ -2092,6 +2213,28 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           .orderBy(desc(scenes.pos))
           .limit(1)
           .all()[0]?.pos ?? -1) + 1;
+      // The chapter row FIRST — `scenes.chapter_id` is a foreign key since
+      // migration 0014, and a generated scene is the one write that can name
+      // a chapter the campaign does not have yet (issue #115).
+      // A new-chapter run puts its `_chapter` draft FIRST in the same batch
+      // (generator.ts `jobChapterTarget`), so the row normally exists with
+      // the title the DM typed; this is the net under it, and it names the
+      // chapter by its id.
+      //
+      // `ensureChapterRow` returns false for TWO reasons — the row is already
+      // there (fine), or the id is not a slug it may create a row for. Only
+      // the second one matters, and it used to reach the client as a raw
+      // foreign-key failure from the insert below, i.e. a 500 that named a
+      // constraint instead of the chapter. It is a 400 that names it.
+      if (locator.chapterId !== null && locator.chapterId !== undefined) {
+        ensureChapterRow(tx, campaign, locator.chapterId);
+        if (chapterRowOf(tx, campaign, locator.chapterId) === undefined) {
+          throw new ApiError(
+            400,
+            `unknown chapter: ${locator.chapterId} — create the chapter first`,
+          );
+        }
+      }
       tx.insert(scenes)
         .values({
           campaignId: campaign,
@@ -2583,6 +2726,11 @@ export async function createChapter(
         campaignId: campaign,
         id,
         title: title.trim(),
+        // A chapter is born `planned` (issue #115), like the one the boot
+        // repair and `ensureChapterRow` create: the status is a three-position
+        // regler now, and every chapter should start at a position the DM can
+        // read instead of at "no status at all".
+        status: CHAPTER_PLANNED,
         body,
         pos: nextPos(
           tx.select({ pos: chapters.pos }).from(chapters).where(eq(chapters.campaignId, campaign)).all(),
@@ -2592,6 +2740,53 @@ export async function createChapter(
     const row = chapterRowOf(tx, campaign, id);
     if (row === undefined) throw new ApiError(500, "chapter could not be created");
     indexChapter(tx, campaign, row);
+    return renderChapter(row);
+  });
+}
+
+/**
+ * POST /api/:campaign/chapters/:id/active -> the chapter document.
+ *
+ * „Aktiv" in the pool's status regler (issue #115). ONE call, ONE transaction,
+ * because it is ONE decision about two rows: the chapter named here becomes
+ * `active` and whatever was active before goes back to `planned`. Two
+ * requests from the app would have a window in which the campaign has two
+ * active chapters — and the live view picks the FIRST one it finds, so that
+ * window is a wrong session view, not a cosmetic race.
+ *
+ * The swap itself is `clearOtherActiveChapters`, which a
+ * `PATCH /properties` setting `active` runs too: the invariant belongs to the
+ * column, not to this endpoint, or the „Kapitel-Eigenschaften" dialog would be
+ * a second door past it (issue #115 review, finding 4).
+ *
+ * Every other status a chapter carries is left alone — this action decides
+ * which chapter is active, nothing else.
+ *
+ * NO rev guard, deliberately, and it is the one write here without one: there
+ * is nothing to overwrite. The pool shows no rev (the tree carries none), the
+ * action sets a value rather than editing text, and its whole point is that it
+ * also changes a row the caller never read. Two DMs racing on it end with one
+ * active chapter either way — which is the invariant that matters.
+ * `PATCH /properties` on `<chapter>/_chapter` keeps its rev guard, so the
+ * „Eigenschaften" dialog is a guarded write that happens to also swap.
+ *
+ * 404 for a chapter that does not exist; idempotent for one that is already
+ * active.
+ */
+export async function setActiveChapter(campaign: string, id: string): Promise<EntryResponse> {
+  assertSafeChapterId(id);
+  return mutate(campaign, (tx) => {
+    const target = chapterRowOf(tx, campaign, id);
+    if (target === undefined) throw new ApiError(404, `unknown chapter: ${id}`);
+    clearOtherActiveChapters(tx, campaign, id);
+    if (target.status !== CHAPTER_ACTIVE) {
+      tx.update(chapters)
+        .set({ status: CHAPTER_ACTIVE, rev: target.rev + 1 })
+        .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, id)))
+        .run();
+    }
+    const row = chapterRowOf(tx, campaign, id);
+    if (row === undefined) throw new ApiError(500, "chapter could not be updated");
     return renderChapter(row);
   });
 }

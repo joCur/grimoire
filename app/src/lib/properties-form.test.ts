@@ -101,6 +101,18 @@ describe("propertiesFieldsFor", () => {
     expect(keys("chapter")).toEqual(["title", "status"]);
   });
 
+  // Issue #115: the chapter status stopped being free text. The API enforces
+  // the trio (400 otherwise), so a text field could only produce a rejected
+  // save — and the dialog has to offer the same list the pool's regler does.
+  test("the chapter status is a select over the enum, in lifecycle order", () => {
+    const status = fields("chapter").find((field) => field.key === "status");
+    expect(status?.control).toBe("select");
+    expect(status?.options?.map((o) => o.value)).toEqual(["planned", "active", "done"]);
+    expect(status?.options?.map((o) => o.label)).toEqual(["Geplant", "Aktiv", "Abgeschlossen"]);
+    // No placeholder any more — a select has no empty text to hint at.
+    expect(status?.placeholder).toBeUndefined();
+  });
+
   test("neither the id nor the kind is ever a field (the rename cascade owns the id)", () => {
     for (const kind of ["scene", "npc", "location", "chapter"] as const) {
       expect(keys(kind)).not.toContain("id");

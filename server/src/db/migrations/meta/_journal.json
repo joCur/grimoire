@@ -92,6 +92,20 @@
       "when": 1789512099181,
       "tag": "0012_drop_import_bookkeeping",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1789512901943,
+      "tag": "0013_job_new_chapter_title",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1789512907811,
+      "tag": "0014_scenes_chapter_fk",
+      "breakpoints": true
     }
   ]
 }

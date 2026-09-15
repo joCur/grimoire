@@ -55,6 +55,11 @@
 //                                              Same id derivation and same 400/409 as above;
 //                                              `goal` lands under `## Ziel des Kapitels`, the
 //                                              heading the pool reads its goal line from
+//   [x] POST /api/:campaign/chapters/:id/active -> that chapter's document. „Aktiv" in the
+//                                              pool's status regler (#115): sets `active` here and
+//                                              puts the previously active chapter back to
+//                                              `planned`, in ONE transaction. Idempotent,
+//                                              404 for an unknown chapter, no rev guard
 //   [x] POST /api/:campaign/scenes             { title, chapter } -> 201 the scene document
 //                                              (type planned, status draft, empty body, no
 //                                              `location`). `chapter` is REQUIRED and must
@@ -469,6 +474,31 @@ if (import.meta.main) {
       `${groupMigration.createdLocations.length} location(s) referenced by a scene had no ` +
         `entry and got one: ${groupMigration.createdLocations.join(", ")}`,
     );
+  }
+  // Issue #115: a `chapter_id` without a chapters row made the chapter AND
+  // its scenes invisible in the pool. The repair gives it a row named by its
+  // own slug, so it is loud on purpose — a chapter showing up under a slug is
+  // something the DM wants to go and rename.
+  const chapterRepair = info?.chapterRepair;
+  if (chapterRepair !== undefined && chapterRepair.created.length > 0) {
+    console.log(
+      `${chapterRepair.created.length} chapter(s) named by a scene had no entry and got one ` +
+        "(titled by their id — rename them in the pool):",
+    );
+    for (const entry of chapterRepair.created) {
+      console.log(
+        `  · [${entry.campaignId}] ${entry.chapterId} (${entry.scenes} scene(s) were invisible)`,
+      );
+    }
+  }
+  if (chapterRepair !== undefined && chapterRepair.blanked.length > 0) {
+    // A blank `chapter_id` named no chapter, so nothing could be created for
+    // it — it is now NULL, which is what "no chapter" has always meant. The
+    // scenes are listed under „Ohne Kapitel"; say so, they moved.
+    console.log("scene(s) carried an EMPTY chapter reference and now carry none:");
+    for (const entry of chapterRepair.blanked) {
+      console.log(`  · [${entry.campaignId}] ${entry.scenes} scene(s)`);
+    }
   }
   // Issue #23: jobs are rows now, so a restart no longer loses a finished
   // generation — but a run that was in flight died with the old process and
