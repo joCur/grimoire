@@ -7,10 +7,10 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 
 ## Pflichtlektüre vor jeder Aufgabe
 
-1. `README.md` — Datenformat und Konventionen. Achtung auf die Zweiteilung
-   (ADR #13): Ordnerstruktur/Dateinamen sind das **Import-Format
-   (historisch)**, das Body-Vokabular (Callouts, `If:`-Abschnitte, Hashtags)
-   und die Frontmatter-Keys sind **normativ**
+1. `README.md` — Datenformat und Konventionen: Adressschema,
+   Properties-Keys je Entität, Body-Vokabular (Callouts, `If:`-Abschnitte,
+   Hashtags) und Schreibregeln. Alles davon ist normativ; der Markdown-Baum
+   steht als Import-Format im Anhang.
 2. `docs/DECISIONS.md` — Architektur-Entscheidungen inkl. Tech-Stack. Entscheidungen dort sind bindend; Abweichungen nur mit neuem Eintrag.
 3. `docs/UI-BRIEF.md` — Design-Richtung für alles Sichtbare
 
@@ -35,10 +35,11 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - `GRIMOIRE_DATA` (Default `./data`, gitignored) — hier liegt
   `grimoire.db` samt `-wal`/`-shm`: die eigentlichen Daten. Kein Code liest
   Kampagneninhalte von woanders.
-- `shared/` — Entitäts-Typen und Markdown-Parser (`@grimoire/shared`),
-  von Server und App gemeinsam genutzt. Das Datenformat ist hier genau
-  einmal in Code beschrieben (Spiegel von README.md — beides synchron halten);
-  die Speicherform steht genau einmal in `server/src/db/schema.ts`.
+- `shared/` — Entitäts-Typen und der Importer-Parser (`@grimoire/shared`),
+  von Server und App gemeinsam genutzt. Autorität über das Format sind
+  `server/src/db/schema.ts` (Speicherform) und `server/src/store/paths.ts`
+  (Adressen), beschrieben in README.md — die drei synchron halten;
+  `shared/src/parse.ts` liest nur den Markdown-Baum ein.
 - `server/` — Hono-API. Geplante Endpoints sind in `server/src/server.ts`
   dokumentiert und dort abzuhaken, wenn implementiert. Datenzugriff
   ausschließlich über `server/src/store/` (Queries), nie direkt SQL aus einer
