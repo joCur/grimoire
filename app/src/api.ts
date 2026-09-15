@@ -113,8 +113,8 @@ export function fetchSearch(campaign: string, q: string): Promise<SearchResponse
 
 /**
  * Campaign version counter (issue #8) — bumped by every server-side write, in
- * the same transaction as the change (the file watcher is gone with the SQLite
- * cutover, DECISIONS #9/#13); polled by useCampaignVersion.
+ * the same transaction as the change (DECISIONS #9/#13); polled by
+ * useCampaignVersion.
  *
  * `build` (issue #24) is the server's build id, riding along on this poll so
  * the handshake costs no extra request. Optional in the type because an older
@@ -180,10 +180,10 @@ export function putKnowledge(
 // --- write endpoints (session/log, issue #9) --------------------------------
 
 /**
- * Set/delete properties keys of one file (issue #5 endpoint, used by the
+ * Set/delete properties keys of one entry (issue #5 endpoint, used by the
  * scene-status control of issue #28). `patch` is flat: a value sets the key,
  * `null` deletes it. `rev` is the optimistic-concurrency token and must be
- * the one from the EntryResponse the UI is showing — when the file changed on
+ * the one from the EntryResponse the UI is showing — when the entry changed on
  * disk since, the server answers 409 with the current `rev` in
  * `ApiError.details` and writes nothing.
  *
@@ -213,7 +213,7 @@ export async function patchProperties(
 }
 
 /**
- * Replace the markdown BODY of one file, properties untouched (issue #15 —
+ * Replace the markdown BODY of one entry, properties untouched (issue #15 —
  * the reading view's edit mode). `body` is what GET /file hands out: the file
  * without its properties block. `rev` is the same optimistic-concurrency
  * token as above and must come from the EntryResponse the editor was seeded
@@ -251,8 +251,8 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
  * The ACTIVE session (issue #40), or null when none is running — the server's
  * 404 is the normal "no session" answer, never an error state in the UI.
  *
- * The app must NOT derive the session file from its own date: a session that
- * runs past midnight lives in yesterday's file, and a browser in another
+ * The app must NOT derive the session from its own date: a session that
+ * runs past midnight lives in yesterday's session, and a browser in another
  * timezone than the server would guess wrong. The response carries
  * `startedMs`/`endedMs` (epoch, resolved by the server), which is what makes
  * the live runtime correct.
@@ -264,7 +264,7 @@ export async function fetchActiveSession(campaign: string): Promise<EntryRespons
 /**
  * The LAST STARTED session, ended or not (`?includeEnded=1`) — the REVIEW's
  * session. Same reason the app must not guess it: an evening that ran past
- * midnight was ended in yesterday's file, so "today's file" would harvest
+ * midnight was ended in yesterday's session, so "today's session" would harvest
  * nothing (or the wrong log). null when the campaign has no session at all.
  */
 export async function fetchLastStartedSession(campaign: string): Promise<EntryResponse | null> {
@@ -293,7 +293,7 @@ export function startSession(campaign: string): Promise<EntryResponse> {
   return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/session/start`);
 }
 
-/** Set `ended` in the ACTIVE session file (404 when there is none). */
+/** Set `ended` in the ACTIVE session (404 when there is none). */
 export function endSession(campaign: string): Promise<EntryResponse> {
   return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/session/end`);
 }
@@ -316,10 +316,10 @@ export function continueSession(campaign: string): Promise<EntryResponse> {
 }
 
 /**
- * DELETE the active session's file — the undo of a mis-clicked "Session
+ * DELETE the active session — the undo of a mis-clicked "Session
  * starten" (issue #40 AK7). Only an EMPTY session may be discarded; the
  * server answers 409 (`code: "session_not_empty"`) otherwise and 404 when
- * nothing is running. Returns the path of the file that is gone.
+ * nothing is running. Returns the path of the entry that is gone.
  */
 export function discardSession(campaign: string): Promise<{ path: string }> {
   return postJson<{ path: string }>(`/${encodeURIComponent(campaign)}/session/discard`);
@@ -327,7 +327,7 @@ export function discardSession(campaign: string): Promise<{ path: string }> {
 
 /**
  * Append a line to the campaign's inbox (mobile capture, issue #11);
- * the server creates the file on the first entry.
+ * the server creates the session on the first log entry.
  */
 export function appendInbox(campaign: string, text: string): Promise<EntryResponse> {
   return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/inbox`, { text });
@@ -335,7 +335,7 @@ export function appendInbox(campaign: string, text: string): Promise<EntryRespon
 
 /**
  * Append a log line to the ACTIVE session (404 when none runs) — which may be
- * yesterday's file when the session ran past midnight; the server picks it.
+ * yesterday's session when the session ran past midnight; the server picks it.
  * With a sceneId the server also maintains `scenes_played`.
  */
 export function appendLog(
@@ -353,7 +353,7 @@ export function appendLog(
 
 /**
  * Mark a log line as reviewed: the server adds the short hash of the RAW
- * line to the session's `reviewed` list (idempotent). Returns the session file.
+ * line to the session's `reviewed` list (idempotent). Returns the session.
  */
 export function markLogLineSeen(
   campaign: string,
@@ -365,7 +365,7 @@ export function markLogLineSeen(
 
 /**
  * Append `- [ ] text` under `## Offene Fäden` of the chapter's _chapter
- * (section created when missing). Returns the chapter file.
+ * (section created when missing). Returns the chapter entry.
  */
 export function adoptThread(
   campaign: string,
@@ -481,8 +481,8 @@ export function createLocation(
 export type RenameKind = "npc" | "location" | "scene" | "chapter";
 
 /**
- * The answer of POST /:campaign/rename — the moved file (or, for a chapter,
- * the moved DIRECTORY) plus every file whose bytes changed, named by its path
+ * The answer of POST /:campaign/rename — the moved entry (or, for a chapter,
+ * the chapter itself) plus every entry whose bytes changed, named by its path
  * AFTER the rename. With `dryRun` nothing was written and this is the plan
  * the dialog previews. (Declared here rather than in @grimoire/shared: the
  * rename ticket keeps its footprint to server/ and app/.)
@@ -617,15 +617,15 @@ export async function startGenerateJob(
 }
 
 /**
- * Start an NPC run (issue #21): source material in, ONE npc file draft out.
+ * Start an NPC run (issue #21): source material in, ONE NPC draft out.
  * Same job model as the scene run — 202 { jobId }, the result is fetched via
  * fetchGenerateJob (`kind: "npc"`, `npcResult`), and a 409 that carries a
  * jobId means "a generator job is already running for this campaign" and is
  * adopted instead of shown as an error.
  *
  * `id` is optional: empty means the model picks the id. A 409 WITHOUT a jobId
- * is the other collision — the pinned id's file already exists (never
- * overwritten); its `details.path` names the file.
+ * is the other collision — the pinned id's entry already exists (never
+ * overwritten); its `details.path` names the entry.
  */
 export async function startGenerateNpcJob(
   campaign: string,
@@ -824,7 +824,7 @@ export function retryJobPart(
  * was written then.
  *
  * `jobId` hands the server the job these drafts came from: a successful
- * apply discards it (the drafts are on disk — nothing left to restore).
+ * apply discards it (the drafts are written — nothing left to restore).
  */
 export function applyDrafts(
   campaign: string,
@@ -849,7 +849,7 @@ export function applyDrafts(
 /**
  * Write the reviewed NPC draft (issue #21) — the same apply endpoint as the
  * scene drafts: it re-validates server-side (path, id, status, parseable
- * properties), answers 409 with `details.conflicts` when the file already
+ * properties), answers 409 with `details.conflicts` when the entry already
  * exists (nothing written), and drops the job the draft came from.
  */
 export function applyNpcDraft(

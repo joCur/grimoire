@@ -70,7 +70,7 @@ export function EntityArticle({
   const t = useT();
   const header = entityHeaderKind(file.kind);
   const fm = file.properties;
-  // npc/location files carry `name`, chapter/campaign files `title` — either
+  // npc/location entries carry `name`, chapter/campaign entries `title` — either
   // may be missing (degrade), then the path is the honest fallback.
   // A SESSION has no `title` and its id is opaque noise since issue #58, so
   // the heading is derived from `started` ("Session vom 15.01.2026") instead

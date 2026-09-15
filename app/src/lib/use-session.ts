@@ -1,23 +1,23 @@
-// React-query hooks around the session file.
+// React-query hooks around the session.
 //
 // TWO different questions, two hooks (issue #40) — and BOTH are the server's
 // answer, never the client's date:
 //
 //   - useActiveSession — "is a session running right now?"
 //     (GET /:campaign/session): the last started session that is not ended,
-//     which may well be YESTERDAY's file when the evening went past midnight.
+//     which may well be YESTERDAY's session when the evening went past midnight.
 //     `null` means "nothing running" — a normal state, not an error.
 //   - useLastStartedSession — "which session does the review harvest?"
 //     (GET /:campaign/session?includeEnded=1): the last started session,
-//     ENDED or not. Deriving today's file name here was the midnight bug of
-//     the review (finding 1): `end` writes into the file the session was
+//     ENDED or not. Deriving today's session id here was the midnight bug of
+//     the review (finding 1): `end` writes into the session that was
 //     STARTED in, so after a session that ran past midnight the harvest — and
-//     every `review/seen` patch — looked at a file that does not exist.
+//     every `review/seen` patch — looked at a session that does not exist.
 //
 // Every write endpoint returns the fresh EntryResponse: it is written into the
 // cache immediately (keyed by the path the SERVER reports, never a guessed
 // one). No invalidation on top — the version poll (lib/use-campaign-version)
-// covers external changes, and re-fetching the same file per log line was one
+// covers external changes, and re-fetching the same session per log line was one
 // redundant request per keystroke-sized write.
 
 import type { EntryResponse } from "@grimoire/shared/types";
@@ -60,7 +60,7 @@ export function useActiveSession(campaign: string, enabled = true) {
 
 /**
  * The session the REVIEW works on: the last started one, ended or not.
- * `null` when the campaign has no session file at all ("nothing to harvest").
+ * `null` when the campaign has no session at all ("nothing to harvest").
  */
 export function useLastStartedSession(campaign: string, enabled = true) {
   return useQuery({
@@ -99,12 +99,12 @@ export function conflictPath(error: unknown): string | undefined {
 
 /**
  * Session write mutation (start/end/log/pause): seeds the caches from
- * the returned file.
+ * the returned session.
  *
- * The file cache is keyed by `data.path` — the server decides which file the
+ * The session cache is keyed by `data.path` — the server decides which session the
  * write landed in (issue #40: a log line goes into the RUNNING session, which
- * can be yesterday's file). The active-session cache is seeded only while the
- * returned file is not ended (shared `isEnded` — the ONE predicate, so client
+ * can be yesterday's session). The active-session cache is seeded only while the
+ * returned session is not ended (shared `isEnded` — the ONE predicate, so client
  * and server never disagree about a blank `ended`); an ended session is no
  * longer active and must not linger as a live indicator. The review's session
  * is seeded either way: an ended session is exactly what it harvests.
@@ -127,15 +127,15 @@ export function useSessionWrite<TVars = void>(
 }
 
 /**
- * "Session verwerfen" (issue #40 AK7): the active session's file is DELETED.
+ * "Session verwerfen" (issue #40 AK7): the active session is DELETED.
  * Offered only while `isSessionEmpty` holds — the same shared predicate the
  * server enforces, so the action never leads into a 409.
  *
- * The cache cannot be seeded from a response here (there is no file any
+ * The cache cannot be seeded from a response here (there is no session any
  * more): the active session becomes `null` immediately, and the review's
  * session is INVALIDATED rather than nulled — after the discard the last
  * started session is an older, ended one, and only the server knows which.
- * The deleted file's own cache entry is removed so a stale copy cannot be
+ * The deleted session's own cache entry is removed so a stale copy cannot be
  * rendered from it.
  */
 export function useSessionDiscard(campaign: string, onDone?: () => void) {

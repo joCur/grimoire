@@ -2,11 +2,11 @@
 // BODY (properties already stripped — same string as ParsedFile.body) into a
 // flat-ish list of editable blocks and serialize it back.
 //
-// THE invariant, enforced by blocks.test.ts against every file in examples/:
+// THE invariant, enforced by blocks.test.ts against every body in examples/:
 //
 //     serializeBlocks(parseBlocks(body)) === body     // byte-identical
 //
-// That is what makes a composer UI safe to point at hand-written files: opening
+// That is what makes a composer UI safe to point at hand-written markdown: opening
 // a scene and saving it again must not produce a single byte of diff. The trick
 // is that every parsed block keeps its own `source` verbatim and is re-rendered
 // from its fields ONLY once it has been edited (see `source` below). Markdown
@@ -94,7 +94,7 @@ export interface CalloutBlock extends BlockCommon {
   /**
    * The callout's content: `>` markers and the `[!kind]` marker removed, line
    * breaks kept as "\n" (a callout may hold several paragraphs, separated by
-   * an empty line just like in the file).
+   * an empty line just like in the body).
    */
   text: string;
 }
@@ -330,7 +330,7 @@ function takeGap(lines: Line[], last: number): Gap {
  * chunk, plus a chunk break before every heading, blockquote and fenced code
  * block (all of which interrupt a paragraph in CommonMark). So a paragraph is
  * one card, a tight list is one card, a code fence is one card — which is how
- * the DM reads the file. The two known costs, both harmless because every
+ * the DM reads the body. The two known costs, both harmless because every
  * block keeps its `source`: a LOOSE list (blank lines between items) splits
  * into one block per item, and a setext heading (`Titel` + `=====`) stays a
  * text block instead of becoming a heading block. Both still round-trip
@@ -354,7 +354,7 @@ export function parseBlocks(body: string): SceneBlock[] {
     // it round-trips (source "" and gap "" reproduce exactly the whitespace
     // that was there) AND gives the composer something to type into. Typing
     // drops the source, and the serializer then gives the block the trailing
-    // newline every file in the data set has.
+    // newline every body in the data set has.
     if (lead === "") return [];
     return [{ id: nextId(), type: "text", text: "", source: "", lead, gap: "" }];
   }
@@ -519,19 +519,19 @@ interface Unit {
  * which is what makes the round-trip byte-identical. Blocks without a source —
  * constructed or edited — are rendered from their fields in the house style of
  * examples/ and separated by one blank line; the last one gets a single
- * trailing newline, because every file in the data set ends with exactly one.
+ * trailing newline, because every body in the data set ends with exactly one.
  *
- * Two rules about EMPTINESS, both of them „the file gets what the DM meant,
+ * Two rules about EMPTINESS, both of them „the body gets what the DM meant,
  * the composer keeps what the DM is working on":
  *
  *   * An edited or constructed block that renders to NOTHING contributes
  *     nothing at all — not even its separator. The card stays on screen (it is
  *     draft state, and a freshly inserted block is empty by definition), it
- *     just does not write a stray blank line into the file, and it therefore
+ *     just does not write a stray blank line into the body, and it therefore
  *     also cannot vanish differently on the way through „Markdown" and back.
  *     Parsing never produces such a block; only editing does.
  *   * An edited LAST block that ended the body without a newline gets one:
- *     every file in the data set ends with exactly one. A body that genuinely
+ *     every body in the data set ends with exactly one. A body that genuinely
  *     has no final newline and is not touched stays as it is (its blocks are
  *     verbatim), so nothing is normalized behind the DM's back.
  */
@@ -549,7 +549,7 @@ export function serializeBlocks(blocks: SceneBlock[]): string {
       const isLast = index === units.length - 1;
       const gap = unit.gap ?? (isLast ? eol : eol + eol);
       // Rendered bodies are built with "\n"; verbatim ones already carry the
-      // file's own endings and must never be rewritten (that would turn a
+      // body's own endings and must never be rewritten (that would turn a
       // "\r\n" into "\r\r\n").
       const body = unit.verbatim ? unit.body : unit.body.replace(/\n/g, eol);
       const end = isLast && !unit.verbatim && gap === "" ? eol : gap;
@@ -565,7 +565,7 @@ export function serializeBlocks(blocks: SceneBlock[]): string {
  *
  *   * `lead` (for the first block: the blank line gray-matter left behind the
  *     properties fence) moves forward to whatever is first now,
- *   * a dropped unit at the END of the list gives its gap — the file's own
+ *   * a dropped unit at the END of the list gives its gap — the body's own
  *     terminator — to the unit that is last now, so emptying the last block
  *     leaves `A\n` and not `A\n\n`.
  */
@@ -587,7 +587,7 @@ function withoutEmpty(units: Unit[]): Unit[] {
   }
   const last = kept[kept.length - 1];
   if (atTail && last !== undefined) {
-    // A terminator of "" (a file that ends without a newline) is not inherited:
+    // A terminator of "" (a body that ends without a newline) is not inherited:
     // the block that carried it was EDITED away, and the serializer's default
     // gives the new last block the single trailing newline the data set has.
     kept[kept.length - 1] = { ...last, gap: terminator === "" ? undefined : terminator };
@@ -610,9 +610,9 @@ function flatten(blocks: SceneBlock[], units: Unit[]): void {
 
 /**
  * A CRLF body stays CRLF even where new blocks were inserted: the line ending
- * is a property of the file, not of the block that happens to be new.
+ * is a property of the body, not of the block that happens to be new.
  *
- * `lead` counts as evidence like everything else: in a CRLF file whose body
+ * `lead` counts as evidence like everything else: in a CRLF text whose body
  * starts with the blank line after the properties fence and holds a single
  * block, that blank line is the ONLY place a "\r\n" can be seen.
  */
@@ -637,7 +637,7 @@ export function blockMarkdown(block: SceneBlock): string {
 
 /**
  * The markdown of a block INCLUDING everything it contains — for an `## If:`
- * section that is the heading plus its children, with the separators the file
+ * section that is the heading plus its children, with the separators the body
  * has between them.
  *
  * `blockMarkdown` deliberately answers for the block's own line only (the
@@ -760,8 +760,8 @@ export function withChildren(block: IfSectionBlock, children: SceneBlock[]): IfS
 //
 // Whitespace is POSITIONAL, not part of the block: `lead` is the whitespace in
 // front of the list (for a body from gray-matter: the blank line after the
-// properties fence), the last gap is the file's terminator ("\n", or "" for a
-// file without a final newline) and the gaps in between are separators.
+// properties fence), the last gap is the body's terminator ("\n", or "" for a
+// body without a final newline) and the gaps in between are separators.
 //
 // So a structural change permutes the block bodies and leaves that scaffolding
 // where it is. Moving the first block must not drag the leading blank line

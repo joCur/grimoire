@@ -7,9 +7,9 @@
 // no waiting, no flicker between "unmarked" and "marked".
 //
 // Sections are the three campaign-wide entry points, not entity kinds: a scene
-// file belongs under Kapitel because that is where the DM finds it, an NPC file
+// entry belongs under Kapitel because that is where the DM finds it, an NPC entry
 // under NPCs no matter which chapter mentions it. Views that are not part of
-// any section (generator, review, the campaign file, sessions, inbox, glossary)
+// any section (generator, review, the campaign entry, sessions, inbox, glossary)
 // are marked nowhere — an arbitrary highlight would be a lie.
 
 import { kindFromPath } from "@grimoire/shared/kind";
@@ -30,9 +30,9 @@ export interface NavView {
 /**
  * The section to mark, or undefined for the views that belong to none.
  *
- * The pool and the scene list are Kapitel; a file's section comes from its
+ * The pool and the scene list are Kapitel; an entry's section comes from its
  * kind (the shared path table — the format contract in code exactly once):
- * scenes and `_chapter` are Kapitel, npc/location files their own lists.
+ * scenes and `_chapter` are Kapitel, npc/location entries their own lists.
  */
 export function navSection(view: NavView): NavSection | undefined {
   if (view.isPool) return "chapters";
@@ -57,7 +57,7 @@ export function navSection(view: NavView): NavSection | undefined {
     case "location":
       return "locations";
     default:
-      // campaign file, session, inbox, glossary, unknown — no section.
+      // campaign entry, session, inbox, glossary, unknown — no section.
       return undefined;
   }
 }

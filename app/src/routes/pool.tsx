@@ -40,7 +40,7 @@ export function PoolRoute() {
     ) ?? 0;
   const chapterCount = data?.chapters.length ?? 0;
   // Display name + description from _campaign (issue #17); the header
-  // degrades to the campaign id when the file is missing.
+  // degrades to the campaign id when the entry is missing.
   const meta = useCampaignMeta(campaign);
   // Open the active chapter(s) by default; without one, the first.
   const anyActive = data?.chapters.some((ch) => ch.status === "active") ?? false;
@@ -144,7 +144,7 @@ function Chapter({
   const contingencies = scenes.filter((s) => s.type === "contingency");
 
   // The chapter goal lives in the _chapter body — fetched lazily on
-  // first expand; missing file/heading degrades to no goal line.
+  // first expand; missing entry/heading degrades to no goal line.
   const chapterFile = useQuery({
     queryKey: ["file", campaign, chapter.path],
     queryFn: () => fetchFile(campaign, chapter.path as string),
@@ -324,7 +324,7 @@ function SceneRow({
           ) : null}
         </span>
       </Link>
-      {/* No rev in the tree — the control fetches the file when it opens. */}
+      {/* No rev in the tree — the control fetches the entry when it opens. */}
       <SceneStatusControl
         campaign={campaign}
         path={scene.path}

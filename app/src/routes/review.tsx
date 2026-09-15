@@ -5,7 +5,7 @@
 // "Fertig" at the end. Reached after "Session beenden" and from the quiet
 // pool affordance.
 //
-// The server files are the truth: every action writes through the review
+// The server is the truth: every action writes through the review
 // endpoints, the returned EntryResponse is seeded into the cache and the
 // query invalidated on top. The ONLY client state is cosmetic — which action
 // a card got in this sitting (the server stores done/not-done, not which
@@ -87,7 +87,7 @@ export function ReviewRoute() {
   // „Behalten" writes nothing: the entry stays open (and counted) for the next
   // wrap-up, the marker is cosmetic and lives for this sitting only.
   // Campaign-scoped like the rest of the review memory: the entry key is only
-  // the line index in its file, so an unscoped set would carry a „Behalten"
+  // the line index in its session, so an unscoped set would carry a „Behalten"
   // over to the same index in the NEXT campaign (the route param changes
   // without remounting this component).
   const [kept, setKept] = useState<ReadonlySet<string>>(() => new Set<string>());
@@ -129,7 +129,7 @@ export function ReviewRoute() {
       // Only after the harvest succeeded is the source marked done.
       if (entry.source === "log") {
         // The path comes from the server (the last started session — which
-        // may be yesterday's file). Without it there is nothing to patch.
+        // may be yesterday's session). Without it there is nothing to patch.
         if (model.sessionPath === "") throw new Error("keine Session");
         written.push(await markLogLineSeen(campaign, model.sessionPath, entry.rawLine));
       } else {
@@ -138,12 +138,12 @@ export function ReviewRoute() {
       return written;
     },
     onSuccess: (files, vars) => {
-      // Every endpoint returns the fresh file: seed, then invalidate on top.
+      // Every endpoint returns the fresh entry: seed, then invalidate on top.
       for (const file of files) {
         queryClient.setQueryData(["file", campaign, file.path], file);
         void queryClient.invalidateQueries({ queryKey: ["file", campaign, file.path] });
-        // A log line's done-state lives in the session file's frontmatter, and
-        // the live aside and the topbar read that file through the SESSION
+        // A log line's done-state lives in the session's properties, and
+        // the live aside and the topbar read that session through the SESSION
         // queries — they have to see the fresh one too (same rule as
         // components/PcReminders).
         if (file.path === model.sessionPath) {
@@ -151,7 +151,7 @@ export function ReviewRoute() {
           void queryClient.invalidateQueries({ queryKey: lastStartedSessionKey(campaign) });
         }
       }
-      // A new thread section or npc file can change the tree, too.
+      // A new thread section or NPC entry can change the tree, too.
       if (vars.action !== "dismiss") {
         void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
       }

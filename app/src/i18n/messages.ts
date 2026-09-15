@@ -11,7 +11,7 @@ import { de } from "./de";
 /** Every message key the app may ask for. */
 export type MessageKey = keyof typeof de;
 
-/** A complete catalog — the shape every language file must satisfy. */
+/** A complete catalog — the shape every language entry must satisfy. */
 export type Messages = Record<MessageKey, string>;
 
 /** The languages the UI ships (German is the primary one, CLAUDE.md). */

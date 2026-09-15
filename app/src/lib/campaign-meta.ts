@@ -45,13 +45,13 @@ export interface CampaignMetaBase {
   rev: number;
 }
 
-/** What the file query knows: the document, or nothing yet. */
+/** What the entry query knows: the document, or nothing yet. */
 export type CampaignMetaAnswer = { rev: number } | undefined;
 
 /**
- * Decide the base version ONCE, at the first answer of the file query.
+ * Decide the base version ONCE, at the first answer of the entry query.
  *
- * The file query keeps refetching while the dialog is open — the 5s version
+ * The entry query keeps refetching while the dialog is open — the 5s version
  * poll (issue #8) invalidates it — so reading its token at save time would let
  * a concurrent edit of the campaign document advance the base silently: the
  * save would overwrite that edit instead of answering 409. Same trap the body

@@ -41,7 +41,7 @@ export function PcReminders({ campaign }: { campaign: string }) {
       setCleared(true);
       queryClient.setQueryData(["file", campaign, file.path], file);
       void queryClient.invalidateQueries({ queryKey: ["file", campaign, file.path] });
-      // The done-state of a log line lives in the session file's frontmatter
+      // The done-state of a log line lives in the session's properties
       // — both session queries have to see the fresh one.
       void queryClient.invalidateQueries({ queryKey: activeSessionKey(campaign) });
       void queryClient.invalidateQueries({ queryKey: lastStartedSessionKey(campaign) });

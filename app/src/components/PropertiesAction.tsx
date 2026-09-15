@@ -18,20 +18,20 @@
 // resolving the current name (#68), changing an id is a repair, not everyday
 // work. It replaces the properties dialog rather than stacking on top of it:
 // a successful rename navigates the reading view to the new path, and a
-// properties dialog left standing over it would hold the OLD file's frozen
+// properties dialog left standing over it would hold the OLD entry's frozen
 // values.
 //
 // The version the save is checked against is frozen when the dialog OPENS: the
-// 5s version poll (issue #8) keeps refetching the file behind it, and following
+// 5s version poll (issue #8) keeps refetching the entry behind it, and following
 // that rev would turn an external edit into a silent overwrite instead of a
-// 409. It moves only after a conflict, to the file the re-read brought — the
+// 409. It moves only after a conflict, to the entry the re-read brought — the
 // typed values stay, so the next „Speichern" writes on top of what is stored.
 //
 // Because everything the save uses is frozen, the dialog is bound to ONE path
 // (same rule as the body editor of issue #15): the reading route stays mounted
-// across a navigation — ⌘K works over the modal, Back reopens a cached file —
+// across a navigation — ⌘K works over the modal, Back reopens a cached entry —
 // and a dialog holding file A's frozen values while `file` already points at B
-// would patch A's diff into B. So the open state IS the file (campaign + path),
+// would patch A's diff into B. So the open state IS the entry (campaign + path),
 // and the content is keyed by it.
 
 import type { CampaignTree, EntryResponse } from "@grimoire/shared/types";
@@ -70,7 +70,7 @@ import { usePropertiesFormMutation } from "@/lib/use-properties-form";
 /**
  * The quiet header trigger, in the same vocabulary as „Bearbeiten" next to
  * it. Renders nothing for the kinds that have no form:
- * the campaign file (its own metadata dialog), sessions and the inbox
+ * the campaign entry (its own metadata dialog), sessions and the inbox
  * (app-managed, append-only), glossary and unknown.
  */
 export function PropertiesAction({
@@ -80,12 +80,12 @@ export function PropertiesAction({
 }: {
   campaign: string;
   file: EntryResponse;
-  /** For the reference fields — the ids that already have a file. */
+  /** For the reference fields — the ids that already have an entry. */
   tree: CampaignTree | undefined;
 }) {
   const t = useT();
   // Open-BY-FILE, not a boolean: navigating away closes the dialog instead of
-  // leaving it standing over another file's reading view. Campaign AND path,
+  // leaving it standing over another entry's reading view. Campaign AND path,
   // because two campaigns can hold the same relative path (`npcs/jorna`).
   const fileKey = `${campaign}/${file.path}`;
   const [openFile, setOpenFile] = useState<string>();
@@ -94,13 +94,13 @@ export function PropertiesAction({
   const [renameFile, setRenameFile] = useState<string>();
   const open = openFile === fileKey;
   const renameOpen = renameFile === fileKey;
-  // …and the state is dropped as well, so returning to the file (Back into the
+  // …and the state is dropped as well, so returning to the entry (Back into the
   // react-query cache) does not reopen a dialog nobody asked for.
   useEffect(() => {
     setOpenFile(undefined);
     setRenameFile(undefined);
   }, [fileKey]);
-  // The renameable id of the file on screen — undefined for the kinds the
+  // The renameable id of the entry on screen — undefined for the kinds the
   // rename endpoint does not cover, and then the footer action is absent.
   const renameTarget = renameTargetFor(file);
   const fields = propertiesFieldsFor(file.kind, t);
@@ -116,8 +116,8 @@ export function PropertiesAction({
       />
       {open && (
         <PropertiesDialog
-          // Belt and braces next to the open-by-file rule: a path change
-          // remounts the dialog, so no frozen value can outlive its file.
+          // Belt and braces next to the open-by-entry rule: a path change
+          // remounts the dialog, so no frozen value can outlive its entry.
           key={fileKey}
           campaign={campaign}
           file={file}
@@ -167,7 +167,7 @@ function PropertiesDialog({
 }) {
   const { t } = useI18n();
   // Both frozen at open, on purpose (see the file header): `initial` is what
-  // the diff is measured against — NOT the file behind the dialog, or an
+  // the diff is measured against — NOT the entry behind the dialog, or an
   // external edit landing in the cache would silently swallow the DM's change
   // — and `base` is the version the write is checked against.
   const [initial] = useState<FormValues>(() => propertiesFormValues(fields, file.properties));
@@ -197,7 +197,7 @@ function PropertiesDialog({
   // What is unfinished, per field — an unnamed or a doubled quickstat row.
   // Saving over one of those would lose what the DM typed, so it blocks the
   // save and says why under the field itself.
-  // `initial` exempts what the file already holds: free text a migrated
+  // `initial` exempts what the entry already holds: free text a migrated
   // campaign carries in `npcs` must not block a save of another field (#70).
   const issues = propertiesFormIssues(fields, effective, initial, t);
   const canSubmit =

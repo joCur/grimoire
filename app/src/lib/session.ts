@@ -1,12 +1,12 @@
-// Session-file helpers for the live mode: the log-line parser, the elapsed
+// Session helpers for the live mode: the log-line parser, the elapsed
 // timer and the epoch readings of `started`/`ended`. Pure functions —
 // unit-tested, no react or query imports here.
 //
 // There is NO client-side date guessing left here (issue #40 and its
-// review): WHICH file a session lives in is always the server's answer
+// review): WHICH session is the active one is always the server's answer
 // (GET /:campaign/session, with ?includeEnded=1 for the review — see
-// lib/use-session.ts). A session past midnight lives in YESTERDAY's file,
-// and a browser in another timezone than the server would get both the file
+// lib/use-session.ts). A session past midnight is YESTERDAY's session,
+// and a browser in another timezone than the server would get both the session
 // and the runtime wrong.
 
 import { isPaused, openPause, sessionPauses } from "@grimoire/shared/session-state";
@@ -20,7 +20,7 @@ export interface LogEntry {
   sceneId?: string;
   text: string;
   /**
-   * The line as it stands in the file (trimmed — the write API never emits
+   * The line as it stands in the log (trimmed — the write API never emits
    * indented log lines). The review hashes THIS string for the session's
    * `reviewed` list, so it must travel alongside the parsed form.
    */
@@ -33,7 +33,7 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const LOG_LINE = /^-\s+(\d{1,2}:\d{2})(?:\s+\(([^)]+)\))?\s+(.+)$/;
 
 /**
- * The lines of the `## Log` section as entries, in file order. Degrade
+ * The lines of the `## Log` section as entries, in log order. Degrade
  * rules: a line that does not match the log-line shape becomes a raw text
  * entry (no time, no sceneId), a missing Log section yields an empty list —
  * never an error.
@@ -91,7 +91,7 @@ export function parseLocalDateTime(value: unknown): number | undefined {
  * Start / end of a session as epoch milliseconds (issue #40).
  *
  * The SERVER's reading wins (`startedMs`/`endedMs` of the EntryResponse): the
- * file format is zone-less on purpose, and only the server knows the timezone
+ * format is zone-less on purpose, and only the server knows the timezone
  * those wall-clock digits were written in — computing them in the browser
  * gave a runtime that was hours off whenever the two differ. The local parse
  * stays as the fallback for a response without the epoch fields.
@@ -160,7 +160,7 @@ export function sessionIsPaused(session: SessionTimes | undefined): boolean {
  * point is then the moment the pause began, so a re-render a minute later
  * shows the same number. `ended` and an open pause together (only reachable by
  * hand-editing) take the earlier of the two, so the value can never grow past
- * the end. Undefined when the file says nothing usable about `started`.
+ * the end. Undefined when the session says nothing usable about `started`.
  */
 export function sessionElapsedMs(
   session: SessionTimes | undefined,
@@ -216,7 +216,7 @@ export function sessionElapsedLabel(
  * 23:30 ends up dated the next day.
  *
  * Falls back to a plain "Session" when there is no usable `started` — the
- * honest answer for a hand-edited file, and better than the raw id, which is
+ * honest answer for an imported entry, and better than the raw id, which is
  * 36 characters of noise.
  */
 export function sessionDateLabel(

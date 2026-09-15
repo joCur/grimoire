@@ -2,7 +2,7 @@
 // everything about it that is pure, so the dialog itself stays a thin shell.
 //
 // The id of an entity is its stable reference key (README), so a rename is a
-// cascade the SERVER computes: the app only decides whether the file on
+// cascade the SERVER computes: the app only decides whether the entry on
 // screen can be renamed at all, validates the new id the same way the server
 // does (fail before the request, not after it), and turns the server's
 // answers into readable lines — in the UI language since issue #69, which is
@@ -29,9 +29,9 @@ export interface RenameTarget {
 const RESERVED_IDS = new Set(["npcs", "locations", "sessions"]);
 
 /**
- * What a rename would target for the file on screen, or undefined when the
- * file has no renameable id: sessions (their id is the date), the campaign
- * file, inbox, glossary, and anything unknown.
+ * What a rename would target for the entry on screen, or undefined when the
+ * entry has no renameable id: sessions (their id is opaque), the campaign
+ * entry, inbox, glossary, and anything unknown.
  *
  * For a chapter the id is the FIRST PATH SEGMENT of its `_chapter` (the
  * chapter row's id). For every other kind it is `properties.id`, which every
@@ -141,12 +141,12 @@ export function usageTotalLabel(total: number, t: Translate): string {
 }
 
 /**
- * The path the reading view must go to after the rename: the file on screen,
+ * The path the reading view must go to after the rename: the entry on screen,
  * moved along with the rename.
  *
- * The server names `from`/`to` in DOCUMENTS for every kind since the SQLite
- * cutover (#57) — a chapter rename reports `<id>/_chapter`, not the bare
- * directory — so the file on screen is usually `from` itself. The prefix
+ * The server names `from`/`to` as addresses for every kind — a chapter rename
+ * reports `<id>/_chapter` — so the entry on screen is usually `from` itself.
+ * The prefix
  * branch stays for the case where the view sits on something UNDER the
  * renamed address; it costs nothing and is the safe direction.
  */

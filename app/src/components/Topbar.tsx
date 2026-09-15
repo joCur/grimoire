@@ -1,7 +1,7 @@
 // The constant topbar (design reference: 56px, hairline below).
 //
 // THE CHROME IS GLOBAL AND STABLE (PO rework of PR #35). Every campaign-scoped
-// view — pool, browse lists, file/scene, generator, review — shows the very
+// view — pool, browse lists, entry/scene, generator, review — shows the very
 // same left block:
 //
 //     Grimoire │ Kampagne: <name> ⌄ │ Kapitel · NPCs · Orte
@@ -11,7 +11,7 @@
 // (lib/topbar-nav.ts). There are NO breadcrumbs in the topbar any more. The
 // three it used to have (scene, list, generator) each repeated the campaign
 // name the switcher already carries, competed with the nav next to them, and
-// on a file view claimed a chapter path that was misleading for an NPC opened
+// on an entry view claimed a chapter path that was misleading for an NPC opened
 // from the NPC list. Hierarchical context now lives in the page header instead
 // (components/PageContext.tsx) — where it belongs, next to the title it
 // describes. The campaign name appears exactly ONCE in the chrome.
@@ -413,7 +413,7 @@ export function Topbar() {
 /**
  * The running time of the session as `H:MM:SS`, re-rendered every second.
  *
- * Every epoch reading comes from the SERVER (lib/session.ts): the file format
+ * Every epoch reading comes from the SERVER (lib/session.ts): the format
  * is zone-less, so a browser in another timezone than the server used to show
  * a runtime that was hours off (issue #40). PAUSED time is deducted and the
  * clock STANDS while a pause runs (AK8) — the number on the chip is the time
@@ -469,7 +469,7 @@ type SessionChipState = "hidden" | "start" | "running" | "error";
  * The chip's state, straight from the server's answer — and from nothing else
  * (issue #40 review, finding 6):
  *
- *   running — a session file came back, ended or not decided by the server.
+ *   running — a session came back, ended or not decided by the server.
  *   start   — EXACTLY the answer `null` ("nothing running"). Never while the
  *             query is pending (the chip would flash an offer into a running
  *             session) and never when it failed.
@@ -683,7 +683,7 @@ function SessionMenuChip({
   const navigate = useNavigate();
   const [discardOpen, setDiscardOpen] = useState(false);
   // ONE entry, two directions (issue #40 AK8): the pause endpoints open and
-  // close a `pauses` interval in the file — the log line comes with it, and
+  // close a `pauses` interval in the session — the log line comes with it, and
   // the runtime really stops instead of only being annotated.
   const pause = useSessionWrite(campaign, () =>
     paused ? continueSession(campaign) : pauseSession(campaign),
@@ -835,12 +835,12 @@ function TopbarNavLink({
 }
 
 /**
- * "Session verwerfen" (issue #40 AK7): deletes the session file of a session
+ * "Session verwerfen" (issue #40 AK7): deletes the session
  * that has nothing in it — the undo of a "Session starten" that was a
  * mis-click. It lives in the session menu now (last entry, dimmed), below
  * "Session beenden", which stays THE way out of a session that happened.
  *
- * It deletes a file, so it asks first. The confirmation names the consequence
+ * It deletes a session, so it asks first. The confirmation names the consequence
  * instead of asking "sicher?" — that is the only thing worth reading here.
  * After the discard nothing is live any more, so the pool is where the DM
  * lands (the live route without a session would only show its empty state).

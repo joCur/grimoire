@@ -61,7 +61,7 @@ export interface MarkdownEditorSurfaceProps {
   editing: boolean;
   /** id of the textarea; the toggle's aria-controls target. */
   id: string;
-  /** aria-label of the textarea; include the file/draft name so labels stay unique. */
+  /** aria-label of the textarea; include the entry/draft name so labels stay unique. */
   label: string;
   /**
    * What the preview renders when it must differ from `value`: the generator

@@ -384,7 +384,7 @@ function AugmentReview({
   const canApply = bodyChanged || Object.keys(patch).length > 0;
 
   // The accept is an ORDINARY rev-checked write (issue #38's shared layer):
-  // the written file seeds the cache, tree AND search are invalidated — ⌘K
+  // the written entry seeds the cache, tree AND search are invalidated — ⌘K
   // must not keep the text the proposal replaced — and the 409 protocol is
   // the house one.
   const apply = useRevWriteMutation<{ rev: number; properties?: typeof patch; body?: string }>({

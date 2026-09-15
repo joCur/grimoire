@@ -3,14 +3,11 @@
 // Every write the app does carries the guard token of the EntryResponse the DM
 // was looking at, so a competing write answers 409 instead of being
 // overwritten silently. The 409 is not an error the user has to fix: nothing
-// was written, so the file is re-read once and the NEXT attempt carries the
+// was written, so the entry is re-read once and the NEXT attempt carries the
 // fresh token.
 //
-// The wire field is still called `rev`, but since the SQLite cutover
-// (issue #57) it carries the row's VERSION, not a file rev — an opaque
-// token, which is all this module ever treated it as. The upgrade is real
-// though: two writes inside the same second used to share a rev and both
-// went through (issue #37); two writes cannot share a row version.
+// `rev` is the row's VERSION — an opaque token, which is all this module
+// treats it as, and one that two writes can never share (issue #37).
 //
 // Three write paths share exactly that shape — the status regler (#28), the
 // campaign metadata dialog (#34) and the body editor (#15). What differs is
@@ -33,7 +30,7 @@ export function isStaleFileError(error: unknown): boolean {
  * layer only names which sentence a path uses.
  *
  * The wording no longer says "extern": after the cutover the other writer is
- * another tab, the generator or a second request — not an editor on the file
+ * another tab, the generator or a second request — not an editor on the entry
  * system, which does not exist any more.
  */
 export const STALE_FILE_MESSAGE: MessageKey = "write.stale";
@@ -46,10 +43,10 @@ export const STALE_FILE_MESSAGE: MessageKey = "write.stale";
 export const WRITE_FAILED_MESSAGE: MessageKey = "write.failed";
 
 export type RevWriteResult =
-  /** Written: the server's fresh file, ready to seed into the query cache. */
+  /** Written: the server's fresh entry, ready to seed into the query cache. */
   | { ok: true; file: EntryResponse }
   /**
-   * NOT written — the file changed on disk (or appeared while a dialog was
+   * NOT written — the entry changed on the server (or appeared while a dialog was
    * open). `file` is the re-read file when the reload succeeded (its rev
    * makes the next attempt work); undefined when even the reload failed.
    */
@@ -57,7 +54,7 @@ export type RevWriteResult =
 
 /**
  * Run one rev-checked write. `write` is the API call including the rev;
- * `reread` fetches the file the write was aimed at and is only used after a
+ * `reread` fetches the entry the write was aimed at and is only used after a
  * 409. Every failure that is NOT a conflict throws — the caller's inline error
  * line belongs to those.
  */
@@ -73,7 +70,7 @@ export async function writeWithRev(
       return { ok: false, file: await reread() };
     } catch {
       // The reload failed too (server gone): the conflict message stands and
-      // the cache keeps the file we had — the version poll (issue #8) brings
+      // the cache keeps the entry we had — the version poll (issue #8) brings
       // the current one as soon as the server answers again.
       return { ok: false };
     }
@@ -84,7 +81,7 @@ export async function writeWithRev(
  * Bind a write to the version it is checked against — the "is there a rev
  * at all?" dance, once.
  *
- * Two paths (the status regler, the body editor) can only write when the file
+ * Two paths (the status regler, the body editor) can only write when the entry
  * on screen has been read; `undefined` means "nothing to write against yet".
  * Returning NO write function for that case is what makes it one place: the
  * hook already ignores a call it cannot serve, so neither path needs its own

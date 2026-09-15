@@ -154,7 +154,7 @@ export function chapterIdValue(
 }
 
 /**
- * Body of a complete markdown file (properties block stripped) — the same
+ * Body of a complete draft (properties block stripped) — the same
  * shape the server's parser returns, so the review preview can run the
  * normal markdown pipeline over an edited draft. Degrades: without a
  * parseable block the whole text IS the body.
@@ -437,7 +437,7 @@ export function jobParts(job: GenerateJob | null | undefined): string[] {
 /**
  * How far a partially accepted run got — „2 von 3 übernommen" in the topbar
  * and on the generator page. `total` counts every part the run produced,
- * `written` the ones already on disk; a run nobody has accepted anything of
+ * `written` the ones already accepted; a run nobody has accepted anything of
  * reports 0 and shows no progress at all.
  */
 export function jobProgress(job: GenerateJob | null | undefined): {

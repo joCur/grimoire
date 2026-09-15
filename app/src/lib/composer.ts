@@ -65,7 +65,7 @@ export type ComposerDraft =
   | { mode: "blocks"; blocks: SceneBlock[] }
   | { mode: "markdown"; text: string };
 
-/** Seed the draft from a file body — the composer is the default mode. */
+/** Seed the draft from a body — the composer is the default mode. */
 export function composerDraft(body: string): ComposerDraft {
   return { mode: "blocks", blocks: parseBlocks(body) };
 }
@@ -178,8 +178,8 @@ export function setHeadingDepth(
 
 /**
  * An `## If:` heading can sit on a gap of a single newline — as the last line
- * of a file (`## If: a\n`), or with its first child glued right underneath it
- * (`## If: a\ndrin\n`, valid markdown that a hand-written file may well hold).
+ * of a body (`## If: a\n`), or with its first child glued right underneath it
+ * (`## If: a\ndrin\n`, valid markdown that hand-written text may well hold).
  * A block inserted at the TOP of that section would then land directly under
  * the heading line, which is not the house style of examples/. Dropping the gap
  * hands the separator back to the serializer, which puts one blank line there.
@@ -243,7 +243,7 @@ export function moveBy(blocks: SceneBlock[], id: string, delta: number): SceneBl
  * an `## If:` section whose markdown holds a heading that ENDS the section
  * (`#` or `##` at the start of a line — endsIfSectionText uses the parser's own
  * reading, so a `##` inside a code fence or a blockquote is fine). Saving that
- * writes a file whose next parse puts the child — and everything below it —
+ * writes a body whose next parse puts the child — and everything below it —
  * OUTSIDE the branch, while the composer still shows it nested. The DM would
  * have moved a whole branch by typing two characters.
  */

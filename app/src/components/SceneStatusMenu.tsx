@@ -3,14 +3,14 @@
 // the bare dot+label of a pool row; both keep the quiet look and only grow a
 // small chevron on hover/focus.
 //
-// The write needs the rev of the file it is changing. The reading view has
+// The write needs the rev of the entry it is changing. The reading view has
 // the EntryResponse on screen and hands its rev down; a pool row has only
-// the tree (which carries no rev), so the control fetches the file LAZILY
-// when the menu opens — one GET, shared with the file query cache.
+// the tree (which carries no rev), so the control fetches the entry LAZILY
+// when the menu opens — one GET, shared with the entry query cache.
 //
 // While a write runs the trigger shows the TARGET value dimmed. That is a
 // display state only: the query cache is never written with a guessed value,
-// it always gets the file the server sent back.
+// it always gets the entry the server sent back.
 
 import type { SceneStatus } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
@@ -42,7 +42,7 @@ export function SceneStatusControl({
 }: {
   campaign: string;
   path: string;
-  /** The status as it stands in the file/tree — unknown values pass through. */
+  /** The status as it stands in the log/tree — unknown values pass through. */
   status: string;
   /** From the loaded EntryResponse; undefined means "fetch it when opening". */
   rev?: number | undefined;
@@ -51,7 +51,7 @@ export function SceneStatusControl({
   const t = useT();
   const [open, setOpen] = useState(false);
   // Lazy rev for the pool rows: only ever requested once the menu opens,
-  // and served from the cache when the file was read before.
+  // and served from the cache when the entry was read before.
   const file = useQuery({
     queryKey: ["file", campaign, path],
     queryFn: () => fetchFile(campaign, path),
@@ -66,7 +66,7 @@ export function SceneStatusControl({
       status={status}
       variant={variant}
       pendingStatus={pendingStatus}
-      // A row whose file could not be read at all cannot be patched — the
+      // A row whose entry could not be read at all cannot be patched — the
       // display stays, the menu just does nothing.
       disabled={file.isError}
       message={message ?? (file.isError ? t("status.sceneUnloadable") : undefined)}

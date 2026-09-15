@@ -31,7 +31,7 @@ export interface EntryBodyMutation {
  * `onSaved` runs after a SUCCESSFUL write only — that is where the route
  * leaves edit mode. A conflict or an error keeps the editor open on purpose;
  * `onConflict` then carries the re-read entry (undefined when even the reload
- * failed) so the next attempt starts from the version on disk.
+ * failed) so the next attempt starts from the stored version.
  */
 export function useEntryBodyMutation(
   campaign: string,
