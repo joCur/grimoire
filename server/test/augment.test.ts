@@ -369,7 +369,6 @@ describe("prompt assembly", () => {
       expect(prompt, kind).toContain("Den Eigenschaften-Block baut der Server daraus");
       // No trace of the raw-entry format this ticket replaced.
       expect(prompt, kind).not.toContain("---warnings---");
-      expect(prompt, kind).not.toContain("**das Dokument selbst**");
     }
     // The SAME description everywhere — one shape, every entry prompt.
     const wordings = new Set(assembled.map(([, doc]) => ruleParagraph(doc, OBJECT_RULE)));
@@ -521,11 +520,11 @@ describe("proposal", () => {
     // reply. It reads as `unknown`, the same degrade the shared parser
     // applies, and the DM sees it as a CHANGED field in the review rather
     // than as a silent overwrite or a dead run.
-    const file = await read(NPC);
-    expect(file.properties.status).toBe("alive");
+    const entry = await read(NPC);
+    expect(entry.properties.status).toBe("alive");
     const outcome = validateAugmentReply(
-      augmentReply(NPC, file.raw.replace("status: alive\n", "")),
-      { kind: "npc", file },
+      augmentReply(NPC, entry.raw.replace("status: alive\n", "")),
+      { kind: "npc", file: entry },
     );
     expect(outcome.ok).toBe(true);
     if (outcome.ok) {

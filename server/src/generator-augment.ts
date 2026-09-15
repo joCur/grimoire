@@ -211,7 +211,7 @@ export function validateAugmentReply(
 ): { ok: true; result: AugmentResult } | { ok: false; errors: string[] } {
   // The reply is the schema-forced OBJECT (./entry-reply):
   // `properties` per kind, the whole `body` as it should look afterwards, and
-  // the warnings. The augmentation rule („immer die GANZE Datei") is the rule
+  // the warnings. The augmentation rule („immer den GANZEN Eintrag") is the rule
   // it always was — the shape around it is what changed.
   //
   // A key the schema does NOT have (a `roll20-page` on an npc, app-managed
