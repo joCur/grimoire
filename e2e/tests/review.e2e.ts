@@ -15,7 +15,7 @@ import { expect, test, todaySessionId, todaySessionPath } from "../support/test"
 
 const THREAD_LINE = "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread";
 const THREAD_TEXT = "Cliffhanger: Lichter in der Bucht gesichtet";
-const NPC_TEXT = 'Improvisiert: Fischerin "Old Metta" am Steg';
+const NPC_TEXT = 'Improvisiert: Fischerin „Old Metta“ am Steg';
 const INBOX_TEXT = "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug";
 /** An idea thrown in on the go — no hashtag at all (issue #85). */
 const NOTE_TEXT = "Die Laternen am Kai brennen bei Ebbe nie";

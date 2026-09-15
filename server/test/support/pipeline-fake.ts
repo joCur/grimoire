@@ -15,18 +15,28 @@
 //                  A reply that does not PARSE (garbage, a truncated one) is
 //                  served verbatim here instead: that is a run that dies
 //                  before it has parts, which is what those tests are about.
-//   scene part     the scripted reply VERBATIM. The single-scene validation
-//                  accepts a one-element `scenes` array, so a batch reply
-//                  with one scene is a legal single-scene reply — which keeps
-//                  the correction-turn assertions (the replayed assistant
-//                  text, the raw reply in the error body) byte-exact.
-//   entry part     the scripted reply's matching `entries` item, rewrapped as
-//                  the npc/location prompt's own `{ npc }` / `{ location }`
-//                  schema.
+//   scene part     the scripted reply's scene entry, as the REPLY OBJECT
+//                  `properties` (the entry's own properties,
+//                  parsed), `body`, and the batch reply's `warnings`.
+//   entry part     the scripted reply's matching `entries` item, likewise.
+//   single call    the npc/augment run's scripted entry, likewise — a
+//                  reply that does NOT parse as a batch / `{ npc }` /
+//                  `{ entry }` object travels verbatim, which is what the
+//                  garbage and the truncation cases are about.
+//
+// The script keeps writing ENTRIES (`content`: markdown with a properties
+// block), because that is how a test says what a run is about in one literal.
+// The fake is what turns them into the object a schema-forced provider
+// delivers — so the correction turns, the replayed assistant turns and the
+// `rawReply` of an error body are all in the real shape. A `content` whose
+// properties block does not parse travels VERBATIM: that is a reply the run
+// has to fail on, and the failure is the test's subject.
 //
 // Attempt N of a part reads script[N], so "bad, then good" still means one
 // correction turn — per part, which is the whole point of the ticket.
 
+import { CORE_SCHEMA, load } from "js-yaml";
+import { PAIR_KEY, PAIR_VALUE, propertyFieldsFor } from "@grimoire/shared";
 import type {
   CompletionResult,
   CorrectionTurn,
@@ -95,6 +105,91 @@ function parseBatch(reply: ScriptedReply): BatchReply | null {
       ? obj.warnings.filter((w): w is string => typeof w === "string")
       : [],
   };
+}
+
+/**
+ * The REPLY OBJECT, built out of a scripted entry: the
+ * properties block parsed into `properties`, everything below it as `body`,
+ * plus the script's warnings. Returns null when the entry has no parseable
+ * properties block — such a script is served verbatim, because a reply the
+ * server cannot read is exactly what those cases test.
+ *
+ * `quickstats` (and any other key/value field) is turned into the `{ key,
+ * value }` LIST the schema asks for — a free mapping cannot be expressed in
+ * strict mode (shared/entry-schema.ts).
+ */
+export function entryReply(
+  content: string,
+  warnings: readonly string[] = [],
+  kind: "scene" | "npc" | "location" = "scene",
+): string | null {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(content);
+  if (match === null) return null;
+  let data: unknown;
+  try {
+    data = load(match[1]!, { schema: CORE_SCHEMA });
+  } catch {
+    return null;
+  }
+  if (data === null || typeof data !== "object" || Array.isArray(data)) return null;
+  const properties = { ...(data as Record<string, unknown>) };
+  for (const field of propertyFieldsFor(kind) ?? []) {
+    if (field.control !== "pairs") continue;
+    const value = properties[field.key];
+    if (value === null || typeof value !== "object" || Array.isArray(value)) continue;
+    properties[field.key] = Object.entries(value as Record<string, unknown>).map(
+      ([key, item]) => ({ [PAIR_KEY]: key, [PAIR_VALUE]: String(item) }),
+    );
+  }
+  return JSON.stringify({
+    properties,
+    body: (match[2] ?? "").replace(/^\n+/, "").replace(/\s*$/, "\n"),
+    warnings: [...warnings],
+  });
+}
+
+/** The reply object of a scripted entry, or the entry verbatim. */
+function replyOrVerbatim(
+  content: string,
+  warnings: readonly string[],
+  kind: "scene" | "npc" | "location",
+): string {
+  return entryReply(content, warnings, kind) ?? content;
+}
+
+/**
+ * The ONE entry a scripted single-call reply carries: `{ npc }` for an NPC
+ * run, `{ entry }` for an augment run — plus `scene`/`location`, so a script
+ * can say any of them. Null when the reply is not such an object, and then it
+ * travels verbatim.
+ */
+function singleEntry(reply: ScriptedReply): { content: string; warnings: string[] } | null {
+  if (typeof reply !== "string" && reply.truncated === true) return null;
+  const raw = textOf(reply);
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start === -1 || end <= start) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const obj = parsed as Record<string, unknown>;
+  for (const key of ["npc", "entry", "location", "scene"]) {
+    const value = obj[key];
+    if (value === null || typeof value !== "object") continue;
+    const content = (value as { content?: unknown }).content;
+    if (typeof content !== "string") continue;
+    return {
+      content,
+      warnings: Array.isArray(obj.warnings)
+        ? obj.warnings.filter((w): w is string => typeof w === "string")
+        : [],
+    };
+  }
+  return null;
 }
 
 /** One `key: value` line of a document's properties block. */
@@ -211,21 +306,31 @@ export class PipelineFake implements LLMProvider {
     const scripted = this.replies[Math.min(attempt, this.replies.length - 1)];
     if (scripted === undefined) throw new Error("PipelineFake: no scripted reply left");
 
-    if (part.kind === "single") return completionOf(scripted);
+    if (part.kind === "single") {
+      const entry = singleEntry(scripted);
+      if (entry === null) return completionOf(scripted);
+      return {
+        ...completionOf(scripted),
+        // Which kind the single call is about is not in the request; the npc
+        // run and an npc augment are the ones with key/value fields, so npc
+        // is the honest default here (a scene/location entry simply has
+        // no `pairs` field to convert).
+        text: replyOrVerbatim(entry.content, entry.warnings, "npc"),
+      };
+    }
 
     if (part.kind === "scene") {
       const batch = parseBatch(scripted);
-      // A one-scene batch reply IS a legal single-scene reply, so it travels
-      // VERBATIM — which is what keeps the replayed assistant turn and the
-      // raw reply in an error body byte-exact. A batch with several scenes is
-      // narrowed to the one this part is about; serving it whole would fail
-      // every part with „genau EINE Szene", which is a statement about the
-      // fake and not about the code under test.
-      if (batch === null || batch.scenes.length <= 1) return completionOf(scripted);
+      // Not a batch object at all (garbage, a truncated reply): served
+      // verbatim, because that is a reply the run has to fail on.
+      if (batch === null) return completionOf(scripted);
+      // The entry this part is about — a batch with several scenes is
+      // narrowed to the assigned one; serving them all would fail every part
+      // for a reason that is about the fake, not about the code under test.
       const scene =
         batch.scenes.find((doc) => property(doc.content, "id") === part.id) ?? batch.scenes[0];
       return {
-        text: JSON.stringify({ scene: { content: scene!.content }, warnings: batch.warnings }),
+        text: replyOrVerbatim(scene!.content, batch.warnings, "scene"),
         truncated: false,
         ...(typeof scripted === "string" || scripted.usage === undefined
           ? {}
@@ -257,9 +362,8 @@ export class PipelineFake implements LLMProvider {
     const entry =
       batch.entries.find(byId) ?? batch.entries[0] ?? this.lastBatch()?.entries.find(byId);
     if (entry === undefined) return completionOf(scripted);
-    const key = entry.kind === "location" ? "location" : "npc";
     return {
-      text: JSON.stringify({ [key]: { content: entry.content }, warnings: [] }),
+      text: replyOrVerbatim(entry.content, [], entry.kind === "location" ? "location" : "npc"),
       truncated: false,
       ...(typeof scripted === "string" || scripted.usage === undefined
         ? {}

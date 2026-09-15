@@ -43,7 +43,6 @@ function sceneMarkdown(id: string, title: string): string {
     "chapter: 01-salzhafen",
     "location: leuchtturm",
     "npcs: [fenn]",
-    "handouts: []",
     "tags: [social]",
     "status: draft",
     "---",

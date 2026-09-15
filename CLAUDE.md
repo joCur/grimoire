@@ -79,6 +79,11 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Eintrags `properties`, sein Markdown `body`.
 - Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
   Code, Kommentare, Commits: Englisch.
+- Kommentare erklären den Code und stehen für sich: Englisch, ohne Verweise
+  auf Issues, PRs oder Reviews.
+- Schemata und Fixtures liegen in ihrem Zielformat vor (ein JSON-Schema als
+  `.json`, eine Antwort-Fixture als das Objekt selbst), statt im Code
+  zusammengebaut zu werden.
 - Nutzersichtbare Texte NIE direkt in Komponenten, sondern in den Katalog
   `app/src/i18n/` (`de.ts` = Key-Satz, `en.ts` muss vollständig sein, sonst
   Typfehler). `t()` kommt aus `useT()`/`useI18n()`; reine Helfer in

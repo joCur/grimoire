@@ -1,0 +1,119 @@
+{
+  "title": "run_outline",
+  "description": "Die Gliederung dieses Generierungs-Durchlaufs: welche Szenen entstehen, welche Figuren und Orte neu sind, und welche Warnungen der DM lesen soll.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "scenes",
+    "entries",
+    "warnings"
+  ],
+  "properties": {
+    "scenes": {
+      "type": "array",
+      "description": "Mindestens eine, höchstens 12 Szenen.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "type",
+          "location",
+          "sourceExcerpt",
+          "refs"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Kleinbuchstaben, Ziffern und Bindestriche, keine Umlaute (Muster: ^[a-z0-9]+(-[a-z0-9]+)*$)."
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "contingency"
+            ]
+          },
+          "location": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Orts-id aus dem Kontext oder aus entries; null, wenn keine."
+          },
+          "sourceExcerpt": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "required": [
+              "first",
+              "last"
+            ],
+            "description": "Erster und letzter Satz des Quelltext-Abschnitts, wörtlich; null, wenn keine.",
+            "properties": {
+              "first": {
+                "type": "string"
+              },
+              "last": {
+                "type": "string"
+              }
+            }
+          },
+          "refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Kleinbuchstaben, Ziffern und Bindestriche, keine Umlaute (Muster: ^[a-z0-9]+(-[a-z0-9]+)*$)."
+            },
+            "description": "ids anderer Szenen DIESER Gliederung."
+          }
+        }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "description": "Höchstens 12 neue Figuren und Orte.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "id",
+          "name",
+          "summary"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "npc",
+              "location"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "description": "Kleinbuchstaben, Ziffern und Bindestriche, keine Umlaute (Muster: ^[a-z0-9]+(-[a-z0-9]+)*$)."
+          },
+          "name": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

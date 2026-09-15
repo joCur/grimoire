@@ -112,7 +112,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   // belongs to the rename dialog (with its cascade), the kind comes from the
   // path — and the footer says where to change it (issue #77).
   await expect(dialog).toContainText("lighthouse-arrival");
-  await expect(dialog).toContainText('unten über „id ändern"');
+  await expect(dialog).toContainText('unten über „id ändern“');
   await expect(dialog.getByRole("button", { name: "id ändern" })).toBeVisible();
   await expect(dialog.getByLabel("Titel")).toHaveValue("Ankunft am Leuchtturm");
   await expect(dialog.getByLabel("Status")).toHaveValue("ready");
@@ -243,13 +243,13 @@ test('free text in the Ort field creates the Ort under the typed NAME (#100)', a
 
   // Text no slug can be derived from is the one thing that still blocks.
   await ort.fill("???");
-  await expect(dialog.getByText('„???" ergibt keine Orts-id')).toBeVisible();
+  await expect(dialog.getByText('„???“ ergibt keine Orts-id')).toBeVisible();
   await expect(save).toBeDisabled();
 
   // And a new name says what saving will do with it.
   await ort.fill("Der alte Hafen");
   await expect(
-    referenceHint(dialog, 'Neu — wird als Ort „Der alte Hafen" angelegt.'),
+    referenceHint(dialog, 'Neu — wird als Ort „Der alte Hafen“ angelegt.'),
   ).toBeVisible();
   await expect(save).toBeEnabled();
   await save.click();
@@ -422,7 +422,7 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
   await expect(dialog).toContainText("Zeile ohne Namen");
   await expect(save).toBeDisabled();
   await statName.fill("insight");
-  await expect(dialog).toContainText('Name „insight" doppelt');
+  await expect(dialog).toContainText('Name „insight“ doppelt');
   await expect(save).toBeDisabled();
   await statName.fill("deception");
   await expect(dialog).not.toContainText("Zeile ohne Namen");
