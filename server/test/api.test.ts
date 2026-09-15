@@ -133,8 +133,8 @@ describe("GET /api/campaigns", () => {
       // Broken properties → the campaign ROW still exists (a directory is a
       // campaign) and nothing was READ from the file: no description, and
       // never the parser's file-stem fallback ("_campaign") as the name — the
-      // id is. The file itself is kept verbatim in unknown_files (see
-      // db-migration.test.ts).
+      // id is. The file itself stays in the tree, named in the seed report
+      // (db-migration.test.ts).
       expect(byId.get("kaputte-meta")).toEqual({ id: "kaputte-meta", name: "kaputte-meta" });
       // File present but without `name` → the id is the display name.
       expect(byId.get("meta-ohne-name")).toEqual({

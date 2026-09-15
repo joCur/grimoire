@@ -147,7 +147,7 @@ interface RawFile {
    * The raw bytes, kept only for a file that is NOT valid UTF-8 text (a map
    * png, a pdf handout). Decoding those into a string would replace every
    * unmappable byte with U+FFFD and the "kept verbatim" promise would be a
-   * lie — so the bytes go into `unknown_files.content_blob` instead.
+   * lie — so the file is only named in the report.
    */
   bytes?: Buffer;
   /** True when the file is not decodable text. */
@@ -200,7 +200,7 @@ async function readCampaign(root: string, id: string): Promise<RawCampaign> {
       if (s.isDirectory()) {
         if (depth === 0 && !RESERVED_DIRS.has(entry.name)) chapterDirs.push(entry.name);
         // Depth is capped generously: deeper files still get collected so
-        // they can land in `unknown_files` instead of vanishing.
+        // they are named in the report instead of vanishing.
         if (depth < 6) await walk(abs, rel, depth + 1);
         continue;
       }
@@ -291,7 +291,7 @@ function splitFrontmatter(
  * — which is exactly the signal used here.
  *
  * A file like that cannot be turned into a row: its id would be a guess and
- * its contract fields do not exist. It goes to `unknown_files` verbatim.
+ * its contract fields do not exist. It is reported and left out.
  */
 function hasFrontmatterBlock(raw: string): boolean {
   return /^﻿?---\r?\n/.test(raw);
@@ -312,7 +312,7 @@ function frontmatterUnusable(raw: string, body: string): boolean {
  * that never had an `inbox.md` gets one from `POST /api/:campaign/inbox` as
  * plain `# Inbox\n\n- text` with no frontmatter (campaign-write.ts,
  * `appendInboxEntry`) — treating that as unusable would push every ingested
- * idea of such a campaign into `unknown_files` and out of the app's inbox.
+ * idea of such a campaign out of the app's inbox and into the report.
  * The glossary is the same shape: `parseGlossaryBody` reads only the body,
  * and the frontmatter block holds at most a decorative `id`.
  *
@@ -368,7 +368,7 @@ type FileClass =
  * `kindFromPath` on purpose: that function answers the FORMAT question
  * ("what would this be"), while the migration must also decide what to do
  * with a path the format does not describe — `npcs/alt/fenn.md`, a scene
- * three directories deep, a `.txt` file. Those become `unknown_files`
+ * three directories deep, a `.txt` file. Those are named in the report
  * instead of being force-fitted into a table.
  */
 function classify(file: RawFile): FileClass {

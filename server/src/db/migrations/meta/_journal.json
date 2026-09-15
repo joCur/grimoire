@@ -85,6 +85,13 @@
       "when": 1789510860953,
       "tag": "0011_drop_chapter_declared",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1789512099181,
+      "tag": "0012_drop_import_bookkeeping",
+      "breakpoints": true
     }
   ]
 }

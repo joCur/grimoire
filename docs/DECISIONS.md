@@ -450,7 +450,10 @@ weg (Migration 0011). Das Flag hielt fest, ob ein Frontmatter-Block `chapter:`
 nannte, damit `PATCH { chapter: null }` den Key ausblenden konnte; das Kapitel
 ist Fremdschlüssel und Teil der Adresse, also immer gerendert, und `null` ist
 ein 400. `extra` gehört dem Importer: die API ändert und löscht dort vorhandene
-Keys, legt aber keine neuen an (unbekannter Key im Patch → 400).
+Keys, legt aber keine neuen an (unbekannter Key im Patch → 400). Die
+Tabellen `unknown_files` und `migration_report` sind weg (Migration 0012): sie
+verwahrten Dateien und Befunde der einmaligen Migration aus dem Dateibaum, den
+kein Produktionspfad mehr liest — der Seed-Bericht kommt aus dem Speicher.
 
 **Nachtrag zu ADR #10 (eingelöst in #62):** Generator-Jobs sind persistent
 (`generate_jobs`); der dort akzeptierte Verlust bei Neustart entfällt für
