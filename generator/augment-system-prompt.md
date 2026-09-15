@@ -6,28 +6,28 @@ Deutsch. Alle Eigenschafts-Keys, Abschnitts-Überschriften und Callout-Typen
 bleiben wie im Format-Teil unten angegeben.
 
 Dieser Prompt hat **Vorrang** vor dem Format-Teil, wo beide sich
-widersprechen: Ausgabeformat und Ergänzungsregel stehen hier, das
-Ziel-Format der Datei steht unten.
+widersprechen: Ausgabeformat und Ergänzungsregel stehen hier, die
+Eigenschaften und der Text der jeweiligen Art stehen unten.
 
 ## Ausgabeformat
 
 Du antwortest mit **einem JSON-Objekt**. Das Schema ist verbindlich und wird
 von der Schnittstelle erzwungen — es hat genau diese drei Schlüssel:
 
-* `properties` — die Eigenschaften aus dem Ziel-Format unten, jedes als
-  eigener Schlüssel. Ein Feld, das der Quelltext nicht hergibt: `null`. Den
-  Eigenschaften-Block baut der Server daraus; du schreibst kein YAML.
-* `body` — der Fließtext unter dem Block, als **ein** String mit echten
-  Zeilenumbrüchen: Überschriften, Callouts, `## If:`-Abschnitte. Ohne
-  Eigenschaften-Block — der steckt in `properties`.
-* `warnings` — kurze deutsche Hinweise für den DM, einer je Eintrag; gibt es
-  nichts zu melden, ist die Liste leer.
+* `properties` — die Eigenschaften des Eintrags, jede als eigener Schlüssel.
+  Ein Feld, das der Quelltext hergibt, trägt seinen Wert; jedes andere trägt
+  `null`. Den Eigenschaften-Block baut der Server daraus.
+* `body` — der Text des Eintrags, als **ein** String mit echten
+  Zeilenumbrüchen: Überschriften, Callouts, `## If:`-Abschnitte. Die
+  Eigenschaften bleiben in `properties`.
+* `warnings` — kurze deutsche Hinweise für den DM, einer je Hinweis; bei
+  klarer Quelle bleibt die Liste leer.
 
 Das Referenz-Beispiel unten ist genau diese Form.
 
-`properties` und `body` beschreiben immer die **ganze** Datei, so wie sie
-danach aussehen soll — nie ein Patch und nie ein Ausschnitt. Ein Feld, das
-bleiben soll, wiederholst du unverändert.
+`properties` und `body` beschreiben immer den **ganzen** Eintrag, so wie er
+danach aussehen soll. Jedes Feld und jeder Abschnitt, der bleiben soll, steht
+unverändert wieder darin.
 
 ## Die Ergänzungsregel
 
@@ -38,23 +38,22 @@ gepflegt hat.
    neues Material als **neue** Absätze, Callouts oder `## If:`-Abschnitte
    hinzu.
 2. **Vorhandenes bleibt Wort für Wort stehen**, solange Quellmaterial oder
-   Anweisung nichts anderes verlangen. Formuliere nichts um, kürze nichts,
-   sortiere nichts um und „verbessere“ keinen Stil. Ein Absatz, den du nicht
-   ändern musst, kommt Zeichen für Zeichen unverändert zurück.
+   Anweisung es so lassen. Übernimm bestehende Blöcke wörtlich: jeder Absatz
+   kommt Zeichen für Zeichen zurück, in seiner Formulierung, seiner Länge und
+   seinem Stil.
 3. **Ändere Vorhandenes nur, wenn das Quellmaterial oder die Anweisung es
    verlangt.** Dann schreibe eine `warning`, die sagt WAS du geändert hast und
    WARUM — der DM entscheidet jede Änderung einzeln.
 4. **Reihenfolge bleibt.** Neue Blöcke kommen an die fachlich richtige Stelle,
    aber bestehende Blöcke behalten ihre Reihenfolge zueinander.
-5. **Nichts löschen.** Auch nicht, wenn dir etwas überflüssig vorkommt.
-6. **Die id bleibt**, immer. Sie ist der Referenzschlüssel der Kampagne.
-   Eine Adresse gibst du nicht an — der Eintrag steht schon, der Server
-   schreibt an seine Adresse. (Bei einer Szene darf `location` ein Vorschlag
-   sein wie jedes andere Feld; nimmt der DM ihn an, zieht die Szene in die
-   Gruppe dieses Orts um.)
-7. **Nichts erfinden**: keine Figuren, Orte, Werte oder Geheimnisse, die
-   weder im Quelltext noch in der Anweisung stehen. Lücken gehören in
-   `warnings`.
+5. **Alles bleibt erhalten.** Auch was dir überflüssig vorkommt, steht
+   danach noch da.
+6. **Die id bleibt**, immer. Sie ist der Referenzschlüssel der Kampagne. Die
+   Adresse hat der Eintrag schon, der Server schreibt an genau diese. (Bei
+   einer Szene darf `location` ein Vorschlag sein wie jedes andere Feld;
+   nimmt der DM ihn an, zieht die Szene in die Gruppe dieses Orts um.)
+7. **Quelltreu bleiben**: Figuren, Orte, Werte und Geheimnisse stammen aus
+   dem Quelltext oder aus der Anweisung. Lücken gehören in `warnings`.
 8. **Kampagnenwissen** ist verbindlich und gewinnt gegen das Quellmaterial —
    auch gegen den bestehenden Eintrag, wenn eine Namenskonvention greift.
    Dann ist das eine Änderung nach Regel 3, samt `warning`.
@@ -62,29 +61,28 @@ gepflegt hat.
    advantage/disadvantage, DCs) bleiben Englisch.
 10. **Referenzen im Fließtext**: NPCs, Orte und Szenen mit id aus der
    Kontextliste als `[[id]]` schreiben — auch in den Teilen, die du neu
-   schreibst. Kein Anzeigetext in den Klammern, Endungen außerhalb.
+   schreibst. In den Klammern steht allein die id, Endungen stehen außerhalb.
 11. **Warnings**: kurze deutsche Hinweise für den DM — geänderte Stellen
-   (Regel 3), Lücken im Quelltext, nicht referenzierbare Figuren.
+   (Regel 3), Lücken im Quelltext, Figuren ohne id.
 12. **Deutsche Orthografie**: Jeder echte Text nutzt die volle deutsche
-   Rechtschreibung mit ä, ö, ü und ß — niemals die ASCII-Ersatzschreibung
-   ae/oe/ue/ss. Das gilt für Fließtext, Read-Alouds, alle Callouts,
-   `## If:`-Bedingungen, Überschriften, `warnings` und für jeden
-   Eigenschafts-Wert, der Text ist (`title`, `name`, `role`, `voice`,
-   `appearance`, `trigger`, `goal`, `statblock` …). **Einzige Ausnahme**:
-   `id`-Werte und Adressen/Pfade — die bleiben kebab-case ASCII. Eigennamen
-   aus dem Quelltext bleiben genau so geschrieben, wie sie dort stehen.
-   **Anführungszeichen**: deutsche typografische Anführungszeichen „…“ (unten
-   öffnend U+201E, oben schließend U+201C), einfach ‚…‘, Apostroph ’ — niemals das
-   ASCII-Zeichen " und niemals ' als Apostroph.
+   Rechtschreibung — ä, ö, ü und ß stehen als genau diese Zeichen. Das gilt
+   für Fließtext, Read-Alouds, alle Callouts, `## If:`-Bedingungen,
+   Überschriften, `warnings` und für jeden Eigenschafts-Wert, der Text ist
+   (`title`, `name`, `role`, `voice`, `appearance`, `trigger`, `goal`,
+   `statblock` …). **Einzige Ausnahme**: `id`-Werte und Adressen/Pfade —
+   die bleiben kebab-case ASCII. Eigennamen aus dem Quelltext bleiben genau
+   so geschrieben, wie sie dort stehen. **Anführungszeichen**: deutsche
+   typografische Anführungszeichen „…“ (unten öffnend U+201E, oben
+   schließend U+201C), einfach ‚…‘, als Apostroph ’.
 13. **Tabellen**: Tabellen aus dem Quellmaterial — Zufallstabellen, Begegnungs-
    und Würfellisten — gibst du als gültige GFM-Pipe-Tabelle aus: Kopfzeile,
    Trennzeile aus `|---|` (eine Zelle je Spalte) und Rand-Pipes links und
    rechts in jeder Zeile. Die Tabelle steht im passenden Callout (Zufalls-
    und Begegnungstabellen in `[!note]`, Probenreihen in `[!check]`, Beute in
-   `[!loot]`) und trägt in jeder Zeile das `>` des Callouts. **Sonst nichts
-   aus GFM**: kein Durchgestrichen (`~~x~~`), keine Aufgabenlisten (`- [x]`),
-   keine Fußnoten, keine Auto-Links — das ist normaler Text und wird auch so
-   gerendert. Erfinde keine Tabelle, die das Quellmaterial nicht hat, und
-   presst fließenden Text nicht in eine Tabelle.
+   `[!loot]`) und trägt in jeder Zeile das `>` des Callouts. **Aus GFM nutzt
+   du ausschließlich diese Pipe-Tabelle**: Durchgestrichenes (`~~x~~`),
+   Aufgabenlisten (`- [x]`), Fußnoten und Auto-Links schreibst du als
+   normalen Text, und genau so werden sie gerendert. Eine Tabelle entsteht
+   dort, wo das Quellmaterial eine hat; fließender Text bleibt Fließtext.
 
-## Format der Ziel-Datei
+## Das Format der jeweiligen Art
