@@ -107,6 +107,9 @@ Callout-Typen, Status-Werte) bleiben davon unberührt.
 | Markdown-Block | Markdown block | Roh-Block |
 | Kurzwerte | Quick stats | Quickstats |
 | Handlungsstrang | Storyline | Thread (en) |
+| Eintrag | Entry | Dokument, Datei |
+| Eigenschaften | Properties | Frontmatter |
+| Text | Text | Body |
 
 ## Nicht-Ziele
 
