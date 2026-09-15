@@ -476,6 +476,55 @@ export interface AugmentResult {
   usage?: GenerateUsage;
 }
 
+// --- the scene pipeline (issue #102) ---------------------------------------
+
+/**
+ * ONE part of a pipelined scene run (issue #102) as the client sees it.
+ *
+ * A run is no longer one call that stands or falls whole: an OUTLINE call
+ * decides which scenes exist, and then every scene and every suggested entry
+ * is a call of its own. Each of those is a PART with a status, so a form
+ * error costs that part and nothing else — and a finished part is reviewable
+ * while its siblings are still running.
+ *
+ * The OUTLINE itself never travels: it is a purely internal step for error
+ * reduction (PO, 15.09.) and is never offered for editing. What the client
+ * gets is the part LIST — order, kind, title, status — because a status card
+ * and „2 von 3 Szenen fertig" cannot be drawn without it.
+ */
+export interface GenerateJobPart {
+  /** Stable key of the part; the retry endpoint addresses it (`scene:<id>`). */
+  key: string;
+  kind: "scene" | "npc" | "location";
+  /** The id the outline gave this part — the scene/entry id. */
+  id: string;
+  /** Display title of the part; the id when the outline named none. */
+  title: string;
+  status: GenerateJobPartStatus;
+  /** Why the part failed — the DM reads this next to „Erneut versuchen". */
+  error?: string;
+  /** The mechanical validation errors of a failed part, when there were any. */
+  validationErrors?: string[];
+}
+
+export const GENERATE_JOB_PART_STATUSES = ["pending", "running", "done", "failed"] as const;
+export type GenerateJobPartStatus = (typeof GENERATE_JOB_PART_STATUSES)[number];
+
+/**
+ * The pipeline state of a scene run (issue #102): its parts in OUTLINE order
+ * plus what the whole run has cost so far. Absent for the single-call runs
+ * (npc, augment) and for a job from an older server.
+ */
+export interface GenerateJobPipeline {
+  parts: GenerateJobPart[];
+  /**
+   * Summed over every provider call of every part, the outline included —
+   * the review header shows it as „~N Tokens · M Aufrufe". `calls` counts
+   * provider calls (a correction turn is one more).
+   */
+  totals: { inputTokens: number; outputTokens: number; calls: number };
+}
+
 // --- background generate jobs (issue #19) ----------------------------------
 
 export const GENERATE_JOB_STATUSES = ["running", "done", "failed"] as const;
@@ -569,6 +618,13 @@ export interface GenerateJob {
    * that as "nothing decided yet".
    */
   review?: GenerateJobReview;
+  /**
+   * The pipeline state of a scene run (issue #102) — the parts in outline
+   * order and the run's token/call totals. Absent for a single-call run and
+   * for a payload from an older server, and then the review renders exactly
+   * as it did before this ticket.
+   */
+  pipeline?: GenerateJobPipeline;
 }
 
 /**
