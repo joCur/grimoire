@@ -24,18 +24,23 @@ Das Referenz-Beispiel unten ist genau diese Form.
 
 ## Eigenschaften und Text des Eintrags
 
-```yaml
----
-id: <kebab-case ASCII, kurz und stabil — nur die id; der Anzeigename steht in name>
-name: <Anzeigename>
-chapter: <Kapitel-id aus dem Kontext>   # nur wenn eindeutig; sonst weglassen
-roll20-page: "<Page-Name>"              # nur der Verweis auf die Roll20-Seite
----
+```json
+{
+  "properties": {
+    "id": "<kebab-case ASCII, kurz und stabil — nur die id; der Anzeigename steht in name>",
+    "name": "<Anzeigename>",
+    "chapter": "<Kapitel-id aus dem Kontext; nur wenn eindeutig, sonst null>",
+    "roll20-page": "<Page-Name als Verweis auf die Roll20-Seite; sonst null>"
+  },
+  "body": "<der Text des Ortes, ein String mit echten Zeilenumbrüchen>",
+  "warnings": ["<kurzer deutscher Hinweis für den DM>"]
+}
 ```
 
-Ein Ort trägt genau diese Felder; `status` gehört zu Szene und Figur und entfällt hier.
+Ein Ort trägt genau diese Felder; `status` gehört zu Szene und Figur und
+entfällt hier. Jedes Feld, das der Quelltext nicht hergibt, trägt `null`.
 
-Abschnitte sind frei; empfohlen und in dieser Reihenfolge:
+Die Abschnitte im String `body` sind frei; empfohlen und in dieser Reihenfolge:
 
 1. `## Beim ersten Betreten` — der erste Eindruck, als `[!readaloud]`.
 2. `## Atmosphäre` — was der Ort über sich verrät: Zustand, Geräusche,
@@ -43,7 +48,6 @@ Abschnitte sind frei; empfohlen und in dieser Reihenfolge:
 3. `## Wer ist hier` — Liste der Figuren/Gruppen am Ort. NPCs mit id aus der
    Kontextliste als `[[id]]`.
 4. `## Notizen` — bleibt LEER (nur ein HTML-Kommentar wie im Beispiel).
-
 ## Regeln
 
 0. **Referenzen im Fließtext**: Nennt der Text eine Figur, einen Ort oder eine

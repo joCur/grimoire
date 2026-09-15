@@ -28,22 +28,29 @@ der `id` aus `properties`, und die Gruppe aus `location`.
 
 ## Eigenschaften und Text des Eintrags
 
-```yaml
----
-id: <kebab-case ASCII, Englisch, kurz und stabil — nur die id; der Anzeigetext steht in title>
-title: <Anzeigetitel der Szene>
-type: planned | contingency
-trigger: <nur bei contingency: woran die Szene ausgelöst wird>
-chapter: <Kapitel-id aus dem Kontext>
-location: <Orts-id aus dem Kontext oder der Gliederung; sonst weglassen>
-npcs: [<npc-ids aus dem Kontext>]
-handouts: [<Roll20-Namen als Verweis> — oder null]
-tags: [<frei>]
-status: draft                     # neue Szenen sind immer Entwürfe
----
+```json
+{
+  "properties": {
+    "id": "<kebab-case ASCII, Englisch, kurz und stabil — nur die id; der Anzeigetext steht in title>",
+    "title": "<Anzeigetitel der Szene>",
+    "type": "planned | contingency",
+    "trigger": "<nur bei contingency: woran die Szene ausgelöst wird; sonst null>",
+    "chapter": "<Kapitel-id aus dem Kontext>",
+    "location": "<Orts-id aus dem Kontext oder der Gliederung; sonst null>",
+    "npcs": ["<npc-ids aus dem Kontext>"],
+    "handouts": ["<Roll20-Namen als Verweis>"],
+    "tags": ["<frei>"],
+    "status": "draft"
+  },
+  "body": "<der Text der Szene, ein String mit echten Zeilenumbrüchen>",
+  "warnings": ["<kurzer deutscher Hinweis für den DM>"]
+}
 ```
 
-Danach der Fließtext der Szene, in dieser Ordnung:
+Jedes Feld, das der Quelltext nicht hergibt, trägt `null`; `status` trägt bei
+einer neuen Szene immer `draft`.
+
+Der String in `body` ist in dieser Ordnung aufgebaut:
 
 1. `## Flow` — die Situation, wie sie am Tisch läuft.
 2. Beliebig viele `## If: <Bedingung>` — Verzweigungen derselben Situation.
@@ -51,9 +58,8 @@ Danach der Fließtext der Szene, in dieser Ordnung:
    `[!check]` für jede Würfelmechanik, `[!secret]` für Wissen, das allein dem
    DM gehört, `[!outcome]` für szenenübergreifende Konsequenzen, `[!loot]`
    für Beute, `[!note]` für DM-Hinweise. Genau diese sechs Typen.
-4. Referenzen im Fließtext: NPCs, Orte und Szenen mit id aus der Kontextliste
+4. Referenzen im Text: NPCs, Orte und Szenen mit id aus der Kontextliste
    als `[[id]]`, ohne Anzeigetext, Endungen außerhalb der Klammern.
-
 ## Regeln
 
 1. **Szenen-Schnitt**: Eine Szene = eine Situation, die am Tisch am Stück

@@ -59,6 +59,15 @@ Unterschied zwischen den Läufen steht in den Schemata selbst: eine bestehende
 Szene behält den Status, den der DM ihr gegeben hat, während eine **neue**
 Szene nur `draft` sein kann.
 
+**Die Prompts zeigen genau dieses Objekt.** Der Abschnitt „## Eigenschaften
+und Text des Eintrags“ jedes Create-Prompts führt ein ```json-Beispiel des
+Antwort-Objekts: `properties` mit denselben Feldern in derselben Reihenfolge
+wie das Schema der Art (ein Feld ohne Quelle als `null`), `body` als **ein**
+String — dessen Aufbau, `## Flow`, `## If:`, die sechs Callouts und
+`[[id]]`-Verweise, steht als Beschreibung dieses Strings darunter — und
+`warnings` als Liste von Strings. Prompt, Schema und Few-Shot zeigen damit
+Feld für Feld dieselbe Form.
+
 Drei Eigenheiten des **strict mode** (der OpenAI-Pfad schickt `strict: true`,
 und ein abgelehntes Schema ist ein dauerhafter Rückfall für den ganzen
 Prozess):

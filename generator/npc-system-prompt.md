@@ -28,20 +28,28 @@ zur Mapping-Form der gespeicherten Eigenschaften zusammen.
 
 ## Eigenschaften und Text des Eintrags
 
-```yaml
----
-id: <kebab-case ASCII, Englisch oder Name, kurz und stabil — nur die id; der Anzeigename steht in name>
-name: <Anzeigename>
-role: <Einzeiler: wer ist das am Tisch>
-status: alive | dead | missing | unknown
-statblock: "Roll20: <Sheet-Name>"   # nur der Verweis auf das Sheet
-quickstats: { wis: "+2", insight: "+2", passive-perception: "13" }
-voice: <wie klingt er/sie>
-appearance: <1-2 Merkmale>
----
+```json
+{
+  "properties": {
+    "id": "<kebab-case ASCII, Englisch oder Name, kurz und stabil — nur die id; der Anzeigename steht in name>",
+    "name": "<Anzeigename>",
+    "role": "<Einzeiler: wer ist das am Tisch>",
+    "chapter": null,
+    "status": "alive | dead | missing | unknown",
+    "statblock": "Roll20: <Sheet-Name>",
+    "quickstats": [{ "key": "insight", "value": "+2" }],
+    "voice": "<wie klingt er/sie>",
+    "appearance": "<1-2 Merkmale>"
+  },
+  "body": "<der Text der Figur, ein String mit echten Zeilenumbrüchen>",
+  "warnings": ["<kurzer deutscher Hinweis für den DM>"]
+}
 ```
 
-Danach genau diese Abschnitte, in dieser Reihenfolge:
+Jedes Feld, das der Quelltext nicht hergibt, trägt `null` — `chapter` bleibt
+`null`, weil der DM es später setzt.
+
+Der String in `body` trägt genau diese Abschnitte, in dieser Reihenfolge:
 
 1. `## Will` — Motivation in 1-3 Sätzen: was die Figur in dieser Kampagne
    erreichen will, und woran sie zerbricht.
@@ -53,7 +61,6 @@ Danach genau diese Abschnitte, in dieser Reihenfolge:
    Beziehungen her, steht der Abschnitt; sonst entfällt er.
 4. `## Notizen` — bleibt LEER (nur ein HTML-Kommentar wie im Beispiel). Die App
    füllt ihn im Review-Schritt.
-
 ## Regeln
 
 0. **Referenzen im Fließtext**: Nennt der Text in `## Will` oder `## Weiß`
