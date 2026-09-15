@@ -415,8 +415,8 @@ describe("prompt assembly", () => {
   });
 
   test("the run sends the kind's own system prompt and few-shot", async () => {
-    const file = await read(LOCATION);
-    const content = `${file.raw}\n## Wer ist hier\n\n- niemand\n`;
+    const stored = await read(LOCATION);
+    const content = `${stored.raw}\n## Wer ist hier\n\n- niemand\n`;
     const fake = useFake([augmentReply(LOCATION, content)]);
     await runAugmentJob({ path: LOCATION, instruction: "Ergänze, wer hier ist" });
     const req = fake.calls[0]!.req;
@@ -429,8 +429,8 @@ describe("prompt assembly", () => {
   });
 
   test("a scene run carries its chapter in the context", async () => {
-    const file = await read(SCENE);
-    const fake = useFake([augmentReply(SCENE, file.raw)]);
+    const stored = await read(SCENE);
+    const fake = useFake([augmentReply(SCENE, stored.raw)]);
     await runAugmentJob({ path: SCENE, instruction: "nichts ändern" });
     expect(fake.calls[0]!.req.context.chapter).toBe("01-salzhafen");
   });
@@ -476,36 +476,36 @@ describe("proposal", () => {
   });
 
   test("a changed id is rejected — it is the reference key", async () => {
-    const file = await read(NPC);
+    const stored = await read(NPC);
     const outcome = validateAugmentReply(
-      augmentReply(NPC, file.raw.replace("id: jorna", "id: jorna-die-hafenmeisterin")),
-      { kind: "npc", file },
+      augmentReply(NPC, stored.raw.replace("id: jorna", "id: jorna-die-hafenmeisterin")),
+      { kind: "npc", stored },
     );
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) expect(outcome.errors.join(" ")).toContain("die id bleibt");
   });
 
   test("an unknown callout is a correction turn, a known one is not", async () => {
-    const file = await read(NPC);
+    const stored = await read(NPC);
     const bad = validateAugmentReply(
-      augmentReply(NPC, `${file.raw}\n> [!spoiler] nope\n`),
-      { kind: "npc", file },
+      augmentReply(NPC, `${stored.raw}\n> [!spoiler] nope\n`),
+      { kind: "npc", stored },
     );
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.errors.join(" ")).toContain("[!spoiler]");
     const good = validateAugmentReply(
-      augmentReply(NPC, `${file.raw}\n> [!note] fine\n`),
-      { kind: "npc", file },
+      augmentReply(NPC, `${stored.raw}\n> [!note] fine\n`),
+      { kind: "npc", stored },
     );
     expect(good.ok).toBe(true);
   });
 
   test("a scene keeps the status the DM gave it", async () => {
-    const file = await read(SCENE);
-    expect(file.properties.status).toBe("ready");
-    const outcome = validateAugmentReply(augmentReply(SCENE, file.raw), {
+    const stored = await read(SCENE);
+    expect(stored.properties.status).toBe("ready");
+    const outcome = validateAugmentReply(augmentReply(SCENE, stored.raw), {
       kind: "scene",
-      file,
+      stored,
     });
     expect(outcome.ok).toBe(true);
     // `ready` is not `draft` and must not be reported as a change at all.
@@ -520,11 +520,11 @@ describe("proposal", () => {
     // reply. It reads as `unknown`, the same degrade the shared parser
     // applies, and the DM sees it as a CHANGED field in the review rather
     // than as a silent overwrite or a dead run.
-    const entry = await read(NPC);
-    expect(entry.properties.status).toBe("alive");
+    const stored = await read(NPC);
+    expect(stored.properties.status).toBe("alive");
     const outcome = validateAugmentReply(
-      augmentReply(NPC, entry.raw.replace("status: alive\n", "")),
-      { kind: "npc", file: entry },
+      augmentReply(NPC, stored.raw.replace("status: alive\n", "")),
+      { kind: "npc", stored },
     );
     expect(outcome.ok).toBe(true);
     if (outcome.ok) {
@@ -544,10 +544,10 @@ describe("proposal", () => {
     // echoes the key back — and the run must not die on that: the key cannot
     // be proposed anyway, and the proposal patches only the keys it lists, so
     // the value the DM authored keeps standing.
-    const file = await read(NPC);
+    const stored = await read(NPC);
     const outcome = validateAugmentReply(
-      augmentReply(NPC, file.raw.replace("status: alive", "status: alive\nroll20-page: Jorna")),
-      { kind: "npc", file },
+      augmentReply(NPC, stored.raw.replace("status: alive", "status: alive\nroll20-page: Jorna")),
+      { kind: "npc", stored },
     );
     expect(outcome.ok).toBe(true);
     if (outcome.ok) {
@@ -556,10 +556,10 @@ describe("proposal", () => {
   });
 
   test("a location may not carry a status", async () => {
-    const file = await read(LOCATION);
+    const stored = await read(LOCATION);
     const outcome = validateAugmentReply(
-      augmentReply(LOCATION, file.raw.replace("---\n\n", "status: alive\n---\n\n")),
-      { kind: "location", file },
+      augmentReply(LOCATION, stored.raw.replace("---\n\n", "status: alive\n---\n\n")),
+      { kind: "location", stored },
     );
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) expect(outcome.errors.join(" ")).toContain("status");
@@ -570,8 +570,8 @@ describe("proposal", () => {
 
 describe("the job", () => {
   test("a run answers 202 and leaves an augment job with the proposal", async () => {
-    const file = await read(NPC);
-    const content = file.raw.replace(
+    const stored = await read(NPC);
+    const content = stored.raw.replace(
       "## Notizen",
       "> [!secret] Der Spitzel sitzt in der Hafenwache.\n\n## Notizen",
     );
@@ -583,19 +583,19 @@ describe("the job", () => {
     const result = job.augmentResult as AugmentResult;
     expect(result.path).toBe(NPC);
     expect(result.kind).toBe("npc");
-    expect(result.rev).toBe(file.rev);
-    expect(result.currentBody).toBe(file.body);
+    expect(result.rev).toBe(stored.rev);
+    expect(result.currentBody).toBe(stored.body);
     expect(result.proposedBody).toContain("Der Spitzel sitzt in der Hafenwache");
     expect(result.warnings).toEqual(["Neuer Handlungsstrang ergänzt"]);
     // Nothing is written by a run.
-    expect((await read(NPC)).body).toBe(file.body);
+    expect((await read(NPC)).body).toBe(stored.body);
   });
 
   test("a body without properties comes back as a correction turn", async () => {
-    const file = await read(NPC);
+    const stored = await read(NPC);
     const fake = useFake([
       augmentReply(NPC, "## Will\n\nkein Eigenschaften-Block\n"),
-      augmentReply(NPC, file.raw),
+      augmentReply(NPC, stored.raw),
     ]);
     const job = await runAugmentJob({ path: NPC, instruction: "x" });
     expect(job.status).toBe("done");
@@ -678,15 +678,15 @@ describe("one job per campaign, whatever its kind", () => {
   });
 
   test("Vorschlag verwerfen discards a finished augment job", async () => {
-    const file = await read(NPC);
-    useFake([augmentReply(NPC, file.raw)]);
+    const stored = await read(NPC);
+    useFake([augmentReply(NPC, stored.raw)]);
     await runAugmentJob({ path: NPC, instruction: "x" });
     expect(await jobStatus()).toBe(200);
     const res = await app.request(`/api/${CAMPAIGN}/generate/job`, { method: "DELETE" });
     expect(res.status).toBe(200);
     expect(await jobStatus()).toBe(404);
     // Nothing was written by the run, and nothing by the reject.
-    expect((await read(NPC)).rev).toBe(file.rev);
+    expect((await read(NPC)).rev).toBe(stored.rev);
   });
 
   test("a leftover `running` augment row becomes a failed job at the next boot", async () => {
@@ -709,12 +709,12 @@ describe("one job per campaign, whatever its kind", () => {
   });
 
   test("the proposal round-trips through the job row", async () => {
-    const file = await read(NPC);
+    const stored = await read(NPC);
     // A CHANGED field, so the proposal has something to carry through the
     // row. A key the SCHEMA does not have (a `tags` on an npc) cannot be
     // proposed at all — and cannot be lost either, it simply
     // keeps the value it has.
-    const content = file.raw.replace(
+    const content = stored.raw.replace(
       "voice: knapp, wetterrau, duzt jeden",
       "voice: knapp, wetterrau — duzt auch den Ratsherrn",
     );
@@ -731,7 +731,7 @@ describe("one job per campaign, whatever its kind", () => {
       "knapp, wetterrau — duzt auch den Ratsherrn",
     );
     expect(result.warnings).toEqual(["geprüft"]);
-    expect(result.rev).toBe(file.rev);
+    expect(result.rev).toBe(stored.rev);
   });
 
   test("every reply malformed is a terminal 422 llm_invalid", async () => {
@@ -887,8 +887,8 @@ describe("naming check", () => {
 
   test("a proposal that keeps the old spelling is a HINT, never a failure", async () => {
     await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
-    const file = await read(NPC);
-    const content = file.raw.replace(
+    const stored = await read(NPC);
+    const content = stored.raw.replace(
       "## Notizen",
       "> [!secret] Sie kam aus Salt Harbour zurück.\n\n## Notizen",
     );
@@ -913,8 +913,8 @@ describe("naming check", () => {
     // way a block is built, which makes this structural rather than a rule
     // about what a model happens to write.
     await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
-    const file = await read(NPC);
-    const content = file.raw.replace(
+    const stored = await read(NPC);
+    const content = stored.raw.replace(
       "role: Auftraggeberin, Hafenmeisterin von Salzhafen",
       'role: "Hafenmeisterin: Salt Harbour"',
     );
@@ -930,8 +930,8 @@ describe("naming check", () => {
 
   test("a proposal that follows the convention produces no hint", async () => {
     await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
-    const file = await read(NPC);
-    useFake([augmentReply(NPC, file.raw.replace("## Notizen", "## Notizen\n\nSalzhafen."))]);
+    const stored = await read(NPC);
+    useFake([augmentReply(NPC, stored.raw.replace("## Notizen", "## Notizen\n\nSalzhafen."))]);
     const job = await runAugmentJob({ path: NPC, instruction: "x" });
     expect(job.status).toBe("done");
     expect((job.augmentResult as AugmentResult).namingHints).toBeUndefined();

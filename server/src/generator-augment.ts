@@ -10,7 +10,7 @@
 //      plus the DM's instruction, under the augmentation rule of
 //      generator/augment-system-prompt.md ("ergänze; Vorhandenes nur ändern,
 //      wenn Quellmaterial/Anweisung es verlangt"),
-//   2. the reply is turned into a PROPOSAL rather than into a draft file:
+//   2. the reply is turned into a PROPOSAL rather than into a draft entry:
 //      properties per field with the current value next to it, and the
 //      proposed body whole,
 //   3. accepting writes into the existing row with a `rev` guard, in ONE
@@ -82,12 +82,12 @@ const FROZEN_KEYS = new Set(["id", "scenes_played", "reviewed", "pauses"]);
 export async function readAugmentTarget(
   campaign: string,
   rel: string,
-): Promise<{ kind: AugmentKind; file: FileResponse }> {
-  const file = await readParsedFile(campaign, rel); // 400 unsafe, 404 unknown
-  if (!isAugmentKind(file.kind)) {
-    throw new ApiError(400, `"${file.kind}" cannot be augmented — npc, location or scene only`);
+): Promise<{ kind: AugmentKind; stored: FileResponse }> {
+  const stored = await readParsedFile(campaign, rel); // 400 unsafe, 404 unknown
+  if (!isAugmentKind(stored.kind)) {
+    throw new ApiError(400, `"${stored.kind}" cannot be augmented — npc, location or scene only`);
   }
-  return { kind: file.kind, file };
+  return { kind: stored.kind, stored };
 }
 
 // --- prompt --------------------------------------------------------------------
@@ -207,7 +207,7 @@ function kindErrors(
  */
 export function validateAugmentReply(
   raw: string,
-  target: { kind: AugmentKind; file: FileResponse },
+  target: { kind: AugmentKind; stored: FileResponse },
 ): { ok: true; result: AugmentResult } | { ok: false; errors: string[] } {
   // The reply is the schema-forced OBJECT (./entry-reply):
   // `properties` per kind, the whole `body` as it should look afterwards, and
@@ -219,25 +219,25 @@ export function validateAugmentReply(
   // all — and it cannot be lost either: the proposal only patches the keys it
   // lists, so every other key keeps its value, which is exactly what
   // „nichts löschen" means here.
-  const { kind, file } = target;
-  // Read in AUGMENT mode: an unknown property key is an echo of the file the
+  const { kind, stored } = target;
+  // Read in AUGMENT mode: an unknown property key is an echo of the entry the
   // model was shown, not a proposal (see normalizeProperties) — it is dropped
   // instead of failing the run.
   const read = parseEntryReply(raw, kind, "augment");
   if (!read.ok) {
-    return { ok: false, errors: read.errors.map((e) => `entry "${file.path}": ${e}`) };
+    return { ok: false, errors: read.errors.map((e) => `entry "${stored.path}": ${e}`) };
   }
   const reply = read.reply;
   const errors: string[] = [];
 
   // The target address is the SERVER's and always was — since issue #100 the
   // model is not even asked for one: an augment run rewrites the document at
-  // `file.path`, full stop. (Its `location`, on the other hand, is an
+  // `stored.path`, full stop. (Its `location`, on the other hand, is an
   // ordinary proposal: accepting one moves the scene like any other write.)
-  const label = `entry "${file.path}"`;
+  const label = `entry "${stored.path}"`;
   const fm = reply.properties;
 
-  const currentId = file.properties.id;
+  const currentId = stored.properties.id;
   if (currentId !== undefined && fm.id !== currentId) {
     errors.push(
       `${label}: die id bleibt "${String(currentId)}" — sie ist der Referenzschlüssel ` +
@@ -250,17 +250,17 @@ export function validateAugmentReply(
         CALLOUT_KINDS.map((k) => `[!${k}]`).join(", "),
     );
   }
-  kindErrors(kind, fm, file.properties, label, errors, reply.ignored ?? []);
+  kindErrors(kind, fm, stored.properties, label, errors, reply.ignored ?? []);
   if (errors.length > 0) return { ok: false, errors };
 
   return {
     ok: true,
     result: {
-      path: file.path,
+      path: stored.path,
       kind,
-      rev: file.rev,
-      properties: propertyProposals(file.properties, fm),
-      currentBody: file.body,
+      rev: stored.rev,
+      properties: propertyProposals(stored.properties, fm),
+      currentBody: stored.body,
       proposedBody: reply.body,
       warnings: reply.warnings,
     },
@@ -367,10 +367,10 @@ export async function runAugment(
         locations: ctx.locations,
         // A scene's chapter is part of its address, so it belongs in the
         // context exactly as it does for a scene run.
-        ...(target.kind === "scene" ? { chapter: chapterOf(target.file) } : {}),
+        ...(target.kind === "scene" ? { chapter: chapterOf(target.stored) } : {}),
       },
       sourceText,
-      existingEntry: { path: target.file.path, markdown: target.file.raw },
+      existingEntry: { path: target.stored.path, markdown: target.stored.raw },
       ...(instruction === "" ? {} : { instruction }),
       // Forced like every other reply — in „augment" mode, which
       // is the one difference: an existing scene's `status` is whatever the DM
@@ -392,8 +392,8 @@ export async function runAugment(
 }
 
 /** The chapter segment of a scene address (`<chapter>/…`). */
-function chapterOf(file: FileResponse): string {
-  return file.path.split("/")[0] ?? "";
+function chapterOf(stored: FileResponse): string {
+  return stored.path.split("/")[0] ?? "";
 }
 
 /**
@@ -403,7 +403,7 @@ function chapterOf(file: FileResponse): string {
  * `String(value)`: a list, a mapping or a `role` that contains „: " produced
  * YAML the parser could not read, and the whole block then degraded into the
  * body — every hint landed on `body` with a line number that pointed at
- * nothing. Same renderer as a written file, so the check reads the document
+ * nothing. Same renderer as a written entry, so the check reads the entry
  * the DM is about to accept.
  */
 function proposedEntry(result: AugmentResult): string {
