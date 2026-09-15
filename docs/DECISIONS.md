@@ -437,11 +437,11 @@ Entscheidung selbst bleibt; das hier ist ihre Vollendung.
   wo ein Frontmatter-Block wirklich das Thema ist) und als echte Datei-`mtime`
   im Static-Serving (ETag/Last-Modified eines gebauten Assets).
 
-**Nachtrag (#118, Schritt 6):** `scenes.chapter_declared` ist weg (Migration
-0011). Das Flag hielt fest, ob ein Frontmatter-Block `chapter:` nannte, damit
-`PATCH { chapter: null }` den Key ausblenden konnte; seit #115 ist das Kapitel
-Fremdschlüssel und Teil der Adresse, also immer gerendert, und `null` ist ein
-400. `extra` gehört dem Importer: die API ändert und löscht dort vorhandene
+**Nachtrag — Schema ohne Datei-Buchhaltung:** `scenes.chapter_declared` ist
+weg (Migration 0011). Das Flag hielt fest, ob ein Frontmatter-Block `chapter:`
+nannte, damit `PATCH { chapter: null }` den Key ausblenden konnte; das Kapitel
+ist Fremdschlüssel und Teil der Adresse, also immer gerendert, und `null` ist
+ein 400. `extra` gehört dem Importer: die API ändert und löscht dort vorhandene
 Keys, legt aber keine neuen an (unbekannter Key im Patch → 400).
 
 **Nachtrag zu ADR #10 (eingelöst in #62):** Generator-Jobs sind persistent
