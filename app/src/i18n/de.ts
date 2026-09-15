@@ -389,6 +389,8 @@ export const de = {
   // aktiven Kapitel ab — ein Serveraufruf, eine Transaktion.
   "pool.chapter.setActive": "Als aktiv setzen",
   "pool.chapter.activating": "Setze …",
+  "pool.chapter.properties": "Kapitel-Eigenschaften",
+  "pool.chapter.edit": "Kapitel bearbeiten",
   "pool.chapter.setActive.failed": "Kapitel nicht aktiviert",
   "chapterBody.title": "Kapitel bearbeiten: {title}",
   "chapterBody.description":

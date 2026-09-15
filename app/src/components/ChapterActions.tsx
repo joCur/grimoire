@@ -85,8 +85,22 @@ export function ChapterActions({
       {status !== "active" && <SetActiveAction campaign={campaign} chapter={chapter} />}
       {file !== undefined && (
         <>
-          <PropertiesAction campaign={campaign} file={file} tree={tree} />
-          <HeaderAction icon={PenLine} label={t("common.edit")} onClick={() => setEditing(true)} />
+          {/* Named „Kapitel-…" rather than plain „Eigenschaften"/„Bearbeiten":
+              the pool header carries its own „Bearbeiten" for the campaign and
+              every open chapter carries these, so the bare words would be
+              ambiguous — for a screen reader, and for anyone counting Tab
+              stops down the list. */}
+          <PropertiesAction
+            campaign={campaign}
+            file={file}
+            tree={tree}
+            triggerLabel={t("pool.chapter.properties")}
+          />
+          <HeaderAction
+            icon={PenLine}
+            label={t("pool.chapter.edit")}
+            onClick={() => setEditing(true)}
+          />
         </>
       )}
       {editing && file !== undefined && (

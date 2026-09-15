@@ -356,6 +356,8 @@ export const en: Messages = {
   // --- chapter actions in the pool (issue #115) ----------------------------
   "pool.chapter.setActive": "Set as active",
   "pool.chapter.activating": "Setting \u2026",
+  "pool.chapter.properties": "Chapter properties",
+  "pool.chapter.edit": "Edit chapter",
   "pool.chapter.setActive.failed": "Chapter not activated",
   "chapterBody.title": "Edit chapter: {title}",
   "chapterBody.description":
