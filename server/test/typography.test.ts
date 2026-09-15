@@ -2,14 +2,18 @@
 //
 // The PO case: a model wrote German quotation marks as the opening U+201E
 // closed by an ASCII `"`. Inside a JSON string that `"` ended the string, and
-// an otherwise perfect scene reply was unparseable. The document replies are
-// raw markdown now, so that particular breakage is gone; the MIXED spelling
-// is not, and it is ours: the prompts, the few-shots and the example campaign
+// an otherwise perfect scene reply was unparseable. The escaping is the
+// TRANSPORT's job now (the reply is a forced object and the body a string it
+// serializes), so that particular breakage is gone; the MIXED spelling is
+// not, and it is ours: the prompts, the few-shots and the example campaign
 // wrote it that way throughout, and the model imitates what it reads.
 //
 // So this test forbids the mixed form everywhere the model can see it: the
-// system prompts, the few-shot documents and the reference campaign in
-// `examples/`. The catalog carries the same guard over its VALUES (a raw scan
+// system prompts (`.md`), the few-shot REPLIES (`.json` since issue #107) and
+// the reference campaign in `examples/`. A few-shot is one JSON object whose
+// body is a single string, so a whole scene sits on one line — the rule still
+// reads it correctly, because a correctly closed `„…“` cannot be crossed and
+// the string delimiter always stands after it. The catalog carries the same guard over its VALUES (a raw scan
 // of `de.ts` cannot tell a closing quotation mark from the TypeScript string
 // delimiter) — see app/src/i18n/i18n.test.ts.
 //
@@ -29,12 +33,12 @@ const ROOT = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../..")
 /** `„` and, later on the same line, an ASCII `"` with no `“` in between. */
 export const MIXED_QUOTES = /„[^“\n]*"/;
 
-async function markdownFiles(dir: string): Promise<string[]> {
+async function promptFiles(dir: string, extensions: readonly string[]): Promise<string[]> {
   const out: string[] = [];
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...(await markdownFiles(full)));
-    else if (entry.name.endsWith(".md")) out.push(full);
+    if (entry.isDirectory()) out.push(...(await promptFiles(full, extensions)));
+    else if (extensions.some((ext) => entry.name.endsWith(ext))) out.push(full);
   }
   return out;
 }
@@ -61,14 +65,14 @@ describe("German quotation marks (issue #107)", () => {
   });
 
   test("no prompt and no few-shot mixes them", async () => {
-    const files = await markdownFiles(path.join(ROOT, "generator"));
+    const files = await promptFiles(path.join(ROOT, "generator"), [".md", ".json"]);
     expect(files.length).toBeGreaterThan(5);
     const hits = (await Promise.all(files.map(offenders))).flat();
     expect(hits).toEqual([]);
   });
 
   test("no file of the example campaign mixes them", async () => {
-    const files = await markdownFiles(path.join(ROOT, "examples"));
+    const files = await promptFiles(path.join(ROOT, "examples"), [".md"]);
     expect(files.length).toBeGreaterThan(5);
     const hits = (await Promise.all(files.map(offenders))).flat();
     expect(hits).toEqual([]);

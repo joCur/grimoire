@@ -100,6 +100,6 @@ Frontmatter. Die Adresse bildet der Server aus dem Kapitel im Kontext und der
 ## Beispiel (Few-Shot)
 
 Der Prompt trägt eine Beispiel-Gliederung als Referenz bei
-(`outline-example-output.md`): drei Szenen aus einem Hafen-Kapitel, eine
+(`outline-example-output.json`): drei Szenen aus einem Hafen-Kapitel, eine
 davon `contingency` mit `refs` auf die Szene, aus der sie ausgelöst wird,
 und zwei neue Einträge.

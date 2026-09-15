@@ -57,13 +57,13 @@ import {
   OUTLINE_SCHEMA_NAME,
   outlineJsonSchema,
 } from "@grimoire/shared/outline-schema";
+import { documentReplySchema } from "@grimoire/shared/document-schema";
 import { ApiError } from "./campaign-fs";
 import { checkDraftsNaming } from "./naming-check";
 import {
   ASSET_FILES,
   buildCorrectionMessage,
   collectSceneContext,
-  extractJsonReply,
   loadAsset,
   loadPromptAssets,
   obtainProvider,
@@ -77,9 +77,8 @@ import {
   type SceneContext,
 } from "./generator";
 export type { SceneContext } from "./generator";
-import { parseWithProperties, reparseAtAddress, unknownCallouts } from "./generator";
-import { parseDocumentReply } from "./document-reply";
-import { jsonrepair } from "jsonrepair";
+import { unknownCallouts } from "./generator";
+import { parseDocumentReply, parseJsonReply } from "./document-reply";
 import type { LLMProvider } from "./llm-provider";
 import { locationPath, npcPath } from "./store/paths";
 
@@ -150,35 +149,16 @@ export const REPAIRED_REPLY_WARNING =
   "gültiges JSON geliefert.";
 
 /**
- * The outline reply as a JSON value — with ONE tolerant repair attempt before
- * a correction turn is spent (issue #107, Zuschnitt 4).
+ * The outline reply as a JSON value — read by the tolerant reader every reply
+ * shares (`parseJsonReply`, ./document-reply): the whole text first (which is
+ * what a schema-forced reply is), then a fence, then the brace span, and ONE
+ * deterministic `jsonrepair` attempt before a correction turn is spent.
  *
- * `extractJsonReply` already handles prose and fences around a WELL-FORMED
- * object. What it cannot do is read an object that is merely almost JSON: a
- * trailing comma, a single-quoted key, an unescaped newline inside a string.
- * Those are the errors a model makes when it hand-writes JSON, and they are
- * mechanical — `jsonrepair` fixes them deterministically and much more
- * cheaply than a correction turn, which resends the whole prompt.
- *
- * `repaired` says which way in it was, so the run can say so too. The result
- * goes through the UNCHANGED validation either way: the repair loosens the
- * parsing, never the rules (the same line issue #20 drew for the extraction).
+ * Kept as a named function of its own because the outline's `repaired` flag
+ * becomes a RUN WARNING here, and because the tests of this step address it.
  */
 export function parseOutlineJson(raw: string): { value: unknown; repaired: boolean } | null {
-  const extracted = extractJsonReply(raw);
-  if (extracted !== null) return { value: extracted.value, repaired: false };
-  // A model that wrote no JSON at all is not repairable — jsonrepair would
-  // happily turn prose into a string, which then fails validation with a
-  // message about the wrong thing. So the repair only runs on a candidate
-  // that at least LOOKS like an object.
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start === -1 || end <= start) return null;
-  try {
-    return { value: JSON.parse(jsonrepair(raw.slice(start, end + 1))), repaired: true };
-  } catch {
-    return null;
-  }
+  return parseJsonReply(raw);
 }
 
 /** One of the schema's entry kinds (#107) — the list is the schema's own. */
@@ -513,16 +493,16 @@ export function validateSingleSceneReply(input: {
   scene: OutlineScene;
   allowed: AllowedRefs;
 }): { ok: true; result: { scene: GeneratedSceneDraft; warnings: string[] } } | { ok: false; errors: string[] } {
-  // Since issue #107 the reply IS the document: no wrapper to be tolerant
-  // about any more, only the document itself and — after `---warnings---` —
-  // the warnings. `parseDocumentReply` strips a fence and a leading sentence;
-  // everything below judges the markdown, exactly as it did before.
-  const split = parseDocumentReply(input.raw);
-  if (!split.ok) return { ok: false, errors: [split.error] };
-  const reply = split.reply;
+  // Since issue #107 the reply is the schema-forced OBJECT: `properties`,
+  // `body`, `warnings` (./document-reply reads it and composes the document
+  // the server would store). Everything below judges that object, by exactly
+  // the rules it judged the markdown by before.
+  const read = parseDocumentReply(input.raw, "scene");
+  if (!read.ok) return { ok: false, errors: read.errors };
+  const reply = read.reply;
   const errors: string[] = [];
   const draft = validateSceneDocument({
-    content: reply.content,
+    reply,
     label: `scene "${input.scene.id}"`,
     chapter: input.ctx.chapter,
     allowed: input.allowed,
@@ -550,11 +530,11 @@ export function validateEntryReply(
   entry: OutlineEntry,
   ctx: SceneContext,
 ): { ok: true; result: { stub: GeneratedStub; warnings: string[] } } | { ok: false; errors: string[] } {
-  const split = parseDocumentReply(raw);
-  if (!split.ok) return { ok: false, errors: [split.error] };
-  const reply = split.reply;
+  const read = parseDocumentReply(raw, entry.kind);
+  if (!read.ok) return { ok: false, errors: read.errors };
+  const reply = read.reply;
   const errors: string[] = [];
-  const stub = validateEntry({ kind: entry.kind, content: reply.content }, 0, errors);
+  const stub = validateEntry({ kind: entry.kind, reply }, 0, errors);
   if (stub === null || errors.length > 0) return { ok: false, errors };
   const label = `${entry.kind} "${entry.id}"`;
   if (stub.id !== entry.id) {
@@ -566,13 +546,12 @@ export function validateEntryReply(
       ],
     };
   }
-  const { parsed } = parseWithProperties(reply.content, entryAddress(entry.kind, entry.id));
-  for (const callout of unknownCallouts(parsed.body)) {
+  for (const callout of unknownCallouts(reply.body)) {
     errors.push(`${label}: unknown callout "[!${callout}]"`);
   }
   if (entry.kind === "npc") {
-    for (const msg of quickstatsErrors(parsed.properties)) errors.push(`${label}: ${msg}`);
-    for (const msg of npcBodyErrors(parsed.body, ctx)) errors.push(`${label}: ${msg}`);
+    for (const msg of quickstatsErrors(reply.properties)) errors.push(`${label}: ${msg}`);
+    for (const msg of npcBodyErrors(reply.body, ctx)) errors.push(`${label}: ${msg}`);
   }
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, result: { stub, warnings: reply.warnings } };
@@ -802,7 +781,6 @@ export async function runOutlineStep(
       return outcome.ok ? { ok: true, result: { outline: outcome.result } } : outcome;
     },
     correctionTail: OUTLINE_CORRECTION_TAIL,
-    correctionFormat: "outline",
     onCall: counter.onCall,
   });
   return { outline: result.outline, usage: usageOf(result.usage, counter.count()) };
@@ -834,6 +812,8 @@ export async function runScenePart(
       outline: outlineBlock(plan.outline),
       assignment: assignmentBlock(scene),
       sourceText: cut.text,
+      // Forced like the outline (issue #107): the reply is the scene object.
+      jsonSchema: documentReplySchema("scene", "create"),
     },
     provider,
     validate: (raw) => validateSingleSceneReply({ raw, ctx: plan.ctx, scene, allowed: plan.allowed }),
@@ -893,6 +873,7 @@ export async function runEntryPart(
       // scenes that mention it (Zuschnitt 3). An entry used to fall out of
       // the batch reply with no context of its own at all.
       sourceText: entryContext(plan, entry),
+      jsonSchema: documentReplySchema(entry.kind, "create"),
     },
     provider,
     validate: (raw) => validateEntryReply(raw, entry, plan.ctx),

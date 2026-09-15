@@ -23,12 +23,15 @@
 // free-text id that has no file yet, and a wrong-typed value is shown as text
 // rather than throwing.
 
+import { type CampaignTree, type EntityKind } from "@grimoire/shared/types";
 import {
-  NPC_STATUSES,
-  SCENE_TYPES,
-  type CampaignTree,
-  type EntityKind,
-} from "@grimoire/shared/types";
+  PROPERTY_FIELDS,
+  isPropertiesKind,
+  type FieldControl,
+  type PropertiesKind,
+  type PropertyFieldDef,
+  type ReferenceSource,
+} from "@grimoire/shared/property-fields";
 import { toSlug } from "@grimoire/shared/slug";
 
 import { fetchFile, patchProperties } from "@/api";
@@ -39,30 +42,14 @@ import { fmQuickstats, fmStringArray } from "@/lib/properties";
 import { sceneStatusOptions } from "@/lib/scene-status";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
-/** The kinds whose properties the form knows (README entity sections). */
-export type PropertiesKind = "scene" | "npc" | "location" | "chapter";
-
 /**
- * How one field is edited:
- *
- *   text / textarea   free string (textarea = the fields that hold a sentence)
- *   select            a known value set, plus whatever stands in the file
- *   reference         ONE id of an existing entity, free text allowed
- *   references        MANY such ids, as chips
- *   chips             free string list (`tags`, `handouts`)
- *   pairs             free key/value map (`quickstats`)
+ * The kinds, the controls and the reference sources come from
+ * @grimoire/shared/property-fields since issue #107 — the generator's reply
+ * schemas are built from the SAME field list, so „which fields does an npc
+ * have" is answered once for the whole repo. Re-exported here because every
+ * caller in the app already imports them from this module.
  */
-export type FieldControl =
-  | "text"
-  | "textarea"
-  | "select"
-  | "reference"
-  | "references"
-  | "chips"
-  | "pairs";
-
-/** Which tree list a reference field offers (free text stays possible). */
-export type ReferenceSource = "npcs" | "locations" | "chapters";
+export type { FieldControl, PropertiesKind, ReferenceSource };
 
 export interface FieldOption {
   /** What is written to the file. */
@@ -101,179 +88,118 @@ export interface PropertiesField {
 // cards share: they belong to Scheibe 2 of #69, and a signature change here
 // would drag half of those views into this slice.
 
+/** Catalog keys of a field's copy — label, and the optional two below it. */
+interface FieldCopy {
+  label: MessageKey;
+  hint?: MessageKey;
+  placeholder?: MessageKey;
+}
+
+/**
+ * The COPY of every field, by kind and key. This is the whole app-side half
+ * of the tables: the field LIST, its order, its controls and its known value
+ * sets live in @grimoire/shared/property-fields, and what is left here is
+ * what a translator owns.
+ *
+ * The keys (`title`, `npcs`, `roll20-page`) are frontmatter and never
+ * translated, and neither are the option VALUES — `active`, `planned`,
+ * `insight +2` are data.
+ */
+const FIELD_COPY: Record<PropertiesKind, Record<string, FieldCopy>> = {
+  scene: {
+    title: { label: "properties.scene.title.label" },
+    type: { label: "properties.scene.type.label" },
+    trigger: { label: "properties.scene.trigger.label", hint: "properties.scene.trigger.hint" },
+    chapter: { label: "properties.scene.chapter.label" },
+    location: { label: "properties.scene.location.label", hint: "properties.scene.location.hint" },
+    npcs: { label: "properties.scene.npcs.label", hint: "properties.scene.npcs.hint" },
+    handouts: { label: "properties.scene.handouts.label", hint: "properties.scene.handouts.hint" },
+    tags: { label: "properties.scene.tags.label", hint: "properties.scene.tags.hint" },
+    status: { label: "properties.scene.status.label" },
+  },
+  npc: {
+    name: { label: "properties.npc.name.label" },
+    role: { label: "properties.npc.role.label", hint: "properties.npc.role.hint" },
+    chapter: { label: "properties.npc.chapter.label", hint: "properties.npc.chapter.hint" },
+    status: { label: "properties.npc.status.label" },
+    statblock: {
+      label: "properties.npc.statblock.label",
+      hint: "properties.npc.statblock.hint",
+      placeholder: "properties.npc.statblock.placeholder",
+    },
+    quickstats: { label: "properties.npc.quickstats.label", hint: "properties.npc.quickstats.hint" },
+    voice: { label: "properties.npc.voice.label", hint: "properties.npc.voice.hint" },
+    appearance: { label: "properties.npc.appearance.label", hint: "properties.npc.appearance.hint" },
+  },
+  location: {
+    name: { label: "properties.location.name.label" },
+    chapter: { label: "properties.location.chapter.label" },
+    "roll20-page": { label: "properties.location.roll20.label", hint: "properties.location.roll20.hint" },
+  },
+  chapter: {
+    title: { label: "properties.chapter.title.label" },
+    status: {
+      label: "properties.chapter.status.label",
+      hint: "properties.chapter.status.hint",
+      placeholder: "properties.chapter.status.placeholder",
+    },
+  },
+};
+
 const SCENE_TYPE_LABEL_KEYS: Record<string, MessageKey> = {
   planned: "properties.scene.type.planned",
   contingency: "properties.scene.type.contingency",
 };
 
-function sceneTypeOptions(t: Translate): readonly FieldOption[] {
-  return SCENE_TYPES.map((value) => {
-    const key = SCENE_TYPE_LABEL_KEYS[value];
-    return { value, label: key === undefined ? value : t(key) };
-  });
+/**
+ * The labelled options of a `select`. The enum LABELS come from the modules
+ * the pool, the lists and the cards share (lib/scene-status.ts,
+ * lib/entity.ts) — the VALUES come from the shared field list, so a format
+ * change lands in one place and the labels follow.
+ */
+function optionsOf(
+  kind: PropertiesKind,
+  def: PropertyFieldDef,
+  t: Translate,
+): readonly FieldOption[] | undefined {
+  if (def.control !== "select") return undefined;
+  if (kind === "scene" && def.key === "status") return sceneStatusOptions(t);
+  if (kind === "npc" && def.key === "status") {
+    return (def.values ?? []).map((value) => ({ value, label: npcStatusLabel(value, t) }));
+  }
+  if (kind === "scene" && def.key === "type") {
+    return (def.values ?? []).map((value) => {
+      const key = SCENE_TYPE_LABEL_KEYS[value];
+      return { value, label: key === undefined ? value : t(key) };
+    });
+  }
+  return (def.values ?? []).map((value) => ({ value, label: value }));
 }
 
-function npcStatusOptions(t: Translate): readonly FieldOption[] {
-  return NPC_STATUSES.map((value) => ({ value, label: npcStatusLabel(value, t) }));
+/** One shared field definition plus the copy the dialog renders it with. */
+function fieldOf(kind: PropertiesKind, def: PropertyFieldDef, t: Translate): PropertiesField {
+  const copy = FIELD_COPY[kind][def.key];
+  const options = optionsOf(kind, def, t);
+  return {
+    key: def.key,
+    control: def.control,
+    // A field without copy would be a silent blank label; the key is the
+    // honest fallback and the i18n test is what keeps it unused.
+    label: copy === undefined ? def.key : t(copy.label),
+    ...(def.required === true ? { required: true } : {}),
+    ...(def.source === undefined ? {} : { source: def.source }),
+    ...(copy?.hint === undefined ? {} : { hint: t(copy.hint) }),
+    ...(copy?.placeholder === undefined ? {} : { placeholder: t(copy.placeholder) }),
+    ...(options === undefined ? {} : { options }),
+  };
 }
-
-function sceneFields(t: Translate): readonly PropertiesField[] {
-  return [
-    { key: "title", label: t("properties.scene.title.label"), control: "text", required: true },
-    {
-      key: "type",
-      label: t("properties.scene.type.label"),
-      control: "select",
-      options: sceneTypeOptions(t),
-    },
-    {
-      key: "trigger",
-      label: t("properties.scene.trigger.label"),
-      control: "textarea",
-      hint: t("properties.scene.trigger.hint"),
-    },
-    {
-      key: "chapter",
-      label: t("properties.scene.chapter.label"),
-      control: "reference",
-      source: "chapters",
-    },
-    {
-      key: "location",
-      label: t("properties.scene.location.label"),
-      control: "reference",
-      source: "locations",
-      hint: t("properties.scene.location.hint"),
-    },
-    {
-      key: "npcs",
-      label: t("properties.scene.npcs.label"),
-      control: "references",
-      source: "npcs",
-      hint: t("properties.scene.npcs.hint"),
-    },
-    {
-      key: "handouts",
-      label: t("properties.scene.handouts.label"),
-      control: "chips",
-      hint: t("properties.scene.handouts.hint"),
-    },
-    {
-      key: "tags",
-      label: t("properties.scene.tags.label"),
-      control: "chips",
-      hint: t("properties.scene.tags.hint"),
-    },
-    {
-      key: "status",
-      label: t("properties.scene.status.label"),
-      control: "select",
-      options: sceneStatusOptions(t),
-    },
-  ];
-}
-
-function npcFields(t: Translate): readonly PropertiesField[] {
-  return [
-    { key: "name", label: t("properties.npc.name.label"), control: "text", required: true },
-    {
-      key: "role",
-      label: t("properties.npc.role.label"),
-      control: "text",
-      hint: t("properties.npc.role.hint"),
-    },
-    {
-      key: "chapter",
-      label: t("properties.npc.chapter.label"),
-      control: "reference",
-      source: "chapters",
-      hint: t("properties.npc.chapter.hint"),
-    },
-    {
-      key: "status",
-      label: t("properties.npc.status.label"),
-      control: "select",
-      options: npcStatusOptions(t),
-    },
-    {
-      key: "statblock",
-      label: t("properties.npc.statblock.label"),
-      control: "text",
-      placeholder: t("properties.npc.statblock.placeholder"),
-      hint: t("properties.npc.statblock.hint"),
-    },
-    {
-      key: "quickstats",
-      label: t("properties.npc.quickstats.label"),
-      control: "pairs",
-      hint: t("properties.npc.quickstats.hint"),
-    },
-    {
-      key: "voice",
-      label: t("properties.npc.voice.label"),
-      control: "textarea",
-      hint: t("properties.npc.voice.hint"),
-    },
-    {
-      key: "appearance",
-      label: t("properties.npc.appearance.label"),
-      control: "textarea",
-      hint: t("properties.npc.appearance.hint"),
-    },
-  ];
-}
-
-function locationFields(t: Translate): readonly PropertiesField[] {
-  return [
-    { key: "name", label: t("properties.location.name.label"), control: "text", required: true },
-    {
-      key: "chapter",
-      label: t("properties.location.chapter.label"),
-      control: "reference",
-      source: "chapters",
-    },
-    {
-      key: "roll20-page",
-      label: t("properties.location.roll20.label"),
-      control: "text",
-      hint: t("properties.location.roll20.hint"),
-    },
-  ];
-}
-
-function chapterFields(t: Translate): readonly PropertiesField[] {
-  return [
-    { key: "title", label: t("properties.chapter.title.label"), control: "text", required: true },
-    {
-      key: "status",
-      label: t("properties.chapter.status.label"),
-      control: "text",
-      placeholder: t("properties.chapter.status.placeholder"),
-      hint: t("properties.chapter.status.hint"),
-    },
-  ];
-}
-
-const FIELDS_BY_KIND: Record<PropertiesKind, (t: Translate) => readonly PropertiesField[]> = {
-  scene: sceneFields,
-  npc: npcFields,
-  location: locationFields,
-  chapter: chapterFields,
-};
 
 export function propertiesFieldsFor(
   kind: EntityKind,
   t: Translate,
 ): readonly PropertiesField[] | undefined {
-  switch (kind) {
-    case "scene":
-    case "npc":
-    case "location":
-    case "chapter":
-      return FIELDS_BY_KIND[kind](t);
-    default:
-      return undefined;
-  }
+  if (!isPropertiesKind(kind)) return undefined;
+  return PROPERTY_FIELDS[kind].map((def) => fieldOf(kind, def, t));
 }
 
 /** German label of the kind for the dialog title („NPC-Eigenschaften"). */

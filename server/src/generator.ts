@@ -1,16 +1,16 @@
 // Generator pipeline (GitHub issue #6, generator/README.md):
 //
 //   1. collect campaign context (npc/location ids+names, chapter, glossary)
-//   2. prompt = system-prompt.md + example-output.md + context + source text
+//   2. prompt = system-prompt.md + example-output.json + context + source text
 //   3. call the LLM provider
-//   4. split the reply and validate it MECHANICALLY. A DOCUMENT call answers
-//      the document itself since issue #107 (frontmatter + body, warnings
-//      after `---warnings---` — ./document-reply); the OUTLINE call is the
-//      one that still answers JSON, and `extractJsonReply` below belongs to
-//      it alone (issue #20 — prose around the object is tolerated, the
-//      validation itself is not loosened). Errors go back to the model as a
-//      correction turn (LLM_CORRECTION_TURNS, default 1, max 2 — issue
-//      #19), never to the user; exhausted retries -> 422.
+//   4. read the reply and validate it MECHANICALLY. EVERY call answers a
+//      JSON object whose shape the provider forces (issue #107): the outline
+//      its own small object (shared/outline-schema), a document call the
+//      object that mirrors the stored row — `properties` per kind, `body`,
+//      `warnings` (shared/document-schema, read by ./document-reply). Errors
+//      go back to the model as a correction turn (LLM_CORRECTION_TURNS,
+//      default 1, max 2 — issue #19), never to the user; exhausted retries
+//      -> 422.
 //      A TRUNCATED reply (the provider saw finish_reason/stop_reason) skips
 //      the correction turns entirely: re-asking for the same oversized JSON
 //      cannot succeed and a correction turn resends the whole prompt plus
@@ -52,13 +52,10 @@ import {
   type NamingHint,
   type ParsedFile,
 } from "@grimoire/shared";
+import { documentReplySchema } from "@grimoire/shared/document-schema";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
 import { ApiError, assertSafeAddress } from "./campaign-fs";
-import {
-  NO_TEXT_AROUND_DOCUMENT_RULE,
-  WARNINGS_DELIMITER,
-  parseDocumentReply,
-} from "./document-reply";
+import { composeDocument, parseDocumentReply, type DocumentReply } from "./document-reply";
 import { checkDraftsNaming, type NamingRule } from "./naming-check";
 // The generator reads its context and writes its drafts through the store
 // (issue #57) — the campaign file tree is not a data source any more.
@@ -164,20 +161,20 @@ export interface PromptAssets {
  * their own few-shot target file, cached per kind after the first read.
  */
 export const ASSET_FILES = {
-  scene: { systemPrompt: "system-prompt.md", fewShotTarget: "example-output.md" },
-  npc: { systemPrompt: "npc-system-prompt.md", fewShotTarget: "npc-example-output.md" },
+  scene: { systemPrompt: "system-prompt.md", fewShotTarget: "example-output.json" },
+  npc: { systemPrompt: "npc-system-prompt.md", fewShotTarget: "npc-example-output.json" },
   // Issue #36: locations had no prompt of their own — the augment run is the
   // first caller, and the pair is written so a future „Ort generieren" can
   // use it unchanged.
   location: {
     systemPrompt: "location-system-prompt.md",
-    fewShotTarget: "location-example-output.md",
+    fewShotTarget: "location-example-output.json",
   },
   // The OUTLINE step of a pipelined scene run (issue #102): its own prompt
   // and its own few-shot (a worked example outline, not a target file).
   outline: {
     systemPrompt: "outline-system-prompt.md",
-    fewShotTarget: "outline-example-output.md",
+    fewShotTarget: "outline-example-output.json",
   },
   // The output-schema section that turns the scene prompt into „genau eine
   // Szene aus der Gliederung" mode (issue #102). No few-shot of its own — the
@@ -369,68 +366,13 @@ export async function collectContext(campaign: string): Promise<CampaignContext>
   };
 }
 
-// --- JSON extraction — THE OUTLINE ONLY (issue #20, narrowed by #107) -------
+// --- reading a reply --------------------------------------------------------
 //
-// Since issue #107 no document call answers JSON: the scene part, the entry
-// part, the NPC run and the augment run answer the document itself and are
-// split by ./document-reply. What is left for this extractor is the OUTLINE
-// step (generate-pipeline.ts), whose reply is a small, flat object — the one
-// call where JSON is the honest shape.
-
-/**
- * ```json fence (labelled wins) or a bare ``` fence. Non-greedy: the FIRST
- * fence of the reply. The bare variant requires the newline right after the
- * backticks, so it can never swallow a "json" label as content.
- */
-const LABELLED_FENCE = /```json\b[ \t]*\r?\n?([\s\S]*?)```/i;
-const BARE_FENCE = /```[ \t]*\r?\n([\s\S]*?)```/;
-
-function fenceContent(raw: string): string | null {
-  const labelled = LABELLED_FENCE.exec(raw);
-  if (labelled !== null) return labelled[1]!;
-  const bare = BARE_FENCE.exec(raw);
-  return bare === null ? null : bare[1]!;
-}
-
-/** Substring from the first `{` to the last `}` — prose on both sides falls off. */
-function braceSpan(raw: string): string | null {
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start === -1 || end <= start) return null;
-  return raw.slice(start, end + 1);
-}
-
-/**
- * Get the JSON value out of a raw model reply (issue #20). Models like to
- * put an explainer sentence in front of the object ("I need to be careful
- * about characters inside string values…"); that must not cost two
- * correction turns for an otherwise usable reply.
- *
- * Three stages, first one that PARSES wins:
- *   (a) the whole text — what a well-behaved model returns,
- *   (b) the content of a ```json (or bare ```) fence,
- *   (c) the substring from the first `{` to the last `}` (braces inside
- *       string values cannot confuse this — only the outermost pair counts).
- *
- * The extraction loosens ONLY the parsing: whatever comes out goes through
- * the unchanged full validation below. Returns null when no stage parses —
- * then, and only then, the reply "is not valid JSON" and the correction turn
- * runs as before. Wrapped in an object because a parsed value may itself be
- * `null` (the validation rejects that, the extractor must not swallow it).
- */
-export function extractJsonReply(raw: string): { value: unknown } | null {
-  for (const candidate of [raw, fenceContent(raw), braceSpan(raw)]) {
-    if (candidate === null) continue;
-    const trimmed = candidate.trim();
-    if (trimmed === "") continue;
-    try {
-      return { value: JSON.parse(trimmed) };
-    } catch {
-      // next stage
-    }
-  }
-  return null;
-}
+// There is nothing left to extract here. Every reply is a JSON object the
+// provider was forced into (issue #107), and the one tolerant reader both the
+// outline and the documents share — fence, brace span, ONE `jsonrepair`
+// attempt — lives in ./document-reply (`parseJsonReply`), next to the
+// document shape it is mostly used for.
 
 // --- mechanical validation (generator/README.md step 4) ----------------------
 
@@ -446,7 +388,8 @@ export function extractJsonReply(raw: string): { value: unknown } | null {
  */
 export interface RawEntry {
   kind?: string;
-  content: string;
+  /** The reply object of this entry (./document-reply). */
+  reply: DocumentReply;
 }
 
 const KNOWN_CALLOUTS = new Set<string>(CALLOUT_KINDS);
@@ -473,24 +416,17 @@ const ENTITY_ID_PATTERN = ENTITY_SLUG;
  *
  * The shared parser fills a missing `id` from the address's last segment
  * (parse.ts, the degrade rule for a properties-less file), so a reply that
- * names no `id` silently inherited one from whatever label it happened to be
- * parsed under — for an NPC reply that label was `"npc"`, which is a kebab
- * slug and passed the id pattern. The run then wrote `npcs/npc`.
- *
- * Parsing under a stem that can NEVER be an id makes the omission visible,
- * and a missing `id` is exactly the kind of error a correction turn fixes
- * (issue #100 review): the model is told „id fehlt" instead of having one
- * invented for it.
+ * names no `id` would silently inherit one from whatever label it happened to
+ * be parsed under. Parsing under a stem that can NEVER be an id keeps the
+ * omission visible — and a missing `id` is exactly the kind of error a
+ * correction turn fixes (issue #100 review).
  */
 const NO_ID_STEM = "\u0000no-id";
 
-/**
- * The `id` the document DECLARED, or undefined when it declared none — the
- * parser's fallback (NO_ID_STEM) read back as what it means.
- */
-function declaredId(parsed: ParsedFile): unknown {
-  const id = parsed.properties.id;
-  return id === NO_ID_STEM ? undefined : id;
+/** The `id` a reply DECLARED, or undefined — the schema's `null` read as what it means. */
+function declaredId(properties: Record<string, unknown>): string | undefined {
+  const id = properties.id;
+  return typeof id === "string" && id !== "" ? id : undefined;
 }
 
 /** Last segment of a campaign-relative address — the entity's id. */
@@ -583,34 +519,34 @@ export function validateEntry(entry: RawEntry, index: number, errors: string[]):
     return null;
   }
   const preview = `entries[${index}]`;
-  const { parsed, error } = parseWithProperties(entry.content, NO_ID_STEM);
-  if (error !== undefined) {
-    errors.push(`${kind} entry ${preview}: ${error}`);
-    return null;
-  }
-  const fmId = declaredId(parsed);
+  const fm = entry.reply.properties;
+  const fmId = declaredId(fm);
   if (fmId === undefined) {
     errors.push(`${kind} entry ${preview}: "id" fehlt — jeder Eintrag nennt seine kebab-case id`);
     return null;
   }
-  if (typeof fmId !== "string" || !ENTITY_ID_PATTERN.test(fmId)) {
+  if (!ENTITY_ID_PATTERN.test(fmId)) {
     errors.push(
       `${kind} entry ${preview}: "id" must be a kebab-case id (a-z, 0-9, single dashes)`,
     );
     return null;
   }
   const id = fmId;
-  const reparsed = reparseAtAddress(entry.content, id, kind === "npc" ? npcPath : locationPath);
+  // The document the server would store, composed from the reply object
+  // (./document-reply) — the frontmatter block is the renderer's, not the
+  // model's, since issue #107.
+  const markdown = composeDocument(entry.reply);
+  const reparsed = reparseAtAddress(markdown, id, kind === "npc" ? npcPath : locationPath);
   const label = `${kind} entry "${id}"`;
   // A status error does not stop the mapping: the stub still resolves the
   // scene's reference, so the correction turn gets the ONE real error
   // instead of a cascade of "npc does not exist".
-  for (const msg of stubStatusErrors(kind, parsed.properties)) errors.push(`${label}: ${msg}`);
+  for (const msg of stubStatusErrors(kind, fm)) errors.push(`${label}: ${msg}`);
   return {
     kind,
     id,
     name: typeof reparsed.properties.name === "string" ? reparsed.properties.name : id,
-    markdown: entry.content,
+    markdown,
   };
 }
 
@@ -638,7 +574,7 @@ export interface AllowedRefs {
  * Returns the draft, or null with the errors pushed onto `errors`.
  */
 export function validateSceneDocument(input: {
-  content: string;
+  reply: DocumentReply;
   label: string;
   chapter: string;
   allowed: AllowedRefs;
@@ -647,23 +583,19 @@ export function validateSceneDocument(input: {
   /** The id the OUTLINE assigned — a pipeline part may not rename itself. */
   expectedId?: string;
 }): GeneratedSceneDraft | null {
-  const { content, chapter, allowed, seenIds, errors } = input;
+  const { reply, chapter, allowed, seenIds, errors } = input;
   // The scene's ADDRESS is the server's: `<chapter>/<id>`, with the chapter
   // taken from the run's CONTEXT and never from the model (issue #100). The
   // id is the one thing the model decides here, so it is the one thing
   // validated as an address would be.
-  const { parsed, error } = parseWithProperties(content, NO_ID_STEM);
-  if (error !== undefined) {
-    errors.push(`${input.label}: ${error}`);
-    return null;
-  }
-  const fm = parsed.properties;
-  const fmId = declaredId(parsed);
+  const fm = reply.properties;
+  const content = composeDocument(reply);
+  const fmId = declaredId(fm);
   if (fmId === undefined) {
     errors.push(`${input.label}: "id" fehlt — jede Szene nennt ihre kebab-case id`);
     return null;
   }
-  if (typeof fmId !== "string" || !ENTITY_ID_PATTERN.test(fmId)) {
+  if (!ENTITY_ID_PATTERN.test(fmId)) {
     errors.push(`${input.label}: "id" must be a kebab-case id (a-z, 0-9, single dashes)`);
     return null;
   }
@@ -711,7 +643,7 @@ export function validateSceneDocument(input: {
     }
   }
 
-  for (const kind of unknownCallouts(parsed.body)) {
+  for (const kind of unknownCallouts(reply.body)) {
     errors.push(
       `${label}: unknown callout "[!${kind}]" — allowed: ${CALLOUT_KINDS.map((k) => `[!${k}]`).join(", ")}`,
     );
@@ -849,10 +781,10 @@ export function quickstatsErrors(fm: Record<string, unknown>): string[] {
  * Same contract as every other validator: the mapped result, or the error
  * list for the correction turn.
  *
- * Since issue #107 the reply IS the document (./document-reply): frontmatter
- * plus body, warnings after `---warnings---`. Nothing below this line changed
- * with it — the rules are the format contract's and were always checked on
- * the markdown, never on the JSON wrapper.
+ * Since issue #107 the reply is the schema-forced OBJECT (./document-reply):
+ * `properties` per kind, `body`, `warnings`. The rules below are the format
+ * contract's and unchanged by that — they read the properties mapping and the
+ * body, which is what they always did.
  *
  * The rules, all from the format contract (README "Entität: NPC"):
  * parseable properties whose `id` is a kebab-case id — the ADDRESS is the
@@ -878,25 +810,20 @@ export function validateNpcReply(
   ctx: CampaignContext,
   pinnedId?: string,
 ): { ok: true; result: GenerateNpcResult } | { ok: false; errors: string[] } {
-  const split = parseDocumentReply(raw);
-  if (!split.ok) return { ok: false, errors: [`npc: ${split.error}`] };
-  const reply = split.reply;
+  const read = parseDocumentReply(raw, "npc");
+  if (!read.ok) return { ok: false, errors: read.errors.map((e) => `npc: ${e}`) };
+  const { reply, markdown } = read;
   const errors: string[] = [];
 
-  // Without usable properties nothing else can be judged (the id is in them).
-  const { parsed, error } = parseWithProperties(reply.content, NO_ID_STEM);
-  if (error !== undefined) {
-    return { ok: false, errors: [`npc: ${error}`] };
-  }
-  const fm = parsed.properties;
-  const fmId = declaredId(parsed);
+  const fm = reply.properties;
+  const fmId = declaredId(fm);
   if (fmId === undefined) {
     return {
       ok: false,
       errors: ['npc: "id" fehlt — die Datei muss ihre kebab-case id nennen'],
     };
   }
-  if (typeof fmId !== "string" || !ENTITY_ID_PATTERN.test(fmId)) {
+  if (!ENTITY_ID_PATTERN.test(fmId)) {
     return {
       ok: false,
       errors: ['npc: "id" muss eine kebab-case id sein (a-z, 0-9, einzelne Bindestriche)'],
@@ -906,7 +833,7 @@ export function validateNpcReply(
   // Re-parsed under the address the server will use, so the shared parser's
   // degrade rules (a missing `name` falls back to the address's last
   // segment) see the same address they always did — see reparseAtAddress.
-  const reparsed = reparseAtAddress(reply.content, id, npcPath);
+  const reparsed = reparseAtAddress(markdown, id, npcPath);
   const label = `npc "${id}"`;
   if (pinnedId !== undefined && id !== pinnedId) {
     errors.push(`${label}: die id ist vorgegeben — "id" muss "${pinnedId}" sein`);
@@ -927,16 +854,12 @@ export function validateNpcReply(
   for (const msg of npcStatusErrors(fm, "NPC-Dateien")) errors.push(`${label}: ${msg}`);
   for (const msg of quickstatsErrors(fm)) errors.push(`${label}: ${msg}`);
 
-  for (const kind of unknownCallouts(parsed.body)) {
+  for (const kind of unknownCallouts(reply.body)) {
     errors.push(
       `${label}: unknown callout "[!${kind}]" — allowed: ${CALLOUT_KINDS.map((k) => `[!${k}]`).join(", ")}`,
     );
   }
-  for (const msg of [
-    ...knowledgeCalloutErrors(parsed.body),
-    ...relationErrors(parsed.body, ctx),
-    ...notesErrors(parsed.body),
-  ]) {
+  for (const msg of npcBodyErrors(reply.body, ctx)) {
     errors.push(`${label}: ${msg}`);
   }
 
@@ -944,7 +867,7 @@ export function validateNpcReply(
   return {
     ok: true,
     result: {
-      npc: { path: npcPath(id), markdown: reply.content, properties: reparsed.properties },
+      npc: { path: npcPath(id), markdown, properties: reparsed.properties },
       warnings: reply.warnings,
     },
   };
@@ -955,27 +878,21 @@ export function validateNpcReply(
  * (German) prompt conversation. The tail names what the corrected reply must
  * still contain, which is the only part that differs between the run kinds.
  *
- * `format` says WHAT the reply is (issue #107). A document call gets the
- * raw-document instruction — asking for „korrigiertes JSON" back after the
- * ticket that removed the JSON wrapper would teach the model the wrapper it
- * is not supposed to write. The outline is the one call that stays JSON.
+ * `schemaName` is the schema the reply is forced into (issue #107) — it is
+ * NAMED here so the model corrects inside the shape it was given instead of
+ * starting a new one. Every call has one now, so the instruction is the same
+ * sentence for the outline and for a document; an absent name (a provider
+ * that forces nothing) simply leaves the reference out.
  */
 export function buildCorrectionMessage(
   errors: string[],
   tail: string,
-  format: "document" | "outline" = "document",
+  schemaName?: string,
 ): string {
+  const schema = schemaName === undefined ? "gleiches Schema" : `gleiches Schema (\`${schemaName}\`)`;
   const instruction =
-    format === "outline"
-      ? `Antworte erneut mit dem vollständigen, korrigierten JSON — gleiches Schema, ${tail}, ` +
-        "kein Text außerhalb des JSON-Blocks."
-      : `Antworte erneut mit dem vollständigen, korrigierten Dokument — Frontmatter-Block ` +
-        `und Fließtext, ${tail}. Kein JSON, keine Code-Zäune. ` +
-        // The same wording the document prompts carry: nothing around the
-        // document, and the warnings block is the one exception. Trailing
-        // chatter is kept verbatim now (./document-reply), so this is where
-        // it has to be said — every time.
-        NO_TEXT_AROUND_DOCUMENT_RULE;
+    `Antworte erneut mit dem vollständigen, korrigierten JSON-Objekt — ${schema}, ` +
+    `${tail}, kein Text außerhalb des Objekts.`;
   return [
     "Deine letzte Antwort hat die mechanische Validierung nicht bestanden:",
     errors.map((e) => `- ${e}`).join("\n"),
@@ -1086,12 +1003,6 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
   validate: (raw: string) => { ok: true; result: T } | { ok: false; errors: string[] };
   correctionTail: string;
   /**
-   * Which shape the correction turn asks for (issue #107). Every document
-   * call leaves it at the default; the OUTLINE step passes "outline", because
-   * it is the one call that still answers JSON.
-   */
-  correctionFormat?: "document" | "outline";
-  /**
    * Called once per provider call (issue #102). The pipeline counts its own
    * calls with it: `usage` is absent whenever the endpoint reports no tokens,
    * so the run's „M Aufrufe" cannot be read off it — and a part that FAILED
@@ -1142,7 +1053,8 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
       correction: buildCorrectionMessage(
         outcome.errors,
         input.correctionTail,
-        input.correctionFormat,
+        // The schema the request itself carries — no caller has to repeat it.
+        req.jsonSchema?.name,
       ),
     });
   }
@@ -1180,6 +1092,9 @@ export async function runGenerateNpc(
         ...(npcId === undefined ? {} : { targetId: npcId }),
       },
       sourceText,
+      // The reply object, forced by the provider (issue #107) — the same
+      // guarantee the outline has had since Zuschnitt 1.
+      jsonSchema: documentReplySchema("npc", "create"),
     },
     provider: getProvider(),
     validate: (raw) => validateNpcReply(raw, ctx, npcId),

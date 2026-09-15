@@ -8,20 +8,22 @@
 // validation error that goes back to the model as a correction turn, not an
 // exception (generator/README.md step 4).
 //
-// Since issue #107 a request says WHAT SHAPE it wants back, and the two are
-// handled very differently:
+// Since issue #107 EVERY request carries the schema of the object it wants
+// back — the outline its own (shared/outline-schema), a document call the
+// object that mirrors the stored row (shared/document-schema) — and the
+// transports force it, because that is the one guarantee an API can give:
 //
-//   a DOCUMENT (no `jsonSchema`) — the scene part, the entry part, the NPC
-//       run, the augment run. Nothing is forced at all: the reply is markdown
-//       and every JSON-forcing knob the transports have would fight it. The
-//       `{` prefill of issue #20 and `response_format` are gone from this
-//       path for exactly that reason.
-//   a JSON OBJECT (`jsonSchema` set) — the outline, and only the outline.
-//       Here the API can GUARANTEE the shape, so it is made to: Claude gets
-//       the schema as a tool with `tool_choice` forcing the call, an
-//       OpenAI-compatible endpoint gets `response_format: json_schema` with
-//       `strict: true` (and falls back to plain `json_object` for endpoints
-//       that reject it — detected once per process).
+//   Claude — the schema travels as a TOOL and `tool_choice` forces the call,
+//       so the reply cannot be prose, cannot miss a required key and cannot
+//       break on a quotation mark; the reply text is the tool input.
+//   OpenAI-compatible — `response_format: json_schema` with `strict: true`,
+//       with ONE fallback to plain `json_object` for endpoints that reject
+//       the field (detected once per process, and only on a 400 that actually
+//       blames the format).
+//
+// The assistant prefill of `{` from issue #20 is gone for good: a forced tool
+// and a forced `response_format` do the job, and a prefilled brace in front
+// of a reply the API already shapes is only in the way.
 //
 // Two facts travel WITH the text, because only the transport can see them
 // (issue #18): whether the model hit its output cap (`finish_reason: length`
@@ -33,7 +35,7 @@ import type { JsonSchema } from "@grimoire/shared/outline-schema";
 
 export interface GenerateRequest {
   systemPrompt: string; // generator/system-prompt.md (npc run: npc-system-prompt.md)
-  fewShotTarget: string; // generator/example-output.md (npc run: npc-example-output.md)
+  fewShotTarget: string; // generator/example-output.json (npc run: npc-example-output.json)
   /**
    * The campaign-knowledge lines (issue #53), already rendered and with
    * `[[slug]]` references resolved (store/read.ts knowledgeText). `""` means
@@ -86,9 +88,10 @@ export interface GenerateRequest {
    */
   instruction?: string;
   /**
-   * The JSON schema the reply must satisfy (issue #107). Set by the OUTLINE
-   * step alone; every document call leaves it absent, and then the transport
-   * forces nothing and the reply is the document itself.
+   * The JSON schema the reply must satisfy (issue #107). Every call sets it —
+   * the outline its own, a document call its kind's. It stays OPTIONAL in the
+   * type so a caller that forces nothing (and a test that wants the unforced
+   * transport) is still a legal request.
    */
   jsonSchema?: ReplySchema;
 }
@@ -289,7 +292,11 @@ export function buildPromptParts(req: GenerateRequest): { constant: string; vari
       ...(req.context.targetId === undefined ? [] : [`vorgegebene id: ${req.context.targetId}`]),
     ].join("\n"),
     "## Referenz-Zieldatei (Few-Shot)",
-    "```markdown",
+    // The few-shot is a REPLY now, not a file (issue #107): every prompt's
+    // example is the JSON object its schema describes, so the fence says json
+    // and the model sees the shape it will be forced into. (The augment run's
+    // „Bestehender Eintrag" below stays markdown — that one IS a file.)
+    "```json",
     req.fewShotTarget,
     "```",
     // The outline stands below the few-shot and above what this call is
@@ -382,14 +389,12 @@ export function cachedMessages(
   return messages;
 }
 
-// --- JSON forcing: the OUTLINE call only (issue #20, narrowed by #107) ------
+// --- JSON forcing: every call (issue #20, by schema since #107) ------------
 //
-// Issue #20 forced JSON on EVERY call — an assistant prefill of `{` on the
-// Messages API, `response_format: json_object` on the OpenAI path. Both are
-// now bound to a request that actually wants JSON, i.e. to the outline: a
-// prefilled `{` in front of a markdown document is a corrupted document, and
-// `response_format` on a document call asks the endpoint for the one thing
-// the prompt forbids.
+// Issue #20 forced JSON by prefilling `{` and by `response_format:
+// json_object`. Both are replaced by the SCHEMA of the request: a forced tool
+// on the Messages API, `json_schema` with `strict: true` on the OpenAI path —
+// the shape is guaranteed rather than merely asked for.
 
 // --- Claude API ------------------------------------------------------------
 
@@ -480,11 +485,10 @@ export function claudeBody(
     // scene" being affordable and not.
     system: [{ type: "text", text: req.systemPrompt, cache_control: EPHEMERAL }],
     messages: claudeMessages(req, corrections),
-    // The outline (issue #107): the schema travels as a TOOL and the call is
-    // forced, so the reply cannot be prose, cannot be truncated JSON and
-    // cannot miss a required key — the API validates it before we do. A
-    // document call sends neither, and therefore no `{` prefill either: a
-    // prefilled brace in front of markdown is a corrupted document.
+    // The reply's schema (issue #107): it travels as a TOOL and the call is
+    // forced, so the reply cannot be prose and cannot miss a required key —
+    // the API validates it before we do. Absent only for a request that
+    // deliberately forces nothing.
     ...(schema === undefined
       ? {}
       : {
@@ -534,11 +538,10 @@ export interface OpenAICompatOptions {
   /** Output cap; omitted from the body when unset (endpoint's own default). */
   maxTokens?: number;
   /**
-   * Force the reply shape of a call that wants JSON — the outline (issue
-   * #107): `response_format: json_schema` with a fallback to `json_object`.
-   * Default on; the factory turns it off for `LLM_FORCE_JSON=0`, because some
-   * routed endpoints reject the field and would fail every single run. It
-   * never applies to a document call, which forces nothing either way.
+   * Force the reply shape of every call that carries a schema (issue #107):
+   * `response_format: json_schema` with a fallback to `json_object`. Default
+   * on; the factory turns it off for `LLM_FORCE_JSON=0`, because some routed
+   * endpoints reject the field and would fail every single run.
    */
   forceJson?: boolean;
   /**
@@ -668,15 +671,14 @@ export class OpenAICompatProvider implements LLMProvider {
 
   /**
    * What this call asks the endpoint to guarantee (issue #107):
+   * `json_schema` with `strict: true` for every request that carries a
+   * schema — or plain `json_object` once an endpoint has been seen to reject
+   * the schema form, and nothing at all for a request without one.
    *
-   *   a document call        nothing. The reply is markdown.
-   *   the outline            `json_schema` with `strict: true` — or
-   *                          `json_object` once an endpoint has been seen to
-   *                          reject the schema form.
-   *
-   * `LLM_FORCE_JSON=0` turns both off for endpoints that reject the field
-   * altogether; the extraction and the tolerant repair in generate-pipeline
-   * stay the safety net for endpoints that accept it and ignore it.
+   * `LLM_FORCE_JSON=0` turns it off for endpoints that reject the field
+   * altogether; the tolerant reader in ./document-reply (fence, brace span,
+   * one `jsonrepair` pass) stays the safety net for endpoints that accept the
+   * field and ignore it.
    */
   responseFormat(req: GenerateRequest): JsonSchema | undefined {
     const schema = req.jsonSchema;

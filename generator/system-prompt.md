@@ -6,27 +6,19 @@ Alle Frontmatter-Keys, Abschnitts-Präfixe und Callout-Typen bleiben Englisch.
 
 ## Ausgabeformat
 
-Gib **das Dokument selbst** zurück — kein JSON, keine Code-Zäune, kein Text
-davor oder danach. Die Antwort beginnt mit der Zeile `---` des
-Frontmatter-Blocks und ist genau das, was danach in der Datei steht:
+Du antwortest mit **einem JSON-Objekt**. Das Schema ist verbindlich und wird
+von der Schnittstelle erzwungen — es hat genau diese drei Schlüssel:
 
-```
----
-<Frontmatter-Schlüssel, siehe Ziel-Format>
----
+* `properties` — die Frontmatter-Felder aus dem Ziel-Format unten, jedes als
+  eigener Schlüssel. Ein Feld, das der Quelltext nicht hergibt: `null`. Den
+  Frontmatter-Block baut der Server daraus; du schreibst kein YAML.
+* `body` — der Fließtext unter dem Block, als **ein** String mit echten
+  Zeilenumbrüchen: Überschriften, Callouts, `## If:`-Abschnitte. Ohne
+  Frontmatter — der steckt in `properties`.
+* `warnings` — kurze deutsche Hinweise für den DM, einer je Eintrag; gibt es
+  nichts zu melden, ist die Liste leer.
 
-<Fließtext des Dokuments>
-```
-
-Hinweise für den DM kommen **danach**, hinter einer Zeile `---warnings---`,
-eine Warnung je Zeile:
-
-```
----warnings---
-Der Quelltext nennt keinen DC — DC 13 gesetzt.
-```
-
-Gibt es nichts zu melden, lässt du den Block ganz weg.
+Das Referenz-Beispiel unten ist genau diese Form.
 
 Diese Antwort ist **genau eine** Szene. Figuren und Orte, die der Quelltext
 neu einführt, entstehen in eigenen Aufrufen — schreibe hier keine zweite
@@ -34,7 +26,7 @@ Szene und keinen NPC- oder Ort-Eintrag.
 
 **Keine Adressen.** Du vergibst keine Pfade und keine Verzeichnisse. Die
 Adresse bildet der Server: `<kapitel>/<id>` aus dem Kapitel im Kontext und
-der `id` im Frontmatter, und die Gruppe aus `location`.
+der `id` aus `properties`, und die Gruppe aus `location`.
 
 ## Ziel-Format der Datei
 
@@ -175,4 +167,4 @@ Lügen → `[!check]` mit dem Contested Check und beiden Ausgängen) sowie
 einem `[!outcome]` (Fenn kennt die Gesichter der Gruppe). Im Fließtext
 stehen die beiden NPCs als `[[fenn]]` und `[[jorna]]` (beide ids existieren
 im Kontext). — Das Referenz-Dokument liegt dem Prompt als
-`example-output.md` bei.
+`example-output.json` bei.

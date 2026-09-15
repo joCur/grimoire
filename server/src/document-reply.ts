@@ -1,229 +1,312 @@
-// The RAW document reply (issue #107).
+// The DOCUMENT reply (issue #107, PO decision of 15.09.): ONE JSON object per
+// kind, mirroring the object the database stores.
 //
-// Until this ticket every document call — a pipeline scene part, a pipeline
-// entry part, the NPC run, the augment run — asked the model for JSON with the
-// whole markdown file embedded as a string value. That is the most fragile
-// place in the pipeline: a complete document carries newlines, backslashes and
-// quotation marks, and each of them has to survive JSON escaping. The PO case
-// of 15.09. was exactly that — a scene that was CORRECT and unparseable,
-// because the model wrote German quotation marks with an ASCII closing `"`
-// and that `"` ended the JSON string.
+//     { "properties": { "id": "night-watch-quay", "title": "Nachtwache am Kai",
+//                       "type": "planned", "status": "draft", … },
+//       "body": "## Flow\n\nDie Wache murrt: „Wer nachts hier steht …“\n",
+//       "warnings": ["Der Quelltext nennt keinen DC — DC 13 gesetzt."] }
 //
-// So the reply IS the document now: frontmatter block plus body, byte for byte
-// as it will be stored. Warnings follow after a delimiter line:
+// Two earlier shapes are gone, and the reasons are worth keeping:
 //
-//     ---
-//     id: night-watch-quay
-//     …
-//     ---
+//   the JSON WRAPPER around a whole markdown file — the PO case of 15.09.:
+//       the model hand-wrote the escaping of a complete document and a German
+//       quotation mark closed with an ASCII `"` ended the string. A correct
+//       scene, unparseable.
+//   the RAW document — this branch's first answer to that. It removed the
+//       escaping but put FRONTMATTER PARSING in its place, and that half
+//       could not be forced by any API: a fence, a leading sentence, a
+//       sign-off, two horizontal rules that look like a properties block. All
+//       of it had to be tolerated by hand here, and a miss was a correction
+//       turn or silent data loss.
 //
-//     ## Flow
-//     …
+// The object is forced by the provider for every document call now — Claude
+// gets the schema as a tool with `tool_choice`, an OpenAI-compatible endpoint
+// gets `response_format: json_schema` with `strict: true` (llm-provider.ts) —
+// so the shape the API guarantees is the shape this module reads. The body
+// travels as a JSON string, which the TRANSPORT escapes: quotation marks,
+// newlines and backslashes survive because nobody hand-wrote them.
 //
-//     ---warnings---
-//     Der Quelltext nennt keinen DC — DC 13 gesetzt.
-//
-// No warnings block means no warnings. The document half goes through the
-// SAME shared Markdown parser and the SAME validators as before
-// (generator.ts) — this module only splits and un-wraps; it never judges
-// content.
-//
-// What it tolerates, and why: a model that was asked for a markdown document
-// tends to fence it (```markdown) and to put a sentence in front of it
-// („Hier ist die Szene:"). Neither changes the document, and a correction turn
-// for either resends the whole prompt plus the whole reply at full price. So
-// both are stripped — but only as long as the frontmatter start is still
-// findable, which is the one thing a document cannot do without.
-//
-// What it does NOT touch is anything AFTER the document: a trailing sentence
-// is kept verbatim as body text. Guessing there means guessing whether a
-// closing sentence is the model signing off or the last line of the scene,
-// and a wrong guess deletes the DM's content without a trace. The prompts
-// forbid the sign-off instead (generator/*-system-prompt.md).
-//
-// `extractJsonReply` (generator.ts) survives for the OUTLINE alone: that step
-// answers a small, flat object and is the one call where JSON is the honest
-// shape (issue #107, Zuschnitt 1).
+// What this module does NOT do is judge content. It reads the object,
+// type-checks its `properties` against the kind's FIELD LIST
+// (@grimoire/shared/property-fields — the very list the properties dialog is
+// built from) and COMPOSES the document the server would store. Everything
+// after that — a kebab `id`, a known scene type, references that resolve,
+// known callouts, the npc format rules — stays in the validators
+// (./generator.ts, ./generate-pipeline.ts, ./generator-augment.ts).
 
-/** The line that separates the document from its warnings. */
-export const WARNINGS_DELIMITER = "---warnings---";
+import { jsonrepair } from "jsonrepair";
+import {
+  PAIR_KEY,
+  PAIR_VALUE,
+  isNotGiven,
+  propertyFieldsFor,
+  type DocumentKind,
+  type PropertyFieldDef,
+} from "@grimoire/shared";
+import { renderRaw } from "./store/render";
 
-/**
- * How the delimiter is RECOGNIZED — deliberately wider than how it is
- * documented: two or more dashes on each side and any casing, because a model
- * that got the word right and a dash wrong has said what it meant.
- */
-const WARNINGS_LINE = /^[ \t]*-{2,}[ \t]*warnings[ \t]*-{2,}[ \t]*$/i;
-
-/** A line that is nothing but a code fence (with or without a language). */
-const FENCE_LINE = /^[ \t]*`{3,}[ \t]*[a-zA-Z0-9_-]*[ \t]*$/;
-/** A line that CLOSES a fence — backticks and nothing else. */
-const FENCE_CLOSE = /^[ \t]*`{3,}[ \t]*$/;
-/** The frontmatter delimiter of the data format: three dashes, alone. */
-const FRONTMATTER_LINE = /^[ \t]*-{3}[ \t]*$/;
-/**
- * A frontmatter KEY line. At least one of them has to stand between the two
- * `---` lines, otherwise the pair is not a frontmatter block at all: a reply
- * that separates two prose paragraphs with two horizontal rules looks exactly
- * like `---` … `---` and used to parse as a document with an empty
- * frontmatter (issue #107 review).
- */
-const KEY_LINE = /^[ \t]*[A-Za-z_][A-Za-z0-9_-]*[ \t]*:/;
+/** One document reply, normalized: the object the server stores plus notes. */
 export interface DocumentReply {
-  /** The document, frontmatter block included, exactly as it will be stored. */
-  content: string;
-  /** One warning per line of the warnings block; empty when there was none. */
+  /**
+   * The frontmatter mapping, in contract order, with „not given" (`null`)
+   * dropped: strict mode has no optional properties, so the schema asks for
+   * every field and `null` is how a model says it has nothing to put there.
+   */
+  properties: Record<string, unknown>;
+  /** The markdown below the properties block, verbatim as it will be stored. */
+  body: string;
+  /** One note per entry; empty when there was nothing to report. */
   warnings: string[];
 }
 
 /**
- * The one rule that keeps a reply a document, in the exact wording the
- * document prompts carry („## Ausgabeformat" in scene-single-output.md,
- * npc-, location- and augment-system-prompt.md — minus their `**` emphasis).
- *
- * It exists as a constant because the CORRECTION turn has to say the same
- * thing (generator.buildCorrectionMessage): trailing chatter is no longer
- * stripped, so the prompt is the only place it is prevented, and a correction
- * turn that repeated a softer rule would teach the model the softer rule.
+ * The run warning a REPAIRED document reply earns — the sibling of
+ * REPAIRED_REPLY_WARNING (generate-pipeline.ts), and there for the same
+ * reason: the repair is silent otherwise, and a provider whose replies need
+ * patching every single run is a provider to reconsider.
  */
-export const NO_TEXT_AROUND_DOCUMENT_RULE =
-  "Vor dem Dokument und nach dem Dokument steht nichts — keine Anrede, keine " +
-  "Erklärung, kein Schlusssatz: das Einzige, was nach dem Dokument stehen darf, " +
-  `ist der \`${WARNINGS_DELIMITER}\`-Block.`;
+export const REPAIRED_DOCUMENT_WARNING =
+  "Antwort musste repariert werden — das Modell hat das Dokument nicht als " +
+  "gültiges JSON-Objekt geliefert.";
 
 /**
- * The error a reply that is not a document gets back — German, because it
- * travels into the (German) correction turn. It names the ONE thing that was
- * missing, so the model has something to fix instead of a verdict.
+ * The error a reply that is not the reply object gets back — German, because
+ * it travels into the (German) correction turn. It names the shape instead of
+ * passing a verdict, and the correction turn adds the schema's name.
  */
 export const NOT_A_DOCUMENT_ERROR =
-  "die Antwort ist kein Dokument — sie muss mit dem Frontmatter-Block beginnen " +
-  "(eine Zeile `---`, darunter die Schlüssel, darunter wieder eine Zeile `---`), " +
-  "danach folgt der Fließtext; Warnungen stehen erst nach einer Zeile " +
-  `\`${WARNINGS_DELIMITER}\`, eine je Zeile. Kein JSON, keine Code-Zäune.`;
+  "die Antwort ist kein Objekt des Schemas — sie braucht genau die drei " +
+  "Schlüssel `properties` (die Frontmatter-Felder), `body` (der Fließtext als " +
+  "ein String) und `warnings` (eine Liste von Hinweisen). Kein Markdown-Dokument, " +
+  "keine Code-Zäune, kein Text außerhalb des Objekts.";
 
 /**
- * Split one raw model reply into document and warnings.
+ * One raw reply as a JSON value — with ONE tolerant repair attempt before a
+ * correction turn is spent. Shared by the document calls and the outline
+ * (generate-pipeline `parseOutlineJson`).
  *
- * Order matters: the warnings block is cut off FIRST, so a model that put its
- * warnings outside a fenced document and one that put them inside end up in
- * the same place. Then the fence comes off, then the leading prose.
+ * Three stages, first one that PARSES wins: the whole text (what a
+ * schema-forced reply is), the content of a ```json fence, the span from the
+ * first `{` to the last `}`. A candidate that merely LOOKS like an object is
+ * then handed to `jsonrepair` once — a trailing comma or a single-quoted key
+ * is mechanical, and much cheaper to fix than to re-ask for.
  *
- * Returns the error message for the correction turn when no frontmatter start
- * can be found — and only then.
+ * `repaired` says which way in it was, so the run can say so too. The result
+ * goes through the unchanged validation either way: the repair loosens the
+ * parsing, never the rules.
+ */
+export function parseJsonReply(raw: string): { value: unknown; repaired: boolean } | null {
+  for (const candidate of [raw, fenceContent(raw), braceSpan(raw)]) {
+    if (candidate === null) continue;
+    const trimmed = candidate.trim();
+    if (trimmed === "") continue;
+    try {
+      return { value: JSON.parse(trimmed), repaired: false };
+    } catch {
+      // next stage
+    }
+  }
+  // Prose without an object is NOT repaired: jsonrepair would happily turn a
+  // sentence into a JSON string, and the run would then fail with a message
+  // about the wrong thing.
+  const span = braceSpan(raw);
+  if (span === null) return null;
+  try {
+    return { value: JSON.parse(jsonrepair(span)), repaired: true };
+  } catch {
+    return null;
+  }
+}
+
+/** ```json fence (labelled wins) or a bare ``` fence — the FIRST of the reply. */
+const LABELLED_FENCE = /```json\b[ \t]*\r?\n?([\s\S]*?)```/i;
+const BARE_FENCE = /```[ \t]*\r?\n([\s\S]*?)```/;
+
+function fenceContent(raw: string): string | null {
+  const labelled = LABELLED_FENCE.exec(raw);
+  if (labelled !== null) return labelled[1]!;
+  const bare = BARE_FENCE.exec(raw);
+  return bare === null ? null : bare[1]!;
+}
+
+/** Substring from the first `{` to the last `}` — prose on both sides falls off. */
+function braceSpan(raw: string): string | null {
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start === -1 || end <= start) return null;
+  return raw.slice(start, end + 1);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * Read one document reply: JSON in, the normalized object plus the COMPOSED
+ * markdown out — or the error list for the correction turn.
+ *
+ * The markdown is the server's own rendering (`renderRaw`, the same one every
+ * written file goes through), which is what makes the frontmatter block the
+ * server's business again: `quickstats: { wis: "+2" }` is quoted because the
+ * renderer quotes it, not because the model remembered to.
  */
 export function parseDocumentReply(
   raw: string,
-): { ok: true; reply: DocumentReply } | { ok: false; error: string } {
-  // A BOM from an endpoint that wrote UTF-8 with a signature would otherwise
-  // sit in front of the frontmatter `---` and make the reply "not a document".
-  const lines = raw.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").split("\n");
-  const { body, tail } = splitFence(lines);
-
-  // Where the warnings block is looked for: after the closing fence first —
-  // that is where a model that fenced its document usually puts it — and
-  // otherwise inside the document, where only a line OUTSIDE a fenced region
-  // counts. A `---warnings---` in a fenced example block is example text.
-  const tailCut = lastIndexWhere(tail, (line) => WARNINGS_LINE.test(line));
-  const bodyCut =
-    tailCut === -1
-      ? lastIndexWhere(body, (line, i) => WARNINGS_LINE.test(line) && !insideFence(body, i))
-      : -1;
-  const warnings =
-    tailCut !== -1
-      ? warningsOf(tail.slice(tailCut + 1))
-      : bodyCut !== -1
-        ? warningsOf(body.slice(bodyCut + 1))
-        : [];
-  const documentLines = bodyCut === -1 ? body : body.slice(0, bodyCut);
-
-  const start = frontmatterStart(documentLines);
-  if (start === -1) return { ok: false, error: NOT_A_DOCUMENT_ERROR };
-  // Everything from the frontmatter start on IS the document, trailing prose
-  // included. There used to be a heuristic here that cut a structureless
-  // trailing block off an unfenced reply („Ich hoffe, das passt so!"), and it
-  // could not tell a sign-off from a plain closing sentence after a callout or
-  // a table — so it silently deleted real content. Visible chatter the DM
-  // deletes in the review is the cheaper failure; the prompt side is where
-  // this is prevented (generator/README.md).
-  //
-  // The document keeps its trailing newline: that is how a file is stored,
-  // and the renderer's own output ends that way too.
-  const content = `${documentLines.slice(start).join("\n").trimEnd()}\n`;
-  return { ok: true, reply: { content, warnings } };
-}
-
-/** Index of the LAST matching line, or -1 (Array.findLastIndex needs es2023). */
-function lastIndexWhere(
-  lines: readonly string[],
-  match: (line: string, index: number) => boolean,
-): number {
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    if (match(lines[i] as string, i)) return i;
+  kind: DocumentKind,
+): { ok: true; reply: DocumentReply; markdown: string } | { ok: false; errors: string[] } {
+  const parsed = parseJsonReply(raw);
+  if (parsed === null || !isRecord(parsed.value)) {
+    return { ok: false, errors: [NOT_A_DOCUMENT_ERROR] };
   }
-  return -1;
+  const obj = parsed.value;
+  const errors: string[] = [];
+
+  if (!isRecord(obj.properties)) {
+    return { ok: false, errors: [NOT_A_DOCUMENT_ERROR] };
+  }
+  const body = obj.body;
+  if (typeof body !== "string") {
+    errors.push('"body" muss der Fließtext als ein String sein');
+  }
+  const warnings = normalizeWarnings(obj.warnings, errors);
+  const properties = normalizeProperties(kind, obj.properties, errors);
+  if (errors.length > 0) return { ok: false, errors };
+
+  const reply: DocumentReply = {
+    properties,
+    // The body is stored the way a file is: one trailing newline, and the
+    // blank line the renderer puts between the block and the first heading.
+    body: `${(body as string).replace(/^\n+/, "").trimEnd()}\n`,
+    warnings: parsed.repaired ? [...warnings, REPAIRED_DOCUMENT_WARNING] : warnings,
+  };
+  return { ok: true, reply, markdown: composeDocument(reply) };
+}
+
+/** The document as it will be stored: the composed block plus the body. */
+export function composeDocument(reply: DocumentReply): string {
+  return renderRaw(reply.properties, `\n${reply.body}`);
+}
+
+function normalizeWarnings(value: unknown, errors: string[]): string[] {
+  if (isNotGiven(value)) return [];
+  if (!Array.isArray(value)) {
+    errors.push('"warnings" muss eine Liste von Strings sein');
+    return [];
+  }
+  const out: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") {
+      errors.push('"warnings" muss eine Liste von Strings sein');
+      return [];
+    }
+    if (item.trim() !== "") out.push(item.trim());
+  }
+  return out;
 }
 
 /**
- * One warning per non-empty line; stray fences fall off and so does the
- * leading marker of a list — `-`, `*`, `+` or a number (`1.`, `1)`). A model
- * that numbered its warnings meant the text, not the number.
- */
-function warningsOf(lines: readonly string[]): string[] {
-  return lines
-    .filter((line) => !FENCE_LINE.test(line))
-    .map((line) => line.replace(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+/, "").trim())
-    .filter((line) => line !== "");
-}
-
-/**
- * The reply split at a SURROUNDING code fence: `body` is what the fence
- * contains (or the whole reply when there is none), `tail` is what stood
- * below the closing fence — and `tail.length > 0` is also how the rest of
- * this module knows the reply WAS fenced.
+ * The `properties` half, field by field: only keys the kind HAS, each value
+ * in the shape its field describes, `null` read as „not given" and dropped.
+ * Order is the field list's, so two replies of one kind compose to the same
+ * block layout.
  *
- * The fence has to OPEN before the document does — a fence line below the
- * frontmatter start belongs to the body (a model may legitimately fence a
- * table or a snippet inside a scene) and is left alone. The CLOSING fence is
- * the last backtick-only line, so a fenced block inside the document cannot
- * cut the reply short.
+ * `id` is passed through as a string without further judgement — its kebab
+ * rule is semantic and is checked where it always was, by the validator that
+ * also knows whether the id may be a NEW one.
  */
-function splitFence(lines: readonly string[]): {
-  body: readonly string[];
-  tail: readonly string[];
-} {
-  const opener = lines.findIndex((line) => FENCE_LINE.test(line));
-  const document = lines.findIndex((line) => FRONTMATTER_LINE.test(line));
-  if (opener === -1 || (document !== -1 && document < opener)) return { body: lines, tail: [] };
-  const close = lastIndexWhere(lines, (line, i) => i > opener && FENCE_CLOSE.test(line));
-  if (close === -1) return { body: lines.slice(opener + 1), tail: [""] };
-  return { body: lines.slice(opener + 1, close), tail: lines.slice(close + 1) };
+function normalizeProperties(
+  kind: DocumentKind,
+  raw: Record<string, unknown>,
+  errors: string[],
+): Record<string, unknown> {
+  const fields = propertyFieldsFor(kind) ?? [];
+  const known = new Set(["id", ...fields.map((field) => field.key)]);
+  for (const key of Object.keys(raw)) {
+    if (!known.has(key)) {
+      errors.push(
+        `"properties.${key}" ist kein Feld dieser Entität — erlaubt sind: ` +
+          `${[...known].join(", ")}`,
+      );
+    }
+  }
+  const out: Record<string, unknown> = {};
+  const id = raw.id;
+  if (typeof id === "string" && id.trim() !== "") out.id = id.trim();
+  else if (!isNotGiven(id)) errors.push('"properties.id" muss ein String sein');
+
+  for (const field of fields) {
+    const value = fieldValue(field, raw[field.key], errors);
+    if (value !== undefined) out[field.key] = value;
+  }
+  return out;
 }
 
-/** Whether line `i` stands inside a fenced region of `lines`. */
-function insideFence(lines: readonly string[], i: number): boolean {
-  let open = false;
-  for (let j = 0; j < i; j += 1) {
-    if (FENCE_LINE.test(lines[j] as string)) open = !open;
+/** One field's value, normalized — or undefined when the model gave none. */
+function fieldValue(
+  field: PropertyFieldDef,
+  value: unknown,
+  errors: string[],
+): unknown {
+  if (isNotGiven(value)) {
+    if (field.required === true) {
+      errors.push(`"properties.${field.key}" fehlt — das Feld ist verpflichtend`);
+    }
+    return undefined;
   }
-  return open;
+  switch (field.control) {
+    case "references":
+    case "chips": {
+      if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+        errors.push(`"properties.${field.key}" muss eine Liste von Strings sein`);
+        return undefined;
+      }
+      // An empty list is „not given": `tags: []` is noise in a file the DM
+      // also reads in an editor (the properties dialog's own rule).
+      const items = (value as string[]).map((item) => item.trim()).filter((item) => item !== "");
+      return items.length === 0 ? undefined : items;
+    }
+    case "pairs":
+      return pairsValue(field, value, errors);
+    default: {
+      if (typeof value !== "string") {
+        errors.push(`"properties.${field.key}" muss ein String sein`);
+        return undefined;
+      }
+      const text = value.trim();
+      return text === "" ? undefined : text;
+    }
+  }
 }
 
 /**
- * Index of the line the document starts at: the `---` that opens the
- * frontmatter block. That has to be the FIRST `---` of the block — a leading
- * sentence about the answer is dropped, but a reply whose first `---` is a
- * horizontal rule in prose is not a document with prose above it, it is prose
- * with a rule in it. And the pair has to have a closing `---` below it with
- * at least one `key:` line in between; two horizontal rules are not a
- * frontmatter block.
+ * A `pairs` field (`quickstats`) arrives as a LIST of `{ key, value }`
+ * objects and is folded back into the mapping the format contract asks for.
+ *
+ * The detour exists because strict mode cannot express a free key/value map
+ * at all (`additionalProperties` must be `false`), and the alternative — a
+ * fixed set of stat keys — would be the schema deciding which ability scores
+ * a campaign may care about.
  */
-function frontmatterStart(lines: readonly string[]): number {
-  const open = lines.findIndex((line) => FRONTMATTER_LINE.test(line));
-  if (open === -1) return -1;
-  const close = lines.findIndex((line, j) => j > open && FRONTMATTER_LINE.test(line));
-  if (close === -1) return -1;
-  const keys = lines.slice(open + 1, close);
-  if (!keys.some((line) => KEY_LINE.test(line))) return -1;
-  return open;
+function pairsValue(field: PropertyFieldDef, value: unknown, errors: string[]): unknown {
+  const shape = `"properties.${field.key}" muss eine Liste von { ${PAIR_KEY}, ${PAIR_VALUE} } sein`;
+  if (!Array.isArray(value)) {
+    errors.push(shape);
+    return undefined;
+  }
+  const out: Record<string, string> = {};
+  for (const item of value) {
+    if (!isRecord(item)) {
+      errors.push(shape);
+      return undefined;
+    }
+    const key = item[PAIR_KEY];
+    const text = item[PAIR_VALUE];
+    if (typeof key !== "string" || typeof text !== "string") {
+      errors.push(shape);
+      return undefined;
+    }
+    if (key.trim() === "") continue;
+    out[key.trim()] = text.trim();
+  }
+  return Object.keys(out).length === 0 ? undefined : out;
 }

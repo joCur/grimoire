@@ -36,6 +36,7 @@ import {
   type AugmentResult,
   type FileResponse,
 } from "@grimoire/shared";
+import { documentReplySchema } from "@grimoire/shared/document-schema";
 import { ApiError } from "./campaign-fs";
 import {
   ASSET_FILES,
@@ -43,7 +44,6 @@ import {
   loadAsset,
   npcStatusErrors,
   obtainProvider,
-  parseWithProperties,
   quickstatsErrors,
   runPipeline,
   unknownCallouts,
@@ -204,24 +204,28 @@ export function validateAugmentReply(
   raw: string,
   target: { kind: AugmentKind; file: FileResponse },
 ): { ok: true; result: AugmentResult } | { ok: false; errors: string[] } {
-  // The reply IS the document since issue #107 (../document-reply): the whole
-  // file as it should look afterwards, warnings after `---warnings---`. The
-  // augmentation rule („content ist immer die GANZE Datei") is the same rule
-  // it always was — only the wrapper is gone.
-  const split = parseDocumentReply(raw);
-  if (!split.ok) return { ok: false, errors: [split.error] };
-  const reply = split.reply;
+  // Since issue #107 the reply is the schema-forced OBJECT (./document-reply):
+  // `properties` per kind, the whole `body` as it should look afterwards, and
+  // the warnings. The augmentation rule („immer die GANZE Datei") is the rule
+  // it always was — the shape around it is what changed.
+  //
+  // A key the schema does NOT have (a `roll20-page` on an npc, app-managed
+  // bookkeeping, anything a DM hand-wrote) therefore cannot be proposed at
+  // all — and it cannot be lost either: the proposal only patches the keys it
+  // lists, so every other key keeps its value, which is exactly what
+  // „nichts löschen" means here.
+  const { kind, file } = target;
+  const read = parseDocumentReply(raw, kind);
+  if (!read.ok) return { ok: false, errors: read.errors };
+  const reply = read.reply;
   const errors: string[] = [];
 
-  const { kind, file } = target;
   // The target address is the SERVER's and always was — since issue #100 the
   // model is not even asked for one: an augment run rewrites the document at
   // `file.path`, full stop. (Its `location`, on the other hand, is an
   // ordinary proposal: accepting one moves the scene like any other write.)
   const label = `entry "${file.path}"`;
-  const { parsed, error } = parseWithProperties(reply.content, file.path);
-  if (error !== undefined) return { ok: false, errors: [`${label}: ${error}`] };
-  const fm = parsed.properties;
+  const fm = reply.properties;
 
   const currentId = file.properties.id;
   if (currentId !== undefined && fm.id !== currentId) {
@@ -230,7 +234,7 @@ export function validateAugmentReply(
         "der Kampagne und wird beim Ergänzen nie geändert",
     );
   }
-  for (const callout of unknownCallouts(parsed.body)) {
+  for (const callout of unknownCallouts(reply.body)) {
     errors.push(
       `${label}: unknown callout "[!${callout}]" — allowed: ` +
         CALLOUT_KINDS.map((k) => `[!${k}]`).join(", "),
@@ -247,7 +251,7 @@ export function validateAugmentReply(
       rev: file.rev,
       properties: propertyProposals(file.properties, fm),
       currentBody: file.body,
-      proposedBody: parsed.body,
+      proposedBody: reply.body,
       warnings: reply.warnings,
     },
   };
@@ -358,6 +362,10 @@ export async function runAugment(
       sourceText,
       existingEntry: { path: target.file.path, markdown: target.file.raw },
       ...(instruction === "" ? {} : { instruction }),
+      // Forced like every other reply (issue #107) — in „augment" mode, which
+      // is the one difference: an existing scene's `status` is whatever the DM
+      // made it, so the schema must not narrow it to `draft`.
+      jsonSchema: documentReplySchema(target.kind, "augment"),
     },
     provider: getProvider(),
     validate: (raw) => validateAugmentReply(raw, target),

@@ -8,32 +8,23 @@ angegeben.
 
 ## Ausgabeformat
 
-Gib **das Dokument selbst** zurück — kein JSON, keine Code-Zäune, kein Text
-davor oder danach. Die Antwort beginnt mit der Zeile `---` des
-Frontmatter-Blocks und ist genau das, was danach in der Datei steht:
+Du antwortest mit **einem JSON-Objekt**. Das Schema ist verbindlich und wird
+von der Schnittstelle erzwungen — es hat genau diese drei Schlüssel:
 
-```
----
-<Frontmatter-Schlüssel, siehe Ziel-Format>
----
+* `properties` — die Frontmatter-Felder aus dem Ziel-Format unten, jedes als
+  eigener Schlüssel. Ein Feld, das der Quelltext nicht hergibt: `null`. Den
+  Frontmatter-Block baut der Server daraus; du schreibst kein YAML.
+* `body` — der Fließtext unter dem Block, als **ein** String mit echten
+  Zeilenumbrüchen: Überschriften, Callouts, `## If:`-Abschnitte. Ohne
+  Frontmatter — der steckt in `properties`.
+* `warnings` — kurze deutsche Hinweise für den DM, einer je Eintrag; gibt es
+  nichts zu melden, ist die Liste leer.
 
-<Fließtext des Dokuments>
-```
+Das Referenz-Beispiel unten ist genau diese Form.
 
-Hinweise für den DM kommen **danach**, hinter einer Zeile `---warnings---`,
-eine Warnung je Zeile:
-
-```
----warnings---
-Der Quelltext nennt keinen DC — DC 13 gesetzt.
-```
-
-Gibt es nichts zu melden, lässt du den Block ganz weg.
-
-Vor dem Dokument und nach dem Dokument steht **nichts** — keine Anrede, keine
-Erklärung, kein Schlusssatz: das Einzige, was nach dem Dokument stehen darf,
-ist der `---warnings---`-Block. Ein Satz danach landet sonst als Fließtext in
-der Datei.
+Schlüssel/Wert-Felder (`quickstats`) sind eine Liste von
+`{ "key": …, "value": … }`, die Werte immer als String — der Server setzt sie
+zur Mapping-Form im Frontmatter zusammen.
 
 ## Ziel-Format der Datei
 
@@ -154,4 +145,4 @@ locations: bucht (Die Schmugglerbucht)
 Tote — der wunde Punkt), `## Weiß` mit einem `[!secret]` (Name des
 Auftraggebers, Bedingung fürs Reden), `## Beziehungen` mit genau
 `- jorna: …` (id existiert im Kontext) und leerem `## Notizen`.
-Das Referenz-Dokument liegt dem Prompt als `npc-example-output.md` bei.
+Das Referenz-Dokument liegt dem Prompt als `npc-example-output.json` bei.

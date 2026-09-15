@@ -4,73 +4,9 @@ Pipeline: Quelltext (EN) → LLM → Szenen-Drafts (DE) → Review-Vorschau → 
 
 ## Antwortformate (Issue #107)
 
-Es gibt genau **zwei**, und der Unterschied ist die Begründung:
-
-**Dokument-Antworten — der Normalfall.** Szenen-Teil, Eintrags-Teil
-(NPC/Ort), NPC-Lauf und Ergänzen-Lauf antworten mit dem **Dokument selbst**:
-Frontmatter-Block plus Fließtext, genau so, wie es gespeichert wird. Warnungen
-folgen hinter einer Zeile `---warnings---`, eine je Zeile; fehlt der Block,
-gibt es keine Warnungen.
-
-```
----
-id: night-watch-quay
-title: Nachtwache am Kai
-type: planned
-status: draft
----
-
-## Flow
-
-Die Wache murrt: „Wer nachts hier steht, hat was zu verbergen.“
-
----warnings---
-Der Quelltext nennt keinen DC — DC 13 gesetzt.
-```
-
-Warum: ein vollständiges Markdown-Dokument als JSON-String einzubetten war die
-fragilste Stelle der Pipeline. Zeilenumbrüche, Backslashes und
-Anführungszeichen müssen alle die JSON-Maskierung überleben, und der PO-Fall
-vom 15.09. zeigt, was das kostet — eine inhaltlich korrekte Szene, nicht
-parsebar, weil ein Anführungszeichen mit dem ASCII-`"` geschlossen war und
-damit den String beendete.
-
-Der Server trennt die beiden Hälften in `server/src/document-reply.ts`
-(`parseDocumentReply`, von allen vier Validierungen benutzt) und validiert wie
-immer über den Markdown-Parser aus `@grimoire/shared`.
-
-**Was vor dem Dokument steht, fällt weg.** Toleriert werden eine umgebende
-Code-Zaun (```` ``` ````) und ein Satz davor („Hier ist die Szene:“) — beides
-kostet sonst eine Korrekturrunde für nichts —, solange der Frontmatter-Start
-noch zu finden ist: das **erste** `---` des Blocks, mit einem zweiten `---`
-darunter und mindestens einer `key:`-Zeile dazwischen. Zwei waagerechte Linien
-in Prosa sind also kein Frontmatter, und ein Absatz oberhalb fällt nur weg,
-wenn vor dem Frontmatter kein `---` steht. Findet der Server keinen
-Frontmatter-Start, ist das der **eine** Formfehler, und die Korrekturrunde
-sagt genau, wie ein Dokument aussieht.
-
-**Was nach dem Dokument steht, ist Teil des Dokuments.** Vom Frontmatter-Start
-an wird jede Zeile wörtlich übernommen; nur der `---warnings---`-Block wird
-abgetrennt. Ein „Ich hoffe, das passt so!“ am Ende landet also als Fließtext in
-der Datei — sichtbar in der Review-Vorschau, wo der DM es in einem Zug löscht.
-
-Das war einmal anders: eine Heuristik schnitt bei unverzäunten Antworten einen
-letzten Block ohne Markdown-Struktur ab. Sie ist entfernt (Issue #107), weil
-sie einen Abschiedssatz nicht von einem schlichten Schlusssatz nach einem
-Callout oder einer Tabelle unterscheiden kann — und stiller Datenverlust ist
-teurer als sichtbares Geplauder, das der DM in der Review löscht. Verhindert
-wird das Geplauder jetzt auf der Prompt-Seite: jeder Dokument-Prompt
-(`scene-single-output.md`, `npc-`, `location-`, `augment-system-prompt.md`)
-trägt genau einmal den Satz „Vor dem Dokument und nach dem Dokument steht
-nichts …“, und die Korrekturrunde für Dokumente wiederholt ihn wörtlich
-(`NO_TEXT_AROUND_DOCUMENT_RULE`). Der Gliederungs-Prompt trägt ihn nicht — der
-antwortet JSON.
-
-Sonst wird nichts nachkorrigiert: keine Typografie-Heuristik, kein stilles
-Ersetzen.
-
-**Die Gliederung — das einzige JSON.** Sie ist ein kleines, flaches Objekt,
-und deshalb die einzige Antwort, deren Form eine API *garantieren* kann:
+**Jede Antwort ist ein JSON-Objekt, und jedes Objekt ist per Schema
+erzwungen.** Das ist der ganze Vertrag: der Provider schickt das Schema mit
+und die Schnittstelle garantiert die Form, bevor der Server sie liest.
 
 * **Claude**: das Schema reist als Tool mit, `tool_choice` erzwingt den
   Aufruf; die Antwort ist der Tool-Input.
@@ -83,31 +19,101 @@ und deshalb die einzige Antwort, deren Form eine API *garantieren* kann:
   fliegt unverändert nach oben, statt die erzwungene Form dauerhaft
   abzuschalten.
 
-Das Schema steht **einmal** in `shared/src/outline-schema.ts` und ist aus
-denselben Konstanten gebaut, die die Validierung liest (Szenen-Typen,
-id-Muster, die 12/12-Obergrenzen, die Eintrags-Arten) — ein Schema, das mehr
-erlaubt als die Prüfung, wäre ein Lauf, der an einer Antwort scheitert, die
-die API als gültig zugesichert hat. Die **semantischen** Prüfungen bleiben, wo
-sie sind: ein Schema kann nicht sagen „diese id kommt im ganzen Durchlauf nur
-einmal vor“, „dieser `refs`-Eintrag ist eine Szene DIESER Gliederung“ oder
-„das Kapitel kommt aus dem Kontext“.
+**Dokument-Antworten — der Normalfall.** Szenen-Teil, Eintrags-Teil
+(NPC/Ort), NPC-Lauf und Ergänzen-Lauf antworten mit dem Objekt, das die
+gespeicherte Zeile **spiegelt**: die Frontmatter-Felder unter `properties`,
+der ganze Fließtext als **ein** String unter `body`, die Hinweise für den DM
+unter `warnings`.
 
-Davor liegt eine **tolerante Reparatur** (`jsonrepair`, exakt gepinnt): findet
-`extractJsonReply` kein parsebares Objekt, sieht die Antwort aber wie eines
-aus, wird sie einmal deterministisch repariert (Komma am Ende, einfache
-Anführungszeichen) und **danach normal validiert** — die Reparatur lockert das
+```json
+{
+  "properties": {
+    "id": "night-watch-quay",
+    "title": "Nachtwache am Kai",
+    "type": "planned",
+    "status": "draft"
+  },
+  "body": "## Flow\n\nDie Wache murrt: „Wer nachts hier steht, hat was zu verbergen.“\n",
+  "warnings": ["Der Quelltext nennt keinen DC — DC 13 gesetzt."]
+}
+```
+
+`properties` ist **je Art** getypt, und zwar aus **derselben** Feldliste, aus
+der der Eigenschaften-Dialog gebaut wird (`shared/src/property-fields.ts`) —
+ein Modell kann also genau die Felder schreiben, die der DM auch bearbeiten
+kann, und keins mehr. Der **Frontmatter-Block ist Sache des Servers**: er
+setzt ihn aus `properties` zusammen (`renderRaw`, derselbe Renderer wie bei
+jeder geschriebenen Datei), weshalb `quickstats: { wis: "+2" }` gequotet ist,
+weil der Renderer quotet — nicht weil das Modell daran gedacht hat.
+
+Die Schemata stehen **einmal** in `shared/src/document-schema.ts`, gebaut aus
+der Feldliste und den Konstanten, die die Validierung liest. Für den
+Ergänzen-Lauf gibt es denselben Bau im Modus `augment`: eine bestehende Szene
+behält den Status, den der DM ihr gegeben hat, während eine **neue** Szene nur
+`draft` sein kann.
+
+Drei Eigenheiten des **strict mode** (der OpenAI-Pfad schickt `strict: true`,
+und ein abgelehntes Schema ist ein dauerhafter Rückfall für den ganzen
+Prozess):
+
+* kein `pattern`, kein `format`, keine `min*`/`max*`-Grenzen — was das Schema
+  nicht sagen kann, steht in einer `description` und wird dort geprüft, wo es
+  immer geprüft wurde (kebab-`id`, bekannte Callouts, auflösbare Referenzen,
+  die NPC-Formatregeln),
+* **alle** Felder stehen in `required`; ein wirklich optionales Feld ist
+  stattdessen `null`-fähig, und der Server liest `null` als „nicht
+  angegeben“ und lässt den Schlüssel weg,
+* eine freie Schlüssel/Wert-Abbildung (`quickstats`) lässt sich gar nicht
+  ausdrücken, also reist sie als **Liste** von `{ key, value }` und der Server
+  faltet sie zurück in die Mapping-Form des Format-Vertrags.
+
+Warum nicht das Dokument selbst? Genau das war der Zwischenschritt dieses
+Tickets — die Antwort IST die Markdown-Datei — und er hat die JSON-Maskierung
+gegen **Frontmatter-Parsen** getauscht: Code-Zaun drumherum, ein Satz davor,
+ein Abschiedssatz danach, zwei waagerechte Linien, die wie ein
+Frontmatter-Block aussehen. Diese Hälfte kann keine API garantieren, also
+musste sie hier von Hand toleriert werden — und jeder Fehlgriff war eine
+Korrekturrunde oder stiller Datenverlust. Ein erzwungenes Objekt kann das
+alles nicht: den `body` maskiert der **Transport**, und deshalb übersteht der
+PO-Fall vom 15.09. (ein `„…“`, dessen schließendes Zeichen das ASCII-`"` war) die
+Übertragung Zeichen für Zeichen.
+
+**Der tolerante Leser** bleibt als Netz für Endpoints, die das Feld annehmen
+und ignorieren (`parseJsonReply` in `server/src/document-reply.ts`, von allen
+Antworten benutzt): der ganze Text, dann ein ```json-Zaun, dann die Spanne von
+der ersten `{` bis zur letzten `}` — und **eine** deterministische Reparatur
+(`jsonrepair`, exakt gepinnt) für Komma am Ende oder einfache
+Anführungszeichen. Danach wird **normal validiert**: die Reparatur lockert das
 Parsen, nie die Regeln. Ein reparierter Lauf trägt die Warnung „Antwort musste
 repariert werden“, damit ein Provider, der jedes Mal geflickt werden muss,
 sichtbar ist. Fließtext ohne Objekt wird *nicht* repariert: `jsonrepair` würde
 einen Satz in einen JSON-String verwandeln, und der Lauf scheiterte dann mit
 einer Meldung über die falsche Sache.
 
+Die **Korrekturrunde** nennt das Schema, in dem korrigiert werden soll
+(`buildCorrectionMessage`), damit das Modell in der Form bleibt, die es
+bekommen hat. Sonst wird nichts nachkorrigiert: keine Typografie-Heuristik,
+kein stilles Ersetzen.
+
+**Die Gliederung** ist das vierte Schema (`shared/src/outline-schema.ts`) und
+das einzige, das kein Dokument beschreibt: ein kleines, flaches Objekt aus
+Szenenliste und neuen Einträgen. Die **semantischen** Prüfungen bleiben auch
+dort, wo sie sind: ein Schema kann nicht sagen „diese id kommt im ganzen
+Durchlauf nur einmal vor“, „dieser `refs`-Eintrag ist eine Szene DIESER
+Gliederung“ oder „das Kapitel kommt aus dem Kontext“.
+
+**Die Few-Shots sind Antworten**, keine Dateien: `example-output.json`,
+`npc-example-output.json`, `location-example-output.json` und
+`outline-example-output.json` zeigen genau das Objekt, in das der jeweilige
+Aufruf gezwungen wird — derselbe Beispielinhalt wie vorher, nur in der Form,
+die das Modell auch liefern soll.
+
 ## Ablauf eines Szenen-Laufs (Pipeline, Issue #102)
 
 Ein Szenen-Lauf ist nicht **ein** Aufruf, sondern `1 + N (+ Vorschläge)`:
 
 1. **Gliederung** (ein Aufruf, `outline-system-prompt.md` +
-   `outline-example-output.md`): kleines JSON, per Schema erzwungen (siehe
+   `outline-example-output.json`): kleines JSON, per Schema erzwungen (siehe
    „Antwortformate“) — mit der Szenenliste: `id`,
    `title`, `type`, `location`, Querverweise (`refs`) — und der Liste neuer
    Figuren/Orte (`entries`). Jede Szene nennt zusätzlich den **ersten und
@@ -170,12 +176,15 @@ Szenen-Aufruf, jeden Eintrags-Aufruf und die beiden Ein-Aufruf-Läufe:
 1. Server sammelt Kontext: alle npc-/location-ids + Namen, Kapitel-id,
    **Kampagnenwissen** und Glossar (beides aus der Datenbank —
    `campaign_knowledge` bzw. `glossary`).
-2. Prompt = `system-prompt.md` + `example-output.md` (Few-Shot-Ziel)
+2. Prompt = `system-prompt.md` + `example-output.json` (Few-Shot-Ziel)
    + Kampagnenwissen + Glossar + Kontext + Quelltext.
-3. LLM antwortet — mit dem **Dokument** (Szene, NPC, Ort, Ergänzung) bzw.
-   mit dem **Gliederungs-JSON**; siehe „Antwortformate“ oben.
-4. Server validiert mechanisch:
-   - Frontmatter-Block parsebar? `type`/`status` gültig? `status == draft`?
+3. LLM antwortet — mit dem **Dokument-Objekt** (Szene, NPC, Ort, Ergänzung)
+   bzw. mit dem **Gliederungs-Objekt**, je per Schema erzwungen; siehe
+   „Antwortformate“ oben.
+4. Server validiert mechanisch (das Schema deckt die Form ab, hier steht der
+   Inhalt):
+   - `properties` nur bekannte Felder, kebab-`id`? `type`/`status` gültig?
+     `status == draft`?
      Stubs: NPC-Status gültig (Normalfall `alive`), Orte ohne status-Key.
    - alle `npcs`-/`location`-Referenzen existieren ODER liegen als Stub bei?
    - nur bekannte Callout-Typen?
@@ -260,7 +269,7 @@ passenden Callout, in jeder Zeile mit dessen `>`. **Sonst nichts aus GFM**:
 Durchgestrichen, Aufgabenlisten, Fußnoten und Auto-Links bleiben normaler
 Text — der Renderer kennt sie nicht (`app/src/markdown/remark-table.ts`).
 
-Der Szenen-Few-Shot (`example-output.md`) zeigt eine kleine W6-Tabelle in
+Der Szenen-Few-Shot (`example-output.json`) zeigt eine kleine W6-Tabelle in
 einem `[!note]`-Callout, damit das Modell die Form im Callout sieht und nicht
 nur beschrieben bekommt. Der Server validiert Tabellen nicht: eine kaputte
 Trennzeile ist keine Tabelle, sondern Text — Degradation statt Fehler.
@@ -268,7 +277,7 @@ Trennzeile ist keine Tabelle, sondern Text — Degradation statt Fehler.
 ## NPC-Generator
 
 Gleiche Pipeline, eigener Endpoint (`POST /api/:campaign/generate/npc`)
-und eigene Prompt-Assets (`npc-system-prompt.md`, `npc-example-output.md`
+und eigene Prompt-Assets (`npc-system-prompt.md`, `npc-example-output.json`
 — Few-Shot ist die Format-Referenz `examples/beispiel/npcs/fenn.md`).
 Zielformat: NPC-Entität aus README.md; Beziehungen nur auf existierende
 ids, Quickstats als gequotete Strings (das Plus überlebt YAML),
@@ -308,7 +317,7 @@ Server bildet die Adresse:
 * Vorgeschlagene Einträge: ein gemeinsames Array `entries` mit
   `kind: "npc" | "location"`; die `id` steht im Frontmatter des Eintrags,
   adressiert wird als `npcs/<id>` bzw. `locations/<id>`.
-* NPC-Lauf und Ergänzen-Lauf: ein Dokument ohne `path`; beim Ergänzen steht
+* NPC-Lauf und Ergänzen-Lauf: ein Objekt ohne `path`; beim Ergänzen steht
   die Zieladresse ohnehin serverseitig fest.
 
 Der Prüfschritt adressiert die Teile eines Laufs weiterhin über die vom
