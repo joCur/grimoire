@@ -302,6 +302,9 @@ export function GenerateRoute() {
             chapter: chapterId as string,
             sourceText,
             newChapter: creatingChapter,
+            // The title travels with the START since issue #115 — the accept
+            // must not depend on this tab still being open.
+            ...(creatingChapter ? { chapterTitle: newTitle.trim() } : {}),
           }),
     // 202 (or an adopted 409 — the api client hands back the running job's
     // id): from here on the job query drives the view.

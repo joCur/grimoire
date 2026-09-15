@@ -106,6 +106,14 @@ interface Job {
   /** The run's source material — a per-part retry sends it again. */
   sourceText?: string;
   newChapter: boolean;
+  /**
+   * Title of the chapter a „Neues Kapitel" run creates (issue #115) — stored
+   * when the run STARTS, so the accept step no longer depends on the browser
+   * still holding it. Undefined for every other run and for a row written
+   * before that column existed, and then the accept falls back to the
+   * chapter id as the title.
+   */
+  newChapterTitle?: string;
 }
 
 /**
@@ -379,6 +387,9 @@ function toJob(row: JobRow): Job {
     ...(pipeline === undefined ? {} : { pipeline }),
     ...(row.sourceText === null ? {} : { sourceText: row.sourceText }),
     newChapter: row.newChapter === 1,
+    ...(row.newChapterTitle === null || row.newChapterTitle === undefined
+      ? {}
+      : { newChapterTitle: row.newChapterTitle }),
   };
 }
 
@@ -452,7 +463,14 @@ export async function getJob(campaign: string): Promise<Job | undefined> {
  * kind") must exist exactly once.
  */
 export type JobInput = { campaign: string; provider: LLMProvider } & (
-  | { kind: "scene"; chapter: string; sourceText: string; newChapter: boolean }
+  | {
+      kind: "scene";
+      chapter: string;
+      sourceText: string;
+      newChapter: boolean;
+      /** Title for the chapter a `newChapter` run creates (issue #115). */
+      newChapterTitle?: string;
+    }
   | { kind: "npc"; sourceText: string; npcId?: string }
   // Issue #36: an augment run targets an entry that EXISTS. At least one of
   // sourceText/instruction is there — the route enforces that before a job
@@ -491,6 +509,9 @@ export async function startJob(input: JobInput): Promise<Job> {
       ? { sourceText: input.sourceText, pipeline: emptyPipeline() }
       : {}),
     newChapter: input.kind === "scene" && input.newChapter,
+    ...(input.kind === "scene" && input.newChapterTitle !== undefined
+      ? { newChapterTitle: input.newChapterTitle }
+      : {}),
   };
 
   db.transaction((handle) => {
@@ -520,6 +541,7 @@ export async function startJob(input: JobInput): Promise<Job> {
         pipeline: input.kind === "scene" ? JSON.stringify(emptyPipeline()) : "{}",
         sourceText: input.kind === "scene" ? input.sourceText : null,
         newChapter: input.kind === "scene" && input.newChapter ? 1 : 0,
+        newChapterTitle: input.kind === "scene" ? (input.newChapterTitle ?? null) : null,
       })
       .run();
   });

@@ -582,6 +582,11 @@ export function renameEntity(
  * allows a chapter directory that does not exist yet (created by
  * applyDrafts below).
  *
+ * `chapterTitle` rides along for a `newChapter` run and is stored ON the job
+ * (issue #115). It is what makes the accept independent of this browser: the
+ * review is persistent since #97, so the accept regularly happens in a tab
+ * that never saw this form.
+ *
  * A 409 is NOT an error here: it means a job for this campaign is already
  * running, and its id is the answer to "start a run" — the view adopts the
  * running job instead of showing a failure. Everything else throws as
@@ -594,7 +599,7 @@ export function renameEntity(
  */
 export async function startGenerateJob(
   campaign: string,
-  input: { chapter: string; sourceText: string; newChapter?: boolean },
+  input: { chapter: string; sourceText: string; newChapter?: boolean; chapterTitle?: string },
 ): Promise<GenerateJobStarted> {
   const path = `/${encodeURIComponent(campaign)}/generate`;
   const response = await fetch(`/api${path}`, {
@@ -604,6 +609,9 @@ export async function startGenerateJob(
       chapter: input.chapter,
       sourceText: input.sourceText,
       ...(input.newChapter === true ? { newChapter: true } : {}),
+      ...(input.newChapter === true && input.chapterTitle !== undefined
+        ? { chapterTitle: input.chapterTitle }
+        : {}),
     }),
   });
   if (!response.ok) {

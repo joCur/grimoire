@@ -685,6 +685,16 @@ export const generateJobs = sqliteTable(
     sourceText: text("source_text"),
     /** The run's „Neues Kapitel" flag — a retry must not 404 on it. */
     newChapter: integer("new_chapter").notNull().default(0),
+    /**
+     * TITLE of the chapter a „Neues Kapitel" run is going to create (issue
+     * #115). It used to live in the BROWSER only and travelled on the accept
+     * body — so a run reviewed after a navigation or a reload (#97 made the
+     * review persistent) accepted with no title and no chapter at all, and
+     * its scenes landed under a `chapter_id` that had no row. The title
+     * belongs to the run, so it is stored when the run STARTS. NULL for
+     * every other run and for rows written before this deploy.
+     */
+    newChapterTitle: text("new_chapter_title"),
   },
   (t) => [uniqueIndex("generate_jobs_campaign_unique").on(t.campaignId)],
 );
