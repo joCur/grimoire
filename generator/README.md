@@ -64,8 +64,12 @@ und deshalb die einzige Antwort, deren Form eine API *garantieren* kann:
   Aufruf; die Antwort ist der Tool-Input.
 * **OpenAI-kompatibel**: `response_format: { type: "json_schema", …, strict:
   true }`, mit **einem** Rückfall auf `json_object`, wenn der Endpoint mit 400
-  antwortet (einmal je Prozess gemerkt, damit die Erkennung einmal bezahlt
-  wird).
+  antwortet. Gemerkt (einmal je Prozess, damit die Erkennung einmal bezahlt
+  wird) wird der Rückfall nur, wenn der Fehlertext das Format nennt
+  (`response_format`, `json_schema`, `schema`) oder der einfache Versuch
+  gelingt — ein 400 aus anderem Grund (zu langer Prompt, falsche Modell-id)
+  fliegt unverändert nach oben, statt die erzwungene Form dauerhaft
+  abzuschalten.
 
 Das Schema steht **einmal** in `shared/src/outline-schema.ts` und ist aus
 denselben Konstanten gebaut, die die Validierung liest (Szenen-Typen,

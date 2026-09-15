@@ -538,13 +538,26 @@ export class OpenAICompatProvider implements LLMProvider {
     // next outline call does not pay for the discovery again (issue #107).
     // Only a 400 counts: a 401 or a 500 says nothing about the field, and
     // retrying those would double every failing request.
+    //
+    // But not EVERY 400 is about the field, and the latch is permanent: a
+    // request that was too long, a model id that does not exist, a content
+    // filter all answer 400 too, and latching on those would throw the
+    // forced shape away for the rest of the process over an unrelated error
+    // (issue #107 review). So the downgrade is only remembered when the error
+    // body actually talks about the format — or when the plain retry proves
+    // it by succeeding. Otherwise the original 400 is what the caller sees.
     if (!res.ok && res.status === 400 && isJsonSchemaFormat(wanted)) {
+      const body = await res.text();
+      const retry = await send(JSON_OBJECT_FORMAT);
+      if (!retry.ok && !mentionsResponseFormat(body)) {
+        throw new Error(`${this.name}: 400 ${body}`);
+      }
       jsonSchemaRejected = true;
       console.log(
         `${this.name}: response_format json_schema was rejected (400) — ` +
           "falling back to json_object for this process",
       );
-      res = await send(JSON_OBJECT_FORMAT);
+      res = retry;
     }
     if (!res.ok) throw new Error(`${this.name}: ${res.status} ${await res.text()}`);
     const data = await res.json();
@@ -620,6 +633,16 @@ export function resetJsonSchemaSupportForTests(): void {
 
 function isJsonSchemaFormat(format: JsonSchema | undefined): boolean {
   return format?.type === "json_schema";
+}
+
+/**
+ * Whether a 400 body blames the response format. Endpoints word it
+ * differently ("response_format.type json_schema is not supported",
+ * "Invalid schema for response_format"), so the three words they all use are
+ * what is looked for.
+ */
+function mentionsResponseFormat(body: string): boolean {
+  return /response_format|json_schema|schema/i.test(body);
 }
 
 // --- factory ----------------------------------------------------------------

@@ -449,6 +449,81 @@ describe("OpenAICompatProvider request", () => {
     resetJsonSchemaSupportForTests();
   });
 
+  test("a 400 that is NOT about the format does not latch the downgrade", async () => {
+    resetJsonSchemaSupportForTests();
+    const bodies: Array<Record<string, unknown>> = [];
+    const s = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (c: Buffer) => chunks.push(c));
+      req.on("end", () => {
+        bodies.push(JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>);
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end('{"error":{"message":"prompt is too long: 250000 tokens"}}');
+      });
+    });
+    server = s;
+    await new Promise<void>((resolve) => s.listen(0, "127.0.0.1", () => resolve()));
+    const addr = s.address();
+    if (addr === null || typeof addr === "string") throw new Error("no port");
+    const provider = new OpenAICompatProvider({
+      name: "lmstudio",
+      baseUrl: `http://127.0.0.1:${addr.port}/v1`,
+      model: "local-model",
+    });
+
+    // The caller sees the REAL error, body included — not a schema verdict.
+    await expect(provider.complete(OUTLINE_REQ)).rejects.toThrow("prompt is too long");
+    // …and the next outline call still asks for the schema.
+    await expect(provider.complete(OUTLINE_REQ)).rejects.toThrow("lmstudio: 400");
+    expect(bodies.map((b) => (b.response_format as { type: string }).type)).toEqual([
+      "json_schema",
+      "json_object",
+      "json_schema",
+      "json_object",
+    ]);
+    resetJsonSchemaSupportForTests();
+  });
+
+  test("a 400 with no format hint latches when the json_object retry SUCCEEDS", async () => {
+    resetJsonSchemaSupportForTests();
+    const bodies: Array<Record<string, unknown>> = [];
+    const s = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (c: Buffer) => chunks.push(c));
+      req.on("end", () => {
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+        bodies.push(body);
+        const format = body.response_format as { type?: string } | undefined;
+        if (format?.type === "json_schema") {
+          res.writeHead(400, { "content-type": "application/json" });
+          // No mention of the field at all — only the retry can tell.
+          res.end('{"error":{"message":"Bad Request"}}');
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ choices: [{ message: { content: "{}" } }] }));
+      });
+    });
+    server = s;
+    await new Promise<void>((resolve) => s.listen(0, "127.0.0.1", () => resolve()));
+    const addr = s.address();
+    if (addr === null || typeof addr === "string") throw new Error("no port");
+    const provider = new OpenAICompatProvider({
+      name: "lmstudio",
+      baseUrl: `http://127.0.0.1:${addr.port}/v1`,
+      model: "local-model",
+    });
+
+    expect((await provider.complete(OUTLINE_REQ)).text).toBe("{}");
+    expect((await provider.complete(OUTLINE_REQ)).text).toBe("{}");
+    expect(bodies.map((b) => (b.response_format as { type: string }).type)).toEqual([
+      "json_schema",
+      "json_object",
+      "json_object",
+    ]);
+    resetJsonSchemaSupportForTests();
+  });
+
   test("an error status that is NOT 400 is not retried", async () => {
     resetJsonSchemaSupportForTests();
     let requests = 0;
