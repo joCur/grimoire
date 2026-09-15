@@ -1,6 +1,7 @@
 # Grimoire — Produktiv-Setup (Details: docs/DEPLOYMENT.md).
 # Kopieren, .env daneben legen (OPENROUTER_API_KEY=…, optional
 # GRIMOIRE_VERSION=v0.1.0), dann:
+#   mkdir -p ./data && sudo chown 1000:1000 ./data
 #   docker compose up -d
 #
 # Zugriffsschutz ist Deployment-Sache (DECISIONS #3): der Port bindet nur an
