@@ -31,6 +31,8 @@ import {
 } from "../src/generator-augment";
 import { sceneSystemPrompt } from "../src/generate-pipeline";
 import { documentReply } from "./support/pipeline-fake";
+import { parseDocumentReply } from "../src/document-reply";
+import { propertyFieldsFor } from "@grimoire/shared";
 import { buildPrompt, EXISTING_ENTRY_HEADING, INSTRUCTION_HEADING } from "../src/llm-provider";
 import { failInterruptedJobs } from "../src/db/job-boot";
 import { getDb } from "../src/store/handle";
@@ -280,6 +282,23 @@ describe("prompt assembly", () => {
       expect(Array.isArray(reply.warnings), `${kind} warnings`).toBe(true);
       // No frontmatter in the body: the block is the server's.
       expect(reply.body.startsWith("---"), `${kind} body`).toBe(false);
+    }
+  });
+
+  test("the few-shot replies name EVERY key of their kind and pass the reader", async () => {
+    // Strict mode has no optional properties: the schema asks for every field
+    // and `null` is how a model says „nicht gegeben" (system-prompt.md). A
+    // few-shot that simply omits a key teaches the opposite of the schema,
+    // and the model imitates what it reads (issue #93) — so the examples show
+    // the convention, `null` included.
+    for (const kind of ["scene", "npc", "location"] as const) {
+      const raw = await loadAsset(ASSET_FILES[kind].fewShotTarget);
+      const reply = JSON.parse(raw) as { properties: Record<string, unknown> };
+      for (const field of propertyFieldsFor(kind) ?? []) {
+        expect(Object.hasOwn(reply.properties, field.key), `${kind}.${field.key}`).toBe(true);
+      }
+      // …and the whole example is a reply the server can read as it stands.
+      expect(parseDocumentReply(raw, kind).ok, kind).toBe(true);
     }
   });
 

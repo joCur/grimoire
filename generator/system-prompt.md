@@ -39,9 +39,9 @@ trigger: <nur bei contingency: woran die Szene ausgelöst wird>
 chapter: <Kapitel-id aus dem Kontext>
 location: <Orts-id aus dem Kontext oder der Gliederung — nie Freitext, nie leer erfinden>
 npcs: [<npc-ids aus dem Kontext>]
-handouts: []                      # nur Roll20-Namen, KEINE Kopien
+handouts: [<Roll20-Namen, KEINE Kopien> — oder null]
 tags: [<frei>]
-status: draft | ready | played
+status: draft                     # neue Szenen sind immer Entwürfe
 ---
 ```
 
