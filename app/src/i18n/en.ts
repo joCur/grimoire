@@ -645,6 +645,8 @@ export const en: Messages = {
   "generate.review.conflicts": "These entries already exist — nothing written:",
   "generate.review.conflictsNpc": "This entry already exists — nothing written:",
   "generate.review.applyFailed": "Not written — check the server.",
+  "generate.review.applyStale":
+    "Not written — the run has moved on. Reloading the view.",
   "generate.review.discardFailed": "Not discarded — check the server.",
   "generate.review.apply": "Apply ({count})",
   "generate.review.applyNpc": "Apply",
@@ -671,13 +673,19 @@ export const en: Messages = {
   "generate.pipeline.cost": "~{tokens} tokens · {calls, plural, one {# call} other {# calls}}",
   "generate.pipeline.progress":
     "{done} of {total, plural, one {# scene} other {# scenes}} finished",
-  "generate.pipeline.progressEntries":
-    "{done} of {total, plural, one {# suggestion} other {# suggestions}} finished",
+  "generate.pipeline.progressParts":
+    "{done} of {total, plural, one {# part} other {# parts}} finished",
   "generate.pipeline.partRunning": "being written …",
   "generate.pipeline.partPending": "waiting",
   "generate.pipeline.partFailed": "not written",
   "generate.pipeline.retry": "Try again",
   "generate.pipeline.retryFailed": "Not restarted — check the server.",
+  "generate.pipeline.retryConflict":
+    "Not restarted — this part is already running or already finished. Reloading the view.",
+  "generate.pipeline.partInvalid":
+    "Failed the format check — the reply stayed malformed through the correction turns.",
+  "generate.pipeline.partMissing":
+    "Reported finished but no draft arrived — try this part again.",
   "generate.pipeline.stillRunning":
     "The run is not finished yet — whatever is here can already be accepted.",
 

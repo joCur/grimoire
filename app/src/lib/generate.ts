@@ -507,6 +507,14 @@ export function partPath(job: GenerateJob | null | undefined, part: GenerateJobP
  * question from „2 von 3 übernommen" (jobProgress, issue #97). Undefined when
  * the run has no parts or every part is settled: a finished run needs no
  * progress line, it needs its drafts.
+ *
+ * It counts EVERY part, because that is what „is the run still going" is
+ * measured against. Counting only the scenes while the line was shown for as
+ * long as any part was open froze it at „3 von 3 Szenen fertig" for the whole
+ * entry half of a run — and that line REPLACES the review's own progress in
+ * the header, so the run looked stuck and the „N von M übernommen" was hidden
+ * behind it. The wording follows what is actually counted: „Szenen" only when
+ * every part is a scene, „Teile" as soon as suggested entries are among them.
  */
 export function pipelineProgress(
   job: GenerateJob | null | undefined,
@@ -514,11 +522,10 @@ export function pipelineProgress(
 ): string | undefined {
   const parts = jobPipelineParts(job);
   if (parts.length === 0 || !partsStillRunning(job)) return undefined;
-  const scenes = parts.filter((part) => part.kind === "scene");
-  const relevant = scenes.length > 0 ? scenes : parts;
-  return t(scenes.length > 0 ? "generate.pipeline.progress" : "generate.pipeline.progressEntries", {
-    done: relevant.filter((part) => part.status === "done").length,
-    total: relevant.length,
+  const allScenes = parts.every((part) => part.kind === "scene");
+  return t(allScenes ? "generate.pipeline.progress" : "generate.pipeline.progressParts", {
+    done: parts.filter((part) => part.status === "done").length,
+    total: parts.length,
   });
 }
 
