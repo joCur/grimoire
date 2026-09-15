@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/joCur/grimoire/compare/v0.5.0...v0.6.0) (2026-09-15)
+
+
+### Features
+
+* generator pipeline — outline, one call per scene, progressive review with per-part retry ([#102](https://github.com/joCur/grimoire/issues/102)) ([#106](https://github.com/joCur/grimoire/issues/106)) ([00e7367](https://github.com/joCur/grimoire/commit/00e73672dcb2133ba34d0fa88a0c7609022e8e19))
+* scene group derived from location; generator replies without paths ([#100](https://github.com/joCur/grimoire/issues/100)) ([#104](https://github.com/joCur/grimoire/issues/104)) ([9c15e05](https://github.com/joCur/grimoire/commit/9c15e058b4257fef1b998713616fada2c420c914))
+
 ## [0.5.0](https://github.com/joCur/grimoire/compare/v0.4.1...v0.5.0) (2026-09-14)
 
 
