@@ -2158,6 +2158,26 @@ describe("a scene draft whose chapter has no row (#115)", () => {
     expect(node?.groups.flatMap((g) => g.scenes).map((s) => s.id)).toContain("brut-im-dunkeln");
   });
 
+  // #115 review, finding 2: `ensureChapterRow` only creates rows for a real
+  // entity slug, and everything else used to fall through to the insert — so
+  // the client got the raw foreign-key failure as a 500 that named a
+  // constraint. A chapter id like `Kapitel_1` passes the path safety check
+  // but is not a slug, which is exactly that case.
+  test("a chapter id that is no slug answers 400 and names the chapter", async () => {
+    const markdown = sceneMarkdown()
+      // Its own id: the scene id IS the primary key, so reusing the one the
+      // case above wrote would answer the duplicate-target 409 first.
+      .replace("id: treffen-am-kai", "id: brut-im-schacht")
+      .replace("chapter: 01-salzhafen", "chapter: Kapitel_1");
+    const res = await postJson("/api/beispiel/generate/apply", {
+      scenes: [{ path: "Kapitel_1/brut-im-schacht", markdown }],
+    });
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(await res.json())).toContain("Kapitel_1");
+    // Nothing was written — not the scene, and not a chapter either.
+    expect((await app.request("/api/beispiel/file?path=Kapitel_1/_chapter")).status).toBe(404);
+  });
+
   test("a DIALOG still refuses an unknown chapter — ADR #14 stands", async () => {
     // The invariant is about rows, not about inventing chapters: where a DM
     // typed the chapter, an unknown one is a typo and the honest answer is

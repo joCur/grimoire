@@ -2125,8 +2125,20 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       // (generator.ts `jobChapterTarget`), so the row normally exists with
       // the title the DM typed; this is the net under it, and it names the
       // chapter by its id.
+      //
+      // `ensureChapterRow` returns false for TWO reasons — the row is already
+      // there (fine), or the id is not a slug it may create a row for. Only
+      // the second one matters, and it used to reach the client as a raw
+      // foreign-key failure from the insert below, i.e. a 500 that named a
+      // constraint instead of the chapter. It is a 400 that names it.
       if (locator.chapterId !== null && locator.chapterId !== undefined) {
         ensureChapterRow(tx, campaign, locator.chapterId);
+        if (chapterRowOf(tx, campaign, locator.chapterId) === undefined) {
+          throw new ApiError(
+            400,
+            `unknown chapter: ${locator.chapterId} — create the chapter first`,
+          );
+        }
       }
       tx.insert(scenes)
         .values({
