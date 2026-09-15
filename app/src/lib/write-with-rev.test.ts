@@ -15,7 +15,6 @@ function fileAt(rev: number): EntryResponse {
     kind: "scene",
     properties: { id: "arrival", status: "ready" },
     body: "Text",
-    raw: "---\nid: arrival\n---\n\nText",
     rev,
   };
 }

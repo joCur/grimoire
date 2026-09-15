@@ -252,7 +252,7 @@ describe("GET /api/:campaign/file", () => {
     dropStore();
   });
 
-  test("returns raw + parsed + the rev as rev", async () => {
+  test("returns properties, body and the rev", async () => {
     const rel = "01-salzhafen/leuchtturm/lighthouse-arrival";
     const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
     expect(res.status).toBe(200);
@@ -261,7 +261,6 @@ describe("GET /api/:campaign/file", () => {
     expect(body.kind).toBe("scene");
     expect(body.properties.id).toBe("lighthouse-arrival");
     expect(body.properties.status).toBe("ready");
-    expect(body.raw.startsWith("---")).toBe(true);
     expect(body.body).toContain("## Flow");
     expect(body.body).not.toContain("id: lighthouse-arrival");
     // `rev` is the ROW VERSION (store/render.ts rule 3): an opaque
@@ -278,7 +277,6 @@ describe("GET /api/:campaign/file", () => {
     expect(body.kind).toBe("campaign");
     expect(body.properties.id).toBe("beispiel");
     expect(body.properties.name).toBe("Der Leuchtturm von Salzhafen");
-    expect(body.raw.startsWith("---")).toBe(true);
   });
 
   test("serves the two list files from their rows: inbox and glossary", async () => {

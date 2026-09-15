@@ -36,6 +36,7 @@ import { propertyFieldsFor } from "@grimoire/shared";
 import { buildPrompt, EXISTING_ENTRY_HEADING, INSTRUCTION_HEADING } from "../src/llm-provider";
 import { failInterruptedJobs } from "../src/db/job-boot";
 import { getDb } from "../src/store/handle";
+import { renderRaw } from "../src/store/render";
 import { dropStore, seedStore } from "./support/store";
 import type {
   CompletionResult,
@@ -416,7 +417,7 @@ describe("prompt assembly", () => {
 
   test("the run sends the kind's own system prompt and few-shot", async () => {
     const stored = await read(LOCATION);
-    const content = `${stored.raw}\n## Wer ist hier\n\n- niemand\n`;
+    const content = `${renderRaw(stored.properties, stored.body)}\n## Wer ist hier\n\n- niemand\n`;
     const fake = useFake([augmentReply(LOCATION, content)]);
     await runAugmentJob({ path: LOCATION, instruction: "Ergänze, wer hier ist" });
     const req = fake.calls[0]!.req;
@@ -430,7 +431,7 @@ describe("prompt assembly", () => {
 
   test("a scene run carries its chapter in the context", async () => {
     const stored = await read(SCENE);
-    const fake = useFake([augmentReply(SCENE, stored.raw)]);
+    const fake = useFake([augmentReply(SCENE, renderRaw(stored.properties, stored.body))]);
     await runAugmentJob({ path: SCENE, instruction: "nichts ändern" });
     expect(fake.calls[0]!.req.context.chapter).toBe("01-salzhafen");
   });
@@ -477,8 +478,9 @@ describe("proposal", () => {
 
   test("a changed id is rejected — it is the reference key", async () => {
     const stored = await read(NPC);
+    const markdown = renderRaw(stored.properties, stored.body);
     const outcome = validateAugmentReply(
-      augmentReply(NPC, stored.raw.replace("id: jorna", "id: jorna-die-hafenmeisterin")),
+      augmentReply(NPC, markdown.replace("id: jorna", "id: jorna-die-hafenmeisterin")),
       { kind: "npc", stored },
     );
     expect(outcome.ok).toBe(false);
@@ -488,13 +490,13 @@ describe("proposal", () => {
   test("an unknown callout is a correction turn, a known one is not", async () => {
     const stored = await read(NPC);
     const bad = validateAugmentReply(
-      augmentReply(NPC, `${stored.raw}\n> [!spoiler] nope\n`),
+      augmentReply(NPC, `${renderRaw(stored.properties, stored.body)}\n> [!spoiler] nope\n`),
       { kind: "npc", stored },
     );
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.errors.join(" ")).toContain("[!spoiler]");
     const good = validateAugmentReply(
-      augmentReply(NPC, `${stored.raw}\n> [!note] fine\n`),
+      augmentReply(NPC, `${renderRaw(stored.properties, stored.body)}\n> [!note] fine\n`),
       { kind: "npc", stored },
     );
     expect(good.ok).toBe(true);
@@ -503,7 +505,7 @@ describe("proposal", () => {
   test("a scene keeps the status the DM gave it", async () => {
     const stored = await read(SCENE);
     expect(stored.properties.status).toBe("ready");
-    const outcome = validateAugmentReply(augmentReply(SCENE, stored.raw), {
+    const outcome = validateAugmentReply(augmentReply(SCENE, renderRaw(stored.properties, stored.body)), {
       kind: "scene",
       stored,
     });
@@ -523,7 +525,7 @@ describe("proposal", () => {
     const stored = await read(NPC);
     expect(stored.properties.status).toBe("alive");
     const outcome = validateAugmentReply(
-      augmentReply(NPC, stored.raw.replace("status: alive\n", "")),
+      augmentReply(NPC, renderRaw(stored.properties, stored.body).replace("status: alive\n", "")),
       { kind: "npc", stored },
     );
     expect(outcome.ok).toBe(true);
@@ -545,8 +547,9 @@ describe("proposal", () => {
     // be proposed anyway, and the proposal patches only the keys it lists, so
     // the value the DM authored keeps standing.
     const stored = await read(NPC);
+    const markdown = renderRaw(stored.properties, stored.body);
     const outcome = validateAugmentReply(
-      augmentReply(NPC, stored.raw.replace("status: alive", "status: alive\nroll20-page: Jorna")),
+      augmentReply(NPC, markdown.replace("status: alive", "status: alive\nroll20-page: Jorna")),
       { kind: "npc", stored },
     );
     expect(outcome.ok).toBe(true);
@@ -557,8 +560,9 @@ describe("proposal", () => {
 
   test("a location may not carry a status", async () => {
     const stored = await read(LOCATION);
+    const markdown = renderRaw(stored.properties, stored.body);
     const outcome = validateAugmentReply(
-      augmentReply(LOCATION, stored.raw.replace("---\n\n", "status: alive\n---\n\n")),
+      augmentReply(LOCATION, markdown.replace("---\n\n", "status: alive\n---\n\n")),
       { kind: "location", stored },
     );
     expect(outcome.ok).toBe(false);
@@ -571,7 +575,7 @@ describe("proposal", () => {
 describe("the job", () => {
   test("a run answers 202 and leaves an augment job with the proposal", async () => {
     const stored = await read(NPC);
-    const content = stored.raw.replace(
+    const content = renderRaw(stored.properties, stored.body).replace(
       "## Notizen",
       "> [!secret] Der Spitzel sitzt in der Hafenwache.\n\n## Notizen",
     );
@@ -595,7 +599,7 @@ describe("the job", () => {
     const stored = await read(NPC);
     const fake = useFake([
       augmentReply(NPC, "## Will\n\nkein Eigenschaften-Block\n"),
-      augmentReply(NPC, stored.raw),
+      augmentReply(NPC, renderRaw(stored.properties, stored.body)),
     ]);
     const job = await runAugmentJob({ path: NPC, instruction: "x" });
     expect(job.status).toBe("done");
@@ -679,7 +683,7 @@ describe("one job per campaign, whatever its kind", () => {
 
   test("Vorschlag verwerfen discards a finished augment job", async () => {
     const stored = await read(NPC);
-    useFake([augmentReply(NPC, stored.raw)]);
+    useFake([augmentReply(NPC, renderRaw(stored.properties, stored.body))]);
     await runAugmentJob({ path: NPC, instruction: "x" });
     expect(await jobStatus()).toBe(200);
     const res = await app.request(`/api/${CAMPAIGN}/generate/job`, { method: "DELETE" });
@@ -714,7 +718,7 @@ describe("one job per campaign, whatever its kind", () => {
     // row. A key the SCHEMA does not have (a `tags` on an npc) cannot be
     // proposed at all — and cannot be lost either, it simply
     // keeps the value it has.
-    const content = stored.raw.replace(
+    const content = renderRaw(stored.properties, stored.body).replace(
       "voice: knapp, wetterrau, duzt jeden",
       "voice: knapp, wetterrau — duzt auch den Ratsherrn",
     );
@@ -763,7 +767,7 @@ describe("accept", () => {
 
   test("properties and body land in ONE write, and the job is gone", async () => {
     const before = await read(LOCATION);
-    useFake([augmentReply(LOCATION, before.raw)]);
+    useFake([augmentReply(LOCATION, renderRaw(before.properties, before.body))]);
     const job = await runAugmentJob({ path: LOCATION, instruction: "x" });
 
     const body = `${before.body}\n## Wer ist hier\n\n- niemand\n`;
@@ -888,7 +892,7 @@ describe("naming check", () => {
   test("a proposal that keeps the old spelling is a HINT, never a failure", async () => {
     await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
     const stored = await read(NPC);
-    const content = stored.raw.replace(
+    const content = renderRaw(stored.properties, stored.body).replace(
       "## Notizen",
       "> [!secret] Sie kam aus Salt Harbour zurück.\n\n## Notizen",
     );
@@ -914,7 +918,7 @@ describe("naming check", () => {
     // about what a model happens to write.
     await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
     const stored = await read(NPC);
-    const content = stored.raw.replace(
+    const content = renderRaw(stored.properties, stored.body).replace(
       "role: Auftraggeberin, Hafenmeisterin von Salzhafen",
       'role: "Hafenmeisterin: Salt Harbour"',
     );
@@ -931,7 +935,8 @@ describe("naming check", () => {
   test("a proposal that follows the convention produces no hint", async () => {
     await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
     const stored = await read(NPC);
-    useFake([augmentReply(NPC, stored.raw.replace("## Notizen", "## Notizen\n\nSalzhafen."))]);
+    const markdown = renderRaw(stored.properties, stored.body);
+    useFake([augmentReply(NPC, markdown.replace("## Notizen", "## Notizen\n\nSalzhafen."))]);
     const job = await runAugmentJob({ path: NPC, instruction: "x" });
     expect(job.status).toBe("done");
     expect((job.augmentResult as AugmentResult).namingHints).toBeUndefined();

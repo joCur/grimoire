@@ -71,7 +71,7 @@
 //   [x] POST /api/:campaign/locations          { name } -> 201 the location document, same
 //                                              rules as npcs
 //   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (properties parsed)
-//   [x] GET  /api/:campaign/file?path=...      one document (raw + parsed + rev). glossary
+//   [x] GET  /api/:campaign/file?path=...      one entry (properties + body + rev). glossary
 //                                              answers 200 with an EMPTY body when the
 //                                              campaign has no terms — it is an empty
 //                                              document, not a missing one (#57 review:

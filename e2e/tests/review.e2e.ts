@@ -85,12 +85,12 @@ test("adopting a thread lands in _chapter, the inbox line gets ticked off", asyn
   // The thread list shows the new item with the "neu" chip.
   await expect(page.getByText("neu", { exact: true })).toBeVisible();
 
-  // On disk: the chapter file gained the checklist item …
+  // Stored: the chapter gained the checklist item …
   await expect
-    .poll(() => api.raw("01-salzhafen/_chapter"))
+    .poll(() => api.body("01-salzhafen/_chapter"))
     .toContain(`- [ ] ${THREAD_TEXT}`);
   // … and the source line is marked as seen via its short hash.
-  await expect.poll(() => api.raw(todaySessionPath())).toContain("reviewed:");
+  await expect.poll(() => api.properties(todaySessionPath())).toHaveProperty("reviewed");
 
   // --- tick off the inbox line --------------------------------------------
   const inboxCard = page.locator("div").filter({ hasText: INBOX_TEXT }).last();
@@ -100,7 +100,7 @@ test("adopting a thread lands in _chapter, the inbox line gets ticked off", asyn
   await expect(inboxCard.getByText("Verworfen")).toBeVisible();
   await expect(progress).toHaveText("2 von 4 gesichtet");
   await expect
-    .poll(() => api.raw("inbox"))
+    .poll(() => api.body("inbox"))
     .toMatch(/- \[x\] 2026-01-10 Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread/);
 
   // "Fertig" goes back to the chapters.
@@ -121,7 +121,7 @@ test("an untagged inbox note is reviewable and can be ticked off (issue #85)", a
   await page.getByLabel("Ideen").fill(NOTE_TEXT);
   await page.getByRole("button", { name: "Einwerfen" }).click();
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
-  await expect.poll(() => api.raw("inbox")).toContain(`- ${NOTE_TEXT}`);
+  await expect.poll(() => api.body("inbox")).toContain(`- ${NOTE_TEXT}`);
 
   // At the desk it shows up in the session review — in its own "Ungetaggte Einträge" section,
   // and counted with everything else (one source for page and topbar).
@@ -143,7 +143,7 @@ test("an untagged inbox note is reviewable and can be ticked off (issue #85)", a
   await expect(noteCard.getByText("Erledigt", { exact: true })).toBeVisible();
   await expect(progress).toHaveText("1 von 5 gesichtet");
   // The line is ticked off in the inbox document itself.
-  await expect.poll(() => api.raw("inbox")).toContain(`- [x] ${NOTE_TEXT}`);
+  await expect.poll(() => api.body("inbox")).toContain(`- [x] ${NOTE_TEXT}`);
 
   // The pool affordance counts the same entries the page does.
   await page.getByRole("button", { name: "Fertig — zurück zu den Kapiteln" }).click();
@@ -193,7 +193,7 @@ test("a #pc note is grouped by character and ticked off (issue #86)", async ({ p
   await expect(page.getByText(/von \d+ gesichtet/).first()).toHaveText("1 von 5 gesichtet");
   // The line is ticked off in the inbox document itself.
   await expect
-    .poll(() => api.raw("inbox"))
+    .poll(() => api.body("inbox"))
     .toContain(`- [x] ${PC_TEXT} #pc #kaela`);
 
   // Back at the desk the pool affordance counts what is still open.
@@ -220,14 +220,14 @@ test("creating an NPC entry from a #npc log line", async ({ page, api }) => {
   await dialog.getByRole("button", { name: "Anlegen" }).click();
 
   await expect(npcCard.getByText("NPC angelegt")).toBeVisible();
-  const stub = await api.raw("npcs/old-metta");
-  expect(stub).toContain("id: old-metta");
-  expect(stub).toContain("name: Old Metta");
+  const stub = await api.file("npcs/old-metta");
+  expect(stub.properties.id).toBe("old-metta");
+  expect(stub.properties.name).toBe("Old Metta");
   // The log line said nothing about the NPC's state, so the entry claims
-  // nothing either (issue #70 — it used to write "alive").
-  expect(stub).toContain("status: unknown");
-  expect(stub).toContain("## Notizen");
-  expect(stub).toContain(NPC_TEXT);
+  // nothing either (issue #70).
+  expect(stub.properties.status).toBe("unknown");
+  expect(stub.body).toContain("## Notizen");
+  expect(stub.body).toContain(NPC_TEXT);
 
   // The new NPC is in the tree right away (list page, search index).
   await page.goto("/beispiel/list/npcs");
@@ -235,9 +235,8 @@ test("creating an NPC entry from a #npc log line", async ({ page, api }) => {
 });
 
 test("an id that already has an entry is linked, not refused (#70)", async ({ page, api }) => {
-  // The file era answered 409 here and made the DM correct an id that was
-  // right. The call is idempotent now: the entry stands, untouched.
-  const before = await api.raw("npcs/fenn");
+  // The call is idempotent: the entry stands, untouched.
+  const before = await api.file("npcs/fenn");
   await page.goto("/beispiel/review");
 
   const npcCard = page.locator("div").filter({ hasText: NPC_TEXT }).last();
@@ -250,7 +249,9 @@ test("an id that already has an entry is linked, not refused (#70)", async ({ pa
   // The action counts as done and nothing was overwritten.
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(npcCard.getByText("NPC angelegt")).toBeVisible();
-  expect(await api.raw("npcs/fenn")).toBe(before);
+  const after = await api.file("npcs/fenn");
+  expect(after.properties).toEqual(before.properties);
+  expect(after.body).toBe(before.body);
 });
 
 test.describe("with yesterday's session, ended after midnight", () => {
@@ -273,12 +274,12 @@ test.describe("with yesterday's session, ended after midnight", () => {
     await threadCard.getByRole("button", { name: "Als Handlungsstrang übernehmen" }).click();
     await expect(threadCard.getByText("Als Handlungsstrang übernommen")).toBeVisible();
 
-    // The `reviewed` hash lands in YESTERDAY's file — the one the session
-    // actually lives in — and no file was invented for today.
-    await expect.poll(() => api.raw(rel)).toContain("reviewed:");
+    // The `reviewed` hash lands in YESTERDAY's session — the one that is
+    // running — and no session was invented for today.
+    await expect.poll(() => api.properties(rel)).toHaveProperty("reviewed");
     expect(await api.exists(todaySessionPath())).toBe(false);
     await expect
-      .poll(() => api.raw("01-salzhafen/_chapter"))
+      .poll(() => api.body("01-salzhafen/_chapter"))
       .toContain(`- [ ] ${THREAD_TEXT}`);
   });
 });

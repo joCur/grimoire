@@ -370,7 +370,12 @@ export async function runAugment(
         ...(target.kind === "scene" ? { chapter: chapterOf(target.stored) } : {}),
       },
       sourceText,
-      existingEntry: { path: target.stored.path, markdown: target.stored.raw },
+      existingEntry: {
+        path: target.stored.path,
+        // The prompt needs one coherent markdown text, so the stored entry's
+        // properties and body are rendered back together here.
+        markdown: renderRaw(target.stored.properties, target.stored.body),
+      },
       ...(instruction === "" ? {} : { instruction }),
       // Forced like every other reply — in „augment" mode, which
       // is the one difference: an existing scene's `status` is whatever the DM

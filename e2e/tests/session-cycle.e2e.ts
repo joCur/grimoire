@@ -153,9 +153,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
     page.getByText("Noch keine Einträge — die Schnellnotiz unten landet hier."),
   ).toBeVisible();
 
-  await expect
-    .poll(() => api.raw(sessionPath))
-    .toContain("scenes_played: []");
+  await expect.poll(() => api.properties(sessionPath)).toHaveProperty("scenes_played", []);
 
   // …and while it is empty, the session menu offers to discard it (#40 AK7).
   await expect(await sessionMenuItem(page, "Session verwerfen")).toBeVisible();
@@ -171,12 +169,13 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect(log).toBeVisible();
   await expect(quickNote).toHaveValue("");
 
-  // …and the file gained the line plus the played scene id.
+  // …and the session gained the line plus the played scene id.
   await expect
-    .poll(() => api.raw(sessionPath))
+    .poll(() => api.body(sessionPath))
     .toMatch(/- \d{2}:\d{2} \(lighthouse-arrival\) Gruppe verhandelt mit Jorna am Fuß der Treppe #thread/);
-  await expect.poll(() => api.raw(sessionPath)).toContain("scenes_played:");
-  await expect.poll(() => api.raw(sessionPath)).toContain("lighthouse-arrival");
+  await expect
+    .poll(async () => (await api.properties(sessionPath)).scenes_played)
+    .toEqual(["lighthouse-arrival"]);
 
   // The played checkmark comes from scenes_played — never faked client-side.
   await expect(nav.getByText("Gespielt")).toBeAttached();
@@ -243,9 +242,11 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // --- pause: the clock really STOPS (issue #40 AK8) ------------------------
   await (await sessionMenuItem(page, "Pause")).click();
   await expect(page.getByText("— Pause")).toBeVisible();
-  await expect.poll(() => api.raw(sessionPath)).toMatch(/- \d{2}:\d{2} — Pause/);
+  await expect.poll(() => api.body(sessionPath)).toMatch(/- \d{2}:\d{2} — Pause/);
   // The interval is in the file, still open (no `to` yet) …
-  await expect.poll(() => api.raw(sessionPath)).toMatch(/pauses: \[\{from: [\d\-T:]+\}\]/);
+  await expect
+    .poll(async () => (await api.properties(sessionPath)).pauses)
+    .toEqual([{ from: expect.stringMatching(/^[\d\-T:]+$/) }]);
 
   // … the chip is the same chip, dimmed, and says so.
   const pausedChip = page.getByRole("button", { name: /Session pausiert/ }).first();
@@ -262,10 +263,10 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // --- weiter: the same menu entry, the other direction ---------------------
   await (await sessionMenuItem(page, "Weiter")).click();
   await expect(page.getByText("— Weiter")).toBeVisible();
-  // The interval is closed in the file (`to` written) …
+  // The interval is closed (`to` written) …
   await expect
-    .poll(() => api.raw(sessionPath))
-    .toMatch(/pauses: \[\{from: [\d\-T:]+, to: [\d\-T:]+\}\]/);
+    .poll(async () => (await api.properties(sessionPath)).pauses)
+    .toEqual([{ from: expect.stringMatching(/^[\d\-T:]+$/), to: expect.stringMatching(/^[\d\-T:]+$/) }]);
   // … the chip is brass again, and the clock ticks once more.
   const runningAgain = sessionMenuChip(page);
   await expect(runningAgain).toBeVisible();
@@ -274,8 +275,8 @@ test("session start, quick note, pause, end — log and file follow", async ({
     .poll(() => runningAgain.textContent(), { timeout: 5_000 })
     .not.toBe(resumed);
 
-  // Both log lines are in the file — the readable chronicle of the evening.
-  const withPause = await api.raw(sessionPath);
+  // Both log lines are in the session — the readable chronicle of the evening.
+  const withPause = await api.body(sessionPath);
   expect(withPause).toMatch(/- \d{2}:\d{2} — Pause/);
   expect(withPause).toMatch(/- \d{2}:\d{2} — Weiter/);
 
@@ -283,7 +284,9 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await (await sessionMenuItem(page, "Session beenden")).click();
   await expect(page).toHaveURL(/\/beispiel\/review$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session-Nachbereitung");
-  await expect.poll(() => api.raw(sessionPath)).toMatch(/^ended: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/m);
+  await expect
+    .poll(async () => (await api.properties(sessionPath)).ended)
+    .toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
 
   // The harvest card for the tagged note is waiting there.
   await expect(page.getByText("Gruppe verhandelt mit Jorna am Fuß der Treppe")).toBeVisible();
@@ -312,15 +315,17 @@ test("session start, quick note, pause, end — log and file follow", async ({
   const secondPath = (await api.sessionPath()) ?? "";
   expect(secondPath).toMatch(/^sessions\/.+$/);
   expect(secondPath).not.toBe(sessionPath);
-  const second = await api.raw(secondPath);
-  expect(second).not.toContain("ended:");
-  expect(second).not.toContain("pauses:");
-  expect(second).not.toContain(NOTE);
+  const second = await api.file(secondPath);
+  expect(second.properties.ended).toBeUndefined();
+  expect(second.properties.pauses).toBeUndefined();
+  expect(second.body).not.toContain(NOTE);
   // … and the first session is untouched: still ended, log and pauses intact.
-  const first = await api.raw(sessionPath);
-  expect(first).toMatch(/^ended: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/m);
-  expect(first).toContain(NOTE);
-  expect(first).toMatch(/pauses: \[\{from: [\d\-T:]+, to: [\d\-T:]+\}\]/);
+  const first = await api.file(sessionPath);
+  expect(first.properties.ended).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
+  expect(first.body).toContain(NOTE);
+  expect(first.properties.pauses).toEqual([
+    { from: expect.stringMatching(/^[\d\-T:]+$/), to: expect.stringMatching(/^[\d\-T:]+$/) },
+  ]);
 
   // The two sessions stay separate under writing: a note now lands in the
   // SECOND one only, and its own pause is its own.
@@ -328,18 +333,20 @@ test("session start, quick note, pause, end — log and file follow", async ({
   const secondNoteField = page.getByLabel("Schnellnotiz");
   await secondNoteField.fill(SECOND_NOTE);
   await secondNoteField.press("Enter");
-  await expect.poll(() => api.raw(secondPath)).toContain(SECOND_NOTE);
-  expect(await api.raw(sessionPath)).not.toContain(SECOND_NOTE);
+  await expect.poll(() => api.body(secondPath)).toContain(SECOND_NOTE);
+  expect(await api.body(sessionPath)).not.toContain(SECOND_NOTE);
   await (await sessionMenuItem(page, "Pause")).click();
-  await expect.poll(() => api.raw(secondPath)).toMatch(/pauses: \[\{from: [\d\-T:]+\}\]/);
+  await expect
+    .poll(async () => (await api.properties(secondPath)).pauses)
+    .toEqual([{ from: expect.stringMatching(/^[\d\-T:]+$/) }]);
   // The first session's pause list did not grow.
-  expect((await api.raw(sessionPath)).match(/from:/g)?.length).toBe(1);
+  expect((await api.properties(sessionPath)).pauses).toHaveLength(1);
 
   // Ending the second one leads to the review of the SECOND session — the
   // harvest works on the LAST STARTED session, which is this one.
   await (await sessionMenuItem(page, "Session beenden")).click();
   await expect(page).toHaveURL(/\/beispiel\/review$/);
-  await expect.poll(() => api.raw(secondPath)).toMatch(/^ended: /m);
+  await expect.poll(async () => (await api.properties(secondPath)).ended).toBeDefined();
   await expect(
     page.getByText("Zweite Runde: die Gruppe bricht zum Leuchtturm auf"),
   ).toBeVisible();
@@ -381,7 +388,7 @@ test("a #pc quick note becomes a reminder in the aside and is ticked off there (
   await expect(emptied).toContainText("Alles erledigt.");
   await expect(emptied.getByRole("button", { name: /Kaela bekommt den Brief/ })).toHaveCount(0);
   await expect(emptied.getByText("Alles erledigt.")).toBeFocused();
-  await expect.poll(() => api.raw(sessionPath)).toContain("reviewed:");
+  await expect.poll(() => api.properties(sessionPath)).toHaveProperty("reviewed");
 });
 
 test("session verwerfen — the mis-click's undo removes the empty file", async ({
@@ -562,7 +569,9 @@ test.describe("played/dropped scenes in the live nav (issue #73)", () => {
     await quickNote.fill("Der Kontorschreiber rückt die Bücher heraus #thread");
     await quickNote.press("Enter");
     const sessionPath = (await api.sessionPath()) ?? "";
-    await expect.poll(() => api.raw(sessionPath)).toContain("harbor-office-talk");
+    await expect
+      .poll(async () => (await api.properties(sessionPath)).scenes_played)
+      .toContain("harbor-office-talk");
     await expect(
       nav.getByRole("group", { name: "Gespielt" }).getByText("Gespielt"),
     ).toBeAttached();

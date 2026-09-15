@@ -146,10 +146,10 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   await page.keyboard.press("Enter");
   const sessionPath = (await api.sessionPath()) ?? "";
   await expect(async () => {
-    expect(await api.raw(sessionPath)).toContain(note);
+    expect(await api.body(sessionPath)).toContain(note);
   }).toPass();
   // The note carried the scene, so the session knows what was played.
-  expect(await api.raw(sessionPath)).toContain("ankunft-am-leuchtturm");
+  expect(await api.body(sessionPath)).toContain("ankunft-am-leuchtturm");
 });
 
 test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", async ({

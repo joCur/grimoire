@@ -13,7 +13,7 @@ const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 
 test("the status control writes the status into the file", async ({ page, api }) => {
   await page.goto(SCENE_URL);
-  expect(await api.raw(SCENE)).toContain("status: ready");
+  expect((await api.properties(SCENE)).status).toBe("ready");
 
   // The pill IS the control (issue #28).
   const trigger = page.getByRole("button", { name: /^Status ändern, aktuell/ });
@@ -27,13 +27,13 @@ test("the status control writes the status into the file", async ({ page, api })
   await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
 
   await expect(trigger).toHaveText(/Gespielt/);
-  await expect.poll(() => api.raw(SCENE)).toContain("status: played");
+  await expect.poll(() => api.properties(SCENE)).toHaveProperty("status", "played");
 
   // …and back to "Bereit" — the file follows every pick.
   await trigger.click();
   await page.getByRole("menuitemradio", { name: "Bereit" }).click();
   await expect(trigger).toHaveText(/Bereit/);
-  await expect.poll(() => api.raw(SCENE)).toContain("status: ready");
+  await expect.poll(() => api.properties(SCENE)).toHaveProperty("status", "ready");
 
   // The pool row shows the same control with the same label.
   await page.goto("/beispiel");
@@ -71,14 +71,14 @@ test("a second writer: the status pick reports the conflict inline", async ({
   expect(conflicted, "the 409 conflict message never appeared").toBe(true);
 
   // Nothing was written: the other writer's content stands, unchanged.
-  const stored = await api.raw(SCENE);
-  expect(stored).toContain("status: ready");
-  expect(stored).toContain("Von einem zweiten Schreiber geändert");
+  const stored = await api.file(SCENE);
+  expect(stored.properties.status).toBe("ready");
+  expect(stored.body).toContain("Von einem zweiten Schreiber geändert");
 
   // The control re-read the file, so the SAME pick works now.
   await trigger.click();
   await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
   await expect(trigger).toHaveText(/Gespielt/);
   await expect(message).toHaveCount(0);
-  await expect.poll(() => api.raw(SCENE)).toContain("status: played");
+  await expect.poll(() => api.properties(SCENE)).toHaveProperty("status", "played");
 });

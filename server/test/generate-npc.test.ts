@@ -830,7 +830,8 @@ describe("apply an npc draft", () => {
       conflicts: ["npcs/apply-happy"],
     });
     const after = await read("npcs/apply-happy");
-    expect(after.raw).toBe(before.raw);
+    expect(after.properties).toEqual(before.properties);
+    expect(after.body).toBe(before.body);
     expect(after.rev).toBe(before.rev); // the row's rev never moved
   });
 

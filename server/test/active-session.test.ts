@@ -287,12 +287,12 @@ describe("GET /api/:campaign/session", () => {
     expect(file.path).not.toContain("2026-08-19");
     expect(file.kind).toBe("session");
     expect(file.properties.started).toBe("2026-08-19T21:05:00");
-    // `raw` is a deterministic rendering of the rows now, not stored bytes
-    // (store/render.ts rule 2) — so it is compared against GET /file, which
-    // must answer with exactly the same document for the same session.
-    expect(file.raw).toBe((await getFile(started)).raw);
-    expect(file.raw.startsWith("---")).toBe(true);
-    expect(file.raw).toContain("## Log");
+    // The answer is a deterministic rendering of the rows — so it is compared
+    // against GET /file, which must answer with exactly the same entry.
+    const viaFile = await getFile(started);
+    expect(file.properties).toEqual(viaFile.properties);
+    expect(file.body).toBe(viaFile.body);
+    expect(file.body).toContain("## Log");
     expect(typeof file.rev).toBe("number");
     // The whole point: the SERVER resolves the zone-less timestamp, so a
     // client in another timezone still computes the right runtime.
@@ -538,10 +538,11 @@ describe("POST /session/discard — the mis-click's undo (AK7)", () => {
       code: "session_not_empty",
       path: started,
     });
-    // "File untouched" is now "row untouched": same rendering, same rev — a
-    // refused write must not even bump the guard token.
+    // Row untouched: same properties, same body, same rev — a refused write
+    // must not even bump the guard token.
     const after = await getFile(started);
-    expect(after.raw).toBe(before.raw);
+    expect(after.properties).toEqual(before.properties);
+    expect(after.body).toBe(before.body);
     expect(after.rev).toBe(before.rev);
     // Still the running session — the refusal changed nothing at all.
     expect((await app.request("/api/beispiel/session")).status).toBe(200);

@@ -131,14 +131,12 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   await expect(page.getByText(SCENE_PATH)).toBeVisible();
 
   // Stored: the draft plus both stubs, and a location stub without a status.
-  const scene = await api.raw(SCENE_PATH);
-  expect(scene).toContain("status: draft");
-  expect(scene).toContain(`title: ${SCENE_TITLE}`);
-  expect(scene).toContain("> [!loot]");
-  const npcFile = await api.raw(`npcs/${NPC_STUB_ID}`);
-  expect(npcFile).toContain("status: alive");
-  const locationFile = await api.raw(`locations/${LOCATION_STUB_ID}`);
-  expect(locationFile).not.toContain("status:");
+  const scene = await api.file(SCENE_PATH);
+  expect(scene.properties.status).toBe("draft");
+  expect(scene.properties.title).toBe(SCENE_TITLE);
+  expect(scene.body).toContain("> [!loot]");
+  expect((await api.properties(`npcs/${NPC_STUB_ID}`)).status).toBe("alive");
+  expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).status).toBeUndefined();
   // The review's own address is a STALE address for the scene now, not a
   // dead one: it names the same id, so it resolves and reports where the
   // scene actually is (issue #100, ADR #17).
@@ -245,7 +243,7 @@ test("a scene with ASCII closing quotes is accepted without a correction turn", 
     .click();
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
   // …and they are stored byte for byte: the server corrects no typography.
-  const stored = await api.raw(`01-salzhafen/${SCENE_ID}`);
+  const stored = await api.body(`01-salzhafen/${SCENE_ID}`);
   expect(stored).toContain(ASCII_QUOTE_LINE);
 });
 
@@ -276,12 +274,11 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
 
   await expect(page.getByText("Geschrieben — NPC-Eintrag angelegt")).toBeVisible();
-  const npc = await api.raw("npcs/brakk");
-  expect(npc).toContain("id: brakk");
-  expect(npc).toContain("status: alive");
-  // Quoted quickstats stay STRINGS; the YAML the store emits quotes them in
-  // its own style (documented normalization — server/src/store/render.ts).
-  expect(npc).toContain("insight: '+1'");
+  const npc = await api.properties("npcs/brakk");
+  expect(npc.id).toBe("brakk");
+  expect(npc.status).toBe("alive");
+  // Quoted quickstats stay STRINGS — a „+1" is not read as the number 1.
+  expect(npc.quickstats).toMatchObject({ insight: "+1" });
 
   // "NPC ansehen" opens the file that now exists.
   await page.getByRole("button", { name: "NPC ansehen" }).click();
@@ -381,10 +378,10 @@ test("review state survives navigation and reload; parts are accepted one by one
   await expect(written.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: SCENE_PATH })).toBeVisible();
   // The edit really is what was written.
-  expect(await api.raw(SCENE_PATH)).toContain("Die Flut zieht sich im Regen");
+  expect(await api.body(SCENE_PATH)).toContain("Die Flut zieht sich im Regen");
   // Writing the scene creates EMPTY rows for the ids it references (#70), so
   // „exists" cannot answer whether a stub landed — its CONTENT can.
-  expect(await api.raw(`locations/${LOCATION_STUB_ID}`)).not.toContain(LOCATION_STUB_NAME);
+  expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).name).not.toBe(LOCATION_STUB_NAME);
   // The undecided location stub is still open — a bulk accept would skip it,
   // so it is decided explicitly here.
   await stubRow(`locations/${LOCATION_STUB_ID}`)
@@ -394,8 +391,8 @@ test("review state survives navigation and reload; parts are accepted one by one
   // (4) „Rest übernehmen" writes what is left — and the job is gone.
   await page.getByRole("button", { name: /^Rest übernehmen/ }).click();
   await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
-  expect(await api.raw(`npcs/${NPC_STUB_ID}`)).toContain(NPC_STUB_NAME);
-  expect(await api.raw(`locations/${LOCATION_STUB_ID}`)).toContain(LOCATION_STUB_NAME);
+  expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).toBe(NPC_STUB_NAME);
+  expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).name).toBe(LOCATION_STUB_NAME);
   expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
 });
 
@@ -420,6 +417,6 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
   // The accepted scene is an entry now; the suggested entries never landed —
   // their ids exist only as the empty rows the scene's references leave (#70).
   expect(await api.exists(SCENE_PATH)).toBe(true);
-  expect(await api.raw(`npcs/${NPC_STUB_ID}`)).not.toContain(NPC_STUB_NAME);
+  expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).not.toBe(NPC_STUB_NAME);
   expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
 });

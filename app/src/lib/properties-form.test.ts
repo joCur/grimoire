@@ -698,7 +698,6 @@ const FILE: EntryResponse = {
   properties: NPC_FM,
   body: "",
   rev: 42,
-  raw: "",
 };
 
 describe("writePropertiesForm", () => {
