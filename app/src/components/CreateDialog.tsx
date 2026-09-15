@@ -33,6 +33,7 @@ import {
   canCreate,
   createConflict,
   createErrorMessage,
+  derivedAddress,
   type CreateConflict,
 } from "@/lib/create";
 
@@ -64,6 +65,12 @@ interface CreateDialogProps {
    * campaign's names have no business in a fresh instance.
    */
   namePlaceholder: string;
+  /**
+   * What the derived id gets prefixed with for the address preview
+   * („npcs/", „locations/", „<kapitel>/"). A campaign has no address to
+   * prefix, so it labels the bare id instead („id: ").
+   */
+  addressPrefix: string;
   /** The optional second field — same placeholder rule as above. */
   extra?: { label: string; placeholder: string; multiline?: boolean };
   /** Runs the POST. Rejecting with an ApiError is what the dialog reads. */
@@ -76,6 +83,7 @@ export function CreateDialog({
   description,
   nameLabel,
   namePlaceholder,
+  addressPrefix,
   extra,
   create,
   onClose,
@@ -101,6 +109,7 @@ export function CreateDialog({
   });
 
   const trimmed = name.trim();
+  const address = derivedAddress(trimmed, addressPrefix);
   const canSubmit = canCreate(trimmed) && !run.isPending;
 
   const submit = (id?: string) => {
@@ -142,6 +151,10 @@ export function CreateDialog({
               placeholder={namePlaceholder}
               className="w-full rounded-md border border-input bg-panel-deep px-3 py-2 text-[13.5px] text-foreground placeholder:text-muted-foreground max-md:text-[16px]"
             />
+            {/* The id that will be created — quiet, but never hidden. */}
+            <span className="min-h-[16px] font-mono text-[11.5px] text-muted-foreground">
+              {address ?? ""}
+            </span>
           </label>
 
           {extra !== undefined && (

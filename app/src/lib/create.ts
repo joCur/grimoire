@@ -26,6 +26,16 @@ export function derivedId(name: string): string {
   return toSlug(name);
 }
 
+/**
+ * The address the derived id will have — the quiet line under the name field.
+ * `undefined` while the name yields no id at all, so the dialog stays silent
+ * instead of showing half a path.
+ */
+export function derivedAddress(name: string, prefix: string): string | undefined {
+  const id = derivedId(name);
+  return id === "" ? undefined : `${prefix}${id}`;
+}
+
 /** What a slug 409 carries — the taken id, a free one, and its path. */
 export interface CreateConflict {
   id: string;

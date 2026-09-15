@@ -13,6 +13,7 @@ import {
   canCreate,
   createConflict,
   createErrorMessage,
+  derivedAddress,
   derivedId,
 } from "@/lib/create";
 import { translator } from "@/i18n/format";
@@ -28,15 +29,18 @@ const conflictError = (details: Record<string, unknown>) =>
     ...details,
   });
 
-describe("derivedId", () => {
-  test("the id a name will produce — the server derives the same one", () => {
+describe("derivedId / derivedAddress", () => {
+  test("shows the id a name will produce", () => {
     expect(derivedId("Alte Fischerin")).toBe("alte-fischerin");
-    expect(derivedId("Ankunft am Leuchtturm")).toBe("ankunft-am-leuchtturm");
+    expect(derivedAddress("Alte Fischerin", "npcs/")).toBe("npcs/alte-fischerin");
+    expect(derivedAddress("Ankunft am Leuchtturm", "01-salzhafen/")).toBe(
+      "01-salzhafen/ankunft-am-leuchtturm",
+    );
   });
 
-  test("a name that yields no id at all", () => {
-    expect(derivedId("")).toBe("");
-    expect(derivedId("!!!")).toBe("");
+  test("stays silent while there is no id — never half an address", () => {
+    expect(derivedAddress("", "npcs/")).toBeUndefined();
+    expect(derivedAddress("!!!", "npcs/")).toBeUndefined();
   });
 });
 

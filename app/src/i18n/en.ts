@@ -74,6 +74,7 @@ export const en: Messages = {
   "create.campaign.title": "Create campaign",
   "create.campaign.nameLabel": "Campaign name",
   "create.campaign.namePlaceholder": "Campaign name",
+  "create.campaign.idPrefix": "id: ",
   "create.campaign.descriptionLabel": "Description (optional)",
   "create.campaign.descriptionPlaceholder": "One sentence that places the campaign",
 
@@ -108,6 +109,7 @@ export const en: Messages = {
   "coldstart.title": "Welcome to Grimoire",
   "coldstart.lead":
     "No campaign yet. Create one — chapters and scenes come into being inside it afterwards.",
+  "coldstart.id": "id: {id}",
 
   // --- properties dialog ----------------------------------------------------
   "properties.action": "Properties",

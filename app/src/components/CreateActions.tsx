@@ -108,6 +108,7 @@ export function CampaignCreateDialog({ onClose }: { onClose: () => void }) {
       title={t("create.campaign.title")}
       nameLabel={t("create.campaign.nameLabel")}
       namePlaceholder={t("create.campaign.namePlaceholder")}
+      addressPrefix={t("create.campaign.idPrefix")}
       extra={{
         label: t("create.campaign.descriptionLabel"),
         placeholder: t("create.campaign.descriptionPlaceholder"),
@@ -179,6 +180,7 @@ export function ChapterCreateAction({
           description={t("create.chapter.description")}
           nameLabel={t("create.chapter.nameLabel")}
           namePlaceholder={t("create.chapter.namePlaceholder")}
+          addressPrefix=""
           extra={{
             label: t("create.chapter.goalLabel"),
             placeholder: t("create.chapter.goalPlaceholder"),
@@ -229,6 +231,7 @@ export function SceneCreateAction({
           description={t("create.scene.description")}
           nameLabel={t("create.scene.nameLabel")}
           namePlaceholder={t("create.scene.namePlaceholder")}
+          addressPrefix={`${chapter}/`}
           create={async (values: CreateValues) => {
             const created = await createScene(campaign, {
               title: values.name,
@@ -267,6 +270,7 @@ export function NpcCreateAction({ campaign }: { campaign: string }) {
           description={t("create.npc.description")}
           nameLabel={t("create.npc.nameLabel")}
           namePlaceholder={t("create.npc.namePlaceholder")}
+          addressPrefix="npcs/"
           create={async (values: CreateValues) => {
             const created = await createNpc(campaign, {
               name: values.name,
@@ -303,6 +307,7 @@ export function LocationCreateAction({ campaign }: { campaign: string }) {
           description={t("create.location.description")}
           nameLabel={t("create.location.nameLabel")}
           namePlaceholder={t("create.location.namePlaceholder")}
+          addressPrefix="locations/"
           create={async (values: CreateValues) => {
             const created = await createLocation(campaign, {
               name: values.name,

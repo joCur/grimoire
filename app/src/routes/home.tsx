@@ -138,6 +138,10 @@ function ColdStart() {
             placeholder={t("create.campaign.namePlaceholder")}
             className="w-full rounded-md border border-input bg-panel-deep px-3 py-2.5 text-[14px] text-foreground placeholder:text-muted-foreground max-md:text-[16px]"
           />
+          {/* The id the name produces — it goes into every URL and stays. */}
+          <span className="min-h-[16px] font-mono text-[11.5px] text-muted-foreground">
+            {id === "" ? "" : t("coldstart.id", { id })}
+          </span>
         </label>
 
         <label htmlFor={descriptionId} className="flex flex-col gap-1.5">
