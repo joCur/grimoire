@@ -12,7 +12,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { CampaignTree, FileResponse } from "@grimoire/shared";
 import { app } from "../src/server";
-import { ApiError } from "../src/campaign-fs";
+import { ApiError } from "../src/api-error";
 import { setNow } from "../src/clock";
 import { applyDrafts } from "../src/store/write";
 import {

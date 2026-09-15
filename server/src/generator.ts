@@ -54,7 +54,8 @@ import {
 } from "@grimoire/shared";
 import { documentReplySchema } from "@grimoire/shared/document-schema";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
-import { ApiError, assertSafeAddress } from "./campaign-fs";
+import { ApiError } from "./api-error";
+import { assertSafeAddress } from "./addressing";
 import { composeDocument, parseDocumentReply, type DocumentReply } from "./document-reply";
 import { checkDraftsNaming, type NamingRule } from "./naming-check";
 // The generator reads its context and writes its drafts through the store

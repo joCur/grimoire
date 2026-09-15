@@ -106,7 +106,6 @@ export function CampaignCreateDialog({ onClose }: { onClose: () => void }) {
   return (
     <CreateDialog
       title={t("create.campaign.title")}
-      description={t("create.campaign.description")}
       nameLabel={t("create.campaign.nameLabel")}
       namePlaceholder={t("create.campaign.namePlaceholder")}
       addressPrefix={t("create.campaign.idPrefix")}

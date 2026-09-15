@@ -58,7 +58,7 @@ import {
   outlineJsonSchema,
 } from "@grimoire/shared/outline-schema";
 import { documentReplySchema } from "@grimoire/shared/document-schema";
-import { ApiError } from "./campaign-fs";
+import { ApiError } from "./api-error";
 import { checkDraftsNaming } from "./naming-check";
 import {
   ASSET_FILES,

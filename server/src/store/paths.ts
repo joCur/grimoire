@@ -38,7 +38,7 @@
 // (issue #79 AK7, PO: no stored URLs). An address that ends in `.md` simply
 // names nothing and answers 404, like any other unknown address.
 
-import { ApiError } from "../campaign-fs";
+import { ApiError } from "../api-error";
 
 /** Which row a campaign-relative address names. */
 export type Locator =

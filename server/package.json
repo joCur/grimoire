@@ -17,7 +17,6 @@
   "dependencies": {
     "@grimoire/shared": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "gray-matter": "^4.0.3",
     "hono": "^4.13.3",
     "js-yaml": "^5.3.0",
     "jsonrepair": "3.15.0"

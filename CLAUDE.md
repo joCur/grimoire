@@ -19,7 +19,7 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Frontend: Vite + React 19 + Tailwind v4 + shadcn/ui, TanStack Query,
   react-markdown + eigenes Remark-Plugin für Callouts und `## If:`
 - Backend: Bun + Hono, SQLite über Drizzle (`server/src/db/`), Suche als
-  FTS5-Index, gray-matter nur noch im Import-/Parser-Pfad
+  FTS5-Index
 - Speicher: **eine SQLite-Datei ist die Quelle der Wahrheit** (ADR #13),
   `GRIMOIRE_DATA/grimoire.db`
 - Regel: Keine Bun-only-APIs ohne Eintrag in docs/DECISIONS.md
@@ -32,11 +32,6 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   für Dev/Tests/E2E (der echte Import liest sie, es gibt keine zweiten
   Fixtures) und die Referenz des Import-Formats. NIE umformatieren oder
   „aufräumen"; das Format ist Vertrag.
-- `campaigns/` — echte Kampagnendaten als Markdown-Baum, in `.gitignore`
-  (Nutzungsdaten, ggf. urheberrechtlich geschütztes Quellmaterial). Seit
-  Issue #79 liest der Server **keinen** Kampagnen-Dateibaum mehr — nur
-  `grimoire seed <dir>` tut es, wenn man es ihm ausdrücklich sagt. Im Code
-  nie fest verdrahten.
 - `GRIMOIRE_DATA` (Default `./data`, gitignored) — hier liegt
   `grimoire.db` samt `-wal`/`-shm`: die eigentlichen Daten. Kein Code liest
   Kampagneninhalte von woanders.

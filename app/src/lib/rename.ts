@@ -28,21 +28,15 @@ export interface RenameTarget {
 /** Reserved campaign directories; the server refuses them as an id. */
 const RESERVED_IDS = new Set(["npcs", "locations", "sessions"]);
 
-/** Last address segment — the id a document degrades to. */
-function fileStem(path: string): string {
-  const base = path.slice(path.lastIndexOf("/") + 1);
-  return base;
-}
-
 /**
  * What a rename would target for the file on screen, or undefined when the
  * file has no renameable id: sessions (their id is the date), the campaign
  * file, inbox, glossary, and anything unknown.
  *
  * For a chapter the id is the FIRST PATH SEGMENT of its `_chapter` (the
- * former directory name, and the chapter row's id). For every other kind it
- * is the properties id (which the parser already falls back to the file
- * stem).
+ * chapter row's id). For every other kind it is `properties.id`, which every
+ * document carries — it is the row's primary key, and the render layer puts
+ * it in every properties mapping.
  */
 export function renameTargetFor(file: {
   path: string;
@@ -56,7 +50,7 @@ export function renameTargetFor(file: {
     return dir === "" || dir.includes("/") ? undefined : { kind: "chapter", oldId: dir };
   }
   if (file.kind !== "npc" && file.kind !== "location" && file.kind !== "scene") return undefined;
-  const oldId = fmString(file.properties.id) ?? fileStem(file.path);
+  const oldId = fmString(file.properties.id) ?? "";
   return oldId === "" ? undefined : { kind: file.kind, oldId };
 }
 

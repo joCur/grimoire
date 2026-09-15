@@ -45,8 +45,11 @@ describe("renameTargetFor", () => {
     ).toEqual({ kind: "scene", oldId: "lighthouse-arrival" });
   });
 
-  test("a missing id degrades to the file stem", () => {
-    expect(renameTargetFor(file("npcs/fenn", "npc"))).toEqual({ kind: "npc", oldId: "fenn" });
+  test("no id, no rename — the address is not guessed at", () => {
+    // Cannot happen against the real API (`id` is the row's primary key and
+    // every properties mapping carries it), so the view degrades quietly
+    // instead of deriving an id from the address.
+    expect(renameTargetFor(file("npcs/fenn", "npc"))).toBeUndefined();
   });
 
   test("a chapter is renamed by its DIRECTORY, not by _chapter", () => {

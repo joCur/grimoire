@@ -79,11 +79,12 @@ COPY --chown=bun:bun examples /examples
 ENV GRIMOIRE_DATA=/data \
     PORT=3000
 
-# The database directory — this is the state of the deployment and the volume
+# The database directory — this is the state of the deployment and the path
 # that must be mounted (docs/DEPLOYMENT.md, section 2a). Created here so the
-# first boot without a mount still works.
+# first boot without a mount still works. Mounted by the operator
+# (`-v …:/data`); no VOLUME declaration, so a missing mount is never hidden
+# by an anonymous volume.
 RUN mkdir -p /data && chown bun:bun /data
-VOLUME ["/data"]
 # ANTHROPIC_API_KEY is optional — without it the read/write API works and only
 # POST /api/:campaign/generate answers 503.
 

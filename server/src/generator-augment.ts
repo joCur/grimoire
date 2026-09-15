@@ -37,7 +37,7 @@ import {
   type FileResponse,
 } from "@grimoire/shared";
 import { documentReplySchema } from "@grimoire/shared/document-schema";
-import { ApiError } from "./campaign-fs";
+import { ApiError } from "./api-error";
 import {
   ASSET_FILES,
   collectContext,

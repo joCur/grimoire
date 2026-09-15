@@ -72,8 +72,6 @@ export const en: Messages = {
   "create.useSuggestion": "Use “{id}”",
 
   "create.campaign.title": "Create campaign",
-  "create.campaign.description":
-    "The name becomes the campaign's id — it appears in every address and stays as it is. Chapters and scenes come into being inside it afterwards.",
   "create.campaign.nameLabel": "Campaign name",
   "create.campaign.namePlaceholder": "Campaign name",
   "create.campaign.idPrefix": "id: ",
@@ -82,7 +80,7 @@ export const en: Messages = {
 
   "create.chapter.title": "Create chapter",
   "create.chapter.description":
-    "The title becomes the chapter's id — it appears in every scene address and stays as it is. The goal is optional and lands in the file under the heading “## Ziel des Kapitels” — the section shown as the chapter's goal.",
+    "The goal is optional and appears in the chapter as the “Ziel des Kapitels” section.",
   "create.chapter.nameLabel": "Title",
   "create.chapter.namePlaceholder": "Chapter title",
   "create.chapter.goalLabel": "Goal of the chapter (optional)",
@@ -90,19 +88,19 @@ export const en: Messages = {
 
   "create.scene.title": "Create scene",
   "create.scene.description":
-    "The scene is created as a draft in this chapter and opens straight in the editor. The title becomes the id — and it stays.",
+    "The scene is created as a draft in this chapter and opens straight in the editor.",
   "create.scene.nameLabel": "Title",
   "create.scene.namePlaceholder": "Scene title",
 
   "create.npc.title": "Create NPC",
   "create.npc.description":
-    "Just the name — role, status and everything else follow in the properties dialog. The name becomes the id, and that id stays.",
+    "Just the name — role, status and everything else follow in the properties dialog.",
   "create.npc.nameLabel": "Name",
   "create.npc.namePlaceholder": "NPC name",
 
   "create.location.title": "Create location",
   "create.location.description":
-    "Just the name — everything else follows in the properties dialog. The name becomes the id, and that id stays.",
+    "Just the name — everything else follows in the properties dialog.",
   "create.location.nameLabel": "Name",
   "create.location.namePlaceholder": "Location name",
 
