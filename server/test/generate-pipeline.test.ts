@@ -26,6 +26,7 @@ import {
   outlineParts,
   sceneSystemPrompt,
   validateOutlineReply,
+  REPAIRED_REPLY_WARNING,
   type RunOutline,
   type SceneContext,
 } from "../src/generate-pipeline";
@@ -83,6 +84,78 @@ test("a well-formed outline validates and keeps its order", () => {
   if (!outcome.ok) return;
   expect(outcome.result.scenes.map((s) => s.id)).toEqual(["night-watch"]);
   expect(outcome.result.scenes[0]!.sourceExcerpt).toEqual({ first: "One.", last: "Two." });
+});
+
+test("an almost-JSON outline is repaired instead of costing a correction turn", () => {
+  // The errors a model makes when it hand-writes JSON: a trailing comma, a
+  // single-quoted key, an unquoted one. `jsonrepair` fixes them
+  // deterministically — far cheaper than resending the whole prompt.
+  const almost = `{
+    scenes: [
+      {
+        'id': 'night-watch',
+        "title": "Nachtwache am Kai",
+        "type": "planned",
+        "refs": [],
+      },
+    ],
+    "entries": [],
+    "warnings": ["Der Quelltext nennt keinen DC."],
+  }`;
+  const outcome = validateOutlineReply(almost, CTX);
+  expect(outcome.ok).toBe(true);
+  if (!outcome.ok) return;
+  expect(outcome.result.scenes.map((sc) => sc.id)).toEqual(["night-watch"]);
+  // …and the run says so, so a provider that needs patching every time is
+  // visible to the DM instead of silently tolerated.
+  expect(outcome.result.warnings).toEqual([
+    "Der Quelltext nennt keinen DC.",
+    REPAIRED_REPLY_WARNING,
+  ]);
+});
+
+test("a repaired outline is still VALIDATED — the repair loosens only parsing", () => {
+  // Parseable after the repair, and still wrong: the type is not a scene type.
+  expect(
+    outlineErrors('{ "scenes": [{ "id": "night-watch", "type": "kampf", "refs": [] },], }'),
+  ).toEqual(expect.arrayContaining([expect.stringContaining('"type" must be one of')]));
+});
+
+test("prose without an object is NOT repaired — it is a correction turn", () => {
+  // jsonrepair would happily turn a sentence into a JSON string, and the run
+  // would then fail with a message about the wrong thing.
+  for (const raw of ["Ich kann diese Aufgabe nicht erfüllen.", "", "   "]) {
+    expect(outlineErrors(raw)).toEqual(["reply is not valid JSON"]);
+  }
+  // A well-formed reply reports no repair at all.
+  const clean = validateOutlineReply(outlineReply(), CTX);
+  expect(clean.ok && clean.result.warnings).toEqual([]);
+});
+
+test("the schema's nullable optionals read as „not given“", () => {
+  // `strict: true` has no optional properties, so the schema makes `location`
+  // and `sourceExcerpt` NULLABLE and the provider will hand back explicit
+  // nulls. The validation has to read those as absent — otherwise the very
+  // shape the API guarantees would fail the run.
+  const outcome = validateOutlineReply(
+    outlineReply({
+      scenes: [
+        {
+          id: "night-watch",
+          title: "Nachtwache am Kai",
+          type: "planned",
+          location: null,
+          sourceExcerpt: null,
+          refs: [],
+        },
+      ],
+    }),
+    CTX,
+  );
+  expect(outcome.ok).toBe(true);
+  if (!outcome.ok) return;
+  expect(outcome.result.scenes[0]!.location).toBeUndefined();
+  expect(outcome.result.scenes[0]!.sourceExcerpt).toBeUndefined();
 });
 
 test("the outline's ids are kebab slugs and unique across scenes AND entries", () => {
@@ -295,22 +368,26 @@ test("an entry's context is the passages that mention it — by name OR by id wo
 // --- the per-part prompt -------------------------------------------------------
 
 test("the single-scene mode swaps the output schema and keeps every rule", async () => {
-  const single = await sceneSystemPrompt("single");
-  const batch = await sceneSystemPrompt("batch");
-  // The batch schema is gone…
-  expect(single).not.toContain('"scenes": [');
-  expect(single).not.toContain('"entries": [');
-  // …replaced by the one-document one, and the `entries` array is explicitly
-  // NOT part of this answer any more.
-  expect(single).toContain('"scene": { "content"');
-  expect(single).toContain("kein `entries`-Array");
+  const single = await sceneSystemPrompt();
+  // The reply object — the swapped section describes it, and
+  // nothing of the raw-entry format is left.
+  expect(single).toContain("Du antwortest mit **einem JSON-Objekt**");
+  expect(single).toContain("`warnings`");
+  expect(single).not.toContain("---warnings---");
+  // The outline-bound half of the swap: one scene per call, no entries.
+  expect(single).toContain("GENAU EINE Szene");
+  expect(single).toContain("Die Gliederung ist verbindlich.");
   // Exactly one output-format heading, and the file format and the rules of
-  // the batch prompt are untouched — that is why this is a swap and not a
+  // the scene prompt are untouched — that is why this is a swap and not a
   // second prompt file.
   expect(single.split("## Ausgabeformat").length - 1).toBe(1);
-  for (const marker of ["## Ziel-Format der Datei", "**Deutsche Orthografie**", "**Tabellen**"]) {
+  for (const marker of [
+    "## Eigenschaften und Text des Eintrags",
+    "**Deutsche Orthografie**",
+    "**Anführungszeichen**",
+    "**Tabellen**",
+  ]) {
     expect(single).toContain(marker);
-    expect(batch).toContain(marker);
   }
 });
 
@@ -383,24 +460,21 @@ test("two parts of one run share a byte-identical constant prefix", () => {
 
 const SCENE_IDS = ["eins", "zwei", "drei"] as const;
 
+/** One scene as the REPLY OBJECT — what a part's call answers. */
 function sceneDoc(id: string, over: { status?: string } = {}): string {
-  return [
-    "---",
-    `id: ${id}`,
-    `title: Szene ${id}`,
-    "type: planned",
-    "location: leuchtturm",
-    "npcs: [fenn]",
-    "handouts: []",
-    "tags: [social]",
-    `status: ${over.status ?? "draft"}`,
-    "---",
-    "",
-    "## Flow",
-    "",
-    "Fenn wartet am Kai.",
-    "",
-  ].join("\n");
+  return JSON.stringify({
+    properties: {
+      id,
+      title: `Szene ${id}`,
+      type: "planned",
+      location: "leuchtturm",
+      npcs: ["fenn"],
+      tags: ["social"],
+      status: over.status ?? "draft",
+    },
+    body: "## Flow\n\nFenn wartet am Kai.\n",
+    warnings: [],
+  });
 }
 
 /**
@@ -441,11 +515,10 @@ class ThreeSceneProvider implements LLMProvider {
     }
     const id = /^([a-z0-9-]+) /.exec(req.assignment ?? "")?.[1] ?? "";
     this.calls.push(id);
+    // The reply object — the scene part's answer, with no
+    // warnings in it.
     return {
-      text: JSON.stringify({
-        scene: { content: sceneDoc(id, id === this.broken ? { status: "ready" } : {}) },
-        warnings: [],
-      }),
+      text: sceneDoc(id, id === this.broken ? { status: "ready" } : {}),
       truncated: false,
     };
   }
@@ -522,7 +595,7 @@ test("one failed part leaves the other two reviewable (AK1, AK2)", async () => {
   expect(failed.error).toContain("validation");
   // The part carries its OWN last raw reply to the client (the job's error
   // body only ever has one, for a run that can have many parts).
-  expect(failed.rawReply).toContain("status: ready");
+  expect(failed.rawReply).toContain('"status":"ready"');
   expect(failed.validationErrors).toEqual(
     expect.arrayContaining([expect.stringContaining('"status" must be "draft"')]),
   );

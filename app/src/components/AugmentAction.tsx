@@ -56,7 +56,7 @@ import {
 } from "@/lib/augment";
 import { blockLabel, blockTreeMarkdown } from "@/lib/blocks";
 import { fmString } from "@/lib/properties";
-import { reviewOf } from "@/lib/generate";
+import { reviewOf, runJobArrived } from "@/lib/generate";
 import { generateJobKey, useGenerateJob } from "@/lib/use-generate-job";
 import { useJobReview } from "@/lib/use-job-review";
 import { useRevWriteMutation } from "@/lib/use-rev-write";
@@ -137,7 +137,20 @@ function AugmentDialog({
 }) {
   const t = useT();
   const queryClient = useQueryClient();
-  const job = useGenerateJob(campaign);
+  // `awaitingJob` is on from the click on „Ergänzen" until the job of THAT
+  // run is readable, and it carries the id that was in the cache at the click
+  // — because that is the one the new job does NOT have (lib/generate.ts
+  // runJobArrived). It is the running view's first half and the poll loop's
+  // reason to live at the same time, and those two have to be ONE flag: a GET
+  // that overtakes the new row answers 404 and a previous run's job is
+  // settled, so without it the interval switched off with nothing to switch
+  // it back on — the dialog sat in front of a run that had long finished on
+  // the server, and only closing and reopening it showed the proposal.
+  const [awaitingJob, setAwaitingJob] = useState<{
+    staleJobId: string | null;
+    startedJobId?: string;
+  }>();
+  const job = useGenerateJob(campaign, { expectJob: awaitingJob !== undefined });
   const [sourceText, setSourceText] = useState("");
   const [instruction, setInstruction] = useState("");
   const [message, setMessage] = useState<string>();
@@ -158,27 +171,65 @@ function AugmentDialog({
 
   const start = useMutation({
     mutationFn: () => startAugmentJob(campaign, { path: file.path, sourceText, instruction }),
-    onMutate: () => setMessage(undefined),
-    onSuccess: () => {
+    onMutate: () => {
+      setMessage(undefined);
+      // From here on this run's job is EXPECTED — see `awaitingJob` above.
+      setAwaitingJob({ staleJobId: current?.id ?? null });
+    },
+    onSuccess: (started) => {
+      // The id the start answered with (a 202's, or an adopted 409's) belongs
+      // to THIS wait — kept here and not read off `start.data`, which
+      // outlives it: a second run over a failed one would otherwise
+      // recognise the OLD run's job as its own.
+      setAwaitingJob((waiting) =>
+        waiting === undefined ? waiting : { ...waiting, startedJobId: started.jobId },
+      );
       void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
     },
-    onError: () => setMessage(t("augment.start.failed")),
+    onError: () => {
+      // The run never started: stop waiting for a job that is not coming.
+      setAwaitingJob(undefined);
+      setMessage(t("augment.start.failed"));
+    },
   });
 
   const discard = useMutation({
     mutationFn: () => deleteGenerateJob(campaign),
     onSuccess: () => {
+      setAwaitingJob(undefined);
       void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
       onClose();
     },
     onError: () => setMessage(t("augment.discard.failed")),
   });
 
-  const canStart =
-    (sourceText.trim() !== "" || instruction.trim() !== "") && !start.isPending && !foreign;
+  // The window between the click and „this run's job is readable" — and
+  // NOTHING more: the moment the job answers, the JOB decides the phase, even
+  // while its own 202 is still on the way. With a fast model the run is
+  // finished before that response arrives, and taking the start request's
+  // lifetime for the run's left the DM in front of a done run.
+  const arrived =
+    awaitingJob !== undefined &&
+    runJobArrived({
+      jobId: current?.id ?? null,
+      staleJobId: awaitingJob.staleJobId,
+      ...(awaitingJob.startedJobId === undefined
+        ? {}
+        : { startedJobId: awaitingJob.startedJobId }),
+    });
+  if (arrived) setAwaitingJob(undefined);
+  const starting = awaitingJob !== undefined && !arrived;
 
-  const failure = mine && current?.status === "failed" ? current.error : undefined;
-  const running = mine && current?.status === "running" && proposal === undefined;
+  const canStart =
+    (sourceText.trim() !== "" || instruction.trim() !== "") && !starting && !foreign;
+
+  const failure = !starting && mine && current?.status === "failed" ? current.error : undefined;
+  // Phase = f(job), with the start window as its only local part: the
+  // proposal wins over everything (a done job is a review, whatever a
+  // pending request says), and the spinner needs either an expected job or a
+  // running one — never a mutation's `isPending`.
+  const running =
+    proposal === undefined && (starting || (mine && current?.status === "running"));
   const name = entryName(file);
 
   return (
@@ -302,7 +353,7 @@ function AugmentDialog({
                   onClick={() => start.mutate()}
                   className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
                 >
-                  {t(start.isPending ? "augment.starting" : "augment.start")}
+                  {t(starting ? "augment.starting" : "augment.start")}
                 </Button>
               </>
             )}

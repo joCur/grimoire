@@ -126,19 +126,28 @@ einsammelt (Bun matcht `*.test.ts` und `*.spec.ts`).
 
 ## Stub-Fixtures anpassen
 
-`fixtures/replies.ts` enthält die Modellantworten als lesbare Markdown-Blöcke:
-den Szenen-Entwurf mit NPC- und Ort-Stub, die NPC-Datei und je eine bewusst
-ungültige Variante. Sie erfüllen die aktuelle mechanische Validierung aus
-`server/src/generator.ts`. Seit Issue #100 enthält **keine** Antwort mehr
-einen `path`: Szenen kommen als `{ content }` (die `id` im Frontmatter ist
-alles, was das Modell über die Adressierung entscheidet), vorgeschlagene
-Einträge als ein gemeinsames Array `entries` mit
-`{ kind: "npc" | "location", content }`, und NPC- wie Ergänzungs-Lauf
-liefern ein Dokument ohne Adresse. Die inhaltlichen Regeln bleiben (Szene:
-`status: draft`, nur bekannte Callouts, `location` ist eine id, Referenzen
-existieren oder kommen als Eintrag mit; NPC-Eintrag *mit* Status,
+`fixtures/replies.ts` enthält die Modellantworten als **Objekte**, genau so,
+wie das erzwungene Schema sie beschreibt: ein Eintrags-Aufruf antwortet
+`{ properties, body, warnings }`, die Gliederung ihr eigenes Format. Ein
+String, der kein Objekt ist, reist unverändert — das ist eine Antwort, die ein
+Test absichtlich unlesbar geschrieben hat. Der Stub serialisiert das Objekt als
+JSON in den Message-Content.
+
+Abgedeckt sind: der Szenen-Entwurf mit NPC- und Ort-Stub, der NPC-Eintrag
+und je eine bewusst ungültige Variante. Sie erfüllen die aktuelle
+mechanische Validierung aus `server/src/generator.ts`.
+
+Der Stub ist ein OpenAI-kompatibler Endpoint und **ignoriert**
+`response_format`. Genau das ist der Wert dieses Pfades: der Lauf muss auch
+dort funktionieren, wo das Schema nicht wirklich erzwungen wird — dafür ist
+der tolerante Leser im Server (`parseJsonReply`) das Netz.
+
+Keine Antwort enthält eine Adresse: die `id` in `properties` ist alles, was das
+Modell über die Adressierung entscheidet. Die inhaltlichen Regeln bleiben
+(Szene: `status: draft`, nur bekannte Callouts, `location` ist eine id,
+Referenzen existieren oder kommen als Eintrag mit; NPC-Eintrag *mit* Status,
 Ort-Eintrag *ohne*; NPC-Lauf: kebab-`id`, kein `chapter`, Quickstats als
-Strings in Anführungszeichen, `## Notizen` leer).
+`{ key, value }`-Liste mit String-Werten, `## Notizen` leer).
 
 Wenn sich eine Validierungsregel ändert, ist diese Datei die Stelle, die
 mitwandert. Die Specs behaupten die dort definierten Titel und ids.
@@ -182,6 +191,12 @@ keinen Zustand und kann mehrere Worker parallel bedienen:
   „Erneut versuchen". Der Rundenzähler ist der **einzige** Zustand des Stubs
   und hängt an der `nonce`, die der Spec schreibt: so können parallele Worker
   sich den Fehlschlag nicht gegenseitig wegnehmen.
+- `E2E_ASCII_QUOTES` → der Szenen-Körper trägt deutsche Anführungszeichen mit
+  dem **ASCII-Zeichen `"`** als Schlusszeichen. Eine Antwort, die das Modell
+  selbst einpacken musste, bezahlte dieses `"` mit einer Korrekturrunde; als
+  `body` eines erzwungenen Objekts ist es Text, der Lauf muss also ohne eine
+  einzige Korrekturrunde `done` erreichen (zwei Aufrufe: Gliederung + eine
+  Szene).
 - `E2E_HOLD_LAST` → nur die **letzte** Szene wird gehalten, die anderen
   antworten normal. Das ist die Lage, die ein Neustart mitten im Lauf braucht:
   fertige Teile zum Behalten und einen in Flug. (Der Name beginnt bewusst

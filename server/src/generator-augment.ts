@@ -10,7 +10,7 @@
 //      plus the DM's instruction, under the augmentation rule of
 //      generator/augment-system-prompt.md ("ergänze; Vorhandenes nur ändern,
 //      wenn Quellmaterial/Anweisung es verlangt"),
-//   2. the reply is turned into a PROPOSAL rather than into a draft file:
+//   2. the reply is turned into a PROPOSAL rather than into a draft entry:
 //      properties per field with the current value next to it, and the
 //      proposed body whole,
 //   3. accepting writes into the existing row with a `rev` guard, in ONE
@@ -36,23 +36,21 @@ import {
   type AugmentResult,
   type EntryResponse,
 } from "@grimoire/shared";
+import { entryReplySchema } from "@grimoire/shared/entry-schema";
 import { ApiError } from "./api-error";
 import {
   ASSET_FILES,
   collectContext,
-  extractJsonReply,
-  isRawEntry,
   loadAsset,
   npcStatusErrors,
   obtainProvider,
-  parseWithProperties,
   quickstatsErrors,
   runPipeline,
   unknownCallouts,
   withNamingHints,
   type CampaignContext,
-  type RawEntry,
 } from "./generator";
+import { parseEntryReply } from "./entry-reply";
 import type { LLMProvider } from "./llm-provider";
 import { readParsedFile } from "./store/read";
 import { renderRaw } from "./store/render";
@@ -84,32 +82,32 @@ const FROZEN_KEYS = new Set(["id", "scenes_played", "reviewed", "pauses"]);
 export async function readAugmentTarget(
   campaign: string,
   rel: string,
-): Promise<{ kind: AugmentKind; file: EntryResponse }> {
-  const file = await readParsedFile(campaign, rel); // 400 unsafe, 404 unknown
-  if (!isAugmentKind(file.kind)) {
-    throw new ApiError(400, `"${file.kind}" cannot be augmented — npc, location or scene only`);
+): Promise<{ kind: AugmentKind; stored: EntryResponse }> {
+  const stored = await readParsedFile(campaign, rel); // 400 unsafe, 404 unknown
+  if (!isAugmentKind(stored.kind)) {
+    throw new ApiError(400, `"${stored.kind}" cannot be augmented — npc, location or scene only`);
   }
-  return { kind: file.kind, file };
+  return { kind: stored.kind, stored };
 }
 
 // --- prompt --------------------------------------------------------------------
 
-/** The heading every create prompt describes the TARGET FILE under. */
-const FORMAT_HEADING = "## Ziel-Format der Datei";
+/** The heading every create prompt describes the TARGET ENTRY under. */
+const FORMAT_HEADING = "## Eigenschaften und Text des Eintrags";
 
 /**
- * The FILE-FORMAT half of a create prompt: its title line plus the
- * „## Ziel-Format der Datei" section, and nothing else.
+ * The FORMAT half of a create prompt: its title line plus the
+ * „## Eigenschaften und Text des Eintrags" section, and nothing else.
  *
  * Why the slice: a create prompt also carries its own „## Ausgabeformat" —
  * `scenes`/`entries` for a scene run, `npc` for an NPC run — and its
  * „## Regeln" speak of stubs the augment run can never produce. Embedding
- * the whole document put TWO contradictory output schemas in front of the
+ * the whole prompt put TWO contradictory output schemas in front of the
  * model, and „this prompt wins" is a sentence, not a guarantee. The augment
  * run brings its own output schema and its own rules; all it needs from the
- * create prompt is what the target file looks like.
+ * create prompt is the shape of the target entry.
  *
- * Degrades: a document without the heading travels whole rather than empty —
+ * Degrades: a prompt without the heading travels whole rather than empty —
  * a missing section must not silently strip the format contract.
  */
 export function formatContract(doc: string): string {
@@ -124,9 +122,9 @@ export function formatContract(doc: string): string {
 
 /**
  * The augment system prompt of one kind: the shared augmentation rule
- * (augment-system-prompt.md, which ends on the heading „## Format der
- * Ziel-Datei") followed by that kind's own FILE format contract — the format
- * is still described exactly ONCE, but only the half that is about the file.
+ * (augment-system-prompt.md, which ends on the heading „## Das Format der
+ * jeweiligen Art") followed by that kind's own format contract — the format
+ * is still described exactly ONCE, but only the half that is about the entry.
  */
 export async function augmentSystemPrompt(kind: AugmentKind): Promise<string> {
   const [rule, format] = await Promise.all([
@@ -142,33 +140,6 @@ export function augmentFewShotFile(kind: AugmentKind): string {
 }
 
 // --- validation ------------------------------------------------------------------
-
-interface RawAugmentReply {
-  entry: RawEntry;
-  warnings: string[];
-}
-
-function parseRawAugmentReply(raw: string, errors: string[]): RawAugmentReply | null {
-  const extracted = extractJsonReply(raw);
-  if (extracted === null) {
-    errors.push("reply is not valid JSON");
-    return null;
-  }
-  const parsed = extracted.value;
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    errors.push("reply must be a JSON object");
-    return null;
-  }
-  const obj = parsed as Record<string, unknown>;
-  if (!isRawEntry(obj.entry)) {
-    errors.push('"entry" must be an object with a string "content"');
-    return null;
-  }
-  const warnings = Array.isArray(obj.warnings)
-    ? obj.warnings.filter((w): w is string => typeof w === "string")
-    : [];
-  return { entry: obj.entry, warnings };
-}
 
 /**
  * The kind's own mechanical rules, as far as they apply to an entry that
@@ -192,6 +163,7 @@ function kindErrors(
   current: Record<string, unknown>,
   label: string,
   errors: string[],
+  ignored: readonly string[] = [],
 ): void {
   if (kind === "npc") {
     for (const msg of npcStatusErrors(fm, "NPC-Dateien")) errors.push(`${label}: ${msg}`);
@@ -206,7 +178,11 @@ function kindErrors(
     return;
   }
   if (kind === "location") {
-    if (Object.hasOwn(fm, "status")) {
+    // A location has no `status` — the schema has no such field for it, so a
+    // reply that names one had it DROPPED (`reply.ignored`) rather than
+    // normalized. Still an error, and not a silent one: the key is the data
+    // contract being broken, not a DM's own extra key.
+    if (Object.hasOwn(fm, "status") || ignored.includes("status")) {
       errors.push(`${label}: "status" ist nicht erlaubt — locations haben keinen status`);
     }
     return;
@@ -231,48 +207,61 @@ function kindErrors(
  */
 export function validateAugmentReply(
   raw: string,
-  target: { kind: AugmentKind; file: EntryResponse },
+  target: { kind: AugmentKind; stored: EntryResponse },
 ): { ok: true; result: AugmentResult } | { ok: false; errors: string[] } {
+  // The reply is the schema-forced OBJECT (./entry-reply):
+  // `properties` per kind, the whole `body` as it should look afterwards, and
+  // the warnings. The augmentation rule („immer den GANZEN Eintrag") is the rule
+  // it always was — the shape around it is what changed.
+  //
+  // A key the schema does NOT have (a `roll20-page` on an npc, app-managed
+  // bookkeeping, anything a DM hand-wrote) therefore cannot be proposed at
+  // all — and it cannot be lost either: the proposal only patches the keys it
+  // lists, so every other key keeps its value, which is exactly what
+  // „nichts löschen" means here.
+  const { kind, stored } = target;
+  // Read in AUGMENT mode: an unknown property key is an echo of the entry the
+  // model was shown, not a proposal (see normalizeProperties) — it is dropped
+  // instead of failing the run.
+  const read = parseEntryReply(raw, kind, "augment");
+  if (!read.ok) {
+    return { ok: false, errors: read.errors.map((e) => `entry "${stored.path}": ${e}`) };
+  }
+  const reply = read.reply;
   const errors: string[] = [];
-  const reply = parseRawAugmentReply(raw, errors);
-  if (reply === null) return { ok: false, errors };
 
-  const { kind, file } = target;
-  const entry = reply.entry;
   // The target address is the SERVER's and always was — since issue #100 the
   // model is not even asked for one: an augment run rewrites the document at
-  // `file.path`, full stop. (Its `location`, on the other hand, is an
+  // `stored.path`, full stop. (Its `location`, on the other hand, is an
   // ordinary proposal: accepting one moves the scene like any other write.)
-  const label = `entry "${file.path}"`;
-  const { parsed, error } = parseWithProperties(entry.content, file.path);
-  if (error !== undefined) return { ok: false, errors: [`${label}: ${error}`] };
-  const fm = parsed.properties;
+  const label = `entry "${stored.path}"`;
+  const fm = reply.properties;
 
-  const currentId = file.properties.id;
+  const currentId = stored.properties.id;
   if (currentId !== undefined && fm.id !== currentId) {
     errors.push(
       `${label}: die id bleibt "${String(currentId)}" — sie ist der Referenzschlüssel ` +
         "der Kampagne und wird beim Ergänzen nie geändert",
     );
   }
-  for (const callout of unknownCallouts(parsed.body)) {
+  for (const callout of unknownCallouts(reply.body)) {
     errors.push(
       `${label}: unknown callout "[!${callout}]" — allowed: ` +
         CALLOUT_KINDS.map((k) => `[!${k}]`).join(", "),
     );
   }
-  kindErrors(kind, fm, file.properties, label, errors);
+  kindErrors(kind, fm, stored.properties, label, errors, reply.ignored ?? []);
   if (errors.length > 0) return { ok: false, errors };
 
   return {
     ok: true,
     result: {
-      path: file.path,
+      path: stored.path,
       kind,
-      rev: file.rev,
-      properties: propertyProposals(file.properties, fm),
-      currentBody: file.body,
-      proposedBody: parsed.body,
+      rev: stored.rev,
+      properties: propertyProposals(stored.properties, fm),
+      currentBody: stored.body,
+      proposedBody: reply.body,
       warnings: reply.warnings,
     },
   };
@@ -378,14 +367,20 @@ export async function runAugment(
         locations: ctx.locations,
         // A scene's chapter is part of its address, so it belongs in the
         // context exactly as it does for a scene run.
-        ...(target.kind === "scene" ? { chapter: chapterOf(target.file) } : {}),
+        ...(target.kind === "scene" ? { chapter: chapterOf(target.stored) } : {}),
       },
       sourceText,
       existingEntry: {
-        path: target.file.path,
-        markdown: renderRaw(target.file.properties, target.file.body),
+        path: target.stored.path,
+        // The prompt needs one coherent markdown text, so the stored entry's
+        // properties and body are rendered back together here.
+        markdown: renderRaw(target.stored.properties, target.stored.body),
       },
       ...(instruction === "" ? {} : { instruction }),
+      // Forced like every other reply — in „augment" mode, which
+      // is the one difference: an existing scene's `status` is whatever the DM
+      // made it, so the schema must not narrow it to `draft`.
+      jsonSchema: entryReplySchema(target.kind, "augment"),
     },
     provider: getProvider(),
     validate: (raw) => validateAugmentReply(raw, target),
@@ -396,27 +391,27 @@ export async function runAugment(
   // the text the DM is about to accept.
   return withNamingHints(
     result,
-    [{ path: result.path, markdown: proposedDocument(result) }],
+    [{ path: result.path, markdown: proposedEntry(result) }],
     ctx.namingRules,
   );
 }
 
 /** The chapter segment of a scene address (`<chapter>/…`). */
-function chapterOf(file: EntryResponse): string {
-  return file.path.split("/")[0] ?? "";
+function chapterOf(stored: EntryResponse): string {
+  return stored.path.split("/")[0] ?? "";
 }
 
 /**
  * The proposed body under the proposed properties — what the check reads.
  *
- * The properties go through the STORE'S OWN frontmatter renderer, not through
+ * The properties go through the STORE'S OWN renderer, not through
  * `String(value)`: a list, a mapping or a `role` that contains „: " produced
  * YAML the parser could not read, and the whole block then degraded into the
  * body — every hint landed on `body` with a line number that pointed at
- * nothing. Same renderer as a written file, so the check reads the document
+ * nothing. Same renderer as a written entry, so the check reads the entry
  * the DM is about to accept.
  */
-function proposedDocument(result: AugmentResult): string {
+function proposedEntry(result: AugmentResult): string {
   const properties = Object.fromEntries(result.properties.map((p) => [p.key, p.proposed]));
   return renderRaw(properties, result.proposedBody);
 }

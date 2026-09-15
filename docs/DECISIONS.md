@@ -63,7 +63,18 @@ Kein Electron/Tauri — Web-App hinter Tailscale reicht.
 
 **Backend:** Bun + Hono, Drizzle über SQLite (`server/src/db/`), Suche als
 FTS5-Index. gray-matter gehört zum Importer/Parser (`@grimoire/shared`), nicht
-zum Laufzeit-Stack.
+zum Laufzeit-Stack. `jsonrepair` (exakt gepinnt) im Generator: **jede**
+Modell-Antwort ist ein per Schema erzwungenes JSON-Objekt — die Gliederung ihr
+eigenes, ein Eintrags-Aufruf das Objekt, das den gespeicherten Eintrag
+spiegelt (`properties` je Art, `body`, `warnings`; die Schemata liegen als
+lesbares JSON in `shared/schema/`). Ein Endpoint, der `response_format`
+annimmt und ignoriert, liefert trotzdem Handgeschriebenes, und dort sind die
+Fehler mechanisch (Komma am Ende, einfache Anführungszeichen): eine
+deterministische Reparatur vor der Validierung ist deutlich billiger als eine
+Korrekturrunde, die den ganzen Prompt erneut sendet. Die Regeln selbst bleiben
+unangetastet, und ein reparierter Lauf trägt eine Warnung. Weitere
+Abhängigkeiten braucht es nicht — den Eigenschaften-Block eines Eintrags
+rendert der Server mit dem Renderer des Stores.
 Hono statt Express/Fastify: minimal, typsicher, läuft auf Bun UND Node
 (Runtime-Wechsel bleibt möglich, siehe #7).
 

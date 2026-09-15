@@ -10,8 +10,8 @@
 // A literal brace in copy has to be quoted as `'{'` — there is none here.
 //
 // The German strings are taken 1:1 out of the components they came from; the
-// typographic detail is part of the design (»…« as „ ", the em dash with
-// spaces, the ellipsis character in „Speichere …"). Do not normalize them.
+// typographic detail is part of the design (»…« as „ “, the em dash with
+// spaces, the ellipsis character in „Speichere …“). Do not normalize them.
 //
 // SCHEIBE 1 (issue #69): topbar incl. session chip, campaign switcher, the
 // five create dialogs, properties dialog + fields, rename dialog, cold start.
@@ -76,13 +76,13 @@ export const de = {
   "session.discard.description": "Die Session wird gelöscht.",
   "session.discard.failed": "Session nicht verworfen — Server prüfen und neu laden.",
   // `{date}` comes from Intl.DateTimeFormat in the selected language, so the
-  // German reading stays „Session vom 13.09.2026".
+  // German reading stays „Session vom 13.09.2026“.
   "session.date": "Session vom {date}",
   "session.date.unknown": "Session",
 
   // --- create dialogs -------------------------------------------------------
   "create.failed": "Nicht angelegt — Server prüfen.",
-  "create.useSuggestion": '„{id}" verwenden',
+  "create.useSuggestion": '„{id}“ verwenden',
 
   "create.campaign.title": "Kampagne anlegen",
   "create.campaign.nameLabel": "Name der Kampagne",
@@ -93,7 +93,7 @@ export const de = {
 
   "create.chapter.title": "Kapitel anlegen",
   "create.chapter.description":
-    'Das Ziel ist optional und erscheint im Kapitel als Abschnitt „Ziel des Kapitels".',
+    'Das Ziel ist optional und erscheint im Kapitel als Abschnitt „Ziel des Kapitels“.',
   "create.chapter.nameLabel": "Titel",
   "create.chapter.namePlaceholder": "Titel des Kapitels",
   "create.chapter.goalLabel": "Ziel des Kapitels (optional)",
@@ -129,7 +129,7 @@ export const de = {
   "properties.description":
     "Alle Eigenschaften dieses Eintrags. Gespeichert wird nur, was du geändert hast — alles andere bleibt unverändert stehen.",
   "properties.id": "id",
-  "properties.id.viaRename": ' · unten über „id ändern"',
+  "properties.id.viaRename": ' · unten über „id ändern“',
   "properties.changeId": "id ändern",
   "properties.discard.title": "Änderungen verwerfen?",
   "properties.discard.close":
@@ -154,14 +154,14 @@ export const de = {
   "properties.field.row.value.aria": "{label}, Zeile {row}: Wert",
   "properties.ref.unknownChapter": "Unbekannt — Kapitel muss existieren.",
   "properties.ref.new": "Neu — wird beim Speichern angelegt.",
-  "properties.ref.locationNew": 'Neu — wird als Ort „{name}" angelegt.',
+  "properties.ref.locationNew": 'Neu — wird als Ort „{name}“ angelegt.',
   "properties.issue.locationUnusable":
-    'Kein verwendbarer Name — „{value}" ergibt keine Orts-id.',
+    'Kein verwendbarer Name — „{value}“ ergibt keine Orts-id.',
   "properties.issue.notAnId":
-    '„{id}" ist keine id — nur Kleinbuchstaben, Ziffern und Bindestriche.',
+    '„{id}“ ist keine id — nur Kleinbuchstaben, Ziffern und Bindestriche.',
   "properties.issue.namelessRow": "Zeile ohne Namen — Name ergänzen oder Zeile entfernen.",
   "properties.issue.duplicateName":
-    'Name „{name}" doppelt — jeder Name darf nur einmal vorkommen.',
+    'Name „{name}“ doppelt — jeder Name darf nur einmal vorkommen.',
 
   // Per-kind field labels/hints/placeholders (lib/properties-form.ts)
   "properties.scene.title.label": "Titel",
@@ -227,7 +227,7 @@ export const de = {
   "rename.error.unchanged": "Unverändert — das ist schon die aktuelle id.",
   "rename.error.slug": "id braucht Kleinbuchstaben, Ziffern und einzelne Bindestriche.",
   "rename.error.reserved":
-    '„npcs", „locations" und „sessions" sind reservierte Namen.',
+    '„npcs“, „locations“ und „sessions“ sind reservierte Namen.',
   "rename.failed": "Umbenennen fehlgeschlagen — Server prüfen.",
   "rename.conflict.ambiguous": "Mehrere Einträge beanspruchen diese id — Konflikt in der Datenbank.",
   "rename.conflict.path": "{path} existiert schon — andere id wählen.",
@@ -256,7 +256,7 @@ export const de = {
   "settings.language.hint": "Sprache der Oberfläche. Gilt für diese Instanz, nicht für die Kampagnendaten.",
 
   // --- the two campaign-content pages (issue #53) --------------------------
-  // „Kampagnenwissen" (/:campaign/knowledge) and „Glossar"
+  // „Kampagnenwissen“ (/:campaign/knowledge) and „Glossar“
   // (/:campaign/glossary). Campaign CONTENT, like the NPCs and the Orte — the
   // instance settings under /settings are a different thing entirely (PO
   // feedback on PR #87). Shared by both pages: the row controls, the per-entry
@@ -310,21 +310,21 @@ export const de = {
   "glossary.explanation": "Erklärung",
   "glossary.noExplanation": "Ohne Erklärung",
 
-  // Where the two pages are reached from: the pool's „Nachschlagen" line and
+  // Where the two pages are reached from: the pool's „Nachschlagen“ line and
   // the mobile start surface's rows (PO feedback on PR #87 — deliberately NOT
   // the topbar, which stays the three campaign-wide entries it has).
   "lookup.heading": "Nachschlagen",
 
   // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
-  "server.slug_taken": '{kind} „{id}" existiert schon — Vorschlag: „{suggestion}"',
-  "server.slug_reserved": '„{id}" ist ein reservierter Name — Vorschlag: „{suggestion}"',
+  "server.slug_taken": '{kind} „{id}“ existiert schon — Vorschlag: „{suggestion}“',
+  "server.slug_reserved": '„{id}“ ist ein reservierter Name — Vorschlag: „{suggestion}“',
   "server.slug_empty": "{field} ergibt keine id — bitte Buchstaben oder Ziffern verwenden.",
   "server.location_not_an_id":
-    'Der Ort „{value}" ist keine Orts-id — „{suggestion}" verwenden, der Eintrag wird angelegt.',
+    'Der Ort „{value}“ ist keine Orts-id — „{suggestion}“ verwenden, der Eintrag wird angelegt.',
   "server.location_not_an_id.noSuggestion":
-    'Der Ort „{value}" ist keine Orts-id — bitte Kleinbuchstaben, Ziffern und Bindestriche verwenden.',
+    'Der Ort „{value}“ ist keine Orts-id — bitte Kleinbuchstaben, Ziffern und Bindestriche verwenden.',
   "server.glossary_duplicate_term":
-    'Glossar-Begriff „{term}" kommt mehrfach vor — bitte zusammenfassen.',
+    'Glossar-Begriff „{term}“ kommt mehrfach vor — bitte zusammenfassen.',
   "server.session_running": "Eine ältere Session läuft noch — erst beenden.",
   "server.session_not_empty": "Diese Session hat Inhalt — beenden statt verwerfen.",
   "server.rev_conflict": "Inzwischen extern geändert — neu laden vor dem Speichern.",
@@ -382,7 +382,7 @@ export const de = {
   // The chapter pill: only `active` gets a label, every other value degrades
   // to the raw string (README, "Format degradiert").
   "pool.chapter.status.active": "Aktiv",
-  // The quiet second half of the „Eventualszenen" heading row — the „· "
+  // The quiet second half of the „Eventualszenen“ heading row — the `· `
   // separator stays markup in the JSX.
   "pool.contingencies.hint": "nur wenn der Auslöser feuert",
   "pool.scene.trigger": "Wenn: {trigger}",
@@ -449,7 +449,7 @@ export const de = {
   "live.session.olderRunning.withPath": "Eine ältere Session läuft noch ({path}) — erst beenden.",
   "live.session.endOld": "Alte Session beenden",
 
-  // The „Für die Spieler" reminder list of the aside (issue #86).
+  // The „Für die Spieler“ reminder list of the aside.
   "live.pc.heading": "Für die Spieler",
   "live.pc.done": "„{text}“ erledigt",
   "live.pc.allDone": "Alles erledigt.",
@@ -632,7 +632,7 @@ export const de = {
   "generate.input.chapterId.space": "Keine Leerzeichen — Wörter mit Bindestrich trennen.",
   "generate.input.chapterId.charset": "Nur Kleinbuchstaben, Ziffern und Bindestriche.",
   "generate.input.chapterId.reserved":
-    '„npcs", „locations" und „sessions" sind reserviert — kein Kapitelname.',
+    '„npcs“, „locations“ und „sessions“ sind reserviert — kein Kapitelname.',
   "generate.input.npcId.slash": "Keine Schrägstriche — die id ist ein einzelnes Segment.",
   "generate.input.npcId.space": "Keine Leerzeichen — Wörter mit Bindestrich trennen.",
   "generate.input.npcId.charset":
@@ -687,7 +687,7 @@ export const de = {
   // language-free (#69).
   "generate.review.namingHeading":
     "{count, plural, one {# Namens-Hinweis} other {# Namens-Hinweise}} — kein Blocker",
-  "generate.review.namingHint": '„{from}" steht noch da — vereinbart ist „{to}"',
+  "generate.review.namingHint": '„{from}“ steht noch da — vereinbart ist „{to}“',
   "generate.review.namingWhereBody": "{path}, Zeile {line}",
   "generate.review.namingWhereField": "{path}, Feld {field}",
   "generate.review.conflicts": "Diese Einträge existieren schon — nichts geschrieben:",
@@ -707,7 +707,7 @@ export const de = {
   "generate.review.saved": "Gespeichert",
   "generate.review.saveConflict": "In einem anderen Tab geändert — neu geladen.",
   "generate.review.saveFailed": "Nicht gespeichert — Server prüfen.",
-  // Partial accepts: „2 von 3 übernommen" (ICU, both halves are numbers).
+  // Partial accepts: „2 von 3 übernommen“ (ICU, both halves are numbers).
   "generate.review.progress":
     "{written} von {total} übernommen · der Rest wartet hier",
   "generate.review.acceptOne": "Diesen übernehmen",
@@ -733,7 +733,7 @@ export const de = {
     "~{tokens} Tokens · {calls, plural, one {# Aufruf} other {# Aufrufe}}",
   "generate.pipeline.progress":
     "{done} von {total, plural, one {# Szene} other {# Szenen}} fertig",
-  // Counted over EVERY part of the run — so the wording says „Teile" as soon
+  // Counted over EVERY part of the run — so the wording says „Teile“ as soon
   // as the run has suggested entries next to its scenes.
   "generate.pipeline.progressParts":
     "{done} von {total, plural, one {# Teil} other {# Teilen}} fertig",
@@ -742,7 +742,7 @@ export const de = {
   "generate.pipeline.partFailed": "nicht geschrieben",
   "generate.pipeline.retry": "Erneut versuchen",
   "generate.pipeline.retryFailed": "Nicht neu gestartet — Server prüfen.",
-  // The 409 of „Erneut versuchen": the part is already running or already
+  // The 409 of „Erneut versuchen“: the part is already running or already
   // fertig (ein zweiter Tab, ein Doppelklick) — kein Serverfehler.
   "generate.pipeline.retryConflict":
     "Nicht neu gestartet — dieser Teil läuft schon oder ist fertig. Die Ansicht wird neu geladen.",
@@ -818,18 +818,18 @@ export const de = {
   "composer.ifSection.condition.aria": "Bedingung des Falls-Abschnitts",
   "composer.ifSection.condition.placeholder": "sie geben zu, für Jorna zu arbeiten",
   "composer.ifSection.hint":
-    'Wird als „## If: …" geschrieben und in der Leseansicht einklappbar.',
+    'Wird als „## If: …“ geschrieben und in der Leseansicht einklappbar.',
   "composer.block.content.aria": "Inhalt: {label}",
   "composer.block.text.placeholder": "Text des Blocks",
   "composer.block.markdown.placeholder": "Markdown",
   "composer.markdown.hint": "Markdown mit Markern — wird unverändert übernommen.",
   "composer.list.aria": "Blöcke: {label}",
-  "composer.empty": 'Noch keine Blöcke — mit „+" den ersten anlegen.',
-  // Two whole sentences instead of a glued-in fragment („… im Falls-Abschnitt"):
+  "composer.empty": 'Noch keine Blöcke — mit „+“ den ersten anlegen.',
+  // Two whole sentences instead of a glued-in fragment („… im Falls-Abschnitt“):
   // the word order of the insert target is not the same in every language.
   "composer.insert.aria": "Block an Position {position} einfügen",
   "composer.insert.section.aria": "Block im Falls-Abschnitt an Position {position} einfügen",
-  // „Vorlesetext 2" — the position makes the second read-aloud of a scene
+  // „Vorlesetext 2“ — the position makes the second read-aloud of a scene
   // distinguishable for screen readers and for the E2E suite.
   "composer.card.name": "{label} {position}",
   "composer.card.moveUp.aria": "{name} nach oben",
@@ -844,7 +844,7 @@ export const de = {
     "»##«-Überschrift beendet den Falls-Abschnitt — tiefer einstufen (###) oder Block nach außen ziehen.",
 
   // --- the raw-markdown editor (components/MarkdownEditor.tsx) --------------
-  // „Bearbeiten" is `common.edit`.
+  // „Bearbeiten“ is `common.edit`.
   "editor.preview": "Vorschau",
 
   // --- scene article (components/SceneArticle.tsx) --------------------------
@@ -873,7 +873,7 @@ export const de = {
   "harness.lead": "Rendert die Referenz-Fixtures aus examples/ ohne laufenden Server.",
   "harness.properties": "Eigenschaften anzeigen",
 
-  // --- „Mit KI ergänzen" (components/AugmentAction.tsx, issue #36) ---------
+  // --- „Mit KI ergänzen“ (components/AugmentAction.tsx) --------------------
   "augment.action": "Mit KI ergänzen",
   "augment.title": "Mit KI ergänzen",
   "augment.description":

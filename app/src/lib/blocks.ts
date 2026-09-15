@@ -681,7 +681,7 @@ function renderBlock(block: SceneBlock): string {
 }
 
 /**
- * House style for a callout (examples/, generator/example-output.md): the
+ * House style for a callout (examples/, generator/example-output.json): the
  * `[!kind]` marker and the text start on the SAME line, every line carries a
  * `> ` marker, an empty line inside the callout is a bare `>`.
  *

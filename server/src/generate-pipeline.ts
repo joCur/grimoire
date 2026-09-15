@@ -29,7 +29,7 @@
 //      the DM is interested in is the finished scene (PO, 15.09.).
 //
 //   2. SCENES — one call per outline scene, three at a time. Prompt =
-//      the scene prompt in „single scene from outline" mode + the outline +
+//      the scene prompt in „single scene from outline“ mode + the outline +
 //      the excerpt. Validation, correction turns and the naming check happen
 //      PER SCENE, so a form error costs that scene and nothing else, and a
 //      finished scene is reviewable while its siblings are still running.
@@ -49,14 +49,21 @@ import {
   type NamingHint,
 } from "@grimoire/shared";
 import { ENTITY_SLUG } from "@grimoire/shared/slug";
+import {
+  MAX_OUTLINE_ENTRIES,
+  MAX_OUTLINE_SCENES,
+  OUTLINE_ENTRY_KINDS,
+  OUTLINE_SCHEMA_DESCRIPTION,
+  OUTLINE_SCHEMA_NAME,
+  outlineJsonSchema,
+} from "@grimoire/shared/outline-schema";
+import { entryReplySchema } from "@grimoire/shared/entry-schema";
 import { ApiError } from "./api-error";
 import { checkDraftsNaming } from "./naming-check";
 import {
   ASSET_FILES,
   buildCorrectionMessage,
   collectSceneContext,
-  extractJsonReply,
-  isRawEntry,
   loadAsset,
   loadPromptAssets,
   obtainProvider,
@@ -65,12 +72,13 @@ import {
   quickstatsErrors,
   stubPath,
   validateEntry,
-  validateSceneDocument,
+  validateSceneEntry,
   type AllowedRefs,
   type SceneContext,
 } from "./generator";
 export type { SceneContext } from "./generator";
-import { parseWithProperties, reparseAtAddress, unknownCallouts } from "./generator";
+import { unknownCallouts } from "./generator";
+import { parseEntryReply, parseJsonReply } from "./entry-reply";
 import type { LLMProvider } from "./llm-provider";
 import { locationPath, npcPath } from "./store/paths";
 
@@ -83,15 +91,18 @@ export const PART_CONCURRENCY = 3;
  *
  * Without it the outline decides how many provider calls a run makes, and a
  * source text that is a whole adventure (or a model that splits every
- * paragraph) turns one „Entwürfe generieren" into dozens of calls the DM
+ * paragraph) turns one „Entwürfe generieren“ into dozens of calls the DM
  * never asked for and cannot stop except by discarding the run. A chapter of
  * twelve playable scenes is already a long evening — beyond that the honest
- * answer is „cut the source text", so an outline over the bound is a
+ * answer is „cut the source text“, so an outline over the bound is a
  * VALIDATION ERROR and therefore a correction turn that asks the model to
  * consolidate, not a failed run.
+ *
+ * The numbers live in the SCHEMA module (`maxItems` states
+ * them to the provider, the validation below enforces them) and are
+ * re-exported here, where every caller already reads them.
  */
-export const MAX_OUTLINE_SCENES = 12;
-export const MAX_OUTLINE_ENTRIES = 12;
+export { MAX_OUTLINE_ENTRIES, MAX_OUTLINE_SCENES } from "@grimoire/shared/outline-schema";
 
 // --- the outline --------------------------------------------------------------
 
@@ -123,6 +134,38 @@ export interface RunOutline {
 
 const OUTLINE_CORRECTION_TAIL = "die vollständige Gliederung enthalten";
 
+/**
+ * The run warning a REPAIRED outline earns. German,
+ * like the excerpt-fallback warning next to it: it rides along in the run's
+ * `warnings` and the review shows those verbatim.
+ *
+ * Why it is a warning at all: the repair is silent otherwise, and „the model
+ * answered something JSON.parse could not read" is exactly the kind of thing
+ * a DM wants to see once — a provider whose replies need patching every run
+ * is a provider to reconsider, and without the note nobody would ever know.
+ */
+export const REPAIRED_REPLY_WARNING =
+  "Antwort musste repariert werden — das Modell hat die Gliederung nicht als " +
+  "gültiges JSON geliefert.";
+
+/**
+ * The outline reply as a JSON value — read by the tolerant reader every reply
+ * shares (`parseJsonReply`, ./entry-reply): the whole text first (which is
+ * what a schema-forced reply is), then a fence, then the brace span, and ONE
+ * deterministic `jsonrepair` attempt before a correction turn is spent.
+ *
+ * Kept as a named function of its own because the outline's `repaired` flag
+ * becomes a RUN WARNING here, and because the tests of this step address it.
+ */
+export function parseOutlineJson(raw: string): { value: unknown; repaired: boolean } | null {
+  return parseJsonReply(raw);
+}
+
+/** One of the schema's entry kinds — the list is the schema's own. */
+function isOutlineEntryKind(v: unknown): v is (typeof OUTLINE_ENTRY_KINDS)[number] {
+  return typeof v === "string" && (OUTLINE_ENTRY_KINDS as readonly string[]).includes(v);
+}
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
 }
@@ -147,10 +190,10 @@ export function validateOutlineReply(
   ctx: SceneContext,
 ): { ok: true; result: RunOutline } | { ok: false; errors: string[] } {
   const errors: string[] = [];
-  const extracted = extractJsonReply(raw);
-  if (extracted === null) return { ok: false, errors: ["reply is not valid JSON"] };
-  if (!isRecord(extracted.value)) return { ok: false, errors: ["reply must be a JSON object"] };
-  const obj = extracted.value;
+  const parsedReply = parseOutlineJson(raw);
+  if (parsedReply === null) return { ok: false, errors: ["reply is not valid JSON"] };
+  if (!isRecord(parsedReply.value)) return { ok: false, errors: ["reply must be a JSON object"] };
+  const obj = parsedReply.value;
 
   const rawScenes = obj.scenes ?? [];
   if (!Array.isArray(rawScenes)) return { ok: false, errors: ['"scenes" must be an array'] };
@@ -166,8 +209,10 @@ export function validateOutlineReply(
       return;
     }
     const kind = item.kind;
-    if (kind !== "npc" && kind !== "location") {
-      errors.push(`${label}: "kind" must be "npc" or "location"`);
+    // The schema's own list: the shape the provider is forced into and
+    // the shape the validation accepts read the same constant.
+    if (!isOutlineEntryKind(kind)) {
+      errors.push(`${label}: "kind" must be ${OUTLINE_ENTRY_KINDS.join(" or ")}`);
       return;
     }
     const id = stringField(item, "id");
@@ -298,7 +343,15 @@ export function validateOutlineReply(
   const warnings = Array.isArray(obj.warnings)
     ? obj.warnings.filter((w): w is string => typeof w === "string")
     : [];
-  return { ok: true, result: { scenes, entries, warnings } };
+  return {
+    ok: true,
+    result: {
+      scenes,
+      entries,
+      // The repair is recorded as a run warning, not swallowed.
+      warnings: parsedReply.repaired ? [...warnings, REPAIRED_REPLY_WARNING] : warnings,
+    },
+  };
 }
 
 // --- cutting the source passage ----------------------------------------------
@@ -374,17 +427,21 @@ function normalizeWithMap(source: string): { text: string; offsets: number[] } {
 // --- the per-call prompt assets ----------------------------------------------
 
 /**
- * The scene system prompt in „single scene from outline" mode: the existing
- * document with its BATCH output schema swapped for the single-scene one.
+ * The scene system prompt in „genau eine Szene aus der Gliederung“ mode: the
+ * scene prompt with its own output section swapped for the outline-bound one
+ * (`scene-single-output.md`).
  *
  * A swap rather than a second prompt file, for the reason the augment run's
- * `formatContract` exists: the rules (#93 orthography, #96 tables, the
- * callout list, the reference rules) must be the SAME text in both modes, and
- * the one way to guarantee that is to have them in one file.
+ * `formatContract` exists: the rules (orthography and quotation marks,
+ * tables, the callout list, the reference rules) must be the SAME text in
+ * both, and the one way to guarantee that is to keep them side by side.
+ *
+ * Both sections describe the RAW entry — the swap adds
+ * what only the pipeline knows: the outline is binding, and every id of the
+ * run is already decided.
  */
-export async function sceneSystemPrompt(mode: "batch" | "single"): Promise<string> {
+export async function sceneSystemPrompt(): Promise<string> {
   const doc = await loadAsset(ASSET_FILES.scene.systemPrompt);
-  if (mode === "batch") return doc;
   const replacement = await loadAsset(ASSET_FILES.sceneSingle.systemPrompt);
   const start = doc.indexOf("## Ausgabeformat");
   if (start === -1) return `${doc.trimEnd()}\n\n${replacement}`;
@@ -436,32 +493,18 @@ export function validateSingleSceneReply(input: {
   scene: OutlineScene;
   allowed: AllowedRefs;
 }): { ok: true; result: { scene: GeneratedSceneDraft; warnings: string[] } } | { ok: false; errors: string[] } {
-  const extracted = extractJsonReply(input.raw);
-  if (extracted === null) return { ok: false, errors: ["reply is not valid JSON"] };
-  if (!isRecord(extracted.value)) return { ok: false, errors: ["reply must be a JSON object"] };
-  const obj = extracted.value;
-  // Tolerant about the WRAPPER, strict about the document: a model that puts
-  // its one scene into the batch array has made a form error a correction
-  // turn would fix at full price for no gain.
-  const candidate = isRawEntry(obj.scene)
-    ? obj.scene
-    : Array.isArray(obj.scenes) && isRawEntry(obj.scenes[0])
-      ? obj.scenes[0]
-      : undefined;
-  if (candidate === undefined) {
-    return { ok: false, errors: ['"scene" must be an object with a string "content"'] };
-  }
-  if (Array.isArray(obj.scenes) && obj.scenes.length > 1) {
-    return {
-      ok: false,
-      errors: [
-        'diese Antwort enthält genau EINE Szene — jede weitere Szene der Gliederung ist ein eigener Aufruf',
-      ],
-    };
-  }
+  // The reply is the schema-forced OBJECT: `properties`,
+  // `body`, `warnings` (./entry-reply reads it and composes the entry
+  // the server would store). Everything below judges that object, by exactly
+  // the rules it judged the markdown by before.
+  const read = parseEntryReply(input.raw, "scene");
+  // Labelled like every other error of this part: the review shows the list
+  // per part, and „which scene" is the first thing the DM looks for.
+  if (!read.ok) return { ok: false, errors: read.errors.map((e) => `scene "${input.scene.id}": ${e}`) };
+  const reply = read.reply;
   const errors: string[] = [];
-  const draft = validateSceneDocument({
-    content: candidate.content,
+  const draft = validateSceneEntry({
+    reply,
     label: `scene "${input.scene.id}"`,
     chapter: input.ctx.chapter,
     allowed: input.allowed,
@@ -470,10 +513,7 @@ export function validateSingleSceneReply(input: {
     expectedId: input.scene.id,
   });
   if (draft === null || errors.length > 0) return { ok: false, errors };
-  const warnings = Array.isArray(obj.warnings)
-    ? obj.warnings.filter((w): w is string => typeof w === "string")
-    : [];
-  return { ok: true, result: { scene: draft, warnings } };
+  return { ok: true, result: { scene: draft, warnings: reply.warnings } };
 }
 
 /**
@@ -492,22 +532,13 @@ export function validateEntryReply(
   entry: OutlineEntry,
   ctx: SceneContext,
 ): { ok: true; result: { stub: GeneratedStub; warnings: string[] } } | { ok: false; errors: string[] } {
-  const extracted = extractJsonReply(raw);
-  if (extracted === null) return { ok: false, errors: ["reply is not valid JSON"] };
-  if (!isRecord(extracted.value)) return { ok: false, errors: ["reply must be a JSON object"] };
-  const obj = extracted.value;
-  // The npc prompt answers `{ npc }`, the location prompt `{ location }`;
-  // `entry` is tolerated because that is what the augment prompt calls it and
-  // a model that has seen all three will mix them up once.
-  const candidate = [obj[entry.kind], obj.entry].find(isRawEntry);
-  if (candidate === undefined) {
-    return {
-      ok: false,
-      errors: [`"${entry.kind}" must be an object with a string "content"`],
-    };
+  const read = parseEntryReply(raw, entry.kind);
+  if (!read.ok) {
+    return { ok: false, errors: read.errors.map((e) => `${entry.kind} "${entry.id}": ${e}`) };
   }
+  const reply = read.reply;
   const errors: string[] = [];
-  const stub = validateEntry({ kind: entry.kind, content: candidate.content }, 0, errors);
+  const stub = validateEntry({ kind: entry.kind, reply }, 0, errors);
   if (stub === null || errors.length > 0) return { ok: false, errors };
   const label = `${entry.kind} "${entry.id}"`;
   if (stub.id !== entry.id) {
@@ -519,19 +550,15 @@ export function validateEntryReply(
       ],
     };
   }
-  const { parsed } = parseWithProperties(candidate.content, entryAddress(entry.kind, entry.id));
-  for (const callout of unknownCallouts(parsed.body)) {
+  for (const callout of unknownCallouts(reply.body)) {
     errors.push(`${label}: unknown callout "[!${callout}]"`);
   }
   if (entry.kind === "npc") {
-    for (const msg of quickstatsErrors(parsed.properties)) errors.push(`${label}: ${msg}`);
-    for (const msg of npcBodyErrors(parsed.body, ctx)) errors.push(`${label}: ${msg}`);
+    for (const msg of quickstatsErrors(reply.properties)) errors.push(`${label}: ${msg}`);
+    for (const msg of npcBodyErrors(reply.body, ctx)) errors.push(`${label}: ${msg}`);
   }
   if (errors.length > 0) return { ok: false, errors };
-  const warnings = Array.isArray(obj.warnings)
-    ? obj.warnings.filter((w): w is string => typeof w === "string")
-    : [];
-  return { ok: true, result: { stub, warnings } };
+  return { ok: true, result: { stub, warnings: reply.warnings } };
 }
 
 // --- the run ------------------------------------------------------------------
@@ -546,7 +573,7 @@ export interface PartOutcome {
   excerptFallback?: boolean;
 }
 
-/** Usage of one part — `calls` is what the review header sums into „M Aufrufe". */
+/** Usage of one part — `calls` is what the review header sums into „M Aufrufe“. */
 export interface PartUsage {
   inputTokens: number;
   outputTokens: number;
@@ -573,7 +600,7 @@ export interface PipelineSink {
     failure: { error: string; validationErrors?: string[]; rawReply?: string },
     usage: PartUsage,
   ): Promise<void>;
-  /** True once the run was cancelled („Verwerfen") or replaced. */
+  /** True once the run was cancelled („Verwerfen“) or replaced. */
   cancelled(): boolean;
 }
 
@@ -613,7 +640,7 @@ export function outlineParts(outline: RunOutline): GenerateJobPart[] {
 /**
  * A part's usage, from a successful result or from a thrown ApiError, with the
  * CALL COUNT taken from the counter rather than from `usage.attempts`: a local
- * endpoint reports no usage at all, and „M Aufrufe" must be true anyway.
+ * endpoint reports no usage at all, and „M Aufrufe“ must be true anyway.
  */
 function usageOf(value: unknown, calls: number): PartUsage {
   const usage = (value ?? {}) as Partial<GenerateUsage>;
@@ -645,7 +672,7 @@ export function callCounter(): CallCounter {
   };
 }
 
-/** The message and the error list the DM reads next to „Erneut versuchen". */
+/** The message and the error list the DM reads next to „Erneut versuchen“. */
 function failureOf(
   err: unknown,
   calls: number,
@@ -743,6 +770,14 @@ export async function runOutlineStep(
       glossary: ctx.glossary,
       context: { chapter: ctx.chapter, npcs: ctx.npcs, locations: ctx.locations },
       sourceText,
+      // The one call of a run that still answers JSON — so it is the one
+      // call whose shape the API can GUARANTEE: Claude gets a
+      // forced tool, an OpenAI-compatible endpoint `json_schema`.
+      jsonSchema: {
+        name: OUTLINE_SCHEMA_NAME,
+        description: OUTLINE_SCHEMA_DESCRIPTION,
+        schema: outlineJsonSchema(),
+      },
     },
     provider,
     validate: (raw) => {
@@ -763,7 +798,7 @@ export async function runScenePart(
   counter: CallCounter = callCounter(),
 ): Promise<{ outcome: PartOutcome; usage: PartUsage }> {
   const [systemPrompt, fewShotTarget] = await Promise.all([
-    sceneSystemPrompt("single"),
+    sceneSystemPrompt(),
     loadAsset(ASSET_FILES.scene.fewShotTarget),
   ]);
   const cut = excerptOf(plan, scene);
@@ -781,6 +816,8 @@ export async function runScenePart(
       outline: outlineBlock(plan.outline),
       assignment: assignmentBlock(scene),
       sourceText: cut.text,
+      // Forced like the outline: the reply is the scene object.
+      jsonSchema: entryReplySchema("scene", "create"),
     },
     provider,
     validate: (raw) => validateSingleSceneReply({ raw, ctx: plan.ctx, scene, allowed: plan.allowed }),
@@ -798,7 +835,7 @@ export async function runScenePart(
         ...(cut.matched
           ? []
           : [
-              `Der Quelltext-Ausschnitt für „${scene.title}" ließ sich nicht wörtlich ` +
+              `Der Quelltext-Ausschnitt für „${scene.title}“ ließ sich nicht wörtlich ` +
                 "zuordnen — diese Szene wurde aus dem ganzen Quelltext geschrieben.",
             ]),
       ],
@@ -840,6 +877,7 @@ export async function runEntryPart(
       // scenes that mention it (Zuschnitt 3). An entry used to fall out of
       // the batch reply with no context of its own at all.
       sourceText: entryContext(plan, entry),
+      jsonSchema: entryReplySchema(entry.kind, "create"),
     },
     provider,
     validate: (raw) => validateEntryReply(raw, entry, plan.ctx),
@@ -870,10 +908,10 @@ export async function runEntryPart(
 export function entryContext(plan: RunPlan, entry: OutlineEntry): string {
   const blocks: string[] = [`${entry.name} (${entry.id}): ${entry.summary}`];
   const needle = entry.name.toLowerCase();
-  // The id is kebab-case ENGLISH while the name is German („harbour-master" /
-  // „Hafenmeisterin"), so the whole id rarely appears in an English source
+  // The id is kebab-case ENGLISH while the name is German („harbour-master“ /
+  // „Hafenmeisterin“), so the whole id rarely appears in an English source
   // text but its WORDS do. Each word is required, in any order — matching on
-  // one word alone would pull „old" or „the" into every entry's context.
+  // one word alone would pull „old“ or „the“ into every entry's context.
   const idWords = entry.id.split("-").filter((word) => word.length > 2);
   for (const scene of plan.outline.scenes) {
     const passage = excerptOf(plan, scene).text;
@@ -885,7 +923,7 @@ export function entryContext(plan: RunPlan, entry: OutlineEntry): string {
           passage.includes(entry.id) ||
           (idWords.length > 0 && idWords.every((word) => lower.includes(word)));
     if (!mentions) continue;
-    blocks.push(`### Szene „${scene.title}" (${scene.id})\n\n${passage}`);
+    blocks.push(`### Szene „${scene.title}“ (${scene.id})\n\n${passage}`);
   }
   // Nothing matched: the whole source text is the honest fallback — the same
   // rule the excerpt cut follows.
@@ -900,7 +938,7 @@ function excerptOf(plan: RunPlan, scene: OutlineScene): { text: string; matched:
 
 /**
  * Run one part and report it into the sink. The ONE place a part's outcome
- * becomes job state, so a fresh run and a „Erneut versuchen" cannot drift.
+ * becomes job state, so a fresh run and a „Erneut versuchen“ cannot drift.
  */
 export async function runPart(
   plan: RunPlan,
@@ -973,7 +1011,7 @@ export async function runPartsPooled(
 
 /**
  * The whole scene run: outline, then every part. Writes NOTHING — the drafts
- * land in the job and only „Übernehmen" touches the store.
+ * land in the job and only „Übernehmen“ touches the store.
  */
 export async function runScenePipeline(input: {
   campaign: string;

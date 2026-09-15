@@ -296,6 +296,15 @@ Szenen sind sofort prüfbar, und ein defekter Teil lässt sich einzeln
 wiederholen. Die Gliederung ist ein systeminterner Schritt — sie wird nie
 angezeigt.
 
+**Jeder** Aufruf antwortet mit einem JSON-Objekt, dessen Schema der Server
+über die Provider-API **erzwingt**. Ein Eintrags-Aufruf (Szene, NPC, Ort,
+Ergänzung) liefert das Objekt, das den gespeicherten Eintrag spiegelt: die
+Eigenschaften unter `properties` — je Art getypt aus derselben Feldliste, aus
+der der Eigenschaften-Dialog gebaut wird —, den Text als einen String unter
+`body` und die Hinweise für den DM unter `warnings`. Den
+Eigenschaften-Block schreibt der Server selbst. Die Schemata liegen als
+lesbares JSON in `shared/schema/`; Details in `generator/README.md`.
+
 ## Anhang: `grimoire seed`
 
 `grimoire seed [dir]` ist ein Dev-/E2E-Werkzeug (siehe `docs/DEPLOYMENT.md`

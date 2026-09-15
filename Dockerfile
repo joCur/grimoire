@@ -60,9 +60,11 @@ COPY app/package.json ./app/
 RUN bun install --frozen-lockfile --production \
       --filter '@grimoire/server' --filter '@grimoire/shared'
 
-# Sources (run as-is by Bun) + the generator's prompt assets, which the
-# generate endpoint reads from ../generator relative to the server package.
+# Sources (run as-is by Bun), the reply schema files the generator hands to
+# the provider, and the generator's prompt assets, which the generate endpoint
+# reads from ../generator relative to the server package.
 COPY shared/src ./shared/src
+COPY shared/schema ./shared/schema
 COPY server/src ./server/src
 COPY generator ./generator
 COPY --from=build /app/app/dist ./app/dist
