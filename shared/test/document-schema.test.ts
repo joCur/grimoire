@@ -1,37 +1,58 @@
-// The document reply schemas (issue #107, PO decision of 15.09.).
+// The one consistency test over the schema files in ../schema.
 //
-// Four things have to hold, and each of them is a bug that would be silent:
+// The schemas are plain files, so nothing stops one of them from slowly
+// disagreeing with the code that reads the same data. This test is what
+// stops it. It never writes a schema and never builds one — it ASSERTS, file
+// by file, against the definitions the rest of the app already uses:
 //
-//   1. the `properties` of a kind ARE its field list — the same list the
-//      properties dialog is built from. A schema that knew a field the dialog
-//      does not would be a model writing something the DM cannot edit; a
-//      schema that forgot one would be a field no run can ever fill.
-//   2. strict mode: no keyword OpenAI rejects, `additionalProperties: false`
-//      everywhere, every property in `required`, and the optional ones
-//      nullable instead. A rejected schema is a 400 on EVERY call and
-//      therefore a permanent, silent downgrade for the whole process
-//      (llm-provider.ts).
-//   3. a new scene can only be a draft; an existing one keeps the status the
-//      DM gave it — that is the difference between the two modes.
-//   4. a fresh object per call, because both transports serialize it into a
-//      request body.
+//   1. the `properties` of a kind ARE its property field list, in order —
+//      the same list the „Eigenschaften" dialog is built from. A schema that
+//      knew a field the dialog does not would be a model writing something
+//      the DM cannot edit; a schema that forgot one would be a field no run
+//      can ever fill.
+//   2. a `select` offers the format's own value set, a required field is not
+//      nullable, and an optional one is.
+//   3. strict mode: no keyword OpenAI rejects, `additionalProperties: false`
+//      everywhere, every property in `required`. A rejected schema is a 400
+//      on EVERY call and therefore a permanent, silent downgrade for the
+//      whole process (server/src/llm-provider.ts).
+//   4. a NEW scene can only be a draft; an existing one keeps the status the
+//      DM gave it — the whole difference between the create files and the
+//      augment files.
+//   5. the outline names the same scene types, ids and bounds the server's
+//      semantic validation reads, and is strict-mode shaped too.
+//   6. a copy per call, because both transports serialize it into a body.
 
 import { describe, expect, test } from "bun:test";
-import { NPC_STATUSES, SCENE_STATUSES, SCENE_TYPES } from "../src/types";
-import { PROPERTY_FIELDS, type PropertiesKind } from "../src/property-fields";
+import { SCENE_TYPES } from "../src/types";
+import { ENTITY_SLUG } from "../src/slug";
+import {
+  propertyFieldDef,
+  PROPERTY_FIELDS,
+  type FieldControl,
+  type PropertiesKind,
+} from "../src/property-fields";
+import {
+  MAX_OUTLINE_ENTRIES,
+  MAX_OUTLINE_SCENES,
+  OUTLINE_ENTRY_KINDS,
+  OUTLINE_ID_DESCRIPTION,
+  outlineJsonSchema,
+} from "../src/outline-schema";
 import {
   DOCUMENT_KINDS,
   documentJsonSchema,
   documentReplySchema,
   documentSchemaName,
-  propertiesJsonSchema,
-  type DocumentKind,
+  PAIR_KEY,
+  PAIR_VALUE,
   type DocumentMode,
 } from "../src/document-schema";
 
-/** The keywords OpenAI's strict mode refuses — same list as the outline's. */
+/** The keywords OpenAI's strict mode refuses — see point 3 above. */
 const UNSUPPORTED = ["pattern", "minItems", "maxItems", "minLength", "maxLength", "format"];
 
+/** Every place any of `UNSUPPORTED` appears, as a dotted path. */
 function unsupportedPaths(node: unknown, path: string[] = []): string[] {
   if (Array.isArray(node)) {
     return node.flatMap((item, i) => unsupportedPaths(item, [...path, `${i}`]));
@@ -42,24 +63,53 @@ function unsupportedPaths(node: unknown, path: string[] = []): string[] {
   );
 }
 
-/** Every `properties`/`items` object of the tree, root included. */
+/** Every object node of the tree, root included. */
 function objectNodes(node: unknown): Array<Record<string, unknown>> {
   if (node === null || typeof node !== "object") return [];
   const self = node as Record<string, unknown>;
   const nested = Object.values(self).flatMap(objectNodes);
-  return self.type === "object" || (Array.isArray(self.type) && self.type.includes("object"))
+  const type = self.type;
+  return type === "object" || (Array.isArray(type) && type.includes("object"))
     ? [self, ...nested]
     : nested;
 }
 
+/** A nested node of a schema, by path. */
+function at(schema: Record<string, unknown>, path: string[]): Record<string, unknown> {
+  let node = schema;
+  for (const key of path) node = node[key] as Record<string, unknown>;
+  return node;
+}
+
+/** The `properties` half of a document schema, field by field. */
+function documentFields(
+  kind: (typeof DOCUMENT_KINDS)[number],
+  mode: DocumentMode,
+): Record<string, Record<string, unknown>> {
+  return at(documentJsonSchema(kind, mode), ["properties", "properties", "properties"]) as Record<
+    string,
+    Record<string, unknown>
+  >;
+}
+
+/** The JSON type a control's value carries — the whole mapping, spelled out. */
+const TYPE_OF_CONTROL: Record<FieldControl, string> = {
+  text: "string",
+  textarea: "string",
+  select: "string",
+  reference: "string",
+  references: "array",
+  chips: "array",
+  pairs: "array",
+};
+
 const MODES: DocumentMode[] = ["create", "augment"];
 
-describe("the document reply schemas", () => {
-  test("the properties ARE the kind's field list, plus the id", () => {
+describe("the document schema files", () => {
+  test("the properties ARE the kind's field list, in order, plus the id", () => {
     for (const kind of DOCUMENT_KINDS) {
       for (const mode of MODES) {
-        const props = propertiesJsonSchema(kind, mode).properties as Record<string, unknown>;
-        expect(Object.keys(props), `${kind}/${mode}`).toEqual([
+        expect(Object.keys(documentFields(kind, mode)), `${kind}/${mode}`).toEqual([
           "id",
           ...PROPERTY_FIELDS[kind as PropertiesKind].map((field) => field.key),
         ]);
@@ -67,51 +117,50 @@ describe("the document reply schemas", () => {
     }
   });
 
-  test("a select offers the format's own values; a required field is not nullable", () => {
-    const scene = propertiesJsonSchema("scene", "augment").properties as Record<string, unknown>;
-    expect(scene.type).toEqual({ type: ["string", "null"], enum: [...SCENE_TYPES, null] });
-    expect(scene.status).toEqual({ type: ["string", "null"], enum: [...SCENE_STATUSES, null] });
-    // `title` is the field a scene cannot lose, so it is a plain string.
-    expect(scene.title).toEqual({ type: "string" });
-    const npc = propertiesJsonSchema("npc", "create").properties as Record<string, unknown>;
-    expect(npc.status).toEqual({ type: ["string", "null"], enum: [...NPC_STATUSES, null] });
-    expect(npc.name).toEqual({ type: "string" });
-    // A list field, and the key/value field as the pair LIST strict mode
-    // needs (a free mapping cannot be expressed at all).
-    expect(scene.npcs).toEqual({ type: ["array", "null"], items: { type: "string" } });
-    const quickstats = npc.quickstats as Record<string, unknown>;
-    expect(quickstats.type).toEqual(["array", "null"]);
-    expect((quickstats.items as Record<string, unknown>).required).toEqual(["key", "value"]);
-  });
-
-  test("a NEW scene is a draft; an existing one keeps its status", () => {
-    const created = propertiesJsonSchema("scene", "create").properties as Record<string, unknown>;
-    expect(created.status).toMatchObject({ type: "string", enum: ["draft"] });
-    const existing = propertiesJsonSchema("scene", "augment").properties as Record<string, unknown>;
-    expect((existing.status as { enum: unknown[] }).enum).toContain("played");
-  });
-
-  test("every schema is strict-mode shaped", () => {
+  test("every field carries its control's type, its values, and its nullability", () => {
     for (const kind of DOCUMENT_KINDS) {
       for (const mode of MODES) {
-        const label = `${kind}/${mode}`;
-        const schema = documentJsonSchema(kind, mode);
-        expect(schema.required, label).toEqual(["properties", "body", "warnings"]);
-        expect(unsupportedPaths(schema), label).toEqual([]);
-        for (const node of objectNodes(schema)) {
-          expect(node.additionalProperties, label).toBe(false);
-          // Strict mode has no optional properties.
-          expect(node.required, label).toEqual(Object.keys(node.properties as object));
+        const fields = documentFields(kind, mode);
+        for (const def of PROPERTY_FIELDS[kind as PropertiesKind]) {
+          const label = `${kind}/${mode}/${def.key}`;
+          const node = fields[def.key] as Record<string, unknown>;
+          const base = TYPE_OF_CONTROL[def.control];
+          // A field the entity cannot lose is a plain type; every other one
+          // is nullable, because strict mode knows no optional property and
+          // the server reads `null` as „not given".
+          const draftOnly = kind === "scene" && mode === "create" && def.key === "status";
+          if (def.required === true || draftOnly) {
+            expect(node.type, label).toBe(base);
+          } else {
+            expect(node.type, label).toEqual([base, "null"]);
+          }
+          if (def.control === "select" && !draftOnly) {
+            expect(node.enum, label).toEqual([...(def.values ?? []), null]);
+          }
+          if (def.control !== "select") expect(node.enum, label).toBeUndefined();
+          // The free key/value map travels as the pair LIST strict mode
+          // needs — a mapping cannot be expressed at all.
+          if (def.control === "pairs") {
+            expect(at(node, ["items"]).required, label).toEqual([PAIR_KEY, PAIR_VALUE]);
+          } else if (base === "array") {
+            expect(node.items, label).toEqual({ type: "string" });
+          }
         }
       }
     }
-    // The guard has to be able to FIND an offender, or it guards nothing.
-    expect(unsupportedPaths({ properties: { a: { pattern: "x" } } })).toEqual([
-      "properties.a.pattern",
-    ]);
   });
 
-  test("the schema name says kind and mode, and nothing else does", () => {
+  test("a NEW scene is a draft; an existing one keeps its status", () => {
+    expect(documentFields("scene", "create").status).toMatchObject({
+      type: "string",
+      enum: ["draft"],
+    });
+    const existing = documentFields("scene", "augment").status as { enum: unknown[] };
+    expect(existing.enum).toEqual([...(propertyFieldDef("scene", "status")?.values ?? []), null]);
+    expect(existing.enum).toContain("played");
+  });
+
+  test("the schema name says kind and run, and nothing else does", () => {
     expect(documentSchemaName("scene", "create")).toBe("scene_document");
     expect(documentSchemaName("npc", "create")).toBe("npc_document");
     expect(documentSchemaName("location", "create")).toBe("location_document");
@@ -122,13 +171,74 @@ describe("the document reply schemas", () => {
     }
   });
 
-  test("a fresh object every call — both transports serialize it into a body", () => {
+  test("a copy every call — both transports serialize it into a body", () => {
     const first = documentJsonSchema("scene", "create");
     expect(documentJsonSchema("scene", "create")).not.toBe(first);
     expect(documentJsonSchema("scene", "create")).toEqual(first);
     const reply = documentReplySchema("npc", "create");
     expect(reply.name).toBe("npc_document");
     expect(reply.description).toContain("Figur");
-    expect(reply.schema).toEqual(documentJsonSchema("npc" as DocumentKind, "create"));
+    expect(reply.schema).toEqual(documentJsonSchema("npc", "create"));
+  });
+});
+
+describe("the outline schema file", () => {
+  const scenes = () => at(outlineJsonSchema(), ["properties", "scenes"]);
+  const sceneProps = () => at(outlineJsonSchema(), ["properties", "scenes", "items", "properties"]);
+  const entries = () => at(outlineJsonSchema(), ["properties", "entries"]);
+
+  test("names the same scene types, ids and bounds as the validation", () => {
+    expect(sceneProps().type).toEqual({ type: "string", enum: [...SCENE_TYPES] });
+    // The id rule and the bounds travel as PROSE — strict mode allows
+    // neither `pattern` nor `maxItems` — but they still say the numbers and
+    // the pattern the server's own checks read.
+    expect(sceneProps().id).toEqual({ type: "string", description: OUTLINE_ID_DESCRIPTION });
+    expect(OUTLINE_ID_DESCRIPTION).toContain(ENTITY_SLUG.source);
+    expect(scenes().description).toContain(String(MAX_OUTLINE_SCENES));
+    expect(entries().description).toContain(String(MAX_OUTLINE_ENTRIES));
+    expect(at(entries(), ["items", "properties", "kind"]).enum).toEqual([...OUTLINE_ENTRY_KINDS]);
+  });
+
+  test("the genuinely optional fields are nullable instead of absent", () => {
+    expect(sceneProps().location).toMatchObject({ type: ["string", "null"] });
+    expect(sceneProps().sourceExcerpt).toMatchObject({ type: ["object", "null"] });
+  });
+
+  test("a copy every call", () => {
+    const first = outlineJsonSchema();
+    expect(outlineJsonSchema()).not.toBe(first);
+    expect(outlineJsonSchema()).toEqual(first);
+  });
+});
+
+describe("every schema file", () => {
+  const all = [
+    ...DOCUMENT_KINDS.flatMap((kind) =>
+      MODES.map((mode) => [`${kind}/${mode}`, documentJsonSchema(kind, mode)] as const),
+    ),
+    ["outline", outlineJsonSchema()] as const,
+  ];
+
+  test("is strict-mode shaped: every key required, nothing extra allowed", () => {
+    for (const [label, schema] of all) {
+      expect(schema.additionalProperties, label).toBe(false);
+      expect(unsupportedPaths(schema), label).toEqual([]);
+      for (const node of objectNodes(schema)) {
+        expect(node.additionalProperties, label).toBe(false);
+        // Strict mode has no optional properties.
+        expect(node.required, label).toEqual(Object.keys(node.properties as object));
+      }
+    }
+    // The guard has to be able to FIND an offender, or it guards nothing.
+    expect(unsupportedPaths({ properties: { a: { items: { pattern: "x" } } } })).toEqual([
+      "properties.a.items.pattern",
+    ]);
+  });
+
+  test("carries the name and the description the provider request sends", () => {
+    for (const [label, schema] of all) {
+      expect(typeof schema.title, label).toBe("string");
+      expect(typeof schema.description, label).toBe("string");
+    }
   });
 });
