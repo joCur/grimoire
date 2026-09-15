@@ -53,12 +53,12 @@
 //   - TRIGGER.slowPart -> only the LAST scene's reply is held, so a spec can
 //     restart a run that has finished parts AND one in flight.
 //   - TRIGGER.asciiQuotes -> the scene body carries German quotation marks
-//     closed with an ASCII `"` (issue #107 AK5). Under the hand-written JSON
+//     closed with an ASCII `"`. Under the hand-written JSON
 //     wrapper that ended the string; as the `body` of a forced object the run
 //     must reach `done` without a single correction turn, and the characters
 //     have to arrive verbatim.
 //
-// REPLY SHAPE (issue #107): every reply is an OBJECT and is serialized as
+// REPLY SHAPE: every reply is an OBJECT and is serialized as
 // JSON into the message content — the outline its own, a document call
 // `{ properties, body, warnings }` (replies.ts assembles both). A reply that
 // is a plain STRING is one a spec wrote to be unreadable, and it travels
@@ -181,7 +181,7 @@ function existingEntry(prompt: string): { path: string; markdown: string } | nul
 
 export interface StubDecision {
   /**
-   * The reply object (issue #107), serialized as JSON into the message
+   * The reply object, serialized as JSON into the message
    * content. A plain STRING travels verbatim — that is a reply a spec wrote
    * to be unreadable.
    */
@@ -371,7 +371,7 @@ export function startStubLlm(port = 0): Promise<{ port: number; close: () => Pro
               index: 0,
               message: {
                 role: "assistant",
-                // Every reply is an object since issue #107; a string is a
+                // Every reply is an object; a string is a
                 // deliberately unreadable one and goes out as it stands.
                 content:
                   typeof decision.reply === "string"
