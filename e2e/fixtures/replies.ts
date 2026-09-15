@@ -30,6 +30,11 @@
 // campaign), `[[grella]]` (shipped as a stub in the same reply, so it stays
 // literal text until the stub is applied) and `[[smuggler-captured]]` (a
 // scene — the third referenceable kind).
+//
+// REPLY SHAPE (issue #107): every DOCUMENT reply here is the document itself,
+// with its warnings after a `---warnings---` line — `rawDocument()` below is
+// the one place that assembles it. Only the OUTLINE is still a JSON object,
+// and the server forces its schema through the provider.
 
 /** Trigger tokens a test puts into the source text to steer the stub. */
 export const TRIGGER = {
@@ -84,6 +89,14 @@ export const TRIGGER = {
    * ever rendered.
    */
   latePart: "E2E_LATE_PARTS",
+  /**
+   * The scene body carries German quotation marks closed with an ASCII `"`
+   * (issue #107 AK5, the PO case of 15.09.). Under the old JSON wrapper that
+   * `"` ended the `content` string and an inhaltlich correct scene cost a
+   * correction turn; as a raw document it is just text, so the run has to
+   * reach `done` with no correction at all.
+   */
+  asciiQuotes: "E2E_ASCII_QUOTES",
   // A part that FAILS answers at once even so — with `E2E_PART_FAIL` the run
   // therefore reaches the state in which its only reviewable part is a failed
   // one.
@@ -109,6 +122,22 @@ export const SLOW_REPLY_MS = 60_000;
  * longer than the app's first job poll, shorter than a test's patience.
  */
 export const LATE_REPLY_MS = 5_000;
+
+/** The delimiter the server splits a document reply at (server/src/document-reply.ts). */
+export const WARNINGS_DELIMITER = "---warnings---";
+
+/**
+ * One raw document reply: the document, then the warnings block. Duplicated
+ * rather than imported from the server, like KNOWLEDGE_HEADING in the stub:
+ * the fixture is a fake MODEL and writes what a model writes, so the server
+ * agrees with it by ASSERTION and not by construction.
+ */
+export function rawDocument(content: string, warnings: readonly string[] = []): string {
+  const document = content.replace(/\n*$/, "\n");
+  return warnings.length === 0
+    ? document
+    : `${document}\n${WARNINGS_DELIMITER}\n${warnings.join("\n")}\n`;
+}
 
 // --- scene run ---------------------------------------------------------------
 
@@ -144,7 +173,31 @@ export function contextEchoWarnings(knowledge: string): string[] {
   return trimmed === "" ? [] : [`${CONTEXT_ECHO} ${trimmed.replace(/\n/g, " | ")}`];
 }
 
-function sceneDraft(chapter: string, oldName = false): string {
+function sceneDraft(chapter: string, oldName = false, asciiQuotes = false): string {
+  if (asciiQuotes) {
+    // Deliberately WITHOUT the entry references of the rich draft below: this
+    // case is about the quotation marks, and every reference is one more
+    // thing that could fail for another reason.
+    return `---
+id: ${SCENE_ID}
+title: ${SCENE_TITLE}
+type: planned
+chapter: ${chapter}
+npcs: [fenn]
+handouts: []
+tags: [stealth]
+status: draft
+---
+
+## Flow
+
+Die Wache am Kran murrt: \u201EWer nachts hier steht, hat was zu verbergen".
+[[fenn]]s Leute räumen eine Ladung fort, bevor der Morgen kommt.
+
+> [!readaloud] ${ASCII_QUOTE_LINE}
+> jünger, als sie sein sollte.
+`;
+  }
   if (oldName) {
     return `---
 id: ${SCENE_ID}
@@ -205,6 +258,14 @@ die Ladung ins Dorf bringt.
 er will reden, nicht kämpfen.
 `;
 }
+
+/**
+ * The read-aloud the ASCII-quote case adds — the exact spelling of the PO
+ * case: opening `„`, closing with the ASCII `"`. A spec asserts it survives
+ * into the review byte for byte.
+ */
+export const ASCII_QUOTE_LINE =
+  '\u201EBleibt, wo ihr seid", ruft jemand aus dem Dunkeln \u2014 und die Stimme klingt';
 
 const npcStub = `---
 id: ${NPC_STUB_ID}
@@ -267,21 +328,16 @@ Nächten keinen Fang verkauft und traut [[fenn]] nicht.
 }
 
 /** The good NPC reply; `id` is the DM's pin when there was one. */
-export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): unknown {
-  return {
-    npc: { content: npcFile(id) },
-    warnings: contextEchoWarnings(knowledge),
-  };
+export function npcReply(id: string = NPC_DEFAULT_ID, knowledge = ""): string {
+  return rawDocument(npcFile(id), contextEchoWarnings(knowledge));
 }
 
 /**
  * An NPC reply that FAILS validation: unquoted quickstats (YAML eats the
  * plus), a missing status and an invented `chapter`.
  */
-export function invalidNpcReply(id: string = NPC_DEFAULT_ID): unknown {
-  return {
-    npc: {
-      content: `---
+export function invalidNpcReply(id: string = NPC_DEFAULT_ID): string {
+  return rawDocument(`---
 id: ${id}
 name: ${NPC_DEFAULT_NAME}
 chapter: 01-salzhafen
@@ -291,10 +347,7 @@ quickstats: { insight: +1 }
 ## Will
 
 Irgendwas.
-`,
-    },
-    warnings: [],
-  };
+`);
 }
 
 // --- augment run (issue #36) ---------------------------------------------
@@ -359,7 +412,7 @@ function propertyValue(properties: string[], key: string): string | undefined {
  *   anything else (a prepared scene, a location)       ->  one NEW `## If:`
  *       section at the end; every existing block comes back unchanged.
  */
-export function augmentReply(path: string, markdown: string, knowledge = ""): unknown {
+export function augmentReply(path: string, markdown: string, knowledge = ""): string {
   const { properties, body } = splitEntry(markdown);
   const id = propertyValue(properties, "id") ?? path.slice(path.lastIndexOf("/") + 1);
   const isEmptyNpc =
@@ -392,7 +445,7 @@ export function augmentReply(path: string, markdown: string, knowledge = ""): un
         AUGMENT_THREAD_TEXT,
         "",
       ].join("\n");
-  return { entry: { content }, warnings: contextEchoWarnings(knowledge) };
+  return rawDocument(content, contextEchoWarnings(knowledge));
 }
 
 /**
@@ -401,8 +454,8 @@ export function augmentReply(path: string, markdown: string, knowledge = ""): un
  * is no longer a shape a reply can have — rewriting the reference key is,
  * and it is the rule the augment run cares about most.
  */
-export function invalidAugmentReply(_path: string): unknown {
-  return { entry: { content: "---\nid: not-the-entry\n---\n" }, warnings: [] };
+export function invalidAugmentReply(_path: string): string {
+  return rawDocument("---\nid: not-the-entry\n---\n");
 }
 
 // --- the pipelined scene run (issue #102) ------------------------------------
@@ -413,11 +466,11 @@ export function invalidAugmentReply(_path: string): unknown {
 //
 //   outline        the scene list with a verbatim `sourceExcerpt` per scene —
 //                  the server cuts the passage with it, so the fixture has to
-//                  quote the SOURCE TEXT and not paraphrase it.
-//   scene          one document, `{ scene: { content } }` — the same document
-//                  the batch reply used to carry.
-//   entry          `{ npc }` / `{ location }` — the npc/location prompt's own
-//                  schema, one file per call.
+//                  quote the SOURCE TEXT and not paraphrase it. Still JSON:
+//                  the server forces its schema through the provider (#107).
+//   scene          the scene document itself (#107) — raw markdown, warnings
+//                  after `---warnings---`.
+//   entry          the npc/location document itself, likewise raw.
 //
 // The default run has ONE scene and the two entries the specs already know.
 // TRIGGER.threeScenes turns it into three scenes and no entries, which is what
@@ -463,6 +516,12 @@ export function outlineReply(input: {
    * trigger stands for is about SPELLING, nothing else).
    */
   oldName?: boolean;
+  /**
+   * TRIGGER.asciiQuotes (issue #107): same reasoning as `oldName` — the
+   * draft has no entry references, so the outline proposes none and the run
+   * is exactly one part. The case is about the quotation marks.
+   */
+  asciiQuotes?: boolean;
 }): unknown {
   const sourceExcerpt = wholeSourceExcerpt(input.source);
   // The outline is the step that reads the WHOLE source text, so the run's
@@ -484,7 +543,7 @@ export function outlineReply(input: {
       warnings,
     };
   }
-  if (input.oldName === true) {
+  if (input.oldName === true || input.asciiQuotes === true) {
     return {
       scenes: [{ id: SCENE_ID, title: SCENE_TITLE, type: "planned", sourceExcerpt, refs: [] }],
       entries: [],
@@ -538,23 +597,23 @@ export function invalidRunOutline(source: string): unknown {
 }
 
 /** One finished scene document, as the per-scene call answers it. */
-export function scenePartReply(chapter: string, sceneId: string, oldName = false): unknown {
+export function scenePartReply(
+  chapter: string,
+  sceneId: string,
+  oldName = false,
+  asciiQuotes = false,
+): string {
   if (sceneId === SCENE_ID) {
-    return { scene: { content: sceneDraft(chapter, oldName) }, warnings: [] };
+    return rawDocument(sceneDraft(chapter, oldName, asciiQuotes));
   }
   const scene = THREE_SCENES.find((s) => s.id === sceneId);
-  return {
-    scene: { content: plainSceneDraft(chapter, sceneId, scene?.title ?? sceneId) },
-    warnings: [],
-  };
+  return rawDocument(plainSceneDraft(chapter, sceneId, scene?.title ?? sceneId));
 }
 
 /** A scene document that FAILS validation — `status: ready` is drafts only. */
-export function invalidScenePartReply(chapter: string, sceneId: string): unknown {
+export function invalidScenePartReply(chapter: string, sceneId: string): string {
   const title = THREE_SCENES.find((s) => s.id === sceneId)?.title ?? SCENE_TITLE;
-  return {
-    scene: {
-      content: `---
+  return rawDocument(`---
 id: ${sceneId}
 title: ${title}
 type: planned
@@ -565,10 +624,7 @@ status: ready
 ## Flow
 
 > [!combat] Zwei Wachen, Initiative wie üblich.
-`,
-    },
-    warnings: [],
-  };
+`);
 }
 
 /**
@@ -597,9 +653,7 @@ status: draft
 `;
 }
 
-/** One suggested entry, in the npc/location prompt's own reply schema. */
-export function entryPartReply(kind: "npc" | "location"): unknown {
-  return kind === "location"
-    ? { location: { content: locationStub }, warnings: [] }
-    : { npc: { content: npcStub }, warnings: [] };
+/** One suggested entry — the document itself (issue #107). */
+export function entryPartReply(kind: "npc" | "location"): string {
+  return rawDocument(kind === "location" ? locationStub : npcStub);
 }

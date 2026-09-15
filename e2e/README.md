@@ -134,12 +134,21 @@ einsammelt (Bun matcht `*.test.ts` und `*.spec.ts`).
 `fixtures/replies.ts` enthält die Modellantworten als lesbare Markdown-Blöcke:
 den Szenen-Entwurf mit NPC- und Ort-Stub, die NPC-Datei und je eine bewusst
 ungültige Variante. Sie erfüllen die aktuelle mechanische Validierung aus
-`server/src/generator.ts`. Seit Issue #100 enthält **keine** Antwort mehr
-einen `path`: Szenen kommen als `{ content }` (die `id` im Frontmatter ist
-alles, was das Modell über die Adressierung entscheidet), vorgeschlagene
-Einträge als ein gemeinsames Array `entries` mit
-`{ kind: "npc" | "location", content }`, und NPC- wie Ergänzungs-Lauf
-liefern ein Dokument ohne Adresse. Die inhaltlichen Regeln bleiben (Szene:
+`server/src/generator.ts`.
+
+**Antwortformate (Issue #107).** Eine **Dokument-Antwort ist ein String** —
+das Dokument selbst, Warnungen danach hinter einer Zeile `---warnings---`;
+`rawDocument()` baut sie an einer Stelle, und der Stub schreibt einen String
+unverändert in den Message-Content. Das gilt für den Szenen-Teil, den
+Eintrags-Teil, den NPC-Lauf und den Ergänzungs-Lauf. Die **Gliederung** ist
+das einzige Objekt, das übrig ist: sie wird als JSON serialisiert, und der
+Server erzwingt ihr Schema über den Provider (der Stub ist ein
+OpenAI-kompatibler Endpoint und ignoriert `response_format` — damit läuft
+nebenbei der Fallback-Pfad echt).
+
+Seit Issue #100 enthält **keine** Antwort einen `path`: die `id` im
+Frontmatter ist alles, was das Modell über die Adressierung entscheidet.
+Die inhaltlichen Regeln bleiben (Szene:
 `status: draft`, nur bekannte Callouts, `location` ist eine id, Referenzen
 existieren oder kommen als Eintrag mit; NPC-Eintrag *mit* Status,
 Ort-Eintrag *ohne*; NPC-Lauf: kebab-`id`, kein `chapter`, Quickstats als
@@ -187,6 +196,11 @@ keinen Zustand und kann mehrere Worker parallel bedienen:
   „Erneut versuchen". Der Rundenzähler ist der **einzige** Zustand des Stubs
   und hängt an der `nonce`, die der Spec schreibt: so können parallele Worker
   sich den Fehlschlag nicht gegenseitig wegnehmen.
+- `E2E_ASCII_QUOTES` → der Szenen-Körper trägt deutsche Anführungszeichen mit
+  dem **ASCII-Zeichen `"`** als Schlusszeichen — der PO-Fall vom 15.09.
+  (Issue #107 AK5). Früher beendete dieses `"` den JSON-String; als rohes
+  Dokument ist es Text, der Lauf muss also ohne eine einzige Korrekturrunde
+  `done` erreichen (zwei Aufrufe: Gliederung + eine Szene).
 - `E2E_HOLD_LAST` → nur die **letzte** Szene wird gehalten, die anderen
   antworten normal. Das ist die Lage, die ein Neustart mitten im Lauf braucht:
   fertige Teile zum Behalten und einen in Flug. (Der Name beginnt bewusst

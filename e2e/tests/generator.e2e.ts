@@ -14,6 +14,7 @@
 // validates the reply mechanically exactly as in production.
 
 import {
+  ASCII_QUOTE_LINE,
   LOCATION_STUB_ID,
   LOCATION_STUB_NAME,
   NPC_DEFAULT_NAME,
@@ -152,6 +153,47 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
     page.getByRole("button", { name: "Status ändern, aktuell Entwurf" }),
   ).toBeVisible();
   await expect(page.getByText("1 Kapitel · 3 Szenen")).toBeVisible();
+});
+
+/**
+ * Issue #107 AK5, the PO case of 15.09.: the scene body carries German
+ * quotation marks closed with an ASCII `"`. Under the old JSON wrapper that
+ * quote ended the `content` string and an inhaltlich correct scene cost the
+ * run a correction turn — and often a „Formprüfung nicht bestanden". As a raw
+ * document it is text, so the run reaches the review in ONE call per part and
+ * the quotation marks arrive byte for byte.
+ */
+test("a scene with ASCII closing quotes is accepted without a correction turn", async ({
+  page,
+  api,
+}) => {
+  await page.goto("/beispiel/generate");
+  await page.getByLabel("Quelltext (EN)").fill(`${SOURCE}\n\n${TRIGGER.asciiQuotes}`);
+  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+    timeout: 30_000,
+  });
+  // One scene, no suggested entries — and, the point of the case, exactly TWO
+  // calls: the outline and the one scene. A correction turn would be a third.
+  await expect(
+    page.getByText("1 Szene · 0 vorgeschlagene Einträge · noch nichts geschrieben"),
+  ).toBeVisible();
+  await expect(page.getByText(/~[\d.]+ Tokens · 2 Aufrufe/)).toBeVisible();
+  // Nothing failed, so no error block and no „Erneut versuchen".
+  await expect(page.getByRole("button", { name: "Erneut versuchen" })).toHaveCount(0);
+
+  // The read-aloud carries the mixed quotation marks, rendered as written.
+  const card = page.locator("div").filter({ hasText: DRAFT_PATH }).last();
+  await expect(card.locator("[data-callout='readaloud']")).toContainText(ASCII_QUOTE_LINE);
+
+  await page
+    .getByRole("button", { name: /^Übernehmen \(1 Szene · 0 vorgeschlagene Einträge\)$/ })
+    .click();
+  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
+  // …and they are stored byte for byte: the server corrects no typography.
+  const stored = await api.raw(`01-salzhafen/${SCENE_ID}`);
+  expect(stored).toContain(ASCII_QUOTE_LINE);
 });
 
 test("npc run: pinned id, review, apply", async ({ page, api }) => {

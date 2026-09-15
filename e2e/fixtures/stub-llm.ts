@@ -52,6 +52,18 @@
 //     so parallel workers cannot consume each other's failure.
 //   - TRIGGER.slowPart -> only the LAST scene's reply is held, so a spec can
 //     restart a run that has finished parts AND one in flight.
+//   - TRIGGER.asciiQuotes -> the scene body carries German quotation marks
+//     closed with an ASCII `"` (issue #107 AK5). Under the old JSON wrapper
+//     that ended the string; as a raw document the run must reach `done`
+//     without a single correction turn.
+//
+// REPLY SHAPE (issue #107): a DOCUMENT reply is a STRING — the document plus
+// its warnings block, exactly as replies.ts assembles it — and goes into the
+// message content verbatim. The OUTLINE is the one object left, and it is
+// serialized as JSON. The stub answers the schema-forced request of the
+// Claude path in neither form: it is an OpenAI-compatible endpoint and simply
+// ignores `response_format`, which is also what the real fallback path
+// exercises.
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
@@ -164,7 +176,11 @@ function existingEntry(prompt: string): { path: string; markdown: string } | nul
 }
 
 export interface StubDecision {
-  /** The reply body (a JSON object, serialized into the message content). */
+  /**
+   * The reply. A STRING goes into the message content verbatim — that is a
+   * document reply (issue #107); anything else is serialized as JSON, which
+   * is the outline and only the outline.
+   */
   reply: unknown;
   /** The endpoint reports the reply as cut off. */
   truncated: boolean;
@@ -196,6 +212,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
   const knowledge = knowledgeBlock(prompt);
   const oldName = source.includes(TRIGGER.oldName);
   const three = source.includes(TRIGGER.threeScenes);
+  const asciiQuotes = source.includes(TRIGGER.asciiQuotes);
   // Only the PARTS are late; the outline answers at once, so the run reaches
   // `running` with its parts still pending (issue #102 review).
   const latePart = source.includes(TRIGGER.latePart) ? LATE_REPLY_MS : 0;
@@ -226,7 +243,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
       // it gets is a well-formed one with a single part.
       reply: invalid
         ? invalidRunOutline(source)
-        : outlineReply({ source, knowledge, three, oldName }),
+        : outlineReply({ source, knowledge, three, oldName, asciiQuotes }),
     };
   }
 
@@ -266,7 +283,7 @@ export function decide(messages: ChatMessage[]): StubDecision {
         reply:
           invalid || fails
             ? invalidScenePartReply(chapter, assigned)
-            : scenePartReply(chapter, assigned, oldName),
+            : scenePartReply(chapter, assigned, oldName, asciiQuotes),
       };
     }
     const kind = system.includes("System-Prompt: Ort-Generator") ? "location" : "npc";
@@ -348,7 +365,15 @@ export function startStubLlm(port = 0): Promise<{ port: number; close: () => Pro
           choices: [
             {
               index: 0,
-              message: { role: "assistant", content: JSON.stringify(decision.reply, null, 2) },
+              message: {
+                role: "assistant",
+                // A document reply IS the content (issue #107); the outline
+                // is the one reply left that gets serialized.
+                content:
+                  typeof decision.reply === "string"
+                    ? decision.reply
+                    : JSON.stringify(decision.reply, null, 2),
+              },
               finish_reason: decision.truncated ? "length" : "stop",
             },
           ],
