@@ -506,3 +506,29 @@ test("creating the chapter is idempotent across two partial accepts", async () =
   expect((await accept(job, {})).status).toBe(200);
   expect(await chapterTitles()).toMatchObject({ "03-dragon-hatchery": "Die Drachenbrut" });
 });
+
+// #115 review, finding 4: a partial accept of the NPC stub ALONE — no scene in
+// the batch, so nothing in it names the chapter. The chapter row is still
+// created, and that is intended: `jobChapterTarget` is decided from the job,
+// not from what the accept happens to contain, so the chapter the run is for
+// exists from the first accept onwards — and the scenes accepted afterwards
+// have the row their foreign key needs. The alternative (create it only
+// together with a scene) is exactly the ordering bug #115 is about.
+test("accepting only the npc stub already creates the run's chapter", async () => {
+  const job = await runNewChapterJob("Die Drachenbrut");
+  const res = await accept(job, { paths: [STUB_PATH] });
+  expect(res.status).toBe(200);
+
+  expect(await exists(STUB_PATH)).toBe(true);
+  // The chapter is there, with the title the run carries…
+  expect(await chapterTitles()).toMatchObject({ "03-dragon-hatchery": "Die Drachenbrut" });
+  expect(await exists("03-dragon-hatchery/_chapter")).toBe(true);
+  // …and no scene was written by this accept.
+  expect(await exists("03-dragon-hatchery/leuchtturm/treffen-am-kai")).toBe(false);
+
+  // The scenes still accept afterwards, into the row that now exists.
+  const rest = (await fetchJob()) as GenerateJob;
+  expect(rest).not.toBeNull();
+  expect((await accept(rest, {})).status).toBe(200);
+  expect(await chapterTitles()).toMatchObject({ "03-dragon-hatchery": "Die Drachenbrut" });
+});
