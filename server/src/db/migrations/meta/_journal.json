@@ -78,6 +78,13 @@
       "when": 1789459044189,
       "tag": "0010_pipeline_parts",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1789510860953,
+      "tag": "0011_drop_chapter_declared",
+      "breakpoints": true
     }
   ]
 }

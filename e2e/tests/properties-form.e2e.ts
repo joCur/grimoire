@@ -35,7 +35,21 @@
 
 import type { Locator, Page } from "@playwright/test";
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { expect, test, type Api } from "../support/test";
+import { EXAMPLES_DIR } from "../support/paths";
+
+
+// The reference scene with one key the schema has no field for — seeded
+// through the importer, because that is the only way an unknown key gets
+// into `extra` (the API refuses new ones).
+const SCENE_FILE = "01-salzhafen/hafen/ankunft-leuchtturm";
+const SCENE_WITH_CUSTOM = readFileSync(
+  path.join(EXAMPLES_DIR, "beispiel", `${SCENE_FILE}.md`),
+  "utf8",
+).replace(/\n---\n/, "\nx-custom: bleibt\n---\n");
+test.use({ seed: { files: { [SCENE_FILE]: SCENE_WITH_CUSTOM } } });
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const SCENE_URL = `/beispiel/file/${SCENE}`;
@@ -73,10 +87,10 @@ test("scene properties: chips, reference and status land in the file — nothing
   api,
 }) => {
   const pristine = await split(api, SCENE);
-  // A key the form does not know, written BEFORE the dialog opens: the patch
-  // must not carry it, so it has to come out of the save verbatim. (A patch is
-  // the only way to put it there now — nobody hand-edits a row.)
-  await api.patchProperties(SCENE, { "x-custom": "bleibt" });
+  // A key the form does not know (`x-custom`, seeded through the importer —
+  // the only way such a key gets in): the patch must not carry it, so it has
+  // to come out of the save verbatim.
+  expect(pristine.properties["x-custom"]).toBe("bleibt");
 
   // Entered from the pool, so there is a history entry BEHIND the scene —
   // the „zurück" assertion after the move below needs one.

@@ -217,64 +217,21 @@ describe("guard tokens of the two list documents", () => {
 });
 
 describe("PATCH /properties — a scene's `chapter`", () => {
-  test("null deletes the key and the scene keeps its place in the tree", async () => {
+  test("null is refused: a scene belongs to a chapter, the address is the chapter", async () => {
     const before = await getFile(SCENE);
     expect(before.properties.chapter).toBe("01-salzhafen");
 
-    const after = await patchOk({
-      path: SCENE,
-      rev: before.rev,
-      patch: { chapter: null },
-    });
-    expect("chapter" in after.properties).toBe(false);
-    // The address is untouched — a deleted KEY must never move a scene, let
-    // alone drop it out of the tree.
-    expect(after.path).toBe(SCENE);
-    const chapter = (await tree()).chapters[0]!;
-    expect(chapter.groups.flatMap((g) => g.scenes.map((s) => s.id))).toContain(
-      "lighthouse-arrival",
-    );
-    expect((await getFile(SCENE)).properties.chapter).toBeUndefined();
-  });
-
-  test("a chapter that does not exist -> 400, nothing written", async () => {
-    const before = await getFile(SCENE);
-    const res = await patchReq({
-      path: SCENE,
-      rev: before.rev,
-      patch: { chapter: "99-gibt-es-nicht" },
+    const res = await app.request("/api/beispiel/properties", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: SCENE, rev: before.rev, patch: { chapter: null } }),
     });
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toContain("99-gibt-es-nicht");
-    expect(await getFile(SCENE)).toEqual(before);
-  });
-
-  test("an existing chapter moves the scene, and the tree follows", async () => {
-    const root = await tempCampaignRoot();
-    try {
-      await mkdir(path.join(root, "beispiel", "02-nordbucht"), { recursive: true });
-      await writeFile(
-        path.join(root, "beispiel", "02-nordbucht", "_chapter.md"),
-        "---\nid: 02-nordbucht\ntitle: Kapitel 2\nstatus: planned\n---\n",
-        "utf8",
-      );
-      await seedStore(root);
-
-      const before = await getFile(SCENE);
-      const after = await patchOk({
-        path: SCENE,
-        rev: before.rev,
-        patch: { chapter: "02-nordbucht" },
-      });
-      expect(after.properties.chapter).toBe("02-nordbucht");
-      // the CHAPTER changed; the group is the scene's location and stays
-      expect(after.path).toBe("02-nordbucht/leuchtturm/lighthouse-arrival");
-      const chapters = (await tree()).chapters;
-      const moved = chapters.find((c) => c.id === "02-nordbucht");
-      expect(moved?.groups[0]?.scenes.map((s) => s.id)).toEqual(["lighthouse-arrival"]);
-    } finally {
-      await removeTempRoot(root);
-    }
+    // Nothing written: same chapter, same address, same rev.
+    const after = await getFile(SCENE);
+    expect(after.properties.chapter).toBe("01-salzhafen");
+    expect(after.path).toBe(SCENE);
+    expect(after.rev).toBe(before.rev);
   });
 });
 

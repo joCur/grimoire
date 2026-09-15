@@ -73,7 +73,6 @@ export interface SceneRow {
   id: string;
   chapterId: string | null;
   /** 1 when the properties declares `chapter:` (schema.ts). */
-  chapterDeclared: number;
   title: string;
   type: string;
   trigger: string | null;
@@ -271,10 +270,8 @@ export function sceneProperties(
       // they are always present so a status control never has to guess.
       ["type", row.type === "" ? "planned" : row.type],
       ["trigger", row.trigger],
-      // The ADDRESS keeps the chapter either way; the key is only rendered
-      // while the properties declares it (schema.ts `chapter_declared`), so
-      // `PATCH { chapter: null }` can delete it as it always could.
-      ["chapter", row.chapterDeclared === 0 ? null : row.chapterId],
+      // The chapter is part of the scene's address — always present.
+      ["chapter", row.chapterId],
       ["location", row.location],
       // Empty reference lists are omitted, not written as `[]`: the format
       // says nothing about them, and an authored file had no key either.

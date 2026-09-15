@@ -54,7 +54,9 @@ eigenen Seiten gepflegt und über `GET/PUT /api/:campaign/knowledge` bzw.
 Die Eigenschaften eines Eintrags sind seine strukturierten Felder. Sie
 heißen auf der Leitung `properties`; die App zeigt sie im
 Eigenschaften-Dialog, und `PATCH /properties` ändert genau die Felder, die
-der DM angefasst hat. Unbekannte Felder bleiben erhalten.
+der DM angefasst hat. Felder, die der Import mitgebracht hat und die kein
+Eintrag kennt, bleiben erhalten und lassen sich ändern oder löschen; neue legt
+die API nicht an (400).
 
 ### Kampagne
 

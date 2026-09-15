@@ -5,9 +5,9 @@
 // added later:
 //
 //   1. CONTRACT FIELDS ARE COLUMNS. Everything README.md names for an entity
-//      gets its own column. Unknown frontmatter keys are preserved verbatim
-//      in the `extra` JSON column — the format degrades, it never validates
-//      (DECISIONS #1), and a hand-written key must survive a round trip.
+//      gets its own column. Unknown keys an import brings along are kept
+//      verbatim in the `extra` JSON column — the format degrades, it never
+//      validates — and the API adds none (`PATCH` refuses a new key).
 //   2. REFERENCES ARE TABLES with a `pos` column. `npcs: [jorna, fenn]` is an
 //      ORDERED list in the file, and the order is authored information.
 //   3. SOFT REFERENCES CARRY NO FOREIGN KEY. `scenes.location`, `scene_npcs.
@@ -47,7 +47,12 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
-/** JSON object column holding preserved-but-unknown frontmatter keys. */
+/**
+ * JSON object column holding unknown properties. Only the importer puts keys
+ * in here (a seeded entry may carry fields the schema has no column for);
+ * the API keeps them readable and lets `PATCH /properties` change or delete
+ * them, but never adds a new one — an unknown key in a patch is a 400.
+ */
 const extraColumn = () => text("extra").notNull().default("{}");
 
 /** Optimistic-concurrency token of one row (rule 4). */
@@ -137,16 +142,6 @@ export const scenes = sqliteTable(
      * from the directory, which is what the tree was actually built from.
      */
     chapterId: text("chapter_id"),
-    /**
-     * Whether the scene's FRONTMATTER declares `chapter:`. In the file tree
-     * the owning chapter was the DIRECTORY and `chapter:` was a decorative
-     * copy of it, so `PATCH { chapter: null }` deleted a key and left the
-     * scene where it was. `chapter_id` is the address now, so nulling it
-     * would drop the scene out of the tree — the declaration is a flag
-     * instead: 0 hides the key from the rendered frontmatter, the address
-     * stays.
-     */
-    chapterDeclared: integer("chapter_declared").notNull().default(1),
     title: text("title").notNull().default(""),
     /** "planned" | "contingency" | anything else a file carried. */
     type: text("type").notNull().default("planned"),
