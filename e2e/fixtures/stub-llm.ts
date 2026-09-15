@@ -58,6 +58,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import {
   EXISTING_ENTRY_HEADING,
   FAILING_SCENE_ID,
+  LATE_REPLY_MS,
   SLOW_REPLY_MS,
   THREE_SCENES,
   TRIGGER,
@@ -170,6 +171,12 @@ export interface StubDecision {
   kind: "outline" | "scene" | "entry" | "npc" | "augment";
   /** Milliseconds to hold the reply before sending it (TRIGGER.slow). */
   delayMs: number;
+  /**
+   * Milliseconds to WAIT and then answer normally (TRIGGER.latePart) — a
+   * slow model, not a dead one: the part really finishes, just not before
+   * the browser has seen the run without it.
+   */
+  pauseMs?: number;
 }
 
 /** The system message of the request — which PROMPT the call is (issue #102). */
@@ -189,6 +196,9 @@ export function decide(messages: ChatMessage[]): StubDecision {
   const knowledge = knowledgeBlock(prompt);
   const oldName = source.includes(TRIGGER.oldName);
   const three = source.includes(TRIGGER.threeScenes);
+  // Only the PARTS are late; the outline answers at once, so the run reaches
+  // `running` with its parts still pending (issue #102 review).
+  const latePart = source.includes(TRIGGER.latePart) ? LATE_REPLY_MS : 0;
 
   // Issue #36: an augment run is the one prompt that carries an EXISTING
   // entry. It is checked FIRST — a scene augment also carries a `chapter:`
@@ -249,6 +259,10 @@ export function decide(messages: ChatMessage[]): StubDecision {
           delayMs > 0 || (source.includes(TRIGGER.slowPart) && assigned === last)
             ? SLOW_REPLY_MS
             : 0,
+        // A FAILING part answers at once even when the others are late: that
+        // is the shape in which the only reviewable thing is an error
+        // (issue #102 review).
+        pauseMs: fails ? 0 : latePart,
         reply:
           invalid || fails
             ? invalidScenePartReply(chapter, assigned)
@@ -320,6 +334,12 @@ export function startStubLlm(port = 0): Promise<{ port: number; close: () => Pro
           held.unref?.();
           req.on("close", () => clearTimeout(held));
           return;
+        }
+        if (decision.pauseMs !== undefined && decision.pauseMs > 0) {
+          // A slow but working model (TRIGGER.latePart): the reply comes,
+          // just late enough for the browser to have rendered the run
+          // without it first.
+          await new Promise((resolve) => setTimeout(resolve, decision.pauseMs));
         }
         json(res, 200, {
           id: "chatcmpl-stub",

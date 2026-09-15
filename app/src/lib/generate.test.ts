@@ -8,6 +8,7 @@ import { describe, expect, test } from "bun:test";
 import type { GenerateJob } from "@grimoire/shared/types";
 
 import { translator } from "@/i18n/format";
+import { GENERATE_JOB_POLL_MS, generateJobPollMs } from "@/lib/use-generate-job";
 import {
   applySummary,
   chapterIdError,
@@ -607,6 +608,20 @@ describe("the run's parts", () => {
     expect(hasReviewableParts(job(["done", "running", "pending"]))).toBe(true);
     // A FAILED part is reviewable too — it carries „Erneut versuchen“.
     expect(hasReviewableParts(job(["failed", "running", "pending"]))).toBe(true);
+  });
+
+  test("the poll survives the window in which there is NO job yet", () => {
+    // The regression this guards (issue #102 review): right after „Entwürfe
+    // generieren" a GET can overtake the new row and answer 404 → `null`. A
+    // `null` is not a running job, so the interval went off and nothing ever
+    // switched it back on — the view sat on the spinner until a reload.
+    expect(generateJobPollMs(job(["running"]))).toBe(GENERATE_JOB_POLL_MS);
+    expect(generateJobPollMs(null)).toBe(false);
+    expect(generateJobPollMs(undefined)).toBe(false);
+    expect(generateJobPollMs(null, true)).toBe(GENERATE_JOB_POLL_MS);
+    expect(generateJobPollMs(undefined, true)).toBe(GENERATE_JOB_POLL_MS);
+    // A settled job needs no poll, whatever the caller is waiting for.
+    expect(generateJobPollMs({ ...job(["done"]), status: "done" }, true)).toBe(false);
   });
 
   test("„noch offen“ is pending or running, never failed", () => {

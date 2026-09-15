@@ -23,21 +23,42 @@ export function generateJobKey(campaign: string): [string, string] {
 }
 
 /**
- * The campaign's generate job, or null when there is none. Polls only while
- * the job is running; `enabled: false` keeps a view out of it entirely (the
- * topbar switches it on where the indicator can actually show).
+ * How long until the next poll — `false` for „nothing to wait for".
+ *
+ * A running job is the obvious case. The second one is the one that stranded
+ * the generator view: right after „Entwürfe generieren" the job may not be
+ * READABLE yet (the answer is a 202 and a GET that overtakes the row answers
+ * 404 → `null`), and a `null` is not a running job — so the interval was
+ * switched off and NOTHING ever switched it back on. The view then sat on
+ * „Entwürfe werden generiert …" until the DM reloaded the page, while the run
+ * finished on the server. So a caller that is WAITING for a job to appear
+ * keeps the loop alive until it does.
+ */
+export function generateJobPollMs(
+  job: GenerateJob | null | undefined,
+  expectJob = false,
+): number | false {
+  if (job?.status === "running") return GENERATE_JOB_POLL_MS;
+  if (expectJob && (job === null || job === undefined)) return GENERATE_JOB_POLL_MS;
+  return false;
+}
+
+/**
+ * The campaign's generate job, or null when there is none. Polls while the
+ * job is running — and while `expectJob` says a run was just started and its
+ * job is still on its way; `enabled: false` keeps a view out of it entirely
+ * (the topbar switches it on where the indicator can actually show).
  */
 export function useGenerateJob(
   campaign: string,
-  { enabled = true }: { enabled?: boolean } = {},
+  { enabled = true, expectJob = false }: { enabled?: boolean; expectJob?: boolean } = {},
 ): UseQueryResult<GenerateJob | null> {
   return useQuery({
     queryKey: generateJobKey(campaign),
     queryFn: () => fetchGenerateJob(campaign),
     enabled: enabled && campaign !== "",
     // Poll only as long as there is something to wait for.
-    refetchInterval: (query) =>
-      query.state.data?.status === "running" ? GENERATE_JOB_POLL_MS : false,
+    refetchInterval: (query) => generateJobPollMs(query.state.data, expectJob),
     retry: false,
   });
 }

@@ -164,6 +164,95 @@ test("a finished part is acceptable while the run is still running (AK2)", async
   await page.getByRole("button", { name: /^(Verwerfen|Rest verwerfen)$/ }).click();
 });
 
+test("the review replaces the spinner on a POLL, without a reload", async ({
+  page,
+  api,
+}, testInfo) => {
+  // The regression this claim exists for (issue #102 review): every part
+  // answered so fast that the review was the FIRST thing the page ever
+  // rendered, so no test ever watched the spinner turn into it. With late
+  // parts the browser really sees „Entwürfe werden generiert …" first and the
+  // switch has to happen on a polled job — never on a reload.
+  await page.goto("/beispiel/generate");
+  await page
+    .getByLabel("Quelltext (EN)")
+    .fill([SOURCE, TRIGGER.threeScenes, TRIGGER.latePart, TRIGGER.slowPart].join("\n\n"));
+  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+
+  // The spinner first — with nothing to review, that is the honest state.
+  await expect(page.getByText("Entwürfe werden generiert", { exact: false })).toBeVisible();
+  // …and the run is genuinely `running` while it stands there.
+  const during = (await api.fetch("beispiel/generate/job").then((r) => r.json())) as {
+    status: string;
+  };
+  expect(during.status).toBe("running");
+
+  // No reload, no goto: the poll alone has to carry the view into the review.
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+    timeout: 30_000,
+  });
+  const firstTitle = THREE_SCENES[0].title;
+  await expect(page.getByRole("heading", { level: 2, name: firstTitle })).toBeVisible();
+  await expect(page.getByText("Entwürfe werden generiert", { exact: false })).toBeHidden();
+  // And the run is STILL going while the review stands there: the switch was
+  // made by a poll of a `running` job, not by its end.
+  const shown = (await api.fetch("beispiel/generate/job").then((r) => r.json())) as {
+    status: string;
+  };
+  expect(shown.status).toBe("running");
+
+  // Cleanup — nothing of this run needs to be written.
+  await page.getByRole("button", { name: /^(Verwerfen|Rest verwerfen)$/ }).click();
+});
+
+test("a FAILED part alone is already the review (no empty page)", async ({
+  page,
+  api,
+}, testInfo) => {
+  // The other half of the same regression (issue #102 review): the parts are
+  // the review's spine, the drafts only fill it in. While the two good parts
+  // are still late, the failed one is the only thing there is — and it is
+  // something the DM can act on. Gating the review on a RESULT rendered this
+  // state as an empty page that only appeared on a reload.
+  await page.goto("/beispiel/generate");
+  await page
+    .getByLabel("Quelltext (EN)")
+    .fill(threeSceneSource(`w${testInfo.workerIndex}d`, TRIGGER.latePart));
+  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+
+  const failedTitle = THREE_SCENES.find((s) => s.id === FAILING_SCENE_ID)!.title;
+  // No reload: the failed part carries the view into the review on its own,
+  // with its error and its own „Erneut versuchen".
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+    timeout: 30_000,
+  });
+  const failedCard = page.locator("section").filter({ hasText: failedTitle }).last();
+  await expect(failedCard).toContainText("nicht geschrieben");
+  await expect(failedCard.getByRole("button", { name: "Erneut versuchen" })).toBeVisible();
+  // The pin of the claim: at this moment NO part has produced a draft yet —
+  // the review is on the screen because a part FAILED, not because one
+  // succeeded. (Waiting for the late parts first would pass either way.)
+  const early = (await api.fetch("beispiel/generate/job").then((r) => r.json())) as {
+    status: string;
+    result?: { scenes: unknown[] };
+    pipeline: { parts: Array<{ status: string }> };
+  };
+  expect(early.status).toBe("running");
+  expect(early.pipeline.parts.map((part) => part.status)).not.toContain("done");
+  expect(early.result?.scenes ?? []).toEqual([]);
+  // …and the two late parts arrive afterwards, into the same review: their
+  // DRAFTS, addressed by path — the part's own title is on its status card
+  // while it is still open, so only the path says the draft is there.
+  for (const scene of THREE_SCENES) {
+    if (scene.id === FAILING_SCENE_ID) continue;
+    await expect(page.getByText(draftPath(scene.id), { exact: false }).first()).toBeVisible({
+      timeout: 30_000,
+    });
+  }
+
+  await page.getByRole("button", { name: /^(Verwerfen|Rest verwerfen)$/ }).click();
+});
+
 test("„Verwerfen\" during a run stops the open parts", async ({ page, api }, testInfo) => {
   await page.goto("/beispiel/generate");
   // The last scene's reply is HELD, so the run is genuinely still going while

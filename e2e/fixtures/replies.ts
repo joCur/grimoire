@@ -74,6 +74,19 @@ export const TRIGGER = {
   // a name starting with it would hold every call of the run — the outline
   // included — and no part would ever finish.
   slowPart: "E2E_HOLD_LAST",
+  /**
+   * Every scene part answers LATE (LATE_REPLY_MS) while the outline answers
+   * at once — the only shape in which the browser sees a run that is
+   * `running` with NOTHING to review yet, and therefore the only one that
+   * exercises the switch from the spinner to the review on a POLLED update
+   * (issue #102 review). Without it the parts are finished before the first
+   * `GET …/generate/job` answers, and the review is simply the first thing
+   * ever rendered.
+   */
+  latePart: "E2E_LATE_PARTS",
+  // A part that FAILS answers at once even so — with `E2E_PART_FAIL` the run
+  // therefore reaches the state in which its only reviewable part is a failed
+  // one.
 } as const;
 
 /** The nonce of a `E2E_PART_FAIL:<nonce>` token, or "" when there is none. */
@@ -90,6 +103,12 @@ export const OLD_NAME = "Saltmarsh";
 
 /** How long a TRIGGER.slow request is held before it would answer. */
 export const SLOW_REPLY_MS = 60_000;
+
+/**
+ * How long a `TRIGGER.latePart` reply waits before it answers NORMALLY —
+ * longer than the app's first job poll, shorter than a test's patience.
+ */
+export const LATE_REPLY_MS = 5_000;
 
 // --- scene run ---------------------------------------------------------------
 

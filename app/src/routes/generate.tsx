@@ -231,9 +231,17 @@ export function GenerateRoute() {
   const [written, setWritten] = useState<string[]>();
 
   // The server's job IS the state of a run (issue #19).
-  const jobQuery = useGenerateJob(campaign);
+  //
+  // `expectJob` is on while „Entwürfe generieren" has been clicked and no job
+  // has shown up yet: a GET that overtakes the new row answers 404, and
+  // without this the poll loop would be switched off by that one `null` and
+  // never switched back on — the view would sit on the spinner until a
+  // reload, which is exactly the report this fixes.
+  const [awaitingJob, setAwaitingJob] = useState(false);
+  const jobQuery = useGenerateJob(campaign, { expectJob: awaitingJob });
   const job = jobQuery.data ?? null;
   const jobId = job?.id ?? null;
+  if (awaitingJob && jobId !== null) setAwaitingJob(false);
   // Every review change goes back to the job (issue #97): text debounced,
   // decisions immediately, both flushed before the view can go away.
   const review = useJobReview(campaign, job);
@@ -297,10 +305,18 @@ export function GenerateRoute() {
           }),
     // 202 (or an adopted 409 — the api client hands back the running job's
     // id): from here on the job query drives the view.
+    onMutate: () => {
+      // From here on a job is EXPECTED — see `awaitingJob` above.
+      setAwaitingJob(true);
+    },
     onSuccess: () => {
       setLostJob(false);
       setWritten(undefined);
       void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
+    },
+    onError: () => {
+      // The run never started: stop waiting for a job that is not coming.
+      setAwaitingJob(false);
     },
   });
 
@@ -865,7 +881,14 @@ export function GenerateRoute() {
 
         {phase === "working" && <Working />}
 
-        {phase === "review" && result !== undefined && (
+        {/* The review of a SCENE run — gated on the phase and the job's kind,
+            never on a result being there (issue #102 review): in a pipelined
+            run the parts are the review's spine and the drafts only fill it
+            in, so a run whose sole reviewable part FAILED has something to
+            show (its error and its „Erneut versuchen") while `result` is
+            still empty. Gating on the result rendered that state as an empty
+            page, and the run only became visible on a reload. */}
+        {phase === "review" && jobKind === "scene" && (
           <>
             <div className="mb-1.5 flex flex-wrap items-baseline gap-3">
               <h1 className="font-serif text-[26px] leading-[1.25] font-semibold text-foreground">
@@ -913,7 +936,7 @@ export function GenerateRoute() {
               </p>
             )}
 
-            {result.warnings.map((warning) => (
+            {(result?.warnings ?? []).map((warning) => (
               <div
                 key={warning}
                 className="mb-2 flex items-start gap-2.5 rounded-md border border-[color-mix(in_srgb,var(--primary)_30%,transparent)] bg-[color-mix(in_srgb,var(--primary)_6%,transparent)] px-3.5 py-2.5"
@@ -923,7 +946,7 @@ export function GenerateRoute() {
               </div>
             ))}
 
-            <NamingHints hints={result.namingHints} t={t} />
+            <NamingHints hints={result?.namingHints} t={t} />
 
             {/* The parts in OUTLINE order (issue #102): a finished one is its
                 draft, an open one a status card, a failed one its error plus
