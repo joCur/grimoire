@@ -54,9 +54,6 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   const nameField = page.getByLabel("Name der Kampagne");
   await expect(nameField).toHaveAttribute("placeholder", "Name der Kampagne");
   await nameField.fill(CAMPAIGN_NAME);
-  // The id is DERIVED and shown before it is created — it is permanent, so it
-  // is never a surprise. Umlaut included: „Küste" → `kueste`.
-  await expect(page.getByText(`id: ${CAMPAIGN_ID}`)).toBeVisible();
   await page.getByLabel("Beschreibung (optional)").fill("Ein erloschener Leuchtturm.");
   await page.getByRole("button", { name: "Kampagne anlegen" }).click();
 
@@ -77,7 +74,6 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   const chapterTitle = page.getByLabel("Titel");
   await expect(chapterTitle).toHaveAttribute("placeholder", "Titel des Kapitels");
   await chapterTitle.fill("01 Salzhafen");
-  await expect(page.getByText("01-salzhafen", { exact: true })).toBeVisible();
   await page
     .getByLabel("Ziel des Kapitels (optional)")
     .fill("Herausfinden, warum das Leuchtfeuer erloschen ist.");
@@ -100,7 +96,6 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   const sceneTitle = page.getByLabel("Titel");
   await expect(sceneTitle).toHaveAttribute("placeholder", "Titel der Szene");
   await sceneTitle.fill("Ankunft am Leuchtturm");
-  await expect(page.getByText("01-salzhafen/ankunft-am-leuchtturm", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Anlegen" }).click();
 
   // A new scene OPENS IN THE EDITOR — an empty scene is there to be written.
@@ -169,7 +164,6 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   const npcName = page.getByLabel("Name");
   await expect(npcName).toHaveAttribute("placeholder", "Name des NPCs");
   await npcName.fill("Hafenmeisterin Jorna");
-  await expect(page.getByText("npcs/hafenmeisterin-jorna", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Anlegen" }).click();
 
   // The dialog only ever asks for a name — the reading view opens, and the
@@ -238,11 +232,9 @@ test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, serve
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Kampagne anlegen");
   const nameField = dialog.getByLabel("Name der Kampagne");
-  // The very same dialog as the cold start: generic hint, derived id on screen
-  // before anything is written, optional description.
+  // The very same dialog as the cold start: generic hint, optional description.
   await expect(nameField).toHaveAttribute("placeholder", "Name der Kampagne");
   await nameField.fill(SECOND_NAME);
-  await expect(dialog.getByText(`id: ${SECOND_ID}`)).toBeVisible();
   await dialog.getByLabel("Beschreibung (optional)").fill("Nebel, Torf und ein Verschwundener.");
   await dialog.getByRole("button", { name: "Anlegen" }).click();
 
