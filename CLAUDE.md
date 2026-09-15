@@ -7,10 +7,10 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 
 ## Pflichtlektüre vor jeder Aufgabe
 
-1. `README.md` — Datenformat und Konventionen: Adressschema,
-   Properties-Keys je Entität, Body-Vokabular (Callouts, `If:`-Abschnitte,
-   Hashtags) und Schreibregeln. Alles davon ist normativ; der Markdown-Baum
-   steht als Import-Format im Anhang.
+1. `README.md` — Datenmodell und Konventionen: Einträge, ihre
+   Eigenschaften und Adressen, das Text-Vokabular (Callouts,
+   `If:`-Abschnitte, Hashtags) und die Schreibregeln. Alles davon ist
+   normativ.
 2. `docs/DECISIONS.md` — Architektur-Entscheidungen inkl. Tech-Stack. Entscheidungen dort sind bindend; Abweichungen nur mit neuem Eintrag.
 3. `docs/UI-BRIEF.md` — Design-Richtung für alles Sichtbare
 
@@ -73,11 +73,10 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Schreibzugriffe der App nur über die dokumentierte API; Patches tragen das
   Guard-Token des Lesevorgangs mit (`rev`, die Zeilenversion) — 409 bei
   Konflikt, nie stilles Überschreiben.
-- Adressen tragen keine Dateiendung (`npcs/jorna`, `<kapitel>/<szenen-id>`,
+- Jeder Eintrag hat eine Adresse (`npcs/jorna`, `<kapitel>/<szenen-id>`,
   `sessions/<id>`, `_campaign`, `glossary`); das Schema steht in
   `server/src/store/paths.ts`. Auf der Leitung heißen die Felder eines
-  Dokuments `properties` — `frontmatter`/`mtime` gibt es nur noch im
-  Markdown-Importer unter `server/src/db/` (Issue #79).
+  Eintrags `properties`, sein Markdown `body`.
 - Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
   Code, Kommentare, Commits: Englisch.
 - Nutzersichtbare Texte NIE direkt in Komponenten, sondern in den Katalog
@@ -148,7 +147,7 @@ Die Pfade:
 3. ⌘K-Suche findet und öffnet
 4. Session-Zyklus: starten → Schnellnotiz → Log + scenes_played →
    Pause → beenden → Nachbereitung
-5. Nachbereitung: Handlungsstrang übernehmen → _chapter.md; Ideen abhaken
+5. Nachbereitung: Handlungsstrang übernehmen → Kapiteltext; Ideen abhaken
 6. Generator-Zyklus (Stub-LLM): Job → Entwürfe prüfen → Übernehmen → Entwurf
    in den Kapiteln; plus 409-/Fehlerpfad. Dazu (Issue #53) Kampagnenwissen und
    Glossar auf `/settings` pflegen — anlegen, bearbeiten, löschen,
