@@ -123,7 +123,7 @@ import {
 import { NON_CAMPAIGN_SEGMENTS } from "@/lib/routes";
 import { sessionElapsedLabel, sessionIsPaused } from "@/lib/session";
 import { navSection } from "@/lib/topbar-nav";
-import { jobProgress, pipelineProgress } from "@/lib/generate";
+import { acceptProgress, pipelineProgress } from "@/lib/generate";
 import { useGenerateJob } from "@/lib/use-generate-job";
 import { cn } from "@/lib/utils";
 import { useReviewEntries } from "@/lib/use-review";
@@ -910,7 +910,10 @@ function GeneratorLink({ campaign }: { campaign: string }) {
   // A run the DM already took PART of is not „done" and not „running" — it
   // is half applied (issue #97), and the entry says how far it got so a
   // forgotten rest is findable from anywhere.
-  const progress = jobProgress(data);
+  // Counted against ALL parts of the run (issue #102 review): while a
+  // pipelined run is still going, only the finished parts have produced a
+  // draft, so „1 von 2 übernommen" stood next to „2 von 3 Szenen fertig".
+  const progress = acceptProgress(data);
   const partial = progress.written > 0 && progress.written < progress.total;
   const progressLabel = t("topbar.generator.progress", progress);
   // A PIPELINED run (issue #102) is both at once: parts are still going while
@@ -956,6 +959,11 @@ function GeneratorLink({ campaign }: { campaign: string }) {
           dot carries the state and the number stays in the accessible name
           (and in the chip's `title`) — the same trade the label above makes
           below xl. */}
+      {/* ONE element, whatever the width (issue #102 review): `sr-only` takes
+          the number off the row without taking it out of the accessible name,
+          so the second, screen-reader-only copy that used to stand next to it
+          only doubled the chip's name (and its innerText) below the
+          breakpoint. */}
       {partial && (
         <span
           className={cn(
@@ -963,11 +971,6 @@ function GeneratorLink({ campaign }: { campaign: string }) {
             running ? "max-2xl:sr-only" : "max-xl:sr-only",
           )}
         >
-          {progressLabel}
-        </span>
-      )}
-      {partial && (
-        <span className={cn("sr-only", running ? "2xl:hidden" : "xl:hidden")}>
           {progressLabel}
         </span>
       )}

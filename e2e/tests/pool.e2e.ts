@@ -559,7 +559,21 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
     // Below md the topbar is hidden (the mobile start surface is the chrome
     // there), so the chip is only on the row from 768 up.
     if (width >= 768) {
-      await expect(page.getByRole("link", { name: /Generator/ })).toBeVisible();
+      const chip = page.getByRole("link", { name: /Generator/ });
+      await expect(chip).toBeVisible();
+      // The number is on the chip exactly ONCE, whatever the width does with
+      // it (issue #102 review): above 2xl it is spelled out, below it stands
+      // in the accessible name only — never both, which read as „1 von 3
+      // übernommen / 1 von 3 übernommen".
+      const text = await chip.innerText();
+      expect(
+        text.match(/übernommen/g)?.length ?? 0,
+        `chip text at ${width}px: ${JSON.stringify(text)}`,
+      ).toBe(1);
+      // And it counts against the PARTS OF THE RUN, not against the parts
+      // that happen to have answered already: one of three, next to „2 von 3
+      // Szenen fertig" on the generator page.
+      expect(text).toContain("1 von 3 übernommen");
     }
     expect(await topbarOverflow(page), `pool at ${width}px`).toEqual({ row: 0, page: 0 });
     await widenGlyphs(page, "1px");

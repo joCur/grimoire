@@ -452,6 +452,32 @@ export function jobProgress(job: GenerateJob | null | undefined): {
   };
 }
 
+/**
+ * „1 von 3 übernommen" — the same count, but measured against ALL parts of
+ * the RUN (issue #102 review).
+ *
+ * `jobProgress` counts what the run has PRODUCED, which is the whole truth
+ * for a single-call run and only half of it for a pipeline: while parts are
+ * still going, their drafts are not in the result yet, so a run of three
+ * scenes with two finished and one accepted reported „1 von 2 übernommen"
+ * right next to „2 von 3 Szenen fertig". The DM thinks in parts of the run,
+ * not in parts that happen to have answered already.
+ *
+ * `Math.max` because the two counts do not have to agree in the other
+ * direction either: a suggested entry the DM accepted is a part of the
+ * review without being a part of the outline, and „3 von 2" would be worse
+ * than the confusion this fixes.
+ */
+export function acceptProgress(job: GenerateJob | null | undefined): {
+  written: number;
+  total: number;
+} {
+  const progress = jobProgress(job);
+  const parts = jobPipelineParts(job);
+  if (parts.length === 0) return progress;
+  return { written: progress.written, total: Math.max(parts.length, progress.total) };
+}
+
 /** The parts „Alle übernehmen" would write: everything still open. */
 export function openParts(job: GenerateJob | null | undefined): string[] {
   return jobParts(job).filter((path) => partState(job, path) === "open");

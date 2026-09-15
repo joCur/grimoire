@@ -14,6 +14,7 @@ import {
   chapterIdValue,
   contextHint,
   jobParts,
+  acceptProgress,
   jobProgress,
   mergeReviewPatch,
   openParts,
@@ -625,6 +626,52 @@ describe("the run's parts", () => {
     // Nothing open any more, and a single-call run: no line at all.
     expect(pipelineProgress(job(["done", "done", "failed"]), t)).toBeUndefined();
     expect(pipelineProgress(null, t)).toBeUndefined();
+  });
+
+  test("„übernommen“ counts against every part of the RUN (issue #102 review)", () => {
+    // Two of three parts answered, and the DM took one of them.
+    const run = job(["done", "done", "running"], {
+      result: {
+        scenes: [
+          { path: "01-salzhafen/s0", markdown: "a", properties: {} },
+          { path: "01-salzhafen/s1", markdown: "b", properties: {} },
+        ],
+        stubs: [],
+        warnings: [],
+      },
+      review: {
+        entries: {},
+        dropped: [],
+        fields: {},
+        blocks: {},
+        written: { "01-salzhafen/s0": "01-salzhafen/s0" },
+      },
+    });
+    // What the run PRODUCED — and why that number confused the chip.
+    expect(jobProgress(run)).toEqual({ written: 1, total: 2 });
+    expect(acceptProgress(run)).toEqual({ written: 1, total: 3 });
+    expect(t("topbar.generator.progress", acceptProgress(run))).toBe("1 von 3 übernommen");
+    // A run without a pipeline (a single call) is left exactly as it was.
+    const single = { ...run, pipeline: undefined };
+    expect(acceptProgress(single)).toEqual(jobProgress(single));
+    expect(acceptProgress(null)).toEqual({ written: 0, total: 0 });
+    // An accepted suggested entry is a part of the review without being a
+    // part of the outline — the total never falls below what is written.
+    const withStub = job(["done"], {
+      result: {
+        scenes: [{ path: "01-salzhafen/s0", markdown: "a", properties: {} }],
+        stubs: [{ kind: "npc", id: "grella", name: "Grella", markdown: "s" }],
+        warnings: [],
+      },
+      review: {
+        entries: { "npcs/grella": "accepted" },
+        dropped: [],
+        fields: {},
+        blocks: {},
+        written: { "01-salzhafen/s0": "01-salzhafen/s0", "npcs/grella": "npcs/grella" },
+      },
+    });
+    expect(acceptProgress(withStub)).toEqual({ written: 2, total: 2 });
   });
 
   test("the cost line sums the run's tokens and COUNTS CALLS (AK5)", () => {
