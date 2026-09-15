@@ -416,3 +416,93 @@ test("markWrittenInTx throws for a lost job instead of reporting false", async (
   ).toThrow();
   expect((await fetchJob())?.review?.written).toEqual({});
 });
+
+// --- the new chapter (issue #115) ------------------------------------------------
+//
+// The production bug: the app sent `chapter`/`chapterTitle` on accept from its
+// OWN state, and since #97 made the review persistent the accept regularly
+// happens in a tab that never saw the start form — so the scenes were written
+// under a `chapter_id` that had no chapters row, and the pool (which lists
+// chapters from the chapter TABLE) showed neither the chapter nor its scenes.
+//
+// „Reload" is modelled exactly as it reaches the server: an accept with NO
+// chapter fields in the body. Nothing else about these cases is special —
+// same run, same accept endpoint.
+
+/** Start a „Neues Kapitel" run and wait for it, like `runJob`. */
+async function runNewChapterJob(title?: string): Promise<GenerateJob> {
+  const res = await send("POST", "/api/beispiel/generate", {
+    chapter: "03-dragon-hatchery",
+    sourceText: "Eggs in the dark.",
+    newChapter: true,
+    ...(title === undefined ? {} : { chapterTitle: title }),
+  });
+  expect(res.status).toBe(202);
+  for (let i = 0; i < 2000; i++) {
+    const job = await fetchJob();
+    if (job === null) throw new Error("job disappeared");
+    if (job.status !== "running") return job;
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
+  throw new Error("job never finished");
+}
+
+async function chapterTitles(): Promise<Record<string, string>> {
+  const res = await app.request("/api/beispiel/tree");
+  expect(res.status).toBe(200);
+  const tree = (await res.json()) as { chapters: Array<{ id: string; title: string }> };
+  return Object.fromEntries(tree.chapters.map((chapter) => [chapter.id, chapter.title]));
+}
+
+test("an accept with NO chapter fields creates the chapter from the job's title", async () => {
+  const job = await runNewChapterJob("Die Drachenbrut");
+  // Exactly what the app sends after a navigation or a reload: a rev and
+  // nothing else. Before this ticket the chapter was simply not written.
+  const res = await accept(job, {});
+  expect(res.status).toBe(200);
+
+  expect(await chapterTitles()).toMatchObject({ "03-dragon-hatchery": "Die Drachenbrut" });
+  expect(await exists("03-dragon-hatchery/_chapter")).toBe(true);
+});
+
+test("the accepted scenes hang in that chapter and are visible in the tree", async () => {
+  const job = await runNewChapterJob("Die Drachenbrut");
+  expect((await accept(job, {})).status).toBe(200);
+
+  const res = await app.request("/api/beispiel/tree");
+  const tree = (await res.json()) as {
+    chapters: Array<{ id: string; groups: Array<{ scenes: Array<{ title: string }> }> }>;
+  };
+  const chapter = tree.chapters.find((c) => c.id === "03-dragon-hatchery");
+  const scenes = chapter?.groups.flatMap((g) => g.scenes) ?? [];
+  expect(scenes.length).toBeGreaterThan(0);
+});
+
+test("a run started without a title falls back to the chapter id", async () => {
+  // An older app build, or a job row from before the column existed.
+  const job = await runNewChapterJob();
+  expect((await accept(job, {})).status).toBe(200);
+  expect(await chapterTitles()).toMatchObject({
+    "03-dragon-hatchery": "03-dragon-hatchery",
+  });
+});
+
+test("the body fields still override the job — compatibility", async () => {
+  const job = await runNewChapterJob("Die Drachenbrut");
+  expect(
+    (await accept(job, { chapter: "03-dragon-hatchery", chapterTitle: "Anders benannt" })).status,
+  ).toBe(200);
+  expect(await chapterTitles()).toMatchObject({ "03-dragon-hatchery": "Anders benannt" });
+});
+
+test("creating the chapter is idempotent across two partial accepts", async () => {
+  let job = await runNewChapterJob("Die Drachenbrut");
+  const first = await accept(job, { paths: ["03-dragon-hatchery/treffen-am-kai"] });
+  expect(first.status).toBe(200);
+  const again = await fetchJob();
+  expect(again).not.toBeNull();
+  job = again as GenerateJob;
+  // The second accept must not trip over the chapter it created itself.
+  expect((await accept(job, {})).status).toBe(200);
+  expect(await chapterTitles()).toMatchObject({ "03-dragon-hatchery": "Die Drachenbrut" });
+});

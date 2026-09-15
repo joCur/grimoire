@@ -2122,3 +2122,50 @@ describe("campaign knowledge", () => {
     expect(result.namingHints).toBeUndefined();
   });
 });
+
+// --- the write-layer invariant (issue #115) ---------------------------------------
+
+describe("a scene draft whose chapter has no row (#115)", () => {
+  test("gets the chapter row in the same write, named by its id", async () => {
+    // The apply path is the ONE scene write without a dialog in front of it,
+    // and it is what produced the production bug: twelve scenes under
+    // `03-dragon-hatchery` with no such chapter, invisible in the pool.
+    // `ensureChapterRow` closes it the way `ensureLocationRow` closes the Ort
+    // — and since migration 0012 it has to, or the foreign key would turn the
+    // apply into a 409.
+    const markdown = sceneMarkdown()
+      .replace("id: treffen-am-kai", "id: brut-im-dunkeln")
+      .replace("chapter: 01-salzhafen", "chapter: 03-dragon-hatchery");
+    const res = await postJson("/api/beispiel/generate/apply", {
+      // No `chapter`/`chapterTitle` in the body on purpose — the net under
+      // the job-driven creation, not the creation itself.
+      scenes: [{ path: "03-dragon-hatchery/brut-im-dunkeln", markdown }],
+    });
+    expect(res.status).toBe(200);
+
+    const chapter = await read("03-dragon-hatchery/_chapter");
+    expect(chapter.kind).toBe("chapter");
+    // No title was known here, so the chapter is called by its slug — which
+    // is renameable in the pool, where an invisible chapter was not.
+    expect(chapter.properties.title).toBe("03-dragon-hatchery");
+    expect(chapter.properties.status).toBe("planned");
+
+    // …and the scene really hangs in it.
+    const tree = (await (await app.request("/api/beispiel/tree")).json()) as {
+      chapters: Array<{ id: string; groups: Array<{ scenes: Array<{ id: string }> }> }>;
+    };
+    const node = tree.chapters.find((c) => c.id === "03-dragon-hatchery");
+    expect(node?.groups.flatMap((g) => g.scenes).map((s) => s.id)).toContain("brut-im-dunkeln");
+  });
+
+  test("a DIALOG still refuses an unknown chapter — ADR #14 stands", async () => {
+    // The invariant is about rows, not about inventing chapters: where a DM
+    // typed the chapter, an unknown one is a typo and the honest answer is
+    // the 400.
+    const res = await postJson("/api/beispiel/scenes", {
+      title: "Szene im Nichts",
+      chapter: "99-gibt-es-nicht",
+    });
+    expect(res.status).toBe(400);
+  });
+});
