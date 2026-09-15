@@ -40,10 +40,22 @@ Der Server trennt die beiden Hälften in `server/src/document-reply.ts`
 immer über den Markdown-Parser aus `@grimoire/shared`. **Toleriert** werden
 eine umgebende Code-Zaun (```` ``` ````) und ein Satz davor oder danach —
 beides kostet sonst eine Korrekturrunde für nichts —, solange der
-Frontmatter-Start noch zu finden ist (eine Zeile `---`, mit einer zweiten
-darunter). Findet er ihn nicht, ist das der **eine** Formfehler, und die
-Korrekturrunde sagt genau, wie ein Dokument aussieht. Nachkorrigiert wird
-nichts: keine Typografie-Heuristik, kein stilles Ersetzen.
+Frontmatter-Start noch zu finden ist: das **erste** `---` des Blocks, mit
+einem zweiten `---` darunter und mindestens einer `key:`-Zeile dazwischen.
+Zwei waagerechte Linien in Prosa sind also kein Frontmatter, und ein Absatz
+oberhalb fällt nur weg, wenn vor dem Frontmatter kein `---` steht. Findet der
+Server keinen Frontmatter-Start, ist das der **eine** Formfehler, und die
+Korrekturrunde sagt genau, wie ein Dokument aussieht.
+
+Ein **nachgestellter** Satz fällt nur bei einer *unverzäunten* Antwort weg,
+und nur wenn er der letzte Block ist, hinter einer Leerzeile steht und keine
+Markdown-Struktur enthält (`#`, `>`, `-`, `*`, `|`, Backtick, `[[`) — das ist
+das „Ich hoffe, das passt so!“ am Ende. Ein Schlussabsatz mit Struktur bleibt,
+ein strukturloser Absatz direkt unter einer Überschrift (`## Will` plus ein
+Satz) bleibt ebenfalls, und verzäunter Inhalt bleibt unangetastet. Der Preis:
+ein schlichter Schlussabsatz, der *nicht* unter einer Überschrift steht, ist
+von einem Abschiedssatz nicht zu unterscheiden und fällt weg. Sonst wird nichts nachkorrigiert: keine Typografie-Heuristik, kein
+stilles Ersetzen.
 
 **Die Gliederung — das einzige JSON.** Sie ist ein kleines, flaches Objekt,
 und deshalb die einzige Antwort, deren Form eine API *garantieren* kann:

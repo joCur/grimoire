@@ -127,6 +127,69 @@ describe("parseDocumentReply", () => {
     expect(NOT_A_DOCUMENT_ERROR).toContain("Frontmatter-Block");
   });
 
+  test("trailing model chatter after an unfenced document comes off", () => {
+    const reply = parse(`${PO_SCENE}\nIch hoffe, das passt so!\n`);
+    expect(reply.content).toBe(PO_SCENE);
+    expect(reply.content).not.toContain("Ich hoffe");
+  });
+
+  test("a closing paragraph WITH structure stays — only structureless chatter goes", () => {
+    for (const closing of [
+      "> [!note] Die Wache erinnert sich.",
+      "- Die Wache erinnert sich.",
+      "Die Wache erinnert sich an [[night-watch-quay]].",
+      "| Wurf | Folge |\n| --- | --- |",
+      "Nutze `Stealth` erneut.",
+    ]) {
+      const reply = parse(`${PO_SCENE}\n${closing}\n`);
+      expect(reply.content).toBe(`${PO_SCENE}\n${closing}\n`);
+    }
+    // A structureless block under a bare HEADING is that section's text —
+    // `## Will` plus one sentence is how an npc stub ends.
+    const section = `${PO_SCENE}\n## Nachwirkung\n\nDie Wache erinnert sich.\n`;
+    expect(parse(section).content).toBe(section);
+    // The price of the rule: a plain closing paragraph that does NOT sit
+    // under a heading cannot be told apart from a sign-off and is cut.
+    expect(parse(`${PO_SCENE}\nEin schlichter Schlussabsatz.\n`).content).toBe(PO_SCENE);
+    // A FENCED reply is left alone: the fence already said where it ends.
+    const fenced = `\`\`\`markdown\n${PO_SCENE}\nIch hoffe, das passt so!\n\`\`\`\n`;
+    expect(parse(fenced).content).toContain("Ich hoffe, das passt so!");
+  });
+
+  test("the frontmatter opener must be the FIRST `---` of the block", () => {
+    // A leading sentence is still dropped…
+    expect(parse(`Hier ist die Szene:\n\n${PO_SCENE}`).content).toBe(PO_SCENE);
+    // …but prose with a horizontal rule in it is prose, not a document.
+    expect(error(`Erst ein Absatz.\n\n---\n\n${PO_SCENE}`)).toBe(NOT_A_DOCUMENT_ERROR);
+  });
+
+  test("two horizontal rules are not a frontmatter block", () => {
+    expect(error("Ein Absatz.\n\n---\n\nNoch ein Absatz.\n\n---\n\nUnd Schluss.\n")).toBe(
+      NOT_A_DOCUMENT_ERROR,
+    );
+  });
+
+  test("a `---warnings---` inside a fenced body block is example text", () => {
+    const withExample = `${PO_SCENE.trimEnd()}\n\n> [!note] So sieht das aus:\n\n\`\`\`\n${WARNINGS_DELIMITER}\nnur ein Beispiel\n\`\`\`\n`;
+    const reply = parse(withExample);
+    expect(reply.warnings).toEqual([]);
+    expect(reply.content).toBe(withExample);
+    // The REAL block, below the fenced example, still wins.
+    const both = parse(`${withExample}\n${WARNINGS_DELIMITER}\nechte Warnung\n`);
+    expect(both.warnings).toEqual(["echte Warnung"]);
+    expect(both.content).toBe(withExample);
+  });
+
+  test("a leading BOM does not hide the frontmatter", () => {
+    expect(parse(`\uFEFF${PO_SCENE}`).content).toBe(PO_SCENE);
+  });
+
+  test("numbered and `+` warnings lose their marker too", () => {
+    expect(
+      parse(`${PO_SCENE}\n${WARNINGS_DELIMITER}\n1. eins\n2) zwei\n+ drei\n`).warnings,
+    ).toEqual(["eins", "zwei", "drei"]);
+  });
+
   test("the delimiter is read from the END — a mention in the body is body", () => {
     // The LAST occurrence wins, so a document that TALKS about the delimiter
     // keeps its own text and only the real block becomes warnings.

@@ -55,6 +55,21 @@ const FENCE_LINE = /^[ \t]*`{3,}[ \t]*[a-zA-Z0-9_-]*[ \t]*$/;
 const FENCE_CLOSE = /^[ \t]*`{3,}[ \t]*$/;
 /** The frontmatter delimiter of the data format: three dashes, alone. */
 const FRONTMATTER_LINE = /^[ \t]*-{3}[ \t]*$/;
+/**
+ * A frontmatter KEY line. At least one of them has to stand between the two
+ * `---` lines, otherwise the pair is not a frontmatter block at all: a reply
+ * that separates two prose paragraphs with two horizontal rules looks exactly
+ * like `---` … `---` and used to parse as a document with an empty
+ * frontmatter (issue #107 review).
+ */
+const KEY_LINE = /^[ \t]*[A-Za-z_][A-Za-z0-9_-]*[ \t]*:/;
+/**
+ * Anything that makes a line MARKDOWN rather than a sentence — a heading, a
+ * callout or quote, a list bullet, a table, code, a wiki link. A trailing
+ * block that carries none of it is the model talking about its answer
+ * („Ich hoffe, das passt so!"), and that is not part of the document.
+ */
+const STRUCTURE = /[#>\-*|`]|\[\[/;
 
 export interface DocumentReply {
   /** The document, frontmatter block included, exactly as it will be stored. */
@@ -87,17 +102,34 @@ export const NOT_A_DOCUMENT_ERROR =
 export function parseDocumentReply(
   raw: string,
 ): { ok: true; reply: DocumentReply } | { ok: false; error: string } {
-  const lines = raw.replace(/\r\n/g, "\n").split("\n");
-  const cut = lastIndexWhere(lines, (line) => WARNINGS_LINE.test(line));
-  const documentLines = cut === -1 ? lines : lines.slice(0, cut);
-  const warnings = cut === -1 ? [] : warningsOf(lines.slice(cut + 1));
+  // A BOM from an endpoint that wrote UTF-8 with a signature would otherwise
+  // sit in front of the frontmatter `---` and make the reply "not a document".
+  const lines = raw.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").split("\n");
+  const { body, tail } = splitFence(lines);
 
-  const unfenced = stripFence(documentLines);
-  const start = frontmatterStart(unfenced);
+  // Where the warnings block is looked for: after the closing fence first —
+  // that is where a model that fenced its document usually puts it — and
+  // otherwise inside the document, where only a line OUTSIDE a fenced region
+  // counts. A `---warnings---` in a fenced example block is example text.
+  const tailCut = lastIndexWhere(tail, (line) => WARNINGS_LINE.test(line));
+  const bodyCut =
+    tailCut === -1
+      ? lastIndexWhere(body, (line, i) => WARNINGS_LINE.test(line) && !insideFence(body, i))
+      : -1;
+  const warnings =
+    tailCut !== -1
+      ? warningsOf(tail.slice(tailCut + 1))
+      : bodyCut !== -1
+        ? warningsOf(body.slice(bodyCut + 1))
+        : [];
+  const documentLines = bodyCut === -1 ? body : body.slice(0, bodyCut);
+
+  const start = frontmatterStart(documentLines);
   if (start === -1) return { ok: false, error: NOT_A_DOCUMENT_ERROR };
   // The document keeps its trailing newline: that is how a file is stored,
   // and the renderer's own output ends that way too.
-  const content = `${unfenced.slice(start).join("\n").trimEnd()}\n`;
+  const kept = tail.length > 0 ? documentLines.slice(start) : withoutChatter(documentLines.slice(start));
+  const content = `${kept.join("\n").trimEnd()}\n`;
   return { ok: true, reply: { content, warnings } };
 }
 
@@ -112,16 +144,23 @@ function lastIndexWhere(
   return -1;
 }
 
-/** One warning per non-empty line; list bullets and stray fences fall off. */
+/**
+ * One warning per non-empty line; stray fences fall off and so does the
+ * leading marker of a list — `-`, `*`, `+` or a number (`1.`, `1)`). A model
+ * that numbered its warnings meant the text, not the number.
+ */
 function warningsOf(lines: readonly string[]): string[] {
   return lines
     .filter((line) => !FENCE_LINE.test(line))
-    .map((line) => line.replace(/^[ \t]*[-*][ \t]+/, "").trim())
+    .map((line) => line.replace(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+/, "").trim())
     .filter((line) => line !== "");
 }
 
 /**
- * The content of a surrounding code fence, or the lines unchanged.
+ * The reply split at a SURROUNDING code fence: `body` is what the fence
+ * contains (or the whole reply when there is none), `tail` is what stood
+ * below the closing fence — and `tail.length > 0` is also how the rest of
+ * this module knows the reply WAS fenced.
  *
  * The fence has to OPEN before the document does — a fence line below the
  * frontmatter start belongs to the body (a model may legitimately fence a
@@ -129,29 +168,84 @@ function warningsOf(lines: readonly string[]): string[] {
  * the last backtick-only line, so a fenced block inside the document cannot
  * cut the reply short.
  */
-function stripFence(lines: readonly string[]): readonly string[] {
-  const open = lines.findIndex((line) => line.trim() !== "");
-  if (open === -1) return lines;
+function splitFence(lines: readonly string[]): {
+  body: readonly string[];
+  tail: readonly string[];
+} {
   const opener = lines.findIndex((line) => FENCE_LINE.test(line));
   const document = lines.findIndex((line) => FRONTMATTER_LINE.test(line));
-  if (opener === -1 || (document !== -1 && document < opener)) return lines;
+  if (opener === -1 || (document !== -1 && document < opener)) return { body: lines, tail: [] };
   const close = lastIndexWhere(lines, (line, i) => i > opener && FENCE_CLOSE.test(line));
-  return lines.slice(opener + 1, close === -1 ? undefined : close);
+  if (close === -1) return { body: lines.slice(opener + 1), tail: [""] };
+  return { body: lines.slice(opener + 1, close), tail: lines.slice(close + 1) };
+}
+
+/** Whether line `i` stands inside a fenced region of `lines`. */
+function insideFence(lines: readonly string[], i: number): boolean {
+  let open = false;
+  for (let j = 0; j < i; j += 1) {
+    if (FENCE_LINE.test(lines[j] as string)) open = !open;
+  }
+  return open;
+}
+
+/**
+ * The document without a trailing block of model chatter.
+ *
+ * Only for an UNFENCED reply, and only for the LAST block: a block that
+ * follows a blank line and carries no markdown structure at all is the model
+ * signing off („Ich hoffe, das passt so!"), which used to be stored as body
+ * text and passed every validator. A fenced reply is left alone — there the
+ * fence already said where the document ends — and so is a closing paragraph
+ * that has any structure in it.
+ *
+ * One exception keeps real documents whole: a structureless block whose
+ * PREVIOUS block is nothing but a heading is that section's text (`## Will`
+ * followed by one sentence is how an npc stub ends), never a sign-off.
+ * Chatter stands after a finished section, not under an empty heading.
+ */
+function withoutChatter(lines: readonly string[]): readonly string[] {
+  let end = lines.length;
+  while (end > 0 && (lines[end - 1] as string).trim() === "") end -= 1;
+  let begin = end;
+  while (begin > 0 && (lines[begin - 1] as string).trim() !== "") begin -= 1;
+  // No blank line above it means the reply is ONE block — the document.
+  if (begin === 0) return lines;
+  const block = lines.slice(begin, end);
+  if (block.some((line) => STRUCTURE.test(line))) return lines;
+  if (isHeadingBlock(previousBlock(lines, begin))) return lines;
+  return lines.slice(0, begin);
+}
+
+/** The block above line `begin`, blank lines in between skipped. */
+function previousBlock(lines: readonly string[], begin: number): readonly string[] {
+  let end = begin;
+  while (end > 0 && (lines[end - 1] as string).trim() === "") end -= 1;
+  let start = end;
+  while (start > 0 && (lines[start - 1] as string).trim() !== "") start -= 1;
+  return lines.slice(start, end);
+}
+
+/** A block that is nothing but an ATX heading line. */
+function isHeadingBlock(block: readonly string[]): boolean {
+  return block.length === 1 && /^[ \t]*#{1,6}[ \t]+\S/.test(block[0] as string);
 }
 
 /**
  * Index of the line the document starts at: the `---` that opens the
- * frontmatter block. The FIRST non-empty line is the well-behaved case;
- * anything above it is prose the model wrote about its answer and is dropped —
- * but only for a `---` that is actually the OPENING one, i.e. one with another
- * `---` below it. Without that pair there is no frontmatter block and no
- * document, whatever else the reply contains.
+ * frontmatter block. That has to be the FIRST `---` of the block — a leading
+ * sentence about the answer is dropped, but a reply whose first `---` is a
+ * horizontal rule in prose is not a document with prose above it, it is prose
+ * with a rule in it. And the pair has to have a closing `---` below it with
+ * at least one `key:` line in between; two horizontal rules are not a
+ * frontmatter block.
  */
 function frontmatterStart(lines: readonly string[]): number {
-  for (let i = 0; i < lines.length; i += 1) {
-    if (!FRONTMATTER_LINE.test(lines[i] as string)) continue;
-    const close = lines.findIndex((line, j) => j > i && FRONTMATTER_LINE.test(line));
-    return close === -1 ? -1 : i;
-  }
-  return -1;
+  const open = lines.findIndex((line) => FRONTMATTER_LINE.test(line));
+  if (open === -1) return -1;
+  const close = lines.findIndex((line, j) => j > open && FRONTMATTER_LINE.test(line));
+  if (close === -1) return -1;
+  const keys = lines.slice(open + 1, close);
+  if (!keys.some((line) => KEY_LINE.test(line))) return -1;
+  return open;
 }
