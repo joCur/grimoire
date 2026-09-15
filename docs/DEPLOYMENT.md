@@ -221,11 +221,9 @@ GRIMOIRE_DATA=/srv/grimoire/data bun run server/src/cli.ts seed /pfad/zum/baum
 - Der Befehl **überschreibt nie**: eine Datenbank mit Inhalt bleibt
   unangetastet (`--force` existiert nur für Wegwerf-Datenbanken). Der
   Markdown-Baum selbst wird nur gelesen.
-- Was er nicht in Zeilen übersetzen konnte, geht **nicht verloren**: die Datei
-  liegt wörtlich in `unknown_files`, und jeder Vorfall wird als Zeile in
-  `migration_report` festgehalten **und auf stdout gedruckt** — das ist der
-  Report. **Keine Zeile = sauberer Import.** (Ein API-Endpoint dafür gibt es
-  seit #79 nicht mehr: der Report gehört dem Werkzeug.)
+- Was er nicht in Zeilen übersetzen konnte, übernimmt er nicht: jeder Vorfall
+  wird mit Pfad und Grund **auf stdout gedruckt** — das ist der Report, und
+  die Datei bleibt unverändert im Baum. **Keine Zeile = sauberer Import.**
 
 Ein Probelauf auf einer Kopie, in ein leeres Datenverzeichnis, ist damit
 billig:

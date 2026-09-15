@@ -21,11 +21,11 @@
 //      database or not at all; a broken file in campaign B cannot leave
 //      campaign A half-imported.
 //   4. IT DEGRADES, IT DOES NOT FAIL. Anything the importer cannot turn into
-//      rows is kept VERBATIM in `unknown_files` and explained in
-//      `migration_report`. An empty report means a clean import; a non-empty
-//      one is a reading task for the DM, not an error.
+//      rows is named in the run's report (path and reason, printed by the
+//      CLI); the file itself stays where it is — the tree is input, not
+//      storage. An empty report means a clean import; a non-empty one is a
+//      reading task for the DM, not an error.
 
-import { randomUUID } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { kindFromPath, parseMarkdown, sessionPauses } from "@grimoire/shared";
@@ -48,7 +48,6 @@ import {
   locations as locationsTable,
   logEntries as logTable,
   meta as metaTable,
-  migrationReport as reportTable,
   npcRelations as relationsTable,
   npcs as npcsTable,
   packJson,
@@ -58,7 +57,6 @@ import {
   sessionPauses as pausesTable,
   sessionScenesPlayed as playedTable,
   sessions as sessionsTable,
-  unknownFiles as unknownTable,
 } from "./schema";
 import { eq, sql } from "drizzle-orm";
 import { expandIndexedRefs } from "../store/refs";
@@ -86,18 +84,21 @@ export interface MigrationOutcome {
    * run therefore left alone. Non-empty means this call resumed.
    */
   resumedFrom: string[];
-  /** Number of `migration_report` rows this run wrote. 0 = clean import. */
-  reportEntries: number;
-  /** Number of files kept verbatim in `unknown_files`. */
-  unknownFiles: number;
+  /**
+   * Every degradation of THIS run — path and reason per incident, in import
+   * order. Empty = clean import. The CLI prints it; nothing stores it.
+   */
+  report: RunReportEntry[];
   /** The run's ISO timestamp — the `at` of every row this run wrote. */
   at?: string;
-  /**
-   * Id of THIS run. `migration_report` rows carry it, so "the findings of
-   * this run" is an exact query (the CLI prints exactly those). Undefined
-   * when nothing was imported.
-   */
-  runId?: string;
+}
+
+export interface RunReportEntry {
+  campaignId: string;
+  /** Campaign-relative path the incident happened in; "" when campaign-wide. */
+  path: string;
+  /** Human-readable German reason — read by the DM, not by code. */
+  reason: string;
 }
 
 /**
@@ -146,7 +147,7 @@ interface RawFile {
    * The raw bytes, kept only for a file that is NOT valid UTF-8 text (a map
    * png, a pdf handout). Decoding those into a string would replace every
    * unmappable byte with U+FFFD and the "kept verbatim" promise would be a
-   * lie — so the bytes go into `unknown_files.content_blob` instead.
+   * lie — so the file is only named in the report.
    */
   bytes?: Buffer;
   /** True when the file is not decodable text. */
@@ -199,7 +200,7 @@ async function readCampaign(root: string, id: string): Promise<RawCampaign> {
       if (s.isDirectory()) {
         if (depth === 0 && !RESERVED_DIRS.has(entry.name)) chapterDirs.push(entry.name);
         // Depth is capped generously: deeper files still get collected so
-        // they can land in `unknown_files` instead of vanishing.
+        // they are named in the report instead of vanishing.
         if (depth < 6) await walk(abs, rel, depth + 1);
         continue;
       }
@@ -290,7 +291,7 @@ function splitFrontmatter(
  * — which is exactly the signal used here.
  *
  * A file like that cannot be turned into a row: its id would be a guess and
- * its contract fields do not exist. It goes to `unknown_files` verbatim.
+ * its contract fields do not exist. It is reported and left out.
  */
 function hasFrontmatterBlock(raw: string): boolean {
   return /^﻿?---\r?\n/.test(raw);
@@ -311,7 +312,7 @@ function frontmatterUnusable(raw: string, body: string): boolean {
  * that never had an `inbox.md` gets one from `POST /api/:campaign/inbox` as
  * plain `# Inbox\n\n- text` with no frontmatter (campaign-write.ts,
  * `appendInboxEntry`) — treating that as unusable would push every ingested
- * idea of such a campaign into `unknown_files` and out of the app's inbox.
+ * idea of such a campaign out of the app's inbox and into the report.
  * The glossary is the same shape: `parseGlossaryBody` reads only the body,
  * and the frontmatter block holds at most a decorative `id`.
  *
@@ -367,7 +368,7 @@ type FileClass =
  * `kindFromPath` on purpose: that function answers the FORMAT question
  * ("what would this be"), while the migration must also decide what to do
  * with a path the format does not describe — `npcs/alt/fenn.md`, a scene
- * three directories deep, a `.txt` file. Those become `unknown_files`
+ * three directories deep, a `.txt` file. Those are named in the report
  * instead of being force-fitted into a table.
  */
 function classify(file: RawFile): FileClass {
@@ -375,20 +376,15 @@ function classify(file: RawFile): FileClass {
   const basename = segments[segments.length - 1]!;
 
   if (file.binary) {
-    // No verbatim TEXT exists for these — say so instead of claiming the
-    // content came through (the bytes go into `unknown_files.content_blob`).
     const size = file.bytes?.length ?? 0;
     return {
       kind: "unknown",
-      reason:
-        `Keine Textdatei (${size} Byte, binär) — nicht als Text übernommen. ` +
-        "Die Bytes liegen unverändert in unknown_files.content_blob, " +
-        "das Original bleibt im Dateibaum liegen.",
+      reason: `Keine Textdatei (${size} Byte, binär) — nicht übernommen, die Datei bleibt im Baum.`,
     };
   }
 
   if (!file.markdown) {
-    return { kind: "unknown", reason: "Keine Markdown-Datei — Inhalt unverändert übernommen." };
+    return { kind: "unknown", reason: "Keine Markdown-Datei — nicht übernommen, die Datei bleibt im Baum." };
   }
 
   if (segments.length === 1) {
@@ -440,16 +436,15 @@ function classify(file: RawFile): FileClass {
 // --- importing one campaign ---------------------------------------------------
 
 /**
- * Import one campaign inside an open transaction. Pure bookkeeping beyond
- * that: every degradation appends to `report` and the offending file's text
- * goes to `unknownFiles`, both written by the caller in the same transaction.
+ * Import one campaign inside an open transaction. Every degradation appends
+ * to `report`; the offending file stays where it is — the tree is input.
  */
 function importCampaign(
   tx: DbWriter,
   campaign: RawCampaign,
   at: string,
   report: ReportEntry[],
-): number {
+): void {
   const campaignId = campaign.id;
   const unknown: RawFile[] = [];
   const degrade = (file: RawFile, reason: string): void => {
@@ -969,23 +964,6 @@ function importCampaign(
   //     at have no row yet — so the expansion cannot happen inline.
   expandIndexedRefs(tx, campaignId);
 
-  // 8. everything that degraded, kept verbatim. De-duplicated by path: a file
-  //    can collect several report entries but is stored once.
-  const stored = new Set<string>();
-  for (const file of unknown) {
-    if (stored.has(file.rel)) continue;
-    stored.add(file.rel);
-    tx.insert(unknownTable)
-      .values({
-        campaignId,
-        path: file.rel,
-        content: file.raw,
-        contentBlob: file.bytes ?? null,
-        at,
-      })
-      .run();
-  }
-  return stored.size;
 }
 
 // --- the entry point ----------------------------------------------------------
@@ -1008,8 +986,7 @@ export async function runInitialMigration(
     skipped,
     campaigns: [],
     resumedFrom: [],
-    reportEntries: 0,
-    unknownFiles: 0,
+    report: [],
   });
 
   // Campaigns a previous run committed. Read even under `--force`, so a forced
@@ -1040,10 +1017,7 @@ export async function runInitialMigration(
   const resumedFrom = ids.filter((id) => done.has(id));
 
   const at = new Date().toISOString();
-  // Not derived from `at`: two runs can fall into the same millisecond.
-  const runId = randomUUID();
-  let reportEntries = 0;
-  let unknownFiles = 0;
+  const runReport: RunReportEntry[] = [];
   const imported: string[] = [];
 
   const upsertMeta = (writer: DbWriter, key: string, value: string): void => {
@@ -1061,23 +1035,17 @@ export async function runInitialMigration(
     const report: ReportEntry[] = [];
     db.transaction((tx) => {
       const writer = tx as unknown as DbWriter;
-      const stored = importCampaign(writer, campaign, at, report);
-      for (const entry of report) {
-        tx.insert(reportTable)
-          .values({ campaignId: id, path: entry.path, reason: entry.reason, at, runId })
-          .run();
-      }
+      importCampaign(writer, campaign, at, report);
       // Same transaction as the rows: the marker cannot outlive a rollback,
       // and a crash after this commit leaves a resumable state.
       upsertMeta(writer, campaignMarkerKey(id), at);
-      unknownFiles += stored;
     });
-    reportEntries += report.length;
+    for (const entry of report) runReport.push({ campaignId: id, path: entry.path, reason: entry.reason });
     imported.push(id);
   }
 
   upsertMeta(db, "migrated_at", at);
   upsertMeta(db, "migrated_from", path.resolve(root));
 
-  return { migrated: true, campaigns: imported, resumedFrom, reportEntries, unknownFiles, at, runId };
+  return { migrated: true, campaigns: imported, resumedFrom, report: runReport, at };
 }

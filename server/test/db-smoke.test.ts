@@ -80,8 +80,6 @@ test("migrations create every table of the schema plus the FTS index", async () 
       "inbox_entries",
       "glossary",
       "generate_jobs",
-      "unknown_files",
-      "migration_report",
       "meta",
       "search_fts",
     ]) {

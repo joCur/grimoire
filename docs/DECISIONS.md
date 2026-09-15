@@ -370,11 +370,8 @@ ein Spiegel erzeugt, wird nicht gebaut.
   Abfederung der Einbahnstraße, zusammen mit „manueller Export" als bekanntem
   Später-Pfad.
 - **Die Migration verliert nie still Inhalt.** Was nicht zu Zeilen wird,
-  liegt wörtlich in `unknown_files` — Textdateien in `content`, Nicht-Text
-  (Karten-PNG, PDF-Handout) als Bytes in `content_blob`, denn eine als UTF-8
-  verstümmelte Kopie unter der Überschrift „unverändert übernommen" wäre
-  schlimmer als eine ehrliche Absage. Jede Degradierung steht mit Grund und
-  Lauf-Id (`migration_report.run_id`) daneben.
+  nennt der Lauf mit Pfad und Grund im Bericht auf stdout; die Datei bleibt
+  unverändert im Baum, der ohnehin nur Eingabe ist.
 - **Die Migration ist wiederaufnehmbar.** Neben `meta['migrated_at']` (Lauf
   fertig) markiert `meta['migrated_campaign:<id>']` jede einzelne, in ihrer
   eigenen Transaktion committete Kampagne. Ein Abbruch zwischen zwei
@@ -453,7 +450,10 @@ weg (Migration 0011). Das Flag hielt fest, ob ein Frontmatter-Block `chapter:`
 nannte, damit `PATCH { chapter: null }` den Key ausblenden konnte; das Kapitel
 ist Fremdschlüssel und Teil der Adresse, also immer gerendert, und `null` ist
 ein 400. `extra` gehört dem Importer: die API ändert und löscht dort vorhandene
-Keys, legt aber keine neuen an (unbekannter Key im Patch → 400).
+Keys, legt aber keine neuen an (unbekannter Key im Patch → 400). Die
+Tabellen `unknown_files` und `migration_report` sind weg (Migration 0012): sie
+verwahrten Dateien und Befunde der einmaligen Migration aus dem Dateibaum, den
+kein Produktionspfad mehr liest — der Seed-Bericht kommt aus dem Speicher.
 
 **Nachtrag zu ADR #10 (eingelöst in #62):** Generator-Jobs sind persistent
 (`generate_jobs`); der dort akzeptierte Verlust bei Neustart entfällt für

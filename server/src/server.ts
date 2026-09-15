@@ -193,11 +193,8 @@
 //                                              (the import makes them) and is flattened
 //                                              for the prompt instead
 //   [—] GET  /api/:campaign/migration-report   REMOVED with issue #79. The markdown import
-//                                              left the production path (no boot import any
-//                                              more): it is the dev/E2E tool `grimoire seed`,
-//                                              which prints its own report on stdout. The
-//                                              `migration_report` table stays as the
-//                                              importer's bookkeeping (server/src/db/)
+//                                              is the dev/E2E tool `grimoire seed`, which
+//                                              prints its report on stdout; nothing is stored.
 //   [x] GET  /api/:campaign/version            { version, build } — version is
 //                                              `campaigns.version`, bumped by every write in
 //                                              the same transaction (the chokidar watcher is

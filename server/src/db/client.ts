@@ -116,9 +116,8 @@ export async function openDb(filename: string): Promise<OpenDb> {
  * defensive half of the migration's idempotency rule (planning section 3):
  * a NON-EMPTY database is never overwritten, marker or no marker.
  *
- * "Empty" is deliberately narrow — only `campaigns`. The migration
- * bookkeeping tables (`meta`, `migration_report`) say nothing about whether
- * a DM's content is in there.
+ * "Empty" is deliberately narrow — only `campaigns`. The bookkeeping table
+ * `meta` says nothing about whether a DM's content is in there.
  */
 export function isDbEmpty(db: GrimoireDb): boolean {
   const rows = db.all<{ n: number }>(sql`select count(*) as n from campaigns`);
