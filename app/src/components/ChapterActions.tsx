@@ -1,36 +1,35 @@
-// The per-chapter actions of the Kapitelübersicht (issue #115).
+// The per-chapter actions of the chapter overview.
 //
-// A chapter was the one thing the pool listed and could not edit: the title
-// stayed whatever „Kapitel anlegen" was given (a slug, for a chapter the boot
-// repair created), and a goal left out at creation time could never be added.
-// So a chapter gets the campaign header's vocabulary (#34/#56), per chapter:
+// A chapter was the one thing the overview listed and could not edit: the
+// title stayed whatever the create-chapter action was given (a slug, for a
+// chapter the boot repair created), and a goal left out at creation time could
+// never be added. So a chapter gets the campaign header's vocabulary, per
+// chapter:
 //
-//   „Eigenschaften"    Titel and Status — the SHARED properties dialog
-//                      (components/PropertiesAction, issue #42). Its chapter
-//                      form already has exactly these two fields, its rev is
-//                      frozen when it opens, and its 409 keeps the typed
-//                      values. Reusing it is the point: a second chapter form
-//                      is how the German wording and the conflict handling
-//                      drift apart.
-//   „Bearbeiten"       the `_chapter` BODY, which is where the goal line the
-//                      pool shows comes from. Its own dialog (not the
-//                      reading view's inline editor — the pool is a list, it
-//                      does not turn into an editing surface), same rev
-//                      protocol.
-// „Als aktiv setzen" USED to be a third action here. It is gone: the status
-// regler in the chapter's heading row (components/ChapterStatusMenu) already
-// offers „Aktiv" and calls the same swap endpoint, so the button was the same
-// decision said twice — and two controls for one value is how they end up
-// disagreeing about what the chapter's status is.
+//   PROPERTIES   title and status — the SHARED properties dialog
+//                (components/PropertiesAction). Its chapter form already has
+//                exactly these two fields, its rev is frozen when it opens,
+//                and its 409 keeps the typed values. Reusing it is the point:
+//                a second chapter form is how the wording and the conflict
+//                handling drift apart.
+//   EDIT         the chapter entry's BODY, which is where the goal line the
+//                overview shows comes from. Its own dialog (not the reading
+//                view's inline editor — the overview is a list, it does not
+//                turn into an editing surface), same rev protocol.
+//
+// Setting the active chapter USED to be a third action here. It is gone: the
+// status menu in the chapter's heading row (components/ChapterStatusMenu)
+// already offers `active` and calls the same swap endpoint, so the button was
+// the same decision said twice — and two controls for one value is how they
+// end up disagreeing about what the chapter's status is.
 //
 // MOBILE IS READ-ONLY, and it comes for free: below md the route renders the
-// mobile start surface instead of the pool (routes/pool.tsx), so this whole
-// row is not on the phone at all. Nothing here has a `md:` class of its own,
-// because a rule enforced in two places is a rule that will disagree with
-// itself.
+// mobile start surface instead of the overview, so this whole row is not on
+// the phone at all. Nothing here has a `md:` class of its own, because a rule
+// enforced in two places is a rule that will disagree with itself.
 //
-// The chapter DOCUMENT is what carries the rev, so both dialogs need it. It is
-// the query the pool already runs for the goal line, passed in rather than
+// The chapter ENTRY is what carries the rev, so both dialogs need it. It is
+// the query the overview already runs for the goal line, passed in rather than
 // fetched twice.
 
 import type { CampaignTree, EntryResponse } from "@grimoire/shared/types";
@@ -66,8 +65,8 @@ export function ChapterActions({
   campaign: string;
   chapter: string;
   /**
-   * The chapter's document. Undefined while the pool's lazy query is still
-   * running (or when the chapter has no document to read): the two editing
+   * The chapter's entry. Undefined while the overview's lazy query is still
+   * running (or when the chapter has no entry to read): the two editing
    * actions need its rev, so they simply are not offered yet.
    */
   file: EntryResponse | undefined;
@@ -81,11 +80,11 @@ export function ChapterActions({
     <div className="mb-3 flex flex-wrap items-center gap-1">
       {file !== undefined && (
         <>
-          {/* Named „Kapitel-…" rather than plain „Eigenschaften"/„Bearbeiten":
-              the pool header carries its own „Bearbeiten" for the campaign and
-              every open chapter carries these, so the bare words would be
-              ambiguous — for a screen reader, and for anyone counting Tab
-              stops down the list. */}
+          {/* The labels name the chapter instead of saying only "properties"
+              or "edit": the overview header carries its own edit action for
+              the campaign and every open chapter carries these, so the bare
+              words would be ambiguous — for a screen reader, and for anyone
+              counting Tab stops down the list. */}
           <PropertiesAction
             campaign={campaign}
             file={file}
@@ -112,21 +111,21 @@ export function ChapterActions({
 }
 
 /**
- * „Bearbeiten" — the chapter's markdown body, where the goal lives.
+ * The edit dialog — the chapter's markdown body, where the goal lives.
  *
- * The rev is frozen at the first render with a document, for the reason the
+ * The rev is frozen at the first render with an entry, for the reason the
  * campaign dialog spells out (lib/campaign-meta.ts `seedCampaignMetaBase`):
  * the 5s version poll refetches this file while the dialog stands, and
  * following it would turn a concurrent edit into a silent overwrite instead of
  * a 409. It moves only after a conflict, to the version the re-read brought,
  * and the typed text stays.
  *
- * The BASELINE the „nothing changed" check compares against is frozen in the
+ * The BASELINE the "nothing changed" check compares against is frozen in the
  * same breath, and for the same reason (the properties dialog's `initial`
  * does it too): it is the body that belongs to the frozen rev. Reading
  * `file.body` live meant the poll could move the baseline under the dialog —
  * a second writer whose text happened to equal what the DM had typed disabled
- * „Speichern", so the DM's own version was never written and nothing said
+ * the save button, so the DM's own version was never written and nothing said
  * why; and after a conflict the re-read body became the baseline, which
  * disabled the retry that was supposed to write on top of it.
  */
@@ -151,7 +150,7 @@ function ChapterBodyDialog({
   const save = useRevWriteMutation<void>({
     write: () => writeChapterBody(campaign, chapter, body, rev),
     fileKey: ["file", campaign, chapterMetaPath(chapter)],
-    // The goal line lives in the pool's tree view, and the body is indexed.
+    // The goal line lives in the overview's tree view, and the body is indexed.
     invalidateOnSuccess: [["tree", campaign], ["search", campaign]],
     onSaved: onClose,
     onConflict: (reread) => {

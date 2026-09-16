@@ -2205,14 +2205,15 @@ describe("campaign knowledge", () => {
   });
 });
 
-// --- the write-layer invariant (issue #115) ---------------------------------------
+// --- the write-layer invariant ---------------------------------------
 
-describe("a scene draft whose chapter has no row (#115)", () => {
+describe("a scene draft whose chapter has no row", () => {
   test("gets the chapter row in the same write, named by its id", async () => {
     // The apply path is the ONE scene write without a dialog in front of it,
     // and it is what produced the production bug: twelve scenes under
-    // `03-dragon-hatchery` with no such chapter, invisible in the pool.
-    // `ensureChapterRow` closes it the way `ensureLocationRow` closes the Ort
+    // `03-dragon-hatchery` with no such chapter, invisible in the overview.
+    // `ensureChapterRow` closes it the way `ensureLocationRow` closes the
+    // location reference
     // — and since migration 0014 it has to, or the foreign key would turn the
     // apply into a 409.
     const markdown = sceneMarkdown()
@@ -2228,7 +2229,7 @@ describe("a scene draft whose chapter has no row (#115)", () => {
     const chapter = await read("03-dragon-hatchery/_chapter");
     expect(chapter.kind).toBe("chapter");
     // No title was known here, so the chapter is called by its slug — which
-    // is renameable in the pool, where an invisible chapter was not.
+    // is renameable in the overview, where an invisible chapter was not.
     expect(chapter.properties.title).toBe("03-dragon-hatchery");
     expect(chapter.properties.status).toBe("planned");
 
@@ -2240,7 +2241,7 @@ describe("a scene draft whose chapter has no row (#115)", () => {
     expect(node?.groups.flatMap((g) => g.scenes).map((s) => s.id)).toContain("brut-im-dunkeln");
   });
 
-  // #115 review, finding 2: `ensureChapterRow` only creates rows for a real
+  // Review finding 2: `ensureChapterRow` only creates rows for a real
   // entity slug, and everything else used to fall through to the insert — so
   // the client got the raw foreign-key failure as a 500 that named a
   // constraint. A chapter id like `Kapitel_1` passes the path safety check

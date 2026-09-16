@@ -1,7 +1,7 @@
-// The no-op filter of the status regler (issue #115 hotfix).
+// The no-op filter of the status menu.
 //
 // A radio group reports every select, the one of the already-checked option
-// included — and for the chapter's „Aktiv" that select is not a null write but
+// included — and for the chapter's `active` that select is not a null write but
 // a SWAP of two rows, which pulls the flag back off the chapter the DM just
 // picked. The predicate is what the menu asks before it writes; the render
 // side of the control lives in ChapterStatusMenu.test.tsx /
@@ -23,7 +23,7 @@ describe("statusSelectionWrites", () => {
   });
 
   test("while a write runs, its TARGET is the value shown", () => {
-    // The trigger already reads „Aktiv" (dimmed) — selecting it again is the
+    // The trigger already reads `active` (dimmed) — selecting it again is the
     // same no-op, not a second swap.
     expect(statusSelectionWrites("active", "planned", "active")).toBe(false);
     // …and the stored value is selectable again, which is how a DM takes it

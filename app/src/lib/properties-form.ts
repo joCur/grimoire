@@ -101,7 +101,7 @@ export interface PropertiesField {
 //
 // The enum option LABELS (scene status, npc status, chapter status) come from
 // lib/scene-status.ts, lib/entity.ts and lib/chapter-status.ts instead, which
-// the pool, the lists and the cards share: a signature change here would drag
+// the overview, the lists and the cards share: a signature change here would drag
 // half of those views along.
 
 /** Catalog keys of a field's copy — label, and the optional two below it. */
@@ -179,7 +179,7 @@ function optionsOf(
 ): readonly FieldOption[] | undefined {
   if (def.control !== "select") return undefined;
   if (kind === "scene" && def.key === "status") return sceneStatusOptions(t);
-  // The same three labels the pool's status regler shows, so picking „Aktiv"
+  // The same three labels the overview's status menu shows, so picking `active`
   // reads identically in both places. The server performs the swap to the
   // one active chapter for a properties patch too, so the invariant does not
   // depend on which of the two doors the write came through.

@@ -1250,14 +1250,13 @@ export function applyStubTarget(item: unknown, index: number): ApplyTarget {
 }
 
 /**
- * The `_chapter` target of a „Neues Kapitel" run, decided from the JOB
- * (issue #115).
+ * The chapter-entry target of a new-chapter run, decided from the JOB.
  *
  * This is the fix for the production bug: the app used to send
- * `chapter`/`chapterTitle` from its own state on accept, and since #97 made
- * the review persistent that state is gone after a navigation or a reload —
+ * `chapter`/`chapterTitle` from its own state on accept, and now that the
+ * review is persistent that state is gone after a navigation or a reload —
  * so the scenes were written with a `chapter_id` whose chapter had no row and
- * the whole chapter was invisible in the pool. The run knows what chapter it
+ * the whole chapter was invisible in the overview. The run knows what chapter it
  * is for (`generate_jobs.chapter`) and, since the migration next to this,
  * what it is CALLED (`new_chapter_title`), so the decision is made here and
  * needs no browser.
@@ -1279,7 +1278,7 @@ export async function jobChapterTarget(
   if (!job.newChapter || job.chapter === undefined) return null;
   // No stored title (a run started before this deploy) falls back to the id —
   // the same rule the boot repair uses. A chapter called by its slug is
-  // renameable in the pool; an invisible one is not.
+  // renameable in the overview; an invisible one is not.
   return newChapterTarget(campaign, job.chapter, job.newChapterTitle ?? job.chapter);
 }
 

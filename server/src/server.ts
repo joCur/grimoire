@@ -55,8 +55,8 @@
 //                                              Same id derivation and same 400/409 as above;
 //                                              `goal` lands under `## Ziel des Kapitels`, the
 //                                              heading the pool reads its goal line from
-//   [x] POST /api/:campaign/chapters/:id/active -> that chapter's document. „Aktiv" in the
-//                                              pool's status regler (#115): sets `active` here and
+//   [x] POST /api/:campaign/chapters/:id/active -> that chapter's entry. `active` in the
+//                                              overview's status menu: sets `active` here and
 //                                              puts the previously active chapter back to
 //                                              `planned`, in ONE transaction. Idempotent,
 //                                              404 for an unknown chapter, no rev guard
@@ -475,15 +475,15 @@ if (import.meta.main) {
         `entry and got one: ${groupMigration.createdLocations.join(", ")}`,
     );
   }
-  // Issue #115: a `chapter_id` without a chapters row made the chapter AND
-  // its scenes invisible in the pool. The repair gives it a row named by its
+  // A `chapter_id` without a chapters row made the chapter AND its scenes
+  // invisible in the overview. The repair gives it a row named by its
   // own slug, so it is loud on purpose — a chapter showing up under a slug is
   // something the DM wants to go and rename.
   const chapterRepair = info?.chapterRepair;
   if (chapterRepair !== undefined && chapterRepair.created.length > 0) {
     console.log(
       `${chapterRepair.created.length} chapter(s) named by a scene had no entry and got one ` +
-        "(titled by their id — rename them in the pool):",
+        "(titled by their id — rename them in the chapter overview):",
     );
     for (const entry of chapterRepair.created) {
       console.log(

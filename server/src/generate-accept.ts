@@ -137,8 +137,8 @@ export async function acceptJobParts(
   // an existing chapter yields null, so only the FIRST partial accept of a
   // new-chapter run actually creates it.
   //
-  // Decided from the JOB since issue #115, not from the body: the review is
-  // persistent (#97), so the accept regularly happens in a browser that never
+  // Decided from the JOB, not from the body: the review is
+  // persistent, so the accept regularly happens in a browser that never
   // saw the start form. The body fields remain an override.
   const chapterFile = await jobChapterTarget(campaign, job, body.chapter, body.chapterTitle);
   if (chapterFile !== null) targets.unshift(chapterFile);

@@ -158,10 +158,10 @@ function Chapter({
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="mb-4">
-      {/* ONE row, but not one button: the status regler (issue #115) is a
-          menu trigger, and a button inside a button is invalid markup. So the
+      {/* ONE row, but not one button: the status control is a menu trigger,
+          and a button inside a button is invalid markup. So the
           trigger covers the chevron, the heading and the scene count — the
-          whole reading of the row — and the regler sits BESIDE it in the same
+          whole reading of the row — and the menu sits BESIDE it in the same
           flex line with the shared bottom border. */}
       <div className="flex w-full items-center gap-2.5 border-b border-border pt-2.5 pb-3">
         <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-2.5 text-left">
@@ -174,7 +174,7 @@ function Chapter({
               inside the trigger, which stays the button that opens it. Without
               it the outline jumped from the pool's h1 straight to the group
               h3s, and the chapter the groups belong to was not in the tree at
-              all (issue #100 review). */}
+              all. */}
           <h2 className="min-w-0 truncate font-serif text-[18px] font-semibold text-foreground">
             {chapter.title}
           </h2>
@@ -183,7 +183,7 @@ function Chapter({
             {t("pool.sceneCount", { count: scenes.length })}
           </span>
         </CollapsibleTrigger>
-        {/* The pill that only SAID „Aktiv" is the regler now: „Aktiv" swaps
+        {/* The pill that only SAID `active` is the menu now: `active` swaps
             the active chapter in one server call, the other two patch this
             chapter. Mobile never sees it — the route renders the start
             surface instead of the pool below md. */}
@@ -191,7 +191,7 @@ function Chapter({
       </div>
       <CollapsibleContent>
         <div className="pt-4 pb-1 pl-[25px]">
-          {/* The chapter's own actions (issue #115). They sit INSIDE the
+          {/* The chapter's own actions. They sit INSIDE the
               accordion and not in the trigger row: the trigger is the button
               that opens the chapter, and a button inside a button is invalid
               markup — the same reason the pool row keeps its status control

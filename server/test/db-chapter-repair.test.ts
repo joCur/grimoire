@@ -1,9 +1,9 @@
-// The one-time repair of issue #115: a `scenes.chapter_id` without a chapters
+// The one-time repair: a `scenes.chapter_id` without a chapters
 // row gets one — and afterwards the database itself refuses such a row.
 //
 // Two halves, tested the way they run:
 //
-//   * the repair on the RAW client against a pre-#115 database (no foreign
+//   * the repair on the RAW client against a legacy database (no foreign
 //     key, orphans allowed), because that is the only state it ever sees —
 //     `openDb` calls it before the migrator for exactly that reason;
 //   * the foreign key of migration 0014 on a fully migrated database, at SQL
@@ -19,7 +19,7 @@ import path from "node:path";
 import { MIGRATIONS_DIR, openDb } from "../src/db/client";
 import { openSqlite, type SqliteClient } from "../src/db/driver";
 
-/** The pre-#115 shape: `chapter_id` carries no foreign key at all. */
+/** The legacy shape: `chapter_id` carries no foreign key at all. */
 async function oldSchemaDb(): Promise<SqliteClient> {
   const client = await openSqlite(":memory:");
   client.exec(`
@@ -119,7 +119,7 @@ function chapters(client: SqliteClient): Record<string, unknown>[] {
   return client.prepare("select id, title, status, pos from chapters order by id").all();
 }
 
-describe("the boot repair of orphan chapters (#115)", () => {
+describe("the boot repair of orphan chapters", () => {
   test("creates one row per named chapter, titled by its id, and reports it", async () => {
     const client = await oldSchemaDb();
     client
@@ -168,7 +168,7 @@ describe("the boot repair of orphan chapters (#115)", () => {
     client.close();
   });
 
-  // A BLANK `chapter_id` (#115 review, finding 1): it names no chapter, so the
+  // A BLANK `chapter_id` (review finding 1): it names no chapter, so the
   // create half has nothing to do — and it is not NULL either, so migration
   // 0013's composite foreign key would demand a chapters row with the empty id
   // and fail the boot. It becomes NULL, which is what "no chapter" means.
@@ -253,7 +253,7 @@ describe("the boot repair of orphan chapters (#115)", () => {
   });
 });
 
-describe("the chapter foreign key of migration 0014 (#115)", () => {
+describe("the chapter foreign key of migration 0014", () => {
   test("rejects a scene whose chapter has no row", async () => {
     const { db, close } = await openDb(":memory:");
     try {

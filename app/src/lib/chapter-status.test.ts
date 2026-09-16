@@ -1,4 +1,4 @@
-// The chapter status enum in the app (issue #115): labels from the catalog,
+// The chapter status enum in the app: labels from the catalog,
 // the degrade rule, and WHICH write one value takes.
 //
 // The last one is the point of this file. Two of the three values are an
@@ -55,7 +55,7 @@ describe("labels", () => {
   });
 
   test("an unknown stored value degrades to its raw text", () => {
-    // The format degrades (README): a row from an import or a pre-#115 hand
+    // The format degrades (README): a row from an import or a legacy hand
     // edit stays readable, verbatim, in whatever language the UI is in.
     expect(chapterStatusMeta("laeuft", t).label).toBe("laeuft");
     expect(chapterStatusMeta("laeuft", tEn).label).toBe("laeuft");
@@ -71,15 +71,15 @@ describe("labels", () => {
 });
 
 describe("which write a value takes", () => {
-  test("only „Aktiv\" is the swap", () => {
+  test("only `active` is the swap", () => {
     expect(chapterStatusNeedsSwap("active")).toBe(true);
     expect(chapterStatusNeedsSwap("planned")).toBe(false);
     expect(chapterStatusNeedsSwap("done")).toBe(false);
   });
 
   test("the swap needs no rev, a patch does", () => {
-    // A pool row carries no rev until its menu opens and fetches the chapter
-    // document — „Aktiv\" must stay available even if that read fails.
+    // An overview row carries no rev until its menu opens and fetches the chapter
+    // entry — `active` must stay available even if that read fails.
     expect(chapterStatusWritable("active", undefined)).toBe(true);
     expect(chapterStatusWritable("planned", undefined)).toBe(false);
     expect(chapterStatusWritable("done", undefined)).toBe(false);
@@ -87,8 +87,8 @@ describe("which write a value takes", () => {
   });
 
   test("the chapter that already holds the flag is never set active again", () => {
-    // The bounce-back of the #115 hotfix: the swap moves a SECOND row, so
-    // re-asserting „Aktiv" for the chapter whose pill still reads „Aktiv"
+    // The bounce-back of the hotfix: the swap moves a SECOND row, so
+    // re-asserting `active` for the chapter whose pill still reads `active`
     // takes the flag away from the chapter the DM just picked.
     expect(chapterStatusWritable("active", undefined, "active")).toBe(false);
     expect(chapterStatusWritable("active", 3, "active")).toBe(false);
@@ -97,7 +97,7 @@ describe("which write a value takes", () => {
     expect(chapterStatusWritable("active", undefined, "done")).toBe(true);
     // An unknown stored value degrades to „not active" here as well.
     expect(chapterStatusWritable("active", undefined, "laeuft")).toBe(true);
-    // The patch branch is unaffected — „Abgeschlossen" on the active chapter
+    // The patch branch is unaffected — `done` on the active chapter
     // is an ordinary, legitimate write.
     expect(chapterStatusWritable("done", 3, "active")).toBe(true);
   });

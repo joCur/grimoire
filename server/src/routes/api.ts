@@ -504,7 +504,7 @@ api.post("/:campaign/chapters", async (c) => {
 });
 
 // POST /api/:campaign/chapters/:id/active -> EntryResponse of that chapter
-// „Aktiv" in the Kapitelübersicht's status regler: the chapter becomes
+// `active` in the chapter overview's status menu: the chapter becomes
 // `active` and the one that was active goes back to `planned`, in ONE
 // transaction — two calls from the app would leave a window with two active
 // chapters, and the session view picks the first it finds. Idempotent, 404
@@ -716,7 +716,7 @@ const isDecision = (v: unknown): v is "accepted" | "rejected" | null =>
 // The run's own outcome (incl. the 422 of issues #18/#20) lands in the job.
 //
 // `chapterTitle` belongs to a `newChapter` run and is stored ON the job
-// (issue #115): the accept step used to read the title out of the browser,
+// The accept step used to read the title out of the browser,
 // which is gone after a navigation or a reload — and the chapter with it.
 // Optional so an older app build still starts runs; the accept then falls
 // back to the chapter id as the title.

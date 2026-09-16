@@ -1,11 +1,11 @@
-// React-query half of the chapter-status regler (issue #115).
+// React-query half of the chapter-status menu.
 //
 // The cache/409 mechanics are the shared envelope in use-rev-write.ts; what
 // belongs to this path is the INVALIDATION, and it is wider than a scene's.
-// „Aktiv" moves two chapter rows, so the whole file cache goes and not just
+// `active` moves two chapter rows, so the whole file cache goes and not just
 // the one the server answered with — the chapter that LOST the flag is on the
 // same page, and seeding only the winner would leave its pill lying. The tree
-// carries every chapter's status (the pool, the session view), and the session
+// carries every chapter's status (the overview, the session view), and the session
 // view reads which chapter is active, so both follow.
 
 import { writeChapterStatus, chapterStatusWritable } from "@/lib/chapter-status";
@@ -23,7 +23,7 @@ export interface ChapterStatusMutation {
 export function useChapterStatusMutation(
   campaign: string,
   chapter: string,
-  /** Rev of `<chapter>/_chapter` — only the patch branch needs it. */
+  /** Rev of the chapter entry — only the patch branch needs it. */
   rev: number | undefined,
   /**
    * The status this chapter is SHOWN with. It gates the swap: a chapter that
@@ -36,7 +36,7 @@ export function useChapterStatusMutation(
     write: (status) => writeChapterStatus(campaign, chapter, status, rev),
     fileKey: ["file", campaign, `${chapter}/_chapter`],
     invalidateOnSuccess: [
-      // Both chapter documents moved — the whole file cache, not one entry.
+      // Both chapter entries moved — the whole file cache, not one entry.
       ["file", campaign],
       ["tree", campaign],
       ["session", campaign],

@@ -107,7 +107,7 @@ interface Job {
   sourceText?: string;
   newChapter: boolean;
   /**
-   * Title of the chapter a „Neues Kapitel" run creates (issue #115) — stored
+   * Title of the chapter a new-chapter run creates — stored
    * when the run STARTS, so the accept step no longer depends on the browser
    * still holding it. Undefined for every other run and for a row written
    * before that column existed, and then the accept falls back to the
@@ -468,7 +468,7 @@ export type JobInput = { campaign: string; provider: LLMProvider } & (
       chapter: string;
       sourceText: string;
       newChapter: boolean;
-      /** Title for the chapter a `newChapter` run creates (issue #115). */
+      /** Title for the chapter a `newChapter` run creates. */
       newChapterTitle?: string;
     }
   | { kind: "npc"; sourceText: string; npcId?: string }

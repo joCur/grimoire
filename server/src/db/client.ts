@@ -40,7 +40,7 @@ export interface OpenDb {
    */
   groupMigration: GroupMigrationOutcome;
   /**
-   * The chapter rows the pre-migration step of issue #115 had to create for
+   * The chapter rows the pre-migration step had to create for
    * scenes whose `chapter_id` had none. Empty on every database that never
    * had a hole — which, after migration 0014's foreign key, is every database
    * this server has written.
@@ -114,7 +114,7 @@ export async function openDb(filename: string): Promise<OpenDb> {
   // `scenes.group_slug`, and this step is what carries the old grouping over
   // into `location`. It is a no-op once the column is gone.
   const groupMigration = migrateGroupsToLocations(client);
-  // Also BEFORE the migrator, and for a sharper reason (issue #115):
+  // Also BEFORE the migrator, and for a sharper reason:
   // migration 0014 gives `scenes.chapter_id` a real foreign key by copying
   // the rows into a new table, and an orphan `chapter_id` is exactly what
   // that copy would fail on. The holes are closed here, while the old

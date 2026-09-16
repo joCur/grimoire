@@ -1,4 +1,4 @@
-// Render test for the chapter-status regler (issue #115): the open menu lists
+// Render test for the chapter-status menu: the open menu lists
 // the three German labels, marks the current one, and the trigger names it for
 // a screen reader in the wording the PO asked for.
 //
@@ -43,7 +43,7 @@ describe("ChapterStatusMenu", () => {
   });
 
   test("an unknown value shows verbatim and checks nothing", () => {
-    // The format degrades: a pre-#115 row keeps its text, and the menu still
+    // The format degrades: a legacy row keeps its text, and the menu still
     // offers only the trio the API accepts.
     const html = render({ status: "laeuft" });
     expect(html).toContain("laeuft");

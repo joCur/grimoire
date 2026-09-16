@@ -352,7 +352,7 @@ export const en: Messages = {
   "pool.sceneCount": "{count, plural, =0 {no scenes} one {# scene} other {# scenes}}",
   "pool.chapter.goal": "Goal: {goal}",
   "pool.chapter.empty": "No scenes in this chapter yet.",
-  // --- chapter actions in the pool (issue #115) ----------------------------
+  // --- chapter actions in the overview ----------------------------
   "pool.chapter.properties": "Chapter properties",
   "pool.chapter.edit": "Edit chapter",
   "chapterBody.title": "Edit chapter: {title}",

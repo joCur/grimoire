@@ -73,8 +73,8 @@ export function SceneStatusControl({
  * The presentation: trigger plus the four options with the current one
  * checked. Pure (no queries, no mutation) so it can be render-tested.
  *
- * The MARKUP is `components/StatusMenu` since issue #115, which the chapter's
- * regler shares — what stays here is the scene's own data: its four options,
+ * The MARKUP is `components/StatusMenu`, which the chapter's menu shares —
+ * what stays here is the scene's own data: its four options,
  * its label/color table and its aria wording.
  */
 export function SceneStatusMenu({

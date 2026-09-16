@@ -38,8 +38,8 @@ export function usePropertiesFormMutation(
   /**
    * The kind on screen. Only one value changes anything: a CHAPTER patch can
    * set `status: active`, which the server answers by ALSO putting the
-   * previously active chapter back to `planned` (issue #115) — a second
-   * document this dialog never read. Its cached copy would keep the old pill,
+   * previously active chapter back to `planned` — a second
+   * entry this dialog never read. Its cached copy would keep the old pill,
    * so the whole file cache goes for that kind and not just the seeded entry.
    */
   kind?: string,

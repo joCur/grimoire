@@ -1,27 +1,26 @@
-// The chapter-status regler in the Kapitelübersicht (issue #115, PO
-// requirement 9): the status DISPLAY is the control, exactly like the scene's
+// The chapter-status menu in the chapter overview (PO requirement 9): the
+// status DISPLAY is the control, exactly like the scene's
 // (components/SceneStatusMenu) — same markup (components/StatusMenu), same
 // aria wording, same quiet inline message. What differs is the write behind
 // it, and that is the whole reason this file exists:
 //
-//   „Geplant" / „Abgeschlossen"   PATCH /properties on `<chapter>/_chapter`,
-//                                 rev-guarded like every other properties
-//                                 write.
-//   „Aktiv"                       POST /chapters/:id/active — ONE call for
-//                                 ONE decision about TWO rows, so the campaign
-//                                 never has two active chapters. It replaces
-//                                 the separate „Als aktiv setzen" button this
-//                                 ticket removed: the regler already said what
-//                                 the button said, twice.
+//   `planned` / `done`   PATCH /properties on the chapter entry, rev-guarded
+//                        like every other properties write.
+//   `active`             POST /chapters/:id/active — ONE call for ONE decision
+//                        about TWO rows, so the campaign never has two active
+//                        chapters. It replaces the separate set-active button
+//                        this slice removed: the menu already said what the
+//                        button said, twice.
 //
-// The rev for the patch branch comes from the chapter DOCUMENT, and the pool's
-// tree carries none — so it is fetched LAZILY when the menu opens (one GET,
-// shared with the file query cache), the same trick the pool's scene rows use.
-// „Aktiv" needs no rev at all and stays available even if that read fails.
+// The rev for the patch branch comes from the chapter ENTRY, and the
+// overview's tree carries none — so it is fetched LAZILY when the menu opens
+// (one GET, shared with the entry query cache), the same trick the overview's
+// scene rows use. `active` needs no rev at all and stays available even if
+// that read fails.
 //
 // MOBILE IS READ-ONLY, and it comes for free: below md the route renders the
-// mobile start surface instead of the pool (routes/pool.tsx), so this control
-// is not on the phone at all.
+// mobile start surface instead of the overview, so this control is not on the
+// phone at all.
 
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";

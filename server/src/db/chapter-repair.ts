@@ -1,13 +1,14 @@
-// The one-time data step behind issue #115: a `scenes.chapter_id` without a
+// The one-time data step behind the hard chapter reference: a
+// `scenes.chapter_id` without a
 // `chapters` row gets one.
 //
 // WHY IT EXISTS
 //
 // `scenes.chapter_id` used to be a SOFT reference (schema.ts rule 3), and the
 // generator's accept step wrote scenes whose chapter it had been told about
-// only by the browser. After #97 made the review persistent that browser state
+// only by the browser. Once the review became persistent that browser state
 // was regularly gone, so production ended up with twelve scenes under
-// `03-dragon-hatchery` and no such chapter — and the pool lists chapters from
+// `03-dragon-hatchery` and no such chapter — and the overview lists chapters from
 // the chapter TABLE, so the chapter and every scene in it were invisible.
 //
 // WHY IT RUNS BEFORE THE SCHEMA MIGRATOR
@@ -23,8 +24,8 @@
 //
 // `{ id, title: id, status: "planned" }` — the chapter is named by its own
 // slug, which is the only name anybody has for it, and the DM renames it in
-// the pool („Eigenschaften"). Everything created is REPORTED on boot (the
-// shape issue #100 established), because a chapter appearing out of nowhere is
+// the overview (through the properties dialog). Everything created is
+// REPORTED on boot, because a chapter appearing out of nowhere is
 // something the DM should read rather than discover.
 //
 // WHAT IT BLANKS

@@ -84,10 +84,11 @@ export function PropertiesAction({
   /** For the reference fields — the ids that already have an entry. */
   tree: CampaignTree | undefined;
   /**
-   * What the trigger is CALLED. „Eigenschaften" everywhere the action stands
-   * in the header of the one thing on screen. The pool's chapter rows pass
-   * „Kapitel-Eigenschaften" instead (issue #115): there the pool header's own
-   * „Bearbeiten" is on the same page, and two actions with the same name on
+   * What the trigger is CALLED. The plain properties label everywhere the
+   * action stands in the header of the one thing on screen. The overview's
+   * chapter rows pass the chapter-prefixed label instead: there the overview
+   * header's own edit action is on the same page, and two actions with the
+   * same name on
    * one surface are ambiguous for a screen reader and for a keyboard user
    * counting Tab stops. The DIALOG is untouched either way — same form, same
    * frozen rev, same 409.

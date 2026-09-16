@@ -20,14 +20,14 @@ export const NPC_STATUSES = ["alive", "dead", "missing", "unknown"] as const;
 export type NpcStatus = (typeof NPC_STATUSES)[number];
 
 /**
- * A chapter's lifecycle states, in that order (issue #115). `active` is the
+ * A chapter's lifecycle states, in that order. `active` is the
  * ONE the app acts on — the session view opens the active chapter, and there
  * is at most one per campaign (the server swaps it transactionally).
  *
  * Like every other enum here these are the KNOWN values, not a validator:
  * a row that carries something else renders verbatim, and there is no CHECK
  * constraint behind the column. What is new is that the API refuses to WRITE
- * anything else (400) — a chapter status is a regler with three positions
+ * anything else (400) — a chapter status is a menu with three positions
  * now, so a fourth value can only be a typo from a hand-written request.
  */
 export const CHAPTER_STATUSES = ["planned", "active", "done"] as const;

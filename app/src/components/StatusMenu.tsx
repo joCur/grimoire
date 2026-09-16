@@ -1,8 +1,8 @@
-// The status regler, without a domain (issues #28/#115).
+// The status menu, without a domain.
 //
 // The scene status pill was the first one: the display IS the control, two
-// densities, one dropdown, a quiet inline message under it. Issue #115 gave
-// the chapter the same thing — three values instead of four, a different
+// densities, one dropdown, a quiet inline message under it. The chapter then
+// got the same thing — three values instead of four, a different
 // write behind it — and a second copy of this markup is how the two would
 // drift apart: a chevron that only appears on one of them, an aria label
 // worded twice, a dark-mode token fixed in one place.
@@ -45,7 +45,8 @@ export interface StatusMenuProps {
   options: ReadonlyArray<{ value: string; label: string }>;
   /** Label + colors for any value, known or not. */
   meta: (status: string) => StatusMeta;
-  /** The trigger's accessible name — „Status ändern, aktuell {label}". */
+  /** The trigger's accessible name — the localized "change status, currently
+   * {label}". */
   ariaLabel: string;
   variant: StatusVariant;
   /** Quiet inline message under the trigger: a rev conflict, a failed write. */
@@ -58,7 +59,7 @@ export interface StatusMenuProps {
 
 /**
  * Does selecting `next` mean a WRITE — or is it the value the control already
- * shows? (Issue #115 hotfix.)
+ * shows?
  *
  * A radio group reports EVERY select, the one of the already-checked option
  * included, and Radix's menu item selects on `click` (and on a `pointerup`
@@ -67,10 +68,10 @@ export interface StatusMenuProps {
  * reach the write layer as an ordinary status change.
  *
  * For a scene that was a pointless rev bump. For a CHAPTER it was a bug with
- * teeth: „Aktiv" is a SWAP of two rows, so re-asserting it for the chapter
- * whose pill still reads „Aktiv" — the previously active one, whose tree data
+ * teeth: `active` is a SWAP of two rows, so re-asserting it for the chapter
+ * whose pill still reads `active` — the previously active one, whose tree data
  * is only refreshed once the invalidation lands — pulls the flag straight back
- * off the chapter the DM just picked. The regler is a radio group: the checked
+ * off the chapter the DM just picked. The menu is a radio group: the checked
  * option IS the state, and selecting it is nothing to write.
  *
  * `pendingStatus` counts as the current value on purpose: while a write runs

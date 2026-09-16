@@ -43,9 +43,9 @@ export interface StoreInfo {
    */
   groupMigration: GroupMigrationOutcome;
   /**
-   * The chapters the one-time repair of issue #115 created for scenes whose
+   * The chapters the one-time repair created for scenes whose
    * `chapter_id` had no row (db/chapter-repair.ts) — a chapter that was
-   * INVISIBLE in the pool until this boot. Empty on every later boot.
+   * INVISIBLE in the overview until this boot. Empty on every later boot.
    */
   chapterRepair: ChapterRepairOutcome;
 }

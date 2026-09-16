@@ -101,9 +101,9 @@ describe("propertiesFieldsFor", () => {
     expect(keys("chapter")).toEqual(["title", "status"]);
   });
 
-  // Issue #115: the chapter status stopped being free text. The API enforces
+  // The chapter status stopped being free text. The API enforces
   // the trio (400 otherwise), so a text field could only produce a rejected
-  // save — and the dialog has to offer the same list the pool's regler does.
+  // save — and the dialog has to offer the same list the overview's menu does.
   test("the chapter status is a select over the enum, in lifecycle order", () => {
     const status = fields("chapter").find((field) => field.key === "status");
     expect(status?.control).toBe("select");

@@ -431,19 +431,19 @@ test("markWrittenInTx throws for a lost job instead of reporting false", async (
   expect((await fetchJob())?.review?.written).toEqual({});
 });
 
-// --- the new chapter (issue #115) ------------------------------------------------
+// --- the new chapter ------------------------------------------------
 //
 // The production bug: the app sent `chapter`/`chapterTitle` on accept from its
-// OWN state, and since #97 made the review persistent the accept regularly
+// OWN state, and now that the review is persistent the accept regularly
 // happens in a tab that never saw the start form — so the scenes were written
-// under a `chapter_id` that had no chapters row, and the pool (which lists
+// under a `chapter_id` that had no chapters row, and the overview (which lists
 // chapters from the chapter TABLE) showed neither the chapter nor its scenes.
 //
 // „Reload" is modelled exactly as it reaches the server: an accept with NO
 // chapter fields in the body. Nothing else about these cases is special —
 // same run, same accept endpoint.
 
-/** Start a „Neues Kapitel" run and wait for it, like `runJob`. */
+/** Start a new-chapter run and wait for it, like `runJob`. */
 async function runNewChapterJob(title?: string): Promise<GenerateJob> {
   setProviderForTests(new PipelineFake([replyForChapter("03-dragon-hatchery")]));
   const res = await send("POST", "/api/beispiel/generate", {
@@ -522,13 +522,13 @@ test("creating the chapter is idempotent across two partial accepts", async () =
   expect(await chapterTitles()).toMatchObject({ "03-dragon-hatchery": "Die Drachenbrut" });
 });
 
-// #115 review, finding 4: a partial accept of the NPC stub ALONE — no scene in
+// Review finding 4: a partial accept of the NPC stub ALONE — no scene in
 // the batch, so nothing in it names the chapter. The chapter row is still
 // created, and that is intended: `jobChapterTarget` is decided from the job,
 // not from what the accept happens to contain, so the chapter the run is for
 // exists from the first accept onwards — and the scenes accepted afterwards
 // have the row their foreign key needs. The alternative (create it only
-// together with a scene) is exactly the ordering bug #115 is about.
+// together with a scene) is exactly the ordering bug this slice is about.
 test("accepting only the npc stub already creates the run's chapter", async () => {
   const job = await runNewChapterJob("Die Drachenbrut");
   const res = await accept(job, { paths: [STUB_PATH] });

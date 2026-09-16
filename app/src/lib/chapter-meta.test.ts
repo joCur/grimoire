@@ -1,4 +1,4 @@
-// The chapter edit rules of issue #115 — the pure half of ChapterActions.
+// The chapter edit rules — the pure half of ChapterActions.
 
 import { describe, expect, test } from "bun:test";
 
@@ -23,7 +23,7 @@ describe("chapterBodyToWrite", () => {
   });
 
   test("a blank body is the empty string, not whitespace", () => {
-    // "" is what the pool's goal line and the reading view read as „no text";
+    // "" is what the overview's goal line and the reading view read as „no text";
     // three newlines would render as an empty section instead.
     expect(chapterBodyToWrite("")).toBe("");
     expect(chapterBodyToWrite("\n\n  \n")).toBe("");

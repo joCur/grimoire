@@ -350,7 +350,7 @@ describe("creating next to imported stock", () => {
   });
 });
 
-// „Als aktiv setzen" (issue #115): the pool action that decides which chapter
+// The set-active write: the overview action that decides which chapter
 // is the one the session is in. It is ONE transaction over TWO rows, which is
 // the only thing worth testing about it — an app doing it in two calls would
 // have a window with two active chapters, and the session view picks the
@@ -405,7 +405,7 @@ describe("POST /api/:campaign/chapters/:id/active", () => {
   });
 });
 
-// The chapter status enum (issue #115, PO requirement 9): three known values,
+// The chapter status enum (PO requirement 9): three known values,
 // and the API writes nothing else. What is already STORED still degrades —
 // that is the format's rule and there is no CHECK constraint behind the
 // column — so the two halves are tested apart.
@@ -443,7 +443,7 @@ describe("the chapter status enum via PATCH /properties", () => {
   }
 
   test("a created chapter starts at planned", async () => {
-    // Not "no status": the pool renders the value, and a chapter without one
+    // Not "no status": the overview renders the value, and a chapter without one
     // would look less planned than its siblings.
     const created = await file("02-tiefe/_chapter");
     expect(created.properties.status).toBe("planned");
@@ -476,7 +476,7 @@ describe("the chapter status enum via PATCH /properties", () => {
 
   test("a patch that does NOT touch the status leaves an unknown value alone", async () => {
     // The degrade half: an existing row carrying something else (an import, a
-    // pre-#115 hand edit) stays readable AND patchable in its other fields.
+    // legacy hand edit) stays readable AND patchable in its other fields.
     const doc = await file("01-salzhafen/_chapter");
     const { getDb } = await import("../src/store/handle");
     const db = await getDb();
@@ -498,7 +498,7 @@ describe("the chapter status enum via PATCH /properties", () => {
     expect(after.properties.status).toBe("laeuft");
   });
 
-  // #115 review, finding 4: the „Kapitel-Eigenschaften" dialog must not be a
+  // Review finding 4: the chapter properties dialog must not be a
   // second door past the one-active invariant. The endpoint is not the owner
   // of the rule, the column is.
   test("a patch setting active performs the swap, like the endpoint", async () => {

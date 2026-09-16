@@ -1,5 +1,5 @@
-// Chapter status (issue #115): the labels/colors the pool menu and the
-// „Kapitel-Eigenschaften" form share, and the two writes behind them.
+// Chapter status: the labels/colors the overview menu and the chapter
+// properties form share, and the two writes behind them.
 //
 // Same shape as lib/scene-status.ts, and deliberately so — the labels come
 // from the catalog and the translator is PASSED IN (CLAUDE.md/i18n: the lib
@@ -7,7 +7,7 @@
 // because they are design tokens rather than copy.
 //
 // What is DIFFERENT from a scene is the write. Two of the three values are an
-// ordinary properties patch on `<chapter>/_chapter`; `active` is not, because
+// ordinary properties patch on the chapter entry; `active` is not, because
 // it is one decision about TWO rows — the chapter becomes active and the one
 // that held the flag goes back to `planned`. That swap is the dedicated
 // endpoint (`POST /chapters/:id/active`), which needs no rev: it also changes
@@ -19,7 +19,7 @@
 // Degrade rule (README): an unknown stored value is shown VERBATIM. An ABSENT
 // one is not the same case: every path that creates a chapter writes
 // `planned` (the create endpoint, `ensureChapterRow`, the boot repair), so a
-// NULL only survives on a pre-#115 row — and „no status" on a chapter means
+// NULL only survives on a legacy row — and "no status" on a chapter means
 // „not started", which is what `planned` says.
 
 import { CHAPTER_STATUSES, type ChapterStatus } from "@grimoire/shared/types";
@@ -83,14 +83,14 @@ export function chapterStatusOptions(
   return CHAPTER_STATUSES.map((value) => ({ value, label: t(CHAPTER_STATUS_META[value].key) }));
 }
 
-/** Campaign-relative path of a chapter's document. */
+/** Campaign-relative path of a chapter's entry. */
 function chapterDocPath(chapter: string): string {
   return `${chapter}/_chapter`;
 }
 
 /**
  * True when writing `status` means asking the server to SWAP the active
- * chapter rather than to patch this one — the one branch the pool's menu and
+ * chapter rather than to patch this one — the one branch the overview's menu and
  * the properties dialog both have to take.
  */
 export function chapterStatusNeedsSwap(status: string): boolean {
@@ -126,13 +126,13 @@ export async function writeChapterStatus(
 
 /**
  * Can this value be written with what we have? A patch needs the rev of the
- * chapter document, which a pool row only fetches once the menu opens; the
+ * chapter entry, which an overview row only fetches once the menu opens; the
  * swap needs no rev at all.
  *
- * `current` is what the row SHOWS (issue #115 hotfix): a chapter that already
+ * `current` is what the row SHOWS: a chapter that already
  * holds the flag is never set active again. The endpoint would happily
  * re-assert it, and that is the damage — the swap moves a SECOND row, so
- * „Aktiv" on the chapter whose pill still reads „Aktiv" (the previously active
+ * `active` on the chapter whose pill still reads `active` (the previously active
  * one, until the invalidation lands) pulls the flag back off the chapter the
  * DM just picked. The domain rule, next to the control's own no-op filter
  * (`statusSelectionWrites`): this one holds for every caller of the write.
