@@ -406,6 +406,7 @@
 import { existsSync } from "node:fs";
 import { Hono } from "hono";
 import { getAppDistDir, getDbFile, PORT } from "./config";
+import { UNSORTED_CHAPTER_ID, UNSORTED_CHAPTER_TITLE } from "./db/reference-repair";
 import { api } from "./routes/api";
 import { mountStaticApp } from "./static-files";
 import { initStore } from "./store/handle";
@@ -475,29 +476,60 @@ if (import.meta.main) {
         `entry and got one: ${groupMigration.createdLocations.join(", ")}`,
     );
   }
-  // A `chapter_id` without a chapters row made the chapter AND its scenes
-  // invisible in the overview. The repair gives it a row named by its
-  // own slug, so it is loud on purpose — a chapter showing up under a slug is
-  // something the DM wants to go and rename.
-  const chapterRepair = info?.chapterRepair;
-  if (chapterRepair !== undefined && chapterRepair.created.length > 0) {
+  // Every reference is a foreign key now, and the pre-migration repair is
+  // what made that possible on existing data. All of it is LOUD on purpose: a
+  // chapter showing up under its own slug wants renaming, and a row that
+  // appeared out of nowhere should be read rather than discovered.
+  const repair = info?.referenceRepair;
+  if (repair !== undefined && repair.chaptersCreated.length > 0) {
     console.log(
-      `${chapterRepair.created.length} chapter(s) named by a scene had no entry and got one ` +
+      `${repair.chaptersCreated.length} chapter(s) named by a scene had no entry and got one ` +
         "(titled by their id — rename them in the chapter overview):",
     );
-    for (const entry of chapterRepair.created) {
+    for (const entry of repair.chaptersCreated) {
       console.log(
         `  · [${entry.campaignId}] ${entry.chapterId} (${entry.scenes} scene(s) were invisible)`,
       );
     }
   }
-  if (chapterRepair !== undefined && chapterRepair.blanked.length > 0) {
-    // A blank `chapter_id` named no chapter, so nothing could be created for
-    // it — it is now NULL, which is what "no chapter" has always meant. The
-    // scenes are listed under „Ohne Kapitel"; say so, they moved.
-    console.log("scene(s) carried an EMPTY chapter reference and now carry none:");
-    for (const entry of chapterRepair.blanked) {
+  if (repair !== undefined && repair.unsorted.length > 0) {
+    // A scene belongs to a chapter, so one that had none was given the
+    // „Unsortiert" chapter rather than failing the boot. Say where they went.
+    console.log(
+      `scene(s) without a chapter were moved into „${UNSORTED_CHAPTER_TITLE}" ` +
+        `(chapter ${UNSORTED_CHAPTER_ID}) — sort them into a chapter of yours:`,
+    );
+    for (const entry of repair.unsorted) {
       console.log(`  · [${entry.campaignId}] ${entry.scenes} scene(s)`);
+    }
+  }
+  if (repair !== undefined && repair.entriesCreated.length > 0) {
+    console.log(
+      `${repair.entriesCreated.length} referenced entr(y/ies) had none and got an empty one:`,
+    );
+    for (const entry of repair.entriesCreated) {
+      console.log(`  · [${entry.campaignId}] ${entry.kind} ${entry.id}`);
+    }
+  }
+  if (repair !== undefined && repair.repointed.length > 0) {
+    console.log("reference(s) were stored wrapped in brackets and name their entry directly now:");
+    for (const entry of repair.repointed) {
+      console.log(
+        `  · [${entry.campaignId}] ${entry.column}: ${entry.from} -> ${entry.to} ` +
+          `(${entry.rows} row(s))`,
+      );
+    }
+  }
+  if (repair !== undefined && repair.cleared.length > 0) {
+    console.log("optional reference(s) named nothing that exists and are empty now:");
+    for (const entry of repair.cleared) {
+      console.log(`  · [${entry.campaignId}] ${entry.column}: ${entry.rows} row(s)`);
+    }
+  }
+  if (repair !== undefined && repair.dropped.length > 0) {
+    console.log("reference row(s) named nothing at all and were dropped:");
+    for (const entry of repair.dropped) {
+      console.log(`  · [${entry.campaignId}] ${entry.table}: ${entry.rows} row(s)`);
     }
   }
   // Issue #23: jobs are rows now, so a restart no longer loses a finished
