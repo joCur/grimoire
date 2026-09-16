@@ -392,6 +392,41 @@ test("the NPC reading view edits its body the same way", async ({ page, api }) =
   expect(after.properties).toEqual(before.properties);
 });
 
+test("a relation counterpart written as a NAME is refused, and the draft survives", async ({
+  page,
+  api,
+}) => {
+  // The counterpart of a `## Beziehungen` line is a reference like any other,
+  // so a name where an id belongs cannot be stored — and the save that tried
+  // it used to answer 500. The DM sees a sentence and keeps their text.
+  const before = await split(api, NPC);
+  // Into the relations section itself — a line elsewhere in the body is prose.
+  const relation = "- fenn: kennt ihn von früher — er fuhr einst ehrlich zur See";
+  expect(before.body).toContain(relation);
+  const typed = before.body.replace(
+    relation,
+    `${relation}\n- Alte Freundin aus Waterdeep: sie schreiben sich`,
+  );
+
+  await page.goto(`/beispiel/entry/${NPC}`);
+  await openMarkdownEditor(page);
+  const textarea = page.getByRole("textbox", { name: TEXTAREA });
+  await textarea.fill(typed);
+  await page.getByRole("button", { name: "Speichern" }).click();
+
+  await expect(page.getByText(/holds npc ids, not names/)).toBeVisible();
+  // The editor stays open with the typed text — nothing is thrown away.
+  await expect(textarea).toHaveValue(typed);
+  expect(await split(api, NPC)).toEqual(before);
+
+  // The same line with an ID goes through, and creates the empty entry.
+  await textarea.fill(before.body.replace(relation, `${relation}\n- holm: alte Freundin`));
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(textarea).toHaveCount(0);
+  await expect.poll(() => api.body(NPC)).toContain("- holm: alte Freundin");
+  expect(await api.exists("npcs/holm")).toBe(true);
+});
+
 test("location and chapter offer the editor, session and inbox do not", async ({ page, api }) => {
   // The kinds whose prose the DM maintains offer the body editor …
   for (const rel of ["locations/leuchtturm", "01-salzhafen"]) {
