@@ -162,6 +162,8 @@ export const de = {
   "properties.issue.namelessRow": "Zeile ohne Namen — Name ergänzen oder Zeile entfernen.",
   "properties.issue.duplicateName":
     'Name „{name}“ doppelt — jeder Name darf nur einmal vorkommen.',
+  "properties.issue.chapterRequired":
+    "Eine Szene braucht ein Kapitel — es lässt sich verschieben, aber nicht entfernen.",
 
   // Per-kind field labels/hints/placeholders (lib/properties-form.ts)
   "properties.scene.title.label": "Titel",
@@ -327,6 +329,7 @@ export const de = {
   "server.location_unknown": 'Den Ort „{value}“ gibt es nicht — bitte zuerst anlegen.',
   "server.npc_unknown": 'Den NPC „{value}“ gibt es nicht — bitte zuerst anlegen.',
   "server.chapter_unknown": 'Das Kapitel „{value}“ gibt es nicht — bitte zuerst anlegen.',
+  "server.chapter_required": "Eine Szene braucht ein Kapitel — es lässt sich verschieben, aber nicht entfernen.",
   "server.log_scene_unknown": 'Die Szene „{value}“ gibt es nicht — bitte zuerst anlegen.',
   "server.played_scene_unknown":
     'Die gespielte Szene „{value}“ gibt es nicht — bitte zuerst anlegen.',

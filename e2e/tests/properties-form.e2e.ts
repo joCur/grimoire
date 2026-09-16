@@ -301,6 +301,34 @@ test("a rejected save shows the SERVER sentence, not the generic one", async ({ 
   await expect(dialog.getByLabel("Kapitel")).toHaveValue("99-nirgendwo");
 });
 
+test("a CLEARED Kapitel blocks the save in the dialog — no round trip", async ({
+  page,
+  api,
+}) => {
+  // A scene's chapter is part of its address, so the server refuses a patch
+  // that removes it. The form says so under the field and „Speichern" stays
+  // disabled, instead of a save that leaves and comes back as a toast.
+  await page.goto(SCENE_URL);
+  const dialog = await openProperties(page);
+  await dialog.getByLabel("Kapitel").fill("");
+  await expect(
+    dialog.getByText(
+      "Eine Szene braucht ein Kapitel — es lässt sich verschieben, aber nicht entfernen.",
+    ),
+  ).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Speichern" })).toBeDisabled();
+  // Typing the chapter back takes the line away again (the button stays
+  // disabled because there is nothing left to save), and the stored scene
+  // never moved.
+  await dialog.getByLabel("Kapitel").fill("01-salzhafen");
+  await expect(
+    dialog.getByText(
+      "Eine Szene braucht ein Kapitel — es lässt sich verschieben, aber nicht entfernen.",
+    ),
+  ).toHaveCount(0);
+  expect(await api.properties(SCENE)).toHaveProperty("chapter", "01-salzhafen");
+});
+
 test("a second writer: the save reports the conflict, the second click writes", async ({
   page,
   api,

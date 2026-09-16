@@ -42,7 +42,8 @@ export const ERROR_CODES = [
   /**
    * The five REFERENCE refusals: a write names an entry that does not
    * exist. Nothing is created by being named, so each of them asks the DM
-   * to create the entry first. All 400, all `{ value }`.
+   * to create the entry first. All 400, all `{ value }`. `chapter_required`
+   * below is the neighbouring case — the reference is not wrong, it is gone.
    */
   /** A scene's `location` names no location entry. */
   "location_unknown",
@@ -50,6 +51,12 @@ export const ERROR_CODES = [
   "npc_unknown",
   /** A `chapter` — of a scene, an npc or a location — names no chapter. */
   "chapter_unknown",
+  /**
+   * 400, scene write: the `chapter` was CLEARED. A scene's chapter is part of
+   * its address, so it can be moved but never removed. No parameters — there
+   * is no value to name.
+   */
+  "chapter_required",
   /** The scene of a quick note names no scene entry. */
   "log_scene_unknown",
   /** An entry of a session's played scenes names no scene entry. */

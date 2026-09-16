@@ -895,7 +895,9 @@ function patchLocator(
       // cannot be removed: a scene without a chapter has no address.
       const declared: string | null = asOptStr(fm.chapter);
       if (declared === null) {
-        throw new ApiError(400, "chapter cannot be removed — a scene belongs to a chapter");
+        throw new ApiError(400, "chapter cannot be removed — a scene belongs to a chapter", {
+          code: "chapter_required",
+        });
       }
       // Every reference first, so a save that names something unknown is
       // refused before anything is written.
@@ -2056,21 +2058,6 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           .orderBy(desc(scenes.pos))
           .limit(1)
           .all()[0]?.pos ?? -1) + 1;
-      // The scene's chapter is written in THIS transaction, before the scene
-      // itself. A „Neues Kapitel" run creates its chapter from the run's own
-      // state (generator.ts `jobChapterTarget`), so the entry normally exists
-      // with the title the DM typed; this is the net under it, and it names
-      // the chapter by its id. A chapter id that is no entity slug gets none
-      // and is the honest 400 instead of a scene nothing can reach.
-      if (locator.chapterId !== null && locator.chapterId !== undefined) {
-        ensureChapterRow(tx, campaign, locator.chapterId);
-        if (chapterRowOf(tx, campaign, locator.chapterId) === undefined) {
-          throw new ApiError(
-            400,
-            `unknown chapter: ${locator.chapterId} — create the chapter first`,
-          );
-        }
-      }
       tx.insert(scenes)
         .values({
           campaignId: campaign,
@@ -2308,10 +2295,22 @@ function duplicateDraftRels(drafts: EntityDraft[]): string[] {
     .sort();
 }
 
-/** A UNIQUE/PRIMARY KEY violation from either SQLite backend (ADR #13). */
+/**
+ * A UNIQUE/PRIMARY KEY violation from either SQLite backend (ADR #13) — the
+ * race the conflict check above cannot close, and the only constraint failure
+ * that means „the target is taken".
+ *
+ * NAMED CONSTRAINTS ONLY, deliberately. A plain /constraint/ also matched
+ * „FOREIGN KEY constraint failed", so a draft that named an entry the batch
+ * does not bring turned into a 409 listing every draft as an existing target
+ * — an answer about the wrong thing, and about entries that are not there.
+ * A reference that names nothing is a 400 with its own code, raised by the
+ * assertions before the insert; anything else is not this function's answer
+ * and travels on as the error it is.
+ */
 function isConstraintViolation(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /constraint/i.test(message);
+  return /(UNIQUE|PRIMARY KEY) constraint failed/i.test(message);
 }
 
 /** True when a generated target already exists (the apply step's 409). */
@@ -2652,7 +2651,7 @@ export async function createScene(
   assertSafeChapterId(chapter);
   return mutate(campaign, (tx) => {
     if (!chapterIdExists(tx, campaign, chapter)) {
-      throw new ApiError(400, `unknown chapter: ${chapter} — create the chapter first`);
+      throw unknownRef("chapter_unknown", "chapter", chapter);
     }
     const existing = sceneRowOf(tx, campaign, id);
     if (existing !== undefined) {

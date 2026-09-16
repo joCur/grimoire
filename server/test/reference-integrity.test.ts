@@ -154,9 +154,15 @@ describe("a reference that names nothing is refused", () => {
     );
   });
 
-  test("a scene's chapter cannot be removed at all", async () => {
+  test("a scene's chapter cannot be removed at all — 400 chapter_required", async () => {
+    // Clearing the Kapitel field in the dialog is the way to get here, so the
+    // refusal carries a CODE: the app reads its own sentence off it and
+    // disables „Speichern" instead of letting the save round-trip.
     const res = await patchRes(SCENE, { chapter: null });
     expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: "chapter_required" });
+    // …and the scene still hangs where it did.
+    expect((await getFile(SCENE)).properties.chapter).toBe("01-salzhafen");
   });
 
   test("a quick note's scene: 400 log_scene_unknown, and the log stays empty", async () => {
@@ -371,6 +377,35 @@ describe("the generator's apply step", () => {
     const untouched = await getFile("npcs/holm");
     expect(untouched.properties.status).toBe("dead");
     expect(untouched.properties.name).toBe("holm");
+  });
+
+  test("a PRIMARY KEY collision is still the documented 409", async () => {
+    // The conflict check runs on the draft's ADDRESS; the id the row gets
+    // comes from the properties. A draft whose address is free while its id
+    // is taken slips past the check and hits the primary key — which the
+    // apply translates back to the documented answer instead of a 500.
+    //
+    // The translation is NARROW on purpose: it means „the target is taken"
+    // and nothing else, so a reference that names nothing stays the 400 with
+    // its own code (the cases at the top of this file) rather than becoming a
+    // 409 about entries that are not there.
+    await expect(
+      applyDrafts("beispiel", [
+        {
+          rel: "01-salzhafen/hafen/neue-szene",
+          address: "01-salzhafen/hafen/neue-szene",
+          properties: {
+            id: "lighthouse-arrival",
+            title: "Noch eine Ankunft",
+            chapter: "01-salzhafen",
+            status: "draft",
+          },
+          body: "\n## Was passiert\n\nEtwas.\n",
+        },
+      ]),
+    ).rejects.toMatchObject({ status: 409, message: "target files already exist" });
+    // The scene that was already there is untouched.
+    expect((await getFile(SCENE)).properties.title).toBe("Ankunft am Leuchtturm");
   });
 
   test("TWO drafts for one target are a 409, not last-write-win", async () => {

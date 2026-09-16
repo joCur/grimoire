@@ -32,6 +32,7 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   location_unknown: "server.location_unknown",
   npc_unknown: "server.npc_unknown",
   chapter_unknown: "server.chapter_unknown",
+  chapter_required: "server.chapter_required",
   log_scene_unknown: "server.log_scene_unknown",
   played_scene_unknown: "server.played_scene_unknown",
   glossary_duplicate_term: "server.glossary_duplicate_term",
@@ -121,6 +122,7 @@ function paramsFor(
       const max = typeof body.maxTokens === "number" ? String(body.maxTokens) : undefined;
       return { max: max ?? t("server.llm_truncated.defaultCap") };
     }
+    case "chapter_required":
     case "session_running":
     case "session_not_empty":
     case "rev_conflict":

@@ -78,6 +78,18 @@ export interface PropertiesField {
   hint?: string;
   /** A field the entity cannot lose (`title`/`name`) — blank blocks the save. */
   required?: boolean;
+  /**
+   * A REFERENCE the entry cannot lose — a scene's chapter, which is part of
+   * its address. Clearing it blocks the save with its own line under the
+   * field (`propertiesFormIssues`) instead of travelling to the server and
+   * coming back as a 400.
+   *
+   * Separate from `required`, which is about a field that holds a NAME and
+   * also makes the key non-nullable in the generator's reply schema
+   * (@grimoire/shared/entry-schema) — a generated scene may well carry no
+   * chapter of its own, because the run writes it.
+   */
+  mandatoryRef?: boolean;
   placeholder?: string;
   /** `select` only: the known value set. */
   options?: readonly FieldOption[];
@@ -206,6 +218,10 @@ function fieldOf(kind: PropertiesKind, def: PropertyFieldDef, t: Translate): Pro
     // honest fallback and the i18n test is what keeps it unused.
     label: copy === undefined ? def.key : t(copy.label),
     ...(def.required === true ? { required: true } : {}),
+    // The scene is the one kind whose `chapter` is mandatory (ADR #19): an
+    // npc and an Ort may sit outside every chapter, a scene may not — its
+    // chapter is a segment of its address.
+    ...(kind === "scene" && def.key === "chapter" ? { mandatoryRef: true } : {}),
     ...(def.source === undefined ? {} : { source: def.source }),
     ...(copy?.hint === undefined ? {} : { hint: t(copy.hint) }),
     ...(copy?.placeholder === undefined ? {} : { placeholder: t(copy.placeholder) }),
@@ -496,6 +512,12 @@ export function propertiesPatch(
  * server refuses it. Saying it here makes that a line under the field before
  * the click. `initial` is what the entry already holds and is EXEMPT, so a
  * scene stays savable whatever it carries today.
+ *
+ * And a MANDATORY REFERENCE that was cleared: a scene's chapter is part of
+ * its address, so the server refuses a patch that removes it
+ * (`chapter_required`). Saying it here is the same improvement — a line under
+ * the field and a disabled „Speichern", instead of a round trip that ends in
+ * a toast.
  */
 export function propertiesFormIssues(
   fields: readonly PropertiesField[],
@@ -507,6 +529,12 @@ export function propertiesFormIssues(
   for (const field of fields) {
     const value = values[field.key];
     if (value === undefined) continue;
+    // One field carries this flag — the scene's `chapter` — so the sentence
+    // names it. A second mandatory reference would need its own.
+    if (field.mandatoryRef === true && value.kind === "text" && value.text.trim() === "") {
+      issues[field.key] = t("properties.issue.chapterRequired");
+      continue;
+    }
     if (field.source === "locations" && value.kind === "text") {
       const ref = locationRef(value.text, []);
       if (ref.kind === "unusable") {

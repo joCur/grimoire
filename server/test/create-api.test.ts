@@ -13,7 +13,7 @@
 //     click sends is honoured verbatim;
 //   * an EMPTY npc/ort entry — one the DM created and did not fill in — is
 //     FILLED, not collided with;
-//   * a scene needs an EXISTING chapter (ADR #14);
+//   * a scene needs an EXISTING chapter (ADR #19);
 //   * an id the ADDRESS SCHEMA reserves (`npcs`/`locations`/`sessions`) is not
 //     creatable as a chapter — it would be a row nothing can ever open;
 //   * a `suggestion` names only ids nobody holds, empty ones included:
@@ -248,7 +248,11 @@ describe("the per-campaign creates", () => {
   test("a scene under an unknown chapter is a 400 — chapters are never created by naming", async () => {
     const res = await post("/nordwind/scenes", { title: "Irgendwo", chapter: "gibt-es-nicht" });
     expect(res.status).toBe(400);
-    expect(String((await errorBody(res)).error)).toContain("unknown chapter");
+    const error = await errorBody(res);
+    expect(String(error.error)).toContain("unknown chapter");
+    // The SAME refusal a properties patch answers with, code included, so the
+    // German sentence comes out of the one catalog entry.
+    expect(error).toMatchObject({ code: "chapter_unknown", value: "gibt-es-nicht" });
   });
 
   test("a scene without a chapter is refused", async () => {

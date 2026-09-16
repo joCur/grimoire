@@ -57,6 +57,17 @@ describe("the reference refusals", () => {
   });
 });
 
+describe("the chapter a scene may not lose", () => {
+  test("it reads as a rule, in both languages, and carries no parameter", () => {
+    // The refusal a cleared Kapitel field answers with. Nothing to name —
+    // the value is gone, which is the whole message.
+    const german = serverErrorBodyMessage(body("chapter_required"), de);
+    expect(german).toContain("Kapitel");
+    expect(german).toContain("nicht entfernen");
+    expect(serverErrorBodyMessage(body("chapter_required"), en)).toContain("needs a chapter");
+  });
+});
+
 describe("the location value that is no id", () => {
   test("with a slug to propose, the sentence carries it — and says to create it", () => {
     const sentence = serverErrorBodyMessage(

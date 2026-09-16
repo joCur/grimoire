@@ -394,6 +394,45 @@ describe("unfinished quickstat rows block the save", () => {
   });
 });
 
+describe("a scene's Kapitel cannot be cleared", () => {
+  const sceneFields = fields("scene");
+  const initial = propertiesFormValues(sceneFields, SCENE_FM);
+  const withChapter = (text: string): FormValues => ({
+    ...initial,
+    chapter: { kind: "text", text },
+  });
+
+  test("a blank Kapitel blocks the save and says why under the field", () => {
+    // The server refuses the patch (`chapter_required`); saying it here turns
+    // a round trip that ends in a toast into a line under the control.
+    expect(propertiesFormIssues(sceneFields, withChapter(""), initial, t).chapter).toBe(
+      "Eine Szene braucht ein Kapitel — es lässt sich verschieben, aber nicht entfernen.",
+    );
+    // Whitespace only is the same thing.
+    expect(propertiesFormIssues(sceneFields, withChapter("   "), initial, t).chapter).toBeDefined();
+    // …and a value is fine, whether or not that chapter has an entry — that
+    // is the server's answer (i18n/server-errors.ts).
+    expect(propertiesFormIssues(sceneFields, withChapter("02-nordwind"), initial, t)).toEqual({});
+  });
+
+  test("an unfinished Kapitel counts as unsaved work, so Esc asks first", () => {
+    expect(hasPropertiesChanges(sceneFields, initial, withChapter(""), t)).toBe(true);
+  });
+
+  test("an npc and an Ort may sit outside every chapter", () => {
+    // Only a SCENE's chapter is part of its address, so only a scene loses
+    // the ability to clear the field.
+    for (const kind of ["npc", "location"] as const) {
+      const kindFields = fields(kind);
+      const values = propertiesFormValues(kindFields, { id: "x", name: "X", chapter: "01-salzhafen" });
+      expect(
+        propertiesFormIssues(kindFields, { ...values, chapter: { kind: "text", text: "" } }, values, t),
+        kind,
+      ).toEqual({});
+    }
+  });
+});
+
 describe("the npcs list holds ids, not names", () => {
   const sceneFields = fields("scene");
   const initial = propertiesFormValues(sceneFields, SCENE_FM);

@@ -145,6 +145,7 @@ export const en: Messages = {
   "properties.issue.notAnId": "“{id}” is not an id — lowercase letters, digits and hyphens only.",
   "properties.issue.namelessRow": "Row without a name — add a name or remove the row.",
   "properties.issue.duplicateName": "Name “{name}” twice — every name may appear only once.",
+  "properties.issue.chapterRequired": "A scene needs a chapter — it can be moved, but not removed.",
 
   "properties.scene.title.label": "Title",
   "properties.scene.type.label": "Type",
@@ -298,6 +299,7 @@ export const en: Messages = {
   "server.location_unknown": 'Location “{value}” does not exist — create it first.',
   "server.npc_unknown": 'NPC “{value}” does not exist — create it first.',
   "server.chapter_unknown": 'Chapter “{value}” does not exist — create it first.',
+  "server.chapter_required": "A scene needs a chapter — it can be moved, but not removed.",
   "server.log_scene_unknown": 'Scene “{value}” does not exist — create it first.',
   "server.played_scene_unknown":
     'Played scene “{value}” does not exist — create it first.',
