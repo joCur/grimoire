@@ -15,6 +15,7 @@ import { sql } from "drizzle-orm";
 import {
   NO_REFERENCE_REPAIR,
   repairReferences,
+  reportForeignKeyViolations,
   UNSORTED_CHAPTER_ID,
   UNSORTED_CHAPTER_TITLE,
 } from "../src/db/reference-repair";
@@ -667,6 +668,68 @@ describe("the boot repair of entity references", () => {
     const client = await openSqlite(":memory:");
     expect(repairReferences(client)).toBe(NO_REFERENCE_REPAIR);
     client.close();
+  });
+
+  // What the boot says BEFORE it repairs anything. A row that already breaks
+  // a constraint its own database carries is not the repair's business — but
+  // it IS what the migration's table rebuilds fail on, and a failed rebuild
+  // named no row at all.
+  describe("the check in front of the repair", () => {
+    function captureLog(): { lines: string[]; restore: () => void } {
+      const lines: string[] = [];
+      const original = console.log;
+      console.log = (...args: unknown[]) => {
+        lines.push(args.map((arg) => String(arg)).join(" "));
+      };
+      return { lines, restore: () => (console.log = original) };
+    }
+
+    test("says nothing on a database whose references all hold", async () => {
+      const client = await legacyDb();
+      applyMigration(client, CHAPTER_FK);
+      applyMigration(client, REFERENCE_FKS);
+      const log = captureLog();
+      try {
+        reportForeignKeyViolations(client);
+      } finally {
+        log.restore();
+      }
+      expect(log.lines).toEqual([]);
+      client.close();
+    });
+
+    test("names the table of a row that breaks a constraint already in place", async () => {
+      const client = await legacyDb();
+      applyMigration(client, CHAPTER_FK);
+      applyMigration(client, REFERENCE_FKS);
+      // Only with enforcement OFF can such a row get in — which is exactly
+      // how a database arrives carrying one.
+      client.exec("PRAGMA foreign_keys = OFF");
+      addScene(client, "szene", "kein-kapitel");
+      client.exec("PRAGMA foreign_keys = ON");
+
+      const log = captureLog();
+      try {
+        reportForeignKeyViolations(client);
+      } finally {
+        log.restore();
+      }
+      expect(log.lines[0]).toContain("1 row(s) already break a foreign key");
+      expect(log.lines[1]).toContain("scenes: 1 row(s)");
+      client.close();
+    });
+
+    test("is silent on a store that has no tables yet", async () => {
+      const client = await openSqlite(":memory:");
+      const log = captureLog();
+      try {
+        reportForeignKeyViolations(client);
+      } finally {
+        log.restore();
+      }
+      expect(log.lines).toEqual([]);
+      client.close();
+    });
   });
 
   // The promise the whole step exists for, end to end: the same legacy

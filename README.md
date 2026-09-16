@@ -167,8 +167,10 @@ Default). Ein referenzierter Eintrag ist damit nie „fehlt", höchstens leer;
 leere Einträge erscheinen als dünne Karten und sind normal befüllbar.
 
 `location:` verlangt eine id in Slug-Form (400 sonst) — sie ist zugleich die
-Gruppe der Szene. `chapter:` legt nichts an: ein unbekanntes Kapitel ist 400,
-bei Szene, NPC und Ort gleich.
+Gruppe der Szene. Auch `npcs:` und der Gegenüber einer Beziehungs-Zeile nehmen
+**ids, keine Namen**: ein neuer Eintrag ohne Slug-Form ist 400, bereits
+gespeicherter Freitext bleibt speicherbar. `chapter:` legt nichts an: ein
+unbekanntes Kapitel ist 400, bei Szene, NPC und Ort gleich.
 
 Jeder Verweis ist echt: die Datenbank erzwingt, dass die referenzierte Zeile
 existiert. Optional heißt „leer erlaubt" (eine Szene ohne Ort), nie „zeigt

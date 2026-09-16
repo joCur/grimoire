@@ -543,10 +543,19 @@ tat, oder umgekehrt. Verbindlich ist ab jetzt:
   Werte sind ausgenommen — die Migration importiert, was da ist, und eine
   Alt-Szene muss speicherbar bleiben. Die Karte einer solchen Alt-Referenz
   sagt „keine NPC-id, deshalb kein Eintrag" statt „Server prüfen".
+- **`## Beziehungen` nimmt ebenfalls ids, keine Namen** (Nachtrag mit #18).
+  Die linke Hälfte einer Beziehungs-Zeile IST `other_npc_id`, also derselbe
+  Verweis wie ein Listeneintrag — ein NEUER Gegenüber ohne Slug-Form ist 400,
+  ein bereits gespeicherter bleibt speicherbar. Ohne diese Regel scheiterte
+  die Zeile am Fremdschlüssel: ein gewöhnliches Speichern antwortete 500, das
+  Übernehmen einer Ergänzung ebenso, und der Generator-Apply meldete
+  „Ziel existiert schon".
 - **`chapter:` ist überall 400.** Ein unbekanntes Kapitel wurde bei einer
   Szene abgelehnt, bei NPC und Ort still gespeichert; jetzt gilt für alle drei
   dasselbe (nur bei geändertem Wert, wegen Bestandsdaten), und der Hinweis im
-  Dialog sagt „Kapitel muss existieren" statt „wird angelegt".
+  Dialog sagt „Kapitel muss existieren" statt „wird angelegt". Das gilt auch
+  für den Weg **ohne** Dialog: `insertDraft` prüft das `chapter:` eines NPC-
+  und Ort-Drafts genauso, nur das Kapitel einer Szene wird dort angelegt.
 - **Zwei Drafts auf dieselbe ZEILE sind 409** (`{ conflicts }`) statt
   last-write-win: seit eine leere Zeile kein Konflikt mehr ist, hat der
   zweite Draft den ersten befüllt, und das Review meldete einen sauberen
@@ -874,6 +883,9 @@ und **meldet alles beim Start**:
   nicht startet, an die er nicht herankommt.
 - Szene mit einem `chapter_id` **ohne Kapitel-Zeile** → das Kapitel wird
   angelegt, benannt nach seinem eigenen Slug (der einzige Name, den es hat).
+  Auch diese Spalte wird vorher **gelesen** (entklammert, Freitext geslugt):
+  ein Kapitel, dessen id ein Satz ist, trüge diesen Satz in der Adresse jeder
+  Szene darunter.
 - Verweis auf einen Eintrag, den es nicht gibt (`location`, NPC-Liste,
   Beziehungs-Gegenüber, die Szene einer Log-Zeile oder einer
   `scenes_played`-Liste) → der **leere Eintrag** wird angelegt, wie ihn jeder
@@ -890,9 +902,30 @@ und **meldet alles beim Start**:
   zweimal falsch machen: ein zweiter Eintrag für einen NPC, der schon einen
   hat, unter einem Namen, den kein DM erkennt. Der Import entklammert
   seither an der Quelle (`parseRelationsSection`).
+- Verweis, der **Freitext** ist („Alte Fischerin", „Der alte Hafen") → **nie**
+  ein Eintrag, dessen id ein Satz ist; das wäre derselbe Fehler wie die
+  Klammern, einen Schritt weiter. Welche Antwort richtig ist, entscheidet die
+  Spalte: wo sie **nullable** ist (`scenes.location`,
+  `log_entries.scene_id`), wird der Wert **NULL** und der Text steht im
+  Startbericht — nichts muss erfunden werden, weil „kein Verweis" ein
+  erlaubter Zustand ist (die Log-Zeile behält ihr `raw`, die Szene fällt auf
+  Kapitelebene). Wo er **Teil des Schlüssels** ist (`scene_npcs.npc_id`,
+  `npc_relations.other_npc_id`, `session_scenes_played.scene_id`), wird der
+  Eintrag **angelegt** — unter dem Slug des Textes (`toSlug`, dieselbe
+  Ableitung wie im Eigenschaften-Dialog) und **mit dem Text als Namen**, so
+  wie es der Gruppen-Schritt aus #100 schon tut. Text, aus dem kein Slug
+  übrig bleibt („???"), ergibt keine id: dort geht die Zeile.
 
 Der Schritt ist idempotent und auf jeder Datenbank ohne Loch ein No-op — und
 das ist nach 0015 jede, die dieser Server selbst schreibt.
+
+**Er committet vor dem Migrator, und das ist Absicht:** scheitert danach ein
+Tabellen-Neubau, bleiben die reparierten Zeilen auf dem alten Schema stehen —
+der nächste Start findet kein Loch mehr und versucht die Migration erneut,
+statt die Reparatur mit ihr zu verlieren. Damit ein Neubau, der an einem
+Verweis scheitert, den die Datenbank **schon** erzwingt, nicht anonym
+umfällt, protokolliert der Start davor eine `pragma foreign_key_check`-Summe
+pro Tabelle.
 
 **Der Kapitel-Status ist ein Enum** (Nachforderung des PO):
 `planned | active | done`, definiert genau einmal in `shared/`
