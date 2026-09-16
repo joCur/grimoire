@@ -370,9 +370,9 @@ Zwei Pfade haben Zuwachs bekommen, beide um das Kapitel als Eintrag.
 - **Pfad 1** (`pool.e2e.ts`): ein Kapitel ist dort bearbeitbar, wo es gelesen
   wird — „Kapitel-Eigenschaften" (Titel/Status, der geteilte
   Eigenschaften-Dialog), „Kapitel bearbeiten" (Kapiteltext, aus dem die
-  Zielzeile kommt, inkl. 409 gegen einen zweiten Schreiber) und der
-  **Status-Regler** in der Kapitelzeile, dessen „Aktiv" die Fahne in **einem**
-  Serveraufruf umhängt.
+  Zielzeile kommt, inkl. 409 gegen einen zweiten Schreiber) und das
+  **Status-Bedienelement** in der Kapitelzeile, dessen „Aktiv" die Fahne in
+  **einem** Serveraufruf umhängt.
 
 Zwei Fallen für neue Specs auf diesen Pfaden:
 

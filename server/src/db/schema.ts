@@ -117,6 +117,12 @@ export const chapters = sqliteTable(
     /** Chapter id — the former directory name, e.g. "01-salzhafen". */
     id: text("id").notNull(),
     title: text("title").notNull().default(""),
+    /**
+     * `planned | active | done` (@grimoire/shared `CHAPTER_STATUSES`). No
+     * CHECK behind it — the format degrades and an imported value is shown
+     * verbatim — but the API writes nothing else, and at most ONE chapter per
+     * campaign holds `active` (store/write.ts `clearOtherActiveChapters`).
+     */
     status: text("status"),
     body: text("body").notNull().default(""),
     extra: extraColumn(),

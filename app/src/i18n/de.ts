@@ -382,9 +382,9 @@ export const de = {
   "pool.chapter.goal": "Ziel: {goal}",
   "pool.chapter.empty": "Noch keine Szenen in diesem Kapitel.",
   // --- chapter actions in the chapter overview -----------------------------
-  // Der Status-Regler am Kapitel („Aktiv" setzt `active` und nimmt es dem
-  // bisher aktiven Kapitel ab — ein Serveraufruf, ein Vorgang) trägt seine
-  // Labels unter `properties.chapter.status.*`.
+  // The chapter's status control („Aktiv" sets `active` and takes it off the
+  // chapter that held it — one server call, one transaction) carries its
+  // labels under `properties.chapter.status.*`.
   "pool.chapter.properties": "Kapitel-Eigenschaften",
   "pool.chapter.edit": "Kapitel bearbeiten",
   "chapterBody.title": "Kapitel bearbeiten: {title}",

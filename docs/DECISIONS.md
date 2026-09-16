@@ -757,3 +757,46 @@ konserviert, die das Ticket beseitigt. Sie fällt weg; `store/paths.ts`
   und setzt `location` aus der Gruppe, wenn das Frontmatter keines nennt —
   `examples/` bleibt unverändert lesbar, die Beispielszenen landen unter
   ihren Orten statt unter `hafen`.
+
+## 18. Das Kapitel entsteht aus dem Lauf, sein Status ist ein Enum
+
+**Entscheidung (a): Das Kapitel eines „Neues Kapitel"-Laufs entsteht aus dem
+Zustand des Laufs, nicht aus dem des Browsers.** Der Titel wird beim **Start**
+am Job vermerkt (`generate_jobs.new_chapter_title`, Migration 0013), und die
+Übernahme legt das Kapitel daraus an — idempotent und im selben Vorgang wie die
+Szenen. Der Prüfschritt ist persistent (ADR #16), die Übernahme passiert also
+regelmäßig nach Navigation oder Reload; Titel und id dürfen dann nicht im
+Browser liegen. `chapter`/`chapterTitle` am Übernahme-Aufruf bleiben ein
+Override für den Ganz-Lauf-Endpoint und ältere App-Stände; die App sendet sie
+nur, solange das Formular auf dem Schirm das des laufenden Jobs ist.
+
+Die Übernahme legt das Kapitel auch dann an, wenn kein übernommener Teil es
+nennt: das Kapitel gehört dem Lauf, nicht dem einzelnen Teil. Ein generierter
+Szenen-Entwurf bekommt sein Kapitel im selben Schreibvorgang; ist die
+Kapitel-id kein Slug, ist das 400. **Die Dialoge bleiben unverändert:** ein
+Kapitel, das der DM tippt, muss existieren (400, ADR #14) — dort ist ein
+unbekanntes Kapitel ein Tippfehler.
+
+**Entscheidung (b): Der Kapitel-Status ist ein Enum** `planned | active | done`,
+genau einmal in `shared/` definiert (`CHAPTER_STATUSES`), Labels de „Geplant /
+Aktiv / Abgeschlossen", en „Planned / Active / Done". Die API schreibt nur
+diese drei Werte und antwortet sonst **400**; ein bereits gespeicherter
+Fremdwert wird weiterhin **verbatim angezeigt**, und es gibt keine Prüfregel im
+Schema — das Format degradiert wie überall, nur der Schreibweg ist eng. Ein neu
+angelegtes Kapitel startet auf `planned`.
+
+`active` ist **eine Entscheidung über zwei Kapitel**, und „genau ein aktives
+Kapitel" gehört dem **Feld, nicht einem Endpoint**: `POST /chapters/:id/active`
+und ein `PATCH /properties`, dessen Status auf `active` landet, führen denselben
+Tausch im selben Vorgang aus. Sonst wäre der Eigenschaften-Dialog eine zweite
+Tür daran vorbei. Der Tausch-Endpoint hat bewusst **keinen rev-Schutz**: er
+setzt einen Wert und ändert dabei absichtlich ein Kapitel, das der Aufrufer nie
+gelesen hat; `PATCH /properties` behält seinen (ADR #4).
+
+In der Kapitelübersicht ist die Status-Anzeige deshalb **das Bedienelement**
+(wie beim Szenen-Status, gemeinsames Markup in `components/StatusMenu`):
+„Aktiv" ruft den Tausch, „Geplant" und „Abgeschlossen" patchen das Kapitel.
+Die Auswahl des Werts, der schon angezeigt wird, schreibt nichts — bei „Aktiv"
+wäre das ein zweiter Tausch. Mobil bleibt der Status **Anzeige**: unter `md`
+rendert die Route die Startfläche statt der Kapitelübersicht, die Regel steht
+also genau an einer Stelle.

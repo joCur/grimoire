@@ -22,9 +22,6 @@ export function chapterMetaPath(chapter: string): string {
   return chapter;
 }
 
-/** The heading the overview reads a chapter's goal line from (`firstParagraphOfSection`). */
-export const CHAPTER_GOAL_HEADING = "Ziel des Kapitels";
-
 /**
  * The text an edit save writes.
  *
