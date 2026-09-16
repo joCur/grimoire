@@ -59,7 +59,15 @@ export interface PropertyFieldDef {
   values?: readonly string[];
   /** `reference`/`references` only: which entity list the value names. */
   source?: ReferenceSource;
-  /** A field the entity cannot lose (`title`/`name`) — never blank. */
+  /**
+   * A field a generator REPLY has to carry and the dialog will not leave
+   * blank (`title`/`name` — the entry would lose its name).
+   *
+   * It is not the same question as "the column is NOT NULL": a scene's
+   * `chapter` cannot be empty either, but it comes from the RUN and never
+   * from the model, so it is mandatory in the FORM alone
+   * (app/src/lib/properties-form.ts `fieldOf`).
+   */
   required?: boolean;
 }
 

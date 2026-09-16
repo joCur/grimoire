@@ -206,7 +206,14 @@ function fieldOf(kind: PropertiesKind, def: PropertyFieldDef, t: Translate): Pro
     // A field without copy would be a silent blank label; the key is the
     // honest fallback and the i18n test is what keeps it unused.
     label: copy === undefined ? def.key : t(copy.label),
-    ...(def.required === true ? { required: true } : {}),
+    // A SCENE BELONGS TO A CHAPTER (ADR #18): the chapter is part of its
+    // address and the column is NOT NULL, so the field cannot be cleared —
+    // the server answers 400 for an empty one. It is mandatory HERE and not
+    // in the shared definition, because a generator reply does not carry it:
+    // the chapter comes from the run.
+    ...(def.required === true || (kind === "scene" && def.key === "chapter")
+      ? { required: true }
+      : {}),
     ...(def.source === undefined ? {} : { source: def.source }),
     ...(copy?.hint === undefined ? {} : { hint: t(copy.hint) }),
     ...(copy?.placeholder === undefined ? {} : { placeholder: t(copy.placeholder) }),

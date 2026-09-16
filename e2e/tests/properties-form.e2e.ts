@@ -290,6 +290,20 @@ test('a rejected save shows the SERVER sentence, not the generic one (#100)', as
   await expect(dialog.getByLabel("Kapitel")).toHaveValue("99-nirgendwo");
 });
 
+test("a scene cannot lose its chapter — the save stays blocked", async ({ page, api }) => {
+  // `scenes.chapter_id` is NOT NULL (ADR #18): the chapter is part of the
+  // scene's address, so „Speichern" is not available on an empty field and
+  // nothing is written. The server answers 400 for it as well; this is the
+  // half the DM meets first.
+  await page.goto(SCENE_URL);
+  const dialog = await openProperties(page);
+  const before = (await api.properties(SCENE)).chapter;
+  await dialog.getByLabel("Kapitel").fill("");
+  await expect(dialog.getByRole("button", { name: "Speichern" })).toBeDisabled();
+  // …and the scene still carries the chapter it had.
+  expect((await api.properties(SCENE)).chapter).toBe(before);
+});
+
 test("a second writer: the save reports the conflict, the second click writes", async ({
   page,
   api,
