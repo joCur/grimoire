@@ -71,8 +71,8 @@ export interface ChapterRow {
 export interface SceneRow {
   campaignId: string;
   id: string;
-  chapterId: string | null;
-  /** 1 when the properties declares `chapter:` (schema.ts). */
+  /** Always set — a scene belongs to a chapter (schema.ts). */
+  chapterId: string;
   title: string;
   type: string;
   trigger: string | null;

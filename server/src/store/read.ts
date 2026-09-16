@@ -224,7 +224,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
   );
 
   const chapterNodes: ChapterNode[] = chapterRows.map((chapter) => {
-    const own = sceneRows.filter((s) => (s.chapterId ?? "") === chapter.id);
+    const own = sceneRows.filter((s) => s.chapterId === chapter.id);
     // The group IS the scene's location (issue #100) — "" means the scene
     // names none and renders under the app's neutral "Ohne Ort" section.
     const bySlug = new Map<string, SceneSummary[]>();

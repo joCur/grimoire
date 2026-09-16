@@ -374,6 +374,16 @@ export interface RelationParseResult {
 }
 
 /**
+ * A counterpart written in the BODY-REFERENCE spelling, `[[jorna]]`. The
+ * field holds a plain id, so the brackets are a stray notation — from a hand
+ * written line or a model reply — and the id is what stands inside them.
+ * Unwrapping it is what makes the reference REAL: `other_npc_id` is a foreign
+ * key on `npcs`, and `[[jorna]]` names no npc while `jorna` names the one the
+ * line is about.
+ */
+const WRAPPED_REF = /^\[\[([a-z0-9]+(?:-[a-z0-9]+)*)\]\]$/;
+
+/**
  * The `## Beziehungen` section as rows. A line without a colon is not a
  * relation — it is reported and left out, because guessing an npc id out of
  * prose would invent a reference that never existed.
@@ -393,7 +403,8 @@ export function parseRelationsSection(body: string): RelationParseResult {
       result.foreignLines.push(line);
       continue;
     }
-    const otherNpcId = (m[1] ?? "").trim();
+    const written = (m[1] ?? "").trim();
+    const otherNpcId = WRAPPED_REF.exec(written)?.[1] ?? written;
     if (otherNpcId === "" || seen.has(otherNpcId)) {
       // A duplicate counterpart cannot become a second row (composite PK) —
       // report it rather than lose it silently.

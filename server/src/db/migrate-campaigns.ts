@@ -32,6 +32,7 @@ import { kindFromPath, parseMarkdown, sessionPauses } from "@grimoire/shared";
 import { toSlug } from "@grimoire/shared/slug";
 import { isDbEmpty, type GrimoireDb } from "./client";
 import {
+  type ImportedRelation,
   parseGlossaryBody,
   parseInboxBody,
   parseLogSection,
@@ -551,13 +552,33 @@ function importCampaign(
     indexForSearch(tx, campaignId, "chapter", id, title === "" ? id : title, id, "", p?.body ?? "");
   });
 
-  // 3. npcs and locations before scenes — not required by a foreign key
-  //    (those references are soft, schema.ts rule 3) but it keeps the
-  //    id-collision reports in a readable order. The CHAPTERS above are a
-  //    different matter now: `scenes.chapter_id` carries a real
-  //    foreign key now, so step 2 has to come first — and it does, for every
-  //    scene, because a chapter exists by virtue of its DIRECTORY and a
-  //    scene's chapter IS the directory it was read from.
+  // 3. npcs and locations before scenes, because the scene rows REFERENCE
+  //    them: every reference is a foreign key (schema.ts rule 3), so the
+  //    import order is the reference order now, not just a readable one. The
+  //    chapters of step 2 come first for the same reason — a chapter exists
+  //    by virtue of its DIRECTORY, and a scene's chapter IS the directory it
+  //    was read from, so there is always one to point at.
+  //
+  //    A `chapter:` an npc or a location DECLARES is a different matter: it
+  //    is an optional grouping, and chapters are not created by naming them
+  //    (ADR #14 — the API answers 400 there). One that has no chapter is
+  //    imported EMPTY and reported, rather than putting a chapter nobody
+  //    authored into the overview.
+  /** The `chapter:` of an entry, or null when it names no chapter of ours. */
+  const declaredChapter = (p: Parsed): string | null => {
+    const declared = asOptionalString(p.frontmatter.chapter) ?? null;
+    if (declared === null || declared.trim() === "") return null;
+    if (chapterIds.includes(declared)) return declared;
+    degrade(p.file, `Kapitel „${declared}" gibt es nicht — Feld leer übernommen.`);
+    return null;
+  };
+  /**
+   * The `## Beziehungen` rows of every npc, inserted only AFTER the loop:
+   * the counterpart is a foreign key on `npcs`, and it may be an npc the
+   * loop has not reached yet (or one with no entry at all, which gets an
+   * empty one below — „Referenzieren legt an", ADR #14).
+   */
+  const pendingRelations: Array<{ npcId: string; relation: ImportedRelation }> = [];
   const npcIds = new Set<string>();
   for (const p of find("npc")) {
     const id = asString(p.frontmatter.id);
@@ -587,7 +608,7 @@ function importCampaign(
         id,
         name,
         role: asOptionalString(p.frontmatter.role) ?? null,
-        chapterId: asOptionalString(p.frontmatter.chapter) ?? null,
+        chapterId: declaredChapter(p),
         status: asString(p.frontmatter.status, "unknown"),
         statblock: asOptionalString(p.frontmatter.statblock) ?? null,
         quickstats: packJson(quickstatsIsMap ? rawQuickstats : {}),
@@ -623,9 +644,7 @@ function importCampaign(
       );
     }
     for (const relation of relations.relations) {
-      tx.insert(relationsTable)
-        .values({ campaignId, npcId: id, otherNpcId: relation.otherNpcId, note: relation.note, pos: relation.pos })
-        .run();
+      pendingRelations.push({ npcId: id, relation });
     }
     for (const line of relations.foreignLines) {
       degrade(
@@ -664,7 +683,7 @@ function importCampaign(
         campaignId,
         id,
         name,
-        chapterId: asOptionalString(p.frontmatter.chapter) ?? null,
+        chapterId: declaredChapter(p),
         roll20Page: asOptionalString(p.frontmatter["roll20-page"]) ?? null,
         body: p.body,
         extra: packJson(splitFrontmatter(p.frontmatter, ["id", "name", "chapter", "roll20-page"])),
@@ -673,9 +692,52 @@ function importCampaign(
     indexForSearch(tx, campaignId, "location", id, name, id, "", p.body);
   }
 
+  // 3b. REFERENCING CREATES (ADR #14) — the import's half of the rule every
+  //     write path follows, and since every reference is a foreign key it has
+  //     to happen BEFORE the row that points at the entry. NOT a degradation
+  //     and therefore not in the report: a referenced entry is EMPTY, never
+  //     missing, and the entry is exactly what the format's reference means.
+  /**
+   * The empty entry for a referenced npc — the id and nothing else, the same
+   * row `ensureNpcRow` writes in the live paths. `name` stays empty and
+   * renders as the id.
+   */
+  const ensureNpcEntry = (id: string): void => {
+    if (npcIds.has(id)) return;
+    npcIds.add(id);
+    tx.insert(npcsTable).values({ campaignId, id, name: "" }).run();
+    indexForSearch(tx, campaignId, "npc", id, id, id, "", "");
+  };
+  /**
+   * The same for a location. `named` is the text the scene used, which
+   * becomes the entry's display name unless it IS the id — the file tree's
+   * `hafen/` directory and the format's free-text locations become real
+   * entries here, and nowhere else.
+   */
+  const ensureLocationEntry = (id: string, named: string): void => {
+    if (locationIds.has(id)) return;
+    locationIds.add(id);
+    const name = named === id ? "" : named;
+    tx.insert(locationsTable).values({ campaignId, id, name }).run();
+    indexForSearch(tx, campaignId, "location", id, name === "" ? id : name, id, "", "");
+  };
+
+  // 3c. the relation rows. Deferred until every npc exists (see above), and
+  //     a counterpart with no entry of its own gets an empty one.
+  for (const pending of pendingRelations) {
+    ensureNpcEntry(pending.relation.otherNpcId);
+    tx.insert(relationsTable)
+      .values({
+        campaignId,
+        npcId: pending.npcId,
+        otherNpcId: pending.relation.otherNpcId,
+        note: pending.relation.note,
+        pos: pending.relation.pos,
+      })
+      .run();
+  }
+
   // 4. scenes plus their ordered npc and tag references.
-  /** Location id -> the text the scene named it with, for the entries below. */
-  const sceneLocationNames = new Map<string, string>();
   const sceneIds = new Set<string>();
   let scenePos = 0;
   for (const p of find("scene")) {
@@ -712,7 +774,8 @@ function importCampaign(
         `location „${rawLocation}" ist keine Orts-id — als Ort „${sceneLocation}" angelegt.`,
       );
     }
-    if (sceneLocation !== null) sceneLocationNames.set(sceneLocation, rawLocation);
+    // Before the scene row, not after it: `scenes.location` is a foreign key.
+    if (sceneLocation !== null) ensureLocationEntry(sceneLocation, rawLocation);
     tx.insert(scenesTable)
       .values({
         campaignId,
@@ -759,6 +822,8 @@ function importCampaign(
     npcRefs.forEach((npcId, pos) => {
       if (npcId === "" || seenNpcs.has(npcId)) return; // duplicate ref: no second row
       seenNpcs.add(npcId);
+      // `scene_npcs.npc_id` is a foreign key, so the entry comes first.
+      ensureNpcEntry(npcId);
       tx.insert(sceneNpcsTable).values({ campaignId, sceneId: id, npcId, pos }).run();
     });
     const seenTags = new Set<string>();
@@ -768,19 +833,6 @@ function importCampaign(
       tx.insert(sceneTagsTable).values({ campaignId, sceneId: id, tag, pos }).run();
     });
     indexForSearch(tx, campaignId, "scene", id, title, id, tags.join(" "), p.body);
-  }
-
-  // 4b. Referencing creates (#70, #100): a scene's `location` is its group,
-  // so an id without an entry would be a heading the campaign cannot name.
-  // The entry gets the text the scene used as its `name` when that text was
-  // not already the id — the file tree's `hafen/` directory and its free-text
-  // locations become real entries here, and nowhere else.
-  for (const [id, named] of [...sceneLocationNames].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
-    if (locationIds.has(id)) continue;
-    locationIds.add(id);
-    const name = named === id ? "" : named;
-    tx.insert(locationsTable).values({ campaignId, id, name }).run();
-    indexForSearch(tx, campaignId, "location", id, name === "" ? id : name, id, "", "");
   }
 
   // 5. sessions with pauses, log lines and played scenes.
@@ -848,6 +900,20 @@ function importCampaign(
     for (const entry of parseLogSection(p.body)) {
       const isReviewed = reviewed.has(entry.hash);
       if (isReviewed) matched.add(entry.hash);
+      // The scene in parentheses is a foreign key on `scenes`, and unlike an
+      // npc or a location a scene is NOT created by naming it: its address is
+      // the directory it was read from, so the import has nowhere to put one
+      // the tree does not have. The line keeps its `raw` — the text still
+      // says what was typed — and loses only the structured link.
+      const logScene =
+        entry.sceneId === undefined || sceneIds.has(entry.sceneId) ? (entry.sceneId ?? null) : null;
+      if (entry.sceneId !== undefined && logScene === null) {
+        degrade(
+          p.file,
+          `Log-Zeile nennt die Szene „${entry.sceneId}", die es nicht gibt — ` +
+            "Zeile unverändert übernommen, ohne Szenen-Verweis.",
+        );
+      }
       tx.insert(logTable)
         .values({
           campaignId,
@@ -855,7 +921,7 @@ function importCampaign(
           pos: entry.pos,
           raw: entry.raw,
           at: entry.at ?? null,
-          sceneId: entry.sceneId ?? null,
+          sceneId: logScene,
           text: entry.text ?? null,
           hash: entry.hash,
           reviewed: isReviewed ? 1 : 0,
@@ -879,6 +945,16 @@ function importCampaign(
     // second row: the sequence is what the review reads back.
     asStringArray(p.frontmatter.scenes_played).forEach((sceneId, pos) => {
       if (sceneId === "") return;
+      // A foreign key on `scenes`, and the entry is the whole row — there is
+      // no field to empty, so an id the tree has no scene for cannot be
+      // stored at all. Reported, because the list loses an entry.
+      if (!sceneIds.has(sceneId)) {
+        degrade(
+          p.file,
+          `„scenes_played" nennt die Szene „${sceneId}", die es nicht gibt — Eintrag ausgelassen.`,
+        );
+        return;
+      }
       tx.insert(playedTable).values({ campaignId, sessionId: id, sceneId, pos }).run();
     });
   }

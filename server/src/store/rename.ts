@@ -13,10 +13,10 @@
 // preview cannot count something the cascade does not rewrite.
 //
 // What the migration bought here is visible in the code below: the id IS the
-// primary key, so the hard references cascade in the database
-// (`ON UPDATE CASCADE`, schema.ts rule 5) and only the SOFT references — the
-// ones that may legally point at an entity without a row — need statements of
-// their own.
+// primary key and every reference is a foreign key with `ON UPDATE CASCADE`
+// (schema.ts rule 3/5), so the reference ROWS follow the id inside the update
+// itself. Only the references that live in free text — a log line's scene
+// marker, `[[slug]]` in prose — need statements of their own.
 
 import { and, eq, sql } from "drizzle-orm";
 import { ApiError } from "../api-error";
@@ -31,7 +31,6 @@ import {
   npcs,
   sceneNpcs,
   scenes,
-  sessionScenesPlayed,
 } from "../db/schema";
 import { dropEntity } from "./fts";
 import { refOwnerKind, rewriteBodyRefs } from "./refs";
@@ -214,14 +213,25 @@ function patchLogMarkers(raw: string, oldId: string, newId: string): string {
 }
 
 /**
- * The soft-reference updates of one rename (the hard ones cascade).
+ * What a rename still has to do BY HAND — which is only the text.
+ *
+ * Every reference ROW follows the id on its own: each reference is a foreign
+ * key with `ON UPDATE CASCADE` (schema.ts rule 3/5), so the `scene_npcs`
+ * entries, the relation counterparts, a scene's `location`, the chapter of a
+ * scene, an npc and a location, and the scene a log line or a played list
+ * names are all rewritten by the database inside the id UPDATE. What is left
+ * is the two places a reference lives in FREE TEXT, where no constraint
+ * reaches:
+ *
+ *   * the scene MARKER of a log line (`- HH:MM (<id>) Text`) and its hash;
+ *   * `[[slug]]` references in prose.
  *
  * `ownsRefSlug` is decided BEFORE the id update (the row that answers it is
  * gone afterwards): does `[[oldId]]` in prose actually mean THIS entity? See
  * store/refs.ts `refOwnerKind` — with a same-named npc around, a scene rename
  * must leave the prose alone.
  */
-function updateSoftReferences(
+function updateTextReferences(
   tx: GrimoireDb,
   campaign: string,
   kind: RenameKind,
@@ -229,78 +239,11 @@ function updateSoftReferences(
   newId: string,
   ownsRefSlug: boolean,
 ): void {
-  if (kind === "npc") {
-    // MERGE, don't collide (#70): a scene that lists BOTH ids has a
-    // `scene_npcs` primary key (campaign, scene, npc) that the plain UPDATE
-    // would violate — an unhandled constraint error, i.e. a 500 out of a
-    // rename the preview had just called safe. The old row goes, the existing
-    // one stays.
-    //
-    // This is the LIVE path of the empty-target merge above: while a
-    // reference could dangle, the second id had no row at all; now it has an
-    // empty one, `renameEntity` drops that instead of answering 409, and the
-    // two reference lists are joined here. A migrated database can still hold
-    // the dangling variant, which lands in the same code.
-    for (const row of tx
-      .select({ sceneId: sceneNpcs.sceneId })
-      .from(sceneNpcs)
-      .where(and(eq(sceneNpcs.campaignId, campaign), eq(sceneNpcs.npcId, newId)))
-      .all()) {
-      tx.delete(sceneNpcs)
-        .where(
-          and(
-            eq(sceneNpcs.campaignId, campaign),
-            eq(sceneNpcs.sceneId, row.sceneId),
-            eq(sceneNpcs.npcId, oldId),
-          ),
-        )
-        .run();
-    }
-    tx.update(sceneNpcs)
-      .set({ npcId: newId })
-      .where(and(eq(sceneNpcs.campaignId, campaign), eq(sceneNpcs.npcId, oldId)))
-      .run();
-    // Same for a relation list that names both counterparts.
-    for (const row of tx
-      .select({ npcId: npcRelations.npcId })
-      .from(npcRelations)
-      .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.otherNpcId, newId)))
-      .all()) {
-      tx.delete(npcRelations)
-        .where(
-          and(
-            eq(npcRelations.campaignId, campaign),
-            eq(npcRelations.npcId, row.npcId),
-            eq(npcRelations.otherNpcId, oldId),
-          ),
-        )
-        .run();
-    }
-    tx.update(npcRelations)
-      .set({ otherNpcId: newId })
-      .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.otherNpcId, oldId)))
-      .run();
-  }
-  if (kind === "location") {
-    tx.update(scenes)
-      .set({ location: newId })
-      .where(and(eq(scenes.campaignId, campaign), eq(scenes.location, oldId)))
-      .run();
-  }
   if (kind === "scene") {
-    tx.update(sessionScenesPlayed)
-      .set({ sceneId: newId })
-      .where(
-        and(eq(sessionScenesPlayed.campaignId, campaign), eq(sessionScenesPlayed.sceneId, oldId)),
-      )
-      .run();
-    tx.update(logEntries)
-      .set({ sceneId: newId })
-      .where(and(eq(logEntries.campaignId, campaign), eq(logEntries.sceneId, oldId)))
-      .run();
     // The `raw` line the review hashes carries the marker too. It is rewritten
     // so the rendered log keeps naming the scene the DM can actually open;
-    // the hash follows, exactly as the file cascade re-hashed the line.
+    // the hash follows, exactly as the file cascade re-hashed the line. The
+    // rows are found by the NEW id — the cascade has already moved them.
     for (const row of tx
       .select({ sessionId: logEntries.sessionId, pos: logEntries.pos, raw: logEntries.raw })
       .from(logEntries)
@@ -321,27 +264,100 @@ function updateSoftReferences(
     }
   }
   if (kind !== "chapter" && ownsRefSlug) {
-    // BODY REFERENCES (issue #68): `[[oldId]]` in prose is a soft reference
-    // like any other and has to follow the id — the renderer resolves the
-    // CURRENT name from the slug, so a slug left behind goes silently back to
-    // plain text. Every rewritten body is re-indexed (its indexed text
-    // carries the referenced display name, store/refs.ts).
+    // BODY REFERENCES: `[[oldId]]` in prose is a reference like
+    // any other and has to follow the id — the renderer resolves the CURRENT
+    // name from the slug, so a slug left behind goes silently back to plain
+    // text. Every rewritten body is re-indexed (its indexed text carries the
+    // referenced display name, store/refs.ts).
     for (const referrer of rewriteBodyRefs(tx, campaign, oldId, newId)) {
       reindexEntity(tx, campaign, referrer.kind, referrer.id);
     }
   }
-  if (kind === "chapter") {
+}
+
+/**
+ * MERGE INTO AN EMPTY TARGET: move what points at the target onto the row
+ * that is about to take its id.
+ *
+ * The target row holds nothing but its id — a reference put it there (ADR
+ * #14) — and a rename into it is exactly the case where a scene lists BOTH
+ * ids. Two constraints set the order of work: the target cannot be deleted
+ * while a reference names it (no delete action, schema.ts rule 3), and after
+ * the id update the cascade would drive the old id's entries into the
+ * target's and violate the primary key of `scene_npcs`. So the target's
+ * reference entries are moved onto the OLD id first — the cascade then
+ * carries them back under the new one — and an entry that would become a
+ * duplicate is dropped, because a scene lists an npc once.
+ *
+ * The POSITION of the surviving entry is the old id's: that is the row the DM
+ * authored, the target's was put there by being referenced.
+ */
+function mergeRefsOntoSource(
+  tx: GrimoireDb,
+  campaign: string,
+  kind: RenameKind,
+  oldId: string,
+  newId: string,
+): void {
+  if (kind === "npc") {
+    for (const row of tx
+      .select({ sceneId: sceneNpcs.sceneId })
+      .from(sceneNpcs)
+      .where(and(eq(sceneNpcs.campaignId, campaign), eq(sceneNpcs.npcId, newId)))
+      .all()) {
+      const listsBoth =
+        tx
+          .select({ pos: sceneNpcs.pos })
+          .from(sceneNpcs)
+          .where(
+            and(
+              eq(sceneNpcs.campaignId, campaign),
+              eq(sceneNpcs.sceneId, row.sceneId),
+              eq(sceneNpcs.npcId, oldId),
+            ),
+          )
+          .all().length > 0;
+      const target = and(
+        eq(sceneNpcs.campaignId, campaign),
+        eq(sceneNpcs.sceneId, row.sceneId),
+        eq(sceneNpcs.npcId, newId),
+      );
+      if (listsBoth) tx.delete(sceneNpcs).where(target).run();
+      else tx.update(sceneNpcs).set({ npcId: oldId }).where(target).run();
+    }
+    // Same for a relation list that names both counterparts.
+    for (const row of tx
+      .select({ npcId: npcRelations.npcId })
+      .from(npcRelations)
+      .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.otherNpcId, newId)))
+      .all()) {
+      const listsBoth =
+        tx
+          .select({ pos: npcRelations.pos })
+          .from(npcRelations)
+          .where(
+            and(
+              eq(npcRelations.campaignId, campaign),
+              eq(npcRelations.npcId, row.npcId),
+              eq(npcRelations.otherNpcId, oldId),
+            ),
+          )
+          .all().length > 0;
+      const target = and(
+        eq(npcRelations.campaignId, campaign),
+        eq(npcRelations.npcId, row.npcId),
+        eq(npcRelations.otherNpcId, newId),
+      );
+      if (listsBoth) tx.delete(npcRelations).where(target).run();
+      else tx.update(npcRelations).set({ otherNpcId: oldId }).where(target).run();
+    }
+  }
+  if (kind === "location") {
+    // A scene names ONE location, so there is nothing to de-duplicate: the
+    // scenes sitting under the empty target move to the row taking its id.
     tx.update(scenes)
-      .set({ chapterId: newId })
-      .where(and(eq(scenes.campaignId, campaign), eq(scenes.chapterId, oldId)))
-      .run();
-    tx.update(npcs)
-      .set({ chapterId: newId })
-      .where(and(eq(npcs.campaignId, campaign), eq(npcs.chapterId, oldId)))
-      .run();
-    tx.update(locations)
-      .set({ chapterId: newId })
-      .where(and(eq(locations.campaignId, campaign), eq(locations.chapterId, oldId)))
+      .set({ location: oldId })
+      .where(and(eq(scenes.campaignId, campaign), eq(scenes.location, newId)))
       .run();
   }
 }
@@ -372,7 +388,7 @@ export async function renameEntity(
   // nothing but its id was not authored — a reference put it there — and
   // since referencing creates, it is the target a rename runs into: a scene
   // that lists the old AND the new id is exactly what the merge in
-  // `updateSoftReferences` handles, and that state now always comes with an
+  // `mergeRefsOntoSource` handles, and that state now always comes with an
   // empty row for the new id. Every other #70 path fills such a row instead
   // of colliding with it (the generator's apply step, `review/npc-stub`), so
   // the rename does too. A target with CONTENT is still a 409: a rename must
@@ -428,8 +444,11 @@ export async function renameEntity(
     const ownsRefSlug = kind !== "chapter" && refOwnerKind(tx, campaign, oldId) === kind;
     if (mergeInto) {
       // The empty target row makes way for the renamed one — otherwise the id
-      // update below violates the primary key. It carries no content by
-      // definition (`isEmptyEntity`), and its own index row goes with it.
+      // update below violates the primary key. Whatever points AT it is moved
+      // first (`mergeRefsOntoSource`), because a row a reference names cannot
+      // be deleted. It carries no content by definition (`isEmptyEntity`),
+      // and its own index row goes with it.
+      mergeRefsOntoSource(tx, campaign, kind, oldId, newId);
       tx.delete(table)
         .where(and(eq(table.campaignId, campaign), eq(table.id, newId)))
         .run();
@@ -445,7 +464,7 @@ export async function renameEntity(
     // fallback out (`name: jorna`) would keep pointing at a reference that
     // no longer exists, in the tree and in search alike.
     carryFallbackName(tx, campaign, kind, oldId, newId);
-    updateSoftReferences(tx, campaign, kind, oldId, newId, ownsRefSlug);
+    updateTextReferences(tx, campaign, kind, oldId, newId, ownsRefSlug);
     // The index row is REPLACED, not patched: its `title` has to follow too
     // (see fts.ts). Dropping the old id first is what keeps the contract of
     // one row per (campaign, kind, entity_id).

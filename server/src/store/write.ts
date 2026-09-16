@@ -1084,20 +1084,6 @@ function patchLocator(
         extra: extraOf(fm, SCENE_KEYS),
         rev: row.rev + 1,
       };
-      tx.update(scenes)
-        .set({
-          title: next.title,
-          type: next.type,
-          trigger: next.trigger,
-          chapterId: next.chapterId,
-          location: next.location,
-          status: next.status,
-          handouts: next.handouts,
-          extra: next.extra,
-          rev: next.rev,
-        })
-        .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
-        .run();
       // Referencing creates (#70) — only what this patch ADDS, see the note
       // above `ensureNpcRow`.
       for (const npcId of npcRefs) {
@@ -1112,9 +1098,28 @@ function patchLocator(
       // OLD slug exactly as it was — the hint lied about the stock the DM is
       // most likely to look at. Idempotent and cheap (one lookup), and it
       // creates nothing the field does not already name.
+      //
+      // BEFORE the update, both of them: `scenes.location` and
+      // `scene_npcs.npc_id` are foreign keys, so the row they name has to
+      // exist by the time the value is written. The ensure is the product
+      // behaviour, the constraint is the guarantee (schema.ts rule 3).
       if (next.location !== null) {
         ensureLocationRow(tx, campaign, next.location, options.locationName);
       }
+      tx.update(scenes)
+        .set({
+          title: next.title,
+          type: next.type,
+          trigger: next.trigger,
+          chapterId: next.chapterId,
+          location: next.location,
+          status: next.status,
+          handouts: next.handouts,
+          extra: next.extra,
+          rev: next.rev,
+        })
+        .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
+        .run();
       replaceSceneRefs(tx, campaign, row.id, npcRefs, tags, npcsBefore);
       indexScene(tx, campaign, next, tags);
       return renderScene(next, refNpcs(tx, campaign, row.id), refTags(tx, campaign, row.id));
@@ -1253,6 +1258,16 @@ function patchSessionRow(
     .run();
 
   const played = asStrArray(fm.scenes_played);
+  // Every entry names a scene (schema.ts rule 3), and unlike an npc or a
+  // location a scene is not created by naming it — its address is a chapter
+  // and a title nobody typed here. So an id with no scene is a 400 that says
+  // which one, the same answer an unknown `chapter:` gets.
+  for (const sceneId of played) {
+    if (sceneId === "") continue;
+    if (sceneRowOf(tx, campaign, sceneId) === undefined) {
+      throw new ApiError(400, `unknown scene in scenes_played: ${sceneId}`);
+    }
+  }
   tx.delete(sessionScenesPlayed)
     .where(
       and(
@@ -1900,6 +1915,13 @@ export async function appendLogEntry(
   }
   return mutate(campaign, (tx) => {
     const row = requireActive(tx, campaign);
+    // The scene the note is about has to BE one: the log line and
+    // `scenes_played` both reference it (schema.ts rule 3), and a quick note
+    // must not invent a scene — the app picks it from the campaign, so an id
+    // with no scene is a stale client, and 404 says that.
+    if (sceneId !== undefined && sceneRowOf(tx, campaign, sceneId) === undefined) {
+      throw new ApiError(404, `unknown scene: ${sceneId}`);
+    }
     const raw = `- ${localTime(now())}${sceneId ? ` (${sceneId})` : ""} ${text}`;
     appendLogRow(tx, campaign, row.id, raw);
     if (sceneId !== undefined) {
@@ -2213,9 +2235,9 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           .orderBy(desc(scenes.pos))
           .limit(1)
           .all()[0]?.pos ?? -1) + 1;
-      // The chapter row FIRST — `scenes.chapter_id` is a foreign key since
-      // migration 0014, and a generated scene is the one write that can name
-      // a chapter the campaign does not have yet.
+      // The chapter row FIRST — `scenes.chapter_id` is NOT NULL and a
+      // foreign key, and a generated scene is the one write that can name a
+      // chapter the campaign does not have yet.
       // A new-chapter run puts its chapter-entry draft FIRST in the same batch
       // (generator.ts `jobChapterTarget`), so the row normally exists with
       // the title the DM typed; this is the net under it, and it names the
@@ -2226,15 +2248,21 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       // the second one matters, and it used to reach the client as a raw
       // foreign-key failure from the insert below, i.e. a 500 that named a
       // constraint instead of the chapter. It is a 400 that names it.
-      if (locator.chapterId !== null && locator.chapterId !== undefined) {
-        ensureChapterRow(tx, campaign, locator.chapterId);
-        if (chapterRowOf(tx, campaign, locator.chapterId) === undefined) {
-          throw new ApiError(
-            400,
-            `unknown chapter: ${locator.chapterId} — create the chapter first`,
-          );
-        }
+      ensureChapterRow(tx, campaign, locator.chapterId);
+      if (chapterRowOf(tx, campaign, locator.chapterId) === undefined) {
+        throw new ApiError(
+          400,
+          `unknown chapter: ${locator.chapterId} — create the chapter first`,
+        );
       }
+      // Referencing creates (ADR #14): a generated scene may name an npc or
+      // a location the campaign does not have yet. The validation asks the
+      // model to ship a stub for it, but a draft that slips through must not
+      // leave a dangling id behind — it gets an empty row, and a stub in the
+      // same batch fills that row instead of colliding with it. Both run
+      // BEFORE the insert: the columns are foreign keys.
+      for (const npcId of npcRefs) ensureNpcRow(tx, campaign, npcId);
+      if (draftLocation !== null) ensureLocationRow(tx, campaign, draftLocation);
       tx.insert(scenes)
         .values({
           campaignId: campaign,
@@ -2251,13 +2279,6 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           pos,
         })
         .run();
-      // Referencing creates (#70): a generated scene may name an npc or a
-      // location the campaign does not have yet. The validation asks the
-      // model to ship a stub for it, but a draft that slips through must not
-      // leave a dangling id behind — it gets an empty row, and a stub in the
-      // same batch fills that row instead of colliding with it.
-      for (const npcId of npcRefs) ensureNpcRow(tx, campaign, npcId);
-      if (draftLocation !== null) ensureLocationRow(tx, campaign, draftLocation);
       replaceSceneRefs(tx, campaign, id, npcRefs, tags);
       const row = sceneRowOf(tx, campaign, id);
       if (row !== undefined) indexScene(tx, campaign, row, tags);
@@ -2827,7 +2848,7 @@ export async function createScene(
         id,
         suggestion,
         sceneAddress({
-          chapterId: existing.chapterId ?? chapter,
+          chapterId: existing.chapterId,
           location: existing.location,
           id: existing.id,
         }),

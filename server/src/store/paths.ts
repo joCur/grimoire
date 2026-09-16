@@ -77,6 +77,12 @@ export function scenePath(chapterId: string, groupSlug: string, id: string): str
  * The address of a scene ROW — the one place that knows the group segment is
  * the scene's `location` (issue #100). Structural on purpose: paths.ts must
  * not depend on the schema.
+ *
+ * A STORED scene always has a chapter (it is part of the address, and the
+ * column is NOT NULL). `null` is therefore only what a caller passes when
+ * there is no row to read it from — an id nothing stores, e.g. a stale search
+ * index entry — and the address it builds names nothing, which is the truth
+ * about that id.
  */
 export function sceneAddress(row: {
   chapterId: string | null;
