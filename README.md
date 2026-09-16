@@ -74,7 +74,13 @@ Der Text ist freier Notizraum für Kampagnenweites.
 | ---- | --------- |
 | `id` | stabil; erstes Segment jeder Szenen-Adresse |
 | `title` | Anzeigename |
-| `status` | `active` markiert das aktive Kapitel |
+| `status` | `planned`, `active` oder `done` |
+
+`active` markiert das **eine** Kapitel, das die Session-Ansicht öffnet: der
+Server setzt es in einem Vorgang und stellt das bisher aktive Kapitel zurück
+auf `planned`. Die API schreibt nur diese drei Werte (400 sonst); ein bereits
+gespeicherter anderer Wert wird weiterhin unverändert angezeigt — das Format
+degradiert wie überall.
 
 Im Text liegen das Kapitelziel (Abschnitt `## Ziel des Kapitels`) und die
 Handlungsstränge (`## Offene Fäden`, Checkliste), die die Nachbereitung

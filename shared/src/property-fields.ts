@@ -16,7 +16,7 @@
 // The order is the order the dialog shows (and the order the rendered
 // properties block is written in): a contract of its own, not an accident.
 
-import { NPC_STATUSES, SCENE_STATUSES, SCENE_TYPES } from "./types";
+import { CHAPTER_STATUSES, NPC_STATUSES, SCENE_STATUSES, SCENE_TYPES } from "./types";
 
 /** The kinds whose properties are described field by field (README entities). */
 export const PROPERTY_KINDS = ["scene", "npc", "location", "chapter"] as const;
@@ -98,9 +98,12 @@ export const PROPERTY_FIELDS: Record<PropertiesKind, readonly PropertyFieldDef[]
   ],
   chapter: [
     { key: "title", control: "text", required: true },
-    // Free text on purpose: a chapter's status is campaign vocabulary
-    // (`active`, `planned`, whatever the DM writes), not a fixed set.
-    { key: "status", control: "text" },
+    // A KNOWN SET, unlike the other free-text fields: the API accepts only
+    // these three values for a chapter status and answers 400 for anything
+    // else, so a free-text control could only produce a rejected save. A
+    // value a chapter already carries is still shown — the format degrades
+    // here like everywhere.
+    { key: "status", control: "select", values: CHAPTER_STATUSES },
   ],
 };
 

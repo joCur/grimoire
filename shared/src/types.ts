@@ -19,6 +19,20 @@ export type SceneType = (typeof SCENE_TYPES)[number];
 export const NPC_STATUSES = ["alive", "dead", "missing", "unknown"] as const;
 export type NpcStatus = (typeof NPC_STATUSES)[number];
 
+/**
+ * A chapter's lifecycle states, in that order. `active` is the ONE the app
+ * acts on — the session view opens the active chapter, and there is at most
+ * one per campaign (the server swaps it in a single transaction).
+ *
+ * Like every other enum here these are the KNOWN values, not a validator: a
+ * chapter carrying something else is shown verbatim, and there is no CHECK
+ * constraint behind the column. What is different is that the API refuses to
+ * WRITE anything else (400) — the status has three positions now, so a fourth
+ * value arriving on the wire can only be a typo.
+ */
+export const CHAPTER_STATUSES = ["planned", "active", "done"] as const;
+export type ChapterStatus = (typeof CHAPTER_STATUSES)[number];
+
 /** The six callout kinds the renderer knows. Unknown kinds render as plain text. */
 export const CALLOUT_KINDS = [
   "readaloud",
@@ -96,7 +110,7 @@ export interface CampaignProperties {
 export interface ChapterProperties {
   id: string;
   title: string;
-  status?: string;
+  status?: OrString<ChapterStatus>;
   [key: string]: unknown;
 }
 
@@ -223,7 +237,7 @@ export interface ChapterNode {
   id: string;
   /** The chapter's title; falls back to its id. */
   title: string;
-  status?: string;
+  status?: OrString<ChapterStatus>;
   /** Address of the chapter — its id. */
   path?: string;
   groups: SceneGroup[];
