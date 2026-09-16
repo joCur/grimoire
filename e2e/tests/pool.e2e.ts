@@ -1,11 +1,11 @@
 // Critical path 1: auto entry — the pool loads the campaign; see CLAUDE.md.
 //
-// "/" has no page of its own (issue #14): it redirects into the campaign the
+// "/" has no page of its own: it redirects into the campaign the
 // server reports, and the pool is the first thing the DM sees — campaign
 // header, the active chapter with its goal line, the location group and the
 // contingency block.
 //
-// Issue #34 lives on this path as well: the group header resolves its slug
+// The campaign chrome lives on this path as well: the group header resolves its slug
 // against the locations, the topbar carries the NPCs/Orte navigation (the
 // pool's own footer line is gone), and the campaign's name/description are
 // editable from the header.
@@ -19,7 +19,7 @@ import { expect, test, todaySessionId } from "../support/test";
  * How far the topbar's content sticks out of the row, in pixels (0 = it fits).
  *
  * Measured as "right edge of the rightmost child vs. the row's CONTENT edge",
- * not as `header.scrollWidth - header.clientWidth` (issue #69 CI finding):
+ * not as `header.scrollWidth - header.clientWidth` (a CI finding):
  * an overflowing flex item first eats the row's 24px right padding, and
  * `scrollWidth` does not grow for that at all — the old metric reported a
  * clean row while the session chip was already 10px past the padding and,
@@ -49,7 +49,7 @@ async function topbarOverflow(page: Page) {
 /**
  * Stands in for WIDER GLYPHS than the machine running the test happens to
  * have. Linux CI renders every label ~2px wider than macOS does, which is how
- * the row came to overflow on CI only (issue #69) — twice. `letter-spacing`
+ * the row came to overflow on CI only — twice. `letter-spacing`
  * on the row reproduces that class of difference locally and scales it, so
  * the guard below asserts that the row survives 1px of it: far more than the
  * ~0.6px equivalent of the observed CI delta, at every width.
@@ -70,7 +70,7 @@ const TOPBAR_WIDTHS = [640, 768, 900, 1000, 1024, 1040, 1100, 1280, 1300, 1536];
 
 /**
  * A scene that names NO location — it belongs under the pool's neutral
- * „Ohne Ort" section (issue #100). The example campaign has none, so the
+ * „Ohne Ort" section. The example campaign has none, so the
  * test that needs one seeds it.
  */
 const SCENE_WITHOUT_LOCATION = `---
@@ -106,7 +106,7 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
   // The redirect target comes from the server (lastSession per campaign).
   await expect(page).toHaveURL(/\/beispiel$/);
 
-  // Campaign header from _campaign (issue #17).
+  // Campaign header from _campaign.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
@@ -124,7 +124,7 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
     name: /Kapitel 1: Der Leuchtturm von Salzhafen/,
   });
   await expect(chapter).toBeVisible();
-  // The chapter is a HEADING inside that trigger (issue #100 review): the
+  // The chapter is a HEADING inside that trigger: the
   // outline used to jump from the pool's h1 straight to the group h3s.
   await expect(
     chapter.getByRole("heading", { level: 2, name: "Kapitel 1: Der Leuchtturm von Salzhafen" }),
@@ -142,7 +142,7 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
   ).toBeVisible();
 
   // Planned scene in its location group, with the status control's label.
-  // The group IS the scene's `location` since issue #100, so the header is
+  // The group IS the scene's `location`, so the header is
   // the location's NAME — `hafen`, the group DIRECTORY of the import format,
   // is not a grouping and appears nowhere.
   await expect(
@@ -217,8 +217,8 @@ test("the topbar trio navigates without anything in the left block moving", asyn
    * The whole left block of the topbar, as text and as geometry. EVERY
    * campaign-scoped view must agree on every bit of it except which entry is
    * marked: the chrome is global and stable, the trio is a persistent section
-   * nav, and no view brings a breadcrumb of its own any more (PO rework of
-   * PR #35). So nothing appears, disappears or shifts while navigating.
+   * nav, and no view brings a breadcrumb of its own any more (a PO
+   * rework). So nothing appears, disappears or shifts while navigating.
    */
   const leftBlock = async () => ({
     campaign: await label.textContent(),
@@ -251,8 +251,8 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     page.getByRole("banner").getByText(/Der Leuchtturm von Salzhafen/),
   ).toHaveCount(1);
 
-  // The pool carries a „Nachschlagen" line again (issue #53, PO feedback on
-  // PR #87) — it is where the two campaign-content pages are reached from on
+  // The pool carries a „Nachschlagen" line again (PO feedback) — it is
+  // where the two campaign-content pages are reached from on
   // the desktop. What matters HERE is that they did not move into the TOPBAR:
   // the trio above is still exactly Kapitel/NPCs/Orte, which is what the rest
   // of this test measures.
@@ -334,7 +334,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
 
 /**
  * The gear is part of the global chrome, so it must not undress the bar it
- * sits on (PO feedback on PR #83). `/settings` used to count as a campaign-LESS
+ * sits on (PO feedback). `/settings` used to count as a campaign-LESS
  * route, which left the topbar with the wordmark alone: switcher, nav trio,
  * search and session chip all vanished the moment the DM pressed the gear —
  * exactly the "nothing appears or disappears between views" rule the chrome
@@ -417,10 +417,10 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
 });
 
 /**
- * Issue #50: the topbar must not overflow at ANY width from 390px up. The
+ * The topbar must not overflow at ANY width from 390px up. The
  * medium widths were the broken ones — switcher, live pill, timer, Pause,
  * verwerfen, beenden, search and Generator in one 56px row simply ran over.
- * With the session consolidated into ONE chip (PO feedback on issue #40) the
+ * With the session consolidated into ONE chip (PO feedback) the
  * row fits; this test is the guard that keeps it fitting.
  */
 test.describe("with a session running since 19:30", () => {
@@ -437,7 +437,7 @@ test.describe("with a session running since 19:30", () => {
       await expect(
         page.getByRole("link", { name: /Session läuft/ }),
       ).toBeVisible();
-      // The gear (issue #69) is on the row at every width the topbar IS the
+      // The gear is on the row at every width the topbar IS the
       // chrome at — icon-only on purpose, so it cannot grow the row. Below md
       // the whole topbar is hidden (the mobile start surface replaces it), so
       // there is nothing to be visible there.
@@ -483,7 +483,7 @@ test.describe("with a session running since 19:30", () => {
  * session running the chip carries the long "Session starten" label instead
  * of the clock, and the example campaign's last session leaves the
  * "Nachbereitung · N offen" link on the row next to generator and gear
- * (issue #69 CI finding: at 768 and at 1024 that row overflowed by 41 and
+ * (a CI finding: at 768 and at 1024 that row overflowed by 41 and
  * 10px in plain macOS rendering, invisible to the old scrollWidth metric).
  */
 test("the topbar does not overflow at medium widths with no session running", async ({
@@ -515,7 +515,7 @@ test("the topbar does not overflow at medium widths with no session running", as
 });
 
 /**
- * The generator chip's fullest state (issue #102): a pipelined run that is
+ * The generator chip's fullest state: a pipelined run that is
  * still going AND has parts the DM already accepted — so the chip carries its
  * pulsing dot and the „N von M übernommen" progress at the same time. That
  * pair was never on the row before this ticket (a run was either running or
@@ -567,7 +567,7 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
       const chip = page.getByRole("link", { name: /Generator/ });
       await expect(chip).toBeVisible();
       // The number is on the chip exactly ONCE, whatever the width does with
-      // it (issue #102 review): above 2xl it is spelled out, below it stands
+      // it: above 2xl it is spelled out, below it stands
       // in the accessible name only — never both, which read as „1 von 3
       // übernommen / 1 von 3 übernommen".
       const text = await chip.innerText();
@@ -645,7 +645,7 @@ test.describe("imported without a _campaign", () => {
   }) => {
     // Before the cutover this was the one gap PATCH /properties could not
     // close (no file, hence no rev) and the dialog offered to CREATE the
-    // file. Since issue #57 the import gives every campaign directory a row,
+    // file. The import gives every campaign directory a row,
     // whose name falls back to the id — so there is nothing to create, and the
     // ordinary patch path covers this case too.
     await page.goto("/beispiel");
@@ -709,9 +709,9 @@ test("the campaign reading view carries the same edit action", async ({
 test("the pool header is ONE row: the actions right beside the title, never under it", async ({
   page,
 }) => {
-  // Issue #56 put „Kapitel anlegen" next to „Bearbeiten" inside a wrapping
+  // „Kapitel anlegen" sat next to „Bearbeiten" inside a wrapping
   // row, and on a campaign with a normal-length name the pair dropped onto a
-  // second line, right-aligned under the title (PO finding on PR #87). The
+  // second line, right-aligned under the title (PO finding). The
   // actions share the title's line again — checked at the widths a desktop
   // pool is actually read at, and by geometry rather than by class names.
   for (const width of [1024, 1280, 1536]) {
@@ -749,7 +749,7 @@ test("the pool header is ONE row: the actions right beside the title, never unde
     expect(counterBox!.x).toBe(titleBox!.x);
     expect(counterBox!.y).toBeLessThan(descriptionBox!.y);
 
-    // Description, then the „Nachschlagen" line (issue #53) — in that order.
+    // Description, then the „Nachschlagen" line — in that order.
     const lookupBox = (await page
       .getByRole("navigation", { name: "Nachschlagen" })
       .boundingBox())!;

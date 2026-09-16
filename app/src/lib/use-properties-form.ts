@@ -1,4 +1,4 @@
-// React-query half of the „Eigenschaften" form (issue #42).
+// React-query half of the „Eigenschaften" form.
 //
 // The cache/409 mechanics are the shared envelope in use-rev-write.ts; what
 // belongs to this path is the invalidation set. A properties patch can move
@@ -17,7 +17,7 @@ import { withRev } from "@/lib/write-with-rev";
 
 /**
  * What one save carries: the diff, plus the display name for the Ort the
- * scene's `location` may CREATE (issue #100 follow-up — the Ort field takes
+ * scene's `location` may CREATE (the Ort field takes
  * free text, `propertiesPatch` stores the slug and this carries the name).
  */
 export interface PropertiesWrite {

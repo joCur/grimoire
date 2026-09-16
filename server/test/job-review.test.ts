@@ -1,4 +1,4 @@
-// Review state on the job and PARTIAL accept (issue #97).
+// Review state on the job and PARTIAL accept.
 //
 // The harness is the generator suite's: a database seeded from the example
 // campaign and a scripted FakeProvider instead of an LLM, so a run really
@@ -24,7 +24,7 @@ import { PipelineFake } from "./support/pipeline-fake";
 // --- fixtures -----------------------------------------------------------------
 
 // The paths the REVIEW addresses the drafts with — `<chapter>/<id>`, built
-// by the server from the run's chapter and the draft's id (issue #100; the
+// by the server from the run's chapter and the draft's id (the
 // model names no address at all). The stored ADDRESS adds the group, which
 // is the draft's `location` — so the two differ here on purpose, and the
 // accept answers `{ <review path>: <written address> }`.
@@ -131,7 +131,7 @@ async function exists(rel: string): Promise<boolean> {
 
 beforeEach(async () => {
   await seedStore();
-  // Pipeline-aware since issue #102: a scene run is the outline call plus one
+  // Pipeline-aware: a scene run is the outline call plus one
   // call per scene and per suggested entry, and the fake routes this one
   // scripted batch reply over all of them (support/pipeline-fake.ts).
   setProviderForTests(new PipelineFake([REPLY]));
@@ -179,7 +179,7 @@ test("augment decisions per property and per block are stored as booleans", asyn
 
 test("null CLEARS a field or block decision — the keys an augment conflict renames", async () => {
   // A 409 re-aligns the proposal against the body that won, and the block
-  // ids move with it (issue #97 review, finding 5). The decisions cut
+  // ids move with it. The decisions cut
   // against the old ids have to be removable, not just overwritable.
   let job = await runJob();
   job = await patch(job, { fields: { role: true }, blocks: { aug1: true, aug2: false } });
@@ -272,8 +272,7 @@ test("the edited text is what a partial accept writes", async () => {
 
 test("accepting the same part twice answers 200 with nothing written", async () => {
   // A double click, or the second tab clicking what the first already wrote:
-  // the caller asked for a state that already holds (issue #97 review,
-  // finding 6). The empty answer says so; a 400 said the DM did something
+  // the caller asked for a state that already holds. The empty answer says so; a 400 said the DM did something
   // wrong and put an error line under a review that was in order.
   const job = await runJob();
   expect((await accept(job, { paths: [SCENE_A] })).status).toBe(200);
@@ -333,7 +332,7 @@ test('„Alle übernehmen" writes the open rest — never a dropped or rejected 
 test("a bulk accept skips an UNDECIDED suggested entry, an explicit one writes it", async () => {
   const job = await runJob();
   // Nothing decided about the entry: „Alle übernehmen" writes the scenes and
-  // leaves it alone — the pre-#97 rule, and the reason the job stays.
+  // leaves it alone — the earlier rule, and the reason the job stays.
   const bulk = (await (await accept(job, {})).json()) as {
     written: Record<string, string>;
     jobDeleted: boolean;
@@ -402,7 +401,7 @@ test("a job that disappears mid-accept rolls the whole write back", async () => 
 // own guard — the row vanishing between plan and commit. It is reached
 // directly because there is no way to interleave a delete into a synchronous
 // SQLite transaction from a test. A quiet `false` here used to commit the
-// drafts while dropping the bookkeeping (issue #97 review, finding 4).
+// drafts while dropping the bookkeeping.
 test("markWrittenInTx throws for a lost job instead of reporting false", async () => {
   const job = await runJob();
   const db = await getDb();

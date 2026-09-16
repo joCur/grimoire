@@ -26,7 +26,7 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   gar nichts.
 - **Eine leere Instanz** — keine Kampagne, der Normalfall einer frischen
   Installation — schaltet den Seed-Lauf ab: `test.use({ seed: { skip: true } })`
-  (Pfad 10, Issue #56).
+  (Pfad 10).
 - **Zusicherungen laufen über die API** (`api`-Helfer, s. u.); wo eine
   Zusicherung wirklich die Speicherung meint, über `db`.
 - **Adressen tragen keine Dateiendung** und ein Szenen-Segment ist die `id`.
@@ -40,7 +40,7 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
 
 ## Gruppe = Ort
 
-Die **Gruppe** einer Szene ist ihr `location` (#100), es gibt kein eigenes
+Die **Gruppe** einer Szene ist ihr `location`, es gibt kein eigenes
 Gruppenfeld. Für die Suite heißt das drei Dinge:
 
 - **Die Adressen der Beispielszenen folgen ihrem Ort, nicht dem Baum.** Beide
@@ -49,7 +49,7 @@ Gruppenfeld. Für die Suite heißt das drei Dinge:
   `01-salzhafen/bucht/smuggler-captured`. `hafen` ist keine Gruppe und kommt
   in keiner Zusicherung vor. `locations/bucht` gibt es im Baum nicht — der
   Import legt den Eintrag an, weil eine Szene ihn nennt („Referenzieren legt
-  an", #70), die Kampagne hat also **zwei** Orte.
+  an"), die Kampagne hat also **zwei** Orte.
 - **Eine veraltete Szenen-Adresse ist kein 404.** Sie nennt dieselbe id, der
   Server löst sie auf und antwortet mit der aktuellen Adresse (`path`); die
   App ersetzt die URL (ADR #17). `api.exists(<alte Adresse>)` ist deshalb
@@ -104,7 +104,7 @@ tests/*.e2e.ts           ein Spec pro kritischem Pfad (Zuordnung unten)
 **Isolation:** Jeder Test bekommt seine eigene Datenbank *und* seinen eigenen
 Server-Prozess auf eigenem Port (Bereich ab 3200, pro Worker getrennt).
 Zusicherungen sehen damit genau die Zeilen, die dieser Test geschrieben hat —
-inklusive des Generator-Jobs, der seit #23 selbst eine Zeile ist.
+inklusive des Generator-Jobs, der selbst eine Zeile ist.
 `examples/` wird nur kopiert, nie verändert. Boot plus Import kosten ~0,2 s.
 
 **Die zwei Zusicherungs-Helfer:**
@@ -157,14 +157,14 @@ Welche Antwort kommt, entscheidet ausschließlich der Prompt — der Stub hält
 keinen Zustand und kann mehrere Worker parallel bedienen:
 
 - ein Abschnitt „## Bestehender Eintrag" im Prompt → **Ergänzungs-Lauf**
-  (Issue #36). Die Antwort spiegelt den Eintrag zurück und hängt etwas an:
-  bei einem LEEREN NPC (den #70 beim Referenzieren angelegt hat) werden
+  (der Ergänzen-Lauf). Die Antwort spiegelt den Eintrag zurück und hängt etwas an:
+  bei einem LEEREN NPC (den das Referenzieren angelegt hat) werden
   `role`/`voice` gefüllt und ein Körper geschrieben, bei allem anderen kommt
   genau ein neuer `## If:`-Abschnitt dazu — jeder bestehende Block
   unverändert. Diese Verzweigung wird ZUERST geprüft: ein Szenen-Ergänzungs-
   Lauf trägt auch eine `chapter:`-Zeile.
 - der System-Prompt ist der **Gliederungs-Prompt** („System-Prompt:
-  Gliederung") → der Gliederungs-Aufruf eines Szenen-Laufs (#102). Die Antwort
+  Gliederung") → der Gliederungs-Aufruf eines Szenen-Laufs. Die Antwort
   ist die Szenenliste; jede Szene zitiert den ersten und letzten Satz des
   Quelltextes **wörtlich**, damit der Ausschnitt-Schnitt des Servers wirklich
   greift (eine Fehlzuordnung wäre eine Warnung in jedem Spec).
@@ -178,13 +178,13 @@ keinen Zustand und kann mehrere Worker parallel bedienen:
 - `E2E_SLOW` im Quelltext → der Stub antwortet **nie** (die Verbindung stirbt
   mit dem Server-Prozess, der gefragt hat). Das ist die einzige Möglichkeit,
   einen Job anzusehen, während er wirklich `running` ist — der Neustart-Fall
-  aus #23.
+  aus der Job-Zeile.
 - `E2E_INVALID` im Quelltext → Antwort, die die Validierung reißt (auch im
   Korrektur-Turn, der Lauf endet also in einem 422)
 - `E2E_TRUNCATED` im Quelltext → `finish_reason: "length"`
 - `E2E_THREE_SCENES` im Quelltext → die Gliederung hat **drei** Szenen und
   keine Vorschläge — die Form, in der man Teile einzeln fertig werden,
-  fehlschlagen und wiederholen sehen kann (#102)
+  fehlschlagen und wiederholen sehen kann
 - `E2E_PART_FAIL:<nonce>` → die **mittlere** der drei Szenen reißt ihre ganze
   erste Runde (Erstaufruf **und** Korrektur-Turn) und gelingt ab der zweiten.
   Erst das macht den Teil wirklich `failed` — ein Fehler, den der Korrektur-
@@ -236,7 +236,7 @@ mehrere Schreibwege auf ihm liegen:
 | 9 Eintrag bearbeiten | `tests/block-composer.e2e.ts`, `tests/entry-edit.e2e.ts`        |
 | 10 Kaltstart       | `tests/cold-start.e2e.ts`                                       |
 
-`tests/generator-restart.e2e.ts` ist die Neustart-Hälfte von Pfad 6 (#23) und
+`tests/generator-restart.e2e.ts` ist die Neustart-Hälfte von Pfad 6 und
 braucht darum, wie der Seed-Spec unten, zwei Server hintereinander auf
 DEMSELBEN Datenverzeichnis: der erste startet einen Lauf bzw. bringt ihn zu
 Ende, der zweite ist der Neustart. Ein **fertiger** Job ist danach vollständig
@@ -245,7 +245,7 @@ da (Ergebnis, Review-Edits) und wird übernommen; ein **laufender** steht als
 statt als endloser Spinner.
 
 `tests/generator-pipeline.e2e.ts` ist die **Pipeline-Hälfte** von Pfad 6
-(#102): ein Lauf mit drei Szenen, von denen eine fehlschlägt — die anderen
+die Pipeline: ein Lauf mit drei Szenen, von denen eine fehlschlägt — die anderen
 zwei sind prüfbar und einzeln übernehmbar, während der defekte Teil seinen
 Fehlertext und sein eigenes „Erneut versuchen" trägt; danach sind alle drei da
 und „Rest übernehmen" räumt den Lauf ab. Dazu „Verwerfen" mitten im Lauf und
@@ -254,7 +254,7 @@ Teile bleiben, der Teil in Flug wird `failed` und ist auf dem neuen Prozess
 wieder startbar, weil die Gliederung mit der Zeile zurückkommt. Die Gliederung
 selbst kommt in keiner Zusicherung vor — sie wird dem Nutzer nie gezeigt.
 
-Seit Issue #97 deckt `tests/generator.e2e.ts` zusätzlich den **Prüfzustand**
+`tests/generator.e2e.ts` deckt zusätzlich den **Prüfzustand**
 ab: Entwurf bearbeiten → Seite verlassen → zurück → der Text ist da; einen
 vorgeschlagenen Eintrag entscheiden → Reload → die Entscheidung steht; eine
 Szene einzeln übernehmen („Diesen übernehmen") → der Rest bleibt prüfbar und
@@ -265,8 +265,8 @@ bleibt als Eintrag stehen. `tests/augment.e2e.ts` prüft dieselbe Persistenz
 auf Block-Ebene — eine Block-Entscheidung überlebt den Reload.
 
 `tests/augment.e2e.ts` ist die Ergänzungs-Hälfte von Pfad 6 („Mit KI
-ergänzen", Issue #36): derselbe Lauf auf einen Eintrag, den es schon gibt.
-Der Spec belegt AK5 — leerer #70-NPC → ergänzen → Löcher gefüllt, während
+ergänzen"): derselbe Lauf auf einen Eintrag, den es schon gibt.
+Der Spec belegt: ein leerer NPC → ergänzen → Löcher gefüllt, während
 `name` und `status` (beide gefüllt) per Default NICHT ersetzt werden;
 vorbereitete Szene → ein neuer Handlungsstrang als zusätzlicher Block,
 jeder bestehende Block Zeichen für Zeichen gleich, `status: ready` bleibt;
@@ -279,7 +279,7 @@ rendern.
 
 Dazu ein Spec, der auf keinem der zehn Pfade liegt, sondern auf der Naht
 darunter: `tests/seed.e2e.ts` (Nachfolger von `first-migration.e2e.ts`, Issue
-#79 AK6). Er belegt zweierlei — dass eine frische Instanz **leer** startet
+dem Seed-Werkzeug). Er belegt zweierlei — dass eine frische Instanz **leer** startet
 (kein Boot-Import mehr) und dass `grimoire seed` den Markdown-Baum vollständig
 einliest (Tree, Szenenkörper, NPC, Session, Inbox, Glossar, sauberer Report
 auf stdout), während ein **zweiter** Seed-Lauf ein No-op ist: gleiche Marker,
@@ -289,21 +289,21 @@ darum `startGrimoireServer`/`seedCampaigns` direkt statt der
 
 Auf Pfad 7 teilen sich zwei Specs die Arbeit: `status-control.e2e.ts` deckt den
 Status-Regler ab (ein Schlüssel, Konflikt über das Poll-Fenster),
-`properties-form.e2e.ts` den „Eigenschaften"-Dialog von #42 (alle Felder einer
+`properties-form.e2e.ts` den „Eigenschaften"-Dialog (alle Felder einer
 Entitätsart, Chips/Referenzen/Select, Leeren löscht den Schlüssel, und der
 deterministische 409, weil der Dialog sein Wächter-Token beim Öffnen
 einfriert). Der
 Dialog berührt zusätzlich Pfad 2 (die Leseansicht zeigt die neuen Werte sofort)
 und Pfad 8 (Formular bei 390px) — beides steht in demselben Spec. Seit
-Issue #100 prüft `properties-form.e2e.ts` dort auch den UMZUG: `location`
+`properties-form.e2e.ts` prüft dort auch den UMZUG: `location`
 ändern verschiebt die Szene, die URL wird ersetzt, die Kapitelübersicht
 sortiert um, die alte Adresse zeigt weiter auf dieselbe Szene und das
 Session-Log bleibt gültig (es referenziert über ids). Freitext in `location`
 ist dort ein 400 mit `code: "location_not_an_id"` — die Gegenprobe steht in
 `scene-rendering.e2e.ts`.
 
-Auf den Pfaden 2 und 7 liegt zusätzlich `rename.e2e.ts` (#30, erweitert um die
-Usage-Vorschau aus #60, Einstieg seit #77 über „id ändern" im Fußbereich des
+Auf den Pfaden 2 und 7 liegt zusätzlich `rename.e2e.ts` (erweitert um die
+Usage-Vorschau, Einstieg über „id ändern" im Fußbereich des
 Eigenschaften-Dialogs — der Header-Knopf ist weg): die zweistufige
 Bestätigung („Vorschau" ist ein `dryRun` und schreibt nichts), die deutsche
 Usage-Zusammenfassung („2 Verwendungen: 1 Szene, 1 Beziehung" — die eigene
@@ -312,26 +312,26 @@ Kaskade selbst — Szenen-`npcs:`, die `## Beziehungen`-Gegenzeile, der Umzug de
 Leseansicht, und `GET /usage` auf der neuen id gegen 404 auf der alten.
 
 Auf Pfad 9 teilen sich zwei Specs die zwei Oberflächen von „Bearbeiten", die
-sich seit #43 EINEN Entwurf teilen: `block-composer.e2e.ts` deckt den
+sich EINEN Entwurf teilen: `block-composer.e2e.ts` deckt den
 Block-Composer ab — Standardmodus, eine Karte pro Block, Anlegen/Verschieben,
 Kinder eines `## If:`-Abschnitts, unbekannte Konstrukte als Roh-Block, die
 Save-Sperre bei einem `##` in einem If-Kind (Hinweis an der Karte, „Speichern"
 aus, Datei unverändert), der 409 mit offenem Blockformular und die Bedienung
 bei 390px. `entry-edit.e2e.ts` deckt
-den „Markdown"-Fallback ab: die Textarea aus #39, ihre „Vorschau" (die es nur dort
+den „Markdown"-Fallback ab: die Textarea, ihre „Vorschau" (die es nur dort
 gibt), die Kinds mit und ohne Editor und die Verlustpfade (Navigation,
 fehlgeschlagener Refetch, Status-Regler daneben). Jeder Test dort betritt den
 Editor über `openMarkdownEditor` — erst „Bearbeiten", dann der Umschalter „Markdown" —,
-weil „Bearbeiten" allein seit #43 im Composer landet. Ein Test dort deckt
-zusätzlich Issue #100 ab: eine Szene, deren `location` sich geändert hat,
+weil „Bearbeiten" allein im Composer landet. Ein Test dort deckt
+zusätzlich den Umzug ab: eine Szene, deren `location` sich geändert hat,
 wird über ihre ALTE Adresse geöffnet, bearbeitet und gespeichert — der
 Editor arbeitet nur am Körper, also ist der Umzug selbst Pfad 7, aber ein
 Speichern über eine veraltete Adresse darf nicht ins Leere laufen.
 
-Pfad 10 (`cold-start.e2e.ts`, #56) ist der einzige Pfad, der OHNE Seed läuft:
+Pfad 10 (`cold-start.e2e.ts`) ist der einzige Pfad, der OHNE Seed läuft:
 `test.use({ seed: { skip: true } })` startet den Server auf einem leeren
 Datenverzeichnis, der Importer läuft nie — genau das, was eine frische
-Installation seit #79 ist. Der Spec legt darum alles selbst an (Kampagne →
+Installation ist. Der Spec legt darum alles selbst an (Kampagne →
 Kapitel → Szene → Text → Session) und baut seinen `api`-Helfer mit
 `apiFor(server.url, id)`, weil die Kampagnen-id erst zur Laufzeit existiert.
 Dazu die beiden Listen-Einstiege („NPC/Ort anlegen") mit der
@@ -347,9 +347,9 @@ Gedächtnis: bei einer Textänderung in der App wandert der Spec mit.
 
 Ein Spec deckt auch spätere Scheiben auf seinem Pfad ab, nicht nur die Scheibe,
 die ihn angelegt hat: `tests/pool.e2e.ts` prüft zusätzlich Gruppenkopf-Namen,
-die Topbar-Navigation und den Kampagnen-Metadaten-Dialog (#34),
+die Topbar-Navigation und den Kampagnen-Metadaten-Dialog,
 `tests/review.e2e.ts` den Szenentitel im Quellchip, und
-`tests/search.e2e.ts` die Frische-Zusicherung des Cutovers (#57 AK5): was die
+`tests/search.e2e.ts` die Frische-Zusicherung des Cutovers: was die
 APP gerade geschrieben hat, findet ⌘K sofort — der Index wandert in derselben
 Transaktion mit, es gibt keinen Watcher mehr, auf den zu warten wäre.
 

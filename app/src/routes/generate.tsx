@@ -1,4 +1,4 @@
-// "/:campaign/generate" — the LLM generator (issue #12) per the design
+// "/:campaign/generate" — the LLM generator per the design
 // reference's GENERATOR section, four states in one route:
 //
 //   input   target chapter (existing chip or the "Neues Kapitel" flow with
@@ -10,7 +10,7 @@
 //           accepted/rejected one by one. NOTHING is written yet.
 //   done    the paths POST /generate/apply wrote — all as drafts
 //
-// Since issue #21 the route has TWO modes, picked by the quiet chip row above
+// The route has TWO modes, picked by the quiet chip row above
 // the input form: „Szenen" (scene drafts for a chapter) and „NPC" (one npc
 // entry from source material). Both run through the same four states, the same
 // background job (there is one generator job per campaign, whatever its kind)
@@ -19,15 +19,15 @@
 // trivia: a restored job decides it (job.kind), so a reload during an NPC run
 // comes back in NPC mode.
 //
-// Since issue #19 the run is a background JOB on the server and this route
+// The run is a background JOB on the server and this route
 // is only its window: on mount it asks GET …/generate/job and restores
 // whatever it finds (running -> working with ~3s polling, done -> review
 // incl. the edits kept in the job, failed -> the error block). That is the
 // whole point of the ticket: a browser-back gesture, a reload or a closed
 // tab may not destroy minutes of generation any more.
 //
-// A failed run stays in the input state and shows the server's 422 in full
-// (issue #18): the message — read in the UI language out of the job's error
+// A failed run stays in the input state and shows the server's 422 in full:
+// the message — read in the UI language out of the job's error
 // CODE (i18n/server-errors.ts; for a truncated reply the one naming the token
 // cap) — the validation errors when there are any, the last raw reply behind a
 // collapsed „Rohantwort anzeigen“, and the run's token spend.
@@ -163,7 +163,7 @@ export function GenerateRoute() {
     enabled: campaign !== "",
     retry: false,
   });
-  // Same purpose for the campaign knowledge (issue #53 AK5) — the hint names
+  // Same purpose for the campaign knowledge — the hint names
   // the NUMBER of entries, so this reads the list, not an entry. The same
   // query key the settings editor writes, so a rule saved there shows up here
   // without a reload.
@@ -180,7 +180,7 @@ export function GenerateRoute() {
   // live nav and the review use as well.
   const defaultChapter = (chapters.find((c) => c.status === "active") ?? chapters[0])?.id;
 
-  // Which run kind the form is for (issue #21). Local — until a job says
+  // Which run kind the form is for. Local — until a job says
   // otherwise (see the seeding block below).
   const [mode, setMode] = useState<GenerateMode>("scene");
 
@@ -189,7 +189,7 @@ export function GenerateRoute() {
     picked ?? (defaultChapter === undefined ? { kind: "new" } : { kind: "chapter", id: defaultChapter });
   const [newTitle, setNewTitle] = useState("");
   const [sourceText, setSourceText] = useState("");
-  // The chapter id of the "Neues Kapitel" flow (issue #22). undefined means
+  // The chapter id of the "Neues Kapitel" flow. undefined means
   // "the DM has not touched the field" — then the suggestion follows the
   // title. A manual edit pins the value; emptying the field maps back to
   // undefined, so a cleared field starts following the title again.
@@ -200,7 +200,7 @@ export function GenerateRoute() {
   const newIdError = chapterIdError(newIdInput, t);
   // A typed id may name a chapter that is already there: then this is NOT a
   // new chapter — the drafts go into the existing directory and its
-  // chapter entry stays untouched (#12 semantics), so neither the newChapter
+  // chapter entry stays untouched, so neither the newChapter
   // flag nor a chapterTitle travels.
   const newIdExists = newIdError === undefined && chapterIds.includes(newIdInput);
   const creatingChapter = target.kind === "new" && !newIdExists;
@@ -216,7 +216,7 @@ export function GenerateRoute() {
   // on its own.
   const showIdError = newIdError !== undefined && newIdInput !== "";
 
-  // The NPC mode's own two fields (issue #21): its own source buffer, so
+  // The NPC mode's own two fields: its own source buffer, so
   // switching modes never eats what the DM pasted, and the optional id.
   const [npcSource, setNpcSource] = useState("");
   const [npcId, setNpcId] = useState("");
@@ -231,7 +231,7 @@ export function GenerateRoute() {
   const [editing, setEditing] = useState<Record<string, boolean>>({});
   const [written, setWritten] = useState<string[]>();
 
-  // The server's job IS the state of a run (issue #19).
+  // The server's job IS the state of a run.
   //
   // `awaitingJob` is on from the click on „Entwürfe generieren" until the job
   // of THAT run is readable — it carries the id that was in the cache at the
@@ -249,7 +249,7 @@ export function GenerateRoute() {
   const jobQuery = useGenerateJob(campaign, { expectJob: awaitingJob !== undefined });
   const job = jobQuery.data ?? null;
   const jobId = job?.id ?? null;
-  // Every review change goes back to the job (issue #97): text debounced,
+  // Every review change goes back to the job: text debounced,
   // decisions immediately, both flushed before the view can go away.
   const review = useJobReview(campaign, job);
   const reviewState = reviewOf(job);
@@ -269,7 +269,7 @@ export function GenerateRoute() {
     setSeeded({ campaign, jobId });
     setEdits({});
     setEditing({});
-    // A restored run decides the mode (issue #21) — its result belongs to its
+    // A restored run decides the mode — its result belongs to its
     // kind. No job leaves the DM's choice alone.
     setMode((current) => restoredMode(current, job));
     if (previous === undefined) setWritten(undefined);
@@ -281,7 +281,7 @@ export function GenerateRoute() {
   // Which result field to read is the job's kind, never the local mode: a
   // done job of the other kind must not be rendered as this one's.
   const jobKind = jobMode(job);
-  // A pipelined run (issue #102) has a result WHILE it runs: every finished
+  // A pipelined run has a result WHILE it runs: every finished
   // part is already in it, so the review fills up instead of appearing whole.
   const result =
     (job?.status === "done" || (job?.status === "running" && hasReviewableParts(job))) &&
@@ -338,7 +338,7 @@ export function GenerateRoute() {
   });
 
   /**
-   * „Übernehmen" (issue #97). ONE endpoint for both buttons and both modes:
+   * „Übernehmen". ONE endpoint for both buttons and both modes:
    * without a selection it writes everything that is still open (the
    * accepted suggested entries included, an undecided one not — the rule
    * from before this ticket); with one it writes exactly that part and
@@ -350,7 +350,7 @@ export function GenerateRoute() {
       // Text the DM is still typing must be part of what gets written — and
       // AWAITED, not merely started: the server reads `draftEdits` when the
       // accept arrives, so a patch still in flight would land after the read
-      // and be deleted together with the job (issue #97 review, finding 1).
+      // and be deleted together with the job.
       await review.flush();
       // The flush moved the rev; the guard has to carry the one that is
       // current now, not the one this render closed over.
@@ -371,7 +371,7 @@ export function GenerateRoute() {
       });
     },
     onError: (error) => {
-      // The accept carries the review rev (issue #97 review, finding 3): a
+      // The accept carries the review rev: a
       // 409 `rev_conflict` means another tab decided in between and NOTHING
       // was written, so the job is re-read and the quiet conflict line says
       // so — the same protocol the review patch follows.
@@ -380,9 +380,9 @@ export function GenerateRoute() {
         return;
       }
       // Any OTHER 409 says the run moved on: a part that is not open any
-      // more, a run that has produced nothing yet (issue #102 AK2 allows an
-      // accept while it is still running, so „nichts fertig" is now a real
-      // answer). Nothing was written — re-read and say so in one line.
+      // more, a run that has produced nothing yet (an accept while it is
+      // still running is allowed, so „nichts fertig" is a real answer).
+      // Nothing was written — re-read and say so in one line.
       if (error instanceof ApiError && error.status === 409) {
         void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
       }
@@ -391,8 +391,7 @@ export function GenerateRoute() {
       const addresses = Object.values(data.written);
       // ONLY the answer decides: a bulk accept whose rest did not settle the
       // run leaves the job there, and marking it dropped up front turned a
-      // job that is still open into one that „vanished" (issue #97 review,
-      // finding 7).
+      // job that is still open into one that „vanished".
       if (data.jobDeleted) {
         droppedRef.current = true;
         setWritten((prev) => [...(prev ?? []), ...addresses]);
@@ -405,7 +404,7 @@ export function GenerateRoute() {
 
   // „Verwerfen": drops the server's job and with it the OPEN REST only —
   // parts a partial accept already wrote are entries now, not a job
-  // (issue #97, Lead-Entscheid).
+  // (Lead-Entscheid).
   const discard = useMutation({
     mutationFn: () => deleteGenerateJob(campaign),
     onMutate: () => {
@@ -429,7 +428,7 @@ export function GenerateRoute() {
    * The part „Erneut versuchen" handed the focus to, until the focus is
    * actually sitting on its card.
    *
-   * Focusing once in `onSuccess` was not enough (issue #102 review): the
+   * Focusing once in `onSuccess` was not enough: the
    * button unmounts the moment the part goes `running`, and the status card
    * itself unmounts the moment the part is `done` and becomes its draft card
    * — with a fast model both happen within a poll of the click, so the focus
@@ -440,7 +439,7 @@ export function GenerateRoute() {
    */
   const focusPart = useRef<string | undefined>(undefined);
 
-  /** „Erneut versuchen" for one failed part (issue #102). */
+  /** „Erneut versuchen" for one failed part. */
   const retry = useMutation({
     mutationFn: (key: string) => retryJobPart(campaign, job?.id ?? "", key),
     onSuccess: (updated, key) => {
@@ -550,8 +549,8 @@ export function GenerateRoute() {
   // A failed job carries the same body the endpoint used to answer with:
   // the last raw reply and (when the endpoint reports usage) what the run
   // cost — a truncated reply additionally carries an error CODE instead of a
-  // validation error list (issue #18), and serverErrorBodyMessage turns that
-  // code into this language's sentence (issue #69).
+  // validation error list, and serverErrorBodyMessage turns that
+  // code into this language's sentence.
   // Shown only in ITS OWN mode: after switching to the other mode the block
   // would talk about a run this form cannot repeat.
   const failed = jobKind === mode ? jobErrorBody(job) : undefined;
@@ -584,7 +583,7 @@ export function GenerateRoute() {
               {t(mode === "npc" ? "generate.input.lead.npc" : "generate.input.lead.scene")}
             </p>
 
-            {/* The mode switch (issue #21): two quiet chips, same vocabulary
+            {/* The mode switch: two quiet chips, same vocabulary
                 as the chapter chips below. Switching drops a stale error of
                 the other mode's last attempt, nothing else — both modes keep
                 their own source buffer. */}
@@ -698,7 +697,7 @@ export function GenerateRoute() {
                 </div>
 
                 {/* The "Neues Kapitel" flow: display name + the directory name.
-                    The id used to be a read-only preview; since issue #22 it is
+                    The id used to be a read-only preview; it is
                     the field that decides where the drafts land — the DM owns
                     it, because renaming a chapter later is expensive (ids are
                     stable references). The title is only the display name and
@@ -735,7 +734,7 @@ export function GenerateRoute() {
                       type="text"
                       value={newIdInput}
                       // Emptying the field is not a value — it hands the field
-                      // back to the title (issue #22 AK4).
+                      // back to the title.
                       onChange={(e) =>
                         setManualId(e.target.value === "" ? undefined : e.target.value)
                       }
@@ -791,7 +790,7 @@ export function GenerateRoute() {
             {/* Both modes send the same context along (npc/location names,
                 the campaign knowledge and the glossary, generator/README.md
                 step 1). The last two are LINKS since they became pages of
-                their own (issue #53, PO feedback on PR #87): this line is
+                their own (PO feedback): this line is
                 exactly where the DM notices a rule is missing, and it should
                 be one click from here to the page that fixes it. */}
             <p className="mt-2.5 mb-[26px] flex flex-wrap items-baseline gap-1.5 text-[12px] leading-[1.5] text-faint">
@@ -830,7 +829,7 @@ export function GenerateRoute() {
 
             {/* A job that vanished (applied elsewhere, discarded in another
                 tab) — said once, quietly, instead of a spinner that never
-                ends. Since issue #23 a restart is NOT one of the reasons any
+                ends. A restart is NOT one of the reasons any
                 more: the job comes back, a running one as `failed` with its
                 own message. The hint keeps the restart as a parenthetical
                 guess because that is still the likeliest cause for a DM. */}
@@ -917,7 +916,7 @@ export function GenerateRoute() {
         {phase === "working" && <Working />}
 
         {/* The review of a SCENE run — gated on the phase and the job's kind,
-            never on a result being there (issue #102 review): in a pipelined
+            never on a result being there: in a pipelined
             run the parts are the review's spine and the drafts only fill it
             in, so a run whose sole reviewable part FAILED has something to
             show (its error and its „Erneut versuchen") while `result` is
@@ -935,8 +934,8 @@ export function GenerateRoute() {
                   out three times per poll. */}
               <span aria-live="polite" className="text-[13px] text-muted-foreground">
                 {/* While the RUN is still going its own progress is the more
-                    useful number — „2 von 3 Szenen fertig" (issue #102);
-                    once it is finished, the review's is (issue #97). */}
+                    useful number — „2 von 3 Szenen fertig";
+                    once it is finished, the review's is. */}
                 {runProgress ??
                   (progress.written === 0
                     ? t("generate.review.pending", {
@@ -954,10 +953,10 @@ export function GenerateRoute() {
             >
               {t("generate.review.lead")}
             </p>
-            {/* What the run cost — quiet, but never invisible (issue #18).
+            {/* What the run cost — quiet, but never invisible.
                 A pipelined run reports its own totals, summed over every part
                 and every correction turn, and counts CALLS rather than
-                attempts (issue #102 AK5). */}
+                attempts. */}
             {(runCost ?? resultUsage) !== undefined && (
               <p className="mb-[22px] text-[12px] text-faint">{runCost ?? resultUsage}</p>
             )}
@@ -983,7 +982,7 @@ export function GenerateRoute() {
 
             <NamingHints hints={result?.namingHints} t={t} />
 
-            {/* The parts in OUTLINE order (issue #102): a finished one is its
+            {/* The parts in OUTLINE order: a finished one is its
                 draft, an open one a status card, a failed one its error plus
                 „Erneut versuchen". A run without parts — an older job — falls
                 back to the plain draft list below. */}
@@ -1110,7 +1109,7 @@ export function GenerateRoute() {
                   );
                 })}
                 {/* Stubs no entry part claims: a run whose outline proposed
-                    nothing but whose SCENE replies carried stubs (the pre-#102
+                    nothing but whose SCENE replies carried stubs (the earlier
                     shape, and any older job), and a stub whose part id drifted.
                     They used to be invisible as soon as the run had any entry
                     part at all — proposed, generated, and never shown. */}
@@ -1165,7 +1164,7 @@ export function GenerateRoute() {
             <div className="flex flex-wrap items-center gap-2.5 border-t border-border pt-[18px]">
               {/* „Alle übernehmen" writes what is LEFT — the count follows
                   the partial accepts instead of promising the whole run
-                  again (issue #97). */}
+                  again. */}
               <Button
                 type="button"
                 disabled={apply.isPending || openScenes.length + openAcceptedStubs.length === 0}
@@ -1194,7 +1193,7 @@ export function GenerateRoute() {
           </>
         )}
 
-        {/* The NPC review (issue #21): one card, the same warnings/usage/cost
+        {/* The NPC review: one card, the same warnings/usage/cost
             lines and the same two actions — there is nothing to decide per
             item, so no stub rows and no count in the apply button. */}
         {phase === "review" && npcResult !== undefined && (
@@ -1362,7 +1361,7 @@ function stubReason(scenes: GenerateResult["scenes"], t: Translate): string {
 }
 
 /**
- * The naming check's findings (issue #53 AK3) — the ONE block on this page
+ * The naming check's findings — the ONE block on this page
  * that is not the model's voice but the server's.
  *
  * It is deliberately QUIETER than the warnings above it: a hairline box, no
@@ -1415,7 +1414,7 @@ function NamingHints({ hints, t }: { hints: NamingHint[] | undefined; t: Transla
 
 /**
  * The working state: spinner + the correction-turn explainer + the one fact
- * that matters since issue #19 — the run is on the server, so the tab may
+ * that matters — the run is on the server, so the tab may
  * go. No number of attempts here: LLM_CORRECTION_TURNS is a server setting
  * (default 1) and a hardcoded "max. 2" would be a lie in half the setups.
  */
@@ -1448,7 +1447,7 @@ function Working() {
 }
 
 /**
- * One part of a pipelined run that has no draft to show yet (issue #102):
+ * One part of a pipelined run that has no draft to show yet:
  * waiting, being written, or failed.
  *
  * It is deliberately the SAME footprint as a draft card, in the same place in
@@ -1492,7 +1491,7 @@ function PartCard({
       ref={cardRef}
       // Focusable only programmatically: „Erneut versuchen" unmounts its own
       // button, so the retry hands the focus to the card instead of letting
-      // it fall to `body` (issue #102 review). Not a live region — the review
+      // it fall to `body`. Not a live region — the review
       // has exactly one, on its progress line.
       tabIndex={-1}
       className={cn(
@@ -1558,8 +1557,7 @@ function PartCard({
               ))}
             </ul>
           )}
-          {/* WHAT came back — the same disclosure the whole-run failure uses
-              (issue #18). The part carries its own last raw reply. */}
+          {/* WHAT came back — the same disclosure the whole-run failure uses. The part carries its own last raw reply. */}
           {part.rawReply !== undefined && part.rawReply !== "" && (
             <details className="mt-2.5">
               <summary className="cursor-pointer text-[12.5px] text-body-secondary hover:text-foreground">
@@ -1619,7 +1617,7 @@ function SceneCard({
   properties: Record<string, unknown>;
   markdown: string;
   tree: CampaignTree | undefined;
-  /** What became of this scene (issue #97) — written parts are read-only. */
+  /** What became of this scene — written parts are read-only. */
   state: PartState;
   /** The address it landed at, once it is written. */
   writtenAt: string | undefined;
@@ -1628,7 +1626,7 @@ function SceneCard({
   /**
    * Registers this card as what represents its pipeline part right now — the
    * retry's focus follows the part across the swap from status card to draft
-   * card (issue #102 review).
+   * card.
    */
   cardRef?: (el: HTMLElement | null) => void;
   onToggleEditing: () => void;
@@ -1640,7 +1638,7 @@ function SceneCard({
   const t = useT();
   const title = fmString(properties.title) ?? path;
   const status = fmString(properties.status) ?? "draft";
-  // Show the status LABEL, never the raw frontmatter value (#88); unknown
+  // Show the status LABEL, never the raw frontmatter value; unknown
   // values still degrade to their verbatim text inside the helper.
   const statusLabel = sceneStatusMeta(status, t).label;
   const isContingency = fmString(properties.type) === "contingency";
@@ -1666,7 +1664,7 @@ function SceneCard({
         <span className="flex-none rounded-full border border-input px-[9px] py-px text-[11.5px] text-dim">
           {statusLabel}
         </span>
-        {/* A written part is not editable here any more (issue #97, Nicht-
+        {/* A written part is not editable here any more (Nicht-
             Ziele): it is an entry now, and the normal editor owns it. */}
         {!written && (
           <MarkdownEditorToggle
@@ -1725,7 +1723,7 @@ function SceneCard({
 }
 
 /**
- * What can be done with ONE part of a run (issue #97): write it on its own,
+ * What can be done with ONE part of a run: write it on its own,
  * drop it, or — once it is written — open the entry it became.
  *
  * The row is deliberately the same under a scene card and under a suggested
@@ -1791,11 +1789,11 @@ function PartActions({
 }
 
 /**
- * The generated NPC entry as a card (issue #21): the generator's own card
+ * The generated NPC entry as a card: the generator's own card
  * chrome (title, status pill, edit toggle, mono target path) with the NPC
  * facts of the reading view above the body — role, voice, appearance,
  * quickstats chips, statblock reference, in the same vocabulary and with the
- * same helpers as EntityArticle's NPC header (issue #26). The presentation is
+ * same helpers as EntityArticle's NPC header. The presentation is
  * rebuilt here rather than reused wholesale on purpose: EntityArticle takes a
  * EntryResponse of an entry that EXISTS, and nothing is written yet.
  *
@@ -1970,7 +1968,7 @@ function StubRow({
         </div>
       ) : (
         <div className="flex flex-none items-center gap-2">
-          {/* An ACCEPTED entry can be written on its own (issue #97) — the
+          {/* An ACCEPTED entry can be written on its own — the
               rest of the run stays reviewable. */}
           {decision === "accepted" && (
             <Button

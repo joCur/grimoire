@@ -1,4 +1,4 @@
-// The scene-status control (issue #28): the status display itself becomes the
+// The scene-status control: the status display itself becomes the
 // regler. Two densities, one menu — the pill in the scene reading view and
 // the bare dot+label of a pool row; both keep the quiet look and only grow a
 // small chevron on hover/focus.

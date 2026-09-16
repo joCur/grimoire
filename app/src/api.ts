@@ -72,7 +72,7 @@ export function fetchCampaigns(): Promise<CampaignSummary[]> {
 }
 
 /**
- * The instance settings (issue #69) — today just the UI language. Server
+ * The instance settings — today just the UI language. Server
  * state, deliberately not localStorage (quality floor), so the choice survives
  * a reload and is the same in the next browser.
  */
@@ -112,11 +112,11 @@ export function fetchSearch(campaign: string, q: string): Promise<SearchResponse
 }
 
 /**
- * Campaign version counter (issue #8) — bumped by every server-side write, in
+ * Campaign version counter — bumped by every server-side write, in
  * the same transaction as the change (DECISIONS #9/#13); polled by
  * useCampaignVersion.
  *
- * `build` (issue #24) is the server's build id, riding along on this poll so
+ * `build` is the server's build id, riding along on this poll so
  * the handshake costs no extra request. Optional in the type because an older
  * server (or a stale tab talking to one) may not send it.
  */
@@ -130,7 +130,7 @@ export function fetchVersion(campaign: string): Promise<VersionResponse> {
 }
 
 /**
- * The campaign's glossary as a LIST of terms (issue #57): since the SQLite
+ * The campaign's glossary as a LIST of terms: since the SQLite
  * migration it is a table, not a markdown blob. The reading view still opens
  * `glossary` as an entry — that rendering comes from these same rows —
  * but anything that wants the terms themselves reads this.
@@ -142,7 +142,7 @@ export function fetchGlossary(campaign: string): Promise<GlossaryResponse> {
 /**
  * Replace the whole glossary. The list is short and is edited as a whole, so
  * the ARRAY ORDER is the stored order — that is also how the settings page
- * reorders (issue #53) — and `rev` is the guard token of the list, read from
+ * reorders — and `rev` is the guard token of the list, read from
  * the `fetchGlossary` the editor is showing. A stale one answers 409.
  */
 export function putGlossary(
@@ -157,7 +157,7 @@ export function putGlossary(
 }
 
 /**
- * The campaign's KNOWLEDGE the generator has to apply (issue #53) — naming
+ * The campaign's KNOWLEDGE the generator has to apply — naming
  * conventions, facts, style rules. Same whole-list-plus-`rev` contract as the
  * glossary, on purpose: the DM edits both on the same page.
  */
@@ -177,18 +177,18 @@ export function putKnowledge(
   });
 }
 
-// --- write endpoints (session/log, issue #9) --------------------------------
+// --- write endpoints (session/log) -------------------------------------------
 
 /**
- * Set/delete properties keys of one entry (issue #5 endpoint, used by the
- * scene-status control of issue #28). `patch` is flat: a value sets the key,
+ * Set/delete properties keys of one entry (used by the
+ * scene-status control). `patch` is flat: a value sets the key,
  * `null` deletes it. `rev` is the optimistic-concurrency token and must be
  * the one from the EntryResponse the UI is showing — when the entry changed on
  * disk since, the server answers 409 with the current `rev` in
  * `ApiError.details` and writes nothing.
  *
  * `locationName` is the only field that is not a properties key: the display
- * name for the Ort a scene's `location` creates (issue #100 follow-up — the
+ * name for the Ort a scene's `location` creates (the
  * properties form slugs free text into `location` and sends the typed text
  * here). The server applies it when it INSERTS the row and ignores it
  * otherwise, so an existing location is never renamed through a scene.
@@ -213,8 +213,8 @@ export async function patchProperties(
 }
 
 /**
- * Replace the markdown BODY of one entry, properties untouched (issue #15 —
- * the reading view's edit mode). `body` is what GET /entry hands out: the file
+ * Replace the markdown BODY of one entry, properties untouched (the
+ * reading view's edit mode). `body` is what GET /entry hands out: the file
  * without its properties block. `rev` is the same optimistic-concurrency
  * token as above and must come from the EntryResponse the editor was seeded
  * from — on a mismatch the server answers 409 with the current `rev` in
@@ -248,7 +248,7 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
 }
 
 /**
- * The ACTIVE session (issue #40), or null when none is running — the server's
+ * The ACTIVE session, or null when none is running — the server's
  * 404 is the normal "no session" answer, never an error state in the UI.
  *
  * The app must NOT derive the session from its own date: a session that
@@ -283,7 +283,7 @@ async function fetchSession(
 }
 
 /**
- * Start a NEW session (issue #58): "beenden" is final, so a start after an
+ * Start a NEW session: "beenden" is final, so a start after an
  * ended session creates the next one of the day (`<date>-2`, `-3` …) with an
  * empty log. Idempotent only while today's session is the RUNNING one; the
  * single 409 left is `session_running` — an OLDER session is still open (see
@@ -299,7 +299,7 @@ export function endSession(campaign: string): Promise<EntryResponse> {
 }
 
 /**
- * Pause the ACTIVE session (issue #40 AK8): the server opens a `pauses`
+ * Pause the ACTIVE session: the server opens a `pauses`
  * interval — the runtime really stops — and writes the `— Pause` log line.
  * Idempotent; 404 when no session is running.
  */
@@ -309,7 +309,7 @@ export function pauseSession(campaign: string): Promise<EntryResponse> {
 
 /**
  * "Weiter" — close the open pause interval and log `— Weiter`. It ends a
- * PAUSE; an ENDED session is never re-opened (issue #58).
+ * PAUSE; an ENDED session is never re-opened.
  */
 export function continueSession(campaign: string): Promise<EntryResponse> {
   return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/session/continue`);
@@ -317,7 +317,7 @@ export function continueSession(campaign: string): Promise<EntryResponse> {
 
 /**
  * DELETE the active session — the undo of a mis-clicked "Session
- * starten" (issue #40 AK7). Only an EMPTY session may be discarded; the
+ * starten". Only an EMPTY session may be discarded; the
  * server answers 409 (`code: "session_not_empty"`) otherwise and 404 when
  * nothing is running. Returns the path of the entry that is gone.
  */
@@ -326,7 +326,7 @@ export function discardSession(campaign: string): Promise<{ path: string }> {
 }
 
 /**
- * Append a line to the campaign's inbox (mobile capture, issue #11);
+ * Append a line to the campaign's inbox (mobile capture);
  * the server creates the session on the first log entry.
  */
 export function appendInbox(campaign: string, text: string): Promise<EntryResponse> {
@@ -349,7 +349,7 @@ export function appendLog(
   );
 }
 
-// --- review actions (issue #10) ---------------------------------------------
+// --- review actions ----------------------------------------------------------
 
 /**
  * Mark a log line as reviewed: the server adds the short hash of the RAW
@@ -380,7 +380,7 @@ export function adoptThread(
 
 /**
  * Create the npc entry for `id` (status: unknown, note under `## Notizen`) —
- * or answer with the entry the id already has (issue #70). Idempotent: the
+ * or answer with the entry the id already has. Idempotent: the
  * goal is "this id has an entry", so an existing one is LINKED, never
  * overwritten, and an empty one (a reference created it) is filled in.
  */
@@ -406,7 +406,7 @@ export function markInboxLineDone(campaign: string, line: string): Promise<Entry
   return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/review/inbox-done`, { line });
 }
 
-// --- creating content (issue #56) --------------------------------------------
+// --- creating content --------------------------------------------------------
 //
 // Five POSTs with one shape: the DM types a NAME, the server derives the id
 // (the shared slug rule, `@grimoire/shared/slug`) and answers with the created
@@ -470,7 +470,7 @@ export function createScene(
   });
 }
 
-/** A new NPC entry — an EMPTY one a reference left behind is filled (#70). */
+/** A new NPC entry — an EMPTY one a reference left behind is filled. */
 export function createNpc(
   campaign: string,
   input: { name: string; id?: string },
@@ -492,7 +492,7 @@ export function createLocation(
   });
 }
 
-// --- rename with reference cascade (issue #30) -------------------------------
+// --- rename with reference cascade -------------------------------------------
 
 /** The entity kinds the rename endpoint accepts (server: store/rename.ts). */
 export type RenameKind = "npc" | "location" | "scene" | "chapter";
@@ -514,7 +514,7 @@ export type UsageRef =
   | "chapterScenes"
   | "chapterNpcs"
   | "chapterLocations"
-  /** A body text says `[[<id>]]` (issue #68). */
+  /** A body text says `[[<id>]]`. */
   | "bodyRefs";
 
 /** One referencing entry, with how many of its rows point at the entity. */
@@ -534,8 +534,8 @@ export interface UsageGroup {
 }
 
 /**
- * The answer of GET /:campaign/usage — where one entity is referenced
- * (issue #60). The rename's response carries the same report, which is what
+ * The answer of GET /:campaign/usage — where one entity is referenced.
+ * The rename's response carries the same report, which is what
  * the dialog previews before it commits.
  */
 export interface UsageReport {
@@ -555,7 +555,7 @@ export interface RenameResult {
 }
 
 /**
- * Where an entity is referenced, straight from the endpoint (issue #60).
+ * Where an entity is referenced, straight from the endpoint.
  * The rename dialog does not need this — its `dryRun` answer already carries
  * the identical report — but a caller that only wants the numbers can ask.
  */
@@ -590,10 +590,10 @@ export function renameEntity(
   });
 }
 
-// --- generator (issue #12) ---------------------------------------------------
+// --- generator ---------------------------------------------------------------
 
 /**
- * Start a generator run for one chapter — a BACKGROUND job since issue #19:
+ * Start a generator run for one chapter — a BACKGROUND job:
  * the server answers 202 with the job id and the result is fetched via
  * fetchGenerateJob. Nothing is written (generator/README.md); `newChapter`
  * allows a chapter directory that does not exist yet (created by
@@ -605,7 +605,7 @@ export function renameEntity(
  * usual; worth handling are 503 (no provider configured — no API key), 404
  * (unknown chapter) and 400.
  *
- * The run's own failure (the 422 of issues #18/#20 with `rawReply`, `usage`
+ * The run's own failure (the 422 with `rawReply`, `usage`
  * and possibly `validationErrors`) never comes back from THIS call — it
  * lands in the job's `error.body`.
  *
@@ -642,7 +642,7 @@ export async function startGenerateJob(
 }
 
 /**
- * Start an NPC run (issue #21): source material in, ONE NPC draft out.
+ * Start an NPC run: source material in, ONE NPC draft out.
  * Same job model as the scene run — 202 { jobId }, the result is fetched via
  * fetchGenerateJob (`kind: "npc"`, `npcResult`), and a 409 that carries a
  * jobId means "a generator job is already running for this campaign" and is
@@ -676,7 +676,7 @@ export async function startGenerateNpcJob(
 }
 
 /**
- * Start an augment run („Mit KI ergänzen", issue #36): an entry that already
+ * Start an augment run („Mit KI ergänzen"): an entry that already
  * exists plus source material and/or an instruction, and the model proposes
  * the filled-in version. Same job model as the create runs — 202 { jobId },
  * the proposal is fetched via fetchGenerateJob (`kind: "augment"`,
@@ -716,7 +716,7 @@ export async function startAugmentJob(
 }
 
 /**
- * Accept a reviewed augment proposal (issue #36): the properties fields the
+ * Accept a reviewed augment proposal: the properties fields the
  * DM took and the body they assembled from the accepted blocks, written in
  * ONE transaction against `rev`. A 409 is the ordinary conflict protocol
  * (ADR #4) and arrives as ApiError — the caller re-reads and tries again.
@@ -745,8 +745,8 @@ export function applyAugment(
  * The campaign's generate job, or null when there is none (the server's 404
  * is the normal "nothing running, nothing to restore" answer — never an
  * error state in the UI). A `null` after a job WAS there means it is gone:
- * applied or discarded. A server restart does NOT lose it any more (issue
- * #23): a finished job comes back, and one that was still running comes back
+ * applied or discarded. A server restart does NOT lose it any more: a
+ * finished job comes back, and one that was still running comes back
  * as `failed` with a message saying so.
  */
 export async function fetchGenerateJob(campaign: string): Promise<GenerateJob | null> {
@@ -768,7 +768,7 @@ export async function deleteGenerateJob(campaign: string): Promise<void> {
 
 
 /**
- * Store part of the REVIEW STATE on the job (issue #97). Everything merges,
+ * Store part of the REVIEW STATE on the job. Everything merges,
  * so this sends only what changed: the text of the draft being typed in
  * (debounced by the caller), the decision that was just made, the drops.
  *
@@ -799,7 +799,7 @@ export async function patchJobReview(
 }
 
 /**
- * Accept PART of a finished run (issue #97): „Diesen übernehmen" for one
+ * Accept PART of a finished run: „Diesen übernehmen" for one
  * scene or one suggested entry, „Alle übernehmen" without a selection.
  * Answers what it wrote (draft path -> the address it landed at) and
  * whether the job is gone because nothing is open any more. `rev` is the
@@ -825,7 +825,7 @@ export function acceptJobParts(
 }
 
 /**
- * „Erneut versuchen" for ONE part of a pipelined scene run (issue #102).
+ * „Erneut versuchen" for ONE part of a pipelined scene run.
  * Restarts that part only — the outline stays, the finished parts stay
  * reviewable — and answers the job with the part back in `running`, so the
  * view can seed its cache without an extra read.
@@ -872,7 +872,7 @@ export function applyDrafts(
 }
 
 /**
- * Write the reviewed NPC draft (issue #21) — the same apply endpoint as the
+ * Write the reviewed NPC draft — the same apply endpoint as the
  * scene drafts: it re-validates server-side (path, id, status, parseable
  * properties), answers 409 with `details.conflicts` when the entry already
  * exists (nothing written), and drops the job the draft came from.

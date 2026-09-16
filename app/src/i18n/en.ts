@@ -1,4 +1,4 @@
-// The English catalog (issue #69). Typed as `Messages`, so it is complete by
+// The English catalog. Typed as `Messages`, so it is complete by
 // construction: a missing key and a key that only exists here both fail the
 // typecheck.
 //
@@ -239,7 +239,7 @@ export const en: Messages = {
   "settings.language.heading": "Language",
   "settings.language.hint": "Language of the interface. Applies to this instance, not to the campaign data.",
 
-  // --- the two campaign-content pages (issue #53) --------------------------
+  // --- the two campaign-content pages ---------------------------------------
   "entryList.loading": "Loading the list …",
   "entryList.loadFailed": "List not loaded — reload the page.",
   "entryList.saveFailed": "Not saved.",
@@ -347,7 +347,7 @@ export const en: Messages = {
   "pool.empty":
     "No chapters yet. A chapter is the bracket around scenes — the first scene goes inside one.",
   "pool.chapterCount": "{count, plural, one {# chapter} other {# chapters}}",
-  // The chapter's leftovers section: the scenes that name no location (#100).
+  // The chapter's leftovers section: the scenes that name no location.
   "pool.group.noLocation": "No location",
   "pool.sceneCount": "{count, plural, =0 {no scenes} one {# scene} other {# scenes}}",
   "pool.chapter.goal": "Goal: {goal}",
@@ -395,7 +395,7 @@ export const en: Messages = {
 
   "live.nav.aria": "Scenes of the session",
   "live.nav.noPlanned": "No planned scenes in this chapter.",
-  // The collapsed group of scenes that are behind us (issue #73): the heading
+  // The collapsed group of scenes that are behind us: the heading
   // alone names the group for a screen reader, `playedGroup` is the visible
   // trigger where the count is PART of the sentence.
   "live.nav.played": "Played",
@@ -426,7 +426,7 @@ export const en: Messages = {
   "live.session.olderRunning.withPath": "An older session is still running ({path}) — end it first.",
   "live.session.endOld": "End the old session",
 
-  // The "For the players" reminder list of the aside (issue #86).
+  // The "For the players" reminder list of the aside.
   "live.pc.heading": "For the players",
   "live.pc.done": "Mark \u201c{text}\u201d done",
   "live.pc.allDone": "All done.",
@@ -438,8 +438,8 @@ export const en: Messages = {
   "live.drawer.open": "Open entry",
 
 
-  // --- review (the session review, formerly the "five-minute harvest" —
-  // issue #10; the harvest metaphor stayed in the code, not in the UI)
+  // --- review (the session review, formerly the "five-minute harvest";
+  // the harvest metaphor stayed in the code, not in the UI)
   // routes/review.tsx, lib/use-review.ts ------------------------------------
   "review.title": "Session review",
   "review.sessionFailed": "Session not loadable — check the server and reload.",
@@ -447,7 +447,7 @@ export const en: Messages = {
   "review.backToPool": "Back to the chapters",
   "review.lead":
     "Go through the entries of the session — adopt as a storyline, create an NPC or discard. The rest stays in the log.",
-  // Topbar and the mobile page read the same line (two parameters, #69).
+  // Topbar and the mobile page read the same line (two parameters).
   "review.progress": "{seen} of {total} reviewed",
   "review.hashUnavailable":
     "Reviewed state of the log lines unavailable — open Grimoire via localhost or https.",
@@ -476,7 +476,7 @@ export const en: Messages = {
   "review.notes.lead":
     "Untagged entries from the ideas — adopt them, create an NPC or tick them off.",
 
-  // Player-character notes (issue #86): `#pc` lines from log and inbox.
+  // Player-character notes: `#pc` lines from log and inbox.
   "review.pc.title": "Player characters",
   "review.pc.lead":
     "Entries tagged #pc — reminders for the table, not campaign content. Tick them off or keep them for the next review.",
@@ -633,7 +633,7 @@ export const en: Messages = {
 
   // --- generator: review (routes/generate.tsx, lib/generate.ts) -----------
   "generate.review.title": "Check drafts",
-  // The NPC run reviews ONE suggested entry, not a set of drafts (#88).
+  // The NPC run reviews ONE suggested entry, not a set of drafts.
   "generate.review.titleNpc": "Check the proposal",
   "generate.review.summary":
     "{scenes, plural, one {# scene} other {# scenes}} · {stubs, plural, one {# suggested entry} other {# suggested entries}}",
@@ -644,7 +644,7 @@ export const en: Messages = {
   "generate.review.leadNpc":
     "Check and adjust. Only “Apply” writes the entry — existing NPCs are never overwritten.",
   "generate.review.stubsHeading": "Suggested entries — decide one by one",
-  // --- naming hints of the post-run check (issue #53 AK3) -------------------
+  // --- naming hints of the post-run check -----------------------------------
   "generate.review.namingHeading":
     "{count, plural, one {# naming hint} other {# naming hints}} — not a blocker",
   "generate.review.namingHint": '“{from}” is still there — the convention says “{to}”',
@@ -658,7 +658,7 @@ export const en: Messages = {
   "generate.review.discardFailed": "Not discarded — check the server.",
   "generate.review.apply": "Apply ({count})",
   "generate.review.applyNpc": "Apply",
-  // --- generator: review state on the job (issue #97) ----------------------
+  // --- generator: review state on the job -----------------------------------
   "generate.review.saving": "Saving …",
   "generate.review.saved": "Saved",
   "generate.review.saveConflict": "Changed in another tab — reloaded.",
@@ -677,7 +677,7 @@ export const en: Messages = {
   "generate.review.rawLabel": "Markdown of {title}",
   "generate.usage": "~{tokens} tokens · {attempts, plural, one {# attempt} other {# attempts}}",
   "generate.usage.group": ",",
-  // --- generator: the pipeline (issue #102) --------------------------------
+  // --- generator: the pipeline ----------------------------------------------
   "generate.pipeline.cost": "~{tokens} tokens · {calls, plural, one {# call} other {# calls}}",
   "generate.pipeline.progress":
     "{done} of {total, plural, one {# scene} other {# scenes}} finished",
@@ -803,7 +803,7 @@ export const en: Messages = {
   "harness.properties": "Show properties",
 
 
-  // --- "Augment with AI" (components/AugmentAction.tsx, issue #36) ---------
+  // --- "Augment with AI" (components/AugmentAction.tsx) ---------------------
   "augment.action": "Augment with AI",
   "augment.title": "Augment with AI",
   "augment.description":

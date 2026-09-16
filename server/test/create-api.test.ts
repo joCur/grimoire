@@ -1,6 +1,6 @@
-// The create endpoints (issue #56) — POST /campaigns and the four per-campaign
-// creates. This is the API half of "a fresh instance is not a dead end": since
-// issue #79 nothing is imported at boot, so every one of these has to work on
+// The create endpoints — POST /campaigns and the four per-campaign
+// creates. This is the API half of "a fresh instance is not a dead end":
+// nothing is imported at boot, so every one of these has to work on
 // an EMPTY database, which is what the cold-start cases below run on.
 //
 // What each case is really pinning:
@@ -11,7 +11,7 @@
 //   * a COLLISION writes nothing and answers `slug_taken` WITH a free
 //     `suggestion` (the app's one-click "take it"), and the explicit `id` that
 //     click sends is honoured verbatim;
-//   * an EMPTY npc/ort row — one a reference created (#70) — is FILLED, not
+//   * an EMPTY npc/ort row — one a reference created — is FILLED, not
 //     collided with;
 //   * a scene needs an EXISTING chapter (ADR #14);
 //   * an id the ADDRESS SCHEMA reserves (`npcs`/`locations`/`sessions`) is not
@@ -102,7 +102,7 @@ describe("POST /api/campaigns — the cold start", () => {
     const res = await post("/campaigns", { name: "!!! ??? ---" });
     expect(res.status).toBe(400);
     const body = await errorBody(res);
-    // Language-free since issue #69: a stable code plus the field it points
+    // Language-free: a stable code plus the field it points
     // at, and an English technical fallback text next to them.
     expect(body.code).toBe("slug_empty");
     expect(body.kind).toBe("campaign");
@@ -161,7 +161,7 @@ describe("the per-campaign creates", () => {
     const res = await post("/nordwind/chapters", { title: "NPCs" });
     expect(res.status).toBe(409);
     const body = await errorBody(res);
-    // Its OWN code since issue #69: the app offers the same one-click
+    // Its OWN code: the app offers the same one-click
     // proposal as for a taken id, but says a different sentence.
     expect(body.code).toBe("slug_reserved");
     expect(body.kind).toBe("chapter");
@@ -191,7 +191,7 @@ describe("the per-campaign creates", () => {
     expect((await errorBody(res)).path).toBe("nordwind/campaign");
   });
 
-  test("a proposal never lands on an empty row someone else references (#70)", async () => {
+  test("a proposal never lands on an empty row someone else references", async () => {
     await created<EntryResponse>("/nordwind/npcs", { name: "Holm" });
     await created<EntryResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
     const scene = await created<EntryResponse>("/nordwind/scenes", {
@@ -278,13 +278,13 @@ describe("the per-campaign creates", () => {
     expect((await post("/nordwind/locations", { name: "Hafen" })).status).toBe(409);
   });
 
-  test("an EMPTY row a reference created is filled, not collided with (#70)", async () => {
+  test("an EMPTY row a reference created is filled, not collided with", async () => {
     await created<EntryResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
     const scene = await created<EntryResponse>("/nordwind/scenes", {
       title: "Am Steg",
       chapter: "01-salzhafen",
     });
-    // Referencing creates the empty rows — that is the #70 rule.
+    // Referencing creates the empty rows — that is the „referencing creates" rule.
     const patched = await app.request("/api/nordwind/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },

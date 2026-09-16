@@ -1,4 +1,4 @@
-// The write side of the store (issue #57): every write endpoint as database
+// The write side of the store: every write endpoint as database
 // statements.
 //
 // What is UNCHANGED (this is the contract the ported tests pin):
@@ -7,12 +7,12 @@
 //     touched, rendered by ./render;
 //   * optimistic concurrency still answers `409 { error, rev }` — only
 //     the token behind `rev` is now the row's `rev` instead of a file
-//     rev. That is what fixes issue #37: two writes inside the same second
+//     rev. That is what fixes the old hole: two writes inside the same second
 //     used to see the same rev and both went through; two writes against
 //     the same `rev` cannot;
 //   * the session state machine keeps its answers and codes
 //     (`session_running`, `session_not_empty` — `session_ended` is gone with
-//     the resume semantics, issue #58), and
+//     the resume semantics), and
 //     `clock.ts` is untouched — session ids, `started`/`ended` and log times
 //     stay zone-less local strings produced by the server;
 //   * append-only stays append-only: log lines and inbox entries grow by
@@ -302,7 +302,7 @@ function applyPatch(
 // --- FTS helpers per kind ----------------------------------------------------
 
 /**
- * Re-index everything whose BODY references `slug` (issue #68).
+ * Re-index everything whose BODY references `slug`.
  *
  * The indexed text of a referring entity contains the referenced entity's
  * DISPLAY NAME (store/refs.ts explains why), so a name or id change makes
@@ -392,7 +392,7 @@ function indexChapter(tx: GrimoireDb, campaign: string, row: ChapterRow): void {
 
 // The campaign file is not referenceable either — but its note body CONTAINS
 // references like any other, and store/refs.ts scans it for them, so nothing
-// here is half-supported any more (issue #68 review).
+// here is half-supported any more.
 function indexCampaign(tx: GrimoireDb, row: CampaignRow): void {
   indexEntity(tx, row.id, {
     kind: "campaign",
@@ -440,7 +440,7 @@ function sceneRowOf(tx: GrimoireDb, campaign: string, id: string): SceneRow | un
 
 /**
  * The scene a `{ kind: "scene" }` locator addresses — by ID, which is the
- * key (issue #100). The chapter and group segments used to have to match the
+ * key. The chapter and group segments used to have to match the
  * row, because a group was an independent value and a link with the wrong
  * one was a link to nothing. The group is `location` now: it MOVES when the
  * DM corrects the location, so every address handed out before that move is
@@ -511,11 +511,11 @@ function nextPos(rows: Array<{ pos: number }>): number {
   return rows.reduce((max, row) => Math.max(max, row.pos), -1) + 1;
 }
 
-// --- "referencing creates" (issue #70) ---------------------------------------
+// --- "referencing creates" ---------------------------------------------------
 //
 // In the file era a referenced id without a file was a legal, permanent hole:
 // the app showed "NPC-Eintrag fehlt" and offered a stub. In the database
-// (#52/#13) an npc without information IS a row with an id and a name, so a
+// an npc without information IS a row with an id and a name, so a
 // reference can be EMPTY but never MISSING. Every write that INTRODUCES a
 // reference therefore creates the referenced row in the SAME transaction:
 // scene `npcs`, a scene `location` that is a slug, and the counterpart of a
@@ -523,7 +523,7 @@ function nextPos(rows: Array<{ pos: number }>): number {
 // step alike.
 //
 // THE BOUNDARY, and it is deliberate: only a KEBAB-CASE SLUG is a reference.
-// For `location` that is the ONLY legal value since issue #100 — the group a
+// For `location` that is the ONLY legal value — the group a
 // scene sits in IS its location, so `location: Der alte Hafen` cannot be
 // text-that-means-nothing any more and is rejected with
 // `400 location_not_an_id`, suggestion included. The format's one ambiguous
@@ -533,7 +533,7 @@ function nextPos(rows: Array<{ pos: number }>): number {
 // ONLY NEW references are created on a properties patch — for `npcs`, whose
 // stored values may still be legacy names: materialising THOSE would turn a
 // name nobody meant as an id into an entity nobody authored. A scene's
-// `location` is ensured on EVERY patch (#70 audit), because since #100 an
+// `location` is ensured on EVERY patch, because an
 // unusable value cannot be stored in the first place.
 
 /**
@@ -597,13 +597,13 @@ function ensureChapterRow(
 }
 
 /**
- * A scene's `location`, validated (issue #100): an entity id, or null.
+ * A scene's `location`, validated: an entity id, or null.
  *
  * The free-text exception the README used to grant is gone. `location` is a
  * REFERENCE — it is the scene's group and its address — so a value that
  * cannot be an id cannot be a group either; naming an id that has no row
- * CREATES the row (`ensureLocationRow`, the „Referenzieren legt an" rule of
- * #70), and anything else is a 400 the app turns into a sentence with the
+ * CREATES the row (`ensureLocationRow`, the „Referenzieren legt an" rule),
+ * and anything else is a 400 the app turns into a sentence with the
  * slug it would have used.
  */
 function sceneLocation(value: unknown): string | null {
@@ -629,7 +629,7 @@ function sceneLocation(value: unknown): string | null {
  * The same for a location — a scene's `location` when it is a slug.
  *
  * `name` is the DISPLAY NAME the creator typed, and it is used ONLY when the
- * row is actually inserted (issue #100 follow-up): the properties form accepts
+ * row is actually inserted: the properties form accepts
  * free text in the Ort field, slugs it and sends the slug in `location` plus
  * the typed text as `locationName`, so „Der alte Hafen" becomes the entry
  * `der-alte-hafen` CALLED „Der alte Hafen" instead of one called by its own
@@ -728,7 +728,7 @@ function isEmptyJsonObject(packed: string): boolean {
 }
 
 /**
- * The BOOT BACKFILL (issue #70) — for npcs, and deliberately ONLY for npcs.
+ * The BOOT BACKFILL — for npcs, and deliberately ONLY for npcs.
  *
  * Lazy creation alone would leave the migrated stock in the old state: a
  * scene that has listed `holm` since the file era keeps a dangling id until
@@ -740,7 +740,7 @@ function isEmptyJsonObject(packed: string): boolean {
  *     line, likewise an id by format.
  *
  * NOT `scenes.location`, and for a different reason than it used to be: the
- * field holds an id or nothing at all since issue #100, and the stock was
+ * field holds an id or nothing at all, and the stock was
  * carried over ONCE by the data step that derived it (db/group-migration.ts),
  * which creates every entry a scene references and reports it. There is
  * nothing left for a per-boot pass to close.
@@ -774,7 +774,7 @@ export function backfillReferencedNpcs(tx: GrimoireDb, campaign: string): string
 // --- scene reference tables ---------------------------------------------------
 
 /**
- * `npcs:` HOLDS IDS, NOT NAMES (issue #70 audit).
+ * `npcs:` HOLDS IDS, NOT NAMES.
  *
  * Unlike `location`, this list has no free-text half: the README calls it a
  * list of npc ids, the reading view resolves every entry to a card, and the
@@ -836,7 +836,7 @@ function replaceRelations(tx: GrimoireDb, campaign: string, npcId: string, body:
     .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.npcId, npcId)))
     .run();
   for (const relation of parsed.relations) {
-    // The counterpart gets its own (empty) row if it has none — issue #70.
+    // The counterpart gets its own (empty) row if it has none.
     // Until now `npc_relations` was asymmetrically legal: a relation TO an
     // npc without a row was storable, one FROM it was not (the owner side
     // has a foreign key). Both sides are rows now.
@@ -934,7 +934,7 @@ const SESSION_KEYS = ["id", "started", "ended", "scenes_played", "pauses", "revi
  * key and patching it silently orphaned every reference to the entity; in the
  * database the id IS the primary key, and changing it is what
  * `POST /rename` does — as an update with a cascade, which is the whole point
- * of the migration (issues #29/#30).
+ * of the migration.
  */
 /**
  * Unknown keys come from the importer only (schema.ts `extra`): a patch may
@@ -961,8 +961,8 @@ function rejectIdPatch(patch: Record<string, unknown>, current: string): void {
 }
 
 /**
- * Side values a patch may carry that are NOT properties keys (issue #100
- * follow-up). `locationName` is the display name for the location a scene's
+ * Side values a patch may carry that are NOT properties keys.
+ * `locationName` is the display name for the location a scene's
  * `location` CREATES — see `ensureLocationRow`; it is ignored when the row
  * already exists, so it can never rename anything.
  */
@@ -1091,13 +1091,13 @@ function patchLocator(
         })
         .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
         .run();
-      // Referencing creates (#70) — only what this patch ADDS, see the note
+      // Referencing creates — only what this patch ADDS, see the note
       // above `ensureNpcRow`.
       for (const npcId of npcRefs) {
         if (!npcsBefore.includes(npcId)) ensureNpcRow(tx, campaign, npcId);
       }
       // `location`, in contrast, is ensured on EVERY patch, changed or not.
-      // It is also the scene's GROUP since issue #100, so this is the write
+      // It is also the scene's GROUP, so this is the write
       // that MOVES the scene: the address in the response is built from the
       // new value and the app follows it.
       // The properties dialog promises "wird beim Speichern angelegt" for a
@@ -1301,7 +1301,7 @@ function patchSessionRow(
 // --- PUT /api/:campaign/entry -------------------------------------------------
 
 /**
- * Replace the markdown BODY of one entity (issue #15). The append-only kinds
+ * Replace the markdown BODY of one entity. The append-only kinds
  * are still refused with 400 (DECISIONS #4): a session's log and the inbox
  * grow by rows through their own endpoints, never by a body rewrite.
  *
@@ -1332,8 +1332,8 @@ export async function writeEntryBody(
 
 /**
  * The body write itself, INSIDE a caller's transaction. Split out of
- * `writeEntryBody` for issue #36: „Mit KI ergänzen" accepts properties and
- * body of one entry together, and the ticket's AK3 says that is ONE
+ * `writeEntryBody` for the augment run: „Mit KI ergänzen" accepts properties
+ * and body of one entry together, and that is ONE
  * transaction with one rev guard — two `mutate` calls would be two.
  */
 function writeBodyIn(
@@ -1448,7 +1448,7 @@ function writeBodyIn(
 }
 
 /**
- * „Mit KI ergänzen" accepts a proposal (issue #36): the chosen properties
+ * „Mit KI ergänzen" accepts a proposal: the chosen properties
  * fields and the chosen body in ONE transaction, guarded by ONE `rev` — the
  * version the DM was looking at in the review.
  *
@@ -1461,14 +1461,14 @@ function writeBodyIn(
  * client found it, and the patch runs against the rev that write produced.
  * Both halves see the same transaction, so a conflict in either rolls the
  * whole accept back and nothing is half-written. Everything a normal write
- * does — FTS, `[[slug]]` reference rows, the #70 „referencing creates" rule —
+ * does — FTS, `[[slug]]` reference rows, the „referencing creates" rule —
  * happens because these are the very same code paths.
  *
  * The answer is the LAST render, so a move is already in the path the client
  * gets back.
  *
  * `jobId` discards the augment job the proposal came from, in the SAME
- * transaction as the write (issue #62's rule: drafts and job can never
+ * transaction as the write (drafts and job can never
  * disagree after a crash). A stale id matches nothing and is ignored.
  */
 export async function writePropertiesAndBody(
@@ -1533,11 +1533,11 @@ function writeGlossaryRows(
  * fresh `rev`.
  *
  * The ORDER of `entries` is the stored order — that is what the settings
- * page's reordering writes (issue #53): there is no separate "move" endpoint,
+ * page's reordering writes: there is no separate "move" endpoint,
  * because a list this short is one entry and a move is simply a different
  * entry.
  *
- * `rev` is REQUIRED since issue #53, for the reason every other editable
+ * `rev` is REQUIRED, for the reason every other editable
  * entry has one: the settings page and the markdown editor can hold the
  * same glossary open, and a whole-list PUT without a guard is exactly the
  * silent overwrite ADR #4 forbids. An `undefined` rev is refused by the
@@ -1569,7 +1569,7 @@ export async function writeGlossary(
   });
 }
 
-// --- the campaign_knowledge table (issue #53) ----------------------------------
+// --- the campaign_knowledge table --------------------------------------------
 
 /**
  * PUT /api/:campaign/knowledge `{ entries, rev }` -> the stored list + its
@@ -1693,14 +1693,14 @@ function nextCreatedAt(tx: GrimoireDb, campaign: string): number {
 }
 
 /**
- * POST /api/:campaign/session/start — two answers (issue #58):
+ * POST /api/:campaign/session/start — two answers:
  *
  *   * a RUNNING session of today is returned untouched (the start button
  *     stays idempotent while the evening runs);
  *   * an OLDER running session is a 409 `session_running` — ending someone
  *     else's evening is not implied by "starten";
  *   * otherwise a NEW session is created, even when today already has ended
- *     ones. "Beenden" is final since issue #58: the new row gets its own id,
+ *     ones. "Beenden" is final: the new row gets its own id,
  *     an empty log and a runtime that starts at 0. The former 409
  *     `session_ended` and POST /session/resume are gone with it.
  */
@@ -1710,10 +1710,10 @@ export async function startSession(campaign: string): Promise<EntryResponse> {
     const today = localDate(d);
     const active = pickSession(tx, campaign, false);
     // "Is the running session TODAY's?" is answered by `started`, not by the
-    // id — the id is opaque since the PO decision on issue #58 and says
+    // id — the id is opaque since the PO decision and says
     // nothing about a day.
     //
-    // The old degrade of this check (issue #58 review, finding 4) is GONE with
+    // The old degrade of this check is GONE with
     // it: an id that did not parse as a date could never be "today", so a
     // hand-edited row answered every start with a 409 the DM had to clear by
     // hand. A row whose `started` is unreadable is not the "running session"
@@ -1747,7 +1747,7 @@ export async function startSession(campaign: string): Promise<EntryResponse> {
  * POST /session/end — set `ended` in the ACTIVE session (which may be
  * yesterday's row when the evening ran past midnight). Idempotent: with
  * nothing running it falls back to the last started session and keeps its
- * existing `ended`; an OPEN pause is closed by the end (issue #40 AK8).
+ * existing `ended`; an OPEN pause is closed by the end.
  */
 export async function endSession(campaign: string): Promise<EntryResponse> {
   return mutate(campaign, (tx) => {
@@ -1809,7 +1809,7 @@ function appendLogRow(tx: GrimoireDb, campaign: string, sessionId: string, raw: 
 }
 
 /**
- * POST /session/pause — really STOP the clock (issue #40 AK8): an open
+ * POST /session/pause — really STOP the clock: an open
  * `pauses` interval plus the `— Pause` log line, in the same transaction.
  * Idempotent: pausing a paused session changes nothing.
  */
@@ -1849,7 +1849,7 @@ export async function continueSession(campaign: string): Promise<EntryResponse> 
 }
 
 /**
- * POST /session/discard — DELETE the active session (issue #40 AK7), the undo
+ * POST /session/discard — DELETE the active session, the undo
  * of a mis-clicked "Session starten". Allowed only while it is EMPTY (no log
  * row, no played scene, no hand-written body); everything else is ended, not
  * deleted -> 409 `session_not_empty`.
@@ -2107,7 +2107,7 @@ export async function appendThreadToChapter(
 
 /**
  * Entity ids are kebab slugs — the README's stable reference keys. The rule
- * itself lives in `@grimoire/shared/slug` since issue #56 (the create
+ * itself lives in `@grimoire/shared/slug` (the create
  * endpoints DERIVE ids from typed titles and the app has to derive the same
  * ones), and is re-exported here because this module is where the server's
  * callers have always read it.
@@ -2116,12 +2116,12 @@ export { ENTITY_SLUG };
 
 /**
  * POST /api/:campaign/review/npc-stub — the review's "#npc line becomes an
- * npc". CREATE OR LINK (issue #70): the caller's goal is that this id has an
+ * npc". CREATE OR LINK: the caller's goal is that this id has an
  * entry afterwards, so the endpoint is idempotent.
  *
  *   * no row      -> create it with the given name and the log text under
  *                   `## Notizen`;
- *   * EMPTY row   -> fill it (a reference created it — #70 — and the review
+ *   * EMPTY row   -> fill it (a reference created it, and the review
  *                   is the first thing that knows a name and a note);
  *   * filled row  -> return it UNTOUCHED, so the app links to what is there.
  *                   Nothing is overwritten, and the old `409 { path }` is
@@ -2237,7 +2237,7 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           pos,
         })
         .run();
-      // Referencing creates (#70): a generated scene may name an npc or a
+      // Referencing creates: a generated scene may name an npc or a
       // location the campaign does not have yet. The validation asks the
       // model to ship a stub for it, but a draft that slips through must not
       // leave a dangling id behind — it gets an empty row, and a stub in the
@@ -2272,7 +2272,7 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       };
       // An EMPTY row for this id already exists when something referenced the
       // npc before it was written — a scene draft in this very batch, or a
-      // reference the DM typed last week (#70). Filling it is the write the
+      // reference the DM typed last week. Filling it is the write the
       // DM asked for; inserting would collide with a row that holds nothing.
       const existing = npcRowOf(tx, campaign, id);
       if (existing !== undefined) {
@@ -2370,7 +2370,7 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
  * translated back to the documented answer instead of escaping as a 500 —
  * either way the transaction rolls back, so a partial apply is impossible.
  *
- * `jobId` (issue #62) discards the generate job the drafts came from IN THE
+ * `jobId` discards the generate job the drafts came from IN THE
  * SAME COMMIT. It used to be a second statement after the write: a crash in
  * between left a `done` job whose drafts were already stored, so the next
  * start offered a review that could only ever answer 409 — and a failing
@@ -2384,7 +2384,7 @@ export async function applyDrafts(
   drafts: EntityDraft[],
   jobId?: string,
   /**
-   * A PARTIAL accept (issue #97) does not discard the job — it records what
+   * A PARTIAL accept does not discard the job — it records what
    * it wrote on it and deletes the row only when nothing is left open. That
    * bookkeeping belongs in THIS transaction for the same reason the discard
    * does: after a crash the job and the entries it produced must not
@@ -2394,7 +2394,7 @@ export async function applyDrafts(
 ): Promise<void> {
   try {
     await mutate(campaign, (tx) => {
-      // TWO drafts for ONE address are a conflict too (#70 audit). Since an
+      // TWO drafts for ONE address are a conflict too. Since an
       // empty npc/location row stopped being a conflict, the second draft no
       // longer hit the primary key: it FILLED the row the first had just
       // written, last write wins, and the review reported a clean apply for
@@ -2436,7 +2436,7 @@ export async function applyDrafts(
  * — `rel` because that is what the review shows.
  *
  * Keyed by IDENTITY (`addressIdentity`), not by address: a scene's address
- * carries its `location` (issue #100), so two drafts with the same id and
+ * carries its `location`, so two drafts with the same id and
  * different locations have different addresses and the same primary key.
  * Keying on the address let that pair through, and the insert then filled
  * the row twice — last write wins, and the review reported a clean apply for
@@ -2476,7 +2476,7 @@ function draftTargetExistsIn(db: GrimoireDb, campaign: string, rel: string): boo
   switch (locator.kind) {
     case "scene":
       return sceneRowOf(db, campaign, locator.id) !== undefined;
-    // An EMPTY npc/location row is not a conflict (#70): it holds nothing but
+    // An EMPTY npc/location row is not a conflict: it holds nothing but
     // an id — put there by a reference, not by an author — and the generated
     // entity is exactly what fills it. A row with content still answers 409.
     case "npc": {
@@ -2502,12 +2502,12 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
   return chapterRowOf(db, campaign, chapter) !== undefined;
 }
 
-// --- creating content (issue #56) --------------------------------------------
+// --- creating content --------------------------------------------------------
 //
 // Until now nothing in the app could bring a row into existence on purpose. A
 // row appeared as a side effect — the markdown import, the generator's apply
-// step, a reference that created its counterpart (#70) — so a fresh instance,
-// which is what every installation is since issue #79, was a dead end. These
+// step, a reference that created its counterpart — so a fresh instance,
+// which is what every installation is, was a dead end. These
 // five functions are the deliberate half: campaign, chapter, scene, npc, ort.
 //
 // THE THREE RULES they all share, and they are the whole design:
@@ -2523,14 +2523,14 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
 //      proposal or another name. The body carries `code: "slug_taken"`, the
 //      entity `kind` as a stable token, the colliding `id`, its `path` (so the
 //      app can link to what is there) and `suggestion`. The SENTENCE the DM
-//      reads is the app's (issue #69) — what is here is its English fallback.
+//      reads is the app's — what is here is its English fallback.
 //   3. A NEW ROW HOLDS ONLY WHAT WAS TYPED. Everything else keeps its column
 //      default, so `## Notizen`-style scaffolding nobody asked for cannot
 //      appear. The only exception is a chapter's optional goal, which goes
 //      into the section the pool reads it from (`## Ziel des Kapitels`).
 //
 // EMPTY ROWS ARE FILLED, NOT COLLIDED WITH — for npc and ort, the two kinds a
-// reference can create (#70). An entry that holds nothing but its id was put
+// reference can create. An entry that holds nothing but its id was put
 // there by a mention, not by an author, and "NPC anlegen" for exactly that id
 // is what fills it. That is the same rule `createNpcStub` and the generator's
 // apply step already follow.
@@ -2555,7 +2555,7 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
  *
  * `kind` is a stable TOKEN (`@grimoire/shared/error-codes`, ErrorKind), not a
  * label: the sentence the DM reads is built by the app from its own catalog in
- * the UI language (issue #69). The `error` text here is the English technical
+ * the UI language. The `error` text here is the English technical
  * fallback that curl, the log and an unknown-code client get.
  */
 function slugTaken(kind: ErrorKind, id: string, suggestion: string, path: string): ApiError {
@@ -2569,7 +2569,7 @@ function slugTaken(kind: ErrorKind, id: string, suggestion: string, path: string
 }
 
 /**
- * The reserved-id 409. Its own code since issue #69 — the app's collision
+ * The reserved-id 409. Its own code — the app's collision
  * handling (lib/create.ts) treats it exactly like a taken id (one sentence
  * plus the free proposal as one click), but the SENTENCE is a different one
  * („… ist ein reservierter Name"), and a catalog cannot say that from a code
@@ -2590,7 +2590,7 @@ function slugReserved(kind: ErrorKind, id: string, suggestion: string): ApiError
  * The id of a new row: the caller's own `id` when it sent one, else the slug
  * of the typed name. `field` is the TOKEN of the input that has to change
  * (`name` or `title`), so the app's 400 sentence can point at it in the UI
- * language (issue #69).
+ * language.
  *
  * An EXPLICIT id exists for exactly one flow: the `slug_taken` 409 hands the
  * app a free `suggestion`, and "diesen Vorschlag nehmen" has to be one click
@@ -2784,7 +2784,7 @@ export async function setActiveChapter(campaign: string, id: string): Promise<En
  *
  * A scene created here has no `location`, so it sits at chapter level and
  * the app lists it under „Ohne Ort". Setting one later is `PATCH /properties`
- * — and since issue #100 that patch is also what moves the scene into the
+ * — and that patch is also what moves the scene into the
  * location's group, address included.
  */
 export async function createScene(
@@ -2854,7 +2854,7 @@ export async function createNpc(
     if (existing === undefined) {
       tx.insert(npcs).values({ campaignId: campaign, id, name: stored }).run();
     } else {
-      // An empty row a reference left behind (#70) — this call fills it.
+      // An empty row a reference left behind — this call fills it.
       tx.update(npcs)
         .set({ name: stored, rev: existing.rev + 1 })
         .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, id)))

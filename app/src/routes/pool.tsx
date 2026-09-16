@@ -1,8 +1,7 @@
 // "/:campaign" — the scene pool per the design reference: campaign header,
 // chapter accordions with goal line, location-grouped planned scenes and a
 // separate contingency group ("Eventualszenen").
-// Below md the SAME route shows the mobile start surface instead (issue #11,
-// responsive swap — no separate URL): desktop pool `hidden md:block`, mobile
+// Below md the SAME route shows the mobile start surface instead (// responsive swap — no separate URL): desktop pool `hidden md:block`, mobile
 // start `md:hidden`. Both share the tree query cache, so nothing fetches twice.
 
 import type { CampaignTree, ChapterNode, SceneGroup, SceneSummary } from "@grimoire/shared/types";
@@ -40,7 +39,7 @@ export function PoolRoute() {
       0,
     ) ?? 0;
   const chapterCount = data?.chapters.length ?? 0;
-  // Display name + description from campaign (issue #17); the header
+  // Display name + description from campaign; the header
   // degrades to the campaign id when the entry is missing.
   const meta = useCampaignMeta(campaign);
   // Open the active chapter(s) by default; without one, the first.
@@ -61,10 +60,10 @@ export function PoolRoute() {
                   the same line — the shape of the design reference's pool
                   header (design/Grimoire.dc.html: a baseline row that does
                   not wrap).
-                  Issue #56 added „Kapitel anlegen" next to „Bearbeiten"
+                  „Kapitel anlegen" was added next to „Bearbeiten"
                   inside a `flex-wrap` row, and the pair promptly dropped onto
                   a line of ITS OWN, right-aligned under the title, on any
-                  campaign with a normal-length name (PO finding on PR #87).
+                  campaign with a normal-length name (PO finding).
                   So the actions are no longer a wrap candidate: the row holds
                   the title block and the actions and does not wrap between
                   them. What gives when 760px is not enough for all of it is
@@ -85,9 +84,8 @@ export function PoolRoute() {
                     {t("pool.sceneCount", { count: sceneCount })}
                   </span>
                 </div>
-                {/* Quiet header actions: add the thing the pool IS a list of
-                    (issue #56), and edit the name/description right where they
-                    are read (issue #34). */}
+                {/* Quiet header actions: add the thing the pool IS a list of, and edit the name/description right where they
+                    are read. */}
                 <span className="flex flex-none items-center gap-1 md:ml-auto">
                   <ChapterCreateAction campaign={campaign} />
                   <CampaignMetaAction campaign={campaign} />
@@ -100,8 +98,8 @@ export function PoolRoute() {
               )}
               <LookupLine campaign={campaign} />
             </div>
-            {/* The empty pool is the second half of the cold start (issue
-                #56): it used to point at the generator, which needs an API key
+            {/* The empty pool is the second half of the cold start: it used
+                to point at the generator, which needs an API key
                 and source material — a dead end on a fresh instance. The next
                 step is now the one thing that always works. */}
             {data.chapters.length === 0 && (
@@ -174,7 +172,7 @@ function Chapter({
               inside the trigger, which stays the button that opens it. Without
               it the outline jumped from the pool's h1 straight to the group
               h3s, and the chapter the groups belong to was not in the tree at
-              all (issue #100 review). */}
+              all. */}
           <h2 className="min-w-0 truncate font-serif text-[18px] font-semibold text-foreground">
             {chapter.title}
           </h2>
@@ -228,7 +226,7 @@ function Chapter({
             </div>
           )}
           {/* „Szene anlegen" sits IN the chapter, which is what prefills the
-              chapter (issue #56) — no picker, no second decision. */}
+              chapter — no picker, no second decision. */}
           <div className="pb-4">
             <SceneCreateAction
               campaign={campaign}
@@ -243,7 +241,7 @@ function Chapter({
 }
 
 /** One location group with its planned scenes (contingencies render separately). */
-/** Exported for the render test — the „Ohne Ort" heading rule (#100). */
+/** Exported for the render test — the „Ohne Ort" heading rule. */
 export function PlannedGroup({
   campaign,
   group,
@@ -260,7 +258,7 @@ export function PlannedGroup({
     <div className="mb-7">
       <div className="flex items-center gap-2 border-b border-border py-2 text-[13px]">
         <MapPin aria-hidden size={15} className="flex-none text-muted-foreground" />
-        {/* The group IS the scene's location (issue #100), so the heading is
+        {/* The group IS the scene's location, so the heading is
             the location's NAME — resolved by the SERVER, which also orders
             the groups by it (`SceneGroup.name`): an entry nobody has named
             yet falls back to its id, which is still the word the DM typed.
@@ -285,7 +283,7 @@ export function PlannedGroup({
 
 /**
  * One pool row. The row opens the scene — except the status area, which is
- * its own control since issue #28 (same menu as the reading view). The link
+ * its own control (same menu as the reading view). The link
  * therefore covers everything but that control instead of wrapping it: a
  * button inside an anchor is invalid markup and would need click juggling,
  * two siblings in one hover row need neither.
@@ -340,11 +338,11 @@ function SceneRow({
 
 /**
  * „Nachschlagen: NPCs · Orte · Glossar · Kampagnenwissen" — the pool's quiet
- * line into the campaign's reference pages (issue #53, PO feedback on PR #87).
+ * line into the campaign's reference pages (PO feedback).
  *
- * The mobile start surface has carried these as tap rows since issue #11; the
+ * The mobile start surface has carried these as tap rows; the
  * desktop had nowhere for the two new pages to be reached from. The TOPBAR is
- * deliberately not it — it keeps the three campaign-wide entries of issue #34
+ * deliberately not it — it keeps the three campaign-wide entries
  * and does not grow (a fourth and fifth link there would crowd the one bar
  * that has to survive every width, and „Glossar" is not something the DM
  * reaches for mid-session). So the pool's own header gets the line, one row

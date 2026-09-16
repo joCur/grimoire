@@ -1,4 +1,4 @@
-// Generator pipeline (GitHub issue #6, generator/README.md):
+// Generator pipeline (generator/README.md):
 //
 //   1. collect campaign context (npc/location ids+names, chapter, glossary)
 //   2. prompt = system-prompt.md + example-output.json + context + source text
@@ -14,17 +14,17 @@
 //      A TRUNCATED reply (the provider saw finish_reason/stop_reason) skips
 //      the correction turns entirely: re-asking for the same oversized JSON
 //      cannot succeed and a correction turn resends the whole prompt plus
-//      the previous reply — the most expensive retry there is (issue #18).
+//      the previous reply — the most expensive retry there is.
 //   5. the app shows the result as a review preview — generating writes
 //      NOTHING; only POST /generate/apply touches the disk, and it
 //      re-validates server-side instead of trusting the client.
 //
-// Steps 1-4 run in the BACKGROUND since issue #19: POST /generate starts a
+// Steps 1-4 run in the BACKGROUND: POST /generate starts a
 // job (./generate-jobs) and answers 202, the result waits in the job store
 // until it is applied or discarded. runGenerate itself is unchanged by that
 // — it is the job runner's one call.
 //
-// Since issue #21 there is a SECOND run kind next to scenes: one NPC file
+// There is a SECOND run kind next to scenes: one NPC file
 // from source material (runGenerateNpc, POST /generate/npc). It shares
 // everything that is mechanics — provider factory, correction turns,
 // truncation fail-fast, usage accounting, the reply split (runPipeline) and
@@ -58,8 +58,8 @@ import { ApiError } from "./api-error";
 import { assertSafeAddress } from "./addressing";
 import { composeEntry, parseEntryReply, type EntryReply } from "./entry-reply";
 import { checkDraftsNaming, type NamingRule } from "./naming-check";
-// The generator reads its context and writes its drafts through the store
-// (issue #57) — the campaign file tree is not a data source any more.
+// The generator reads its context and writes its drafts through the store —
+// the campaign file tree is not a data source any more.
 import {
   buildTree,
   glossaryText,
@@ -85,15 +85,15 @@ import {
 
 /**
  * Upper bound for correction turns after the initial call (DECISIONS #6:
- * "max. 2"). Issue #19 makes the number configurable BELOW that bound and
- * lowers the default to 1: #18/#20 removed the non-fixable triggers
+ * "max. 2"). The number is configurable BELOW that bound and the default
+ * is 1: the non-fixable triggers are gone
  * (truncation, prose around the JSON), and a model that gets an explicit
  * error list back repairs the remaining form errors in the first turn
  * almost always — the second one only costs money.
  */
 export const MAX_CORRECTION_TURNS = 2;
 
-/** Default when LLM_CORRECTION_TURNS is unset or unusable (issue #19). */
+/** Default when LLM_CORRECTION_TURNS is unset or unusable. */
 export const DEFAULT_CORRECTION_TURNS = 1;
 
 /**
@@ -158,31 +158,31 @@ export interface PromptAssets {
 }
 
 /**
- * The two asset pairs (issue #21): scenes and NPCs have their own prompt and
+ * The two asset pairs: scenes and NPCs have their own prompt and
  * their own few-shot target file, cached per kind after the first read.
  */
 export const ASSET_FILES = {
   scene: { systemPrompt: "system-prompt.md", fewShotTarget: "example-output.json" },
   npc: { systemPrompt: "npc-system-prompt.md", fewShotTarget: "npc-example-output.json" },
-  // Issue #36: locations had no prompt of their own — the augment run is the
+  // Locations had no prompt of their own — the augment run is the
   // first caller, and the pair is written so a future „Ort generieren" can
   // use it unchanged.
   location: {
     systemPrompt: "location-system-prompt.md",
     fewShotTarget: "location-example-output.json",
   },
-  // The OUTLINE step of a pipelined scene run (issue #102): its own prompt
+  // The OUTLINE step of a pipelined scene run: its own prompt
   // and its own few-shot (a worked example outline, not a target file).
   outline: {
     systemPrompt: "outline-system-prompt.md",
     fewShotTarget: "outline-example-output.json",
   },
   // The output-schema section that turns the scene prompt into „genau eine
-  // Szene aus der Gliederung" mode (issue #102). No few-shot of its own — the
+  // Szene aus der Gliederung" mode. No few-shot of its own — the
   // per-scene call sends the scene example file — so, like `augment`, this
   // entry carries a system prompt alone.
   sceneSingle: { systemPrompt: "scene-single-output.md" },
-  // The augment run's OWN system prompt (issue #36). It has no few-shot of
+  // The augment run's OWN system prompt. It has no few-shot of
   // its own — the run sends the TARGET KIND's example file — so this entry
   // carries the system prompt alone and `loadPromptAssets` is not the right
   // shape for it; see loadAsset below.
@@ -194,7 +194,7 @@ const promptAssets = new Map<string, PromptAssets>();
 /**
  * The kinds that have a prompt PAIR. `augment` and `sceneSingle` do not: the
  * first sends the target kind's example file, the second is only an output
- * schema spliced into the scene prompt (issue #102).
+ * schema spliced into the scene prompt.
  */
 type PromptPairKind = Exclude<keyof typeof ASSET_FILES, "augment" | "sceneSingle">;
 
@@ -232,7 +232,7 @@ export interface CampaignContext {
   npcs: Array<{ id: string; name: string }>;
   locations: Array<{ id: string; name: string }>;
   /**
-   * The binding knowledge block (issue #53) — `""` when the campaign has
+   * The binding knowledge block — `""` when the campaign has
    * none, and then the prompt has no such section at all.
    */
   knowledge: string;
@@ -271,12 +271,12 @@ function assertSafeChapterId(chapter: string): void {
 /**
  * The cheap request-level checks of a generate target, without touching the
  * LLM: unsafe campaign/chapter id -> 400, unknown campaign/chapter or a
- * reserved dir -> 404. `allowMissingChapter` is the "new chapter" flow
- * (issue #12): the target directory does not exist yet — it is created on
+ * reserved dir -> 404. `allowMissingChapter` is the "new chapter" flow:
+ * the target directory does not exist yet — it is created on
  * apply, so generating into it must not 404.
  *
  * Exported because POST /generate runs these BEFORE it creates a background
- * job (issue #19): a 400/404 is a request error and must stay a synchronous
+ * job: a 400/404 is a request error and must stay a synchronous
  * answer instead of becoming a failed job the DM has to go and read.
  */
 export async function assertGenerateTarget(
@@ -292,8 +292,8 @@ export async function assertGenerateTarget(
 }
 
 /**
- * The id of an existing npc file, for the collision check of an NPC run
- * (issue #21) — a request-level 409 before a single token is spent.
+ * The id of an existing npc file, for the collision check of an NPC run —
+ * a request-level 409 before a single token is spent.
  * `assertSafeAddress` is not enough here: the id must be a kebab slug,
  * because it becomes the file name AND the reference key.
  */
@@ -302,7 +302,7 @@ export const NPC_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 /**
  * Cheap request checks of an NPC run: unsafe campaign id -> 400, unknown
  * campaign -> 404, an unusable pinned id -> 400, and a pinned id whose file
- * already exists -> 409 (never overwrite, issue #21 non-goal: enriching an
+ * already exists -> 409 (never overwrite, a non-goal: enriching an
  * existing NPC file). Exported for the same reason as assertGenerateTarget:
  * POST /generate/npc runs it BEFORE it creates a background job.
  */
@@ -344,7 +344,7 @@ export async function collectSceneContext(
 /**
  * The part of the context that is the same for every run kind. Reads the
  * campaign's npcs/locations out of the tree query and the glossary out of its
- * TABLE (issue #57) — rendered as the `EN → DE` lines the prompt documents,
+ * TABLE — rendered as the `EN → DE` lines the prompt documents,
  * so the prompt text the LLM sees is the same as before.
  */
 export async function collectContext(campaign: string): Promise<CampaignContext> {
@@ -352,7 +352,7 @@ export async function collectContext(campaign: string): Promise<CampaignContext>
   const npcs = tree.npcs.map((n) => ({ id: n.id, name: n.name }));
   const locations = tree.locations.map((l) => ({ id: l.id, name: l.name }));
   const glossary = (await glossaryText(campaign)) ?? "";
-  // Issue #53: the knowledge block travels with EVERY run kind, and its
+  // The knowledge block travels with EVERY run kind, and its
   // `[[slug]]` references are already resolved by knowledgeText.
   const knowledge = (await knowledgeText(campaign)) ?? "";
 
@@ -408,7 +408,7 @@ export function unknownCallouts(body: string): string[] {
 
 /**
  * An entity id is a kebab slug — the README's stable reference key, and
- * since issue #100 the ONLY thing a model decides about addressing.
+ * the ONLY thing a model decides about addressing.
  */
 const ENTITY_ID_PATTERN = ENTITY_SLUG;
 
@@ -431,7 +431,7 @@ function addressId(rel: string): string {
  */
 /**
  * Re-parse an entry under the ADDRESS the server derives from the `id`
- * inside it (issue #100). The shared parser fills a missing `name`/`title`
+ * inside it. The shared parser fills a missing `name`/`title`
  * from the address's last segment, so once the id is known the entry has
  * to be parsed again under its real address — otherwise a reply that
  * legitimately omits the display name degrades to a placeholder nobody chose.
@@ -457,7 +457,7 @@ export function parseWithProperties(
 }
 
 /**
- * The `status` rules for stubs (issue #27), as messages — empty list means
+ * The `status` rules for stubs, as messages — empty list means
  * fine. `status: draft` belongs to SCENES only: per the data contract
  * (README) an npc knows alive/dead/missing/unknown and a location has no
  * status at all, so a `draft` leaking into a stub becomes an invalid
@@ -478,8 +478,8 @@ function stubStatusErrors(kind: "npc" | "location", fm: Record<string, unknown>)
 }
 
 /**
- * The npc `status` rule, shared by the stub validation and the NPC generator
- * (issue #21): present, and one of NPC_STATUSES. `subject` names who the rule
+ * The npc `status` rule, shared by the stub validation and the NPC generator:
+ * present, and one of NPC_STATUSES. `subject` names who the rule
  * is about, so the correction turn reads naturally in both places.
  */
 export function npcStatusErrors(fm: Record<string, unknown>, subject: string): string[] {
@@ -497,7 +497,7 @@ export function npcStatusErrors(fm: Record<string, unknown>, subject: string): s
 }
 
 /**
- * Validate one SUGGESTED ENTRY of a scene reply (issue #100): `kind` says
+ * Validate one SUGGESTED ENTRY of a scene reply: `kind` says
  * what it is, the properties `id` is its key, and the server addresses it as
  * `npcs/<id>` / `locations/<id>`. Returns the GeneratedStub or pushes errors.
  */
@@ -540,8 +540,8 @@ export function validateEntry(entry: RawEntry, index: number, errors: string[]):
 }
 
 /**
- * Which ids a scene may REFERENCE (issue #102). Before this ticket
- * the answer was "the campaign plus the stubs of the same reply"; with the
+ * Which ids a scene may REFERENCE. Before the pipeline
+ * the answer was "the campaign plus the stubs of the same reply"; with it
  * pipeline the reply is one scene and the other ids come from the OUTLINE, so
  * the allowed sets became a parameter instead of a local variable.
  */
@@ -574,7 +574,7 @@ export function validateSceneEntry(input: {
 }): GeneratedSceneDraft | null {
   const { reply, chapter, allowed, seenIds, errors } = input;
   // The scene's ADDRESS is the server's: `<chapter>/<id>`, with the chapter
-  // taken from the run's CONTEXT and never from the model (issue #100). The
+  // taken from the run's CONTEXT and never from the model. The
   // id is the one thing the model decides here, so it is the one thing
   // validated as an address would be.
   const fm = reply.properties;
@@ -657,7 +657,7 @@ export function validateSceneEntry(input: {
   };
 }
 
-// --- mechanical validation of an NPC reply (issue #21) -----------------------
+// --- mechanical validation of an NPC reply -----------------------------------
 
 /** The only legal target of an NPC run — the id IS the file name. */
 const NPC_PATH_PATTERN = /^npcs\/[a-z0-9][a-z0-9-]*$/;
@@ -803,16 +803,16 @@ export function quickstatsErrors(fm: Record<string, unknown>): string[] {
  *
  * The rules, all from the format contract (README "Entität: NPC"):
  * parseable properties whose `id` is a kebab-case id — the ADDRESS is the
- * server's (`npcs/<id>`, issue #100), the model does not name one — a `name`, a valid NpcStatus (`alive` unless the source says
+ * server's (`npcs/<id>`), the model does not name one — a `name`, a valid NpcStatus (`alive` unless the source says
  * otherwise), no invented `chapter`, quoted quickstats, relationships only to
  * npcs that exist, only `[!secret]` inside `## Weiß`, only known callouts, and
  * an empty `## Notizen`. An id that already exists is an error too — the DM
  * can pin a different one via the request's `id`.
  */
 /**
- * The NPC FORMAT rules that live in the body (issue #21): `## Weiß` carries
+ * The NPC FORMAT rules that live in the body: `## Weiß` carries
  * only `[!secret]`, `## Beziehungen` only existing npc ids, `## Notizen`
- * stays empty. Exported since issue #102, where an npc is generated as a part
+ * stays empty. Exported because an npc is generated as a part
  * of a scene run and has to be judged by the same rules as an npc RUN — minus
  * the ones that are about the run (no chapter, the pinned id).
  */
@@ -917,7 +917,7 @@ export function buildCorrectionMessage(
 
 const NPC_CORRECTION_TAIL = "die vollständige NPC-Datei enthalten";
 
-// --- run accounting (issue #18) -----------------------------------------------
+// --- run accounting ----------------------------------------------------------
 
 /** The raw reply for a 422 body: capped, and honest about being capped. */
 export function capRawReply(raw: string): string {
@@ -933,7 +933,7 @@ class RunUsage {
   private attempts = 0;
   private inputTokens = 0;
   private outputTokens = 0;
-  // Log-only (issue #110): how much of the input was a cache hit. It is NOT
+  // Log-only: how much of the input was a cache hit. It is NOT
   // added to the reported usage — a cached token was still sent, and the
   // review's „~N Tokens" is the size of the prompt, not its price.
   private cachedInputTokens = 0;
@@ -972,7 +972,7 @@ class RunUsage {
 
 /**
  * The truncation message — the ENGLISH technical fallback next to
- * `code: "llm_truncated"` (issue #69); the sentence the DM reads is built by
+ * `code: "llm_truncated"`; the sentence the DM reads is built by
  * the app from `maxTokens`. It names the effective cap so the number to raise
  * is unambiguous; see the LLM_MAX_TOKENS section of docs/DEPLOYMENT.md.
  */
@@ -1005,7 +1005,7 @@ export function withNamingHints<T extends { namingHints?: NamingHint[] }>(
 }
 
 /**
- * The provider loop itself, shared by both run kinds (issue #21) so the
+ * The provider loop itself, shared by both run kinds so the
  * mechanics can only ever be IDENTICAL: correction turns bounded by
  * LLM_CORRECTION_TURNS, truncation fail-fast before any validation, usage
  * summed over every call, and the raw reply in both 422 bodies.
@@ -1018,7 +1018,7 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
   validate: (raw: string) => { ok: true; result: T } | { ok: false; errors: string[] };
   correctionTail: string;
   /**
-   * Called once per provider call (issue #102). The pipeline counts its own
+   * Called once per provider call. The pipeline counts its own
    * calls with it: `usage` is absent whenever the endpoint reports no tokens,
    * so the run's „M Aufrufe" cannot be read off it — and a part that FAILED
    * has to contribute its attempts to the total as well.
@@ -1075,7 +1075,7 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
   }
 }
 
-// --- POST /api/:campaign/generate/npc (issue #21) -----------------------------
+// --- POST /api/:campaign/generate/npc ----------------------------------------
 
 /**
  * Run the NPC pipeline: context -> npc prompt -> provider -> mechanical
@@ -1157,7 +1157,7 @@ export function applySceneTarget(item: unknown, index: number): ApplyTarget {
     throw new ApiError(400, `${label}.markdown must be a non-empty string`);
   }
   assertSafeAddress(rel); // 400 on traversal/absolute/hidden
-  // `<chapter>/<id>` and nothing else since issue #100: the group segment of
+  // `<chapter>/<id>` and nothing else: the group segment of
   // a scene address is its `location`, which the SERVER derives on the way in
   // (`draftAddress`). A client that still sends a three-segment path is
   // naming a group of its own, and that is exactly the contradiction between
@@ -1185,7 +1185,7 @@ export function applySceneTarget(item: unknown, index: number): ApplyTarget {
 }
 
 /**
- * Deep-validate the `npc` item of the apply body -> write target (issue #21).
+ * Deep-validate the `npc` item of the apply body -> write target.
  * Re-validated on the way in, exactly like a scene draft and for the same
  * reason (apply is a separate request — never trust the client): the target
  * path, parseable properties, the id matching the file name and a valid
@@ -1228,7 +1228,7 @@ export function applyStubTarget(item: unknown, index: number): ApplyTarget {
   const id = item.id;
   const markdown = item.markdown;
   // Narrowed to the literal union on purpose — the status re-validation
-  // below is kind-specific (issue #27).
+  // below is kind-specific.
   if (kind !== "npc" && kind !== "location") {
     throw new ApiError(400, `${label}.kind must be "npc" or "location"`);
   }
@@ -1243,14 +1243,14 @@ export function applyStubTarget(item: unknown, index: number): ApplyTarget {
   const { parsed, error } = parseWithProperties(markdown, rel);
   if (error !== undefined) throw new ApiError(400, `${label}: ${error}`);
   // Re-validation, same as for scenes: a client payload must not sneak a
-  // stub status past the reply validation (issue #27).
+  // stub status past the reply validation.
   const statusError = stubStatusErrors(kind, parsed.properties)[0];
   if (statusError !== undefined) throw new ApiError(400, `${label}: ${statusError}`);
   return { rel, markdown };
 }
 
 /**
- * The new-chapter flow (issue #12): `chapter` + `chapterTitle` mean "the
+ * The new-chapter flow: `chapter` + `chapterTitle` mean "the
  * drafts go into a chapter that does not exist yet". Returns the
  * chapter entry to create in the same batch, or null when the
  * chapter is already there (idempotent — an existing chapter is not a
@@ -1314,7 +1314,7 @@ export async function newChapterTarget(
 }
 
 /**
- * Write the reviewed drafts (issue #57: as ROWS). Validates ALL drafts first
+ * Write the reviewed drafts (as ROWS). Validates ALL drafts first
  * (400), then checks ALL targets for conflicts (409 with the conflicting
  * paths, nothing partially written), then inserts them in ONE transaction —
  * which is what "all or nothing" now means literally. Returns the written
@@ -1324,13 +1324,13 @@ export async function newChapterTarget(
  * to the SAME all-or-nothing batch when it does not exist yet — the app's
  * "Neues Kapitel" flow.
  *
- * `npc` is the NPC generator's single draft (issue #21) — the same endpoint on
+ * `npc` is the NPC generator's single draft — the same endpoint on
  * purpose: conflict handling, atomic writes and the job cleanup are identical,
  * and a second apply endpoint would only duplicate them.
  *
- * `jobId` is the background job the drafts came from (issue #19): a
- * successful apply discards it — in the SAME transaction as the writes (issue
- * #62), so a crash can never leave a finished job behind whose drafts are
+ * `jobId` is the background job the drafts came from: a
+ * successful apply discards it — in the SAME transaction as the writes,
+ * so a crash can never leave a finished job behind whose drafts are
  * already stored. A stale id is ignored rather than dropping the wrong job.
  */
 export async function applyGenerated(
@@ -1382,8 +1382,8 @@ export async function applyGenerated(
     };
   });
 
-  // By IDENTITY, not by address: a scene's address carries its `location`
-  // (issue #100), so two drafts with the same id under different locations
+  // By IDENTITY, not by address: a scene's address carries its `location`, so
+  // two drafts with the same id under different locations
   // are two addresses for ONE row — and the row is what the insert claims.
   const seen = new Set<string>();
   for (const draft of drafts) {
@@ -1432,7 +1432,7 @@ export function assertDraftId(id: unknown, rel: string): void {
  * Where a draft will live: its address. For a SCENE that is
  * `<chapter>/<location>/<id>` — the chapter from the draft's own path (the
  * run's chapter), the id from the properties, and the GROUP from the
- * properties `location` (issue #100). Nothing about the group is taken from
+ * properties `location`. Nothing about the group is taken from
  * the path any more: that is what made a corrected `location` and the stored
  * address disagree. For every other kind the address is the path (an npc or
  * location draft is validated against its own segment, a chapter's id IS the

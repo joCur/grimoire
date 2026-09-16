@@ -1,13 +1,13 @@
 // „Eigenschaften" — editing ALL properties fields of one entry from the app
-// (issue #42, slice 2a of #15). This module is the pure half: which fields a
+// This module is the pure half: which fields a
 // kind has, what the open form starts with, and the PATCH body a save sends.
 // No react, no query imports, so every rule here is unit-testable.
 //
 // Three rules carry the whole thing:
 //
 //   1. The FIELD LIST comes from the entity types in @grimoire/shared — one
-//      list per kind, `id` deliberately absent (the rename cascade of issue
-//      #30 owns it) and the kind itself as well (it is derived from the path).
+//      list per kind, `id` deliberately absent (the rename cascade
+//      owns it) and the kind itself as well (it is derived from the path).
 //   2. Only what the DM CHANGED is patched. PATCH /properties re-emits the
 //      whole YAML block from the parsed entry, so every key we do not send
 //      keeps its value — unknown keys of an imported entry included. Sending
@@ -16,7 +16,7 @@
 //   3. Clearing a field DELETES the key (`null`, the server's delete marker)
 //      instead of writing an empty value — `tags: []` or `role: ''` is noise
 //      in an entry the DM also reads in an editor. Same choice the campaign
-//      metadata dialog made for a blank description (issue #34).
+//      metadata dialog made for a blank description.
 //
 // The format DEGRADES (README): an unknown `status`/`type` value is offered as
 // its own option instead of being corrected away, a reference field takes a
@@ -237,7 +237,7 @@ export function propertiesKindLabel(kind: EntityKind, t: Translate): string | un
   }
 }
 
-// --- the Ort field: free text in, a slug out (issue #100 follow-up) ----------
+// --- the Ort field: free text in, a slug out ---------------------------------
 //
 // `location` IS the group a scene sits under in its chapter, so it holds an
 // entity id — and for a while the form said exactly that and nothing else:
@@ -377,8 +377,8 @@ function normalize(value: FieldValue, field?: PropertiesField): FieldValue {
   switch (value.kind) {
     case "text":
       // The Ort field is the one control whose normalized form is not the
-      // typed text: it takes free text and STORES the slug (issue #100
-      // follow-up), so slugging here is what makes „Der Leuchtturm von
+      // typed text: it takes free text and STORES the slug, so slugging
+      // here is what makes „Der Leuchtturm von
       // Salzhafen" over a stored `leuchtturm`… well, a different id — but
       // „leuchtturm " or a re-typed „der-alte-hafen" no change at all, and
       // it is the same value the patch writes.
@@ -513,13 +513,13 @@ export function propertiesPatch(
  * A row that is completely empty (or holds only a name, which means „delete
  * this key") is fine and produces nothing here.
  *
- * A `location` that yields NO id (issue #100 follow-up): the field takes free
+ * A `location` that yields NO id: the field takes free
  * text and the save slugs it, so „Der alte Hafen" is fine — but „???" leaves
  * nothing an id could be made of (shared/slug.ts never invents one), and
  * there is no value to send. The hint under the field says what every other
  * text WILL do; this is the one that cannot be done.
  *
- * And an ID LIST (`npcs`, issue #70 audit): that list holds ids, not names —
+ * And an ID LIST (`npcs`): that list holds ids, not names —
  * every entry becomes a card and a reference the save creates — so the server
  * refuses a non-slug entry with a 400. Saying it here makes that a line under
  * the field before the click. `initial` is what the entry already holds and is

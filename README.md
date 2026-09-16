@@ -297,7 +297,7 @@ Siehe `generator/README.md`. Kurzfassung: Quelltext (EN) rein → Szenen als
 Entwürfe (DE, dieses Format) raus, immer `status: draft`, immer mit
 „Entwürfe prüfen" vor dem Übernehmen.
 
-Ein Szenen-Lauf ist eine **Pipeline** (#102): ein Gliederungs-Aufruf legt die
+Ein Szenen-Lauf ist eine **Pipeline**: ein Gliederungs-Aufruf legt die
 Szenen und ihre ids fest, danach wird jede Szene und jeder neue Eintrag
 einzeln geschrieben. Ein Formfehler kostet nur den betroffenen Teil, fertige
 Szenen sind sofort prüfbar, und ein defekter Teil lässt sich einzeln
