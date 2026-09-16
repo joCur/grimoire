@@ -484,11 +484,16 @@ if (import.meta.main) {
   if (repair !== undefined && repair.chaptersCreated.length > 0) {
     console.log(
       `${repair.chaptersCreated.length} chapter(s) named by a scene had no entry and got one ` +
-        "(titled by their id — rename them in the chapter overview):",
+        "(rename them in the chapter overview):",
     );
     for (const entry of repair.chaptersCreated) {
+      // `fromText` means the stored value was no id: the chapter carries the
+      // text as its title, which is a name the DM may well recognise.
+      const named =
+        entry.fromText === undefined ? "titled by its id" : `titled „${entry.fromText}"`;
       console.log(
-        `  · [${entry.campaignId}] ${entry.chapterId} (${entry.scenes} scene(s) were invisible)`,
+        `  · [${entry.campaignId}] ${entry.chapterId} (${named}, ` +
+          `${entry.scenes} scene(s) were invisible)`,
       );
     }
   }
@@ -496,11 +501,17 @@ if (import.meta.main) {
     // A scene belongs to a chapter, so one that had none was given the
     // „Unsortiert" chapter rather than failing the boot. Say where they went.
     console.log(
-      `scene(s) without a chapter were moved into „${UNSORTED_CHAPTER_TITLE}" ` +
+      `scene(s) without a usable chapter were moved into „${UNSORTED_CHAPTER_TITLE}" ` +
         `(chapter ${UNSORTED_CHAPTER_ID}) — sort them into a chapter of yours:`,
     );
     for (const entry of repair.unsorted) {
-      console.log(`  · [${entry.campaignId}] ${entry.scenes} scene(s)`);
+      // Whether the chapter was created matters: a NEW one is a row that
+      // appeared out of nowhere, an existing one already holds scenes the DM
+      // has seen before, and the two read very differently in the overview.
+      console.log(
+        `  · [${entry.campaignId}] ${entry.scenes} scene(s) — ` +
+          `${entry.chapterCreated ? "chapter created" : "chapter was already there"}`,
+      );
     }
   }
   if (repair !== undefined && repair.entriesCreated.length > 0) {
@@ -508,7 +519,12 @@ if (import.meta.main) {
       `${repair.entriesCreated.length} referenced entr(y/ies) had none and got an empty one:`,
     );
     for (const entry of repair.entriesCreated) {
-      console.log(`  · [${entry.campaignId}] ${entry.kind} ${entry.id}`);
+      // An entry created from free text is NOT empty — it carries the text as
+      // its name, because that text was the only thing the reference said.
+      console.log(
+        `  · [${entry.campaignId}] ${entry.kind} ${entry.id}` +
+          (entry.fromText === undefined ? "" : ` (from the text „${entry.fromText}")`),
+      );
     }
   }
   if (repair !== undefined && repair.repointed.length > 0) {
@@ -524,6 +540,20 @@ if (import.meta.main) {
     console.log("optional reference(s) named nothing that exists and are empty now:");
     for (const entry of repair.cleared) {
       console.log(`  · [${entry.campaignId}] ${entry.column}: ${entry.rows} row(s)`);
+    }
+  }
+  if (repair !== undefined && repair.clearedText.length > 0) {
+    // The loudest of the lot: the TEXT is gone from the column, and this line
+    // is the only place it still stands. Nothing is invented for it because
+    // the column may be empty — but the DM decides what it should have been.
+    console.log(
+      "optional reference(s) held text instead of an id and are empty now — " +
+        "please set them:",
+    );
+    for (const entry of repair.clearedText) {
+      console.log(
+        `  · [${entry.campaignId}] ${entry.column}: „${entry.value}" (${entry.rows} row(s))`,
+      );
     }
   }
   if (repair !== undefined && repair.dropped.length > 0) {

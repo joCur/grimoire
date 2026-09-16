@@ -168,7 +168,7 @@ describe("the boot repair of chapter references", () => {
 
     const outcome = repairReferences(client);
 
-    expect(outcome.unsorted).toEqual([{ campaignId: "beispiel", scenes: 3 }]);
+    expect(outcome.unsorted).toEqual([{ campaignId: "beispiel", scenes: 3, chapterCreated: true }]);
     expect(outcome.chaptersCreated).toEqual([]);
     expect(rows(client, "select id, title, status from chapters")).toEqual([
       { id: UNSORTED_CHAPTER_ID, title: UNSORTED_CHAPTER_TITLE, status: "planned" },
@@ -324,10 +324,57 @@ describe("the boot repair of entity references", () => {
       .prepare("insert into scene_npcs (campaign_id, scene_id, npc_id, pos) values ('beispiel', 'szene', '[[jorna]]', 1)")
       .run();
 
-    repairReferences(client);
+    const outcome = repairReferences(client);
 
     expect(rows(client, "select npc_id, pos from scene_npcs")).toEqual([
       { npc_id: "jorna", pos: 0 },
+    ]);
+    // BOTH numbers, because they used to disagree with the rows: the delete
+    // was silent, and the re-pointing counted the row it had just removed —
+    // two entries in the list for one row that never moved.
+    expect(outcome.dropped).toEqual([
+      { campaignId: "beispiel", table: "scene_npcs", rows: 1 },
+    ]);
+    expect(outcome.repointed).toEqual([]);
+    expect(repairReferences(client)).toBe(NO_REFERENCE_REPAIR);
+    client.close();
+  });
+
+  test("a dedup next to a row that DOES move reports one of each", async () => {
+    const client = await legacyDb();
+    addChapter(client, "01");
+    addScene(client, "szene", "01");
+    addScene(client, "andere", "01");
+    addNpc(client, "jorna");
+    // `[[jorna]]` twice: in one scene it duplicates the plain spelling and
+    // has to go, in the other it is the only entry and moves onto `jorna`.
+    client
+      .prepare("insert into scene_npcs (campaign_id, scene_id, npc_id, pos) values ('beispiel', 'szene', 'jorna', 0)")
+      .run();
+    client
+      .prepare("insert into scene_npcs (campaign_id, scene_id, npc_id, pos) values ('beispiel', 'szene', '[[jorna]]', 1)")
+      .run();
+    client
+      .prepare("insert into scene_npcs (campaign_id, scene_id, npc_id, pos) values ('beispiel', 'andere', '[[jorna]]', 0)")
+      .run();
+
+    const outcome = repairReferences(client);
+
+    expect(outcome.dropped).toEqual([
+      { campaignId: "beispiel", table: "scene_npcs", rows: 1 },
+    ]);
+    expect(outcome.repointed).toEqual([
+      {
+        campaignId: "beispiel",
+        column: "scene_npcs.npc_id",
+        from: "[[jorna]]",
+        to: "jorna",
+        rows: 1,
+      },
+    ]);
+    expect(rows(client, "select scene_id, npc_id from scene_npcs order by scene_id")).toEqual([
+      { scene_id: "andere", npc_id: "jorna" },
+      { scene_id: "szene", npc_id: "jorna" },
     ]);
     client.close();
   });
@@ -384,6 +431,218 @@ describe("the boot repair of entity references", () => {
     client.close();
   });
 
+  // The second half of "a reference never invents an entry the DM would not
+  // recognise": the brackets were notation, and PROSE is not an id either.
+  // An entry whose id is a sentence would carry that sentence in every
+  // address built from it and in every ⌘K result.
+  test("free text in a NULLABLE reference becomes none, and is reported", async () => {
+    const client = await legacyDb();
+    addChapter(client, "01");
+    addScene(client, "szene", "01", "Der alte Hafen");
+    client
+      .prepare("insert into sessions (campaign_id, id, started) values ('beispiel', 's1', '2026-01-15T19:30')")
+      .run();
+    client
+      .prepare(
+        `insert into log_entries (campaign_id, session_id, pos, raw, at, scene_id, text)
+         values ('beispiel', 's1', 0, '- 19:52 (Abkürzung übers Moor) sie nehmen sie', '19:52', 'Abkürzung übers Moor', 'sie nehmen sie')`,
+      )
+      .run();
+
+    const outcome = repairReferences(client);
+
+    // Nothing was invented: the column may be empty, so it is.
+    expect(outcome.entriesCreated).toEqual([]);
+    expect(rows(client, "select count(*) as n from locations")).toEqual([{ n: 0 }]);
+    expect(rows(client, "select id, location from scenes")).toEqual([
+      { id: "szene", location: null },
+    ]);
+    expect(rows(client, "select scene_id, raw from log_entries")).toEqual([
+      // The line keeps its own text — the scene marker is IN `raw`, so the
+      // evening is readable exactly as it was written.
+      {
+        scene_id: null,
+        raw: "- 19:52 (Abkürzung übers Moor) sie nehmen sie",
+      },
+    ]);
+    // …and the text is in the report, because for `scenes.location` this is
+    // the only place it still stands.
+    expect(outcome.clearedText).toEqual([
+      {
+        campaignId: "beispiel",
+        column: "scenes.location",
+        value: "Der alte Hafen",
+        rows: 1,
+      },
+      {
+        campaignId: "beispiel",
+        column: "log_entries.scene_id",
+        value: "Abkürzung übers Moor",
+        rows: 1,
+      },
+    ]);
+    expect(repairReferences(client)).toBe(NO_REFERENCE_REPAIR);
+    client.close();
+  });
+
+  test("free text in a KEY reference becomes an id with the text as its name", async () => {
+    const client = await legacyDb();
+    addChapter(client, "01");
+    addScene(client, "szene", "01");
+    addNpc(client, "jorna");
+    client
+      .prepare("insert into sessions (campaign_id, id, started) values ('beispiel', 's1', '2026-01-15T19:30')")
+      .run();
+    client
+      .prepare("insert into scene_npcs (campaign_id, scene_id, npc_id, pos) values ('beispiel', 'szene', 'Alte Fischerin', 0)")
+      .run();
+    client
+      .prepare(
+        `insert into npc_relations (campaign_id, npc_id, other_npc_id, note, pos)
+         values ('beispiel', 'jorna', 'Alte Freundin aus Waterdeep', 'sie schreiben sich', 0)`,
+      )
+      .run();
+    client
+      .prepare("insert into session_scenes_played (campaign_id, session_id, scene_id, pos) values ('beispiel', 's1', 'Abkürzung übers Moor', 0)")
+      .run();
+
+    const outcome = repairReferences(client);
+
+    // Here the reference is part of the KEY: there is no NULL to fall back
+    // on, so the entry IS created — under an id, with the text as its name.
+    expect(outcome.entriesCreated).toEqual([
+      {
+        campaignId: "beispiel",
+        kind: "npc",
+        id: "alte-fischerin",
+        fromText: "Alte Fischerin",
+      },
+      {
+        campaignId: "beispiel",
+        kind: "npc",
+        id: "alte-freundin-aus-waterdeep",
+        fromText: "Alte Freundin aus Waterdeep",
+      },
+      {
+        campaignId: "beispiel",
+        kind: "scene",
+        id: "abkuerzung-uebers-moor",
+        fromText: "Abkürzung übers Moor",
+      },
+    ]);
+    expect(rows(client, "select id, name from npcs order by id")).toEqual([
+      { id: "alte-fischerin", name: "Alte Fischerin" },
+      { id: "alte-freundin-aus-waterdeep", name: "Alte Freundin aus Waterdeep" },
+      { id: "jorna", name: "jorna" },
+    ]);
+    expect(rows(client, "select id, title, chapter_id from scenes order by id")).toEqual([
+      { id: "abkuerzung-uebers-moor", title: "Abkürzung übers Moor", chapter_id: UNSORTED_CHAPTER_ID },
+      { id: "szene", title: "szene", chapter_id: "01" },
+    ]);
+    // Every reference survived, pointing at the entry that now carries the
+    // text — and the note with it.
+    expect(rows(client, "select npc_id from scene_npcs")).toEqual([
+      { npc_id: "alte-fischerin" },
+    ]);
+    expect(rows(client, "select other_npc_id, note from npc_relations")).toEqual([
+      { other_npc_id: "alte-freundin-aus-waterdeep", note: "sie schreiben sich" },
+    ]);
+    expect(rows(client, "select scene_id from session_scenes_played")).toEqual([
+      { scene_id: "abkuerzung-uebers-moor" },
+    ]);
+    // Findable by the text a DM would search for, not only by the slug.
+    expect(
+      rows(client, "select title from search_fts where entity_id = 'alte-fischerin'"),
+    ).toEqual([{ title: "Alte Fischerin" }]);
+    expect(repairReferences(client)).toBe(NO_REFERENCE_REPAIR);
+    client.close();
+  });
+
+  test("text that yields no id at all loses its row, like an empty one", async () => {
+    const client = await legacyDb();
+    addChapter(client, "01");
+    addScene(client, "szene", "01");
+    // Nothing survives the transliteration, so there is no id to create and
+    // no id to keep. An id is never invented out of nothing.
+    client
+      .prepare("insert into scene_npcs (campaign_id, scene_id, npc_id, pos) values ('beispiel', 'szene', '???', 0)")
+      .run();
+
+    const outcome = repairReferences(client);
+
+    expect(outcome.entriesCreated).toEqual([]);
+    expect(outcome.dropped).toEqual([
+      { campaignId: "beispiel", table: "scene_npcs", rows: 1 },
+    ]);
+    expect(rows(client, "select count(*) as n from npcs")).toEqual([{ n: 0 }]);
+    expect(rows(client, "select count(*) as n from scene_npcs")).toEqual([{ n: 0 }]);
+    client.close();
+  });
+
+  test("a scene's chapter stored as `[[id]]` re-points instead of doubling it", async () => {
+    const client = await legacyDb();
+    addChapter(client, "03-x");
+    addScene(client, "szene", "[[03-x]]");
+
+    const outcome = repairReferences(client);
+
+    // The chapter the value NAMES exists, so the scene is moved onto it. A
+    // second chapter called `[[03-x]]` would satisfy the constraint and put a
+    // bracketed id into the overview and into the scene's address.
+    expect(outcome.chaptersCreated).toEqual([]);
+    expect(outcome.repointed).toEqual([
+      {
+        campaignId: "beispiel",
+        column: "scenes.chapter_id",
+        from: "[[03-x]]",
+        to: "03-x",
+        rows: 1,
+      },
+    ]);
+    expect(rows(client, "select id from chapters")).toEqual([{ id: "03-x" }]);
+    expect(rows(client, "select id, chapter_id from scenes")).toEqual([
+      { id: "szene", chapter_id: "03-x" },
+    ]);
+    expect(repairReferences(client)).toBe(NO_REFERENCE_REPAIR);
+    client.close();
+  });
+
+  test("a scene's chapter stored as `[[id]]` with NO chapter creates the unwrapped one", async () => {
+    const client = await legacyDb();
+    addScene(client, "szene", "[[03-x]]");
+
+    const outcome = repairReferences(client);
+
+    expect(outcome.chaptersCreated).toEqual([
+      { campaignId: "beispiel", chapterId: "03-x", scenes: 1 },
+    ]);
+    expect(rows(client, "select id, title from chapters")).toEqual([
+      { id: "03-x", title: "03-x" },
+    ]);
+    expect(rows(client, "select id, chapter_id from scenes")).toEqual([
+      { id: "szene", chapter_id: "03-x" },
+    ]);
+    client.close();
+  });
+
+  test("the unsorted chapter is reported as created, or as already there", async () => {
+    const client = await legacyDb();
+    addScene(client, "szene-a", null);
+    expect(repairReferences(client).unsorted).toEqual([
+      { campaignId: "beispiel", scenes: 1, chapterCreated: true },
+    ]);
+
+    // A SECOND boot with a second chapterless scene: the chapter is there
+    // already, and a row that did not appear out of nowhere reads very
+    // differently in the report.
+    addScene(client, "szene-b", null);
+    expect(repairReferences(client).unsorted).toEqual([
+      { campaignId: "beispiel", scenes: 1, chapterCreated: false },
+    ]);
+    expect(rows(client, "select count(*) as n from chapters")).toEqual([{ n: 1 }]);
+    client.close();
+  });
+
   test("is a no-op on a database without a hole, and idempotent", async () => {
     const client = await legacyDb();
     addChapter(client, "01");
@@ -432,7 +691,7 @@ describe("the boot repair of entity references", () => {
 
     const repaired = await withHoles();
     const outcome = repairReferences(repaired);
-    expect(outcome.unsorted).toEqual([{ campaignId: "beispiel", scenes: 1 }]);
+    expect(outcome.unsorted).toEqual([{ campaignId: "beispiel", scenes: 1, chapterCreated: true }]);
     expect(outcome.entriesCreated).toEqual([
       { campaignId: "beispiel", kind: "location", id: "bucht" },
     ]);
@@ -813,7 +1072,7 @@ describe("upgrading an existing database through the reference constraints", () 
       expect(referenceRepair.chaptersCreated).toEqual([
         { campaignId: "beispiel", chapterId: "03-dragon-hatchery", scenes: 1 },
       ]);
-      expect(referenceRepair.unsorted).toEqual([{ campaignId: "beispiel", scenes: 1 }]);
+      expect(referenceRepair.unsorted).toEqual([{ campaignId: "beispiel", scenes: 1, chapterCreated: true }]);
       expect(referenceRepair.entriesCreated).toEqual([
         { campaignId: "beispiel", kind: "location", id: "bucht" },
         { campaignId: "beispiel", kind: "npc", id: "fenn" },

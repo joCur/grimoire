@@ -51,6 +51,29 @@
 // unwrapped id is what gets the empty entry when IT has no row either — the
 // brackets are notation, never part of an id.
 //
+// AND NO ENTRY EVER GETS AN ID THAT IS PROSE. The columns also hold plain
+// text: `npcs: [Alte Fischerin]`, a relation line whose counterpart is a
+// name, a scene whose `location` is „Der alte Hafen". Creating the entry the
+// value literally names would satisfy the constraint the same way the
+// brackets did and be wrong the same way — an entry whose id is a sentence,
+// in every address built from it, in every ⌘K result. Which of the two
+// answers is right depends on whether the column has a NULL:
+//
+//   * NULLABLE (`scenes.location`, `log_entries.scene_id`) → NULL, and the
+//     text in the boot report. Nothing has to be invented, because "no
+//     reference" is a legal state: the log line still carries its `raw`, and
+//     the scene falls back to chapter level, where the DM sets an Ort.
+//   * PART OF THE KEY (`scene_npcs.npc_id`, `npc_relations.other_npc_id`,
+//     `session_scenes_played.scene_id`) → the entry IS created, but under the
+//     slug of the text (`toSlug`, the one derivation rule the product has)
+//     and with the text as its display NAME. That is exactly what the
+//     properties form does with a typed Ort and what the group step of #100
+//     did with a group directory. The reference survives, the name survives,
+//     and the id is an id.
+//
+// A text nothing survives the transliteration of („???") yields no id at all;
+// there the row goes, like a reference that named nothing.
+//
 // EVERYTHING IT DOES IS REPORTED at boot (server.ts), because a row appearing
 // out of nowhere is something the DM should read rather than discover.
 //
@@ -66,7 +89,7 @@
 // dropped it) and on one that already lost it. A table or column that is not
 // there yet is skipped instead of guessed at.
 
-import { ENTITY_SLUG } from "@grimoire/shared";
+import { ENTITY_SLUG, toSlug } from "@grimoire/shared";
 import type { SqliteClient } from "./driver";
 
 /** The chapter that takes in scenes which name none. */
@@ -76,10 +99,12 @@ export const UNSORTED_CHAPTER_TITLE = "Unsortiert";
 /** One chapter row this step had to create, and for how many scenes. */
 export interface ChapterCreated {
   campaignId: string;
-  /** The chapter id the scenes named — and now the chapter's title too. */
+  /** The chapter id the scenes named — and, absent `fromText`, its title. */
   chapterId: string;
   /** How many scenes were hanging under it. */
   scenes: number;
+  /** The free text the id was derived from, when it was not an id itself. */
+  fromText?: string;
 }
 
 /** One campaign whose chapterless scenes were moved into `unsortiert`. */
@@ -87,6 +112,8 @@ export interface ScenesUnsorted {
   campaignId: string;
   /** How many scenes had no chapter at all. */
   scenes: number;
+  /** Did the chapter have to be created, or was one already there? */
+  chapterCreated: boolean;
 }
 
 /** One empty entry created for a reference that named no row. */
@@ -94,6 +121,12 @@ export interface EntryCreated {
   campaignId: string;
   kind: EntryKind;
   id: string;
+  /**
+   * The free text the id was derived from, when the stored value was no id —
+   * it is the entry's display name, and the boot report names it, because an
+   * entry the DM never authored is something to read rather than discover.
+   */
+  fromText?: string;
 }
 
 /** One reference re-pointed at the entry it actually named. */
@@ -110,6 +143,20 @@ export interface ReferenceRepointed {
 export interface ReferenceCleared {
   campaignId: string;
   column: string;
+  rows: number;
+}
+
+/**
+ * One optional reference that held FREE TEXT — NULL now, with the text in the
+ * report. Its own category, not lumped in with `cleared`: „the field was
+ * empty" needs no words, „the field said Der alte Hafen and says nothing now"
+ * is the only copy of that sentence the DM has left.
+ */
+export interface ReferenceTextCleared {
+  campaignId: string;
+  column: string;
+  /** The text that stood in the column. */
+  value: string;
   rows: number;
 }
 
@@ -131,6 +178,8 @@ export interface ReferenceRepairOutcome {
   repointed: ReferenceRepointed[];
   /** Optional references that named nothing and are NULL now. */
   cleared: ReferenceCleared[];
+  /** Optional references that held free text and are NULL now. */
+  clearedText: ReferenceTextCleared[];
   /** Reference rows that named nothing and were dropped. */
   dropped: ReferenceDropped[];
 }
@@ -141,6 +190,7 @@ export const NO_REFERENCE_REPAIR: ReferenceRepairOutcome = {
   entriesCreated: [],
   repointed: [],
   cleared: [],
+  clearedText: [],
   dropped: [],
 };
 
@@ -243,6 +293,58 @@ function unwrapRef(value: string): string {
 }
 
 /**
+ * What a stored value can be READ as: the id it names, and the text it is
+ * when it names none.
+ *
+ * `id` is "" for a text nothing usable survives the transliteration of — an
+ * id is never invented out of nothing (`toSlug`'s own rule). `text` is set
+ * only when the value was NOT an id, and it is then the display name the
+ * created entry gets; see the header for which columns may create one.
+ */
+function referenceValue(value: string): { id: string; text: string } {
+  const unwrapped = unwrapRef(value).trim();
+  if (ENTITY_SLUG.test(unwrapped)) return { id: unwrapped, text: "" };
+  return { id: toSlug(unwrapped), text: unwrapped };
+}
+
+/**
+ * What `pragma foreign_key_check` finds, per table — LOGGED, not returned.
+ *
+ * A violation of a constraint a database ALREADY carries is not this step's
+ * business: it closes the holes the old unconstrained schema allowed, and the
+ * migrator then rebuilds the tables. But if such a row is there, the rebuild
+ * fails on a copy statement — and all a boot used to say was that a migration
+ * had failed, with no hint which row it choked on. Naming the tables
+ * beforehand turns that into a diagnosis.
+ *
+ * It prints rather than reporting through `OpenDb` for exactly that reason:
+ * the interesting case is the boot that does not get far enough to return
+ * anything. Silent on a clean database, which is every database this server
+ * writes, and silent on one the migrator has not built yet.
+ */
+export function reportForeignKeyViolations(client: SqliteClient): void {
+  let violations: Record<string, unknown>[];
+  try {
+    violations = client.prepare("pragma foreign_key_check").all();
+  } catch {
+    return;
+  }
+  if (violations.length === 0) return;
+  const perTable = new Map<string, number>();
+  for (const violation of violations) {
+    const table = String(violation.table ?? "?");
+    perTable.set(table, (perTable.get(table) ?? 0) + 1);
+  }
+  console.log(
+    `${violations.length} row(s) already break a foreign key this database ` +
+      "carries — the table rebuilds of the migration will fail on them:",
+  );
+  for (const [table, rows] of [...perTable].sort(([a], [b]) => cmp(a, b))) {
+    console.log(`  · ${table}: ${rows} row(s)`);
+  }
+}
+
+/**
  * Close every reference hole, in ONE transaction: either the database is
  * ready for the constraints or it is untouched. Returns what it did, which
  * the boot log reports; `NO_REFERENCE_REPAIR` when there was nothing to do
@@ -257,14 +359,16 @@ export function repairReferences(client: SqliteClient): ReferenceRepairOutcome {
     entriesCreated: [],
     repointed: [],
     cleared: [],
+    clearedText: [],
     dropped: [],
   };
 
   const createChapter = client.prepare(
-    // `title = id` on purpose for a repaired chapter — the slug is the only
-    // name anybody has for it, and the DM renames it in the overview. `pos`
-    // puts it LAST in its campaign, which is where an unplaced chapter
-    // belongs; any other choice would push the known chapters around.
+    // `title = id` for a chapter named by a slug — that slug is the only name
+    // anybody has for it, and the DM renames it in the overview. When the
+    // value was TEXT the text is the title, because then a name does exist.
+    // `pos` puts the chapter LAST in its campaign, which is where an unplaced
+    // chapter belongs; any other choice would push the known chapters around.
     `insert into chapters (campaign_id, id, title, status, body, extra, pos, rev)
      values (?, ?, ?, 'planned', '', '{}',
              coalesce((select max(pos) + 1 from chapters where campaign_id = ?), 0), 1)`,
@@ -274,14 +378,18 @@ export function repairReferences(client: SqliteClient): ReferenceRepairOutcome {
   // boot over an index the search rebuilds anyway.
   let indexStatement: ReturnType<SqliteClient["prepare"]> | undefined;
 
-  /** Make a created row findable in the search — same shape as the store. */
-  function index(campaignId: string, kind: string, id: string): void {
+  /**
+   * Make a created row findable in the search — same shape as the store.
+   * `title` is what ⌘K shows, so an entry created from free text is found by
+   * that text and not only by the slug derived from it.
+   */
+  function index(campaignId: string, kind: string, id: string, title = id): void {
     try {
       indexStatement ??= client.prepare(
         `insert into search_fts (title, ref, tags, body, campaign_id, kind, entity_id)
          values (?, ?, '', '', ?, ?, ?)`,
       );
-      indexStatement.run(id, id, campaignId, kind, id);
+      indexStatement.run(title, id, campaignId, kind, id);
     } catch {
       // No FTS table on this database — the row is what matters.
     }
@@ -294,39 +402,48 @@ export function repairReferences(client: SqliteClient): ReferenceRepairOutcome {
     );
   }
 
-  function ensureUnsortedChapter(campaignId: string): void {
-    if (entryExists(campaignId, "chapters", UNSORTED_CHAPTER_ID)) return;
+  /** True when the chapter had to be created, false when one was there. */
+  function ensureUnsortedChapter(campaignId: string): boolean {
+    if (entryExists(campaignId, "chapters", UNSORTED_CHAPTER_ID)) return false;
     createChapter.run(campaignId, UNSORTED_CHAPTER_ID, UNSORTED_CHAPTER_TITLE, campaignId);
-    index(campaignId, "chapter", UNSORTED_CHAPTER_ID);
+    index(campaignId, "chapter", UNSORTED_CHAPTER_ID, UNSORTED_CHAPTER_TITLE);
+    return true;
   }
 
   /**
    * The empty entry a reference asks for — the id and nothing else, exactly
    * what the write paths create (`ensureNpcRow`, `ensureLocationRow`). A SCENE
    * also gets the one thing it cannot be without: a chapter, the `unsortiert`
-   * one. Its title stays empty and renders as the id, like every other empty
-   * entry.
+   * one.
+   *
+   * `name` is the free text the id was derived from, and only then: an entry
+   * whose name repeats its id says nothing, and render.ts falls back to the id
+   * anyway. With a name the entry is the text the DM wrote, under an id that
+   * is an id — the only shape in which a reference written as prose can be
+   * kept at all (see the header).
    */
-  function createEntry(campaignId: string, kind: EntryKind, id: string): void {
+  function createEntry(campaignId: string, kind: EntryKind, id: string, name = ""): void {
     if (kind === "scene") {
       ensureUnsortedChapter(campaignId);
       client
         .prepare(
           `insert into scenes (campaign_id, id, chapter_id, title, pos)
-           values (?, ?, ?, '',
+           values (?, ?, ?, ?,
                    coalesce((select max(pos) + 1 from scenes where campaign_id = ?), 0))`,
         )
-        .run(campaignId, id, UNSORTED_CHAPTER_ID, campaignId);
+        .run(campaignId, id, UNSORTED_CHAPTER_ID, name, campaignId);
     } else {
       client
         .prepare(
           `insert into ${kind === "npc" ? "npcs" : "locations"} (campaign_id, id, name)
-           values (?, ?, '')`,
+           values (?, ?, ?)`,
         )
-        .run(campaignId, id);
+        .run(campaignId, id, name);
     }
-    index(campaignId, kind, id);
-    outcome.entriesCreated.push({ campaignId, kind, id });
+    index(campaignId, kind, id, name === "" ? id : name);
+    outcome.entriesCreated.push(
+      name === "" ? { campaignId, kind, id } : { campaignId, kind, id, fromText: name },
+    );
   }
 
   /** The holes of one reference column, grouped by the value that has none. */
@@ -359,8 +476,16 @@ export function repairReferences(client: SqliteClient): ReferenceRepairOutcome {
       .all() as unknown as CountRow[];
   }
 
-  /** Move every row holding `row.value` onto the id it meant. */
-  function repoint(ref: RefColumn, row: HoleRow, meant: string): void {
+  /**
+   * Move every row holding `row.value` onto the id it meant, and report how
+   * many actually moved.
+   *
+   * `rows` is passed rather than taken from `row.n`: on a key column some of
+   * those rows are deleted first as duplicates of the row the re-pointing
+   * would collide with, and counting them as re-pointed made the boot report
+   * claim work it had undone in the same breath.
+   */
+  function repoint(ref: RefColumn, row: HoleRow, meant: string, rows: number): void {
     client
       .prepare(`update ${ref.table} set ${ref.column} = ? where campaign_id = ? and ${ref.column} = ?`)
       .run(meant, row.campaign_id, row.value);
@@ -369,8 +494,13 @@ export function repairReferences(client: SqliteClient): ReferenceRepairOutcome {
       column: `${ref.table}.${ref.column}`,
       from: row.value,
       to: meant,
-      rows: Number(row.n),
+      rows,
     });
+  }
+
+  /** Report rows this step had to delete, because nothing could keep them. */
+  function reportDropped(campaignId: string, table: string, rows: number): void {
+    if (rows > 0) outcome.dropped.push({ campaignId, table, rows });
   }
 
   client
@@ -385,26 +515,63 @@ export function repairReferences(client: SqliteClient): ReferenceRepairOutcome {
             order by campaign_id`,
         )
         .all() as unknown as CountRow[]) {
-        ensureUnsortedChapter(row.campaign_id);
+        const chapterCreated = ensureUnsortedChapter(row.campaign_id);
         client
           .prepare(
             `update scenes set chapter_id = ?
               where campaign_id = ? and (chapter_id is null or trim(chapter_id) = '')`,
           )
           .run(UNSORTED_CHAPTER_ID, row.campaign_id);
-        outcome.unsorted.push({ campaignId: row.campaign_id, scenes: Number(row.n) });
+        outcome.unsorted.push({
+          campaignId: row.campaign_id,
+          scenes: Number(row.n),
+          chapterCreated,
+        });
       }
 
-      // 2. A `chapter_id` that names no chapter: the chapter is the scene's
-      //    address, so it is created under its own slug.
-      for (const row of holes({ table: "scenes", column: "chapter_id", target: "chapters" })) {
-        createChapter.run(row.campaign_id, row.value, row.value, row.campaign_id);
-        index(row.campaign_id, "chapter", row.value);
-        outcome.chaptersCreated.push({
-          campaignId: row.campaign_id,
-          chapterId: row.value,
-          scenes: Number(row.n),
-        });
+      // 2. A `chapter_id` that names no chapter. The chapter is the scene's
+      //    ADDRESS, so unlike a grouping note it IS created — but the value
+      //    is read first, like every other reference: a stored
+      //    `[[03-x]]` names the chapter `03-x` (and gets re-pointed at it
+      //    instead of adding a second one next to it), and text becomes an id
+      //    with the text as the chapter's title. A chapter whose id is a
+      //    sentence would carry that sentence in the address of every scene
+      //    under it.
+      const sceneChapter: RefColumn = {
+        table: "scenes",
+        column: "chapter_id",
+        target: "chapters",
+      };
+      for (const row of holes(sceneChapter)) {
+        const meant = referenceValue(row.value);
+        // NOT NULL and part of the address: without an id there is nothing to
+        // point the scene at but the chapter that exists for exactly this.
+        const chapterId = meant.id === "" ? UNSORTED_CHAPTER_ID : meant.id;
+        if (chapterId === UNSORTED_CHAPTER_ID) {
+          const chapterCreated = ensureUnsortedChapter(row.campaign_id);
+          outcome.unsorted.push({
+            campaignId: row.campaign_id,
+            scenes: Number(row.n),
+            chapterCreated,
+          });
+        } else if (!entryExists(row.campaign_id, "chapters", chapterId)) {
+          const title = meant.text === "" ? chapterId : meant.text;
+          createChapter.run(row.campaign_id, chapterId, title, row.campaign_id);
+          index(row.campaign_id, "chapter", chapterId, title);
+          outcome.chaptersCreated.push(
+            meant.text === ""
+              ? { campaignId: row.campaign_id, chapterId, scenes: Number(row.n) }
+              : {
+                  campaignId: row.campaign_id,
+                  chapterId,
+                  scenes: Number(row.n),
+                  fromText: meant.text,
+                },
+          );
+        }
+        if (chapterId !== row.value) {
+          repoint(sceneChapter, row, chapterId, Number(row.n));
+        }
       }
 
       // 3. The nullable references.
@@ -415,32 +582,53 @@ export function repairReferences(client: SqliteClient): ReferenceRepairOutcome {
           `update ${ref.table} set ${ref.column} = null
             where campaign_id = ? and ${ref.column} is not null and trim(${ref.column}) = ''`,
         );
+        const clearValue = client.prepare(
+          `update ${ref.table} set ${ref.column} = null
+            where campaign_id = ? and ${ref.column} = ?`,
+        );
         for (const row of blanks(ref)) {
           clearBlank.run(row.campaign_id);
           cleared.set(row.campaign_id, Number(row.n));
         }
         for (const row of holes(ref)) {
-          const meant = unwrapRef(row.value);
           if (ref.creates === false) {
             // A chapter is never created by naming it: the value names the
             // chapter it MEANT when that one exists, and nothing otherwise.
-            if (meant !== row.value && entryExists(row.campaign_id, ref.target, meant)) {
-              repoint(ref, row, meant);
+            // Only the brackets are read here — deriving a chapter from prose
+            // and hoping it hits one would be a guess, not an unwrapping.
+            const unwrapped = unwrapRef(row.value);
+            if (
+              unwrapped !== row.value &&
+              entryExists(row.campaign_id, ref.target, unwrapped)
+            ) {
+              repoint(ref, row, unwrapped, Number(row.n));
               continue;
             }
-            client
-              .prepare(
-                `update ${ref.table} set ${ref.column} = null
-                  where campaign_id = ? and ${ref.column} = ?`,
-              )
-              .run(row.campaign_id, row.value);
+            clearValue.run(row.campaign_id, row.value);
             cleared.set(row.campaign_id, (cleared.get(row.campaign_id) ?? 0) + Number(row.n));
             continue;
           }
-          if (!entryExists(row.campaign_id, ref.target, meant)) {
-            createEntry(row.campaign_id, ref.creates, meant);
+          const meant = referenceValue(row.value);
+          if (meant.text !== "") {
+            // FREE TEXT in a column that may be NULL. Nothing is invented for
+            // it: "no reference" is a legal state here, so the value goes and
+            // the TEXT goes into the report — a log line still carries its
+            // `raw`, and a scene falls back to chapter level, where the DM
+            // picks an Ort. See the header for why the key columns answer
+            // differently.
+            clearValue.run(row.campaign_id, row.value);
+            outcome.clearedText.push({
+              campaignId: row.campaign_id,
+              column: `${ref.table}.${ref.column}`,
+              value: row.value,
+              rows: Number(row.n),
+            });
+            continue;
           }
-          if (meant !== row.value) repoint(ref, row, meant);
+          if (!entryExists(row.campaign_id, ref.target, meant.id)) {
+            createEntry(row.campaign_id, ref.creates, meant.id);
+          }
+          if (meant.id !== row.value) repoint(ref, row, meant.id, Number(row.n));
         }
         for (const [campaignId, rows] of [...cleared].sort(([a], [b]) => cmp(a, b))) {
           outcome.cleared.push({ campaignId, column: `${ref.table}.${ref.column}`, rows });
@@ -454,36 +642,53 @@ export function repairReferences(client: SqliteClient): ReferenceRepairOutcome {
           `delete from ${ref.table}
             where campaign_id = ? and ${ref.column} is not null and trim(${ref.column}) = ''`,
         );
+        const dropValue = client.prepare(
+          `delete from ${ref.table} where campaign_id = ? and ${ref.column} = ?`,
+        );
         for (const row of blanks(ref)) {
           dropBlank.run(row.campaign_id);
-          outcome.dropped.push({
-            campaignId: row.campaign_id,
-            table: ref.table,
-            rows: Number(row.n),
-          });
+          reportDropped(row.campaign_id, ref.table, Number(row.n));
         }
+        // The row the re-pointing would DUPLICATE goes first: the reference is
+        // part of the key, so a parent that names both spellings would
+        // otherwise end up with the same entry twice.
+        const sameParent = ref.keyColumns.map((column) => `${column} = r.${column}`).join(" and ");
+        const dropDuplicate = client.prepare(
+          `delete from ${ref.table} as r
+            where r.campaign_id = ? and r.${ref.column} = ?
+              and exists (select 1 from ${ref.table}
+                           where campaign_id = r.campaign_id
+                             and ${ref.column} = ? and ${sameParent})`,
+        );
         for (const row of holes(ref)) {
-          const meant = unwrapRef(row.value);
-          if (!entryExists(row.campaign_id, ref.target, meant)) {
-            createEntry(row.campaign_id, KIND_OF_TARGET[ref.target] ?? "npc", meant);
+          const meant = referenceValue(row.value);
+          if (meant.id === "") {
+            // Free text nothing usable survives the transliteration of, in a
+            // column that has no NULL: there is no id to create and no id to
+            // keep, so the row goes the way a reference that named nothing
+            // does — and the report says so.
+            reportDropped(
+              row.campaign_id,
+              ref.table,
+              Number(dropValue.run(row.campaign_id, row.value).changes),
+            );
+            continue;
           }
-          if (meant === row.value) continue;
-          // The row the re-pointing would DUPLICATE goes first: the reference
-          // is part of the key, so a parent that names both spellings would
-          // otherwise end up with the same entry twice.
-          const sameParent = ref.keyColumns
-            .map((column) => `${column} = r.${column}`)
-            .join(" and ");
-          client
-            .prepare(
-              `delete from ${ref.table} as r
-                where r.campaign_id = ? and r.${ref.column} = ?
-                  and exists (select 1 from ${ref.table}
-                               where campaign_id = r.campaign_id
-                                 and ${ref.column} = ? and ${sameParent})`,
-            )
-            .run(row.campaign_id, row.value, meant);
-          repoint(ref, row, meant);
+          if (!entryExists(row.campaign_id, ref.target, meant.id)) {
+            // TEXT becomes an entry here, unlike in the nullable columns: the
+            // reference is part of the key, so there is no NULL to fall back
+            // on and dropping the row would drop the note with it. It gets an
+            // id derived from the text, and the text as its name.
+            createEntry(row.campaign_id, KIND_OF_TARGET[ref.target] ?? "npc", meant.id, meant.text);
+          }
+          if (meant.id === row.value) continue;
+          const duplicates = Number(
+            dropDuplicate.run(row.campaign_id, row.value, meant.id).changes,
+          );
+          reportDropped(row.campaign_id, ref.table, duplicates);
+          // What is LEFT is what gets re-pointed — the duplicates are gone.
+          const moved = Number(row.n) - duplicates;
+          if (moved > 0) repoint(ref, row, meant.id, moved);
         }
       }
     })
@@ -495,6 +700,7 @@ export function repairReferences(client: SqliteClient): ReferenceRepairOutcome {
     outcome.entriesCreated.length +
     outcome.repointed.length +
     outcome.cleared.length +
+    outcome.clearedText.length +
     outcome.dropped.length;
   return changes === 0 ? NO_REFERENCE_REPAIR : outcome;
 }

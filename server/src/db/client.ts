@@ -20,7 +20,11 @@ import { SQLiteBunSession } from "drizzle-orm/bun-sqlite/session";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { mkdirSync } from "node:fs";
-import { repairReferences, type ReferenceRepairOutcome } from "./reference-repair";
+import {
+  repairReferences,
+  reportForeignKeyViolations,
+  type ReferenceRepairOutcome,
+} from "./reference-repair";
 import { openSqlite, type SqliteClient } from "./driver";
 import { migrateGroupsToLocations, type GroupMigrationOutcome } from "./group-migration";
 import { schema } from "./schema";
@@ -114,11 +118,21 @@ export async function openDb(filename: string): Promise<OpenDb> {
   // `scenes.group_slug`, and this step is what carries the old grouping over
   // into `location`. It is a no-op once the column is gone.
   const groupMigration = migrateGroupsToLocations(client);
+  // What is broken BEFORE anything is touched, said out loud: a row that
+  // already breaks a constraint this database carries is not the repair's
+  // business, but it IS what the migration's table rebuilds fail on, and a
+  // failed rebuild says nothing about which row it choked on.
+  reportForeignKeyViolations(client);
   // Also BEFORE the migrator, and for a sharper reason: migrations 0014 and
   // 0015 turn every reference into a real foreign key by copying the rows
   // into rebuilt tables, and a reference that names nothing is exactly what
   // those copies fail on. The holes are closed here, while the old
   // unconstrained schema still allows them to be read.
+  //
+  // It COMMITS on its own, before the migrator runs. A boot whose rebuild
+  // then fails leaves the repaired rows behind on the old schema — which is
+  // the retryable state: the next boot finds nothing left to repair and tries
+  // the migration again.
   const referenceRepair = repairReferences(client);
   const db = buildDrizzle(client);
   migrateDb(db);
