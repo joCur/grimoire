@@ -420,3 +420,66 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
   expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).not.toBe(NPC_STUB_NAME);
   expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
 });
+
+// Critical path 6: „Neues Kapitel" → leave the page → come back →
+// „Übernehmen". The chapter has to be in the overview WITH its title.
+//
+// The app used to send the chapter and its title from its own state when the
+// accept was pressed; the review state is persistent, so the accept regularly
+// happens after a navigation or a reload, when that state is gone — and then
+// the scenes were written under a chapter that had no entry of its own, which
+// the overview cannot list.
+//
+// The navigation is the whole point of the test, so it is a REAL one: to the
+// overview and back, which is what a DM does while the run is going.
+test("new chapter: the run survives leaving the page and the chapter keeps its title", async ({
+  page,
+  api,
+}) => {
+  const CHAPTER_ID = "02-die-schmugglerbucht";
+  const CHAPTER_TITLE = "Die Schmugglerbucht";
+
+  await page.goto("/beispiel/generate");
+  await page.getByRole("button", { name: "Neues Kapitel" }).click();
+  await page.getByLabel("Kapiteltitel").fill(CHAPTER_TITLE);
+  // The id is derived from the title and is the field that decides where the
+  // drafts land (issue #22).
+  await expect(page.getByLabel("Kapitel-id")).toHaveValue(CHAPTER_ID);
+  await page.getByLabel("Quelltext (EN)").fill(SOURCE);
+  await page.getByRole("button", { name: "Entwürfe generieren" }).click();
+
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+    timeout: 30_000,
+  });
+
+  // …and away. The review state is a row, so it is still there when we come
+  // back — but this browser has forgotten the title it typed.
+  await page.goto("/beispiel");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.goto("/beispiel/generate");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
+    timeout: 30_000,
+  });
+
+  await page.getByRole("button", { name: /^Übernehmen \(/ }).click();
+  // A bulk accept writes the scene and leaves the two UNDECIDED suggested
+  // entries reviewable (the review's own rule), so the review stays — which
+  // is fine: the chapter is written with the very first accept.
+  await expect(page.getByText("1 von 3 übernommen", { exact: false })).toBeVisible();
+
+  // The point: the chapter exists, with the title the RUN was started with —
+  // not the id, and not nothing.
+  expect((await api.file(CHAPTER_ID)).properties.title).toBe(CHAPTER_TITLE);
+  // …and the scene really hangs in it.
+  expect(
+    (await api.file(`${CHAPTER_ID}/${LOCATION_STUB_ID}/${SCENE_ID}`)).properties.chapter,
+  ).toBe(CHAPTER_ID);
+
+  // The overview lists the chapter with that title, and the scene inside it.
+  await page.getByRole("link", { name: "Kapitel", exact: true }).click();
+  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page.getByRole("heading", { level: 2, name: CHAPTER_TITLE })).toBeVisible();
+  await page.getByRole("button", { name: new RegExp(CHAPTER_TITLE) }).click();
+  await expect(page.getByRole("link", { name: new RegExp(SCENE_TITLE) })).toBeVisible();
+  await expect(page.getByText("2 Kapitel · 3 Szenen")).toBeVisible();
+});

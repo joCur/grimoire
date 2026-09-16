@@ -352,3 +352,35 @@ die Topbar-Navigation und den Kampagnen-Metadaten-Dialog (#34),
 `tests/search.e2e.ts` die Frische-Zusicherung des Cutovers (#57 AK5): was die
 APP gerade geschrieben hat, findet ⌘K sofort — der Index wandert in derselben
 Transaktion mit, es gibt keinen Watcher mehr, auf den zu warten wäre.
+
+## Seit „Kapitel bearbeiten und der Kapitel-Status"
+
+Zwei Pfade haben Zuwachs bekommen, beide um das Kapitel als Eintrag.
+
+- **Pfad 6** (`generator.e2e.ts`): „Neues Kapitel" → **Seite verlassen** →
+  zurück → „Übernehmen". Die Navigation ist der Kern des Tests, nicht Deko:
+  Titel und id des neuen Kapitels reisten früher nur im Browser-Zustand und
+  waren nach der Navigation weg — der Prüfschritt ist persistent, also ist
+  genau das der Normalfall. Der Titel liegt jetzt am Job
+  (`generate_jobs.new_chapter_title`, beim **Start** geschrieben), und der
+  Spec prüft ihn am Kapitel-Eintrag UND in der Übersicht.
+  Zu beachten: ein Bulk-„Übernehmen" lässt **unentschiedene** vorgeschlagene
+  Einträge offen (Regel des Prüfschritts), der Prüfschritt bleibt stehen und
+  meldet „1 von 3 übernommen" — das Kapitel schreibt schon der erste Accept.
+- **Pfad 1** (`pool.e2e.ts`): ein Kapitel ist dort bearbeitbar, wo es gelesen
+  wird — „Kapitel-Eigenschaften" (Titel/Status, der geteilte
+  Eigenschaften-Dialog), „Kapitel bearbeiten" (Kapiteltext, aus dem die
+  Zielzeile kommt, inkl. 409 gegen einen zweiten Schreiber) und der
+  **Status-Regler** in der Kapitelzeile, dessen „Aktiv" die Fahne in **einem**
+  Serveraufruf umhängt.
+
+Zwei Fallen für neue Specs auf diesen Pfaden:
+
+- **Namen matchen als Teilstring.** „Kapitel bearbeiten" enthält
+  „Bearbeiten", und in der Kapitelübersicht steht beides auf einer Seite. Wer
+  die Aktion des KAMPAGNENKOPFS meint, schreibt
+  `getByRole("button", { name: "Bearbeiten", exact: true })`.
+- **Die Felder der Dialoge über die Rolle ansprechen.** Der
+  Eigenschaften-Dialog schreibt die Pflichtmarkierung in das Label, der
+  zugängliche Name ist also „Titel · nötig" — `getByRole("textbox", { name: … })`
+  ist dort robuster als `getByLabel`.
