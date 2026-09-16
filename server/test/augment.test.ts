@@ -869,6 +869,26 @@ describe("accept", () => {
     const before = await read(NPC);
     expect((await apply({ path: NPC, rev: before.rev, properties: {} })).status).toBe(400);
   });
+
+  test("400 for a proposed relation counterpart that is a name, not an id", async () => {
+    // The accept runs the ordinary body write, so it inherits its rules —
+    // and a model is exactly the author that writes a counterpart as a name.
+    // `other_npc_id` is a foreign key, so this was a 500 on an accept the DM
+    // could not tell apart from a broken server.
+    const before = await read(NPC);
+    const body = before.body.replace(
+      "- fenn:",
+      "- Alte Freundin aus Waterdeep: sie schreiben sich\n- fenn:",
+    );
+    expect(body).toContain("Alte Freundin");
+    const res = await apply({ path: NPC, rev: before.rev, body });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain(
+      "Beziehungen holds npc ids, not names",
+    );
+    // Nothing of the accept survived — one transaction, both halves.
+    expect(await read(NPC)).toEqual(before);
+  });
 });
 
 // --- the naming check (issue #53 AK3, „läuft auch hier") ----------------------

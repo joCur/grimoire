@@ -836,8 +836,53 @@ function replaceSceneRefs(
   });
 }
 
+/**
+ * `## Beziehungen` HOLDS IDS, NOT NAMES — the same rule as `npcs:`, and for
+ * the same reason.
+ *
+ * The line `- <counterpart>: <note>` puts its left half into
+ * `npc_relations.other_npc_id`, which is a foreign key on `npcs`. The row it
+ * needs is created by `ensureNpcRow`, and that one creates NOTHING for a
+ * value that is no slug — so a line like „- Alte Freundin aus Waterdeep: sie
+ * schreiben sich" asked for a reference to an npc that cannot exist. Before
+ * the constraints it was stored and then rendered as a card the reading view
+ * could not resolve; with them the insert fails, and an ordinary body edit
+ * answered 500 (the generator's apply step even turned it into „target
+ * already exists" — a conflict that was never there).
+ *
+ * The honest answer is the one the npc list already gives: 400, naming the
+ * value and the rule. A relation's counterpart IS an entry, and an entry is
+ * named by its id.
+ *
+ * `known` is what this npc's section ALREADY stored, and it is exempt for the
+ * same reason as there: a file era campaign is imported as it stands, and
+ * refusing its text on the way out would make the entry unsavable. Old free
+ * text stays until somebody removes it; nothing new joins it.
+ */
+function assertRelationRefSlugs(
+  relations: readonly { otherNpcId: string }[],
+  known: readonly string[],
+): void {
+  for (const relation of relations) {
+    const id = relation.otherNpcId;
+    if (id === "" || known.includes(id) || ENTITY_SLUG.test(id)) continue;
+    throw new ApiError(
+      400,
+      `Beziehungen holds npc ids, not names: "${id}" is no kebab-case slug ` +
+        "(a-z, 0-9, single dashes)",
+    );
+  }
+}
+
+/** The counterparts this npc's relations name right now — the exempt ones. */
+function knownRelationRefs(tx: GrimoireDb, campaign: string, npcId: string): string[] {
+  return relationRows(tx, campaign, npcId).map((relation) => relation.otherNpcId);
+}
+
 function replaceRelations(tx: GrimoireDb, campaign: string, npcId: string, body: string): string {
   const parsed = parseRelationsSection(body);
+  // BEFORE the delete: afterwards there is nothing left to call known.
+  assertRelationRefSlugs(parsed.relations, knownRelationRefs(tx, campaign, npcId));
   tx.delete(npcRelations)
     .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.npcId, npcId)))
     .run();
@@ -2293,10 +2338,18 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       // Only the parsed relation LINES leave the body — prose under the
       // heading stays (see `replaceRelations`).
       const stripped = removeRelationLines(draft.body);
+      // The same two guards the dialog paths have, because this path has the
+      // same two foreign keys — and a model is exactly the author that writes
+      // a counterpart as a name and a `chapter:` nobody created. Both ran as
+      // raw constraint failures before, which the apply step reported as
+      // „target already exists".
+      const npcChapter = asOptStr(fm.chapter);
+      assertRelationRefSlugs(parsedRelations.relations, knownRelationRefs(tx, campaign, id));
+      assertChapterRef(tx, campaign, npcChapter, npcRowOf(tx, campaign, id)?.chapterId ?? null);
       const values = {
         name: asStr(fm.name, id),
         role: asOptStr(fm.role),
-        chapterId: asOptStr(fm.chapter),
+        chapterId: npcChapter,
         status: asStr(fm.status, NPC_DEFAULT_STATUS),
         statblock: asOptStr(fm.statblock),
         quickstats: packJson(asMap(fm.quickstats)),
@@ -2343,9 +2396,17 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
     }
     case "location": {
       const id = asStr(fm.id, locator.id);
+      // `locations.chapter_id` is a foreign key too — see the npc case.
+      const locationChapter = asOptStr(fm.chapter);
+      assertChapterRef(
+        tx,
+        campaign,
+        locationChapter,
+        locationRowOf(tx, campaign, id)?.chapterId ?? null,
+      );
       const values = {
         name: asStr(fm.name, id),
-        chapterId: asOptStr(fm.chapter),
+        chapterId: locationChapter,
         roll20Page: asOptStr(fm["roll20-page"]),
         body: draft.body,
         extra: extraOf(fm, LOCATION_KEYS),

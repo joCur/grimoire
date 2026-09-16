@@ -32,7 +32,12 @@ import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { setNow } from "../src/clock";
 import type { GrimoireDb } from "../src/db/client";
-import { scenes as scenesTable, sessions as sessionsTable } from "../src/db/schema";
+import {
+  npcRelations as npcRelationsTable,
+  npcs as npcsTable,
+  scenes as scenesTable,
+  sessions as sessionsTable,
+} from "../src/db/schema";
 import { getDb } from "../src/store/handle";
 import {
   dropStore,
@@ -926,5 +931,68 @@ describe("PUT /api/:campaign/entry", () => {
       body: JSON.stringify({ path: "a.md", rev: 1, body: "x" }),
     });
     expect(res.status).toBe(404);
+  });
+
+  describe("a relation counterpart is an id", () => {
+    const NPC = "npcs/jorna";
+    const LINE = "- fenn: kennt ihn von früher — er fuhr einst ehrlich zur See";
+
+    /** The npc body with one extra line in the `## Beziehungen` section. */
+    function withRelation(body: string, line: string): string {
+      expect(body).toContain(LINE);
+      return body.replace(LINE, `${LINE}\n${line}`);
+    }
+
+    test("400 for a counterpart written as a name — nothing is written", async () => {
+      // `other_npc_id` is a foreign key and `ensureNpcRow` creates nothing
+      // for a value that is no id, so this used to be a 500 on an ordinary
+      // body edit. The rule is the one the npc list states.
+      const before = await getFile(NPC);
+      const res = await putFile({
+        path: NPC,
+        rev: before.rev,
+        body: withRelation(before.body, "- Alte Freundin aus Waterdeep: sie schreiben sich"),
+      });
+      expect(res.status).toBe(400);
+      const error = ((await res.json()) as { error: string }).error;
+      expect(error).toContain("Beziehungen holds npc ids, not names");
+      expect(error).toContain("Alte Freundin aus Waterdeep");
+      expect(await getFile(NPC)).toEqual(before);
+    });
+
+    test("a counterpart that IS an id creates its empty entry", async () => {
+      const before = await getFile(NPC);
+      const after = await putOk({
+        path: NPC,
+        rev: before.rev,
+        body: withRelation(before.body, "- holm: schuldet ihr einen Gefallen"),
+      });
+      expect(after.body).toContain("- holm: schuldet ihr einen Gefallen");
+      expect((await getFile("npcs/holm")).properties.name).toBe("holm");
+    });
+
+    test("a counterpart the entry ALREADY stores keeps saving", async () => {
+      // A file era campaign is imported as it stands: a reference written as
+      // a name got an npc row under that very name, and the relation points
+      // at it. Refusing that text on the way out would make the entry
+      // unsavable, so the rows are put there the way the import left them.
+      db.insert(npcsTable)
+        .values({ campaignId: "beispiel", id: "Alte Freundin aus Waterdeep" })
+        .run();
+      db.insert(npcRelationsTable)
+        .values({
+          campaignId: "beispiel",
+          npcId: "jorna",
+          otherNpcId: "Alte Freundin aus Waterdeep",
+          note: "sie schreiben sich",
+          pos: 1,
+        })
+        .run();
+      const before = await getFile(NPC);
+      expect(before.body).toContain("- Alte Freundin aus Waterdeep: sie schreiben sich");
+
+      const after = await putOk({ path: NPC, rev: before.rev, body: before.body });
+      expect(after.body).toContain("- Alte Freundin aus Waterdeep: sie schreiben sich");
+    });
   });
 });

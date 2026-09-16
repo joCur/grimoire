@@ -316,6 +316,55 @@ describe("the generator's apply step", () => {
     expect((await getFile("locations/bucht")).properties.name).toBe("bucht");
   });
 
+  // The apply step re-runs neither the body validation nor the properties
+  // form, so it had to grow the guards of both — and until it did, the
+  // foreign-key failure came back through the conflict catch as „target
+  // already exists", a conflict that was never there.
+  test("400 for a relation counterpart that is a name, not an id", async () => {
+    let status: unknown;
+    let message = "";
+    try {
+      await applyDrafts("beispiel", [
+        {
+          rel: "npcs/holm",
+          address: "npcs/holm",
+          properties: { id: "holm", name: "Holm" },
+          body: "\n## Beziehungen\n\n- Alte Freundin aus Waterdeep: sie schreiben sich\n",
+        },
+      ]);
+      throw new Error("expected a 400");
+    } catch (error) {
+      status = (error as { status?: number }).status;
+      message = (error as Error).message;
+    }
+    expect(status).toBe(400);
+    expect(message).toContain("Beziehungen holds npc ids, not names");
+    expect(await fileStatus("npcs/holm")).toBe(404);
+  });
+
+  test("400 for an npc or location draft whose chapter does not exist", async () => {
+    // `chapter:` is an optional grouping note, and a chapter is never
+    // created by naming it (ADR #14) — only a SCENE's chapter is.
+    for (const draft of [
+      {
+        rel: "npcs/holm",
+        address: "npcs/holm",
+        properties: { id: "holm", name: "Holm", chapter: "99-nirgendwo" },
+        body: "\n## Will\n\nSeine Netze zurück.\n",
+      },
+      {
+        rel: "locations/moor",
+        address: "locations/moor",
+        properties: { id: "moor", name: "Moor", chapter: "99-nirgendwo" },
+        body: "\n## Was hier ist\n\nNebel.\n",
+      },
+    ]) {
+      await expect(applyDrafts("beispiel", [draft])).rejects.toThrow(/unknown chapter/);
+    }
+    expect(await fileStatus("npcs/holm")).toBe(404);
+    expect(await fileStatus("locations/moor")).toBe(404);
+  });
+
   test("a row that holds CONTENT is still a 409 conflict", async () => {
     const before = await getFile(NPC);
     await expect(
