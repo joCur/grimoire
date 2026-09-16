@@ -1,10 +1,10 @@
-// Background generate jobs (issue #19) — born from a production loss: a
+// Background generate jobs — born from a production loss: a
 // finished, good generation died with a browser-back gesture because the
 // run was one synchronous request and the result lived only in client state.
 //
 // The model is deliberately small:
 //
-//   - ONE job per campaign — since issue #21 regardless of its KIND: a scene
+//   - ONE job per campaign — regardless of its KIND: a scene
 //     run and an NPC run share the store and the 409 gate, `kind` only says
 //     which result field is filled (and which UI mode to restore).
 //   - POST /generate validates as before, then starts a job and answers 202;
@@ -16,8 +16,8 @@
 //   - review edits live in the job too (draftEdits), so an edited draft
 //     survives the same way.
 //
-// SINCE ISSUE #23 THE JOB IS A DATABASE ROW (`generate_jobs`), not a Map.
-// Issue #19 parked persistence as a non-goal because the campaign files were
+// THE JOB IS A DATABASE ROW (`generate_jobs`), not a Map.
+// Persistence was parked as a non-goal because the campaign files were
 // the only truth and there was nowhere sensible to put a job; with the
 // database as that truth (ADR #13) the row is the obvious home, and the loss
 // it prevents is the same one the job model was built for: a deploy or a
@@ -39,8 +39,8 @@
 //                more) and runs from store/handle.ts.
 //
 // A failed run is stored as the ANSWER the synchronous endpoint would have
-// given (status + JSON body), so nothing about the 422 semantics of issues
-// #18/#20 (rawReply, usage, validationErrors) changes for the client.
+// given (status + JSON body), so nothing about the 422 semantics
+// (rawReply, usage, validationErrors) changes for the client.
 
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
@@ -79,11 +79,11 @@ import { RESERVED_SEGMENTS } from "./store/paths";
 interface Job {
   id: string;
   campaign: string;
-  /** Scene run or NPC run (issue #21) — still one job per campaign. */
+  /** Scene run or NPC run — still one job per campaign. */
   kind: GenerateJobKind;
   /** Target chapter; only a scene run has one. */
   chapter?: string;
-  /** Address of the entry an AUGMENT run works on (issue #36). */
+  /** Address of the entry an AUGMENT run works on. */
   target?: string;
   status: "running" | "done" | "failed";
   result?: GenerateResult;
@@ -93,12 +93,12 @@ interface Job {
   startedAt: string;
   finishedAt?: string;
   draftEdits: Map<string, string>;
-  /** The DM's review state (issue #97) — decisions, drops, written parts. */
+  /** The DM's review state — decisions, drops, written parts. */
   review: GenerateJobReview;
   /** Optimistic-concurrency token of that review state. */
   rev: number;
   /**
-   * The pipeline of a scene run (issue #102): the internal outline, the parts
+   * The pipeline of a scene run: the internal outline, the parts
    * with their status, and the run's totals. `undefined` for the single-call
    * runs and for a row written before this deploy.
    */
@@ -106,10 +106,18 @@ interface Job {
   /** The run's source material — a per-part retry sends it again. */
   sourceText?: string;
   newChapter: boolean;
+  /**
+   * Title of the chapter a „Neues Kapitel" run creates — stored when the run
+   * STARTS, so the accept step no longer depends on the browser still holding
+   * it. Undefined for every other run and for a job written before that
+   * column existed; the accept then falls back to the chapter id as the
+   * title.
+   */
+  newChapterTitle?: string;
 }
 
 /**
- * What the `pipeline` column holds (issue #102). The OUTLINE is stored but
+ * What the `pipeline` column holds. The OUTLINE is stored but
  * never serialized: it is an internal step and is never shown to the DM (PO,
  * 15.09.). A retry needs it, a restart needs it — the browser does not.
  */
@@ -124,7 +132,7 @@ export interface PipelineRecord {
  * last failed attempt. The raw reply IS serialized per part (the shared type
  * declares it and the failed part's card shows it behind the same disclosure
  * the whole-run failure uses) — the job's error body still carries the last
- * failed one, which is where the app has read it since issue #18, but that is
+ * failed one, which is where the app has read it, but that is
  * one reply for a run with many parts.
  */
 export type StoredPart = GenerateJobPart & { usage?: PartUsage; rawReply?: string };
@@ -234,7 +242,7 @@ function unpackEdits(value: string): Map<string, string> {
   return edits;
 }
 
-/** The review state of a job that has not been touched yet (issue #97). */
+/** The review state of a job that has not been touched yet. */
 export function emptyReview(): GenerateJobReview {
   return { entries: {}, dropped: [], fields: {}, blocks: {}, written: {} };
 }
@@ -282,10 +290,10 @@ function unpackReview(value: string): GenerateJobReview {
  * point of persisting it — so its draft paths can be spelled the way TWO
  * earlier schemes spelled them, and neither is a legal target any more:
  *
- *   * issue #79 dropped the file extension from every ADDRESS, and a `.md`
+ *   * the file extension is gone from every ADDRESS, and a `.md`
  *     path is rejected outright by the NPC apply pattern (400 on
  *     „Übernehmen") or would insert a scene row whose id nothing can address.
- *   * issue #100 made a scene draft's path `<chapter>/<id>`: the group
+ *   * a scene draft's path is `<chapter>/<id>`: the group
  *     segment IS the `location`, and the SERVER derives it on the way in.
  *     A three-segment scene path is now a client naming a group of its own,
  *     which `applySceneTarget` answers with a 400 — for a `done` job stored
@@ -379,13 +387,16 @@ function toJob(row: JobRow): Job {
     ...(pipeline === undefined ? {} : { pipeline }),
     ...(row.sourceText === null ? {} : { sourceText: row.sourceText }),
     newChapter: row.newChapter === 1,
+    ...(row.newChapterTitle === null || row.newChapterTitle === undefined
+      ? {}
+      : { newChapterTitle: row.newChapterTitle }),
   };
 }
 
 /**
  * Parse the pipeline column. Degrades like every other payload here: a column
  * that cannot be read becomes "this run has no parts", which renders as the
- * pre-#102 review of whatever result is stored instead of making the job
+ * earlier review of whatever result is stored instead of making the job
  * unreachable.
  */
 function unpackPipeline(value: string): PipelineRecord | undefined {
@@ -447,14 +458,21 @@ export async function getJob(campaign: string): Promise<Job | undefined> {
 // --- start -------------------------------------------------------------------
 
 /**
- * What a run needs, per kind (issue #21). One union instead of two start
+ * What a run needs, per kind. One union instead of two start
  * functions: the 409 gate ("one generator job per campaign, whatever its
  * kind") must exist exactly once.
  */
 export type JobInput = { campaign: string; provider: LLMProvider } & (
-  | { kind: "scene"; chapter: string; sourceText: string; newChapter: boolean }
+  | {
+      kind: "scene";
+      chapter: string;
+      sourceText: string;
+      newChapter: boolean;
+      /** Title for the chapter a `newChapter` run creates. */
+      newChapterTitle?: string;
+    }
   | { kind: "npc"; sourceText: string; npcId?: string }
-  // Issue #36: an augment run targets an entry that EXISTS. At least one of
+  // An augment run targets an entry that EXISTS. At least one of
   // sourceText/instruction is there — the route enforces that before a job
   // is created, and runAugment asserts it again.
   | { kind: "augment"; target: string; sourceText: string; instruction: string }
@@ -491,6 +509,9 @@ export async function startJob(input: JobInput): Promise<Job> {
       ? { sourceText: input.sourceText, pipeline: emptyPipeline() }
       : {}),
     newChapter: input.kind === "scene" && input.newChapter,
+    ...(input.kind === "scene" && input.newChapterTitle !== undefined
+      ? { newChapterTitle: input.newChapterTitle }
+      : {}),
   };
 
   db.transaction((handle) => {
@@ -520,6 +541,7 @@ export async function startJob(input: JobInput): Promise<Job> {
         pipeline: input.kind === "scene" ? JSON.stringify(emptyPipeline()) : "{}",
         sourceText: input.kind === "scene" ? input.sourceText : null,
         newChapter: input.kind === "scene" && input.newChapter ? 1 : 0,
+        newChapterTitle: input.kind === "scene" ? (input.newChapterTitle ?? null) : null,
       })
       .run();
   });
@@ -548,7 +570,7 @@ export async function startJob(input: JobInput): Promise<Job> {
         await finish(job, { status: "done", npcResult: JSON.stringify(npcResult) });
         return;
       }
-      // A scene run is a PIPELINE since issue #102: the outline call, then
+      // A scene run is a PIPELINE: the outline call, then
       // one call per scene and per suggested entry, three at a time. The sink
       // writes every step onto this job's row — which is what makes a
       // finished part reviewable while its siblings are still running, and
@@ -615,7 +637,7 @@ async function finish(
     .run();
 }
 
-// --- the pipeline sink (issue #102) -----------------------------------------
+// --- the pipeline sink -------------------------------------------------------
 //
 // Every step of a pipelined run is WRITTEN DOWN before the next one starts:
 // the outline's part list, each part going `running`, each part's result or
@@ -708,7 +730,7 @@ export function partsSettled(pipeline: PipelineRecord): boolean {
 
 /**
  * What a run whose every part failed answers. The shape is the 422 the
- * synchronous endpoint would have given (issues #18/#20), because that is
+ * synchronous endpoint would have given, because that is
  * what the app's failure block renders — with the per-part messages as the
  * error list, since that is what went wrong.
  */
@@ -879,7 +901,7 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
   };
 }
 
-// --- „Erneut versuchen" per part (issue #102) --------------------------------
+// --- „Erneut versuchen" per part ---------------------------------------------
 
 /**
  * Restart ONE part of a run. Only that part: the outline stays, the finished
@@ -1008,14 +1030,14 @@ export async function deleteJob(campaign: string): Promise<boolean> {
 }
 
 // Discarding the job an apply came from is NOT here: it belongs to the same
-// transaction as the writes, so it lives in store/write.ts `applyDrafts`
-// (issue #62). A separate "delete if current" call after the write left a
+// transaction as the writes, so it lives in store/write.ts `applyDrafts`.
+// A separate "delete if current" call after the write left a
 // window in which a crash kept a done job whose drafts were already stored.
 
 // --- review edits ------------------------------------------------------------
 
 
-// --- review state (issue #97) -----------------------------------------------
+// --- review state ------------------------------------------------------------
 
 /**
  * What one `PATCH …/review` may change. Every field is OPTIONAL and MERGES:
@@ -1027,7 +1049,7 @@ export async function deleteJob(campaign: string): Promise<boolean> {
  * dropped" has to be expressible too. In `entries`, `fields` and `blocks` a
  * `null` value DELETES the key — „wieder offen", and the only way to clear
  * decisions whose keys no longer exist (an augment re-alignment cuts new
- * block ids; issue #97 review, finding 5).
+ * block ids).
  */
 export interface ReviewPatch {
   edits?: Record<string, string>;
@@ -1038,7 +1060,7 @@ export interface ReviewPatch {
 }
 
 /**
- * Store a review patch on the job (issue #97). The `rev` the client read
+ * Store a review patch on the job. The `rev` the client read
  * must still be the row's — a second tab that decided something first makes
  * this a 409 `rev_conflict` carrying the CURRENT rev, and the app reloads
  * the state instead of silently winning.
@@ -1081,8 +1103,8 @@ export async function patchJobReview(
 }
 
 /**
- * A draft path the run never produced is a client bug, not state to store
- * (issue #97 review, finding 8). `PUT …/job/drafts` always checked this;
+ * A draft path the run never produced is a client bug, not state to store.
+ * `PUT …/job/drafts` always checked this;
  * the review patch that replaced it did not, so a typo grew a `draftEdits`
  * key nothing would ever read again.
  */
@@ -1123,18 +1145,18 @@ function assignFlags(into: Record<string, boolean>, patch?: Record<string, boole
 /**
  * Record a partial accept on the job — called INSIDE the write transaction
  * (store/write.ts `applyDrafts`), so the job and the entries it produced can
- * never disagree after a crash: either both landed or neither did (the rule
- * issue #62 established for the whole-run apply).
+ * never disagree after a crash: either both landed or neither did (the same
+ * rule the whole-run apply follows).
  *
  * Returns true when the job row was deleted because nothing is left open.
  *
- * `rev` is the review rev the client read (issue #97 review, findings 3+4).
+ * `rev` is the review rev the client read.
  * The row is re-read HERE, inside the transaction. A job that MOVED (rev) or
  * VANISHED in the meantime throws, which rolls the whole write back — the
  * pre-read the accept planned with is then stale. Reporting a lost job as a
  * quiet `false` used to commit the drafts while silently dropping the
  * bookkeeping that says they were written, so the next „Alle übernehmen"
- * would have written them a second time (issue #97 review, finding 4).
+ * would have written them a second time.
  */
 export function markWrittenInTx(
   tx: GrimoireDb,
@@ -1156,7 +1178,7 @@ export function markWrittenInTx(
   const job = toJob(row);
   // Openness is recomputed from the row THIS transaction sees, never from
   // the caller's pre-read: a part that was dropped or rejected in between
-  // must not be assigned `written` (issue #97 review, finding 3).
+  // must not be assigned `written`.
   const open = openPartPaths(job);
   for (const rel of Object.keys(written)) {
     if (open.has(rel)) continue;
@@ -1181,7 +1203,7 @@ export function markWrittenInTx(
  * Which parts of a finished run are still OPEN, addressed the way the review
  * addresses them. The one place that question is answered — the accept reads
  * it INSIDE its transaction so a decision made between the pre-read and the
- * commit cannot be written over (issue #97 review, finding 3).
+ * commit cannot be written over.
  */
 export function openPartPaths(job: Job): Set<string> {
   const written = job.review.written;
@@ -1208,12 +1230,12 @@ export function openPartPaths(job: Job): Set<string> {
 /**
  * Is there anything left to decide? Every scene is written or dropped, every
  * suggested entry is written or rejected, and an NPC run's one draft is
- * written. That question is what makes the job DISAPPEAR on its own (issue
- * #97 Zuschnitt 3) instead of leaving an empty review behind.
+ * written. That question is what makes the job DISAPPEAR on its own
+ * instead of leaving an empty review behind.
  */
 export function jobIsSettled(job: Job): boolean {
   // A pipelined run with parts still pending, running or failed is NOT
-  // settled, however much of it the DM has accepted (issue #102): deleting
+  // settled, however much of it the DM has accepted: deleting
   // the row would throw away the outline every open part still needs.
   if (job.pipeline !== undefined && job.pipeline.parts.length > 0) {
     if (job.pipeline.parts.some((p) => p.status !== "done")) return false;

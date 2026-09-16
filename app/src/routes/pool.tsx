@@ -1,8 +1,7 @@
 // "/:campaign" — the scene pool per the design reference: campaign header,
 // chapter accordions with goal line, location-grouped planned scenes and a
 // separate contingency group ("Eventualszenen").
-// Below md the SAME route shows the mobile start surface instead (issue #11,
-// responsive swap — no separate URL): desktop pool `hidden md:block`, mobile
+// Below md the SAME route shows the mobile start surface instead (// responsive swap — no separate URL): desktop pool `hidden md:block`, mobile
 // start `md:hidden`. Both share the tree query cache, so nothing fetches twice.
 
 import type { CampaignTree, ChapterNode, SceneGroup, SceneSummary } from "@grimoire/shared/types";
@@ -13,6 +12,8 @@ import { Link, useParams } from "react-router";
 
 import { fetchEntry, fetchTree } from "@/api";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
+import { ChapterActions } from "@/components/ChapterActions";
+import { ChapterStatusControl } from "@/components/ChapterStatusMenu";
 import { ChapterCreateAction, SceneCreateAction } from "@/components/CreateActions";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -21,7 +22,6 @@ import { locationName } from "@/lib/campaign";
 import { firstParagraphOfSection } from "@/lib/md-section";
 import { POOL_LOOKUP_TARGETS } from "@/lib/lookup";
 import { useCampaignMeta } from "@/lib/use-campaign";
-import { cn } from "@/lib/utils";
 import { MobileStart } from "@/routes/mobile-start";
 
 export function PoolRoute() {
@@ -39,7 +39,7 @@ export function PoolRoute() {
       0,
     ) ?? 0;
   const chapterCount = data?.chapters.length ?? 0;
-  // Display name + description from campaign (issue #17); the header
+  // Display name + description from campaign; the header
   // degrades to the campaign id when the entry is missing.
   const meta = useCampaignMeta(campaign);
   // Open the active chapter(s) by default; without one, the first.
@@ -60,10 +60,10 @@ export function PoolRoute() {
                   the same line — the shape of the design reference's pool
                   header (design/Grimoire.dc.html: a baseline row that does
                   not wrap).
-                  Issue #56 added „Kapitel anlegen" next to „Bearbeiten"
+                  „Kapitel anlegen" was added next to „Bearbeiten"
                   inside a `flex-wrap` row, and the pair promptly dropped onto
                   a line of ITS OWN, right-aligned under the title, on any
-                  campaign with a normal-length name (PO finding on PR #87).
+                  campaign with a normal-length name (PO finding).
                   So the actions are no longer a wrap candidate: the row holds
                   the title block and the actions and does not wrap between
                   them. What gives when 760px is not enough for all of it is
@@ -84,9 +84,8 @@ export function PoolRoute() {
                     {t("pool.sceneCount", { count: sceneCount })}
                   </span>
                 </div>
-                {/* Quiet header actions: add the thing the pool IS a list of
-                    (issue #56), and edit the name/description right where they
-                    are read (issue #34). */}
+                {/* Quiet header actions: add the thing the pool IS a list of, and edit the name/description right where they
+                    are read. */}
                 <span className="flex flex-none items-center gap-1 md:ml-auto">
                   <ChapterCreateAction campaign={campaign} />
                   <CampaignMetaAction campaign={campaign} />
@@ -99,8 +98,8 @@ export function PoolRoute() {
               )}
               <LookupLine campaign={campaign} />
             </div>
-            {/* The empty pool is the second half of the cold start (issue
-                #56): it used to point at the generator, which needs an API key
+            {/* The empty pool is the second half of the cold start: it used
+                to point at the generator, which needs an API key
                 and source material — a dead end on a fresh instance. The next
                 step is now the one thing that always works. */}
             {data.chapters.length === 0 && (
@@ -157,28 +156,48 @@ function Chapter({
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="mb-4">
-      <CollapsibleTrigger className="group flex w-full items-center gap-2.5 border-b border-border pt-2.5 pb-3 text-left">
-        <ChevronDown
-          aria-hidden
-          size={15}
-          className="flex-none -rotate-90 text-muted-foreground transition-transform group-data-[state=open]:rotate-0"
-        />
-        {/* The chapter names a section of the page, so it IS a heading —
-            inside the trigger, which stays the button that opens it. Without
-            it the outline jumped from the pool's h1 straight to the group
-            h3s, and the chapter the groups belong to was not in the tree at
-            all (issue #100 review). */}
-        <h2 className="font-serif text-[18px] font-semibold text-foreground">
-          {chapter.title}
-        </h2>
-        <ChapterStatusPill status={chapter.status} />
-        <span className="flex-1" />
-        <span className="flex-none text-[12.5px] text-muted-foreground">
-          {t("pool.sceneCount", { count: scenes.length })}
-        </span>
-      </CollapsibleTrigger>
+      {/* ONE row, but not one button: the status control is a menu trigger,
+          and a button inside a button is invalid markup. So the trigger covers
+          the chevron, the heading and the scene count — the whole reading of
+          the row — and the control sits BESIDE it in the same flex line with
+          the shared bottom border. */}
+      <div className="flex w-full items-center gap-2.5 border-b border-border pt-2.5 pb-3">
+        <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-2.5 text-left">
+          <ChevronDown
+            aria-hidden
+            size={15}
+            className="flex-none -rotate-90 text-muted-foreground transition-transform group-data-[state=open]:rotate-0"
+          />
+          {/* The chapter names a section of the page, so it IS a heading —
+              inside the trigger, which stays the button that opens it. Without
+              it the outline jumped from the pool's h1 straight to the group
+              h3s, and the chapter the groups belong to was not in the tree at
+              all. */}
+          <h2 className="min-w-0 truncate font-serif text-[18px] font-semibold text-foreground">
+            {chapter.title}
+          </h2>
+          <span className="flex-1" />
+          <span className="flex-none text-[12.5px] text-muted-foreground">
+            {t("pool.sceneCount", { count: scenes.length })}
+          </span>
+        </CollapsibleTrigger>
+        {/* The status that only SAID „Aktiv" is the control now: „Aktiv" swaps
+            the active chapter in one server call, the other two patch this
+            chapter. Mobile never sees it — the route renders the start
+            surface instead of the overview below md. */}
+        <ChapterStatusControl campaign={campaign} chapter={chapter.id} status={chapter.status} />
+      </div>
       <CollapsibleContent>
         <div className="pt-4 pb-1 pl-[25px]">
+          {/* The chapter's own actions. They sit INSIDE the accordion and not
+              in the heading row: that row is already as wide as it gets, and
+              the actions are for the chapter the DM has opened. */}
+          <ChapterActions
+            campaign={campaign}
+            chapter={chapter.id}
+            entry={chapterFile.data}
+            tree={tree}
+          />
           {goal !== undefined && (
             <p className="mb-3 text-[14px] leading-[1.6] text-body-secondary">
               {t("pool.chapter.goal", { goal })}
@@ -207,7 +226,7 @@ function Chapter({
             </div>
           )}
           {/* „Szene anlegen" sits IN the chapter, which is what prefills the
-              chapter (issue #56) — no picker, no second decision. */}
+              chapter — no picker, no second decision. */}
           <div className="pb-4">
             <SceneCreateAction
               campaign={campaign}
@@ -221,26 +240,8 @@ function Chapter({
   );
 }
 
-function ChapterStatusPill({ status }: { status?: string | undefined }) {
-  const t = useT();
-  if (status === undefined || status === "") return null;
-  const active = status === "active";
-  return (
-    <span
-      className={cn(
-        "flex-none rounded-full border px-[9px] py-px text-[11.5px]",
-        active
-          ? "border-[color-mix(in_srgb,var(--success)_35%,transparent)] text-success-text"
-          : "border-input text-dim",
-      )}
-    >
-      {active ? t("pool.chapter.status.active") : status}
-    </span>
-  );
-}
-
 /** One location group with its planned scenes (contingencies render separately). */
-/** Exported for the render test — the „Ohne Ort" heading rule (#100). */
+/** Exported for the render test — the „Ohne Ort" heading rule. */
 export function PlannedGroup({
   campaign,
   group,
@@ -257,7 +258,7 @@ export function PlannedGroup({
     <div className="mb-7">
       <div className="flex items-center gap-2 border-b border-border py-2 text-[13px]">
         <MapPin aria-hidden size={15} className="flex-none text-muted-foreground" />
-        {/* The group IS the scene's location (issue #100), so the heading is
+        {/* The group IS the scene's location, so the heading is
             the location's NAME — resolved by the SERVER, which also orders
             the groups by it (`SceneGroup.name`): an entry nobody has named
             yet falls back to its id, which is still the word the DM typed.
@@ -282,7 +283,7 @@ export function PlannedGroup({
 
 /**
  * One pool row. The row opens the scene — except the status area, which is
- * its own control since issue #28 (same menu as the reading view). The link
+ * its own control (same menu as the reading view). The link
  * therefore covers everything but that control instead of wrapping it: a
  * button inside an anchor is invalid markup and would need click juggling,
  * two siblings in one hover row need neither.
@@ -337,11 +338,11 @@ function SceneRow({
 
 /**
  * „Nachschlagen: NPCs · Orte · Glossar · Kampagnenwissen" — the pool's quiet
- * line into the campaign's reference pages (issue #53, PO feedback on PR #87).
+ * line into the campaign's reference pages (PO feedback).
  *
- * The mobile start surface has carried these as tap rows since issue #11; the
+ * The mobile start surface has carried these as tap rows; the
  * desktop had nowhere for the two new pages to be reached from. The TOPBAR is
- * deliberately not it — it keeps the three campaign-wide entries of issue #34
+ * deliberately not it — it keeps the three campaign-wide entries
  * and does not grow (a fourth and fifth link there would crowd the one bar
  * that has to survive every width, and „Glossar" is not something the DM
  * reaches for mid-session). So the pool's own header gets the line, one row

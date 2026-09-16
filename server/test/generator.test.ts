@@ -1,4 +1,4 @@
-// Generator pipeline tests (issue #6). Since the cutover (issue #57) they run
+// Generator pipeline tests. Since the cutover they run
 // against a DATABASE seeded from the example campaign, and the apply step
 // writes ROWS — so "was it written?" is asked through the API, never off disk.
 // The database is seeded ONCE for the whole file (not per case): several
@@ -12,16 +12,16 @@
 //
 // A scripted reply is either a plain string (fine, not truncated, no usage
 // reported) or the full CompletionResult shape — that is how the truncation
-// fail-fast and the token accounting of issue #18 are exercised.
+// fail-fast and the token accounting are exercised.
 //
-// Since issue #19 the run is a background job, so the pipeline tests go
+// The run is a background job, so the pipeline tests go
 // through `generate()`: POST /generate (202), poll the job in-process, then
 // answer like the old synchronous endpoint did. The job endpoints
 // themselves (lifecycle, 409, drafts, apply cleanup, restart) have their own
 // describe block at the end; a FakeProvider that waits on a manual gate
 // makes "running" observable without a single timer.
 //
-// Since issue #23 the job is a ROW, so a "restart" is no longer "drop the
+// The job is a ROW, so a "restart" is no longer "drop the
 // Map": it is `failInterruptedJobs()` — literally what the boot runs — over
 // the same database. That is why the restart cases below call it directly.
 
@@ -84,7 +84,7 @@ async function restartServer(): Promise<number> {
 
 // --- fake provider ------------------------------------------------------------
 //
-// Scripted and PIPELINE-AWARE since issue #102 (see support/pipeline-fake.ts):
+// Scripted and PIPELINE-AWARE (see support/pipeline-fake.ts):
 // a test still writes „first this reply, then that one“, and the fake routes
 // the script over the outline call, the per-scene call and the per-entry call
 // of the run. `fake.calls` is therefore every call of the run; `fake.callsFor`
@@ -124,7 +124,7 @@ const usage = (inputTokens: number, outputTokens: number): TokenUsage => ({
 const SCENE_PATH = "01-salzhafen/treffen-am-kai";
 /**
  * …and the address it is actually WRITTEN to: the group segment is the
- * draft's `location` (issue #100), so review key and stored address differ
+ * draft's `location`, so review key and stored address differ
  * whenever a scene names a location.
  */
 const SCENE_ADDRESS = "01-salzhafen/leuchtturm/treffen-am-kai";
@@ -165,7 +165,7 @@ function sceneWithId(id: string): string {
 
 /**
  * An npc stub. `status` defaults to what the prompt asks for (`alive`);
- * `null` drops the key entirely — both are validated since issue #27.
+ * `null` drops the key entirely — both are validated.
  */
 function npcStub(over: { id?: string; name?: string; status?: string | null } = {}): string {
   const status = over.status === undefined ? "alive" : over.status;
@@ -189,7 +189,7 @@ const STUB_MARKDOWN = npcStub();
 
 const LOCATION_STUB_ID = "raeucherkammer";
 
-/** A location stub — correct form carries NO status key at all (issue #27). */
+/** A location stub — correct form carries NO status key at all. */
 function locationStub(over: { status?: string } = {}): string {
   return [
     "---",
@@ -212,7 +212,7 @@ interface ReplyOver {
   warnings?: string[];
 }
 
-/** The reply's JSON object, bare — what a model SHOULD return (issue #20). */
+/** The reply's JSON object, bare — what a model SHOULD return. */
 function replyJson(over: ReplyOver = {}): string {
   const body = {
     scenes: over.scenes ?? [{ content: sceneMarkdown() }],
@@ -236,13 +236,13 @@ function servedScene(over: ReplyOver = {}): string {
 }
 
 function reply(over: ReplyOver = {}): string {
-  // Wrapped in a fence like real models tend to do — the extraction (issue
-  // #20, stage b) takes the fence content.
+  // Wrapped in a fence like real models tend to do — the extraction
+  // (stage b) takes the fence content.
   return "```json\n" + replyJson(over) + "\n```";
 }
 
 /**
- * The PO's production reply (issue #20): an English explainer paragraph, a
+ * The PO's production reply: an English explainer paragraph, a
  * blank line, then the JSON object. Valid JSON the old whole-text parse
  * rejected — three correction turns for a usable answer.
  */
@@ -265,7 +265,7 @@ async function postJson(url: string, body?: unknown): Promise<Response> {
 
 const generateBody = { chapter: "01-salzhafen", sourceText: "Fenn waits at the docks." };
 
-// --- job helpers (issue #19) ------------------------------------------------
+// --- job helpers ------------------------------------------------------------
 
 /** GET the campaign's job, or null on the 404 "there is none". */
 async function fetchJob(campaign = "beispiel"): Promise<GenerateJob | null> {
@@ -277,7 +277,7 @@ async function fetchJob(campaign = "beispiel"): Promise<GenerateJob | null> {
 
 /**
  * PATCH the review with one draft edit — the endpoint that replaced
- * `PUT …/job/drafts` (issue #97 review, finding 8). `jobId`/`rev` default to
+ * `PUT …/job/drafts`. `jobId`/`rev` default to
  * the campaign's current job, which is what every caller here wants.
  */
 async function patchReview(
@@ -310,7 +310,7 @@ async function waitForJob(campaign = "beispiel"): Promise<GenerateJob> {
   throw new Error("job never finished");
 }
 
-/** What the endpoint answered before issue #19, rebuilt over the job flow. */
+/** What the synchronous endpoint answered, rebuilt over the job flow. */
 interface GenerateOutcome {
   status: number;
   json: () => Promise<unknown>;
@@ -431,7 +431,7 @@ describe("POST /api/:campaign/generate", () => {
     // this provider reports no usage — then the field stays absent
     expect(result.usage).toBeUndefined();
 
-    // Three provider calls since issue #102 — the outline, the one scene and
+    // Three provider calls — the outline, the one scene and
     // the one suggested entry — and not a correction turn among them.
     // Sorted: the parts run three at a time (PART_CONCURRENCY), so which of
     // them reaches the provider first is not a promise — only that the
@@ -448,7 +448,7 @@ describe("POST /api/:campaign/generate", () => {
     const req = fake.callsFor("outline")[0]!.req;
     expect(req.context.chapter).toBe("01-salzhafen");
     expect(req.context.npcs.map((n) => n.id).sort()).toEqual(["fenn", "jorna"]);
-    // `bucht` is an entry too since issue #100 — the contingency scene
+    // `bucht` is an entry too — the contingency scene
     // names it, and a named location always has a row.
     expect(req.context.locations.map((l) => l.id).sort()).toEqual(["bucht", "leuchtturm"]);
     expect(req.glossary).toContain("Leuchtturmwärter");
@@ -507,7 +507,7 @@ describe("POST /api/:campaign/generate", () => {
     expect(scene[1]!.corrections[0]!.correction).toContain("[!danger]");
   });
 
-  // --- the id is the model's ONE addressing decision (issue #100 review) -------
+  // --- the id is the model's ONE addressing decision ------------------------
   //
   // The shared parser degrades a missing `id` to the address's last segment,
   // and the validation used to parse the reply under its own PREVIEW LABEL —
@@ -525,7 +525,7 @@ describe("POST /api/:campaign/generate", () => {
     expect(scene).toHaveLength(2);
     const correction = scene[1]!.corrections[0]!.correction;
     expect(correction).toContain('"id" fehlt');
-    // The part is named by the id the OUTLINE gave it (issue #102), so the
+    // The part is named by the id the OUTLINE gave it, so the
     // message says which scene is meant instead of an array index.
     expect(correction).toContain('scene "treffen-am-kai"');
     // …and nothing was invented for it.
@@ -544,7 +544,7 @@ describe("POST /api/:campaign/generate", () => {
     expect(correction).toContain('"id" fehlt');
   });
 
-  // --- stub status rules (issue #27) -------------------------------------------
+  // --- stub status rules ----------------------------------------------------
 
   test("npc stub with the SCENE status draft triggers a correction turn, then succeeds", async () => {
     const bad = reply({
@@ -642,7 +642,7 @@ describe("POST /api/:campaign/generate", () => {
   });
 
   test("422 with the remaining errors after 2 correction turns", async () => {
-    // Two turns is the MAXIMUM, not the default any more (issue #19).
+    // Two turns is the MAXIMUM, not the default any more.
     process.env.LLM_CORRECTION_TURNS = "2";
     // `entries: []` on purpose: the run then has exactly ONE part, so „every
     // part failed" is what the 422 of this case is about. A run with a
@@ -703,7 +703,7 @@ describe("POST /api/:campaign/generate", () => {
     expect(await exists(SCENE_PATH)).toBe(false);
   });
 
-  // --- truncation fail-fast (issue #18) ---------------------------------------
+  // --- truncation fail-fast -------------------------------------------------
 
   test("a truncated reply aborts after ONE call with the LLM_MAX_TOKENS message", async () => {
     const cut = '{"scenes":[{"path":"01-salzhafen/hafen/treffen-am-kai","content":"---\\nid: tre';
@@ -718,7 +718,7 @@ describe("POST /api/:campaign/generate", () => {
       usage: GenerateUsage;
       validationErrors?: string[];
     };
-    // Language-free since issue #69: the stable code plus the cap as a
+    // Language-free: the stable code plus the cap as a
     // PARAMETER, and the English fallback text next to them.
     expect(body.code).toBe("llm_truncated");
     expect(body.maxTokens).toBe(8000);
@@ -790,8 +790,8 @@ describe("POST /api/:campaign/generate", () => {
     const res = await generate(generateBody);
     expect(res.status).toBe(200);
     const result = (await res.json()) as GenerateResult;
-    // Summed over every call of every part, the outline included (issue
-    // #102): outline (5000/1200, the script's first reply) + the scene's two
+    // Summed over every call of every part, the outline included:
+    // outline (5000/1200, the script's first reply) + the scene's two
     // attempts + the entry's one.
     expect(result.usage).toEqual({
       inputTokens: 16400,
@@ -801,7 +801,7 @@ describe("POST /api/:campaign/generate", () => {
     expect(fake.callsFor("treffen-am-kai")).toHaveLength(2);
   });
 
-  // --- prose around the JSON (issue #20) --------------------------------------
+  // --- prose around the JSON ------------------------------------------------
 
   test("the PO case — explainer paragraph before the object — costs ONE call", async () => {
     const fake = useFake([proseThenJson(replyJson())]);
@@ -881,11 +881,11 @@ describe("POST /api/:campaign/generate", () => {
     expect(body.validationErrors).toEqual(
       expect.arrayContaining([expect.stringContaining('"status" must be "draft"')]),
     );
-    // initial call + the default single correction turn (issue #19), per part
+    // initial call + the default single correction turn, per part
     expect(fake.callsFor("treffen-am-kai")).toHaveLength(2);
   });
 
-  test("truncation is still checked BEFORE extraction (issue #18 order)", async () => {
+  test("truncation is still checked BEFORE extraction", async () => {
     // Extractable, valid JSON — but the transport saw the output cap. The run
     // must still abort after ONE call instead of extracting a maybe-complete
     // object out of a reply the model itself reported as cut off.
@@ -908,7 +908,7 @@ describe("POST /api/:campaign/generate", () => {
     expect(fake.calls).toHaveLength(1);
   });
 
-  test("a scene id that is no kebab slug is a validation error (#100)", async () => {
+  test("a scene id that is no kebab slug is a validation error", async () => {
     // The model names no address any more — the `id` is all it decides, so
     // that is what the validation is about.
     const bad = reply({
@@ -922,7 +922,7 @@ describe("POST /api/:campaign/generate", () => {
     expect(fake.calls).toHaveLength(2);
   });
 
-  test("two scenes with the SAME id are a validation error (#100)", async () => {
+  test("two scenes with the SAME id are a validation error", async () => {
     // The id is the primary key AND the address, so a reply that uses one
     // twice describes two entities that cannot both exist.
     const bad = reply({
@@ -935,7 +935,7 @@ describe("POST /api/:campaign/generate", () => {
     expect(body.validationErrors.some((e) => e.includes("duplicate id"))).toBe(true);
   });
 
-  test("the chapter of a draft's address comes from the RUN, not the reply (#100)", async () => {
+  test("the chapter of a draft's address comes from the RUN, not the reply", async () => {
     // The address is built from the chapter the REQUEST named — a reply that
     // names no chapter at all changes nothing about it.
     const fake = useFake([
@@ -1102,7 +1102,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     const fake = useFake([reply()]);
     const gen = await generate(generateBody);
     const result = (await gen.json()) as GenerateResult;
-    // outline + scene + entry (issue #102)
+    // outline + scene + entry
     expect(fake.calls).toHaveLength(3);
 
     const res = await postJson("/api/beispiel/generate/apply", {
@@ -1111,7 +1111,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     });
     expect(res.status).toBe(200);
     // The review addressed the draft as `<chapter>/<id>`; it is WRITTEN
-    // under its location (issue #100).
+    // under its location.
     expect(await res.json()).toEqual({ written: [SCENE_ADDRESS, "npcs/grella"] });
 
     // the drafts are entities now — every field the review showed survived
@@ -1136,7 +1136,7 @@ describe("POST /api/:campaign/generate/apply", () => {
   test("409 lists all conflicting paths and writes nothing", async () => {
     // The conflict is decided by ID (draftTargetExists) and REPORTED under
     // the path the client sent — `<chapter>/<id>`, the only scene target
-    // shape a client may send since issue #100.
+    // shape a client may send.
     const existing = "01-salzhafen/lighthouse-arrival";
     const before = await read("01-salzhafen/leuchtturm/lighthouse-arrival");
     const fresh = "01-salzhafen/ganz-neu";
@@ -1193,7 +1193,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect((await read("01-salzhafen/leuchtturm/leere-id")).properties.id).toBe("leere-id");
   });
 
-  // There is no extension rule any more (issue #79): an address carries
+  // There is no extension rule any more: an address carries
   // none, and what a draft is ADDRESSED as comes from its `id` anyway
   // (assertDraftId). So the cases below are the ones that are still unsafe:
   // traversal, absolute, a reserved directory, the wrong depth.
@@ -1206,7 +1206,7 @@ describe("POST /api/:campaign/generate/apply", () => {
       { scenes: [{ path: "toplevel.md", markdown: md }] }, // not inside a chapter
       { scenes: [{ path: "npcs/evil", markdown: md }] }, // reserved dir as scene
       { scenes: [{ path: "01-salzhafen/a/b/zu-tief", markdown: md }] }, // too deep
-      // A GROUP segment is no longer the client's to pick (issue #100): the
+      // A GROUP segment is no longer the client's to pick: the
       // group is the draft's `location`, so a three-segment target is a
       // client naming a grouping of its own.
       { scenes: [{ path: "01-salzhafen/hafen/gruppe-selbst-gewaehlt", markdown: md }] },
@@ -1243,7 +1243,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect(await exists(rel)).toBe(false);
   });
 
-  test("400 re-validation: the stub status rules (issue #27) — nothing written", async () => {
+  test("400 re-validation: the stub status rules — nothing written", async () => {
     const brix = { id: "brix", name: "Brix" };
     const cases: Array<[unknown, string]> = [
       // the scene status sneaked into an npc stub after the review
@@ -1309,7 +1309,7 @@ describe("POST /api/:campaign/generate/apply", () => {
   });
 
   /**
-   * TWO drafts, ONE row (issue #100 review): a scene's address carries its
+   * TWO drafts, ONE row: a scene's address carries its
    * `location`, so the same id under two locations produced two DIFFERENT
    * addresses. The duplicate check keyed on the address let the pair through,
    * and the insert then filled one row twice — last write wins, and the
@@ -1335,7 +1335,7 @@ describe("POST /api/:campaign/generate/apply", () => {
 
   /**
    * The last segment of a scene path IS the id whenever the properties carry
-   * none (issue #79 review) — so a path segment that is not a slug has to be
+   * none — so a path segment that is not a slug has to be
    * rejected at the door, or the insert stores a row whose id ("foo.md")
    * contradicts the address contract and nothing can open it again.
    */
@@ -1358,7 +1358,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect(res.status).toBe(404);
   });
 
-  // --- new-chapter flow (issue #12) ------------------------------------------
+  // --- new-chapter flow -----------------------------------------------------
 
   test("chapter + chapterTitle create chapter entry once — and never twice", async () => {
     const chapter = "03-neues-kapitel";
@@ -1448,7 +1448,7 @@ describe("POST /api/:campaign/generate/apply", () => {
   });
 });
 
-// --- background jobs (issue #19) --------------------------------------------
+// --- background jobs --------------------------------------------------------
 
 describe("generate jobs", () => {
   /** A reply into a fresh path, without stubs (npcs/grella exists by now). */
@@ -1465,12 +1465,11 @@ describe("generate jobs", () => {
       entries: [],
     });
   }
-  /** Last segment of an address — the entity id (issue #79: no extension). */
+  /** Last segment of an address — the entity id (no extension). */
   const addressId = (rel: string) => rel.slice(rel.lastIndexOf("/") + 1);
   /**
    * The address a `<chapter>/<id>` review key is WRITTEN to: the fixture's
-   * scenes all carry `location: leuchtturm`, and the group is the location
-   * (issue #100).
+   * scenes all carry `location: leuchtturm`, and the group is the location.
    */
   const withLocation = (rel: string) =>
     `${rel.slice(0, rel.indexOf("/"))}/leuchtturm/${addressId(rel)}`;
@@ -1565,7 +1564,7 @@ describe("generate jobs", () => {
       attempts: fake.calls.length,
     });
     // The part itself says what happened, which is what „Erneut versuchen“
-    // hangs off (issue #102).
+    // hangs off.
     expect(job.pipeline!.parts).toEqual([
       expect.objectContaining({
         key: "scene:treffen-am-kai",
@@ -1576,7 +1575,7 @@ describe("generate jobs", () => {
     ]);
   });
 
-  test("a truncated run keeps the fail-fast 422 body (issue #18 through the job)", async () => {
+  test("a truncated run keeps the fail-fast 422 body (through the job)", async () => {
     const cut = '{"scenes":[{"path":"01-salzhafen/hafen/x","content":"---\\nid: x';
     const fake = useFake([{ text: cut, truncated: true, usage: usage(9000, 8000) }], 8000);
     expect((await postJson("/api/beispiel/generate", generateBody)).status).toBe(202);
@@ -1631,8 +1630,8 @@ describe("generate jobs", () => {
     useFake([jobReply(scenePath)]);
     await generate(generateBody);
 
-    // a path that is not part of the result (issue #97 review, finding 8:
-    // the review patch used to store any key it was handed)
+    // a path that is not part of the result (the review patch used to store
+    // any key it was handed)
     res = await putDraftEdit("beispiel", "01-salzhafen/fremd", edited);
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("unknown draft path");
@@ -1728,7 +1727,7 @@ describe("generate jobs", () => {
     expect(second!.result!.scenes[0]!.path).toBe("01-salzhafen/job-second");
   });
 
-  // --- surviving a restart (issue #23) --------------------------------------
+  // --- surviving a restart --------------------------------------------------
 
   test("a FINISHED job survives a restart whole — result, edits, applyable", async () => {
     const scenePath = "01-salzhafen/job-restart";
@@ -1800,7 +1799,7 @@ describe("generate jobs", () => {
     expect(await res.json()).toEqual({ error: "no generate job for this campaign" });
   });
 
-  // --- a row that cannot be read (issue #62 review) -------------------------
+  // --- a row that cannot be read --------------------------------------------
 
   test("a done job with an unreadable result is served as FAILED and can be discarded", async () => {
     useFake([jobReply("01-salzhafen/job-unreadable")]);
@@ -1842,7 +1841,7 @@ describe("generate jobs", () => {
     expect(job.error!.body.error).toBe(UNREADABLE_PAYLOAD_MESSAGE);
   });
 
-  // --- a row written BEFORE the address upgrade (issue #79 review) ---------
+  // --- a row written BEFORE the address upgrade -----------------------------
 
   test("a persisted job with legacy .md draft paths is normalized on the way out", async () => {
     // The row an old process left behind: paths WITH the file suffix, in the
@@ -1901,10 +1900,10 @@ describe("generate jobs", () => {
     expect(await exists("npcs/legacy-npc")).toBe(true);
   });
 
-  // --- a row written BEFORE the group cutover (issue #100 review) ----------
+  // --- a row written BEFORE the group cutover -------------------------------
 
   test("a persisted job with a three-segment scene draft path is collapsed", async () => {
-    // The row a pre-#100 process left behind: the scene draft's path carries
+    // The row an earlier process left behind: the scene draft's path carries
     // the GROUP segment the model used to choose. `applySceneTarget` answers
     // 400 for that shape now, so without this normalization the job could
     // never be applied again — it would sit there for good.
@@ -1958,7 +1957,7 @@ describe("generate jobs", () => {
     expect(await exists("01-salzhafen/leuchtturm/legacy-grouped")).toBe(true);
   });
 
-  // --- the invariant is a constraint (issue #62 review) ---------------------
+  // --- the invariant is a constraint ----------------------------------------
 
   test("a second job row for the same campaign is rejected by the database", async () => {
     useFake([jobReply("01-salzhafen/job-unique")]);
@@ -1980,7 +1979,7 @@ describe("generate jobs", () => {
     ).toThrow(/constraint/i);
   });
 
-  // --- apply and job cleanup commit together (issue #62 review) ------------
+  // --- apply and job cleanup commit together --------------------------------
 
   test("apply discards the job in the SAME commit as the drafts", async () => {
     const scenePath = "01-salzhafen/job-atomic";
@@ -2039,7 +2038,7 @@ describe("generate jobs", () => {
   });
 });
 
-// --- LLM_CORRECTION_TURNS (issue #19 AK6) -----------------------------------
+// --- LLM_CORRECTION_TURNS ---------------------------------------------------
 
 describe("LLM_CORRECTION_TURNS", () => {
   test("parses 0..2 and falls back to the default on junk", () => {
@@ -2079,7 +2078,7 @@ describe("LLM_CORRECTION_TURNS", () => {
   test("1 (default): one correction turn", async () => {
     const fake = useFake(badReplies(2));
     expect((await generate(generateBody)).status).toBe(422);
-    // Per PART since issue #102 — the bound is the same, the unit is smaller.
+    // Per PART — the bound is the same, the unit is smaller.
     const scene = fake.callsFor("treffen-am-kai");
     expect(scene).toHaveLength(2);
     expect(scene[1]!.corrections).toHaveLength(1);
@@ -2102,7 +2101,7 @@ describe("LLM_CORRECTION_TURNS", () => {
   });
 });
 
-// --- campaign knowledge in the run (issue #53) -------------------------------
+// --- campaign knowledge in the run ------------------------------------------
 //
 // Two claims, both about the WIRING rather than about the wording: the
 // knowledge reaches the provider on every run kind (the wording itself is
@@ -2113,7 +2112,7 @@ describe("campaign knowledge", () => {
   /**
    * A reply whose suggested entry is one the campaign does NOT have yet. The
    * database is shared by the whole file and the apply cases above already
-   * wrote `npcs/grella`; since issue #102 the OUTLINE step refuses an entry
+   * wrote `npcs/grella`; the OUTLINE step refuses an entry
    * that exists (proposing it again would mean a second file for the same
    * reference key), so these cases bring their own.
    */
@@ -2202,5 +2201,68 @@ describe("campaign knowledge", () => {
     useFake([freshReply({ scenes: [{ content: sceneWithId("kai-drei") }] })]);
     const result = (await (await generate(generateBody)).json()) as GenerateResult;
     expect(result.namingHints).toBeUndefined();
+  });
+});
+
+// --- the write-layer net under a generated chapter ------------------------------
+
+describe("a scene draft whose chapter has no entry", () => {
+  test("gets the chapter in the same write, named by its id", async () => {
+    // The apply path is the ONE scene write without a dialog in front of it,
+    // and it is what let scenes land under a chapter that had none: the
+    // overview lists chapters, so chapter and scenes were both unreachable.
+    // `ensureChapterRow` closes it the way `ensureLocationRow` closes the Ort.
+    const markdown = sceneMarkdown()
+      .replace("id: treffen-am-kai", "id: brut-im-dunkeln")
+      .replace("chapter: 01-salzhafen", "chapter: 03-drachenbrut");
+    const res = await postJson("/api/beispiel/generate/apply", {
+      // No `chapter`/`chapterTitle` in the body on purpose — this is the net
+      // under the job-driven creation, not the creation itself.
+      scenes: [{ path: "03-drachenbrut/brut-im-dunkeln", markdown }],
+    });
+    expect(res.status).toBe(200);
+
+    const chapter = await read("03-drachenbrut");
+    expect(chapter.kind).toBe("chapter");
+    // No title was known here, so the chapter is called by its slug — which
+    // is renameable in the overview, where an unreachable chapter was not.
+    expect(chapter.properties.title).toBe("03-drachenbrut");
+    expect(chapter.properties.status).toBe("planned");
+
+    // …and the scene really hangs in it.
+    const tree = (await (await app.request("/api/beispiel/tree")).json()) as {
+      chapters: Array<{ id: string; groups: Array<{ scenes: Array<{ id: string }> }> }>;
+    };
+    const node = tree.chapters.find((c) => c.id === "03-drachenbrut");
+    expect(node?.groups.flatMap((g) => g.scenes).map((s) => s.id)).toContain("brut-im-dunkeln");
+  });
+
+  test("a chapter id that is no slug answers 400 and names the chapter", async () => {
+    // `ensureChapterRow` only creates a chapter for a real entity slug. An id
+    // like `Kapitel_1` passes the address safety check but is not one, so the
+    // apply says so instead of storing a scene nothing can reach.
+    const markdown = sceneMarkdown()
+      // Its own id: the scene id IS the primary key, so reusing the one the
+      // case above wrote would answer the duplicate-target 409 first.
+      .replace("id: treffen-am-kai", "id: brut-im-schacht")
+      .replace("chapter: 01-salzhafen", "chapter: Kapitel_1");
+    const res = await postJson("/api/beispiel/generate/apply", {
+      scenes: [{ path: "Kapitel_1/brut-im-schacht", markdown }],
+    });
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(await res.json())).toContain("Kapitel_1");
+    // Nothing was written — not the scene, and not a chapter either.
+    expect((await app.request("/api/beispiel/entry?path=Kapitel_1")).status).toBe(404);
+  });
+
+  test("a DIALOG still refuses an unknown chapter — ADR #14 stands", async () => {
+    // The rule is about reachability, not about inventing chapters: where a
+    // DM typed the chapter, an unknown one is a typo and the honest answer is
+    // the 400.
+    const res = await postJson("/api/beispiel/scenes", {
+      title: "Szene im Nichts",
+      chapter: "99-gibt-es-nicht",
+    });
+    expect(res.status).toBe(400);
   });
 });

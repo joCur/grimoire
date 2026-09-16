@@ -1,4 +1,4 @@
-// THE German catalog — and the source of truth for the KEY SET (issue #69).
+// THE German catalog — and the source of truth for the KEY SET.
 //
 // `MessageKey` is derived from this object (messages.ts), so every other
 // language is a `Record<MessageKey, string>`: a key that is missing in `en.ts`
@@ -13,7 +13,7 @@
 // typographic detail is part of the design (»…« as „ “, the em dash with
 // spaces, the ellipsis character in „Speichere …“). Do not normalize them.
 //
-// SCHEIBE 1 (issue #69): topbar incl. session chip, campaign switcher, the
+// SCHEIBE 1: topbar incl. session chip, campaign switcher, the
 // five create dialogs, properties dialog + fields, rename dialog, cold start.
 // Everything else still carries its literal strings and follows in Scheibe 2.
 
@@ -44,7 +44,7 @@ export const de = {
   "topbar.generator.running": "Generierung läuft …",
   "topbar.generator.progress": "{written} von {total} übernommen",
   "topbar.review.pending": "Nachbereitung · {count} offen",
-  // The same link below xl, where the row has no width to spare (issue #69):
+  // The same link below xl, where the row has no width to spare:
   // the COUNT is the news, the word is the one thing that can go. The full
   // label stays as the accessible name at every width.
   "topbar.review.pendingShort": "{count} offen",
@@ -205,9 +205,11 @@ export const de = {
 
   "properties.chapter.title.label": "Titel",
   "properties.chapter.status.label": "Status",
-  "properties.chapter.status.placeholder": "active",
+  "properties.chapter.status.planned": "Geplant",
+  "properties.chapter.status.active": "Aktiv",
+  "properties.chapter.status.done": "Abgeschlossen",
   "properties.chapter.status.hint":
-    "Der Wert active markiert das Kapitel, das die Session-Ansicht öffnet.",
+    "Aktiv markiert das Kapitel, das die Session-Ansicht öffnet — es gibt genau eins; das vorherige wird wieder geplant.",
 
   // --- rename dialog --------------------------------------------------------
   "rename.title": "{kind}: id ändern",
@@ -255,11 +257,11 @@ export const de = {
   "settings.language.heading": "Sprache",
   "settings.language.hint": "Sprache der Oberfläche. Gilt für diese Instanz, nicht für die Kampagnendaten.",
 
-  // --- the two campaign-content pages (issue #53) --------------------------
+  // --- the two campaign-content pages ---------------------------------------
   // „Kampagnenwissen“ (/:campaign/knowledge) and „Glossar“
   // (/:campaign/glossary). Campaign CONTENT, like the NPCs and the Orte — the
   // instance settings under /settings are a different thing entirely (PO
-  // feedback on PR #87). Shared by both pages: the row controls, the per-entry
+  // feedback). Shared by both pages: the row controls, the per-entry
   // save outcome, the delete confirmation.
   "entryList.loading": "Lade Liste …",
   "entryList.loadFailed": "Liste nicht geladen — Seite neu laden.",
@@ -311,7 +313,7 @@ export const de = {
   "glossary.noExplanation": "Ohne Erklärung",
 
   // Where the two pages are reached from: the pool's „Nachschlagen“ line and
-  // the mobile start surface's rows (PO feedback on PR #87 — deliberately NOT
+  // the mobile start surface's rows (PO feedback — deliberately NOT
   // the topbar, which stays the three campaign-wide entries it has).
   "lookup.heading": "Nachschlagen",
 
@@ -374,14 +376,23 @@ export const de = {
   // one form for both plural categories here — the ICU shape stays, so `en`
   // can differ without a second call site.
   "pool.chapterCount": "{count, plural, one {# Kapitel} other {# Kapitel}}",
-  // Die Restsektion eines Kapitels: Szenen, die keinen Ort nennen (#100).
+  // Die Restsektion eines Kapitels: Szenen, die keinen Ort nennen.
   "pool.group.noLocation": "Ohne Ort",
   "pool.sceneCount": "{count, plural, =0 {keine Szenen} one {# Szene} other {# Szenen}}",
   "pool.chapter.goal": "Ziel: {goal}",
   "pool.chapter.empty": "Noch keine Szenen in diesem Kapitel.",
-  // The chapter pill: only `active` gets a label, every other value degrades
-  // to the raw string (README, "Format degradiert").
-  "pool.chapter.status.active": "Aktiv",
+  // --- chapter actions in the chapter overview -----------------------------
+  // The chapter's status control („Aktiv" sets `active` and takes it off the
+  // chapter that held it — one server call, one transaction) carries its
+  // labels under `properties.chapter.status.*`.
+  "pool.chapter.properties": "Kapitel-Eigenschaften",
+  "pool.chapter.edit": "Kapitel bearbeiten",
+  "chapterBody.title": "Kapitel bearbeiten: {title}",
+  "chapterBody.description":
+    "Text des Kapitels als Markdown — die Überschrift „## Ziel des Kapitels“ ist die Zeile, die die Übersicht als Ziel zeigt.",
+  "chapterBody.field.body": "Text",
+  "chapterBody.field.body.placeholder":
+    "## Ziel des Kapitels\n\nWas die Gruppe hier erreichen soll",
   // The quiet second half of the „Eventualszenen“ heading row — the `· `
   // separator stays markup in the JSX.
   "pool.contingencies.hint": "nur wenn der Auslöser feuert",
@@ -418,7 +429,7 @@ export const de = {
 
   "live.nav.aria": "Szenen der Session",
   "live.nav.noPlanned": "Keine geplanten Szenen in diesem Kapitel.",
-  // The collapsed group of scenes that are behind us (issue #73): the heading
+  // The collapsed group of scenes that are behind us: the heading
   // alone names the group for a screen reader, `playedGroup` is the visible
   // trigger where the count is PART of the sentence.
   "live.nav.played": "Gespielt",
@@ -460,8 +471,8 @@ export const de = {
   "live.drawer.unloadable": "Nicht ladbar — {path} prüfen.",
   "live.drawer.open": "Eintrag öffnen",
 
-  // --- review (the session wrap-up, formerly "Fünf Minuten Ernte" — issue
-  // #10; the "Ernte"/harvest metaphor stayed in the code, not in the UI)
+  // --- review (the session wrap-up, formerly "Fünf Minuten Ernte";
+  // the "Ernte"/harvest metaphor stayed in the code, not in the UI)
   // routes/review.tsx, lib/use-review.ts ------------------------------------
   "review.title": "Session-Nachbereitung",
   "review.sessionFailed": "Session nicht ladbar — Server prüfen und neu laden.",
@@ -469,7 +480,7 @@ export const de = {
   "review.backToPool": "Zurück zu den Kapiteln",
   "review.lead":
     "Die Einträge der Session durchgehen — als Handlungsstrang übernehmen, NPC anlegen oder verwerfen. Der Rest bleibt im Log.",
-  // Topbar and the mobile page read the same line (two parameters, #69).
+  // Topbar and the mobile page read the same line (two parameters).
   "review.progress": "{seen} von {total} gesichtet",
   "review.hashUnavailable":
     "Gesichtet-Status der Log-Zeilen nicht verfügbar — Grimoire über localhost oder https öffnen.",
@@ -494,12 +505,12 @@ export const de = {
   "review.done.resolved": "Erledigt",
   "review.done.seen": "gesichtet",
 
-  // The untagged inbox lines (issue #85) — ideas thrown in on the go.
+  // The untagged inbox lines — ideas thrown in on the go.
   "review.notes.title": "Ungetaggte Einträge",
   "review.notes.lead":
     "Einträge aus den Ideen ohne Tag — übernehmen, als NPC anlegen oder abhaken.",
 
-  // Player-character notes (issue #86): `#pc` lines from log and inbox.
+  // Player-character notes: `#pc` lines from log and inbox.
   "review.pc.title": "Spielercharaktere",
   "review.pc.lead":
     "Einträge mit #pc — Erinnerungen für den Tisch, kein Kampagneninhalt. Abhaken oder für die nächste Nachbereitung behalten.",
@@ -541,7 +552,7 @@ export const de = {
   "palette.placeholder": "Szenen, NPCs, Orte durchsuchen …",
   "palette.results.aria": "Suchergebnisse",
   "palette.empty": "Nichts gefunden.",
-  // The kind label of a NAVIGATION row (issue #53): a page of this campaign,
+  // The kind label of a NAVIGATION row: a page of this campaign,
   // not an entry the index found.
   "palette.kind.page": "Seite",
 
@@ -610,11 +621,11 @@ export const de = {
     "Abenteuertext einfügen — Absätze, Boxed Text, Statblock-Verweise …",
   "generate.input.contextLabel": "Mitgeschickter Kontext:",
   // The two counts that come from the tree. The knowledge and the glossary
-  // are LINKS to their own pages now (issue #53, PO feedback on PR #87), so
+  // are LINKS to their own pages now (PO feedback), so
   // the view composes the line from three pieces (lib/generate.ts).
   "generate.input.contextEntities":
     "{npcs, plural, one {# NPC} other {# NPCs}} \u00b7 {locations, plural, one {# Ort} other {# Orte}}",
-  // The knowledge COUNT (issue #53 AK5) — the number is what tells the DM
+  // The knowledge COUNT — the number is what tells the DM
   // whether the rules they just wrote arrived.
   "generate.input.knowledgeCount":
     "{count, plural, =0 {kein Kampagnenwissen} one {# Wissens-Eintrag} other {# Wissens-Eintr\u00e4ge}}",
@@ -669,7 +680,7 @@ export const de = {
 
   // --- generator: review (routes/generate.tsx, lib/generate.ts) -----------
   "generate.review.title": "Entwürfe prüfen",
-  // The NPC run reviews ONE suggested entry, not a set of drafts (#88).
+  // The NPC run reviews ONE suggested entry, not a set of drafts.
   "generate.review.titleNpc": "Vorschlag prüfen",
   "generate.review.summary":
     "{scenes, plural, one {# Szene} other {# Szenen}} · {stubs, plural, one {# vorgeschlagener Eintrag} other {# vorgeschlagene Einträge}}",
@@ -680,11 +691,11 @@ export const de = {
   "generate.review.leadNpc":
     "Prüfen und anpassen. Erst „Übernehmen“ schreibt den Eintrag — bestehende NPCs werden nie überschrieben.",
   "generate.review.stubsHeading": "Vorgeschlagene Einträge — einzeln entscheiden",
-  // --- naming hints of the post-run check (issue #53 AK3) -------------------
+  // --- naming hints of the post-run check -----------------------------------
   // Deliberately NOT a warning: the check is a plain text search and the DM
   // decides. So the heading counts and the row states the finding plus where
   // it sits — the sentence is built here because the server stays
-  // language-free (#69).
+  // language-free.
   "generate.review.namingHeading":
     "{count, plural, one {# Namens-Hinweis} other {# Namens-Hinweise}} — kein Blocker",
   "generate.review.namingHint": '„{from}“ steht noch da — vereinbart ist „{to}“',
@@ -700,7 +711,7 @@ export const de = {
   "generate.review.discardFailed": "Nicht verworfen — Server prüfen.",
   "generate.review.apply": "Übernehmen ({count})",
   "generate.review.applyNpc": "Übernehmen",
-  // --- generator: review state on the job (issue #97) ----------------------
+  // --- generator: review state on the job -----------------------------------
   // Everything the DM does here is saved on the SERVER — the line says so
   // quietly, and only once something has happened.
   "generate.review.saving": "Speichern …",
@@ -725,7 +736,7 @@ export const de = {
   // (lib/generate.ts groups by hand — Intl would need full ICU data).
   "generate.usage": "~{tokens} Tokens · {attempts, plural, one {# Versuch} other {# Versuche}}",
   "generate.usage.group": ".",
-  // --- generator: the pipeline (issue #102) --------------------------------
+  // --- generator: the pipeline ----------------------------------------------
   // A run is the outline call plus one call per scene and per entry, so the
   // review fills up while the run is still going. What the DM reads is the
   // PARTS — the outline itself is never shown.
@@ -791,7 +802,7 @@ export const de = {
   "markdown.readaloud.copied": "Kopiert",
   "markdown.readaloud.copy.aria": "Vorlesetext kopieren",
   "markdown.readaloud.copied.aria": "Vorlesetext kopiert",
-  // The scroll container around a table (issue #96): on a phone the table
+  // The scroll container around a table: on a phone the table
   // scrolls, the page never does — and a scrollable box needs a name.
   "markdown.table.aria": "Tabelle",
 

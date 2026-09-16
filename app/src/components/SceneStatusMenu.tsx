@@ -1,4 +1,4 @@
-// The scene-status control (issue #28): the status display itself becomes the
+// The scene-status control: the status display itself becomes the
 // regler. Two densities, one menu — the pill in the scene reading view and
 // the bare dot+label of a pool row; both keep the quiet look and only grow a
 // small chevron on hover/focus.
@@ -14,24 +14,16 @@
 
 import type { SceneStatus } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
 
 import { fetchEntry } from "@/api";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { StatusMenu, type StatusVariant } from "@/components/StatusMenu";
 import { useT } from "@/i18n";
 import { sceneStatusMeta, sceneStatusOptions } from "@/lib/scene-status";
 import { useSceneStatusMutation } from "@/lib/use-scene-status";
-import { cn } from "@/lib/utils";
 
 /** "pill" = scene reading view (bordered pill), "row" = pool list row. */
-export type SceneStatusVariant = "pill" | "row";
+export type SceneStatusVariant = StatusVariant;
 
 export function SceneStatusControl({
   campaign,
@@ -80,6 +72,10 @@ export function SceneStatusControl({
 /**
  * The presentation: trigger plus the four options with the current one
  * checked. Pure (no queries, no mutation) so it can be render-tested.
+ *
+ * The MARKUP is `components/StatusMenu`, which the chapter's control shares —
+ * what stays here is the scene's own data: its four options, its label/color
+ * table and its aria wording.
  */
 export function SceneStatusMenu({
   status,
@@ -101,72 +97,19 @@ export function SceneStatusMenu({
   onSelect: (status: SceneStatus) => void;
 }) {
   const t = useT();
-  const pending = pendingStatus !== undefined;
-  // Optimistic DISPLAY: the target value while the write is in flight.
-  const shown = sceneStatusMeta(pendingStatus ?? status, t);
-  const pill = variant === "pill";
-
   return (
-    <span className="inline-flex flex-none flex-col items-end gap-0.5">
-      <DropdownMenu open={open} onOpenChange={onOpenChange}>
-        {/* The visible pill sits INSIDE the button, which reaches 8px further
-            up and down (compensated by the negative margin): a finger-sized
-            target on mobile without changing a single pixel of the layout. */}
-        <DropdownMenuTrigger
-          type="button"
-          disabled={disabled}
-          aria-label={t("status.change.aria", { current: sceneStatusMeta(status, t).label })}
-          className="group -my-2 inline-flex items-center py-2 disabled:cursor-default"
-        >
-          <span
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full transition-colors",
-              pill
-                ? "border border-input px-[9px] py-px text-[11.5px] group-hover:border-border-hover"
-                : "px-1 text-[12px] group-hover:bg-secondary",
-            )}
-          >
-            <span aria-hidden className={cn("size-[7px] flex-none rounded-full", shown.dot)} />
-            <span className={cn(shown.text, pending && "opacity-60")}>{shown.label}</span>
-            <ChevronDown
-              aria-hidden
-              size={12}
-              className={cn(
-                "flex-none text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 group-data-[state=open]:opacity-100",
-                disabled && "hidden",
-              )}
-            />
-          </span>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-[170px]">
-          <DropdownMenuRadioGroup
-            value={status}
-            onValueChange={(value) => onSelect(value as SceneStatus)}
-          >
-            {sceneStatusOptions(t).map((option) => {
-              const meta = sceneStatusMeta(option.value, t);
-              return (
-                <DropdownMenuRadioItem
-                  key={option.value}
-                  value={option.value}
-                  className="text-[13px] text-body-secondary"
-                >
-                  <span aria-hidden className={cn("size-[7px] flex-none rounded-full", meta.dot)} />
-                  <span className="flex-1">{option.label}</span>
-                  <span aria-hidden className="flex w-3.5 flex-none justify-center text-primary">
-                    {option.value === status && <Check size={13} />}
-                  </span>
-                </DropdownMenuRadioItem>
-              );
-            })}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {message !== undefined && (
-        <span aria-live="polite" className="text-right text-[11.5px] text-muted-foreground">
-          {message}
-        </span>
-      )}
-    </span>
+    <StatusMenu
+      status={status}
+      pendingStatus={pendingStatus}
+      options={sceneStatusOptions(t)}
+      meta={(value) => sceneStatusMeta(value, t)}
+      ariaLabel={t("status.change.aria", { current: sceneStatusMeta(status, t).label })}
+      variant={variant}
+      message={message}
+      disabled={disabled}
+      open={open}
+      onOpenChange={onOpenChange}
+      onSelect={(value) => onSelect(value as SceneStatus)}
+    />
   );
 }

@@ -1,4 +1,4 @@
-// Partial accept of a finished generator run (issue #97).
+// Partial accept of a finished generator run.
 //
 // Its own module and not part of generator.ts for one reason: it needs both
 // the draft VALIDATION (generator.ts) and the JOB store (generate-jobs.ts),
@@ -15,7 +15,7 @@ import {
   applyStubTarget,
   assertDraftId,
   draftAddress,
-  newChapterTarget,
+  jobChapterTarget,
   type ApplyTarget,
 } from "./generator";
 import { locationPath, npcPath } from "./store/paths";
@@ -23,7 +23,7 @@ import { requireCampaign } from "./store/read";
 import { applyDrafts } from "./store/write";
 
 /**
- * Accept PART of a finished run (issue #97) — „Diesen übernehmen" per scene
+ * Accept PART of a finished run — „Diesen übernehmen" per scene
  * and per suggested entry, and „Alle übernehmen" for whatever is left.
  *
  * The whole-run apply (`applyGenerated`) stays exactly as it was; this is
@@ -57,7 +57,7 @@ export async function acceptJobParts(
   if (job === undefined || job.id !== jobId) {
     throw new ApiError(404, "no generate job for this campaign");
   }
-  // A RUNNING job is acceptable too, part by part (AK2 of issue #102): a
+  // A RUNNING job is acceptable too, part by part (AK2): a
   // pipelined run stays `running` while parts are open, and the whole point
   // of the pipeline is that a finished part is reviewable and acceptable
   // before its siblings are. What is acceptable is what is IN the result, and
@@ -124,7 +124,7 @@ export async function acceptJobParts(
   }
   // A selection whose parts are ALL written already is a double click or a
   // second tab, not an error: the caller asked for a state that is the
-  // state, so it gets the honest empty answer (issue #97 review, finding 6).
+  // state, so it gets the honest empty answer.
   // Only a BULK accept with nothing open left stays a 400 — there the caller
   // named nothing and there was nothing, which is a client bug.
   if (selected.length === 0) {
@@ -133,10 +133,14 @@ export async function acceptJobParts(
   }
 
   const targets: ApplyTarget[] = selected.map((rel) => (parts.get(rel) as { target: ApplyTarget }).target);
-  // The chapter file comes first — the scenes live inside it. Idempotent:
+  // The chapter comes first — the scenes live inside it. Idempotent:
   // an existing chapter yields null, so only the FIRST partial accept of a
   // new-chapter run actually creates it.
-  const chapterFile = await newChapterTarget(campaign, body.chapter, body.chapterTitle);
+  //
+  // Decided from the JOB and not from the body: the review state is
+  // persistent, so the accept regularly happens in a browser that never saw
+  // the start form. The body fields remain an override.
+  const chapterFile = await jobChapterTarget(campaign, job, body.chapter, body.chapterTitle);
   if (chapterFile !== null) targets.unshift(chapterFile);
 
   const drafts = targets.map((t) => {

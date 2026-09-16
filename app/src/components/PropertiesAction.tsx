@@ -1,8 +1,8 @@
-// „Eigenschaften" in the reading view (issue #42, slice 2a of #15): the DM
+// „Eigenschaften" in the reading view: the DM
 // edits EVERY properties field of a scene/NPC/Ort/Kapitel in a form — never
 // raw YAML, never a text editor detour.
 //
-// The dialog is the house pattern of issues #30/#34: mounted only while open,
+// The dialog is the house pattern: mounted only while open,
 // one aria-live error line, Abbrechen/Speichern. What it adds is the diff —
 // only the fields the DM actually changed are sent, so every key the form does
 // not know (and every field it did not touch) keeps its stored value.
@@ -12,23 +12,23 @@
 // the path). Both are shown as read-only context so the absence reads as a rule
 // rather than as a gap.
 //
-// Since issue #77 the id is not just shown here, it is REACHABLE here: „id
+// The id is not just shown here, it is REACHABLE here: „id
 // ändern" in the footer is the only entry into the rename dialog (the header
 // button is gone). It is a secondary action on purpose — with references
-// resolving the current name (#68), changing an id is a repair, not everyday
+// resolving the current name, changing an id is a repair, not everyday
 // work. It replaces the properties dialog rather than stacking on top of it:
 // a successful rename navigates the reading view to the new path, and a
 // properties dialog left standing over it would hold the OLD entry's frozen
 // values.
 //
 // The version the save is checked against is frozen when the dialog OPENS: the
-// 5s version poll (issue #8) keeps refetching the entry behind it, and following
+// 5s version poll keeps refetching the entry behind it, and following
 // that rev would turn an external edit into a silent overwrite instead of a
 // 409. It moves only after a conflict, to the entry the re-read brought — the
 // typed values stay, so the next „Speichern" writes on top of what is stored.
 //
 // Because everything the save uses is frozen, the dialog is bound to ONE path
-// (same rule as the body editor of issue #15): the reading route stays mounted
+// (same rule as the body editor): the reading route stays mounted
 // across a navigation — ⌘K works over the modal, Back reopens a cached entry —
 // and a dialog holding file A's frozen values while `file` already points at B
 // would patch A's diff into B. So the open state IS the entry (campaign + path),
@@ -77,11 +77,22 @@ export function PropertiesAction({
   campaign,
   file,
   tree,
+  triggerLabel,
 }: {
   campaign: string;
   file: EntryResponse;
   /** For the reference fields — the ids that already have an entry. */
   tree: CampaignTree | undefined;
+  /**
+   * What the trigger is CALLED. The plain properties label everywhere the
+   * action stands in the header of the one thing on screen. The chapter
+   * overview passes the chapter-prefixed label instead: there the overview
+   * header's own edit action is on the same page, and two actions with the
+   * same name on one surface are ambiguous for a screen reader and for a
+   * keyboard user counting Tab stops. The DIALOG is untouched either way —
+   * same form, same frozen rev, same 409.
+   */
+  triggerLabel?: string;
 }) {
   const t = useT();
   // Open-BY-FILE, not a boolean: navigating away closes the dialog instead of
@@ -111,7 +122,7 @@ export function PropertiesAction({
     <>
       <HeaderAction
         icon={SlidersHorizontal}
-        label={t("properties.action")}
+        label={triggerLabel ?? t("properties.action")}
         onClick={() => setOpenFile(entryKey)}
       />
       {open && (
@@ -180,17 +191,24 @@ function PropertiesDialog({
   // hand over to the rename dialog. undefined = nothing pending.
   const [discardIntent, setDiscardIntent] = useState<"close" | "rename">();
 
-  const save = usePropertiesFormMutation(campaign, file.path, base, {
-    onSaved: onClose,
-    onConflict: (reread) => {
-      if (reread !== undefined) setBase(reread.rev);
+  const save = usePropertiesFormMutation(
+    campaign,
+    file.path,
+    base,
+    {
+      onSaved: onClose,
+      onConflict: (reread) => {
+        if (reread !== undefined) setBase(reread.rev);
+      },
     },
-  });
+    // A chapter patch can swap the active chapter server-side — see the hook.
+    file.kind,
+  );
 
   // What a save would send: the values plus the pending chip text.
   const effective = commitPendingText(fields, values, pending);
   const patch = propertiesPatch(fields, initial, effective);
-  // The Ort field takes free text and STORES the slug (#100 follow-up), so a
+  // The Ort field takes free text and STORES the slug, so a
   // new group needs the typed text as its name. Always computed, never
   // conditional: the server applies it only when it inserts the row.
   const locationName = propertiesLocationName(fields, effective);
@@ -198,7 +216,7 @@ function PropertiesDialog({
   // Saving over one of those would lose what the DM typed, so it blocks the
   // save and says why under the field itself.
   // `initial` exempts what the entry already holds: free text a migrated
-  // campaign carries in `npcs` must not block a save of another field (#70).
+  // campaign carries in `npcs` must not block a save of another field.
   const issues = propertiesFormIssues(fields, effective, initial, t);
   const canSubmit =
     canSubmitProperties(fields, effective) &&

@@ -1,13 +1,13 @@
 // „Eigenschaften" — editing ALL properties fields of one entry from the app
-// (issue #42, slice 2a of #15). This module is the pure half: which fields a
+// This module is the pure half: which fields a
 // kind has, what the open form starts with, and the PATCH body a save sends.
 // No react, no query imports, so every rule here is unit-testable.
 //
 // Three rules carry the whole thing:
 //
 //   1. The FIELD LIST comes from the entity types in @grimoire/shared — one
-//      list per kind, `id` deliberately absent (the rename cascade of issue
-//      #30 owns it) and the kind itself as well (it is derived from the path).
+//      list per kind, `id` deliberately absent (the rename cascade
+//      owns it) and the kind itself as well (it is derived from the path).
 //   2. Only what the DM CHANGED is patched. PATCH /properties re-emits the
 //      whole YAML block from the parsed entry, so every key we do not send
 //      keeps its value — unknown keys of an imported entry included. Sending
@@ -16,7 +16,7 @@
 //   3. Clearing a field DELETES the key (`null`, the server's delete marker)
 //      instead of writing an empty value — `tags: []` or `role: ''` is noise
 //      in an entry the DM also reads in an editor. Same choice the campaign
-//      metadata dialog made for a blank description (issue #34).
+//      metadata dialog made for a blank description.
 //
 // The format DEGRADES (README): an unknown `status`/`type` value is offered as
 // its own option instead of being corrected away, a reference field takes a
@@ -39,6 +39,7 @@ import type { Translate } from "@/i18n/format";
 import type { MessageKey } from "@/i18n/messages";
 import { isEntityId, npcStatusLabel } from "@/lib/entity";
 import { fmQuickstats, fmStringArray } from "@/lib/properties";
+import { chapterStatusOptions } from "@/lib/chapter-status";
 import { sceneStatusOptions } from "@/lib/scene-status";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
@@ -98,10 +99,10 @@ export interface PropertiesField {
 //   LABELS          the only translated half: every one of them is a catalog
 //                   key here (FIELD_COPY), resolved through the translator.
 //
-// The enum option LABELS (scene status, npc status) come from
-// lib/scene-status.ts and lib/entity.ts instead, which the pool, the lists
-// and the cards share: a signature change here would drag half of those
-// views along.
+// The enum option LABELS (scene status, npc status, chapter status) come from
+// lib/scene-status.ts, lib/entity.ts and lib/chapter-status.ts instead, which
+// the pool, the lists and the cards share: a signature change here would drag
+// half of those views along.
 
 /** Catalog keys of a field's copy — label, and the optional two below it. */
 interface FieldCopy {
@@ -154,11 +155,8 @@ const FIELD_COPY: Record<PropertiesKind, Record<string, FieldCopy>> = {
   },
   chapter: {
     title: { label: "properties.chapter.title.label" },
-    status: {
-      label: "properties.chapter.status.label",
-      hint: "properties.chapter.status.hint",
-      placeholder: "properties.chapter.status.placeholder",
-    },
+    // No placeholder: a select has no empty text box to hint at.
+    status: { label: "properties.chapter.status.label", hint: "properties.chapter.status.hint" },
   },
 };
 
@@ -170,8 +168,8 @@ const SCENE_TYPE_LABEL_KEYS: Record<string, MessageKey> = {
 /**
  * The labelled options of a `select`. The enum LABELS come from the modules
  * the pool, the lists and the cards share (lib/scene-status.ts,
- * lib/entity.ts) — the VALUES come from the shared field list, so a format
- * change lands in one place and the labels follow.
+ * lib/entity.ts, lib/chapter-status.ts) — the VALUES come from the shared
+ * field list, so a format change lands in one place and the labels follow.
  */
 function optionsOf(
   kind: PropertiesKind,
@@ -180,6 +178,11 @@ function optionsOf(
 ): readonly FieldOption[] | undefined {
   if (def.control !== "select") return undefined;
   if (kind === "scene" && def.key === "status") return sceneStatusOptions(t);
+  // The same three labels the overview's status control shows, so picking
+  // „Aktiv" reads identically in both places. The server performs the swap to
+  // the one active chapter for a properties patch too, so the rule does not
+  // depend on which of the two doors the write came through.
+  if (kind === "chapter" && def.key === "status") return chapterStatusOptions(t);
   if (kind === "npc" && def.key === "status") {
     return (def.values ?? []).map((value) => ({ value, label: npcStatusLabel(value, t) }));
   }
@@ -234,7 +237,7 @@ export function propertiesKindLabel(kind: EntityKind, t: Translate): string | un
   }
 }
 
-// --- the Ort field: free text in, a slug out (issue #100 follow-up) ----------
+// --- the Ort field: free text in, a slug out ---------------------------------
 //
 // `location` IS the group a scene sits under in its chapter, so it holds an
 // entity id — and for a while the form said exactly that and nothing else:
@@ -374,8 +377,8 @@ function normalize(value: FieldValue, field?: PropertiesField): FieldValue {
   switch (value.kind) {
     case "text":
       // The Ort field is the one control whose normalized form is not the
-      // typed text: it takes free text and STORES the slug (issue #100
-      // follow-up), so slugging here is what makes „Der Leuchtturm von
+      // typed text: it takes free text and STORES the slug, so slugging
+      // here is what makes „Der Leuchtturm von
       // Salzhafen" over a stored `leuchtturm`… well, a different id — but
       // „leuchtturm " or a re-typed „der-alte-hafen" no change at all, and
       // it is the same value the patch writes.
@@ -510,13 +513,13 @@ export function propertiesPatch(
  * A row that is completely empty (or holds only a name, which means „delete
  * this key") is fine and produces nothing here.
  *
- * A `location` that yields NO id (issue #100 follow-up): the field takes free
+ * A `location` that yields NO id: the field takes free
  * text and the save slugs it, so „Der alte Hafen" is fine — but „???" leaves
  * nothing an id could be made of (shared/slug.ts never invents one), and
  * there is no value to send. The hint under the field says what every other
  * text WILL do; this is the one that cannot be done.
  *
- * And an ID LIST (`npcs`, issue #70 audit): that list holds ids, not names —
+ * And an ID LIST (`npcs`): that list holds ids, not names —
  * every entry becomes a card and a reference the save creates — so the server
  * refuses a non-slug entry with a 400. Saying it here makes that a line under
  * the field before the click. `initial` is what the entry already holds and is

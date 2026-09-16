@@ -19,6 +19,20 @@ export type SceneType = (typeof SCENE_TYPES)[number];
 export const NPC_STATUSES = ["alive", "dead", "missing", "unknown"] as const;
 export type NpcStatus = (typeof NPC_STATUSES)[number];
 
+/**
+ * A chapter's lifecycle states, in that order. `active` is the ONE the app
+ * acts on — the session view opens the active chapter, and there is at most
+ * one per campaign (the server swaps it in a single transaction).
+ *
+ * Like every other enum here these are the KNOWN values, not a validator: a
+ * chapter carrying something else is shown verbatim, and there is no CHECK
+ * constraint behind the column. What is different is that the API refuses to
+ * WRITE anything else (400) — the status has three positions now, so a fourth
+ * value arriving on the wire can only be a typo.
+ */
+export const CHAPTER_STATUSES = ["planned", "active", "done"] as const;
+export type ChapterStatus = (typeof CHAPTER_STATUSES)[number];
+
 /** The six callout kinds the renderer knows. Unknown kinds render as plain text. */
 export const CALLOUT_KINDS = [
   "readaloud",
@@ -96,13 +110,13 @@ export interface CampaignProperties {
 export interface ChapterProperties {
   id: string;
   title: string;
-  status?: string;
+  status?: OrString<ChapterStatus>;
   [key: string]: unknown;
 }
 
 /**
  * Session files are app-managed (`sessions/<id>`, where `<id>` is an
- * opaque random string since issue #58 — everything displayable about a
+ * opaque random string — everything displayable about a
  * session comes from `started`).
  * Timestamps are strings — YAML would otherwise parse bare ISO dates as
  * Date objects; the parser normalizes them back to strings.
@@ -113,8 +127,8 @@ export interface SessionProperties {
   ended?: string;
   scenes_played?: string[];
   /**
-   * Pause intervals of the session (app-managed, hand-editable — issue #40
-   * AK8): `[{ from: yyyy-mm-ddTHH:MM:SS, to?: … }]` in the same zone-less
+   * Pause intervals of the session (app-managed, hand-editable):
+   * `[{ from: yyyy-mm-ddTHH:MM:SS, to?: … }]` in the same zone-less
    * local-time convention as started/ended. An entry without `to` is the
    * running pause. Read it through `sessionPauses` (session-state.ts), which
    * carries the degrade rules.
@@ -159,7 +173,7 @@ export interface CampaignSummary {
   id: string;
   /**
    * Id of the campaign's newest session (`sessions/<id>` without the
-   * extension). OPAQUE since the PO decision on issue #58: an address, not a
+   * extension). OPAQUE since the PO decision: an address, not a
    * date, and NOT comparable — order by `lastSessionStarted` instead. Absent
    * when the campaign has no session.
    */
@@ -167,14 +181,14 @@ export interface CampaignSummary {
   /**
    * `started` of that newest session — the zone-less wall-clock string the
    * file format carries (`yyyy-mm-ddTHH:MM:SS`). This is what "last active"
-   * means (issue #14) and the only orderable thing about a session the client
+   * means and the only orderable thing about a session the client
    * gets. Absent when the campaign has no session, or when that session has no
    * usable `started` (a hand-edited file) — either way it then sorts behind
    * every campaign that has one.
    */
   lastSessionStarted?: string;
   /**
-   * Display name (issue #17). Always present since issue #62: a campaign
+   * Display name. Always present: a campaign
    * without an authored name is shown under its ID, exactly as the campaign
    * DOCUMENT renders it (`GET /entry?path=campaign`) — the two endpoints
    * used to disagree. Optional in the type so an older payload still parses.
@@ -202,13 +216,13 @@ export interface SceneSummary {
 
 export interface SceneGroup {
   /**
-   * The `location` the scenes of this group name — the group IS that location
-   * since issue #100. "" for the scenes that name none.
+   * The `location` the scenes of this group name — the group IS that
+   * location. "" for the scenes that name none.
    */
   slug: string;
   /**
    * The location entry's display NAME, degraded to the id when nobody has
-   * named it yet (an entry a reference created, #70). "" for the `slug: ""`
+   * named it yet (an entry a reference created). "" for the `slug: ""`
    * group, which is not a location and is labelled by the app.
    *
    * Resolved HERE because the groups are ordered by it: the heading the DM
@@ -223,7 +237,7 @@ export interface ChapterNode {
   id: string;
   /** The chapter's title; falls back to its id. */
   title: string;
-  status?: string;
+  status?: OrString<ChapterStatus>;
   /** Address of the chapter — its id. */
   path?: string;
   groups: SceneGroup[];
@@ -265,7 +279,7 @@ export interface CampaignTree {
 /** GET /api/:campaign/entry?path=… (and GET /api/:campaign/session) */
 export interface EntryResponse extends ParsedFile {
   /**
-   * SESSIONS ONLY (issue #40): `started` as epoch milliseconds, read in
+   * SESSIONS ONLY: `started` as epoch milliseconds, read in
    * the SERVER's timezone. The properties value stays the zone-less string
    * the format uses — this is the server's interpretation of it, so a client
    * in a different timezone still computes the right session runtime.
@@ -275,7 +289,7 @@ export interface EntryResponse extends ParsedFile {
   /** SESSIONS ONLY: `ended` as epoch milliseconds (see startedMs). */
   endedMs?: number;
   /**
-   * SESSIONS ONLY (issue #40 AK8): the total length of the session's
+   * SESSIONS ONLY: the total length of the session's
    * CLOSED `pauses` intervals in milliseconds, computed by the server for the
    * same reason as startedMs — the strings are zone-less. Absent when the
    * session has no usable closed pause.
@@ -344,7 +358,7 @@ export interface GeneratedStub {
  * initial one plus each correction turn). Absent when the endpoint reports
  * no usage at all — the UI then simply shows nothing. The generator's 422
  * bodies carry the same shape next to `error`, so a run that produced
- * nothing is just as visible as a successful one (issue #18).
+ * nothing is just as visible as a successful one.
  */
 export interface GenerateUsage {
   inputTokens: number;
@@ -364,7 +378,7 @@ export interface GenerateResult {
   stubs: GeneratedStub[];
   warnings: string[];
   /**
-   * The SERVER's own findings, not the model's (issue #53 AK3): drafts that
+   * The SERVER's own findings, not the model's: drafts that
    * still carry a spelling a naming convention replaces. Absent/empty when
    * the campaign has no naming conventions or nothing was found — never a
    * reason to fail a run.
@@ -375,7 +389,7 @@ export interface GenerateResult {
 }
 
 /**
- * One generated NPC file draft (issue #21). Same "nothing is on disk yet"
+ * One generated NPC file draft. Same "nothing is on disk yet"
  * rule as a scene draft: writing happens only via POST
  * /api/:campaign/generate/apply. The path is always `npcs/<id>` and the
  * properties id matches that filename — the server validates both before
@@ -391,7 +405,7 @@ export interface GeneratedNpcDraft {
 }
 
 /**
- * Result of an NPC run (POST /api/:campaign/generate/npc, issue #21) —
+ * Result of an NPC run (POST /api/:campaign/generate/npc) —
  * deliberately its OWN shape instead of a scene-less GenerateResult: an NPC
  * run produces exactly one file, has no stubs and no chapter, and a
  * `scenes: []` would be a lie every consumer would have to special-case.
@@ -407,7 +421,7 @@ export interface GenerateNpcResult {
   usage?: GenerateUsage;
 }
 
-// --- augmenting an EXISTING entry (issue #36) -------------------------------
+// --- augmenting an EXISTING entry ------------------------------------------
 
 /**
  * The entity kinds „Mit KI ergänzen" works on. Deliberately its own list and
@@ -426,7 +440,7 @@ export function isAugmentKind(value: unknown): value is AugmentKind {
  * One properties field of an augment proposal, as the review renders it:
  * „Vorhanden | Vorschlag" side by side.
  *
- * `state` is what the DEFAULT decision hangs off (issue #36 AK2 — never
+ * `state` is what the DEFAULT decision hangs off (never
  * silently overwrite): `new` means the entry has no value for the key (absent,
  * null, empty string, empty list) and the proposal is preselected; `changed`
  * means the entry HAS a value and the model wants a different one — the
@@ -443,7 +457,7 @@ export interface AugmentPropertyProposal {
 }
 
 /**
- * The result of an augment run (issue #36): a PROPOSAL for one existing
+ * The result of an augment run: a PROPOSAL for one existing
  * entry. Nothing is written — POST …/generate/augment/apply is the only
  * write, and it carries the DM's per-field/per-block decisions.
  *
@@ -474,10 +488,10 @@ export interface AugmentResult {
   usage?: GenerateUsage;
 }
 
-// --- the scene pipeline (issue #102) ---------------------------------------
+// --- the scene pipeline ----------------------------------------------------
 
 /**
- * ONE part of a pipelined scene run (issue #102) as the client sees it.
+ * ONE part of a pipelined scene run as the client sees it.
  *
  * A run is no longer one call that stands or falls whole: an OUTLINE call
  * decides which scenes exist, and then every scene and every suggested entry
@@ -511,7 +525,7 @@ export const GENERATE_JOB_PART_STATUSES = ["pending", "running", "done", "failed
 export type GenerateJobPartStatus = (typeof GENERATE_JOB_PART_STATUSES)[number];
 
 /**
- * The pipeline state of a scene run (issue #102): its parts in OUTLINE order
+ * The pipeline state of a scene run: its parts in OUTLINE order
  * plus what the whole run has cost so far. Absent for the single-call runs
  * (npc, augment) and for a job from an older server.
  */
@@ -525,15 +539,15 @@ export interface GenerateJobPipeline {
   totals: { inputTokens: number; outputTokens: number; calls: number };
 }
 
-// --- background generate jobs (issue #19) ----------------------------------
+// --- background generate jobs ----------------------------------------------
 
 export const GENERATE_JOB_STATUSES = ["running", "done", "failed"] as const;
 export type GenerateJobStatus = (typeof GENERATE_JOB_STATUSES)[number];
 
 /**
- * What a generator job produces: scene drafts for a chapter (issue #6), one
- * NPC file draft (issue #21), or a PROPOSAL for an entry that already exists
- * (issue #36 — `augment`). There is still exactly ONE job per campaign; the
+ * What a generator job produces: scene drafts for a chapter, one
+ * NPC file draft, or a PROPOSAL for an entry that already exists
+ * (`augment`). There is still exactly ONE job per campaign; the
  * kind only tells the client which result field to read and which mode to
  * restore.
  */
@@ -544,7 +558,7 @@ export type GenerateJobKind = (typeof GENERATE_JOB_KINDS)[number];
  * A failed run, exactly as the synchronous endpoint would have answered it:
  * the HTTP status and the JSON error body it would have sent. So a job
  * failure carries the same `error`/`validationErrors`/`rawReply`/`usage`
- * fields the client already knows from the generator's 422 (issues #18/#20)
+ * fields the client already knows from the generator's 422
  * — the UI feeds `body` into the same block it feeds `ApiError.details`.
  */
 export interface GenerateJobError {
@@ -553,12 +567,12 @@ export interface GenerateJobError {
 }
 
 /**
- * GET /api/:campaign/generate/job — the one generate job of a campaign
- * (issue #19). The run outlives the browser tab: POST /generate answers
+ * GET /api/:campaign/generate/job — the one generate job of a campaign.
+ * The run outlives the browser tab: POST /generate answers
  * `202 { jobId }` and the result waits here until it is applied, discarded
  * or replaced by the next run.
  *
- * A ROW on the server since issue #23 (`generate_jobs`), so the run outlives
+ * A ROW on the server (`generate_jobs`), so the run outlives
  * the process too: `done` and `failed` come back after a restart whole —
  * result, error body and `draftEdits` — and stay applyable. Only a `running`
  * job cannot survive, because its provider call died with the process: the
@@ -570,7 +584,7 @@ export interface GenerateJob {
   id: string;
   campaign: string;
   /**
-   * What this run produces (issue #21). Additive and optional: a payload
+   * What this run produces. Additive and optional: a payload
    * without it is a scene run — the field exists so the UI can restore the
    * right generator mode (and read the right result field).
    */
@@ -583,12 +597,12 @@ export interface GenerateJob {
   finishedAt?: string;
   /** Present iff status is "done" and kind is "scene". */
   result?: GenerateResult;
-  /** Present iff status is "done" and kind is "npc" (issue #21). */
+  /** Present iff status is "done" and kind is "npc". */
   npcResult?: GenerateNpcResult;
-  /** Present iff status is "done" and kind is "augment" (issue #36). */
+  /** Present iff status is "done" and kind is "augment". */
   augmentResult?: AugmentResult;
   /**
-   * Address of the entry an `augment` run targets (issue #36). Present for
+   * Address of the entry an `augment` run targets. Present for
    * that kind from the moment the job STARTS, so the app can show which entry
    * is being worked on while the run is still going.
    */
@@ -603,7 +617,7 @@ export interface GenerateJob {
    */
   draftEdits: Record<string, string>;
   /**
-   * Optimistic-concurrency token of the REVIEW STATE (issue #97). Every
+   * Optimistic-concurrency token of the REVIEW STATE. Every
    * `PATCH …/review` sends the rev it read and gets a 409
    * `rev_conflict` when the job moved underneath (a second tab), so nothing
    * a DM decided is ever silently overwritten. Bumped by the review patch
@@ -611,7 +625,7 @@ export interface GenerateJob {
    */
   rev?: number;
   /**
-   * Everything the DM DID in the review, kept on the job (issue #97) so a
+   * Everything the DM DID in the review, kept on the job so a
    * navigation, a reload, a second tab and a server restart all show the
    * same state. `draftEdits` holds the edited TEXT; this holds the
    * decisions. Absent on a payload from an older server — the UI treats
@@ -619,7 +633,7 @@ export interface GenerateJob {
    */
   review?: GenerateJobReview;
   /**
-   * The pipeline state of a scene run (issue #102) — the parts in outline
+   * The pipeline state of a scene run — the parts in outline
    * order and the run's token/call totals. Absent for a single-call run and
    * for a payload from an older server, and then the review renders exactly
    * as it did before this ticket.
@@ -628,7 +642,7 @@ export interface GenerateJob {
 }
 
 /**
- * The review state of a job (issue #97). Deliberately a small, additive
+ * The review state of a job. Deliberately a small, additive
  * record of DECISIONS, not a second copy of the result: the result stays
  * the model's output, this is what the DM did with it.
  */
@@ -670,7 +684,7 @@ export interface GenerateJobStarted {
   jobId: string;
 }
 
-// --- instance settings (issue #69) ------------------------------------------
+// --- instance settings -----------------------------------------------------
 
 /**
  * The UI languages the app ships. The list lives HERE, not in the app, because
@@ -699,7 +713,7 @@ export interface InstanceSettings {
   locale: UiLocale | null;
 }
 
-// --- glossary & campaign knowledge (issue #53) -----------------------------
+// --- glossary & campaign knowledge -----------------------------------------
 
 /**
  * One glossary term. The glossary answers the TRANSLATION question ("what do
@@ -723,7 +737,7 @@ export interface GlossaryResponse {
 }
 
 /**
- * The three kinds of campaign knowledge (issue #53, PO decision):
+ * The three kinds of campaign knowledge (PO decision):
  *
  *   naming  a NAMING CONVENTION — `from` is the spelling the source material
  *           uses, `to` the one this campaign uses. The only kind the server
@@ -763,14 +777,14 @@ export interface KnowledgeResponse {
 }
 
 /**
- * One finding of the POST-RUN naming check (issue #53 AK3): a finished draft
+ * One finding of the POST-RUN naming check: a finished draft
  * still carries a spelling that a naming convention replaces.
  *
  * A HINT, never a blocker — the check is a plain word-boundary text search
  * and cannot know whether the hit is the thing the rule means (a `from` of
  * "Salt" hits "Salt Harbour" and the word "salt"). So it reports WHERE it
  * looked and lets the DM decide; the sentence around it is built by the app
- * from its own catalog, because the server stays language-free (#69).
+ * from its own catalog, because the server stays language-free.
  */
 export interface NamingHint {
   /** The convention's `from` — the spelling that was found. */

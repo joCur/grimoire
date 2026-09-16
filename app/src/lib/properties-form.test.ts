@@ -30,7 +30,7 @@ import {
 } from "./properties-form";
 import { translator } from "@/i18n/format";
 
-// The language the assertions below are written in (issue #69): the helpers
+// The language the assertions below are written in: the helpers
 // take the translator as an argument, so a test says so explicitly instead of
 // leaning on a default.
 const t = translator("de");
@@ -99,6 +99,18 @@ describe("propertiesFieldsFor", () => {
     ]);
     expect(keys("location")).toEqual(["name", "chapter", "roll20-page"]);
     expect(keys("chapter")).toEqual(["title", "status"]);
+  });
+
+  // The chapter status is not free text: the API enforces the trio (400
+  // otherwise), so a text field could only produce a rejected save — and the
+  // dialog has to offer the same list the overview's control does.
+  test("the chapter status is a select over the enum, in lifecycle order", () => {
+    const status = fields("chapter").find((field) => field.key === "status");
+    expect(status?.control).toBe("select");
+    expect(status?.options?.map((o) => o.value)).toEqual(["planned", "active", "done"]);
+    expect(status?.options?.map((o) => o.label)).toEqual(["Geplant", "Aktiv", "Abgeschlossen"]);
+    // No placeholder any more — a select has no empty text to hint at.
+    expect(status?.placeholder).toBeUndefined();
   });
 
   test("neither the id nor the kind is ever a field (the rename cascade owns the id)", () => {
@@ -383,7 +395,7 @@ describe("unfinished quickstat rows block the save", () => {
   });
 });
 
-describe("the npcs list holds ids, not names (#70 audit)", () => {
+describe("the npcs list holds ids, not names", () => {
   const sceneFields = fields("scene");
   const initial = propertiesFormValues(sceneFields, SCENE_FM);
   const withNpcs = (items: string[]): FormValues => ({
@@ -414,7 +426,7 @@ describe("the npcs list holds ids, not names (#70 audit)", () => {
   });
 });
 
-describe("the Ort field: free text in, a slug out (#100)", () => {
+describe("the Ort field: free text in, a slug out", () => {
   const sceneFields = fields("scene");
   const initial = propertiesFormValues(sceneFields, SCENE_FM);
   const withLocation = (text: string): FormValues => ({
@@ -636,7 +648,7 @@ describe("reference and select options", () => {
       { value: "ready", label: "Bereit" },
     ];
     // Open on `onhold`, switch to a known value: the odd one must still be in
-    // the list, or the DM could never put it back (issue #42 review).
+    // the list, or the DM could never put it back.
     expect(selectOptions(known, "draft", "onhold")).toEqual([
       ...known,
       { value: "onhold", label: "onhold" },
@@ -715,7 +727,7 @@ describe("writePropertiesForm", () => {
     });
   });
 
-  test("the Ort's display name rides along in the same request (#100)", async () => {
+  test("the Ort's display name rides along in the same request", async () => {
     // One write, one transaction: the slug in `location`, the typed text as
     // `locationName`. The server names the entry it CREATES with it and
     // ignores it for a row that exists.

@@ -1,4 +1,4 @@
-// React-query half of the „Eigenschaften" form (issue #42).
+// React-query half of the „Eigenschaften" form.
 //
 // The cache/409 mechanics are the shared envelope in use-rev-write.ts; what
 // belongs to this path is the invalidation set. A properties patch can move
@@ -17,7 +17,7 @@ import { withRev } from "@/lib/write-with-rev";
 
 /**
  * What one save carries: the diff, plus the display name for the Ort the
- * scene's `location` may CREATE (issue #100 follow-up — the Ort field takes
+ * scene's `location` may CREATE (the Ort field takes
  * free text, `propertiesPatch` stores the slug and this carries the name).
  */
 export interface PropertiesWrite {
@@ -35,6 +35,14 @@ export function usePropertiesFormMutation(
     /** The re-read entry after a conflict; the dialog moves its base to it. */
     onConflict: (file: EntryResponse | undefined) => void;
   },
+  /**
+   * The kind on screen. Only one value changes anything: a CHAPTER patch can
+   * set `status: active`, which the server answers by ALSO putting the
+   * previously active chapter back to `planned` — a second entry this dialog
+   * never read. Its cached copy would keep the old status, so the whole entry
+   * cache goes for that kind and not just the seeded entry.
+   */
+  kind?: string,
 ): RevWriteMutation<PropertiesWrite> {
   return useRevWriteMutation<PropertiesWrite>({
     write: withRev(rev, (write, rev) =>
@@ -42,6 +50,7 @@ export function usePropertiesFormMutation(
     ),
     entryKey: ["entry", campaign, path],
     invalidateOnSuccess: [
+      ...(kind === "chapter" ? [["entry", campaign]] : []),
       ["tree", campaign],
       ["search", campaign],
     ],
