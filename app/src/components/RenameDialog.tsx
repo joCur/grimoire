@@ -50,7 +50,7 @@ import {
 
 /**
  * The rename dialog itself — mounted only while open, by whoever offers the
- * action (today: the „Eigenschaften" dialog's footer, issue #77).
+ * action (today: the „Eigenschaften" dialog's footer).
  */
 export function RenameDialog({
   campaign,
@@ -197,9 +197,9 @@ export function RenameDialog({
 }
 
 /**
- * The dry run's plan: the move, the USAGE summary (issue #60 — what hangs off
- * the id, counted by the same queries the cascade rewrites), the entry count
- * and every entry it touches.
+ * The dry run's plan: the move, the USAGE summary (what hangs off the id,
+ * counted by the same queries the cascade rewrites), the entry count and
+ * every entry it touches.
  */
 function RenamePlanPreview({ plan }: { plan: RenameResult }) {
   const { t } = useI18n();
