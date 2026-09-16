@@ -110,7 +110,7 @@ test("editing the body: save writes the entry and the reading view shows it", as
 });
 
 test("a mention in the text stays text — no entry, no error", async ({ page, api }) => {
-  // A reference names an entry that exists (ADR #18) — but a MENTION in the
+  // A reference names an entry that exists (ADR #19) — but a MENTION in the
   // body is not a reference: `[[niemand]]` and a `## Beziehungen` line are
   // prose. Saving them is a normal save: nothing is created, nothing is
   // refused, and the text comes back as written.
@@ -147,7 +147,7 @@ test("a scene that MOVED is still editable under its old address", async ({
   // that (a bookmark, another tab) names the old address. Opening it has to
   // land on the scene, replace the URL with the one it has now, and save
   // through it like any other edit.
-  // The Ort has to exist before a scene can name it (ADR #18).
+  // The Ort has to exist before a scene can name it (ADR #19).
   await api.send("POST", "beispiel/locations", { name: "Nordbucht" });
   await api.patchProperties(SCENE, { location: "nordbucht" });
   const moved = "01-salzhafen/nordbucht/lighthouse-arrival";

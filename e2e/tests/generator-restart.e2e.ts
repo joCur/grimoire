@@ -164,7 +164,7 @@ test("a finished job survives a restart whole and is still applyable", async ({}
 
     // The scene AND the entries it references: a proposal is applied as one
     // batch, because a scene cannot name an entry that does not exist
-    // (ADR #18).
+    // (ADR #19).
     const result = after.result as { scenes: unknown[]; stubs: unknown[] };
     const written = await api.send<{ written: string[] }>("POST", "beispiel/generate/apply", {
       scenes: result.scenes,

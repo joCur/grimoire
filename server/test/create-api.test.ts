@@ -354,3 +354,164 @@ describe("creating next to imported stock", () => {
     expect(found.results.map((r) => r.path)).toContain("npcs/brunhild-wellenbrecher");
   });
 });
+
+// „Aktiv" on a chapter: the action that decides which chapter the session is
+// in. It is ONE transaction over TWO chapters, which is the only thing worth
+// testing about it — an app doing it in two calls would have a window with two
+// active chapters, and the session view picks the first it finds.
+describe("POST /api/:campaign/chapters/:id/active", () => {
+  beforeEach(async () => {
+    await emptyStore();
+    await created<CampaignSummary>("/campaigns", { name: "Nordwind" });
+    await created<EntryResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
+    await created<EntryResponse>("/nordwind/chapters", { title: "02 Tiefe" });
+  });
+  afterEach(() => {
+    dropStore();
+  });
+
+  const statuses = async (): Promise<Record<string, string | undefined>> => {
+    const tree = (await (await app.request("/api/nordwind/tree")).json()) as {
+      chapters: Array<{ id: string; status?: string }>;
+    };
+    return Object.fromEntries(tree.chapters.map((c) => [c.id, c.status]));
+  };
+
+  test("sets active here and puts the previous one back to planned — in one call", async () => {
+    expect((await post("/nordwind/chapters/01-salzhafen/active", {})).status).toBe(200);
+    expect(await statuses()).toMatchObject({ "01-salzhafen": "active" });
+
+    expect((await post("/nordwind/chapters/02-tiefe/active", {})).status).toBe(200);
+    // The swap, which is the whole point: never two active chapters.
+    expect(await statuses()).toEqual({ "01-salzhafen": "planned", "02-tiefe": "active" });
+  });
+
+  test("is idempotent and answers the chapter entry", async () => {
+    expect((await post("/nordwind/chapters/01-salzhafen/active", {})).status).toBe(200);
+    const res = await post("/nordwind/chapters/01-salzhafen/active", {});
+    expect(res.status).toBe(200);
+    const entry = (await res.json()) as EntryResponse;
+    expect(entry.path).toBe("01-salzhafen");
+    expect(entry.properties.status).toBe("active");
+    expect(await statuses()).toMatchObject({ "01-salzhafen": "active" });
+  });
+
+  test("404 for a chapter that does not exist, and nothing changes", async () => {
+    await post("/nordwind/chapters/01-salzhafen/active", {});
+    expect((await post("/nordwind/chapters/99-nichts/active", {})).status).toBe(404);
+    expect(await statuses()).toMatchObject({ "01-salzhafen": "active" });
+  });
+
+  test("400 for an unsafe chapter id", async () => {
+    expect((await post("/nordwind/chapters/..%2Fetc/active", {})).status).toBe(400);
+  });
+});
+
+// The chapter status enum: three known values, and the API writes nothing
+// else. What is already STORED still degrades — that is the format's rule and
+// there is no CHECK constraint behind the column — so the two halves are
+// tested apart.
+describe("the chapter status enum via PATCH /properties", () => {
+  beforeEach(async () => {
+    await emptyStore();
+    await created<CampaignSummary>("/campaigns", { name: "Nordwind" });
+    await created<EntryResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
+    await created<EntryResponse>("/nordwind/chapters", { title: "02 Tiefe" });
+  });
+  afterEach(() => {
+    dropStore();
+  });
+
+  const statuses = async (): Promise<Record<string, string | undefined>> => {
+    const tree = (await (await app.request("/api/nordwind/tree")).json()) as {
+      chapters: Array<{ id: string; status?: string }>;
+    };
+    return Object.fromEntries(tree.chapters.map((c) => [c.id, c.status]));
+  };
+
+  async function entry(rel: string): Promise<EntryResponse> {
+    const res = await app.request(`/api/nordwind/entry?path=${encodeURIComponent(rel)}`);
+    expect(res.status).toBe(200);
+    return (await res.json()) as EntryResponse;
+  }
+
+  async function patchStatus(chapter: string, status: unknown): Promise<Response> {
+    const current = await entry(chapter);
+    return app.request("/api/nordwind/properties", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: current.path, rev: current.rev, patch: { status } }),
+    });
+  }
+
+  test("a created chapter starts at planned", async () => {
+    // Not "no status": the overview renders the value, and a chapter without
+    // one would look less planned than its siblings.
+    expect((await entry("02-tiefe")).properties.status).toBe("planned");
+  });
+
+  test("writes each of the three known values", async () => {
+    for (const status of ["planned", "active", "done"]) {
+      expect((await patchStatus("01-salzhafen", status)).status).toBe(200);
+      expect((await entry("01-salzhafen")).properties.status).toBe(status);
+    }
+  });
+
+  test("400 for anything else, and nothing is written", async () => {
+    expect((await patchStatus("01-salzhafen", "planned")).status).toBe(200);
+    const res = await patchStatus("01-salzhafen", "laeuft");
+    expect(res.status).toBe(400);
+    // The message names the trio, so the DM reads what IS allowed.
+    expect(JSON.stringify(await res.json())).toContain("planned, active, done");
+    expect((await entry("01-salzhafen")).properties.status).toBe("planned");
+
+    // A non-string is the same answer.
+    expect((await patchStatus("01-salzhafen", 3)).status).toBe(400);
+  });
+
+  test("null still deletes the key — a chapter may have no status", async () => {
+    expect((await patchStatus("01-salzhafen", "done")).status).toBe(200);
+    expect((await patchStatus("01-salzhafen", null)).status).toBe(200);
+    expect((await entry("01-salzhafen")).properties.status).toBeUndefined();
+  });
+
+  test("a patch that does NOT touch the status leaves an unknown value alone", async () => {
+    // The degrade half: a chapter carrying something else stays readable AND
+    // patchable in its other properties.
+    const { getDb } = await import("../src/store/handle");
+    const db = await getDb();
+    const { sql } = await import("drizzle-orm");
+    db.run(
+      sql`update chapters set status = 'laeuft' where campaign_id = 'nordwind' and id = '01-salzhafen'`,
+    );
+
+    const fresh = await entry("01-salzhafen");
+    expect(fresh.properties.status).toBe("laeuft");
+    const res = await app.request("/api/nordwind/properties", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: fresh.path, rev: fresh.rev, patch: { title: "Neu benannt" } }),
+    });
+    expect(res.status).toBe(200);
+    const after = await entry("01-salzhafen");
+    expect(after.properties.title).toBe("Neu benannt");
+    expect(after.properties.status).toBe("laeuft");
+  });
+
+  // The properties dialog must not be a second door past the one-active rule.
+  // The endpoint is not the owner of it, the column is.
+  test("a patch setting active performs the swap, like the endpoint", async () => {
+    expect((await post("/nordwind/chapters/01-salzhafen/active", {})).status).toBe(200);
+    expect(await statuses()).toEqual({ "01-salzhafen": "active", "02-tiefe": "planned" });
+
+    expect((await patchStatus("02-tiefe", "active")).status).toBe(200);
+    // Never two active chapters — whichever door the write came through.
+    expect(await statuses()).toEqual({ "01-salzhafen": "planned", "02-tiefe": "active" });
+  });
+
+  test("setting a chapter to done does not touch the active one", async () => {
+    expect((await post("/nordwind/chapters/01-salzhafen/active", {})).status).toBe(200);
+    expect((await patchStatus("02-tiefe", "done")).status).toBe(200);
+    expect(await statuses()).toEqual({ "01-salzhafen": "active", "02-tiefe": "done" });
+  });
+});

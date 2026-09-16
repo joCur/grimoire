@@ -55,7 +55,7 @@ const INSTRUCTION = "Führe einen Handlungsstrang um den Schmuggler-Spitzel ein"
 /**
  * „NPC anlegen" with nothing but the id — how a DM ends up with an entry
  * that exists and says nothing. The scene then references it, which is only
- * possible BECAUSE it exists (ADR #18).
+ * possible BECAUSE it exists (ADR #19).
  */
 async function createEmptyNpc(api: Api): Promise<void> {
   await api.send("POST", "beispiel/npcs", { name: EMPTY_NPC });

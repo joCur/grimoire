@@ -15,7 +15,7 @@ import {
   applyStubTarget,
   assertDraftId,
   draftAddress,
-  newChapterTarget,
+  jobChapterTarget,
   type ApplyTarget,
 } from "./generator";
 import { locationPath, npcPath } from "./store/paths";
@@ -38,12 +38,14 @@ import { applyDrafts } from "./store/write";
  *               rejected one never is. Naming a path explicitly is the one
  *               way an undecided entry gets written („Diesen übernehmen"
  *               on its row is the decision).
- *               A SCENE carries the entries it names: a scene cannot be
- *               written while its `npcs`/`location` name nothing (ADR #18),
- *               so a selected scene pulls in the run's own suggested
- *               entries for those ids — but only the ACCEPTED ones, because
- *               an undecided entry stays the DM's decision. With one still
- *               open the write is refused and names it.
+ *               A SCENE CARRIES THE ENTRIES IT NAMES. A scene cannot be
+ *               written while its `npcs`/`location` name nothing (ADR #19),
+ *               so a selected scene pulls in the run's own suggested entries
+ *               for those ids — every one that is not REJECTED, accepted or
+ *               still undecided. A stub is the minimal entry the scene
+ *               needs, so accepting the scene is the decision that it
+ *               exists; what the DM threw away stays thrown away, and the
+ *               write is then refused and names it.
  *   transaction one, with the target rev guards of the ordinary draft write
  *               (`applyDrafts`: conflicts checked INSIDE it, FTS and
  *               `[[slug]]` reference rows follow because this is that path).
@@ -113,12 +115,12 @@ export async function acceptJobParts(
   }
 
   /**
-   * The run's own entries a scene REFERENCES and the DM has accepted — see
-   * the selection rule above. Read off the draft markdown, so an edit of the
-   * scene in the review counts.
+   * The run's own entries a scene REFERENCES and the DM has not rejected —
+   * see the selection rule above. Read off the draft markdown, so an edit of
+   * the scene in the review counts.
    */
   const scenePaths = new Set(job.result?.scenes.map((scene) => scene.path) ?? []);
-  const acceptedRefsOf = (rel: string): string[] => {
+  const referencedPartsOf = (rel: string): string[] => {
     const part = parts.get(rel);
     if (part === undefined || !scenePaths.has(rel)) return [];
     const properties = parseMarkdown(part.target.markdown, rel, 0).properties;
@@ -128,12 +130,17 @@ export async function acceptJobParts(
       ...npcIds.filter((id): id is string => typeof id === "string").map(npcPath),
       ...(typeof location === "string" && location !== "" ? [locationPath(location)] : []),
     ];
-    return candidates.filter((candidate) => parts.get(candidate)?.bulk === true);
+    return candidates.filter((candidate) => parts.get(candidate)?.open === true);
   };
 
   let selected: string[];
   if (body.paths === undefined) {
     selected = [...parts].filter(([, part]) => part.bulk).map(([rel]) => rel);
+    for (const rel of [...selected]) {
+      for (const referenced of referencedPartsOf(rel)) {
+        if (!selected.includes(referenced)) selected.push(referenced);
+      }
+    }
   } else {
     if (!Array.isArray(body.paths)) throw new ApiError(400, "paths must be an array of strings");
     selected = [];
@@ -147,7 +154,7 @@ export async function acceptJobParts(
       if (part.open) selected.push(rel);
     }
     for (const rel of [...selected]) {
-      for (const referenced of acceptedRefsOf(rel)) {
+      for (const referenced of referencedPartsOf(rel)) {
         if (!selected.includes(referenced)) selected.push(referenced);
       }
     }
@@ -163,10 +170,14 @@ export async function acceptJobParts(
   }
 
   const targets: ApplyTarget[] = selected.map((rel) => (parts.get(rel) as { target: ApplyTarget }).target);
-  // The chapter file comes first — the scenes live inside it. Idempotent:
+  // The chapter comes first — the scenes live inside it. Idempotent:
   // an existing chapter yields null, so only the FIRST partial accept of a
   // new-chapter run actually creates it.
-  const chapterFile = await newChapterTarget(campaign, body.chapter, body.chapterTitle);
+  //
+  // Decided from the JOB and not from the body: the review state is
+  // persistent, so the accept regularly happens in a browser that never saw
+  // the start form. The body fields remain an override.
+  const chapterFile = await jobChapterTarget(campaign, job, body.chapter, body.chapterTitle);
   if (chapterFile !== null) targets.unshift(chapterFile);
 
   const drafts = targets.map((t) => {

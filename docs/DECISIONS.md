@@ -1,11 +1,11 @@
 # Grimoire — Entscheidungen (leichtgewichtige ADRs)
 
 Festgehaltene Architektur-Entscheidungen mit Begründung. Neue Entscheidungen
-unten anfügen, alte nicht löschen — bei Änderung Status auf `ersetzt durch #N`.
+unten anfügen, alte nicht löschen — bei Änderung Status auf `ersetzt durch ADR #N`.
 
 ## 1. Source of Truth: Markdown + Frontmatter auf dem Dateisystem
 
-> **Status: ersetzt durch #13.** Die Speicherung ist eine SQLite-Datenbank.
+> **Status: ersetzt durch ADR #13.** Die Speicherung ist eine SQLite-Datenbank.
 > Was von diesem Eintrag GILT: „Format degradiert statt zu validieren" ist
 > unverändert Grundregel (im Renderer wie im Import), und das
 > Markdown-Body-Vokabular aus README.md bleibt normativ. Was NICHT mehr gilt:
@@ -42,7 +42,7 @@ Schreibzugriffe laufen über den Server, kein persistenter Browser-State.
   ist bewusst KEIN Ziel von v1.
 - Konfliktschutz: Patch nur bei unveränderter Zeilenversion `rev`, sonst 409.
 
-> **Teilweise überholt (#11, #13/#15):** Bearbeitet wird in der App; ein
+> **Teilweise überholt (ADR #11 und ADR #13):** Bearbeitet wird in der App; ein
 > externer Editor ist kein Datenpfad mehr, weil die Datenbank die Wahrheit
 > ist. Was GILT: das Append-only von Session-Log und Inbox (samt der einen
 > Ausnahme, dem Abhaken erledigter Inbox-Zeilen) und die Konfliktregel auf
@@ -55,7 +55,7 @@ Server-State: TanStack Query (Caching, Refetch nach Mutation,
 409-Handling). Lokaler UI-State: plain React — kein Zustand/Redux.
 Markdown-Rendering: react-markdown + eigenes Remark-Plugin für
 `[!callout]`-Blöcke und `## If:`-Überschriften.
-GFM nur für Tabellen (#96): `micromark-extension-gfm-table` +
+GFM nur für Tabellen: `micromark-extension-gfm-table` +
 `mdast-util-gfm-table` statt `remark-gfm` — die Sammel-Plugin-Variante
 ließe sich nicht auf Tabellen beschränken (Aufgabenlisten würden die
 Inbox-Syntax `- [x]` vereinnahmen).
@@ -76,7 +76,7 @@ unangetastet, und ein reparierter Lauf trägt eine Warnung. Weitere
 Abhängigkeiten braucht es nicht — den Eigenschaften-Block eines Eintrags
 rendert der Server mit dem Renderer des Stores.
 Hono statt Express/Fastify: minimal, typsicher, läuft auf Bun UND Node
-(Runtime-Wechsel bleibt möglich, siehe #7).
+(Runtime-Wechsel bleibt möglich, siehe ADR #7).
 
 **Icons:** Lucide für UI-Chrome (konsistent mit shadcn);
 game-icons.net (CC BY) für thematische Marker (Entitäts- und
@@ -92,33 +92,33 @@ Pipeline mit Review-Vorschau, nie Direkt-Schreiben; Drafts immer
 `status: draft`. Provider hinter Interface (`server/src/llm-provider.ts`):
 Start Claude API, Umschalten auf LM Studio per Env-Var. Mechanische
 Validierung nach Generierung, Fehler als Korrektur-Turn ans LLM
-(konfigurierbar über LLM_CORRECTION_TURNS, 0–2; Default seit #10-Ära 1 —
+(konfigurierbar über LLM_CORRECTION_TURNS, 0–2; Default 1 —
 nicht heilbare Fehlerklassen wurden eliminiert, verbleibende Formfehler
 repariert ein Turn). Details: generator/README.md.
 
-## 7. Wachstums-Pfad (damit #5 keine Sackgasse ist)
+## 7. Wachstums-Pfad (damit ADR #5 keine Sackgasse ist)
 
 Bun/Hono ist keine „nur für klein"-Entscheidung, aber die Grenzen sind
 benannt:
 
 - **App-Level-Auth später nötig?** Erst prüfen, ob Forward Auth im Proxy
   (Authelia/authentik) reicht — das deckt auch „Zugriff von fremden
-  Geräten" ab, ohne App-Code (#3 bleibt gültig). Falls doch in-App:
+  Geräten" ab, ohne App-Code (ADR #3 bleibt gültig). Falls doch in-App:
   Hono bringt Middleware für Basic Auth, JWT und Sessions mit; das ist
   ein Middleware-Layer, kein Rewrite.
 - **Mehr Daten / komplexere Queries?** *Eingetreten und entschieden in
-  #13* — allerdings anders als hier vermutet: SQLite ist nicht Index/Cache
+  ADR #13* — allerdings anders als hier vermutet: SQLite ist nicht Index/Cache
   geworden, sondern die Quelle der Wahrheit; das Dateisystem ist nur noch
   Import-Quelle.
 - **Bun-spezifisches Risiko?** Hono läuft unverändert auf Node; die einzige
   registrierte Bun-Kopplung ist `bun:sqlite` als Fallback hinter
   `server/src/db/driver.ts` — primär läuft `node:sqlite`; `better-sqlite3`
-  wäre der Ersatz, wenn beide ausfallen, ist aber nicht implementiert (#13).
+  wäre der Ersatz, wenn beide ausfallen, ist aber nicht implementiert (ADR #13).
   Runtime-Wechsel = Deployment-Änderung, kein Code-Umbau, solange keine
   weiteren Bun-only-APIs benutzt werden. Diese Regel gilt: **Bun-only-APIs
   nur mit Eintrag hier.**
 - **Echte Mehrnutzer-/Rechte-Anforderungen?** Dann ist nicht die Runtime
-  das Problem, sondern Datenmodell (#1) und Auth-Modell (#3) — an dem
+  das Problem, sondern Datenmodell (ADR #1) und Auth-Modell (ADR #3) — an dem
   Punkt bewusst neu entscheiden statt anbauen.
 
 ## 8. Monorepo mit Bun-Workspaces und shared/-Paket
@@ -128,23 +128,23 @@ Frontmatter-Parser), `server/`, `app/`. Das Datenformat aus README.md ist
 damit genau einmal in Code beschrieben; Server und Frontend importieren
 dieselben Typen (`@grimoire/shared`). shared/ wird ohne Build-Schritt als
 TypeScript-Quelle konsumiert (Bun und Vite können das nativ; Node-Fallback
-über tsx, siehe #7). Test-Runner ist `bun test` — Dev-Werkzeug, kein
-Runtime-Code; die Bun-only-Regel aus #5 betrifft weiterhin nur
+über tsx, siehe ADR #7). Test-Runner ist `bun test` — Dev-Werkzeug, kein
+Runtime-Code; die Bun-only-Regel aus ADR #5 betrifft weiterhin nur
 Laufzeit-APIs.
 
 ## 9. Client-Aktualisierung: Polling statt SSE
 
 Änderungen sollen in der App sichtbar werden, ohne manuell neu zu laden.
 Mechanismus ursprünglich: chokidar beobachtet den Kampagnen-Dateibaum
-(`CAMPAIGN_ROOT`, seit #79 auch als Einstellung weg) und invalidiert
+(`CAMPAIGN_ROOT`, inzwischen auch als Einstellung weg) und invalidiert
 pro Kampagne den In-Memory-Suchindex und einen Versionszähler.
-**Seit #13 ohne Watcher:** es gibt keinen externen Schreiber mehr, also wird
+**Seit ADR #13 ohne Watcher:** es gibt keinen externen Schreiber mehr, also wird
 `campaigns.version` von jedem Write in DERSELBEN Transaktion hochgezählt —
 ein Poll kann keine erhöhte Version ohne die zugehörige Änderung sehen.
 Unverändert: die App pollt `GET /api/:campaign/version` und
 invalidiert ihre Queries, wenn sich der Wert ändert. Das Poll-Intervall
 ist rein clientseitig. SSE/WebSockets erwogen und zurückgestellt: für
-einen Einzelnutzer (#3) reicht Polling, und SSE ist später ohne
+einen Einzelnutzer (ADR #3) reicht Polling, und SSE ist später ohne
 API-Bruch nachrüstbar — der Versionszähler bleibt dann als Fallback
 gültig.
 
@@ -157,13 +157,13 @@ Ergebnis werden gepollt, die UI stellt den Zustand nach Navigation,
 Reload oder Tab-Schließen vollständig wieder her. Nie an einen offenen
 Browser-Tab oder eine offene HTTP-Verbindung gebunden — ein
 Space-Wechsel auf macOS hat einmal ein bezahltes Generierungs-Ergebnis
-vernichtet (PO-Vorfall zu #19); das darf konstruktionsbedingt nicht
+vernichtet (ein Vorfall beim PO); das darf konstruktionsbedingt nicht
 möglich sein. Job-Store in-memory (Kampagnendateien bleiben die einzige
-Platten-Wahrheit, #1); Verlust bei Server-Neustart ist der akzeptierte
+Platten-Wahrheit, ADR #1); Verlust bei Server-Neustart ist der akzeptierte
 Trade-off und wird der UI sauber gemeldet.
 
-**Nachtrag (#23, erledigt in #62):** Der letzte Satz gilt nicht mehr. Jobs
-sind Zeilen in `generate_jobs` (#13), denn mit der Datenbank als Wahrheit gibt
+**Nachtrag:** Der letzte Satz gilt nicht mehr. Jobs
+sind Zeilen in `generate_jobs` (ADR #13), denn mit der Datenbank als Wahrheit gibt
 es einen naheliegenden Ort dafür — und der Verlust, den das Job-Modell
 verhindern sollte, trat genau hier noch auf: ein Deploy in der Minute zwischen
 „fertig" und „Übernehmen" warf ein fertiges Ergebnis weg. Seither überlebt ein
@@ -174,7 +174,7 @@ schreibt jede übrig gebliebene `running`-Zeile auf `failed` mit der Meldung
 „Server wurde während des Laufs neu gestartet — Job neu starten"
 (`server/src/db/job-boot.ts`), statt die App ins endlose Pollen zu schicken.
 
-**Nachtrag (#102):** Ein Szenen-Lauf ist kein einzelner Provider-Call mehr,
+**Nachtrag:** Ein Szenen-Lauf ist kein einzelner Provider-Call mehr,
 sondern eine **Pipeline** — und damit besteht ein Job aus **Teilen**. Ein
 Gliederungs-Aufruf legt fest, welche Szenen es gibt (rein systeminterner
 Schritt zur Fehlerreduktion, dem Nutzer wird die Gliederung nie zum Bearbeiten
@@ -209,36 +209,36 @@ Konsequenzen für das Job-Modell:
   und würde sonst zweimal laufen. Abbruch
   („Verwerfen") stoppt die offenen Teile; was schon übernommen wurde, ist ein
   Eintrag und kein Job mehr.
-- Ein Lauf pro Kampagne wie bisher, und die Review-Zustände aus #97
+- Ein Lauf pro Kampagne wie bisher, und die Review-Zustände aus ADR #16
   (`written`/`dropped`/`entries`) behalten ihre Schlüssel.
 
 ## 11. App-first: Bearbeitung in der App ist das Ziel, der Editor Ausweichlösung
 
-> **Status: ersetzt durch #13.** Die Speicherformat-Konsequenz unten („Markdown
+> **Status: ersetzt durch ADR #13.** Die Speicherformat-Konsequenz unten („Markdown
 > bleibt vorerst Source of Truth") ist eingelöst und aufgehoben: die benannten
 > Trigger sind eingetreten, die Migration ist durch. Die Haltung „alles aus der
-> App heraus" bleibt Produktziel — sie ist der Grund für #13.
+> App heraus" bleibt Produktziel — sie ist der Grund für ADR #13.
 
-Revidiert die Gewichtung aus #4: Externes Editieren (VS Code o. ä.) ist
+Revidiert die Gewichtung aus ADR #4: Externes Editieren (VS Code o. ä.) ist
 Übergangs-Ventil, nicht Produktziel. Zielbild des PO: alle Pflege-
-Operationen aus der App heraus (#15). Priorisierung richtet sich danach.
+Operationen aus der App heraus. Priorisierung richtet sich danach.
 
-Speicherformat-Konsequenz (Diskussion zu #29): Markdown-Dateien bleiben
+Speicherformat-Konsequenz: Markdown-Dateien bleiben
 vorerst Source of Truth — nicht aus Prinzip, sondern aus Reihenfolge:
-Die Editing-UI (#15) ist speicheragnostisch (die API ist die Naht),
+Die Editing-UI ist speicheragnostisch (die API ist die Naht),
 eine Migration vor fertiger Editing-UI würde eine Bearbeitungs-Lücke
 reißen, und der akute Schmerz (id-Umbenennung) ist auf Dateien billig
 lösbar (Rename-Kaskade). Erwartete Evolution, vom PO benannt und hier
-festgehalten: Job-Persistenz (#23), parallele Jobs und eventuelles
+festgehalten: Job-Persistenz, parallele Jobs und eventuelles
 Usermanagement sind die Trigger, bei denen der SQLite-Umzug hinter der
 API-Naht als eigenes ADR-Verfahren ansteht — dann mit Editing-UI als
 Sicherheitsnetz und Export/Import als Teil des Umzugs.
-Wiedervorlage: nach #15 v1.
+Wiedervorlage: nach der ersten Editing-UI.
 
 ## 12. Release-Prozess: release-please, Versions-Tags, `:latest` nur bei Releases
 
 Deploys sollen bewusste Ereignisse mit Changelog sein, nicht ein Tag, das
-bei jedem Merge unter dem laufenden Betrieb mutiert (PO-Anforderung zu #47:
+bei jedem Merge unter dem laufenden Betrieb mutiert (PO-Anforderung:
 gezielt einen bekannten guten Stand vor einer Session deployen, im Problemfall
 trivial zurückrollen).
 
@@ -269,7 +269,7 @@ ein Image und ein Compose-File:
   `:latest` heißt damit „letzter Release", nicht „letzter Merge". Das
   Compose-File referenziert `${GRIMOIRE_VERSION:-latest}`; empfohlen ist eine
   festgenagelte Version.
-- Die Build-Id für den Reload-Banner (#24, `GRIMOIRE_BUILD`) bleibt
+- Die Build-Id für den Reload-Banner (`GRIMOIRE_BUILD`) bleibt
   erhalten: das Release-Image brennt den Tag ein — derselbe Wert in Bundle
   und Server, sonst zeigte jeder Deploy sein eigenes Banner.
 
@@ -277,7 +277,7 @@ Bewusst nicht dabei: Multi-Arch (amd64 genügt), Auto-Deploy (der PO pullt
 weiterhin selbst) und rückwirkende Changelog-Generierung für die Commits vor
 diesem Eintrag.
 
-### Nachtrag 2026-09-06 (#66): CI baut zur Prüfung, publiziert nie
+### Nachtrag 2026-09-06: CI baut zur Prüfung, publiziert nie
 
 Ursprünglich baute `ci.yml` bei jedem main-Merge ein Image unter dem
 Commit-SHA und **pushte** es. Das Pushen ist entfallen — **der
@@ -307,30 +307,30 @@ Release-Workflow ist der einzige Schreiber der GHCR-Registry.**
 
 ## 13. SQLite ist die Quelle der Wahrheit
 
-> **Status: final** (#62). Als Entwurf mit Scheibe 1 (#54) eingecheckt, damit
+> **Status: final.** Als Entwurf mit Scheibe 1 eingecheckt, damit
 > Schema und Werkzeug nicht ohne festgehaltene Begründung im Repo liegen;
-> wirksam seit dem Cutover in Scheibe 2 (#57); mit Scheibe 4 (#62) ist die
+> wirksam seit dem Cutover in Scheibe 2; mit Scheibe 4 ist die
 > Migration abgeschlossen und dieser Eintrag maßgeblich.
 >
 > Was die vier Scheiben eingelöst haben:
 >
-> - **#54** — Drizzle-Schema als eine Typquelle, committete Migrationen,
+> - **Scheibe 1** — Drizzle-Schema als eine Typquelle, committete Migrationen,
 >   FTS5-Custom-Migration, die Einmal-Migration Dateibaum → DB (voller Import,
 >   Degradation statt Fehler), `grimoire seed`, Bun+Node-Treiber-Smoke.
-> - **#57 (Cutover)** — alle Read-/Write-Endpoints als Queries
->   (`server/src/store/`), `rev` als 409-Guard (löst #37), FTS5 statt Fuse.js,
+> - **Scheibe 2 (Cutover)** — alle Read-/Write-Endpoints als Queries
+>   (`server/src/store/`), `rev` als 409-Guard, FTS5 statt Fuse.js,
 >   `GET/PUT /:campaign/glossary` auf der Glossar-Tabelle,
 >   `GET /:campaign/migration-report` samt leisem UI-Hinweis, Boot =
 >   Schema-Migrator + Erstmigration, chokidar-Watcher entfernt (die
 >   Versions-Zählung kommt aus `campaigns.version`).
-> - **#60** — `GET /usage` als Referenzzählung, Rename-Vorschau auf diesen
+> - **Scheibe 3** — `GET /usage` als Referenzzählung, Rename-Vorschau auf diesen
 >   Zahlen.
-> - **#62** — Generator-Jobs persistent (Nachtrag zu #10), die letzten
+> - **Scheibe 4** — Generator-Jobs persistent (Nachtrag zu ADR #10), die letzten
 >   Dateileser entfernt (`CAMPAIGN_ROOT` liest nur noch
 >   `db/migrate-campaigns.ts`), `POST /campaign-meta` entfernt (der Totpfad
 >   nach dem Cutover: die Kampagnen-Zeile existiert immer, also gibt es keinen
 >   Anlege-Fall mehr — Name und Beschreibung laufen über PATCH /frontmatter,
->   heute `PATCH /properties`, siehe Nachtrag #79),
+>   heute `PATCH /properties`, siehe den Nachtrag unten),
 >   `name` in Kampagnenliste und Kampagnen-Dokument vereinheitlicht, Doku
 >   nachgezogen.
 >
@@ -338,15 +338,15 @@ Release-Workflow ist der einzige Schreiber der GHCR-Registry.**
 > ändern: (a) **eine Szene wird über ihre `id` adressiert**, nicht mehr über
 > ihren früheren Dateinamen (`scenes.file_slug` entfällt laut Planung, also
 > existiert der Dateiname nirgends mehr — die Adresse lautet
-> `<kapitel>/<ort>/<id>`, seit #79 ohne Endung); (b) **`POST /rename` ist mit dem Cutover auf die
+> `<kapitel>/<ort>/<id>`, heute ohne Endung); (b) **`POST /rename` ist mit dem Cutover auf die
 > Datenbank umgestellt** statt erst in Scheibe 3 — der Datei-Kaskade hätte
 > sonst niemand mehr zugesehen.
 
 **Löst ADR #11 ab** (und damit die dort formulierte Reihenfolge „Markdown
 bleibt vorerst Source of Truth"). Die dort benannten Trigger sind eingetreten:
-Job-Persistenz (#23), Rename als Datenoperation (#29/#30) und die
-Editing-UI (#15/#42/#43) als Sicherheitsnetz stehen. Planung und
-PO-Entscheidungen: #52 (Fassung 3, final).
+Job-Persistenz, Rename als Datenoperation und die
+Editing-UI als Sicherheitsnetz stehen. Planung und
+PO-Entscheidungen: Planungsfassung 3, final.
 
 **Entscheidung:** Eine SQLite-Datenbank ist die **alleinige** Quelle der
 Wahrheit für Kampagneninhalte. Kein Spiegel auf das Dateisystem, kein
@@ -354,7 +354,7 @@ Auto-Export, kein Zwei-Wege-Abgleich — die Klasse von Konfliktproblemen, die
 ein Spiegel erzeugt, wird nicht gebaut.
 
 - **Markdown bleibt an genau zwei Stellen:** (a) als Quelle des Importers
-  (seit #79 nur noch `grimoire seed`), (b) als Inhaltsformat der
+  (heute nur noch `grimoire seed`), (b) als Inhaltsformat der
   `body`-Spalten. Das
   Body-Vokabular aus README.md (Callouts, `## If:`, Hashtags) bleibt
   normativ; das Datenformat-Kapitel wird zum „Import-Format (historisch)".
@@ -362,9 +362,9 @@ ein Spiegel erzeugt, wird nicht gebaut.
   (PO-Entscheidung). „Blöcke als Zeilen" ist eine bewusst offen gelassene
   Später-Option; das Schema verbaut sie nicht.
 - **Das Glossar ist eine strukturierte Tabelle** (Begriff → Erklärung), kein
-  Markdown-Blob. Der Ausbau zur Generator-Wissensbasis ist Folge-Feature #53.
+  Markdown-Blob. Der Ausbau zur Generator-Wissensbasis ist ein Folge-Feature.
 - **Altdateien werden nie gelöscht, verschoben oder markiert.** Der Server
-  liest überhaupt keinen Kampagnen-Dateibaum (seit #79 auch nicht beim
+  liest überhaupt keinen Kampagnen-Dateibaum (auch nicht beim
   Boot; nur `grimoire seed` liest einen, wenn man ihm einen nennt). Der komplette,
   menschenlesbare Vor-Migrations-Stand bleibt damit liegen — das ist die
   Abfederung der Einbahnstraße, zusammen mit „manueller Export" als bekanntem
@@ -384,18 +384,18 @@ ein Spiegel erzeugt, wird nicht gebaut.
   `server/src/db/schema.ts` ist die eine Typquelle; Migrationen sind
   generierte, **committete** SQL-Dateien und werden beim Boot in einer
   Transaktion angewandt. Downgrade wird nicht unterstützt; Rückweg ist
-  Volume-Sicherung plus Image-Rollback auf einen älteren Versions-Tag (#12).
+  Volume-Sicherung plus Image-Rollback auf einen älteren Versions-Tag (ADR #12).
 - **FTS5 statt Fuse.js** für die Suche, als handgeschriebene
   Custom-Migration (Tokenizer `unicode61 remove_diacritics 2`, Ranking
   `bm25(search_fts, 10, 6, 4, 1)`), explizit aus der Store-Schicht gepflegt.
 - **`rev` ersetzt `mtimeMs`** als 409-Guard (Zeilenversion statt Dateizeit —
-  löst #37). **PRAGMAs:** `journal_mode=WAL`, `foreign_keys=ON`,
+  **PRAGMAs:** `journal_mode=WAL`, `foreign_keys=ON`,
   `busy_timeout=5000`. **`GRIMOIRE_DATA`** (Default `./data`) hält
-  `grimoire.db` samt `-wal`/`-shm` — seit #79 die einzige Dateneinstellung
+  `grimoire.db` samt `-wal`/`-shm` — die einzige Dateneinstellung
   überhaupt (siehe Nachtrag unten).
 
 **Treiber — Abweichung von der Planung, hier als Bun-Kopplung registriert
-(Pflicht aus #7):** Die Planung ging davon aus, dass `node:sqlite` auf beiden
+(Pflicht aus ADR #7):** Die Planung ging davon aus, dass `node:sqlite` auf beiden
 Laufzeiten verfügbar ist und dass Drizzle einen `drizzle-orm/node-sqlite`
 -Treiber mitbringt. Beides trifft nicht zu: **Bun implementiert `node:sqlite`
 nicht** (geprüft mit 1.3.14, der in CI gepinnten Version — Bun verweist auf
@@ -404,7 +404,7 @@ Konsequenz, gekapselt in `server/src/db/driver.ts`:
 
 - **`node:sqlite` ist der primäre Treiber** (Node ≥ 22.16 — ab 22.13 ohne
   Flag, ab 22.16 mit `setReturnArrays`). Der Server läuft damit auf reinem
-  Node **ohne native Abhängigkeit**; die Node-Portabilität aus #7 ist real und
+  Node **ohne native Abhängigkeit**; die Node-Portabilität aus ADR #7 ist real und
   nicht nur behauptet.
 - **`bun:sqlite` ist der Fallback,** genutzt genau dann, wenn `node:sqlite`
   fehlt. Das ist die eine dokumentierte Bun-only-API des Projekts.
@@ -417,7 +417,7 @@ Konsequenz, gekapselt in `server/src/db/driver.ts`:
   Code existiert er nicht, es ist eine Option für diesen Fall, kein
   vorhandener Notausgang.
 
-**Nachtrag (#79 — die Datei-Ära ist restlos raus):** Die drei Stellen, an
+**Nachtrag (die Datei-Ära ist restlos raus):** Die drei Stellen, an
 denen ADR #13 die Dateiwelt noch durchgelassen hat, sind geschlossen. Die
 Entscheidung selbst bleibt; das hier ist ihre Vollendung.
 
@@ -428,7 +428,7 @@ Entscheidung selbst bleibt; das hier ist ihre Vollendung.
   App-Hinweis dazu sind entfernt. Markdown einlesen ist ausschließlich das
   **Dev-/E2E-Werkzeug `grimoire seed [dir]`** (Default `examples/`, Report auf
   stdout), das denselben Importer fährt — Planung F5 bleibt: kein zweites
-  Fixture-Format. Der Kaltstart einer echten Kampagne ist #56.
+  Fixture-Format. Der Kaltstart einer echten Kampagne ist ein eigenes Feature.
 - **Adressen tragen keine Dateiendung.** `campaign`, `inbox`, `glossary`,
   `<kapitel>`, `<kapitel>/[<gruppe>/]<szenen-id>`, `npcs/<id>`,
   `locations/<id>`, `sessions/<id>` — das Schema steht abschließend in
@@ -458,19 +458,19 @@ Adressen und URL sprechen vom Eintrag: `GET/PUT /api/:campaign/entry`, die
 Route `/:campaign/entry/<adresse>`, die Kampagne heißt `campaign` und ein
 Kapitel seine id — die Unterstrich-Namen der Ordner-Metadateien sind weg.
 
-**Nachtrag zu ADR #10 (eingelöst in #62):** Generator-Jobs sind persistent
+**Nachtrag zu ADR #10:** Generator-Jobs sind persistent
 (`generate_jobs`); der dort akzeptierte Verlust bei Neustart entfällt für
 fertige Jobs, laufende werden beim Boot auf `failed` mit einer klaren deutschen
-Meldung gesetzt. Wortlaut und Begründung stehen im Nachtrag unter #10.
+Meldung gesetzt. Wortlaut und Begründung stehen im Nachtrag unter ADR #10.
 
 **Bewusst nicht Teil der Entscheidung:** Export/Import jenseits der
 Erstmigration, Trigram-Tokenizer für tippfehlertolerante Suche, Auto-Backups,
-Mehrnutzer-Betrieb (dafür gelten weiter #3 und die Neubewertung aus #7).
+Mehrnutzer-Betrieb (dafür gelten weiter ADR #3 und die Neubewertung aus ADR #7).
 
 ## 14. Referenzieren legt an — ein referenzierter Eintrag fehlt nie
 
-> **Status: ersetzt durch #18.** Diese Entscheidung ließ jeden Schreibweg den
-> Eintrag anlegen, den er referenziert; #18 dreht das um — eine Referenz
+> **Status: ersetzt durch ADR #19.** Diese Entscheidung ließ jeden Schreibweg den
+> Eintrag anlegen, den er referenziert; ADR #19 dreht das um — eine Referenz
 > nennt einen vorhandenen Eintrag, alles andere wird abgelehnt. Was von hier
 > GILT: ein leerer Eintrag ist kein Fehler (dünne Karte, normal befüllbar,
 > kein „fehlt"-Platzhalter), eine leere Inbox antwortet 200 statt 404, und
@@ -479,9 +479,9 @@ Mehrnutzer-Betrieb (dafür gelten weiter #3 und die Neubewertung aus #7).
 
 ## 15. i18n: typisierter TS-Katalog + ICU über `intl-messageformat`
 
-> **Status: final** (#69). Gilt für alles Nutzersichtbare in `app/` **und**
+> **Status: final.** Gilt für alles Nutzersichtbare in `app/` **und**
 > für jeden Fehler-Body des Servers, den ein Mensch liest. Der Zuschnitt in
-> Scheiben ist mit dem PO-Feedback zu PR #83 entfallen: die Migration ist
+> Scheiben ist mit dem PO-Feedback entfallen: die Migration ist
 > vollständig, das Lint-Gate ist überall scharf.
 
 **Entscheidung:** Nutzersichtbare Texte stehen im Katalog
@@ -540,13 +540,13 @@ reiner Formatter, wir behalten Katalog und Laden selbst in der Hand.
   nur einen statischen Wert tragen; ein falsches `lang` spricht die Seite im
   Screenreader falsch aus und trennt sie falsch.
 - **Die Sprachwahl steht auf einer Einstellungsseite,** nicht im Menü des
-  Kampagnen-Switchers (PO-Feedback zu PR #83). Route `/settings`,
+  Kampagnen-Switchers (PO-Feedback). Route `/settings`,
   kampagnenunabhängig, Einstieg ist **ein** Zahnrad-Icon rechts im Topbar
-  (icon-only bei jeder Breite, damit es die Leiste nicht wachsen lässt —
-  Overflow #50). Begründung: das Switcher-Menü ist, wo man eine *Kampagne*
+  (icon-only bei jeder Breite, damit es die Leiste nicht wachsen lässt).
+  Begründung: das Switcher-Menü ist, wo man eine *Kampagne*
   wählt; eine instanzweite Einstellung darin ist schwer zu finden und
   kategorial falsch. Die Seite trennt **Instanz-Abschnitte** (heute: Sprache)
-  von **Kampagnen-Abschnitten** (`CAMPAIGN_SECTIONS`, leer — #53 füllt sie mit
+  von **Kampagnen-Abschnitten** (`CAMPAIGN_SECTIONS`, zunächst leer, heute
   Glossar und Kampagnenwissen); ohne Kampagne entfällt die zweite Hälfte samt
   Überschrift.
 - **Der Umschalter bleibt zusätzlich dort, wo es kein Chrome gibt** — über
@@ -588,7 +588,7 @@ reiner Formatter, wir behalten Katalog und Laden selbst in der Hand.
 
 ## 16. Der Prüfzustand einer Generierung gehört auf den Job
 
-> **Status: final** (#97). Betrifft den Generator-Prüfschritt (Szenen, NPC)
+> **Status: final.** Betrifft den Generator-Prüfschritt (Szenen, NPC)
 > und den „Mit KI ergänzen"-Lauf.
 
 **Entscheidung:** Alles, was der DM im Prüfschritt tut — Text bearbeiten,
@@ -617,7 +617,7 @@ Server ist die Wahrheit).
   schreibt genau die gewählten Teile in einer Transaktion (Konfliktprüfung
   drin, FTS und Referenzen folgen) und vermerkt sie im selben Commit auf dem
   Job. Der Job verschwindet von selbst, sobald nichts mehr offen ist.
-- **„Verwerfen" nimmt nur den offenen Rest mit** (Lead-Entscheid im Ticket).
+- **„Verwerfen" nimmt nur den offenen Rest mit** (Lead-Entscheid).
   Was einzeln übernommen wurde, ist ein Eintrag und kein Job mehr — es im
   Prüfschritt weiter zu bearbeiten ist ausdrücklich kein Ziel, dafür gibt es
   den normalen Editor.
@@ -632,7 +632,7 @@ Adresse und Kapitelgruppierung einer Szene werden aus der Spalte `location`
 abgeleitet: `<kapitel>/<location>/<id>`, ohne `location` `<kapitel>/<id>`.
 `location` ist damit immer eine Orts-id oder leer — Freitext wird mit
 `400 location_not_an_id` abgelehnt, eine id ohne Eintrag mit
-`400 location_unknown` (ADR #18).
+`400 location_unknown` (ADR #19).
 
 **Warum:** `group_slug` („rein eine Anzeige-Gruppierung") und `location`
 waren zwei unabhängige Werte für dieselbe Sache — ein Erbe der
@@ -645,7 +645,7 @@ abzuschaffen, nicht sie zu synchronisieren.
 **Abgeleitete Spalte vs. Entfernen:** Eine beibehaltene, abgeleitete Spalte
 hätte jeden Schreibpfad (Patch, Roh-Editor, Import, Generator-Übernahme,
 Ergänzen) verpflichtet, sie mitzuziehen — also genau die Drift-Möglichkeit
-konserviert, die das Ticket beseitigt. Sie fällt weg; `store/paths.ts`
+konserviert, die diese Entscheidung beseitigt. Sie fällt weg; `store/paths.ts`
 `sceneAddress(row)` ist die eine Stelle, die die Ableitung kennt.
 
 **Konsequenzen:**
@@ -662,7 +662,7 @@ konserviert, die das Ticket beseitigt. Sie fällt weg; `store/paths.ts`
   Schreibzugriff über eine veraltete Adresse die richtige Zeile trifft, ist
   gewollt; dass er einen Stand überschreibt, den er nicht gesehen hat, fängt
   weiterhin der Rev-Check ab.
-- **Der Generator vergibt keine Pfade mehr** (Issue #100, generator/README):
+- **Der Generator vergibt keine Pfade mehr** (generator/README):
   das Modell liefert Dokumente, der Server bildet die Adresse aus Kapitel +
   `id` und die Gruppe aus `location`. Der Prüfschritt adressiert Teile über
   `<kapitel>/<id>`; die tatsächlich geschriebene Adresse steht in der
@@ -679,7 +679,50 @@ konserviert, die das Ticket beseitigt. Sie fällt weg; `store/paths.ts`
   `examples/` bleibt unverändert lesbar, die Beispielszenen landen unter
   ihren Orten statt unter `hafen`.
 
-## 18. Jede Referenz ist ein Fremdschlüssel — eine Nennung legt nichts an
+## 18. Das Kapitel entsteht aus dem Lauf, sein Status ist ein Enum
+
+**Entscheidung (a): Das Kapitel eines „Neues Kapitel"-Laufs entsteht aus dem
+Zustand des Laufs, nicht aus dem des Browsers.** Der Titel wird beim **Start**
+am Job vermerkt (`generate_jobs.new_chapter_title`, Migration 0013), und die
+Übernahme legt das Kapitel daraus an — idempotent und im selben Vorgang wie die
+Szenen. Der Prüfschritt ist persistent (ADR #16), die Übernahme passiert also
+regelmäßig nach Navigation oder Reload; Titel und id dürfen dann nicht im
+Browser liegen. `chapter`/`chapterTitle` am Übernahme-Aufruf bleiben ein
+Override für den Ganz-Lauf-Endpoint und ältere App-Stände; die App sendet sie
+nur, solange das Formular auf dem Schirm das des laufenden Jobs ist.
+
+Die Übernahme legt das Kapitel auch dann an, wenn kein übernommener Teil es
+nennt: das Kapitel gehört dem Lauf, nicht dem einzelnen Teil. Ein generierter
+Szenen-Entwurf bekommt sein Kapitel im selben Schreibvorgang; ist die
+Kapitel-id kein Slug, ist das 400. **Die Dialoge bleiben unverändert:** ein
+Kapitel, das der DM tippt, muss existieren (400, ADR #14) — dort ist ein
+unbekanntes Kapitel ein Tippfehler.
+
+**Entscheidung (b): Der Kapitel-Status ist ein Enum** `planned | active | done`,
+genau einmal in `shared/` definiert (`CHAPTER_STATUSES`), Labels de „Geplant /
+Aktiv / Abgeschlossen", en „Planned / Active / Done". Die API schreibt nur
+diese drei Werte und antwortet sonst **400**; ein bereits gespeicherter
+Fremdwert wird weiterhin **verbatim angezeigt**, und es gibt keine Prüfregel im
+Schema — das Format degradiert wie überall, nur der Schreibweg ist eng. Ein neu
+angelegtes Kapitel startet auf `planned`.
+
+`active` ist **eine Entscheidung über zwei Kapitel**, und „genau ein aktives
+Kapitel" gehört dem **Feld, nicht einem Endpoint**: `POST /chapters/:id/active`
+und ein `PATCH /properties`, dessen Status auf `active` landet, führen denselben
+Tausch im selben Vorgang aus. Sonst wäre der Eigenschaften-Dialog eine zweite
+Tür daran vorbei. Der Tausch-Endpoint hat bewusst **keinen rev-Schutz**: er
+setzt einen Wert und ändert dabei absichtlich ein Kapitel, das der Aufrufer nie
+gelesen hat; `PATCH /properties` behält seinen (ADR #4).
+
+In der Kapitelübersicht ist die Status-Anzeige deshalb **das Bedienelement**
+(wie beim Szenen-Status, gemeinsames Markup in `components/StatusMenu`):
+„Aktiv" ruft den Tausch, „Geplant" und „Abgeschlossen" patchen das Kapitel.
+Die Auswahl des Werts, der schon angezeigt wird, schreibt nichts — bei „Aktiv"
+wäre das ein zweiter Tausch. Mobil bleibt der Status **Anzeige**: unter `md`
+rendert die Route die Startfläche statt der Kapitelübersicht, die Regel steht
+also genau an einer Stelle.
+
+## 19. Jede Referenz ist ein Fremdschlüssel — eine Nennung legt nichts an
 
 **Entscheidung:** Jede gespeicherte Referenz bekommt einen zusammengesetzten
 Fremdschlüssel `(campaign_id, <referenz>)` mit `ON UPDATE CASCADE` und
@@ -702,7 +745,11 @@ Vorschlags entsteht der Kapitel-Eintrag zusammen mit den Szenen.
 
 **Eine Nennung legt nichts an.** Ein Eintrag entsteht über „Neu anlegen",
 über „NPC-Stub anlegen" und über das Übernehmen eines Generator-Vorschlags,
-sonst nirgends. Wer in `npcs:`, `location:`, `chapter:`, in einer
+sonst nirgends — und dazu gehört das Kapitel eines „Neues Kapitel"-Laufs, das
+die Übernahme aus dem Lauf anlegt (ADR #18). Ein übernommener Szenen-Vorschlag
+nimmt außerdem die vorgeschlagenen Einträge mit, die er nennt: sie sind Teil
+desselben Vorschlags, und was der DM abgelehnt hat, bleibt abgelehnt — dann
+wird die Szene abgewiesen und nennt den fehlenden Eintrag. Wer in `npcs:`, `location:`, `chapter:`, in einer
 Schnellnotiz oder in `scenes_played:` etwas einträgt, das keinen Eintrag hat,
 bekommt 400 mit einem eigenen Code (`npc_unknown`, `location_unknown`,
 `chapter_unknown`, `log_scene_unknown`, `played_scene_unknown`) und dem

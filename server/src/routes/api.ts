@@ -34,6 +34,7 @@ import {
   continueSession,
   createCampaign,
   createChapter,
+  setActiveChapter,
   createLocation,
   createNpc,
   createNpcStub,
@@ -492,6 +493,16 @@ api.post("/:campaign/chapters", async (c) => {
   );
 });
 
+// POST /api/:campaign/chapters/:id/active -> EntryResponse of that chapter
+// „Aktiv" in the chapter overview's status control: the chapter becomes
+// `active` and the one that was active goes back to `planned`, in ONE
+// transaction — two calls from the app would leave a window with two active
+// chapters, and the session view picks the first it finds. Idempotent, 404
+// for an unknown chapter, no rev guard (store/write.ts explains why).
+api.post("/:campaign/chapters/:id/active", async (c) =>
+  c.json(await setActiveChapter(c.req.param("campaign"), c.req.param("id"))),
+);
+
 // POST /api/:campaign/scenes { title, chapter } -> 201 EntryResponse
 // `chapter` is required and must exist (400) — a scene's chapter is part of
 // its address, and chapters are never created by being named (ADR #14).
@@ -679,7 +690,8 @@ const isDecision = (v: unknown): v is "accepted" | "rejected" | null =>
 
 // --- generator endpoints ------------------------------------------------------------
 
-// POST /api/:campaign/generate { chapter, sourceText, newChapter? } ->
+// POST /api/:campaign/generate { chapter, sourceText, newChapter?,
+//                                chapterTitle? } ->
 // 202 { jobId }. Starts a BACKGROUND job and returns
 // immediately; the result is picked up via GET …/generate/job. Writes
 // NOTHING (generator/README.md).
@@ -693,12 +705,18 @@ const isDecision = (v: unknown): v is "accepted" | "rejected" | null =>
 // job for this campaign is still running — one job per campaign.
 // The run's own outcome (incl. the 422 of a truncated or invalid reply)
 // lands in the job.
+//
+// `chapterTitle` belongs to a `newChapter` run and is stored ON the job: the
+// accept step used to read the title out of the browser, which is gone after
+// a navigation or a reload — and the chapter with it. Optional, so an older
+// app build still starts runs; the accept then falls back to the chapter id.
 api.post("/:campaign/generate", async (c) => {
-  const body = await jsonBody(c, ["chapter", "sourceText", "newChapter"]);
+  const body = await jsonBody(c, ["chapter", "sourceText", "newChapter", "chapterTitle"]);
   const campaign = c.req.param("campaign");
   const chapter = body.chapter;
   const sourceText = body.sourceText;
   const newChapter = body.newChapter;
+  const chapterTitle = optionalText(body.chapterTitle, "chapterTitle");
   if (typeof chapter !== "string" || chapter.trim() === "") {
     throw new ApiError(400, "chapter must be a non-empty string");
   }
@@ -716,6 +734,7 @@ api.post("/:campaign/generate", async (c) => {
     chapter,
     sourceText,
     newChapter: newChapter === true,
+    ...(newChapter === true && chapterTitle !== undefined ? { newChapterTitle: chapterTitle } : {}),
     provider,
   });
   return c.json({ jobId: job.id }, 202);

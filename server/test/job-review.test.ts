@@ -1,4 +1,4 @@
-// Review state on the job and PARTIAL accept (issue #97).
+// Review state on the job and PARTIAL accept.
 //
 // The harness is the generator suite's: a database seeded from the example
 // campaign and a scripted FakeProvider instead of an LLM, so a run really
@@ -24,7 +24,7 @@ import { PipelineFake } from "./support/pipeline-fake";
 // --- fixtures -----------------------------------------------------------------
 
 // The paths the REVIEW addresses the drafts with — `<chapter>/<id>`, built
-// by the server from the run's chapter and the draft's id (issue #100; the
+// by the server from the run's chapter and the draft's id (the
 // model names no address at all). The stored ADDRESS adds the group, which
 // is the draft's `location` — so the two differ here on purpose, and the
 // accept answers `{ <review path>: <written address> }`.
@@ -131,7 +131,7 @@ async function exists(rel: string): Promise<boolean> {
 
 beforeEach(async () => {
   await seedStore();
-  // Pipeline-aware since issue #102: a scene run is the outline call plus one
+  // Pipeline-aware: a scene run is the outline call plus one
   // call per scene and per suggested entry, and the fake routes this one
   // scripted batch reply over all of them (support/pipeline-fake.ts).
   setProviderForTests(new PipelineFake([REPLY]));
@@ -179,7 +179,7 @@ test("augment decisions per property and per block are stored as booleans", asyn
 
 test("null CLEARS a field or block decision — the keys an augment conflict renames", async () => {
   // A 409 re-aligns the proposal against the body that won, and the block
-  // ids move with it (issue #97 review, finding 5). The decisions cut
+  // ids move with it. The decisions cut
   // against the old ids have to be removable, not just overwritable.
   let job = await runJob();
   job = await patch(job, { fields: { role: true }, blocks: { aug1: true, aug2: false } });
@@ -272,8 +272,7 @@ test("the edited text is what a partial accept writes", async () => {
 
 test("accepting the same part twice answers 200 with nothing written", async () => {
   // A double click, or the second tab clicking what the first already wrote:
-  // the caller asked for a state that already holds (issue #97 review,
-  // finding 6). The empty answer says so; a 400 said the DM did something
+  // the caller asked for a state that already holds. The empty answer says so; a 400 said the DM did something
   // wrong and put an error line under a review that was in order.
   const job = await runJob();
   expect((await accept(job, { paths: [SCENE_A] })).status).toBe(200);
@@ -333,7 +332,7 @@ test('„Alle übernehmen" writes the open rest — never a dropped or rejected 
 test("a bulk accept skips an UNDECIDED suggested entry, an explicit one writes it", async () => {
   const job = await runJob();
   // Nothing decided about the entry: „Alle übernehmen" writes the scenes and
-  // leaves it alone — the pre-#97 rule, and the reason the job stays.
+  // leaves it alone — the earlier rule, and the reason the job stays.
   const bulk = (await (await accept(job, {})).json()) as {
     written: Record<string, string>;
     jobDeleted: boolean;
@@ -402,7 +401,7 @@ test("a job that disappears mid-accept rolls the whole write back", async () => 
 // own guard — the row vanishing between plan and commit. It is reached
 // directly because there is no way to interleave a delete into a synchronous
 // SQLite transaction from a test. A quiet `false` here used to commit the
-// drafts while dropping the bookkeeping (issue #97 review, finding 4).
+// drafts while dropping the bookkeeping.
 test("markWrittenInTx throws for a lost job instead of reporting false", async () => {
   const job = await runJob();
   const db = await getDb();
@@ -414,4 +413,126 @@ test("markWrittenInTx throws for a lost job instead of reporting false", async (
     ),
   ).toThrow();
   expect((await fetchJob())?.review?.written).toEqual({});
+});
+
+// --- the new chapter ------------------------------------------------------------
+//
+// The app used to send `chapter`/`chapterTitle` on accept from its OWN state,
+// and the review state is persistent — so the accept regularly happens in a
+// tab that never saw the start form. The scenes were then written under a
+// chapter that had no entry, and the overview (which lists chapters from the
+// chapter table) showed neither the chapter nor its scenes.
+//
+// „Reload" is modelled exactly as it reaches the server: an accept with NO
+// chapter fields in the body. Nothing else about these cases is special — same
+// run, same accept endpoint.
+
+const NEW_CHAPTER = "03-drachenbrut";
+
+// The same scripted batch as above, but for a run on a chapter that does not
+// exist yet — the reply validation compares each scene's chapter against the
+// run's, so the drafts have to name this one.
+const NEW_CHAPTER_REPLY = JSON.stringify({
+  scenes: [
+    { content: sceneMarkdown("treffen-am-kai", "Treffen am Kai").replace("01-salzhafen", NEW_CHAPTER) },
+    { content: sceneMarkdown("nacht-am-kai", "Nacht am Kai").replace("01-salzhafen", NEW_CHAPTER) },
+  ],
+  entries: [{ kind: "npc", content: STUB_MARKDOWN.replace("01-salzhafen", NEW_CHAPTER) }],
+  warnings: [],
+});
+
+/** Start a „Neues Kapitel" run and wait for it, like `runJob`. */
+async function runNewChapterJob(title?: string): Promise<GenerateJob> {
+  setProviderForTests(new PipelineFake([NEW_CHAPTER_REPLY]));
+  const res = await send("POST", "/api/beispiel/generate", {
+    chapter: NEW_CHAPTER,
+    sourceText: "Eggs in the dark.",
+    newChapter: true,
+    ...(title === undefined ? {} : { chapterTitle: title }),
+  });
+  expect(res.status).toBe(202);
+  for (let i = 0; i < 2000; i++) {
+    const job = await fetchJob();
+    if (job === null) throw new Error("job disappeared");
+    if (job.status !== "running") return job;
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
+  throw new Error("job never finished");
+}
+
+async function chapterTitles(): Promise<Record<string, string>> {
+  const res = await app.request("/api/beispiel/tree");
+  expect(res.status).toBe(200);
+  const tree = (await res.json()) as { chapters: Array<{ id: string; title: string }> };
+  return Object.fromEntries(tree.chapters.map((chapter) => [chapter.id, chapter.title]));
+}
+
+test("an accept with NO chapter fields creates the chapter from the job's title", async () => {
+  const job = await runNewChapterJob("Die Drachenbrut");
+  // Exactly what the app sends after a navigation or a reload: a rev and
+  // nothing else.
+  expect((await accept(job, {})).status).toBe(200);
+
+  expect(await chapterTitles()).toMatchObject({ [NEW_CHAPTER]: "Die Drachenbrut" });
+  expect(await exists(NEW_CHAPTER)).toBe(true);
+});
+
+test("the accepted scenes hang in that chapter and are visible in the tree", async () => {
+  const job = await runNewChapterJob("Die Drachenbrut");
+  expect((await accept(job, {})).status).toBe(200);
+
+  const res = await app.request("/api/beispiel/tree");
+  const tree = (await res.json()) as {
+    chapters: Array<{ id: string; groups: Array<{ scenes: Array<{ id: string }> }> }>;
+  };
+  const chapter = tree.chapters.find((c) => c.id === NEW_CHAPTER);
+  expect((chapter?.groups.flatMap((g) => g.scenes) ?? []).length).toBeGreaterThan(0);
+});
+
+test("a run started without a title falls back to the chapter id", async () => {
+  // An older app build, or a job from before the column existed.
+  const job = await runNewChapterJob();
+  expect((await accept(job, {})).status).toBe(200);
+  expect(await chapterTitles()).toMatchObject({ [NEW_CHAPTER]: NEW_CHAPTER });
+});
+
+test("the body fields still override the job — compatibility", async () => {
+  const job = await runNewChapterJob("Die Drachenbrut");
+  expect(
+    (await accept(job, { chapter: NEW_CHAPTER, chapterTitle: "Anders benannt" })).status,
+  ).toBe(200);
+  expect(await chapterTitles()).toMatchObject({ [NEW_CHAPTER]: "Anders benannt" });
+});
+
+test("creating the chapter is idempotent across two partial accepts", async () => {
+  let job = await runNewChapterJob("Die Drachenbrut");
+  expect((await accept(job, { paths: [`${NEW_CHAPTER}/treffen-am-kai`] })).status).toBe(200);
+  const again = await fetchJob();
+  expect(again).not.toBeNull();
+  job = again as GenerateJob;
+  // The second accept must not trip over the chapter it created itself.
+  expect((await accept(job, {})).status).toBe(200);
+  expect(await chapterTitles()).toMatchObject({ [NEW_CHAPTER]: "Die Drachenbrut" });
+});
+
+// A partial accept of the suggested entry ALONE — no scene in the batch, so
+// nothing in it names the chapter. The chapter is still created, and that is
+// intended: the target is decided from the job, not from what the accept
+// happens to contain, so the chapter the run is for exists from the first
+// accept onwards and the scenes accepted afterwards find it.
+test("accepting only the suggested entry already creates the run's chapter", async () => {
+  const job = await runNewChapterJob("Die Drachenbrut");
+  expect((await accept(job, { paths: [STUB_PATH] })).status).toBe(200);
+
+  expect(await exists(STUB_PATH)).toBe(true);
+  expect(await chapterTitles()).toMatchObject({ [NEW_CHAPTER]: "Die Drachenbrut" });
+  expect(await exists(NEW_CHAPTER)).toBe(true);
+  // …and no scene was written by this accept.
+  expect(await exists(`${NEW_CHAPTER}/leuchtturm/treffen-am-kai`)).toBe(false);
+
+  // The scenes still accept afterwards, into the chapter that now exists.
+  const rest = (await fetchJob()) as GenerateJob;
+  expect(rest).not.toBeNull();
+  expect((await accept(rest, {})).status).toBe(200);
+  expect(await chapterTitles()).toMatchObject({ [NEW_CHAPTER]: "Die Drachenbrut" });
 });

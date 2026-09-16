@@ -426,6 +426,23 @@ export function createCampaign(input: {
   });
 }
 
+/**
+ * „Aktiv" on a chapter's status control — ONE call, because it is one
+ * decision about two chapters: this one becomes `active` and the one that was
+ * active goes back to `planned`. Doing it as two properties patches from here
+ * would leave a window in which the campaign has two active chapters, and the
+ * session view picks the first it finds.
+ *
+ * No rev: there is nothing to overwrite (the overview carries no rev at all),
+ * and the action deliberately also changes a chapter the caller never read.
+ * Answers the chapter's entry.
+ */
+export function setChapterActive(campaign: string, chapter: string): Promise<EntryResponse> {
+  return postJson<EntryResponse>(
+    `/${encodeURIComponent(campaign)}/chapters/${encodeURIComponent(chapter)}/active`,
+  );
+}
+
 /** A new chapter; `goal` lands under `## Ziel des Kapitels` when given. */
 export function createChapter(
   campaign: string,
@@ -587,10 +604,15 @@ export function renameEntity(
  * The run's own failure (the 422 with `rawReply`, `usage`
  * and possibly `validationErrors`) never comes back from THIS call — it
  * lands in the job's `error.body`.
+ *
+ * `chapterTitle` rides along for a `newChapter` run and is stored ON the job.
+ * It is what makes the accept independent of this browser: the review state is
+ * persistent, so the accept regularly happens in a tab that never saw this
+ * form.
  */
 export async function startGenerateJob(
   campaign: string,
-  input: { chapter: string; sourceText: string; newChapter?: boolean },
+  input: { chapter: string; sourceText: string; newChapter?: boolean; chapterTitle?: string },
 ): Promise<GenerateJobStarted> {
   const path = `/${encodeURIComponent(campaign)}/generate`;
   const response = await fetch(`/api${path}`, {
@@ -600,6 +622,9 @@ export async function startGenerateJob(
       chapter: input.chapter,
       sourceText: input.sourceText,
       ...(input.newChapter === true ? { newChapter: true } : {}),
+      ...(input.newChapter === true && input.chapterTitle !== undefined
+        ? { chapterTitle: input.chapterTitle }
+        : {}),
     }),
   });
   if (!response.ok) {

@@ -53,7 +53,7 @@ test("rename with usage preview: count first, then the cascade", async ({ page, 
 
   // The preview: what hangs off this id, in German — the one scene that
   // names the npc in its `npcs:` list. Fenn's `## Beziehungen` line about
-  // her is prose and therefore no reference (ADR #18).
+  // her is prose and therefore no reference (ADR #19).
   const summary = dialog.getByTestId("rename-usage");
   await expect(summary).toContainText("1 Verwendung");
   await expect(summary).toContainText("1 Szene");

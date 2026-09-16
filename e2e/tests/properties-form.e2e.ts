@@ -88,7 +88,7 @@ test("scene properties: chips, reference and status land in the file — nothing
 }) => {
   const pristine = await split(api, SCENE);
   // The Ort the scene is moved into below has to EXIST — a reference names
-  // an entry, and nothing is created by naming it (ADR #18). „Neu anlegen"
+  // an entry, and nothing is created by naming it (ADR #19). „Neu anlegen"
   // is the app's own path (tested in create.e2e.ts); here it is one call.
   await api.send("POST", "beispiel/locations", { name: "Nordbucht" });
   // A key the form does not know (`x-custom`, seeded through the importer —
@@ -155,7 +155,7 @@ test("scene properties: chips, reference and status land in the file — nothing
 
   // An id nothing holds stays typeable, and the hint says the save would be
   // refused — a typo is visible before the click instead of in a toast after
-  // it (ADR #18).
+  // it (ADR #19).
   await location.fill("gibt-es-nicht");
   await expect(referenceHint(dialog, "Unbekannt — Ort muss existieren.")).toBeVisible();
   await expect(referenceHint(dialog, "Der Leuchtturm von Salzhafen")).toHaveCount(0);
@@ -237,7 +237,7 @@ test("the Ort field reads a name as its id — a missing Ort is refused", async 
   // The group a scene sits under IS its `location`, and the column holds an
   // id — but the DM types a name, and the form reads it as the id it means.
   // What the save cannot do is invent the entry: a reference names something
-  // that exists (ADR #18), so „Der alte Hafen" is refused until that Ort is
+  // that exists (ADR #19), so „Der alte Hafen" is refused until that Ort is
   // there — and then the very same save lands.
   await page.goto(SCENE_URL);
   const dialog = await openProperties(page);
@@ -286,7 +286,7 @@ test("a rejected save shows the SERVER sentence, not the generic one", async ({ 
   // The shared write layer answered every non-conflict rejection with its
   // caller's generic wording, so a 400 that names exactly what is wrong was
   // invisible to the DM. An unknown chapter is one of the five reference
-  // refusals, and the app builds its sentence from the code (ADR #18).
+  // refusals, and the app builds its sentence from the code (ADR #19).
   await page.goto(SCENE_URL);
   const dialog = await openProperties(page);
   await dialog.getByLabel("Kapitel").fill("99-nirgendwo");

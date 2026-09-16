@@ -175,7 +175,7 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
 
 test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ page, api }) => {
   // `location` is the scene's group, so it is always an id or empty — and
-  // the id has to have an entry (ADR #18).
+  // the id has to have an entry (ADR #19).
   const scene = "01-salzhafen/bucht/smuggler-captured";
   const patchLocation = async (value: string, rev: number): Promise<Response> =>
     api.fetch("beispiel/properties", {
