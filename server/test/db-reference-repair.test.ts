@@ -435,11 +435,79 @@ describe("the boot repair of entity references", () => {
   // The second half of "a reference never invents an entry the DM would not
   // recognise": the brackets were notation, and PROSE is not an id either.
   // An entry whose id is a sentence would carry that sentence in every
-  // address built from it and in every ⌘K result.
-  test("free text in a NULLABLE reference becomes none, and is reported", async () => {
+  // address built from it and in every ⌘K result — so the text is read
+  // instead: `toSlug` gives the id, the text becomes the entry's NAME. That
+  // is the answer the group step gives the same column, and the two have to
+  // agree or a boot would undo what that step decided.
+  test("free text in a scene's location becomes an id with the text as its name", async () => {
     const client = await legacyDb();
     addChapter(client, "01");
     addScene(client, "szene", "01", "Der alte Hafen");
+
+    const outcome = repairReferences(client);
+
+    expect(outcome.entriesCreated).toEqual([
+      {
+        campaignId: "beispiel",
+        kind: "location",
+        id: "der-alte-hafen",
+        fromText: "Der alte Hafen",
+      },
+    ]);
+    expect(rows(client, "select id, name from locations")).toEqual([
+      { id: "der-alte-hafen", name: "Der alte Hafen" },
+    ]);
+    expect(rows(client, "select id, location from scenes")).toEqual([
+      { id: "szene", location: "der-alte-hafen" },
+    ]);
+    expect(outcome.repointed).toEqual([
+      {
+        campaignId: "beispiel",
+        column: "scenes.location",
+        from: "Der alte Hafen",
+        to: "der-alte-hafen",
+        rows: 1,
+      },
+    ]);
+    // Nothing was lost, so nothing is in the "please set them" list.
+    expect(outcome.clearedText).toEqual([]);
+    // ⌘K finds the Ort by the text the DM wrote, not only by its slug.
+    expect(
+      rows(client, "select title from search_fts where entity_id = 'der-alte-hafen'"),
+    ).toEqual([{ title: "Der alte Hafen" }]);
+    expect(repairReferences(client)).toBe(NO_REFERENCE_REPAIR);
+    client.close();
+  });
+
+  test("a location text that yields no id at all becomes none, and is reported", async () => {
+    const client = await legacyDb();
+    addChapter(client, "01");
+    addScene(client, "szene", "01", "???");
+
+    const outcome = repairReferences(client);
+
+    // An id is never invented out of nothing, and the column may be empty —
+    // so the scene falls back to chapter level and the text is in the report,
+    // which is then the only place it still stands.
+    expect(outcome.entriesCreated).toEqual([]);
+    expect(rows(client, "select count(*) as n from locations")).toEqual([{ n: 0 }]);
+    expect(rows(client, "select id, location from scenes")).toEqual([
+      { id: "szene", location: null },
+    ]);
+    expect(outcome.clearedText).toEqual([
+      { campaignId: "beispiel", column: "scenes.location", value: "???", rows: 1 },
+    ]);
+    expect(repairReferences(client)).toBe(NO_REFERENCE_REPAIR);
+    client.close();
+  });
+
+  // The one reference that is read the other way round: a log line is not an
+  // ADDRESS. The marker in it says what the table was talking about, the line
+  // keeps it in `raw`, and a scene invented for it would stand in the chapter
+  // overview without ever having been played.
+  test("free text in a log line's scene becomes none, and is reported", async () => {
+    const client = await legacyDb();
+    addChapter(client, "01");
     client
       .prepare("insert into sessions (campaign_id, id, started) values ('beispiel', 's1', '2026-01-15T19:30')")
       .run();
@@ -452,12 +520,8 @@ describe("the boot repair of entity references", () => {
 
     const outcome = repairReferences(client);
 
-    // Nothing was invented: the column may be empty, so it is.
     expect(outcome.entriesCreated).toEqual([]);
-    expect(rows(client, "select count(*) as n from locations")).toEqual([{ n: 0 }]);
-    expect(rows(client, "select id, location from scenes")).toEqual([
-      { id: "szene", location: null },
-    ]);
+    expect(rows(client, "select count(*) as n from scenes")).toEqual([{ n: 0 }]);
     expect(rows(client, "select scene_id, raw from log_entries")).toEqual([
       // The line keeps its own text — the scene marker is IN `raw`, so the
       // evening is readable exactly as it was written.
@@ -466,15 +530,7 @@ describe("the boot repair of entity references", () => {
         raw: "- 19:52 (Abkürzung übers Moor) sie nehmen sie",
       },
     ]);
-    // …and the text is in the report, because for `scenes.location` this is
-    // the only place it still stands.
     expect(outcome.clearedText).toEqual([
-      {
-        campaignId: "beispiel",
-        column: "scenes.location",
-        value: "Der alte Hafen",
-        rows: 1,
-      },
       {
         campaignId: "beispiel",
         column: "log_entries.scene_id",

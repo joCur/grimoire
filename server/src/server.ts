@@ -544,8 +544,9 @@ if (import.meta.main) {
   }
   if (repair !== undefined && repair.clearedText.length > 0) {
     // The loudest of the lot: the TEXT is gone from the column, and this line
-    // is the only place it still stands. Nothing is invented for it because
-    // the column may be empty — but the DM decides what it should have been.
+    // is the only place it still stands. No entry was made from it because
+    // the column holds no address, or because no slug survived the text —
+    // and the column may be empty, so the DM decides what it should have been.
     console.log(
       "optional reference(s) held text instead of an id and are empty now — " +
         "please set them:",

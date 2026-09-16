@@ -53,26 +53,30 @@
 //
 // AND NO ENTRY EVER GETS AN ID THAT IS PROSE. The columns also hold plain
 // text: `npcs: [Alte Fischerin]`, a relation line whose counterpart is a
-// name, a scene whose `location` is „Der alte Hafen". Creating the entry the
+// name, a scene whose `location` is „Der alte Hafen“. Creating the entry the
 // value literally names would satisfy the constraint the same way the
 // brackets did and be wrong the same way — an entry whose id is a sentence,
-// in every address built from it, in every ⌘K result. Which of the two
-// answers is right depends on whether the column has a NULL:
+// in every address built from it, in every ⌘K result. So the text is READ
+// the way the product reads every typed name: `toSlug` gives the id, and the
+// text becomes the entry's display NAME. That is what the properties form
+// does with a typed Ort, and what the group step (db/group-migration.ts)
+// already does with a free-text `location` — the two steps see the same
+// column and have to answer the same input the same way, or a boot would
+// undo what that step decided.
 //
-//   * NULLABLE (`scenes.location`, `log_entries.scene_id`) → NULL, and the
-//     text in the boot report. Nothing has to be invented, because "no
-//     reference" is a legal state: the log line still carries its `raw`, and
-//     the scene falls back to chapter level, where the DM sets an Ort.
-//   * PART OF THE KEY (`scene_npcs.npc_id`, `npc_relations.other_npc_id`,
-//     `session_scenes_played.scene_id`) → the entry IS created, but under the
-//     slug of the text (`toSlug`, the one derivation rule the product has)
-//     and with the text as its display NAME. That is exactly what the
-//     properties form does with a typed Ort and what the group step of #100
-//     did with a group directory. The reference survives, the name survives,
-//     and the id is an id.
+//   * `scenes.location`, `scene_npcs.npc_id`, `npc_relations.other_npc_id`,
+//     `session_scenes_played.scene_id` → the entry is CREATED, under the slug
+//     of the text and with the text as its name. The reference survives, the
+//     name survives, and the id is an id.
+//   * `log_entries.scene_id` → NULL, and the text in the boot report. A log
+//     line is not an ADDRESS: the marker in it is a note about what the table
+//     was talking about, the line keeps it in `raw`, and creating a scene for
+//     it would put a scene nobody played into the chapter overview.
 //
-// A text nothing survives the transliteration of („???") yields no id at all;
-// there the row goes, like a reference that named nothing.
+// A text nothing usable survives the transliteration of („???“) yields no id
+// at all. There the value becomes NULL where the column allows it — with the
+// text in the report, since that is all anybody has left of it — and the row
+// goes where the reference is part of the key.
 //
 // EVERYTHING IT DOES IS REPORTED at boot (server.ts), because a row appearing
 // out of nowhere is something the DM should read rather than discover.
@@ -147,10 +151,10 @@ export interface ReferenceCleared {
 }
 
 /**
- * One optional reference that held FREE TEXT — NULL now, with the text in the
- * report. Its own category, not lumped in with `cleared`: „the field was
- * empty" needs no words, „the field said Der alte Hafen and says nothing now"
- * is the only copy of that sentence the DM has left.
+ * One optional reference that held FREE TEXT and could not become an entry —
+ * NULL now, with the text in the report. Its own category, not lumped in with
+ * `cleared`: „the field was empty“ needs no words, „the field said Abkürzung
+ * übers Moor and says nothing now“ is the only copy of that text left.
  */
 export interface ReferenceTextCleared {
   campaignId: string;
@@ -208,9 +212,16 @@ interface RefColumn {
  * A NULLABLE reference column. `creates` is the entry kind a value with no row
  * brings into existence, or `false` for the one exception (a chapter named by
  * a note, see the header) — that value becomes NULL.
+ *
+ * `fromText` says what FREE TEXT in the column means. `"create"` makes the
+ * entry under the slug of the text, with the text as its name — the answer
+ * for a column that holds an ADDRESS. `"clear"` empties the column and puts
+ * the text in the boot report instead; see the header for why a log line's
+ * scene is the one reference read that way.
  */
 interface OptionalRef extends RefColumn {
   creates: EntryKind | false;
+  fromText: "create" | "clear";
 }
 
 /**
@@ -224,10 +235,34 @@ interface RequiredRef extends RefColumn {
 
 /** The nullable references, in the order they are repaired. */
 const OPTIONAL_REFS: readonly OptionalRef[] = [
-  { table: "scenes", column: "location", target: "locations", creates: "location" },
-  { table: "npcs", column: "chapter_id", target: "chapters", creates: false },
-  { table: "locations", column: "chapter_id", target: "chapters", creates: false },
-  { table: "log_entries", column: "scene_id", target: "scenes", creates: "scene" },
+  {
+    table: "scenes",
+    column: "location",
+    target: "locations",
+    creates: "location",
+    fromText: "create",
+  },
+  {
+    table: "npcs",
+    column: "chapter_id",
+    target: "chapters",
+    creates: false,
+    fromText: "clear",
+  },
+  {
+    table: "locations",
+    column: "chapter_id",
+    target: "chapters",
+    creates: false,
+    fromText: "clear",
+  },
+  {
+    table: "log_entries",
+    column: "scene_id",
+    target: "scenes",
+    creates: "scene",
+    fromText: "clear",
+  },
 ];
 
 /** The references that are part of a key. */
@@ -609,13 +644,13 @@ export function repairReferences(client: SqliteClient): ReferenceRepairOutcome {
             continue;
           }
           const meant = referenceValue(row.value);
-          if (meant.text !== "") {
-            // FREE TEXT in a column that may be NULL. Nothing is invented for
-            // it: "no reference" is a legal state here, so the value goes and
-            // the TEXT goes into the report — a log line still carries its
-            // `raw`, and a scene falls back to chapter level, where the DM
-            // picks an Ort. See the header for why the key columns answer
-            // differently.
+          if (meant.text !== "" && (ref.fromText === "clear" || meant.id === "")) {
+            // FREE TEXT this column cannot turn into an entry: either it holds
+            // no address (a log line's scene, see the header), or the text
+            // yields no slug at all and an id is never invented out of
+            // nothing. The column may be NULL, so it becomes NULL — and the
+            // TEXT goes into the report, which is then the only place it
+            // still stands.
             clearValue.run(row.campaign_id, row.value);
             outcome.clearedText.push({
               campaignId: row.campaign_id,
@@ -626,7 +661,10 @@ export function repairReferences(client: SqliteClient): ReferenceRepairOutcome {
             continue;
           }
           if (!entryExists(row.campaign_id, ref.target, meant.id)) {
-            createEntry(row.campaign_id, ref.creates, meant.id);
+            // `meant.text` is set only when the value was no id, and it is
+            // then the entry's display name — the same shape the key columns
+            // and the group step give a reference written as prose.
+            createEntry(row.campaign_id, ref.creates, meant.id, meant.text);
           }
           if (meant.id !== row.value) repoint(ref, row, meant.id, Number(row.n));
         }

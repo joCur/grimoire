@@ -904,17 +904,21 @@ und **meldet alles beim Start**:
   seither an der Quelle (`parseRelationsSection`).
 - Verweis, der **Freitext** ist („Alte Fischerin", „Der alte Hafen") → **nie**
   ein Eintrag, dessen id ein Satz ist; das wäre derselbe Fehler wie die
-  Klammern, einen Schritt weiter. Welche Antwort richtig ist, entscheidet die
-  Spalte: wo sie **nullable** ist (`scenes.location`,
-  `log_entries.scene_id`), wird der Wert **NULL** und der Text steht im
-  Startbericht — nichts muss erfunden werden, weil „kein Verweis" ein
-  erlaubter Zustand ist (die Log-Zeile behält ihr `raw`, die Szene fällt auf
-  Kapitelebene). Wo er **Teil des Schlüssels** ist (`scene_npcs.npc_id`,
-  `npc_relations.other_npc_id`, `session_scenes_played.scene_id`), wird der
-  Eintrag **angelegt** — unter dem Slug des Textes (`toSlug`, dieselbe
-  Ableitung wie im Eigenschaften-Dialog) und **mit dem Text als Namen**, so
-  wie es der Gruppen-Schritt aus #100 schon tut. Text, aus dem kein Slug
-  übrig bleibt („???"), ergibt keine id: dort geht die Zeile.
+  Klammern, einen Schritt weiter. Der Text wird stattdessen **gelesen**, wie
+  das Produkt jeden getippten Namen liest: `toSlug` gibt die id, der Text wird
+  der **Name** des Eintrags. So legt es der Eigenschaften-Dialog an, und so
+  legt es der Gruppen-Schritt (`db/group-migration.ts`) an — beide Schritte
+  sehen dieselbe Spalte und müssen auf dieselbe Eingabe dieselbe Antwort
+  geben. Das gilt für `scenes.location` ebenso wie für die
+  Schlüssel-Spalten (`scene_npcs.npc_id`, `npc_relations.other_npc_id`,
+  `session_scenes_played.scene_id`). **Ausnahme: `log_entries.scene_id`** →
+  **NULL**, Text in den Startbericht. Eine Log-Zeile ist keine **Adresse**:
+  die Marke darin ist eine Notiz darüber, wovon am Tisch die Rede war, die
+  Zeile behält sie in ihrem `raw`, und eine daraus erfundene Szene stände in
+  der Kapitelübersicht, ohne je gespielt worden zu sein. Text, aus dem kein
+  Slug übrig bleibt („???"), ergibt keine id: dort wird der Wert NULL, wo die
+  Spalte es erlaubt (mit dem Text im Bericht), und die Zeile geht, wo der
+  Verweis Teil des Schlüssels ist.
 
 Der Schritt ist idempotent und auf jeder Datenbank ohne Loch ein No-op — und
 das ist nach 0015 jede, die dieser Server selbst schreibt.
