@@ -188,9 +188,11 @@ export const en: Messages = {
 
   "properties.chapter.title.label": "Title",
   "properties.chapter.status.label": "Status",
-  "properties.chapter.status.placeholder": "active",
+  "properties.chapter.status.planned": "Planned",
+  "properties.chapter.status.active": "Active",
+  "properties.chapter.status.done": "Done",
   "properties.chapter.status.hint":
-    "The value active marks the chapter the session view opens.",
+    "Active marks the chapter the session view opens — there is exactly one; the previous one goes back to planned.",
 
   // --- rename dialog --------------------------------------------------------
   "rename.title": "{kind}: change id",
@@ -350,7 +352,15 @@ export const en: Messages = {
   "pool.sceneCount": "{count, plural, =0 {no scenes} one {# scene} other {# scenes}}",
   "pool.chapter.goal": "Goal: {goal}",
   "pool.chapter.empty": "No scenes in this chapter yet.",
-  "pool.chapter.status.active": "active",
+  // --- chapter actions in the chapter overview -----------------------------
+  "pool.chapter.properties": "Chapter properties",
+  "pool.chapter.edit": "Edit chapter",
+  "chapterBody.title": "Edit chapter: {title}",
+  "chapterBody.description":
+    "The chapter's text as markdown \u2014 the heading \u201c## Ziel des Kapitels\u201d is the line the overview shows as its goal.",
+  "chapterBody.field.body": "Text",
+  "chapterBody.field.body.placeholder":
+    "## Ziel des Kapitels\n\nWhat the party is meant to achieve here",
   "pool.contingencies.hint": "only when the trigger fires",
   "pool.scene.trigger": "When: {trigger}",
 

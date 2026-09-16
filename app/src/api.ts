@@ -429,6 +429,23 @@ export function createCampaign(input: {
   });
 }
 
+/**
+ * „Aktiv" on a chapter's status control — ONE call, because it is one
+ * decision about two chapters: this one becomes `active` and the one that was
+ * active goes back to `planned`. Doing it as two properties patches from here
+ * would leave a window in which the campaign has two active chapters, and the
+ * session view picks the first it finds.
+ *
+ * No rev: there is nothing to overwrite (the overview carries no rev at all),
+ * and the action deliberately also changes a chapter the caller never read.
+ * Answers the chapter's entry.
+ */
+export function setChapterActive(campaign: string, chapter: string): Promise<EntryResponse> {
+  return postJson<EntryResponse>(
+    `/${encodeURIComponent(campaign)}/chapters/${encodeURIComponent(chapter)}/active`,
+  );
+}
+
 /** A new chapter; `goal` lands under `## Ziel des Kapitels` when given. */
 export function createChapter(
   campaign: string,

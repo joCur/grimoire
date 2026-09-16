@@ -39,6 +39,7 @@ import type { Translate } from "@/i18n/format";
 import type { MessageKey } from "@/i18n/messages";
 import { isEntityId, npcStatusLabel } from "@/lib/entity";
 import { fmQuickstats, fmStringArray } from "@/lib/properties";
+import { chapterStatusOptions } from "@/lib/chapter-status";
 import { sceneStatusOptions } from "@/lib/scene-status";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
@@ -98,10 +99,10 @@ export interface PropertiesField {
 //   LABELS          the only translated half: every one of them is a catalog
 //                   key here (FIELD_COPY), resolved through the translator.
 //
-// The enum option LABELS (scene status, npc status) come from
-// lib/scene-status.ts and lib/entity.ts instead, which the pool, the lists
-// and the cards share: a signature change here would drag half of those
-// views along.
+// The enum option LABELS (scene status, npc status, chapter status) come from
+// lib/scene-status.ts, lib/entity.ts and lib/chapter-status.ts instead, which
+// the pool, the lists and the cards share: a signature change here would drag
+// half of those views along.
 
 /** Catalog keys of a field's copy — label, and the optional two below it. */
 interface FieldCopy {
@@ -154,11 +155,8 @@ const FIELD_COPY: Record<PropertiesKind, Record<string, FieldCopy>> = {
   },
   chapter: {
     title: { label: "properties.chapter.title.label" },
-    status: {
-      label: "properties.chapter.status.label",
-      hint: "properties.chapter.status.hint",
-      placeholder: "properties.chapter.status.placeholder",
-    },
+    // No placeholder: a select has no empty text box to hint at.
+    status: { label: "properties.chapter.status.label", hint: "properties.chapter.status.hint" },
   },
 };
 
@@ -170,8 +168,8 @@ const SCENE_TYPE_LABEL_KEYS: Record<string, MessageKey> = {
 /**
  * The labelled options of a `select`. The enum LABELS come from the modules
  * the pool, the lists and the cards share (lib/scene-status.ts,
- * lib/entity.ts) — the VALUES come from the shared field list, so a format
- * change lands in one place and the labels follow.
+ * lib/entity.ts, lib/chapter-status.ts) — the VALUES come from the shared
+ * field list, so a format change lands in one place and the labels follow.
  */
 function optionsOf(
   kind: PropertiesKind,
@@ -180,6 +178,11 @@ function optionsOf(
 ): readonly FieldOption[] | undefined {
   if (def.control !== "select") return undefined;
   if (kind === "scene" && def.key === "status") return sceneStatusOptions(t);
+  // The same three labels the overview's status control shows, so picking
+  // „Aktiv" reads identically in both places. The server performs the swap to
+  // the one active chapter for a properties patch too, so the rule does not
+  // depend on which of the two doors the write came through.
+  if (kind === "chapter" && def.key === "status") return chapterStatusOptions(t);
   if (kind === "npc" && def.key === "status") {
     return (def.values ?? []).map((value) => ({ value, label: npcStatusLabel(value, t) }));
   }

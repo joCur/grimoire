@@ -13,6 +13,8 @@ import { Link, useParams } from "react-router";
 
 import { fetchEntry, fetchTree } from "@/api";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
+import { ChapterActions } from "@/components/ChapterActions";
+import { ChapterStatusControl } from "@/components/ChapterStatusMenu";
 import { ChapterCreateAction, SceneCreateAction } from "@/components/CreateActions";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -21,7 +23,6 @@ import { locationName } from "@/lib/campaign";
 import { firstParagraphOfSection } from "@/lib/md-section";
 import { POOL_LOOKUP_TARGETS } from "@/lib/lookup";
 import { useCampaignMeta } from "@/lib/use-campaign";
-import { cn } from "@/lib/utils";
 import { MobileStart } from "@/routes/mobile-start";
 
 export function PoolRoute() {
@@ -157,28 +158,48 @@ function Chapter({
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="mb-4">
-      <CollapsibleTrigger className="group flex w-full items-center gap-2.5 border-b border-border pt-2.5 pb-3 text-left">
-        <ChevronDown
-          aria-hidden
-          size={15}
-          className="flex-none -rotate-90 text-muted-foreground transition-transform group-data-[state=open]:rotate-0"
-        />
-        {/* The chapter names a section of the page, so it IS a heading —
-            inside the trigger, which stays the button that opens it. Without
-            it the outline jumped from the pool's h1 straight to the group
-            h3s, and the chapter the groups belong to was not in the tree at
-            all (issue #100 review). */}
-        <h2 className="font-serif text-[18px] font-semibold text-foreground">
-          {chapter.title}
-        </h2>
-        <ChapterStatusPill status={chapter.status} />
-        <span className="flex-1" />
-        <span className="flex-none text-[12.5px] text-muted-foreground">
-          {t("pool.sceneCount", { count: scenes.length })}
-        </span>
-      </CollapsibleTrigger>
+      {/* ONE row, but not one button: the status control is a menu trigger,
+          and a button inside a button is invalid markup. So the trigger covers
+          the chevron, the heading and the scene count — the whole reading of
+          the row — and the control sits BESIDE it in the same flex line with
+          the shared bottom border. */}
+      <div className="flex w-full items-center gap-2.5 border-b border-border pt-2.5 pb-3">
+        <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-2.5 text-left">
+          <ChevronDown
+            aria-hidden
+            size={15}
+            className="flex-none -rotate-90 text-muted-foreground transition-transform group-data-[state=open]:rotate-0"
+          />
+          {/* The chapter names a section of the page, so it IS a heading —
+              inside the trigger, which stays the button that opens it. Without
+              it the outline jumped from the pool's h1 straight to the group
+              h3s, and the chapter the groups belong to was not in the tree at
+              all (issue #100 review). */}
+          <h2 className="min-w-0 truncate font-serif text-[18px] font-semibold text-foreground">
+            {chapter.title}
+          </h2>
+          <span className="flex-1" />
+          <span className="flex-none text-[12.5px] text-muted-foreground">
+            {t("pool.sceneCount", { count: scenes.length })}
+          </span>
+        </CollapsibleTrigger>
+        {/* The status that only SAID „Aktiv" is the control now: „Aktiv" swaps
+            the active chapter in one server call, the other two patch this
+            chapter. Mobile never sees it — the route renders the start
+            surface instead of the overview below md. */}
+        <ChapterStatusControl campaign={campaign} chapter={chapter.id} status={chapter.status} />
+      </div>
       <CollapsibleContent>
         <div className="pt-4 pb-1 pl-[25px]">
+          {/* The chapter's own actions. They sit INSIDE the accordion and not
+              in the heading row: that row is already as wide as it gets, and
+              the actions are for the chapter the DM has opened. */}
+          <ChapterActions
+            campaign={campaign}
+            chapter={chapter.id}
+            entry={chapterFile.data}
+            tree={tree}
+          />
           {goal !== undefined && (
             <p className="mb-3 text-[14px] leading-[1.6] text-body-secondary">
               {t("pool.chapter.goal", { goal })}
@@ -218,24 +239,6 @@ function Chapter({
         </div>
       </CollapsibleContent>
     </Collapsible>
-  );
-}
-
-function ChapterStatusPill({ status }: { status?: string | undefined }) {
-  const t = useT();
-  if (status === undefined || status === "") return null;
-  const active = status === "active";
-  return (
-    <span
-      className={cn(
-        "flex-none rounded-full border px-[9px] py-px text-[11.5px]",
-        active
-          ? "border-[color-mix(in_srgb,var(--success)_35%,transparent)] text-success-text"
-          : "border-input text-dim",
-      )}
-    >
-      {active ? t("pool.chapter.status.active") : status}
-    </span>
   );
 }
 
