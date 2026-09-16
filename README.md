@@ -110,8 +110,9 @@ befüllt.
 | `appearance` | ein bis zwei Merkmale |
 
 Text-Abschnitte: `## Will` (Motivation), `## Weiß` (`[!secret]`-Callouts),
-`## Beziehungen` (Liste `- <npc-id>: <Freitext>`), `## Notizen` (befüllt die
-Nachbereitung mit „NPC-Stub anlegen" — nicht von Hand pflegen).
+`## Beziehungen` (freier Text; einen Gegenpart verlinkt `[[id]]` wie überall
+im Text), `## Notizen` (befüllt die Nachbereitung mit „NPC-Stub anlegen" —
+nicht von Hand pflegen).
 
 Kleinst-NPCs bekommen keinen Eintrag, bis sie wiederkehren. Bis dahin: Zeile
 im Szenentext oder `#npc`-Notiz im Log.
@@ -151,17 +152,24 @@ Sessions verwaltet die App; der DM schreibt nur ins Log.
 - `reviewed` hasht die **rohe** Log-Zeile, damit `## Log` strikt append-only
   bleibt.
 
-## Referenzieren legt an
+## Referenzen zeigen auf vorhandene Einträge
 
-Wer eine id referenziert, legt sie an. Trägt der DM in `npcs:` einer Szene,
-in `location:` oder in `## Beziehungen` eine id ein, die es noch nicht gibt,
-entsteht im selben Schreibvorgang ein leerer Eintrag (id, Name = id, Status
-Default). Ein referenzierter Eintrag ist damit nie „fehlt", höchstens leer;
-leere Einträge erscheinen als dünne Karten und sind normal befüllbar.
+Eine Referenz nennt einen Eintrag, den es gibt. Wer in `npcs:` einer Szene,
+in `location:`, in `chapter:`, in einer Schnellnotiz oder in
+`scenes_played:` etwas einträgt, das keinen Eintrag hat, bekommt 400 mit dem
+Hinweis, den Eintrag zuerst anzulegen — es entsteht nichts nebenbei.
+Einträge entstehen über „Neu anlegen" und über das Übernehmen eines
+Generator-Vorschlags, sonst nirgends.
 
 `location:` verlangt eine id in Slug-Form (400 sonst) — sie ist zugleich die
-Gruppe der Szene. `chapter:` legt nichts an: ein unbekanntes Kapitel ist 400,
-bei Szene, NPC und Ort gleich.
+Gruppe der Szene. Jede Szene gehört zu einem Kapitel; `chapter:` lässt sich
+nicht leeren.
+
+Eine Nennung im **Text** ist keine Referenz in diesem Sinn: `[[id]]` und was
+unter `## Beziehungen` steht bleiben sichtbarer Text. Ein `[[id]]`, zu dem
+es keinen Eintrag gibt, wird als Text angezeigt — kein Fehler, kein neuer
+Eintrag. Ein leerer Eintrag ist übrigens normal: angelegt und noch nicht
+gefüllt, er erscheint als dünne Karte und lässt sich jederzeit füllen.
 
 ## Text
 
