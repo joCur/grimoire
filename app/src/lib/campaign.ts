@@ -10,7 +10,7 @@ import { parseLocalDateTime } from "@/lib/session";
  * passes through unchanged (degrade).
  *
  * An entry whose `name` is EMPTY degrades to the id too — that is the state
- * „Referenzieren legt an" (#70) leaves behind, and the id is still the word
+ * an entry created and left empty looks like, and the id is still the word
  * the DM typed. The tree already degrades it server-side; doing it here as
  * well means no caller can render a blank chip or breadcrumb for it.
  */

@@ -208,7 +208,7 @@ export interface SceneGroup {
   slug: string;
   /**
    * The location entry's display NAME, degraded to the id when nobody has
-   * named it yet (an entry a reference created, #70). "" for the `slug: ""`
+   * named it yet (an entry created and left empty). "" for the `slug: ""`
    * group, which is not a location and is labelled by the app.
    *
    * Resolved HERE because the groups are ordered by it: the heading the DM

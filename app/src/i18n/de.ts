@@ -153,8 +153,8 @@ export const de = {
   "properties.field.row.name.aria": "{label}, Zeile {row}: Name",
   "properties.field.row.value.aria": "{label}, Zeile {row}: Wert",
   "properties.ref.unknownChapter": "Unbekannt — Kapitel muss existieren.",
-  "properties.ref.new": "Neu — wird beim Speichern angelegt.",
-  "properties.ref.locationNew": 'Neu — wird als Ort „{name}“ angelegt.',
+  "properties.ref.unknown": "Unbekannt — Eintrag muss existieren.",
+  "properties.ref.unknownLocation": "Unbekannt — Ort muss existieren.",
   "properties.issue.locationUnusable":
     'Kein verwendbarer Name — „{value}“ ergibt keine Orts-id.',
   "properties.issue.notAnId":
@@ -173,9 +173,9 @@ export const de = {
   "properties.scene.chapter.label": "Kapitel",
   "properties.scene.location.label": "Ort",
   "properties.scene.location.hint":
-    "Ort aus der Liste oder ein neuer Name — die Szene steht im Kapitel unter diesem Ort.",
+    "Ort aus der Liste — die Szene steht im Kapitel unter diesem Ort.",
   "properties.scene.npcs.label": "NPCs",
-  "properties.scene.npcs.hint": "Nur ids — unbekannte werden beim Speichern angelegt.",
+  "properties.scene.npcs.hint": "Nur ids — der NPC muss schon einen Eintrag haben.",
   "properties.scene.handouts.label": "Handouts",
   "properties.scene.handouts.hint": "Name des Roll20-Handouts, nur ein Verweis.",
   "properties.scene.tags.label": "Tags",
@@ -238,7 +238,6 @@ export const de = {
   "rename.usage.total": "{count, plural, one {# Verwendung} other {# Verwendungen}}",
   "rename.usage.none": "Keine Referenzen — nichts hängt an dieser id.",
   "rename.usage.sceneNpcs": "{count, plural, one {# Szene} other {# Szenen}}",
-  "rename.usage.npcRelations": "{count, plural, one {# Beziehung} other {# Beziehungen}}",
   "rename.usage.sceneLocation": "{count, plural, one {# Szene} other {# Szenen}}",
   "rename.usage.scenesPlayed":
     "{count, plural, one {# Session-Eintrag} other {# Session-Einträge}}",
@@ -320,9 +319,16 @@ export const de = {
   "server.slug_reserved": '„{id}“ ist ein reservierter Name — Vorschlag: „{suggestion}“',
   "server.slug_empty": "{field} ergibt keine id — bitte Buchstaben oder Ziffern verwenden.",
   "server.location_not_an_id":
-    'Der Ort „{value}“ ist keine Orts-id — „{suggestion}“ verwenden, der Eintrag wird angelegt.',
+    'Der Ort „{value}“ ist keine Orts-id — „{suggestion}“ verwenden und den Ort zuerst anlegen.',
   "server.location_not_an_id.noSuggestion":
     'Der Ort „{value}“ ist keine Orts-id — bitte Kleinbuchstaben, Ziffern und Bindestriche verwenden.',
+  "server.location_unknown": 'Den Ort „{value}“ gibt es nicht — bitte zuerst anlegen.',
+  "server.npc_unknown": 'Den NPC „{value}“ gibt es nicht — bitte zuerst anlegen.',
+  "server.chapter_unknown": 'Das Kapitel „{value}“ gibt es nicht — bitte zuerst anlegen.',
+  "server.log_scene_unknown":
+    'Die Szene „{value}“ gibt es nicht — die Notiz braucht eine vorhandene Szene.',
+  "server.played_scene_unknown":
+    'Die gespielte Szene „{value}“ gibt es nicht — bitte zuerst anlegen.',
   "server.glossary_duplicate_term":
     'Glossar-Begriff „{term}“ kommt mehrfach vor — bitte zusammenfassen.',
   "server.session_running": "Eine ältere Session läuft noch — erst beenden.",

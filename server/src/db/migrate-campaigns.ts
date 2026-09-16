@@ -25,6 +25,12 @@
 //      CLI); the file itself stays where it is — the tree is input, not
 //      storage. An empty report means a clean import; a non-empty one is a
 //      reading task for the DM, not an error.
+//   5. IT CREATES NOTHING A REFERENCE NAMES. A reference is a foreign key
+//      (schema.ts rule 3), and an entry only ever comes from a file of its
+//      own. So a `location:`, an `npcs:` entry, a `chapter:` or a played
+//      scene that names something the tree does not have is left out and
+//      REPORTED, with the sentence saying which entry to add — the text of
+//      the file is imported either way.
 
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -35,8 +41,6 @@ import {
   parseGlossaryBody,
   parseInboxBody,
   parseLogSection,
-  parseRelationsSection,
-  removeRelationLines,
   removeSection,
   SECTION_LEVEL,
 } from "./import-markdown";
@@ -48,7 +52,6 @@ import {
   locations as locationsTable,
   logEntries as logTable,
   meta as metaTable,
-  npcRelations as relationsTable,
   npcs as npcsTable,
   packJson,
   sceneNpcs as sceneNpcsTable,
@@ -551,9 +554,20 @@ function importCampaign(
     indexForSearch(tx, campaignId, "chapter", id, title === "" ? id : title, id, "", p?.body ?? "");
   });
 
-  // 3. npcs and locations before scenes — not required by a foreign key
-  //    (scene references are soft, schema.ts rule 3) but it keeps the
-  //    id-collision reports in a readable order.
+  // 3. npcs and locations before scenes: a scene's references are foreign
+  //    keys, so the entries it names have to be there first (and the
+  //    id-collision reports stay in a readable order).
+  const knownChapters = new Set(chapterIds);
+  /** A `chapter:` the tree has no chapter for is left out and reported. */
+  const chapterRef = (p: Parsed, kind: string): string | null => {
+    const declared = asOptionalString(p.frontmatter.chapter);
+    if (declared === undefined || knownChapters.has(declared)) return declared ?? null;
+    degrade(
+      p.file,
+      `chapter „${declared}" hat kein Kapitel im Baum — ${kind} ohne Kapitel übernommen.`,
+    );
+    return null;
+  };
   const npcIds = new Set<string>();
   for (const p of find("npc")) {
     const id = asString(p.frontmatter.id);
@@ -568,7 +582,6 @@ function importCampaign(
     }
     npcIds.add(id);
     const name = asString(p.frontmatter.name, id);
-    const relations = parseRelationsSection(p.body);
     // `quickstats` is a MAP in the format (README, "Entität: NPC"). A
     // hand-edited file can hold a list or a scalar there, and packing that
     // into the object column would degrade it to `{}` — a value gone with no
@@ -583,17 +596,15 @@ function importCampaign(
         id,
         name,
         role: asOptionalString(p.frontmatter.role) ?? null,
-        chapterId: asOptionalString(p.frontmatter.chapter) ?? null,
+        chapterId: chapterRef(p, "NPC"),
         status: asString(p.frontmatter.status, "unknown"),
         statblock: asOptionalString(p.frontmatter.statblock) ?? null,
         quickstats: packJson(quickstatsIsMap ? rawQuickstats : {}),
         voice: asOptionalString(p.frontmatter.voice) ?? null,
         appearance: asOptionalString(p.frontmatter.appearance) ?? null,
-        // `## Beziehungen` becomes rows, so it must not also stay as prose.
-        // Only the LINES that were parsed go (see removeRelationLines): a
-        // `###` subsection under it, and any line that became no row, stay in
-        // the body rather than vanishing.
-        body: removeRelationLines(p.body),
+        // The whole text, `## Beziehungen` included: it is prose, and
+        // nothing in the storage is derived from body text.
+        body: p.body,
         extra: packJson({
           ...splitFrontmatter(p.frontmatter, [
             "id",
@@ -616,17 +627,6 @@ function importCampaign(
         p.file,
         '„quickstats" ist keine Schlüssel-Wert-Liste und passt nicht in die Quickstats-Spalte — ' +
           "der Wert wurde unverändert in die Zusatzfelder (extra) übernommen.",
-      );
-    }
-    for (const relation of relations.relations) {
-      tx.insert(relationsTable)
-        .values({ campaignId, npcId: id, otherNpcId: relation.otherNpcId, note: relation.note, pos: relation.pos })
-        .run();
-    }
-    for (const line of relations.foreignLines) {
-      degrade(
-        p.file,
-        `Zeile unter „## Beziehungen" ist keine „- <npc-id>: <Text>"-Beziehung: „${line}"`,
       );
     }
     indexForSearch(
@@ -660,7 +660,7 @@ function importCampaign(
         campaignId,
         id,
         name,
-        chapterId: asOptionalString(p.frontmatter.chapter) ?? null,
+        chapterId: chapterRef(p, "Ort"),
         roll20Page: asOptionalString(p.frontmatter["roll20-page"]) ?? null,
         body: p.body,
         extra: packJson(splitFrontmatter(p.frontmatter, ["id", "name", "chapter", "roll20-page"])),
@@ -670,8 +670,6 @@ function importCampaign(
   }
 
   // 4. scenes plus their ordered npc and tag references.
-  /** Location id -> the text the scene named it with, for the entries below. */
-  const sceneLocationNames = new Map<string, string>();
   const sceneIds = new Set<string>();
   let scenePos = 0;
   for (const p of find("scene")) {
@@ -705,10 +703,21 @@ function importCampaign(
     if (sceneLocation !== null && sceneLocation !== rawLocation) {
       degrade(
         p.file,
-        `location „${rawLocation}" ist keine Orts-id — als Ort „${sceneLocation}" angelegt.`,
+        `location „${rawLocation}" ist keine Orts-id — als „${sceneLocation}" gelesen.`,
       );
     }
-    if (sceneLocation !== null) sceneLocationNames.set(sceneLocation, rawLocation);
+    // The location is a reference: without an entry of its own the scene is
+    // imported WITHOUT a location, and the report says which entry is
+    // missing. Nothing is created for it.
+    let locationRef = sceneLocation;
+    if (locationRef !== null && !locationIds.has(locationRef)) {
+      degrade(
+        p.file,
+        `location „${locationRef}" hat keinen Ort im Baum — Szene ohne Ort übernommen, ` +
+          `Ort zuerst anlegen.`,
+      );
+      locationRef = null;
+    }
     tx.insert(scenesTable)
       .values({
         campaignId,
@@ -723,9 +732,9 @@ function importCampaign(
         // `location` IS the group since issue #100, so the import derives
         // it the way the file tree meant it: an explicit value wins, an
         // empty one inherits the group DIRECTORY the file sat in. Free text
-        // becomes the slug of that text (`Die Bucht` -> `die-bucht`) and the
-        // entry is created below — the format's free-text location is gone.
-        location: sceneLocation,
+        // is read as the slug of that text (`Die Bucht` -> `die-bucht`) —
+        // the format's free-text location is gone.
+        location: locationRef,
         status: asString(p.frontmatter.status, "draft"),
         handouts: packJson(asStringArray(p.frontmatter.handouts)),
         body: p.body,
@@ -755,6 +764,16 @@ function importCampaign(
     npcRefs.forEach((npcId, pos) => {
       if (npcId === "" || seenNpcs.has(npcId)) return; // duplicate ref: no second row
       seenNpcs.add(npcId);
+      // Same rule as the location: an npc the tree does not have is left
+      // out of the list and reported, never invented.
+      if (!npcIds.has(npcId)) {
+        degrade(
+          p.file,
+          `npcs nennt „${npcId}" — dazu gibt es keinen NPC im Baum, Eintrag ausgelassen, ` +
+            `NPC zuerst anlegen.`,
+        );
+        return;
+      }
       tx.insert(sceneNpcsTable).values({ campaignId, sceneId: id, npcId, pos }).run();
     });
     const seenTags = new Set<string>();
@@ -764,19 +783,6 @@ function importCampaign(
       tx.insert(sceneTagsTable).values({ campaignId, sceneId: id, tag, pos }).run();
     });
     indexForSearch(tx, campaignId, "scene", id, title, id, tags.join(" "), p.body);
-  }
-
-  // 4b. Referencing creates (#70, #100): a scene's `location` is its group,
-  // so an id without an entry would be a heading the campaign cannot name.
-  // The entry gets the text the scene used as its `name` when that text was
-  // not already the id — the file tree's `hafen/` directory and its free-text
-  // locations become real entries here, and nowhere else.
-  for (const [id, named] of [...sceneLocationNames].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
-    if (locationIds.has(id)) continue;
-    locationIds.add(id);
-    const name = named === id ? "" : named;
-    tx.insert(locationsTable).values({ campaignId, id, name }).run();
-    indexForSearch(tx, campaignId, "location", id, name === "" ? id : name, id, "", "");
   }
 
   // 5. sessions with pauses, log lines and played scenes.
@@ -851,7 +857,11 @@ function importCampaign(
           pos: entry.pos,
           raw: entry.raw,
           at: entry.at ?? null,
-          sceneId: entry.sceneId ?? null,
+          // The `(id)` marker is a reference only when a scene of that id
+          // exists. Otherwise it stays part of `raw`, where the DM can read
+          // it — the same rule the live log endpoint follows.
+          sceneId:
+            entry.sceneId !== undefined && sceneIds.has(entry.sceneId) ? entry.sceneId : null,
           text: entry.text ?? null,
           hash: entry.hash,
           reviewed: isReviewed ? 1 : 0,
@@ -875,6 +885,14 @@ function importCampaign(
     // second row: the sequence is what the review reads back.
     asStringArray(p.frontmatter.scenes_played).forEach((sceneId, pos) => {
       if (sceneId === "") return;
+      if (!sceneIds.has(sceneId)) {
+        degrade(
+          p.file,
+          `scenes_played nennt „${sceneId}" — dazu gibt es keine Szene im Baum, ` +
+            `Eintrag ausgelassen.`,
+        );
+        return;
+      }
       tx.insert(playedTable).values({ campaignId, sessionId: id, sceneId, pos }).run();
     });
   }

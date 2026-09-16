@@ -292,8 +292,7 @@ describe("POST /api/:campaign/review/npc-stub", () => {
     expect(file.path).toBe("npcs/old-metta");
     expect(file.kind).toBe("npc");
     // status is the column default — the log line said nothing about it, so
-    // the entry must not claim "alive" (issue #70; the route always
-    // documented "unknown", the insert said otherwise).
+    // the entry must not claim "alive".
     expect(file.properties.status).toBe("unknown");
     expect(file.properties).toEqual({ id: "old-metta", name: "Old Metta", status: "unknown" });
     expect(file.body).toBe("\n## Notizen\n\n- Fischerin am Steg, kennt die Gezeiten #npc\n");
@@ -309,9 +308,9 @@ describe("POST /api/:campaign/review/npc-stub", () => {
   });
 
   test("an existing entry is ANSWERED, not overwritten and not refused", async () => {
-    // Create-or-link (issue #70): the caller wants this id to have an entry.
-    // An entry with content comes back untouched — the old 409 made the
-    // review correct an id that was right.
+    // Create-or-link: the caller wants this id to have an entry. One with
+    // content comes back untouched — the old 409 made the review correct an
+    // id that was right.
     const before = await getFile("npcs/fenn");
     const linked = await postOk("/api/beispiel/review/npc-stub", {
       id: "fenn",
@@ -326,19 +325,15 @@ describe("POST /api/:campaign/review/npc-stub", () => {
     expect(second).toEqual(first);
   });
 
-  test("an EMPTY entry — one a reference created — is filled in", async () => {
-    // `holm` gets its row from the scene that names it (#70); the review is
-    // the first thing that knows a name and a note for it.
-    const res = await app.request("/api/beispiel/properties", {
-      method: "PATCH",
+  test("an EMPTY entry is filled in", async () => {
+    // An entry the DM created and did not fill in — the review is the first
+    // thing that knows a name and a note for it.
+    const created = await app.request("/api/beispiel/npcs", {
+      method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        path: SCENE,
-        rev: (await getFile(SCENE)).rev,
-        patch: { npcs: ["jorna", "holm"] },
-      }),
+      body: JSON.stringify({ name: "holm" }),
     });
-    expect(res.status).toBe(200);
+    expect(created.status).toBe(201);
     const empty = await getFile("npcs/holm");
     expect(empty.properties.name).toBe("holm");
     const filled = await postOk("/api/beispiel/review/npc-stub", {

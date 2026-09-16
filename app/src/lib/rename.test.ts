@@ -179,15 +179,14 @@ describe("usage summary", () => {
   test("one German line per group, in the server's order", () => {
     expect(
       usageSummary(
-        report([group("sceneNpcs", 3), group("npcRelations", 2), group("logEntries", 4)]),
+        report([group("sceneNpcs", 3), group("bodyRefs", 2), group("logEntries", 4)]),
         t,
       ),
-    ).toBe("3 Szenen, 2 Beziehungen, 4 Log-Zeilen");
+    ).toBe("3 Szenen, 2 Textstellen, 4 Log-Zeilen");
   });
 
   test("singular per group, not per report", () => {
     expect(usageGroupLabel(group("sceneNpcs", 1), t)).toBe("1 Szene");
-    expect(usageGroupLabel(group("npcRelations", 1), t)).toBe("1 Beziehung");
     expect(usageGroupLabel(group("scenesPlayed", 1), t)).toBe("1 Session-Eintrag");
     expect(usageGroupLabel(group("scenesPlayed", 2), t)).toBe("2 Session-Einträge");
     expect(usageGroupLabel(group("logEntries", 1), t)).toBe("1 Log-Zeile");

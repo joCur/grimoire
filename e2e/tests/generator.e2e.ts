@@ -363,7 +363,16 @@ test("review state survives navigation and reload; parts are accepted one by one
   await page.reload();
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(1);
 
-  // (3) „Diesen übernehmen" writes exactly that scene; the rest stays.
+  // (3) The second suggested entry, decided as well: the scene NAMES both of
+  // them, and a scene cannot be written while a reference names nothing
+  // (ADR #18) — „Annehmen" is that decision, the write comes below.
+  await stubRow(`locations/${LOCATION_STUB_ID}`).getByRole("button", { name: "Annehmen" }).click();
+  await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
+  // Accepted is a decision, not a write.
+  expect(await api.exists(`npcs/${NPC_STUB_ID}`)).toBe(false);
+
+  // (4) „Diesen übernehmen" on the scene writes the scene AND the two
+  // accepted entries it references — one batch, so nothing is half-written.
   expect(await api.exists(SCENE_PATH)).toBe(false);
   await page
     .locator("div")
@@ -371,28 +380,14 @@ test("review state survives navigation and reload; parts are accepted one by one
     .last()
     .getByRole("button", { name: "Diesen übernehmen" })
     .click();
-  await expect(page.getByText("1 von 3 übernommen", { exact: false })).toBeVisible();
+  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
   expect(await api.exists(SCENE_PATH)).toBe(true);
-  // The written scene is not editable here any more and links to the entry.
-  const written = page.locator("div").filter({ hasText: SCENE_TITLE }).last();
-  await expect(written.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: SCENE_PATH })).toBeVisible();
   // The edit really is what was written.
   expect(await api.body(SCENE_PATH)).toContain("Die Flut zieht sich im Regen");
-  // Writing the scene creates EMPTY rows for the ids it references (#70), so
-  // „exists" cannot answer whether a stub landed — its CONTENT can.
-  expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).name).not.toBe(LOCATION_STUB_NAME);
-  // The undecided location stub is still open — a bulk accept would skip it,
-  // so it is decided explicitly here.
-  await stubRow(`locations/${LOCATION_STUB_ID}`)
-    .getByRole("button", { name: "Annehmen" })
-    .click();
-
-  // (4) „Rest übernehmen" writes what is left — and the job is gone.
-  await page.getByRole("button", { name: /^Rest übernehmen/ }).click();
-  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
+  // Both entries carry their NAME, so they were written as proposed.
   expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).toBe(NPC_STUB_NAME);
   expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).name).toBe(LOCATION_STUB_NAME);
+  // Nothing is left open, so the job is gone.
   expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
 });
 
@@ -404,19 +399,29 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
     timeout: 30_000,
   });
 
+  // One suggested entry is accepted and written — it references nothing, so
+  // it stands on its own — and the rest of the run is thrown away.
+  const npcRow = page
+    .locator("div")
+    .filter({ hasText: `npcs/${NPC_STUB_ID}` })
+    .filter({ has: page.getByRole("button", { name: "Ablehnen" }) })
+    .last();
+  await npcRow.getByRole("button", { name: "Annehmen" }).click();
   await page
     .locator("div")
-    .filter({ hasText: DRAFT_PATH })
+    .filter({ hasText: `npcs/${NPC_STUB_ID}` })
+    .filter({ has: page.getByRole("button", { name: "Diesen übernehmen" }) })
     .last()
     .getByRole("button", { name: "Diesen übernehmen" })
     .click();
-  await expect(page.getByRole("link", { name: SCENE_PATH })).toBeVisible();
+  await expect(page.getByRole("link", { name: `npcs/${NPC_STUB_ID}` })).toBeVisible();
 
   await page.getByRole("button", { name: "Rest verwerfen" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Szenen generieren");
-  // The accepted scene is an entry now; the suggested entries never landed —
-  // their ids exist only as the empty rows the scene's references leave (#70).
-  expect(await api.exists(SCENE_PATH)).toBe(true);
-  expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).not.toBe(NPC_STUB_NAME);
+  // The accepted entry is an entry now; the scene and the other suggestion
+  // never landed.
+  expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).toBe(NPC_STUB_NAME);
+  expect(await api.exists(SCENE_PATH)).toBe(false);
+  expect(await api.exists(`locations/${LOCATION_STUB_ID}`)).toBe(false);
   expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
 });

@@ -22,6 +22,7 @@ import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { openSqlite, type SqliteClient } from "./driver";
 import { migrateGroupsToLocations, type GroupMigrationOutcome } from "./group-migration";
+import { assertReferencesResolvable } from "./reference-preflight";
 import { schema } from "./schema";
 
 /** The drizzle handle the whole server uses. Synchronous, like the driver. */
@@ -106,6 +107,11 @@ export async function openDb(filename: string): Promise<OpenDb> {
   // `scenes.group_slug`, and this step is what carries the old grouping over
   // into `location`. It is a no-op once the column is gone.
   const groupMigration = migrateGroupsToLocations(client);
+  // The gate in front of the reference constraints: a database whose data
+  // cannot satisfy them is REFUSED here, with the offending values in the
+  // log, instead of failing halfway through the rebuild (or being repaired
+  // behind the DM's back). A no-op once the constraints are in place.
+  assertReferencesResolvable(client);
   const db = buildDrizzle(client);
   migrateDb(db);
   return { db, client, close: () => client.close(), groupMigration };

@@ -29,6 +29,11 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   slug_reserved: "server.slug_reserved",
   slug_empty: "server.slug_empty",
   location_not_an_id: "server.location_not_an_id",
+  location_unknown: "server.location_unknown",
+  npc_unknown: "server.npc_unknown",
+  chapter_unknown: "server.chapter_unknown",
+  log_scene_unknown: "server.log_scene_unknown",
+  played_scene_unknown: "server.played_scene_unknown",
   glossary_duplicate_term: "server.glossary_duplicate_term",
   session_running: "server.session_running",
   session_not_empty: "server.session_not_empty",
@@ -96,6 +101,16 @@ function paramsFor(
       // then names only what was typed (two catalog entries, one code).
       const suggestion = text(body.suggestion);
       return suggestion === undefined ? { value } : { value, suggestion };
+    }
+    case "location_unknown":
+    case "npc_unknown":
+    case "chapter_unknown":
+    case "log_scene_unknown":
+    case "played_scene_unknown": {
+      // The five reference refusals share one shape: the value that names
+      // nothing. Without it there is no sentence worth showing.
+      const value = text(body.value);
+      return value === undefined ? undefined : { value };
     }
     case "glossary_duplicate_term": {
       const term = text(body.term);

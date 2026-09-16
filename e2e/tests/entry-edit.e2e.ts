@@ -109,6 +109,35 @@ test("editing the body: save writes the entry and the reading view shows it", as
   expect(after.body).toBe(`${before.body}\n${added}\n`);
 });
 
+test("a mention in the text stays text — no entry, no error", async ({ page, api }) => {
+  // A reference names an entry that exists (ADR #18) — but a MENTION in the
+  // body is not a reference: `[[niemand]]` and a `## Beziehungen` line are
+  // prose. Saving them is a normal save: nothing is created, nothing is
+  // refused, and the text comes back as written.
+  const before = await split(api, NPC);
+  const mention = "Sie spricht von [[niemand]] und meint es ernst.";
+  const relation = "- holm: schuldet ihr noch Hafengeld";
+
+  await page.goto(`/beispiel/entry/${NPC}`);
+  await openMarkdownEditor(page);
+  const textarea = page.getByRole("textbox", { name: TEXTAREA });
+  await textarea.fill(`${before.body}\n${mention}\n\n## Beziehungen\n\n${relation}\n`);
+  await page.getByRole("button", { name: "Speichern" }).click();
+
+  // Saved, rendered, and readable as typed — the unknown slug included.
+  await expect(textarea).toHaveCount(0);
+  const article = page.getByRole("article");
+  await expect(article).toContainText("[[niemand]]");
+  // Rendered as the list item it is, so without the markdown dash.
+  await expect(article).toContainText("holm: schuldet ihr noch Hafengeld");
+  // …and neither mention brought an entry into existence.
+  expect(await api.exists("npcs/niemand")).toBe(false);
+  expect(await api.exists("npcs/holm")).toBe(false);
+  const after = await split(api, NPC);
+  expect(after.body).toContain(mention);
+  expect(after.body).toContain(relation);
+});
+
 test("a scene that MOVED is still editable under its old address (#100)", async ({
   page,
   api,
@@ -118,6 +147,8 @@ test("a scene that MOVED is still editable under its old address (#100)", async 
   // that (a bookmark, another tab) names the old address. Opening it has to
   // land on the scene, replace the URL with the one it has now, and save
   // through it like any other edit.
+  // The Ort has to exist before a scene can name it (ADR #18).
+  await api.send("POST", "beispiel/locations", { name: "Nordbucht" });
   await api.patchProperties(SCENE, { location: "nordbucht" });
   const moved = "01-salzhafen/nordbucht/lighthouse-arrival";
 

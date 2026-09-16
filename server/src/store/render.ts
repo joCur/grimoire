@@ -71,8 +71,8 @@ export interface ChapterRow {
 export interface SceneRow {
   campaignId: string;
   id: string;
-  chapterId: string | null;
-  /** 1 when the properties declares `chapter:` (schema.ts). */
+  /** The owning chapter — never absent (schema.ts). */
+  chapterId: string;
   title: string;
   type: string;
   trigger: string | null;
@@ -294,52 +294,6 @@ export function renderScene(row: SceneRow, npcs: string[], tags: string[]): Entr
   );
 }
 
-/** `## Beziehungen` rendered back from `npc_relations` (in `pos` order). */
-export function renderRelationsSection(
-  relations: Array<{ otherNpcId: string; note: string }>,
-): string {
-  if (relations.length === 0) return "";
-  const lines = relations.map((r) => (r.note === "" ? `- ${r.otherNpcId}:` : `- ${r.otherNpcId}: ${r.note}`));
-  return `## Beziehungen\n\n${lines.join("\n")}\n`;
-}
-
-/** The `## Beziehungen` heading a body kept because it still holds prose. */
-const RELATIONS_HEADING = /^##[ \t]+Beziehungen[ \t]*\r?$/im;
-
-/**
- * The npc body with its relations rows rendered back in.
- *
- * Two cases, and the second one is why this is not a plain append:
- *
- *   * the body has NO `## Beziehungen` section (the normal case — the whole
- *     section became rows): the section is appended at the END, which is
- *     deterministic; its original position inside the file was never part of
- *     the contract.
- *   * the body still HAS the section: it kept lines that became no row —
- *     prose, a note without a colon, a duplicate counterpart
- *     (`removeRelationLines`). The rows then go back INTO that section, above
- *     what stayed, so the DM sees one `## Beziehungen` in its original place
- *     with nothing missing.
- */
-export function renderNpcBody(
-  row: NpcRow,
-  relations: Array<{ otherNpcId: string; note: string }>,
-): string {
-  const kept = RELATIONS_HEADING.exec(row.body);
-  if (kept !== null) {
-    const lines = relations.map((r) =>
-      r.note === "" ? `- ${r.otherNpcId}:` : `- ${r.otherNpcId}: ${r.note}`,
-    );
-    if (lines.length === 0) return row.body;
-    const headingEnd = kept.index + kept[0].length;
-    return `${row.body.slice(0, headingEnd)}\n\n${lines.join("\n")}${row.body.slice(headingEnd)}`;
-  }
-  const section = renderRelationsSection(relations);
-  if (section === "") return row.body;
-  const base = row.body === "" ? "" : row.body.endsWith("\n") ? row.body : `${row.body}\n`;
-  return `${base}${base === "" ? "" : "\n"}${section}`;
-}
-
 export function npcProperties(row: NpcRow): Record<string, unknown> {
   const quickstats = unpackJson(row.quickstats);
   return withExtra(
@@ -358,11 +312,12 @@ export function npcProperties(row: NpcRow): Record<string, unknown> {
   );
 }
 
-export function renderNpc(
-  row: NpcRow,
-  relations: Array<{ otherNpcId: string; note: string }>,
-): EntryResponse {
-  return parsed(npcPath(row.id), "npc", npcProperties(row), renderNpcBody(row, relations), row.rev);
+/**
+ * The npc entry. Its text is rendered exactly as it is stored,
+ * `## Beziehungen` included: nothing about an npc is derived from body text.
+ */
+export function renderNpc(row: NpcRow): EntryResponse {
+  return parsed(npcPath(row.id), "npc", npcProperties(row), row.body, row.rev);
 }
 
 export function locationProperties(row: LocationRow): Record<string, unknown> {

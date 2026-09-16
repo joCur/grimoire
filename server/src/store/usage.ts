@@ -26,7 +26,6 @@ import {
   chapters,
   locations,
   logEntries,
-  npcRelations,
   npcs,
   sceneNpcs,
   scenes,
@@ -58,7 +57,6 @@ export function isUsageKind(value: unknown): value is UsageKind {
  * labels (app/src/lib/rename.ts) — the wire keeps stable English keys.
  *
  *   sceneNpcs         scene properties `npcs:` names the npc
- *   npcRelations      another npc's `## Beziehungen` line names the npc
  *   sceneLocation     scene properties `location:` names the location
  *   scenesPlayed      a session's `scenes_played:` names the scene
  *   logEntries        a log line's `(scene-id)` marker names the scene
@@ -69,7 +67,6 @@ export function isUsageKind(value: unknown): value is UsageKind {
  */
 export const USAGE_REFS = [
   "sceneNpcs",
-  "npcRelations",
   "sceneLocation",
   "scenesPlayed",
   "logEntries",
@@ -193,33 +190,6 @@ function scenesWithNpc(db: GrimoireDb, campaign: string, npcId: string): UsageSi
     .map(sceneSite);
 }
 
-/**
- * `## Beziehungen` lines that REFERENCE the npc — lines in someone else's
- * list naming this npc (`otherNpcId`), which are exactly the rows the rename
- * rewrites (rename.ts). The npc's OWN outgoing lines are deliberately not
- * counted: they carry other ids, and its own entry only moves. Counting
- * them would make the preview promise more rewritten sites than there are.
- */
-function relationsPointingAtNpc(db: GrimoireDb, campaign: string, npcId: string): UsageSite[] {
-  return db
-    .select({ ownerId: npcRelations.npcId, name: npcs.name })
-    .from(npcRelations)
-    .innerJoin(
-      npcs,
-      and(eq(npcs.campaignId, npcRelations.campaignId), eq(npcs.id, npcRelations.npcId)),
-    )
-    .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.otherNpcId, npcId)))
-    .orderBy(npcRelations.npcId, npcRelations.pos)
-    .all()
-    .map((row) => ({
-      kind: "npc" as const,
-      id: row.ownerId,
-      title: row.name === "" ? row.ownerId : row.name,
-      path: npcPath(row.ownerId),
-      count: 1,
-    }));
-}
-
 function sessionSites(rows: { sessionId: string }[]): UsageSite[] {
   return rows.map((row) => ({
     kind: "session" as const,
@@ -324,7 +294,6 @@ function groupsFor(db: GrimoireDb, campaign: string, kind: UsageKind, id: string
 
   if (kind === "npc") {
     add("sceneNpcs", scenesWithNpc(db, campaign, id));
-    add("npcRelations", relationsPointingAtNpc(db, campaign, id));
   }
 
   if (kind === "location") {

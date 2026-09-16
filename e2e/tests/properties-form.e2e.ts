@@ -87,6 +87,10 @@ test("scene properties: chips, reference and status land in the file — nothing
   api,
 }) => {
   const pristine = await split(api, SCENE);
+  // The Ort the scene is moved into below has to EXIST — a reference names
+  // an entry, and nothing is created by naming it (ADR #18). „Neu anlegen"
+  // is the app's own path (tested in create.e2e.ts); here it is one call.
+  await api.send("POST", "beispiel/locations", { name: "Nordbucht" });
   // A key the form does not know (`x-custom`, seeded through the importer —
   // the only way such a key gets in): the patch must not carry it, so it has
   // to come out of the save verbatim.
@@ -127,8 +131,9 @@ test("scene properties: chips, reference and status land in the file — nothing
   // option, so this is the one place the spec uses the DOM id the field
   // builds for its list.)
   const suggestions = dialog.locator("#fm-location-options option");
-  // Two since issue #100: `bucht` is a scene's location, so it is an entry.
-  await expect(suggestions).toHaveCount(2);
+  // The three Orte the campaign has: the two of the example tree plus the
+  // one created above.
+  await expect(suggestions).toHaveCount(3);
   await expect(suggestions.first()).toHaveAttribute("value", "leuchtturm");
   // A reference CHIP names its entity next to the raw id.
   const npcChip = dialog.getByRole("listitem").filter({ hasText: "jorna" });
@@ -148,16 +153,18 @@ test("scene properties: chips, reference and status land in the file — nothing
   // of being lost with the closing dialog.
   await tags.fill("nachtszene");
 
-  // An unknown id stays typeable, and the hint says what saving will do:
-  // since issue #70 the write CREATES the entry, so a typo is visible as a
-  // new entry called that instead of a silent nothing.
-  await location.fill("nordbucht");
-  await expect(referenceHint(dialog, "Neu — wird beim Speichern angelegt.")).toBeVisible();
+  // An id nothing holds stays typeable, and the hint says the save would be
+  // refused — a typo is visible before the click instead of in a toast after
+  // it (ADR #18).
+  await location.fill("gibt-es-nicht");
+  await expect(referenceHint(dialog, "Unbekannt — Ort muss existieren.")).toBeVisible();
   await expect(referenceHint(dialog, "Der Leuchtturm von Salzhafen")).toHaveCount(0);
+  // The Ort that exists resolves to its name, and that is the save below.
+  await location.fill("nordbucht");
+  await expect(referenceHint(dialog, "Nordbucht")).toBeVisible();
 
-  // A CHAPTER is the one reference that is NOT created by naming it (ADR #14 —
-  // the server answers 400), so the hint must not promise it. Typed and taken
-  // back, so the save below stays the one this spec is about.
+  // A CHAPTER says the same thing, and the server answers 400 for it too.
+  // Typed and taken back, so the save below stays the one this spec is about.
   const chapter = dialog.getByLabel("Kapitel");
   await chapter.fill("99-nirgendwo");
   await expect(referenceHint(dialog, "Unbekannt — Kapitel muss existieren.")).toBeVisible();
@@ -173,7 +180,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   const article = page.getByRole("article");
   await expect(article).toContainText("#stealth");
   await expect(article).toContainText("#nachtszene");
-  await expect(article.getByText("nordbucht", { exact: true })).toBeVisible();
+  await expect(article.getByText("Nordbucht", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Entwurf" })).toBeVisible();
   // The location IS the group since issue #100, so the scene MOVED — and the
   // URL follows it (replace, so „zurück" does not return to the old address).
@@ -191,9 +198,9 @@ test("scene properties: chips, reference and status land in the file — nothing
     /\/beispiel\/entry\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
   );
 
-  // The chapter overview re-sorts: a „nordbucht" section, no „leuchtturm" one.
+  // The chapter overview re-sorts: a „Nordbucht" section, no „leuchtturm" one.
   await page.goto("/beispiel");
-  await expect(page.getByRole("heading", { level: 3, name: "nordbucht" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 3, name: "Nordbucht" })).toBeVisible();
   await expect(
     page.getByRole("heading", { level: 3, name: "Der Leuchtturm von Salzhafen" }),
   ).toHaveCount(0);
@@ -207,8 +214,9 @@ test("scene properties: chips, reference and status land in the file — nothing
   const after = await split(api, SCENE);
   expect(after.properties.tags).toEqual(["social", "travel", "stealth", "nachtszene"]);
   expect(after.properties.location).toBe("nordbucht");
-  // …and the referenced Ort now has its own (empty) entry — issue #70.
-  expect(await api.exists("locations/nordbucht")).toBe(true);
+  // …and the Ort it names is untouched: a scene references its group, it
+  // never writes it.
+  expect((await api.file("locations/nordbucht")).properties.name).toBe("Nordbucht");
   expect(after.properties.status).toBe("draft");
   // … the untouched ones with their values, the unknown one included …
   expect(after.properties["x-custom"]).toBe("bleibt");
@@ -222,70 +230,73 @@ test("scene properties: chips, reference and status land in the file — nothing
   expect(after.body).toBe(pristine.body);
 });
 
-test('free text in the Ort field creates the Ort under the typed NAME (#100)', async ({
+test("the Ort field reads a name as its id — a missing Ort is refused", async ({
   page,
   api,
 }) => {
   // The group a scene sits under IS its `location`, and the column holds an
-  // id — but that is the app's problem, not the DM's. The form used to refuse
-  // free text („Keine Orts-id — „der-alte-hafen" verwenden.") and disable
-  // Speichern; it now slugs what was typed and sends the text as the new
-  // entry's NAME, in the same write.
+  // id — but the DM types a name, and the form reads it as the id it means.
+  // What the save cannot do is invent the entry: a reference names something
+  // that exists (ADR #18), so „Der alte Hafen" is refused until that Ort is
+  // there — and then the very same save lands.
   await page.goto(SCENE_URL);
   const dialog = await openProperties(page);
   const ort = dialog.getByLabel("Ort");
   const save = dialog.getByRole("button", { name: "Speichern" });
 
-  // Typing the NAME of an existing Ort resolves to that Ort — the save would
-  // land on the entry that is already there, so nothing is promised.
+  // Typing the NAME of an existing Ort resolves to that Ort.
   await ort.fill("Leuchtturm");
   await expect(referenceHint(dialog, "Der Leuchtturm von Salzhafen")).toBeVisible();
 
-  // Text no slug can be derived from is the one thing that still blocks.
+  // Text no slug can be derived from is blocked by the form itself.
   await ort.fill("???");
   await expect(dialog.getByText('„???“ ergibt keine Orts-id')).toBeVisible();
   await expect(save).toBeDisabled();
 
-  // And a new name says what saving will do with it.
+  // A name no Ort holds: typeable, and the hint says it has to exist.
   await ort.fill("Der alte Hafen");
-  await expect(
-    referenceHint(dialog, 'Neu — wird als Ort „Der alte Hafen“ angelegt.'),
-  ).toBeVisible();
+  await expect(referenceHint(dialog, "Unbekannt — Ort muss existieren.")).toBeVisible();
   await expect(save).toBeEnabled();
   await save.click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  // The scene moved into the new group, and the slug is what the file holds.
+  // The server refuses it in the UI language, the dialog stays open on what
+  // was typed, and NOTHING was written — neither the scene nor an entry.
+  await expect(
+    dialog.getByText('Den Ort „der-alte-hafen“ gibt es nicht — bitte zuerst anlegen.'),
+  ).toBeVisible();
+  await expect(ort).toHaveValue("Der alte Hafen");
+  expect(await api.exists("locations/der-alte-hafen")).toBe(false);
+  expect((await api.properties(SCENE)).location).toBe("leuchtturm");
+
+  // With the Ort created, the same save lands and the scene moves into it.
+  await api.send("POST", "beispiel/locations", { name: "Der alte Hafen" });
+  await save.click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page).toHaveURL(
     /\/beispiel\/entry\/01-salzhafen\/der-alte-hafen\/lighthouse-arrival$/,
   );
   await expect.poll(() => api.properties(SCENE)).toHaveProperty("location", "der-alte-hafen");
 
-  // The Ort exists and is called what the DM typed — not by its own id.
-  expect(await api.exists("locations/der-alte-hafen")).toBe(true);
-  expect((await api.file("locations/der-alte-hafen")).properties.name).toBe("Der alte Hafen");
-
-  // …and the chapter overview heads the group with that name.
+  // …and the chapter overview heads the group with the Ort's name.
   await page.goto("/beispiel");
   await expect(page.getByRole("heading", { level: 3, name: "Der alte Hafen" })).toBeVisible();
 });
 
-test('a rejected save shows the SERVER sentence, not the generic one (#100)', async ({
-  page,
-}) => {
+test("a rejected save shows the SERVER sentence, not the generic one", async ({ page }) => {
   // The shared write layer answered every non-conflict rejection with its
-  // caller's generic wording, so a 400 that names exactly what is wrong —
-  // `location_not_an_id` with its suggestion, or this unknown chapter — was
-  // invisible to the DM. An unknown CHAPTER is the reachable case: it is the
-  // one reference the app deliberately does not block (ADR #14), because
-  // only the server knows which chapters exist.
+  // caller's generic wording, so a 400 that names exactly what is wrong was
+  // invisible to the DM. An unknown chapter is one of the five reference
+  // refusals, and the app builds its sentence from the code (ADR #18).
   await page.goto(SCENE_URL);
   const dialog = await openProperties(page);
   await dialog.getByLabel("Kapitel").fill("99-nirgendwo");
   await dialog.getByRole("button", { name: "Speichern" }).click();
 
-  // The server's own text, and the dialog stays open on the typed value.
-  await expect(dialog.getByText("unknown chapter: 99-nirgendwo")).toBeVisible();
+  // The catalog sentence for the code, and the dialog stays open on the
+  // typed value.
+  await expect(
+    dialog.getByText('Das Kapitel „99-nirgendwo“ gibt es nicht — bitte zuerst anlegen.'),
+  ).toBeVisible();
   await expect(dialog.getByText("Eigenschaften nicht gespeichert")).toHaveCount(0);
   await expect(dialog.getByLabel("Kapitel")).toHaveValue("99-nirgendwo");
 });

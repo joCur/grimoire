@@ -8,14 +8,13 @@
 // The handle is opened LAZILY rather than at module import, so that importing
 // the app for in-process tests stays free of side effects (no database file
 // appearing next to the repository). The first access opens the file, runs the
-// schema migrator (client.ts), then the job cleanup of issue #23 and the
-// reference backfill; every later call gets the memoized handle.
+// schema migrator (client.ts) and then the job cleanup of issue #23; every
+// later call gets the memoized handle.
 
 import { getDbFile } from "../config";
 import { openDb, type GrimoireDb, type OpenDb } from "../db/client";
 import type { GroupMigrationOutcome } from "../db/group-migration";
 import { failInterruptedJobs } from "../db/job-boot";
-import { backfillReferences } from "./ref-backfill";
 
 /** What `initStore` was called with — reported on boot. */
 export interface StoreInfo {
@@ -28,12 +27,6 @@ export interface StoreInfo {
    * (issue #23) — the runs the previous process took down with it.
    */
   interruptedJobs: number;
-  /**
-   * `<campaign>/<npc-id>` per empty npc row this boot created for a dangling
-   * reference (issue #70, store/ref-backfill.ts). Empty on every boot after
-   * the first — the pass only inserts what has no row.
-   */
-  backfilledNpcs: string[];
   /**
    * What the one-time `group_slug` -> `location` step of issue #100 changed
    * (db/group-migration.ts): the scenes whose address moved, the location
@@ -66,15 +59,11 @@ export async function initStore(options: { file?: string } = {}): Promise<Grimoi
     // crash is failed here — with a German sentence the app shows — instead of
     // being polled forever. Finished jobs are untouched and stay applyable.
     const interruptedJobs = failInterruptedJobs(handle.db);
-    // Issue #70: a referenced entity is never missing, only empty. Every
-    // write path holds that now; this pass holds it for the migrated stock.
-    const refBackfill = backfillReferences(handle.db);
     opened = handle;
     info = {
       file,
       backend: handle.client.backend,
       interruptedJobs,
-      backfilledNpcs: refBackfill.created,
       groupMigration: handle.groupMigration,
     };
     return handle.db;

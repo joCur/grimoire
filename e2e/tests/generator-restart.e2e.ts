@@ -162,13 +162,16 @@ test("a finished job survives a restart whole and is still applyable", async ({}
     // The DM's own edit came back with it.
     expect((after.draftEdits as Record<string, string>)[DRAFT_PATH]).toContain(edited.trim());
 
-    const scenes = (after.result as { scenes: unknown[] }).scenes;
+    // The scene AND the entries it references: a proposal is applied as one
+    // batch, because a scene cannot name an entry that does not exist
+    // (ADR #18).
+    const result = after.result as { scenes: unknown[]; stubs: unknown[] };
     const written = await api.send<{ written: string[] }>("POST", "beispiel/generate/apply", {
-      scenes,
-      stubs: [],
+      scenes: result.scenes,
+      stubs: result.stubs,
       jobId: after.id,
     });
-    expect(written.written).toEqual([SCENE_PATH]);
+    expect(written.written).toContain(SCENE_PATH);
     const stored = await api.properties(SCENE_PATH);
     expect(stored.title).toBe(SCENE_TITLE);
     expect(stored.status).toBe("draft");

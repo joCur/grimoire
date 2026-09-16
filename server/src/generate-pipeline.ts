@@ -225,7 +225,7 @@ export function validateOutlineReply(
       return;
     }
     // An id the campaign ALREADY has is deliberately not an error here: since
-    // issue #70 a reference creates an empty row, so „locations/bucht exists“
+    // an entry may exist and hold nothing, so „locations/bucht exists“
     // routinely means „a scene mentioned it and nobody has written it yet“ —
     // exactly the entry this run should fill. The apply path is what decides
     // whether a write collides, and it always was.

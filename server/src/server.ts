@@ -62,9 +62,9 @@
 //                                              part of its address and chapters are never
 //                                              created by being named (ADR #14)
 //   [x] POST /api/:campaign/npcs               { name } -> 201 the npc entry. An EMPTY
-//                                              entry for the derived id (one a reference
-//                                              created, issue #70) is FILLED rather than
-//                                              collided with; an entry that holds content
+//                                              entry for the derived id — one the DM
+//                                              created and left empty — is FILLED rather
+//                                              than collided with; one that holds content
 //                                              answers the `slug_taken` 409; a RESERVED
 //                                              id answers 409 { code: "slug_reserved" },
 //                                              same shape, different sentence
@@ -77,11 +77,11 @@
 //                                              an entry, not a missing one (a 404 would
 //                                              make a glossary the DM had just emptied
 //                                              unreachable from the editor).
-//                                              inbox does the same since #70 — same
-//                                              reasoning, it had been left behind.
+//                                              inbox answers the same way, for the same
+//                                              reason.
 //                                              `rev` of glossary/inbox is that
 //                                              DOCUMENT's own counter, not campaigns.version
-//   [x] PATCH /api/:campaign/properties        { path, rev, patch, locationName? } — only if rev is
+//   [x] PATCH /api/:campaign/properties        { path, rev, patch } — only if rev is
 //                                              unchanged, otherwise
 //                                              409 { code: "rev_conflict", rev }.
 //                                              A scene's `chapter` may be SET (400 when
@@ -243,8 +243,8 @@
 //                                              `rev` — 409 { code: "rev_conflict", rev }
 //                                              and nothing written when the entry moved.
 //                                              FTS and `[[slug]]` references follow (it is
-//                                              the ordinary write path, so the #70 rule
-//                                              „Referenzieren legt an" applies as well);
+//                                              the ordinary write path, so a reference
+//                                              that names nothing is a 400 here too);
 //                                              `jobId` discards the job in the same
 //                                              transaction. `id` and the app-managed keys
 //                                              are refused (400) — an id change is
@@ -348,8 +348,8 @@
 //   [x] POST /api/:campaign/review/thread      { chapter, text } -> append `- [ ] text` under
 //                                              ## Offene Fäden of the chapter entry
 //   [x] POST /api/:campaign/review/npc-stub    { id, name?, note? } -> create npcs/<id>
-//                                              (status: unknown), or answer with the entry the
-//                                              id already has — idempotent since #70
+//                                              (status: unknown), or answer with the entry
+//                                              the id already has — idempotent
 //   [x] POST /api/:campaign/review/inbox-done  { line } -> rewrite the inbox line to `- [x] …`
 //                                              (documented append-only exception)
 //
@@ -426,15 +426,6 @@ if (import.meta.main) {
   void store;
   const info = (await import("./store/handle")).storeInfo();
   console.log(`Database ready (${info?.backend ?? "unknown backend"}).`);
-  // Issue #70: a boot that CHANGED data says so. The pass creates an empty
-  // npc row for every dangling npc reference and is a no-op from the second
-  // boot on (store/ref-backfill.ts).
-  if (info !== undefined && info.backfilledNpcs.length > 0) {
-    console.log(
-      `${info.backfilledNpcs.length} referenced npc(s) had no entry and got an empty one: ` +
-        info.backfilledNpcs.join(", "),
-    );
-  }
   // Issue #100: the one-time step that turned the file era's group
   // directories into `location` references. It names EVERY scene whose
   // address moved — an old link still resolves (the app follows the

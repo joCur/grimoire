@@ -71,7 +71,6 @@ test("migrations create every table of the schema plus the FTS index", async () 
       "scene_npcs",
       "scene_tags",
       "npcs",
-      "npc_relations",
       "locations",
       "sessions",
       "session_pauses",
@@ -210,6 +209,10 @@ test("a composite primary key cascades on update", async () => {
   const { db, close } = await openDb(":memory:");
   try {
     db.insert(campaigns).values({ id: "beispiel", name: "Beispiel" }).run();
+    // The chapter and the location first: a scene's references are foreign
+    // keys, so the entries it names have to be there.
+    db.run(sql`insert into chapters (campaign_id, id, title, pos) values ('beispiel', '01', 'Kapitel', 0)`);
+    db.run(sql`insert into locations (campaign_id, id, name) values ('beispiel', 'hafen', 'Hafen')`);
     db.run(
       sql`insert into scenes (campaign_id, id, chapter_id, location, title, pos) values ('beispiel', 'alt', '01', 'hafen', 'Szene', 0)`,
     );

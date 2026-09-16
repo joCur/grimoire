@@ -47,9 +47,9 @@ Gruppenfeld. Für die Suite heißt das drei Dinge:
   Quelldateien liegen im Verzeichnis `hafen/`, nennen aber verschiedene Orte,
   also lauten die Adressen `01-salzhafen/leuchtturm/lighthouse-arrival` und
   `01-salzhafen/bucht/smuggler-captured`. `hafen` ist keine Gruppe und kommt
-  in keiner Zusicherung vor. `locations/bucht` gibt es im Baum nicht — der
-  Import legt den Eintrag an, weil eine Szene ihn nennt („Referenzieren legt
-  an", #70), die Kampagne hat also **zwei** Orte.
+  in keiner Zusicherung vor. Beide Orte haben einen eigenen Eintrag im Baum
+  (`locations/leuchtturm`, `locations/bucht`) — eine Referenz legt nichts an
+  (ADR #18) —, die Kampagne hat also **zwei** Orte.
 - **Eine veraltete Szenen-Adresse ist kein 404.** Sie nennt dieselbe id, der
   Server löst sie auf und antwortet mit der aktuellen Adresse (`path`); die
   App ersetzt die URL (ADR #17). `api.exists(<alte Adresse>)` ist deshalb
@@ -158,7 +158,7 @@ keinen Zustand und kann mehrere Worker parallel bedienen:
 
 - ein Abschnitt „## Bestehender Eintrag" im Prompt → **Ergänzungs-Lauf**
   (Issue #36). Die Antwort spiegelt den Eintrag zurück und hängt etwas an:
-  bei einem LEEREN NPC (den #70 beim Referenzieren angelegt hat) werden
+  bei einem LEEREN NPC (angelegt und nicht gefüllt) werden
   `role`/`voice` gefüllt und ein Körper geschrieben, bei allem anderen kommt
   genau ein neuer `## If:`-Abschnitt dazu — jeder bestehende Block
   unverändert. Diese Verzweigung wird ZUERST geprüft: ein Szenen-Ergänzungs-
@@ -266,7 +266,7 @@ auf Block-Ebene — eine Block-Entscheidung überlebt den Reload.
 
 `tests/augment.e2e.ts` ist die Ergänzungs-Hälfte von Pfad 6 („Mit KI
 ergänzen", Issue #36): derselbe Lauf auf einen Eintrag, den es schon gibt.
-Der Spec belegt AK5 — leerer #70-NPC → ergänzen → Löcher gefüllt, während
+Der Spec belegt AK5 — leerer NPC-Eintrag → ergänzen → Löcher gefüllt, während
 `name` und `status` (beide gefüllt) per Default NICHT ersetzt werden;
 vorbereitete Szene → ein neuer Handlungsstrang als zusätzlicher Block,
 jeder bestehende Block Zeichen für Zeichen gleich, `status: ready` bleibt;

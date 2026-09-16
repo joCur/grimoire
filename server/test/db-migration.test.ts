@@ -27,7 +27,6 @@ import {
   locations,
   logEntries,
   meta,
-  npcRelations,
   npcs,
   sceneNpcs,
   sceneTags,
@@ -168,8 +167,8 @@ describe("AK1 — examples/beispiel imports completely and cleanly", () => {
         .map((r) => r.tag),
     ).toEqual(["social", "travel"]);
 
-    // npcs — every contract field, and `## Beziehungen` decomposed into rows
-    // AND removed from the body (it is rendered from the rows now).
+    // npcs — every contract field, and the whole text as it was written:
+    // `## Beziehungen` is prose and stays in the body.
     const jorna = db.select().from(npcs).where(eq(npcs.id, "jorna")).all()[0];
     expect(jorna?.name).toBe("Hafenmeisterin Jorna");
     expect(jorna?.role).toContain("Hafenmeisterin von Salzhafen");
@@ -179,20 +178,15 @@ describe("AK1 — examples/beispiel imports completely and cleanly", () => {
     expect(jorna?.chapterId).toBe("01-salzhafen");
     expect(Object.keys(unpackJson(jorna?.quickstats))).toContain("insight");
     expect(jorna?.body).toContain("## Weiß");
-    expect(jorna?.body).not.toContain("## Beziehungen");
-
-    const relations = db
-      .select()
-      .from(npcRelations)
-      .where(eq(npcRelations.npcId, "jorna"))
-      .all();
-    expect(relations).toHaveLength(1);
-    expect(relations[0]?.otherNpcId).toBe("fenn");
-    expect(relations[0]?.note).toBe("kennt ihn von früher — er fuhr einst ehrlich zur See");
-    expect(relations[0]?.pos).toBe(0);
+    expect(jorna?.body).toContain("## Beziehungen");
+    expect(jorna?.body).toContain("- fenn: kennt ihn von früher — er fuhr einst ehrlich zur See");
 
     // locations — including the hyphenated properties key.
-    const leuchtturm = db.select().from(locations).all()[0];
+    const leuchtturm = db
+      .select()
+      .from(locations)
+      .where(eq(locations.id, "leuchtturm"))
+      .all()[0];
     expect(leuchtturm?.id).toBe("leuchtturm");
     expect(leuchtturm?.roll20Page).toBe("Leuchtturm");
     expect(leuchtturm?.body).toContain("[!readaloud]");
@@ -416,12 +410,20 @@ Freitext ganz oben, der zu keinem Begriff gehört.
     // 8. unknown file type and a path the format does not describe.
     expect(reasonFor("notizen.txt").join(" ")).toContain("Keine Markdown-Datei");
     expect(reasonFor("npcs/alt/fenn.md").join(" ")).toContain("Unterordner");
+    // 9. references that name nothing in THIS tree — the copied scene brings
+    //    a `location:` and an `npcs:` entry along. Both are left out and
+    //    reported; the import creates neither.
+    expect(reasonFor("01-kapitel/aaa-original.md").join(" ")).toContain("hat keinen Ort im Baum");
+    expect(reasonFor("01-kapitel/aaa-original.md").join(" ")).toContain(
+      "dazu gibt es keinen NPC im Baum",
+    );
 
     // NOTHING IS TOUCHED: the files stay in the tree, the report names them.
     expect(new Set(report.map((r) => r.path))).toEqual(
       new Set([
         "01-kapitel/ort/kaputt.md",
         "01-kapitel/ort/nackt.md",
+        "01-kapitel/aaa-original.md",
         "01-kapitel/zzz-kollision.md",
         "sessions/2026-02-01.md",
         "glossary.md",
@@ -584,6 +586,11 @@ describe("no silent content loss", () => {
   test("`scenes_played` keeps repetitions and their order", async () => {
     const id = await campaignWith({
       "_campaign.md": "---\nid: review\n---\n",
+      "01-x/_chapter.md": "---\nid: 01-x\ntitle: Kapitel\n---\n",
+      // The two scenes the list names — a played scene is a reference, so
+      // there is an entry for each of them.
+      "01-x/hafen.md": "---\nid: hafen\ntitle: Am Hafen\n---\n",
+      "01-x/leuchtturm.md": "---\nid: leuchtturm\ntitle: Im Turm\n---\n",
       "sessions/2026-03-03.md":
         "---\nid: 2026-03-03\nscenes_played: [hafen, leuchtturm, hafen]\n---\n",
     });

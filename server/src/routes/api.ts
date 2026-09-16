@@ -258,34 +258,24 @@ api.get("/:campaign/knowledge", async (c) =>
 
 // --- write endpoints (issue #5) ---------------------------------------------------
 
-// PATCH /api/:campaign/properties { path, rev, patch, locationName? } ->
-// EntryResponse
+// PATCH /api/:campaign/properties { path, rev, patch } -> EntryResponse
 // patch is a flat object of properties keys to set; null deletes a key.
-// 409 { error, rev } when the file changed on disk since it was read.
+// 409 { error, rev } when the entry changed since it was read.
 //
-// `locationName` is the one value that is NOT a properties key: the display
-// name for the Ort a scene's `location` CREATES (issue #100 follow-up). The
-// properties form takes free text in the Ort field, slugs it into `location`
-// and sends the typed text here, so the new entry is called what the DM
-// typed. It is applied only when the row is inserted — an existing location
-// is never renamed through a scene.
+// A reference in the patch — `chapter`, `location`, an `npcs` entry — has to
+// name an entry that exists: 400 with the code the app turns into „bitte
+// zuerst anlegen", never a new entry as a side effect.
 api.patch("/:campaign/properties", async (c) => {
-  const body = await jsonBody(c, ["path", "rev", "patch", "locationName"]);
+  const body = await jsonBody(c, ["path", "rev", "patch"]);
   const rel = body.path;
   const rev = body.rev;
   const patch = body.patch;
-  const locationName = body.locationName;
   if (typeof rel !== "string") throw new ApiError(400, "path must be a string");
   if (typeof rev !== "number" || !Number.isFinite(rev)) {
     throw new ApiError(400, "rev must be a number");
   }
   if (!isPlainObject(patch)) throw new ApiError(400, "patch must be an object");
-  if (locationName !== undefined && typeof locationName !== "string") {
-    throw new ApiError(400, "locationName must be a string");
-  }
-  return c.json(
-    await patchProperties(c.req.param("campaign"), rel, rev, patch, { locationName }),
-  );
+  return c.json(await patchProperties(c.req.param("campaign"), rel, rev, patch));
 });
 
 // PUT /api/:campaign/entry { path, rev, body } -> EntryResponse
@@ -516,7 +506,7 @@ api.post("/:campaign/scenes", async (c) => {
 });
 
 // POST /api/:campaign/npcs { name } -> 201 EntryResponse
-// An EMPTY entry for the derived id (one a reference created, issue #70) is
+// An EMPTY entry for the derived id — one the DM created and left empty — is
 // FILLED instead of colliding; an entry with content answers 409.
 api.post("/:campaign/npcs", async (c) => {
   const body = await jsonBody(c, ["name", "id"]);
@@ -631,9 +621,9 @@ api.post("/:campaign/review/thread", async (c) => {
 
 // POST /api/:campaign/review/npc-stub { id, name?, note? } -> EntryResponse
 // Creates the npc entry (status: unknown) — or, when the id already has one,
-// answers with THAT entry (issue #70): the caller's goal is "this id has an
+// answers with THAT entry: the caller's goal is "this id has an
 // entry", so the call is idempotent. An entry that holds content is never
-// overwritten; an EMPTY one (a reference created it) is filled in.
+// overwritten; an EMPTY one — created and never filled in — is filled in.
 api.post("/:campaign/review/npc-stub", async (c) => {
   const body = await jsonBody(c, ["id", "name", "note"]);
   if (typeof body.id !== "string") throw new ApiError(400, "id must be a string");

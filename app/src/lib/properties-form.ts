@@ -237,15 +237,15 @@ export function propertiesKindLabel(kind: EntityKind, t: Translate): string | un
 // --- the Ort field: free text in, a slug out (issue #100 follow-up) ----------
 //
 // `location` IS the group a scene sits under in its chapter, so it holds an
-// entity id — and for a while the form said exactly that and nothing else:
-// free text was refused with „Keine Orts-id — „der-alte-hafen" verwenden."
-// and a disabled Speichern. That put the slug rule in front of the DM as
-// homework. It is the app's job instead: the field takes what a DM types, the
-// hint says what saving will DO with it, and the save sends the slug plus the
-// typed text as the new entry's name.
+// entity id — but the DM types a NAME, and the field takes it: „Der alte
+// Hafen" is read as `der-alte-hafen`, so nobody has to spell slugs. What the
+// hint then says is which entry that id means, and „Unbekannt" when no Ort
+// has it: a reference names an entry that exists, so the save is refused
+// until the Ort is there.
 //
-// The one case that still blocks is text no slug can be derived from („???"):
-// an id is never invented out of nothing (shared/slug.ts).
+// Text no slug can be derived from („???") blocks the save in the form
+// itself: an id is never invented out of nothing (shared/slug.ts), so there
+// is nothing to send.
 
 /** The id the typed text stands for — "" when nothing usable is left. */
 export function locationRefId(text: string): string {
@@ -260,12 +260,9 @@ export type LocationRef =
   | { kind: "empty" }
   /** An entry that exists; `name` is its name, absent when it has none. */
   | { kind: "known"; id: string; name?: string }
-  /**
-   * An entry the save CREATES. `name` is the typed display name — absent when
-   * the DM typed the bare id, which is then the entry's name by fallback.
-   */
-  | { kind: "new"; id: string; name?: string }
-  /** Text that yields no id at all — the only state that blocks the save. */
+  /** No Ort has this id — the save will be refused until one does. */
+  | { kind: "unknown"; id: string }
+  /** Text that yields no id at all — the state the form itself blocks. */
   | { kind: "unusable"; value: string };
 
 export function locationRef(text: string, options: readonly FieldOption[]): LocationRef {
@@ -274,35 +271,10 @@ export function locationRef(text: string, options: readonly FieldOption[]): Loca
   const id = locationRefId(typed);
   if (id === "") return { kind: "unusable", value: typed };
   const hit = options.find((option) => option.value === id);
+  if (hit === undefined) return { kind: "unknown", id };
   // A label that equals the id is no name (referenceOptions labels a nameless
   // entry with its own id), so it is not worth a line under the field.
-  const name = typed === id ? undefined : typed;
-  return hit === undefined
-    ? { kind: "new", id, name }
-    : { kind: "known", id, name: hit.label === id ? undefined : hit.label };
-}
-
-/**
- * The display name a save sends alongside the patch (`locationName`): the
- * text the DM typed, whenever that text is not already the id itself. The
- * server uses it ONLY when it inserts the row, so this is always safe to send
- * — an existing Ort is never renamed by a scene — and the form does not need
- * to know which ids exist to decide.
- */
-export function propertiesLocationName(
-  fields: readonly PropertiesField[],
-  values: FormValues,
-): string | undefined {
-  for (const field of fields) {
-    if (field.source !== "locations" || field.control !== "reference") continue;
-    const value = values[field.key];
-    if (value === undefined || value.kind !== "text") continue;
-    const typed = value.text.trim();
-    const id = locationRefId(typed);
-    if (id === "" || id === typed) continue;
-    return typed;
-  }
-  return undefined;
+  return { kind: "known", id, name: hit.label === id ? undefined : hit.label };
 }
 
 // --- form state --------------------------------------------------------------
@@ -516,12 +488,11 @@ export function propertiesPatch(
  * there is no value to send. The hint under the field says what every other
  * text WILL do; this is the one that cannot be done.
  *
- * And an ID LIST (`npcs`, issue #70 audit): that list holds ids, not names —
- * every entry becomes a card and a reference the save creates — so the server
- * refuses a non-slug entry with a 400. Saying it here makes that a line under
- * the field before the click. `initial` is what the entry already holds and is
- * EXEMPT: an imported campaign may carry free text there, and
- * such a scene has to stay savable (the server exempts the same values).
+ * And an ID LIST (`npcs`): that list holds ids, not names — every entry is a
+ * reference to an npc entry — so a non-slug entry can name nothing and the
+ * server refuses it. Saying it here makes that a line under the field before
+ * the click. `initial` is what the entry already holds and is EXEMPT, so a
+ * scene stays savable whatever it carries today.
  */
 export function propertiesFormIssues(
   fields: readonly PropertiesField[],
@@ -697,11 +668,9 @@ export function writePropertiesForm(
   path: string,
   rev: number,
   patch: Record<string, unknown>,
-  /** The name for the Ort `location` creates — see propertiesLocationName. */
-  locationName?: string,
 ): Promise<RevWriteResult> {
   return writeWithRev(
-    () => patchProperties(campaign, { path, rev, patch, locationName }),
+    () => patchProperties(campaign, { path, rev, patch }),
     () => fetchEntry(campaign, path),
   );
 }

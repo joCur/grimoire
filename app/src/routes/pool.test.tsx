@@ -60,7 +60,7 @@ describe("PlannedGroup — the heading is the location", () => {
   });
 
   test("a location nobody has named yet shows its id", () => {
-    // The entry exists — referencing created it (#70) — and it has no name.
+    // The entry exists and has no name of its own.
     // The heading must be the word the DM typed, never a blank line: the
     // tree degrades an empty name to the id and so does this view, so the
     // fixture carries the EMPTY name the database actually holds.

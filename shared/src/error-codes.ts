@@ -35,11 +35,25 @@ export const ERROR_CODES = [
   /** 400, create: the typed name yields no id at all. `{ kind, field }` */
   "slug_empty",
   /**
-   * 400, scene write: `location` is neither empty nor an entity id
-   * (#100 — a scene's location is always a REFERENCE, and the reference
-   * creates the location row). `{ value, suggestion }`
+   * 400, scene write: `location` is neither empty nor an entity id — a
+   * scene's location is always a REFERENCE. `{ value, suggestion }`
    */
   "location_not_an_id",
+  /**
+   * The five REFERENCE refusals: a write names an entry that does not
+   * exist. Nothing is created by being named, so each of them asks the DM
+   * to create the entry first. All 400, all `{ value }`.
+   */
+  /** A scene's `location` names no location entry. */
+  "location_unknown",
+  /** An entry of a scene's npc list names no npc entry. */
+  "npc_unknown",
+  /** A `chapter` — of a scene, an npc or a location — names no chapter. */
+  "chapter_unknown",
+  /** The scene of a quick note names no scene entry. */
+  "log_scene_unknown",
+  /** An entry of a session's played scenes names no scene entry. */
+  "played_scene_unknown",
   /** 400, glossary write: one term appears twice. `{ term }` */
   "glossary_duplicate_term",
   /** 409, session start: an older session is still running. `{ path }` */

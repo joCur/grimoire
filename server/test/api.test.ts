@@ -182,12 +182,11 @@ describe("GET /api/:campaign/tree", () => {
     // apart even though they shared a directory.
     //
     // Ordered by the NAME the heading shows (issue #100 review), not by the
-    // id behind it: `leuchtturm` has an entry called „Der Leuchtturm von
-    // Salzhafen", `bucht` has none and falls back to its id.
+    // id behind it.
     expect(chapter.groups.map((g) => g.slug)).toEqual(["leuchtturm", "bucht"]);
     expect(chapter.groups.map((g) => g.name)).toEqual([
       "Der Leuchtturm von Salzhafen",
-      "bucht",
+      "Die Nordbucht",
     ]);
     const leuchtturm = chapter.groups.find((g) => g.slug === "leuchtturm")!;
     expect(leuchtturm.scenes.map((s) => s.id)).toEqual(["lighthouse-arrival"]);
@@ -203,8 +202,8 @@ describe("GET /api/:campaign/tree", () => {
     const t = await tree();
     expect(t.npcs.map((n) => n.id)).toEqual(["fenn", "jorna"]); // Fenn < Hafenmeisterin Jorna
     expect(t.npcs[0]!.name).toBe("Fenn");
-    // `bucht` has no file in examples/ — the import created the entry,
-    // because the contingency scene names it as its location (#100).
+    // Both locations the example campaign's scenes name have an entry of
+    // their own — a reference never creates one.
     expect(t.locations.map((l) => l.id).sort()).toEqual(["bucht", "leuchtturm"]);
     expect(t.sessions.map((s) => s.id)).toEqual(["2026-01-15"]);
     expect(t.sessions[0]!.scenes_played).toEqual(["lighthouse-arrival"]);

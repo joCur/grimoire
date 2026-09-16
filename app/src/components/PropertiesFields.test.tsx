@@ -71,18 +71,18 @@ describe("reference fields", () => {
     expect(html).toContain("Der Leuchtturm");
   });
 
-  test("an unknown id says the save will create it (#70)", () => {
+  test("an unknown id says the entry has to exist", () => {
     const html = render(sceneField("location"), { kind: "text", text: "nordbucht" });
     expect(html).toContain('value="nordbucht"');
-    expect(html).toContain("Neu — wird beim Speichern angelegt.");
+    expect(html).toContain("Unbekannt — Ort muss existieren.");
   });
 
-  test("free text in the Ort field promises the entry BY NAME (#100)", () => {
-    // `location` IS the group the scene sits under (issue #100) and it stores
-    // an id — but the DM types a name and the save slugs it, so the line says
-    // what will happen instead of handing over the slug as homework.
+  test("free text in the Ort field is read as its id", () => {
+    // `location` IS the group the scene sits under and it stores an id — but
+    // the DM types a name, so the line answers for the id that text means,
+    // instead of handing the slug over as homework.
     const html = render(sceneField("location"), { kind: "text", text: "Der alte Hafen" });
-    expect(html).toContain("Neu — wird als Ort „Der alte Hafen");
+    expect(html).toContain("Unbekannt — Ort muss existieren.");
     expect(html).not.toContain("Keine Orts-id");
   });
 

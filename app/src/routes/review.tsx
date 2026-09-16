@@ -166,7 +166,7 @@ export function ReviewRoute() {
   });
 
   const busyKey = act.isPending ? act.variables?.entry.key : undefined;
-  // No 409 case any more (issue #70): an id that already has an entry is
+  // No 409 case any more: an id that already has an entry is
   // LINKED, not refused, so the only thing left to report is a server that
   // did not answer.
   const npcError =

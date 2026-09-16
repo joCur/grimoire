@@ -43,7 +43,6 @@ import {
   inboxEntries,
   locations,
   logEntries,
-  npcRelations,
   npcs,
   sceneNpcs,
   sceneTags,
@@ -237,7 +236,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
     const groups: SceneGroup[] = [...bySlug.entries()]
       .map(([slug, list]) => ({
         slug,
-        // An entry always exists (referencing one creates it, #70), and an
+        // A referenced entry always exists (schema.ts rule 3), and an
         // unnamed one degrades to its id — still the word the DM typed.
         name: slug === "" ? "" : (locationNames.get(slug) ?? slug),
         scenes: list.sort((a, b) => cmp(a.path, b.path)),
@@ -531,19 +530,6 @@ export function knowledgeRows(db: GrimoireDb, campaign: string): KnowledgeRow[] 
     .all() as KnowledgeRow[];
 }
 
-export function relationRows(
-  db: GrimoireDb,
-  campaign: string,
-  npcId: string,
-): Array<{ otherNpcId: string; note: string }> {
-  return db
-    .select({ otherNpcId: npcRelations.otherNpcId, note: npcRelations.note })
-    .from(npcRelations)
-    .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.npcId, npcId)))
-    .orderBy(asc(npcRelations.pos))
-    .all();
-}
-
 /**
  * Render the row a campaign-relative path addresses. 404 when there is no
  * such row — including for a scene whose path names the wrong chapter or
@@ -591,7 +577,7 @@ export function readByLocator(
         .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, locator.id)))
         .all()[0] as NpcRow | undefined;
       if (row === undefined) throw new ApiError(404, "entry not found");
-      return renderNpc(row, relationRows(db, campaign, row.id));
+      return renderNpc(row);
     }
     case "location": {
       const row = db
@@ -618,9 +604,9 @@ export function readByLocator(
       // different edits can hash alike); a per-entry counter is the exact
       // one.
       // An EMPTY inbox is an empty entry, not a missing one (200) — the
-      // same correction the glossary already had below (#70): "no rows yet"
-      // was the file era's "no file yet", and it made every reader special-
-      // case a 404 that means nothing is wrong.
+      // same answer the glossary gives below: "no rows yet" was the file
+      // era's "no file yet", and it made every reader special-case a 404
+      // that means nothing is wrong.
       return renderInbox(campaign, rows, campaignRowValue.inboxRev);
     }
     case "glossary":

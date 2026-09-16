@@ -98,9 +98,8 @@ export function changedCountLabel(count: number, t: Translate): string {
 
 /**
  * The catalog key of each reference kind. The wire keeps stable English keys
- * (`UsageRef`); the sentence („3 Szenen, 2 Beziehungen, 4 Log-Zeilen" /
- * "3 scenes, 2 relationships, 4 log lines") is an ICU plural per key, so no
- * caller has to pick a form.
+ * (`UsageRef`); the sentence („3 Szenen, 4 Log-Zeilen" / "3 scenes, 4 log
+ * lines") is an ICU plural per key, so no caller has to pick a form.
  *
  * `bodyRefs` (issue #68) is a body text that says `[[<id>]]` — „Textstelle"
  * is what the DM sees on the page, a name in running prose rather than a
@@ -108,7 +107,6 @@ export function changedCountLabel(count: number, t: Translate): string {
  */
 const USAGE_REF_KEY: Record<UsageRef, MessageKey> = {
   sceneNpcs: "rename.usage.sceneNpcs",
-  npcRelations: "rename.usage.npcRelations",
   sceneLocation: "rename.usage.sceneLocation",
   scenesPlayed: "rename.usage.scenesPlayed",
   logEntries: "rename.usage.logEntries",

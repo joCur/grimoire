@@ -51,17 +51,17 @@ test("rename with usage preview: count first, then the cascade", async ({ page, 
   await input.fill("hafenmeisterin");
   await dialog.getByRole("button", { name: "Vorschau" }).click();
 
-  // The preview: what hangs off this id, in German — one scene naming the npc
-  // in its `npcs:` list and fenn's `## Beziehungen` line about her.
+  // The preview: what hangs off this id, in German — the one scene that
+  // names the npc in its `npcs:` list. Fenn's `## Beziehungen` line about
+  // her is prose and therefore no reference (ADR #18).
   const summary = dialog.getByTestId("rename-usage");
-  await expect(summary).toContainText("2 Verwendungen");
+  await expect(summary).toContainText("1 Verwendung");
   await expect(summary).toContainText("1 Szene");
-  await expect(summary).toContainText("1 Beziehung");
 
-  // …and which documents that means: those two plus her own, which moves.
-  await expect(dialog).toContainText("betrifft 3 Einträge");
+  // …and which entries that means: that scene plus her own, which moves.
+  await expect(dialog).toContainText("betrifft 2 Einträge");
   await expect(dialog).toContainText(SCENE);
-  await expect(dialog).toContainText("npcs/fenn");
+  await expect(dialog).not.toContainText("npcs/fenn");
 
   // Nothing has been written yet: the preview is a dry run.
   expect(await api.exists(NPC)).toBe(true);
@@ -78,9 +78,9 @@ test("rename with usage preview: count first, then the cascade", async ({ page, 
   expect(await api.exists(RENAMED)).toBe(true);
   const scene = await api.file(SCENE);
   expect(scene.properties.npcs).toEqual(["hafenmeisterin"]);
-  expect(await api.body("npcs/fenn")).toContain("- hafenmeisterin:");
-  // The prose of the other scene still says "Jorna" — a mention is not a
-  // reference (README).
+  // The prose of the other scene still says "Jorna", and so does fenn's
+  // relations line — a mention in text is not a reference (README).
+  expect(await api.body("npcs/fenn")).toContain("- jorna:");
   expect(await api.body("01-salzhafen/bucht/smuggler-captured")).toContain("Jorna");
 
   // The endpoint behind the preview agrees, for the new id: the rows moved,
@@ -88,6 +88,6 @@ test("rename with usage preview: count first, then the cascade", async ({ page, 
   const usage = await api.get<{ total: number }>(
     "beispiel/usage?kind=npc&id=hafenmeisterin",
   );
-  expect(usage.total).toBe(2);
+  expect(usage.total).toBe(1);
   expect((await api.fetch("beispiel/usage?kind=npc&id=jorna")).status).toBe(404);
 });

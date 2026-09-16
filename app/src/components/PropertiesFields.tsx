@@ -220,26 +220,15 @@ function ReferenceOptions({ id, options }: { id: string; options: readonly Field
 
 /**
  * What the typed id resolves to. Says nothing while the field is empty, names
- * the entity when the id is known, and otherwise says what SAVING will do —
- * because since issue #70 an unknown id is not a hole that stays open: the
- * save creates the entry, so the DM should know that before clicking, and a
- * typo is visible as "a new entry called that" instead of a silent nothing.
+ * the entity when the id is known, and says „Unbekannt" when nothing has
+ * that id — a reference names an entry that exists, so the save would be
+ * refused, and the DM should see that before clicking rather than in a toast
+ * afterwards.
  *
- * Two exceptions, and both are about telling the truth about the save:
- *
- *   * `location` is the group the scene sits under in its chapter (issue
- *     #100), so it STORES an id — but the DM types a name, and the form
- *     slugs it (issue #100 follow-up). This line therefore names the entry
- *     the save will land on: the existing Ort's name, or „Neu — wird als Ort
- *     „…" angelegt" for a name that has none yet. It used to hand the DM the
- *     slug as homework („Keine Orts-id — „der-alte-hafen" verwenden.") and
- *     block the save; the only text that still blocks is text no slug can be
- *     derived from, and `propertiesFormIssues` says that one.
- *   * CHAPTERS are not created by naming them (ADR #14, #70 audit): a scene
- *     under an unknown chapter would fall out of the tree, so the server
- *     answers 400 for every kind. This line used to promise the entry anyway
- *     — the save then failed with the server's message. It now says what
- *     actually happens.
+ * `location` is the one field whose text is not its id: it is the group the
+ * scene sits under in its chapter, so it STORES an id while the DM types a
+ * name, and the form slugs it. The line therefore resolves over the SLUG —
+ * typing the name of an existing Ort shows that Ort.
  */
 function ReferenceHint({
   field,
@@ -268,13 +257,9 @@ function ReferenceHint({
         return ref.name === undefined ? null : (
           <p className="text-[11.5px] text-faint">{ref.name}</p>
         );
-      case "new":
+      case "unknown":
         return (
-          <p className="text-[11.5px] text-faint">
-            {ref.name === undefined
-              ? t("properties.ref.new")
-              : t("properties.ref.locationNew", { name: ref.name })}
-          </p>
+          <p className="text-[11.5px] text-faint">{t("properties.ref.unknownLocation")}</p>
         );
     }
   }
@@ -286,8 +271,7 @@ function ReferenceHint({
       <p className="text-[11.5px] text-faint">{t("properties.ref.unknownChapter")}</p>
     );
   }
-  // An unknown id is not a hole: the save creates the entry (#70).
-  return <p className="text-[11.5px] text-faint">{t("properties.ref.new")}</p>;
+  return <p className="text-[11.5px] text-faint">{t("properties.ref.unknown")}</p>;
 }
 
 /** Chips for a string list (`tags`, `handouts`) or an id list (`npcs`). */

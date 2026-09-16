@@ -20,8 +20,11 @@
 //      location entry is created with the text as its `name`. The format's
 //      free-text exception is gone (#100), so there is no third option.
 //   3. `location` names an entry that does not exist -> the empty entry is
-//      created („Referenzieren legt an", #70). Without it the chapter view
-//      would show a heading for a location the campaign cannot name.
+//      created. Without it the chapter view would show a heading for a
+//      location the campaign cannot name — and since every reference became
+//      a foreign key, such a scene could not be stored at all. This is the
+//      ONE place that still creates an entry for a reference, and only for
+//      the one column this step derives, on a database that predates it.
 //
 // Every scene whose ADDRESS changes is reported, because that is what a DM
 // notices: `<chapter>/<old-group>/<id>` is a link they may have written down.

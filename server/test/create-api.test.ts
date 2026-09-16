@@ -11,13 +11,13 @@
 //   * a COLLISION writes nothing and answers `slug_taken` WITH a free
 //     `suggestion` (the app's one-click "take it"), and the explicit `id` that
 //     click sends is honoured verbatim;
-//   * an EMPTY npc/ort row — one a reference created (#70) — is FILLED, not
-//     collided with;
+//   * an EMPTY npc/ort entry — one the DM created and did not fill in — is
+//     FILLED, not collided with;
 //   * a scene needs an EXISTING chapter (ADR #14);
 //   * an id the ADDRESS SCHEMA reserves (`npcs`/`locations`/`sessions`) is not
 //     creatable as a chapter — it would be a row nothing can ever open;
-//   * a `suggestion` names only ids nobody holds, empty referenced rows
-//     included: filling one of those is the DM's own decision about that id.
+//   * a `suggestion` names only ids nobody holds, empty ones included:
+//     filling one of those is the DM's own decision about that id.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { CampaignSummary, EntryResponse } from "@grimoire/shared";
@@ -191,14 +191,17 @@ describe("the per-campaign creates", () => {
     expect((await errorBody(res)).path).toBe("nordwind/campaign");
   });
 
-  test("a proposal never lands on an empty row someone else references (#70)", async () => {
+  test("a proposal never lands on an existing empty entry", async () => {
     await created<EntryResponse>("/nordwind/npcs", { name: "Holm" });
+    // An entry whose name IS its id holds nothing — the DM created it and
+    // typed nothing else.
+    await created<EntryResponse>("/nordwind/npcs", { name: "holm-2" });
     await created<EntryResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
     const scene = await created<EntryResponse>("/nordwind/scenes", {
       title: "Am Steg",
       chapter: "01-salzhafen",
     });
-    // A reference leaves an EMPTY `holm-2` behind.
+    // A scene may reference it — the entry exists.
     expect(
       (
         await app.request("/api/nordwind/properties", {
@@ -210,7 +213,7 @@ describe("the per-campaign creates", () => {
     ).toBe(200);
 
     // „Holm" collides with the filled `holm` — and the proposal SKIPS the
-    // referenced empty `holm-2` instead of handing it over.
+    // empty `holm-2` instead of handing somebody else's id over.
     const res = await post("/nordwind/npcs", { name: "Holm" });
     expect(res.status).toBe(409);
     expect((await errorBody(res)).suggestion).toBe("holm-3");
@@ -278,13 +281,15 @@ describe("the per-campaign creates", () => {
     expect((await post("/nordwind/locations", { name: "Hafen" })).status).toBe(409);
   });
 
-  test("an EMPTY row a reference created is filled, not collided with (#70)", async () => {
+  test("an EMPTY entry is filled, not collided with", async () => {
     await created<EntryResponse>("/nordwind/chapters", { title: "01 Salzhafen" });
     const scene = await created<EntryResponse>("/nordwind/scenes", {
       title: "Am Steg",
       chapter: "01-salzhafen",
     });
-    // Referencing creates the empty rows — that is the #70 rule.
+    // Two entries created and left empty — their name is their own id.
+    await created<EntryResponse>("/nordwind/npcs", { name: "holm" });
+    await created<EntryResponse>("/nordwind/locations", { name: "bucht" });
     const patched = await app.request("/api/nordwind/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -296,7 +301,7 @@ describe("the per-campaign creates", () => {
     });
     expect(patched.status).toBe(200);
 
-    // „NPC anlegen" for exactly that id now FILLS the entry.
+    // „NPC anlegen" for exactly that id FILLS the entry.
     const npc = await created<EntryResponse>("/nordwind/npcs", { name: "Holm" });
     expect(npc.path).toBe("npcs/holm");
     expect(npc.properties.name).toBe("Holm");

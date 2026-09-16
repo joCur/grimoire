@@ -1,10 +1,10 @@
-// "NPC anlegen" (issue #10, simplified by #70): the entry needs an id the DM
+// "NPC anlegen" (issue #10): the entry needs an id the DM
 // chooses — a log line is prose, and ids are the stable reference keys of the
 // format (README) — so the review proposes a kebab-case slug derived from the
 // text and lets it be edited. Optional display name; the entry text becomes
 // the `## Notizen` line.
 //
-// The id that ALREADY has an entry is no longer an error (#70): the call is
+// The id that ALREADY has an entry is not an error: the call is
 // idempotent, so the review links to what is there instead of making the DM
 // correct an id that was right. Only a server that cannot answer is shown
 // inline.

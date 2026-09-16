@@ -147,8 +147,8 @@ function isBlank(line: string | undefined): boolean {
 /**
  * The body with one named section REMOVED (heading line included) — used
  * where a section becomes rows and must not also survive as prose: a
- * session's `## Log` (now `log_entries`) and an npc's `## Beziehungen` (now
- * `npc_relations`). Rendering puts them back from the rows.
+ * session's `## Log`, which is `log_entries` and is rendered back from those
+ * rows.
  *
  * Three promises, all of them content-safety rules:
  *
@@ -183,60 +183,6 @@ export function removeSection(body: string, heading: string, level?: number): st
 }
 
 /**
- * The body with only the PARSED RELATION LINES of `## Beziehungen` removed —
- * the content-safe counterpart of `removeSection` for npc bodies.
- *
- * `parseRelationsSection` turns `- <npc-id>: <Text>` lines into rows, but a
- * section may also hold prose, a `- note without a colon` or a SECOND line
- * for an npc id that already has a row (the composite key allows only one).
- * Those `foreignLines` become no row, so cutting the whole section would
- * delete them. They stay exactly where they are, under their own heading;
- * `renderNpcBody` splices the rows back INTO that section.
- *
- * When nothing but relation lines was in the section, the section goes
- * completely (`removeSection`) — the renderer puts it back from the rows.
- */
-export function removeRelationLines(body: string): string {
-  const lines = body.split("\n");
-  const target = splitSections(body).find((s) =>
-    matchesSection(s, "beziehungen", SECTION_LEVEL),
-  );
-  if (target === undefined) return body;
-
-  const kept: string[] = [];
-  const seen = new Set<string>();
-  for (const rawLine of target.lines) {
-    const line = rawLine.trim();
-    if (line === "") {
-      kept.push(rawLine);
-      continue;
-    }
-    const m = RELATION_LINE.exec(line);
-    const otherNpcId = m === null ? "" : (m[1] ?? "").trim();
-    if (m !== null && otherNpcId !== "" && !seen.has(otherNpcId)) {
-      seen.add(otherNpcId); // became a row — the renderer brings it back
-      continue;
-    }
-    kept.push(rawLine);
-  }
-
-  // Nothing survived but blank lines: the whole section became rows.
-  if (kept.every((line) => line.trim() === "")) {
-    return removeSection(body, "Beziehungen", SECTION_LEVEL);
-  }
-
-  // Rebuild: heading, one blank line, the surviving lines, and the untouched
-  // rest of the body behind its own blank line.
-  let first = 0;
-  let last = kept.length;
-  while (first < last && kept[first]!.trim() === "") first += 1;
-  while (last > first && kept[last - 1]!.trim() === "") last -= 1;
-  const before = lines.slice(0, target.startIndex + 1); // heading included
-  const after = lines.slice(target.endIndex);
-  return [...before, "", ...kept.slice(first, last), "", ...after].join("\n");
-}
-
-/**
  * The lines of one named section, or undefined when the section is absent.
  * `level` pins the heading depth; the first match wins.
  */
@@ -250,7 +196,7 @@ export function sectionLines(
   return target?.lines;
 }
 
-/** The heading level `## Log` and `## Beziehungen` live on — as in the app. */
+/** The heading level `## Log` lives on — as in the app. */
 export const SECTION_LEVEL = 2;
 
 // --- structural vs. foreign lines --------------------------------------------
@@ -354,60 +300,6 @@ export function parseInboxBody(body: string): ImportedInboxEntry[] {
     out.push({ pos: out.length, raw, text: rest, done, foreign: false });
   }
   return out;
-}
-
-// --- npc relations ------------------------------------------------------------
-
-/** `- <npc-id>: <Freitext>` (README, "Entität: NPC"). */
-const RELATION_LINE = /^[-*+]\s+([^:]+?)\s*:\s*(.*)$/;
-
-export interface ImportedRelation {
-  otherNpcId: string;
-  note: string;
-  pos: number;
-}
-
-export interface RelationParseResult {
-  relations: ImportedRelation[];
-  /** Non-blank lines of the section that are not relation lines. */
-  foreignLines: string[];
-}
-
-/**
- * The `## Beziehungen` section as rows. A line without a colon is not a
- * relation — it is reported and left out, because guessing an npc id out of
- * prose would invent a reference that never existed.
- */
-export function parseRelationsSection(body: string): RelationParseResult {
-  // Level 2 exactly — the same heading the rename cascade rewrites
-  // (`/^##[ \t]+Beziehungen[ \t]*\r?$/`).
-  const lines = sectionLines(body, "Beziehungen", SECTION_LEVEL);
-  const result: RelationParseResult = { relations: [], foreignLines: [] };
-  if (lines === undefined) return result;
-  const seen = new Set<string>();
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (line === "") continue;
-    const m = RELATION_LINE.exec(line);
-    if (m === null) {
-      result.foreignLines.push(line);
-      continue;
-    }
-    const otherNpcId = (m[1] ?? "").trim();
-    if (otherNpcId === "" || seen.has(otherNpcId)) {
-      // A duplicate counterpart cannot become a second row (composite PK) —
-      // report it rather than lose it silently.
-      result.foreignLines.push(line);
-      continue;
-    }
-    seen.add(otherNpcId);
-    result.relations.push({
-      otherNpcId,
-      note: (m[2] ?? "").trim(),
-      pos: result.relations.length,
-    });
-  }
-  return result;
 }
 
 // --- glossary -----------------------------------------------------------------

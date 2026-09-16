@@ -4,8 +4,8 @@
 // same pipeline pointed at an entry that ALREADY EXISTS, and it asserts the
 // four things the ticket's AK5 names:
 //
-//   a) an EMPTY npc — the row issue #70's „Referenzieren legt an" leaves
-//      behind — is augmented and its holes are filled,
+//   a) an EMPTY npc — an entry created and not filled in — is augmented and
+//      its holes are filled,
 //   b) a PREPARED scene gains a new plot thread as ADDITIONAL blocks while
 //      every existing block comes back byte for byte,
 //   c) rejecting the proposal writes nothing and takes the job with it,
@@ -45,7 +45,7 @@ import { expect, test, type Api } from "../support/test";
 const SCENE = "01-salzhafen/bucht/smuggler-captured";
 const SCENE_URL = `/beispiel/entry/${SCENE}`;
 
-/** The empty npc: created by REFERENCING it from that scene (issue #70). */
+/** The empty npc — created, never filled in. */
 const EMPTY_NPC = "spitzel";
 const NPC_PATH = `npcs/${EMPTY_NPC}`;
 const NPC_URL = `/beispiel/entry/${NPC_PATH}`;
@@ -53,11 +53,12 @@ const NPC_URL = `/beispiel/entry/${NPC_PATH}`;
 const INSTRUCTION = "Führe einen Handlungsstrang um den Schmuggler-Spitzel ein";
 
 /**
- * Reference the id from the scene's `npcs` list. That is the #70 path that
- * actually creates a row (a `[[slug]]` in prose does not), so this is how a
- * DM ends up with an entry that exists and says nothing.
+ * „NPC anlegen" with nothing but the id — how a DM ends up with an entry
+ * that exists and says nothing. The scene then references it, which is only
+ * possible BECAUSE it exists (ADR #18).
  */
-async function createEmptyNpcByReference(api: Api): Promise<void> {
+async function createEmptyNpc(api: Api): Promise<void> {
+  await api.send("POST", "beispiel/npcs", { name: EMPTY_NPC });
   await api.patchProperties(SCENE, { npcs: ["fenn", EMPTY_NPC] });
   const npc = await api.file(NPC_PATH);
   expect(npc.properties.name).toBe(EMPTY_NPC);
@@ -75,7 +76,7 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   page,
   api,
 }) => {
-  await createEmptyNpcByReference(api);
+  await createEmptyNpc(api);
 
   await page.goto(NPC_URL);
   await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
@@ -336,7 +337,7 @@ test.describe("at 390px (critical path 8)", () => {
     page,
     api,
   }) => {
-    await createEmptyNpcByReference(api);
+    await createEmptyNpc(api);
     // What a desktop augment run leaves behind, written through the ordinary
     // API — the phone's job is to READ the result, not to review a diff.
     await api.writeBody(

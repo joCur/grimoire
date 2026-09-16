@@ -1,11 +1,10 @@
-// The one thing the NPC card decides WITHOUT the server (issue #70 audit).
+// The one thing the NPC card decides WITHOUT the server.
 //
 // `npcs:` holds ids. A non-slug entry is no id and therefore no entry — the
-// server refuses new ones, and what can still stand in the list is what a
-// migrated file era campaign brought along. Asking for `npcs/Alte
-// Fischerin` answers 404, which the card reported as "NPC nicht ladbar,
-// Server prüfen": it blamed the server for data it had been handed. The card
-// does not ask at all now and says what is actually the case.
+// server refuses one. Asking for `npcs/Alte Fischerin` answers 404, which
+// the card reported as "NPC nicht ladbar, Server prüfen": it blamed the
+// server for data it had been handed. The card does not ask at all now and
+// says what is actually the case.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, test } from "bun:test";

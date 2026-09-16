@@ -150,11 +150,11 @@ test("reference scene 2: contingency header, collapsible If-sections, consequenc
 });
 
 test("a referenced NPC without information is a thin card, not a gap", async ({ page, api }) => {
-  // Issue #70: referencing creates. Adding an unknown id to a scene's npcs
-  // gives that id an EMPTY entry, and the aside shows it like any other card
-  // — the id as the name, nothing else. No "NPC-Eintrag fehlt", no
-  // "Stub anlegen" detour, and the card opens the (equally thin) page.
+  // An npc entry created and not filled in: the aside shows it like any
+  // other card — the id as the name, nothing else. No "NPC-Eintrag fehlt",
+  // no "Stub anlegen" detour, and the card opens the (equally thin) page.
   expect(await api.exists("npcs/holm")).toBe(false);
+  await api.send("POST", "beispiel/npcs", { name: "holm" });
   await api.patchProperties("01-salzhafen/leuchtturm/lighthouse-arrival", {
     npcs: ["jorna", "holm"],
   });
@@ -173,38 +173,44 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
   await expect(page.getByRole("button", { name: "Eigenschaften" })).toBeVisible();
 });
 
-test("a scene location is a REFERENCE: an id creates the entry, text is a 400", async ({
-  page,
-  api,
-}) => {
-  // Issue #100: `location` is the scene's group, so it is always an id or
-  // empty. Naming an unknown id creates the entry (#70) …
-  await api.patchProperties("01-salzhafen/bucht/smuggler-captured", { location: "nordbucht" });
-  expect(await api.exists("locations/nordbucht")).toBe(true);
-  // … and the scene MOVES with it, address included.
-  const moved = await api.file("01-salzhafen/bucht/smuggler-captured");
-  expect(moved.path).toBe("01-salzhafen/nordbucht/smuggler-captured");
+test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ page, api }) => {
+  // `location` is the scene's group, so it is always an id or empty — and
+  // the id has to have an entry (ADR #18).
+  const scene = "01-salzhafen/bucht/smuggler-captured";
+  const patchLocation = async (value: string, rev: number): Promise<Response> =>
+    api.fetch("beispiel/properties", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: scene, rev, patch: { location: value } }),
+    });
 
-  // Free text is refused, with the slug it would have used — the README's
-  // free-text exception is gone.
-  const res = await api.fetch("beispiel/properties", {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      path: moved.path,
-      rev: moved.rev,
-      patch: { location: "Der alte Hafen" },
-    }),
+  // An id nothing holds: refused, and no entry appears for it.
+  const before = await api.file(scene);
+  const unknown = await patchLocation("nordbucht", before.rev);
+  expect(unknown.status).toBe(400);
+  expect(await unknown.json()).toMatchObject({
+    code: "location_unknown",
+    value: "nordbucht",
   });
-  expect(res.status).toBe(400);
-  expect(await res.json()).toMatchObject({
+  expect(await api.exists("locations/nordbucht")).toBe(false);
+
+  // Free text is refused too, with the slug it would have used — the
+  // README's free-text exception is gone.
+  const text = await patchLocation("Der alte Hafen", before.rev);
+  expect(text.status).toBe(400);
+  expect(await text.json()).toMatchObject({
     code: "location_not_an_id",
     suggestion: "der-alte-hafen",
   });
   expect(await api.exists("locations/der-alte-hafen")).toBe(false);
-  // Nothing moved, and the scene still reads under the location it has.
+
+  // With the Ort created, the patch lands and the scene MOVES with it.
+  await api.send("POST", "beispiel/locations", { name: "Nordbucht" });
+  await api.patchProperties(scene, { location: "nordbucht" });
+  const moved = await api.file(scene);
+  expect(moved.path).toBe("01-salzhafen/nordbucht/smuggler-captured");
   await page.goto(`/beispiel/entry/${moved.path}`);
-  await expect(page.getByRole("article")).toContainText("nordbucht");
+  await expect(page.getByRole("article")).toContainText("Nordbucht");
 });
 
 test.describe("with a seeded loot scene", () => {

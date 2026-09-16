@@ -183,15 +183,13 @@ export function putKnowledge(
  * Set/delete properties keys of one entry (issue #5 endpoint, used by the
  * scene-status control of issue #28). `patch` is flat: a value sets the key,
  * `null` deletes it. `rev` is the optimistic-concurrency token and must be
- * the one from the EntryResponse the UI is showing — when the entry changed on
- * disk since, the server answers 409 with the current `rev` in
- * `ApiError.details` and writes nothing.
+ * the one from the EntryResponse the UI is showing — when the entry changed
+ * since, the server answers 409 with the current `rev` in `ApiError.details`
+ * and writes nothing.
  *
- * `locationName` is the only field that is not a properties key: the display
- * name for the Ort a scene's `location` creates (issue #100 follow-up — the
- * properties form slugs free text into `location` and sends the typed text
- * here). The server applies it when it INSERTS the row and ignores it
- * otherwise, so an existing location is never renamed through a scene.
+ * A reference in the patch — `chapter`, `location`, an `npcs` entry — has to
+ * name an entry that exists; the server answers 400 with the code the app
+ * turns into „bitte zuerst anlegen" and writes nothing.
  */
 export async function patchProperties(
   campaign: string,
@@ -199,7 +197,6 @@ export async function patchProperties(
     path: string;
     rev: number;
     patch: Record<string, unknown>;
-    locationName?: string;
   },
 ): Promise<EntryResponse> {
   const path = `/${encodeURIComponent(campaign)}/properties`;
@@ -380,9 +377,9 @@ export function adoptThread(
 
 /**
  * Create the npc entry for `id` (status: unknown, note under `## Notizen`) —
- * or answer with the entry the id already has (issue #70). Idempotent: the
+ * or answer with the entry the id already has. Idempotent: the
  * goal is "this id has an entry", so an existing one is LINKED, never
- * overwritten, and an empty one (a reference created it) is filled in.
+ * overwritten, and an empty one — created and never filled in — is filled in.
  */
 export function ensureNpc(
   campaign: string,
@@ -453,7 +450,7 @@ export function createScene(
   });
 }
 
-/** A new NPC entry — an EMPTY one a reference left behind is filled (#70). */
+/** A new NPC entry — an EMPTY one that was never filled in is filled. */
 export function createNpc(
   campaign: string,
   input: { name: string; id?: string },
@@ -490,7 +487,6 @@ export type RenameKind = "npc" | "location" | "scene" | "chapter";
 /** The kinds of reference `GET /usage` counts (server: store/usage.ts). */
 export type UsageRef =
   | "sceneNpcs"
-  | "npcRelations"
   | "sceneLocation"
   | "scenesPlayed"
   | "logEntries"

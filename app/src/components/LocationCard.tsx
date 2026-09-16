@@ -10,10 +10,9 @@
 //
 // Degradation like everywhere: while the query runs nothing is claimed, any
 // failure is a one-liner. Never an error. There is no "Ortseintrag fehlt"
-// placeholder any more (issue #70): a scene `location` that is a SLUG gets
-// its entry created by the write that names it, and free text never reaches
-// this card at all — the caller only mounts it for an id the tree knows
-// (routes/live.tsx).
+// placeholder any more: a scene's `location` names an entry that exists (the
+// reference is a foreign key), and the caller only mounts this card for an id
+// the tree knows (routes/live.tsx).
 
 import { useQuery } from "@tanstack/react-query";
 

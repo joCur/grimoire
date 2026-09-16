@@ -224,7 +224,7 @@ test("creating an NPC entry from a #npc log line", async ({ page, api }) => {
   expect(stub.properties.id).toBe("old-metta");
   expect(stub.properties.name).toBe("Old Metta");
   // The log line said nothing about the NPC's state, so the entry claims
-  // nothing either (issue #70).
+  // nothing either.
   expect(stub.properties.status).toBe("unknown");
   expect(stub.body).toContain("## Notizen");
   expect(stub.body).toContain(NPC_TEXT);
@@ -234,7 +234,7 @@ test("creating an NPC entry from a #npc log line", async ({ page, api }) => {
   await expect(page.getByRole("link", { name: /Old Metta/ })).toBeVisible();
 });
 
-test("an id that already has an entry is linked, not refused (#70)", async ({ page, api }) => {
+test("an id that already has an entry is linked, not refused", async ({ page, api }) => {
   // The call is idempotent: the entry stands, untouched.
   const before = await api.file("npcs/fenn");
   await page.goto("/beispiel/review");

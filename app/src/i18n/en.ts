@@ -138,8 +138,8 @@ export const en: Messages = {
   "properties.field.row.name.aria": "{label}, row {row}: name",
   "properties.field.row.value.aria": "{label}, row {row}: value",
   "properties.ref.unknownChapter": "Unknown — the chapter has to exist.",
-  "properties.ref.new": "New — will be created on save.",
-  "properties.ref.locationNew": 'New — will be created as location “{name}”.',
+  "properties.ref.unknown": "Unknown — the entry has to exist.",
+  "properties.ref.unknownLocation": "Unknown — the location has to exist.",
   "properties.issue.locationUnusable":
     'Not a usable name — “{value}” yields no location id.',
   "properties.issue.notAnId": "“{id}” is not an id — lowercase letters, digits and hyphens only.",
@@ -155,9 +155,9 @@ export const en: Messages = {
   "properties.scene.chapter.label": "Chapter",
   "properties.scene.location.label": "Location",
   "properties.scene.location.hint":
-    "A location from the list or a new name — the chapter groups the scene under it.",
+    "A location from the list — the chapter groups the scene under it.",
   "properties.scene.npcs.label": "NPCs",
-  "properties.scene.npcs.hint": "Ids only — unknown ones are created on save.",
+  "properties.scene.npcs.hint": "Ids only — the npc has to have an entry already.",
   "properties.scene.handouts.label": "Handouts",
   "properties.scene.handouts.hint": "Name of the Roll20 handout, a reference only.",
   "properties.scene.tags.label": "Tags",
@@ -221,7 +221,6 @@ export const en: Messages = {
   "rename.usage.total": "{count, plural, one {# use} other {# uses}}",
   "rename.usage.none": "No references — nothing hangs off this id.",
   "rename.usage.sceneNpcs": "{count, plural, one {# scene} other {# scenes}}",
-  "rename.usage.npcRelations": "{count, plural, one {# relationship} other {# relationships}}",
   "rename.usage.sceneLocation": "{count, plural, one {# scene} other {# scenes}}",
   "rename.usage.scenesPlayed": "{count, plural, one {# session entry} other {# session entries}}",
   "rename.usage.logEntries": "{count, plural, one {# log line} other {# log lines}}",
@@ -291,9 +290,16 @@ export const en: Messages = {
   "server.slug_reserved": '“{id}” is a reserved name — suggestion: “{suggestion}”',
   "server.slug_empty": "{field} yields no id — please use letters or digits.",
   "server.location_not_an_id":
-    'Location “{value}” is not a location id — use “{suggestion}”; the entry is created for you.',
+    'Location “{value}” is not a location id — use “{suggestion}” and create that location first.',
   "server.location_not_an_id.noSuggestion":
     'Location “{value}” is not a location id — please use lowercase letters, digits and dashes.',
+  "server.location_unknown": 'Location “{value}” does not exist — create it first.',
+  "server.npc_unknown": 'NPC “{value}” does not exist — create it first.',
+  "server.chapter_unknown": 'Chapter “{value}” does not exist — create it first.',
+  "server.log_scene_unknown":
+    'Scene “{value}” does not exist — a note needs a scene that exists.',
+  "server.played_scene_unknown":
+    'Played scene “{value}” does not exist — create it first.',
   "server.glossary_duplicate_term":
     'Glossary term “{term}” appears more than once — please merge the entries.',
   "server.session_running": "An older session is still running — end it first.",

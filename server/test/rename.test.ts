@@ -2,11 +2,15 @@
 //
 // The rename is a primary-key UPDATE with a cascade now (store/rename.ts), so
 // the assertions changed their MEDIUM but not their subject: every reference
-// site is read back THROUGH THE API — the scene's `npcs` list, the
-// counterpart's `## Beziehungen` line, the scene's `location`, the session's
-// `scenes_played` and its log markers, the `chapter` fields of npcs,
-// locations and scenes. That is the contract the app sees; the bytes of a
-// file are not a thing any more.
+// site is read back THROUGH THE API — the scene's `npcs` list, the scene's
+// `location`, the session's `scenes_played` and its log markers, the
+// `chapter` fields of npcs, locations and scenes, and `[[id]]` in prose.
+// That is the contract the app sees; the bytes of a file are not a thing any
+// more.
+//
+// What is NOT a reference site: a `## Beziehungen` line. The section is
+// prose, so a counterpart named there follows the rename only when the DM
+// wrote it as `[[id]]`, like any other mention in a text.
 //
 // What byte-exactness became: the surrounding VALUES must survive a rename
 // untouched (a display name that happens to contain the old id, quickstats,
@@ -92,17 +96,14 @@ async function version(): Promise<number> {
 }
 
 describe("POST /api/:campaign/rename — npc", () => {
-  test("cascade: own id, scene npcs list and the Beziehungen counterpart", async () => {
+  test("cascade: own id and the scene npcs list", async () => {
     const result = await renameOk({ kind: "npc", oldId: "jorna", newId: "hafenmeisterin" });
 
     expect(result.renamed).toEqual({ from: "npcs/jorna", to: "npcs/hafenmeisterin" });
-    // von-schmugglern-erwischt mentions "Jorna" in a `## If:` heading —
-    // prose, so it is NOT in the plan.
-    expect(result.changed).toEqual([
-      SCENE_A,
-      "npcs/fenn",
-      "npcs/hafenmeisterin",
-    ]);
+    // von-schmugglern-erwischt mentions "Jorna" in a `## If:` heading, and
+    // fenn's `## Beziehungen` names her in a plain line — both are prose, so
+    // neither is in the plan.
+    expect(result.changed).toEqual([SCENE_A, "npcs/hafenmeisterin"]);
 
     // the npc is addressed by its new id, and everything that is NOT an id
     // survived: the display name still says Jorna, the quickstats are intact
@@ -112,10 +113,10 @@ describe("POST /api/:campaign/rename — npc", () => {
     expect(renamed.properties.name).toBe("Hafenmeisterin Jorna");
     expect(renamed.properties.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
 
-    // fenn's `## Beziehungen` names the counterpart by ID — it followed
+    // fenn's `## Beziehungen` line is TEXT and stays exactly as written — a
+    // counterpart follows a rename only as `[[jorna]]`.
     const fenn = await read("npcs/fenn");
-    expect(fenn.body).toContain("- hafenmeisterin: alte Bekannte; er weicht ihrem Blick aus");
-    expect(fenn.body).not.toContain("- jorna:");
+    expect(fenn.body).toContain("- jorna: alte Bekannte; er weicht ihrem Blick aus");
 
     // the scene: the npcs member is rewritten, nothing else about it moves
     const sceneA = await read(SCENE_A);
@@ -358,7 +359,7 @@ describe("POST /api/:campaign/rename — dry run", () => {
     const plan = (await res.json()) as RenameResponse;
     expect(plan.dryRun).toBe(true);
     expect(plan.renamed).toEqual({ from: "npcs/jorna", to: "npcs/hafenmeisterin" });
-    expect(plan.changed).toEqual([SCENE_A, "npcs/fenn", "npcs/hafenmeisterin"]);
+    expect(plan.changed).toEqual([SCENE_A, "npcs/hafenmeisterin"]);
 
     expect(await version()).toBe(before);
     expect(await exists("npcs/jorna")).toBe(true);

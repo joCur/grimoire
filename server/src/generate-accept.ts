@@ -38,6 +38,12 @@ import { applyDrafts } from "./store/write";
  *               rejected one never is. Naming a path explicitly is the one
  *               way an undecided entry gets written („Diesen übernehmen"
  *               on its row is the decision).
+ *               A SCENE carries the entries it names: a scene cannot be
+ *               written while its `npcs`/`location` name nothing (ADR #18),
+ *               so a selected scene pulls in the run's own suggested
+ *               entries for those ids — but only the ACCEPTED ones, because
+ *               an undecided entry stays the DM's decision. With one still
+ *               open the write is refused and names it.
  *   transaction one, with the target rev guards of the ordinary draft write
  *               (`applyDrafts`: conflicts checked INSIDE it, FTS and
  *               `[[slug]]` reference rows follow because this is that path).
@@ -106,6 +112,25 @@ export async function acceptJobParts(
     });
   }
 
+  /**
+   * The run's own entries a scene REFERENCES and the DM has accepted — see
+   * the selection rule above. Read off the draft markdown, so an edit of the
+   * scene in the review counts.
+   */
+  const scenePaths = new Set(job.result?.scenes.map((scene) => scene.path) ?? []);
+  const acceptedRefsOf = (rel: string): string[] => {
+    const part = parts.get(rel);
+    if (part === undefined || !scenePaths.has(rel)) return [];
+    const properties = parseMarkdown(part.target.markdown, rel, 0).properties;
+    const npcIds = Array.isArray(properties.npcs) ? properties.npcs : [];
+    const location = properties.location;
+    const candidates = [
+      ...npcIds.filter((id): id is string => typeof id === "string").map(npcPath),
+      ...(typeof location === "string" && location !== "" ? [locationPath(location)] : []),
+    ];
+    return candidates.filter((candidate) => parts.get(candidate)?.bulk === true);
+  };
+
   let selected: string[];
   if (body.paths === undefined) {
     selected = [...parts].filter(([, part]) => part.bulk).map(([rel]) => rel);
@@ -120,6 +145,11 @@ export async function acceptJobParts(
       // tab) and is simply skipped.
       if (part === undefined) throw new ApiError(400, `unknown draft path: ${rel}`);
       if (part.open) selected.push(rel);
+    }
+    for (const rel of [...selected]) {
+      for (const referenced of acceptedRefsOf(rel)) {
+        if (!selected.includes(referenced)) selected.push(referenced);
+      }
     }
   }
   // A selection whose parts are ALL written already is a double click or a
