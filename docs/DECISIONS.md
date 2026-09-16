@@ -757,17 +757,17 @@ konserviert, die das Ticket beseitigt. Sie fällt weg; `store/paths.ts`
 
 ## 18. Die Kapitel-Referenz einer Szene ist hart — `location` bleibt weich
 
-**Kontext:** Issue #115. Nach einer Generierung mit „Neues Kapitel" standen in
+**Kontext:** Nach einer Generierung mit „Neues Kapitel" standen in
 Produktion zwölf Szenen mit `chapter_id: 03-dragon-hatchery` in der Datenbank
 — **ohne Kapitel-Zeile**. Die Kapitelübersicht listet Kapitel aus der
 Kapiteltabelle, also war das Kapitel samt allen Szenen unsichtbar. Ursache war
 die App: Titel und id des neuen Kapitels reisten nur im Browser-Zustand und
-gingen beim Übernehmen mit, seit #97 den Prüfschritt persistent gemacht hat —
-nach Navigation oder Reload war beides weg.
+gingen beim Übernehmen mit — seit der Prüfschritt persistent ist, war nach
+Navigation oder Reload beides weg.
 
-`scenes.chapter_id` war seit #57 bewusst eine **weiche** Referenz
+`scenes.chapter_id` war bislang bewusst eine **weiche** Referenz
 (schema.ts Regel 3): der Import sollte reihenfolgeunabhängig bleiben, und ein
-Kapitel ohne `_chapter.md` sollte Szenen tragen dürfen. Genau diese Lizenz hat
+Kapitel ohne eigenen Eintrag sollte Szenen tragen dürfen. Genau diese Lizenz hat
 der Fehler verbraucht.
 
 **Entscheidung:**
@@ -797,13 +797,13 @@ der Fehler verbraucht.
   unbekanntes Kapitel: dort ist ein unbekanntes Kapitel ein Tippfehler, und
   die ehrliche Antwort ist der Fehler, nicht ein erfundenes Kapitel.
 
-**Migration in zwei Schritten**, dieselbe Reihenfolge wie bei #100: der
+**Migration in zwei Schritten**, dieselbe Reihenfolge wie beim vorherigen
+Reparaturschritt: der
 Reparaturschritt (`db/chapter-repair.ts`) läuft **vor** dem Migrator auf dem
 rohen Client und legt für jede verwaiste `chapter_id` ein Kapitel
 `{id, title: id, status: planned}` an — sonst würde Migration 0014 genau an
-diesen Zeilen scheitern. Er meldet beim Start, was er angelegt hat (Form wie
-#100), weil ein Kapitel, das unter seinem Slug auftaucht, umbenannt werden
-will.
+diesen Zeilen scheitern. Er meldet beim Start, was er angelegt hat, weil ein
+Kapitel, das unter seinem Slug auftaucht, umbenannt werden will.
 
 Ein **leeres** `chapter_id` (`''` oder nur Leerzeichen) nennt kein Kapitel, es
 kann also keines angelegt werden — und es ist auch nicht `NULL`, würde den
@@ -811,7 +811,7 @@ zusammengesetzten Fremdschlüssel von 0012 also verletzen. Der Reparaturschritt
 setzt solche Werte in derselben Transaktion auf `NULL` (was „keine
 Kapitel-Referenz" seit immer bedeutet) und meldet sie ebenfalls beim Start.
 
-**Der Kapitel-Status ist ein Enum** (Nachforderung des PO zu #115):
+**Der Kapitel-Status ist ein Enum** (Nachforderung des PO):
 `planned | active | done`, definiert genau einmal in `shared/`
 (`CHAPTER_STATUSES`), Labels de „Geplant / Aktiv / Abgeschlossen", en
 „Planned / Active / Done". Die API schreibt nur diese drei Werte und antwortet
@@ -819,7 +819,7 @@ sonst **400**; gespeicherte Fremdwerte werden weiterhin **verbatim angezeigt**
 und es gibt **keinen CHECK-Constraint** auf der Spalte — das Format degradiert
 wie überall, nur der Schreibweg ist eng. Ein neu angelegtes Kapitel startet auf
 `planned` (wie die Zeilen aus `ensureChapterRow` und dem Reparaturschritt); ein
-`NULL` überlebt nur auf Zeilen von vor #115 und wird in der App als `planned`
+`NULL` überlebt nur auf älteren Zeilen und wird in der App als `planned`
 gelesen.
 
 `active` ist dabei **eine Entscheidung über zwei Zeilen**, und die Invariante
@@ -830,7 +830,7 @@ gelesen.
 eine zweite Tür daran vorbei.
 
 In der Kapitelübersicht ist die Status-Pille deshalb **das Bedienelement**
-(wie der Szenen-Regler aus #28, gemeinsames Markup in
+(wie der Szenen-Regler, gemeinsames Markup in
 `components/StatusMenu`): „Aktiv" ruft den Tausch-Endpoint, „Geplant" und
 „Abgeschlossen" patchen das Kapitel. Der separate Knopf „Als aktiv setzen" ist
 entfallen — zwei Bedienelemente für einen Wert sind der Weg, auf dem sie sich

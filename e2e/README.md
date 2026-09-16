@@ -352,7 +352,7 @@ die Topbar-Navigation und den Kampagnen-Metadaten-Dialog (#34),
 APP gerade geschrieben hat, findet ⌘K sofort — der Index wandert in derselben
 Transaktion mit, es gibt keinen Watcher mehr, auf den zu warten wäre.
 
-## Seit „Kapitel-Zeile und Kapitel bearbeiten" (#115)
+## Seit „Kapitel-Zeile und Kapitel bearbeiten"
 
 Zwei Pfade haben Zuwachs bekommen, beide gegen denselben Produktionsfehler:
 Szenen mit einer `chapter_id` ohne Kapitel-Zeile waren samt Kapitel
@@ -361,16 +361,17 @@ unsichtbar, weil die Kapitelübersicht Kapitel aus der Kapiteltabelle listet.
 - **Pfad 6** (`generator.e2e.ts`): „Neues Kapitel" → **Seite verlassen** →
   zurück → „Übernehmen". Die Navigation ist der Kern des Tests, nicht Deko:
   Titel und id des neuen Kapitels reisten früher nur im Browser-Zustand und
-  waren nach der Navigation weg — seit #97 ist der Prüfschritt persistent,
-  also ist genau das der Normalfall. Der Titel liegt jetzt am Job
+  waren nach der Navigation weg — der Prüfschritt ist persistent, also ist
+  genau das der Normalfall. Der Titel liegt jetzt am Job
   (`generate_jobs.new_chapter_title`, beim **Start** geschrieben), und der
   Spec prüft ihn am Kapitel-Eintrag UND in der Übersicht.
   Zu beachten: ein Bulk-„Übernehmen" lässt **unentschiedene** vorgeschlagene
-  Einträge offen (Regel aus #97), der Prüfschritt bleibt also stehen und
+  Einträge offen (Regel des Prüfschritts), der Prüfschritt bleibt stehen und
   meldet „1 von 3 übernommen" — das Kapitel schreibt schon der erste Accept.
 - **Pfad 1** (`pool.e2e.ts`): ein Kapitel ist dort bearbeitbar, wo es gelesen
-  wird — „Kapitel-Eigenschaften" (Titel/Status, der geteilte Dialog aus #42),
-  „Kapitel bearbeiten" (`_chapter`-Text, aus dem die Zielzeile kommt, inkl.
+  wird — „Kapitel-Eigenschaften" (Titel/Status, der geteilte
+  Eigenschaften-Dialog), „Kapitel bearbeiten" (Kapiteltext, aus dem die
+  Zielzeile kommt, inkl.
   409 gegen einen zweiten Schreiber) und der **Status-Regler** in der
   Kapitelzeile, dessen „Aktiv" die Fahne in **einem** Serveraufruf umhängt
   („Als aktiv setzen" als eigener Knopf ist entfallen).
