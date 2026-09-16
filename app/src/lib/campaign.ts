@@ -24,7 +24,7 @@ export function locationName(
 }
 
 /**
- * Resolve a scene id to its title via the tree (issue #34: the review's
+ * Resolve a scene id to its title via the tree (the review's
  * source chip names the scene, not its id). Unknown ids pass through
  * unchanged — the id is the honest fallback, never a prettified guess.
  */
@@ -43,8 +43,8 @@ export function sceneTitle(
 }
 
 /**
- * The campaign's display label: the `name` from its optional `campaign`
- * (issue #17), else the id — which is the directory name and stays the key in
+ * The campaign's display label: the `name` from its optional `campaign`,
+ * else the id — which is the directory name and stays the key in
  * every URL. Never returns an empty string.
  */
 export function campaignLabel(campaign: CampaignSummary | undefined, id: string): string {
@@ -67,15 +67,15 @@ export function findCampaign(
 }
 
 /**
- * Order of the campaign list for "last active first" (issue #14): the
+ * Order of the campaign list for "last active first": the
  * campaign with the newest session wins, campaigns without a session rank
  * behind all that have one, and ties fall back to the alphabetically first
  * id.
  *
- * A session ID says NOTHING about time since the PO decision on issue #58 —
- * it is an opaque random string, so sorting by it would sort noise. The order
- * therefore reads `lastSessionStarted`, the newest session's `started` as the
- * server computed it (CampaignSummary), and compares the two as timestamps.
+ * A session ID says NOTHING about time — it is an opaque random string, so
+ * sorting by it would sort noise. The order therefore reads
+ * `lastSessionStarted`, the newest session's `started` as the server computed
+ * it (CampaignSummary), and compares the two as timestamps.
  * A missing, empty or unparsable value is "no session at all" and sorts behind
  * every campaign that has one; ties fall back to the id.
  */
@@ -108,7 +108,7 @@ export function pickLastCampaign(campaigns: CampaignSummary[]): string | undefin
 }
 
 /**
- * The campaign `/settings` is about (issue #69, PO feedback on PR #83).
+ * The campaign `/settings` is about.
  *
  * `/settings` is campaign-independent — the gear has to work on a fresh
  * instance — so the campaign the DM CAME FROM travels in `?from=`. It is

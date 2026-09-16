@@ -1,4 +1,4 @@
-// The controls of the „Eigenschaften" form (issue #42) — one row per
+// The controls of the „Eigenschaften" form — one row per
 // properties field, chosen by the field's control. Kept apart from the dialog
 // so the dialog stays the save/409 shell and this file stays plain rendering:
 // every row gets its value and gives back a new one, no queries, no writes.

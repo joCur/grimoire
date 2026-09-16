@@ -1,5 +1,5 @@
 // "/:campaign/review" — the review view, "Session-Nachbereitung" in the UI
-// (issue #10; formerly "Fünf Minuten Ernte")
+// (formerly "Fünf Minuten Ernte")
 // per the design reference: the tagged lines of today's log and of the inbox
 // as cards with one-click actions, the chapter's open threads below, brass
 // "Fertig" at the end. Reached after "Session beenden" and from the quiet
@@ -63,7 +63,7 @@ function doneLabel(
       return t("review.done.npc");
     case "dismiss":
       // An untagged note or a PC reminder is not "verworfen", it is done
-      // with (issues #85, #86) — the write is the same, the word the DM sees
+      // with — the write is the same, the word the DM sees
       // is not.
       return section === "harvest" ? t("review.done.dismiss") : t("review.done.resolved");
     default:
@@ -256,8 +256,8 @@ export function ReviewRoute() {
             ) : (
               <>
                 <div className="flex flex-col gap-2.5">{harvest.map(renderCard)}</div>
-                {/* `#pc` lines, grouped by character (issue #86): reminders
-                    for the table — abhaken or keep, never adopted. */}
+                {/* `#pc` lines, grouped by character: reminders
+                    for the table — tick off or keep, never adopted. */}
                 {pcs.length > 0 && (
                   <section className="mt-9">
                     <h2 className="mb-3 text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground">
@@ -280,7 +280,7 @@ export function ReviewRoute() {
                     </div>
                   </section>
                 )}
-                {/* Untagged inbox lines get their own section (issue #85) so
+                {/* Untagged inbox lines get their own section so
                     the tagged harvest above keeps reading as one list. */}
                 {notes.length > 0 && (
                   <section className="mt-9">
@@ -382,7 +382,7 @@ function EntryCard({
   busy: boolean;
   error: string | undefined;
   canAdopt: boolean;
-  /** „Behalten" was clicked in this sitting (issue #86) — still open. */
+  /** „Behalten" was clicked in this sitting — still open. */
   kept: boolean;
   onThread: () => void;
   onNpc: () => void;

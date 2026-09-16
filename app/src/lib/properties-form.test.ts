@@ -29,7 +29,7 @@ import {
 } from "./properties-form";
 import { translator } from "@/i18n/format";
 
-// The language the assertions below are written in (issue #69): the helpers
+// The language the assertions below are written in: the helpers
 // take the translator as an argument, so a test says so explicitly instead of
 // leaning on a default.
 const t = translator("de");
@@ -415,7 +415,7 @@ describe("the npcs list holds ids, not names", () => {
   });
 });
 
-describe("the Ort field: free text in, an id out (#100)", () => {
+describe("the Ort field: free text in, an id out", () => {
   const sceneFields = fields("scene");
   const initial = propertiesFormValues(sceneFields, SCENE_FM);
   const withLocation = (text: string): FormValues => ({
@@ -624,7 +624,7 @@ describe("reference and select options", () => {
       { value: "ready", label: "Bereit" },
     ];
     // Open on `onhold`, switch to a known value: the odd one must still be in
-    // the list, or the DM could never put it back (issue #42 review).
+    // the list, or the DM could never put it back.
     expect(selectOptions(known, "draft", "onhold")).toEqual([
       ...known,
       { value: "onhold", label: "onhold" },

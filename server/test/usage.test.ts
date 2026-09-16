@@ -1,4 +1,4 @@
-// GET /api/:campaign/usage — reference counting (issue #60).
+// GET /api/:campaign/usage — reference counting.
 //
 // One case per reference kind, all of them against the SEED campaign
 // (`examples/`, the suite's fixture — CLAUDE.md): the example tree happens to

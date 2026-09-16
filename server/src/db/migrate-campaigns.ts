@@ -1,16 +1,14 @@
-// The one-time migration from the markdown file tree into the database
-// (issue #54; planning #52 Fassung 3, section 3). This is the ONLY place in
-// the server that will still read campaign markdown once the cutover
-// (Scheibe 2) is done — the single, deliberate bridge between the old format
-// and the new storage.
+// The one-time migration from the markdown file tree into the database.
+// This is the ONLY place in the server that will still read campaign
+// markdown once the cutover (slice 2) is done — the single, deliberate
+// bridge between the old format and the new storage.
 //
-// The four rules that make it safe to run on a DM's real campaign:
+// The five rules that make it safe to run on a DM's real campaign:
 //
 //   1. IT NEVER TOUCHES THE FILES. No delete, no move, no marker file, not
-//      even an mtime change (PO decision F-neu-1). The source tree is left
+//      even an mtime change (PO decision). The source tree is left
 //      exactly as it was and is simply ignored afterwards — it stays the
-//      readable pre-migration snapshot, which is the whole fallback story
-//      (planning risk R1).
+//      readable pre-migration snapshot, which is the whole fallback story.
 //   2. IT IS IDEMPOTENT, three times over: `meta['migrated_at']` marks a
 //      finished run, `meta['migrated_campaign:<id>']` marks each single
 //      campaign as committed (so a run interrupted between two campaigns
@@ -333,9 +331,8 @@ function needsNoFrontmatter(cls: FileClass, raw: string): boolean {
 // --- the FTS index ------------------------------------------------------------
 
 /**
- * Index one entity for search. Maintained explicitly from here (planning
- * section 2: "Pflege explizit aus der Store-Schicht") — the migration is the
- * first writer, Scheibe 2's store methods are the next.
+ * Index one entity for search. Maintained explicitly from here — the
+ * migration is the first writer, the store's own methods are the next.
  */
 function indexForSearch(
   tx: DbWriter,
@@ -692,7 +689,7 @@ function importCampaign(
     const locationSlug = rawLocation === "" ? "" : toSlug(rawLocation);
     // A `location` that transliterates to NOTHING („???", an emoji): the
     // field is imported empty, and that is a degrade the DM has to read —
-    // it used to happen in silence (issue #100 review).
+    // it used to happen in silence.
     if (rawLocation !== "" && locationSlug === "") {
       degrade(
         p.file,
@@ -729,7 +726,7 @@ function importCampaign(
         title,
         type: asString(p.frontmatter.type, "planned"),
         trigger: asOptionalString(p.frontmatter.trigger) ?? null,
-        // `location` IS the group since issue #100, so the import derives
+        // `location` IS the group, so the import derives
         // it the way the file tree meant it: an explicit value wins, an
         // empty one inherits the group DIRECTORY the file sat in. Free text
         // is read as the slug of that text (`Die Bucht` -> `die-bucht`) —
@@ -925,7 +922,7 @@ function importCampaign(
     }
   }
 
-  // 7. the glossary (planning F6: a structured table, not a blob).
+  // 7. the glossary — a structured table, not a blob.
   const glossaryFiles = find("glossary");
   const glossaryFile = glossaryFiles[0];
   if (glossaryFile !== undefined) {
@@ -975,7 +972,7 @@ function importCampaign(
     degrade(dup.file, "Zweite inbox.md — nur die erste wurde übernommen.");
   }
 
-  // 7b. `[[slug]]` body references (issue #68): the SECOND pass over the
+  // 7b. `[[slug]]` body references: the SECOND pass over the
   //     search index, once every row of this campaign exists. Bodies are
   //     indexed with their references replaced by the referenced display name
   //     (store/refs.ts), and while importing, half the entities a body points
@@ -1017,7 +1014,7 @@ export async function runInitialMigration(
     );
     if (marker.length > 0) return nothing("already-migrated");
     if (!isDbEmpty(db) && done.size === 0) {
-      // The defensive rule (planning section 3): content without ANY marker is
+      // The defensive rule: content without ANY marker is
       // still content. Overwriting it would be the one unrecoverable move.
       // (With per-campaign markers present we resume instead — see below.)
       return nothing("database-not-empty");

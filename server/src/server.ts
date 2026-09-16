@@ -4,7 +4,7 @@
 // on Node >= 20 the same app runs via @hono/node-server instead:
 //   import { serve } from "@hono/node-server"; serve({ fetch: app.fetch, port: PORT });
 //
-// WHAT `path` MEANS (issue #79): an ADDRESS, not a file name — no `.md`, no
+// WHAT `path` MEANS: an ADDRESS, not a file name — no `.md`, no
 // extension at all. The complete schema is in ./store/paths.ts:
 //
 //   campaign · inbox · glossary · <chapter> ·
@@ -18,7 +18,7 @@
 // Planned API — the living checklist (conventions: /README.md). Tick an
 // endpoint here when it is implemented:
 //
-// ERROR BODIES ARE LANGUAGE-FREE (issue #69). Every error a HUMAN reads carries
+// ERROR BODIES ARE LANGUAGE-FREE. Every error a HUMAN reads carries
 // a stable `code` from `@grimoire/shared/error-codes` plus the parameters its
 // sentence needs; the `error` text next to it is the ENGLISH technical fallback
 // (curl, logs, an unknown-code client). The app renders the sentence from its
@@ -29,7 +29,7 @@
 //   [x] GET  /api/campaigns                    campaign list (directories + lastSession +
 //                                              name/description from campaign)
 //   [x] POST /api/campaigns                    { name, description? } -> 201 CampaignSummary.
-//                                              THE COLD START (issue #56): since #79 a fresh
+//                                              THE COLD START: a fresh
 //                                              instance boots empty, so this is how the first
 //                                              campaign comes into being. `id` is DERIVED from
 //                                              the name with the shared slug rule
@@ -40,7 +40,7 @@
 //                                              taken id is 409 { code: "slug_taken", kind,
 //                                              id, suggestion, path }
 //   [x] GET  /api/settings                     InstanceSettings — the instance's UI
-//                                              language (issue #69): { locale: "de" | "en"
+//                                              language: { locale: "de" | "en"
 //                                              | null }. `null` is "never decided": the app
 //                                              then follows navigator.language and writes
 //                                              nothing. Campaign-INDEPENDENT on purpose —
@@ -93,29 +93,29 @@
 //                                              be changed or deleted with null.
 //                                              `locationName` is the display name for the
 //                                              Ort a scene's `location` CREATES — applied
-//                                              only on insert, never a rename (#100)
+//                                              only on insert, never a rename
 //   [x] PUT  /api/:campaign/entry              { path, rev, body } — write the markdown
 //                                              BODY of an existing entry;
 //                                              its properties are untouched (they are
 //                                              PATCH /properties' job), same rev guard
 //                                              as PATCH above (409 `rev_conflict`)
-//   [—] POST /api/:campaign/campaign-meta      REMOVED with issue #62. It existed
+//   [—] POST /api/:campaign/campaign-meta      REMOVED. It existed
 //                                              for the one gap PATCH /properties
 //                                              could not close: a campaign whose
 //                                              `campaign` did not exist yet had
 //                                              no row and therefore no guard token
 //                                              to PATCH against. Since the cutover
-//                                              (#57) the import always creates a
+//                                              the import always creates a
 //                                              campaign ROW, GET /entry?path=
 //                                              campaign therefore always
 //                                              answers 200 with a `rev`, and the
 //                                              app's create branch became
-//                                              unreachable (observed in #59). The
+//                                              unreachable. The
 //                                              name is now written the same way
 //                                              every other field is: PATCH
 //                                              /properties with the row's guard
 //                                              token — one write path, one 409 rule
-//   [x] GET  /api/:campaign/session            the ACTIVE session (issue #40): the last
+//   [x] GET  /api/:campaign/session            the ACTIVE session: the last
 //                                              STARTED session file that is not ended —
 //                                              today's OR an older one, so a session past
 //                                              midnight stays active. Same shape as
@@ -131,7 +131,7 @@
 //                                              must not guess it either); 404 only when the
 //                                              campaign has no session file at all
 //   [x] POST /api/:campaign/session/start      creates a NEW session at sessions/<id>, with
-//                                              an OPAQUE RANDOM id (issue #58 — "beenden" is
+//                                              an OPAQUE RANDOM id ("beenden" is
 //                                              final, so a second evening on the same day is
 //                                              simply a second session with an empty log and
 //                                              a runtime at 0; nothing reads the id, order and
@@ -145,18 +145,18 @@
 //                                              (falls back to the last started session) and
 //                                              closes an open pause interval
 //   [x] POST /api/:campaign/session/pause      opens a `pauses` interval + `— Pause` log line
-//                                              — the clock really stops (issue #40 AK8);
+//                                              — the clock really stops;
 //                                              idempotent, 404 when nothing runs
 //   [x] POST /api/:campaign/session/continue   closes that interval + `— Weiter`; idempotent.
 //                                              "Weiter" ends a PAUSE — an ended session is
-//                                              never re-opened (issue #58)
+//                                              never re-opened
 //   [x] POST /api/:campaign/session/discard    deletes the ACTIVE session's file — allowed
 //                                              only while it is EMPTY (no log entry, no
 //                                              scenes_played); 409 { code:
 //                                              "session_not_empty" } otherwise, 404 when
 //                                              nothing is running
 //   [x] POST /api/:campaign/log                { text, sceneId? } -> append with timestamp
-//                                              to the ACTIVE session (issue #40); STRICT —
+//                                              to the ACTIVE session; STRICT —
 //                                              404 when no session is running, 400 when
 //                                              sceneId is not a kebab slug (it is a PARSE
 //                                              COLUMN of `- HH:MM (id) text`)
@@ -164,19 +164,19 @@
 //   [x] GET  /api/:campaign/search?q=...       { results } — full-text search (FTS5, bm25,
 //                                              prefix terms, diacritics folded;
 //                                              scenes/npcs/locations/chapters/campaign/
-//                                              GLOSSARY, max 20 results — issue #57)
+//                                              GLOSSARY, max 20 results)
 //   [x] GET  /api/:campaign/glossary           { entries: [{ term, explanation }], rev } — the
-//                                              glossary TABLE (issue #57, planning F6); `rev`
+//                                              glossary TABLE; `rev`
 //                                              is the LIST's guard token, the same one
-//                                              GET /entry?path=glossary hands out (issue #53)
+//                                              GET /entry?path=glossary hands out
 //   [x] PUT  /api/:campaign/glossary           { entries, rev } -> { entries, rev }; replaces
 //                                              the WHOLE list, so the array order IS the
 //                                              stored order and reordering needs no endpoint
 //                                              of its own. Stale rev -> 409
-//                                              { code: "rev_conflict", rev } (issue #53)
+//                                              { code: "rev_conflict", rev }
 //   [x] GET  /api/:campaign/knowledge          { entries: [{ kind, from, to, text }], rev } —
 //                                              the CAMPAIGN KNOWLEDGE the generator must
-//                                              apply (issue #53): kind is naming|fact|style,
+//                                              apply: kind is naming|fact|style,
 //                                              a `naming` entry carries from/to, the others
 //                                              `text`. Guard token: campaigns.knowledge_rev
 //   [x] PUT  /api/:campaign/knowledge          { entries, rev } -> { entries, rev }; the
@@ -192,7 +192,7 @@
 //                                              glossary keeps taking wrapped explanations
 //                                              (the import makes them) and is flattened
 //                                              for the prompt instead
-//   [—] GET  /api/:campaign/migration-report   REMOVED with issue #79. The markdown import
+//   [—] GET  /api/:campaign/migration-report   REMOVED. The markdown import
 //                                              is the dev/E2E tool `grimoire seed`, which
 //                                              prints its report on stdout; nothing is stored.
 //   [x] GET  /api/:campaign/version            { version, build } — version is
@@ -201,25 +201,25 @@
 //                                              gone with the cutover); the app polls it and
 //                                              refetches on change (SSE considered and deferred,
 //                                              DECISIONS #9). build is this server's build id
-//                                              (GRIMOIRE_BUILD, "dev" outside an image) — issue
-//                                              #24: when it differs from the app's own build id
+//                                              (GRIMOIRE_BUILD, "dev" outside an image) —
+//                                              when it differs from the app's own build id
 //                                              the app shows a reload banner. Every /api
 //                                              response also carries it as x-grimoire-build.
 //   [x] POST /api/:campaign/generate           { chapter, sourceText, newChapter? } ->
 //                                              202 { jobId } — starts a background job
-//                                              (issue #19; writes NOTHING). newChapter
+//                                              (writes NOTHING). newChapter
 //                                              allows a chapter directory that does not
 //                                              exist yet. 409 { jobId } while one runs.
 //   [x] POST /api/:campaign/generate/npc       { sourceText, id? } -> 202 { jobId } —
-//                                              one NPC file draft from source material
-//                                              (issue #21), same job model and same
+//                                              one NPC file draft from source material,
+//                                              same job model and same
 //                                              pipeline mechanics as the scene run;
 //                                              409 { jobId } while ANY generator job
 //                                              runs, 409 { path } when the pinned id's
 //                                              file exists. Writes NOTHING.
 //   [x] POST /api/:campaign/generate/augment  { path, sourceText?, instruction? }
-//                                              -> 202 { jobId } — „Mit KI ergänzen"
-//                                              (issue #36): the SAME job model and the
+//                                              -> 202 { jobId } — „Mit KI ergänzen":
+//                                              the SAME job model and the
 //                                              same pipeline, pointed at an entry that
 //                                              already exists (npc/location/scene). At
 //                                              least one of sourceText/instruction is
@@ -250,8 +250,8 @@
 //                                              are refused (400) — an id change is
 //                                              POST /rename's job, with its cascade
 //   [x] POST /api/:campaign/generate/job/:id/parts/:key/retry -> 202 GenerateJob —
-//           „Erneut versuchen" for ONE part of a pipelined scene run (issue
-//           #102). Re-runs only that part; the outline and the finished parts
+//           „Erneut versuchen" for ONE part of a pipelined scene run.
+//           Re-runs only that part; the outline and the finished parts
 //           stay. 404 unknown job/part, 409 for a part that already runs, has
 //           not run yet or is done and for a job without parts, 503 without a
 //           provider.
@@ -261,24 +261,24 @@
 //                                              there is none. An `augment` job also
 //                                              carries `target` — the entry's address —
 //                                              from the moment it STARTS.
-//                                              A finished result may carry `namingHints`
-//                                              (issue #53): the SERVER's own findings that
+//                                              A finished result may carry `namingHints`:
+//                                              the SERVER's own findings that
 //                                              a draft still uses a spelling a naming
 //                                              convention replaces — hints for the review,
 //                                              never a reason to fail or block
 //                                              A job also carries its REVIEW STATE and
-//                                              that state's `rev` (issue #97): the
+//                                              that state's `rev`: the
 //                                              decision per suggested entry, the dropped
 //                                              scenes, the per field/block decisions of an
 //                                              augment run and the parts a partial accept
 //                                              already wrote (`review.written`, draft path
 //                                              -> the address it landed at)
-//   [x] DELETE /api/:campaign/generate/job     discard the job ("Verwerfen"). Since issue
-//                                              #97 that is the OPEN REST only — parts a
+//   [x] DELETE /api/:campaign/generate/job     discard the job ("Verwerfen"). That is
+//                                              the OPEN REST only — parts a
 //                                              partial accept wrote are entries now
 //   [x] PATCH /api/:campaign/generate/job/:id/review
 //                                              { rev, edits?, entries?, dropped?, fields?,
-//                                              blocks? } -> the job (issue #97). Everything
+//                                              blocks? } -> the job. Everything
 //                                              MERGES, so the app sends the one thing that
 //                                              changed — text debounced, decisions at once.
 //                                              409 { code: "rev_conflict", rev } when
@@ -286,7 +286,7 @@
 //                                              404 without a job or for a stale :id
 //   [x] POST /api/:campaign/generate/job/:id/accept
 //                                              { paths?, chapter?, chapterTitle? } ->
-//                                              { written, jobDeleted } (issue #97).
+//                                              { written, jobDeleted }.
 //                                              „Diesen übernehmen" per scene / suggested
 //                                              entry; without `paths` everything still
 //                                              open (accepted entries included, undecided
@@ -295,7 +295,7 @@
 //                                              refs follow, and the job row disappears the
 //                                              moment nothing is left open. A pipelined run
 //                                              that is still `running` is acceptable part by
-//                                              part (issue #102 AK2); 409 only for a failed
+//                                              part; 409 only for a failed
 //                                              run and for one with no finished part yet
 //   [x] POST /api/:campaign/generate/apply     { scenes?, stubs?, npc?, chapter?,
 //                                              chapterTitle?, jobId? } -> { written }
@@ -307,7 +307,7 @@
 //                                              chapter + chapterTitle create
 //                                              the chapter entry when missing, in the
 //                                              same batch; `npc` is the NPC run's single
-//                                              draft (issue #21); jobId discards that job
+//                                              draft; jobId discards that job
 //                                              after a successful write.
 //   [x] POST /api/:campaign/rename             { kind, oldId, newId, dryRun? } ->
 //                                              { renamed: { from, to }, changed } — renames
@@ -316,7 +316,7 @@
 //                                              location/chapter, session scenes_played,
 //                                              `## Beziehungen` lines, log scene markers,
 //                                              and the search index. Prose is NOT touched.
-//                                              CHANGED with the cutover (#57): `from`/`to`
+//                                              CHANGED with the cutover: `from`/`to`
 //                                              are DOCUMENT paths for every kind, so a
 //                                              chapter reads `<id>` where the
 //                                              file version named the bare DIRECTORY —
@@ -324,9 +324,9 @@
 //                                              (store/paths.ts). A display name that was
 //                                              literally the old id follows the id.
 //                                              Plan-then-execute: 400/404/409 { path } write
-//                                              nothing; dryRun returns the plan only (issue #30).
+//                                              nothing; dryRun returns the plan only.
 //                                              Every answer carries `usage` — the reference
-//                                              counts of GET /usage (issue #60), which is what
+//                                              counts of GET /usage, which is what
 //                                              the dialog's German summary reads off.
 //   [x] GET  /api/:campaign/usage              ?kind=<npc|location|scene|chapter>&id=<slug> ->
 //                                              { kind, id, path, total, groups: [{ ref, count,
@@ -338,7 +338,7 @@
 //                                              group counts ROWS, its sites are the referencing
 //                                              DOCUMENTS; an entity's own outgoing relations
 //                                              are not references TO it. 404 unknown campaign/
-//                                              entity, 400 unknown kind/empty id (issue #60)
+//                                              entity, 400 unknown kind/empty id
 //   [x] POST /api/:campaign/review/seen        { path, line } -> EntryResponse &
 //                                              { marked } — flags the log ROW whose short
 //                                              hash the line has (idempotent). marked=false
@@ -363,14 +363,14 @@
 //
 // Validation after generate: properties parseable, status==draft, references
 // exist or ship as stubs, only known callouts. Errors -> correction turn to
-// the LLM (LLM_CORRECTION_TURNS, default 1, max 2 — issue #19), see
+// the LLM (LLM_CORRECTION_TURNS, default 1, max 2), see
 // generator/README.md; exhausted retries -> 422. A reply the model TRUNCATED
 // (finish_reason/stop_reason) skips the correction turns and answers 422
-// right away (issue #18). Every generator 422 carries the last raw reply
-// (`rawReply`, capped) and the run's `usage` — since issue #19 inside the
+// right away. Every generator 422 carries the last raw reply
+// (`rawReply`, capped) and the run's `usage` — inside the
 // job's `error` body instead of as the POST's response.
 //
-// Generate jobs are ROWS since issue #23 (`generate_jobs`, ./generate-jobs):
+// Generate jobs are ROWS (`generate_jobs`, ./generate-jobs):
 // a finished run survives a restart whole — result, error body and review
 // edits — and is still applyable afterwards. A run that was IN FLIGHT cannot
 // survive (its provider call died with the process), so the boot rewrites
@@ -378,7 +378,7 @@
 // sentence of db/job-boot.ts. The app renders that field, so an interrupted
 // run says "Job neu starten" instead of spinning forever.
 //
-// Since issue #102 a SCENE run is a PIPELINE of provider calls — an outline
+// A SCENE run is a PIPELINE of provider calls — an outline
 // call, then one call per scene and per suggested entry, three at a time — and
 // the job therefore carries PARTS with a status each (./generate-pipeline,
 // ADR #10). What that changes for this list: the run stays `running` while
@@ -408,7 +408,7 @@ import { initStore } from "./store/handle";
 export const app = new Hono();
 app.route("/api", api);
 
-// The database boot (issue #57) and the static SPA routes (issue #13) are
+// The database boot and the static SPA routes are
 // wired up ONLY when this file is the process entrypoint — importing the app
 // for in-process tests must stay free of side effects (no database file
 // created next to the repo, and no catch-all route swallowing 404 assertions;
@@ -419,14 +419,14 @@ app.route("/api", api);
 if (import.meta.main) {
   console.log(`Grimoire server — database: ${getDbFile()}, port: ${PORT}`);
   // Opens the database and applies the schema migrations — see
-  // store/handle.ts. NOTHING is imported (issue #79 AK6): a fresh instance
+  // store/handle.ts. NOTHING is imported: a fresh instance
   // starts empty. Awaited before the first request so a boot that cannot open
   // its database fails loudly instead of on the first query.
   const store = await initStore();
   void store;
   const info = (await import("./store/handle")).storeInfo();
   console.log(`Database ready (${info?.backend ?? "unknown backend"}).`);
-  // Issue #100: the one-time step that turned the file era's group
+  // The one-time step that turned the file era's group
   // directories into `location` references. It names EVERY scene whose
   // address moved — an old link still resolves (the app follows the
   // response's `path`), but a DM who wrote one down should see it.
@@ -461,7 +461,7 @@ if (import.meta.main) {
         `entry and got one: ${groupMigration.createdLocations.join(", ")}`,
     );
   }
-  // Issue #23: jobs are rows now, so a restart no longer loses a finished
+  // Jobs are rows now, so a restart no longer loses a finished
   // generation — but a run that was in flight died with the old process and
   // is reported as failed. Say so, it explains the app's message.
   if (info !== undefined && info.interruptedJobs > 0) {

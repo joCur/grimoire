@@ -1,8 +1,7 @@
 // The Grimoire database schema — the ONE place the storage shape is written
-// down in code (planning #52 Fassung 3, section 2; issue #54).
+// down in code.
 //
-// Design rules, taken verbatim from the planning and binding for every table
-// added later:
+// Design rules, binding for every table added later:
 //
 //   1. CONTRACT FIELDS ARE COLUMNS. Everything README.md names for an entity
 //      gets its own column. Unknown keys an import brings along are kept
@@ -34,8 +33,7 @@
 //      row a client can PATCH has one; the store bumps it on every write.
 //   5. NATURAL COMPOSITE KEYS, `ON UPDATE CASCADE`. The id IS the key
 //      (README: "id ... NIE ändern (Referenzen!)"), and a rename is then a
-//      PK update the database cascades instead of a file-tree rewrite
-//      (Scheibe 3, issues #29/#30).
+//      PK update the database cascades instead of a file-tree rewrite.
 //   6. SESSION TIMESTAMPS STAY ZONE-LESS STRINGS, exactly as the files carry
 //      them. Only the server resolves them to epoch ms (see clock.ts) —
 //      storing an epoch here would bake today's timezone into the data.
@@ -106,7 +104,7 @@ export const campaigns = sqliteTable("campaigns", {
   glossaryRev: integer("glossary_rev").notNull().default(1),
   inboxRev: integer("inbox_rev").notNull().default(1),
   /**
-   * Guard token of the CAMPAIGN KNOWLEDGE list (issue #53). Third of the same
+   * Guard token of the CAMPAIGN KNOWLEDGE list. Third of the same
    * kind as the two above and for the same reason: `campaign_knowledge` is a
    * whole list, so the version belongs to the LIST and not to a row
    * — and `campaigns.version`, which every unrelated write bumps, would make
@@ -168,11 +166,11 @@ export const scenes = sqliteTable(
     /**
      * Roll20 handout NAMES, as a JSON string array. Deliberately a column and
      * not a join table: handouts are opaque external strings, nothing ever
-     * joins on them, and the planning's table list has no table for them.
+     * joins on them, and no query needs a table for them.
      * Order is preserved because the JSON array preserves it.
      */
     handouts: text("handouts").notNull().default("[]"),
-    /** The markdown body — ONE field, editable as markdown (planning F-neu-3). */
+    /** The markdown body — ONE field, editable as markdown. */
     body: text("body").notNull().default(""),
     extra: extraColumn(),
     pos: integer("pos").notNull().default(0),
@@ -351,7 +349,7 @@ export const locations = sqliteTable(
  * of the file format (rule 6); the epoch reading stays the server's job.
  * An `ended` that is NULL or blank means the session runs (session-state.ts).
  *
- * IDENTITY (issue #58, PO decision): the id of a NEW session is an OPAQUE
+ * IDENTITY (PO decision): the id of a NEW session is an OPAQUE
  * RANDOM string — `crypto.randomUUID()` (store/write.ts `newSessionId`).
  * Nobody reads it: it is an address (`sessions/<id>.md`) and nothing else,
  * and everything DISPLAYABLE about a session is derived from `started`.
@@ -421,7 +419,7 @@ export const sessions = sqliteTable(
 
 /**
  * One pause interval of a session, second-precise and zone-less like
- * `started`/`ended`. `toTs` NULL is the RUNNING pause (README, issue #40 AK8).
+ * `started`/`ended`. `toTs` NULL is the RUNNING pause (README).
  * `pos` is the position in the file's list and therefore the key — two pauses
  * may legitimately share a `from`.
  */
@@ -573,9 +571,9 @@ export const inboxEntries = sqliteTable(
 // --- glossary ---------------------------------------------------------------
 
 /**
- * The translation glossary as a STRUCTURED table (planning F6, revised by the
- * PO): term → explanation instead of one markdown blob. Issue #53 builds the
- * generator knowledge base on exactly this table.
+ * The translation glossary as a STRUCTURED table: term → explanation
+ * instead of one markdown blob. The generator's
+ * knowledge base builds on exactly this table.
  */
 export const glossary = sqliteTable(
   "glossary",
@@ -602,7 +600,7 @@ export const glossary = sqliteTable(
 // --- campaign knowledge -----------------------------------------------------
 
 /**
- * The campaign's KNOWLEDGE BASE for the generator (issue #53): naming
+ * The campaign's KNOWLEDGE BASE for the generator: naming
  * conventions, facts and style rules the model has to apply even when the
  * source material says something else.
  *
@@ -657,8 +655,8 @@ export const campaignKnowledge = sqliteTable(
 // --- generator jobs ---------------------------------------------------------
 
 /**
- * The generate job of a campaign (issue #23 / ADR #10 addendum). Still at
- * most one per campaign; persisting it is what Scheibe 4 switches on. The
+ * The generate job of a campaign (ADR #10 addendum). Still at most one
+ * per campaign; persisting it is what slice 4 switches on. The
  * result/error/edit payloads stay JSON: they are the API's own shapes
  * (`GenerateResult`, `GenerateJobError`, `draftEdits`) and nothing queries
  * inside them.
@@ -675,10 +673,10 @@ export const generateJobs = sqliteTable(
     campaignId: text("campaign_id")
       .notNull()
       .references(() => campaigns.id, { onUpdate: "cascade", onDelete: "cascade" }),
-    /** "scene" | "npc" | "augment" (issue #36). */
+    /** "scene" | "npc" | "augment". */
     kind: text("kind").notNull().default("scene"),
     /**
-     * Address of the entry an `augment` run targets (issue #36); NULL for the
+     * Address of the entry an `augment` run targets; NULL for the
      * two runs that CREATE something. Stored from the start of the run, so a
      * job that is still going can already name the entry it works on.
      */
@@ -697,12 +695,12 @@ export const generateJobs = sqliteTable(
     finishedAt: text("finished_at"),
     result: text("result"),
     npcResult: text("npc_result"),
-    /** The augment PROPOSAL (issue #36) — JSON, see AugmentResult. */
+    /** The augment PROPOSAL — JSON, see AugmentResult. */
     augmentResult: text("augment_result"),
     error: text("error"),
     draftEdits: text("draft_edits").notNull().default("{}"),
     /**
-     * The DM's REVIEW STATE (issue #97) — JSON, see `GenerateJobReview`:
+     * The DM's REVIEW STATE — JSON, see `GenerateJobReview`:
      * the decision per suggested entry, the dropped scenes, the per
      * field/block decisions of an augment run and the parts a partial
      * accept already wrote. JSON for the same reason as the payloads above:
@@ -716,7 +714,7 @@ export const generateJobs = sqliteTable(
      */
     rev: integer("rev").notNull().default(0),
     /**
-     * The PIPELINE state of a scene run (issue #102) — JSON: the internal
+     * The PIPELINE state of a scene run — JSON: the internal
      * outline, the parts with their per-part status/error/usage, and the
      * run's token and call totals. `{}` for the single-call runs (npc,
      * augment) and for a row written before this deploy, which is what makes
@@ -725,7 +723,7 @@ export const generateJobs = sqliteTable(
     pipeline: text("pipeline").notNull().default("{}"),
     /**
      * The run's source material, kept because a per-part RETRY has to send
-     * the same excerpt again (issue #102) — and a retry may happen after a
+     * the same excerpt again — and a retry may happen after a
      * restart, when nothing but the row is left. Only a scene run stores it.
      */
     sourceText: text("source_text"),

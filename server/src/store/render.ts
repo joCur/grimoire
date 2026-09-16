@@ -10,13 +10,11 @@
 //      keys from `extra`. Same keys the parser produced, same fallbacks
 //      (`title`/`name` fall back to the id — shared/parse.ts), so the app
 //      cannot tell the difference.
-//   2. `raw` IS A DETERMINISTIC RENDERING, not a stored byte sequence
-//      (planning section 4). It is the editor's display value; no byte
-//      guarantees are made or needed.
-//   3. THE GUARD TOKEN `rev` IS THE ROW'S VERSION COUNTER (planning
-//      section 4). The app has always treated it as opaque, and the row
-//      version makes the semantics stronger than a file time: it cannot
-//      collide inside one second, which is exactly the bug of issue #37.
+//   2. `raw` IS A DETERMINISTIC RENDERING, not a stored byte sequence. It is
+//      the editor's display value; no byte guarantees are made or needed.
+//   3. THE GUARD TOKEN `rev` IS THE ROW'S VERSION COUNTER. The app has
+//      always treated it as opaque, and the row version makes the semantics
+//      stronger than a file time: it cannot collide inside one second.
 //
 // Sections that became rows are rendered BACK from those rows: a session's
 // `## Log`, an npc's `## Beziehungen`, the inbox list, the glossary. That is
@@ -53,7 +51,7 @@ export interface CampaignRow {
   glossaryIntro: string;
   glossaryRev: number;
   inboxRev: number;
-  /** Guard token of the campaign-knowledge list (issue #53). */
+  /** Guard token of the campaign-knowledge list. */
   knowledgeRev: number;
 }
 
@@ -220,7 +218,7 @@ function parsed(
  * rule for a missing `name` is the id fallback (shared/src/parse.ts). The
  * fallback is applied HERE, once, and everything that shows a campaign name
  * reads it through this function: the campaign entry (`GET /entry`) and the
- * campaign list (`GET /campaigns`) disagreed about it before issue #62.
+ * campaign list (`GET /campaigns`) once disagreed about it.
  */
 export function campaignDisplayName(row: CampaignRow): string {
   return row.name === "" ? row.id : row.name;
@@ -379,7 +377,7 @@ export function renderSessionBody(row: SessionRow, log: LogRow[]): string {
 
 /**
  * The epoch interpretation of a session's zone-less timestamps — unchanged
- * arithmetic, unchanged reason (issue #40): only the SERVER knows which wall
+ * arithmetic, unchanged reason: only the SERVER knows which wall
  * clock those digits belong to, so it ships the reading alongside the
  * strings. `clock.ts` is untouched by the cutover.
  */

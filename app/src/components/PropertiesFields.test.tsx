@@ -1,4 +1,4 @@
-// Render tests for the „Eigenschaften" controls (issue #42, react-dom/server —
+// Render tests for the „Eigenschaften" controls (react-dom/server —
 // no DOM). What must hold is the degrade contract of the reference and select
 // fields: the existing ids are OFFERED (a <datalist>, never a closed list), an
 // id without a file stays typeable and visible, and a status value nobody knows
@@ -13,7 +13,7 @@ import { propertiesFieldsFor, type FieldValue, type PropertiesField } from "@/li
 import { PropertiesFieldControl } from "./PropertiesFields";
 import { translator } from "@/i18n/format";
 
-// The language the assertions below are written in (issue #69): the helpers
+// The language the assertions below are written in: the helpers
 // take the translator as an argument, so a test says so explicitly instead of
 // leaning on a default.
 const t = translator("de");
@@ -86,14 +86,14 @@ describe("reference fields", () => {
     expect(html).not.toContain("Keine Orts-id");
   });
 
-  test("text that SLUGS to a known Ort resolves to that Ort's name (#100)", () => {
+  test("text that SLUGS to a known Ort resolves to that Ort's name", () => {
     // Typing the name lands on the entry that is already there — no „neu".
     const html = render(sceneField("location"), { kind: "text", text: "Leuchtturm" });
     expect(html).toContain("Der Leuchtturm");
     expect(html).not.toContain("angelegt");
   });
 
-  test("text no slug can be derived from says nothing — the issue does (#100)", () => {
+  test("text no slug can be derived from says nothing — the issue does", () => {
     const html = render(sceneField("location"), { kind: "text", text: "???" });
     expect(html).not.toContain("angelegt");
     expect(html).not.toContain("Keine Orts-id");

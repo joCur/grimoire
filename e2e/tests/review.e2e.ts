@@ -8,8 +8,8 @@
 // tree the test's database is imported from (the same lines the live view
 // would have written — path 4 covers the writing itself).
 //
-// Issue #34 touches this path too: the source chip of a log line names the
-// SCENE by its title (resolved via the tree), not by the id in the log line.
+// The source chip of a log line names the SCENE by its title (resolved via
+// the tree), not by the id in the log line.
 
 import { expect, test, todaySessionId, todaySessionPath } from "../support/test";
 
@@ -17,9 +17,9 @@ const THREAD_LINE = "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #th
 const THREAD_TEXT = "Cliffhanger: Lichter in der Bucht gesichtet";
 const NPC_TEXT = 'Improvisiert: Fischerin „Old Metta“ am Steg';
 const INBOX_TEXT = "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug";
-/** An idea thrown in on the go — no hashtag at all (issue #85). */
+/** An idea thrown in on the go — no hashtag at all. */
 const NOTE_TEXT = "Die Laternen am Kai brennen bei Ebbe nie";
-/** A note ABOUT a player character (issue #86) — `#pc` plus the name tag. */
+/** A note ABOUT a player character — `#pc` plus the name tag. */
 const PC_TEXT = "Geburtstags-Item für Kaela vorbereiten";
 
 /** Today's session with the three tagged log lines the review harvests. */
@@ -76,7 +76,7 @@ test("adopting a thread lands in the chapter, the inbox line gets ticked off", a
   // --- adopt the #thread log line -----------------------------------------
   const threadCard = page.locator("div").filter({ hasText: THREAD_TEXT }).last();
   // This line was logged without a scene marker, so the chip stays bare
-  // (issue #34 — the scene part only appears when the line names one).
+  // (the scene part only appears when the line names one).
   await expect(threadCard.getByText("Log", { exact: true })).toBeVisible();
   await threadCard.getByRole("button", { name: "Als Handlungsstrang übernehmen" }).click();
 
@@ -110,7 +110,7 @@ test("adopting a thread lands in the chapter, the inbox line gets ticked off", a
   await expect(page.getByRole("link", { name: "Nachbereitung · 2 offen" })).toBeVisible();
 });
 
-test("an untagged inbox note is reviewable and can be ticked off (issue #85)", async ({
+test("an untagged inbox note is reviewable and can be ticked off", async ({
   page,
   api,
 }) => {
@@ -150,7 +150,7 @@ test("an untagged inbox note is reviewable and can be ticked off (issue #85)", a
   await expect(page.getByRole("link", { name: "Nachbereitung · 4 offen" })).toBeVisible();
 });
 
-test("a #pc note is grouped by character and ticked off (issue #86)", async ({ page, api }) => {
+test("a #pc note is grouped by character and ticked off", async ({ page, api }) => {
   // Thrown in the way it happens on the go: the mobile start surface at
   // 390px (critical path 8), tagged `#pc #kaela`.
   await page.setViewportSize({ width: 390, height: 844 });
@@ -207,7 +207,7 @@ test("creating an NPC entry from a #npc log line", async ({ page, api }) => {
 
   const npcCard = page.locator("div").filter({ hasText: NPC_TEXT }).last();
   // The source chip names the SCENE the line was logged under, resolved from
-  // the tree — never the `(lighthouse-arrival)` id of the log line (issue #34).
+  // the tree — never the `(lighthouse-arrival)` id of the log line.
   await expect(npcCard.getByText("Log · Ankunft am Leuchtturm")).toBeVisible();
   await expect(npcCard.getByText("lighthouse-arrival")).toHaveCount(0);
   await npcCard.getByRole("button", { name: "NPC anlegen" }).click();
@@ -257,7 +257,7 @@ test("an id that already has an entry is linked, not refused", async ({ page, ap
 test.describe("with yesterday's session, ended after midnight", () => {
   test.use({ seed: { files: { [PAST_MIDNIGHT.path]: PAST_MIDNIGHT.content } } });
 
-  test("a session that ran past midnight is still the session review's session (issue #40 review)", async ({
+  test("a session that ran past midnight is still the session review's session", async ({
     page,
     api,
   }) => {

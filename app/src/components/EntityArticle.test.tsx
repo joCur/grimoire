@@ -1,5 +1,5 @@
 // Render tests for the entity reading view (react-dom/server — no DOM):
-// the NPC/location/titled headers and the one rule that started issue #26 —
+// the NPC/location/titled headers and the one rule behind them —
 // the scene type overline never appears above a non-scene.
 
 import type { EntityKind, EntryResponse } from "@grimoire/shared/types";
@@ -120,7 +120,7 @@ describe("EntityArticle — location and titled entities", () => {
   });
 
   test("the action slot stays ONE spaced group in every header variant", () => {
-    // Since issue #15 the slot carries more than one trigger; the
+    // The slot carries more than one trigger; the
     // headers put it in a `justify-between` row, so without the group wrapper
     // the first button would be stranded in the middle of the header.
     const actions = (

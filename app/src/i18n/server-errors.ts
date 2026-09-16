@@ -1,4 +1,4 @@
-// Server error bodies, read in the UI language (issue #69).
+// Server error bodies, read in the UI language.
 //
 // The server is language-free (`@grimoire/shared/error-codes`): every error a
 // human reads carries a stable `code` plus the parameters its sentence needs,

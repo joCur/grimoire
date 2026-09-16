@@ -1,4 +1,4 @@
-// React-query half of the „Eigenschaften" form (issue #42).
+// React-query half of the „Eigenschaften" form.
 //
 // The cache/409 mechanics are the shared envelope in use-rev-write.ts; what
 // belongs to this path is the invalidation set. A properties patch can move

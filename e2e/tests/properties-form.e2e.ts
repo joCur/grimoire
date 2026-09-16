@@ -1,8 +1,8 @@
 // Critical path 7: the properties patch from the app, here through the
-// „Eigenschaften" form of issue #42 — one dialog per entity kind over ALL
-// typed fields, including the 409 conflict. It also touches path 2 (the
-// reading view must show the new values the moment the dialog closes) and
-// path 8 (the form has to be usable at 390px). See CLAUDE.md.
+// „Eigenschaften" form — one dialog per entity kind over ALL typed fields,
+// including the 409 conflict. It also touches path 2 (the reading view must
+// show the new values the moment the dialog closes) and path 8 (the form has
+// to be usable at 390px). See CLAUDE.md.
 //
 // The sibling spec on this path is tests/status-control.e2e.ts: the status
 // regler patches ONE key, this form patches any of them. Two things make the
@@ -22,9 +22,9 @@
 //      unfinished quickstat row.
 //
 // Every assertion reads the file back through the API — what the UI shows and
-// what the database holds are checked separately. Since the cutover (issue
-// #57) there is no file behind it: „extern geändert" now means a SECOND
-// WRITER through the same API, which is what bumps the row's guard token.
+// what the database holds are checked separately. Since the cutover there is
+// no file behind it: „extern geändert" now means a SECOND WRITER through the
+// same API, which is what bumps the row's guard token.
 //
 // One caveat the assertions live with: PATCH /properties re-emits the whole
 // YAML block, so the SURFACE formatting of untouched keys may normalize
@@ -103,7 +103,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
 
   // The header action row: the body editor and this form. „Umbenennen" is NOT
-  // among them any more — issue #77 moved the id change into this dialog.
+  // among them any more — the id change lives in this dialog now.
   const headerActions = page
     .getByRole("article")
     .getByRole("button")
@@ -114,7 +114,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   await expect(dialog).toContainText("Szene: Eigenschaften");
   // The two values the form does NOT own are context, not fields: the id
   // belongs to the rename dialog (with its cascade), the kind comes from the
-  // path — and the footer says where to change it (issue #77).
+  // path — and the footer says where to change it.
   await expect(dialog).toContainText("lighthouse-arrival");
   await expect(dialog).toContainText('unten über „id ändern“');
   await expect(dialog.getByRole("button", { name: "id ändern" })).toBeVisible();
@@ -182,7 +182,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   await expect(article).toContainText("#nachtszene");
   await expect(article.getByText("Nordbucht", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Entwurf" })).toBeVisible();
-  // The location IS the group since issue #100, so the scene MOVED — and the
+  // The location IS the group, so the scene MOVED — and the
   // URL follows it (replace, so „zurück" does not return to the old address).
   await expect(page).toHaveURL(
     /\/beispiel\/entry\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
@@ -578,7 +578,7 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
     await expect(page.getByRole("button", { name: "Eigenschaften" })).toHaveCount(0);
   }
 
-  // The campaign file keeps its ONE dialog (issue #34): its name/description
+  // The campaign file keeps its ONE dialog: its name/description
   // ARE its properties, so a second form next to it would be two ways to
   // write the same two keys.
   await page.goto("/beispiel/entry/campaign");
@@ -592,7 +592,7 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
 
 // Critical path 8: the same form at phone size. The dialog is the only place
 // in the reading view where the DM types more than one field, so it has to
-// work here — the header action row wraps to a second line for it (issue #42).
+// work here — the header action row wraps to a second line for it.
 test.describe("at 390px", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 

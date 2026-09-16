@@ -1,4 +1,4 @@
-// GET /api/:campaign/usage — where an entity is REFERENCED (issue #60).
+// GET /api/:campaign/usage — where an entity is REFERENCED.
 //
 // This is the counting half of the rename: before the DM changes an id, the
 // dialog says what hangs off it ("3 Szenen, 2 Beziehungen, 4 Log-Zeilen"),
@@ -63,7 +63,7 @@ export function isUsageKind(value: unknown): value is UsageKind {
  *   chapterScenes     a scene belongs to the chapter
  *   chapterNpcs       an npc is introduced in the chapter
  *   chapterLocations  a location belongs to the chapter
- *   bodyRefs          a body text says `[[<id>]]` (issue #68)
+ *   bodyRefs          a body text says `[[<id>]]`
  */
 export const USAGE_REFS = [
   "sceneNpcs",
@@ -201,7 +201,7 @@ function sessionSites(rows: { sessionId: string }[]): UsageSite[] {
 }
 
 /**
- * Documents whose BODY TEXT references the entity as `[[<id>]]` (issue #68).
+ * Documents whose BODY TEXT references the entity as `[[<id>]]`.
  * One site per entry — the ROW is the entry here, so a scene that names
  * the npc three times counts once: there is no row per mention to count.
  *

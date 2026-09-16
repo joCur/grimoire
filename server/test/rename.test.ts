@@ -1,4 +1,4 @@
-// Rename-cascade tests (issue #30, ported to the database in issue #57).
+// Rename-cascade tests, ported to the database.
 //
 // The rename is a primary-key UPDATE with a cascade now (store/rename.ts), so
 // the assertions changed their MEDIUM but not their subject: every reference
@@ -16,7 +16,7 @@
 // untouched (a display name that happens to contain the old id, quickstats,
 // the `roll20-page`, the log's timestamps and hashtags). Those are asserted
 // individually, because that is what "nur Referenzstellen ändern sich"
-// (AK5) means once the values live in columns.
+// means once the values live in columns.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { CampaignTree, EntryResponse } from "@grimoire/shared";
@@ -39,7 +39,7 @@ const SESSION = "sessions/2026-01-15";
 interface RenameResponse {
   renamed: { from: string; to: string };
   changed: string[];
-  /** The reference counts behind `changed` (issue #60). */
+  /** The reference counts behind `changed`. */
   usage: UsageReport;
   dryRun?: boolean;
 }
@@ -58,7 +58,7 @@ async function renameOk(body: unknown): Promise<RenameResponse> {
   return (await res.json()) as RenameResponse;
 }
 
-/** GET /usage — the reference counts of one entity (issue #60). */
+/** GET /usage — the reference counts of one entity. */
 async function usageOf(kind: string, id: string): Promise<UsageReport> {
   const res = await app.request(`/api/beispiel/usage?kind=${kind}&id=${encodeURIComponent(id)}`);
   expect(res.status).toBe(200);
@@ -319,14 +319,14 @@ describe("POST /api/:campaign/rename — chapter", () => {
     expect(campaignTree.chapters.map((ch) => ch.id)).toEqual(["01-salzbucht"]);
     const chapter = campaignTree.chapters[0]!;
     expect(chapter.path).toBe("01-salzbucht");
-    // Groups ordered by their NAME (issue #100 review): „Der Leuchtturm von
+    // Groups ordered by their NAME: „Der Leuchtturm von
     // Salzhafen" before the unnamed `bucht`.
     expect(chapter.groups.flatMap((g) => g.scenes.map((s) => s.path))).toEqual([
       "01-salzbucht/leuchtturm/lighthouse-arrival",
       "01-salzbucht/bucht/smuggler-captured",
     ]);
-    // scene ids are untouched by a chapter rename (one group per location
-    // since issue #100, so the ids are collected across the groups)
+    // scene ids are untouched by a chapter rename (one group per location,
+    // so the ids are collected across the groups)
     expect(chapter.groups.flatMap((g) => g.scenes.map((s) => s.id)).sort()).toEqual([
       "lighthouse-arrival",
       "smuggler-captured",
@@ -372,7 +372,7 @@ describe("POST /api/:campaign/rename — dry run", () => {
     expect(done.dryRun).toBeUndefined();
   });
 
-  // Issue #60: the preview's numbers ARE the cascade's numbers — one set of
+  // The preview's numbers ARE the cascade's numbers — one set of
   // queries answers both (store/usage.ts). The proof is the round trip: what
   // the dry run counted for the old id is what the new id carries afterwards.
   test.each(["npc", "location", "scene", "chapter"] as const)(

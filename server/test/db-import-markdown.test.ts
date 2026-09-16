@@ -1,5 +1,5 @@
-// The markdown decomposition rules of the one-time migration, unit level
-// (issue #54). The integration side is test/db-migration.test.ts; this file
+// The markdown decomposition rules of the one-time migration, unit level.
+// The integration side is test/db-migration.test.ts; this file
 // pins the DEGRADE RULES themselves, because they are the part that decides
 // whether a DM's odd hand-written file survives the move.
 
@@ -32,7 +32,7 @@ describe("splitSections / removeSection", () => {
   });
 
   test("a `###` subsection is NOT parsed, so it is NOT removed either", () => {
-    // The review finding this pins: `sectionLines` stops at the next heading
+    // What this pins: `sectionLines` stops at the next heading
     // of ANY level, so the `### Nachtrag` lines never became rows. Removing
     // them with the section deleted content that nothing had stored.
     const body = "## Log\n\n- 19:00 x\n\n### Nachtrag\n\ny\n\n## Threads\n\n- [ ] t\n";
@@ -235,7 +235,7 @@ describe("parseGlossaryBody", () => {
   });
 
   test("emphasis inside prose is NOT a term", () => {
-    // The review finding: `**Wichtig:** …` matched the bold rule and became a
+    // The bug this pins: `**Wichtig:** …` matched the bold rule and became a
     // glossary term named "Wichtig:" — an entry the DM never wrote. Prose
     // belongs to its section's explanation.
     const result = parseGlossaryBody(
@@ -260,7 +260,7 @@ describe("parseGlossaryBody", () => {
     const result = parseGlossaryBody("Freitext ohne Überschrift\n\n# G\n\n- a → b\n");
     expect(result.entries.map((e) => e.term)).toEqual(["a"]);
     expect(result.problems.join(" ")).toContain("vor der ersten Überschrift");
-    // …and it is handed back verbatim so the caller can keep it (#57 review).
+    // …and it is handed back verbatim so the caller can keep it.
     expect(result.preamble).toBe("Freitext ohne Überschrift");
   });
 

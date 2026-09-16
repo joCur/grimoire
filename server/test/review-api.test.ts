@@ -1,4 +1,4 @@
-// Review-action tests (issue #10), ported to the database stack (issue #57).
+// Review-action tests, ported to the database stack.
 //
 // Same setup as the write-API tests: one fresh in-memory database per case,
 // seeded from `examples/` by the real migration (test/support/store.ts). No
@@ -426,7 +426,7 @@ describe("POST /api/:campaign/review/inbox-done", () => {
 
   test("404 when the campaign has no inbox at all", async () => {
     // The "inbox is missing" case: a campaign whose migration produced no
-    // inbox rows. GET answers 200 with an empty document (#70), but there is
+    // inbox rows. GET answers 200 with an empty document, but there is
     // still no such LINE to check off — hence 404 here.
     const root = await tempCampaignRoot();
     try {

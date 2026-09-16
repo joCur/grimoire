@@ -1,8 +1,8 @@
 // Critical paths 2 and 7: changing an id from the reading view, with the
-// USAGE PREVIEW the DM decides on (issue #60).
+// USAGE PREVIEW the DM decides on.
 //
-// Since issue #77 the way in is the FOOTER of the „Eigenschaften" dialog („id
-// ändern") — the header button is gone: names resolve themselves (#68), so an
+// The way in is the FOOTER of the „Eigenschaften" dialog („id
+// ändern") — the header button is gone: names resolve themselves, so an
 // id change is a repair, not everyday work. What this spec also pins is that
 // the two dialogs do not stack: the form closes and the rename dialog takes
 // the focus.

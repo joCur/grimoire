@@ -2,12 +2,12 @@
 // `## Will` section) and quickstats, exactly those three per UI-BRIEF.
 // Two densities per the design prototype: the scene aside ("full", with id
 // badge and labeled rows) and the live aside ("compact", inline "Will:").
-// The whole card links to the NPC reading view (issue #26) — UNLESS the caller
-// passes `onOpen`: in the live mode (issue #40) the card must not navigate
+// The whole card links to the NPC reading view — UNLESS the caller
+// passes `onOpen`: in the live mode the card must not navigate
 // away from the running session, it opens the detail drawer instead. Same
 // card, same hover, only the element differs (link vs. button).
 //
-// Degradation (issue #26): an npc a scene lists always HAS an entry — the
+// Degradation: an npc a scene lists always HAS an entry — the
 // reference is a foreign key, and a write that names nothing is refused. The
 // entry may be empty, and then this card is simply thin: the name (the id,
 // until somebody types one) and nothing else. What is left is the honest
@@ -39,7 +39,7 @@ export function NpcCard({
   compact?: boolean;
   /**
    * When given, the card is a BUTTON that hands the npc's campaign-relative
-   * path to the caller instead of navigating (live mode drawer, issue #40).
+   * path to the caller instead of navigating (live mode drawer).
    */
   onOpen?: (path: string) => void;
 }) {

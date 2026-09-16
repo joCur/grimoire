@@ -1,4 +1,4 @@
-// The one-time data step behind issue #100: `group_slug` becomes `location`.
+// The one-time data step: `group_slug` becomes `location`.
 //
 // WHY IT RUNS BEFORE THE SCHEMA MIGRATOR
 //
@@ -18,7 +18,7 @@
 //      DM's grouping exactly as it was.
 //   2. `location` is free text -> it becomes the slug of that text, and the
 //      location entry is created with the text as its `name`. The format's
-//      free-text exception is gone (#100), so there is no third option.
+//      free-text exception is gone, so there is no third option.
 //   3. `location` names an entry that does not exist -> the empty entry is
 //      created. Without it the chapter view would show a heading for a
 //      location the campaign cannot name — and since every reference became
@@ -78,7 +78,7 @@ function hasTable(client: SqliteClient, name: string): boolean {
   );
 }
 
-/** Does this database still have the pre-#100 column? */
+/** Does this database still have the pre-migration column? */
 function hasGroupSlug(client: SqliteClient): boolean {
   if (!hasTable(client, "scenes")) return false;
   return client

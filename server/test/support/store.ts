@@ -1,12 +1,12 @@
-// Test setup for the database-backed API (issue #57).
+// Test setup for the database-backed API.
 //
 // Every test case gets its OWN in-memory database, seeded through the real
 // markdown importer from a campaign tree — `examples/` by default, which is
 // what makes the committed example campaign the fixture of the whole suite
-// (CLAUDE.md, "Arbeitsweise"; planning decision F5) without a second data
+// (CLAUDE.md, "Arbeitsweise") without a second data
 // format anywhere.
 //
-// Since issue #79 the seeding is EXPLICIT: the boot imports nothing, so a
+// The seeding is EXPLICIT: the boot imports nothing, so a
 // test that wants content runs the importer itself — exactly what `grimoire
 // seed` does. Why in-memory: same driver, same schema migrations, same
 // importer as production, no cleanup, and each case is independent.

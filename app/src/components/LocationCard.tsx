@@ -1,4 +1,4 @@
-// Location card fed from locations/<id> (issue #40) — the counterpart of
+// Location card fed from locations/<id> — the counterpart of
 // NpcCard for the live aside: the DM needs the PLACE of the running scene as
 // readily as its people ("wo stehen wir gerade?"), and until now the scene's
 // `location` was only a line in the scene header.

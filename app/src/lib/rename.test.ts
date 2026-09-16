@@ -1,4 +1,4 @@
-// Tests for the pure half of „Umbenennen" (issue #30): which files offer the
+// Tests for the pure half of „Umbenennen": which files offer the
 // action, the id rules the dialog blocks on before it ever asks the server,
 // and where the reading view has to go after the cascade.
 
@@ -20,7 +20,7 @@ import {
 } from "@/lib/rename";
 import { translator } from "@/i18n/format";
 
-// The language the assertions below are written in (issue #69): the helpers
+// The language the assertions below are written in: the helpers
 // take the translator as an argument, so a test says so explicitly instead of
 // leaning on a default.
 const t = translator("de");
@@ -159,7 +159,7 @@ describe("renameKindLabel", () => {
   });
 });
 
-// --- usage summary (issue #60) ----------------------------------------------
+// --- usage summary ----------------------------------------------------------
 
 function group(ref: UsageGroup["ref"], count: number): UsageGroup {
   return { ref, count, sites: [] };

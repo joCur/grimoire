@@ -1,4 +1,4 @@
-// THE error-code contract between server and app (issue #69).
+// THE error-code contract between server and app.
 //
 // The server is LANGUAGE-FREE. Until this module existed, a handful of error
 // bodies carried German sentences and the app printed them verbatim — which

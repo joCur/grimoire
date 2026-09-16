@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
-// The `grimoire` CLI (issue #54).
+// The `grimoire` CLI.
 //
 //   grimoire seed [dir]      import a markdown campaign tree into the database
 //
-// `seed` is the ONLY way markdown gets into a database (issue #79 AK6): the
+// `seed` is the ONLY way markdown gets into a database: the
 // server boots empty and imports nothing. There is still exactly one importer
-// — this command drives it (planning #52, PO decision F5). Its default source
+// — this command drives it. Its default source
 // is `examples/`, which is what makes the example campaign the dev and E2E
 // fixture without a second data format.
 //

@@ -1,4 +1,4 @@
-// „Mit KI ergänzen" (issue #36): the generator pipeline pointed at an entry
+// „Mit KI ergänzen": the generator pipeline pointed at an entry
 // that ALREADY EXISTS — an NPC, a location or a scene.
 //
 // It is deliberately the SAME pipeline as the two create runs
@@ -230,7 +230,7 @@ export function validateAugmentReply(
   const reply = read.reply;
   const errors: string[] = [];
 
-  // The target address is the SERVER's and always was — since issue #100 the
+  // The target address is the SERVER's and always was — the
   // model is not even asked for one: an augment run rewrites the entry at
   // `stored.path`, full stop. (Its `location`, on the other hand, is an
   // ordinary proposal: accepting one moves the scene like any other write.)
@@ -301,8 +301,8 @@ function sameValue(a: unknown, b: unknown): boolean {
 }
 
 /**
- * What the model wants to do to the properties, field by field (issue #36
- * AK2). Only what CHANGES is listed: a key the proposal repeats verbatim is
+ * What the model wants to do to the properties, field by field.
+ * Only what CHANGES is listed: a key the proposal repeats verbatim is
  * not a decision the DM has to make.
  *
  * A key the proposal DROPS is not listed either — „nichts löschen" is the
@@ -386,7 +386,7 @@ export async function runAugment(
     validate: (raw) => validateAugmentReply(raw, target),
     correctionTail: AUGMENT_CORRECTION_TAIL,
   });
-  // The naming check runs on the PROPOSAL (issue #53 AK3), as hints — never
+  // The naming check runs on the PROPOSAL, as hints — never
   // a reason to fail a run. It reads the proposed entry, because that is
   // the text the DM is about to accept.
   return withNamingHints(

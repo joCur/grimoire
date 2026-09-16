@@ -1,16 +1,16 @@
-// POST /api/:campaign/rename as a database UPDATE (issue #57).
+// POST /api/:campaign/rename as a database UPDATE.
 //
-// SCOPE NOTE: the planning puts the rename rebuild in Scheibe 3 (#29/#30).
-// It could not stay behind, though — the moment the read/write endpoints stop
+// SCOPE NOTE: the rename rebuild came with the cutover rather than after it.
+// It could not stay behind — the moment the read/write endpoints stop
 // reading the markdown tree, the file-tree cascade of `campaign-rename.ts` is
 // renaming files nobody reads any more. So the endpoint moves with the
 // cutover, at exactly the size the cutover needs: the id update plus the
 // reference cascade, with the response shape (`{ renamed, changed }`) and the
-// error semantics (400 / 404 / 409) unchanged. Scheibe 3 (#60) then added
-// what was left: the reference COUNTS. They come from store/usage.ts, which
-// is also what `GET /usage` answers with — so the plan's `changed` list, the
-// dialog's German summary and the endpoint are one set of queries, and the
-// preview cannot count something the cascade does not rewrite.
+// error semantics (400 / 404 / 409) unchanged. What was left came on top:
+// the reference COUNTS. They come from store/usage.ts, which is also what
+// `GET /usage` answers with — so the plan's `changed` list, the dialog's
+// German summary and the endpoint are one set of queries, and the preview
+// cannot count something the cascade does not rewrite.
 //
 // What the migration bought here is visible in the code below: the id IS the
 // primary key and every reference is a foreign key (schema.ts rules 3 and
@@ -71,7 +71,7 @@ export interface RenameResult {
   renamed: { from: string; to: string };
   changed: string[];
   /**
-   * The reference count behind `changed` (issue #60), from the very same
+   * The reference count behind `changed`, from the very same
    * queries `GET /usage` answers with — the dialog's German summary reads off
    * this, so the preview counts what the cascade rewrites.
    */
@@ -107,7 +107,7 @@ function assertNewId(newId: string): void {
 /**
  * The reference sites of one rename, as the paths whose CONTENT changes —
  * derived from the USAGE report, so the preview's numbers and the cascade's
- * file list come from one set of queries (issue #60).
+ * file list come from one set of queries.
  *
  * Two corrections on top of the raw sites:
  *
@@ -341,7 +341,7 @@ export async function renameEntity(
 
   const from = pathOf(db, campaign, kind, oldId);
   // ONE reference pass for both answers: the counts the dialog shows and the
-  // paths the cascade touches (issue #60).
+  // paths the cascade touches.
   const usage = usageReport(db, campaign, kind, oldId);
   const changed = new Set(referenceSites(usage, oldId, newId));
   const to =

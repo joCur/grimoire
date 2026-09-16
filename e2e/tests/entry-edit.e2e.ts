@@ -2,7 +2,7 @@
 // the body → save → rendered; 409 on a CONCURRENT SECOND WRITE means reload
 // instead of a silent overwrite; see CLAUDE.md.
 //
-// Since the cutover (issue #57) the database is the only truth, so "someone
+// Since the cutover the database is the only truth, so "someone
 // changed the file outside" can no longer happen — the conflict this path is
 // about is a second write through the API while the editor stands open.
 // Everything else is unchanged: the write goes through PUT /entry with its
@@ -14,13 +14,13 @@
 // ~5s version poll cannot heal the staleness while the DM types. No retry loop.
 //
 // The other half of that freeze is what must NOT become a conflict: the status
-// regler right next to the editor writes a new version of the same body, and
+// control right next to the editor writes a new version of the same body, and
 // the DM's own click may not answer their save with „Inzwischen geändert".
 // Two more ways to lose text are covered here as well — a navigation must not
 // leave edit mode armed, and a failing background refetch must not tear the
 // open editor down.
 //
-// Since issue #43 „Bearbeiten" opens the BLOCK COMPOSER, so this spec covers
+// „Bearbeiten" opens the BLOCK COMPOSER, so this spec covers
 // the „Markdown" half of edit mode: the textarea, its „Vorschau" and the whole
 // save/409/discard machinery as seen from the fallback surface. The composer
 // itself — and the fact that it is the default — is
@@ -46,7 +46,7 @@ async function split(api: Api, rel: string) {
 /**
  * Enter edit mode and switch to the raw markdown surface.
  *
- * „Bearbeiten" opens the block composer since issue #43, so everything the
+ * „Bearbeiten" opens the block composer, so everything the
  * fallback surface owns costs one more click: the „Markdown" side of the mode
  * toggle. Switching is lossless by construction (the draft round-trips through
  * serializeBlocks/parseBlocks), which is why the textarea below is still
@@ -79,7 +79,7 @@ test("editing the body: save writes the entry and the reading view shows it", as
   // touches (and says so).
   await expect(textarea).toHaveValue(before.body);
   await expect(page.getByText("Nur der Textkörper — die Eigenschaften bleiben unverändert.")).toBeVisible();
-  // The header keeps standing: title, chips and the status regler stay put.
+  // The header keeps standing: title, chips and the status control stay put.
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Bereit" })).toBeVisible();
   // While the editor runs the header trigger is gone — the toolbar toggle owns
   // the mode from here on, and it currently offers the OTHER side.
@@ -138,7 +138,7 @@ test("a mention in the text stays text — no entry, no error", async ({ page, a
   expect(after.body).toContain(relation);
 });
 
-test("a scene that MOVED is still editable under its old address (#100)", async ({
+test("a scene that MOVED is still editable under its old address", async ({
   page,
   api,
 }) => {
@@ -270,7 +270,7 @@ test("a concurrent second write: the save reports the conflict, the second one w
   expect(after.body).not.toContain("Von einem zweiten Schreiber");
 });
 
-test("the status regler next to the editor is no conflict for the own save", async ({
+test("the status control next to the editor is no conflict for the own save", async ({
   page,
   api,
 }) => {
@@ -283,7 +283,7 @@ test("the status regler next to the editor is no conflict for the own save", asy
   await expect(textarea).toHaveValue(before.body);
   await textarea.fill(`${before.body}\n${mine}\n`);
 
-  // The pill stays usable while the editor runs (issue #28) — and its PATCH
+  // The pill stays usable while the editor runs — and its PATCH
   // bumps the file's rev without touching one byte of the body.
   const trigger = page.getByRole("button", { name: /^Status ändern, aktuell/ });
   await trigger.click();
@@ -439,8 +439,8 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   await page.goto("/beispiel/entry/sessions/2026-01-15");
   await expect(page.getByRole("article")).toContainText("Spuren gefunden");
   // A session's heading is its DATE, derived from `started` — the id is opaque
-  // since issue #58 and is never shown. (This fixture still carries the old
-  // date-shaped id, which must make no difference to the heading.)
+  // and is never shown. (This fixture still carries the old date-shaped id,
+  // which must make no difference to the heading.)
   await expect(page.getByRole("article").getByRole("heading", { level: 1 })).toHaveText(
     "Session vom 15.01.2026",
   );
@@ -468,7 +468,7 @@ test("campaign keeps its ONE Bearbeiten — the metadata dialog", async ({ page 
     "Der Leuchtturm von Salzhafen",
   );
 
-  // One label, one meaning (issue #34): the campaign file's „Bearbeiten" is
+  // One label, one meaning: the campaign file's „Bearbeiten" is
   // the name/description dialog, and there is no second one for the body.
   const edit = page.getByRole("button", { name: "Bearbeiten" });
   await expect(edit).toHaveCount(1);

@@ -18,7 +18,7 @@ import { expect, test } from "../support/test";
 /** The scene with the [!loot] callout — seeded, examples/ has none. */
 const LOOT_SCENE = {
   // The path segment is the scene's ID from the fixture's properties
-  // (`loot-check`), like every scene path since issue #57.
+  // (`loot-check`), like every scene path.
   path: "01-salzhafen/leuchtturm/loot-check",
   content: readFileSync(path.join(FIXTURES_DIR, "loot-scene.md"), "utf8"),
 };
@@ -39,7 +39,7 @@ const CAPTURED = "/beispiel/entry/01-salzhafen/bucht/smuggler-captured";
 test("reference scene 1: read-aloud, check, secret, note and the NPC card", async ({ page }) => {
   await page.goto(ARRIVAL);
 
-  // The context line above the title (issue #34): chapter › group, replacing
+  // The context line above the title: chapter › group, replacing
   // the topbar breadcrumb. The chapter links back to the pool.
   const context = page.getByRole("navigation", { name: "Kontext" });
   await expect(
@@ -61,7 +61,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(article.getByText("Der Leuchtturm von Salzhafen", { exact: true })).toBeVisible();
   await expect(article.getByText("#social", { exact: true })).toBeVisible();
   await expect(article.getByText("Handout: Karte von Salzhafen")).toBeVisible();
-  // The status display IS the control (issue #28).
+  // The status display IS the control.
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Bereit" })).toBeVisible();
 
   // The signature element: no label row, brass ribbon, copy button on hover.
@@ -93,7 +93,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(aside).toContainText("insight");
   await expect(aside).toContainText("passive-perception");
 
-  // The card links into the NPC reading view (issue #26).
+  // The card links into the NPC reading view.
   await aside.getByRole("link").first().click();
   await expect(page).toHaveURL(/\/beispiel\/entry\/npcs\/jorna$/);
 });
@@ -222,7 +222,7 @@ test.describe("with a seeded loot scene", () => {
     // [!loot] is missing from the reference scenes and examples/ must not be
     // reformatted — so the sixth kind is checked on a scene this test seeds into
     // the markdown tree its own database is imported from. Its path segment is
-    // the scene's ID (`beutezug`), like every scene path since issue #57.
+    // the scene's ID (`beutezug`), like every scene path.
     await page.goto(`/beispiel/entry/${LOOT_SCENE.path}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Beutezug in der Räucherkammer",
@@ -238,7 +238,7 @@ test.describe("with a seeded loot scene", () => {
   });
 });
 
-// Issue #96: the table is part of the same critical path — the reference
+// The table is part of the same critical path — the reference
 // scene carries a W6 table inside its `[!note]`, so path 2 checks it where
 // the DM meets it.
 test("the reference scene's W6 table renders as a table inside the note callout", async ({

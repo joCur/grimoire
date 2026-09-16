@@ -1,5 +1,5 @@
 // Decomposing markdown bodies into rows — the pure half of the one-time
-// migration (issue #54). No filesystem, no database: everything here is a
+// migration. No filesystem, no database: everything here is a
 // function from text to data, so the degrade rules are unit-testable.
 //
 // The same design rule as everywhere else applies (DECISIONS #1): NOTHING
@@ -312,7 +312,7 @@ export function parseInboxBody(body: string): ImportedInboxEntry[] {
  *                                               `EN → DE` form the generator
  *                                               prompt texts)
  *   `- lighthouse keeper -> Leuchtturmwärter`   (ASCII arrow)
- *   `- Begriff: Erklärung`                      (planning section 2)
+ *   `- Begriff: Erklärung`                      (colon form)
  *
  * The right-hand side must be NON-EMPTY: `- Regelbegriffe … bleiben
  * Englisch:` is a sentence that happens to end in a colon, not a term whose
@@ -370,8 +370,7 @@ export interface GlossaryParseResult {
 }
 
 /**
- * Turn a glossary body into term/explanation rows (planning section 2, PO
- * decision F6).
+ * Turn a glossary body into term/explanation rows.
  *
  * The rules, in the order they fire per heading section:
  *
@@ -379,14 +378,13 @@ export interface GlossaryParseResult {
  *      Text following a `**bold**` term, up to the next term or heading, is
  *      appended to ITS explanation.
  *   2. Whatever text is left over in a section becomes the explanation of a
- *      row named after the section's HEADING. This is the planning's
+ *      row named after the section's HEADING. This is the
  *      "`## Begriff` mit Folgetext" rule, and it is what keeps a glossary's
  *      prose sections (`## Stil`, and the file's own `# …` title block)
  *      as visible content instead of a report entry.
  *   3. Leftover text with NO heading above it — prose before the first
  *      heading — is the one genuinely unassignable case and is reported.
- *   4. A duplicate term: the FIRST one wins, the second is reported
- *      (planning: "Duplikat-Begriff: erster gewinnt, zweiter in den Report").
+ *   4. A duplicate term: the FIRST one wins, the second is reported.
  */
 export function parseGlossaryBody(body: string): GlossaryParseResult {
   const result: GlossaryParseResult = {

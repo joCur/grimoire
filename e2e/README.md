@@ -302,14 +302,13 @@ Session-Log bleibt gültig (es referenziert über ids). Freitext in `location`
 ist dort ein 400 mit `code: "location_not_an_id"` — die Gegenprobe steht in
 `scene-rendering.e2e.ts`.
 
-Auf den Pfaden 2 und 7 liegt zusätzlich `rename.e2e.ts` (#30, erweitert um die
-Usage-Vorschau aus #60, Einstieg seit #77 über „id ändern" im Fußbereich des
-Eigenschaften-Dialogs — der Header-Knopf ist weg): die zweistufige
-Bestätigung („Vorschau" ist ein `dryRun` und schreibt nichts), die deutsche
-Usage-Zusammenfassung („2 Verwendungen: 1 Szene, 1 Beziehung" — die eigene
-ausgehende Beziehungszeile ist keine Referenz AUF die id) und danach die
-Kaskade selbst — Szenen-`npcs:`, die `## Beziehungen`-Gegenzeile, der Umzug der
-Leseansicht, und `GET /usage` auf der neuen id gegen 404 auf der alten.
+Auf den Pfaden 2 und 7 liegt zusätzlich `rename.e2e.ts` (Einstieg über „id
+ändern" im Fußbereich des Eigenschaften-Dialogs — der Header-Knopf ist weg):
+die zweistufige Bestätigung („Vorschau" ist ein `dryRun` und schreibt nichts),
+die deutsche Usage-Zusammenfassung („1 Verwendung: 1 Szene" — eine Zeile unter
+`## Beziehungen` ist Text und damit keine Referenz) und danach die Kaskade
+selbst — Szenen-`npcs:`, der Umzug der Leseansicht, und `GET /usage` auf der
+neuen id gegen 404 auf der alten.
 
 Auf Pfad 9 teilen sich zwei Specs die zwei Oberflächen von „Bearbeiten", die
 sich seit #43 EINEN Entwurf teilen: `block-composer.e2e.ts` deckt den

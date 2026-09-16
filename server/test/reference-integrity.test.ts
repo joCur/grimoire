@@ -173,6 +173,20 @@ describe("a reference that names nothing is refused", () => {
     expect((await getFile(`sessions/${session!.id}`)).body).not.toContain("Etwas passiert");
   });
 
+  test("parentheses in the NOTE are text, not a reference", async () => {
+    // The `- HH:MM (id) text` marker is a parse column of the log line, so a
+    // note that happens to begin with „(…)" would otherwise name a scene
+    // nobody meant. The text is kept whole and stores no scene — a note is
+    // never refused over something the DM did not write as a reference.
+    expect((await post("/session/start", {})).status).toBe(200);
+    const res = await post("/log", { text: "(vermutlich) der Turmwärter lügt" });
+    expect(res.status).toBe(200);
+    const id = (await tree()).sessions[0]!.id;
+    const session = await getFile(`sessions/${id}`);
+    expect(session.body).toContain("(vermutlich) der Turmwärter lügt");
+    expect(session.properties.scenes_played).toEqual([]);
+  });
+
   test("a played-scenes list: 400 played_scene_unknown", async () => {
     expect((await post("/session/start", {})).status).toBe(200);
     const id = (await tree()).sessions[0]!.id;

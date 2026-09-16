@@ -1,19 +1,19 @@
-// „id ändern" — the rename dialog (issue #30), reached from the footer of the
-// „Eigenschaften" dialog since issue #77. It has no header trigger of its own
-// any more: with `[[slug]]` references resolving the CURRENT name (#68),
-// changing the id is a repair (a typo, a slug merge), not everyday work — so
-// it sits as a quiet secondary action next to the fields it does not own,
-// while „name" is edited in the form like any other property.
+// „id ändern" — the rename dialog, reached from the footer of the
+// „Eigenschaften" dialog. It has no header trigger of its own any more: with
+// `[[slug]]` references resolving the CURRENT name, changing the id is a
+// repair (a typo, a slug merge), not everyday work — so it sits as a quiet
+// secondary action next to the fields it does not own, while „name" is
+// edited in the form like any other property.
 //
-// An id is a reference key, so renaming it is never a one-entry edit — it is a
-// cascade through scene properties, session logs and relationship lists. The
-// DM must SEE that before it happens, which is why the dialog has two steps:
+// An id is a reference key, so renaming it is never a one-entry edit — it is
+// a cascade through scene properties, the session log and `[[id]]` mentions
+// in prose. The DM must SEE that before it happens, which is why the dialog
+// has two steps:
 //
 //   1. new id -> „Vorschau" (a dryRun of the endpoint: the server computes
 //      the whole plan and writes nothing),
-//   2. the usage summary („12 Verwendungen: 3 Szenen, 2 Beziehungen …",
-//      issue #60) plus „betrifft N Einträge" and the entry list ->
-//      „Umbenennen" commits.
+//   2. the usage summary („12 Verwendungen: 3 Szenen, 4 Log-Zeilen …") plus
+//      „betrifft N Einträge" and the entry list -> „Umbenennen" commits.
 //
 // The preview is the same code path as the commit, so a preview that
 // succeeded is a rename that will succeed. Editing the id after a preview

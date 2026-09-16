@@ -1,4 +1,4 @@
-// "NPC anlegen" (issue #10): the entry needs an id the DM
+// "NPC anlegen": the entry needs an id the DM
 // chooses — a log line is prose, and ids are the stable reference keys of the
 // format (README) — so the review proposes a kebab-case slug derived from the
 // text and lets it be edited. Optional display name; the entry text becomes
@@ -79,10 +79,9 @@ export function NpcCreateDialog({
               autoComplete="off"
               aria-invalid={idInvalid}
               className="w-full rounded-md border border-input bg-panel-deep px-3 py-2 font-mono text-[13.5px] text-foreground outline-none placeholder:text-muted-foreground max-md:text-[16px]"
-              // Generic, like every other create hint (PO feedback on issue
-              // #56): the field is normally prefilled from the log line
-              // anyway, and a sample-campaign id in an empty field reads like
-              // a default.
+              // Generic, like every other create hint: the field is normally
+              // prefilled from the log line anyway, and a sample-campaign id
+              // in an empty field reads like a default.
               placeholder={t("npcCreate.idPlaceholder")}
             />
           </label>

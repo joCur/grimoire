@@ -1,4 +1,4 @@
-// Read-API tests against the DATABASE (issue #57), seeded through the real
+// Read-API tests against the DATABASE, seeded through the real
 // markdown importer from the example campaign — examples/ is the committed
 // format reference and stays the fixture of the whole suite (see
 // test/support/store.ts). The Hono app runs in-process via app.request() —
@@ -38,7 +38,7 @@ describe("GET /api/campaigns", () => {
 
     test("lists example campaign directories", async () => {
       const body = await campaigns();
-      // The example campaign carries a campaign (issue #17), so name and
+      // The example campaign carries a campaign, so name and
       // description come along additively.
       expect(body).toContainEqual({
         id: "beispiel",
@@ -58,7 +58,7 @@ describe("GET /api/campaigns", () => {
     test("lastSession/lastSessionStarted name the newest session of the example", async () => {
       const beispiel = (await campaigns()).find((c) => c.id === "beispiel");
       expect(beispiel?.lastSession).toBe("2026-01-15");
-      // `lastSessionStarted` is the ORDERABLE half (issue #58): the id is
+      // `lastSessionStarted` is the ORDERABLE half: the id is
       // opaque for every session written since, so the app sorts by this.
       expect(beispiel?.lastSessionStarted).toBe("2026-01-15T19:30");
     });
@@ -83,7 +83,7 @@ describe("GET /api/campaigns", () => {
       await mkdir(path.join(tmpRoot, "ohne-sessions"), { recursive: true });
       await mkdir(path.join(tmpRoot, "leere-sessions", "sessions"), { recursive: true });
 
-      // Campaign-metadata files (issue #17) in every degradation flavour.
+      // Campaign-metadata files in every degradation flavour.
       const campaignFile = async (id: string, content: string) => {
         await mkdir(path.join(tmpRoot, id), { recursive: true });
         await writeFile(path.join(tmpRoot, id, "_campaign.md"), content);
@@ -114,7 +114,7 @@ describe("GET /api/campaigns", () => {
 
     test("newest session id wins; no sessions → no lastSession field", async () => {
       const body = await campaigns();
-      // `name` is the DISPLAY name and is always there since issue #62: a
+      // `name` is the DISPLAY name and is always there: a
       // campaign with no authored name is listed under its id, exactly as the
       // campaign DOCUMENT renders it (GET /entry?path=campaign).
       expect(body).toEqual([
@@ -174,14 +174,14 @@ describe("GET /api/:campaign/tree", () => {
     expect(chapter!.path).toBe("01-salzhafen");
   });
 
-  test("scenes grouped by their LOCATION (#100)", async () => {
+  test("scenes grouped by their LOCATION", async () => {
     const t = await tree();
     const chapter = t.chapters.find((c) => c.id === "01-salzhafen")!;
     // The `hafen/` directory of the import format is not a group: the group
     // is what the scene's `location` names, so the two example scenes sit
     // apart even though they shared a directory.
     //
-    // Ordered by the NAME the heading shows (issue #100 review), not by the
+    // Ordered by the NAME the heading shows, not by the
     // id behind it.
     expect(chapter.groups.map((g) => g.slug)).toEqual(["leuchtturm", "bucht"]);
     expect(chapter.groups.map((g) => g.name)).toEqual([
@@ -214,7 +214,7 @@ describe("GET /api/:campaign/tree", () => {
 
   test("root-level files (incl. campaign) never appear in the tree", async () => {
     const t = await tree();
-    // The tree has no slot for campaign metadata (issue #17 keeps it out);
+    // The tree has no slot for campaign metadata;
     // the campaign row is addressed by campaign and by nothing in here.
     expect(t.chapters.map((c) => c.id)).toEqual(["01-salzhafen"]);
     const paths = t.chapters.flatMap((c) => [
@@ -295,7 +295,7 @@ describe("GET /api/:campaign/entry", () => {
     expect((await app.request("/api/nope/entry?path=inbox")).status).toBe(404);
   });
 
-  test("a STALE scene address resolves and answers with the current one (#100)", async () => {
+  test("a STALE scene address resolves and answers with the current one", async () => {
     // The group segment is the scene's `location` and moves with it, so an
     // address written down before a correction names the right scene with
     // the wrong group. It resolves by id and reports the address it has now
@@ -345,14 +345,14 @@ describe("GET /api/:campaign/entry", () => {
     // "there is no such entry" — not a 400 about its shape.
     expect((await app.request("/api/beispiel/entry?path=kein-kapitel")).status).toBe(404);
     expect((await app.request("/api/beispiel/entry?path=notes.txt")).status).toBe(404);
-    // …including the OLD `.md` form: no compatibility, by decision (AK7).
+    // …including the OLD `.md` form: no compatibility, by decision.
     expect(
       (await app.request("/api/beispiel/entry?path=npcs%2Fjorna.md")).status,
     ).toBe(404);
   });
 });
 
-// --- the empty boot (issue #79 AK6) ------------------------------------------
+// --- the empty boot ----------------------------------------------------------
 // The production boot imports NOTHING: a fresh instance is empty, and the
 // markdown importer is the dev/E2E tool `grimoire seed`. Nothing 500s on the
 // way there — an empty campaign list and 404s are the honest answers.

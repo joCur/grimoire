@@ -337,6 +337,17 @@ describe("the rebuild keeps every row", () => {
           .run(),
       ).toThrow(/FOREIGN KEY constraint failed/);
 
+      // A table that was NOT rebuilt still points at the one that was: the
+      // parent was dropped and recreated under the same name, and that is
+      // what the rebuild has to leave intact.
+      expect(() =>
+        client
+          .prepare(
+            "insert into scene_tags (campaign_id, scene_id, tag, pos) values ('beispiel', 'weg', 'social', 1)",
+          )
+          .run(),
+      ).toThrow(/FOREIGN KEY constraint failed/);
+
       // The relations table is gone, and so are the migration's own tables.
       const tables = rows(
         client,

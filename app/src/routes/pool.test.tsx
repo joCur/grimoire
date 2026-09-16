@@ -1,4 +1,4 @@
-// The chapter overview's grouping heading (issue #100).
+// The chapter overview's grouping heading.
 //
 // A scene's group IS its `location`, so the heading is the LOCATION'S NAME —
 // and the group `""` is not a location with an empty name but the scenes

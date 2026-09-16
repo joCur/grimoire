@@ -1,4 +1,4 @@
-// Partial accept of a finished generator run (issue #97).
+// Partial accept of a finished generator run.
 //
 // Its own module and not part of generator.ts for one reason: it needs both
 // the draft VALIDATION (generator.ts) and the JOB store (generate-jobs.ts),
@@ -23,7 +23,7 @@ import { requireCampaign } from "./store/read";
 import { applyDrafts } from "./store/write";
 
 /**
- * Accept PART of a finished run (issue #97) — „Diesen übernehmen" per scene
+ * Accept PART of a finished run — „Diesen übernehmen" per scene
  * and per suggested entry, and „Alle übernehmen" for whatever is left.
  *
  * The whole-run apply (`applyGenerated`) stays exactly as it was; this is
@@ -34,7 +34,7 @@ import { applyDrafts } from "./store/write";
  *               (`npcs/grella`). Absent is „Alle übernehmen": every scene
  *               that is neither written nor dropped, plus the suggested
  *               entries the DM ACCEPTED — an undecided entry is not written
- *               by a bulk action, exactly as before this ticket, and a
+ *               by a bulk action, exactly as before, and a
  *               rejected one never is. Naming a path explicitly is the one
  *               way an undecided entry gets written („Diesen übernehmen"
  *               on its row is the decision).
@@ -63,7 +63,7 @@ export async function acceptJobParts(
   if (job === undefined || job.id !== jobId) {
     throw new ApiError(404, "no generate job for this campaign");
   }
-  // A RUNNING job is acceptable too, part by part (AK2 of issue #102): a
+  // A RUNNING job is acceptable too, part by part: a
   // pipelined run stays `running` while parts are open, and the whole point
   // of the pipeline is that a finished part is reviewable and acceptable
   // before its siblings are. What is acceptable is what is IN the result, and
@@ -154,7 +154,7 @@ export async function acceptJobParts(
   }
   // A selection whose parts are ALL written already is a double click or a
   // second tab, not an error: the caller asked for a state that is the
-  // state, so it gets the honest empty answer (issue #97 review, finding 6).
+  // state, so it gets the honest empty answer.
   // Only a BULK accept with nothing open left stays a 400 — there the caller
   // named nothing and there was nothing, which is a client bug.
   if (selected.length === 0) {
