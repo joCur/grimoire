@@ -13,7 +13,7 @@
 
 import { SCENE_STATUSES, type SceneStatus } from "@grimoire/shared/types";
 
-import { fetchFile, patchProperties } from "@/api";
+import { fetchEntry, patchProperties } from "@/api";
 import type { MessageKey, Translate } from "@/i18n";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
@@ -102,6 +102,6 @@ export function writeSceneStatus(
 ): Promise<RevWriteResult> {
   return writeWithRev(
     () => patchProperties(campaign, sceneStatusPatchBody(path, rev, status)),
-    () => fetchFile(campaign, path),
+    () => fetchEntry(campaign, path),
   );
 }

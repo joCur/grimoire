@@ -1,21 +1,19 @@
-// Campaign metadata from the UI (issue #34, first small slice of the #15
-// territory): name + description of `_campaign`.
+// Campaign name and description from the UI — the rules behind the
+// „Bearbeiten" dialog of the campaign entry.
 //
-// ONE write path since issue #62: PATCH /properties with the guard token the
-// dialog read, so an edit that happened meanwhile cannot be overwritten
-// silently (409). The second path — POST /campaign-meta for a campaign that
-// had no `_campaign` yet — is gone with the endpoint: since the cutover
-// (#57) every campaign is a ROW, GET /file?path=_campaign always answers
-// with a document and a token, and there is no "create" case left to serve.
+// One write path: PATCH /properties with the `rev` the dialog read, so an edit
+// that happened meanwhile answers 409 instead of being overwritten. Every
+// campaign has its entry (it is the campaign row), so GET /entry?path=campaign
+// always answers with values and a `rev` — there is no "create" case.
 //
 // Everything here is pure or a plain API call — no react, no query imports,
 // so the rules are unit-testable.
 
-import { fetchFile, patchProperties } from "@/api";
+import { fetchEntry, patchProperties } from "@/api";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
-/** Campaign-relative path of the metadata document. */
-export const CAMPAIGN_META_PATH = "_campaign";
+/** Address of the campaign entry. */
+export const CAMPAIGN_META_PATH = "campaign";
 
 export interface CampaignMetaValues {
   name: string;
@@ -45,18 +43,18 @@ export interface CampaignMetaBase {
   rev: number;
 }
 
-/** What the entry query knows: the document, or nothing yet. */
+/** What the entry query knows: the entry, or nothing yet. */
 export type CampaignMetaAnswer = { rev: number } | undefined;
 
 /**
  * Decide the base version ONCE, at the first answer of the entry query.
  *
  * The entry query keeps refetching while the dialog is open — the 5s version
- * poll (issue #8) invalidates it — so reading its token at save time would let
- * a concurrent edit of the campaign document advance the base silently: the
- * save would overwrite that edit instead of answering 409. Same trap the body
- * editor avoids (see `shouldAdvanceBase` in entry-body.ts), same answer: freeze
- * it.
+ * poll invalidates it — so reading its `rev` at save time would let a
+ * concurrent edit of the campaign entry advance the base silently: the save
+ * would overwrite that edit instead of answering 409. Same trap the body
+ * editor avoids (`shouldAdvanceBase` in entry-body.ts), same answer: hold the
+ * first `rev`.
  *
  * `undefined` in, `undefined` out means "no answer yet, nothing to write
  * against". Once frozen the base never moves on its own — only the conflict
@@ -75,7 +73,7 @@ export function seedCampaignMetaBase(
  * The name to PREFILL the dialog with. A stored name that is literally the id
  * is what an UNNAMED campaign looks like — the server synthesizes the id as
  * the display name so every surface has something to show (`GET /campaigns`
- * and `GET /file` agree on that since #62). The dialog must not propose it as
+ * and `GET /entry` agree on that since #62). The dialog must not propose it as
  * an authored value, so it starts empty with the id as the placeholder.
  */
 export function prefillCampaignName(campaign: string, name: string | undefined): string {
@@ -84,8 +82,8 @@ export function prefillCampaignName(campaign: string, name: string | undefined):
 }
 
 /**
- * Save name/description. `rev` is the guard token of the campaign
- * document the dialog is showing. A 409 means nothing was written (it changed
+ * Save name/description. `rev` is the guard token of the campaign entry the
+ * dialog is showing. A 409 means nothing was written (it changed
  * meanwhile); the shared protocol of write-with-rev.ts re-reads it so the
  * next attempt carries the truth. Everything else throws.
  */
@@ -101,6 +99,6 @@ export function writeCampaignMeta(
         rev,
         patch: campaignMetaPatch(values),
       }),
-    () => fetchFile(campaign, CAMPAIGN_META_PATH),
+    () => fetchEntry(campaign, CAMPAIGN_META_PATH),
   );
 }

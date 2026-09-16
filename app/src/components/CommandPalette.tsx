@@ -82,7 +82,7 @@ export function CommandPalette({
   // Above the hits: the PAGES of this campaign whose name the DM typed (issue
   // #53, PO feedback on PR #87). „Glossar" and „Kampagnenwissen" are reachable
   // from the pool and the phone's start surface, but ⌘K is where this app's
-  // keyboard goes first — and the server's index holds documents, not pages,
+  // keyboard goes first — and the server's index holds entries, not pages,
   // so it can never answer for them. A navigation target the DM typed the name
   // of is what they meant, and there are never more than a handful.
   const navs = useMemo(() => navTargets(campaign, term, t), [campaign, term, t]);
@@ -210,7 +210,7 @@ export function CommandPalette({
   );
 }
 
-/** One row of the palette: a page of this campaign, or a document hit. */
+/** One row of the palette: a page of this campaign, or an entry hit. */
 type Item =
   | { kind: "nav"; target: LookupTarget }
   | { kind: "result"; result: SearchResult };

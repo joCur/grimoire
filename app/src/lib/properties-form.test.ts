@@ -744,7 +744,7 @@ describe("writePropertiesForm", () => {
     expect(result.ok).toBe(false);
     expect(result.file?.rev).toBe(99);
     expect(calls[1]?.method).toBe("GET");
-    expect(calls[1]?.url).toBe("/api/beispiel/file?path=npcs%2Ffenn");
+    expect(calls[1]?.url).toBe("/api/beispiel/entry?path=npcs%2Ffenn");
   });
 
   test("a failed reload after the conflict keeps the conflict, not a crash", async () => {

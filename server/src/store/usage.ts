@@ -82,7 +82,7 @@ export type UsageRef = (typeof USAGE_REFS)[number];
 
 /** One referencing DOCUMENT, with how many of its rows point at the entity. */
 export interface UsageSite {
-  /** What the referencing document is. */
+  /** What the referencing entry is. */
   kind: "scene" | "npc" | "location" | "session" | "chapter" | "campaign";
   id: string;
   /** Display title (falls back to the id, as everywhere else). */
@@ -94,7 +94,7 @@ export interface UsageSite {
 
 export interface UsageGroup {
   ref: UsageRef;
-  /** Referencing ROWS, not documents. */
+  /** Referencing ROWS, not entries. */
   count: number;
   sites: UsageSite[];
 }
@@ -102,7 +102,7 @@ export interface UsageGroup {
 export interface UsageReport {
   kind: UsageKind;
   id: string;
-  /** The entity's own document. */
+  /** The entity's own entry. */
   path: string;
   /** Sum of all group counts. */
   total: number;
@@ -110,7 +110,7 @@ export interface UsageReport {
   groups: UsageGroup[];
 }
 
-/** The document path of one entity. */
+/** The address of one entity. */
 export function pathOf(db: GrimoireDb, campaign: string, kind: UsageKind, id: string): string {
   if (kind === "npc") return npcPath(id);
   if (kind === "location") return locationPath(id);
@@ -197,7 +197,7 @@ function scenesWithNpc(db: GrimoireDb, campaign: string, npcId: string): UsageSi
  * `## Beziehungen` lines that REFERENCE the npc — lines in someone else's
  * list naming this npc (`otherNpcId`), which are exactly the rows the rename
  * rewrites (rename.ts). The npc's OWN outgoing lines are deliberately not
- * counted: they carry other ids, and its own document only moves. Counting
+ * counted: they carry other ids, and its own entry only moves. Counting
  * them would make the preview promise more rewritten sites than there are.
  */
 function relationsPointingAtNpc(db: GrimoireDb, campaign: string, npcId: string): UsageSite[] {
@@ -232,7 +232,7 @@ function sessionSites(rows: { sessionId: string }[]): UsageSite[] {
 
 /**
  * Documents whose BODY TEXT references the entity as `[[<id>]]` (issue #68).
- * One site per document — the ROW is the document here, so a scene that names
+ * One site per entry — the ROW is the entry here, so a scene that names
  * the npc three times counts once: there is no row per mention to count.
  *
  * These are real reference sites: the rename cascade rewrites them
@@ -443,7 +443,7 @@ export function usageReport(
 
 /**
  * GET /api/:campaign/usage?kind=…&id=… — 404 for an entity that does not
- * exist (the same answer `GET /file` gives for its path).
+ * exist (the same answer `GET /entry` gives for its path).
  */
 export async function readUsage(
   campaign: string,

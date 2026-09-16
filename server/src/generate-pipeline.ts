@@ -486,7 +486,7 @@ export function assignmentBlock(scene: OutlineScene): string {
 
 // --- per-part validation -------------------------------------------------------
 
-/** What a single-scene reply must look like: one document plus warnings. */
+/** What a single-scene reply must look like: one entry plus warnings. */
 export function validateSingleSceneReply(input: {
   raw: string;
   ctx: SceneContext;

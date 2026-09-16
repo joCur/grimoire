@@ -63,7 +63,7 @@ function answerOnce(
 }
 
 const FILE: EntryResponse = {
-  path: "_campaign",
+  path: "campaign",
   kind: "campaign",
   properties: { id: "beispiel", name: "Neuer Name" },
   body: "",
@@ -105,7 +105,7 @@ describe("seedCampaignMetaBase", () => {
 
   test("a later poll does NOT advance the base (that would overwrite the foreign edit)", () => {
     const frozen = { rev: 42 };
-    // The 5s version poll refetches _campaign while the dialog stands; a
+    // The 5s version poll refetches campaign while the dialog stands; a
     // concurrent edit must answer 409 on save, so the base stays where it was.
     expect(seedCampaignMetaBase(frozen, { rev: 99 })).toBe(frozen);
   });
@@ -134,7 +134,7 @@ describe("writeCampaignMeta", () => {
     expect(calls[0]?.method).toBe("PATCH");
     expect(calls[0]?.url).toBe("/api/beispiel/properties");
     expect(calls[0]?.body).toEqual({
-      path: "_campaign",
+      path: "campaign",
       rev: 42,
       patch: { name: "Neuer Name", description: "Neue Zeile" },
     });
@@ -149,7 +149,7 @@ describe("writeCampaignMeta", () => {
     expect(result.ok).toBe(false);
     expect(result.file?.rev).toBe(99);
     expect(calls[1]?.method).toBe("GET");
-    expect(calls[1]?.url).toBe("/api/beispiel/file?path=_campaign");
+    expect(calls[1]?.url).toBe("/api/beispiel/entry?path=campaign");
   });
 
   test("a failed reload after the conflict keeps the conflict, not a crash", async () => {

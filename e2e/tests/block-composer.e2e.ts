@@ -33,10 +33,10 @@ import { expect, test, type Api } from "../support/test";
 
 /** Six blocks, one per type the reading view knows — the composer's reference. */
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
-const SCENE_URL = `/beispiel/file/${SCENE}`;
+const SCENE_URL = `/beispiel/entry/${SCENE}`;
 /** The reference scene WITH two `## If:` sections and their children. */
 const IF_SCENE = "01-salzhafen/bucht/smuggler-captured";
-const IF_SCENE_URL = `/beispiel/file/${IF_SCENE}`;
+const IF_SCENE_URL = `/beispiel/entry/${IF_SCENE}`;
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 
 /** The cards of SCENE, in document order, as the composer names them. */
@@ -610,7 +610,7 @@ test.describe("with a scene of unknown constructs", () => {
     const before = await split(api, rel);
     const added = "Bei einem Patt würfelt die Gruppe erneut.";
 
-    await page.goto(`/beispiel/file/${rel}`);
+    await page.goto(`/beispiel/entry/${rel}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Seltsame Mechanik");
     await page.getByRole("button", { name: "Bearbeiten" }).click();
 

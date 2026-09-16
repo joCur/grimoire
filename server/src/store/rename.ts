@@ -114,7 +114,7 @@ function assertNewId(newId: string): void {
  *
  *   * a chapter rename MOVES its scenes (the chapter id is part of a scene's
  *     path), so those sites are reported at their new address,
- *   * the entity's OWN document is not a reference site — it is the thing
+ *   * the entity's OWN entry is not a reference site — it is the thing
  *     being renamed, and the caller adds its new path.
  */
 function referenceSites(usage: UsageReport, oldId: string, newId: string): string[] {
@@ -412,7 +412,7 @@ export async function renameEntity(
         : kind === "npc"
           ? npcPath(newId)
           : locationPath(newId);
-  // The renamed entity's own document changes too — its id is part of the
+  // The renamed entity's own entry changes too — its id is part of the
   // cascade (the file version said the same).
   changed.add(to);
 

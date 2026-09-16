@@ -51,7 +51,7 @@ const LOCATION = "locations/leuchtturm";
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
 async function read(rel: string): Promise<EntryResponse> {
-  const res = await app.request(`/api/${CAMPAIGN}/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/${CAMPAIGN}/entry?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
@@ -621,7 +621,7 @@ describe("the job", () => {
     const res = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: "01-salzhafen/_chapter", instruction: "x" }),
+      body: JSON.stringify({ path: "01-salzhafen", instruction: "x" }),
     });
     expect(res.status).toBe(400);
   });
@@ -828,7 +828,7 @@ describe("accept", () => {
     // it still names the scene and answers with the one it has now, which is
     // what lets the app replace the URL instead of showing a 404.
     const old = await app.request(
-      `/api/${CAMPAIGN}/file?path=${encodeURIComponent(scene.path)}`,
+      `/api/${CAMPAIGN}/entry?path=${encodeURIComponent(scene.path)}`,
     );
     expect(old.status).toBe(200);
     expect(((await old.json()) as EntryResponse).path).toBe(written.path);

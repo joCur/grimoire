@@ -1,17 +1,44 @@
-// Entity-kind detection from a campaign-relative path — the folder half of
-// the format contract (README.md, "Entitäten").
+// Entity-kind detection — twice, because two different strings name an entry:
 //
-// Its own module on purpose: this is the ONE place the folder conventions are
-// written down in code, and both sides need it. parse.ts pulls in gray-matter,
-// which has no business in a browser bundle, so the app imports
-// `@grimoire/shared/kind` (types plus this function, no runtime dependencies)
-// while the server keeps getting it re-exported from the package root.
+//   * `kindFromAddress` reads an API ADDRESS (server/src/store/paths.ts is the
+//     schema): what the app links to and what every response's `path` is.
+//   * `kindFromPath` reads a FILE PATH in the markdown tree the importer
+//     (`grimoire seed`) walks — the folder layout described in README.md.
+//
+// Its own module on purpose: parse.ts pulls in gray-matter, which has no
+// business in a browser bundle, so the app imports `@grimoire/shared/kind`
+// (types plus these functions, no runtime dependencies).
 
 import type { EntityKind } from "./types";
 
 /**
- * Detect the entity kind purely from the campaign-relative path, per the
- * layout in README.md:
+ * The kind an API address names. Mirrors `locatorFromPath` in
+ * server/src/store/paths.ts without the 404s: an address the schema does not
+ * describe is `unknown`.
+ */
+export function kindFromAddress(address: string): EntityKind {
+  const segments = address.split("/").filter((s) => s.length > 0);
+  const first = segments[0] ?? "";
+  if (segments.length === 1) {
+    if (first === "campaign") return "campaign";
+    if (first === "inbox") return "inbox";
+    if (first === "glossary") return "glossary";
+    if (first === "npcs" || first === "locations" || first === "sessions") return "unknown";
+    return "chapter";
+  }
+  if (segments.length === 2) {
+    if (first === "npcs") return "npc";
+    if (first === "locations") return "location";
+    if (first === "sessions") return "session";
+  }
+  if (first === "campaign" || first === "inbox" || first === "glossary") return "unknown";
+  if (segments.length === 2 || segments.length === 3) return "scene";
+  return "unknown";
+}
+
+/**
+ * Detect the entity kind of a FILE in the markdown tree the importer reads,
+ * per the layout in README.md:
  *
  *   npcs/<id>            -> npc
  *   locations/<id>       -> location
@@ -23,12 +50,9 @@ import type { EntityKind } from "./types";
  *   <chapter>/**\/<id>   -> scene   (anything else at depth >= 2)
  *   everything else      -> unknown
  *
- * Both spellings work, and on purpose: the API's ADDRESSES carry no extension
- * since issue #79 (store/paths.ts), while the markdown IMPORTER hands in file
- * paths that still end in `.md` (server/src/db/). A trailing `.md` is
- * therefore stripped; any OTHER extension left on the last segment means
- * "not one of ours" and answers `unknown`, so `map.png` and `notes.txt` are
- * still not scenes.
+ * A trailing `.md` is stripped; any OTHER extension left on the last segment
+ * means "not one of ours" and answers `unknown`, so `map.png` and `notes.txt`
+ * are not scenes.
  */
 export function kindFromPath(path: string): EntityKind {
   // Normalize: forward slashes, no leading "./" or "/".
@@ -41,8 +65,8 @@ export function kindFromPath(path: string): EntityKind {
   if (name === "" || name.includes(".")) return "unknown";
 
   if (segments.length === 1) {
-    // Campaign metadata lives in the campaign ROOT only (issue #17); a deeper
-    // `_campaign` keeps whatever kind its depth gives it.
+    // Campaign metadata lives in the campaign ROOT only; a deeper `_campaign`
+    // keeps whatever kind its depth gives it.
     if (name === "_campaign") return "campaign";
     if (name === "inbox") return "inbox";
     if (name === "glossary") return "glossary";

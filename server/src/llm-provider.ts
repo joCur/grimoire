@@ -76,7 +76,7 @@ export interface GenerateRequest {
   assignment?: string;
   /**
    * The entry an AUGMENT run works on (issue #36): its complete current
-   * document, properties block included, under its address. Absent for the
+   * entry as one markdown text, properties block included, under its address. Absent for the
    * two runs that create something — and then the prompt has no such section,
    * so a scene/npc run sees the prompt exactly as before.
    */

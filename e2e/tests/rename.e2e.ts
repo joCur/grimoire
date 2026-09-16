@@ -23,7 +23,7 @@ const RENAMED = "npcs/hafenmeisterin";
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
 test("rename with usage preview: count first, then the cascade", async ({ page, api }) => {
-  await page.goto(`/beispiel/file/${NPC}`);
+  await page.goto(`/beispiel/entry/${NPC}`);
   await expect(page.getByRole("heading", { name: "Hafenmeisterin Jorna" })).toBeVisible();
 
   // No prominent header action any more — the id change lives in the form.
@@ -70,7 +70,7 @@ test("rename with usage preview: count first, then the cascade", async ({ page, 
   await dialog.getByRole("button", { name: "Umbenennen" }).click();
 
   // The reading view follows the file to its new address …
-  await expect(page).toHaveURL(new RegExp(`/beispiel/file/${RENAMED}$`));
+  await expect(page).toHaveURL(new RegExp(`/beispiel/entry/${RENAMED}$`));
   await expect(page.getByRole("heading", { name: "Hafenmeisterin Jorna" })).toBeVisible();
 
   // … and the cascade the preview counted actually happened.

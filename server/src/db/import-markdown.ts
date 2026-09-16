@@ -418,7 +418,7 @@ export function parseRelationsSection(body: string): RelationParseResult {
  *
  *   `- lighthouse keeper → Leuchtturmwärter`   (examples/beispiel — the
  *                                               `EN → DE` form the generator
- *                                               prompt documents)
+ *                                               prompt texts)
  *   `- lighthouse keeper -> Leuchtturmwärter`   (ASCII arrow)
  *   `- Begriff: Erklärung`                      (planning section 2)
  *

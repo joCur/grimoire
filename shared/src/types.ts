@@ -79,7 +79,7 @@ export interface LocationProperties {
 }
 
 /**
- * Properties of a campaign's `_campaign` (README, "Entität: Kampagne
+ * Properties of a campaign's `campaign` (README, "Entität: Kampagne
  * (optional)"). The file is optional — without it the UI shows the directory
  * name. `id` is the directory name, `name` the display name; further keys
  * (e.g. `system`) are preserved verbatim.
@@ -92,7 +92,7 @@ export interface CampaignProperties {
   [key: string]: unknown;
 }
 
-/** Properties of a chapter's `_chapter`. */
+/** Properties of a chapter. */
 export interface ChapterProperties {
   id: string;
   title: string;
@@ -176,7 +176,7 @@ export interface CampaignSummary {
   /**
    * Display name (issue #17). Always present since issue #62: a campaign
    * without an authored name is shown under its ID, exactly as the campaign
-   * DOCUMENT renders it (`GET /file?path=_campaign`) — the two endpoints
+   * DOCUMENT renders it (`GET /entry?path=campaign`) — the two endpoints
    * used to disagree. Optional in the type so an older payload still parses.
    */
   name?: string;
@@ -221,10 +221,10 @@ export interface SceneGroup {
 export interface ChapterNode {
   /** Directory name, e.g. "01-salzhafen". */
   id: string;
-  /** From _chapter; falls back to the directory name. */
+  /** The chapter's title; falls back to its id. */
   title: string;
   status?: string;
-  /** Path of _chapter, if present. */
+  /** Address of the chapter — its id. */
   path?: string;
   groups: SceneGroup[];
 }
@@ -262,7 +262,7 @@ export interface CampaignTree {
   sessions: SessionSummary[];
 }
 
-/** GET /api/:campaign/file?path=… (and GET /api/:campaign/session) */
+/** GET /api/:campaign/entry?path=… (and GET /api/:campaign/session) */
 export interface EntryResponse extends ParsedFile {
   /**
    * SESSIONS ONLY (issue #40): `started` as epoch milliseconds, read in
@@ -713,7 +713,7 @@ export interface GlossaryEntry {
 
 /**
  * GET/PUT /api/:campaign/glossary. `rev` is the guard token of the WHOLE
- * list (`campaigns.glossary_rev`) — the glossary is one document that is
+ * list (`campaigns.glossary_rev`) — the glossary is one entry that is
  * edited as a whole, so there is no per-entry version to hold, and the
  * ORDER of `entries` is the stored order (that is what reordering writes).
  */

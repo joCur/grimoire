@@ -15,7 +15,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { fetchFile } from "@/api";
+import { fetchEntry } from "@/api";
 import { EntityCardShell } from "@/components/EntityCardShell";
 import { useI18n } from "@/i18n";
 import { isEntityId } from "@/lib/entity";
@@ -51,8 +51,8 @@ export function NpcCard({
   // the line says what is actually the case.
   const isId = isEntityId(id);
   const { data, isPending, isError } = useQuery({
-    queryKey: ["file", campaign, path],
-    queryFn: () => fetchFile(campaign, path),
+    queryKey: ["entry", campaign, path],
+    queryFn: () => fetchEntry(campaign, path),
     retry: false,
     enabled: isId,
   });

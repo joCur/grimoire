@@ -3,7 +3,7 @@
 //
 // Properties is deliberately NOT part of this: the status regler (#28), the
 // campaign metadata dialog (#34) and the rename cascade (#30) own the
-// structured fields. Here the DM edits prose — PUT /file replaces the text and
+// structured fields. Here the DM edits prose — PUT /entry replaces the text and
 // leaves the properties block byte-identical.
 //
 // Everything in this module is pure or a plain API call (no react, no query
@@ -11,7 +11,7 @@
 
 import type { EntityKind, EntryResponse } from "@grimoire/shared/types";
 
-import { fetchFile, putEntryBody } from "@/api";
+import { fetchEntry, putEntryBody } from "@/api";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
 /**
@@ -21,7 +21,7 @@ import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
  *                    free-hand rewrite of a log is not a maintenance action.
  *   campaign         no — its header already carries „Bearbeiten" for name and
  *                    description (issue #34); one label, one meaning.
- *   everything else  yes: scene, npc, location, chapter (_chapter),
+ *   everything else  yes: scene, npc, location, chapter (chapter entry),
  *                    glossary and whatever else the route is pointed at.
  */
 export function canEditEntryBody(kind: EntityKind): boolean {
@@ -60,7 +60,7 @@ export function hasBodyChanges(original: string, draft: string): boolean {
  *
  * The rule is therefore: same path, different version, IDENTICAL body. A write
  * that changed only properties (from anywhere) is folded in as well, which is
- * correct — PUT /file keeps whatever properties the row holds, so there is
+ * correct — PUT /entry keeps whatever properties the row holds, so there is
  * nothing for a body write to conflict with.
  */
 export function shouldAdvanceBase(base: EntryResponse, incoming: EntryResponse | undefined): boolean {
@@ -85,6 +85,6 @@ export function writeEntryBody(
 ): Promise<RevWriteResult> {
   return writeWithRev(
     () => putEntryBody(campaign, path, body, rev),
-    () => fetchFile(campaign, path),
+    () => fetchEntry(campaign, path),
   );
 }

@@ -1,6 +1,6 @@
 // Entity-kind helpers for the entry reading view (issue #26).
 //
-// GET /file answers with the entity `kind` (path-derived, see
+// GET /entry answers with the entity `kind` (path-derived, see
 // shared/src/parse.ts). The reading view picks its header from that kind —
 // the scene header (type overline, chip row) must never sit above an NPC or
 // a location. Everything here is pure so it can be unit-tested without a DOM.

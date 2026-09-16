@@ -11,7 +11,7 @@ import { Bookmark, ChevronDown, GitFork, MapPin } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
-import { fetchFile, fetchTree } from "@/api";
+import { fetchEntry, fetchTree } from "@/api";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
 import { ChapterCreateAction, SceneCreateAction } from "@/components/CreateActions";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
@@ -39,7 +39,7 @@ export function PoolRoute() {
       0,
     ) ?? 0;
   const chapterCount = data?.chapters.length ?? 0;
-  // Display name + description from _campaign (issue #17); the header
+  // Display name + description from campaign (issue #17); the header
   // degrades to the campaign id when the entry is missing.
   const meta = useCampaignMeta(campaign);
   // Open the active chapter(s) by default; without one, the first.
@@ -143,11 +143,11 @@ function Chapter({
   const scenes = chapter.groups.flatMap((g) => g.scenes);
   const contingencies = scenes.filter((s) => s.type === "contingency");
 
-  // The chapter goal lives in the _chapter body — fetched lazily on
+  // The chapter goal lives in the chapter entry body — fetched lazily on
   // first expand; missing entry/heading degrades to no goal line.
   const chapterFile = useQuery({
-    queryKey: ["file", campaign, chapter.path],
-    queryFn: () => fetchFile(campaign, chapter.path as string),
+    queryKey: ["entry", campaign, chapter.path],
+    queryFn: () => fetchEntry(campaign, chapter.path as string),
     enabled: open && chapter.path !== undefined,
     retry: false,
   });
@@ -305,7 +305,7 @@ function SceneRow({
   return (
     <div className="group flex items-center gap-3 rounded-md border-b border-divider px-2.5 hover:bg-card">
       <Link
-        to={`/${campaign}/file/${scene.path}`}
+        to={`/${campaign}/entry/${scene.path}`}
         className="flex min-w-0 flex-1 items-center gap-3 py-[13px]"
       >
         {isContingency ? (

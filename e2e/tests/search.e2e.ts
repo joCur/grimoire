@@ -49,7 +49,7 @@ test("⌘K finds \"leucht\" and Enter opens the hit", async ({ page }) => {
   await page.keyboard.press("Enter");
 
   await expect(page).toHaveURL(
-    /\/beispiel\/file\/01-salzhafen\/leuchtturm\/lighthouse-arrival$/,
+    /\/beispiel\/entry\/01-salzhafen\/leuchtturm\/lighthouse-arrival$/,
   );
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   // The palette closed on pick.
@@ -72,7 +72,7 @@ test("content the APP just wrote is findable right away (issue #57 AK5)", async 
   expect(before.results).toEqual([]);
 
   // The DM writes it in the editor: „Bearbeiten" → „Markdown" → save.
-  await page.goto(`/beispiel/file/${SCENE}`);
+  await page.goto(`/beispiel/entry/${SCENE}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await page.getByRole("button", { name: "Bearbeiten" }).click();
   await page.getByRole("button", { name: "Markdown", exact: true }).click();
@@ -91,7 +91,7 @@ test("content the APP just wrote is findable right away (issue #57 AK5)", async 
   await expect(hit).toHaveCount(1);
   // … and the row opens the scene the word was typed into.
   await hit.click();
-  await expect(page).toHaveURL(new RegExp(`/beispiel/file/${SCENE.replace(/\./g, "\\.")}$`));
+  await expect(page).toHaveURL(new RegExp(`/beispiel/entry/${SCENE.replace(/\./g, "\\.")}$`));
   await expect(page.getByRole("article")).toContainText(WORD);
 });
 

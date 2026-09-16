@@ -46,13 +46,13 @@ async function post(url: string, body?: unknown): Promise<Response> {
   });
 }
 
-/** GET /file — the status is the assertion for "does this row exist". */
+/** GET /entry — the status is the assertion for "does this row exist". */
 async function fileStatus(rel: string): Promise<number> {
-  return (await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`)).status;
+  return (await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`)).status;
 }
 
 async function getFile(rel: string): Promise<EntryResponse> {
-  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
@@ -288,7 +288,7 @@ describe("GET /api/:campaign/session", () => {
     expect(file.kind).toBe("session");
     expect(file.properties.started).toBe("2026-08-19T21:05:00");
     // The answer is a deterministic rendering of the rows — so it is compared
-    // against GET /file, which must answer with exactly the same entry.
+    // against GET /entry, which must answer with exactly the same entry.
     const viaFile = await getFile(started);
     expect(file.properties).toEqual(viaFile.properties);
     expect(file.body).toBe(viaFile.body);
@@ -329,7 +329,7 @@ describe("GET /api/:campaign/session", () => {
     expect(file.startedMs).toBe(new Date(2026, 7, 19, 0, 0).getTime());
   });
 
-  test("an ended session carries endedMs too (GET /file, same shape)", async () => {
+  test("an ended session carries endedMs too (GET /entry, same shape)", async () => {
     const file = await getFile("sessions/2026-01-15");
     expect(file.startedMs).toBe(new Date(2026, 0, 15, 19, 30).getTime());
     expect(file.endedMs).toBe(new Date(2026, 0, 15, 22, 45).getTime());

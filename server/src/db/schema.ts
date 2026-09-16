@@ -31,7 +31,7 @@
 //      them. Only the server resolves them to epoch ms (see clock.ts) —
 //      storing an epoch here would bake today's timezone into the data.
 //
-// `extra` and the other JSON columns are plain TEXT holding a JSON document;
+// `extra` and the other JSON columns are plain TEXT holding a JSON object;
 // pack/unpack helpers live at the bottom of this file. Deliberately not
 // drizzle's `mode: "json"`: the migration writes rows through raw SQL as well
 // (FTS maintenance, custom migration), and one representation everywhere is
@@ -88,19 +88,18 @@ export const campaigns = sqliteTable("campaigns", {
    */
   glossaryIntro: text("glossary_intro").notNull().default(""),
   /**
-   * Guard tokens of the two SINGLETON LIST documents (`glossary.md`,
-   * `inbox.md`). Neither is a single row that could carry a `rev`, and using
-   * `version` for it — which every unrelated write bumps — made an open
-   * glossary edit unsaveable during a running session. These count only
-   * their own document's writes, so `mtimeMs` behaves exactly like an
-   * entity's `rev`.
+   * Guard tokens of the two LIST entries, glossary and inbox. Neither is a
+   * single row that could carry a `rev`, and `version` — which every
+   * unrelated write bumps — would make an open glossary edit unsaveable
+   * during a running session. These count only their own list's writes, so
+   * they behave exactly like an entity's `rev`.
    */
   glossaryRev: integer("glossary_rev").notNull().default(1),
   inboxRev: integer("inbox_rev").notNull().default(1),
   /**
    * Guard token of the CAMPAIGN KNOWLEDGE list (issue #53). Third of the same
    * kind as the two above and for the same reason: `campaign_knowledge` is a
-   * whole-list document, so the version belongs to the LIST and not to a row
+   * whole list, so the version belongs to the LIST and not to a row
    * — and `campaigns.version`, which every unrelated write bumps, would make
    * an open knowledge edit unsaveable during a running session.
    */

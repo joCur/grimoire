@@ -131,11 +131,8 @@ export async function campaignVersion(id: string): Promise<number> {
  * to sort campaigns by the id string and would now be sorting random noise.
  *
  * `name` is the campaign's DISPLAY name and therefore always there: an
- * unnamed campaign is shown under its id. This list and `GET /file?path=
- * _campaign` used to disagree about that — the document synthesized the id
- * fallback and the list omitted the key — so the same campaign had two
- * different names depending on which endpoint you asked (issue #62). Both go
- * through `campaignDisplayName` now.
+ * unnamed campaign is shown under its id. This list and `GET /entry?path=
+ * campaign` agree on that: both go through `campaignDisplayName`.
  */
 export async function listCampaigns(): Promise<CampaignSummary[]> {
   const db = await getDb();
@@ -253,9 +250,8 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
       id: chapter.id,
       title: chapter.title === "" ? chapter.id : chapter.title,
       groups,
-      // `_chapter` was optional in the file tree, but a chapter ROW always
-      // exists — so the address is always there now. The app only uses it to
-      // open the chapter document, which is exactly what it names.
+      // A chapter row always exists, so its address is always there; the app
+      // uses it to open the chapter entry.
       path: chapterPath(chapter.id),
     };
     if (chapter.status !== null) node.status = chapter.status;
@@ -475,7 +471,7 @@ export async function readActiveSession(
   return renderSessionRow(db, campaign, row);
 }
 
-// --- GET /api/:campaign/file -------------------------------------------------
+// --- GET /api/:campaign/entry ------------------------------------------------
 
 export function inboxRows(db: GrimoireDb, campaign: string): InboxRow[] {
   return db
@@ -568,7 +564,7 @@ export function readByLocator(
         .from(chapters)
         .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, locator.id)))
         .all()[0] as ChapterRow | undefined;
-      if (row === undefined) throw new ApiError(404, "file not found");
+      if (row === undefined) throw new ApiError(404, "entry not found");
       return renderChapter(row);
     }
     case "scene": {
@@ -577,7 +573,7 @@ export function readByLocator(
         .from(scenes)
         .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, locator.id)))
         .all()[0] as SceneRow | undefined;
-      if (row === undefined) throw new ApiError(404, "file not found");
+      if (row === undefined) throw new ApiError(404, "entry not found");
       // A scene is resolved by its ID alone (issue #100). The chapter and
       // group segments used to have to match, which was right while a group
       // was an independent value — but the group is `location` now and moves
@@ -594,7 +590,7 @@ export function readByLocator(
         .from(npcs)
         .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, locator.id)))
         .all()[0] as NpcRow | undefined;
-      if (row === undefined) throw new ApiError(404, "file not found");
+      if (row === undefined) throw new ApiError(404, "entry not found");
       return renderNpc(row, relationRows(db, campaign, row.id));
     }
     case "location": {
@@ -603,12 +599,12 @@ export function readByLocator(
         .from(locations)
         .where(and(eq(locations.campaignId, campaign), eq(locations.id, locator.id)))
         .all()[0] as LocationRow | undefined;
-      if (row === undefined) throw new ApiError(404, "file not found");
+      if (row === undefined) throw new ApiError(404, "entry not found");
       return renderLocation(row);
     }
     case "session": {
       const row = sessionRow(db, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "file not found");
+      if (row === undefined) throw new ApiError(404, "entry not found");
       return renderSessionRow(db, campaign, row);
     }
     case "inbox": {
@@ -619,16 +615,16 @@ export function readByLocator(
       // for both, and because EVERY write bumps that, one unrelated log line
       // invalidated a glossary edit the DM had open — un-saveable during a
       // running session. A content hash would be the unsafe fix (two
-      // different edits can hash alike); a per-document counter is the exact
+      // different edits can hash alike); a per-entry counter is the exact
       // one.
-      // An EMPTY inbox is an empty document, not a missing one (200) — the
+      // An EMPTY inbox is an empty entry, not a missing one (200) — the
       // same correction the glossary already had below (#70): "no rows yet"
       // was the file era's "no file yet", and it made every reader special-
       // case a 404 that means nothing is wrong.
       return renderInbox(campaign, rows, campaignRowValue.inboxRev);
     }
     case "glossary":
-      // An EMPTY glossary is an empty document, not a missing one (200). The
+      // An EMPTY glossary is an empty entry, not a missing one (200). The
       // 404 it used to answer was a trap: saving an empty body through the
       // editor made the file the editor was in unreachable.
       return renderGlossary(
@@ -639,7 +635,7 @@ export function readByLocator(
   }
 }
 
-/** GET /api/:campaign/file?path=<address> */
+/** GET /api/:campaign/entry?path=<address> */
 export async function readParsedFile(campaign: string, rel: string): Promise<EntryResponse> {
   const row = await requireCampaign(campaign);
   assertSafeAddress(rel); // 400 unsafe id/address
@@ -653,8 +649,8 @@ export async function readParsedFile(campaign: string, rel: string): Promise<Ent
  * GET /api/:campaign/glossary -> `{ entries, rev }` (planning section 2).
  *
  * `rev` since issue #53: the settings page edits this list, so it needs the
- * same guard token every other editable document has. It is the LIST's
- * counter (`campaigns.glossary_rev`) — the same one `GET /file?path=glossary`
+ * same guard token every other editable entry has. It is the LIST's
+ * counter (`campaigns.glossary_rev`) — the same one `GET /entry?path=glossary`
  * hands out, so the two views of the glossary cannot disagree about what
  * "unchanged" means.
  */
@@ -672,7 +668,7 @@ export async function readGlossary(campaign: string): Promise<GlossaryResponse> 
 
 /**
  * The glossary as the generator's context block — the `EN → DE` lines the
- * prompt documents. Replaces reading a glossary file off disk (generator.ts).
+ * prompt texts (generator.ts).
  */
 export async function glossaryText(campaign: string): Promise<string | undefined> {
   const db = await getDb();
@@ -776,7 +772,7 @@ export async function namingRules(campaign: string): Promise<Array<{ from: strin
  * One stored entry as it may appear INSIDE a prompt line (review of #53).
  *
  * The lists above are assembled into a markdown prompt, so an entry is a
- * fragment of a document the model reads as instructions. The endpoints
+ * fragment of an entry the model reads as instructions. The endpoints
  * already refuse newlines (routes/api.ts), and this is the second half of
  * that: whatever is in the database — a row from an older build, a hand-made
  * one, a value that slipped past a validator — can only ever become ONE line

@@ -59,7 +59,7 @@ describe("writeEntryBody", () => {
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("PUT");
-    expect(calls[0]?.url).toBe("/api/beispiel/file");
+    expect(calls[0]?.url).toBe("/api/beispiel/entry");
     expect(calls[0]?.body).toEqual({ path: SCENE, rev: 111, body: "Neuer Text.\n" });
     expect(result).toEqual({ ok: true, file: fileAt(222, "Neuer Text.\n") });
   });
@@ -77,7 +77,7 @@ describe("writeEntryBody", () => {
     expect(result.file?.rev).toBe(999);
     expect(calls).toHaveLength(2);
     expect(calls[1]?.method).toBe("GET");
-    expect(calls[1]?.url).toBe(`/api/beispiel/file?path=${encodeURIComponent(SCENE)}`);
+    expect(calls[1]?.url).toBe(`/api/beispiel/entry?path=${encodeURIComponent(SCENE)}`);
   });
 
   test("the attempt after a conflict carries the rev the reload brought", async () => {
@@ -171,7 +171,7 @@ describe("canEditEntryBody", () => {
   });
 
   test("append-only files and the campaign metadata file are not", () => {
-    // Logs/inbox are append-only by design; `_campaign` has its own
+    // Logs/inbox are append-only by design; `campaign` has its own
     // „Bearbeiten" for name/description (issue #34).
     expect(canEditEntryBody("session")).toBe(false);
     expect(canEditEntryBody("inbox")).toBe(false);

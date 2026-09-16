@@ -34,7 +34,7 @@ import {
 } from "@grimoire/shared/property-fields";
 import { toSlug } from "@grimoire/shared/slug";
 
-import { fetchFile, patchProperties } from "@/api";
+import { fetchEntry, patchProperties } from "@/api";
 import type { Translate } from "@/i18n/format";
 import type { MessageKey } from "@/i18n/messages";
 import { isEntityId, npcStatusLabel } from "@/lib/entity";
@@ -702,6 +702,6 @@ export function writePropertiesForm(
 ): Promise<RevWriteResult> {
   return writeWithRev(
     () => patchProperties(campaign, { path, rev, patch, locationName }),
-    () => fetchFile(campaign, path),
+    () => fetchEntry(campaign, path),
   );
 }

@@ -27,7 +27,7 @@ const SCENE = {
   content: readFileSync(path.join(FIXTURES_DIR, "entity-refs-scene.md"), "utf8"),
 };
 
-const SCENE_URL = "/beispiel/file/01-salzhafen/leuchtturm/entity-refs";
+const SCENE_URL = "/beispiel/entry/01-salzhafen/leuchtturm/entity-refs";
 const SCENE_TITLE = "Referenzen am Kai";
 const JORNA = "Hafenmeisterin Jorna";
 
@@ -43,7 +43,7 @@ test("reading view: references render as the current name, unknown ones stay tex
   // is the paragraph.
   const ref = page.getByRole("link", { name: `NPC: ${JORNA}`, exact: true }).first();
   await expect(ref).toHaveText(JORNA);
-  await expect(ref).toHaveAttribute("href", "/beispiel/file/npcs/jorna");
+  await expect(ref).toHaveAttribute("href", "/beispiel/entry/npcs/jorna");
 
   // The suffix stays outside the reference — "Jornas Boot" reads as German.
   await expect(page.locator(".md-body")).toContainText(`${JORNA}s Boot`);
@@ -60,7 +60,7 @@ test("reading view: references render as the current name, unknown ones stay tex
 
   // The reference is a real link and opens the entity.
   await ref.click();
-  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/jorna$/);
+  await expect(page).toHaveURL(/\/beispiel\/entry\/npcs\/jorna$/);
   await expect(page.getByRole("heading", { level: 1, name: JORNA })).toBeVisible();
 });
 
@@ -162,5 +162,5 @@ test("an id rename drags the body reference along", async ({ page, api }) => {
   // …and the reference is still alive on the page, under the same name.
   await page.goto(SCENE_URL);
   const ref = page.getByRole("link", { name: `NPC: ${JORNA}`, exact: true }).first();
-  await expect(ref).toHaveAttribute("href", "/beispiel/file/npcs/jorna-b");
+  await expect(ref).toHaveAttribute("href", "/beispiel/entry/npcs/jorna-b");
 });

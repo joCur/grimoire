@@ -40,7 +40,7 @@ export function usePropertiesFormMutation(
     write: withRev(rev, (write, rev) =>
       writePropertiesForm(campaign, path, rev, write.patch, write.locationName),
     ),
-    fileKey: ["file", campaign, path],
+    entryKey: ["entry", campaign, path],
     invalidateOnSuccess: [
       ["tree", campaign],
       ["search", campaign],

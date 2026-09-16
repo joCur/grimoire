@@ -134,7 +134,7 @@ export async function augmentSystemPrompt(kind: AugmentKind): Promise<string> {
   return `${rule.trimEnd()}\n\n${formatContract(format)}`;
 }
 
-/** The few-shot target of a kind — its example document. */
+/** The few-shot target of a kind — its example entry. */
 export function augmentFewShotFile(kind: AugmentKind): string {
   return ASSET_FILES[kind].fewShotTarget;
 }
@@ -231,7 +231,7 @@ export function validateAugmentReply(
   const errors: string[] = [];
 
   // The target address is the SERVER's and always was — since issue #100 the
-  // model is not even asked for one: an augment run rewrites the document at
+  // model is not even asked for one: an augment run rewrites the entry at
   // `stored.path`, full stop. (Its `location`, on the other hand, is an
   // ordinary proposal: accepting one moves the scene like any other write.)
   const label = `entry "${stored.path}"`;
@@ -387,7 +387,7 @@ export async function runAugment(
     correctionTail: AUGMENT_CORRECTION_TAIL,
   });
   // The naming check runs on the PROPOSAL (issue #53 AK3), as hints — never
-  // a reason to fail a run. It reads the proposed document, because that is
+  // a reason to fail a run. It reads the proposed entry, because that is
   // the text the DM is about to accept.
   return withNamingHints(
     result,

@@ -71,7 +71,7 @@ describe("pageContextCrumbs", () => {
   });
 
   test("files outside the hierarchy get no context line", () => {
-    for (const path of ["_campaign", "sessions/2026-01-15", "inbox", "glossary"]) {
+    for (const path of ["campaign", "sessions/2026-01-15", "inbox", "glossary"]) {
       expect(pageContextCrumbs("beispiel", path, tree, de)).toEqual([]);
     }
   });

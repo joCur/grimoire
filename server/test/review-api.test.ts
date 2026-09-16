@@ -45,14 +45,14 @@ async function postOk(url: string, body?: unknown): Promise<EntryResponse> {
 }
 
 async function getFile(rel: string, campaign = "beispiel"): Promise<EntryResponse> {
-  const res = await app.request(`/api/${campaign}/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/${campaign}/entry?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
 
 async function putBody(rel: string, body: string): Promise<EntryResponse> {
   const before = await getFile(rel);
-  const res = await app.request("/api/beispiel/file", {
+  const res = await app.request("/api/beispiel/entry", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ path: rel, rev: before.rev, body }),
@@ -194,7 +194,7 @@ describe("POST /api/:campaign/review/seen", () => {
 // instead of on file bytes, and the three insertion cases below are the same
 // three it always had.
 describe("POST /api/:campaign/review/thread", () => {
-  const CHAPTER = "01-salzhafen/_chapter";
+  const CHAPTER = "01-salzhafen";
 
   test("appends to an existing ## Offene Fäden section (append-only)", async () => {
     const before = await getFile(CHAPTER);
@@ -209,7 +209,7 @@ describe("POST /api/:campaign/review/thread", () => {
   });
 
   test("inserts before the next heading when the section is not last", async () => {
-    // The body is set up through PUT /file — the app's own way to get a
+    // The body is set up through PUT /entry — the app's own way to get a
     // chapter into this shape, instead of writing a file behind the server.
     await putBody(CHAPTER, "\n## Offene Fäden\n\n- [ ] Alt\n\n## Notizen\n\nText bleibt.\n");
     const file = await postOk("/api/beispiel/review/thread", {
@@ -244,7 +244,7 @@ describe("POST /api/:campaign/review/thread", () => {
   });
 
   test("404 when the chapter does not exist or is not a chapter", async () => {
-    // Replaces "creates _chapter with minimal properties when missing":
+    // Replaces "creates chapter entry with minimal properties when missing":
     // the endpoint used to invent a chapter file for any directory it found,
     // and a chapter ROW is not something a review action may create out of a
     // typo (the generator's new-chapter flow does that, deliberately). So an

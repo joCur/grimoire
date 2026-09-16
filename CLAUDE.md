@@ -73,8 +73,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Schreibzugriffe der App nur über die dokumentierte API; Patches tragen das
   Guard-Token des Lesevorgangs mit (`rev`, die Zeilenversion) — 409 bei
   Konflikt, nie stilles Überschreiben.
-- Jeder Eintrag hat eine Adresse (`npcs/jorna`, `<kapitel>/<szenen-id>`,
-  `sessions/<id>`, `_campaign`, `glossary`); das Schema steht in
+- Jeder Eintrag hat eine Adresse (`npcs/jorna`, `<kapitel>`,
+  `<kapitel>/<szenen-id>`, `sessions/<id>`, `campaign`, `glossary`); das
+  Schema steht in
   `server/src/store/paths.ts`. Auf der Leitung heißen die Felder eines
   Eintrags `properties`, sein Markdown `body`.
 - Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.

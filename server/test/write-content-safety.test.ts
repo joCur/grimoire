@@ -23,13 +23,13 @@ import {
 } from "./support/store";
 
 async function getFile(rel: string): Promise<EntryResponse> {
-  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
 
 async function putFile(body: unknown): Promise<Response> {
-  return app.request("/api/beispiel/file", {
+  return app.request("/api/beispiel/entry", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -90,7 +90,7 @@ afterEach(() => {
   dropStore();
 });
 
-describe("PUT /file — an npc's `## Beziehungen` keeps what became no row", () => {
+describe("PUT /entry — an npc's `## Beziehungen` keeps what became no row", () => {
   test("prose and a duplicate counterpart survive the save", async () => {
     const before = await getFile(NPC);
     expect(before.body).toContain("- jorna: alte Bekannte");

@@ -62,7 +62,7 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
   await search.fill("fenn");
   await page.getByRole("option").filter({ hasText: "Fenn" }).first().click();
 
-  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/fenn$/);
+  await expect(page).toHaveURL(/\/beispiel\/entry\/npcs\/fenn$/);
   // The mobile read view has its own way back to the start surface.
   const back = page.getByRole("link", { name: "Kapitel" });
   await expect(back).toBeVisible();
@@ -95,7 +95,7 @@ test.describe("with a session open since yesterday", () => {
 });
 
 test("mobile: the reference scene's reading view stays readable", async ({ page }) => {
-  await page.goto("/beispiel/file/01-salzhafen/leuchtturm/lighthouse-arrival");
+  await page.goto("/beispiel/entry/01-salzhafen/leuchtturm/lighthouse-arrival");
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
   await expect(page.locator("[data-callout='readaloud']")).toBeVisible();

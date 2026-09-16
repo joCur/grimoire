@@ -111,7 +111,7 @@ export function EntryBodyEditor({
   // The block composer is the default surface (PO decision on #43): the DM
   // maintains prose in forms, the textarea is the fallback.
   const [draft, setDraft] = useState(() => composerDraft(file.body));
-  // `file` is the ["file", campaign, path] query data, so this sees every
+  // `file` is the ["entry", campaign, path] query data, so this sees every
   // refetch and every write that seeds the cache — the status patch included.
   useEffect(() => {
     if (shouldAdvanceBase(base, file)) setBase(file);

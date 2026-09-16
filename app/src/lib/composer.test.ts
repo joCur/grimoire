@@ -415,7 +415,7 @@ describe("what blocks a save", () => {
 
 describe("the type picker", () => {
   test("the document offers the six callouts, both plain blocks and a section", () => {
-    expect(newBlockOptions("document", t).map((option) => option.label)).toEqual([
+    expect(newBlockOptions("body", t).map((option) => option.label)).toEqual([
       "Vorlesetext",
       "Probe",
       "Geheim",
@@ -435,7 +435,7 @@ describe("the type picker", () => {
   });
 
   test("a new heading inside a section starts below the section's own level", () => {
-    const heading = (scope: "document" | "section") => {
+    const heading = (scope: "body" | "section") => {
       const option = newBlockOptions(scope, t).find((candidate) => candidate.key === "heading");
       const block = option?.create();
       if (block?.type !== "heading") throw new Error("expected a heading option");
@@ -444,13 +444,13 @@ describe("the type picker", () => {
     // `##` inside a section would END it (blocks.ts) and take everything below
     // it out of the branch.
     expect(heading("section")).toBe(3);
-    expect(heading("document")).toBe(2);
+    expect(heading("body")).toBe(2);
     expect(headingDepths("section")).toEqual([3, 4, 5, 6]);
-    expect(headingDepths("document")).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(headingDepths("body")).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
   test("every option builds an empty block that serializes and parses back", () => {
-    for (const scope of ["document", "section"] as const) {
+    for (const scope of ["body", "section"] as const) {
       for (const option of newBlockOptions(scope, t)) {
         const block = option.create();
         const markdown = serializeBlocks([block]);

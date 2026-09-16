@@ -46,7 +46,7 @@ export const ERROR_CODES = [
   "session_running",
   /** 409, session discard: the session already carries content. `{ path }` */
   "session_not_empty",
-  /** 409, any rev-checked write: the document changed underneath. `{ rev }` */
+  /** 409, any rev-checked write: the entry changed underneath. `{ rev }` */
   "rev_conflict",
   /** 503, generator: the server was restarted while the job was running. */
   "job_restarted",

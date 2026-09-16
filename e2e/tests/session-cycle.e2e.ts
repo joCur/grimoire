@@ -200,7 +200,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // The full file, not the card excerpt — and the way out into the full view.
   await expect(drawer.getByRole("link", { name: "Eintrag öffnen" })).toHaveAttribute(
     "href",
-    "/beispiel/file/npcs/jorna",
+    "/beispiel/entry/npcs/jorna",
   );
   // Still in the live mode, session still running.
   await expect(page).toHaveURL(/\/beispiel\/live$/);

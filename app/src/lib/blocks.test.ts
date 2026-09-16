@@ -44,7 +44,7 @@ function exampleFiles(): string[] {
     .sort();
 }
 
-/** The body as the app sees it: whatever GET /file put into ParsedFile.body. */
+/** The body as the app sees it: whatever GET /entry put into ParsedFile.body. */
 function exampleBody(rel: string): string {
   const raw = readFileSync(new URL(rel, EXAMPLES), "utf8");
   return parseMarkdown(raw, rel, 0).body;

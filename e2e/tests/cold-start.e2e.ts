@@ -63,7 +63,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   // Straight into the (empty) pool of the new campaign.
   await expect(page).toHaveURL(new RegExp(`/${CAMPAIGN_ID}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
-  const campaignDoc = await api.file("_campaign");
+  const campaignDoc = await api.file("campaign");
   expect(campaignDoc.properties.name).toBe(CAMPAIGN_NAME);
 
   // The empty pool names the NEXT STEP instead of the generator (which needs
@@ -87,7 +87,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   const chapter = page.getByRole("button", { name: /01 Salzhafen/ });
   await expect(chapter).toBeVisible();
   await expect(chapter).toContainText("keine Szenen");
-  const chapterDoc = await api.file("01-salzhafen/_chapter");
+  const chapterDoc = await api.file("01-salzhafen");
   expect(chapterDoc.body).toContain("## Ziel des Kapitels");
   await expect(
     page.getByText("Ziel: Herausfinden, warum das Leuchtfeuer erloschen ist."),
@@ -251,14 +251,14 @@ test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, serve
   await expect(page).toHaveURL(new RegExp(`/${SECOND_ID}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(SECOND_NAME);
   await expect(switcher).toHaveAccessibleName(`Kampagne: ${SECOND_NAME}`);
-  expect((await second.file("_campaign")).properties.name).toBe(SECOND_NAME);
+  expect((await second.file("campaign")).properties.name).toBe(SECOND_NAME);
 
   // Both campaigns are in the menu now, and the first one is untouched.
   await switcher.click();
   await expect(page.getByRole("menu")).toContainText(CAMPAIGN_NAME);
   await expect(page.getByRole("menu")).toContainText(SECOND_NAME);
   await expect(page.getByRole("menu")).toContainText("Nebel, Torf und ein Verschwundener.");
-  expect((await first.file("_campaign")).properties.name).toBe(CAMPAIGN_NAME);
+  expect((await first.file("campaign")).properties.name).toBe(CAMPAIGN_NAME);
 
   // …and switching back works, which is what the menu was there for already.
   await page.getByRole("menu").getByRole("menuitem", { name: new RegExp(CAMPAIGN_NAME) }).click();

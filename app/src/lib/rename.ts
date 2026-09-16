@@ -33,10 +33,9 @@ const RESERVED_IDS = new Set(["npcs", "locations", "sessions"]);
  * entry has no renameable id: sessions (their id is opaque), the campaign
  * entry, inbox, glossary, and anything unknown.
  *
- * For a chapter the id is the FIRST PATH SEGMENT of its `_chapter` (the
- * chapter row's id). For every other kind it is `properties.id`, which every
- * document carries — it is the row's primary key, and the render layer puts
- * it in every properties mapping.
+ * A chapter's address IS its id. For every other kind it is `properties.id`,
+ * which every entry carries — it is the row's primary key, and the render
+ * layer puts it in every properties mapping.
  */
 export function renameTargetFor(file: {
   path: string;
@@ -44,10 +43,8 @@ export function renameTargetFor(file: {
   properties: Record<string, unknown>;
 }): RenameTarget | undefined {
   if (file.kind === "chapter") {
-    const dir = file.path.slice(0, file.path.lastIndexOf("/"));
-    // A `_chapter` always lives INSIDE its chapter directory; anything
-    // else is not a chapter we can rename.
-    return dir === "" || dir.includes("/") ? undefined : { kind: "chapter", oldId: dir };
+    // One segment, the id — anything else is not a chapter we can rename.
+    return file.path === "" || file.path.includes("/") ? undefined : { kind: "chapter", oldId: file.path };
   }
   if (file.kind !== "npc" && file.kind !== "location" && file.kind !== "scene") return undefined;
   const oldId = fmString(file.properties.id) ?? "";
@@ -145,7 +142,7 @@ export function usageTotalLabel(total: number, t: Translate): string {
  * moved along with the rename.
  *
  * The server names `from`/`to` as addresses for every kind — a chapter rename
- * reports `<id>/_chapter` — so the entry on screen is usually `from` itself.
+ * reports `<id>` — so the entry on screen is usually `from` itself.
  * The prefix
  * branch stays for the case where the view sits on something UNDER the
  * renamed address; it costs nothing and is the safe direction.

@@ -8,7 +8,7 @@
 //    never errors.
 //
 // 2. `## If: <condition>` headings: the heading plus every sibling up to the
-//    next depth<=2 heading (or end of document) is wrapped in a custom node
+//    next depth<=2 heading (or end of text) is wrapped in a custom node
 //    that renders as `<details data-if-section open>` with the condition as
 //    its `<summary>` label. Branches are OPEN by default (design reference) —
 //    the DM collapses what does not apply.
@@ -30,7 +30,7 @@ import { toString as mdastToString } from "mdast-util-to-string";
 import { visit } from "unist-util-visit";
 
 // The marker, the If-prefix and the depth boundary are the FORMAT, not this
-// plugin's private business — the Block-Composer reads the same document with
+// plugin's private business — the Block-Composer reads the same text with
 // the same rules (app/src/markdown/grammar.ts).
 import {
   CALLOUT_MARKER,
@@ -217,7 +217,7 @@ function transformIfSections(tree: Root): void {
  *   * a text node is REPLACED BY SEVERAL nodes, which needs the parent's
  *     children array, and
  *   * text inside a LINK is skipped — a resolved reference renders as an
- *     anchor, and an anchor inside an anchor is not a document. Reference-style
+ *     anchor, and an anchor inside an anchor is not valid markup. Reference-style
  *     links (`linkReference`, `imageReference`) count as links here: they also
  *     become an anchor, and `[text with [[ref]]][label]` would nest one.
  *     `inlineCode` and `code` are skipped for free: their content is not a
