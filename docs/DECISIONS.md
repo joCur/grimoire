@@ -505,9 +505,11 @@ einer `## Beziehungen`-Zeile.
   `location` einen Eintrag an und meldet jeden im Boot-Log. Für neue Werte
   gilt weiter die Lazy-Regel — der nächste Schreibvorgang, der das Feld
   anfasst, legt an.
-- **Keine Foreign Keys** auf diesen Spalten. Sie halten Freitext und
-  Importbestand legal; die Konsistenz kommt aus den Schreibwegen, nicht aus
-  einem Constraint, der einen legalen Import scheitern lassen würde.
+- **Echte Foreign Keys** auf diesen Spalten (#18). Die Konsistenz kommt aus
+  der Datenbank; der Schreibweg legt den Eintrag in derselben Transaktion
+  VORHER an, damit der Constraint hält. Genau deshalb kann er halten: „ein
+  referenzierter Eintrag fehlt nie" ist erst mit dem Constraint eine Zusage
+  und nicht eine Absicht.
 - **Leer ist nicht fehlt, auch beim Lesen:** eine leere Inbox antwortet 200 mit
   einem leeren Dokument (wie das Glossar seit #57), nicht 404.
 
@@ -758,7 +760,7 @@ konserviert, die das Ticket beseitigt. Sie fällt weg; `store/paths.ts`
   `examples/` bleibt unverändert lesbar, die Beispielszenen landen unter
   ihren Orten statt unter `hafen`.
 
-## 18. Die Kapitel-Referenz einer Szene ist hart — `location` bleibt weich
+## 18. Jeder Verweis ist ein echter Fremdschlüssel — `scenes.chapter_id` ist Pflicht
 
 **Kontext:** Nach einer Generierung mit „Neues Kapitel" standen in
 Produktion zwölf Szenen mit `chapter_id: 03-dragon-hatchery` in der Datenbank
@@ -768,51 +770,129 @@ die App: Titel und id des neuen Kapitels reisten nur im Browser-Zustand und
 gingen beim Übernehmen mit — seit der Prüfschritt persistent ist, war nach
 Navigation oder Reload beides weg.
 
-`scenes.chapter_id` war bislang bewusst eine **weiche** Referenz
-(schema.ts Regel 3): der Import sollte reihenfolgeunabhängig bleiben, und ein
-Kapitel ohne eigenen Eintrag sollte Szenen tragen dürfen. Genau diese Lizenz hat
-der Fehler verbraucht.
+Möglich war das, weil die Verweise der Datenbank **weich** waren (Regel 3 in
+`server/src/db/schema.ts`): eine Spalte durfte eine id tragen, zu der es keine
+Zeile gab. Die Begründung war Import-Reihenfolge und Freitext; verbraucht hat
+die Lizenz ein Datenverlust.
 
 **Entscheidung:**
 
-- `scenes(campaign_id, chapter_id)` hat einen **echten Fremdschlüssel** auf
-  `chapters(campaign_id, id)`, `ON UPDATE CASCADE`, **ohne** Delete-Cascade
-  (Migration 0014). Ein Kapitel zu löschen, das noch Szenen trägt, schlägt
-  damit fehl — fachlich ist das Löschen ohnehin gesperrt, und ein stilles
-  Cascade wäre der einzige Weg, ein Dutzend Szenen versehentlich zu
-  verlieren. `NULL` bleibt erlaubt: ein zusammengesetzter Fremdschlüssel mit
-  einer NULL-Spalte ist erfüllt, also bleibt eine Szene ohne Kapitel legal.
-- `scenes.location`, `scene_npcs.npc_id` und `npc_relations.other_npc_id`
-  bleiben **weich**, mit `ensureLocationRow`/`ensureNpcRow` davor (ADR #14).
-  Der Unterschied ist nicht Bequemlichkeit: ein Ort oder NPC ist eine
-  *Notiz über* die Szene und darf leer sein, das Kapitel ist Teil ihrer
-  **Adresse**. Eine Adresse, die ins Nichts zeigt, ist kein degradiertes
-  Format, sondern verlorene Daten.
+- **Jede Spalte, die eine andere Zeile benennt, trägt einen echten
+  Fremdschlüssel.** Integrität wird nicht in Anwendungscode nachgebaut, sie
+  gehört der Datenbank. Die vollständige Liste (Migration 0015, Regel 3 im
+  Schema):
+
+  | Spalte | Ziel | Nullable | ON UPDATE | ON DELETE | Warum dieses ON DELETE |
+  | ------ | ---- | -------- | --------- | --------- | ---------------------- |
+  | `scenes.chapter_id` | `chapters` | **nein** | CASCADE | keine Aktion | Ein Kapitel mit Szenen zu löschen muss scheitern; ein stilles Cascade wäre der einzige Weg, ein Dutzend Szenen zu verlieren. |
+  | `scenes.location` | `locations` | ja | CASCADE | keine Aktion | Einen Ort zu löschen, unter dem Szenen sitzen, wird verweigert statt ihre Gruppe still zu leeren. |
+  | `scene_npcs.npc_id` | `npcs` | nein | CASCADE | keine Aktion | Die Zeile ist der Listeneintrag der SZENE — sie stirbt mit der Szene (Cascade auf `scene_id`), nicht mit dem NPC. |
+  | `npc_relations.other_npc_id` | `npcs` | nein | CASCADE | keine Aktion | Die Zeile gehört dem NPC, unter dem sie steht (Cascade auf `npc_id`); den Gegenüber zu löschen würde eine Zeile aus einem fremden Eintrag nehmen. |
+  | `npcs.chapter_id` | `chapters` | ja | CASCADE | keine Aktion | Optionale Gruppierung; `SET NULL` würde sie beim Löschen still verschlucken. |
+  | `locations.chapter_id` | `chapters` | ja | CASCADE | keine Aktion | Dasselbe. |
+  | `log_entries.scene_id` | `scenes` | ja | CASCADE | keine Aktion | Eine Log-Zeile ist, was am Tisch passiert ist; eine Szene zu löschen darf den Abend nicht umschreiben. Die Zeile stirbt mit ihrer **Session**. |
+  | `session_scenes_played.scene_id` | `scenes` | nein | CASCADE | keine Aktion | Dasselbe: gespielt ist Geschichte, sie wird nicht seitwärts gelöscht. |
+
+  `ON UPDATE CASCADE` überall, weil die id der Schlüssel IST (Regel 5): ein
+  Rename ist ein Primärschlüssel-Update, das die Datenbank in die Verweise
+  trägt — `store/rename.ts` schreibt nur noch die Verweise um, die in
+  **Freitext** stehen (Szenen-Marker einer Log-Zeile, `[[slug]]` in Prosa).
+
+  **`SET NULL` ist nirgends die Antwort.** Einen Verweis beim Löschen zu
+  leeren versteckt den Verlust: die Szene läge plötzlich auf Kapitelebene und
+  nichts würde sagen, dass ihr Ort weg ist. Fachlich ist Löschen ohnehin
+  gesperrt (es gibt keinen Endpoint dafür); der Fremdschlüssel macht daraus
+  eine bewusste Entscheidung statt eines stillen Nebeneffekts. Die
+  Kampagnen-Zeile bleibt löschbar: von `campaigns` cascaden alle
+  Entitätstabellen, und der Cascade erreicht die Kinder, bevor die
+  verweigernden Verweise greifen (eigener Test).
+
+- **Optional heißt NULL.** `scenes.location`, `npcs.chapter_id`,
+  `locations.chapter_id` und `log_entries.scene_id` sind nullable, weil der
+  Verweis fachlich fehlen darf. „Optional" heißt nie „darf ins Nichts
+  zeigen".
+
+- **`scenes.chapter_id` ist NOT NULL.** Eine Szene gehört zu einem Kapitel —
+  das Kapitel ist Teil ihrer **Adresse** (`<kapitel>/<ort>/<szene>`), nicht
+  eine Notiz über sie, und ohne Adresse kann sie nicht angelegt werden. Die
+  Spalte hat damit kein NULL mehr für „kein Kapitel", und die Schreibwege
+  haben keinen Fall dafür: `POST /scenes` und `PATCH /properties` antworten
+  **400** auf ein unbekanntes Kapitel (und auf ein geleertes: „chapter cannot
+  be removed"), das Übernehmen einer Generierung legt die Zeile vorher an.
+  Im Eigenschaften-Dialog ist das Feld `chapter` einer Szene deshalb
+  `required` — leer speichern geht nicht.
+
+- **„Referenzieren legt an" bleibt, und wird jetzt erst tragfähig** (ADR #14).
+  Der Schreibweg legt die referenzierte Zeile in **derselben Transaktion und
+  VOR** dem Verweis an (`ensureNpcRow`, `ensureLocationRow`,
+  `ensureChapterRow`): das ist das fachliche Verhalten, der Fremdschlüssel ist
+  die Garantie. Dass es `ensureLocationRow` gibt, ist das Argument FÜR den
+  Constraint — nicht dagegen. Ein referenzierter Eintrag ist **leer**, nie
+  **fehlt**.
+
+  Die eine Ausnahme bleibt das **Kapitel**: es wird nicht dadurch angelegt,
+  dass man es benennt (ADR #14). Bei Szene, NPC und Ort ist ein unbekanntes
+  `chapter:` ein Tippfehler und die ehrliche Antwort der Fehler. Nur der Pfad
+  ohne Dialog — `insertDraft` beim Übernehmen — legt das Kapitel der Szene an,
+  weil die Szene ohne es keine Adresse hätte.
+
+- **`generate_jobs.chapter` ist bewusst KEIN Fremdschlüssel** — die einzige
+  id-Spalte ohne. Ein Job ist eine Absicht, kein Kampagneninhalt: ein
+  „Neues Kapitel"-Lauf benennt das Kapitel, das er ANLEGEN wird, und die
+  Zeile entsteht beim Übernehmen (`new_chapter_title`, Migration 0013). Ein
+  Constraint würde erzwingen, das Kapitel beim START eines Laufs anzulegen,
+  den der DM noch verwerfen kann.
+
 - **Der Titel gehört auf den Job**, nicht in den Browser:
   `generate_jobs.new_chapter_title` (Migration 0013) wird beim **Start** des
   Laufs geschrieben, und `acceptJobParts` legt das Kapitel aus dem
   Job-Zustand an (`jobChapterTarget`, idempotent). Die Body-Felder
   `chapter`/`chapterTitle` bleiben Override für Kompatibilität.
-- **„Referenzieren legt an" gilt jetzt auch fürs Kapitel** — aber nur auf dem
-  Pfad ohne Dialog: `insertDraft` legt die Kapitel-Zeile im selben
-  Schreibvorgang an (`ensureChapterRow`, Titel = Job-Titel, sonst id).
-  `PATCH /properties` und `POST /scenes` bleiben bei ihrem 400 auf ein
-  unbekanntes Kapitel: dort ist ein unbekanntes Kapitel ein Tippfehler, und
-  die ehrliche Antwort ist der Fehler, nicht ein erfundenes Kapitel.
 
-**Migration in zwei Schritten**, dieselbe Reihenfolge wie beim vorherigen
-Reparaturschritt: der
-Reparaturschritt (`db/chapter-repair.ts`) läuft **vor** dem Migrator auf dem
-rohen Client und legt für jede verwaiste `chapter_id` ein Kapitel
-`{id, title: id, status: planned}` an — sonst würde Migration 0014 genau an
-diesen Zeilen scheitern. Er meldet beim Start, was er angelegt hat, weil ein
-Kapitel, das unter seinem Slug auftaucht, umbenannt werden will.
+**Migrationen.** `0014_scenes_chapter_fk` gibt `scenes.chapter_id` den
+Fremdschlüssel, `0015_reference_foreign_keys` macht die Spalte NOT NULL und
+setzt alle übrigen Verweise. Beide sind **handgeschrieben**, und die Abweichung
+von drizzle-kit ist der Punkt: SQLite kann keinen Fremdschlüssel nachrüsten,
+also wird die Tabelle neu gebaut — und `PRAGMA foreign_keys=OFF`, das der
+Generator um den Neubau klammert, ist im Migrator **wirkungslos** (er läuft in
+einer Transaktion, dort ist das Pragma ein No-op). Mit aktiver Durchsetzung
+führt `DROP TABLE` ein implizites `DELETE FROM` aus, das in die Kindzeilen
+cascadet. Die Kindzeilen werden deshalb in derselben Transaktion in
+Hilfstabellen beiseitegelegt und zurückgeschrieben (`npc_relations` um den
+`npcs`-Neubau, `scene_npcs`/`scene_tags` um den von `scenes`). Auch die
+**Reihenfolge** ist Teil der Migration: eine Tabelle wird neu gebaut, bevor sie
+Ziel eines verweigernden Verweises wird.
 
-Ein **leeres** `chapter_id` (`''` oder nur Leerzeichen) nennt kein Kapitel, es
-kann also keines angelegt werden — und es ist auch nicht `NULL`, würde den
-zusammengesetzten Fremdschlüssel von 0014 also verletzen. Der Reparaturschritt
-setzt solche Werte in derselben Transaktion auf `NULL` (was „keine
-Kapitel-Referenz" seit immer bedeutet) und meldet sie ebenfalls beim Start.
+**Der Reparaturschritt läuft VOR dem Migrator** (`db/reference-repair.ts`, auf
+dem rohen Client — derselbe Slot wie `db/group-migration.ts`), denn die Kopien
+der Neubauten scheitern genau an den offenen Verweisen. Er schließt jedes Loch
+und **meldet alles beim Start**:
+
+- Szene **ohne** Kapitel (NULL oder leer) → in das Kapitel `unsortiert`
+  („Unsortiert", Status `planned`), das dafür angelegt wird. Den Boot daran
+  scheitern zu lassen hieße, dem DM einen Server zu geben, der über Daten
+  nicht startet, an die er nicht herankommt.
+- Szene mit einem `chapter_id` **ohne Kapitel-Zeile** → das Kapitel wird
+  angelegt, benannt nach seinem eigenen Slug (der einzige Name, den es hat).
+- Verweis auf einen Eintrag, den es nicht gibt (`location`, NPC-Liste,
+  Beziehungs-Gegenüber, die Szene einer Log-Zeile oder einer
+  `scenes_played`-Liste) → der **leere Eintrag** wird angelegt, wie ihn jeder
+  Schreibweg anlegen würde. Eine so entstandene Szene landet in `unsortiert`.
+- `chapter:` eines NPCs oder Orts, das kein Kapitel benennt → **NULL**.
+  Kapitel werden nicht durch Benennen angelegt; die Notiz geht, kein
+  unautorisiertes Kapitel in die Übersicht.
+- Verweis, der **gar nichts** benennt (leer, nur Leerzeichen) → NULL, wo die
+  Spalte es erlaubt; wo der Verweis Teil des Schlüssels ist, geht die Zeile —
+  sie trug keine Information.
+- Verweis in Klammer-Schreibweise (`[[frulam-mondath]]`, aus Produktion) →
+  auf die id **entklammert**, die er meint. Einen Eintrag namens
+  `[[frulam-mondath]]` anzulegen würde den Constraint erfüllen und die Daten
+  zweimal falsch machen: ein zweiter Eintrag für einen NPC, der schon einen
+  hat, unter einem Namen, den kein DM erkennt. Der Import entklammert
+  seither an der Quelle (`parseRelationsSection`).
+
+Der Schritt ist idempotent und auf jeder Datenbank ohne Loch ein No-op — und
+das ist nach 0015 jede, die dieser Server selbst schreibt.
 
 **Der Kapitel-Status ist ein Enum** (Nachforderung des PO):
 `planned | active | done`, definiert genau einmal in `shared/`
@@ -841,9 +921,3 @@ widersprechen. Mobil bleibt der Status **Anzeige**: unter `md` rendert die
 Route die Startfläche statt der Kapitelübersicht, die Regel steht also genau
 an einer Stelle.
 
-**Konsequenz für Migration 0014:** `PRAGMA foreign_keys=OFF`, das drizzle-kit
-um den Tabellen-Neubau generiert, ist im Migrator wirkungslos — der läuft in
-einer Transaktion, und dort ist das Pragma ein No-op. Mit aktiver Durchsetzung
-würde `DROP TABLE scenes` über `scene_npcs`/`scene_tags` cascaden. Die
-Kindzeilen werden deshalb in derselben Transaktion beiseitegelegt und
-zurückgeschrieben; die Migration erklärt es an ihrem Kopf.

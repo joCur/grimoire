@@ -95,8 +95,8 @@ befüllt. Titel und Ziel bearbeitet die App im Kapitel-Dialog.
 | `title` | Anzeigename, frei änderbar |
 | `type` | `planned` oder `contingency` (Eventualszene) |
 | `trigger` | nur bei `contingency`: wann feuert sie? Freitext |
-| `chapter` | Kapitel-id; muss existieren |
-| `location` | Orts-id; bestimmt Gruppe und Adresse der Szene |
+| `chapter` | Kapitel-id; **Pflicht** — eine Szene gehört zu einem Kapitel |
+| `location` | Orts-id; optional, bestimmt Gruppe und Adresse der Szene |
 | `npcs` | Liste von NPC-ids |
 | `handouts` | Namen der Roll20-Handouts, nur Verweis |
 | `tags` | frei; empfohlen: `combat`, `social`, `stealth`, `travel` |
@@ -169,6 +169,11 @@ leere Einträge erscheinen als dünne Karten und sind normal befüllbar.
 `location:` verlangt eine id in Slug-Form (400 sonst) — sie ist zugleich die
 Gruppe der Szene. `chapter:` legt nichts an: ein unbekanntes Kapitel ist 400,
 bei Szene, NPC und Ort gleich.
+
+Jeder Verweis ist echt: die Datenbank erzwingt, dass die referenzierte Zeile
+existiert. Optional heißt „leer erlaubt" (eine Szene ohne Ort), nie „zeigt
+ins Nichts". Deshalb legt der Schreibweg den Eintrag an, bevor er den Verweis
+schreibt (siehe `docs/DECISIONS.md` #18).
 
 ## Text
 
