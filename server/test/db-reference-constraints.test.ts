@@ -13,8 +13,9 @@
 //      through their cascade. The migration sets those rows aside first;
 //      these cases are what says so, and they fail if it stops doing it.
 //   3. THE PRE-FLIGHT that runs before all of it: data that cannot satisfy
-//      the constraints aborts the start, with the offending values in the
-//      report and nothing migrated.
+//      the constraints — or a relations heading the write-back cannot place —
+//      aborts the start, with the offending values in the report and nothing
+//      migrated.
 //
 // The old-schema database is built BY HAND, like the other pre-migration
 // step's test next to this one: that is what keeps the case honest about
@@ -27,9 +28,11 @@ import { sql } from "drizzle-orm";
 import { MIGRATIONS_DIR, openDb } from "../src/db/client";
 import { openSqlite, type SqliteClient } from "../src/db/driver";
 import {
-  assertReferencesResolvable,
+  assertMigrationReady,
   findReferenceProblems,
+  findRelationHeadingProblems,
   referenceProblemReport,
+  relationHeadingReport,
 } from "../src/db/reference-preflight";
 
 // --- the constraints on a migrated database ---------------------------------
@@ -461,6 +464,113 @@ describe("the relation notes survive the table", () => {
   });
 });
 
+/**
+ * An npc that carries relation notes plus the heading spelled the way the
+ * argument says — the shapes the write-back is asked about.
+ */
+function withHeading(client: SqliteClient, id: string, heading: string): void {
+  client
+    .prepare("insert into npcs (campaign_id, id, name, body) values ('beispiel', ?, ?, ?)")
+    .run(id, id, `## Will\n\nRaus.\n\n${heading}\n\n- eine Zeile in Prosa\n`);
+  client
+    .prepare(
+      "insert into npc_relations (campaign_id, npc_id, other_npc_id, note, pos)" +
+        " values ('beispiel', ?, 'metta', 'alte Bekannte', 0)",
+    )
+    .run(id);
+}
+
+describe("a relations heading the write-back cannot place refuses the start", () => {
+  // The write-back handles the CANONICAL heading only. Every spelling below
+  // was recognised by the deleted reader, so the notes stood under it — and
+  // the write-back would append a SECOND section next to it. Refusing is what
+  // keeps that from happening quietly; normalising the prose is the DM's call.
+  const refused: Array<[string, string]> = [
+    ["two spaces", "##  Beziehungen"],
+    ["a tab", "##\tBeziehungen"],
+    ["a longer word", "## Beziehungenx"],
+    ["something after the word", "## Beziehungen (alt)"],
+  ];
+
+  for (const [label, heading] of refused) {
+    test(`${label} is named by npc id, and nothing is migrated`, async () => {
+      const client = await preConstraintDb();
+      try {
+        client.exec("insert into campaigns (id, name) values ('beispiel', 'Beispiel')");
+        withHeading(client, "fenn", heading);
+        expect(findRelationHeadingProblems(client)).toEqual([
+          { entry: "beispiel/fenn", line: heading },
+        ]);
+        expect(() => assertMigrationReady(client)).toThrow(/Relation notes cannot be placed/);
+        // The refusal ran INSTEAD of the migration: the table is still there
+        // and the text is untouched.
+        expect(rows(client, "select count(*) as n from npc_relations")[0]).toEqual({ n: 1 });
+        expect(
+          (rows(client, "select body from npcs where id = 'fenn'")[0] as { body: string }).body,
+        ).toContain(heading);
+      } finally {
+        client.close();
+      }
+    });
+  }
+
+  test("the canonical heading is fine in any case, and so is a text without one", async () => {
+    const client = await preConstraintDb();
+    try {
+      client.exec("insert into campaigns (id, name) values ('beispiel', 'Beispiel')");
+      // A THIRD hash is a different heading level; the deleted reader never
+      // read it as the section either, so the write-back appends its own —
+      // which is exactly what the reader did. No discrepancy, no refusal.
+      withHeading(client, "fenn", "## BEZIEHUNGEN  ");
+      withHeading(client, "holm", "### Beziehungen");
+      expect(findRelationHeadingProblems(client)).toEqual([]);
+      expect(() => assertMigrationReady(client)).not.toThrow();
+    } finally {
+      client.close();
+    }
+  });
+
+  test("an npc with NO notes is not asked about its headings", async () => {
+    // The write-back only touches texts it writes into, so a heading in any
+    // other text cannot produce a second section.
+    const client = await preConstraintDb();
+    try {
+      client.exec(`
+        insert into campaigns (id, name) values ('beispiel', 'Beispiel');
+        insert into npcs (campaign_id, id, name, body) values
+          ('beispiel', 'jorna', 'Jorna', '##  Beziehungen' || char(10)),
+          ('beispiel', 'fenn', 'Fenn', '## Beziehungen' || char(10));
+        insert into npc_relations (campaign_id, npc_id, other_npc_id, note, pos)
+          values ('beispiel', 'fenn', 'jorna', '', 0);
+      `);
+      expect(findRelationHeadingProblems(client)).toEqual([]);
+    } finally {
+      client.close();
+    }
+  });
+
+  test("a migrated database is not asked either", async () => {
+    const { client, close } = await openDb(":memory:");
+    try {
+      expect(findRelationHeadingProblems(client)).toEqual([]);
+    } finally {
+      close();
+    }
+  });
+
+  test("the report names every offending entry and says what to write", () => {
+    const report = relationHeadingReport([
+      { entry: "beispiel/fenn", line: "##  Beziehungen" },
+      { entry: "beispiel/jorna", line: "##\tBeziehungen" },
+    ]).join("\n");
+    expect(report).toContain("beispiel/fenn");
+    expect(report).toContain("beispiel/jorna");
+    expect(report).toContain("##  Beziehungen");
+    expect(report).toContain("Write the heading as exactly `## Beziehungen`");
+    expect(report).toContain("Nothing has been migrated.");
+  });
+});
+
 // --- the pre-flight ---------------------------------------------------------
 
 describe("the pre-flight in front of the constraints", () => {
@@ -469,7 +579,7 @@ describe("the pre-flight in front of the constraints", () => {
     try {
       seedResolvable(client);
       expect(findReferenceProblems(client)).toEqual([]);
-      expect(() => assertReferencesResolvable(client)).not.toThrow();
+      expect(() => assertMigrationReady(client)).not.toThrow();
     } finally {
       client.close();
     }
@@ -552,7 +662,80 @@ describe("the pre-flight in front of the constraints", () => {
       expect(report).toContain("Nothing has been migrated.");
 
       // And the start is aborted.
-      expect(() => assertReferencesResolvable(client)).toThrow(/Reference check failed/);
+      expect(() => assertMigrationReady(client)).toThrow(/Reference check failed/);
+    } finally {
+      client.close();
+    }
+  });
+
+  test("a reference into ANOTHER campaign names nothing", async () => {
+    // `campaign_id` is part of every reference, so a chapter that exists in
+    // one campaign is no chapter for a scene in another — the foreign keys
+    // rule cross-campaign references out, and the pre-flight says so first.
+    const client = await preConstraintDb();
+    try {
+      seedResolvable(client);
+      client.exec(`
+        insert into campaigns (id, name) values ('zweite', 'Zweite');
+        insert into chapters (campaign_id, id, title, pos) values ('zweite', '77-fremd', 'Fremd', 0);
+        insert into scenes (campaign_id, id, chapter_id, title, pos)
+          values ('beispiel', 'geliehen', '77-fremd', 'Geliehen', 3);
+      `);
+      const problem = findReferenceProblems(client).find(
+        (p) => p.table === "scenes" && p.column === "chapter_id" && p.target === "chapters",
+      );
+      expect(problem).toMatchObject({ rows: 1, values: ["beispiel/77-fremd"] });
+    } finally {
+      client.close();
+    }
+  });
+
+  test("a mandatory value that is BLANK is reported as such, not as a bare slash", async () => {
+    // An empty string is not null, so it is not „names nothing at all" — it
+    // names an entry whose id is "", and the report has to show that as
+    // something a reader can see.
+    const client = await preConstraintDb();
+    try {
+      seedResolvable(client);
+      client.exec(
+        "insert into scenes (campaign_id, id, chapter_id, title, pos)" +
+          " values ('beispiel', 'leer', '', 'Leer', 4)",
+      );
+      const problems = findReferenceProblems(client);
+      expect(
+        problems.find((p) => p.table === "scenes" && p.column === "chapter_id" && p.target !== ""),
+      ).toMatchObject({ values: ["beispiel/(leer)"] });
+      expect(referenceProblemReport(problems).join("\n")).toContain("beispiel/(leer)");
+    } finally {
+      client.close();
+    }
+  });
+
+  test("the check reads only — it writes nothing, not even on a failure", async () => {
+    // „Nothing has been migrated" is a promise about the data, so the check
+    // that prints it must not touch a row itself.
+    const client = await preConstraintDb();
+    try {
+      seedResolvable(client);
+      client.exec(`
+        insert into scenes (campaign_id, id, chapter_id, location, title, pos)
+          values ('beispiel', 'fremd', '99-weg', 'nirgendwo', 'Fremd', 2);
+        insert into npcs (campaign_id, id, name, body) values
+          ('beispiel', 'metta', 'Metta', '##  Beziehungen' || char(10));
+        insert into npc_relations (campaign_id, npc_id, other_npc_id, note, pos)
+          values ('beispiel', 'metta', 'jorna', 'kennt sie', 0);
+      `);
+      const snapshot = (): string =>
+        JSON.stringify([
+          rows(client, "select * from scenes order by id"),
+          rows(client, "select * from npcs order by id"),
+          rows(client, "select * from npc_relations order by npc_id, other_npc_id"),
+          rows(client, "select * from chapters order by id"),
+          rows(client, "select name from sqlite_master where type = 'table' order by name"),
+        ]);
+      const before = snapshot();
+      expect(() => assertMigrationReady(client)).toThrow();
+      expect(snapshot()).toBe(before);
     } finally {
       client.close();
     }

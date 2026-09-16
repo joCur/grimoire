@@ -1,20 +1,30 @@
 // The gate in front of the reference constraints (migration 0014).
 //
-// That migration turns every stored reference into a real foreign key and
-// makes a scene's chapter mandatory. A database whose data cannot satisfy
-// that would fail somewhere in the middle of the rebuild with SQLite's own
-// "FOREIGN KEY constraint failed" — a message that names neither the table,
-// nor the column, nor the value that is wrong.
+// That migration turns every stored reference into a real foreign key, makes
+// a scene's chapter mandatory, and writes an npc's relation notes into the
+// npc's own text before the table that held them goes. A database whose data
+// cannot take that would fail somewhere in the middle of the rebuild with
+// SQLite's own "FOREIGN KEY constraint failed" — a message that names neither
+// the table, nor the column, nor the value that is wrong.
 //
-// So the migration path asks FIRST, while the old schema is still in place:
-// is every reference resolvable? If not, nothing is migrated at all, and the
-// log says per table and column which values name no entry and how many
-// carry them. The data is then corrected in the previous version of the app
-// or directly in the database, and the next start migrates.
+// So the migration path asks FIRST, while the old schema is still in place,
+// and it asks two questions:
+//
+//   1. IS EVERY REFERENCE RESOLVABLE? If not, the log says per table and
+//      column which values name no entry and how many rows carry them.
+//   2. CAN THE RELATION NOTES BE PLACED? The write-back handles exactly the
+//      canonical `## Beziehungen` heading, because that is the one form the
+//      deleted reader wrote the section under. A text that spells the heading
+//      any other way — two spaces, a tab, or a longer word before the real
+//      heading — would silently get a SECOND section next to the one it
+//      already has, so such a text refuses the start instead, by npc id.
+//
+// Either way NOTHING is migrated. The data is then corrected in the previous
+// version of the app or directly in the database, and the next start migrates.
 //
 // DELIBERATELY NO REPAIR. Creating the missing entries would invent content,
-// and dropping the references would delete what somebody wrote — both are
-// decisions only the DM can make.
+// dropping the references would delete what somebody wrote, and normalising a
+// heading would rewrite prose — all three are decisions only the DM can make.
 //
 // It runs on the raw client before the migrator, like the other
 // pre-migration step next to it, and is guarded by the constraints' own
@@ -41,6 +51,13 @@ export interface ReferenceProblem {
 
 /** How many distinct values one problem lists before it only counts them. */
 const MAX_VALUES = 20;
+
+/**
+ * What stands in the report where the offending value is the EMPTY STRING —
+ * without it the line ends in a bare slash and reads like a typo in the
+ * report rather than a blank in the data.
+ */
+const BLANK_VALUE = "(leer)";
 
 /** One reference to check: a column and the table it has to resolve in. */
 interface Reference {
@@ -88,8 +105,14 @@ function constraintsMissing(client: SqliteClient): boolean {
 }
 
 interface CountedValue {
+  campaign: string;
   value: string;
   rows: number;
+}
+
+/** What the report prints for one offending value — „(leer)" for a blank. */
+function shownValue(row: CountedValue): string {
+  return `${row.campaign}/${row.value === "" ? BLANK_VALUE : row.value}`;
 }
 
 /**
@@ -97,17 +120,20 @@ interface CountedValue {
  * row that holds NOTHING is never one of them: for a nullable reference that
  * is legal, and for a mandatory one `absentCount` reports it — the same row
  * must not appear twice under two different reasons.
+ *
+ * The campaign and the value come back SEPARATELY, so a value that is the
+ * empty string can be shown as such instead of as a trailing slash.
  */
 function unresolved(client: SqliteClient, reference: Reference): CountedValue[] {
   const { table, column, target } = reference;
   return client
     .prepare(
-      `select child.campaign_id || '/' || child.\`${column}\` as value,` +
+      `select child.campaign_id as campaign, child.\`${column}\` as value,` +
         ` count(*) as rows from \`${table}\` as child` +
         ` where child.\`${column}\` is not null` +
         ` and not exists (select 1 from \`${target}\` as parent` +
         ` where parent.campaign_id = child.campaign_id and parent.id = child.\`${column}\`)` +
-        ` group by value order by value`,
+        ` group by campaign, value order by campaign, value`,
     )
     .all() as unknown as CountedValue[];
 }
@@ -150,11 +176,93 @@ export function findReferenceProblems(client: SqliteClient): ReferenceProblem[] 
       column: reference.column,
       target: reference.target,
       rows: dangling.reduce((sum, entry) => sum + entry.rows, 0),
-      values: dangling.map((entry) => entry.value),
+      values: dangling.map(shownValue),
     });
   }
   return problems;
 }
+
+// --- the relation notes' one heading ----------------------------------------
+
+/**
+ * The heading the migration's write-back recognises, and the ONLY one: two
+ * hashes, ONE space, the word, then nothing but blanks. It is the form the
+ * deleted reader produced, so it is the form the notes are written back under.
+ */
+const CANONICAL_RELATIONS_HEADING = /^## beziehungen[ \t\r]*$/i;
+
+/**
+ * A line that MEANS the relations heading without being it. Two hashes (a
+ * third is a different heading level, which the reader never read as the
+ * section either), then the word anywhere on the line: `##  Beziehungen`,
+ * `##\tBeziehungen`, `## Beziehungen (alt)`.
+ */
+const RELATIONS_HEADING_LIKE = /^##[^#\n]*beziehungen/i;
+
+/** An npc text whose relations heading the write-back cannot place. */
+export interface RelationHeadingProblem {
+  /** `<campaign>/<npc id>` — the entry the DM opens to correct it. */
+  entry: string;
+  /** The offending line, verbatim, so it can be found in a long text. */
+  line: string;
+}
+
+interface NpcBody {
+  campaign_id: string;
+  id: string;
+  body: string;
+}
+
+/**
+ * Every npc whose notes the migration is about to write into its text and
+ * whose text spells the heading in a form the write-back does not recognise.
+ *
+ * Only npcs that HAVE notes are asked: a text the migration does not touch
+ * cannot gain a second section, whatever its headings say. The first
+ * offending line per npc is enough — the correction is the same one.
+ */
+export function findRelationHeadingProblems(client: SqliteClient): RelationHeadingProblem[] {
+  if (!constraintsMissing(client)) return [];
+  if (!hasTable(client, "npcs") || !hasTable(client, "npc_relations")) return [];
+  const rows = client
+    .prepare(
+      "select n.campaign_id, n.id, n.body from npcs as n where exists" +
+        " (select 1 from npc_relations as r" +
+        " where r.campaign_id = n.campaign_id and r.npc_id = n.id)" +
+        " order by n.campaign_id, n.id",
+    )
+    .all() as unknown as NpcBody[];
+  const problems: RelationHeadingProblem[] = [];
+  for (const row of rows) {
+    for (const line of row.body.split("\n")) {
+      if (!RELATIONS_HEADING_LIKE.test(line)) continue;
+      if (CANONICAL_RELATIONS_HEADING.test(line)) continue;
+      problems.push({ entry: `${row.campaign_id}/${row.id}`, line });
+      break;
+    }
+  }
+  return problems;
+}
+
+/** The log block a heading the write-back cannot place prints. */
+export function relationHeadingReport(problems: RelationHeadingProblem[]): string[] {
+  const lines = [
+    "Relation notes cannot be placed — these npc texts spell `## Beziehungen`" +
+      " in a form the migration does not recognise, and would end up with a" +
+      " second section:",
+  ];
+  for (const problem of problems) {
+    lines.push(`  · ${problem.entry}: ${JSON.stringify(problem.line)}`);
+  }
+  lines.push(
+    "Write the heading as exactly `## Beziehungen` in the previous version of" +
+      " the app or directly in the database, then start again. Nothing has" +
+      " been migrated.",
+  );
+  return lines;
+}
+
+// --- the report -------------------------------------------------------------
 
 /** „1 entry names" / „3 entries name" — so the lines below read as sentences. */
 function entriesName(count: number): string {
@@ -188,14 +296,21 @@ export function referenceProblemReport(problems: ReferenceProblem[]): string[] {
 }
 
 /**
- * Run the check and abort the start when it fails. The report goes to the log
- * BEFORE the throw, so the operator reads all of it even where only the last
- * line of an error survives.
+ * Run both checks and abort the start when either fails — the references and
+ * the relation notes' heading, in one pass, so a database with both kinds of
+ * problem is corrected once instead of on two consecutive failed starts.
+ *
+ * The report goes to the log BEFORE the throw, so the operator reads all of
+ * it even where only the last line of an error survives.
  */
-export function assertReferencesResolvable(client: SqliteClient): void {
-  const problems = findReferenceProblems(client);
-  if (problems.length === 0) return;
-  const report = referenceProblemReport(problems);
+export function assertMigrationReady(client: SqliteClient): void {
+  const references = findReferenceProblems(client);
+  const headings = findRelationHeadingProblems(client);
+  const report = [
+    ...(references.length === 0 ? [] : referenceProblemReport(references)),
+    ...(headings.length === 0 ? [] : relationHeadingReport(headings)),
+  ];
+  if (report.length === 0) return;
   for (const line of report) console.error(line);
   throw new Error(report.join("\n"));
 }

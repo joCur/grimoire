@@ -3,6 +3,10 @@
 --> seven affected tables are REBUILT — the documented procedure: create the
 --> new table, carry the rows over, drop the old one, rename.
 -->
+--> TAKE A BACKUP BEFORE THE START THAT RUNS THIS. It is the first migration
+--> that rewrites campaign CONTENT (the relation notes below), and there is no
+--> downgrade — docs/DEPLOYMENT.md has the two consistent ways.
+-->
 --> Two things the generated form of that procedure cannot do, and they are
 --> why this file is hand-written:
 -->
@@ -32,6 +36,12 @@
 --> reader put them there; every other text gets the section appended, which
 --> is where the reader appended it. Values in `[[…]]` keep their brackets:
 --> they are prose now, and prose is copied, not interpreted.
+-->
+--> The heading recognised here is the CANONICAL one and only that — two
+--> hashes, one space, the word, then nothing but blanks. Any other spelling
+--> would place the section somewhere else than the reader did, so the
+--> pre-flight refuses the start for it by npc id (db/reference-preflight.ts)
+--> rather than this file guessing at what a heading was meant to be.
 -->
 --> `rev` is deliberately NOT bumped: what `GET /entry` answers is the same
 --> text as before, so an editor that is open keeps its guard token.
