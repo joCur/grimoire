@@ -51,15 +51,15 @@ import { chapterBodyChanged, chapterMetaPath, writeChapterBody } from "@/lib/cha
 import { useRevWriteMutation } from "@/lib/use-rev-write";
 
 /** The chapter's display name — its id when the title is missing or empty. */
-function chapterLabel(file: EntryResponse, chapter: string): string {
-  const title = file.properties.title;
+function chapterLabel(entry: EntryResponse, chapter: string): string {
+  const title = entry.properties.title;
   return typeof title === "string" && title.trim() !== "" ? title : chapter;
 }
 
 export function ChapterActions({
   campaign,
   chapter,
-  file,
+  entry,
   tree,
 }: {
   campaign: string;
@@ -69,7 +69,7 @@ export function ChapterActions({
    * running (or when the chapter has no entry to read): the two editing
    * actions need its rev, so they simply are not offered yet.
    */
-  file: EntryResponse | undefined;
+  entry: EntryResponse | undefined;
   /** For the properties dialog's reference fields. */
   tree: CampaignTree | undefined;
 }) {
@@ -78,7 +78,7 @@ export function ChapterActions({
 
   return (
     <div className="mb-3 flex flex-wrap items-center gap-1">
-      {file !== undefined && (
+      {entry !== undefined && (
         <>
           {/* The labels name the chapter instead of saying only "properties"
               or "edit": the overview header carries its own edit action for
@@ -87,7 +87,7 @@ export function ChapterActions({
               counting Tab stops down the list. */}
           <PropertiesAction
             campaign={campaign}
-            file={file}
+            file={entry}
             tree={tree}
             triggerLabel={t("pool.chapter.properties")}
           />
@@ -98,11 +98,11 @@ export function ChapterActions({
           />
         </>
       )}
-      {editing && file !== undefined && (
+      {editing && entry !== undefined && (
         <ChapterBodyDialog
           campaign={campaign}
           chapter={chapter}
-          file={file}
+          entry={entry}
           onClose={() => setEditing(false)}
         />
       )}
@@ -123,7 +123,7 @@ export function ChapterActions({
  * The BASELINE the "nothing changed" check compares against is frozen in the
  * same breath, and for the same reason (the properties dialog's `initial`
  * does it too): it is the body that belongs to the frozen rev. Reading
- * `file.body` live meant the poll could move the baseline under the dialog —
+ * `entry.body` live meant the poll could move the baseline under the dialog —
  * a second writer whose text happened to equal what the DM had typed disabled
  * the save button, so the DM's own version was never written and nothing said
  * why; and after a conflict the re-read body became the baseline, which
@@ -132,20 +132,20 @@ export function ChapterActions({
 function ChapterBodyDialog({
   campaign,
   chapter,
-  file,
+  entry,
   onClose,
 }: {
   campaign: string;
   chapter: string;
-  file: EntryResponse;
+  entry: EntryResponse;
   onClose: () => void;
 }) {
   const t = useT();
-  const [body, setBody] = useState(file.body);
+  const [body, setBody] = useState(entry.body);
   // Both frozen at open, and moved only by a conflict re-read below — the
   // baseline always belongs to the rev the next save is checked against.
-  const [rev, setRev] = useState(file.rev);
-  const [baseline, setBaseline] = useState(file.body);
+  const [rev, setRev] = useState(entry.rev);
+  const [baseline, setBaseline] = useState(entry.body);
 
   const save = useRevWriteMutation<void>({
     write: () => writeChapterBody(campaign, chapter, body, rev),
@@ -173,7 +173,7 @@ function ChapterBodyDialog({
       }}
     >
       <DialogContent aria-describedby={undefined} className="max-w-[560px]">
-        <DialogTitle>{t("chapterBody.title", { title: chapterLabel(file, chapter) })}</DialogTitle>
+        <DialogTitle>{t("chapterBody.title", { title: chapterLabel(entry, chapter) })}</DialogTitle>
         <DialogDescription>{t("chapterBody.description")}</DialogDescription>
 
         <form

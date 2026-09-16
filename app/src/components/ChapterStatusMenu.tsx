@@ -48,7 +48,7 @@ export function ChapterStatusControl({
 }) {
   const [open, setOpen] = useState(false);
   const path = chapterMetaPath(chapter);
-  const file = useQuery({
+  const entry = useQuery({
     queryKey: ["entry", campaign, path],
     queryFn: () => fetchEntry(campaign, path),
     enabled: open && campaign !== "" && chapter !== "",
@@ -58,7 +58,7 @@ export function ChapterStatusControl({
   const { setStatus, pendingStatus, message } = useChapterStatusMutation(
     campaign,
     chapter,
-    file.data?.rev,
+    entry.data?.rev,
     shown,
   );
 

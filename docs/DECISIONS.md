@@ -810,7 +810,7 @@ Kapitel, das unter seinem Slug auftaucht, umbenannt werden will.
 
 Ein **leeres** `chapter_id` (`''` oder nur Leerzeichen) nennt kein Kapitel, es
 kann also keines angelegt werden — und es ist auch nicht `NULL`, würde den
-zusammengesetzten Fremdschlüssel von 0012 also verletzen. Der Reparaturschritt
+zusammengesetzten Fremdschlüssel von 0014 also verletzen. Der Reparaturschritt
 setzt solche Werte in derselben Transaktion auf `NULL` (was „keine
 Kapitel-Referenz" seit immer bedeutet) und meldet sie ebenfalls beim Start.
 

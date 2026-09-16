@@ -301,7 +301,7 @@ describe("the chapter foreign key of migration 0014", () => {
 
   test("the rebuild keeps the scene child rows", async () => {
     // The hand-edited half of migration 0014 (see its header): the migrator
-    // runs every file in ONE transaction, where `PRAGMA foreign_keys=OFF` is
+    // runs every migration in ONE transaction, where `PRAGMA foreign_keys=OFF` is
     // a no-op — so a plain `DROP TABLE scenes` would cascade through
     // `scene_npcs`/`scene_tags` and delete every scene's references. The
     // migration sets those rows aside and puts them back, and this is the

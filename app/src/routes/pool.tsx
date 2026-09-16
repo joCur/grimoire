@@ -199,7 +199,7 @@ function Chapter({
           <ChapterActions
             campaign={campaign}
             chapter={chapter.id}
-            file={chapterEntry.data}
+            entry={chapterEntry.data}
             tree={tree}
           />
           {goal !== undefined && (
