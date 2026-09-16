@@ -81,7 +81,11 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - Sprache der UI: Deutsch (Primärsprache), Englisch als zweite Sprache.
   Code, Kommentare, Commits: Englisch.
 - Kommentare erklären den Code und stehen für sich: Englisch, ohne Verweise
-  auf Issues, PRs oder Reviews.
+  auf Issues, PRs oder Reviews. Verweise auf ADRs (`ADR #13`) sind erlaubt —
+  sie zeigen auf ein Dokument im Repo, nicht auf ein Ticket.
+- Pfadfinder-Prinzip: Wer eine Datei aus einem anderen Grund anfasst, räumt
+  die Issue-Verweise in dieser ganzen Datei mit auf, nicht nur in den
+  geänderten Zeilen. Dafür gibt es keinen eigenen Aufräum-PR.
 - Schemata und Fixtures liegen in ihrem Zielformat vor (ein JSON-Schema als
   `.json`, eine Antwort-Fixture als das Objekt selbst), statt im Code
   zusammengebaut zu werden.
