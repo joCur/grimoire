@@ -1258,6 +1258,39 @@ export function applyStubTarget(item: unknown, index: number): ApplyTarget {
  * (id/title/status: planned — a generator-created chapter is upcoming,
  * never the active one); the body stays empty and degrades.
  */
+/**
+ * The chapter target of a „Neues Kapitel" run, decided from the JOB.
+ *
+ * The app used to send `chapter`/`chapterTitle` from its own state on accept,
+ * and the review state is persistent — so that state is gone after a
+ * navigation or a reload, and the scenes were written under a chapter that had
+ * no entry of its own: invisible in the overview, together with every scene in
+ * it. The run knows what chapter it is for (`generate_jobs.chapter`) and, since
+ * the migration next to this, what it is CALLED
+ * (`generate_jobs.new_chapter_title`), so the decision is made here and needs
+ * no browser.
+ *
+ * The body fields stay an OVERRIDE for compatibility (an older app build, and
+ * the whole-run `POST /generate/apply`, which has no job to read): sent, they
+ * decide; absent, the job does. Idempotent either way — an existing chapter
+ * yields null.
+ */
+export async function jobChapterTarget(
+  campaign: string,
+  job: { newChapter: boolean; chapter?: string; newChapterTitle?: string },
+  bodyChapter: unknown,
+  bodyChapterTitle: unknown,
+): Promise<ApplyTarget | null> {
+  if (bodyChapter !== undefined || bodyChapterTitle !== undefined) {
+    return newChapterTarget(campaign, bodyChapter, bodyChapterTitle);
+  }
+  if (!job.newChapter || job.chapter === undefined) return null;
+  // No stored title (a run started before the column existed) falls back to
+  // the id: a chapter called by its slug can be renamed in the overview, an
+  // invisible one cannot.
+  return newChapterTarget(campaign, job.chapter, job.newChapterTitle ?? job.chapter);
+}
+
 export async function newChapterTarget(
   campaign: string,
   chapter: unknown,

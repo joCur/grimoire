@@ -15,7 +15,7 @@ import {
   applyStubTarget,
   assertDraftId,
   draftAddress,
-  newChapterTarget,
+  jobChapterTarget,
   type ApplyTarget,
 } from "./generator";
 import { locationPath, npcPath } from "./store/paths";
@@ -133,10 +133,14 @@ export async function acceptJobParts(
   }
 
   const targets: ApplyTarget[] = selected.map((rel) => (parts.get(rel) as { target: ApplyTarget }).target);
-  // The chapter file comes first — the scenes live inside it. Idempotent:
+  // The chapter comes first — the scenes live inside it. Idempotent:
   // an existing chapter yields null, so only the FIRST partial accept of a
   // new-chapter run actually creates it.
-  const chapterFile = await newChapterTarget(campaign, body.chapter, body.chapterTitle);
+  //
+  // Decided from the JOB and not from the body: the review state is
+  // persistent, so the accept regularly happens in a browser that never saw
+  // the start form. The body fields remain an override.
+  const chapterFile = await jobChapterTarget(campaign, job, body.chapter, body.chapterTitle);
   if (chapterFile !== null) targets.unshift(chapterFile);
 
   const drafts = targets.map((t) => {

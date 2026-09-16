@@ -2204,3 +2204,66 @@ describe("campaign knowledge", () => {
     expect(result.namingHints).toBeUndefined();
   });
 });
+
+// --- the write-layer net under a generated chapter ------------------------------
+
+describe("a scene draft whose chapter has no entry", () => {
+  test("gets the chapter in the same write, named by its id", async () => {
+    // The apply path is the ONE scene write without a dialog in front of it,
+    // and it is what let scenes land under a chapter that had none: the
+    // overview lists chapters, so chapter and scenes were both unreachable.
+    // `ensureChapterRow` closes it the way `ensureLocationRow` closes the Ort.
+    const markdown = sceneMarkdown()
+      .replace("id: treffen-am-kai", "id: brut-im-dunkeln")
+      .replace("chapter: 01-salzhafen", "chapter: 03-drachenbrut");
+    const res = await postJson("/api/beispiel/generate/apply", {
+      // No `chapter`/`chapterTitle` in the body on purpose — this is the net
+      // under the job-driven creation, not the creation itself.
+      scenes: [{ path: "03-drachenbrut/brut-im-dunkeln", markdown }],
+    });
+    expect(res.status).toBe(200);
+
+    const chapter = await read("03-drachenbrut");
+    expect(chapter.kind).toBe("chapter");
+    // No title was known here, so the chapter is called by its slug — which
+    // is renameable in the overview, where an unreachable chapter was not.
+    expect(chapter.properties.title).toBe("03-drachenbrut");
+    expect(chapter.properties.status).toBe("planned");
+
+    // …and the scene really hangs in it.
+    const tree = (await (await app.request("/api/beispiel/tree")).json()) as {
+      chapters: Array<{ id: string; groups: Array<{ scenes: Array<{ id: string }> }> }>;
+    };
+    const node = tree.chapters.find((c) => c.id === "03-drachenbrut");
+    expect(node?.groups.flatMap((g) => g.scenes).map((s) => s.id)).toContain("brut-im-dunkeln");
+  });
+
+  test("a chapter id that is no slug answers 400 and names the chapter", async () => {
+    // `ensureChapterRow` only creates a chapter for a real entity slug. An id
+    // like `Kapitel_1` passes the address safety check but is not one, so the
+    // apply says so instead of storing a scene nothing can reach.
+    const markdown = sceneMarkdown()
+      // Its own id: the scene id IS the primary key, so reusing the one the
+      // case above wrote would answer the duplicate-target 409 first.
+      .replace("id: treffen-am-kai", "id: brut-im-schacht")
+      .replace("chapter: 01-salzhafen", "chapter: Kapitel_1");
+    const res = await postJson("/api/beispiel/generate/apply", {
+      scenes: [{ path: "Kapitel_1/brut-im-schacht", markdown }],
+    });
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(await res.json())).toContain("Kapitel_1");
+    // Nothing was written — not the scene, and not a chapter either.
+    expect((await app.request("/api/beispiel/entry?path=Kapitel_1")).status).toBe(404);
+  });
+
+  test("a DIALOG still refuses an unknown chapter — ADR #14 stands", async () => {
+    // The rule is about reachability, not about inventing chapters: where a
+    // DM typed the chapter, an unknown one is a typo and the honest answer is
+    // the 400.
+    const res = await postJson("/api/beispiel/scenes", {
+      title: "Szene im Nichts",
+      chapter: "99-gibt-es-nicht",
+    });
+    expect(res.status).toBe(400);
+  });
+});

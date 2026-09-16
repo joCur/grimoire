@@ -122,6 +122,16 @@ import {
 
 export { logLineShortHash };
 
+// --- chapter status ----------------------------------------------------------
+
+/**
+ * Where a chapter starts. Not NULL: the overview renders a chapter's status
+ * and nothing renders nothing, so a chapter without one would look less
+ * planned than its siblings. A NULL only survives on an older chapter, which
+ * the app reads as `planned`.
+ */
+const CHAPTER_PLANNED = "planned";
+
 // --- transaction plumbing ----------------------------------------------------
 
 /**
@@ -486,6 +496,47 @@ function ensureNpcRow(tx: GrimoireDb, campaign: string, id: string): boolean {
   tx.insert(npcs).values({ campaignId: campaign, id }).run();
   const row = npcRowOf(tx, campaign, id);
   if (row !== undefined) indexNpc(tx, campaign, row, []);
+  return true;
+}
+
+/**
+ * The chapter of a GENERATED scene, created if it has none of its own.
+ *
+ * Not the „Referenzieren legt an" rule of ADR #14 — that one deliberately
+ * stops at chapters, because a chapter a DM typed into a dialog is a typo
+ * worth a 400. Here nobody typed anything: the run itself decided the chapter
+ * (and, for a „Neues Kapitel" run, its title), so the accept has to be able
+ * to write it. Without this a scene ends up under a chapter that has no entry
+ * — and the overview lists chapters, so the chapter and every scene in it
+ * would be unreachable.
+ *
+ * Idempotent and quiet: false when the chapter is already there, and false for
+ * an id that is no entity slug (the caller answers that with its own 400).
+ * `planned` like every other creation path — a chapter the run brought is
+ * upcoming, never the active one.
+ */
+function ensureChapterRow(
+  tx: GrimoireDb,
+  campaign: string,
+  id: string,
+  title?: string,
+): boolean {
+  if (!ENTITY_SLUG.test(id)) return false;
+  if (chapterRowOf(tx, campaign, id) !== undefined) return false;
+  const display = title?.trim();
+  tx.insert(chapters)
+    .values({
+      campaignId: campaign,
+      id,
+      title: display === undefined || display === "" ? id : display,
+      status: CHAPTER_PLANNED,
+      pos: nextPos(
+        tx.select({ pos: chapters.pos }).from(chapters).where(eq(chapters.campaignId, campaign)).all(),
+      ),
+    })
+    .run();
+  const row = chapterRowOf(tx, campaign, id);
+  if (row !== undefined) indexChapter(tx, campaign, row);
   return true;
 }
 
@@ -2092,6 +2143,21 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           .orderBy(desc(scenes.pos))
           .limit(1)
           .all()[0]?.pos ?? -1) + 1;
+      // The scene's chapter is written in THIS transaction, before the scene
+      // itself. A „Neues Kapitel" run creates its chapter from the run's own
+      // state (generator.ts `jobChapterTarget`), so the entry normally exists
+      // with the title the DM typed; this is the net under it, and it names
+      // the chapter by its id. A chapter id that is no entity slug gets none
+      // and is the honest 400 instead of a scene nothing can reach.
+      if (locator.chapterId !== null && locator.chapterId !== undefined) {
+        ensureChapterRow(tx, campaign, locator.chapterId);
+        if (chapterRowOf(tx, campaign, locator.chapterId) === undefined) {
+          throw new ApiError(
+            400,
+            `unknown chapter: ${locator.chapterId} — create the chapter first`,
+          );
+        }
+      }
       tx.insert(scenes)
         .values({
           campaignId: campaign,

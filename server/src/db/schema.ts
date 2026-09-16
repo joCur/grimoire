@@ -678,6 +678,16 @@ export const generateJobs = sqliteTable(
     sourceText: text("source_text"),
     /** The run's „Neues Kapitel" flag — a retry must not 404 on it. */
     newChapter: integer("new_chapter").notNull().default(0),
+    /**
+     * TITLE of the chapter a „Neues Kapitel" run creates. It used to live in
+     * the BROWSER and travelled on the accept request, so a run accepted
+     * after a navigation or a reload carried no title and no chapter at all —
+     * the review state is persistent, the browser's copy of the start form is
+     * not. The title belongs to the run, so it is stored when the run STARTS.
+     * NULL for every other run and for a job written before this column
+     * existed; the accept then falls back to the chapter id.
+     */
+    newChapterTitle: text("new_chapter_title"),
   },
   (t) => [uniqueIndex("generate_jobs_campaign_unique").on(t.campaignId)],
 );
