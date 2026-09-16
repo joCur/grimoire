@@ -10,17 +10,27 @@
 //      validates — and the API adds none (`PATCH` refuses a new key).
 //   2. REFERENCES ARE TABLES with a `pos` column. `npcs: [jorna, fenn]` is an
 //      ORDERED list in the file, and the order is authored information.
-//   3. SOFT REFERENCES CARRY NO FOREIGN KEY. `scenes.location`, `scene_npcs.
-//      npc_id`, `npc_relations.other_npc_id` may hold an id that has no row.
-//      A FK there would turn a legal campaign into a failed import — of the
-//      file tree, and of a `location:` that is FREE TEXT (README).
-//      REVISED BY ISSUE #70: a dangling reference is no longer a state the
-//      app produces. Every write that INTRODUCES a reference creates the
-//      referenced row in the same transaction (store/write.ts
-//      `ensureNpcRow`), so a referenced entity is EMPTY, never MISSING — an
-//      npc without information is a row with an id and a name (#52). The
-//      missing FK is what keeps free text and imported stock legal, not a
-//      licence for new holes.
+//   3. EVERY REFERENCE IS A REAL FOREIGN KEY. A column that names another
+//      row carries the constraint that the row exists — `scenes.chapter_id`,
+//      `scenes.location`, `scene_npcs.npc_id`, `npc_relations.
+//      other_npc_id`, the `chapter_id` of an npc and a location, and the
+//      scene a log line and a played list name. Integrity is not rebuilt in
+//      application code; the database owns it.
+//      An OPTIONAL reference is a NULLABLE one (`scenes.location` NULL: the
+//      scene names no location). "Optional" never means "may point at
+//      nothing that exists".
+//      This does not soften "referencing creates" (ADR #14/#18): every write
+//      that INTRODUCES a reference creates the referenced row in the SAME
+//      transaction and BEFORE the insert (store/write.ts `ensureNpcRow`,
+//      `ensureLocationRow`, `ensureChapterRow`), so a referenced entity is
+//      EMPTY, never MISSING — an npc without information is a row with an id
+//      and a name (#52). The ensure is the product behaviour, the foreign key
+//      is the guarantee: the existence of `ensureLocationRow` is the reason
+//      the constraint can hold, not a reason to do without it.
+//      `ON UPDATE CASCADE` everywhere (rule 5). `ON DELETE` is decided PER
+//      COLUMN and is never `SET NULL`: blanking a reference on a delete hides
+//      the loss. A join row dies with its PARENT (a scene's npc list with the
+//      scene), and a delete that would orphan authored data is REFUSED.
 //   4. `rev` IS THE ROW VERSION and replaces mtimeMs as the 409 guard. Every
 //      row a client can PATCH has one; the store bumps it on every write.
 //   5. NATURAL COMPOSITE KEYS, `ON UPDATE CASCADE`. The id IS the key
@@ -30,6 +40,12 @@
 //   6. SESSION TIMESTAMPS STAY ZONE-LESS STRINGS, exactly as the files carry
 //      them. Only the server resolves them to epoch ms (see clock.ts) —
 //      storing an epoch here would bake today's timezone into the data.
+//
+// THE DECLARATION ORDER IS PARENTS FIRST (campaign, chapters, locations,
+// npcs, scenes, then the reference tables). A table's foreign keys are built
+// when the table is built, so a target declared further down would be read
+// before it exists. Moving a table up the file is therefore a change with a
+// reason, not formatting.
 //
 // `extra` and the other JSON columns are plain TEXT holding a JSON object;
 // pack/unpack helpers live at the bottom of this file. Deliberately not
@@ -127,6 +143,124 @@ export const chapters = sqliteTable(
   (t) => [primaryKey({ columns: [t.campaignId, t.id] })],
 );
 
+// --- locations --------------------------------------------------------------
+
+export const locations = sqliteTable(
+  "locations",
+  {
+    campaignId: text("campaign_id").notNull(),
+    id: text("id").notNull(),
+    name: text("name").notNull().default(""),
+    /**
+     * Chapter the location belongs to — optional, therefore NULLABLE, and a
+     * foreign key like every other reference (rule 3).
+     */
+    chapterId: text("chapter_id"),
+    /** Reference to the Roll20 page — never a map copy (DECISIONS #2). */
+    roll20Page: text("roll20_page"),
+    body: text("body").notNull().default(""),
+    extra: extraColumn(),
+    rev: revColumn(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.campaignId, t.id] }),
+    foreignKey({
+      columns: [t.campaignId],
+      foreignColumns: [campaigns.id],
+      name: "locations_campaign_fk",
+    })
+      .onUpdate("cascade")
+      .onDelete("cascade"),
+    // No delete action: a chapter that locations still name is not deleted
+    // out from under them. `SET NULL` would drop the grouping in silence.
+    foreignKey({
+      columns: [t.campaignId, t.chapterId],
+      foreignColumns: [chapters.campaignId, chapters.id],
+      name: "locations_chapter_fk",
+    }).onUpdate("cascade"),
+  ],
+);
+
+// --- npcs -------------------------------------------------------------------
+
+export const npcs = sqliteTable(
+  "npcs",
+  {
+    campaignId: text("campaign_id").notNull(),
+    id: text("id").notNull(),
+    name: text("name").notNull().default(""),
+    role: text("role"),
+    /**
+     * Chapter the npc is introduced in — optional, therefore NULLABLE, and a
+     * foreign key like every other reference (rule 3).
+     */
+    chapterId: text("chapter_id"),
+    /** "alive" | "dead" | "missing" | "unknown" | anything else. */
+    status: text("status").notNull().default("unknown"),
+    /** `Roll20: <sheet>` — a reference, never a copy (DECISIONS #2). */
+    statblock: text("statblock"),
+    /** Free-form social stats as a JSON object, e.g. `{"wis":"+2"}`. */
+    quickstats: text("quickstats").notNull().default("{}"),
+    voice: text("voice"),
+    appearance: text("appearance"),
+    body: text("body").notNull().default(""),
+    extra: extraColumn(),
+    rev: revColumn(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.campaignId, t.id] }),
+    foreignKey({
+      columns: [t.campaignId],
+      foreignColumns: [campaigns.id],
+      name: "npcs_campaign_fk",
+    })
+      .onUpdate("cascade")
+      .onDelete("cascade"),
+    // Same answer as for a location's chapter: rename cascades, delete is
+    // refused rather than silently ungrouping the npc.
+    foreignKey({
+      columns: [t.campaignId, t.chapterId],
+      foreignColumns: [chapters.campaignId, chapters.id],
+      name: "npcs_chapter_fk",
+    }).onUpdate("cascade"),
+  ],
+);
+
+/**
+ * One line of an npc's `## Beziehungen` list (`- <npc-id>: <Freitext>`).
+ * `otherNpcId` names an npc, so it is a foreign key on one (rule 3) — the
+ * counterpart may be EMPTY, never missing.
+ */
+export const npcRelations = sqliteTable(
+  "npc_relations",
+  {
+    campaignId: text("campaign_id").notNull(),
+    npcId: text("npc_id").notNull(),
+    otherNpcId: text("other_npc_id").notNull(),
+    /** The free text after the colon. */
+    note: text("note").notNull().default(""),
+    pos: integer("pos").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.campaignId, t.npcId, t.otherNpcId] }),
+    foreignKey({
+      columns: [t.campaignId, t.npcId],
+      foreignColumns: [npcs.campaignId, npcs.id],
+      name: "npc_relations_npc_fk",
+    })
+      .onUpdate("cascade")
+      .onDelete("cascade"),
+    // The line belongs to the npc it stands under (delete cascade above),
+    // NOT to the counterpart: deleting the counterpart would take a line out
+    // of someone else's entry, so it is refused.
+    foreignKey({
+      columns: [t.campaignId, t.otherNpcId],
+      foreignColumns: [npcs.campaignId, npcs.id],
+      name: "npc_relations_other_npc_fk",
+    }).onUpdate("cascade"),
+  ],
+);
+
 // --- scenes -----------------------------------------------------------------
 
 export const scenes = sqliteTable(
@@ -135,35 +269,32 @@ export const scenes = sqliteTable(
     campaignId: text("campaign_id").notNull(),
     id: text("id").notNull(),
     /**
-     * Owning chapter — a HARD reference (ADR #18): the
-     * foreign key at the bottom of this table.
+     * Owning chapter — NOT NULL and a foreign key (ADR #18).
      *
-     * It was a soft one (rule 3) so the importer could stay order-independent
-     * and a chapter with no entry of its own could still own scenes. That
-     * licence is what production used up: the generator's accept step wrote
-     * twelve scenes under `03-dragon-hatchery` with no such chapter, and the
-     * overview lists chapters from the chapter TABLE — so the chapter and every
-     * scene in it were invisible. The chapter is part of a scene's ADDRESS,
-     * not a note about it, and an address that points nowhere is not a
-     * degraded format, it is lost data.
+     * The chapter is part of a scene's ADDRESS, not a note about it: the tree
+     * hangs the scene under it and `<chapter>/<location>/<id>` is built from
+     * it. A scene without one has no address and cannot be created — so the
+     * column has no NULL to mean "no chapter", and the write paths have no
+     * case for it either (`POST /scenes` and `PATCH /properties` answer 400
+     * for an unknown chapter, the draft apply creates the row first).
      *
-     * NULL is still allowed and still means "no chapter": a composite
-     * foreign key with a NULL column is satisfied, which is what keeps a
-     * chapterless scene legal. `location` stays SOFT, with
-     * `ensureLocationRow` in front of it (ADR #18).
+     * It was a NULLABLE soft reference, and that licence is what production
+     * used up: the generator's accept step wrote twelve scenes under
+     * `03-dragon-hatchery` with no such chapter, and the overview lists
+     * chapters from the chapter TABLE — so the chapter and every scene in it
+     * were invisible.
      */
-    chapterId: text("chapter_id"),
+    chapterId: text("chapter_id").notNull(),
     title: text("title").notNull().default(""),
     /** "planned" | "contingency" | anything else a file carried. */
     type: text("type").notNull().default("planned"),
     /** Free-text firing condition — only meaningful for contingency scenes. */
     trigger: text("trigger"),
     /**
-     * The scene's location — a location ID or null, never free text
-     * (issue #100). Soft reference (rule 3) in the database sense: the write
-     * layer CREATES the row when the id has none (`ensureLocationRow`), so a
-     * dangling value is impossible from the API side, but the column carries
-     * no foreign key so the importer stays order-independent.
+     * The scene's location — a location id or NULL, never free text
+     * (issue #100). A foreign key like every other reference (rule 3), and
+     * NULLABLE because naming a location is optional: NULL is the scene that
+     * sits at chapter level, and the app lists it under „Ohne Ort".
      *
      * It is also the scene's GROUP: the address `<chapter>/<location>/<id>`
      * and the tree's `SceneGroup`s are derived from this column, which is why
@@ -194,7 +325,7 @@ export const scenes = sqliteTable(
     })
       .onUpdate("cascade")
       .onDelete("cascade"),
-    // ON UPDATE CASCADE, and deliberately NO delete cascade:
+    // ON UPDATE CASCADE, and deliberately NO delete action:
     // renaming a chapter is a primary-key update the database carries into
     // its scenes (rule 5), but deleting a chapter that still owns scenes must
     // FAIL — dropping a chapter is blocked as a matter of product rules while
@@ -205,6 +336,17 @@ export const scenes = sqliteTable(
       foreignColumns: [chapters.campaignId, chapters.id],
       name: "scenes_chapter_fk",
     }).onUpdate("cascade"),
+    // The same two answers for the location, for one reason each:
+    // a rename follows the scenes (rule 5), and deleting a location that
+    // scenes sit under is REFUSED rather than silently blanking their group.
+    // `SET NULL` was the tempting third answer and is the wrong one: the
+    // scenes would quietly move to chapter level and nothing would say that
+    // their location is gone.
+    foreignKey({
+      columns: [t.campaignId, t.location],
+      foreignColumns: [locations.campaignId, locations.id],
+      name: "scenes_location_fk",
+    }).onUpdate("cascade"),
   ],
 );
 
@@ -214,7 +356,7 @@ export const sceneNpcs = sqliteTable(
   {
     campaignId: text("campaign_id").notNull(),
     sceneId: text("scene_id").notNull(),
-    /** Soft reference (rule 3): an npc without a file is legal. */
+    /** The npc — a foreign key on it (rule 3); an EMPTY npc is legal. */
     npcId: text("npc_id").notNull(),
     pos: integer("pos").notNull(),
   },
@@ -227,6 +369,14 @@ export const sceneNpcs = sqliteTable(
     })
       .onUpdate("cascade")
       .onDelete("cascade"),
+    // The row is the SCENE's list entry, so it dies with the scene (above)
+    // and NOT with the npc: deleting an npc that scenes still list is
+    // refused, because the entry is authored information about the scene.
+    foreignKey({
+      columns: [t.campaignId, t.npcId],
+      foreignColumns: [npcs.campaignId, npcs.id],
+      name: "scene_npcs_npc_fk",
+    }).onUpdate("cascade"),
   ],
 );
 
@@ -245,94 +395,6 @@ export const sceneTags = sqliteTable(
       columns: [t.campaignId, t.sceneId],
       foreignColumns: [scenes.campaignId, scenes.id],
       name: "scene_tags_scene_fk",
-    })
-      .onUpdate("cascade")
-      .onDelete("cascade"),
-  ],
-);
-
-// --- npcs -------------------------------------------------------------------
-
-export const npcs = sqliteTable(
-  "npcs",
-  {
-    campaignId: text("campaign_id").notNull(),
-    id: text("id").notNull(),
-    name: text("name").notNull().default(""),
-    role: text("role"),
-    /** Chapter the npc is introduced in — soft reference (rule 3). */
-    chapterId: text("chapter_id"),
-    /** "alive" | "dead" | "missing" | "unknown" | anything else. */
-    status: text("status").notNull().default("unknown"),
-    /** `Roll20: <sheet>` — a reference, never a copy (DECISIONS #2). */
-    statblock: text("statblock"),
-    /** Free-form social stats as a JSON object, e.g. `{"wis":"+2"}`. */
-    quickstats: text("quickstats").notNull().default("{}"),
-    voice: text("voice"),
-    appearance: text("appearance"),
-    body: text("body").notNull().default(""),
-    extra: extraColumn(),
-    rev: revColumn(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.campaignId, t.id] }),
-    foreignKey({
-      columns: [t.campaignId],
-      foreignColumns: [campaigns.id],
-      name: "npcs_campaign_fk",
-    })
-      .onUpdate("cascade")
-      .onDelete("cascade"),
-  ],
-);
-
-/**
- * One line of an npc's `## Beziehungen` list (`- <npc-id>: <Freitext>`).
- * `otherNpcId` is a soft reference — the counterpart may have no file.
- */
-export const npcRelations = sqliteTable(
-  "npc_relations",
-  {
-    campaignId: text("campaign_id").notNull(),
-    npcId: text("npc_id").notNull(),
-    otherNpcId: text("other_npc_id").notNull(),
-    /** The free text after the colon. */
-    note: text("note").notNull().default(""),
-    pos: integer("pos").notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.campaignId, t.npcId, t.otherNpcId] }),
-    foreignKey({
-      columns: [t.campaignId, t.npcId],
-      foreignColumns: [npcs.campaignId, npcs.id],
-      name: "npc_relations_npc_fk",
-    })
-      .onUpdate("cascade")
-      .onDelete("cascade"),
-  ],
-);
-
-// --- locations --------------------------------------------------------------
-
-export const locations = sqliteTable(
-  "locations",
-  {
-    campaignId: text("campaign_id").notNull(),
-    id: text("id").notNull(),
-    name: text("name").notNull().default(""),
-    chapterId: text("chapter_id"),
-    /** Reference to the Roll20 page — never a map copy (DECISIONS #2). */
-    roll20Page: text("roll20_page"),
-    body: text("body").notNull().default(""),
-    extra: extraColumn(),
-    rev: revColumn(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.campaignId, t.id] }),
-    foreignKey({
-      columns: [t.campaignId],
-      foreignColumns: [campaigns.id],
-      name: "locations_campaign_fk",
     })
       .onUpdate("cascade")
       .onDelete("cascade"),
@@ -464,7 +526,10 @@ export const logEntries = sqliteTable(
     raw: text("raw").notNull(),
     /** `HH:MM` as written; NULL for a line that carries no timestamp. */
     at: text("at"),
-    /** Scene context in parentheses — a soft reference (rule 3). */
+    /**
+     * Scene context in parentheses — optional (a note typed without one),
+     * therefore NULLABLE, and a foreign key when it is set (rule 3).
+     */
     sceneId: text("scene_id"),
     /** The line's text without time and scene prefix; NULL for a raw-only line. */
     text: text("text"),
@@ -481,11 +546,21 @@ export const logEntries = sqliteTable(
     })
       .onUpdate("cascade")
       .onDelete("cascade"),
+    // The line belongs to the session (delete cascade above). Towards the
+    // SCENE there is no delete action: a log line is what happened at the
+    // table, and deleting a scene must not rewrite that evening — neither by
+    // dropping the line nor by blanking the scene out of it.
+    foreignKey({
+      columns: [t.campaignId, t.sceneId],
+      foreignColumns: [scenes.campaignId, scenes.id],
+      name: "log_entries_scene_fk",
+    }).onUpdate("cascade"),
   ],
 );
 
 /**
- * `scenes_played: [...]` of a session — ordered, soft scene references.
+ * `scenes_played: [...]` of a session — ordered scene references, each one a
+ * foreign key on the scene (rule 3).
  *
  * The key is (campaign, session, POS), not (…, scene): the list is a
  * SEQUENCE, and a scene the party returned to later stands in it twice. A
@@ -509,6 +584,13 @@ export const sessionScenesPlayed = sqliteTable(
     })
       .onUpdate("cascade")
       .onDelete("cascade"),
+    // Same as for a log line: the entry dies with its session, never with
+    // the scene — what was played is history and is not deleted sideways.
+    foreignKey({
+      columns: [t.campaignId, t.sceneId],
+      foreignColumns: [scenes.campaignId, scenes.id],
+      name: "session_scenes_played_scene_fk",
+    }).onUpdate("cascade"),
   ],
 );
 
@@ -658,7 +740,16 @@ export const generateJobs = sqliteTable(
      * job that is still going can already name the entry it works on.
      */
     targetPath: text("target_path"),
-    /** Target chapter of a scene run; NULL for an npc run. */
+    /**
+     * Target chapter of a scene run; NULL for an npc run.
+     *
+     * The ONE id column that is deliberately NOT a foreign key, and the
+     * reason is that it is not a reference into the campaign: a „Neues
+     * Kapitel" run names the chapter it is GOING TO CREATE, and the chapter
+     * row appears when the DM accepts the run (`new_chapter_title` below).
+     * A job is a pending intent, so constraining it would mean creating the
+     * chapter at the START of a run the DM may still discard.
+     */
     chapter: text("chapter"),
     /** "running" | "done" | "failed". Boot turns leftover "running" into "failed". */
     status: text("status").notNull(),
