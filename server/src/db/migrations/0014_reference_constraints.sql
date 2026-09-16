@@ -20,9 +20,93 @@
 --> runs before the migrator and aborts the start when a reference names
 --> nothing), so a constraint that fires here is a bug, not a data problem.
 -->
---> `npc_relations` is dropped with no replacement: an npc's `## Beziehungen`
---> is prose in the npc's text, and nothing in the storage is derived from
---> body text any more.
+--> `npc_relations` is dropped: an npc's `## Beziehungen` is prose in the
+--> npc's text, and nothing in the storage is derived from body text any
+--> more. THE NOTES ARE KEPT. They only ever existed as rows — the importer
+--> took the lines out of the text and the read path rendered them back — so
+--> before the table goes, every npc that has rows gets the section written
+--> into its own text, character for character as the reader produced it:
+--> the heading, a blank line, then one `- <id>: <note>` line per row in
+--> `pos` order (`- <id>:` for an empty note). A text that already carries a
+--> `## Beziehungen` heading gets the lines under THAT heading, the way the
+--> reader put them there; every other text gets the section appended, which
+--> is where the reader appended it. Values in `[[…]]` keep their brackets:
+--> they are prose now, and prose is copied, not interpreted.
+-->
+--> `rev` is deliberately NOT bumped: what `GET /entry` answers is the same
+--> text as before, so an editor that is open keeps its guard token.
+-->
+--> The line order comes from `ORDER BY` inside `group_concat`, which needs
+--> SQLite 3.44 or newer — both backends ship far newer, and an older one
+--> fails the migration with a syntax error instead of reordering a DM's
+--> notes silently.
+CREATE TABLE `__mig0014_relation_bodies` AS
+	WITH `lines` AS (
+		SELECT
+			`campaign_id`,
+			`npc_id`,
+			group_concat(
+				'- ' || `other_npc_id` || CASE WHEN `note` = '' THEN ':' ELSE ': ' || `note` END,
+				char(10) ORDER BY `pos`
+			) AS `text`
+		FROM `npc_relations`
+		GROUP BY `campaign_id`, `npc_id`
+	),
+	`found` AS (
+		SELECT
+			n.`campaign_id` AS `campaign_id`,
+			n.`id` AS `npc_id`,
+			n.`body` AS `body`,
+			l.`text` AS `lines`,
+			CASE
+				WHEN substr(lower(n.`body`), 1, 14) = '## beziehungen' THEN 1
+				WHEN instr(lower(n.`body`), char(10) || '## beziehungen') > 0
+					THEN instr(lower(n.`body`), char(10) || '## beziehungen') + 1
+				ELSE 0
+			END AS `start`
+		FROM `npcs` AS n
+		JOIN `lines` AS l ON l.`campaign_id` = n.`campaign_id` AND l.`npc_id` = n.`id`
+	),
+	`placed` AS (
+		SELECT
+			`campaign_id`,
+			`npc_id`,
+			`body`,
+			`lines`,
+			`start`,
+			CASE
+				WHEN `start` = 0 THEN 0
+				WHEN instr(substr(`body`, `start`), char(10)) = 0 THEN length(`body`)
+				ELSE `start` + instr(substr(`body`, `start`), char(10)) - 2
+			END AS `end`
+		FROM `found`
+	)
+	SELECT
+		`campaign_id`,
+		`npc_id`,
+		CASE
+			-- The heading is only a heading when nothing but blanks follows it
+			-- on its line, which is what the reader's own pattern asked for.
+			WHEN `start` > 0
+				AND rtrim(substr(`body`, `start` + 14, `end` - `start` - 13), ' ' || char(9) || char(13)) = ''
+				THEN substr(`body`, 1, `end`) || char(10) || char(10) || `lines` || substr(`body`, `end` + 1)
+			WHEN `body` = ''
+				THEN '## Beziehungen' || char(10) || char(10) || `lines` || char(10)
+			WHEN substr(`body`, -1) = char(10)
+				THEN `body` || char(10) || '## Beziehungen' || char(10) || char(10) || `lines` || char(10)
+			ELSE `body` || char(10) || char(10) || '## Beziehungen' || char(10) || char(10) || `lines` || char(10)
+		END AS `body`
+	FROM `placed`;
+--> statement-breakpoint
+UPDATE `npcs` SET `body` = (
+	SELECT b.`body` FROM `__mig0014_relation_bodies` AS b
+	WHERE b.`campaign_id` = `npcs`.`campaign_id` AND b.`npc_id` = `npcs`.`id`
+)
+WHERE EXISTS (
+	SELECT 1 FROM `__mig0014_relation_bodies` AS b
+	WHERE b.`campaign_id` = `npcs`.`campaign_id` AND b.`npc_id` = `npcs`.`id`
+);--> statement-breakpoint
+DROP TABLE `__mig0014_relation_bodies`;--> statement-breakpoint
 DROP TABLE `npc_relations`;--> statement-breakpoint
 CREATE TABLE `__mig0014_scenes` AS SELECT * FROM `scenes`;--> statement-breakpoint
 CREATE TABLE `__mig0014_locations` AS SELECT * FROM `locations`;--> statement-breakpoint

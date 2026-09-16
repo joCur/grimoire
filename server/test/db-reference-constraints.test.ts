@@ -380,6 +380,87 @@ describe("the rebuild keeps every row", () => {
   });
 });
 
+// --- the relation notes ------------------------------------------------------
+
+describe("the relation notes survive the table", () => {
+  /**
+   * `## Beziehungen` only ever existed as ROWS: the importer took the lines
+   * out of the npc's text and the read path rendered them back, so dropping
+   * the table without writing the section into the text would delete the
+   * DM's notes. The migration writes it first — and these are the strings
+   * the reader produced for the same rows, character for character: the
+   * heading, a blank line, one `- <id>: <note>` line per row in `pos` order,
+   * an empty note as `- <id>:`.
+   */
+  const withRelations = (client: SqliteClient): void => {
+    client.exec(`
+      insert into campaigns (id, name) values ('beispiel', 'Beispiel');
+      insert into chapters (campaign_id, id, title, pos) values ('beispiel', '01', 'Kapitel', 0);
+      insert into npcs (campaign_id, id, name, body) values
+        ('beispiel', 'jorna', 'Jorna', '## Will' || char(10) || char(10) || 'Das Leuchtfeuer.' || char(10) || char(10) || '## Notizen' || char(10) || char(10) || '- aus dem Log' || char(10)),
+        ('beispiel', 'fenn', 'Fenn', '## Will' || char(10) || char(10) || 'Raus.' || char(10) || char(10) || '## Beziehungen' || char(10) || char(10) || 'eine Zeile, die keine Beziehung war' || char(10)),
+        ('beispiel', 'holm', 'Holm', '## Will' || char(10) || char(10) || 'Seine Netze.' || char(10));
+      insert into npc_relations (campaign_id, npc_id, other_npc_id, note, pos) values
+        ('beispiel', 'jorna', 'fenn', 'kennt ihn von früher', 0),
+        ('beispiel', 'jorna', 'holm', '', 1),
+        ('beispiel', 'jorna', 'metta', 'schuldet ihr [[hafengeld]]', 2),
+        ('beispiel', 'fenn', 'jorna', 'alte Bekannte', 0);
+    `);
+  };
+
+  test("a text without the heading gets the section appended, in pos order", async () => {
+    const client = await preConstraintDb();
+    try {
+      withRelations(client);
+      applyConstraintMigration(client);
+      const body = (
+        rows(client, "select body from npcs where id = 'jorna'")[0] as { body: string }
+      ).body;
+      expect(body).toBe(
+        "## Will\n\nDas Leuchtfeuer.\n\n## Notizen\n\n- aus dem Log\n" +
+          "\n## Beziehungen\n\n" +
+          "- fenn: kennt ihn von früher\n" +
+          "- holm:\n" +
+          "- metta: schuldet ihr [[hafengeld]]\n",
+      );
+    } finally {
+      client.close();
+    }
+  });
+
+  test("a text that already has the heading keeps one, with the prose under it", async () => {
+    const client = await preConstraintDb();
+    try {
+      withRelations(client);
+      applyConstraintMigration(client);
+      const body = (
+        rows(client, "select body from npcs where id = 'fenn'")[0] as { body: string }
+      ).body;
+      expect(body).toBe(
+        "## Will\n\nRaus.\n\n## Beziehungen\n\n" +
+          "- jorna: alte Bekannte\n" +
+          "\neine Zeile, die keine Beziehung war\n",
+      );
+      expect(body.split("## Beziehungen").length - 1).toBe(1);
+    } finally {
+      client.close();
+    }
+  });
+
+  test("an npc without relations keeps its text byte for byte", async () => {
+    const client = await preConstraintDb();
+    try {
+      withRelations(client);
+      applyConstraintMigration(client);
+      expect(
+        (rows(client, "select body from npcs where id = 'holm'")[0] as { body: string }).body,
+      ).toBe("## Will\n\nSeine Netze.\n");
+    } finally {
+      client.close();
+    }
+  });
+});
+
 // --- the pre-flight ---------------------------------------------------------
 
 describe("the pre-flight in front of the constraints", () => {
