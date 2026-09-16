@@ -34,6 +34,7 @@ import {
   continueSession,
   createCampaign,
   createChapter,
+  setActiveChapter,
   createLocation,
   createNpc,
   createNpcStub,
@@ -501,6 +502,16 @@ api.post("/:campaign/chapters", async (c) => {
     201,
   );
 });
+
+// POST /api/:campaign/chapters/:id/active -> EntryResponse of that chapter
+// „Aktiv" in the chapter overview's status control: the chapter becomes
+// `active` and the one that was active goes back to `planned`, in ONE
+// transaction — two calls from the app would leave a window with two active
+// chapters, and the session view picks the first it finds. Idempotent, 404
+// for an unknown chapter, no rev guard (store/write.ts explains why).
+api.post("/:campaign/chapters/:id/active", async (c) =>
+  c.json(await setActiveChapter(c.req.param("campaign"), c.req.param("id"))),
+);
 
 // POST /api/:campaign/scenes { title, chapter } -> 201 EntryResponse
 // `chapter` is required and must exist (400) — a scene's chapter is part of

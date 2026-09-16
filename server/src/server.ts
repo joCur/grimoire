@@ -55,6 +55,11 @@
 //                                              Same id derivation and same 400/409 as above;
 //                                              `goal` lands under `## Ziel des Kapitels`, the
 //                                              heading the pool reads its goal line from
+//   [x] POST /api/:campaign/chapters/:id/active -> that chapter's entry. „Aktiv" in the
+//                                              overview's status control: sets `active` here
+//                                              and puts the previously active chapter back to
+//                                              `planned`, in ONE transaction. Idempotent,
+//                                              404 for an unknown chapter, no rev guard
 //   [x] POST /api/:campaign/scenes             { title, chapter } -> 201 the scene entry
 //                                              (type planned, status draft, empty body, no
 //                                              `location`). `chapter` is REQUIRED and must
