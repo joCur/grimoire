@@ -20,9 +20,11 @@
 //      chapter.
 //      TWO CONSEQUENCES, and they are the point. A write that names an
 //      entry which does not exist is refused (400) instead of storing a
-//      hole, and NOTHING creates an entry because something mentioned it —
-//      entries are created by the create endpoints and by accepting a
-//      generator proposal, nowhere else. A `[[slug]]` in prose is not a
+//      hole, and NOTHING creates an entry because something mentioned it.
+//      The creation paths are: the create endpoints, „NPC-Stub anlegen" from
+//      a review line, accepting a generator proposal — and, inside that
+//      accept, the chapter a „Neues Kapitel" run decided on. Nowhere else.
+//      A `[[slug]]` in prose is not a
 //      reference in this sense: it is body text, it stays visible text, and
 //      it constrains nothing — which is also why an npc's `## Beziehungen`
 //      is prose and has no table: nothing in the storage is derived from

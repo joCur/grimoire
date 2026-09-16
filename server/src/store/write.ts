@@ -524,9 +524,13 @@ function nextPos(rows: Array<{ pos: number }>): number {
 // A reference names an entry that EXISTS — the database says so (schema.ts
 // rule 3), and the assertions above are what turns a write that names
 // something else into one readable sentence instead of a constraint error.
-// Nothing here creates an entry as a side effect: entries come from the
-// create endpoints at the bottom of this file and from accepting a generator
-// proposal, and nowhere else.
+//
+// Nothing here creates an entry as a side effect. The paths that DO create
+// one are countable: the create endpoints at the bottom of this file,
+// `createNpcStub` (the review's „#npc line becomes an npc", which the DM
+// clicks), and accepting a generator proposal — including `ensureChapterRow`
+// inside that accept, which writes the chapter the run itself decided on
+// (ADR #18). Nowhere else.
 //
 // A `[[slug]]` in a body is not a reference in this sense. It is text, it
 // stays text, and an unknown one renders as exactly what the DM typed.
@@ -2633,8 +2637,8 @@ export async function setActiveChapter(campaign: string, id: string): Promise<En
  *
  * The chapter is REQUIRED and has to exist (400 otherwise): a scene's chapter
  * is part of its address, and a scene under an unknown chapter has no node to
- * hang in — the same rule `assertChapterRef` enforces for a properties patch
- * (ADR #14, chapters are not created by naming them).
+ * hang in — the same rule `assertChapterRef` enforces for a properties patch,
+ * and the same code (ADR #19, a mention creates nothing).
  *
  * A scene created here has no `location`, so it sits at chapter level and
  * the app lists it under „Ohne Ort". Setting one later is `PATCH /properties`

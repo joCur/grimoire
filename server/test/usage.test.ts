@@ -142,8 +142,15 @@ describe("usage per reference kind", () => {
     ]);
     expect(group(report, "chapterLocations")).toEqual({
       ref: "chapterLocations",
-      count: 1,
+      count: 2,
       sites: [
+        {
+          kind: "location",
+          id: "bucht",
+          title: "Die Nordbucht",
+          path: "locations/bucht",
+          count: 1,
+        },
         {
           kind: "location",
           id: "leuchtturm",
@@ -153,7 +160,7 @@ describe("usage per reference kind", () => {
         },
       ],
     });
-    expect(report.total).toBe(5);
+    expect(report.total).toBe(6);
   });
 
   test("an entity nothing points at answers with an empty report", async () => {

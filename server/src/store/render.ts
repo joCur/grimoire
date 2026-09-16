@@ -17,9 +17,12 @@
 //      stronger than a file time: it cannot collide inside one second.
 //
 // Sections that became rows are rendered BACK from those rows: a session's
-// `## Log`, an npc's `## Beziehungen`, the inbox list, the glossary. That is
-// what keeps the reading view, the review and the markdown editor working on
-// the same text they always saw.
+// `## Log`, the inbox list, the glossary. That is what keeps the reading view,
+// the review and the markdown editor working on the same text they always saw.
+//
+// An npc's `## Beziehungen` is NOT among them any more. It is prose in the
+// npc's own text and travels verbatim — nothing about an npc is derived from
+// body text (db/schema.ts rule 3).
 
 import { CORE_SCHEMA, dump } from "js-yaml";
 import type { EntryResponse, ParsedFile } from "@grimoire/shared";

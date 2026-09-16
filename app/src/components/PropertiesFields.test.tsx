@@ -100,7 +100,7 @@ describe("reference fields", () => {
   });
 
   test("an unknown CHAPTER is not promised — chapters are never auto-created", () => {
-    // ADR #14: a scene under an unknown chapter falls out of the tree, so the
+    // ADR #19: a scene under an unknown chapter falls out of the tree, so the
     // server answers 400 for every kind that names one. The hint promised the
     // entry anyway and the save then failed with the server's message.
     const html = render(sceneField("chapter"), { kind: "text", text: "99-nirgendwo" });

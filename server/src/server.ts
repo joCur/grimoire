@@ -65,7 +65,7 @@
 //                                              `location`). `chapter` is REQUIRED and must
 //                                              exist — 400 otherwise: a scene's chapter is
 //                                              part of its address and chapters are never
-//                                              created by being named (ADR #14)
+//                                              created by being named (ADR #19)
 //   [x] POST /api/:campaign/npcs               { name } -> 201 the npc entry. An EMPTY
 //                                              entry for the derived id — one the DM
 //                                              created and left empty — is FILLED rather

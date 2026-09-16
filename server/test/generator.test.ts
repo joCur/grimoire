@@ -2211,7 +2211,10 @@ describe("a scene draft whose chapter has no entry", () => {
     // The apply path is the ONE scene write without a dialog in front of it,
     // and it is what let scenes land under a chapter that had none: the
     // overview lists chapters, so chapter and scenes were both unreachable.
-    // `ensureChapterRow` closes it the way `ensureLocationRow` closes the Ort.
+    // `ensureChapterRow` closes it, and it is the ONE creation path inside
+    // the accept: the run decided the chapter, so accepting has to write it
+    // (ADR #18). A location a scene names is not created that way — the
+    // proposal has to bring it, or the scene is refused.
     const markdown = sceneMarkdown()
       .replace("id: treffen-am-kai", "id: brut-im-dunkeln")
       .replace("chapter: 01-salzhafen", "chapter: 03-drachenbrut");
@@ -2255,7 +2258,7 @@ describe("a scene draft whose chapter has no entry", () => {
     expect((await app.request("/api/beispiel/entry?path=Kapitel_1")).status).toBe(404);
   });
 
-  test("a DIALOG still refuses an unknown chapter — ADR #14 stands", async () => {
+  test("a DIALOG still refuses an unknown chapter — ADR #19 stands", async () => {
     // The rule is about reachability, not about inventing chapters: where a
     // DM typed the chapter, an unknown one is a typo and the honest answer is
     // the 400.

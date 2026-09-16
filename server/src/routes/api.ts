@@ -505,7 +505,7 @@ api.post("/:campaign/chapters/:id/active", async (c) =>
 
 // POST /api/:campaign/scenes { title, chapter } -> 201 EntryResponse
 // `chapter` is required and must exist (400) — a scene's chapter is part of
-// its address, and chapters are never created by being named (ADR #14).
+// its address, and chapters are never created by being named (ADR #19).
 api.post("/:campaign/scenes", async (c) => {
   const body = await jsonBody(c, ["title", "chapter", "id"]);
   const title = requiredText(body.title, "title");

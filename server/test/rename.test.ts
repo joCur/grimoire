@@ -291,6 +291,7 @@ describe("POST /api/:campaign/rename — chapter", () => {
       "01-salzbucht",
       "01-salzbucht/bucht/smuggler-captured",
       "01-salzbucht/leuchtturm/lighthouse-arrival",
+      "locations/bucht",
       "locations/leuchtturm",
       "npcs/fenn",
       "npcs/jorna",
