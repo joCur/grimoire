@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { CampaignTree, EntryResponse } from "@grimoire/shared";
-import { sceneNpcs } from "../src/db/schema";
+import { npcs, sceneNpcs } from "../src/db/schema";
 import { app } from "../src/server";
 import { getDb } from "../src/store/handle";
 import { applyDrafts } from "../src/store/write";
@@ -259,8 +259,11 @@ describe("the seed pass for imported stock", () => {
       await writeFile(scene, raw.replace("npcs: [jorna]", "npcs: [jorna, alte-fischerin]"));
       await seedStore(root);
 
-      // The pass reports what it created, so a run that changes data says so.
-      expect(lastSeedBackfill()).toEqual(["beispiel/alte-fischerin"]);
+      // The IMPORT closes it, not a pass after it: `scene_npcs.npc_id` is a
+      // foreign key (ADR #18), so the entry has to exist by the time the
+      // reference row is written — the backfill that used to do this
+      // afterwards finds nothing left to create.
+      expect(lastSeedBackfill()).toEqual([]);
       const created = await getFile("npcs/alte-fischerin");
       expect(created.properties.name).toBe("alte-fischerin");
       expect((await tree()).npcs.some((n) => n.id === "alte-fischerin")).toBe(true);
@@ -329,23 +332,19 @@ describe("the generator's apply step", () => {
   });
 });
 
+/** The location ids the tree lists, sorted — the groups a scene can sit in. */
+async function treeLocations(): Promise<string[]> {
+  return (await tree()).locations.map((l) => l.id).sort();
+}
+
 describe("the rename cascade", () => {
   test("a scene listing BOTH ids merges instead of failing on the primary key", async () => {
-    // A scene that lists both `jorna` and a `holm` WITHOUT a row: renaming
-    // jorna onto that id used to violate `scene_npcs`' primary key — a 500
-    // out of a rename whose preview had just called it safe. The boot pass
-    // makes that state unreachable through the API from now on, so the row
-    // is put there directly: it is exactly what a database migrated before
-    // this change can hold at the moment of the rename.
-    const db = await getDb();
-    db.insert(sceneNpcs)
-      .values({
-        campaignId: "beispiel",
-        sceneId: "lighthouse-arrival",
-        npcId: "holm",
-        pos: 9,
-      })
-      .run();
+    // A scene that lists both `jorna` and `holm`, where `holm` is the EMPTY
+    // entry a reference left behind (ADR #14): renaming jorna onto that id
+    // has two ways to fail — the primary key of `scene_npcs`, and the empty
+    // target row that cannot be deleted while the scene names it (ADR #18).
+    // The rename merges instead of either.
+    await patchFm(SCENE, { npcs: ["jorna", "holm"] });
 
     const res = await app.request("/api/beispiel/rename", {
       method: "POST",
@@ -355,6 +354,27 @@ describe("the rename cascade", () => {
     expect(res.status).toBe(200);
     // One entry left, not a constraint error and not a duplicate.
     expect((await getFile(SCENE)).properties.npcs).toEqual(["holm"]);
+  });
+
+  test("a location merge moves the scenes that sit under the empty target", async () => {
+    // `bucht` is the empty entry the import created for a scene's `location`
+    // (ADR #14/#17), and `scenes.location` is a foreign key with no delete
+    // action (ADR #18) — so the empty row cannot simply be deleted out from
+    // under the scene that names it. The rename moves the scene instead.
+    const res = await app.request("/api/beispiel/rename", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "location", oldId: "leuchtturm", newId: "bucht" }),
+    });
+    expect(res.status).toBe(200);
+    // Both scenes sit under the merged location now, and it is the renamed
+    // entry that survived — with the name the DM had written for it.
+    expect((await getFile("locations/bucht")).properties.name).toBe(
+      "Der Leuchtturm von Salzhafen",
+    );
+    expect(await fileStatus("locations/leuchtturm")).toBe(404);
+    const tree = await treeLocations();
+    expect(tree).toEqual(["bucht"]);
   });
 });
 
@@ -432,7 +452,13 @@ describe("the audit of the #70 rules", () => {
     // Exactly what a file era campaign can hold. Refusing it on the way out
     // would make such a scene unpatchable — an unrelated `PATCH { status }`
     // re-sends the whole list.
+    //
+    // The value has an ENTRY, because the reference is a foreign key (ADR
+    // #18) and the boot repair gave every stored reference the entry it
+    // names. What stays exempt is the SLUG rule: the id is no slug, the app
+    // says so on the card, and nothing new joins it.
     const db = await getDb();
+    db.insert(npcs).values({ campaignId: "beispiel", id: "Alte Fischerin", name: "" }).run();
     db.insert(sceneNpcs)
       .values({
         campaignId: "beispiel",
@@ -444,8 +470,6 @@ describe("the audit of the #70 rules", () => {
 
     const patched = await patchFm(SCENE, { status: "played" });
     expect(patched.properties.npcs).toContain("Alte Fischerin");
-    // And it got no entry — free text is no reference.
-    expect(await fileStatus("npcs/Alte Fischerin.md")).toBe(404);
   });
 
   test("an unknown `chapter` is a 400 for an npc too, not a silent dangling id", async () => {

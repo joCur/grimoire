@@ -582,8 +582,13 @@ describe("no silent content loss", () => {
   });
 
   test("`scenes_played` keeps repetitions and their order", async () => {
+    // The two scenes are part of the fixture because the list REFERENCES
+    // them: `session_scenes_played.scene_id` is a foreign key on `scenes`
+    // (ADR #18), so a played id names a scene or it is no entry at all.
     const id = await campaignWith({
       "_campaign.md": "---\nid: review\n---\n",
+      "01-salzhafen/hafen.md": "---\nid: hafen\ntitle: Hafen\n---\n",
+      "01-salzhafen/leuchtturm.md": "---\nid: leuchtturm\ntitle: Leuchtturm\n---\n",
       "sessions/2026-03-03.md":
         "---\nid: 2026-03-03\nscenes_played: [hafen, leuchtturm, hafen]\n---\n",
     });

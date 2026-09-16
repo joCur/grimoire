@@ -169,6 +169,34 @@ describe("PATCH /api/:campaign/properties", () => {
     expect(again.rev).toBe(after.rev);
   });
 
+  test("400 when a scene loses its chapter — a scene belongs to one", async () => {
+    // `scenes.chapter_id` is NOT NULL (ADR #18): the chapter is part of the
+    // scene's address, so a patch may MOVE the scene but never unhook it.
+    const before = await getFile(SCENE);
+    const res = await patchReq({ path: SCENE, rev: before.rev, patch: { chapter: null } });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain("chapter cannot be removed");
+    const again = await getFile(SCENE);
+    expect(again.properties.chapter).toBe("01-salzhafen");
+    expect(again.rev).toBe(before.rev);
+  });
+
+  test("400 when `scenes_played` names a scene that does not exist", async () => {
+    // The list REFERENCES scenes (ADR #18), and a scene is not created by
+    // naming it — its address is a chapter and a title nobody typed here.
+    const before = await getFile("sessions/2026-01-15");
+    const res = await patchReq({
+      path: "sessions/2026-01-15",
+      rev: before.rev,
+      patch: { scenes_played: ["lighthouse-arrival", "gibt-es-nicht"] },
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain("unknown scene");
+    const again = await getFile("sessions/2026-01-15");
+    expect(again.properties.scenes_played).toEqual(before.properties.scenes_played);
+    expect(again.rev).toBe(before.rev);
+  });
+
   test("400 for a key the entry has no field for — nothing is written", async () => {
     const before = await getFile(SCENE);
     const res = await app.request("/api/beispiel/properties", {
@@ -490,6 +518,17 @@ describe("POST /api/:campaign/log", () => {
     expect((await postJson("/api/beispiel/log", { text: "   \n " })).status).toBe(400);
     expect((await postJson("/api/beispiel/log", {})).status).toBe(400);
     expect((await postJson("/api/beispiel/log", { text: 42 })).status).toBe(400);
+  });
+
+  test("404 for a scene that does not exist — and nothing is appended", async () => {
+    // The line and `scenes_played` both REFERENCE the scene (ADR #18), and a
+    // quick note does not invent one: the app picks the scene from the
+    // campaign, so an id with no scene is a stale client.
+    const session = await postOk("/api/beispiel/session/start");
+    const res = await postJson("/api/beispiel/log", { text: "Ankunft", sceneId: "gibt-es-nicht" });
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { error: string }).error).toContain("unknown scene");
+    expect((await getFile(session.path)).body).toBe(session.body);
   });
 });
 
