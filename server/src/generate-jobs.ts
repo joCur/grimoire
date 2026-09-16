@@ -305,7 +305,7 @@ function draftAddress(path: string): string {
   // Only a SCENE path collapses: `npcs/<id>`/`locations/<id>` have two
   // segments anyway, and a chapter document is not a draft path.
   if (segments.length !== 3) return stripped;
-  if (RESERVED_SEGMENTS.has(segments[0]!) || segments[2] === "_chapter") return stripped;
+  if (RESERVED_SEGMENTS.has(segments[0]!)) return stripped;
   return `${segments[0]!}/${segments[2]!}`;
 }
 

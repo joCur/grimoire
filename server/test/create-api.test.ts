@@ -64,7 +64,7 @@ describe("POST /api/campaigns — the cold start", () => {
     const list = (await (await app.request("/api/campaigns")).json()) as CampaignSummary[];
     expect(list.map((c) => c.id)).toEqual(["die-kueste-von-salzhafen"]);
     const doc = (await (
-      await app.request("/api/die-kueste-von-salzhafen/file?path=_campaign")
+      await app.request("/api/die-kueste-von-salzhafen/entry?path=campaign")
     ).json()) as EntryResponse;
     expect(doc.properties.name).toBe("Die Küste von Salzhafen");
     expect(doc.rev).toBe(1);
@@ -135,7 +135,7 @@ describe("the per-campaign creates", () => {
       title: "01 Salzhafen",
       goal: "Die Gruppe kommt an",
     });
-    expect(chapter.path).toBe("01-salzhafen/_chapter");
+    expect(chapter.path).toBe("01-salzhafen");
     expect(chapter.properties.title).toBe("01 Salzhafen");
     expect(chapter.body).toBe("## Ziel des Kapitels\n\nDie Gruppe kommt an\n");
   });
@@ -152,7 +152,7 @@ describe("the per-campaign creates", () => {
     const body = await errorBody(res);
     expect(body.code).toBe("slug_taken");
     expect(body.suggestion).toBe("prolog-2");
-    expect(body.path).toBe("prolog/_chapter");
+    expect(body.path).toBe("prolog");
   });
 
   test("a reserved chapter id is refused with a proposal, and no row is written", async () => {
@@ -174,11 +174,11 @@ describe("the per-campaign creates", () => {
       chapters: Array<{ id: string }>;
     };
     expect(tree.chapters.map((c) => c.id)).not.toContain("npcs");
-    expect((await app.request("/api/nordwind/file?path=npcs/_chapter")).status).toBe(404);
+    expect((await app.request("/api/nordwind/entry?path=npcs")).status).toBe(404);
 
     // The proposal itself works, and the reserved ids are all three of them.
     expect((await created<EntryResponse>("/nordwind/chapters", { title: "NPCs", id: "npcs-2" })).path).toBe(
-      "npcs-2/_chapter",
+      "npcs-2",
     );
     expect((await post("/nordwind/chapters", { title: "Locations" })).status).toBe(409);
     expect((await post("/nordwind/chapters", { title: "Sessions" })).status).toBe(409);
@@ -187,8 +187,8 @@ describe("the per-campaign creates", () => {
   test("the campaign 409 points at an address, not at a bare id", async () => {
     const res = await post("/campaigns", { name: "Nordwind" });
     expect(res.status).toBe(409);
-    // `_campaign` is the one document an otherwise empty campaign always has.
-    expect((await errorBody(res)).path).toBe("nordwind/_campaign");
+    // `campaign` is the one document an otherwise empty campaign always has.
+    expect((await errorBody(res)).path).toBe("nordwind/campaign");
   });
 
   test("a proposal never lands on an empty row someone else references (#70)", async () => {

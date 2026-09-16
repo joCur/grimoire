@@ -282,7 +282,7 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
 
   // "NPC ansehen" opens the file that now exists.
   await page.getByRole("button", { name: "NPC ansehen" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/brakk$/);
+  await expect(page).toHaveURL(/\/beispiel\/entry\/npcs\/brakk$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_DEFAULT_NAME);
 });
 

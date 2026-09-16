@@ -43,12 +43,12 @@ import { expect, test, type Api } from "../support/test";
 
 /** The prepared scene of the example campaign — the augment target of (b). */
 const SCENE = "01-salzhafen/bucht/smuggler-captured";
-const SCENE_URL = `/beispiel/file/${SCENE}`;
+const SCENE_URL = `/beispiel/entry/${SCENE}`;
 
 /** The empty npc: created by REFERENCING it from that scene (issue #70). */
 const EMPTY_NPC = "spitzel";
 const NPC_PATH = `npcs/${EMPTY_NPC}`;
-const NPC_URL = `/beispiel/file/${NPC_PATH}`;
+const NPC_URL = `/beispiel/entry/${NPC_PATH}`;
 
 const INSTRUCTION = "Führe einen Handlungsstrang um den Schmuggler-Spitzel ein";
 
@@ -315,16 +315,16 @@ test("the entry point: npc, location and scene — and nothing else (AK1)", asyn
 }) => {
   const action = page.getByRole("button", { name: "Mit KI ergänzen" });
 
-  await page.goto("/beispiel/file/npcs/jorna");
+  await page.goto("/beispiel/entry/npcs/jorna");
   await expect(action).toBeVisible();
-  await page.goto("/beispiel/file/locations/leuchtturm");
+  await page.goto("/beispiel/entry/locations/leuchtturm");
   await expect(action).toBeVisible();
   await page.goto(SCENE_URL);
   await expect(action).toBeVisible();
 
   // The campaign file is not an augmentable entry — no augment prompt, no
   // action, and the reading view is untouched.
-  await page.goto("/beispiel/file/_campaign");
+  await page.goto("/beispiel/entry/campaign");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(action).toHaveCount(0);
 });

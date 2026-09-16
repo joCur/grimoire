@@ -5,7 +5,7 @@
 // Since the cutover (issue #57) the database is the only truth, so "someone
 // changed the file outside" can no longer happen — the conflict this path is
 // about is a second write through the API while the editor stands open.
-// Everything else is unchanged: the write goes through PUT /file with its
+// Everything else is unchanged: the write goes through PUT /entry with its
 // guard token, the properties block must come out byte-identical, and every
 // assertion reads the file back — through the API instead of from disk.
 //
@@ -31,7 +31,7 @@ import type { Page } from "@playwright/test";
 import { expect, test, type Api } from "../support/test";
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
-const SCENE_URL = `/beispiel/file/${SCENE}`;
+const SCENE_URL = `/beispiel/entry/${SCENE}`;
 const NPC = "npcs/jorna";
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 /** aria-label of the raw-markdown textarea (EntryBodyEditor). */
@@ -123,7 +123,7 @@ test("a scene that MOVED is still editable under its old address (#100)", async 
 
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
-  await expect(page).toHaveURL(new RegExp(`/beispiel/file/${moved}$`));
+  await expect(page).toHaveURL(new RegExp(`/beispiel/entry/${moved}$`));
 
   const before = await split(api, moved);
   const added = "Der Weg zur Nordbucht ist bei Ebbe trocken.";
@@ -207,7 +207,7 @@ test("a concurrent second write: the save reports the conflict, the second one w
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toHaveValue(before.body);
 
-  // A SECOND WRITE lands while the editor stands open: the same PUT /file the
+  // A SECOND WRITE lands while the editor stands open: the same PUT /entry the
   // app uses, with a token fetched a moment ago, so it succeeds and bumps the
   // row. No race to win — the editor holds the token it started from until a
   // conflict tells it otherwise, so the version poll cannot make the app's
@@ -312,7 +312,7 @@ test("a failing background refetch leaves the open editor standing", async ({ pa
   // Counted per file: the NPC card of this scene reads through the same
   // endpoint, and its failures say nothing about the scene's query.
   let aborted = 0;
-  await page.route("**/api/beispiel/file?**", (route) => {
+  await page.route("**/api/beispiel/entry?**", (route) => {
     if (route.request().url().includes("lighthouse-arrival")) aborted++;
     void route.abort();
   });
@@ -373,7 +373,7 @@ test("the NPC reading view edits its body the same way", async ({ page, api }) =
   const before = await split(api, NPC);
   const added = "- metta: schuldet Jorna einen Gefallen aus dem letzten Herbst";
 
-  await page.goto(`/beispiel/file/${NPC}`);
+  await page.goto(`/beispiel/entry/${NPC}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
 
   await openMarkdownEditor(page);
@@ -394,8 +394,8 @@ test("the NPC reading view edits its body the same way", async ({ page, api }) =
 
 test("location and chapter offer the editor, session and inbox do not", async ({ page, api }) => {
   // The kinds whose prose the DM maintains offer the body editor …
-  for (const rel of ["locations/leuchtturm", "01-salzhafen/_chapter"]) {
-    await page.goto(`/beispiel/file/${rel}`);
+  for (const rel of ["locations/leuchtturm", "01-salzhafen"]) {
+    await page.goto(`/beispiel/entry/${rel}`);
     await openMarkdownEditor(page);
     await expect(page.getByRole("textbox", { name: TEXTAREA })).toBeVisible();
     // Clean exit — no dialog, nothing written.
@@ -405,7 +405,7 @@ test("location and chapter offer the editor, session and inbox do not", async ({
 
   // … the append-only logs do not: a free-hand rewrite of a log is not a
   // maintenance action (ADR #4).
-  await page.goto("/beispiel/file/sessions/2026-01-15");
+  await page.goto("/beispiel/entry/sessions/2026-01-15");
   await expect(page.getByRole("article")).toContainText("Spuren gefunden");
   // A session's heading is its DATE, derived from `started` — the id is opaque
   // since issue #58 and is never shown. (This fixture still carries the old
@@ -415,7 +415,7 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   );
   await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
 
-  await page.goto("/beispiel/file/inbox");
+  await page.goto("/beispiel/entry/inbox");
   await expect(page.getByRole("article")).toContainText("Der Dorfschmied repariert");
   await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
 
@@ -423,7 +423,7 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   // hand-made PUT on an append-only file is refused, nothing is written.
   for (const rel of ["sessions/2026-01-15", "inbox"]) {
     const before = await split(api, rel);
-    const res = await page.request.put("/api/beispiel/file", {
+    const res = await page.request.put("/api/beispiel/entry", {
       data: { path: rel, rev: Date.now(), body: "\nAlles neu.\n" },
     });
     expect(res.status()).toBe(400);
@@ -431,8 +431,8 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   }
 });
 
-test("_campaign keeps its ONE Bearbeiten — the metadata dialog", async ({ page }) => {
-  await page.goto("/beispiel/file/_campaign");
+test("campaign keeps its ONE Bearbeiten — the metadata dialog", async ({ page }) => {
+  await page.goto("/beispiel/entry/campaign");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
@@ -452,7 +452,7 @@ test("the glossary stays saveable while a session writes next to it", async ({ p
   // write bumps. A quick note during a running session therefore answered the
   // DM's open glossary edit with „Inzwischen geändert" — un-saveable exactly
   // while the campaign is in use. Each document carries its own token now.
-  await page.goto("/beispiel/file/glossary");
+  await page.goto("/beispiel/entry/glossary");
   await expect(page.getByRole("article")).toContainText("Leuchtturmwärter");
 
   await openMarkdownEditor(page);

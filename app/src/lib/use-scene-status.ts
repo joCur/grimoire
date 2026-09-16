@@ -28,7 +28,7 @@ export function useSceneStatusMutation(
 ): SceneStatusMutation {
   const { write, pendingVariables, message } = useRevWriteMutation<SceneStatus>({
     write: withRev(rev, (status, rev) => writeSceneStatus(campaign, path, rev, status)),
-    fileKey: ["file", campaign, path],
+    entryKey: ["entry", campaign, path],
     // The status lives in the tree as well (pool rows, live nav, search).
     invalidateOnSuccess: [["tree", campaign]],
     errorMessage: "write.status.failed",

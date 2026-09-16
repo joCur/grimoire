@@ -38,7 +38,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, SpellCheck, StickyNote } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { applyAugment, deleteGenerateJob, fetchFile, startAugmentJob } from "@/api";
+import { applyAugment, deleteGenerateJob, fetchEntry, startAugmentJob } from "@/api";
 import { HeaderAction } from "@/components/HeaderAction";
 import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
 import { Button } from "@/components/ui/button";
@@ -100,23 +100,23 @@ export function AugmentAction({ campaign, file }: { campaign: string; file: Entr
   // Open-BY-FILE, like the properties dialog: the reading route stays mounted
   // across a navigation, and a dialog holding entry A while `file` already
   // points at B would send A's decisions to B.
-  const fileKey = `${campaign}/${file.path}`;
+  const entryKey = `${campaign}/${file.path}`;
   const [openFile, setOpenFile] = useState<string>();
   useEffect(() => {
     setOpenFile(undefined);
-  }, [fileKey]);
+  }, [entryKey]);
   if (!isAugmentKind(file.kind)) return null;
   return (
     <>
       <HeaderAction
         icon={Sparkles}
         label={t("augment.action")}
-        onClick={() => setOpenFile(fileKey)}
+        onClick={() => setOpenFile(entryKey)}
         className="hidden md:inline-flex"
       />
-      {openFile === fileKey && (
+      {openFile === entryKey && (
         <AugmentDialog
-          key={fileKey}
+          key={entryKey}
           campaign={campaign}
           file={file}
           onClose={() => setOpenFile(undefined)}
@@ -447,9 +447,9 @@ function AugmentReview({
             ...variables,
             ...(jobId === undefined ? {} : { jobId }),
           }),
-        () => fetchFile(campaign, file.path),
+        () => fetchEntry(campaign, file.path),
       ),
-    fileKey: ["file", campaign, file.path],
+    entryKey: ["entry", campaign, file.path],
     invalidateOnSuccess: [
       ["tree", campaign],
       ["search", campaign],

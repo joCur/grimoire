@@ -8,7 +8,7 @@
 // turn the save into a silent overwrite (409 → inline "Inzwischen geändert —
 // neu laden", the typed values stay, the next attempt writes on top of what is
 // stored now). That is the ONLY write path since issue #62: the create
-// endpoint it used for a campaign without `_campaign` is gone, because
+// endpoint it used for a campaign without `campaign` is gone, because
 // every campaign has a row and therefore always has that document. On success
 // the campaigns/tree/search queries are invalidated — the switcher label and
 // the pool header read from the campaign list, so they must not keep the old
@@ -22,7 +22,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PenLine } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { fetchCampaigns, fetchFile } from "@/api";
+import { fetchCampaigns, fetchEntry } from "@/api";
 import { HeaderAction } from "@/components/HeaderAction";
 import { Button } from "@/components/ui/button";
 import {
@@ -85,8 +85,8 @@ function CampaignMetaDialog({
   // Where the base version comes from. The campaign document always exists
   // (it is the campaign row), so an error here really is "not reachable".
   const file = useQuery({
-    queryKey: ["file", campaign, CAMPAIGN_META_PATH],
-    queryFn: () => fetchFile(campaign, CAMPAIGN_META_PATH),
+    queryKey: ["entry", campaign, CAMPAIGN_META_PATH],
+    queryFn: () => fetchEntry(campaign, CAMPAIGN_META_PATH),
     retry: false,
   });
   const unreachable = file.isError;
@@ -106,7 +106,7 @@ function CampaignMetaDialog({
     // to write against, so the mutation cannot start.
     write:
       base === undefined ? undefined : () => writeCampaignMeta(campaign, values, base.rev),
-    fileKey: ["file", campaign, CAMPAIGN_META_PATH],
+    entryKey: ["entry", campaign, CAMPAIGN_META_PATH],
     // The switcher and the pool header read the campaign list; the entry also
     // sits in the tree/search surfaces.
     invalidateOnSuccess: [["campaigns"], ["tree", campaign], ["search", campaign]],

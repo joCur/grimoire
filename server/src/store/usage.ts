@@ -443,7 +443,7 @@ export function usageReport(
 
 /**
  * GET /api/:campaign/usage?kind=…&id=… — 404 for an entity that does not
- * exist (the same answer `GET /file` gives for its path).
+ * exist (the same answer `GET /entry` gives for its path).
  */
 export async function readUsage(
   campaign: string,

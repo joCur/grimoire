@@ -3,7 +3,7 @@
 // the topbar's quiet "NPCs"/"Orte" links on the desktop (the pool's own footer
 // line of issue #26 was the interim solution before that): scenes grouped flat
 // by chapter, npcs and locations alphabetical. Every row opens the read view
-// (/:campaign/file/<path>). The layout is width-agnostic (a plain list).
+// (/:campaign/entry/<path>). The layout is width-agnostic (a plain list).
 
 import type { CampaignTree } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
@@ -156,7 +156,7 @@ function Row({
 }) {
   return (
     <Link
-      to={`/${campaign}/file/${path}`}
+      to={`/${campaign}/entry/${path}`}
       className="flex min-h-[52px] items-center gap-3 rounded-md border-b border-divider px-1 py-1.5 hover:bg-card"
     >
       <Icon aria-hidden size={16} className="flex-none text-muted-foreground" />

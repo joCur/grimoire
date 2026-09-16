@@ -241,7 +241,7 @@ export function SceneCreateAction({
             await afterCreate();
             setOpen(false);
             // Straight into the composer — an empty scene is there to be written.
-            await navigate(`/${campaign}/file/${created.path}?edit=1`);
+            await navigate(`/${campaign}/entry/${created.path}?edit=1`);
           }}
           onClose={() => setOpen(false)}
         />
@@ -278,7 +278,7 @@ export function NpcCreateAction({ campaign }: { campaign: string }) {
             });
             await afterCreate();
             setOpen(false);
-            await navigate(`/${campaign}/file/${created.path}`);
+            await navigate(`/${campaign}/entry/${created.path}`);
           }}
           onClose={() => setOpen(false)}
         />
@@ -315,7 +315,7 @@ export function LocationCreateAction({ campaign }: { campaign: string }) {
             });
             await afterCreate();
             setOpen(false);
-            await navigate(`/${campaign}/file/${created.path}`);
+            await navigate(`/${campaign}/entry/${created.path}`);
           }}
           onClose={() => setOpen(false)}
         />

@@ -429,8 +429,8 @@ Entscheidung selbst bleibt; das hier ist ihre Vollendung.
   **Dev-/E2E-Werkzeug `grimoire seed [dir]`** (Default `examples/`, Report auf
   stdout), das denselben Importer fährt — Planung F5 bleibt: kein zweites
   Fixture-Format. Der Kaltstart einer echten Kampagne ist #56.
-- **Adressen tragen keine Dateiendung.** `_campaign`, `inbox`, `glossary`,
-  `<kapitel>/_chapter`, `<kapitel>/[<gruppe>/]<szenen-id>`, `npcs/<id>`,
+- **Adressen tragen keine Dateiendung.** `campaign`, `inbox`, `glossary`,
+  `<kapitel>`, `<kapitel>/[<gruppe>/]<szenen-id>`, `npcs/<id>`,
   `locations/<id>`, `sessions/<id>` — das Schema steht abschließend in
   `server/src/store/paths.ts` und gilt in API, App-Routen, Cache-Keys, Links,
   Usage-/Rename-Antworten und E2E. **Keine Alt-Kompatibilität** (PO: keine
@@ -454,6 +454,9 @@ Keys, legt aber keine neuen an (unbekannter Key im Patch → 400). Die
 Tabellen `unknown_files` und `migration_report` sind weg (Migration 0012): sie
 verwahrten Dateien und Befunde der einmaligen Migration aus dem Dateibaum, den
 kein Produktionspfad mehr liest — der Seed-Bericht kommt aus dem Speicher.
+Adressen und URL sprechen vom Eintrag: `GET/PUT /api/:campaign/entry`, die
+Route `/:campaign/entry/<adresse>`, die Kampagne heißt `campaign` und ein
+Kapitel seine id — die Unterstrich-Namen der Ordner-Metadateien sind weg.
 
 **Nachtrag zu ADR #10 (eingelöst in #62):** Generator-Jobs sind persistent
 (`generate_jobs`); der dort akzeptierte Verlust bei Neustart entfällt für

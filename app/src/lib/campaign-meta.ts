@@ -1,21 +1,21 @@
 // Campaign metadata from the UI (issue #34, first small slice of the #15
-// territory): name + description of `_campaign`.
+// territory): name + description of `campaign`.
 //
 // ONE write path since issue #62: PATCH /properties with the guard token the
 // dialog read, so an edit that happened meanwhile cannot be overwritten
 // silently (409). The second path — POST /campaign-meta for a campaign that
-// had no `_campaign` yet — is gone with the endpoint: since the cutover
-// (#57) every campaign is a ROW, GET /file?path=_campaign always answers
+// had no `campaign` yet — is gone with the endpoint: since the cutover
+// (#57) every campaign is a ROW, GET /entry?path=campaign always answers
 // with a document and a token, and there is no "create" case left to serve.
 //
 // Everything here is pure or a plain API call — no react, no query imports,
 // so the rules are unit-testable.
 
-import { fetchFile, patchProperties } from "@/api";
+import { fetchEntry, patchProperties } from "@/api";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
 /** Campaign-relative path of the metadata document. */
-export const CAMPAIGN_META_PATH = "_campaign";
+export const CAMPAIGN_META_PATH = "campaign";
 
 export interface CampaignMetaValues {
   name: string;
@@ -75,7 +75,7 @@ export function seedCampaignMetaBase(
  * The name to PREFILL the dialog with. A stored name that is literally the id
  * is what an UNNAMED campaign looks like — the server synthesizes the id as
  * the display name so every surface has something to show (`GET /campaigns`
- * and `GET /file` agree on that since #62). The dialog must not propose it as
+ * and `GET /entry` agree on that since #62). The dialog must not propose it as
  * an authored value, so it starts empty with the id as the placeholder.
  */
 export function prefillCampaignName(campaign: string, name: string | undefined): string {
@@ -101,6 +101,6 @@ export function writeCampaignMeta(
         rev,
         patch: campaignMetaPatch(values),
       }),
-    () => fetchFile(campaign, CAMPAIGN_META_PATH),
+    () => fetchEntry(campaign, CAMPAIGN_META_PATH),
   );
 }

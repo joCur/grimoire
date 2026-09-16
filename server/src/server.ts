@@ -7,7 +7,7 @@
 // WHAT `path` MEANS (issue #79): an ADDRESS, not a file name — no `.md`, no
 // extension at all. The complete schema is in ./store/paths.ts:
 //
-//   _campaign · inbox · glossary · <chapter>/_chapter ·
+//   campaign · inbox · glossary · <chapter> ·
 //   <chapter>/<scene-id> · <chapter>/<group>/<scene-id> ·
 //   npcs/<id> · locations/<id> · sessions/<id>
 //
@@ -27,7 +27,7 @@
 // shared/src/error-codes.ts; per-endpoint they are noted below.
 //
 //   [x] GET  /api/campaigns                    campaign list (directories + lastSession +
-//                                              name/description from _campaign)
+//                                              name/description from campaign)
 //   [x] POST /api/campaigns                    { name, description? } -> 201 CampaignSummary.
 //                                              THE COLD START (issue #56): since #79 a fresh
 //                                              instance boots empty, so this is how the first
@@ -71,7 +71,7 @@
 //   [x] POST /api/:campaign/locations          { name } -> 201 the location document, same
 //                                              rules as npcs
 //   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (properties parsed)
-//   [x] GET  /api/:campaign/file?path=...      one entry (properties + body + rev). glossary
+//   [x] GET  /api/:campaign/entry?path=...      one entry (properties + body + rev). glossary
 //                                              answers 200 with an EMPTY body when the
 //                                              campaign has no terms — it is an empty
 //                                              document, not a missing one (#57 review:
@@ -94,7 +94,7 @@
 //                                              `locationName` is the display name for the
 //                                              Ort a scene's `location` CREATES — applied
 //                                              only on insert, never a rename (#100)
-//   [x] PUT  /api/:campaign/file               { path, rev, body } — write the markdown
+//   [x] PUT  /api/:campaign/entry              { path, rev, body } — write the markdown
 //                                              BODY of an existing document (issue #15);
 //                                              its properties are untouched (they are
 //                                              PATCH /properties' job), same rev guard
@@ -102,12 +102,12 @@
 //   [—] POST /api/:campaign/campaign-meta      REMOVED with issue #62. It existed
 //                                              for the one gap PATCH /properties
 //                                              could not close: a campaign whose
-//                                              `_campaign` did not exist yet had
+//                                              `campaign` did not exist yet had
 //                                              no row and therefore no guard token
 //                                              to PATCH against. Since the cutover
 //                                              (#57) the import always creates a
-//                                              campaign ROW, GET /file?path=
-//                                              _campaign therefore always
+//                                              campaign ROW, GET /entry?path=
+//                                              campaign therefore always
 //                                              answers 200 with a `rev`, and the
 //                                              app's create branch became
 //                                              unreachable (observed in #59). The
@@ -119,7 +119,7 @@
 //                                              STARTED session file that is not ended —
 //                                              today's OR an older one, so a session past
 //                                              midnight stays active. Same shape as
-//                                              GET /file plus startedMs/endedMs/pausedMs/
+//                                              GET /entry plus startedMs/endedMs/pausedMs/
 //                                              pausedSinceMs (the server's epoch reading of
 //                                              the zone-less timestamps and of the pause
 //                                              intervals — the client must never guess the
@@ -168,7 +168,7 @@
 //   [x] GET  /api/:campaign/glossary           { entries: [{ term, explanation }], rev } — the
 //                                              glossary TABLE (issue #57, planning F6); `rev`
 //                                              is the LIST's guard token, the same one
-//                                              GET /file?path=glossary hands out (issue #53)
+//                                              GET /entry?path=glossary hands out (issue #53)
 //   [x] PUT  /api/:campaign/glossary           { entries, rev } -> { entries, rev }; replaces
 //                                              the WHOLE list, so the array order IS the
 //                                              stored order and reordering needs no endpoint
@@ -305,7 +305,7 @@
 //                                              written; 422 when a draft's `id` is not an
 //                                              addressable slug).
 //                                              chapter + chapterTitle create
-//                                              <chapter>/_chapter when missing, in the
+//                                              the chapter entry when missing, in the
 //                                              same batch; `npc` is the NPC run's single
 //                                              draft (issue #21); jobId discards that job
 //                                              after a successful write.
@@ -318,7 +318,7 @@
 //                                              and the search index. Prose is NOT touched.
 //                                              CHANGED with the cutover (#57): `from`/`to`
 //                                              are DOCUMENT paths for every kind, so a
-//                                              chapter reads `<id>/_chapter` where the
+//                                              chapter reads `<id>` where the
 //                                              file version named the bare DIRECTORY —
 //                                              there is no directory to rename any more
 //                                              (store/paths.ts). A display name that was
@@ -346,7 +346,7 @@
 //                                              sent: nothing was changed, and the answer
 //                                              says so instead of hiding it behind a 200
 //   [x] POST /api/:campaign/review/thread      { chapter, text } -> append `- [ ] text` under
-//                                              ## Offene Fäden of <chapter>/_chapter
+//                                              ## Offene Fäden of the chapter entry
 //   [x] POST /api/:campaign/review/npc-stub    { id, name?, note? } -> create npcs/<id>
 //                                              (status: unknown), or answer with the entry the
 //                                              id already has — idempotent since #70

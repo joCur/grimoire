@@ -25,8 +25,8 @@ zusammen und steht genau einmal in `server/src/store/paths.ts`:
 
 | Eintrag | Adresse |
 | ------- | ------- |
-| Kampagne | `_campaign` |
-| Kapitel | `<kapitel-id>/_chapter` |
+| Kampagne | `campaign` |
+| Kapitel | `<kapitel-id>` |
 | Szene | `<kapitel-id>/<orts-id>/<szenen-id>` — ohne Ort: `<kapitel-id>/<szenen-id>` |
 | NPC | `npcs/<id>` |
 | Ort | `locations/<id>` |

@@ -330,7 +330,7 @@ async function collectNpcContext(campaign: string, npcId?: string): Promise<Camp
  * Collect the prompt context of a scene run. Runs the same target checks
  * again (they are cheap and the pipeline must never depend on a caller having
  * done them); the chapter contributes only its id to the context, so nothing
- * else changes when the chapter (and its `_chapter`) is still missing.
+ * else changes when the chapter (and its chapter entry) is still missing.
  */
 export async function collectSceneContext(
   campaign: string,
@@ -1252,7 +1252,7 @@ export function applyStubTarget(item: unknown, index: number): ApplyTarget {
 /**
  * The new-chapter flow (issue #12): `chapter` + `chapterTitle` mean "the
  * drafts go into a chapter that does not exist yet". Returns the
- * `<chapter>/_chapter` target to create in the same batch, or null when the
+ * chapter entry to create in the same batch, or null when the
  * chapter is already there (idempotent — an existing chapter is not a
  * conflict). Minimal properties per the examples convention
  * (id/title/status: planned — a generator-created chapter is upcoming,
@@ -1287,7 +1287,7 @@ export async function newChapterTarget(
  * which is what "all or nothing" now means literally. Returns the written
  * campaign-relative paths.
  *
- * `chapter`/`chapterTitle` (both or neither) add the chapter's `_chapter`
+ * `chapter`/`chapterTitle` (both or neither) add the chapter's chapter entry
  * to the SAME all-or-nothing batch when it does not exist yet — the app's
  * "Neues Kapitel" flow.
  *
@@ -1376,7 +1376,7 @@ export async function applyGenerated(
  * scene, the id segment of its address). It arrives from a client payload and
  * was taken on trust: `id: ""` inserted a row nothing can address, and
  * `id: "a/b"` inserted one whose address parses as a different path — both
- * unreachable through `GET /file`, i.e. content written and lost in the same
+ * unreachable through `GET /entry`, i.e. content written and lost in the same
  * request. A properties that HAS an `id` must therefore carry a usable one;
  * a draft without the key keeps falling back to its address segment, which
  * the address validation already constrains.

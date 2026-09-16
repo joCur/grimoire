@@ -31,15 +31,15 @@ import type {
   TokenUsage,
 } from "../src/llm-provider";
 
-/** Whether an entity is there: its address resolves through GET /file. */
+/** Whether an entity is there: its address resolves through GET /entry. */
 async function exists(rel: string): Promise<boolean> {
-  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
   return res.status === 200;
 }
 
-/** GET /file of an applied draft. */
+/** GET /entry of an applied draft. */
 async function read(rel: string): Promise<EntryResponse> {
-  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }

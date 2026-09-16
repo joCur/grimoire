@@ -125,7 +125,7 @@ const accept = (job: GenerateJob, body: Record<string, unknown> = {}): Promise<R
   send("POST", `/api/beispiel/generate/job/${job.id}/accept`, { rev: job.rev ?? 0, ...body });
 
 async function exists(rel: string): Promise<boolean> {
-  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
   return res.status === 200;
 }
 
@@ -266,7 +266,7 @@ test("the edited text is what a partial accept writes", async () => {
     edits: { [SCENE_A]: sceneMarkdown("treffen-am-kai", "Treffen am Kai").replace("Fenn wartet am Kai.", "Fenn wartet im Regen.") },
   });
   expect((await accept(job, { paths: [SCENE_A] })).status).toBe(200);
-  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(ADDRESS_A)}`);
+  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(ADDRESS_A)}`);
   expect(((await res.json()) as { body: string }).body).toContain("Fenn wartet im Regen.");
 });
 

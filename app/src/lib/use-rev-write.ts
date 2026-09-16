@@ -50,10 +50,10 @@ export interface RevWriteOptions<TVariables> {
   /**
    * Query key of the written entry. Whatever came back — the written entry, or
    * the re-read one after a conflict — is seeded here. NOT invalidated: both
-   * write endpoints answer with the same payload as GET /file, so the file in
+   * write endpoints answer with the same payload as GET /entry, so the file in
    * the cache is already the server's truth.
    */
-  fileKey: QueryKey;
+  entryKey: QueryKey;
   /**
    * Invalidated after a SUCCESSFUL write only, in order. Each write path has
    * its own set (a body write feeds tree and search, a status patch only the
@@ -81,7 +81,7 @@ export interface RevWriteOptions<TVariables> {
 
 export function useRevWriteMutation<TVariables>({
   write,
-  fileKey,
+  entryKey,
   invalidateOnSuccess = [],
   errorMessage = WRITE_FAILED_MESSAGE,
   onSaved,
@@ -110,7 +110,7 @@ export function useRevWriteMutation<TVariables>({
     onSuccess: (result) => {
       // Whatever the server sent back — the written entry, or the re-read one
       // after a conflict — is the new truth for this path.
-      if (result.file !== undefined) queryClient.setQueryData(fileKey, result.file);
+      if (result.file !== undefined) queryClient.setQueryData(entryKey, result.file);
       if (!result.ok) {
         setMessage(t(STALE_FILE_MESSAGE));
         onConflict?.(result.file);

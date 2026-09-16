@@ -103,7 +103,7 @@ describe("writeSceneStatus", () => {
     expect(result.ok).toBe(false);
     expect(result.file?.rev).toBe(999);
     expect(calls[1]?.method).toBe("GET");
-    expect(calls[1]?.url).toBe(`/api/beispiel/file?path=${encodeURIComponent(SCENE)}`);
+    expect(calls[1]?.url).toBe(`/api/beispiel/entry?path=${encodeURIComponent(SCENE)}`);
   });
 
   test("the attempt after a conflict carries the rev the reload brought", async () => {

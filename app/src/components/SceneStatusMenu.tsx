@@ -17,7 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
 
-import { fetchFile } from "@/api";
+import { fetchEntry } from "@/api";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,8 +53,8 @@ export function SceneStatusControl({
   // Lazy rev for the pool rows: only ever requested once the menu opens,
   // and served from the cache when the entry was read before.
   const file = useQuery({
-    queryKey: ["file", campaign, path],
-    queryFn: () => fetchFile(campaign, path),
+    queryKey: ["entry", campaign, path],
+    queryFn: () => fetchEntry(campaign, path),
     enabled: open && rev === undefined && campaign !== "" && path !== "",
     retry: false,
   });

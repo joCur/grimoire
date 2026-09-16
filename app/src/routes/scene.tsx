@@ -1,4 +1,4 @@
-// "/:campaign/file/*" — the reading view of ONE file. For a scene that is
+// "/:campaign/entry/*" — the reading view of ONE file. For a scene that is
 // the scene article per the design reference (type overline, Literata title,
 // trigger row, chip row, markdown body — shared with the live view via
 // SceneArticle) plus a sticky right aside with the scene's NPC cards. Below
@@ -32,7 +32,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 
-import { fetchFile, fetchTree } from "@/api";
+import { fetchEntry, fetchTree } from "@/api";
 import { AugmentAction } from "@/components/AugmentAction";
 import { CampaignMetaAction } from "@/components/CampaignMetaAction";
 import { EntityArticle } from "@/components/EntityArticle";
@@ -68,8 +68,8 @@ export function SceneRoute() {
   const wantsEdit = searchParams.get("edit") === "1";
   const enabled = campaign !== "" && path !== "";
   const { data, isPending } = useQuery({
-    queryKey: ["file", campaign, path],
-    queryFn: () => fetchFile(campaign, path),
+    queryKey: ["entry", campaign, path],
+    queryFn: () => fetchEntry(campaign, path),
     enabled,
   });
   const tree = useQuery({
@@ -120,7 +120,7 @@ export function SceneRoute() {
     // (lib/search.ts): the slashes are the address, everything else is a
     // segment that may carry anything an id may carry.
     const target = canonical.split("/").map(encodeURIComponent).join("/");
-    navigate(`/${encodeURIComponent(campaign)}/file/${target}`, { replace: true });
+    navigate(`/${encodeURIComponent(campaign)}/entry/${target}`, { replace: true });
   }, [campaign, canonical, path, navigate]);
 
   if (isPending) {

@@ -103,7 +103,7 @@ eingerückt, standardmäßig GEÖFFNET.
 - SEITEN-KONTEXT LEBT IN DER SEITE. Die Hierarchie steht als leise
   Kontextzeile über dem Titel, direkt bei dem, was sie beschreibt:
   Szene → `<Kapiteltitel> › <Gruppe>` (Kapitel verlinkt auf den Pool,
-  Gruppe wie ein Pool-Gruppenkopf aufgelöst), `<kapitel>/_chapter` → nur das
+  Gruppe wie ein Pool-Gruppenkopf aufgelöst), `<kapitel>` → nur das
   Kapitel, NPC → „NPCs", Ort → „Orte" (jeweils auf ihre Liste). Kampagnen-
   Datei, Sessions, Inbox, Glossar bekommen keine Zeile. Desktop-Pendant
   der mobilen „‹ Pool"-Zeile (die bleibt unter `md`).
@@ -116,7 +116,7 @@ eingerückt, standardmäßig GEÖFFNET.
   in Identifikations-Kontexten, dort mono: Rename-Dialog, NPC-Stub-
   Platzhalter, id-Badge der NPC-Karte, Pfad-Vorschauen im Generator.
 - „Bearbeiten" am Pool-Kopf und im Kampagnen-Lesekopf: Dialog mit Name +
-  Beschreibung (schreibt `_campaign`, `rev`-sicher). Auch nicht im
+  Beschreibung (schreibt `campaign`, `rev`-sicher). Auch nicht im
   Prototyp — erste kleine Scheibe des #15-Territoriums, per PO-Entscheid
   (#34).
 

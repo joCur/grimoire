@@ -13,7 +13,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import { fetchFile, fetchTree } from "@/api";
+import { fetchEntry, fetchTree } from "@/api";
 import { useT } from "@/i18n";
 import { sceneTitle } from "@/lib/campaign";
 import { fmStringArray } from "@/lib/properties";
@@ -154,8 +154,8 @@ export function useReviewEntries(
   // 404 tolerance stays for a campaign the server does not know — an error
   // here must never look like "no ideas", it just yields no entries.
   const inbox = useQuery({
-    queryKey: ["file", campaign, INBOX_PATH],
-    queryFn: () => fetchFile(campaign, INBOX_PATH),
+    queryKey: ["entry", campaign, INBOX_PATH],
+    queryFn: () => fetchEntry(campaign, INBOX_PATH),
     enabled: enabled && campaign !== "",
     retry: false,
   });

@@ -67,7 +67,7 @@ export interface MarkdownEditorSurfaceProps {
    * What the preview renders when it must differ from `value`: the generator
    * strips the properties block off its drafts (lib/generate.ts markdownBody)
    * because a draft is a whole FILE. Defaults to `value`, which is what the
-   * reading view needs — GET /file already hands out a body without it.
+   * reading view needs — GET /entry already hands out a body without it.
    */
   preview?: string;
   /**

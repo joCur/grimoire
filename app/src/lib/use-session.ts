@@ -118,7 +118,7 @@ export function useSessionWrite<TVars = void>(
   return useMutation({
     mutationFn,
     onSuccess: (data) => {
-      queryClient.setQueryData(["file", campaign, data.path], data);
+      queryClient.setQueryData(["entry", campaign, data.path], data);
       queryClient.setQueryData(activeSessionKey(campaign), isEnded(data.properties) ? null : data);
       queryClient.setQueryData(lastStartedSessionKey(campaign), data);
       onSuccess?.(data);
@@ -143,7 +143,7 @@ export function useSessionDiscard(campaign: string, onDone?: () => void) {
   return useMutation({
     mutationFn: () => discardSession(campaign),
     onSuccess: (data) => {
-      queryClient.removeQueries({ queryKey: ["file", campaign, data.path] });
+      queryClient.removeQueries({ queryKey: ["entry", campaign, data.path] });
       queryClient.setQueryData(activeSessionKey(campaign), null);
       void queryClient.invalidateQueries({ queryKey: lastStartedSessionKey(campaign) });
       onDone?.();

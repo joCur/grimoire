@@ -34,14 +34,14 @@ afterEach(() => {
 });
 
 async function readFile(rel: string): Promise<{ rev: number; body: string }> {
-  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
   return (await res.json()) as { rev: number; body: string };
 }
 
 async function writeBody(rel: string, body: string): Promise<void> {
   const file = await readFile(rel);
-  const res = await app.request("/api/beispiel/file", {
+  const res = await app.request("/api/beispiel/entry", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ path: rel, rev: file.rev, body }),
@@ -153,7 +153,7 @@ describe("referrersOf and the rename cascade", () => {
   test("finds every body kind that mentions the slug", async () => {
     await writeBody(SCENE, "## Flow\n\n[[jorna]] wartet.\n");
     await writeBody("locations/leuchtturm", "[[jorna]] hat den Schlüssel.\n");
-    await writeBody("01-salzhafen/_chapter", "## Ziel\n\n[[jorna]] zahlt.\n");
+    await writeBody("01-salzhafen", "## Ziel\n\n[[jorna]] zahlt.\n");
     const db = await getDb();
     expect(referrersOf(db, "beispiel", "jorna")).toEqual([
       { kind: "scene", id: "lighthouse-arrival" },
@@ -224,7 +224,7 @@ describe("referrersOf and the rename cascade", () => {
   });
 
   test("the campaign body is a full reference site (name and id rename)", async () => {
-    await writeBody("_campaign", "Notiz: [[jorna]] ist bestechlich.\n");
+    await writeBody("campaign", "Notiz: [[jorna]] ist bestechlich.\n");
     const db = await getDb();
     expect(referrersOf(db, "beispiel", "jorna")).toEqual([{ kind: "campaign", id: "beispiel" }]);
 
@@ -237,8 +237,8 @@ describe("referrersOf and the rename cascade", () => {
     const usage = await usageOf("npc", "jorna");
     expect(usage.groups.find((g) => g.ref === "bodyRefs")?.count).toBe(1);
     const plan = await rename({ kind: "npc", oldId: "jorna", newId: "jorna-b" });
-    expect(plan.changed).toContain("_campaign");
-    expect((await readFile("_campaign")).body).toContain("[[jorna-b]]");
+    expect(plan.changed).toContain("campaign");
+    expect((await readFile("campaign")).body).toContain("[[jorna-b]]");
   });
 
   test("a dry run rewrites nothing but reports the site", async () => {

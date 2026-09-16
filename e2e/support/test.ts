@@ -135,7 +135,7 @@ export interface Api {
   get<T>(apiPath: string): Promise<T>;
   /** POST/PATCH/PUT with a JSON body, parsed as JSON; throws on non-2xx. */
   send<T>(method: "POST" | "PATCH" | "PUT" | "DELETE", apiPath: string, body?: unknown): Promise<T>;
-  /** GET /file for a campaign-relative path; throws when it does not exist. */
+  /** GET /entry for a campaign-relative path; throws when it does not exist. */
   file(rel: string): Promise<ApiFile>;
   /** The markdown text of an entry. */
   body(rel: string): Promise<string>;
@@ -153,7 +153,7 @@ export interface Api {
    */
   sessionPath(includeEnded?: boolean): Promise<string | undefined>;
   /**
-   * PUT /file with a FRESH guard token: a second writer, not a race. Returns
+   * PUT /entry with a FRESH guard token: a second writer, not a race. Returns
    * the new token. This is how a spec provokes the app's 409 since "someone
    * changed the file outside" cannot happen any more.
    */
@@ -304,7 +304,7 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
       return json<T>(response, `${method} ${apiPath}`);
     },
     file(rel) {
-      return api.get<ApiFile>(`${campaign}/file?path=${encodeURIComponent(rel)}`);
+      return api.get<ApiFile>(`${campaign}/entry?path=${encodeURIComponent(rel)}`);
     },
     async body(rel) {
       return (await api.file(rel)).body;
@@ -313,9 +313,9 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
       return (await api.file(rel)).properties;
     },
     async exists(rel) {
-      const response = await fetchApi(`${campaign}/file?path=${encodeURIComponent(rel)}`);
+      const response = await fetchApi(`${campaign}/entry?path=${encodeURIComponent(rel)}`);
       if (response.status === 404) return false;
-      if (!response.ok) throw new Error(`GET /file ${rel}: HTTP ${response.status}`);
+      if (!response.ok) throw new Error(`GET /entry ${rel}: HTTP ${response.status}`);
       return true;
     },
     async sessionPath(includeEnded = false) {
@@ -328,7 +328,7 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
     },
     async writeBody(rel, body) {
       const current = await api.file(rel);
-      const written = await api.send<ApiFile>("PUT", `${campaign}/file`, {
+      const written = await api.send<ApiFile>("PUT", `${campaign}/entry`, {
         path: rel,
         rev: current.rev,
         body,

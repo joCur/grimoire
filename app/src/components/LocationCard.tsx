@@ -17,7 +17,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { fetchFile } from "@/api";
+import { fetchEntry } from "@/api";
 import { EntityCardShell } from "@/components/EntityCardShell";
 import { useI18n } from "@/i18n";
 import { fmString } from "@/lib/properties";
@@ -49,8 +49,8 @@ export function LocationCard({
   const { t, tNode } = useI18n();
   const path = knownPath ?? locationPath(id);
   const { data, isPending, isError } = useQuery({
-    queryKey: ["file", campaign, path],
-    queryFn: () => fetchFile(campaign, path),
+    queryKey: ["entry", campaign, path],
+    queryFn: () => fetchEntry(campaign, path),
     retry: false,
   });
 

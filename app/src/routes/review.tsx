@@ -21,7 +21,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import {
   adoptThread,
   ensureNpc,
-  fetchFile,
+  fetchEntry,
   fetchTree,
   markInboxLineDone,
   markLogLineSeen,
@@ -106,8 +106,8 @@ export function ReviewRoute() {
   const chapterPath = chapter?.path;
 
   const chapterFile = useQuery({
-    queryKey: ["file", campaign, chapterPath],
-    queryFn: () => fetchFile(campaign, chapterPath as string),
+    queryKey: ["entry", campaign, chapterPath],
+    queryFn: () => fetchEntry(campaign, chapterPath as string),
     enabled: chapterPath !== undefined,
     retry: false,
   });
@@ -140,8 +140,8 @@ export function ReviewRoute() {
     onSuccess: (files, vars) => {
       // Every endpoint returns the fresh entry: seed, then invalidate on top.
       for (const file of files) {
-        queryClient.setQueryData(["file", campaign, file.path], file);
-        void queryClient.invalidateQueries({ queryKey: ["file", campaign, file.path] });
+        queryClient.setQueryData(["entry", campaign, file.path], file);
+        void queryClient.invalidateQueries({ queryKey: ["entry", campaign, file.path] });
         // A log line's done-state lives in the session's properties, and
         // the live aside and the topbar read that session through the SESSION
         // queries — they have to see the fresh one too (same rule as

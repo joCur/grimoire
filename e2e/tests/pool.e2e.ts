@@ -167,7 +167,7 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
   // Opening a row is the pool's job — the reading view takes over from here.
   await planned.click();
   await expect(page).toHaveURL(
-    /\/beispiel\/file\/01-salzhafen\/leuchtturm\/lighthouse-arrival$/,
+    /\/beispiel\/entry\/01-salzhafen\/leuchtturm\/lighthouse-arrival$/,
   );
 });
 
@@ -190,7 +190,7 @@ test.describe("a scene without a location", () => {
     const scene = page.getByRole("link", { name: /Irgendwo unterwegs/ });
     await expect(scene).toBeVisible();
     // …and the scene sits at chapter level, address included.
-    await expect(scene).toHaveAttribute("href", "/beispiel/file/01-salzhafen/ohne-ort-szene");
+    await expect(scene).toHaveAttribute("href", "/beispiel/entry/01-salzhafen/ohne-ort-szene");
   });
 });
 
@@ -280,7 +280,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   // --- file views: same chrome, section marking follows the entity ----------
   // A scene belongs to Kapitel; its hierarchy lives in the page's context
   // line, not in the topbar.
-  await page.goto("/beispiel/file/01-salzhafen/leuchtturm/lighthouse-arrival");
+  await page.goto("/beispiel/entry/01-salzhafen/leuchtturm/lighthouse-arrival");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Ankunft am Leuchtturm",
   );
@@ -290,7 +290,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   // An NPC belongs to NPCs — whichever chapter happens to mention it. The old
   // breadcrumb claimed a chapter path here, which was plain misleading for an
   // NPC opened from the NPC list.
-  await page.goto("/beispiel/file/npcs/fenn");
+  await page.goto("/beispiel/entry/npcs/fenn");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fenn");
   await expect(current).toHaveText("NPCs");
   await assertChromeIsStable(onPool);
@@ -623,7 +623,7 @@ test("editing the campaign metadata updates header, switcher and the file", asyn
   ).toBeVisible();
 
   // Stored: the properties changed, the text did not.
-  const campaign = await api.file("_campaign");
+  const campaign = await api.file("campaign");
   expect(campaign.properties.name).toBe("Salzhafen, zweite Fassung");
   expect(campaign.properties.description).toBe("Jetzt mit mehr Schmuggel und weniger Möwen.");
   expect(campaign.body).toContain("Kampagnenweite Notizen:");
@@ -646,7 +646,7 @@ test.describe("imported without a _campaign", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "beispiel",
     );
-    const imported = await api.file("_campaign");
+    const imported = await api.file("campaign");
     expect(imported.properties).toEqual({ id: "beispiel", name: "beispiel" });
     expect(imported.body).toBe("");
 
@@ -665,7 +665,7 @@ test.describe("imported without a _campaign", () => {
       "Salzhafen von vorn",
     );
     // The id stays the DIRECTORY name — the server sets it, never the client.
-    const campaign = await api.properties("_campaign");
+    const campaign = await api.properties("campaign");
     expect(campaign.id).toBe("beispiel");
     expect(campaign.name).toBe("Salzhafen von vorn");
     expect(campaign.description).toBe("Frisch angelegt aus der App.");
@@ -676,7 +676,7 @@ test("the campaign reading view carries the same edit action", async ({
   page,
   api,
 }) => {
-  await page.goto("/beispiel/file/_campaign");
+  await page.goto("/beispiel/entry/campaign");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
@@ -689,7 +689,7 @@ test("the campaign reading view carries the same edit action", async ({
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Aus der Leseansicht",
   );
-  await expect.poll(() => api.properties("_campaign")).toHaveProperty("name", "Aus der Leseansicht");
+  await expect.poll(() => api.properties("campaign")).toHaveProperty("name", "Aus der Leseansicht");
 });
 // The dialog's 409 path is the SAME write flow as the status control's
 // (lib/campaign-meta.ts mirrors lib/scene-status.ts: conflict -> inline

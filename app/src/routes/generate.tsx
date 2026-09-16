@@ -66,7 +66,7 @@ import {
   ApiError,
   acceptJobParts,
   deleteGenerateJob,
-  fetchFile,
+  fetchEntry,
   fetchKnowledge,
   fetchTree,
   retryJobPart,
@@ -158,8 +158,8 @@ export function GenerateRoute() {
   // prompt when it exists (generator/README.md step 1). A missing entry is a
   // 404 and means "no glossary" — not an error worth retrying.
   const glossary = useQuery({
-    queryKey: ["file", campaign, "glossary"],
-    queryFn: () => fetchFile(campaign, "glossary"),
+    queryKey: ["entry", campaign, "glossary"],
+    queryFn: () => fetchEntry(campaign, "glossary"),
     enabled: campaign !== "",
     retry: false,
   });
@@ -200,7 +200,7 @@ export function GenerateRoute() {
   const newIdError = chapterIdError(newIdInput, t);
   // A typed id may name a chapter that is already there: then this is NOT a
   // new chapter — the drafts go into the existing directory and its
-  // _chapter stays untouched (#12 semantics), so neither the newChapter
+  // chapter entry stays untouched (#12 semantics), so neither the newChapter
   // flag nor a chapterTitle travels.
   const newIdExists = newIdError === undefined && chapterIds.includes(newIdInput);
   const creatingChapter = target.kind === "new" && !newIdExists;
@@ -354,9 +354,9 @@ export function GenerateRoute() {
       const current = queryClient.getQueryData<GenerateJob | null>(generateJobKey(campaign));
       return acceptJobParts(campaign, job?.id ?? "", current?.rev ?? job?.rev ?? 0, {
         ...(paths === undefined ? {} : { paths }),
-        // The new chapter's _chapter is created in the same batch — only
+        // The new chapter's chapter entry is created in the same batch — only
         // for a chapter that really is new: for an existing id the pair
-        // stays out of the body so an accept cannot touch its _chapter.
+        // stays out of the body so an accept cannot touch its chapter entry.
         ...(creatingChapter && chapterId !== undefined
           ? { chapter: chapterId, chapterTitle: newTitle.trim() }
           : {}),
@@ -1315,7 +1315,7 @@ export function GenerateRoute() {
                   variant="outline"
                   onClick={() => {
                     void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
-                    void navigate(`/${campaign}/file/${written[0]}`);
+                    void navigate(`/${campaign}/entry/${written[0]}`);
                   }}
                   className="h-auto border-input bg-transparent px-4 py-2.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
                 >
@@ -1747,7 +1747,7 @@ function PartActions({
         {t("generate.review.partWritten")}
         {writtenAt !== undefined && (
           <Link
-            to={`/${campaign}/file/${writtenAt}`}
+            to={`/${campaign}/entry/${writtenAt}`}
             className="rounded font-mono text-[11.5px] underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           >
             {writtenAt}
@@ -1934,7 +1934,7 @@ function StubRow({
           {t("generate.review.partWritten")}
           {writtenAt !== undefined && (
             <Link
-              to={`/${campaign}/file/${writtenAt}`}
+              to={`/${campaign}/entry/${writtenAt}`}
               className="rounded font-mono text-[11px] underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
               {writtenAt}

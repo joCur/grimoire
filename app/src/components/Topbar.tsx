@@ -178,7 +178,7 @@ function useSettingsCampaign(isSettings: boolean): string {
 export function Topbar() {
   const t = useT();
   const { pathname } = useLocation();
-  const sceneMatch = matchPath("/:campaign/file/*", pathname);
+  const sceneMatch = matchPath("/:campaign/entry/*", pathname);
   const liveMatch = matchPath("/:campaign/live", pathname);
   const reviewMatch = matchPath("/:campaign/review", pathname);
   const generateMatch = matchPath("/:campaign/generate", pathname);

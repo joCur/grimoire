@@ -95,9 +95,9 @@ export function fetchTree(campaign: string): Promise<CampaignTree> {
   return getJson<CampaignTree>(`/${encodeURIComponent(campaign)}/tree`);
 }
 
-export function fetchFile(campaign: string, path: string): Promise<EntryResponse> {
+export function fetchEntry(campaign: string, path: string): Promise<EntryResponse> {
   return getJson<EntryResponse>(
-    `/${encodeURIComponent(campaign)}/file?path=${encodeURIComponent(path)}`,
+    `/${encodeURIComponent(campaign)}/entry?path=${encodeURIComponent(path)}`,
   );
 }
 
@@ -214,7 +214,7 @@ export async function patchProperties(
 
 /**
  * Replace the markdown BODY of one entry, properties untouched (issue #15 —
- * the reading view's edit mode). `body` is what GET /file hands out: the file
+ * the reading view's edit mode). `body` is what GET /entry hands out: the file
  * without its properties block. `rev` is the same optimistic-concurrency
  * token as above and must come from the EntryResponse the editor was seeded
  * from — on a mismatch the server answers 409 with the current `rev` in
@@ -226,7 +226,7 @@ export async function putEntryBody(
   body: string,
   rev: number,
 ): Promise<EntryResponse> {
-  const url = `/${encodeURIComponent(campaign)}/file`;
+  const url = `/${encodeURIComponent(campaign)}/entry`;
   const response = await fetch(`/api${url}`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
@@ -364,7 +364,7 @@ export function markLogLineSeen(
 }
 
 /**
- * Append `- [ ] text` under `## Offene Fäden` of the chapter's _chapter
+ * Append `- [ ] text` under `## Offene Fäden` of the chapter's chapter entry
  * (section created when missing). Returns the chapter entry.
  */
 export function adoptThread(
@@ -819,7 +819,7 @@ export function retryJobPart(
 /**
  * Write the reviewed drafts (all or nothing): the possibly edited scene
  * markdown plus the accepted stubs. With `chapter` + `chapterTitle` the
- * server also creates `<chapter>/_chapter` when it is missing.
+ * server also creates `<chapter>` when it is missing.
  * ApiError 409 carries the existing paths in `details.conflicts` — nothing
  * was written then.
  *

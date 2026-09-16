@@ -47,7 +47,7 @@ export function useEntryBodyMutation(
 ): EntryBodyMutation {
   const { write, isPending, message } = useRevWriteMutation<string>({
     write: withRev(rev, (body, rev) => writeEntryBody(campaign, path, body, rev)),
-    fileKey: ["file", campaign, path],
+    entryKey: ["entry", campaign, path],
     // The body feeds the tree's counts/titles and the search index, so
     // neither the campaign's lists nor ⌘K may keep the old text.
     invalidateOnSuccess: [

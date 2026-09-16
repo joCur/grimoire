@@ -362,7 +362,7 @@ export const en: Messages = {
   "browse.empty.npcs": "No NPCs yet.",
   "browse.empty.locations": "No locations yet.",
 
-  // --- the reading view ("/:campaign/file/*", routes/scene.tsx) -------------
+  // --- the reading view ("/:campaign/entry/*", routes/scene.tsx) -------------
   "scene.loading": "Loading entry …",
   "scene.notLoadable": "Entry not loadable — check the path or start the server.",
   "scene.npcs.heading": "NPCs in this scene",
@@ -518,7 +518,7 @@ export const en: Messages = {
   // --- campaign metadata dialog (components/CampaignMetaAction.tsx) --------
   "campaignMeta.title": "Edit campaign",
   "campaignMeta.description":
-    "Name and description live in _campaign. The id stays as it is — it is part of every address and does not change here.",
+    "Name and description of the campaign. The id stays as it is — it is part of every address and does not change here.",
   "campaignMeta.field.name": "Name",
   "campaignMeta.field.description": "Description",
   "campaignMeta.field.description.placeholder": "One sentence that places the campaign",
