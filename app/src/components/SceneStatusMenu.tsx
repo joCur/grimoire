@@ -16,7 +16,7 @@ import type { SceneStatus } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { fetchFile } from "@/api";
+import { fetchEntry } from "@/api";
 import { StatusMenu, type StatusVariant } from "@/components/StatusMenu";
 import { useT } from "@/i18n";
 import { sceneStatusMeta, sceneStatusOptions } from "@/lib/scene-status";
@@ -45,8 +45,8 @@ export function SceneStatusControl({
   // Lazy rev for the pool rows: only ever requested once the menu opens,
   // and served from the cache when the entry was read before.
   const file = useQuery({
-    queryKey: ["file", campaign, path],
-    queryFn: () => fetchFile(campaign, path),
+    queryKey: ["entry", campaign, path],
+    queryFn: () => fetchEntry(campaign, path),
     enabled: open && rev === undefined && campaign !== "" && path !== "",
     retry: false,
   });

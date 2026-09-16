@@ -11,7 +11,7 @@
 // Before this module each of them carried its own copy, and the copies had
 // already drifted: the If-prefix was `[ \t]*` on one side and `\s*` on the
 // other, and `## *If:* x` was a collapsible section in the reading view but a
-// plain heading card in the composer. A composer that models the document
+// plain heading card in the composer. A composer that models the text
 // differently from the renderer shows the DM a structure their body does not
 // have — so the predicates live here exactly once.
 //

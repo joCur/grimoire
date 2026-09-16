@@ -17,7 +17,7 @@
 // missing or stale (the format degrades). The tree turns the id into the title.
 
 import type { CampaignTree } from "@grimoire/shared/types";
-import { kindFromPath } from "@grimoire/shared/kind";
+import { kindFromAddress } from "@grimoire/shared/kind";
 
 import type { Translate } from "@/i18n";
 import { locationName } from "@/lib/campaign";
@@ -54,7 +54,7 @@ export function pageContextCrumbs(
   if (campaign === "" || path === "") return [];
   const segments = path.split("/");
 
-  switch (kindFromPath(path)) {
+  switch (kindFromAddress(path)) {
     case "npc":
       return [{ label: t("browse.title.npcs"), to: `/${campaign}/list/npcs` }];
     case "location":

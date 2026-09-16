@@ -2,12 +2,13 @@
 //
 // The cache/409 mechanics are the shared envelope in use-rev-write.ts; what
 // belongs to this path is the INVALIDATION, and it is wider than a scene's.
-// `active` moves two chapter rows, so the whole file cache goes and not just
+// `active` moves two chapter rows, so the whole entry cache goes and not just
 // the one the server answered with — the chapter that LOST the flag is on the
 // same page, and seeding only the winner would leave its pill lying. The tree
 // carries every chapter's status (the overview, the session view), and the session
 // view reads which chapter is active, so both follow.
 
+import { chapterMetaPath } from "@/lib/chapter-meta";
 import { writeChapterStatus, chapterStatusWritable } from "@/lib/chapter-status";
 import { useRevWriteMutation, type RevWriteMutation } from "@/lib/use-rev-write";
 
@@ -34,10 +35,10 @@ export function useChapterStatusMutation(
 ): ChapterStatusMutation {
   const mutation: RevWriteMutation<string> = useRevWriteMutation<string>({
     write: (status) => writeChapterStatus(campaign, chapter, status, rev),
-    fileKey: ["file", campaign, `${chapter}/_chapter`],
+    entryKey: ["entry", campaign, chapterMetaPath(chapter)],
     invalidateOnSuccess: [
-      // Both chapter entries moved — the whole file cache, not one entry.
-      ["file", campaign],
+      // Both chapter entries moved — the whole entry cache, not one of them.
+      ["entry", campaign],
       ["tree", campaign],
       ["session", campaign],
       ["search", campaign],

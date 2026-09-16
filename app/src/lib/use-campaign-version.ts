@@ -60,7 +60,7 @@ export function useCampaignVersion(campaign: string): void {
     // opened — a fresh list must not turn into a silent overwrite.
     for (const key of [
       "tree",
-      "file",
+      "entry",
       "search",
       "active-session",
       "last-session",
@@ -70,7 +70,7 @@ export function useCampaignVersion(campaign: string): void {
       void queryClient.invalidateQueries({ queryKey: [key, campaign] });
     }
     // …plus the campaign list, which carries name/description from
-    // `_campaign` (issue #17) and is keyed without a campaign segment.
+    // `campaign` (issue #17) and is keyed without a campaign segment.
     void queryClient.invalidateQueries({ queryKey: ["campaigns"] });
   }, [data, campaign, queryClient]);
 }

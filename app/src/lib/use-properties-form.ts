@@ -40,7 +40,7 @@ export function usePropertiesFormMutation(
    * set `status: active`, which the server answers by ALSO putting the
    * previously active chapter back to `planned` — a second
    * entry this dialog never read. Its cached copy would keep the old pill,
-   * so the whole file cache goes for that kind and not just the seeded entry.
+   * so the whole entry cache goes for that kind and not just the seeded entry.
    */
   kind?: string,
 ): RevWriteMutation<PropertiesWrite> {
@@ -48,9 +48,9 @@ export function usePropertiesFormMutation(
     write: withRev(rev, (write, rev) =>
       writePropertiesForm(campaign, path, rev, write.patch, write.locationName),
     ),
-    fileKey: ["file", campaign, path],
+    entryKey: ["entry", campaign, path],
     invalidateOnSuccess: [
-      ...(kind === "chapter" ? [["file", campaign]] : []),
+      ...(kind === "chapter" ? [["entry", campaign]] : []),
       ["tree", campaign],
       ["search", campaign],
     ],

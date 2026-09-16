@@ -68,12 +68,12 @@ export function contingencyPaths(tree: CampaignTree | undefined): Set<string> {
 
 /**
  * Route for a picked result. Every kind opens as an entry view
- * (/:campaign/file/<path>) — except the campaign itself, whose "view" is the
+ * (/:campaign/entry/<path>) — except the campaign itself, whose "view" is the
  * pool. Path segments are encoded individually so umlauts/spaces in filenames
  * survive, but the slashes stay routable.
  */
 export function resultHref(campaign: string, result: Pick<SearchResult, "kind" | "path">): string {
   if (result.kind === "campaign") return `/${encodeURIComponent(campaign)}`;
   const encodedPath = result.path.split("/").map(encodeURIComponent).join("/");
-  return `/${encodeURIComponent(campaign)}/file/${encodedPath}`;
+  return `/${encodeURIComponent(campaign)}/entry/${encodedPath}`;
 }

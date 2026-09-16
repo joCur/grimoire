@@ -18,9 +18,10 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
   Inhalte braucht, die die Beispielkampagne nicht hat, sät sie VOR dem Seed
   in seine eigene Kopie des Baums:
   `test.use({ seed: { files: { "locations/hafen": "…" }, remove: ["_campaign"] } })`.
-  Die Schlüssel sind **Adressen** wie überall in der Suite — das `.md` für
-  den Importer hängt die Fixture selbst an (ein Schlüssel, der es schon
-  trägt, wird ebenso akzeptiert). Ohne Seed wird die geteilte pristine Kopie
+  Die Schlüssel sind **Pfade im Baum** ohne `.md` (`_campaign`,
+  `01-salzhafen/_chapter`, `01-salzhafen/hafen/ankunft-leuchtturm`) — das
+  `.md` für den Importer hängt die Fixture selbst an; Adressen der API sind
+  etwas anderes (`campaign`, `01-salzhafen`, `01-salzhafen/leuchtturm/…`). Ohne Seed wird die geteilte pristine Kopie
   direkt benutzt (niemand schreibt hinein), die meisten Tests kopieren also
   gar nichts.
 - **Eine leere Instanz** — keine Kampagne, der Normalfall einer frischen

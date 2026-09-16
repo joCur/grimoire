@@ -33,8 +33,8 @@ const WIDE_TABLE_SCENE = {
   content: readFileSync(path.join(FIXTURES_DIR, "wide-table-scene.md"), "utf8"),
 };
 
-const ARRIVAL = "/beispiel/file/01-salzhafen/leuchtturm/lighthouse-arrival";
-const CAPTURED = "/beispiel/file/01-salzhafen/bucht/smuggler-captured";
+const ARRIVAL = "/beispiel/entry/01-salzhafen/leuchtturm/lighthouse-arrival";
+const CAPTURED = "/beispiel/entry/01-salzhafen/bucht/smuggler-captured";
 
 test("reference scene 1: read-aloud, check, secret, note and the NPC card", async ({ page }) => {
   await page.goto(ARRIVAL);
@@ -95,7 +95,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
 
   // The card links into the NPC reading view (issue #26).
   await aside.getByRole("link").first().click();
-  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/jorna$/);
+  await expect(page).toHaveURL(/\/beispiel\/entry\/npcs\/jorna$/);
 });
 
 test("reference scene 2: contingency header, collapsible If-sections, consequence", async ({
@@ -167,7 +167,7 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
   await expect(aside.getByRole("button", { name: "Stub anlegen" })).toHaveCount(0);
 
   await aside.getByRole("link", { name: /holm/ }).click();
-  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/holm$/);
+  await expect(page).toHaveURL(/\/beispiel\/entry\/npcs\/holm$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("holm");
   // And it is editable from here like every other entry.
   await expect(page.getByRole("button", { name: "Eigenschaften" })).toBeVisible();
@@ -203,7 +203,7 @@ test("a scene location is a REFERENCE: an id creates the entry, text is a 400", 
   });
   expect(await api.exists("locations/der-alte-hafen")).toBe(false);
   // Nothing moved, and the scene still reads under the location it has.
-  await page.goto(`/beispiel/file/${moved.path}`);
+  await page.goto(`/beispiel/entry/${moved.path}`);
   await expect(page.getByRole("article")).toContainText("nordbucht");
 });
 
@@ -217,7 +217,7 @@ test.describe("with a seeded loot scene", () => {
     // reformatted — so the sixth kind is checked on a scene this test seeds into
     // the markdown tree its own database is imported from. Its path segment is
     // the scene's ID (`beutezug`), like every scene path since issue #57.
-    await page.goto(`/beispiel/file/${LOOT_SCENE.path}`);
+    await page.goto(`/beispiel/entry/${LOOT_SCENE.path}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Beutezug in der Räucherkammer",
     );
@@ -259,7 +259,7 @@ test.describe("the table at 390px", () => {
   test("a table too wide for the phone scrolls in its own box, the page does not", async ({
     page,
   }) => {
-    await page.goto(`/beispiel/file/${WIDE_TABLE_SCENE.path}`);
+    await page.goto(`/beispiel/entry/${WIDE_TABLE_SCENE.path}`);
 
     // Overflowing, so the box IS a named region: the tab stop and the
     // landmark only appear once there is something to scroll.

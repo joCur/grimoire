@@ -66,7 +66,7 @@ import {
   ApiError,
   acceptJobParts,
   deleteGenerateJob,
-  fetchFile,
+  fetchEntry,
   fetchKnowledge,
   fetchTree,
   retryJobPart,
@@ -158,13 +158,13 @@ export function GenerateRoute() {
   // prompt when it exists (generator/README.md step 1). A missing entry is a
   // 404 and means "no glossary" — not an error worth retrying.
   const glossary = useQuery({
-    queryKey: ["file", campaign, "glossary"],
-    queryFn: () => fetchFile(campaign, "glossary"),
+    queryKey: ["entry", campaign, "glossary"],
+    queryFn: () => fetchEntry(campaign, "glossary"),
     enabled: campaign !== "",
     retry: false,
   });
   // Same purpose for the campaign knowledge (issue #53 AK5) — the hint names
-  // the NUMBER of entries, so this reads the list, not a document. The same
+  // the NUMBER of entries, so this reads the list, not an entry. The same
   // query key the settings editor writes, so a rule saved there shows up here
   // without a reload.
   const knowledge = useQuery({
@@ -200,7 +200,7 @@ export function GenerateRoute() {
   const newIdError = chapterIdError(newIdInput, t);
   // A typed id may name a chapter that is already there: then this is NOT a
   // new chapter — the drafts go into the existing directory and its
-  // _chapter stays untouched (#12 semantics), so neither the newChapter
+  // chapter entry stays untouched (#12 semantics), so neither the newChapter
   // flag nor a chapterTitle travels.
   const newIdExists = newIdError === undefined && chapterIds.includes(newIdInput);
   const creatingChapter = target.kind === "new" && !newIdExists;
@@ -433,7 +433,7 @@ export function GenerateRoute() {
    * button unmounts the moment the part goes `running`, and the status card
    * itself unmounts the moment the part is `done` and becomes its draft card
    * — with a fast model both happen within a poll of the click, so the focus
-   * fell to `body` and a keyboard DM landed at the top of the document
+   * fell to `body` and a keyboard DM landed at the top of the page
    * (quality floor: focus stays visible and where the work is). So the focus
    * FOLLOWS the part across those swaps, once per commit, and stops as soon
    * as the part is settled or the DM has moved the focus themselves.
@@ -1323,7 +1323,7 @@ export function GenerateRoute() {
                   variant="outline"
                   onClick={() => {
                     void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
-                    void navigate(`/${campaign}/file/${written[0]}`);
+                    void navigate(`/${campaign}/entry/${written[0]}`);
                   }}
                   className="h-auto border-input bg-transparent px-4 py-2.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
                 >
@@ -1755,7 +1755,7 @@ function PartActions({
         {t("generate.review.partWritten")}
         {writtenAt !== undefined && (
           <Link
-            to={`/${campaign}/file/${writtenAt}`}
+            to={`/${campaign}/entry/${writtenAt}`}
             className="rounded font-mono text-[11.5px] underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           >
             {writtenAt}
@@ -1942,7 +1942,7 @@ function StubRow({
           {t("generate.review.partWritten")}
           {writtenAt !== undefined && (
             <Link
-              to={`/${campaign}/file/${writtenAt}`}
+              to={`/${campaign}/entry/${writtenAt}`}
               className="rounded font-mono text-[11px] underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
               {writtenAt}

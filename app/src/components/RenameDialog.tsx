@@ -20,7 +20,7 @@
 // drops the plan — a stale entry list would be a lie.
 //
 // After the write the reading view follows the entry to its new path and the
-// campaign's tree/file/search queries are invalidated (paths and ids moved).
+// campaign's tree/entry/search queries are invalidated (paths and ids moved).
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -89,7 +89,7 @@ export function RenameDialog({
       // Follow the entry to its new path FIRST — the view must not sit on a
       // path that no longer exists while the caches are being refreshed.
       onClose();
-      void navigate(`/${campaign}/file/${renamedPath(currentPath, result.renamed)}`);
+      void navigate(`/${campaign}/entry/${renamedPath(currentPath, result.renamed)}`);
       // Ids and paths moved, so the tree and the search results are stale …
       void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
       void queryClient.invalidateQueries({ queryKey: ["search", campaign] });
@@ -97,7 +97,7 @@ export function RenameDialog({
       // deliberately: a prefix invalidation would also hit the entry we just
       // navigated away from and refetch a path that no longer exists.
       for (const changed of result.changed) {
-        void queryClient.invalidateQueries({ queryKey: ["file", campaign, changed] });
+        void queryClient.invalidateQueries({ queryKey: ["entry", campaign, changed] });
       }
     },
     onError: (error) => setMessage(renameErrorMessage(error, t)),

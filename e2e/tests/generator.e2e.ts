@@ -282,7 +282,7 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
 
   // "NPC ansehen" opens the file that now exists.
   await page.getByRole("button", { name: "NPC ansehen" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/brakk$/);
+  await expect(page).toHaveURL(/\/beispiel\/entry\/npcs\/brakk$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_DEFAULT_NAME);
 });
 
@@ -472,7 +472,7 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
 
   // THE REGRESSION: the chapter exists, with the title the RUN was started
   // with — not the id, and not nothing.
-  const chapter = await api.file(`${CHAPTER_ID}/_chapter`);
+  const chapter = await api.file(CHAPTER_ID);
   expect(chapter.properties.title).toBe(CHAPTER_TITLE);
   // …and the scene really hangs in it.
   expect((await api.file(`${CHAPTER_ID}/${LOCATION_STUB_ID}/${SCENE_ID}`)).properties.chapter).toBe(

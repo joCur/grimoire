@@ -42,13 +42,13 @@ import {
 } from "./support/store";
 
 async function getFile(rel: string, campaign = "beispiel"): Promise<EntryResponse> {
-  const res = await app.request(`/api/${campaign}/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/${campaign}/entry?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
 
 async function fileStatus(rel: string, campaign = "beispiel"): Promise<number> {
-  return (await app.request(`/api/${campaign}/file?path=${encodeURIComponent(rel)}`)).status;
+  return (await app.request(`/api/${campaign}/entry?path=${encodeURIComponent(rel)}`)).status;
 }
 
 async function patchReq(body: unknown): Promise<Response> {
@@ -75,7 +75,7 @@ async function patchJson(url: string, body: unknown): Promise<Response> {
 }
 
 async function putFile(body: unknown): Promise<Response> {
-  return app.request("/api/beispiel/file", {
+  return app.request("/api/beispiel/entry", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -245,8 +245,8 @@ describe("PATCH /api/:campaign/properties", () => {
     }
   });
 
-  test("_campaign is patchable through the same endpoint (issue #17)", async () => {
-    const rel = "_campaign";
+  test("campaign is patchable through the same endpoint (issue #17)", async () => {
+    const rel = "campaign";
     const before = await getFile(rel);
     expect(before.kind).toBe("campaign");
     const after = await patchOk({
@@ -642,8 +642,8 @@ describe("POST /api/:campaign/inbox", () => {
 
 // The metadata dialog of issue #34 writes name/description through PATCH
 // /properties — the ONE write path since issue #62. The endpoint that used to
-// close the "there is no `_campaign` yet" gap (POST /campaign-meta) is gone
-// with that gap: after the cutover the campaign ROW always exists, GET /file
+// close the "there is no `campaign` yet" gap (POST /campaign-meta) is gone
+// with that gap: after the cutover the campaign ROW always exists, GET /entry
 // always answers with a document and a guard token, and naming a campaign that
 // has no name is an ordinary patch.
 describe("naming a campaign that has none (issue #62)", () => {
@@ -651,11 +651,11 @@ describe("naming a campaign that has none (issue #62)", () => {
     await withFreshCampaign(async () => {
       // Unnamed: the document exists and shows the ID as its display name,
       // which is exactly what GET /campaigns says too (both synthesize).
-      const before = await getFile("_campaign", FRESH);
+      const before = await getFile("campaign", FRESH);
       expect(before.properties).toEqual({ id: FRESH, name: FRESH });
 
       const res = await patchJson(`/api/${FRESH}/properties`, {
-        path: "_campaign",
+        path: "campaign",
         rev: before.rev,
         patch: {
           name: "Die Aschekönige",
@@ -664,7 +664,7 @@ describe("naming a campaign that has none (issue #62)", () => {
       });
       expect(res.status).toBe(200);
       const file = (await res.json()) as EntryResponse;
-      expect(file.path).toBe("_campaign");
+      expect(file.path).toBe("campaign");
       expect(file.kind).toBe("campaign");
       expect(file.properties.name).toBe("Die Aschekönige");
       // The id is the CAMPAIGN key — never client input.
@@ -688,9 +688,9 @@ describe("naming a campaign that has none (issue #62)", () => {
 
   test("a blank description is DELETED with null, not written as an empty key", async () => {
     await withFreshCampaign(async () => {
-      const before = await getFile("_campaign", FRESH);
+      const before = await getFile("campaign", FRESH);
       const res = await patchJson(`/api/${FRESH}/properties`, {
-        path: "_campaign",
+        path: "campaign",
         rev: before.rev,
         patch: { name: "Nur ein Name", description: null },
       });
@@ -703,14 +703,14 @@ describe("naming a campaign that has none (issue #62)", () => {
   });
 
   test("a stale token is a 409 — the existing name is never touched", async () => {
-    const before = await getFile("_campaign");
+    const before = await getFile("campaign");
     const res = await patchJson("/api/beispiel/properties", {
-      path: "_campaign",
+      path: "campaign",
       rev: before.rev - 1,
       patch: { name: "Überschrieben" },
     });
     expect(res.status).toBe(409);
-    expect(await getFile("_campaign")).toEqual(before);
+    expect(await getFile("campaign")).toEqual(before);
   });
 
   test("the create endpoint is gone — 404, no route", async () => {
@@ -722,7 +722,7 @@ describe("naming a campaign that has none (issue #62)", () => {
 // test everywhere here is that a body write is ONLY a body write — the
 // properties of the row comes back unchanged, key for key and value for
 // value ("the properties block stays byte-identical" of the file version).
-describe("PUT /api/:campaign/file", () => {
+describe("PUT /api/:campaign/entry", () => {
   const REFERENCE = "01-salzhafen/bucht/smuggler-captured";
   const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
@@ -851,7 +851,7 @@ describe("PUT /api/:campaign/file", () => {
     for (const b of bad) {
       expect((await putFile(b)).status).toBe(400);
     }
-    const res = await app.request("/api/beispiel/file", {
+    const res = await app.request("/api/beispiel/entry", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: "no json",
@@ -881,7 +881,7 @@ describe("PUT /api/:campaign/file", () => {
   });
 
   test("404 for an unknown campaign", async () => {
-    const res = await app.request("/api/nope/file", {
+    const res = await app.request("/api/nope/entry", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: "a.md", rev: 1, body: "x" }),

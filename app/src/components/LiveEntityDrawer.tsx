@@ -16,7 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
 import { Link } from "react-router";
 
-import { fetchFile } from "@/api";
+import { fetchEntry } from "@/api";
 import { EntityArticle } from "@/components/EntityArticle";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useI18n } from "@/i18n";
@@ -52,8 +52,8 @@ export function LiveEntityDrawer({
 function DrawerBody({ campaign, path }: { campaign: string; path: string }) {
   const { t, tNode } = useI18n();
   const { data, isPending, isError } = useQuery({
-    queryKey: ["file", campaign, path],
-    queryFn: () => fetchFile(campaign, path),
+    queryKey: ["entry", campaign, path],
+    queryFn: () => fetchEntry(campaign, path),
     retry: false,
   });
 
@@ -86,7 +86,7 @@ function DrawerBody({ campaign, path }: { campaign: string; path: string }) {
       </div>
       <div className="flex-none border-t border-border px-6 py-3 md:px-8">
         <Link
-          to={`/${campaign}/file/${path}`}
+          to={`/${campaign}/entry/${path}`}
           className="inline-flex items-center gap-1.5 rounded-md text-[13px] text-primary hover:text-primary-hover"
         >
           <ExternalLink aria-hidden size={14} className="flex-none" />

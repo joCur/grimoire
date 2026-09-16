@@ -54,7 +54,7 @@ function composer(blocks: SceneBlock[], issues: Record<string, string> = {}): st
   );
 }
 
-function fields(block: SceneBlock, scope: "document" | "section" = "document"): string {
+function fields(block: SceneBlock, scope: "body" | "section" = "body"): string {
   return renderToStaticMarkup(
     <BlockFields
       block={block}
@@ -155,7 +155,7 @@ describe("If-sections", () => {
 describe("the type picker", () => {
   test("offers all nine types at document level", () => {
     const html = renderToStaticMarkup(
-      <BlockTypePicker scope="document" onPick={() => {}} onCancel={() => {}} />,
+      <BlockTypePicker scope="body" onPick={() => {}} onCancel={() => {}} />,
     );
     for (const label of [
       "Vorlesetext",

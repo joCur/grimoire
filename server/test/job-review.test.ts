@@ -140,7 +140,7 @@ const accept = (job: GenerateJob, body: Record<string, unknown> = {}): Promise<R
   send("POST", `/api/beispiel/generate/job/${job.id}/accept`, { rev: job.rev ?? 0, ...body });
 
 async function exists(rel: string): Promise<boolean> {
-  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
   return res.status === 200;
 }
 
@@ -281,7 +281,7 @@ test("the edited text is what a partial accept writes", async () => {
     edits: { [SCENE_A]: sceneMarkdown("treffen-am-kai", "Treffen am Kai").replace("Fenn wartet am Kai.", "Fenn wartet im Regen.") },
   });
   expect((await accept(job, { paths: [SCENE_A] })).status).toBe(200);
-  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(ADDRESS_A)}`);
+  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(ADDRESS_A)}`);
   expect(((await res.json()) as { body: string }).body).toContain("Fenn wartet im Regen.");
 });
 
@@ -477,7 +477,7 @@ test("an accept with NO chapter fields creates the chapter from the job's title"
   expect(res.status).toBe(200);
 
   expect(await chapterTitles()).toMatchObject({ "03-dragon-hatchery": "Die Drachenbrut" });
-  expect(await exists("03-dragon-hatchery/_chapter")).toBe(true);
+  expect(await exists("03-dragon-hatchery")).toBe(true);
 });
 
 test("the accepted scenes hang in that chapter and are visible in the tree", async () => {
@@ -537,7 +537,7 @@ test("accepting only the npc stub already creates the run's chapter", async () =
   expect(await exists(STUB_PATH)).toBe(true);
   // The chapter is there, with the title the run carries…
   expect(await chapterTitles()).toMatchObject({ "03-dragon-hatchery": "Die Drachenbrut" });
-  expect(await exists("03-dragon-hatchery/_chapter")).toBe(true);
+  expect(await exists("03-dragon-hatchery")).toBe(true);
   // …and no scene was written by this accept.
   expect(await exists("03-dragon-hatchery/leuchtturm/treffen-am-kai")).toBe(false);
 

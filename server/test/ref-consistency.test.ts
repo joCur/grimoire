@@ -26,13 +26,13 @@ const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const NPC = "npcs/fenn";
 
 async function getFile(rel: string, campaign = "beispiel"): Promise<EntryResponse> {
-  const res = await app.request(`/api/${campaign}/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/${campaign}/entry?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
 
 async function fileStatus(rel: string, campaign = "beispiel"): Promise<number> {
-  return (await app.request(`/api/${campaign}/file?path=${encodeURIComponent(rel)}`)).status;
+  return (await app.request(`/api/${campaign}/entry?path=${encodeURIComponent(rel)}`)).status;
 }
 
 async function patchFm(
@@ -53,7 +53,7 @@ async function patchFm(
 
 async function putBody(rel: string, body: string): Promise<EntryResponse> {
   const before = await getFile(rel);
-  const res = await app.request("/api/beispiel/file", {
+  const res = await app.request("/api/beispiel/entry", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ path: rel, rev: before.rev, body }),

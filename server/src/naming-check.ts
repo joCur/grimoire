@@ -200,9 +200,9 @@ export function checkDraftNaming(
   rules: readonly NamingRule[],
 ): NamingHint[] {
   if (rules.length === 0) return [];
-  // The path/rev arguments are the parser's document identity and irrelevant
+  // The path/rev arguments are the parser's entry identity and irrelevant
   // here: the check reads `properties` and `body`, nothing that depends on
-  // which KIND the document is.
+  // which KIND the entry is.
   const parsed = parseMarkdown(markdown, path, 0);
   const hints: NamingHint[] = [];
 

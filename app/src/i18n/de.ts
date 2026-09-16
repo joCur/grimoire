@@ -406,7 +406,7 @@ export const de = {
   "browse.empty.npcs": "Noch keine NPCs.",
   "browse.empty.locations": "Noch keine Orte.",
 
-  // --- the reading view ("/:campaign/file/*", routes/scene.tsx) -------------
+  // --- the reading view ("/:campaign/entry/*", routes/scene.tsx) -------------
   "scene.loading": "Lade Eintrag …",
   "scene.notLoadable": "Eintrag nicht ladbar — Pfad prüfen oder Server starten.",
   "scene.npcs.heading": "NPCs dieser Szene",
@@ -552,7 +552,7 @@ export const de = {
   "palette.results.aria": "Suchergebnisse",
   "palette.empty": "Nichts gefunden.",
   // The kind label of a NAVIGATION row (issue #53): a page of this campaign,
-  // not a document the index found.
+  // not an entry the index found.
   "palette.kind.page": "Seite",
 
   // --- stale-bundle banner (components/UpdateBanner.tsx) -------------------
@@ -562,7 +562,7 @@ export const de = {
   // --- campaign metadata dialog (components/CampaignMetaAction.tsx) --------
   "campaignMeta.title": "Kampagne bearbeiten",
   "campaignMeta.description":
-    "Name und Beschreibung stehen in _campaign. Die id bleibt, wie sie ist — sie steckt in jeder Adresse und ändert sich hier nicht.",
+    "Name und Beschreibung der Kampagne. Die id bleibt, wie sie ist — sie steckt in jeder Adresse und ändert sich hier nicht.",
   "campaignMeta.field.name": "Name",
   "campaignMeta.field.description": "Beschreibung",
   "campaignMeta.field.description.placeholder": "Ein Satz, der die Kampagne einordnet",

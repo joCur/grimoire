@@ -64,7 +64,7 @@ describe("POST /api/campaigns — the cold start", () => {
     const list = (await (await app.request("/api/campaigns")).json()) as CampaignSummary[];
     expect(list.map((c) => c.id)).toEqual(["die-kueste-von-salzhafen"]);
     const doc = (await (
-      await app.request("/api/die-kueste-von-salzhafen/file?path=_campaign")
+      await app.request("/api/die-kueste-von-salzhafen/entry?path=campaign")
     ).json()) as EntryResponse;
     expect(doc.properties.name).toBe("Die Küste von Salzhafen");
     expect(doc.rev).toBe(1);
@@ -135,7 +135,7 @@ describe("the per-campaign creates", () => {
       title: "01 Salzhafen",
       goal: "Die Gruppe kommt an",
     });
-    expect(chapter.path).toBe("01-salzhafen/_chapter");
+    expect(chapter.path).toBe("01-salzhafen");
     expect(chapter.properties.title).toBe("01 Salzhafen");
     expect(chapter.body).toBe("## Ziel des Kapitels\n\nDie Gruppe kommt an\n");
   });
@@ -152,7 +152,7 @@ describe("the per-campaign creates", () => {
     const body = await errorBody(res);
     expect(body.code).toBe("slug_taken");
     expect(body.suggestion).toBe("prolog-2");
-    expect(body.path).toBe("prolog/_chapter");
+    expect(body.path).toBe("prolog");
   });
 
   test("a reserved chapter id is refused with a proposal, and no row is written", async () => {
@@ -174,11 +174,11 @@ describe("the per-campaign creates", () => {
       chapters: Array<{ id: string }>;
     };
     expect(tree.chapters.map((c) => c.id)).not.toContain("npcs");
-    expect((await app.request("/api/nordwind/file?path=npcs/_chapter")).status).toBe(404);
+    expect((await app.request("/api/nordwind/entry?path=npcs")).status).toBe(404);
 
     // The proposal itself works, and the reserved ids are all three of them.
     expect((await created<EntryResponse>("/nordwind/chapters", { title: "NPCs", id: "npcs-2" })).path).toBe(
-      "npcs-2/_chapter",
+      "npcs-2",
     );
     expect((await post("/nordwind/chapters", { title: "Locations" })).status).toBe(409);
     expect((await post("/nordwind/chapters", { title: "Sessions" })).status).toBe(409);
@@ -187,8 +187,8 @@ describe("the per-campaign creates", () => {
   test("the campaign 409 points at an address, not at a bare id", async () => {
     const res = await post("/campaigns", { name: "Nordwind" });
     expect(res.status).toBe(409);
-    // `_campaign` is the one document an otherwise empty campaign always has.
-    expect((await errorBody(res)).path).toBe("nordwind/_campaign");
+    // `campaign` is the one document an otherwise empty campaign always has.
+    expect((await errorBody(res)).path).toBe("nordwind/campaign");
   });
 
   test("a proposal never lands on an empty row someone else references (#70)", async () => {
@@ -384,13 +384,13 @@ describe("POST /api/:campaign/chapters/:id/active", () => {
     expect(await statuses()).toEqual({ "01-salzhafen": "planned", "02-tiefe": "active" });
   });
 
-  test("is idempotent and answers the chapter document", async () => {
+  test("is idempotent and answers the chapter entry", async () => {
     expect((await post("/nordwind/chapters/01-salzhafen/active", {})).status).toBe(200);
     const res = await post("/nordwind/chapters/01-salzhafen/active", {});
     expect(res.status).toBe(200);
-    const doc = (await res.json()) as EntryResponse;
-    expect(doc.path).toBe("01-salzhafen/_chapter");
-    expect(doc.properties.status).toBe("active");
+    const answered = (await res.json()) as EntryResponse;
+    expect(answered.path).toBe("01-salzhafen");
+    expect(answered.properties.status).toBe("active");
     expect(await statuses()).toMatchObject({ "01-salzhafen": "active" });
   });
 
@@ -427,32 +427,32 @@ describe("the chapter status enum via PATCH /properties", () => {
     return Object.fromEntries(tree.chapters.map((c) => [c.id, c.status]));
   };
 
-  async function file(rel: string): Promise<EntryResponse> {
-    const res = await app.request(`/api/nordwind/file?path=${encodeURIComponent(rel)}`);
+  async function entry(rel: string): Promise<EntryResponse> {
+    const res = await app.request(`/api/nordwind/entry?path=${encodeURIComponent(rel)}`);
     expect(res.status).toBe(200);
     return (await res.json()) as EntryResponse;
   }
 
   async function patchStatus(chapter: string, status: unknown): Promise<Response> {
-    const doc = await file(`${chapter}/_chapter`);
+    const chapterEntry = await entry(chapter);
     return app.request("/api/nordwind/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: doc.path, rev: doc.rev, patch: { status } }),
+      body: JSON.stringify({ path: chapterEntry.path, rev: chapterEntry.rev, patch: { status } }),
     });
   }
 
   test("a created chapter starts at planned", async () => {
     // Not "no status": the overview renders the value, and a chapter without one
     // would look less planned than its siblings.
-    const created = await file("02-tiefe/_chapter");
+    const created = await entry("02-tiefe");
     expect(created.properties.status).toBe("planned");
   });
 
   test("writes each of the three known values", async () => {
     for (const status of ["planned", "active", "done"]) {
       expect((await patchStatus("01-salzhafen", status)).status).toBe(200);
-      expect((await file("01-salzhafen/_chapter")).properties.status).toBe(status);
+      expect((await entry("01-salzhafen")).properties.status).toBe(status);
     }
   });
 
@@ -462,22 +462,22 @@ describe("the chapter status enum via PATCH /properties", () => {
     expect(res.status).toBe(400);
     // The message names the trio, so the DM reads what IS allowed.
     expect(JSON.stringify(await res.json())).toContain("planned, active, done");
-    expect((await file("01-salzhafen/_chapter")).properties.status).toBe("planned");
+    expect((await entry("01-salzhafen")).properties.status).toBe("planned");
 
-    // A non-string is the same answer — the wire is not the file.
+    // A non-string is the same answer — the wire is not the column.
     expect((await patchStatus("01-salzhafen", 3)).status).toBe(400);
   });
 
   test("null still deletes the key — a chapter may have no status", async () => {
     expect((await patchStatus("01-salzhafen", "done")).status).toBe(200);
     expect((await patchStatus("01-salzhafen", null)).status).toBe(200);
-    expect((await file("01-salzhafen/_chapter")).properties.status).toBeUndefined();
+    expect((await entry("01-salzhafen")).properties.status).toBeUndefined();
   });
 
   test("a patch that does NOT touch the status leaves an unknown value alone", async () => {
     // The degrade half: an existing row carrying something else (an import, a
     // legacy hand edit) stays readable AND patchable in its other fields.
-    const doc = await file("01-salzhafen/_chapter");
+    const before = await entry("01-salzhafen");
     const { getDb } = await import("../src/store/handle");
     const db = await getDb();
     const { sql } = await import("drizzle-orm");
@@ -485,15 +485,15 @@ describe("the chapter status enum via PATCH /properties", () => {
       sql`update chapters set status = 'laeuft' where campaign_id = 'nordwind' and id = '01-salzhafen'`,
     );
 
-    const fresh = await file("01-salzhafen/_chapter");
+    const fresh = await entry("01-salzhafen");
     expect(fresh.properties.status).toBe("laeuft");
     const res = await app.request("/api/nordwind/properties", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: doc.path, rev: fresh.rev, patch: { title: "Neu benannt" } }),
+      body: JSON.stringify({ path: before.path, rev: fresh.rev, patch: { title: "Neu benannt" } }),
     });
     expect(res.status).toBe(200);
-    const after = await file("01-salzhafen/_chapter");
+    const after = await entry("01-salzhafen");
     expect(after.properties.title).toBe("Neu benannt");
     expect(after.properties.status).toBe("laeuft");
   });

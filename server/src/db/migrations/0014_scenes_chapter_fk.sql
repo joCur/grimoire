@@ -8,7 +8,7 @@
 -- SQLite cannot add a foreign key to an existing table, so a rebuild it is;
 -- what the generated version does around that rebuild does not survive our
 -- migrator. It brackets the work in `PRAGMA foreign_keys=OFF/ON`, and
--- `db/client.ts` runs the whole file inside ONE transaction (drizzle's
+-- `db/client.ts` runs the whole migration inside ONE transaction (drizzle's
 -- dialect) where that pragma is a documented NO-OP. With enforcement still
 -- on, `DROP TABLE scenes` cascades into `scene_npcs` and `scene_tags` — both
 -- reference `scenes` ON DELETE CASCADE — and every scene's npc and tag rows

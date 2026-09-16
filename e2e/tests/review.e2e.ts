@@ -1,7 +1,7 @@
 // Critical path 5: the session review ("Nachbereitung", formerly "Ernte" —
 // the harvest metaphor survives only in file names and code); see CLAUDE.md.
 //
-// Adopt a thread → _chapter, tick off an inbox line, create an NPC stub,
+// Adopt a thread → chapter, tick off an inbox line, create an NPC stub,
 // and the progress counter.
 //
 // TODAY's session is the harvest's data, so it is SEEDED into the markdown
@@ -57,7 +57,7 @@ const PAST_MIDNIGHT = (() => {
   };
 })();
 
-test("adopting a thread lands in _chapter, the inbox line gets ticked off", async ({
+test("adopting a thread lands in the chapter, the inbox line gets ticked off", async ({
   page,
   api,
 }) => {
@@ -87,7 +87,7 @@ test("adopting a thread lands in _chapter, the inbox line gets ticked off", asyn
 
   // Stored: the chapter gained the checklist item …
   await expect
-    .poll(() => api.body("01-salzhafen/_chapter"))
+    .poll(() => api.body("01-salzhafen"))
     .toContain(`- [ ] ${THREAD_TEXT}`);
   // … and the source line is marked as seen via its short hash.
   await expect.poll(() => api.properties(todaySessionPath())).toHaveProperty("reviewed");
@@ -279,7 +279,7 @@ test.describe("with yesterday's session, ended after midnight", () => {
     await expect.poll(() => api.properties(rel)).toHaveProperty("reviewed");
     expect(await api.exists(todaySessionPath())).toBe(false);
     await expect
-      .poll(() => api.body("01-salzhafen/_chapter"))
+      .poll(() => api.body("01-salzhafen"))
       .toContain(`- [ ] ${THREAD_TEXT}`);
   });
 });

@@ -24,8 +24,9 @@
 
 import { CHAPTER_STATUSES, type ChapterStatus } from "@grimoire/shared/types";
 
-import { fetchFile, patchProperties, setChapterActive } from "@/api";
+import { fetchEntry, patchProperties, setChapterActive } from "@/api";
 import type { MessageKey, Translate } from "@/i18n";
+import { chapterMetaPath } from "@/lib/chapter-meta";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
 /** Where a chapter without a stored status is read — see the header. */
@@ -83,11 +84,6 @@ export function chapterStatusOptions(
   return CHAPTER_STATUSES.map((value) => ({ value, label: t(CHAPTER_STATUS_META[value].key) }));
 }
 
-/** Campaign-relative path of a chapter's entry. */
-function chapterDocPath(chapter: string): string {
-  return `${chapter}/_chapter`;
-}
-
 /**
  * True when writing `status` means asking the server to SWAP the active
  * chapter rather than to patch this one — the one branch the overview's menu and
@@ -117,10 +113,10 @@ export async function writeChapterStatus(
   }
   // Unreachable behind `chapterStatusWritable`; an assertion, not a path.
   if (rev === undefined) throw new Error("no version to write against");
-  const path = chapterDocPath(chapter);
+  const path = chapterMetaPath(chapter);
   return writeWithRev(
     () => patchProperties(campaign, { path, rev, patch: { status } }),
-    () => fetchFile(campaign, path),
+    () => fetchEntry(campaign, path),
   );
 }
 

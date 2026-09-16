@@ -100,7 +100,7 @@ export function App() {
               "Fünf Minuten Ernte") — entered after
               "Session beenden" and from the pool affordance. */}
           <Route path="review" element={<ReviewRoute />} />
-          <Route path="file/*" element={<SceneRoute />} />
+          <Route path="entry/*" element={<SceneRoute />} />
         </Route>
       </Route>
     </Routes>

@@ -128,7 +128,7 @@ function requireRev(value: unknown): number {
  * One SINGLE-LINE field of a knowledge entry (review of #53).
  *
  * The knowledge list feeds the generator prompt, where an entry becomes one
- * bullet in a markdown document the model reads as INSTRUCTIONS
+ * bullet in markdown the model reads as INSTRUCTIONS
  * (store/read.ts knowledgeText). A newline inside an entry is
  * therefore not a formatting detail: it lets an entry open lines of its own —
  * a „## " heading that poses as a section of the prompt, for instance. The UI
@@ -180,8 +180,8 @@ api.put("/settings", async (c) => {
 // GET /api/:campaign/tree -> CampaignTree
 api.get("/:campaign/tree", async (c) => c.json(await buildTree(c.req.param("campaign"))));
 
-// GET /api/:campaign/file?path=... -> EntryResponse (properties, body, rev)
-api.get("/:campaign/file", async (c) => {
+// GET /api/:campaign/entry?path=... -> EntryResponse (properties, body, rev)
+api.get("/:campaign/entry", async (c) => {
   const rel = c.req.query("path");
   if (rel === undefined) throw new ApiError(400, "missing path query parameter");
   return c.json(await readParsedFile(c.req.param("campaign"), rel));
@@ -195,7 +195,7 @@ api.get("/:campaign/file", async (c) => {
 // This is the one place that decides what "the running session" is: the app
 // must never derive it from its own date (a browser in another timezone, or
 // simply a session past midnight, would get it wrong). Same shape as GET
-// /file plus `startedMs`/`endedMs` and `pausedMs`/`pausedSinceMs` — the
+// /entry plus `startedMs`/`endedMs` and `pausedMs`/`pausedSinceMs` — the
 // server's epoch reading of the zone-less timestamps and of the `pauses`
 // intervals, which is what makes the live runtime correct (AK8: paused time
 // does not count).
@@ -212,7 +212,7 @@ api.get("/:campaign/session", async (c) =>
 
 // GET /api/:campaign/search?q=... -> { results: SearchResult[] } (max 20)
 // Full-text search over the FTS5 index (issue #57): scenes, npcs, locations,
-// chapters, the campaign document and the GLOSSARY, ranked by bm25 with the
+// chapters, the campaign entry and the GLOSSARY, ranked by bm25 with the
 // column weights of the index migration. Every token is a prefix term, so a
 // half-typed palette query still matches, and the tokenizer folds diacritics
 // ("leucht" finds "Leuchtturm"). Response shape unchanged.
@@ -239,7 +239,7 @@ api.get("/:campaign/version", async (c) => {
 // GET /api/:campaign/glossary -> { entries: [{ term, explanation }] }
 // The glossary is a structured TABLE since the migration (planning F6): term
 // → explanation instead of one markdown blob. The generic reading view still
-// renders it as markdown (GET /file?path=glossary, rendered from these
+// renders it as markdown (GET /entry?path=glossary, rendered from these
 // rows), but this is the shape anything that wants the TERMS should read —
 // the generator knowledge base of issue #53 builds on exactly this.
 api.get("/:campaign/glossary", async (c) => c.json(await readGlossary(c.req.param("campaign"))));
@@ -289,15 +289,15 @@ api.patch("/:campaign/properties", async (c) => {
   );
 });
 
-// PUT /api/:campaign/file { path, rev, body } -> EntryResponse
+// PUT /api/:campaign/entry { path, rev, body } -> EntryResponse
 // Writes the markdown BODY of an existing file — `body` is the markdown
-// WITHOUT the properties block, exactly what GET /file returns as `body`.
+// WITHOUT the properties block, exactly what GET /entry returns as `body`.
 // The properties block on disk stays byte-identical (keys are PATCH
 // /properties's job). Same rev guard: 409 { error, rev } when the file
 // changed on disk since it was read; 404 for a file that does not exist; 400
 // for the append-only kinds (sessions/*, inbox — DECISIONS #4) and for a
 // file whose properties block cannot be split off safely.
-api.put("/:campaign/file", async (c) => {
+api.put("/:campaign/entry", async (c) => {
   const body = await jsonBody(c, ["path", "rev", "body"]);
   const rel = body.path;
   const rev = body.rev;
@@ -312,8 +312,8 @@ api.put("/:campaign/file", async (c) => {
 
 // POST /api/:campaign/campaign-meta is GONE (issue #62). It was the create
 // half of the metadata dialog (issue #34), for the case PATCH /properties
-// cannot serve: no `_campaign`, hence no guard token to write against.
-// Since the cutover every campaign HAS a row, so GET /file?path=_campaign
+// cannot serve: no `campaign`, hence no guard token to write against.
+// Since the cutover every campaign HAS a row, so GET /entry?path=campaign
 // always answers 200 with a `rev` and there is no create case left — the
 // endpoint had become unreachable from the app (#59). Name and description
 // are written like every other properties field now, through PATCH
@@ -398,7 +398,7 @@ api.post("/:campaign/inbox", async (c) => {
 // save (issue #53): the array order is the stored order, so there is no
 // separate move endpoint. Duplicate terms follow the import's rule — the
 // first one wins. `rev` is the list's guard token (the one GET /glossary and
-// GET /file?path=glossary both hand out); a stale one is
+// GET /entry?path=glossary both hand out); a stale one is
 // `409 { code: "rev_conflict", rev }` and writes nothing.
 api.put("/:campaign/glossary", async (c) => {
   const body = await jsonBody(c, ["entries", "rev"]);
@@ -630,8 +630,8 @@ api.post("/:campaign/review/seen", async (c) => {
 });
 
 // POST /api/:campaign/review/thread { chapter, text } -> EntryResponse
-// Appends `- [ ] text` under ## Offene Fäden of <chapter>/_chapter
-// (section/file created when missing; 404 when the chapter dir is missing).
+// Appends `- [ ] text` under ## Offene Fäden of the chapter entry
+// (section created when missing; 404 when the chapter is missing).
 api.post("/:campaign/review/thread", async (c) => {
   const body = await jsonBody(c, ["chapter", "text"]);
   if (typeof body.chapter !== "string") throw new ApiError(400, "chapter must be a string");
@@ -955,7 +955,7 @@ api.delete("/:campaign/generate/job", async (c) => {
 // write, and the DM waits for its result. Re-validates server-side
 // (properties parses, status draft, safe paths); 409 { conflicts } when any
 // target file exists — then nothing is written at all. chapter +
-// chapterTitle (both or neither) additionally create `<chapter>/_chapter`
+// chapterTitle (both or neither) additionally create the chapter entry
 // when it is missing, in the same all-or-nothing batch (the app's "Neues
 // Kapitel" flow).
 // `jobId` (issue #19) ties the apply to the background job it came from: a

@@ -11,17 +11,16 @@
 //
 // The two halves write through DIFFERENT documented endpoints, which is why
 // they are two actions and not one form: the title and the status are
-// PROPERTIES (PATCH /properties), the goal is the BODY (PUT /file). Merging
+// PROPERTIES (PATCH /properties), the goal is the BODY (PUT /entry). Merging
 // them would mean one dialog issuing two guarded writes, i.e. one of them
 // landing while the other 409s.
 
-import { putEntryBody } from "@/api";
-import { fetchFile } from "@/api";
+import { fetchEntry, putEntryBody } from "@/api";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
-/** Campaign-relative path of a chapter's entry. */
+/** Campaign-relative address of a chapter's entry — the chapter id itself. */
 export function chapterMetaPath(chapter: string): string {
-  return `${chapter}/_chapter`;
+  return chapter;
 }
 
 /** The heading the overview reads a chapter's goal line from (`firstParagraphOfSection`). */
@@ -57,6 +56,6 @@ export function writeChapterBody(
   const path = chapterMetaPath(chapter);
   return writeWithRev(
     () => putEntryBody(campaign, path, chapterBodyToWrite(body), rev),
-    () => fetchFile(campaign, path),
+    () => fetchEntry(campaign, path),
   );
 }

@@ -108,7 +108,7 @@ describe("rendered references", () => {
 
   test("resolved: the current name as a link into the entity view", () => {
     const html = render("Am Kai wartet [[jorna]]s Boot.");
-    expect(html).toContain('href="/beispiel/file/npcs/jorna"');
+    expect(html).toContain('href="/beispiel/entry/npcs/jorna"');
     expect(html).toContain("Hafenmeisterin Jorna");
     // The suffix stays outside the reference.
     expect(html).toContain("s Boot.");
@@ -163,7 +163,7 @@ describe("rendered references", () => {
     expect(summary).not.toContain("<a ");
     expect(summary).not.toContain("<button");
     // The section BODY still gets the interactive reference.
-    expect(html).toContain('href="/beispiel/file/npcs/jorna"');
+    expect(html).toContain('href="/beispiel/entry/npcs/jorna"');
   });
 
   test("a reference in inline code is neither resolved nor linked", () => {

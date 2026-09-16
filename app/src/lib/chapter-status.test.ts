@@ -1,7 +1,7 @@
 // The chapter status enum in the app: labels from the catalog,
 // the degrade rule, and WHICH write one value takes.
 //
-// The last one is the point of this file. Two of the three values are an
+// The last one is the point of this module. Two of the three values are an
 // ordinary rev-guarded properties patch; `active` is the swap endpoint,
 // because it is one decision about two rows. Getting that branch wrong is
 // invisible in the UI and produces a campaign with two active chapters.

@@ -21,7 +21,7 @@ import { Bookmark, Check, ChevronDown, GitFork } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
-import { appendLog, endSession, fetchFile, fetchTree } from "@/api";
+import { appendLog, endSession, fetchEntry, fetchTree } from "@/api";
 import { LiveEntityDrawer } from "@/components/LiveEntityDrawer";
 import { LocationCard } from "@/components/LocationCard";
 import { MobileBackRow } from "@/components/MobileBackRow";
@@ -75,7 +75,7 @@ function MobileLiveNote({ campaign }: { campaign: string }) {
         <p className="text-[14px] leading-[1.6] text-muted-foreground">{t("live.mobile.note")}</p>
         {scene !== undefined && (
           <Link
-            to={`/${campaign}/file/${scene.path}`}
+            to={`/${campaign}/entry/${scene.path}`}
             className="mt-2 inline-flex min-h-11 items-center text-[15px] text-primary hover:text-primary-hover"
           >
             {t("live.mobile.read", { title: scene.title })}
@@ -380,8 +380,8 @@ function SceneNavRow({
 function LiveScene({ campaign, path }: { campaign: string; path: string }) {
   const t = useT();
   const { data, isPending, isError } = useQuery({
-    queryKey: ["file", campaign, path],
-    queryFn: () => fetchFile(campaign, path),
+    queryKey: ["entry", campaign, path],
+    queryFn: () => fetchEntry(campaign, path),
   });
   const tree = useQuery({
     queryKey: ["tree", campaign],

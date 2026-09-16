@@ -52,7 +52,7 @@ const SCENE_WITH_CUSTOM = readFileSync(
 test.use({ seed: { files: { [SCENE_FILE]: SCENE_WITH_CUSTOM } } });
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
-const SCENE_URL = `/beispiel/file/${SCENE}`;
+const SCENE_URL = `/beispiel/entry/${SCENE}`;
 const NPC = "npcs/jorna";
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 
@@ -178,7 +178,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   // The location IS the group since issue #100, so the scene MOVED — and the
   // URL follows it (replace, so „zurück" does not return to the old address).
   await expect(page).toHaveURL(
-    /\/beispiel\/file\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
+    /\/beispiel\/entry\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
   );
   // „Zurück" must not return to the address the scene just left: the redirect
   // REPLACES the history entry, so the step back is the page the DM came from
@@ -188,7 +188,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   await expect(page).toHaveURL(/\/beispiel$/);
   await page.goForward();
   await expect(page).toHaveURL(
-    /\/beispiel\/file\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
+    /\/beispiel\/entry\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
   );
 
   // The chapter overview re-sorts: a „nordbucht" section, no „leuchtturm" one.
@@ -257,7 +257,7 @@ test('free text in the Ort field creates the Ort under the typed NAME (#100)', a
 
   // The scene moved into the new group, and the slug is what the file holds.
   await expect(page).toHaveURL(
-    /\/beispiel\/file\/01-salzhafen\/der-alte-hafen\/lighthouse-arrival$/,
+    /\/beispiel\/entry\/01-salzhafen\/der-alte-hafen\/lighthouse-arrival$/,
   );
   await expect.poll(() => api.properties(SCENE)).toHaveProperty("location", "der-alte-hafen");
 
@@ -396,7 +396,7 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
   const before = await split(api, NPC);
   const role = "Auftraggeberin, seit dem Herbst auch im Rat";
 
-  await page.goto(`/beispiel/file/${NPC}`);
+  await page.goto(`/beispiel/entry/${NPC}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
 
   const dialog = await openProperties(page);
@@ -509,7 +509,7 @@ test("navigating away closes the dialog — no diff of file A lands in file B", 
   await expect(search).toBeFocused();
   await search.fill("Hafenmeisterin");
   await page.getByRole("option").filter({ hasText: "Hafenmeisterin Jorna" }).first().click();
-  await expect(page).toHaveURL(/\/beispiel\/file\/npcs\/jorna$/);
+  await expect(page).toHaveURL(/\/beispiel\/entry\/npcs\/jorna$/);
 
   // The dialog is gone with its file — it may not stand over another file's
   // reading view, holding the frozen values (and the rev) of the one it left.
@@ -541,10 +541,10 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
     ["01-salzhafen/bucht/smuggler-captured", "Von den Schmugglern erwischt", "Szene"],
     ["npcs/fenn", "Fenn", "NPC"],
     ["locations/leuchtturm", "Der Leuchtturm von Salzhafen", "Ort"],
-    ["01-salzhafen/_chapter", "Kapitel 1: Der Leuchtturm von Salzhafen", "Kapitel"],
+    ["01-salzhafen", "Kapitel 1: Der Leuchtturm von Salzhafen", "Kapitel"],
   ];
   for (const [rel, heading, kindLabel] of withForm) {
-    await page.goto(`/beispiel/file/${rel}`);
+    await page.goto(`/beispiel/entry/${rel}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
     const dialog = await openProperties(page);
     await expect(dialog).toContainText(`${kindLabel}: Eigenschaften`);
@@ -562,7 +562,7 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
     ["glossary", "Übersetzungs-Glossar"],
   ];
   for (const [rel, marker] of withoutForm) {
-    await page.goto(`/beispiel/file/${rel}`);
+    await page.goto(`/beispiel/entry/${rel}`);
     await expect(page.getByRole("article")).toContainText(marker);
     await expect(page.getByRole("button", { name: "Eigenschaften" })).toHaveCount(0);
   }
@@ -570,7 +570,7 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
   // The campaign file keeps its ONE dialog (issue #34): its name/description
   // ARE its properties, so a second form next to it would be two ways to
   // write the same two keys.
-  await page.goto("/beispiel/file/_campaign");
+  await page.goto("/beispiel/entry/campaign");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );

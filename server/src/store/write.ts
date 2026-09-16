@@ -214,8 +214,8 @@ async function mutate<T>(campaign: string, fn: (db: GrimoireDb) => T): Promise<T
 /**
  * The optimistic-concurrency check: the row's `rev` must be the one read.
  *
- * The body carries `code: "rev_conflict"` (issue #69) — `what` names WHICH
- * document moved and stays English, as the technical fallback next to it.
+ * The body carries `code: "rev_conflict"` — `what` names WHICH entry moved
+ * and stays English, as the technical fallback next to it.
  */
 function guardRev(current: number, sent: number, what: string): void {
   if (current !== sent) {
@@ -347,8 +347,8 @@ function indexScene(tx: GrimoireDb, campaign: string, row: SceneRow, tags: strin
  * ONE rule for the npc index (they disagreed before: a properties patch
  * indexed the STRIPPED body, a body save the full one — so a search for a
  * relationship note stopped matching after an unrelated status change):
- * the indexed text is the npc's FULL document text, `## Beziehungen`
- * included, exactly as `GET /file` renders it.
+ * the indexed text is the npc's FULL text, `## Beziehungen`
+ * included, exactly as `GET /entry` renders it.
  */
 function indexNpc(
   tx: GrimoireDb,
@@ -451,7 +451,7 @@ function sceneRowOf(tx: GrimoireDb, campaign: string, id: string): SceneRow | un
  * address in `path`, and the app replaces the URL with it (ADR #17).
  *
  * The write is not unguarded by this: `rev` is the guard that a write which
- * has not seen the current document is refused (ADR #4).
+ * has not seen the current entry is refused (ADR #4).
  */
 function sceneRowAt(
   tx: GrimoireDb,
@@ -459,7 +459,7 @@ function sceneRowAt(
   locator: Extract<Locator, { kind: "scene" }>,
 ): SceneRow {
   const row = sceneRowOf(tx, campaign, locator.id);
-  if (row === undefined) throw new ApiError(404, "file not found");
+  if (row === undefined) throw new ApiError(404, "entry not found");
   return row;
 }
 
@@ -870,7 +870,7 @@ function replaceRelations(tx: GrimoireDb, campaign: string, npcId: string, body:
  * which must refresh the index row's `title` too, not only its id.
  *
  * `campaign` is a kind here because the campaign FILE is a referring body
- * like any other (store/refs.ts `REF_BODY_KINDS`): a note in `_campaign`
+ * like any other (store/refs.ts `REF_BODY_KINDS`): a note in `campaign`
  * that says `[[jorna]]` has the resolved name in its index row, so it goes
  * stale with everybody else's.
  */
@@ -999,7 +999,7 @@ function patchLocator(
   switch (locator.kind) {
     case "campaign": {
       const row = campaignRow(tx, campaign);
-      if (row === undefined) throw new ApiError(404, "file not found");
+      if (row === undefined) throw new ApiError(404, "entry not found");
       guardRev(row.rev, rev, "campaign changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, CAMPAIGN_KEYS, row.extra);
@@ -1025,7 +1025,7 @@ function patchLocator(
     }
     case "chapter": {
       const row = chapterRowOf(tx, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "file not found");
+      if (row === undefined) throw new ApiError(404, "entry not found");
       guardRev(row.rev, rev, "chapter changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, CHAPTER_KEYS, row.extra);
@@ -1121,7 +1121,7 @@ function patchLocator(
     }
     case "npc": {
       const row = npcRowOf(tx, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "file not found");
+      if (row === undefined) throw new ApiError(404, "entry not found");
       guardRev(row.rev, rev, "npc changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, NPC_KEYS, row.extra);
@@ -1163,7 +1163,7 @@ function patchLocator(
     }
     case "location": {
       const row = locationRowOf(tx, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "file not found");
+      if (row === undefined) throw new ApiError(404, "entry not found");
       guardRev(row.rev, rev, "location changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, LOCATION_KEYS, row.extra);
@@ -1193,7 +1193,7 @@ function patchLocator(
     }
     case "session": {
       const row = sessionRow(tx, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "file not found");
+      if (row === undefined) throw new ApiError(404, "entry not found");
       guardRev(row.rev, rev, "session changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, SESSION_KEYS, row.extra);
@@ -1305,7 +1305,7 @@ function patchSessionRow(
   }
 }
 
-// --- PUT /api/:campaign/file --------------------------------------------------
+// --- PUT /api/:campaign/entry -------------------------------------------------
 
 /**
  * Replace the markdown BODY of one entity (issue #15). The append-only kinds
@@ -1354,7 +1354,7 @@ function writeBodyIn(
   switch (locator.kind) {
     case "campaign": {
       const row = campaignRow(tx, campaign);
-      if (row === undefined) throw new ApiError(404, "file not found");
+      if (row === undefined) throw new ApiError(404, "entry not found");
       guardRev(row.rev, rev, "campaign changed");
       const next: CampaignRow = { ...row, body, rev: row.rev + 1 };
       tx.update(campaigns)
@@ -1366,7 +1366,7 @@ function writeBodyIn(
     }
     case "chapter": {
       const row = chapterRowOf(tx, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "file not found");
+      if (row === undefined) throw new ApiError(404, "entry not found");
       guardRev(row.rev, rev, "chapter changed");
       const next: ChapterRow = { ...row, body, rev: row.rev + 1 };
       tx.update(chapters)
@@ -1390,7 +1390,7 @@ function writeBodyIn(
     }
     case "npc": {
       const row = npcRowOf(tx, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "file not found");
+      if (row === undefined) throw new ApiError(404, "entry not found");
       guardRev(row.rev, rev, "npc changed");
       // `## Beziehungen` in the edited body becomes rows again — the
       // renderer puts the section back, so an edit there is not lost.
@@ -1406,7 +1406,7 @@ function writeBodyIn(
     }
     case "location": {
       const row = locationRowOf(tx, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "file not found");
+      if (row === undefined) throw new ApiError(404, "entry not found");
       guardRev(row.rev, rev, "location changed");
       const next: LocationRow = { ...row, body, rev: row.rev + 1 };
       tx.update(locations)
@@ -1418,7 +1418,7 @@ function writeBodyIn(
     }
     case "glossary": {
       const row = campaignRow(tx, campaign);
-      if (row === undefined) throw new ApiError(404, "file not found");
+      if (row === undefined) throw new ApiError(404, "entry not found");
       // The glossary's OWN counter, not `campaigns.version`: an unrelated
       // write during a running session must not invalidate an open edit.
       guardRev(row.glossaryRev, rev, "glossary changed");
@@ -1450,7 +1450,7 @@ function writeBodyIn(
       return renderGlossary(glossaryRows(tx, campaign), nextRev, parsedGlossary.preamble);
     }
     default:
-      throw new ApiError(404, "file not found");
+      throw new ApiError(404, "entry not found");
   }
 }
 
@@ -1541,11 +1541,11 @@ function writeGlossaryRows(
  *
  * The ORDER of `entries` is the stored order — that is what the settings
  * page's reordering writes (issue #53): there is no separate "move" endpoint,
- * because a list this short is one document and a move is simply a different
- * document.
+ * because a list this short is one entry and a move is simply a different
+ * entry.
  *
  * `rev` is REQUIRED since issue #53, for the reason every other editable
- * document has one: the settings page and the markdown editor can hold the
+ * entry has one: the settings page and the markdown editor can hold the
  * same glossary open, and a whole-list PUT without a guard is exactly the
  * silent overwrite ADR #4 forbids. An `undefined` rev is refused by the
  * endpoint, not defaulted here.
@@ -1559,7 +1559,7 @@ export async function writeGlossary(
     const row = requireCampaignRow(tx, campaign);
     guardRev(row.glossaryRev, rev, "glossary changed");
     writeGlossaryRows(tx, campaign, entries);
-    // Same document, same guard token: an editor holding `glossary` must
+    // Same entry, same guard token: an editor holding `glossary` must
     // see a changed `rev` after this.
     const nextRev = row.glossaryRev + 1;
     tx.update(campaigns)
@@ -1925,7 +1925,7 @@ export async function appendLogEntry(
 /**
  * POST /api/:campaign/inbox — append `- text`. The `## Eingang`-less first
  * entry gets the `# Inbox` heading row the file format opened with, so the
- * rendered inbox still reads like the document it was.
+ * rendered inbox still reads like the list it was.
  */
 export async function appendInboxEntry(campaign: string, text: string): Promise<EntryResponse> {
   return mutate(campaign, (tx) => {
@@ -1949,7 +1949,7 @@ export async function appendInboxEntry(campaign: string, text: string): Promise<
   });
 }
 
-/** The inbox document's own guard token, bumped and returned (see read.ts). */
+/** The inbox's own guard token, bumped and returned (see read.ts). */
 function bumpInboxRev(tx: GrimoireDb, campaign: string): number {
   const next = (campaignRow(tx, campaign)?.inboxRev ?? 0) + 1;
   tx.update(campaigns)
@@ -2020,7 +2020,7 @@ export async function markLogLineSeen(
   const hash = logLineShortHash(line);
   return mutate(campaign, (tx) => {
     const row = sessionRow(tx, campaign, sessionId);
-    if (row === undefined) throw new ApiError(404, "file not found");
+    if (row === undefined) throw new ApiError(404, "entry not found");
     const entry = logRows(tx, campaign, sessionId).find((l) => l.hash === hash);
     if (entry === undefined) {
       return { ...renderSessionRow(tx, campaign, row), marked: false };
@@ -2558,7 +2558,7 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
 //
 // RESERVED IDS ARE NOT CREATABLE. `npcs`, `locations` and `sessions` are the
 // address schema's first segments (store/paths, RESERVED_SEGMENTS), so a
-// chapter with one of those ids would be a row whose own document and scenes
+// chapter with one of those ids would be a row whose own entry and scenes
 // resolve to an entity kind instead — created, then unreachable forever. It is
 // answered like a collision (same 409 shape, same one-click proposal) under its
 // own code `slug_reserved`, because from the dialog's side it is the same
@@ -2588,7 +2588,7 @@ function slugTaken(kind: ErrorKind, id: string, suggestion: string, path: string
  * plus the free proposal as one click), but the SENTENCE is a different one
  * („… ist ein reservierter Name"), and a catalog cannot say that from a code
  * that also means "somebody else has it". `path` is "" because nothing is in
- * the way; there is no document to link to.
+ * the way; there is no entry to link to.
  */
 function slugReserved(kind: ErrorKind, id: string, suggestion: string): ApiError {
   return new ApiError(409, `"${id}" is a reserved name — suggestion: "${suggestion}"`, {
@@ -2664,8 +2664,8 @@ export async function createCampaign(
     if (campaignRow(tx, id) !== undefined) {
       const suggestion = freeSlug(id, (candidate) => campaignRow(tx, candidate) !== undefined);
       // `path` in this 409 is an ADDRESS the app can link to, and a campaign id
-      // alone is not one. The document that always exists — even for a campaign
-      // that holds nothing else — is the campaign row itself (`_campaign`), so
+      // alone is not one. The entry that always exists — even for a campaign
+      // that holds nothing else — is the campaign row itself (`campaign`), so
       // that is what is pointed at. It carries the campaign id as its first
       // segment because a campaign collision has no campaign scope to be
       // relative to, unlike every other create in this file.
@@ -2693,7 +2693,7 @@ export async function createCampaign(
 }
 
 /**
- * POST /api/:campaign/chapters { title, goal? } -> the chapter document.
+ * POST /api/:campaign/chapters { title, goal? } -> the chapter entry.
  *
  * `goal` is optional and lands under `## Ziel des Kapitels` — the heading the
  * pool reads its goal line from (routes/pool.tsx). Without it the body stays
@@ -2792,7 +2792,7 @@ export async function setActiveChapter(campaign: string, id: string): Promise<En
 }
 
 /**
- * POST /api/:campaign/scenes { title, chapter } -> the scene document.
+ * POST /api/:campaign/scenes { title, chapter } -> the scene entry.
  *
  * The chapter is REQUIRED and has to exist (400 otherwise): a scene's chapter
  * is part of its address, and a scene under an unknown chapter has no node to
@@ -2851,7 +2851,7 @@ export async function createScene(
   });
 }
 
-/** POST /api/:campaign/npcs { name } -> the npc document (see the notes above). */
+/** POST /api/:campaign/npcs { name } -> the npc entry (see the notes above). */
 export async function createNpc(
   campaign: string,
   name: string,
@@ -2885,7 +2885,7 @@ export async function createNpc(
   });
 }
 
-/** POST /api/:campaign/locations { name } -> the location document. */
+/** POST /api/:campaign/locations { name } -> the location entry. */
 export async function createLocation(
   campaign: string,
   name: string,

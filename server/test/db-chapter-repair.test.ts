@@ -100,7 +100,7 @@ const DROP_IMPORT_BOOKKEEPING = "0012_drop_import_bookkeeping";
 const BEFORE_CHAPTER_FK = "0013_job_new_chapter_title";
 const CHAPTER_FK = "0014_scenes_chapter_fk";
 
-/** Apply one committed migration file the way drizzle's migrator does. */
+/** Apply one committed migration the way drizzle's migrator does. */
 function applyMigration(client: SqliteClient, tag: string): void {
   const sqlText = readFileSync(path.join(MIGRATIONS_DIR, `${tag}.sql`), "utf8");
   for (const statement of sqlText.split("--> statement-breakpoint")) {
@@ -361,7 +361,7 @@ describe("the chapter foreign key of migration 0014", () => {
 // nothing is lost while it does.
 describe("upgrading an existing database through the chapter foreign key", () => {
   /**
-   * A real file, migrated by hand up to `tag` and told so the way the
+   * A real database, migrated by hand up to `tag` and told so the way the
    * migrator records it: `created_at` is the journal's `when`, which is what
    * the dialect compares against to decide what is still outstanding.
    */
@@ -370,8 +370,8 @@ describe("upgrading an existing database through the chapter foreign key", () =>
     tag: string,
     seed: (client: SqliteClient) => void,
   ): Promise<string> {
-    const file = path.join(dir, `${tag}.db`);
-    const client = await openSqlite(file);
+    const dbPath = path.join(dir, `${tag}.db`);
+    const client = await openSqlite(dbPath);
     client.exec("PRAGMA foreign_keys = ON");
     applyMigrationsThrough(client, tag);
     seed(client);
@@ -386,7 +386,7 @@ describe("upgrading an existing database through the chapter foreign key", () =>
       .prepare(`insert into __drizzle_migrations ("hash", "created_at") values (?, ?)`)
       .run(`seeded-${tag}`, journalEntry(tag).when);
     client.close();
-    return file;
+    return dbPath;
   }
 
   /** A scene with a chapter, a tag, an npc reference — and one orphan. */
@@ -414,8 +414,8 @@ describe("upgrading an existing database through the chapter foreign key", () =>
   }
 
   /** What every one of these boots has to end up with. */
-  async function expectUpgraded(file: string): Promise<void> {
-    const { db, chapterRepair, close } = await openDb(file);
+  async function expectUpgraded(dbPath: string): Promise<void> {
+    const { db, chapterRepair, close } = await openDb(dbPath);
     try {
       // The repair ran, and reported the chapter it had to invent.
       expect(chapterRepair.created).toEqual([
@@ -459,7 +459,7 @@ describe("upgrading an existing database through the chapter foreign key", () =>
         ),
       ).toThrow();
       // A second boot is a no-op: nothing left to repair, nothing outstanding.
-      const again = await openDb(file);
+      const again = await openDb(dbPath);
       expect(again.chapterRepair).toBe(NO_CHAPTER_REPAIR);
       expect(again.db.all(sql`select id from scenes order by id`)).toEqual([
         { id: "szene" },

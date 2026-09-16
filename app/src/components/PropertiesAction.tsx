@@ -99,19 +99,19 @@ export function PropertiesAction({
   // Open-BY-FILE, not a boolean: navigating away closes the dialog instead of
   // leaving it standing over another entry's reading view. Campaign AND path,
   // because two campaigns can hold the same relative path (`npcs/jorna`).
-  const fileKey = `${campaign}/${file.path}`;
+  const entryKey = `${campaign}/${file.path}`;
   const [openFile, setOpenFile] = useState<string>();
   // The rename dialog follows the same rule — and it is a SIBLING of the
   // properties dialog, not a child: „id ändern" closes the form and opens it.
   const [renameFile, setRenameFile] = useState<string>();
-  const open = openFile === fileKey;
-  const renameOpen = renameFile === fileKey;
+  const open = openFile === entryKey;
+  const renameOpen = renameFile === entryKey;
   // …and the state is dropped as well, so returning to the entry (Back into the
   // react-query cache) does not reopen a dialog nobody asked for.
   useEffect(() => {
     setOpenFile(undefined);
     setRenameFile(undefined);
-  }, [fileKey]);
+  }, [entryKey]);
   // The renameable id of the entry on screen — undefined for the kinds the
   // rename endpoint does not cover, and then the footer action is absent.
   const renameTarget = renameTargetFor(file);
@@ -124,13 +124,13 @@ export function PropertiesAction({
       <HeaderAction
         icon={SlidersHorizontal}
         label={triggerLabel ?? t("properties.action")}
-        onClick={() => setOpenFile(fileKey)}
+        onClick={() => setOpenFile(entryKey)}
       />
       {open && (
         <PropertiesDialog
           // Belt and braces next to the open-by-entry rule: a path change
           // remounts the dialog, so no frozen value can outlive its entry.
-          key={fileKey}
+          key={entryKey}
           campaign={campaign}
           file={file}
           tree={tree}
@@ -140,13 +140,13 @@ export function PropertiesAction({
           onClose={() => setOpenFile(undefined)}
           onChangeId={() => {
             setOpenFile(undefined);
-            setRenameFile(fileKey);
+            setRenameFile(entryKey);
           }}
         />
       )}
       {renameOpen && renameTarget !== undefined && (
         <RenameDialog
-          key={fileKey}
+          key={entryKey}
           campaign={campaign}
           currentPath={file.path}
           target={renameTarget}

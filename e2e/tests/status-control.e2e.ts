@@ -8,7 +8,7 @@
 import { expect, test } from "../support/test";
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
-const SCENE_URL = `/beispiel/file/${SCENE}`;
+const SCENE_URL = `/beispiel/entry/${SCENE}`;
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 
 test("the status control writes the status into the file", async ({ page, api }) => {

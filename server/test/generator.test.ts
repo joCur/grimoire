@@ -46,18 +46,18 @@ import { parseJsonReply } from "../src/entry-reply";
 import { PipelineFake, entryReply, type ScriptedReply } from "./support/pipeline-fake";
 
 /**
- * Whether an entity is there: the address resolves through GET /file. That
+ * Whether an entity is there: the address resolves through GET /entry. That
  * is the successor of the `stat()` this file used — a draft that was applied
  * is a ROW, and the only thing that matters is that the app can open it.
  */
 async function exists(rel: string): Promise<boolean> {
-  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
   return res.status === 200;
 }
 
-/** GET /file of an applied draft. */
+/** GET /entry of an applied draft. */
 async function read(rel: string): Promise<EntryResponse> {
-  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
@@ -1045,7 +1045,7 @@ describe("POST /api/:campaign/generate", () => {
     expect(req.glossary).toContain("Leuchtturmwärter");
 
     // still a preview: neither the chapter nor the scene exist
-    expect(await exists(`${chapter}/_chapter`)).toBe(false);
+    expect(await exists(`${chapter}`)).toBe(false);
     expect(await exists(scenePath)).toBe(false);
   });
 
@@ -1360,10 +1360,10 @@ describe("POST /api/:campaign/generate/apply", () => {
 
   // --- new-chapter flow (issue #12) ------------------------------------------
 
-  test("chapter + chapterTitle create _chapter once — and never twice", async () => {
+  test("chapter + chapterTitle create chapter entry once — and never twice", async () => {
     const chapter = "03-neues-kapitel";
     const scenePath = `${chapter}/erste-szene`;
-    const chapterRel = `${chapter}/_chapter`;
+    const chapterRel = `${chapter}`;
 
     let res = await postJson("/api/beispiel/generate/apply", {
       scenes: [{ path: scenePath, markdown: sceneWithId("erste-szene") }],
@@ -1384,7 +1384,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect(written.properties.title).toBe("Kapitel 3: Die Schmugglerbucht");
     expect(written.properties.status).toBe("planned");
 
-    // second apply into the SAME chapter: the existing _chapter is left
+    // second apply into the SAME chapter: the existing chapter entry is left
     // untouched (not a conflict, not rewritten) — only the new scene lands
     const second = `${chapter}/zweite-szene`;
     res = await postJson("/api/beispiel/generate/apply", {
@@ -1399,7 +1399,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     expect(again.rev).toBe(written.rev); // not even a rev bump
   });
 
-  test("new-chapter batch stays all-or-nothing: a scene conflict writes no _chapter", async () => {
+  test("new-chapter batch stays all-or-nothing: a scene conflict writes no chapter entry", async () => {
     const chapter = "04-konflikt";
     const existing = "01-salzhafen/lighthouse-arrival";
     const res = await postJson("/api/beispiel/generate/apply", {
@@ -1412,7 +1412,7 @@ describe("POST /api/:campaign/generate/apply", () => {
     });
     expect(res.status).toBe(409);
     expect(((await res.json()) as { conflicts: string[] }).conflicts).toEqual([existing]);
-    expect(await exists(`${chapter}/_chapter`)).toBe(false);
+    expect(await exists(`${chapter}`)).toBe(false);
     expect(await exists(`${chapter}/leuchtturm/konflikt-neu`)).toBe(false);
   });
 
@@ -1444,7 +1444,7 @@ describe("POST /api/:campaign/generate/apply", () => {
       ).status,
     ).toBe(404);
     expect(await exists("05-halb/neu")).toBe(false);
-    expect(await exists("05-halb/_chapter")).toBe(false);
+    expect(await exists("05-halb")).toBe(false);
   });
 });
 
@@ -2226,7 +2226,7 @@ describe("a scene draft whose chapter has no row", () => {
     });
     expect(res.status).toBe(200);
 
-    const chapter = await read("03-dragon-hatchery/_chapter");
+    const chapter = await read("03-dragon-hatchery");
     expect(chapter.kind).toBe("chapter");
     // No title was known here, so the chapter is called by its slug — which
     // is renameable in the overview, where an invisible chapter was not.
@@ -2258,7 +2258,7 @@ describe("a scene draft whose chapter has no row", () => {
     expect(res.status).toBe(400);
     expect(JSON.stringify(await res.json())).toContain("Kapitel_1");
     // Nothing was written — not the scene, and not a chapter either.
-    expect((await app.request("/api/beispiel/file?path=Kapitel_1/_chapter")).status).toBe(404);
+    expect((await app.request("/api/beispiel/entry?path=Kapitel_1")).status).toBe(404);
   });
 
   test("a DIALOG still refuses an unknown chapter — ADR #14 stands", async () => {

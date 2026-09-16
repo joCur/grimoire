@@ -36,7 +36,7 @@ import { dropStore, seedStore } from "./support/store";
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
 async function getFile(rel: string): Promise<EntryResponse> {
-  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
@@ -50,7 +50,7 @@ async function patchReq(rev: number, patch: Record<string, unknown>): Promise<Re
 }
 
 async function putReq(rev: number, body: string): Promise<Response> {
-  return app.request("/api/beispiel/file", {
+  return app.request("/api/beispiel/entry", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ path: SCENE, rev, body }),
@@ -106,7 +106,7 @@ describe("two writes with the same guard token, same clock second", () => {
     expect(retried.rev).toBe(conflict.rev + 1);
   });
 
-  test("PUT /file: first wins, second is 409, the loser's body did not land", async () => {
+  test("PUT /entry: first wins, second is 409, the loser's body did not land", async () => {
     const read = await getFile(SCENE);
 
     const first = await putReq(read.rev, "\n## Flow\n\nVersion A.\n");

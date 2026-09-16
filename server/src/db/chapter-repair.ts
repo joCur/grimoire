@@ -101,7 +101,7 @@ interface BlankRow {
 /**
  * Close both kinds of hole: create the missing chapter rows, and NULL the
  * `chapter_id`s that are blank. Returns what it did, which the boot log
- * reports; `NO_CHAPTER_REPAIR` on a database without the tables (a fresh file
+ * reports; `NO_CHAPTER_REPAIR` on a database without the tables (a fresh store
  * before the migrator has run) or without a hole.
  */
 export function repairOrphanChapters(client: SqliteClient): ChapterRepairOutcome {

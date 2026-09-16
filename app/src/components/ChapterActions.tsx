@@ -115,7 +115,7 @@ export function ChapterActions({
  *
  * The rev is frozen at the first render with an entry, for the reason the
  * campaign dialog spells out (lib/campaign-meta.ts `seedCampaignMetaBase`):
- * the 5s version poll refetches this file while the dialog stands, and
+ * the 5s version poll refetches this entry while the dialog stands, and
  * following it would turn a concurrent edit into a silent overwrite instead of
  * a 409. It moves only after a conflict, to the version the re-read brought,
  * and the typed text stays.
@@ -149,7 +149,7 @@ function ChapterBodyDialog({
 
   const save = useRevWriteMutation<void>({
     write: () => writeChapterBody(campaign, chapter, body, rev),
-    fileKey: ["file", campaign, chapterMetaPath(chapter)],
+    entryKey: ["entry", campaign, chapterMetaPath(chapter)],
     // The goal line lives in the overview's tree view, and the body is indexed.
     invalidateOnSuccess: [["tree", campaign], ["search", campaign]],
     onSaved: onClose,

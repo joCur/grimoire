@@ -38,7 +38,7 @@ describe("GET /api/campaigns", () => {
 
     test("lists example campaign directories", async () => {
       const body = await campaigns();
-      // The example campaign carries a _campaign (issue #17), so name and
+      // The example campaign carries a campaign (issue #17), so name and
       // description come along additively.
       expect(body).toContainEqual({
         id: "beispiel",
@@ -63,7 +63,7 @@ describe("GET /api/campaigns", () => {
       expect(beispiel?.lastSessionStarted).toBe("2026-01-15T19:30");
     });
 
-    test("name/description come from examples/beispiel/_campaign", async () => {
+    test("name/description come from examples/beispiel/campaign", async () => {
       const beispiel = (await campaigns()).find((c) => c.id === "beispiel");
       expect(beispiel?.name).toBe("Der Leuchtturm von Salzhafen");
       expect(beispiel?.description).toContain("Leuchtturm");
@@ -116,7 +116,7 @@ describe("GET /api/campaigns", () => {
       const body = await campaigns();
       // `name` is the DISPLAY name and is always there since issue #62: a
       // campaign with no authored name is listed under its id, exactly as the
-      // campaign DOCUMENT renders it (GET /file?path=_campaign).
+      // campaign DOCUMENT renders it (GET /entry?path=campaign).
       expect(body).toEqual([
         { id: "kaputte-meta", name: "kaputte-meta" },
         { id: "krude-meta", name: "Krude Kampagne" },
@@ -128,11 +128,11 @@ describe("GET /api/campaigns", () => {
       ]);
     });
 
-    test("_campaign degrades: broken YAML, missing name, non-string values", async () => {
+    test("campaign degrades: broken YAML, missing name, non-string values", async () => {
       const byId = new Map((await campaigns()).map((c) => [c.id, c]));
       // Broken properties → the campaign ROW still exists (a directory is a
       // campaign) and nothing was READ from the file: no description, and
-      // never the parser's file-stem fallback ("_campaign") as the name — the
+      // never the parser's file-stem fallback ("campaign") as the name — the
       // id is. The file itself stays in the tree, named in the seed report
       // (db-migration.test.ts).
       expect(byId.get("kaputte-meta")).toEqual({ id: "kaputte-meta", name: "kaputte-meta" });
@@ -163,16 +163,15 @@ describe("GET /api/:campaign/tree", () => {
     return (await res.json()) as CampaignTree;
   };
 
-  test("chapter 01-salzhafen with title from _chapter", async () => {
+  test("chapter 01-salzhafen with title from chapter entry", async () => {
     const t = await tree();
     expect(t.campaign).toBe("beispiel");
     const chapter = t.chapters.find((c) => c.id === "01-salzhafen");
     expect(chapter).toBeDefined();
     expect(chapter!.title).toBe("Kapitel 1: Der Leuchtturm von Salzhafen");
     expect(chapter!.status).toBe("active");
-    // `_chapter` was optional in the file tree; a chapter ROW always
-    // exists, so the path is now always there (store/read.ts buildTree).
-    expect(chapter!.path).toBe("01-salzhafen/_chapter");
+    // A chapter's address is its id (store/read.ts buildTree).
+    expect(chapter!.path).toBe("01-salzhafen");
   });
 
   test("scenes grouped by their LOCATION (#100)", async () => {
@@ -214,17 +213,16 @@ describe("GET /api/:campaign/tree", () => {
     expect(ids).toEqual([...ids].sort().reverse());
   });
 
-  test("root-level files (incl. _campaign) never appear in the tree", async () => {
+  test("root-level files (incl. campaign) never appear in the tree", async () => {
     const t = await tree();
     // The tree has no slot for campaign metadata (issue #17 keeps it out);
-    // the campaign row is addressed by _campaign and by nothing in here.
+    // the campaign row is addressed by campaign and by nothing in here.
     expect(t.chapters.map((c) => c.id)).toEqual(["01-salzhafen"]);
     const paths = t.chapters.flatMap((c) => [
       ...(c.path === undefined ? [] : [c.path]),
       ...c.groups.flatMap((g) => g.scenes.map((s) => s.path)),
     ]);
-    expect(paths).not.toContain("_campaign");
-    expect(paths.some((p) => !p.includes("/"))).toBe(false);
+    for (const rootEntry of ["campaign", "inbox", "glossary"]) expect(paths).not.toContain(rootEntry);
   });
 
   test("404 for unknown campaign", async () => {
@@ -244,7 +242,7 @@ describe("GET /api/:campaign/tree", () => {
   });
 });
 
-describe("GET /api/:campaign/file", () => {
+describe("GET /api/:campaign/entry", () => {
   beforeEach(async () => {
     await seedStore();
   });
@@ -254,7 +252,7 @@ describe("GET /api/:campaign/file", () => {
 
   test("returns properties, body and the rev", async () => {
     const rel = "01-salzhafen/leuchtturm/lighthouse-arrival";
-    const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+    const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as EntryResponse;
     expect(body.path).toBe(rel);
@@ -270,8 +268,8 @@ describe("GET /api/:campaign/file", () => {
     expect(body.rev).toBe(1);
   });
 
-  test("serves _campaign as kind campaign (no new endpoint needed)", async () => {
-    const res = await app.request("/api/beispiel/file?path=_campaign");
+  test("serves campaign as kind campaign (no new endpoint needed)", async () => {
+    const res = await app.request("/api/beispiel/entry?path=campaign");
     expect(res.status).toBe(200);
     const body = (await res.json()) as EntryResponse;
     expect(body.kind).toBe("campaign");
@@ -282,20 +280,20 @@ describe("GET /api/:campaign/file", () => {
   test("serves the two list files from their rows: inbox and glossary", async () => {
     // They have no entity row of their own; the campaign's version counter is
     // their guard token (store/read.ts readByLocator).
-    const inbox = await app.request("/api/beispiel/file?path=inbox");
+    const inbox = await app.request("/api/beispiel/entry?path=inbox");
     expect(inbox.status).toBe(200);
     const inboxBody = (await inbox.json()) as EntryResponse;
     expect(inboxBody.kind).toBe("inbox");
     expect(inboxBody.body).toContain("- ");
 
-    const glossary = await app.request("/api/beispiel/file?path=glossary");
+    const glossary = await app.request("/api/beispiel/entry?path=glossary");
     expect(glossary.status).toBe(200);
     expect(((await glossary.json()) as EntryResponse).kind).toBe("glossary");
   });
 
   test("404 for unknown file and unknown campaign", async () => {
-    expect((await app.request("/api/beispiel/file?path=01-salzhafen/nope")).status).toBe(404);
-    expect((await app.request("/api/nope/file?path=inbox")).status).toBe(404);
+    expect((await app.request("/api/beispiel/entry?path=01-salzhafen/nope")).status).toBe(404);
+    expect((await app.request("/api/nope/entry?path=inbox")).status).toBe(404);
   });
 
   test("a STALE scene address resolves and answers with the current one (#100)", async () => {
@@ -308,18 +306,18 @@ describe("GET /api/:campaign/file", () => {
       "01-salzhafen/hafen/lighthouse-arrival",
       "02-nope/lighthouse-arrival",
     ]) {
-      const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(stale)}`);
+      const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(stale)}`);
       expect(res.status).toBe(200);
       expect(((await res.json()) as { path: string }).path).toBe(
         "01-salzhafen/leuchtturm/lighthouse-arrival",
       );
     }
     // An unknown ID is still a 404 — nothing to redirect to.
-    expect((await app.request("/api/beispiel/file?path=01-salzhafen/nirgends")).status).toBe(404);
+    expect((await app.request("/api/beispiel/entry?path=01-salzhafen/nirgends")).status).toBe(404);
   });
 
   test("400 without path parameter", async () => {
-    expect((await app.request("/api/beispiel/file")).status).toBe(400);
+    expect((await app.request("/api/beispiel/entry")).status).toBe(400);
   });
 
   test("400 on traversal attempts", async () => {
@@ -333,7 +331,7 @@ describe("GET /api/:campaign/file", () => {
       `?path=${encodeURIComponent("01-salzhafen/../../beispiel/inbox")}`,
     ];
     for (const q of cases) {
-      const res = await app.request(`/api/beispiel/file${q}`);
+      const res = await app.request(`/api/beispiel/entry${q}`);
       expect(res.status).toBe(400);
       const body = (await res.json()) as { error: string };
       expect(typeof body.error).toBe("string");
@@ -342,16 +340,15 @@ describe("GET /api/:campaign/file", () => {
 
   test("400 for hidden segments, 404 for an address the schema has no row for", async () => {
     // Hidden segments stay a 400 — that is a hostile value, not an address.
-    expect((await app.request("/api/beispiel/file?path=.hidden")).status).toBe(400);
-    expect((await app.request("/api/beispiel/file?path=.hidden.md")).status).toBe(400);
-    // The extension rule is gone with issue #79: addresses carry none, so a
-    // value the schema does not describe is honestly a 404 — "there is no
-    // such document" — instead of a 400 about file types.
-    expect((await app.request("/api/beispiel/file?path=01-salzhafen")).status).toBe(404);
-    expect((await app.request("/api/beispiel/file?path=notes.txt")).status).toBe(404);
+    expect((await app.request("/api/beispiel/entry?path=.hidden")).status).toBe(400);
+    expect((await app.request("/api/beispiel/entry?path=.hidden.md")).status).toBe(400);
+    // An address the schema describes but no row answers is honestly a 404 —
+    // "there is no such entry" — not a 400 about its shape.
+    expect((await app.request("/api/beispiel/entry?path=kein-kapitel")).status).toBe(404);
+    expect((await app.request("/api/beispiel/entry?path=notes.txt")).status).toBe(404);
     // …including the OLD `.md` form: no compatibility, by decision (AK7).
     expect(
-      (await app.request("/api/beispiel/file?path=npcs%2Fjorna.md")).status,
+      (await app.request("/api/beispiel/entry?path=npcs%2Fjorna.md")).status,
     ).toBe(404);
   });
 });
@@ -378,7 +375,7 @@ describe("a fresh database (no import at boot)", () => {
     for (const p of [
       "/api/beispiel/tree",
       "/api/beispiel/version",
-      "/api/beispiel/file?path=_campaign",
+      "/api/beispiel/entry?path=campaign",
       "/api/beispiel/session",
     ]) {
       expect((await app.request(p)).status).toBe(404);

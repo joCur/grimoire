@@ -80,16 +80,16 @@ describe("contingencyPaths", () => {
 describe("resultHref", () => {
   test("routes every file-backed kind to the file view", () => {
     expect(resultHref("beispiel", { kind: "npc", path: "npcs/fenn" })).toBe(
-      "/beispiel/file/npcs/fenn",
+      "/beispiel/entry/npcs/fenn",
     );
-    expect(resultHref("beispiel", { kind: "chapter", path: "01-salzhafen/_chapter" })).toBe(
-      "/beispiel/file/01-salzhafen/_chapter",
+    expect(resultHref("beispiel", { kind: "chapter", path: "01-salzhafen" })).toBe(
+      "/beispiel/entry/01-salzhafen",
     );
   });
 
   test("the campaign itself opens the pool, not a file view", () => {
-    expect(resultHref("beispiel", { kind: "campaign", path: "_campaign" })).toBe("/beispiel");
-    expect(resultHref("höhlen kampagne", { kind: "campaign", path: "_campaign" })).toBe(
+    expect(resultHref("beispiel", { kind: "campaign", path: "campaign" })).toBe("/beispiel");
+    expect(resultHref("höhlen kampagne", { kind: "campaign", path: "campaign" })).toBe(
       "/h%C3%B6hlen%20kampagne",
     );
   });
@@ -97,7 +97,7 @@ describe("resultHref", () => {
   test("encodes path segments but keeps the slashes routable", () => {
     const result = { kind: "scene", path: "01-salzhafen/höhle/späh trupp" } as const;
     expect(resultHref("beispiel", result)).toBe(
-      "/beispiel/file/01-salzhafen/h%C3%B6hle/sp%C3%A4h%20trupp",
+      "/beispiel/entry/01-salzhafen/h%C3%B6hle/sp%C3%A4h%20trupp",
     );
   });
 });

@@ -9,8 +9,8 @@ import {
 } from "@/lib/chapter-meta";
 
 describe("chapterMetaPath", () => {
-  test("addresses the chapter's own document", () => {
-    expect(chapterMetaPath("01-salzhafen")).toBe("01-salzhafen/_chapter");
+  test("addresses the chapter's own entry", () => {
+    expect(chapterMetaPath("01-salzhafen")).toBe("01-salzhafen");
   });
 });
 

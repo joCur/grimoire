@@ -12,7 +12,7 @@
 // any section (generator, review, the campaign entry, sessions, inbox, glossary)
 // are marked nowhere — an arbitrary highlight would be a lie.
 
-import { kindFromPath } from "@grimoire/shared/kind";
+import { kindFromAddress } from "@grimoire/shared/kind";
 
 /** The three nav entries; `undefined` means "no entry is the current view". */
 export type NavSection = "chapters" | "npcs" | "locations";
@@ -23,7 +23,7 @@ export interface NavView {
   isPool: boolean;
   /** `:kind` of "/:campaign/list/:kind", or "" when this is not a list view. */
   listKind?: string;
-  /** Campaign-relative path of "/:campaign/file/*", or "" when not a file view. */
+  /** Campaign-relative path of "/:campaign/entry/*", or "" when not a file view. */
   filePath?: string;
 }
 
@@ -32,7 +32,7 @@ export interface NavView {
  *
  * The pool and the scene list are Kapitel; an entry's section comes from its
  * kind (the shared path table — the format contract in code exactly once):
- * scenes and `_chapter` are Kapitel, npc/location entries their own lists.
+ * scenes and chapters are Kapitel, npc/location entries their own lists.
  */
 export function navSection(view: NavView): NavSection | undefined {
   if (view.isPool) return "chapters";
@@ -48,7 +48,7 @@ export function navSection(view: NavView): NavSection | undefined {
 
   const path = view.filePath ?? "";
   if (path === "") return undefined;
-  switch (kindFromPath(path)) {
+  switch (kindFromAddress(path)) {
     case "scene":
     case "chapter":
       return "chapters";

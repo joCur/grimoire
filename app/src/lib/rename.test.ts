@@ -52,11 +52,11 @@ describe("renameTargetFor", () => {
     expect(renameTargetFor(file("npcs/fenn", "npc"))).toBeUndefined();
   });
 
-  test("a chapter is renamed by its DIRECTORY, not by _chapter", () => {
-    expect(renameTargetFor(file("01-salzhafen/_chapter", "chapter", { id: "01-salzhafen" })))
+  test("a chapter is renamed by its address, which is its id", () => {
+    expect(renameTargetFor(file("01-salzhafen", "chapter", { id: "01-salzhafen" })))
       .toEqual({ kind: "chapter", oldId: "01-salzhafen" });
-    // a _chapter one level deeper is not a chapter we can rename
-    expect(renameTargetFor(file("01-salzhafen/hafen/_chapter", "chapter"))).toBeUndefined();
+    // a deeper address is not a chapter we can rename
+    expect(renameTargetFor(file("01-salzhafen/hafen", "chapter"))).toBeUndefined();
   });
 
   test("kinds without a renameable id offer nothing", () => {
@@ -64,7 +64,7 @@ describe("renameTargetFor", () => {
       ["sessions/2026-01-15", "session"],
       ["inbox", "inbox"],
       ["glossary", "glossary"],
-      ["_campaign", "campaign"],
+      ["campaign", "campaign"],
       ["weird", "unknown"],
     ] as Array<[string, EntityKind]>) {
       expect(renameTargetFor(file(path, kind, { id: "x" }))).toBeUndefined();
@@ -115,8 +115,8 @@ describe("renamedPath", () => {
   });
 
   test("a file inside a renamed chapter directory follows along", () => {
-    expect(renamedPath("01-salzhafen/_chapter", { from: "01-salzhafen", to: "01-salzbucht" }))
-      .toBe("01-salzbucht/_chapter");
+    expect(renamedPath("01-salzhafen", { from: "01-salzhafen", to: "01-salzbucht" }))
+      .toBe("01-salzbucht");
     expect(
       renamedPath("01-salzhafen/hafen/ankunft-leuchtturm", {
         from: "01-salzhafen",

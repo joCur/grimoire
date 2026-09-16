@@ -61,16 +61,16 @@ async function usageOf(kind: string, id: string): Promise<UsageReport> {
   return (await res.json()) as UsageReport;
 }
 
-/** GET /file — the way the app sees an entity. */
+/** GET /entry — the way the app sees an entity. */
 async function read(rel: string): Promise<EntryResponse> {
-  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
 
 /** Whether an address resolves at all (404 = the entity is not there). */
 async function exists(rel: string): Promise<boolean> {
-  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
   return res.status === 200;
 }
 
@@ -280,14 +280,14 @@ describe("POST /api/:campaign/rename — scene", () => {
 describe("POST /api/:campaign/rename — chapter", () => {
   test("moves every scene's address and patches every `chapter:` field", async () => {
     const result = await renameOk({ kind: "chapter", oldId: "01-salzhafen", newId: "01-salzbucht" });
-    // a chapter is addressed by its `_chapter` — there is no directory to
+    // a chapter is addressed by its chapter entry — there is no directory to
     // rename any more, so the plan speaks in documents throughout
     expect(result.renamed).toEqual({
-      from: "01-salzhafen/_chapter",
-      to: "01-salzbucht/_chapter",
+      from: "01-salzhafen",
+      to: "01-salzbucht",
     });
     expect(result.changed).toEqual([
-      "01-salzbucht/_chapter",
+      "01-salzbucht",
       "01-salzbucht/bucht/smuggler-captured",
       "01-salzbucht/leuchtturm/lighthouse-arrival",
       "locations/leuchtturm",
@@ -295,8 +295,8 @@ describe("POST /api/:campaign/rename — chapter", () => {
       "npcs/jorna",
     ]);
 
-    expect(await exists("01-salzhafen/_chapter")).toBe(false);
-    const chapterFile = await read("01-salzbucht/_chapter");
+    expect(await exists("01-salzhafen")).toBe(false);
+    const chapterFile = await read("01-salzbucht");
     expect(chapterFile.properties.id).toBe("01-salzbucht");
     // the title mentions the OLD name in prose — it is a title, not a reference
     expect(chapterFile.properties.title).toBe("Kapitel 1: Der Leuchtturm von Salzhafen");
@@ -317,7 +317,7 @@ describe("POST /api/:campaign/rename — chapter", () => {
     const campaignTree = await tree();
     expect(campaignTree.chapters.map((ch) => ch.id)).toEqual(["01-salzbucht"]);
     const chapter = campaignTree.chapters[0]!;
-    expect(chapter.path).toBe("01-salzbucht/_chapter");
+    expect(chapter.path).toBe("01-salzbucht");
     // Groups ordered by their NAME (issue #100 review): „Der Leuchtturm von
     // Salzhafen" before the unnamed `bucht`.
     expect(chapter.groups.flatMap((g) => g.scenes.map((s) => s.path))).toEqual([
@@ -439,8 +439,8 @@ describe("POST /api/:campaign/rename — validation", () => {
 
     const res = await rename({ kind: "chapter", oldId: "01-salzhafen", newId: "02-tiefwasser" });
     expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ path: "02-tiefwasser/_chapter" });
-    expect(await exists("01-salzhafen/_chapter")).toBe(true);
+    expect(await res.json()).toMatchObject({ path: "02-tiefwasser" });
+    expect(await exists("01-salzhafen")).toBe(true);
   });
 
   test("same id -> 400, nothing written", async () => {

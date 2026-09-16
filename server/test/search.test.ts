@@ -34,9 +34,9 @@ async function search(q: string): Promise<SearchResult[]> {
   return body.results;
 }
 
-/** GET /file, for the write cases below (they need the guard token). */
+/** GET /entry, for the write cases below (they need the guard token). */
 async function readFile(rel: string): Promise<{ rev: number; body: string }> {
-  const res = await app.request(`/api/beispiel/file?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
   expect(res.status).toBe(200);
   return (await res.json()) as { rev: number; body: string };
 }
@@ -145,7 +145,7 @@ describe("reference queries (issue #57 AK5)", () => {
     expect(byKind.get("chapter")).toMatchObject({
       id: "01-salzhafen",
       title: "Kapitel 1: Der Leuchtturm von Salzhafen",
-      path: "01-salzhafen/_chapter",
+      path: "01-salzhafen",
     });
     expect(byKind.get("location")).toMatchObject({
       id: "leuchtturm",
@@ -155,7 +155,7 @@ describe("reference queries (issue #57 AK5)", () => {
     expect(byKind.get("campaign")).toMatchObject({
       id: "beispiel",
       title: "Der Leuchtturm von Salzhafen",
-      path: "_campaign",
+      path: "campaign",
     });
     // and the scene, whose path is derived from its ID now (store/paths)
     expect(results.find((r) => r.kind === "scene" && r.id === "lighthouse-arrival")).toMatchObject({
@@ -204,7 +204,7 @@ describe("reference queries (issue #57 AK5)", () => {
 // --- index maintenance ------------------------------------------------------
 
 describe("the index follows every write", () => {
-  test("a body written through PUT /file is searchable immediately", async () => {
+  test("a body written through PUT /entry is searchable immediately", async () => {
     // The guarantee that replaced invalidateCampaign(): the write and the
     // index row are one transaction, so there is no window in which the DM
     // cannot find what they just typed.
@@ -212,7 +212,7 @@ describe("the index follows every write", () => {
     expect(await search("nachtwache")).toEqual([]);
 
     const file = await readFile(rel);
-    const res = await app.request("/api/beispiel/file", {
+    const res = await app.request("/api/beispiel/entry", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({

@@ -2,7 +2,7 @@
 // status DISPLAY is the control, exactly like the scene's
 // (components/SceneStatusMenu) — same markup (components/StatusMenu), same
 // aria wording, same quiet inline message. What differs is the write behind
-// it, and that is the whole reason this file exists:
+// it, and that is the whole reason this module exists:
 //
 //   `planned` / `done`   PATCH /properties on the chapter entry, rev-guarded
 //                        like every other properties write.
@@ -25,9 +25,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { fetchFile } from "@/api";
+import { fetchEntry } from "@/api";
 import { StatusMenu } from "@/components/StatusMenu";
 import { useT } from "@/i18n";
+import { chapterMetaPath } from "@/lib/chapter-meta";
 import {
   chapterStatusMeta,
   chapterStatusOptions,
@@ -46,10 +47,10 @@ export function ChapterStatusControl({
   status: string | undefined;
 }) {
   const [open, setOpen] = useState(false);
-  const path = `${chapter}/_chapter`;
+  const path = chapterMetaPath(chapter);
   const file = useQuery({
-    queryKey: ["file", campaign, path],
-    queryFn: () => fetchFile(campaign, path),
+    queryKey: ["entry", campaign, path],
+    queryFn: () => fetchEntry(campaign, path),
     enabled: open && campaign !== "" && chapter !== "",
     retry: false,
   });

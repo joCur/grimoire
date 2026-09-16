@@ -1,18 +1,18 @@
-// „Bearbeiten" for the campaign's name and description (issue #34) — offered
-// on the pool header and in the campaign entry's reading view, the two places
-// where those two values are on screen.
+// „Bearbeiten" for the campaign's name and description — offered on the pool
+// header and in the campaign entry's reading view, the two places where those
+// two values are on screen.
 //
-// The dialog writes through the documented API: PATCH /properties with the
-// guard token the open dialog was seeded with — frozen, not the live query
-// value, or the 5s version poll would hand it a concurrent edit's token and
-// turn the save into a silent overwrite (409 → inline "Inzwischen geändert —
-// neu laden", the typed values stay, the next attempt writes on top of what is
-// stored now). That is the ONLY write path since issue #62: the create
-// endpoint it used for a campaign without `_campaign` is gone, because
-// every campaign has a row and therefore always has that document. On success
-// the campaigns/tree/search queries are invalidated — the switcher label and
-// the pool header read from the campaign list, so they must not keep the old
-// name.
+// The dialog writes with PATCH /properties and the `rev` it was opened with.
+// That token is frozen on purpose: the 5s version poll keeps refetching the
+// campaign entry while the dialog stands, and taking the live token at save
+// time would let a concurrent edit slip through as a silent overwrite. With
+// the frozen token the server answers 409, the dialog shows „Inzwischen
+// geändert — neu laden", keeps the typed values and moves its base to the
+// re-read entry, so the next „Speichern" writes on top of what is stored now.
+//
+// On success the campaigns, tree and search queries are invalidated: the
+// switcher label and the pool header read the campaign list and must not keep
+// the old name.
 //
 // Prefilled from GET /campaigns, minus the server's id fallback
 // (`prefillCampaignName`): an unnamed campaign starts with an empty field and
@@ -22,7 +22,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PenLine } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { fetchCampaigns, fetchFile } from "@/api";
+import { fetchCampaigns, fetchEntry } from "@/api";
 import { HeaderAction } from "@/components/HeaderAction";
 import { Button } from "@/components/ui/button";
 import {
@@ -82,38 +82,39 @@ function CampaignMetaDialog({
   const setValue = (key: keyof CampaignMetaValues, value: string) =>
     setEdited((prev) => ({ ...prev, [key]: value }));
 
-  // Where the base version comes from. The campaign document always exists
-  // (it is the campaign row), so an error here really is "not reachable".
+  // The campaign entry is the source of the `rev` this dialog writes against.
+  // Every campaign has one (it is the campaign row), so an error here means
+  // the server is not reachable, never "no such entry".
   const file = useQuery({
-    queryKey: ["file", campaign, CAMPAIGN_META_PATH],
-    queryFn: () => fetchFile(campaign, CAMPAIGN_META_PATH),
+    queryKey: ["entry", campaign, CAMPAIGN_META_PATH],
+    queryFn: () => fetchEntry(campaign, CAMPAIGN_META_PATH),
     retry: false,
   });
   const unreachable = file.isError;
 
-  // The version the save is checked against, frozen at the query's first
-  // answer (seedCampaignMetaBase explains why): the 5s version poll refetches
-  // this document while the dialog stands, and following it would turn a
-  // concurrent edit into a silent overwrite instead of a 409. It moves only
-  // after a conflict, to the version the re-read brought.
+  // The `rev` the save is checked against, taken from the query's FIRST
+  // answer and then held (`seedCampaignMetaBase`). The query itself keeps
+  // refetching while the dialog stands; following it would adopt a concurrent
+  // edit's token and overwrite that edit silently. The base moves only after
+  // a 409, to the `rev` the re-read brought.
   const [base, setBase] = useState<CampaignMetaBase>();
   useEffect(() => {
     setBase((previous) => seedCampaignMetaBase(previous, file.data));
   }, [file.data]);
 
   const save = useRevWriteMutation<void>({
-    // No base yet (still loading, or the document is not readable) — nothing
+    // No `rev` yet (still loading, or the entry could not be read) — nothing
     // to write against, so the mutation cannot start.
     write:
       base === undefined ? undefined : () => writeCampaignMeta(campaign, values, base.rev),
-    fileKey: ["file", campaign, CAMPAIGN_META_PATH],
+    entryKey: ["entry", campaign, CAMPAIGN_META_PATH],
     // The switcher and the pool header read the campaign list; the entry also
     // sits in the tree/search surfaces.
     invalidateOnSuccess: [["campaigns"], ["tree", campaign], ["search", campaign]],
     onSaved: onClose,
-    // The document changed meanwhile: the typed values stay, only the version
-    // underneath them moves on, so the next „Speichern" writes on top of what
-    // is stored now.
+    // 409: the entry changed meanwhile. The typed values stay; only the `rev`
+    // underneath them moves to the re-read one, so the next „Speichern"
+    // writes on top of what is stored now.
     onConflict: (reread) => {
       if (reread !== undefined) setBase({ rev: reread.rev });
     },

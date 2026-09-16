@@ -1,16 +1,14 @@
-// Addresses (issues #57/#79).
+// Addresses.
 //
-// The API surface is address-centric — `GET /file?path=…`, `ParsedFile.path`,
-// every link in the app — and an address names a ROW, derived from that row
-// rather than read off a directory entry. Since issue #79 it carries no file
-// extension either: the file era is over, so nothing is a `.md` any more.
+// The API is address-centric — `GET /entry?path=…`, `EntryResponse.path`,
+// every link in the app — and an address names a ROW, derived from that row.
 //
 // THE ADDRESS SCHEMA, complete:
 //
-//   _campaign                        the campaign row
+//   campaign                         the campaign row
 //   inbox                            the campaign's inbox list
 //   glossary                         the campaign's glossary list
-//   <chapter>/_chapter               a chapter row
+//   <chapter>                        a chapter row
 //   <chapter>/<scene-id>             a scene without a `location`
 //   <chapter>/<location>/<scene-id>  a scene whose `location` names that location
 //   npcs/<id>                        an npc row
@@ -19,24 +17,17 @@
 //
 // Two things to know about the segments:
 //
-//   * a SCENE's GROUP segment is its `location` and nothing else (issue #100).
-//     There is no independent grouping any more: the group is derived, so a
-//     scene can never sit in a group that contradicts the location it names.
-//     The consequence is that a scene's address MOVES when its `location`
-//     does, and an address that names the right scene with a stale group is
-//     therefore not an error — the store resolves a scene by ID and answers
-//     with the CURRENT address in `ParsedFile.path`, which the app follows
-//     (redirect strategy, ADR #17).
-//   * a SCENE's last segment is its ID, not a former file name. The id is the
-//     key the format calls stable ("id … NIE ändern"); the file name never
-//     was, and `scenes.file_slug` was dropped with the cutover.
-//   * `_chapter` is reserved inside a chapter, `npcs`/`locations`/`sessions`
-//     are reserved as first segments — the same reservations the format's
-//     folder layout always had (README, "Entitäten").
+//   * a SCENE's GROUP segment is its `location` and nothing else. There is no
+//     independent grouping: the group is derived, so a scene can never sit in
+//     a group that contradicts the location it names. The consequence is that
+//     a scene's address MOVES when its `location` does, and an address that
+//     names the right scene with a stale group is therefore not an error —
+//     the store resolves a scene by ID and answers with the CURRENT address in
+//     `EntryResponse.path`, which the app follows.
+//   * `campaign`, `inbox`, `glossary`, `npcs`, `locations` and `sessions` are
+//     reserved as first segments, so none of them can be a chapter id.
 //
-// There is deliberately NO backwards compatibility for the old `.md` form
-// (issue #79 AK7, PO: no stored URLs). An address that ends in `.md` simply
-// names nothing and answers 404, like any other unknown address.
+// An address the schema does not describe names nothing and answers 404.
 
 import { ApiError } from "../api-error";
 
@@ -51,19 +42,21 @@ export type Locator =
   | { kind: "inbox" }
   | { kind: "glossary" };
 
-/** The three campaign-level documents. */
-export const CAMPAIGN_PATH = "_campaign";
+/** The three campaign-level entries. */
+export const CAMPAIGN_PATH = "campaign";
 export const INBOX_PATH = "inbox";
 export const GLOSSARY_PATH = "glossary";
 
 /**
  * Reserved first segments that are not chapters — the ONE source for this set
- * (`locatorFromPath` routes them to the entity kinds, so a chapter or a rename
- * that claimed one of them would produce an address nothing can read).
- * Imported by ./write.ts (create) and ./rename.ts (rename) rather than
- * re-declared there.
+ * (`locatorFromPath` routes them to their kinds, so a chapter or a rename that
+ * claimed one of them would produce an address nothing can read). Imported by
+ * ./write.ts (create) and ./rename.ts (rename) rather than re-declared there.
  */
 export const RESERVED_SEGMENTS: ReadonlySet<string> = new Set([
+  CAMPAIGN_PATH,
+  INBOX_PATH,
+  GLOSSARY_PATH,
   "npcs",
   "locations",
   "sessions",
@@ -71,11 +64,9 @@ export const RESERVED_SEGMENTS: ReadonlySet<string> = new Set([
 
 const RESERVED = RESERVED_SEGMENTS;
 
-/** Reserved last segment inside a chapter. */
-const CHAPTER_DOC = "_chapter";
-
+/** A chapter's address is its id. */
 export function chapterPath(id: string): string {
-  return `${id}/${CHAPTER_DOC}`;
+  return id;
 }
 
 export function scenePath(chapterId: string, groupSlug: string, id: string): string {
@@ -133,7 +124,7 @@ export function addressIdentity(rel: string): string {
  * enforced by `assertSafeAddress` before this is called.
  *
  * An address the schema does not describe throws 404 rather than 400: from
- * the client's side "there is no such document" is exactly what it means.
+ * the client's side "there is no such entry" is exactly what it means.
  */
 export function locatorFromPath(rel: string): Locator {
   const segments = rel.split("/");
@@ -142,28 +133,26 @@ export function locatorFromPath(rel: string): Locator {
   if (segments.length === 1) {
     if (last === CAMPAIGN_PATH) return { kind: "campaign" };
     if (last === INBOX_PATH) return { kind: "inbox" };
-    if (last === GLOSSARY_PATH || last === "glossar") return { kind: "glossary" };
-    throw new ApiError(404, "file not found");
+    if (last === GLOSSARY_PATH) return { kind: "glossary" };
+    if (last === "" || RESERVED.has(last)) throw new ApiError(404, "entry not found");
+    return { kind: "chapter", id: last };
   }
 
   const first = segments[0] ?? "";
   if (RESERVED.has(first)) {
-    if (segments.length !== 2 || last === "") throw new ApiError(404, "file not found");
+    if (segments.length !== 2 || last === "") throw new ApiError(404, "entry not found");
     if (first === "npcs") return { kind: "npc", id: last };
     if (first === "locations") return { kind: "location", id: last };
-    return { kind: "session", id: last };
+    if (first === "sessions") return { kind: "session", id: last };
+    throw new ApiError(404, "entry not found");
   }
 
-  if (last === CHAPTER_DOC) {
-    if (segments.length !== 2) throw new ApiError(404, "file not found");
-    return { kind: "chapter", id: first };
-  }
-  if (last === "") throw new ApiError(404, "file not found");
+  if (last === "") throw new ApiError(404, "entry not found");
   if (segments.length === 2) {
     return { kind: "scene", id: last, chapterId: first, groupSlug: "" };
   }
   if (segments.length === 3) {
     return { kind: "scene", id: last, chapterId: first, groupSlug: segments[1] ?? "" };
   }
-  throw new ApiError(404, "file not found");
+  throw new ApiError(404, "entry not found");
 }
