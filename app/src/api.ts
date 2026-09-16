@@ -132,7 +132,7 @@ export function fetchVersion(campaign: string): Promise<VersionResponse> {
 /**
  * The campaign's glossary as a LIST of terms (issue #57): since the SQLite
  * migration it is a table, not a markdown blob. The reading view still opens
- * `glossary` as a document — that rendering comes from these same rows —
+ * `glossary` as an entry — that rendering comes from these same rows —
  * but anything that wants the terms themselves reads this.
  */
 export function fetchGlossary(campaign: string): Promise<GlossaryResponse> {
@@ -500,7 +500,7 @@ export type UsageRef =
   /** A body text says `[[<id>]]` (issue #68). */
   | "bodyRefs";
 
-/** One referencing document, with how many of its rows point at the entity. */
+/** One referencing entry, with how many of its rows point at the entity. */
 export interface UsageSite {
   kind: "scene" | "npc" | "location" | "session" | "chapter" | "campaign";
   id: string;
@@ -511,7 +511,7 @@ export interface UsageSite {
 
 export interface UsageGroup {
   ref: UsageRef;
-  /** Referencing ROWS, not documents. */
+  /** Referencing ROWS, not entries. */
   count: number;
   sites: UsageSite[];
 }

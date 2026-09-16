@@ -11,7 +11,7 @@
 //   <chapter>/<scene-id> · <chapter>/<group>/<scene-id> ·
 //   npcs/<id> · locations/<id> · sessions/<id>
 //
-// The wire vocabulary follows from that: a document's fields are
+// The wire vocabulary follows from that: an entry's fields are
 // `properties`, its optimistic-concurrency token is `rev` (the row version).
 // Neither `frontmatter` nor `mtimeMs` exists above the importer any more.
 //
@@ -51,32 +51,32 @@
 //                                              `null` deletes the row; anything but de/en/
 //                                              null is 400. NOT localStorage — the language
 //                                              is server state (quality floor)
-//   [x] POST /api/:campaign/chapters         { title, goal? } -> 201 the chapter document.
+//   [x] POST /api/:campaign/chapters         { title, goal? } -> 201 the chapter entry.
 //                                              Same id derivation and same 400/409 as above;
 //                                              `goal` lands under `## Ziel des Kapitels`, the
 //                                              heading the pool reads its goal line from
-//   [x] POST /api/:campaign/scenes             { title, chapter } -> 201 the scene document
+//   [x] POST /api/:campaign/scenes             { title, chapter } -> 201 the scene entry
 //                                              (type planned, status draft, empty body, no
 //                                              `location`). `chapter` is REQUIRED and must
 //                                              exist — 400 otherwise: a scene's chapter is
 //                                              part of its address and chapters are never
 //                                              created by being named (ADR #14)
-//   [x] POST /api/:campaign/npcs               { name } -> 201 the npc document. An EMPTY
+//   [x] POST /api/:campaign/npcs               { name } -> 201 the npc entry. An EMPTY
 //                                              entry for the derived id (one a reference
 //                                              created, issue #70) is FILLED rather than
 //                                              collided with; an entry that holds content
 //                                              answers the `slug_taken` 409; a RESERVED
 //                                              id answers 409 { code: "slug_reserved" },
 //                                              same shape, different sentence
-//   [x] POST /api/:campaign/locations          { name } -> 201 the location document, same
+//   [x] POST /api/:campaign/locations          { name } -> 201 the location entry, same
 //                                              rules as npcs
 //   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (properties parsed)
 //   [x] GET  /api/:campaign/entry?path=...      one entry (properties + body + rev). glossary
 //                                              answers 200 with an EMPTY body when the
-//                                              campaign has no terms — it is an empty
-//                                              document, not a missing one (#57 review:
-//                                              the 404 made a glossary the DM had just
-//                                              emptied unreachable from the editor).
+//                                              campaign has no terms — an empty list is
+//                                              an entry, not a missing one (a 404 would
+//                                              make a glossary the DM had just emptied
+//                                              unreachable from the editor).
 //                                              inbox does the same since #70 — same
 //                                              reasoning, it had been left behind.
 //                                              `rev` of glossary/inbox is that
@@ -95,7 +95,7 @@
 //                                              Ort a scene's `location` CREATES — applied
 //                                              only on insert, never a rename (#100)
 //   [x] PUT  /api/:campaign/entry              { path, rev, body } — write the markdown
-//                                              BODY of an existing document (issue #15);
+//                                              BODY of an existing entry;
 //                                              its properties are untouched (they are
 //                                              PATCH /properties' job), same rev guard
 //                                              as PATCH above (409 `rev_conflict`)
@@ -236,7 +236,7 @@
 //                                              decision unit is the one the DM edits.
 //   [x] POST /api/:campaign/generate/augment/apply
 //                                              { path, rev, properties?, body?, jobId? }
-//                                              -> the written document. The DM's
+//                                              -> the written entry. The DM's
 //                                              decisions: the accepted properties fields
 //                                              and the body assembled from the accepted
 //                                              blocks, written in ONE transaction against

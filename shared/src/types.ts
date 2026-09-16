@@ -713,7 +713,7 @@ export interface GlossaryEntry {
 
 /**
  * GET/PUT /api/:campaign/glossary. `rev` is the guard token of the WHOLE
- * list (`campaigns.glossary_rev`) — the glossary is one document that is
+ * list (`campaigns.glossary_rev`) — the glossary is one entry that is
  * edited as a whole, so there is no per-entry version to hold, and the
  * ORDER of `entries` is the stored order (that is what reordering writes).
  */

@@ -1,4 +1,4 @@
-// Rows → the API's document shapes (issues #57/#79).
+// Rows → the API's entry shapes.
 //
 // Every read endpoint answers `ParsedFile`/`EntryResponse`: an address, a
 // `properties` mapping, a markdown body, and the concurrency token the client
@@ -49,7 +49,7 @@ export interface CampaignRow {
   extra: string;
   version: number;
   rev: number;
-  /** The glossary's prose preamble and the three list documents' guard tokens. */
+  /** The glossary's prose preamble and the three list entries' guard tokens. */
   glossaryIntro: string;
   glossaryRev: number;
   inboxRev: number;
@@ -219,7 +219,7 @@ function parsed(
  * a campaign whose `campaign` said nothing usable, and the parser's own
  * rule for a missing `name` is the id fallback (shared/src/parse.ts). The
  * fallback is applied HERE, once, and everything that shows a campaign name
- * reads it through this function: the campaign document (`GET /entry`) and the
+ * reads it through this function: the campaign entry (`GET /entry`) and the
  * campaign list (`GET /campaigns`) disagreed about it before issue #62.
  */
 export function campaignDisplayName(row: CampaignRow): string {

@@ -28,7 +28,7 @@ import type { CalloutKind } from "@grimoire/shared/types";
 import type { Translate } from "@/i18n";
 
 // The format's own vocabulary and predicates — shared with the renderer so the
-// composer can never model a document differently than the reading view shows
+// composer can never model a text differently than the reading view shows
 // it (app/src/markdown/grammar.ts).
 import {
   CALLOUT_LABEL_KEYS,

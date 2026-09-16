@@ -164,7 +164,7 @@ export function GenerateRoute() {
     retry: false,
   });
   // Same purpose for the campaign knowledge (issue #53 AK5) — the hint names
-  // the NUMBER of entries, so this reads the list, not a document. The same
+  // the NUMBER of entries, so this reads the list, not an entry. The same
   // query key the settings editor writes, so a rule saved there shows up here
   // without a reload.
   const knowledge = useQuery({
@@ -425,7 +425,7 @@ export function GenerateRoute() {
    * button unmounts the moment the part goes `running`, and the status card
    * itself unmounts the moment the part is `done` and becomes its draft card
    * — with a fast model both happen within a poll of the click, so the focus
-   * fell to `body` and a keyboard DM landed at the top of the document
+   * fell to `body` and a keyboard DM landed at the top of the page
    * (quality floor: focus stays visible and where the work is). So the focus
    * FOLLOWS the part across those swaps, once per commit, and stops as soon
    * as the part is settled or the DM has moved the focus themselves.

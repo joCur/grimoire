@@ -542,7 +542,7 @@ export const de = {
   "palette.results.aria": "Suchergebnisse",
   "palette.empty": "Nichts gefunden.",
   // The kind label of a NAVIGATION row (issue #53): a page of this campaign,
-  // not a document the index found.
+  // not an entry the index found.
   "palette.kind.page": "Seite",
 
   // --- stale-bundle banner (components/UpdateBanner.tsx) -------------------

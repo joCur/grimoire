@@ -127,7 +127,7 @@ function requireRev(value: unknown): number {
  * One SINGLE-LINE field of a knowledge entry (review of #53).
  *
  * The knowledge list feeds the generator prompt, where an entry becomes one
- * bullet in a markdown document the model reads as INSTRUCTIONS
+ * bullet in markdown the model reads as INSTRUCTIONS
  * (store/read.ts knowledgeText). A newline inside an entry is
  * therefore not a formatting detail: it lets an entry open lines of its own —
  * a „## " heading that poses as a section of the prompt, for instance. The UI
@@ -211,7 +211,7 @@ api.get("/:campaign/session", async (c) =>
 
 // GET /api/:campaign/search?q=... -> { results: SearchResult[] } (max 20)
 // Full-text search over the FTS5 index (issue #57): scenes, npcs, locations,
-// chapters, the campaign document and the GLOSSARY, ranked by bm25 with the
+// chapters, the campaign entry and the GLOSSARY, ranked by bm25 with the
 // column weights of the index migration. Every token is a prefix term, so a
 // half-typed palette query still matches, and the tokenizer folds diacritics
 // ("leucht" finds "Leuchtturm"). Response shape unchanged.

@@ -1,17 +1,16 @@
 // The markdown editor: a mono textarea and the rendered preview of the SAME
 // markdown pipeline the reading view uses, switched by one quiet toggle.
 //
-// It grew in the generator review (issues #12/#21, one toggle per draft card)
-// and is now also the reading view's edit mode (issue #15) — same surface, so
-// "Bearbeiten" feels identical wherever the DM meets it.
+// The generator review (one toggle per draft card) and the reading view's
+// edit mode share it — same surface, so „Bearbeiten" feels identical wherever
+// the DM meets it.
 //
 // Three parts, and every caller composes them itself: the TOGGLE, the SURFACE
 // and the framed EditorShell around them. Nothing here is a composed
 // „whole editor" — the generator cards put the toggle in the card header and
 // the surface below the chip row (they are not siblings), and the reading view
 // puts a mode switch and its Speichern/Abbrechen into the same toolbar. A
-// pre-composed block would fit neither, and the one that used to sit here fit
-// nobody: it had no caller left.
+// pre-composed block would fit neither.
 //
 // No local state: the caller owns `value` and `editing`, because both outlive
 // this component (the generator mirrors edits into its server job, the reading
@@ -64,10 +63,10 @@ export interface MarkdownEditorSurfaceProps {
   /** aria-label of the textarea; include the entry/draft name so labels stay unique. */
   label: string;
   /**
-   * What the preview renders when it must differ from `value`: the generator
-   * strips the properties block off its drafts (lib/generate.ts markdownBody)
-   * because a draft is a whole FILE. Defaults to `value`, which is what the
-   * reading view needs — GET /entry already hands out a body without it.
+   * What the preview renders, when that is not `value` itself. The generator
+   * edits a draft as one markdown text WITH its properties block, but previews
+   * only the body (lib/generate.ts `markdownBody`). The reading view edits the
+   * body alone, so it leaves this unset and the preview renders `value`.
    */
   preview?: string;
   /**

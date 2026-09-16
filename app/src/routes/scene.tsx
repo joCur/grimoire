@@ -59,7 +59,7 @@ export function SceneRoute() {
   // another entry would be a lie. Opening a different entry simply leaves edit
   // mode.
   //
-  // The document is identified by its `id`, NOT by its address (issue #100):
+  // The entry is identified by its `id`, NOT by its address:
   // a scene's address carries its `location`, so correcting the location
   // while the body editor is open moves the address — and keying on the
   // address threw the open draft away for a move the DM had just asked for.
@@ -80,7 +80,7 @@ export function SceneRoute() {
 
   // What the entry on screen IS, across every address it may have: the
   // properties `id`, which the format calls stable („id … NIE ändern"), with
-  // the canonical address as the fallback for a document whose properties
+  // the canonical address as the fallback for an entry whose properties
   // carries none.
   const docId = data === undefined ? undefined : (fmString(data.properties.id) ?? data.path);
   const editing = editingId !== undefined && editingId === docId;

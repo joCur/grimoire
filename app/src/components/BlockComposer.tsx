@@ -337,7 +337,7 @@ export function BlockComposer({
     <section aria-label={t("composer.list.aria", { label })} className="mt-3">
       <BlockList
         blocks={blocks}
-        scope="document"
+        scope="body"
         openId={openId}
         picker={picker}
         issues={issues}
@@ -461,7 +461,7 @@ export const InsertSlot = memo(function InsertSlot({
   picking,
   handles,
 }: {
-  /** The list this slot inserts into; undefined = the document itself. */
+  /** The list this slot inserts into; undefined = the body itself. */
   sectionId: string | undefined;
   index: number;
   scope: BlockScope;
@@ -626,7 +626,7 @@ export const BlockCard = memo(function BlockCard({
 
 /**
  * What a collapsed card shows: the first two lines of the block's own text —
- * plain, not rendered. The composer is a structure view; the rendered document
+ * plain, not rendered. The composer is a structure view; the rendered text
  * lives one click away in „Markdown" → „Vorschau" and, after saving, in the reading
  * view itself.
  */

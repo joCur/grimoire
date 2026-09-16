@@ -2,7 +2,7 @@
 // feedback on PR #87): „Kampagnenwissen" (/:campaign/knowledge) and „Glossar"
 // (/:campaign/glossary).
 //
-// Both lists are ONE document the server takes as a whole (server/src/server.ts):
+// Both lists are ONE text the server takes as a whole (server/src/server.ts):
 // the array order is the stored order, so „umsortieren", „löschen" and
 // „bearbeiten" are all the same request — a whole-list PUT guarded by the
 // list's `rev`. This module is that arithmetic — pure, so the pages stay about

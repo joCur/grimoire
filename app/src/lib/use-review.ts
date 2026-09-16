@@ -150,7 +150,7 @@ export function useReviewEntries(
     queryFn: () => fetchTree(campaign),
     enabled: enabled && campaign !== "",
   });
-  // An empty inbox answers 200 with an empty document since issue #70. The
+  // An empty inbox answers 200 with an empty body. The
   // 404 tolerance stays for a campaign the server does not know — an error
   // here must never look like "no ideas", it just yields no entries.
   const inbox = useQuery({

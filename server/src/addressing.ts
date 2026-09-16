@@ -1,6 +1,6 @@
 // Address hygiene: the two guards the store runs before it looks a row up.
 //
-// A campaign id and a document address are strings the CLIENT sends, and even
+// A campaign id and an entry address are strings the CLIENT sends, and even
 // though they resolve to rows they must stay a single non-hidden segment / a
 // relative, non-hidden, traversal-free path: those rules are the addressing
 // contract the store's `locatorFromPath` is written against, and rejecting
@@ -35,7 +35,7 @@ export function assertSafeCampaignId(id: string): void {
 }
 
 /**
- * Lexical validation of a campaign-relative document ADDRESS. Rejects
+ * Lexical validation of a campaign-relative entry ADDRESS. Rejects
  * absolute paths (POSIX and Windows-style), backslashes, `..`/`.` segments
  * and hidden segments. Encoded traversal is already decoded by the time the
  * query value gets here, so it hits the same checks.

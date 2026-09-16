@@ -8,7 +8,7 @@
 // extensions at once (tables, strikethrough, task lists, autolink literals,
 // footnotes) and offers no switch to leave four of them off — `singleTilde`
 // only narrows strikethrough, it does not disable it. Two of the four would
-// change documents we already have:
+// change texts we already have:
 //
 //   * TASK LISTS would eat the inbox syntax. `- [x] erledigt` is a LINE IN A
 //     FILE that the app checks off through the API (README, Inbox); rendered

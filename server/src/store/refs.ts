@@ -22,13 +22,13 @@
 // columns of one campaign — cheap in a single-user tool, and precise, which
 // is why it beats the pragmatic "reindex the whole campaign".
 //
-// SCOPE: every document whose body a DM writes prose in — scene, npc,
+// SCOPE: every entry whose body a DM writes prose in — scene, npc,
 // location, chapter AND the campaign file (`campaign`, the free note
 // space). The campaign file used to be scanned HALF: its index row expanded
 // references (write.ts `indexCampaign`) but no scan ever found it again, so a
 // rename left a stale name in the search index and a dead slug in the note.
 // It is now a FULL body kind: `reindexReferrers` and `rewriteBodyRefs` cover
-// it, and it counts as a usage site like any other document. The glossary
+// it, and it counts as a usage site like any other entry. The glossary
 // stays out — its rows are term/explanation pairs, not a prose body.
 //
 // CODE IS NOT PROSE: `` `[[jorna]]` `` and fenced blocks render literally, so
@@ -174,7 +174,7 @@ const REF_TABLES = {
   chapter: chapters,
 } as const;
 
-/** One referring document with the body the check and the rewrite work on. */
+/** One referring entry with the body the check and the rewrite work on. */
 interface ReferrerRow {
   kind: RefBodyKind;
   id: string;
@@ -182,7 +182,7 @@ interface ReferrerRow {
 }
 
 /**
- * Candidate bodies for `[[slug]]` and the documents they belong to.
+ * Candidate bodies for `[[slug]]` and the entries they belong to.
  *
  * The `like` is only a PRE-FILTER — SQL cannot tell prose from code, so every
  * candidate is confirmed in JS with the shared grammar. The campaign row is

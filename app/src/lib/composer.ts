@@ -10,7 +10,7 @@
 //      authoritative and there is nothing to diverge. Switching modes goes
 //      through serializeBlocks / parseBlocks, which phase 1 guarantees to be
 //      lossless (`serializeBlocks(parseBlocks(body)) === body`).
-//   2. TREE EDITS. The composer shows two levels: the document and the children
+//   2. TREE EDITS. The composer shows two levels: the body and the children
 //      of an `## If:` section. Every operation here addresses a block by id,
 //      finds the list that OWNS it and routes the change through the phase-1
 //      helpers — withBlockText/withIfCondition (which drop the block's `source`,
@@ -100,7 +100,7 @@ export function withDraftBlocks(blocks: SceneBlock[]): ComposerDraft {
 
 /** Where a new block goes: which list, and at which index in it. */
 export interface InsertAt {
-  /** The `## If:` section to insert into; undefined = the document itself. */
+  /** The `## If:` section to insert into; undefined = the body itself. */
   sectionId?: string;
   index: number;
 }
@@ -111,7 +111,7 @@ export function sameInsertAt(a: InsertAt | undefined, b: InsertAt): boolean {
 }
 
 /**
- * Apply `change` to the list that CONTAINS `id` — the document's own list, or
+ * Apply `change` to the list that CONTAINS `id` — the body's own list, or
  * the children of the one section holding it. Section children go back through
  * withChildren, so the section keeps its heading `source` (phase-1 rule 2).
  *
@@ -195,7 +195,7 @@ function withRoomForChildren(section: IfSectionBlock): IfSectionBlock {
   return { ...section, gap: undefined };
 }
 
-/** Insert a fresh block into the document or into one section's children. */
+/** Insert a fresh block into the body or into one section's children. */
 export function insertAt(blocks: SceneBlock[], at: InsertAt, block: SceneBlock): SceneBlock[] {
   const { sectionId, index } = at;
   if (sectionId === undefined) return insertBlock(blocks, index, block);
@@ -264,8 +264,8 @@ export function composerIssues(blocks: SceneBlock[], t: Translate): Record<strin
 
 // --- new blocks --------------------------------------------------------------
 
-/** Which list the „+" belongs to — the document, or one If-section's children. */
-export type BlockScope = "document" | "section";
+/** Which list the „+" belongs to — the body, or one If-section's children. */
+export type BlockScope = "body" | "section";
 
 /** One entry of the type picker. */
 export interface NewBlockOption {
@@ -300,7 +300,7 @@ export function newBlockOptions(scope: BlockScope, t: Translate): NewBlockOption
     create: () => makeHeading(newHeadingDepth(scope), ""),
   });
   options.push({ key: "text", label: t("composer.blockType.text"), create: () => makeText("") });
-  if (scope === "document") {
+  if (scope === "body") {
     options.push({
       key: "ifSection",
       label: t("composer.blockType.ifSection"),
@@ -318,12 +318,12 @@ const ALL_DEPTHS: readonly HeadingBlock["depth"][] = [1, 2, 3, 4, 5, 6];
  * endsIfSection), not a second hard-coded „3".
  */
 export function headingDepths(scope: BlockScope): HeadingBlock["depth"][] {
-  if (scope === "document") return [...ALL_DEPTHS];
+  if (scope === "body") return [...ALL_DEPTHS];
   return ALL_DEPTHS.filter((depth) => !endsIfSection(depth));
 }
 
-/** The level a NEW heading starts at: `##` in the document, the first level
+/** The level a NEW heading starts at: `##` in the body, the first level
  *  that does not end the section inside one. */
 function newHeadingDepth(scope: BlockScope): HeadingBlock["depth"] {
-  return scope === "document" ? 2 : (headingDepths(scope)[0] ?? 3);
+  return scope === "body" ? 2 : (headingDepths(scope)[0] ?? 3);
 }

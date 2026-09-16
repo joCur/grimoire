@@ -378,14 +378,14 @@ export async function collectContext(campaign: string): Promise<CampaignContext>
 // --- mechanical validation (generator/README.md step 4) ----------------------
 
 /**
- * One document of a model reply (issue #100). There is no `path` any more:
+ * One entry of a model reply. There is no `path`:
  * the model does not address anything. It writes a DOCUMENT, the `id` in its
  * properties is the entity's key, and the server builds the address from the
  * run's chapter plus that id — which is what makes a corrected `location`
  * move the scene instead of contradicting a path the model chose.
  *
  * `kind` is how a suggested ENTRY says what it is; scenes and the npc run's
- * single document carry none (the run knows).
+ * single entry carry none (the run knows).
  */
 export interface RawEntry {
   kind?: string;
@@ -430,9 +430,9 @@ function addressId(rel: string): string {
  * actually split it off.
  */
 /**
- * Re-parse a document under the ADDRESS the server derives from the `id`
+ * Re-parse an entry under the ADDRESS the server derives from the `id`
  * inside it (issue #100). The shared parser fills a missing `name`/`title`
- * from the address's last segment, so once the id is known the document has
+ * from the address's last segment, so once the id is known the entry has
  * to be parsed again under its real address — otherwise a reply that
  * legitimately omits the display name degrades to a placeholder nobody chose.
  */
@@ -540,7 +540,7 @@ export function validateEntry(entry: RawEntry, index: number, errors: string[]):
 }
 
 /**
- * Which ids a scene document may REFERENCE (issue #102). Before this ticket
+ * Which ids a scene may REFERENCE (issue #102). Before this ticket
  * the answer was "the campaign plus the stubs of the same reply"; with the
  * pipeline the reply is one scene and the other ids come from the OUTLINE, so
  * the allowed sets became a parameter instead of a local variable.
@@ -556,7 +556,7 @@ export interface AllowedRefs {
  * re-validation have to judge a scene by exactly the same rules, and the one
  * way to guarantee that is one function.
  *
- * `label` is how the document is named in an error message; `seenIds` is the
+ * `label` is how the entry is named in an error message; `seenIds` is the
  * duplicate guard of the surrounding run (the single-scene reply shares the
  * set with the outline's ids).
  *

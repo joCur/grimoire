@@ -303,7 +303,7 @@ function draftAddress(path: string): string {
   const stripped = path.endsWith(".md") ? path.slice(0, -3) : path;
   const segments = stripped.split("/");
   // Only a SCENE path collapses: `npcs/<id>`/`locations/<id>` have two
-  // segments anyway, and a chapter document is not a draft path.
+  // segments anyway, and a chapter is not a draft path.
   if (segments.length !== 3) return stripped;
   if (RESERVED_SEGMENTS.has(segments[0]!)) return stripped;
   return `${segments[0]!}/${segments[2]!}`;
