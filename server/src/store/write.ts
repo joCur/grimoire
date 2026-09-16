@@ -780,6 +780,31 @@ export function backfillReferencedNpcs(tx: GrimoireDb, campaign: string): string
 // --- scene reference tables ---------------------------------------------------
 
 /**
+ * The 400 both npc-reference refusals answer with: the value, the rule, and
+ * the slug the value would have made — an id the reference would then create
+ * a row for, so it is a usable proposal and not just a hint.
+ *
+ * `field` names the place in the ENGLISH fallback text only. The app renders
+ * the sentence from the code, and the two codes exist precisely because the
+ * two places to fix read differently: a scene's npc list is a form field, a
+ * relation line is a line in a body.
+ */
+function refNotAnId(
+  code: "npc_ref_not_an_id" | "relation_ref_not_an_id",
+  field: string,
+  value: string,
+): ApiError {
+  const suggestion = toSlug(value);
+  return new ApiError(
+    400,
+    `${field} holds npc ids, not names: "${value}" is no kebab-case slug ` +
+      "(a-z, 0-9, single dashes)" +
+      (suggestion === "" ? "" : `; use "${suggestion}" (the entry is created for you)`),
+    suggestion === "" ? { code, value } : { code, value, suggestion },
+  );
+}
+
+/**
  * `npcs:` HOLDS IDS, NOT NAMES (issue #70 audit).
  *
  * Unlike `location`, this list has no free-text half: the README calls it a
@@ -796,14 +821,16 @@ export function backfillReferencedNpcs(tx: GrimoireDb, campaign: string): string
  * keys), and refusing that on the way out would make a legacy scene
  * unsavable — an unrelated `PATCH { status }` re-sends the whole list. Old
  * free text stays until somebody removes it; nothing new joins it.
+ *
+ * The body carries a CODE, like the `location` refusal it is the sibling of:
+ * until it did, the editor showed this English sentence verbatim in a German
+ * UI — and the slug the value would have made was in it but not in the app's
+ * reach, so no view could offer it.
  */
 function assertNpcRefSlugs(npcRefs: string[], known: readonly string[]): void {
   for (const id of npcRefs) {
     if (id === "" || known.includes(id) || ENTITY_SLUG.test(id)) continue;
-    throw new ApiError(
-      400,
-      `npcs holds npc ids, not names: "${id}" is no kebab-case slug (a-z, 0-9, single dashes)`,
-    );
+    throw refNotAnId("npc_ref_not_an_id", "npcs", id);
   }
 }
 
@@ -866,11 +893,7 @@ function assertRelationRefSlugs(
   for (const relation of relations) {
     const id = relation.otherNpcId;
     if (id === "" || known.includes(id) || ENTITY_SLUG.test(id)) continue;
-    throw new ApiError(
-      400,
-      `Beziehungen holds npc ids, not names: "${id}" is no kebab-case slug ` +
-        "(a-z, 0-9, single dashes)",
-    );
+    throw refNotAnId("relation_ref_not_an_id", "Beziehungen", id);
   }
 }
 

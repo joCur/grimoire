@@ -414,7 +414,10 @@ test("a relation counterpart written as a NAME is refused, and the draft survive
   await textarea.fill(typed);
   await page.getByRole("button", { name: "Speichern" }).click();
 
-  await expect(page.getByText(/holds npc ids, not names/)).toBeVisible();
+  // The German catalog sentence, not the server's English fallback: the
+  // refusal carries a code now, and it names the slug the line could use.
+  await expect(page.getByText(/Beziehungen halten die id des Gegenübers/)).toBeVisible();
+  await expect(page.getByText(/alte-freundin-aus-waterdeep/)).toBeVisible();
   // The editor stays open with the typed text — nothing is thrown away.
   await expect(textarea).toHaveValue(typed);
   expect(await split(api, NPC)).toEqual(before);

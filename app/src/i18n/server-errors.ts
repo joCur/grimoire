@@ -29,6 +29,8 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   slug_reserved: "server.slug_reserved",
   slug_empty: "server.slug_empty",
   location_not_an_id: "server.location_not_an_id",
+  npc_ref_not_an_id: "server.npc_ref_not_an_id",
+  relation_ref_not_an_id: "server.relation_ref_not_an_id",
   glossary_duplicate_term: "server.glossary_duplicate_term",
   session_running: "server.session_running",
   session_not_empty: "server.session_not_empty",
@@ -36,6 +38,16 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   job_restarted: "server.job_restarted",
   llm_truncated: "server.llm_truncated",
   llm_invalid: "server.llm_invalid",
+};
+
+/**
+ * The second sentence of a code that PROPOSES a slug: what it says when the
+ * value yields none. A code missing here has one sentence and no proposal.
+ */
+const NO_SUGGESTION_KEY: Partial<Record<ErrorCode, MessageKey>> = {
+  location_not_an_id: "server.location_not_an_id.noSuggestion",
+  npc_ref_not_an_id: "server.npc_ref_not_an_id.noSuggestion",
+  relation_ref_not_an_id: "server.relation_ref_not_an_id.noSuggestion",
 };
 
 const KIND_KEY: Record<ErrorKind, MessageKey> = {
@@ -89,7 +101,9 @@ function paramsFor(
       if (!isField(body.field)) return undefined;
       return { field: t(FIELD_KEY[body.field]) };
     }
-    case "location_not_an_id": {
+    case "location_not_an_id":
+    case "npc_ref_not_an_id":
+    case "relation_ref_not_an_id": {
       const value = text(body.value);
       if (value === undefined) return undefined;
       // Without a usable slug there is nothing to propose — the sentence
@@ -130,12 +144,11 @@ export function serverErrorBodyMessage(
   if (isErrorCode(code)) {
     const params = paramsFor(code, body, t);
     if (params !== undefined) {
-      // One code, two sentences: „location_not_an_id" reads differently with
-      // and without a proposal, and a placeholder with no value would show
-      // as the literal `{suggestion}`.
-      if (code === "location_not_an_id" && params.suggestion === undefined) {
-        return t("server.location_not_an_id.noSuggestion", params);
-      }
+      // One code, two sentences: a refusal that names the slug it would have
+      // used reads differently from one that has none to offer, and a
+      // placeholder with no value would show as the literal `{suggestion}`.
+      const key = NO_SUGGESTION_KEY[code];
+      if (key !== undefined && params.suggestion === undefined) return t(key, params);
       return t(CODE_KEY[code], params);
     }
   }

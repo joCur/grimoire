@@ -543,13 +543,19 @@ tat, oder umgekehrt. Verbindlich ist ab jetzt:
   Werte sind ausgenommen — die Migration importiert, was da ist, und eine
   Alt-Szene muss speicherbar bleiben. Die Karte einer solchen Alt-Referenz
   sagt „keine NPC-id, deshalb kein Eintrag" statt „Server prüfen".
+  Der Body trägt `400 npc_ref_not_an_id` mit `{ value, suggestion }` — wie die
+  `location`-Absage, damit der Editor einen deutschen Satz mit dem Slug zeigt
+  und nicht den englischen Fallback-Text.
 - **`## Beziehungen` nimmt ebenfalls ids, keine Namen** (Nachtrag mit #18).
   Die linke Hälfte einer Beziehungs-Zeile IST `other_npc_id`, also derselbe
   Verweis wie ein Listeneintrag — ein NEUER Gegenüber ohne Slug-Form ist 400,
   ein bereits gespeicherter bleibt speicherbar. Ohne diese Regel scheiterte
   die Zeile am Fremdschlüssel: ein gewöhnliches Speichern antwortete 500, das
   Übernehmen einer Ergänzung ebenso, und der Generator-Apply meldete
-  „Ziel existiert schon".
+  „Ziel existiert schon". Eigener Code, `400 relation_ref_not_an_id`, mit
+  demselben `{ value, suggestion }`: die Regel ist dieselbe, aber der Satz
+  nennt eine andere Stelle zum Reparieren — eine Zeile im Text statt ein
+  Feld im Dialog.
 - **`chapter:` ist überall 400.** Ein unbekanntes Kapitel wurde bei einer
   Szene abgelehnt, bei NPC und Ort still gespeichert; jetzt gilt für alle drei
   dasselbe (nur bei geändertem Wert, wegen Bestandsdaten), und der Hinweis im

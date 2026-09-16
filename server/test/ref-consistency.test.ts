@@ -492,9 +492,31 @@ describe("the audit of the #70 rules", () => {
       }),
     });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toMatch(/npc ids, not names/);
+    // The body carries the code the app has a sentence for, plus the slug it
+    // would have used — the same shape the `location` refusal has, so the
+    // chips input can offer the id instead of echoing an English sentence.
+    expect(await res.json()).toMatchObject({
+      code: "npc_ref_not_an_id",
+      value: "Alte Fischerin",
+      suggestion: "alte-fischerin",
+    });
     // The scene is unchanged — no half-written list.
     expect((await getFile(SCENE)).properties.npcs).toEqual(before.properties.npcs);
+  });
+
+  test("a name no slug survives is refused with no proposal", async () => {
+    const before = await getFile(SCENE);
+    const res = await app.request("/api/beispiel/properties", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: SCENE, rev: before.rev, patch: { npcs: ["???"] } }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as Record<string, unknown>;
+    // Nothing to propose, so nothing is proposed: an id is never invented out
+    // of nothing, and the app has a second sentence for exactly this.
+    expect(body).toMatchObject({ code: "npc_ref_not_an_id", value: "???" });
+    expect(body.suggestion).toBeUndefined();
   });
 
   test("…but STORED free text stays savable (the migration imports what is there)", async () => {

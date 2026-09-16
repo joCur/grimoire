@@ -296,6 +296,14 @@ export const en: Messages = {
     'Location “{value}” is not a location id — use “{suggestion}”; the entry is created for you.',
   "server.location_not_an_id.noSuggestion":
     'Location “{value}” is not a location id — please use lowercase letters, digits and dashes.',
+  "server.npc_ref_not_an_id":
+    'The npc list holds ids, not names — use “{suggestion}” instead of “{value}”; the entry is created for you.',
+  "server.npc_ref_not_an_id.noSuggestion":
+    'The npc list holds ids, not names, and “{value}” is none — please use lowercase letters, digits and dashes.',
+  "server.relation_ref_not_an_id":
+    'A relation holds the counterpart\'s id, not a name — use “{suggestion}” instead of “{value}”; the entry is created for you.',
+  "server.relation_ref_not_an_id.noSuggestion":
+    'A relation holds the counterpart\'s id, not a name, and “{value}” is none — please use lowercase letters, digits and dashes.',
   "server.glossary_duplicate_term":
     'Glossary term “{term}” appears more than once — please merge the entries.',
   "server.session_running": "An older session is still running — end it first.",

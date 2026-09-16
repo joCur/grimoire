@@ -954,9 +954,16 @@ describe("PUT /api/:campaign/entry", () => {
         body: withRelation(before.body, "- Alte Freundin aus Waterdeep: sie schreiben sich"),
       });
       expect(res.status).toBe(400);
-      const error = ((await res.json()) as { error: string }).error;
-      expect(error).toContain("Beziehungen holds npc ids, not names");
-      expect(error).toContain("Alte Freundin aus Waterdeep");
+      const body = (await res.json()) as { error: string; code?: string };
+      expect(body.error).toContain("Beziehungen holds npc ids, not names");
+      expect(body.error).toContain("Alte Freundin aus Waterdeep");
+      // Its own code, so the editor shows a German sentence naming the line
+      // to fix rather than the English fallback text.
+      expect(body).toMatchObject({
+        code: "relation_ref_not_an_id",
+        value: "Alte Freundin aus Waterdeep",
+        suggestion: "alte-freundin-aus-waterdeep",
+      });
       expect(await getFile(NPC)).toEqual(before);
     });
 

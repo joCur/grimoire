@@ -40,6 +40,20 @@ export const ERROR_CODES = [
    * creates the location row). `{ value, suggestion }`
    */
   "location_not_an_id",
+  /**
+   * 400, scene write: an entry of the `npcs` list is neither empty nor an
+   * entity id. The list holds REFERENCES, and the reference creates the npc
+   * row. `{ value, suggestion }` — `suggestion` is absent when the value
+   * yields no slug at all.
+   */
+  "npc_ref_not_an_id",
+  /**
+   * 400, npc body write: the counterpart of a `## Beziehungen` line is
+   * neither empty nor an entity id. Same rule as `npc_ref_not_an_id`, its own
+   * code because the sentence names a different place to fix.
+   * `{ value, suggestion }`
+   */
+  "relation_ref_not_an_id",
   /** 400, glossary write: one term appears twice. `{ term }` */
   "glossary_duplicate_term",
   /** 409, session start: an older session is still running. `{ path }` */

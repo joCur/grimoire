@@ -325,6 +325,14 @@ export const de = {
     'Der Ort „{value}“ ist keine Orts-id — „{suggestion}“ verwenden, der Eintrag wird angelegt.',
   "server.location_not_an_id.noSuggestion":
     'Der Ort „{value}“ ist keine Orts-id — bitte Kleinbuchstaben, Ziffern und Bindestriche verwenden.',
+  "server.npc_ref_not_an_id":
+    'Die NPC-Liste hält ids, keine Namen — „{suggestion}“ statt „{value}“ verwenden, der Eintrag wird angelegt.',
+  "server.npc_ref_not_an_id.noSuggestion":
+    'Die NPC-Liste hält ids, keine Namen — „{value}“ ist keine: bitte Kleinbuchstaben, Ziffern und Bindestriche verwenden.',
+  "server.relation_ref_not_an_id":
+    'Beziehungen halten die id des Gegenübers, keinen Namen — „{suggestion}“ statt „{value}“ verwenden, der Eintrag wird angelegt.',
+  "server.relation_ref_not_an_id.noSuggestion":
+    'Beziehungen halten die id des Gegenübers, keinen Namen — „{value}“ ist keine: bitte Kleinbuchstaben, Ziffern und Bindestriche verwenden.',
   "server.glossary_duplicate_term":
     'Glossar-Begriff „{term}“ kommt mehrfach vor — bitte zusammenfassen.',
   "server.session_running": "Eine ältere Session läuft noch — erst beenden.",
