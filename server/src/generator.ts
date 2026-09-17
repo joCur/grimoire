@@ -569,7 +569,7 @@ export function validateSceneEntry(input: {
   allowed: AllowedRefs;
   seenIds: Set<string>;
   errors: string[];
-  /** The id the OUTLINE assigned — a pipeline part may not rename itself. */
+  /** The id the OUTLINE assigned — a pipeline part may not change its own. */
   expectedId?: string;
 }): GeneratedSceneDraft | null {
   const { reply, chapter, allowed, seenIds, errors } = input;
@@ -1292,8 +1292,8 @@ export async function jobChapterTarget(
   }
   if (!job.newChapter || job.chapter === undefined) return null;
   // No stored title (a run started before the column existed) falls back to
-  // the id: a chapter called by its slug can be renamed in the overview, an
-  // invisible one cannot.
+  // the id: a chapter called by its slug is at least readable in the
+  // overview, an invisible one is not.
   return newChapterTarget(campaign, job.chapter, job.newChapterTitle ?? job.chapter);
 }
 

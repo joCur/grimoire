@@ -73,7 +73,7 @@ test("code stays code, and an `## If:` summary toggles instead of navigating", a
   await page.goto(SCENE_URL);
 
   // `` `[[jorna]]` `` is the SYNTAX, quoted: it renders literally and never
-  // becomes a link — the same skip the index and the rename cascade apply.
+  // becomes a link — the same skip the search index applies.
   await expect(
     page.locator(".md-body code").filter({ hasText: "[[jorna]]" }).first(),
   ).toBeVisible();
@@ -113,7 +113,7 @@ test("live view: a reference opens the drawer instead of leaving the session", a
   await expect(page).toHaveURL(/\/beispiel\/live$/);
 });
 
-test("a renamed display name reaches the prose without touching the body", async ({
+test("a changed display name reaches the prose without touching the body", async ({
   page,
   api,
 }) => {
@@ -144,26 +144,4 @@ test("a renamed display name reaches the prose without touching the body", async
     `beispiel/search?q=${encodeURIComponent("Salzhand")}`,
   );
   expect(found.results.map((r) => `${r.kind}:${r.id}`)).toContain("scene:entity-refs");
-});
-
-test("an id rename drags the body reference along", async ({ page, api }) => {
-  // The preview counts the prose mention as a reference site.
-  const usage = await api.get<{ groups: { ref: string; count: number }[] }>(
-    "beispiel/usage?kind=npc&id=jorna",
-  );
-  expect(usage.groups.find((g) => g.ref === "bodyRefs")?.count).toBeGreaterThanOrEqual(1);
-
-  await api.send("POST", "beispiel/rename", { kind: "npc", oldId: "jorna", newId: "jorna-b" });
-
-  const stored = await api.file(SCENE_PATH);
-  expect(stored.body).toContain("[[jorna-b]]");
-  // The QUOTED syntax survives byte-identically — the cascade rewrites prose,
-  // not code (the old SQL `replace` hit both).
-  expect(stored.body).toContain("`[[jorna]]`");
-  expect(stored.body.replace(/`\[\[jorna\]\]`/g, "")).not.toContain("[[jorna]]");
-
-  // …and the reference is still alive on the page, under the same name.
-  await page.goto(SCENE_URL);
-  const ref = page.getByRole("link", { name: `NPC: ${JORNA}`, exact: true }).first();
-  await expect(ref).toHaveAttribute("href", "/beispiel/entry/npcs/jorna-b");
 });

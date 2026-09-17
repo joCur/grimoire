@@ -1,10 +1,10 @@
-// Editing an entry's markdown body from the reading view (issue #15, ADR #11:
-// pflegen aus der App, der externe Editor ist nur noch das Ventil).
+// Editing an entry's markdown body from the reading view (ADR #11: pflegen
+// aus der App, der externe Editor ist nur noch das Ventil).
 //
-// Properties is deliberately NOT part of this: the status regler (#28), the
-// campaign metadata dialog (#34) and the rename cascade (#30) own the
-// structured fields. Here the DM edits prose — PUT /entry replaces the text and
-// leaves the properties block byte-identical.
+// Properties is deliberately NOT part of this: the status control and the
+// campaign metadata dialog own the structured fields. Here the DM edits prose
+// — PUT /entry replaces the text and leaves the properties block
+// byte-identical.
 //
 // Everything in this module is pure or a plain API call (no react, no query
 // imports), so the rules are unit-testable.
@@ -17,10 +17,10 @@ import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 /**
  * Whether the reading view offers „Bearbeiten" for a kind.
  *
- *   session / inbox  no — append-only by design (ADR #4, issues #9/#11); a
+ *   session / inbox  no — append-only by design (ADR #4); a
  *                    free-hand rewrite of a log is not a maintenance action.
  *   campaign         no — its header already carries „Bearbeiten" for name and
- *                    description (issue #34); one label, one meaning.
+ *                    description; one label, one meaning.
  *   everything else  yes: scene, npc, location, chapter (chapter entry),
  *                    glossary and whatever else the route is pointed at.
  */
@@ -54,7 +54,7 @@ export function hasBodyChanges(original: string, draft: string): boolean {
  * poll refetches the entry while the DM types, and inheriting its rev would
  * turn a foreign edit into a silent overwrite instead of a 409. But not every
  * new version is a foreign EDIT — the status regler stays usable while the
- * editor is open (issue #28) and its PATCH bumps the rev without touching a
+ * editor is open, and its PATCH bumps the rev without touching a
  * byte of the body. Inheriting exactly those keeps the DM's own status change
  * from answering the next „Speichern" with „Inzwischen geändert".
  *

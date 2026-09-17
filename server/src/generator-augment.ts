@@ -61,10 +61,10 @@ const AUGMENT_CORRECTION_TAIL = "den vollständigen ergänzten Eintrag enthalten
 
 /**
  * Properties keys a proposal may never touch. `id` is the primary key (and
- * the reference key of the whole campaign) — changing it is `POST /rename`'s
- * job, with its cascade; a model that „improves" it here would orphan every
- * reference to the entry. The others are APP-MANAGED bookkeeping that the
- * DM's own properties form does not offer either.
+ * the reference key of the whole campaign), fixed at creation (ADR #21); a
+ * model that „improves" it here would orphan every reference to the entry.
+ * The others are APP-MANAGED bookkeeping that the DM's own properties form
+ * does not offer either.
  */
 const FROZEN_KEYS = new Set(["id", "scenes_played", "reviewed", "pauses"]);
 

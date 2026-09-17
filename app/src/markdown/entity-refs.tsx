@@ -1,4 +1,4 @@
-// Resolution of `[[slug]]` body references at RENDER TIME (issue #68).
+// Resolution of `[[slug]]` body references at RENDER TIME.
 //
 // The remark plugin only marks a reference (`<span data-entity-ref="slug">`
 // with the literal `[[slug]]` inside); WHAT it means is a question only the
@@ -12,7 +12,7 @@
 //   * the live view — it is a BUTTON that opens the existing entity drawer,
 //     because leaving the live route costs the DM the selected scene and the
 //     half-typed Schnellnotiz (the same reason the aside cards stopped
-//     navigating in issue #40). The live route supplies `onOpen`.
+//     navigating). The live route supplies `onOpen`.
 //
 // Unresolved stays literal text: no red, no tooltip, no icon. The reference
 // simply becomes alive the moment the entity exists — without touching the
@@ -106,7 +106,7 @@ export function EntityRefScope({
 
 /**
  * Mounts the resolver for one campaign. The tree query is the SAME query key
- * every other view uses, so this adds no extra request — and a rename of a
+ * every other view uses, so this adds no extra request — and a changed
  * display name reaches every rendered body through the existing version poll.
  */
 export function EntityRefProvider({
@@ -167,7 +167,7 @@ const REF_CLASS =
  * A reference where an interactive element must NOT go: the `## If:` summary
  * row, whose whole job is to fold its branch. It resolves like any other
  * reference — the DM reads "Falls Jorna gewarnt wurde", not `[[jorna]]` — but
- * it is plain text, so the click stays the toggle's (issue #68 review).
+ * it is plain text, so the click stays the toggle's.
  */
 export function EntityRefName({ slug, fallback }: { slug: string; fallback: ReactNode }) {
   const target = useEntityRefs().resolve(slug);

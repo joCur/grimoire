@@ -14,7 +14,7 @@
 // spaces, the ellipsis character in „Speichere …“). Do not normalize them.
 //
 // SLICE 1: topbar incl. session chip, campaign switcher, the
-// five create dialogs, properties dialog + fields, rename dialog, cold start.
+// five create dialogs, properties dialog + fields, cold start.
 // Everything else still carries its literal strings and follows in slice 2.
 
 export const de = {
@@ -129,13 +129,9 @@ export const de = {
   "properties.description":
     "Alle Eigenschaften dieses Eintrags. Gespeichert wird nur, was du geändert hast — alles andere bleibt unverändert stehen.",
   "properties.id": "id",
-  "properties.id.viaRename": ' · unten über „id ändern“',
-  "properties.changeId": "id ändern",
   "properties.discard.title": "Änderungen verwerfen?",
   "properties.discard.close":
     "Die geänderten Eigenschaften sind nicht gespeichert. Verwerfen schließt das Fenster und lässt den Eintrag so, wie er gespeichert ist.",
-  "properties.discard.rename":
-    "Die geänderten Eigenschaften sind nicht gespeichert. Verwerfen öffnet die id-Änderung und lässt den Eintrag so, wie er gespeichert ist.",
   "properties.discard.keepEditing": "Weiter bearbeiten",
   // The same question for LEAVING A PAGE whose save is explicit
   // (components/UnsavedChangesGuard.tsx); the title is shared.
@@ -212,44 +208,6 @@ export const de = {
   "properties.chapter.status.done": "Abgeschlossen",
   "properties.chapter.status.hint":
     "Aktiv markiert das Kapitel, das die Session-Ansicht öffnet — es gibt genau eins; das vorherige wird wieder geplant.",
-
-  // --- rename dialog --------------------------------------------------------
-  "rename.title": "{kind}: id ändern",
-  "rename.description":
-    "Die neue id zieht alle Referenzen mit: Eigenschaften, Session-Log und „[[id]]“-Erwähnungen. Namen im Fließtext bleiben unverändert.",
-  "rename.newId.label": "neue id (aktuell {oldId})",
-  "rename.preview": "Vorschau",
-  "rename.previewing": "Prüfe …",
-  "rename.commit": "Umbenennen",
-  "rename.committing": "Benenne um …",
-
-  "rename.kind.npc": "NPC",
-  "rename.kind.location": "Ort",
-  "rename.kind.scene": "Szene",
-  "rename.kind.chapter": "Kapitel",
-
-  "rename.error.unchanged": "Unverändert — das ist schon die aktuelle id.",
-  "rename.error.slug": "id braucht Kleinbuchstaben, Ziffern und einzelne Bindestriche.",
-  "rename.error.reserved":
-    '„npcs“, „locations“ und „sessions“ sind reservierte Namen.',
-  "rename.failed": "Umbenennen fehlgeschlagen — Server prüfen.",
-  "rename.conflict.ambiguous": "Mehrere Einträge beanspruchen diese id — Konflikt in der Datenbank.",
-  "rename.conflict.path": "{path} existiert schon — andere id wählen.",
-  "rename.notFound": "Nicht gefunden — Ansicht neu laden.",
-  "rename.badId": "id abgelehnt — Kleinbuchstaben, Ziffern und einzelne Bindestriche.",
-
-  "rename.changed": "betrifft {count, plural, one {# Eintrag} other {# Einträge}}",
-  "rename.usage.total": "{count, plural, one {# Verwendung} other {# Verwendungen}}",
-  "rename.usage.none": "Keine Referenzen — nichts hängt an dieser id.",
-  "rename.usage.sceneNpcs": "{count, plural, one {# Szene} other {# Szenen}}",
-  "rename.usage.sceneLocation": "{count, plural, one {# Szene} other {# Szenen}}",
-  "rename.usage.scenesPlayed":
-    "{count, plural, one {# Session-Eintrag} other {# Session-Einträge}}",
-  "rename.usage.logEntries": "{count, plural, one {# Log-Zeile} other {# Log-Zeilen}}",
-  "rename.usage.chapterScenes": "{count, plural, one {# Szene} other {# Szenen}}",
-  "rename.usage.chapterNpcs": "{count, plural, one {# NPC} other {# NPCs}}",
-  "rename.usage.chapterLocations": "{count, plural, one {# Ort} other {# Orte}}",
-  "rename.usage.bodyRefs": "{count, plural, one {# Textstelle} other {# Textstellen}}",
 
   // --- settings page (/settings) --------------------------------------------
   "settings.title": "Einstellungen",
@@ -539,6 +497,7 @@ export const de = {
     "Legt den NPC-Eintrag mit status: unknown an; der Text landet unter ## Notizen. Gibt es die id schon, wird auf den bestehenden Eintrag verwiesen.",
   "npcCreate.idLabel": "id (steht im Pfad)",
   "npcCreate.idPlaceholder": "id-des-npcs",
+  "npcCreate.idInvalid": "id braucht Kleinbuchstaben, Ziffern und einzelne Bindestriche.",
   "npcCreate.nameLabel": "Name (optional)",
 
   // --- shared verbs: ADD to the existing common block --------------------

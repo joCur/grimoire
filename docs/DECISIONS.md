@@ -814,3 +814,26 @@ gleichzeitig die Referenz dafür, was die API antwortet.
 - Die Planungsentscheidung F5 („kein zweites Datenformat für Fixtures") ist
   zurückgezogen: es gibt genau ein Fixture-Format, und es ist das Format der
   API.
+
+## 21. ids sind unveränderlich
+
+**Entscheidung:** Die `id` eines Eintrags wird beim Anlegen gesetzt und ändert
+sich danach nie. Der Eigenschaften-Dialog zeigt sie als Kontext, bietet aber
+keine Änderung; `PATCH /properties` lehnt ein `id`-Feld mit 400 ab.
+
+**Warum:** Die id ist der Referenz-Schlüssel des ganzen Modells — sie steht in
+jeder Adresse, in jedem Fremdschlüssel und in jeder `[[id]]`-Referenz im Text.
+Ein Apparat, der sie nachträglich überall mitzieht, ist der teuerste Teil der
+Schreibschicht und wird praktisch nie gebraucht: Die Personalisierung der id
+passiert einmal, im Anlege-Dialog. Ein Eintrag, der einen besseren **Titel**
+bekommt, braucht keine neue id — `[[id]]`-Referenzen lösen immer auf den
+aktuellen Anzeigenamen auf, also stimmt der Text ohnehin überall.
+
+**Folgen:**
+
+- Es gibt keinen Endpoint, der eine id ändert, keine Referenz-Kaskade und
+  keinen Verwendungs-Bericht (`GET /usage` diente nur der Vorschau davor).
+- Die `ON UPDATE CASCADE`-Fremdschlüssel bleiben im Schema: sie halten Kind-
+  Zeilen ehrlich und kosten nichts.
+- Anzeigenamen bleiben frei änderbar; der Suchindex zieht die referierenden
+  Einträge dabei nach (`server/src/store/refs.ts`).

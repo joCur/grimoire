@@ -34,9 +34,9 @@
 //      for a new chapter names the chapter it is about to create.
 //   4. `rev` IS THE ROW VERSION and replaces mtimeMs as the 409 guard. Every
 //      row a client can PATCH has one; the store bumps it on every write.
-//   5. NATURAL COMPOSITE KEYS, `ON UPDATE CASCADE`. The id IS the key
-//      (README: "id ... NIE ändern (Referenzen!)"), and a rename is then a
-//      PK update the database cascades instead of a file-tree rewrite.
+//   5. NATURAL COMPOSITE KEYS, `ON UPDATE CASCADE`. The id IS the key and is
+//      set once, at creation (ADR #21); the cascade is what keeps a child row
+//      honest, not a feature that changes ids.
 //   6. SESSION TIMESTAMPS STAY ZONE-LESS STRINGS, exactly as they were
 //      written. Only the server resolves them to epoch ms (see clock.ts) —
 //      storing an epoch here would bake today's timezone into the data.

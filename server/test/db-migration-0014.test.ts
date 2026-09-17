@@ -5,7 +5,7 @@
 // schema declaration, and a test that re-asserts them would only repeat it —
 // every schema change would then be a test change too. The API half of that
 // behaviour (a reference that names nothing is refused, a scene needs a
-// chapter, a rename drags its references along) is asserted where the DM
+// chapter) is asserted where the DM
 // meets it, in test/reference-integrity.test.ts. What IS pinned is the
 // CONTENT of the migration: a released migration never changes again, so
 // what it does to a DM's rows is a promise, and these cases are what caught

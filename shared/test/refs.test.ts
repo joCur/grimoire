@@ -8,7 +8,6 @@ import {
   expandBodyEntityRefs,
   expandEntityRefs,
   isEntityRefSlug,
-  rewriteBodyEntityRefs,
   splitCodeSegments,
   splitEntityRefs,
 } from "../src/refs";
@@ -95,15 +94,6 @@ describe("code regions are not prose", () => {
     expect(expanded).toContain("Vorher Hafenmeisterin Jorna.");
     expect(expanded).toContain("[[jorna]] im Block");
     expect(expanded).toContain("`[[jorna]]` inline");
-  });
-
-  test("a rename rewrites prose only — code stays byte-identical", () => {
-    const rewritten = rewriteBodyEntityRefs(FENCED, "jorna", "jorna-salzhand");
-    expect(rewritten).toContain("Vorher [[jorna-salzhand]].");
-    expect(rewritten).toContain("[[jorna]] im Block");
-    expect(rewritten).toContain("`[[jorna]]` inline");
-    // Other references are untouched, brackets and all.
-    expect(rewriteBodyEntityRefs("[[bucht]]", "jorna", "j2")).toBe("[[bucht]]");
   });
 
   test("a mention only inside code is not a reference", () => {

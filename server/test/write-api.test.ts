@@ -164,7 +164,7 @@ describe("PATCH /api/:campaign/properties", () => {
     expect((await getFile(SCENE)).rev).toBe(before.rev);
   });
 
-  test("400 when the patch carries `id` — that is POST /rename's job", async () => {
+  test("400 when the patch carries `id` — an id never changes", async () => {
     // Replaces the old "a file without `id` on disk does not gain one": in the
     // database the id IS the primary key, always present and never patchable,
     // so the degrade case it guarded cannot exist. What CAN happen is a form

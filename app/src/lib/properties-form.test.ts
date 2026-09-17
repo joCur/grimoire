@@ -112,7 +112,7 @@ describe("propertiesFieldsFor", () => {
     expect(status?.placeholder).toBeUndefined();
   });
 
-  test("neither the id nor the kind is ever a field (the rename cascade owns the id)", () => {
+  test("neither the id nor the kind is ever a field (the id is fixed at creation)", () => {
     for (const kind of ["scene", "npc", "location", "chapter"] as const) {
       expect(keys(kind)).not.toContain("id");
       expect(keys(kind)).not.toContain("kind");

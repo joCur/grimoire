@@ -128,11 +128,11 @@ describe("EntityArticle — location and titled entities", () => {
         {/* Stand-in caller markup, not app copy — the literals stay, in an
             expression container so the i18n lint rule is satisfied. */}
         <button type="button">{"Bearbeiten"}</button>
-        <button type="button">{"Umbenennen"}</button>
+        <button type="button">{"Eigenschaften"}</button>
       </>
     );
     const grouped =
-      /<span class="[^"]*gap-2[^"]*"><button[^>]*>Bearbeiten<\/button><button[^>]*>Umbenennen<\/button><\/span>/;
+      /<span class="[^"]*gap-2[^"]*"><button[^>]*>Bearbeiten<\/button><button[^>]*>Eigenschaften<\/button><\/span>/;
     const variants = [
       jorna, // npc header
       file("location", { id: "leuchtturm", name: "Leuchtturm" }),

@@ -84,17 +84,17 @@ describe("German quotation marks", () => {
 describe("plural", () => {
   test("German picks singular and plural per count", () => {
     const t = translator("de");
-    expect(t("rename.changed", { count: 1 })).toBe("betrifft 1 Eintrag");
-    expect(t("rename.changed", { count: 3 })).toBe("betrifft 3 Einträge");
-    expect(t("rename.usage.logEntries", { count: 1 })).toBe("1 Log-Zeile");
-    expect(t("rename.usage.logEntries", { count: 0 })).toBe("0 Log-Zeilen");
+    expect(t("mobileStart.count.scenes", { count: 1 })).toBe("1 Szene");
+    expect(t("mobileStart.count.scenes", { count: 3 })).toBe("3 Szenen");
+    expect(t("mobileStart.count.locations", { count: 1 })).toBe("1 Ort");
+    expect(t("mobileStart.count.locations", { count: 0 })).toBe("0 Orte");
   });
 
   test("English picks its own forms", () => {
     const t = translator("en");
-    expect(t("rename.changed", { count: 1 })).toBe("affects 1 entry");
-    expect(t("rename.changed", { count: 3 })).toBe("affects 3 entries");
-    expect(t("rename.usage.total", { count: 1 })).toBe("1 use");
+    expect(t("mobileStart.count.scenes", { count: 1 })).toBe("1 scene");
+    expect(t("mobileStart.count.scenes", { count: 3 })).toBe("3 scenes");
+    expect(t("mobileStart.count.locations", { count: 1 })).toBe("1 location");
   });
 });
 
@@ -110,15 +110,15 @@ describe("interpolation", () => {
 
   test("formatParts keeps a non-string value as its own part", () => {
     const marker = { mono: "jorna" };
-    const parts = formatParts("de", "rename.newId.label", { oldId: marker });
+    const parts = formatParts("de", "coldstart.id", { id: marker });
     expect(parts).toContain(marker);
-    expect(parts.filter((part) => typeof part === "string").join("")).toBe("neue id (aktuell )");
+    expect(parts.filter((part) => typeof part === "string").join("")).toBe("id: ");
   });
 
   test("degrades to the raw pattern instead of throwing", () => {
     // A message that WANTS a parameter and gets none must still render
     // something (CLAUDE.md: the format degrades, it never errors).
-    expect(() => translator("de")("rename.usage.total")).not.toThrow();
+    expect(() => translator("de")("mobileStart.count.scenes")).not.toThrow();
   });
 });
 

@@ -4,8 +4,8 @@
 //
 //   * `logLineShortHash` — the short hash of a raw session log line. It is
 //     the identity the review's `reviewed` flag is keyed by, so the log
-//     append (store/write.ts) and the rename cascade (store/rename.ts) have
-//     to compute it exactly the same way.
+//     append (store/write.ts) and the review action have to compute it
+//     exactly the same way.
 //   * `parseGlossaryBody` and the section helpers under it — `PUT /entry` for
 //     the `glossary` address takes the rendered term list back as ONE
 //     markdown text and has to decompose it into rows again.

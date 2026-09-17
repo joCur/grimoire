@@ -583,10 +583,9 @@ function sceneLocation(value: unknown): string | null {
  * An entry that holds NOTHING but its id — what a DM leaves behind by
  * creating an entry and not filling it in.
  *
- * It matters in two places. The generator's apply step FILLS such an entry
- * instead of answering the documented `409 { conflicts }` for a target that
- * has no content to lose, and so does „NPC anlegen" for that same id. The
- * rename cascade merges into one for the same reason.
+ * The generator's apply step FILLS such an entry instead of answering the
+ * documented `409 { conflicts }` for a target that has no content to lose,
+ * and so does „NPC anlegen“ for that same id.
  *
  * `status` COUNTS as information. An entry the DM only ever set to `dead` is
  * still a statement about that npc — the one field the live view acts on — so
@@ -614,26 +613,6 @@ function isEmptyLocationRow(row: LocationRow): boolean {
     row.roll20Page === null &&
     row.body.trim() === ""
   );
-}
-
-/**
- * "This id has a row, and the row holds NOTHING" — for the rename cascade,
- * which merges into such a row instead of refusing (rename.ts). Only the two
- * kinds a reference can create have an empty state at all: a scene or a
- * chapter is never put there by naming it.
- */
-export function isEmptyEntity(
-  db: GrimoireDb,
-  campaign: string,
-  kind: "npc" | "location",
-  id: string,
-): boolean {
-  if (kind === "npc") {
-    const row = npcRowOf(db, campaign, id);
-    return row !== undefined && isEmptyNpcRow(row);
-  }
-  const row = locationRowOf(db, campaign, id);
-  return row !== undefined && isEmptyLocationRow(row);
 }
 
 function isEmptyJsonObject(packed: string): boolean {
@@ -676,8 +655,8 @@ function replaceSceneRefs(
 }
 
 /**
- * Re-index one entity from its current row — used by the rename cascade,
- * which must refresh the index row's `title` too, not only its id.
+ * Re-index one entity from its current row — the index row's `title` too,
+ * not only its id.
  *
  * `campaign` is a kind here because the campaign FILE is a referring body
  * like any other (store/refs.ts `REF_BODY_KINDS`): a note in `campaign`
@@ -761,10 +740,6 @@ export const PROPERTY_CONTRACT = {
 } as const satisfies Record<string, readonly string[]>;
 
 /**
- * An `id` patch is refused (400): the id IS the primary key, and changing it
- * is what `POST /rename` does — an update the database cascades over every
- * reference, which a patch could never do.
- */
 /**
  * A patch may only name keys the CONTRACT names (schema.ts rule 1). There is
  * no field behind anything else, and a typo would otherwise become a silent
@@ -781,7 +756,7 @@ function rejectIdPatch(patch: Record<string, unknown>, current: string): void {
   if (!("id" in patch)) return;
   const next = patch.id;
   if (typeof next === "string" && next === current) return; // a no-op patch is fine
-  throw new ApiError(400, "id is the primary key — use POST /rename to change it");
+  throw new ApiError(400, "id is the primary key — it is set at creation and never changes");
 }
 
 export async function patchProperties(

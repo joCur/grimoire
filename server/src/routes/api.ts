@@ -25,8 +25,6 @@ import {
 } from "../store/read";
 import { searchCampaign } from "../store/search";
 import { readSettings, writeSettings } from "../store/settings";
-import { isRenameKind, RENAME_KINDS, renameEntity } from "../store/rename";
-import { isUsageKind, readUsage, USAGE_KINDS } from "../store/usage";
 import {
   appendInboxEntry,
   appendLogEntry,
@@ -536,63 +534,6 @@ api.post("/:campaign/locations", async (c) => {
     await createLocation(c.req.param("campaign"), name, optionalText(body.id, "id")),
     201,
   );
-});
-
-// --- rename with reference cascade --------------------------------------------------
-
-// POST /api/:campaign/rename { kind, oldId, newId, dryRun? }
-//   -> { renamed: { from, to }, changed: string[] }
-// Renames the entity id (a database UPDATE with a cascade) and patches
-// every reference site of the format contract — see store/rename.ts for
-// the list, the plan/execute split and the write order. Prose mentions are
-// deliberately left alone.
-// 400 unknown kind / invalid or unchanged newId, 404 unknown id,
-// 409 { path } when the target exists. `dryRun: true` answers with the very
-// same plan and writes nothing (the UI's "betrifft N Dateien" preview).
-api.post("/:campaign/rename", async (c) => {
-  const body = await jsonBody(c, ["kind", "oldId", "newId", "dryRun"]);
-  if (!isRenameKind(body.kind)) {
-    throw new ApiError(400, `kind must be one of: ${RENAME_KINDS.join(", ")}`);
-  }
-  if (typeof body.oldId !== "string") throw new ApiError(400, "oldId must be a string");
-  if (typeof body.newId !== "string") throw new ApiError(400, "newId must be a string");
-  if (body.dryRun !== undefined && typeof body.dryRun !== "boolean") {
-    throw new ApiError(400, "dryRun must be a boolean");
-  }
-  return c.json(
-    await renameEntity(
-      c.req.param("campaign"),
-      body.kind,
-      body.oldId.trim(),
-      body.newId.trim(),
-      body.dryRun === true,
-    ),
-  );
-});
-
-// --- usage: where is this entity referenced? ---------------------------------------
-
-// GET /api/:campaign/usage?kind=<npc|location|scene|chapter>&id=<slug>
-//   -> { kind, id, path, total, groups: [{ ref, count, sites: [{ kind, id, title,
-//        path, count }] }] }
-// The reference count of one entity, as queries over the reference tables
-// (store/usage.ts): scene `npcs`/`location`/`chapter`, another npc's
-// `## Beziehungen` line, session `scenes_played`, log scene markers. A group
-// counts ROWS, its sites are the referencing DOCUMENTS. Same queries the
-// rename's `dryRun` answers with, so the preview counts what the cascade
-// rewrites.
-// 404 unknown campaign or entity, 400 unknown/missing kind or empty id.
-api.get("/:campaign/usage", async (c) => {
-  // Campaign first, then the query — the order renameEntity uses, so an
-  // unknown campaign answers 404 whatever the query looks like (server.ts).
-  await requireCampaign(c.req.param("campaign"));
-  const kind = c.req.query("kind");
-  if (!isUsageKind(kind)) {
-    throw new ApiError(400, `kind must be one of: ${USAGE_KINDS.join(", ")}`);
-  }
-  const id = (c.req.query("id") ?? "").trim();
-  if (id === "") throw new ApiError(400, "id is required");
-  return c.json(await readUsage(c.req.param("campaign"), kind, id));
 });
 
 // --- review-action endpoints --------------------------------------------------------

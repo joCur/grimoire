@@ -117,13 +117,9 @@ export const en: Messages = {
   "properties.description":
     "Every property of this entry. Only what you changed is saved — everything else stays exactly as it is.",
   "properties.id": "id",
-  "properties.id.viaRename": " · below via “Change id”",
-  "properties.changeId": "Change id",
   "properties.discard.title": "Discard changes?",
   "properties.discard.close":
     "The changed properties are not saved. Discarding closes the dialog and leaves the entry as it is stored.",
-  "properties.discard.rename":
-    "The changed properties are not saved. Discarding opens the id change and leaves the entry as it is stored.",
   "properties.discard.keepEditing": "Keep editing",
   "unsaved.description":
     "This page has unsaved changes. They are lost if you leave now.",
@@ -194,43 +190,6 @@ export const en: Messages = {
   "properties.chapter.status.done": "Done",
   "properties.chapter.status.hint":
     "Active marks the chapter the session view opens — there is exactly one; the previous one goes back to planned.",
-
-  // --- rename dialog --------------------------------------------------------
-  "rename.title": "{kind}: change id",
-  "rename.description":
-    "The new id takes every reference with it: properties, session log and “[[id]]” mentions. Names in running text stay untouched.",
-  "rename.newId.label": "new id (currently {oldId})",
-  "rename.preview": "Preview",
-  "rename.previewing": "Checking …",
-  "rename.commit": "Rename",
-  "rename.committing": "Renaming …",
-
-  "rename.kind.npc": "NPC",
-  "rename.kind.location": "Location",
-  "rename.kind.scene": "Scene",
-  "rename.kind.chapter": "Chapter",
-
-  "rename.error.unchanged": "Unchanged — that is already the current id.",
-  "rename.error.slug": "An id needs lowercase letters, digits and single hyphens.",
-  "rename.error.reserved":
-    "“npcs”, “locations” and “sessions” are reserved names.",
-  "rename.failed": "Rename failed — check the server.",
-  "rename.conflict.ambiguous": "Several entries claim this id — a conflict in the database.",
-  "rename.conflict.path": "{path} already exists — pick another id.",
-  "rename.notFound": "Not found — reload the view.",
-  "rename.badId": "id rejected — lowercase letters, digits and single hyphens.",
-
-  "rename.changed": "affects {count, plural, one {# entry} other {# entries}}",
-  "rename.usage.total": "{count, plural, one {# use} other {# uses}}",
-  "rename.usage.none": "No references — nothing hangs off this id.",
-  "rename.usage.sceneNpcs": "{count, plural, one {# scene} other {# scenes}}",
-  "rename.usage.sceneLocation": "{count, plural, one {# scene} other {# scenes}}",
-  "rename.usage.scenesPlayed": "{count, plural, one {# session entry} other {# session entries}}",
-  "rename.usage.logEntries": "{count, plural, one {# log line} other {# log lines}}",
-  "rename.usage.chapterScenes": "{count, plural, one {# scene} other {# scenes}}",
-  "rename.usage.chapterNpcs": "{count, plural, one {# NPC} other {# NPCs}}",
-  "rename.usage.chapterLocations": "{count, plural, one {# location} other {# locations}}",
-  "rename.usage.bodyRefs": "{count, plural, one {# passage} other {# passages}}",
 
   // --- settings page (/settings) --------------------------------------------
   "settings.title": "Settings",
@@ -504,6 +463,7 @@ export const en: Messages = {
     "Creates the NPC entry with status: unknown; the text lands under ## Notizen. If the id already exists, the existing entry is linked instead.",
   "npcCreate.idLabel": "id (appears in the path)",
   "npcCreate.idPlaceholder": "npc-id",
+  "npcCreate.idInvalid": "An id needs lowercase letters, digits and single hyphens.",
   "npcCreate.nameLabel": "Name (optional)",
 
 

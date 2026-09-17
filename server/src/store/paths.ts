@@ -49,9 +49,9 @@ export const GLOSSARY_PATH = "glossary";
 
 /**
  * Reserved first segments that are not chapters — the ONE source for this set
- * (`locatorFromPath` routes them to their kinds, so a chapter or a rename that
- * claimed one of them would produce an address nothing can read). Imported by
- * ./write.ts (create) and ./rename.ts (rename) rather than re-declared there.
+ * (`locatorFromPath` routes them to their kinds, so a chapter that claimed
+ * one of them would produce an address nothing can read). Imported by
+ * ./write.ts (create) rather than re-declared there.
  */
 export const RESERVED_SEGMENTS: ReadonlySet<string> = new Set([
   CAMPAIGN_PATH,

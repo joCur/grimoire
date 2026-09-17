@@ -2228,7 +2228,7 @@ describe("a scene draft whose chapter has no entry", () => {
     const chapter = await read("03-drachenbrut");
     expect(chapter.kind).toBe("chapter");
     // No title was known here, so the chapter is called by its slug — which
-    // is renameable in the overview, where an unreachable chapter was not.
+    // is at least readable in the overview, where an unreachable chapter was not.
     expect(chapter.properties.title).toBe("03-drachenbrut");
     expect(chapter.properties.status).toBe("planned");
 

@@ -35,9 +35,10 @@ zusammen und steht genau einmal in `server/src/store/paths.ts`:
 | Glossar | `glossary` |
 
 Die `id` entsteht beim Anlegen aus dem getippten Namen, nach genau einer
-Regel (`@grimoire/shared/slug`), und bleibt dann, wie sie ist. Umbenennen ist
-ein eigener Vorgang: „id ändern" im Eigenschaften-Dialog zeigt vorher, welche
-Einträge die id verwenden, und zieht sie überall mit.
+Regel (`@grimoire/shared/slug`), und steht damit fest: sie ist der
+Referenz-Schlüssel in Adressen, Links und `[[id]]`-Referenzen und ändert sich
+danach nie mehr (ADR #21). Der Eigenschaften-Dialog zeigt sie, bietet aber
+keine Änderung.
 
 Die Adresse einer Szene enthält ihren **Ort**. Die Kapitelübersicht gruppiert
 Szenen nach Ort; Szenen ohne Ort stehen unter „Ohne Ort". Ändert der DM den
@@ -239,24 +240,23 @@ die Szene „Ankunft am Leuchtturm",
 Text (Szene, NPC, Ort, Kapitel, Kampagne) und in jedem Callout.
 
 - **Gespeichert wird immer die id**, nie der Name. Den aktuellen Anzeigenamen
-  setzt erst die Anzeige ein — nach einer Umbenennung stimmt der Text überall,
-  ohne dass ein Eintrag angefasst wird.
+  setzt erst die Anzeige ein — ändert ein Eintrag seinen Titel, stimmt der
+  Text überall, ohne dass ein Eintrag angefasst wird.
 - Referenzierbar sind **NPC, Ort und Szene**. Kollidieren ids über Arten
   hinweg, gewinnt **NPC > Ort > Szene**. Kapitel sind nicht referenzierbar.
 - In den Klammern steht **nur die id** in kebab-case (`[[alte-mole]]`); es
   gibt **keinen Anzeigetext** (`[[jorna|Jorna]]` ist normaler Text). Endungen
   stehen außerhalb: `[[jorna]]s Boot` → „Jornas Boot".
 - **Code ist keine Prosa**: In Code-Blöcken und in `` `[[jorna]]` `` bleibt die
-  Schreibweise wörtlich stehen — nicht aufgelöst, nicht indexiert, von einer
-  Umbenennung nicht angefasst.
+  Schreibweise wörtlich stehen — nicht aufgelöst und nicht indexiert.
 - In der Kopfzeile eines `## If:`-Zweigs erscheint der aufgelöste **Name als
   Text** (kein Link): der Klick faltet den Zweig.
 - **Degradation**: Eine id, die kein Eintrag hat, bleibt als `[[id]]` sichtbar
   stehen — kein Fehler, und sie wird lebendig, sobald der Eintrag existiert.
 - Klick: in der Leseansicht ein Link zum Eintrag, in der Session-Ansicht
   öffnet er die Detail-Schublade, ohne die Session zu verlassen.
-- Namen als normaler Text sind weiterhin erlaubt — sie wandern bei einer
-  Umbenennung nur nicht mit.
+- Namen als normaler Text sind weiterhin erlaubt — sie bleiben aber stehen,
+  wenn ein Eintrag seinen Titel ändert.
 
 ### Hashtags im Log
 
@@ -292,7 +292,7 @@ Hashtags wie das Log. Die Nachbereitung zeigt sie zusammen mit dem Log.
 
 - Geschrieben wird ausschließlich über die API (`server/src/server.ts` führt
   die Endpoints auf): Log, Ideen, `PATCH /properties`, Text-Edits,
-  Nachbereitung, Generator-Entwürfe, Umbenennen.
+  Nachbereitung, Generator-Entwürfe.
 - Konfliktschutz: jeder Schreibzugriff trägt die Zeilenversion `rev` mit, die
   der Lesevorgang geliefert hat. Passt sie nicht mehr, antwortet der Server
   409 und die App sagt „Inzwischen geändert — neu laden" statt still zu

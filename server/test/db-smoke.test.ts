@@ -187,7 +187,7 @@ test("foreign keys cascade on update and delete", async () => {
     db.insert(campaigns).values({ id: "beispiel", name: "Beispiel" }).run();
     db.run(sql`insert into chapters (campaign_id, id, title, pos) values ('beispiel', '01', 'Kapitel', 0)`);
 
-    // ON UPDATE CASCADE — the mechanism the rename endpoint rests on.
+    // ON UPDATE CASCADE — what keeps a child row honest.
     db.run(sql`update campaigns set id = 'umbenannt' where id = 'beispiel'`);
     const moved = db.all<{ campaign_id: string }>(sql`select campaign_id from chapters`);
     assert.deepEqual(moved, [{ campaign_id: "umbenannt" }]);
@@ -200,10 +200,10 @@ test("foreign keys cascade on update and delete", async () => {
   }
 });
 
-// The rename endpoint (store/rename.ts) updates a COMPOSITE
+// A primary-key UPDATE touches a COMPOSITE
 // primary key and lets the database drag the child rows along. A single-column
 // cascade (above) does not prove that: the child FK spans two columns, and a
-// backend that quietly ignored the composite case would corrupt a rename
+// backend that quietly ignored the composite case would corrupt the data
 // instead of failing loudly. Hence its own smoke case on both runtimes.
 test("a composite primary key cascades on update", async () => {
   const { db, close } = await openDb(":memory:");

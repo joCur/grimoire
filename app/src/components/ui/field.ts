@@ -1,6 +1,6 @@
 // The one look of a text control in this app: the input/select/textarea style
-// the „Umbenennen"/„Kampagne"/„Eigenschaften" dialogs (issues #30/#34/#42)
-// established and the Block-Composer's per-block forms (#43) reuse.
+// the „Kampagne"/„Eigenschaften" dialogs established and the Block-Composer's
+// per-block forms reuse.
 //
 // It lives here because neither of the two component modules owns it — a second
 // copy is how two surfaces that are supposed to feel identical start drifting
