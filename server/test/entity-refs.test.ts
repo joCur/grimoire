@@ -1,4 +1,4 @@
-// `[[slug]]` body references, server side (issue #68).
+// `[[slug]]` body references, server side.
 //
 // The renderer resolves references in the browser; the SEARCH INDEX has to
 // resolve them when it is written, or a body that only says `[[jorna]]` is

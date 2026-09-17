@@ -1,14 +1,14 @@
-// NPC generator tests (issue #21). Same harness as the scene pipeline tests
+// NPC generator tests. Same harness as the scene pipeline tests
 // (generator.test.ts): a database seeded from the example campaign — once for
 // the whole file, because cases build on what an earlier one applied — and a
 // FakeProvider with scripted raw replies instead of a real LLM. Since the
-// cutover (issue #57) an applied draft is a ROW, so "was it written?" is
-// asked through the API.
+// database cutover an applied draft is a ROW, so "was it written?" is asked
+// through the API.
 //
-// What is asserted here is what the ticket is about: the NPC run uses the
-// SAME mechanics as the scene run (correction turns, truncation fail-fast,
-// usage summing, JSON extraction, one job per campaign) with its own prompt
-// assets, its own context (no chapter) and its own validation rules.
+// What is asserted here: the NPC run uses the SAME mechanics as the scene run
+// (correction turns, truncation fail-fast, usage summing, JSON extraction,
+// one job per campaign) with its own prompt assets, its own context (no
+// chapter) and its own validation rules.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import type {
@@ -329,7 +329,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     // The reply carries NO `id`. The shared parser degrades a missing id to
     // the address's last segment, and the validation used to parse the reply
     // under the label `"npc"` — a kebab slug that passed the id pattern, so
-    // the run silently produced `npcs/npc` (issue #100 review).
+    // the run silently produced `npcs/npc`.
     const bad = npcReply({ content: npcMarkdown().replace("id: grella\n", "") });
     const fake = useFake([bad, npcReply()]);
     const res = await generateNpc(npcBody);
@@ -464,7 +464,7 @@ describe("POST /api/:campaign/generate/npc", () => {
     ).toContain("## Notizen bleibt leer");
   });
 
-  test("an id that is no kebab slug is an error (#100)", async () => {
+  test("an id that is no kebab slug is an error", async () => {
     // The address is the server's; the `id` is what the model decides, so
     // that is what has to be usable as one.
     for (const badId of ["Grella", "grella.txt", "grella/2", "trailing-"]) {
@@ -586,8 +586,8 @@ describe("POST /api/:campaign/generate/npc", () => {
       usage: GenerateUsage;
       validationErrors?: string[];
     };
-    // Language-free since issue #69: the stable code plus the cap as a
-    // PARAMETER, and the English fallback text next to them.
+    // Language-free: the stable code plus the cap as a PARAMETER, and the
+    // English fallback text next to them.
     expect(body.code).toBe("llm_truncated");
     expect(body.maxTokens).toBe(8000);
     expect(body.error).toBe(
@@ -668,7 +668,7 @@ describe("POST /api/:campaign/generate/npc", () => {
   });
 });
 
-// --- the shared job model (issue #19 + #21) --------------------------------------
+// --- the shared job model ------------------------------------------------------
 
 describe("npc generate jobs", () => {
   test("the job carries kind npc, no chapter, and npcResult", async () => {
@@ -759,8 +759,8 @@ describe("npc generate jobs", () => {
     await generateNpc(npcBody);
     const edited = `${npcMarkdown({ id: "job-drafts" })}\nHandgeschriebene Ergänzung.\n`;
 
-    // The review PATCH replaced `PUT …/job/drafts` (issue #97 review,
-    // finding 8) and checks the same known-path rule.
+    // The review PATCH replaced `PUT …/job/drafts` and checks the same
+    // known-path rule.
     const edit = async (path: string) => {
       const current = await fetchJob();
       return app.request(`/api/beispiel/generate/job/${current!.id}/review`, {
@@ -881,12 +881,12 @@ describe("apply an npc draft", () => {
   });
 });
 
-// --- campaign knowledge in an NPC run (issue #53) ----------------------------
+// --- campaign knowledge in an NPC run ----------------------------------------
 //
-// The NPC half of AK2/AK3. The scene half is in generator.test.ts; what is
-// specific here is that an NPC run has NO chapter and still gets the block,
-// and that the naming check looks at the npc's PROPERTIES as well (a wrong
-// `role` is as visible to the DM as a wrong body line).
+// The NPC half of it; the scene half is in generator.test.ts. What is specific
+// here is that an NPC run has NO chapter and still gets the block, and that
+// the naming check looks at the npc's PROPERTIES as well (a wrong `role` is as
+// visible to the DM as a wrong body line).
 
 describe("campaign knowledge", () => {
   async function setKnowledge(entries: unknown[]): Promise<void> {
@@ -916,7 +916,7 @@ describe("campaign knowledge", () => {
     );
     const req = fake.calls[0]!.req;
     expect(req.context.chapter).toBeUndefined();
-    // `[[fenn]]` reaches the model as the npc's NAME, never as a slug (AK4).
+    // `[[fenn]]` reaches the model as the npc's NAME, never as a slug.
     expect(req.knowledge).toBe(
       [
         "- Fakt: Fenn lügt über die Ladung.",

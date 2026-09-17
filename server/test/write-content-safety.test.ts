@@ -1,4 +1,4 @@
-// Content-safety regressions of the SQLite cutover (issue #57 review).
+// Content-safety regressions of the SQLite cutover.
 //
 // One rule holds every case in this file together, and it is the guard rail of
 // the whole cutover: NO WRITE PATH MAY SILENTLY LOSE CONTENT. Each test below
@@ -283,7 +283,7 @@ describe("POST /log — the scene marker is a parse column", () => {
   test("a sceneId with a closing paren is refused, nothing appended", async () => {
     const start = await postJson("/api/beispiel/session/start");
     expect(start.status).toBe(200);
-    // The session's id is opaque (issue #58), so its path comes from the start.
+    // The session's id is opaque, so its path comes from the start.
     const rel = ((await start.json()) as EntryResponse).path;
     const before = await getFile(rel);
     // (An EMPTY sceneId is not in this list: the route normalises it away to

@@ -58,8 +58,8 @@ Gruppenfeld. Für die Suite heißt das drei Dinge:
 - **Der Generator vergibt keine Pfade.** Der Prüfschritt adressiert eine
   Szene als `<kapitel>/<id>` (`DRAFT_PATH` in den Specs), geschrieben wird
   sie unter `<kapitel>/<location>/<id>` (`SCENE_PATH`). Die Fixture-Antwort
-  setzt `location: bucht` und schlägt diesen Ort im selben Lauf vor — Pfad 6
-  prüft damit genau AK1 des Tickets.
+  setzt `location: bucht` und schlägt diesen Ort im selben Lauf vor — genau
+  das prüft Pfad 6.
 
 ## Lokal ausführen
 
