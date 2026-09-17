@@ -459,41 +459,37 @@ test("an unreachable session lookup dims the chip instead of offering a start", 
   await expect(page.getByRole("link", { name: /Session läuft/ })).toHaveCount(0);
 });
 
-// Issue #73: the scene STATUS sorts the live nav. Chapter 1 of the example
-// campaign holds exactly ONE planned scene, so this block seeds a second one —
+// The scene STATUS sorts the live nav. Chapter 1 of the example campaign
+// holds exactly ONE planned scene, so this block seeds a second one —
 // otherwise "the played scene is no longer the default selection" has nothing
 // to fall through to.
-test.describe("played/dropped scenes in the live nav (issue #73)", () => {
-  // Stored paths come from the scene ID, not from the markdown file name (the
-  // import derives them) — so the seed key and the API path differ.
-  const SEED_FILE = "01-salzhafen/hafen/zweites-gespraech";
+test.describe("played/dropped scenes in the live nav", () => {
   const ARRIVAL = "01-salzhafen/leuchtturm/lighthouse-arrival";
-  // The seeded scene sorts BEFORE the example's own one in the nav
-  // ("harbor-office-talk" < "lighthouse-arrival"), which is exactly what AK3
-  // needs: the scene that gets played is the FIRST row, so a default selection
-  // that ignored the status would land on it.
-  const SEEDED = "01-salzhafen/hafen/harbor-office-talk";
+  // The seeded scene names an Ort that EXISTS — a reference creates nothing
+  // (ADR #19) — and „Die Nordbucht" sorts after „Der Leuchtturm von
+  // Salzhafen", so „Ankunft am Leuchtturm" stays the first row of the nav.
+  // That is what AK3 needs to fall through to.
+  const SEEDED = "01-salzhafen/bucht/harbor-office-talk";
 
   test.use({
     seed: {
-      files: {
-        [SEED_FILE]: [
-          "---",
-          "id: harbor-office-talk",
-          "title: Gespräch im Hafenkontor",
-          "type: planned",
-          "chapter: 01-salzhafen",
-          "location: hafen",
-          "npcs: []",
-          "tags: [social]",
-          "status: ready",
-          "---",
-          "",
-          "## Aufhänger",
-          "",
-          "Der Kontorschreiber hat die Frachtbücher der letzten Woche.",
-          "",
-        ].join("\n"),
+      entries: {
+        "scene-harbor-office-talk": {
+          kind: "scene",
+          properties: {
+            id: "harbor-office-talk",
+            title: "Gespräch im Hafenkontor",
+            type: "planned",
+            chapter: "01-salzhafen",
+            location: "bucht",
+            npcs: [],
+            tags: ["social"],
+            status: "ready",
+          },
+          body:
+            "\n## Aufhänger\n\n" +
+            "Der Kontorschreiber hat die Frachtbücher der letzten Woche.\n",
+        },
       },
     },
   });
@@ -513,8 +509,8 @@ test.describe("played/dropped scenes in the live nav (issue #73)", () => {
 
     // Before: both are planned, the FIRST row is the default selection. That
     // is „Ankunft am Leuchtturm": the nav walks the chapter's groups, and
-    // they are ordered by the NAME their heading shows (issue #100 review) —
-    // „Der Leuchtturm von Salzhafen" before the unnamed `hafen`.
+    // they are ordered by the NAME their heading shows — „Der Leuchtturm von
+    // Salzhafen" before „Die Nordbucht".
     await expect(arrivalRow).toBeVisible();
     await expect(seededRow).toBeVisible();
     await expect(heading).toHaveText("Ankunft am Leuchtturm");
@@ -584,7 +580,7 @@ test.describe("played/dropped scenes in the live nav (issue #73)", () => {
     await expect(nav).toContainText("Keine geplanten Szenen in diesem Kapitel.");
     await expect(nav.getByRole("button", { name: /^Gespielt/ })).toContainText("(2)");
     // The fallback is the FIRST done scene, i.e. the chapter's scene order
-    // again (groups by name, issue #100 review).
+    // again (groups by name).
     await expect(heading).toHaveText("Ankunft am Leuchtturm");
     await expect(page.getByLabel("Schnellnotiz")).toBeVisible();
   });

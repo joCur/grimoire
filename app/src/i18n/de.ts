@@ -889,7 +889,7 @@ export const de = {
 
   // --- the DEV markdown harness ("/dev/markdown", routes/harness.tsx) -------
   "harness.title": "Markdown-Harness",
-  "harness.lead": "Rendert die Referenz-Fixtures aus examples/ ohne laufenden Server.",
+  "harness.lead": "Rendert die Referenz-Fixtures aus fixtures/ ohne laufenden Server.",
   "harness.properties": "Eigenschaften anzeigen",
 
   // --- „Mit KI ergänzen“ (components/AugmentAction.tsx) --------------------

@@ -11,8 +11,8 @@
 //
 // PLACEHOLDERS ARE GENERIC (same feedback): every field hint names the KIND of
 // thing that belongs there („Titel der Szene", „Name des Orts"), never a name
-// out of `examples/` — a placeholder that reads like real campaign content is
-// taken for a default.
+// out of the example campaign — a placeholder that reads like real campaign
+// content is taken for a default.
 //
 // WHERE THEY SIT, and why:
 //

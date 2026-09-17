@@ -181,7 +181,7 @@ export function setHeadingDepth(
  * of a body (`## If: a\n`), or with its first child glued right underneath it
  * (`## If: a\ndrin\n`, valid markdown that hand-written text may well hold).
  * A block inserted at the TOP of that section would then land directly under
- * the heading line, which is not the house style of examples/. Dropping the gap
+ * the heading line, which is not the house style of the fixtures. Dropping the gap
  * hands the separator back to the serializer, which puts one blank line there.
  * Whitespace only: the heading's `source` stays, because the heading itself is
  * not what changed.

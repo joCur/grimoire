@@ -60,8 +60,8 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   // The knowledge count is part of that line; the example
   // campaign has none, so it says so. The knowledge path itself is
   // campaign-knowledge.e2e.ts.
-  // Two locations: `bucht` is a scene's location in the example campaign, so
-  // the import created an entry for it.
+  // Two locations: each Ort a scene names has an entry of its own, because a
+  // reference creates nothing (ADR #19).
   await expect(page.getByText("2 NPCs · 2 Orte")).toBeVisible();
   // The knowledge and the glossary halves are LINKS to their own pages now —
   // this line is where the DM notices a rule is missing, so the fix is one

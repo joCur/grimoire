@@ -1,4 +1,4 @@
-// `[[slug]]` body references, server side (issue #68).
+// `[[slug]]` body references, server side.
 //
 // The renderer resolves references in the browser; the SEARCH INDEX cannot —
 // FTS5 stores text, and a body that only says `[[jorna]]` would be findable
@@ -23,8 +23,8 @@
 // is why it beats the pragmatic "reindex the whole campaign".
 //
 // SCOPE: every entry whose body a DM writes prose in — scene, npc,
-// location, chapter AND the campaign file (`campaign`, the free note
-// space). The campaign file used to be scanned HALF: its index row expanded
+// location, chapter AND the campaign entry (`campaign`, the free note
+// space). The campaign entry used to be scanned HALF: its index row expanded
 // references (write.ts `indexCampaign`) but no scan ever found it again, so a
 // rename left a stale name in the search index and a dead slug in the note.
 // It is now a FULL body kind: `reindexReferrers` and `rewriteBodyRefs` cover
@@ -139,13 +139,13 @@ export function expandBodyRefs(tx: GrimoireDb, campaign: string, body: string): 
 
 /**
  * Expand the references in the ALREADY INDEXED text of a whole campaign —
- * the import's second pass (db/migrate-campaigns.ts).
+ * the seed's second pass (db/seed.ts).
  *
- * The import writes one index row per entity as it goes, and a body can
- * reference an entity that has no row yet at that moment (a chapter text
- * naming an npc, imported earlier in the same pass). So the expansion cannot
- * happen while importing; it happens once at the end, over `search_fts`
- * itself rather than over the source bodies — which keeps it kind-agnostic
+ * The seed writes one index row per entry as it goes, and a body can
+ * reference an entry that has no row yet at that moment (a chapter text
+ * naming an npc loaded later in the same pass). So the expansion cannot
+ * happen while loading; it happens once at the end, over `search_fts`
+ * itself rather than over the bodies — which keeps it kind-agnostic
  * and preserves whatever the indexer decided the indexed text is (an npc's
  * indexed text includes its `## Beziehungen`, for instance).
  */

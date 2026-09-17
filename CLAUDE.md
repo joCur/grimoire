@@ -28,18 +28,19 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 
 ## Projektstruktur
 
-- `examples/` — generische Beispielkampagne (committet). Sie ist der **Seed**
-  für Dev/Tests/E2E (der echte Import liest sie, es gibt keine zweiten
-  Fixtures) und die Referenz des Import-Formats. NIE umformatieren oder
-  „aufräumen"; das Format ist Vertrag.
+- `fixtures/` — die Beispielkampagne als JSON-Einträge
+  (`fixtures/beispiel/*.json`), ein Eintrag je Datei in der Form der API
+  (`properties` + `body`; Sessions, Ideen und Glossar strukturiert). Sie ist
+  der **Seed** für Dev/Tests/E2E und die Referenz für Callouts. Bodies NIE
+  umformatieren oder „aufräumen"; das Format ist Vertrag.
 - `GRIMOIRE_DATA` (Default `./data`, gitignored) — hier liegt
   `grimoire.db` samt `-wal`/`-shm`: die eigentlichen Daten. Kein Code liest
   Kampagneninhalte von woanders.
-- `shared/` — Entitäts-Typen und der Importer-Parser (`@grimoire/shared`),
-  von Server und App gemeinsam genutzt. Autorität über das Format sind
+- `shared/` — Entitäts-Typen (`@grimoire/shared`), von Server und App
+  gemeinsam genutzt. Autorität über das Format sind
   `server/src/db/schema.ts` (Speicherform) und `server/src/store/paths.ts`
   (Adressen), beschrieben in README.md — die drei synchron halten;
-  `shared/src/parse.ts` liest nur den Markdown-Baum ein.
+  `shared/src/parse.ts` ist der Entwurfs-Parser des Generators.
 - `server/` — Hono-API. Geplante Endpoints sind in `server/src/server.ts`
   dokumentiert und dort abzuhaken, wenn implementiert. Datenzugriff
   ausschließlich über `server/src/store/` (Queries), nie direkt SQL aus einer
@@ -55,19 +56,19 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 ## Arbeitsweise
 
 - Vertikale Scheiben, eine pro Auftrag. Nicht mehrere Views gleichzeitig.
-- Gegen echte Daten entwickeln: keine erfundenen Mock-Objekte. Seit dem
-  SQLite-Cutover (ADR #13) ist die Datenbank die Wahrheit, und seit Issue #79
-  startet der Server **leer**: einmal
-  `bun run --filter @grimoire/server seed` (liest `examples/`) füllt
-  `GRIMOIRE_DATA/grimoire.db`. Tests bekommen pro Fall eine
-  frische In-Memory-DB, geseedet über denselben Importer
+- Gegen echte Daten entwickeln: keine erfundenen Mock-Objekte. Die Datenbank
+  ist die Wahrheit (ADR #13), und der Server startet **leer**: einmal
+  `bun run --filter @grimoire/server seed` (liest `fixtures/`) füllt
+  `GRIMOIRE_DATA/grimoire.db`. Tests bekommen pro Fall eine frische
+  In-Memory-DB, geseedet aus denselben Fixtures
   (`server/test/support/store.ts`). `campaigns/` existiert nur lokal beim
   Nutzer und darf in Code, Tests und Doku nie vorausgesetzt werden.
 - Der Callout-Renderer (`[!readaloud]`, `[!check]`, `[!secret]`,
   `[!outcome]`, `[!loot]`, `[!note]`) ist die zentrale Komponente —
-  Änderungen daran immer gegen
-  `examples/beispiel/01-salzhafen/hafen/von-schmugglern-erwischt.md`
-  und `.../ankunft-leuchtturm.md` prüfen.
+  Änderungen daran immer gegen die Referenzszenen
+  `fixtures/beispiel/scene-lighthouse-arrival.json` und
+  `scene-smuggler-captured.json` prüfen, sichtbar im Dev-Harness
+  `/dev/markdown`.
 - Format degradiert: unbekannte Callouts/Überschriften als normalen Text
   rendern, niemals Fehler werfen.
 - Schreibzugriffe der App nur über die dokumentierte API; Patches tragen das
@@ -148,7 +149,7 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 ## Kritische Pfade (E2E-Pflicht, echte Suite ohne Mocks)
 
 Playwright gegen den echten Stack (realer Server auf einer eigenen, aus
-`examples/` importierten DB, gebaute App, echter Browser; einzige Ausnahme:
+`fixtures/` geseedeten DB, gebaute App, echter Browser; einzige Ausnahme:
 das LLM ist ein lokaler Stub-HTTP-Server — der Provider-Pfad läuft real).
 Die Pfade:
 

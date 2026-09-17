@@ -1,4 +1,4 @@
-// Entity references in body text (issue #68) — `[[slug]]`.
+// Entity references in body text — `[[slug]]`.
 //
 // Touches three critical paths (CLAUDE.md):
 //
@@ -13,25 +13,28 @@
 // the whole point of resolving at render time is that the DM never leaves the
 // running session for a name.
 //
-// The scene is SEEDED (examples/ is a format contract and stays untouched):
-// it references an npc, a location and a slug nothing owns.
+// The scene is SEEDED as an extra entry: it references an npc, a location
+// and a slug nothing owns.
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { FIXTURES_DIR } from "../support/paths";
-import { expect, test } from "../support/test";
+import { E2E_FIXTURES_DIR } from "../support/paths";
+import { expect, test, type SeedEntry } from "../support/test";
 
-const SCENE = {
-  path: "01-salzhafen/leuchtturm/entity-refs",
-  content: readFileSync(path.join(FIXTURES_DIR, "entity-refs-scene.md"), "utf8"),
-};
+/** The scene with the `[[…]]` references, as an entry. */
+const SCENE: SeedEntry = JSON.parse(
+  readFileSync(path.join(E2E_FIXTURES_DIR, "entity-refs-scene.json"), "utf8"),
+) as SeedEntry;
+
+/** Its address: chapter, location and the scene's id. */
+const SCENE_PATH = "01-salzhafen/leuchtturm/entity-refs";
 
 const SCENE_URL = "/beispiel/entry/01-salzhafen/leuchtturm/entity-refs";
 const SCENE_TITLE = "Referenzen am Kai";
 const JORNA = "Hafenmeisterin Jorna";
 
-test.use({ seed: { files: { [SCENE.path]: SCENE.content } } });
+test.use({ seed: { entries: { "scene-entity-refs": SCENE } } });
 
 test("reading view: references render as the current name, unknown ones stay text", async ({
   page,
@@ -122,7 +125,7 @@ test("a renamed display name reaches the prose without touching the body", async
 
   // The NAME changes, the body does not.
   await api.patchProperties("npcs/jorna", { name: NEW_NAME });
-  const stored = await api.file(SCENE.path);
+  const stored = await api.file(SCENE_PATH);
   expect(stored.body).toContain("[[jorna]]");
   expect(stored.body).not.toContain(NEW_NAME);
 
@@ -152,7 +155,7 @@ test("an id rename drags the body reference along", async ({ page, api }) => {
 
   await api.send("POST", "beispiel/rename", { kind: "npc", oldId: "jorna", newId: "jorna-b" });
 
-  const stored = await api.file(SCENE.path);
+  const stored = await api.file(SCENE_PATH);
   expect(stored.body).toContain("[[jorna-b]]");
   // The QUOTED syntax survives byte-identically — the cascade rewrites prose,
   // not code (the old SQL `replace` hit both).

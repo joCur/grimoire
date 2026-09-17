@@ -5,13 +5,11 @@ gebauten Frontend-Bundle aus `app/dist`. Die Kampagnendaten liegen außerhalb
 des Images in einem Volume. Zugriffsschutz ist Deployment-Sache, nicht
 App-Sache — Standard ist Tailscale (siehe DECISIONS #3 und #5).
 
-> **Seit der SQLite-Umstellung (ADR #13):** die Kampagnen-Wahrheit ist **eine
-> SQLite-Datei** — `GRIMOIRE_DATA/grimoire.db`, Default `/data` im Container.
-> Das ist die **einzige** Datenquelle: seit Issue #79 importiert der Server
-> beim Start nichts mehr, eine frische Instanz startet **leer** (der
-> Kaltstart-Weg kommt mit #56). Markdown einlesen ist ausschließlich das
-> Dev-/E2E-Werkzeug `grimoire seed` (Abschnitt 2b). Zu sichern ist das
-> `GRIMOIRE_DATA`-Volume — Abschnitt 2a.
+> **Die Kampagnen-Wahrheit ist eine SQLite-Datei (ADR #13):**
+> `GRIMOIRE_DATA/grimoire.db`, Default `/data` im Container. Das ist die
+> **einzige** Datenquelle: der Server liest beim Start keine andere Quelle,
+> eine frische Instanz startet **leer** und wird in der UI gefüllt. Zu sichern
+> ist das `GRIMOIRE_DATA`-Volume — Abschnitt 2a.
 
 ## 1. Bauen und starten
 
@@ -42,20 +40,11 @@ docker run -d --name grimoire \
   Bind-Mount einmalig `sudo chown -R 1000:1000 /srv/grimoire/data`, sonst
   kann die Datenbank nicht angelegt werden.
 
-**Eine frische Instanz startet leer** (Issue #79): der Server importiert beim
-Start nichts. Das ist kein Sonderfall mehr — seit Issue #56 bietet „/" auf
-einer leeren Instanz „Kampagne anlegen" an, und Kapitel, Szenen, NPCs und Orte
-entstehen danach ebenfalls in der UI. `grimoire seed` bleibt das Dev-/E2E-
-Werkzeug für die Beispielkampagne, nicht der Weg zur ersten eigenen Kampagne.
-
-Für einen Smoke-Test *mit* Inhalt einmal die Beispielkampagne aus dem Image
-einlesen (Abschnitt 2b):
-
-```bash
-docker run --rm -p 3000:3000 grimoire   # leere Instanz
-docker run --rm -v /tmp/probe:/data ghcr.io/jocur/grimoire:latest \
-  bun run server/src/cli.ts seed /examples   # Beispielkampagne einlesen
-```
+**Eine frische Instanz startet leer**: der Server seedet beim Start nichts.
+Das ist kein Sonderfall — „/" bietet auf einer leeren Instanz „Kampagne
+anlegen" an, und Kapitel, Szenen, NPCs und Orte entstehen danach ebenfalls in
+der UI. Das Image enthält keine Testdaten; die Beispielkampagne ist ein
+Dev-/E2E-Fixture im Repo (CLAUDE.md, `fixtures/`).
 
 **Update:** neu bauen, Container ersetzen (`docker rm -f grimoire` + `run`).
 Der Container selbst hat keinen Zustand — der steht im `/data`-Volume.
@@ -200,45 +189,7 @@ Ein `cp grimoire.db` im laufenden Betrieb ist **kein** Backup — nimm `VACUUM
 INTO` oder stoppe den Container. Der Wiederherstellungsweg ist derselbe
 rückwärts: Container stoppen, Datei(en) zurücklegen, Container starten.
 
-## 2b. `grimoire seed` — Markdown einlesen (Dev-/E2E-Werkzeug)
-
-Der Produktivpfad importiert **nichts**: beim Start werden Datenbank und
-Schema-Migrationen angelegt, sonst passiert nichts (Issue #79). Eine frische
-Instanz ist leer.
-
-Markdown-Kampagnen in eine Datenbank einzulesen ist ein **eigenes Kommando**,
-gedacht für Entwicklung, die E2E-Suite und einmalige Übernahmen:
-
-```bash
-GRIMOIRE_DATA=/srv/grimoire/data bun run server/src/cli.ts seed /pfad/zum/baum
-```
-
-- Der Baum enthält **direkt die Kampagnen-Ordner** (`<baum>/<kampagne>/…`) —
-  dieselbe Struktur wie `examples/` (README.md); ohne Argument ist `examples/`
-  der Default.
-- **Eine Transaktion pro Kampagne**, also entweder vollständig oder nicht. Ein
-  Lauf, der zwischen zwei Kampagnen abbricht, wird beim nächsten Lauf
-  fortgesetzt.
-- Der Befehl **überschreibt nie**: eine Datenbank mit Inhalt bleibt
-  unangetastet (`--force` existiert nur für Wegwerf-Datenbanken). Der
-  Markdown-Baum selbst wird nur gelesen.
-- Was er nicht in Zeilen übersetzen konnte, übernimmt er nicht: jeder Vorfall
-  wird mit Pfad und Grund **auf stdout gedruckt** — das ist der Report, und
-  die Datei bleibt unverändert im Baum. **Keine Zeile = sauberer Import.**
-
-Ein Probelauf auf einer Kopie, in ein leeres Datenverzeichnis, ist damit
-billig:
-
-```bash
-mkdir -p /tmp/grimoire-probe
-docker run --rm \
-  -v /tmp/grimoire-probe:/data \
-  -v /srv/grimoire/campaigns:/campaigns:ro \
-  ghcr.io/jocur/grimoire:v0.1.0 \
-  bun run server/src/cli.ts seed /campaigns
-```
-
-### Generator (LLM-Provider)
+## 2b. Generator (LLM-Provider)
 
 Alles hier ist **optional** — ohne Konfiguration läuft alles außer dem
 Generator. `LLM_PROVIDER` wählt den Provider, die übrigen Variablen gelten

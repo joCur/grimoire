@@ -1,25 +1,18 @@
 // GET /api/:campaign/usage — reference counting.
 //
-// One case per reference kind, all of them against the SEED campaign
-// (`examples/`, the suite's fixture — CLAUDE.md): the example tree happens to
-// exercise every group exactly once, which is the reason the expected numbers
-// below can be spelled out instead of computed.
+// One case per reference kind, all of them against the SEED campaign (the
+// suite's fixture — CLAUDE.md): it happens to exercise every group exactly
+// once, which is the reason the expected numbers below can be spelled out
+// instead of computed.
 //
-// What is NOT in `examples/` is repetition — a scene played twice in one
+// What the fixture does NOT hold is repetition — a scene played twice in one
 // evening, a second session — and that is what separates "rows" from
-// "documents" in the answer. Those cases get a hand-built campaign root.
+// "entries" in the answer. Those cases add their own entries to the seed.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { app } from "../src/server";
 import type { UsageReport } from "../src/store/usage";
-import {
-  dropStore,
-  removeTempRoot,
-  seedStore,
-  tempCampaignRoot,
-} from "./support/store";
-import { readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { dropStore, seedStore } from "./support/store";
 
 beforeEach(async () => {
   await seedStore();
@@ -194,32 +187,17 @@ describe("usage per reference kind", () => {
 });
 
 describe("a `## Beziehungen` line without a link is not usage", () => {
-  let root: string;
-
-  afterEach(async () => {
-    if (root !== undefined) await removeTempRoot(root);
-  });
-
   test("a relations line -> empty report, rename touches one entry", async () => {
-    root = await tempCampaignRoot();
     // A hermit: his text names jorna, nobody names him, no scene lists him.
-    await writeFile(
-      path.join(root, "beispiel/npcs/kalle.md"),
-      [
-        "---",
-        "id: kalle",
-        "name: Kalle",
-        "chapter: 01-salzhafen",
-        "status: alive",
-        "---",
-        "",
-        "## Beziehungen",
-        "",
-        "- jorna: schuldet ihr noch Hafengeld",
-        "",
-      ].join("\n"),
-    );
-    await seedStore(root);
+    await seedStore({
+      entries: [
+        {
+          kind: "npc",
+          properties: { id: "kalle", name: "Kalle", chapter: "01-salzhafen", status: "alive" },
+          body: "\n## Beziehungen\n\n- jorna: schuldet ihr noch Hafengeld\n",
+        },
+      ],
+    });
 
     // Nothing points AT him — and his own line is text, not a reference.
     const report = await usage("npc", "kalle");
@@ -270,42 +248,44 @@ describe("usage errors", () => {
   });
 });
 
-describe("rows vs documents", () => {
-  let root: string;
-
-  afterEach(async () => {
-    if (root !== undefined) await removeTempRoot(root);
-  });
-
-  test("a scene played twice and in two sessions counts rows per document", async () => {
-    root = await tempCampaignRoot();
-    const first = path.join(root, "beispiel/sessions/2026-01-15.md");
-    const raw = await readFile(first, "utf8");
-    // The party returned to the scene later the same evening.
-    await writeFile(
-      first,
-      raw.replace(
-        "scenes_played: [lighthouse-arrival]",
-        "scenes_played: [lighthouse-arrival, smuggler-captured, lighthouse-arrival]",
-      ),
-    );
-    await writeFile(
-      path.join(root, "beispiel/sessions/2026-01-22.md"),
-      [
-        "---",
-        "id: 2026-01-22",
-        "started: 2026-01-22T19:30",
-        "ended: 2026-01-22T22:00",
-        "scenes_played: [lighthouse-arrival]",
-        "---",
-        "",
-        "## Log",
-        "",
-        "- 20:05 (lighthouse-arrival) Rückweg über die Klippen",
-        "",
-      ].join("\n"),
-    );
-    await seedStore(root);
+describe("rows vs entries", () => {
+  test("a scene played twice and in two sessions counts rows per entry", async () => {
+    // The first session REPLACES the fixture's: the party returned to the
+    // scene later the same evening. The second is an evening of its own.
+    await seedStore({
+      entries: [
+        {
+          kind: "session",
+          properties: {
+            id: "2026-01-15",
+            started: "2026-01-15T19:30",
+            ended: "2026-01-15T22:45",
+            scenes_played: ["lighthouse-arrival", "smuggler-captured", "lighthouse-arrival"],
+          },
+          body: "",
+          // The fixture's own log lines — two of them name the scene.
+          log: [
+            {
+              raw: "- 19:52 (lighthouse-arrival) Spuren gefunden, Gruppe will sofort zur Bucht #decision",
+            },
+            { raw: "- 20:30 — Pause" },
+            { raw: "- 21:10 (lighthouse-arrival) Improvisiert: Fischerin „Old Metta“ am Steg #npc" },
+            { raw: "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread" },
+          ],
+        },
+        {
+          kind: "session",
+          properties: {
+            id: "2026-01-22",
+            started: "2026-01-22T19:30",
+            ended: "2026-01-22T22:00",
+            scenes_played: ["lighthouse-arrival"],
+          },
+          body: "",
+          log: [{ raw: "- 20:05 (lighthouse-arrival) Rückweg über die Klippen" }],
+        },
+      ],
+    });
 
     const report = await usage("scene", "lighthouse-arrival");
     const played = group(report, "scenesPlayed");

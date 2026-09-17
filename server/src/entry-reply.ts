@@ -306,9 +306,9 @@ function normalizeProperties(
 
 /**
  * The value a nullable field falls back to when the reply says „not given" —
- * the SAME default the shared parser applies when it reads such an entry
- * (parse.ts `sceneSummary`/`npcSummary`), spelled out in the properties
- * instead of left to every reader.
+ * the SAME default the renderer applies for an empty column
+ * (store/render.ts: a scene is `planned`, an npc `unknown`), spelled out in
+ * the properties instead of left to every reader.
  *
  * The two fields exist because the schema and the validators disagreed
  * otherwise: strict mode has no optional properties, so a field the prompt

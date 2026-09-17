@@ -1,38 +1,39 @@
 #!/usr/bin/env bun
 // The `grimoire` CLI.
 //
-//   grimoire seed [dir]      import a markdown campaign tree into the database
+//   grimoire seed [dir]      load JSON campaign entries into the database
 //
-// `seed` is the ONLY way markdown gets into a database: the
-// server boots empty and imports nothing. There is still exactly one importer
-// — this command drives it. Its default source
-// is `examples/`, which is what makes the example campaign the dev and E2E
-// fixture without a second data format.
+// The server boots EMPTY — a fresh installation has no content, and creating
+// a campaign in the app is the normal way to start. `seed` is for the
+// development and test data: it loads the committed `fixtures/` tree, where a
+// directory is a campaign and each file in it is one entry in the shape the
+// API speaks (db/seed.ts).
 //
-// Deliberately thin: argument parsing, a readable report, an exit code. The
-// migration itself refuses to overwrite anything (see migrate-campaigns.ts),
-// so the worst a mistyped invocation does is print "nothing to do".
+// Deliberately thin: argument parsing, a readable report, an exit code. A
+// database that already holds campaigns is refused rather than mixed with a
+// second data set.
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { openDb } from "./db/client";
-import { runInitialMigration } from "./db/migrate-campaigns";
+import { isDbEmpty, openDb } from "./db/client";
+import { seedFixtures } from "./db/seed";
 import { getDbFile } from "./config";
 
 const PACKAGE_DIR = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 
-/** Dev default: the committed example campaign (CLAUDE.md, "Arbeitsweise"). */
-const DEFAULT_SOURCE = path.resolve(PACKAGE_DIR, "../examples");
+/** The committed fixture campaigns (CLAUDE.md, "Arbeitsweise"). */
+const DEFAULT_SOURCE = path.resolve(PACKAGE_DIR, "../fixtures");
 
 const USAGE = `grimoire — Grimoire maintenance CLI
 
-  grimoire seed [dir]   Import a markdown campaign tree into the database.
+  grimoire seed [dir]   Load JSON campaign entries into the database.
+                        One subdirectory per campaign, one file per entry.
                         dir defaults to ${DEFAULT_SOURCE}
                         Target database: GRIMOIRE_DATA/grimoire.db
                         (currently ${getDbFile()})
 
   Options:
-    --force             Import even when the database already holds data.
+    --force             Seed even when the database already holds campaigns.
                         Rows are added, nothing is deleted — use it only on a
                         scratch database.
 `;
@@ -40,59 +41,28 @@ const USAGE = `grimoire — Grimoire maintenance CLI
 async function seed(args: string[]): Promise<number> {
   const force = args.includes("--force");
   const positional = args.filter((a) => !a.startsWith("--"));
-  const source = positional[0] === undefined ? DEFAULT_SOURCE : path.resolve(process.cwd(), positional[0]);
+  const source =
+    positional[0] === undefined ? DEFAULT_SOURCE : path.resolve(process.cwd(), positional[0]);
   const dbFile = getDbFile();
 
-  const { db, client, close } = await openDb(dbFile);
+  const { db, close } = await openDb(dbFile);
   try {
-    console.log(`grimoire seed`);
-    console.log(`  source:  ${source}`);
-    console.log(`  target:  ${dbFile}`);
-    console.log(`  backend: ${client.backend}`);
-    const outcome = await runInitialMigration(db, source, { force });
-    if (!outcome.migrated) {
-      const why = {
-        "already-migrated": "the database is already migrated (meta.migrated_at is set)",
-        "database-not-empty": "the database already holds campaigns and is never overwritten",
-        "no-campaigns": "no campaign directory found in the source",
-      }[outcome.skipped ?? "no-campaigns"];
-      console.log(`  nothing to do — ${why}`);
-      // The one skip a user may not have intended: content without any
-      // migration marker. Say what the options are instead of leaving them
-      // with a dead end.
-      if (outcome.skipped === "database-not-empty") {
-        console.log("");
-        console.log("  This database holds campaign rows but no migration marker, so seeding");
-        console.log("  it would mix two data sets. The file is left completely untouched.");
-        console.log("  Your options:");
-        console.log(`    · keep it — it already has content; nothing needs importing`);
-        console.log(`    · import into a FRESH database:`);
-        console.log(`        GRIMOIRE_DATA=<empty-dir> grimoire seed ${source}`);
-        console.log(`    · start over from the files — move the database aside first:`);
-        console.log(`        mv ${dbFile} ${dbFile}.bak && grimoire seed ${source}`);
-        console.log(`    · add to it anyway (rows are added, nothing deleted): --force`);
-      }
+    if (!force && !isDbEmpty(db)) {
+      console.log("this database already holds campaigns and is never overwritten.");
+      console.log("  · seed into a FRESH database:  GRIMOIRE_DATA=<empty-dir> grimoire seed");
+      console.log("  · add to this one anyway (rows are added, nothing deleted): --force");
       return 0;
     }
-    if (outcome.resumedFrom.length > 0) {
-      // Per-campaign markers: an earlier run had already committed these.
-      console.log(`  resumed — already migrated earlier: ${outcome.resumedFrom.join(", ")}`);
+    for (const outcome of await seedFixtures(db, source)) {
+      console.log(
+        `seeded: ${outcome.campaignId} (${outcome.entries} ` +
+          `${outcome.entries === 1 ? "entry" : "entries"})`,
+      );
     }
-    console.log(`  imported: ${outcome.campaigns.join(", ") || "(nothing left to do)"}`);
-    if (outcome.report.length === 0) {
-      console.log("  clean import — nothing to report");
-      return 0;
-    }
-    console.log(
-      `  ${outcome.report.length} report entr${outcome.report.length === 1 ? "y" : "ies"} — ` +
-        "these files were not (fully) imported and stay in the tree:",
-    );
-    for (const entry of outcome.report) {
-      console.log(`   · [${entry.campaignId}] ${entry.path}: ${entry.reason}`);
-    }
-    // Degradation is not a failure (the tree is untouched) — but it IS
-    // something to read, so it is not silent either.
     return 0;
+  } catch (error) {
+    console.error(`seed failed: ${error instanceof Error ? error.message : error}`);
+    return 1;
   } finally {
     close();
   }

@@ -1,24 +1,17 @@
-// Read-API tests against the DATABASE, seeded through the real
-// markdown importer from the example campaign — examples/ is the committed
-// format reference and stays the fixture of the whole suite (see
-// test/support/store.ts). The Hono app runs in-process via app.request() —
-// no live port needed.
+// Read-API tests against the DATABASE, seeded from the committed JSON entries
+// in `fixtures/beispiel` — the example campaign is the fixture of the whole
+// suite (see test/support/store.ts). The Hono app runs in-process via
+// app.request(), so no live port is needed.
 //
-// What the cutover changed for these tests, and nothing else:
-//   - `rev` is the ROW VERSION (an opaque guard token that starts at 1),
-//     not a filesystem rev — so there is nothing left to `stat`.
-//   - a scene's path segment is its ID, not its former file name
-//     (store/paths.ts): ankunft-leuchtturm.md is addressed as
-//     01-salzhafen/leuchtturm/lighthouse-arrival.
-// Every status code, ordering and response field below is the one the
-// file-tree reader answered with.
+// Two addressing facts to know while reading:
+//   - `rev` is the ROW VERSION, an opaque guard token that starts at 1;
+//   - a scene's path segment is its ID (store/paths.ts), so the example
+//     scene is addressed as 01-salzhafen/leuchtturm/lighthouse-arrival.
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { CampaignSummary, CampaignTree, EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
+import { seedCampaign, type SeedEntry } from "../src/db/seed";
 import { dropStore, emptyStore, seedStore } from "./support/store";
 
 describe("GET /api/campaigns", () => {
@@ -28,7 +21,7 @@ describe("GET /api/campaigns", () => {
     return (await res.json()) as CampaignSummary[];
   };
 
-  describe("seeded from examples/", () => {
+  describe("seeded from the example campaign", () => {
     beforeEach(async () => {
       await seedStore();
     });
@@ -63,49 +56,41 @@ describe("GET /api/campaigns", () => {
       expect(beispiel?.lastSessionStarted).toBe("2026-01-15T19:30");
     });
 
-    test("name/description come from examples/beispiel/campaign", async () => {
+    test("name/description come from the campaign entry", async () => {
       const beispiel = (await campaigns()).find((c) => c.id === "beispiel");
       expect(beispiel?.name).toBe("Der Leuchtturm von Salzhafen");
       expect(beispiel?.description).toContain("Leuchtturm");
     });
   });
 
-  describe("in a temp root", () => {
-    let tmpRoot: string;
-
-    beforeAll(async () => {
-      tmpRoot = await mkdtemp(path.join(os.tmpdir(), "grimoire-campaigns-"));
-      // One campaign with two sessions (the later id must win) …
-      await mkdir(path.join(tmpRoot, "mit-sessions", "sessions"), { recursive: true });
-      await writeFile(path.join(tmpRoot, "mit-sessions", "sessions", "2026-02-01.md"), "---\n---\n");
-      await writeFile(path.join(tmpRoot, "mit-sessions", "sessions", "2026-03-09.md"), "---\n---\n");
-      // … one without a sessions directory at all, and one with an empty one.
-      await mkdir(path.join(tmpRoot, "ohne-sessions"), { recursive: true });
-      await mkdir(path.join(tmpRoot, "leere-sessions", "sessions"), { recursive: true });
-
-      // Campaign-metadata files in every degradation flavour.
-      const campaignFile = async (id: string, content: string) => {
-        await mkdir(path.join(tmpRoot, id), { recursive: true });
-        await writeFile(path.join(tmpRoot, id, "_campaign.md"), content);
-      };
-      await campaignFile(
-        "mit-meta",
-        "---\nid: mit-meta\nname: Tyranny of Dragons\ndescription: Drachen, überall.\nsystem: D&D 5e\n---\n\nNotizen.\n",
-      );
-      await campaignFile("kaputte-meta", "---\nname: [unclosed\n---\n\nNotizen.\n");
-      await campaignFile("meta-ohne-name", "---\nid: meta-ohne-name\n---\n\nNur Notizen.\n");
-      await campaignFile(
-        "krude-meta",
-        "---\nid: krude-meta\nname: Krude Kampagne\ndescription:\n  nested: nope\n---\n",
-      );
-    });
-
-    afterAll(async () => {
-      await rm(tmpRoot, { recursive: true, force: true });
-    });
+  describe("several campaigns side by side", () => {
+    /** A campaign's entries: its own, plus one session per id given. */
+    function campaign(
+      properties: Record<string, unknown>,
+      sessionIds: string[] = [],
+    ): SeedEntry[] {
+      return [
+        { kind: "campaign", properties, body: "" },
+        ...sessionIds.map(
+          (id): SeedEntry => ({
+            kind: "session",
+            properties: { id, scenes_played: [] },
+            body: "",
+            log: [],
+          }),
+        ),
+      ];
+    }
 
     beforeEach(async () => {
-      await seedStore(tmpRoot);
+      const db = await emptyStore();
+      seedCampaign(db, campaign({ id: "mit-sessions" }, ["2026-02-01", "2026-03-09"]));
+      seedCampaign(db, campaign({ id: "ohne-sessions" }));
+      seedCampaign(
+        db,
+        campaign({ id: "mit-meta", name: "Tyranny of Dragons", description: "Drachen, überall." }),
+      );
+      seedCampaign(db, campaign({ id: "meta-ohne-name" }));
     });
 
     afterEach(() => {
@@ -114,37 +99,15 @@ describe("GET /api/campaigns", () => {
 
     test("newest session id wins; no sessions → no lastSession field", async () => {
       const body = await campaigns();
-      // `name` is the DISPLAY name and is always there: a
-      // campaign with no authored name is listed under its id, exactly as the
-      // campaign DOCUMENT renders it (GET /entry?path=campaign).
+      // `name` is the DISPLAY name and is always there: a campaign with no
+      // authored name is listed under its id, exactly as the campaign ENTRY
+      // renders it (GET /entry?path=campaign).
       expect(body).toEqual([
-        { id: "kaputte-meta", name: "kaputte-meta" },
-        { id: "krude-meta", name: "Krude Kampagne" },
-        { id: "leere-sessions", name: "leere-sessions" },
         { id: "meta-ohne-name", name: "meta-ohne-name" },
         { id: "mit-meta", name: "Tyranny of Dragons", description: "Drachen, überall." },
         { id: "mit-sessions", name: "mit-sessions", lastSession: "2026-03-09" },
         { id: "ohne-sessions", name: "ohne-sessions" },
       ]);
-    });
-
-    test("campaign degrades: broken YAML, missing name, non-string values", async () => {
-      const byId = new Map((await campaigns()).map((c) => [c.id, c]));
-      // Broken properties → the campaign ROW still exists (a directory is a
-      // campaign) and nothing was READ from the file: no description, and
-      // never the parser's file-stem fallback ("campaign") as the name — the
-      // id is. The file itself stays in the tree, named in the seed report
-      // (db-migration.test.ts).
-      expect(byId.get("kaputte-meta")).toEqual({ id: "kaputte-meta", name: "kaputte-meta" });
-      // File present but without `name` → the id is the display name.
-      expect(byId.get("meta-ohne-name")).toEqual({
-        id: "meta-ohne-name",
-        name: "meta-ohne-name",
-      });
-      // Non-string description is dropped, the valid name survives.
-      expect(byId.get("krude-meta")).toEqual({ id: "krude-meta", name: "Krude Kampagne" });
-      // No file at all → the id, same as everywhere else.
-      expect(byId.get("ohne-sessions")).toEqual({ id: "ohne-sessions", name: "ohne-sessions" });
     });
   });
 });
@@ -353,10 +316,10 @@ describe("GET /api/:campaign/entry", () => {
 });
 
 // --- the empty boot ----------------------------------------------------------
-// The production boot imports NOTHING: a fresh instance is empty, and the
-// markdown importer is the dev/E2E tool `grimoire seed`. Nothing 500s on the
-// way there — an empty campaign list and 404s are the honest answers.
-describe("a fresh database (no import at boot)", () => {
+// The production boot loads NOTHING: a fresh instance is empty, and
+// `grimoire seed` is the dev and E2E tool. Nothing 500s on the way there —
+// an empty campaign list and 404s are the honest answers.
+describe("a fresh database (nothing loaded at boot)", () => {
   beforeEach(async () => {
     await emptyStore();
   });

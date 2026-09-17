@@ -6,32 +6,34 @@
 //
 // All six callout kinds appear: readaloud/check/secret/note in
 // lighthouse-arrival, check/note/outcome in smuggler-captured — and
-// [!loot], which examples/ does not contain, through an extra file this test
-// seeds into ITS OWN campaign copy (examples/ stays untouched).
+// [!loot], which the example campaign does not contain, through an extra
+// entry this test seeds into ITS OWN copy of the fixtures.
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { FIXTURES_DIR } from "../support/paths";
-import { expect, test } from "../support/test";
+import { E2E_FIXTURES_DIR } from "../support/paths";
+import { expect, test, type SeedEntry } from "../support/test";
 
-/** The scene with the [!loot] callout — seeded, examples/ has none. */
-const LOOT_SCENE = {
-  // The path segment is the scene's ID from the fixture's properties
-  // (`loot-check`), like every scene path.
-  path: "01-salzhafen/leuchtturm/loot-check",
-  content: readFileSync(path.join(FIXTURES_DIR, "loot-scene.md"), "utf8"),
-};
+/** Reads one of the suite's own entry fixtures. */
+function entry(name: string): SeedEntry {
+  return JSON.parse(
+    readFileSync(path.join(E2E_FIXTURES_DIR, name), "utf8"),
+  ) as SeedEntry;
+}
+
+/** The scene with the [!loot] callout — the example campaign has none. */
+const LOOT_SCENE = entry("loot-scene.json");
+/** Its address: chapter, location and the scene's id from its properties. */
+const LOOT_SCENE_PATH = "01-salzhafen/leuchtturm/loot-check";
 
 /**
  * A scene whose table CANNOT fit 390px — seven columns of long, unbreakable
  * words. The reference scene's W6 table is narrow enough to fit, so it cannot
  * prove that the box overflows instead of the page; this one can.
  */
-const WIDE_TABLE_SCENE = {
-  path: "01-salzhafen/leuchtturm/wide-table",
-  content: readFileSync(path.join(FIXTURES_DIR, "wide-table-scene.md"), "utf8"),
-};
+const WIDE_TABLE_SCENE = entry("wide-table-scene.json");
+const WIDE_TABLE_SCENE_PATH = "01-salzhafen/leuchtturm/wide-table";
 
 const ARRIVAL = "/beispiel/entry/01-salzhafen/leuchtturm/lighthouse-arrival";
 const CAPTURED = "/beispiel/entry/01-salzhafen/bucht/smuggler-captured";
@@ -45,8 +47,8 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(
     context.getByRole("link", { name: "Kapitel 1: Der Leuchtturm von Salzhafen" }),
   ).toBeVisible();
-  // The scene's group directory; "hafen" has no location file, so the slug
-  // stands as written (no invented prettification).
+  // The group is the scene's location, resolved to the name its entry
+  // carries — no invented prettification.
   await expect(context).toContainText("hafen");
   // The chrome names the campaign exactly ONCE — in the switcher. The old
   // breadcrumb spelled it again right next to the near-identical chapter title.
@@ -214,16 +216,15 @@ test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ p
 });
 
 test.describe("with a seeded loot scene", () => {
-  test.use({ seed: { files: { [LOOT_SCENE.path]: LOOT_SCENE.content } } });
+  test.use({ seed: { entries: { "scene-loot": LOOT_SCENE } } });
 
   test("the loot callout renders, an unknown kind degrades to a blockquote", async ({
     page,
   }) => {
-    // [!loot] is missing from the reference scenes and examples/ must not be
-    // reformatted — so the sixth kind is checked on a scene this test seeds into
-    // the markdown tree its own database is imported from. Its path segment is
-    // the scene's ID (`beutezug`), like every scene path.
-    await page.goto(`/beispiel/entry/${LOOT_SCENE.path}`);
+    // [!loot] is missing from the reference scenes, so the sixth kind is
+    // checked on a scene this test seeds into its own copy of the fixtures.
+    // Its last address segment is the scene's id, like every scene address.
+    await page.goto(`/beispiel/entry/${LOOT_SCENE_PATH}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Beutezug in der Räucherkammer",
     );
@@ -259,13 +260,13 @@ test("the reference scene's W6 table renders as a table inside the note callout"
 test.describe("the table at 390px", () => {
   test.use({
     viewport: { width: 390, height: 844 },
-    seed: { files: { [WIDE_TABLE_SCENE.path]: WIDE_TABLE_SCENE.content } },
+    seed: { entries: { "scene-wide-table": WIDE_TABLE_SCENE } },
   });
 
   test("a table too wide for the phone scrolls in its own box, the page does not", async ({
     page,
   }) => {
-    await page.goto(`/beispiel/entry/${WIDE_TABLE_SCENE.path}`);
+    await page.goto(`/beispiel/entry/${WIDE_TABLE_SCENE_PATH}`);
 
     // Overflowing, so the box IS a named region: the tab stop and the
     // landmark only appear once there is something to scroll.

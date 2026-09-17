@@ -43,8 +43,8 @@ function keys(kind: EntityKind): string[] {
   return fields(kind).map((field) => field.key);
 }
 
-/** examples/beispiel/01-salzhafen/hafen/von-schmugglern-erwischt */
-const SCENE_FM: Record<string, unknown> = {
+/** The properties of the fixture scene „Von den Schmugglern erwischt". */
+const SCENE_PROPERTIES: Record<string, unknown> = {
   id: "smuggler-captured",
   title: "Von den Schmugglern erwischt",
   type: "contingency",
@@ -57,8 +57,8 @@ const SCENE_FM: Record<string, unknown> = {
   status: "ready",
 };
 
-/** examples/beispiel/npcs/fenn — quickstats arrive as YAML numbers. */
-const NPC_FM: Record<string, unknown> = {
+/** The properties of the fixture NPC „Fenn" — quickstats arrive as numbers. */
+const NPC_PROPERTIES: Record<string, unknown> = {
   id: "fenn",
   name: "Fenn",
   role: "Anführer der Schmuggler in der Nordbucht",
@@ -145,7 +145,7 @@ describe("propertiesFieldsFor", () => {
 
 describe("propertiesFormValues", () => {
   test("a scene starts with exactly what stands in the file", () => {
-    expect(propertiesFormValues(fields("scene"), SCENE_FM)).toEqual({
+    expect(propertiesFormValues(fields("scene"), SCENE_PROPERTIES)).toEqual({
       title: { kind: "text", text: "Von den Schmugglern erwischt" },
       type: { kind: "text", text: "contingency" },
       trigger: {
@@ -162,7 +162,7 @@ describe("propertiesFormValues", () => {
   });
 
   test("quickstats become editable key/value rows, numbers as their text", () => {
-    const values = propertiesFormValues(fields("npc"), NPC_FM);
+    const values = propertiesFormValues(fields("npc"), NPC_PROPERTIES);
     expect(values.quickstats).toEqual({
       kind: "pairs",
       entries: [
@@ -200,21 +200,21 @@ describe("propertiesPatch", () => {
   }
 
   test("an untouched form patches nothing at all", () => {
-    const initial = propertiesFormValues(sceneFields, SCENE_FM);
+    const initial = propertiesFormValues(sceneFields, SCENE_PROPERTIES);
     expect(propertiesPatch(sceneFields, initial, initial)).toEqual({});
     // `handouts: []` stays exactly that — an empty list is not a change.
     expect(propertiesPatch(sceneFields, initial, { ...initial })).toEqual({});
   });
 
   test("only the changed field is sent (everything else survives on disk)", () => {
-    const { initial, current } = edited(sceneFields, SCENE_FM, {
+    const { initial, current } = edited(sceneFields, SCENE_PROPERTIES, {
       status: { kind: "text", text: "played" },
     });
     expect(propertiesPatch(sceneFields, initial, current)).toEqual({ status: "played" });
   });
 
   test("unknown properties keys are never part of the patch", () => {
-    const withExtras = { ...SCENE_FM, "prep-time": "20min", weather: ["Regen"] };
+    const withExtras = { ...SCENE_PROPERTIES, "prep-time": "20min", weather: ["Regen"] };
     const initial = propertiesFormValues(sceneFields, withExtras);
     const current = { ...initial, title: { kind: "text" as const, text: "Neuer Titel" } };
     const patch = propertiesPatch(sceneFields, initial, current);
@@ -224,7 +224,7 @@ describe("propertiesPatch", () => {
   });
 
   test("whitespace around a value is not a change", () => {
-    const { initial, current } = edited(sceneFields, SCENE_FM, {
+    const { initial, current } = edited(sceneFields, SCENE_PROPERTIES, {
       title: { kind: "text", text: "  Von den Schmugglern erwischt  " },
       tags: { kind: "list", items: ["social ", " escape"] },
     });
@@ -232,7 +232,7 @@ describe("propertiesPatch", () => {
   });
 
   test("clearing a field DELETES the key — text, list and pairs alike", () => {
-    const scene = edited(sceneFields, SCENE_FM, {
+    const scene = edited(sceneFields, SCENE_PROPERTIES, {
       trigger: { kind: "text", text: "   " },
       tags: { kind: "list", items: [] },
     });
@@ -240,19 +240,19 @@ describe("propertiesPatch", () => {
       trigger: null,
       tags: null,
     });
-    const npc = edited(npcFields, NPC_FM, { quickstats: { kind: "pairs", entries: [] } });
+    const npc = edited(npcFields, NPC_PROPERTIES, { quickstats: { kind: "pairs", entries: [] } });
     expect(propertiesPatch(npcFields, npc.initial, npc.current)).toEqual({ quickstats: null });
   });
 
   test("a list keeps its order and drops blank entries", () => {
-    const { initial, current } = edited(sceneFields, SCENE_FM, {
+    const { initial, current } = edited(sceneFields, SCENE_PROPERTIES, {
       npcs: { kind: "list", items: ["jorna", "  ", "fenn"] },
     });
     expect(propertiesPatch(sceneFields, initial, current)).toEqual({ npcs: ["jorna", "fenn"] });
   });
 
   test("an unknown reference id is saved verbatim (the file may follow later)", () => {
-    const { initial, current } = edited(sceneFields, SCENE_FM, {
+    const { initial, current } = edited(sceneFields, SCENE_PROPERTIES, {
       location: { kind: "text", text: "nordbucht" },
       npcs: { kind: "list", items: ["fenn", "kapitaen-torv"] },
     });
@@ -263,7 +263,7 @@ describe("propertiesPatch", () => {
   });
 
   test("quickstats keep their YAML types: numbers stay numbers, a typed +2 stays text", () => {
-    const { initial, current } = edited(npcFields, NPC_FM, {
+    const { initial, current } = edited(npcFields, NPC_PROPERTIES, {
       quickstats: {
         kind: "pairs",
         entries: [
@@ -282,7 +282,7 @@ describe("propertiesPatch", () => {
   });
 
   test("a quickstat whose VALUE was cleared loses its key — never `key: ''`", () => {
-    const { initial, current } = edited(npcFields, NPC_FM, {
+    const { initial, current } = edited(npcFields, NPC_PROPERTIES, {
       quickstats: {
         kind: "pairs",
         entries: [
@@ -298,7 +298,7 @@ describe("propertiesPatch", () => {
   });
 
   test("clearing every quickstat value deletes the whole key", () => {
-    const { initial, current } = edited(npcFields, NPC_FM, {
+    const { initial, current } = edited(npcFields, NPC_PROPERTIES, {
       quickstats: {
         kind: "pairs",
         entries: [
@@ -312,7 +312,7 @@ describe("propertiesPatch", () => {
   });
 
   test("an unknown status value survives an edit of another field (degrade)", () => {
-    const odd = { ...SCENE_FM, status: "onhold" };
+    const odd = { ...SCENE_PROPERTIES, status: "onhold" };
     const { initial, current } = edited(sceneFields, odd, {
       title: { kind: "text", text: "Anderer Titel" },
     });
@@ -323,7 +323,7 @@ describe("propertiesPatch", () => {
 describe("canSubmitProperties", () => {
   test("a blank title/name is not a save", () => {
     const sceneFields = fields("scene");
-    const values = propertiesFormValues(sceneFields, SCENE_FM);
+    const values = propertiesFormValues(sceneFields, SCENE_PROPERTIES);
     expect(canSubmitProperties(sceneFields, values)).toBe(true);
     expect(
       canSubmitProperties(sceneFields, { ...values, title: { kind: "text", text: "  " } }),
@@ -331,7 +331,7 @@ describe("canSubmitProperties", () => {
     const npcFields = fields("npc");
     expect(
       canSubmitProperties(npcFields, {
-        ...propertiesFormValues(npcFields, NPC_FM),
+        ...propertiesFormValues(npcFields, NPC_PROPERTIES),
         name: { kind: "text", text: "" },
       }),
     ).toBe(false);
@@ -340,7 +340,7 @@ describe("canSubmitProperties", () => {
 
 describe("unfinished quickstat rows block the save", () => {
   const npcFields = fields("npc");
-  const values = propertiesFormValues(npcFields, NPC_FM);
+  const values = propertiesFormValues(npcFields, NPC_PROPERTIES);
   const withStats = (entries: { key: string; value: string }[]): FormValues => ({
     ...values,
     quickstats: { kind: "pairs", entries },
@@ -388,7 +388,7 @@ describe("unfinished quickstat rows block the save", () => {
 
   test("a scene's own properties is fine as it stands", () => {
     const sceneFields = fields("scene");
-    expect(propertiesFormIssues(sceneFields, propertiesFormValues(sceneFields, SCENE_FM), undefined, t)).toEqual(
+    expect(propertiesFormIssues(sceneFields, propertiesFormValues(sceneFields, SCENE_PROPERTIES), undefined, t)).toEqual(
       {},
     );
   });
@@ -396,7 +396,7 @@ describe("unfinished quickstat rows block the save", () => {
 
 describe("a scene's Kapitel cannot be cleared", () => {
   const sceneFields = fields("scene");
-  const initial = propertiesFormValues(sceneFields, SCENE_FM);
+  const initial = propertiesFormValues(sceneFields, SCENE_PROPERTIES);
   const withChapter = (text: string): FormValues => ({
     ...initial,
     chapter: { kind: "text", text },
@@ -435,7 +435,7 @@ describe("a scene's Kapitel cannot be cleared", () => {
 
 describe("the npcs list holds ids, not names", () => {
   const sceneFields = fields("scene");
-  const initial = propertiesFormValues(sceneFields, SCENE_FM);
+  const initial = propertiesFormValues(sceneFields, SCENE_PROPERTIES);
   const withNpcs = (items: string[]): FormValues => ({
     ...initial,
     npcs: { kind: "list", items },
@@ -468,7 +468,7 @@ describe("the npcs list holds ids, not names", () => {
 
 describe("the Ort field: free text in, an id out", () => {
   const sceneFields = fields("scene");
-  const initial = propertiesFormValues(sceneFields, SCENE_FM);
+  const initial = propertiesFormValues(sceneFields, SCENE_PROPERTIES);
   const withLocation = (text: string): FormValues => ({
     ...initial,
     location: { kind: "text", text },
@@ -568,7 +568,7 @@ describe("the Ort field: free text in, an id out", () => {
 describe("hasPropertiesChanges", () => {
   const sceneFields = fields("scene");
   const npcFields = fields("npc");
-  const initial = propertiesFormValues(sceneFields, SCENE_FM);
+  const initial = propertiesFormValues(sceneFields, SCENE_PROPERTIES);
 
   test("an untouched form has nothing to discard", () => {
     expect(hasPropertiesChanges(sceneFields, initial, initial, t)).toBe(false);
@@ -576,7 +576,7 @@ describe("hasPropertiesChanges", () => {
     expect(
       hasPropertiesChanges(sceneFields, initial, {
         ...initial,
-        title: { kind: "text", text: `  ${SCENE_FM.title as string}  ` },
+        title: { kind: "text", text: `  ${SCENE_PROPERTIES.title as string}  ` },
       }, t),
     ).toBe(false);
   });
@@ -590,7 +590,7 @@ describe("hasPropertiesChanges", () => {
     ).toBe(true);
     // The invalid row produces no patch at all, so the guard has to ask the
     // issues as well — otherwise Esc would throw it away silently.
-    const npcInitial = propertiesFormValues(npcFields, NPC_FM);
+    const npcInitial = propertiesFormValues(npcFields, NPC_PROPERTIES);
     const stats = npcInitial.quickstats;
     if (stats?.kind !== "pairs") throw new Error("quickstats is not a pairs field");
     const nameless: FormValues = {
@@ -604,7 +604,7 @@ describe("hasPropertiesChanges", () => {
 
 describe("commitPendingText", () => {
   const sceneFields = fields("scene");
-  const values = propertiesFormValues(sceneFields, SCENE_FM);
+  const values = propertiesFormValues(sceneFields, SCENE_PROPERTIES);
 
   test("text still standing in a chip input is folded into its list", () => {
     const committed = commitPendingText(sceneFields, values, { tags: "combat" });
@@ -734,7 +734,7 @@ function answer(
 const FILE: EntryResponse = {
   path: "npcs/fenn",
   kind: "npc",
-  properties: NPC_FM,
+  properties: NPC_PROPERTIES,
   body: "",
   rev: 42,
 };

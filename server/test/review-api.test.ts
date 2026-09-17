@@ -1,10 +1,9 @@
-// Review-action tests, ported to the database stack.
+// Review actions against the database stack.
 //
 // Same setup as the write-API tests: one fresh in-memory database per case,
-// seeded from `examples/` by the real migration (test/support/store.ts). No
-// campaign file is read or written any more, so every "the file on disk says
-// X" assertion is re-expressed against the API's answer or the structured
-// endpoint behind it.
+// seeded from the committed JSON entries by the real loader
+// (test/support/store.ts). Every assertion reads the API's answer or the
+// structured endpoint behind it.
 //
 // Two behaviour notes the cutover forced, both pinned below:
 //
@@ -19,16 +18,11 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
 import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
-import {
-  dropStore,
-  removeTempRoot,
-  seedStore,
-  tempCampaignRoot,
-} from "./support/store";
+import { getDb } from "../src/store/handle";
+import { seedCampaign } from "../src/db/seed";
+import { dropStore, seedStore } from "./support/store";
 
 async function postJson(url: string, body?: unknown): Promise<Response> {
   return app.request(url, {
@@ -425,18 +419,14 @@ describe("POST /api/:campaign/review/inbox-done", () => {
   });
 
   test("404 when the campaign has no inbox at all", async () => {
-    // The "inbox is missing" case: a campaign whose migration produced no
-    // inbox rows. GET answers 200 with an empty document, but there is
-    // still no such LINE to check off — hence 404 here.
-    const root = await tempCampaignRoot();
-    try {
-      await mkdir(path.join(root, "frischling"), { recursive: true });
-      await seedStore(root);
-      const res = await postJson("/api/frischling/review/inbox-done", { line: "- egal" });
-      expect(res.status).toBe(404);
-    } finally {
-      await removeTempRoot(root);
-    }
+    // The "inbox is missing" case: a campaign with no inbox rows at all.
+    // GET answers 200 with an empty entry, but there is still no such LINE to
+    // check off — hence 404 here.
+    seedCampaign(await getDb(), [
+      { kind: "campaign", properties: { id: "frischling" }, body: "" },
+    ]);
+    const res = await postJson("/api/frischling/review/inbox-done", { line: "- egal" });
+    expect(res.status).toBe(404);
   });
 
   test("404 for an unknown campaign on all four endpoints", async () => {

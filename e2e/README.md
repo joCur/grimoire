@@ -8,30 +8,37 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
 
 ## So sät die Suite
 
-- **Gesät wird über den echten Importer — `grimoire seed`.** Jeder Test
+- **Gesät wird über das echte Werkzeug — `grimoire seed`.** Jeder Test
   bekommt ein leeres `GRIMOIRE_DATA`-Verzeichnis; die `server`-Fixture ruft
-  darauf `grimoire seed <baum>` mit der pristinen Kopie von
-  `examples/beispiel` auf und startet DANN den Server (der Boot selbst
-  importiert nichts). Derselbe Importer, kein zweites Fixture-Format
-  (PO-Entscheidung F5).
-- **Der Markdown-Baum ist EINGABE**, einmal pro Test gelesen. Ein Test, der
-  Inhalte braucht, die die Beispielkampagne nicht hat, sät sie VOR dem Seed
-  in seine eigene Kopie des Baums:
-  `test.use({ seed: { files: { "locations/hafen": "…" }, remove: ["_campaign"] } })`.
-  Die Schlüssel sind **Pfade im Baum** ohne `.md` (`_campaign`,
-  `01-salzhafen/_chapter`, `01-salzhafen/hafen/ankunft-leuchtturm`) — das
-  `.md` für den Importer hängt die Fixture selbst an; Adressen der API sind
-  etwas anderes (`campaign`, `01-salzhafen`, `01-salzhafen/leuchtturm/…`). Ohne Seed wird die geteilte pristine Kopie
-  direkt benutzt (niemand schreibt hinein), die meisten Tests kopieren also
-  gar nichts.
+  darauf `grimoire seed <fixtures-verzeichnis>` mit der pristinen Kopie von
+  `fixtures/beispiel` auf und startet DANN den Server (der Boot selbst lädt
+  nichts).
+- **Die Fixtures sind EINGABE**, einmal pro Test gelesen. `fixtures/beispiel`
+  hält die Beispielkampagne als **ein JSON pro Eintrag**, genau in der Form,
+  die die API spricht (`{ kind, properties, body }`, dazu `log` für eine
+  Session und `entries` für Eingang und Glossar). Ein Test, der Inhalte
+  braucht, die die Beispielkampagne nicht hat, überschreibt sie in seiner
+  eigenen Kopie des Verzeichnisses:
+  `test.use({ seed: { entries: { "scene-loot": { kind: "scene", … } }, without: ["session-2026-01-15"] } })`.
+  Die Schlüssel sind **Dateinamen ohne `.json`**: ein Name, den
+  `fixtures/beispiel` schon hat, ERSETZT diesen Eintrag, jeder andere legt
+  einen dazu. Die Adresse vergibt der Server
+  (`server/src/store/paths.ts`) — sie ist etwas anderes als der Fixture-Name
+  (`campaign`, `01-salzhafen`, `01-salzhafen/leuchtturm/…`). Ohne Überschreibung
+  wird die geteilte pristine Kopie direkt benutzt (niemand schreibt hinein),
+  die meisten Tests kopieren also gar nichts.
+- **Eine Referenz zeigt auf einen Eintrag, der existiert.** Eine Szene, die
+  einen Ort oder NPC ohne eigenen Eintrag nennt, lässt den Seed-Lauf
+  scheitern (ADR #19) — das ist ein Fehler im Fixture, keine Degradierung.
 - **Eine leere Instanz** — keine Kampagne, der Normalfall einer frischen
   Installation — schaltet den Seed-Lauf ab: `test.use({ seed: { skip: true } })`
   (Pfad 10).
 - **Zusicherungen laufen über die API** (`api`-Helfer, s. u.); wo eine
   Zusicherung wirklich die Speicherung meint, über `db`.
-- **Adressen tragen keine Dateiendung** und ein Szenen-Segment ist die `id`.
+- **Eine Adresse ist kein Fixture-Name**; das letzte Segment einer Szene ist
+  ihre `id`.
 - **Das Wächter-Token heißt `rev`** (die Zeilenversion) und die Felder eines
-  Dokuments `properties`. Ein veraltetes `rev` antwortet mit 409.
+  Eintrags `properties`. Ein veraltetes `rev` antwortet mit 409.
 - **Konflikte kommen vom ZWEITEN SCHREIBER**, nicht von außen: kritischer
   Pfad 9 schreibt über die API (`api.writeBody`), während der Editor offen
   steht, danach speichert die UI — und muss den Konflikt zeigen und neu laden
@@ -43,11 +50,11 @@ normalen `OpenAICompatProvider` per HTTP aufruft.
 Die **Gruppe** einer Szene ist ihr `location`, es gibt kein eigenes
 Gruppenfeld. Für die Suite heißt das drei Dinge:
 
-- **Die Adressen der Beispielszenen folgen ihrem Ort, nicht dem Baum.** Beide
-  Quelldateien liegen im Verzeichnis `hafen/`, nennen aber verschiedene Orte,
-  also lauten die Adressen `01-salzhafen/leuchtturm/lighthouse-arrival` und
-  `01-salzhafen/bucht/smuggler-captured`. `hafen` ist keine Gruppe und kommt
-  in keiner Zusicherung vor. Beide Orte haben einen eigenen Eintrag im Baum
+- **Die Adressen der Beispielszenen folgen ihrem Ort.** Die beiden Szenen
+  nennen verschiedene Orte, also lauten die Adressen
+  `01-salzhafen/leuchtturm/lighthouse-arrival` und
+  `01-salzhafen/bucht/smuggler-captured`; der Fixture-Name spielt dabei keine
+  Rolle. Beide Orte haben einen eigenen Eintrag
   (`locations/leuchtturm`, `locations/bucht`) — eine Referenz legt nichts an
   (ADR #19) —, die Kampagne hat also **zwei** Orte.
 - **Eine veraltete Szenen-Adresse ist kein 404.** Sie nennt dieselbe id, der
@@ -91,13 +98,15 @@ Nützliche Schalter:
 
 ```
 playwright.config.ts     Projekt (nur chromium), globalSetup, Report
-support/global-setup.ts  baut die App, legt die pristine Kopie an, startet den Stub
+support/global-setup.ts  baut die App, legt die pristine Kopie von
+                         fixtures/beispiel an, startet den Stub
 support/test.ts          das `test` der Suite: eigene Datenbank + eigener
                          Server + `baseURL` pro Test, plus die Fixtures
                          `api`, `db` und `seed`
 support/procs.ts         verwaltete Kindprozesse (Start, Warten, Stoppen)
 fixtures/stub-llm.ts     standalone LLM-Stub (auch einzeln startbar)
 fixtures/replies.ts      die kanonischen Modellantworten
+fixtures/*.json          Einträge, die einzelne Specs dazusäen
 tests/*.e2e.ts           ein Spec pro kritischem Pfad (Zuordnung unten)
 ```
 
@@ -105,7 +114,7 @@ tests/*.e2e.ts           ein Spec pro kritischem Pfad (Zuordnung unten)
 Server-Prozess auf eigenem Port (Bereich ab 3200, pro Worker getrennt).
 Zusicherungen sehen damit genau die Zeilen, die dieser Test geschrieben hat —
 inklusive des Generator-Jobs, der selbst eine Zeile ist.
-`examples/` wird nur kopiert, nie verändert. Boot plus Import kosten ~0,2 s.
+`fixtures/` wird nur kopiert, nie verändert. Seed plus Boot kosten ~0,2 s.
 
 **Die zwei Zusicherungs-Helfer:**
 
@@ -116,8 +125,8 @@ inklusive des Generator-Jobs, der selbst eine Zeile ist.
   und damit den „zweiten Schreiber" spielen.
 - `db` — liest `grimoire.db` dieses Tests über den Treiber des Servers
   (`server/src/db/driver.ts`, keine zweite SQLite-Abhängigkeit). Nur für
-  Behauptungen, die die API nicht machen kann — die Migrations-Marker in
-  `meta` und Zeilenzahlen (`tests/first-migration.e2e.ts`).
+  Behauptungen, die die API nicht machen kann — etwa Zeilenzahlen
+  (`tests/seed.e2e.ts`).
 
 Jede Schreibaktion der UI wird weiter doppelt geprüft: in der Oberfläche und
 über die API.
@@ -174,7 +183,7 @@ keinen Zustand und kann mehrere Worker parallel bedienen:
 - der Prompt trägt die Gliederung, aber kein `chapter` → ein **Eintrags-Teil**
   (NPC oder Ort, je nach System-Prompt)
 - kein `chapter` und keine Gliederung → NPC-Lauf (ein Aufruf),
-  `vorgegebene id: <id>` fixiert den Dateinamen
+  `vorgegebene id: <id>` fixiert die id des Eintrags
 - `E2E_SLOW` im Quelltext → der Stub antwortet **nie** (die Verbindung stirbt
   mit dem Server-Prozess, der gefragt hat). Das ist die einzige Möglichkeit,
   einen Job anzusehen, während er wirklich `running` ist — der Neustart-Fall
@@ -211,7 +220,8 @@ bun e2e/fixtures/stub-llm.ts --port 4319
 LLM_PROVIDER=openai LLM_BASE_URL=http://127.0.0.1:4319/v1 LLM_MODEL=stub \
   APP_DIST=app/dist GRIMOIRE_DATA=/tmp/grimoire-scratch \
   bun server/src/server.ts
-# (mit Inhalt: vorher GRIMOIRE_DATA=/tmp/grimoire-scratch bun server/src/cli.ts seed)
+# (mit Inhalt: vorher GRIMOIRE_DATA=/tmp/grimoire-scratch \
+#   bun server/src/cli.ts seed fixtures)
 ```
 
 ## Regel
@@ -219,7 +229,7 @@ LLM_PROVIDER=openai LLM_BASE_URL=http://127.0.0.1:4319/v1 LLM_MODEL=stub \
 **Wer einen kritischen Pfad berührt oder einen neuen schafft, erweitert diese
 Suite im selben PR — sonst kein Merge** (`CLAUDE.md`, „Kritische Pfade"). Die
 Pfade und die Specs stehen zueinander; die Nummer steht außerdem in der
-Kopfzeile des jeweiligen Specs (die Dateinamen tragen sie bewusst nicht — die
+Kopfzeile des jeweiligen Specs (die Spec-Namen tragen sie bewusst nicht — die
 Suite hat keine Reihenfolge). Ein Pfad kann mehr als einen Spec haben, wenn
 mehrere Schreibwege auf ihm liegen:
 
@@ -278,14 +288,13 @@ Desktop-only, die Leseansichten beider Arten müssen bei 390px weiter
 rendern.
 
 Dazu ein Spec, der auf keinem der zehn Pfade liegt, sondern auf der Naht
-darunter: `tests/seed.e2e.ts` (Nachfolger von `first-migration.e2e.ts`, Issue
-dem Seed-Werkzeug). Er belegt zweierlei — dass eine frische Instanz **leer** startet
-(kein Boot-Import mehr) und dass `grimoire seed` den Markdown-Baum vollständig
-einliest (Tree, Szenenkörper, NPC, Session, Inbox, Glossar, sauberer Report
-auf stdout), während ein **zweiter** Seed-Lauf ein No-op ist: gleiche Marker,
-gleiche Zeilenzahlen, gleicher Inhalt. Er braucht eigene Boots und benutzt
-darum `startGrimoireServer`/`seedCampaigns` direkt statt der
-`server`-Fixture.
+darunter: `tests/seed.e2e.ts`, auf dem Seed-Werkzeug. Er belegt zweierlei —
+dass eine frische Instanz **leer** startet (der Boot lädt nichts) und dass
+`grimoire seed` die Fixtures vollständig einliest (Tree, Szenenkörper, NPC,
+Session, Eingang, Glossar, `seeded: beispiel` auf stdout), während ein
+**zweiter** Lauf ablehnt, weil die Datenbank schon Kampagnen hält: gleiche
+Zeilenzahlen, gleicher Inhalt. Er braucht eigene Boots und benutzt darum
+`startGrimoireServer`/`seedCampaigns` direkt statt der `server`-Fixture.
 
 Auf Pfad 7 teilen sich zwei Specs die Arbeit: `status-control.e2e.ts` deckt den
 Status-Regler ab (ein Schlüssel, Konflikt über das Poll-Fenster),
@@ -294,7 +303,7 @@ Entitätsart, Chips/Referenzen/Select, Leeren löscht den Schlüssel, und der
 deterministische 409, weil der Dialog sein Wächter-Token beim Öffnen
 einfriert). Der
 Dialog berührt zusätzlich Pfad 2 (die Leseansicht zeigt die neuen Werte sofort)
-und Pfad 8 (Formular bei 390px) — beides steht in demselben Spec. Seit
+und Pfad 8 (Formular bei 390px) — beides steht in demselben Spec.
 `properties-form.e2e.ts` prüft dort auch den UMZUG: `location`
 ändern verschiebt die Szene, die URL wird ersetzt, die Kapitelübersicht
 sortiert um, die alte Adresse zeigt weiter auf dieselbe Szene und das
@@ -316,7 +325,7 @@ sich EINEN Entwurf teilen: `block-composer.e2e.ts` deckt den
 Block-Composer ab — Standardmodus, eine Karte pro Block, Anlegen/Verschieben,
 Kinder eines `## If:`-Abschnitts, unbekannte Konstrukte als Roh-Block, die
 Save-Sperre bei einem `##` in einem If-Kind (Hinweis an der Karte, „Speichern"
-aus, Datei unverändert), der 409 mit offenem Blockformular und die Bedienung
+aus, Eintrag unverändert), der 409 mit offenem Blockformular und die Bedienung
 bei 390px. `entry-edit.e2e.ts` deckt
 den „Markdown"-Fallback ab: die Textarea, ihre „Vorschau" (die es nur dort
 gibt), die Kinds mit und ohne Editor und die Verlustpfade (Navigation,
@@ -330,7 +339,7 @@ Speichern über eine veraltete Adresse darf nicht ins Leere laufen.
 
 Pfad 10 (`cold-start.e2e.ts`) ist der einzige Pfad, der OHNE Seed läuft:
 `test.use({ seed: { skip: true } })` startet den Server auf einem leeren
-Datenverzeichnis, der Importer läuft nie — genau das, was eine frische
+Datenverzeichnis, das Seed-Werkzeug läuft nie — genau das, was eine frische
 Installation ist. Der Spec legt darum alles selbst an (Kampagne →
 Kapitel → Szene → Text → Session) und baut seinen `api`-Helfer mit
 `apiFor(server.url, id)`, weil die Kampagnen-id erst zur Laufzeit existiert.
@@ -338,7 +347,7 @@ Dazu die beiden Listen-Einstiege („NPC/Ort anlegen") mit der
 Slug-Kollision — 409 mit Vorschlag, nichts geschrieben, der Vorschlag als ein
 Klick — und dieselben Listen bei 390px, womit der Spec auch auf Pfad 8 liegt.
 
-Beide lesen nach jedem Speichern die Datei über die API zurück, und der
+Beide lesen nach jedem Speichern den Eintrag über die API zurück, und der
 Composer parst und serialisiert den Textkörper: „kein Byte Diff außer dem bearbeiteten Block" ist
 darum die eigentliche Zusicherung, nicht ein `toContain` auf dem neuen Satz.
 
@@ -353,17 +362,16 @@ die Topbar-Navigation und den Kampagnen-Metadaten-Dialog,
 APP gerade geschrieben hat, findet ⌘K sofort — der Index wandert in derselben
 Transaktion mit, es gibt keinen Watcher mehr, auf den zu warten wäre.
 
-## Seit „Kapitel bearbeiten und der Kapitel-Status"
+## Das Kapitel als Eintrag
 
-Zwei Pfade haben Zuwachs bekommen, beide um das Kapitel als Eintrag.
+Zwei Pfade tragen das Kapitel als eigenen Eintrag.
 
 - **Pfad 6** (`generator.e2e.ts`): „Neues Kapitel" → **Seite verlassen** →
   zurück → „Übernehmen". Die Navigation ist der Kern des Tests, nicht Deko:
-  Titel und id des neuen Kapitels reisten früher nur im Browser-Zustand und
-  waren nach der Navigation weg — der Prüfschritt ist persistent, also ist
-  genau das der Normalfall. Der Titel liegt jetzt am Job
+  der Prüfschritt ist persistent, also ist genau das der Normalfall. Titel
+  und id des neuen Kapitels liegen am Job
   (`generate_jobs.new_chapter_title`, beim **Start** geschrieben), und der
-  Spec prüft ihn am Kapitel-Eintrag UND in der Übersicht.
+  Spec prüft sie am Kapitel-Eintrag UND in der Übersicht.
   Zu beachten: ein Bulk-„Übernehmen" lässt **unentschiedene** vorgeschlagene
   Einträge offen (Regel des Prüfschritts), der Prüfschritt bleibt stehen und
   meldet „1 von 3 übernommen" — das Kapitel schreibt schon der erste Accept.

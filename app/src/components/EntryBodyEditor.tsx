@@ -11,8 +11,8 @@
 //
 // Switching between them is lossless by construction: the draft is the
 // discriminated union of lib/composer.ts, and the switch runs the body through
-// serializeBlocks/parseBlocks, which phase 1 of #43 proves byte-identical over
-// all of examples/. Saving works from either surface — the save path below only
+// serializeBlocks/parseBlocks, which phase 1 proves byte-identical over every
+// fixture body. Saving works from either surface — the save path below only
 // ever sees `draftBody(draft)`.
 //
 // What the DM sees stays the same page: the header (title, chips, status

@@ -6,7 +6,7 @@ dist/
 build/
 *.tsbuildinfo
 
-# Echte Kampagnendaten — bleiben lokal (Beispiele liegen in examples/)
+# Echte Kampagnendaten — bleiben lokal (die Beispielkampagne liegt in fixtures/)
 /campaigns/
 
 # GRIMOIRE_DATA: die SQLite-Datenbank samt WAL-Begleitdateien (ADR #13).

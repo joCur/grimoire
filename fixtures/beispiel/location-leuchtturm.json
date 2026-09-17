@@ -1,0 +1,10 @@
+{
+  "kind": "location",
+  "properties": {
+    "id": "leuchtturm",
+    "name": "Der Leuchtturm von Salzhafen",
+    "chapter": "01-salzhafen",
+    "roll20-page": "Leuchtturm"
+  },
+  "body": "\n## Beim ersten Betreten\n\n> [!readaloud] Drinnen riecht es nach kaltem Lampenöl und Salz. Die\n> Wendeltreppe verliert sich im Dunkel über euch, und auf dem Tisch\n> steht eine halb gegessene Mahlzeit — seit Tagen unberührt.\n\n## Atmosphäre\n\nVerlassen in Eile, nicht im Kampf: nichts ist umgeworfen, aber alles\nstehen gelassen.\n\n## Wer ist hier\n\n- niemand — genau das ist das Problem\n"
+}

@@ -65,7 +65,7 @@ describe("the catalogs", () => {
 // prompts imitated the catalog. Scanned over the VALUES, not over the source
 // text: there the closing ASCII `"` is indistinguishable from the string
 // delimiter. The markdown side of the same rule — prompts, few-shots,
-// examples/ — lives in server/test/typography.test.ts.
+// fixtures — lives in server/test/typography.test.ts.
 describe("German quotation marks", () => {
   /** `„` and, later in the same message, an ASCII `"` with no `“` between. */
   const MIXED = /\u201E[^\u201C]*"/;

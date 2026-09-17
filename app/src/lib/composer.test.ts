@@ -1,15 +1,14 @@
-// The composer's rules (issue #43, phase 2). Two things must hold or the UI is
+// The composer's rules (phase 2). Two things must hold or the UI is
 // dangerous:
 //
-//   1. The mode switch is lossless. Blöcke → Roh → Blöcke over every file in
-//      examples/ must give back the same bytes — the DM has to be able to peek
+//   1. The mode switch is lossless. Blöcke → Roh → Blöcke over every fixture
+//      body must give back the same bytes — the DM has to be able to peek
 //      at the raw markdown without paying for it.
 //   2. Every edit goes through the phase-1 helpers. The observable proof is
 //      `source`: the edited block loses it (it is rendered from its fields from
 //      now on) and every sibling keeps it (it stays byte-identical). A
 //      hand-rolled spread would keep a stale source and silently drop the edit.
 
-import { parseMarkdown } from "@grimoire/shared";
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 
@@ -41,24 +40,31 @@ import {
   withDraftText,
 } from "./composer";
 
-// The German lines come from the catalog and the translator is passed in
-// (issue #69) — a test says which language it asserts.
+// The German lines come from the catalog and the translator is passed in —
+// a test says which language it asserts.
 const t = translator("de");
 
-const EXAMPLES = new URL("../../../examples/", import.meta.url);
-const ARRIVAL = "beispiel/01-salzhafen/hafen/ankunft-leuchtturm.md";
-const SMUGGLERS = "beispiel/01-salzhafen/hafen/von-schmugglern-erwischt.md";
+const FIXTURES = new URL("../../../fixtures/beispiel/", import.meta.url);
+const ARRIVAL = "scene-lighthouse-arrival.json";
+const SMUGGLERS = "scene-smuggler-captured.json";
 
-function exampleFiles(): string[] {
-  return readdirSync(EXAMPLES, { recursive: true, encoding: "utf8" })
-    .filter((entry) => entry.endsWith(".md"))
-    .map((entry) => entry.replace(/\\/g, "/"))
+/** The fixture entry as it lies on disk: the shape the API speaks. */
+function fixture(name: string): { body?: string } {
+  return JSON.parse(readFileSync(new URL(name, FIXTURES), "utf8")) as { body?: string };
+}
+
+function fixtureFiles(): string[] {
+  return readdirSync(FIXTURES, { encoding: "utf8" })
+    .filter((name) => name.endsWith(".json"))
+    .filter((name) => fixture(name).body !== undefined)
     .sort();
 }
 
-/** The body as the app sees it (ParsedFile.body) — what the editor is seeded from. */
-function exampleBody(rel: string): string {
-  return parseMarkdown(readFileSync(new URL(rel, EXAMPLES), "utf8"), rel, 0).body;
+/** The body as the app sees it — what the editor is seeded from. */
+function fixtureBody(name: string): string {
+  const body = fixture(name).body;
+  if (body === undefined) throw new Error(`fixture ${name} has no body`);
+  return body;
 }
 
 function section(blocks: SceneBlock[], index: number): IfSectionBlock {
@@ -75,15 +81,15 @@ function at(blocks: SceneBlock[], index: number): SceneBlock {
 
 describe("the draft and its two surfaces", () => {
   test("a fresh draft opens in the composer", () => {
-    const draft = composerDraft(exampleBody(ARRIVAL));
+    const draft = composerDraft(fixtureBody(ARRIVAL));
     expect(draft.mode).toBe("blocks");
     if (draft.mode !== "blocks") throw new Error("unreachable");
     expect(draft.blocks.length).toBeGreaterThan(0);
   });
 
-  test("Blöcke → Roh → Blöcke keeps every example byte-identical", () => {
-    for (const rel of exampleFiles()) {
-      const body = exampleBody(rel);
+  test("Blöcke → Roh → Blöcke keeps every fixture body byte-identical", () => {
+    for (const rel of fixtureFiles()) {
+      const body = fixtureBody(rel);
       const blocks = composerDraft(body);
       expect(draftBody(blocks)).toBe(body);
       const raw = withDraftMode(blocks, "markdown");
@@ -96,7 +102,7 @@ describe("the draft and its two surfaces", () => {
   });
 
   test("switching to the mode already on screen changes nothing at all", () => {
-    const draft = composerDraft(exampleBody(ARRIVAL));
+    const draft = composerDraft(fixtureBody(ARRIVAL));
     // Same object: a re-parse would hand out new block ids and collapse the
     // open form for a click that meant „stay here".
     expect(withDraftMode(draft, "blocks")).toBe(draft);
@@ -133,7 +139,7 @@ describe("the draft and its two surfaces", () => {
 
 describe("editing a block", () => {
   test("the edited block loses its source, every sibling keeps it", () => {
-    const body = exampleBody(ARRIVAL);
+    const body = fixtureBody(ARRIVAL);
     const blocks = parseBlocks(body);
     const readaloud = at(blocks, 2);
     const next = setBlockText(blocks, readaloud.id, "Der Turm steht still.");
@@ -146,7 +152,7 @@ describe("editing a block", () => {
   });
 
   test("a section's text field is its condition, the children stay untouched", () => {
-    const body = exampleBody(SMUGGLERS);
+    const body = fixtureBody(SMUGGLERS);
     const blocks = parseBlocks(body);
     const first = section(blocks, 2);
     const next = setBlockText(blocks, first.id, "sie schweigen");
@@ -161,7 +167,7 @@ describe("editing a block", () => {
   });
 
   test("a child of a section is edited in place, the heading keeps its source", () => {
-    const body = exampleBody(SMUGGLERS);
+    const body = fixtureBody(SMUGGLERS);
     const blocks = parseBlocks(body);
     const child = at(section(blocks, 2).children, 2);
     const next = setBlockText(blocks, child.id, "Jorna erfährt davon.");
@@ -184,14 +190,14 @@ describe("editing a block", () => {
   });
 
   test("setBlockText on an unknown id leaves the list alone", () => {
-    const blocks = parseBlocks(exampleBody(ARRIVAL));
-    expect(serializeBlocks(setBlockText(blocks, "blk-nope", "x"))).toBe(exampleBody(ARRIVAL));
+    const blocks = parseBlocks(fixtureBody(ARRIVAL));
+    expect(serializeBlocks(setBlockText(blocks, "blk-nope", "x"))).toBe(fixtureBody(ARRIVAL));
   });
 });
 
 describe("insert, move, remove", () => {
   test("a new callout lands between two blocks and nothing else moves", () => {
-    const body = exampleBody(ARRIVAL);
+    const body = fixtureBody(ARRIVAL);
     const blocks = parseBlocks(body);
     const loot = makeCallout("loot", "Ein Silberring am Daumen.");
     const next = insertAt(blocks, { index: 3 }, loot);
@@ -212,7 +218,7 @@ describe("insert, move, remove", () => {
   });
 
   test("a new block inside a section becomes a child of that section", () => {
-    const body = exampleBody(SMUGGLERS);
+    const body = fixtureBody(SMUGGLERS);
     const blocks = parseBlocks(body);
     const target = section(blocks, 3);
     const heading = makeHeading(3, "Danach");
@@ -262,7 +268,7 @@ describe("insert, move, remove", () => {
   });
 
   test("moving swaps two neighbours and leaves the file's whitespace alone", () => {
-    const body = exampleBody(ARRIVAL);
+    const body = fixtureBody(ARRIVAL);
     const blocks = parseBlocks(body);
     const moved = moveBy(blocks, at(blocks, 2).id, 1);
     expect(moved.map((block) => block.id)).toEqual([
@@ -278,7 +284,7 @@ describe("insert, move, remove", () => {
   });
 
   test("children move within their section, never out of it", () => {
-    const blocks = parseBlocks(exampleBody(SMUGGLERS));
+    const blocks = parseBlocks(fixtureBody(SMUGGLERS));
     const target = section(blocks, 2);
     const first = at(target.children, 0);
     const last = at(target.children, 2);
@@ -298,13 +304,13 @@ describe("insert, move, remove", () => {
   });
 
   test("moving the first block of the document is a no-op", () => {
-    const blocks = parseBlocks(exampleBody(ARRIVAL));
+    const blocks = parseBlocks(fixtureBody(ARRIVAL));
     expect(moveBy(blocks, at(blocks, 0).id, -1)).toBe(blocks);
     expect(moveBy(blocks, at(blocks, blocks.length - 1).id, 1)).toBe(blocks);
   });
 
   test("removing a child only touches its own section", () => {
-    const body = exampleBody(SMUGGLERS);
+    const body = fixtureBody(SMUGGLERS);
     const blocks = parseBlocks(body);
     const child = at(section(blocks, 2).children, 1);
     const next = removeAt(blocks, child.id);
@@ -317,7 +323,7 @@ describe("insert, move, remove", () => {
   });
 
   test("removing a section takes its children with it", () => {
-    const blocks = parseBlocks(exampleBody(SMUGGLERS));
+    const blocks = parseBlocks(fixtureBody(SMUGGLERS));
     const target = section(blocks, 2);
     const next = removeAt(blocks, target.id);
     expect(next).toHaveLength(3);
@@ -342,8 +348,8 @@ describe("what blocks a save", () => {
   }
 
   test("a clean list has nothing to say", () => {
-    for (const rel of exampleFiles()) {
-      expect(composerIssues(parseBlocks(exampleBody(rel)), t)).toEqual({});
+    for (const rel of fixtureFiles()) {
+      expect(composerIssues(parseBlocks(fixtureBody(rel)), t)).toEqual({});
     }
   });
 

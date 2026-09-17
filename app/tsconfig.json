@@ -4,6 +4,7 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "types": ["vite/client", "bun", "node"],
+    "resolveJsonModule": true,
     "baseUrl": ".",
     "paths": { "@/*": ["./src/*"] }
   },

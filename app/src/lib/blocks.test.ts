@@ -1,13 +1,12 @@
-// The heart of the Block-Composer's phase 1 (issue #43): the round-trip.
+// The heart of the Block-Composer's phase 1: the round-trip.
 //
-// A composer that rewrites a hand-edited file on open is worse than no
-// composer, so the central test is not a unit test at all — it reads EVERY
-// markdown file in examples/, strips the properties exactly the way the app
-// receives it (ParsedFile.body via @grimoire/shared) and demands
-// `serializeBlocks(parseBlocks(body)) === body`, byte for byte. Blank-line
-// runs, `>` styles, wrapping, the trailing newline: nothing may move.
+// A composer that rewrites a hand-edited body on open is worse than no
+// composer, so the central test is not a unit test at all — it reads the body
+// of EVERY fixture entry, exactly as the app receives it from the API, and
+// demands `serializeBlocks(parseBlocks(body)) === body`, byte for byte.
+// Blank-line runs, `>` styles, wrapping, the trailing newline: nothing may
+// move.
 
-import { parseMarkdown } from "@grimoire/shared";
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 
@@ -34,20 +33,26 @@ import {
   type SceneBlock,
 } from "./blocks";
 
-const EXAMPLES = new URL("../../../examples/", import.meta.url);
+const FIXTURES = new URL("../../../fixtures/beispiel/", import.meta.url);
 
-/** Every .md file under examples/, campaign-relative, sorted. */
-function exampleFiles(): string[] {
-  return readdirSync(EXAMPLES, { recursive: true, encoding: "utf8" })
-    .filter((entry) => entry.endsWith(".md"))
-    .map((entry) => entry.replace(/\\/g, "/"))
+/** The fixture entry as it lies on disk: the shape the API speaks. */
+function fixture(name: string): { body?: string } {
+  return JSON.parse(readFileSync(new URL(name, FIXTURES), "utf8")) as { body?: string };
+}
+
+/** Every fixture entry that carries a body, sorted. */
+function fixtureFiles(): string[] {
+  return readdirSync(FIXTURES, { encoding: "utf8" })
+    .filter((name) => name.endsWith(".json"))
+    .filter((name) => fixture(name).body !== undefined)
     .sort();
 }
 
-/** The body as the app sees it: whatever GET /entry put into ParsedFile.body. */
-function exampleBody(rel: string): string {
-  const raw = readFileSync(new URL(rel, EXAMPLES), "utf8");
-  return parseMarkdown(raw, rel, 0).body;
+/** The body as the app sees it: whatever GET /entry answered. */
+function fixtureBody(name: string): string {
+  const body = fixture(name).body;
+  if (body === undefined) throw new Error(`fixture ${name} has no body`);
+  return body;
 }
 
 /** The block types in order, sections as `ifSection(…children…)`. */
@@ -61,28 +66,28 @@ function shape(blocks: SceneBlock[]): string[] {
   );
 }
 
-describe("roundtrip over examples/", () => {
-  const files = exampleFiles();
+describe("roundtrip over the fixtures", () => {
+  const files = fixtureFiles();
 
   test("finds the example campaign", () => {
     expect(files.length).toBeGreaterThan(5);
-    expect(files).toContain("beispiel/01-salzhafen/hafen/ankunft-leuchtturm.md");
+    expect(files).toContain("scene-lighthouse-arrival.json");
   });
 
   for (const rel of files) {
     test(`${rel} is byte-identical after a roundtrip`, () => {
-      const body = exampleBody(rel);
+      const body = fixtureBody(rel);
       expect(serializeBlocks(parseBlocks(body))).toBe(body);
     });
   }
 
-  test("every example produces at least one block", () => {
+  test("every fixture body produces at least one block", () => {
     for (const rel of files) {
-      expect(parseBlocks(exampleBody(rel)).length).toBeGreaterThan(0);
+      expect(parseBlocks(fixtureBody(rel)).length).toBeGreaterThan(0);
     }
   });
 
-  test("`[[slug]]` references survive the roundtrip untouched (issue #68)", () => {
+  test("`[[slug]]` references survive the roundtrip untouched", () => {
     // The composer needs NO special case for references — they are ordinary
     // text — but „ordinary text" is a claim, and this is what pins it: the
     // brackets must come back out of the editor exactly as they went in, in
@@ -105,8 +110,8 @@ describe("roundtrip over examples/", () => {
 });
 
 describe("structure of the reference scenes", () => {
-  test("ankunft-leuchtturm: Flow plus the four callouts", () => {
-    const blocks = parseBlocks(exampleBody("beispiel/01-salzhafen/hafen/ankunft-leuchtturm.md"));
+  test("lighthouse arrival: Flow plus the four callouts", () => {
+    const blocks = parseBlocks(fixtureBody("scene-lighthouse-arrival.json"));
     expect(shape(blocks)).toEqual([
       "heading",
       "text",
@@ -120,7 +125,7 @@ describe("structure of the reference scenes", () => {
     if (heading?.type !== "heading") throw new Error("expected a heading");
     expect(heading.depth).toBe(2);
     expect(heading.text).toBe("Flow");
-    // gray-matter hands over the blank line after the properties fence.
+    // The body starts with the blank line that separated it from the properties.
     expect(heading.lead).toBe("\n");
 
     const readaloud = blocks[2];
@@ -132,9 +137,9 @@ describe("structure of the reference scenes", () => {
     expect(readaloud.text.split("\n")).toHaveLength(4);
   });
 
-  test("von-schmugglern-erwischt: two If-sections with their children", () => {
+  test("smuggler captured: two If-sections with their children", () => {
     const blocks = parseBlocks(
-      exampleBody("beispiel/01-salzhafen/hafen/von-schmugglern-erwischt.md"),
+      fixtureBody("scene-smuggler-captured.json"),
     );
     expect(shape(blocks)).toEqual([
       "heading",
@@ -174,10 +179,10 @@ describe("structure of the reference scenes", () => {
 });
 
 describe("editing a block", () => {
-  const rel = "beispiel/01-salzhafen/hafen/ankunft-leuchtturm.md";
+  const rel = "scene-lighthouse-arrival.json";
 
   test("only the edited callout changes, every sibling byte-identical", () => {
-    const body = exampleBody(rel);
+    const body = fixtureBody(rel);
     const blocks = parseBlocks(body);
     const original = blocks[2];
     if (original?.type !== "callout") throw new Error("expected the readaloud callout");
@@ -584,9 +589,9 @@ describe("the invariant under a seeded fuzz", () => {
 });
 
 describe("list operations are lossless when nothing actually moves", () => {
-  test("moving a block onto itself leaves every example untouched", () => {
-    for (const rel of exampleFiles()) {
-      const body = exampleBody(rel);
+  test("moving a block onto itself leaves every fixture body untouched", () => {
+    for (const rel of fixtureFiles()) {
+      const body = fixtureBody(rel);
       const blocks = parseBlocks(body);
       for (let i = 0; i < blocks.length; i++) {
         expect(serializeBlocks(moveBlock(blocks, i, i))).toBe(body);
@@ -595,7 +600,7 @@ describe("list operations are lossless when nothing actually moves", () => {
   });
 
   test("insert then remove restores the body", () => {
-    const body = exampleBody("beispiel/01-salzhafen/hafen/ankunft-leuchtturm.md");
+    const body = fixtureBody("scene-lighthouse-arrival.json");
     const blocks = parseBlocks(body);
     const fresh = makeCallout("loot", "Ein Silberring am Daumen.");
     for (let at = 0; at <= blocks.length; at++) {
@@ -629,15 +634,15 @@ describe("labels", () => {
 
   test("ids are unique across blocks and parses", () => {
     const ids = [
-      ...parseBlocks(exampleBody("beispiel/01-salzhafen/hafen/ankunft-leuchtturm.md")),
-      ...parseBlocks(exampleBody("beispiel/01-salzhafen/hafen/ankunft-leuchtturm.md")),
+      ...parseBlocks(fixtureBody("scene-lighthouse-arrival.json")),
+      ...parseBlocks(fixtureBody("scene-lighthouse-arrival.json")),
       makeText("neu"),
     ].map((block) => block.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
 
-// --- tables (issue #96) ------------------------------------------------------
+// --- tables ------------------------------------------------------------------
 //
 // AK 3: a table is NOT a block type. It is markdown inside a text block (or
 // inside a callout's text), which is exactly why nothing here had to change —
@@ -686,8 +691,8 @@ describe("tables are part of a text block, byte-stable", () => {
   });
 
   test("the reference scene's own table survives a re-serialize", () => {
-    const rel = "beispiel/01-salzhafen/hafen/ankunft-leuchtturm.md";
-    const body = exampleBody(rel);
+    const rel = "scene-lighthouse-arrival.json";
+    const body = fixtureBody(rel);
     expect(body).toContain("| W6 | Was die Brandung anschwemmt |");
     const blocks = parseBlocks(body);
     const note = blocks[blocks.length - 1];

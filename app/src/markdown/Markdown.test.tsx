@@ -2,8 +2,8 @@
 // needed): callout anatomy, read-aloud without label row, open-by-default
 // if-sections, and the degrade paths.
 //
-// Issue #96 adds GFM TABLES and the four GFM extensions that stay off, at the
-// end of this file. Rendered HTML rather than mdast, because the question is
+// At the end of this file: GFM TABLES and the four GFM extensions that stay
+// off. Rendered HTML rather than mdast, because the question is
 // what the DM sees: a table has to become a real `<table>` — in body text, in
 // every callout and inside an `## If:` branch — while `- [x]`, `~~wort~~`, a
 // bare URL and a `[^1]` footnote have to stay the literal text they are today.
@@ -24,16 +24,15 @@ function render(markdown: string): string {
 }
 
 /** The reference fixtures CLAUDE.md names for renderer changes, body only. */
-function fixtureBody(rel: string): string {
-  const raw = readFileSync(new URL(`../../../examples/beispiel/${rel}`, import.meta.url), "utf8");
-  const match = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(raw);
-  return match === null ? raw : raw.slice(match[0].length);
+function fixtureBody(name: string): string {
+  const raw = readFileSync(new URL(`../../../fixtures/beispiel/${name}`, import.meta.url), "utf8");
+  return (JSON.parse(raw) as { body: string }).body;
 }
 
 const FIXTURES = [
-  "01-salzhafen/hafen/ankunft-leuchtturm.md",
-  "01-salzhafen/hafen/von-schmugglern-erwischt.md",
-  "npcs/fenn.md",
+  "scene-lighthouse-arrival.json",
+  "scene-smuggler-captured.json",
+  "npc-fenn.json",
 ];
 
 describe("Markdown pipeline rendering", () => {
@@ -82,7 +81,7 @@ describe("Markdown pipeline rendering", () => {
   });
 });
 
-// Raw HTML is dropped instead of printed (skipHtml, review of issue #26): the
+// Raw HTML is dropped instead of printed (skipHtml): the
 // generator leaves `<!-- … -->` hints in the files, and they were showing up
 // as visible text under `## Notizen`.
 describe("HTML in the body", () => {
@@ -101,7 +100,7 @@ describe("HTML in the body", () => {
   });
 
   test("the npc fixture that carries the comment renders without it", () => {
-    const html = render(fixtureBody("npcs/fenn.md"));
+    const html = render(fixtureBody("npc-fenn.json"));
     expect(html).not.toContain("<!--");
     expect(html).not.toContain("wird von der App");
     expect(html).toContain("<h2>Notizen</h2>");
@@ -125,15 +124,15 @@ describe("HTML in the body", () => {
   });
 
   test("callouts and if-sections of the scene fixtures survive untouched", () => {
-    const smugglers = render(fixtureBody("01-salzhafen/hafen/von-schmugglern-erwischt.md"));
+    const smugglers = render(fixtureBody("scene-smuggler-captured.json"));
     expect([...smugglers.matchAll(/data-callout="/g)]).toHaveLength(3);
     expect([...smugglers.matchAll(/data-if-section="/g)]).toHaveLength(2);
     expect(smugglers).toContain("Falls:");
 
-    const lighthouse = render(fixtureBody("01-salzhafen/hafen/ankunft-leuchtturm.md"));
+    const lighthouse = render(fixtureBody("scene-lighthouse-arrival.json"));
     expect(lighthouse).toContain('data-callout="readaloud"');
     expect(lighthouse).toContain('data-callout="check"');
-    // Issue #96 added ONE thing to this fixture: a W6 table in the `[!note]`.
+    // This fixture carries a W6 table in the `[!note]`.
     // Everything above is unchanged; this is the intended difference.
     expect([...lighthouse.matchAll(/data-callout="/g)]).toHaveLength(4);
     expect([...lighthouse.matchAll(/<table/g)]).toHaveLength(1);
@@ -141,7 +140,7 @@ describe("HTML in the body", () => {
   });
 });
 
-// --- issue #96: tables, and the GFM that stays off -------------------------
+// --- tables, and the GFM that stays off -------------------------------------
 
 const W6 = [
   "| W6 | Was treibt in der Bucht |",

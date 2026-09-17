@@ -1,24 +1,23 @@
-// `grimoire seed` (issue #54). The point of the CLI is that it runs the SAME
-// migration code the boot path will run — so what is worth testing is the
-// wiring: source resolution, GRIMOIRE_DATA, the printed report, the exit code
-// and the no-op on a second run.
+// `grimoire seed`. The point of the CLI is that it runs the SAME loader the
+// test suite runs — so what is worth testing is the wiring: source
+// resolution, GRIMOIRE_DATA, the printed report, the exit code and the
+// refusal on a database that already holds campaigns.
 //
 // Run as a real child process rather than by importing cli.ts: the module has
 // a top-level `process.exitCode` assignment, and an in-process import would
 // leak that into the test runner.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { cp, mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SERVER_DIR = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 const CLI = path.join(SERVER_DIR, "src", "cli.ts");
-const EXAMPLES = path.resolve(SERVER_DIR, "../examples");
+const FIXTURES = path.resolve(SERVER_DIR, "../fixtures");
 
 let dataDir = "";
-let sourceDir = "";
 
 async function runCli(args: string[]): Promise<{ code: number; out: string }> {
   const proc = Bun.spawn(["bun", "run", CLI, ...args], {
@@ -36,39 +35,52 @@ async function runCli(args: string[]): Promise<{ code: number; out: string }> {
 
 beforeEach(async () => {
   dataDir = await mkdtemp(path.join(os.tmpdir(), "grimoire-seed-data-"));
-  sourceDir = await mkdtemp(path.join(os.tmpdir(), "grimoire-seed-src-"));
-  await cp(EXAMPLES, sourceDir, { recursive: true });
 });
 
 afterEach(async () => {
   await rm(dataDir, { recursive: true, force: true });
-  await rm(sourceDir, { recursive: true, force: true });
 });
 
 describe("grimoire seed", () => {
-  test("imports a given directory into GRIMOIRE_DATA/grimoire.db", async () => {
-    const { code, out } = await runCli(["seed", sourceDir]);
+  test("loads a given directory into GRIMOIRE_DATA/grimoire.db", async () => {
+    const { code, out } = await runCli(["seed", FIXTURES]);
     expect(code).toBe(0);
-    expect(out).toContain("imported: beispiel");
-    expect(out).toContain("clean import");
-    // The database really landed in GRIMOIRE_DATA (WAL companions included).
-    const files = await readdir(dataDir);
-    expect(files).toContain("grimoire.db");
+    // One line per campaign, with the number of entries it brought.
+    expect(out.trim()).toBe("seeded: beispiel (11 entries)");
+    // The database really landed in GRIMOIRE_DATA.
+    expect(await readdir(dataDir)).toContain("grimoire.db");
   });
 
-  test("the second run is a no-op and says so", async () => {
-    expect((await runCli(["seed", sourceDir])).code).toBe(0);
-    const second = await runCli(["seed", sourceDir]);
-    expect(second.code).toBe(0);
-    expect(second.out).toContain("nothing to do");
-    expect(second.out).toContain("already migrated");
-  });
-
-  test("without a directory it defaults to examples/", async () => {
+  test("without a directory it defaults to fixtures/", async () => {
     const { code, out } = await runCli(["seed"]);
     expect(code).toBe(0);
-    expect(out).toContain(EXAMPLES);
-    expect(out).toContain("imported: beispiel");
+    expect(out).toContain("seeded: beispiel");
+  });
+
+  test("a database that holds campaigns is REFUSED, and --force seeds anyway", async () => {
+    expect((await runCli(["seed"])).code).toBe(0);
+
+    const second = await runCli(["seed"]);
+    expect(second.code).toBe(0);
+    expect(second.out).toContain("already holds campaigns");
+    expect(second.out).toContain("--force");
+
+    // `--force` is for a scratch database: rows are ADDED, nothing deleted.
+    const extra = path.join(dataDir, "extra");
+    await mkdir(path.join(extra, "zweite"), { recursive: true });
+    await writeFile(
+      path.join(extra, "zweite", "campaign.json"),
+      JSON.stringify({ kind: "campaign", properties: { id: "zweite", name: "Zweite" }, body: "" }),
+    );
+    const forced = await runCli(["seed", "--force", extra]);
+    expect(forced.code).toBe(0);
+    expect(forced.out.trim()).toBe("seeded: zweite (1 entry)");
+  });
+
+  test("an unreadable directory exits 1 with a message", async () => {
+    const { code, out } = await runCli(["seed", path.join(dataDir, "gibt-es-nicht")]);
+    expect(code).toBe(1);
+    expect(out).toContain("seed failed");
   });
 
   test("help works and an unknown command fails loudly", async () => {

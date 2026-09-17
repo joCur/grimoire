@@ -60,8 +60,8 @@ test("content the APP just wrote is findable right away (issue #57 AK5)", async 
   page,
   api,
 }) => {
-  // A word that appears nowhere in examples/beispiel, so a hit can only come
-  // from the paragraph typed below.
+  // A word that appears nowhere in the example campaign, so a hit can only
+  // come from the paragraph typed below.
   const WORD = "Zwirbelmuschel";
   const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 

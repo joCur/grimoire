@@ -806,7 +806,7 @@ export const en: Messages = {
 
   // --- the DEV markdown harness ("/dev/markdown", routes/harness.tsx) -------
   "harness.title": "Markdown harness",
-  "harness.lead": "Renders the reference fixtures from examples/ without a running server.",
+  "harness.lead": "Renders the reference fixtures from fixtures/ without a running server.",
   "harness.properties": "Show properties",
 
 

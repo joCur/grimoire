@@ -4,16 +4,18 @@
 // Mobile is search, reading view and inbox (UI-BRIEF) — exactly that, checked
 // at 390×844 (iPhone size), including what the server stored.
 
-import { expect, test } from "../support/test";
+import { expect, test, type SeedEntry } from "../support/test";
 
 /** A session that started YESTERDAY and was never ended. */
-const OPEN_SESSION = (() => {
+const OPEN_SESSION: SeedEntry = (() => {
   const d = new Date(Date.now() - 24 * 3600_000);
   const pad = (n: number) => String(n).padStart(2, "0");
   const id = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   return {
-    path: `sessions/${id}`,
-    content: `---\nid: ${id}\nstarted: ${id}T22:30\nscenes_played: []\n---\n\n## Log\n`,
+    kind: "session",
+    properties: { id, started: `${id}T22:30`, scenes_played: [] },
+    log: [],
+    body: "",
   };
 })();
 
@@ -38,8 +40,8 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
   const lookup = page.getByRole("navigation", { name: "Nachschlagen" });
   await expect(lookup.getByRole("link", { name: /Szenen/ })).toContainText("2 Szenen");
   await expect(lookup.getByRole("link", { name: /NPCs/ })).toContainText("2 NPCs");
-  // Two locations since issue #100: `bucht` is a scene's location, so the
-  // import created an entry for it.
+  // Two locations: each one a scene names has an entry of its own, because a
+  // reference creates nothing (ADR #19).
   await expect(lookup.getByRole("link", { name: /Orte/ })).toContainText("2 Orte");
 
   // --- inbox capture -------------------------------------------------------
@@ -71,16 +73,16 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
   await expect(page.getByLabel("Ideen")).toBeVisible();
 });
 
-// Issue #40 AK2: a running session must be visible on EVERY route, mobile
-// included — where the topbar is not the chrome, the indicator is its own row.
+// A running session must be visible on EVERY route, mobile included — where
+// the topbar is not the chrome, the indicator is its own row.
 test.describe("with a session open since yesterday", () => {
-  test.use({ seed: { files: { [OPEN_SESSION.path]: OPEN_SESSION.content } } });
+  test.use({ seed: { entries: { "session-open": OPEN_SESSION } } });
 
   test("mobile: a running session shows its own live row with the way back", async ({
     page,
   }) => {
-    // The session the client could not see before (it derived today's file name
-    // itself) — imported from the seeded tree.
+    // The session is the server's answer, not something the client derives
+    // from today's date — it comes out of the seeded entry.
     await page.goto("/beispiel");
     // The same chip the desktop topbar carries (PO feedback on issue #40) — in
     // link mode, in the mobile row: one tap back into the session.
