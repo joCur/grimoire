@@ -667,9 +667,15 @@ const KNOWLEDGE_SECTION = "Weiß";
 const RELATIONS_SECTION = "Beziehungen";
 const NOTES_SECTION = "Notizen";
 
-/** `- <npc-id>: <text>` — the relationship line of the format contract. */
+/** `- [[<npc-id>]]: <text>` — the relationship line of the format contract. */
 const RELATION_ITEM = /^\s*[-*]\s+(.*)$/;
-const RELATION_ENTRY = /^([a-z0-9][a-z0-9-]*)\s*:\s*\S/;
+/**
+ * The brackets are OPTIONAL to the check: the prompt asks for them, because
+ * that is what makes the counterpart a link carrying its current name, and a
+ * line written without them is the same statement in the same place. What the
+ * check is after is the id, whichever way the line spells it.
+ */
+const RELATION_ENTRY = /^(?:\[\[)?([a-z0-9][a-z0-9-]*)(?:\]\])?\s*:\s*\S/;
 
 /** The title of a `##` heading line, or undefined for any other line. */
 function h2Title(line: string): string | undefined {
@@ -708,7 +714,7 @@ function relationErrors(body: string, ctx: CampaignContext): string[] {
     const entry = RELATION_ENTRY.exec(text);
     if (entry === null) {
       errors.push(
-        `## ${RELATIONS_SECTION}: "${text}" ist keine "- <npc-id>: <Text>"-Zeile — ` +
+        `## ${RELATIONS_SECTION}: "${text}" ist keine "- [[<npc-id>]]: <Text>"-Zeile — ` +
           "nur ids aus der Kontextliste",
       );
       continue;

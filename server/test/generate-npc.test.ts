@@ -362,11 +362,21 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(await exists("npcs/grella")).toBe(false);
   });
 
-  test("a relationship line that is not `- <npc-id>: text` is an error", async () => {
+  test("a relationship line that is not `- [[<npc-id>]]: text` is an error", async () => {
     const errors = await firstValidationError([
       npcReply({ content: npcMarkdown({ relations: ["- Jorna, die Hafenmeisterin"] }) }),
     ]);
-    expect(errors).toContain("ist keine \"- <npc-id>: <Text>\"-Zeile");
+    expect(errors).toContain("ist keine \"- [[<npc-id>]]: <Text>\"-Zeile");
+  });
+
+  test("the linked form the prompt asks for passes in one turn", async () => {
+    // `- [[jorna]]: …` is what the npc prompt and its few-shot ask for, so a
+    // reply that follows them must not come back as a correction.
+    const fake = useFake([
+      npcReply({ content: npcMarkdown({ relations: ["- [[jorna]]: alte Bekannte"] }) }),
+    ]);
+    expect((await generateNpc(npcBody)).status).toBe(200);
+    expect(fake.calls).toHaveLength(1);
   });
 
   test("prose inside ## Beziehungen degrades instead of erroring", async () => {
