@@ -22,7 +22,7 @@ Schmuggler, kein Mörder, und das ist sein wunder Punkt.
 
 ## Beziehungen
 
-- jorna: alte Bekannte; er weicht ihrem Blick aus
+- [[jorna]]: alte Bekannte; er weicht ihrem Blick aus
 
 ## Notizen
 

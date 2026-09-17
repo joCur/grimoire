@@ -251,13 +251,11 @@ describe("a reference that names an entry is stored", () => {
 describe("a mention in text is not a reference", () => {
   test("a `## Beziehungen` line names an unknown npc: no entry, no error", async () => {
     const npc = await getFile(NPC);
-    expect(npc.body).toContain("- jorna: alte Bekannte");
+    const seeded = "- [[jorna]]: alte Bekannte; er weicht ihrem Blick aus";
+    expect(npc.body).toContain(seeded);
     const written = await putBody(
       NPC,
-      npc.body.replace(
-        "- jorna: alte Bekannte; er weicht ihrem Blick aus",
-        "- jorna: alte Bekannte; er weicht ihrem Blick aus\n- holm: schuldet ihm Geld",
-      ),
+      npc.body.replace(seeded, `${seeded}\n- holm: schuldet ihm Geld`),
     );
     // The line is prose and comes back exactly as written.
     expect(written.body).toContain("- holm: schuldet ihm Geld");

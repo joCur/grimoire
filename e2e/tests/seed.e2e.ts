@@ -1,6 +1,6 @@
-// `grimoire seed` — the markdown importer as the dev/E2E tool it now is
-// (issue #79 AK6; the former first-migration spec, which covered the same
-// importer when it still ran at boot).
+// `grimoire seed` — the markdown importer as the dev/E2E tool it now is.
+// This spec replaces the former first-migration spec, which covered the same
+// importer when it still ran at boot.
 //
 // The production boot imports NOTHING any more, and that is the first thing
 // asserted here: a server on an empty data directory comes up healthy and
@@ -16,8 +16,8 @@
 //
 // The database is looked at directly for the two claims the API cannot make:
 // the import markers in `meta` and the row counts (no second import). The
-// migration report is read from the CLI's own stdout — since #79 there is no
-// endpoint for it, which is the point: the report belongs to the tool.
+// migration report is read from the CLI's own stdout — there is no endpoint
+// for it, which is the point: the report belongs to the tool.
 
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
@@ -67,8 +67,8 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(tree.chapters.map((c) => c.id)).toEqual(["01-salzhafen"]);
   const scenes = tree.chapters.flatMap((c) => c.groups.flatMap((g) => g.scenes));
   // The scene's path segment is its ID since the cutover.
-  // The group segment is the scene's `location` (issue #100), so the two
-  // scenes of the `hafen/` directory land under DIFFERENT groups.
+  // The group segment is the scene's `location`, so the two scenes of the
+  // `hafen/` directory land under DIFFERENT groups.
   expect(scenes.map((s) => s.path).sort()).toEqual([
     "01-salzhafen/bucht/smuggler-captured",
     "01-salzhafen/leuchtturm/lighthouse-arrival",
@@ -104,7 +104,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(npc.properties.voice).toBe("knapp, wetterrau, duzt jeden");
   expect(npc.properties.quickstats).toMatchObject({ insight: 2, "passive-perception": 12 });
   expect(npc.body).toContain("Das Leuchtfeuer muss wieder brennen");
-  expect(npc.body).toContain("- fenn: kennt ihn von früher");
+  expect(npc.body).toContain("- [[fenn]]: kennt ihn von früher");
 
   // --- the session ----------------------------------------------------------
   const session = await api.file("sessions/2026-01-15");
@@ -114,7 +114,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   const inbox = await api.file("inbox");
   expect(inbox.body).toContain("Der Dorfschmied repariert");
 
-  // --- the glossary: its own TABLE since #57 (planning F6) ------------------
+  // --- the glossary: its own TABLE since the cutover ------------------------
   const glossary = await api.get<GlossaryResponse>("beispiel/glossary");
   const terms = glossary.entries.map((e) => e.term);
   expect(terms).toContain("lighthouse keeper");

@@ -1,4 +1,4 @@
-// `[[slug]]` body references, server side (issue #68).
+// `[[slug]]` body references, server side.
 //
 // The renderer resolves references in the browser; the SEARCH INDEX has to
 // resolve them when it is written, or a body that only says `[[jorna]]` is
@@ -24,6 +24,14 @@ import {
 
 /** A scene of the example campaign we overwrite with reference prose. */
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
+
+/**
+ * The seed's OWN reference to jorna: fenn's `## Beziehungen` names her as
+ * `- [[jorna]]: …`, which is a body reference like any other mention. Every
+ * expectation about who refers to jorna carries it, at the position the kind
+ * order gives it (scene, npc, location, chapter, campaign).
+ */
+const FENN_REFERS_TO_JORNA = { kind: "npc", id: "fenn" } as const;
 
 beforeEach(async () => {
   await seedStore();
@@ -157,6 +165,7 @@ describe("referrersOf and the rename cascade", () => {
     const db = await getDb();
     expect(referrersOf(db, "beispiel", "jorna")).toEqual([
       { kind: "scene", id: "lighthouse-arrival" },
+      FENN_REFERS_TO_JORNA,
       { kind: "location", id: "leuchtturm" },
       { kind: "chapter", id: "01-salzhafen" },
     ]);
@@ -165,7 +174,8 @@ describe("referrersOf and the rename cascade", () => {
   test("a mention only inside code is no referrer at all", async () => {
     await writeBody(SCENE, "## Flow\n\nDie Syntax heißt `[[jorna]]`.\n\n```\n[[jorna]]\n```\n");
     const db = await getDb();
-    expect(referrersOf(db, "beispiel", "jorna")).toEqual([]);
+    // The scene drops out; what stays is the seed's own relations line.
+    expect(referrersOf(db, "beispiel", "jorna")).toEqual([FENN_REFERS_TO_JORNA]);
   });
 
   test("GET /usage counts prose mentions as reference sites", async () => {
@@ -173,7 +183,8 @@ describe("referrersOf and the rename cascade", () => {
     const res = await app.request("/api/beispiel/usage?kind=npc&id=jorna");
     expect(res.status).toBe(200);
     const usage = (await res.json()) as { groups: { ref: string; count: number }[] };
-    expect(usage.groups.find((g) => g.ref === "bodyRefs")?.count).toBe(1);
+    // The scene's mention plus fenn's relations line.
+    expect(usage.groups.find((g) => g.ref === "bodyRefs")?.count).toBe(2);
   });
 
   test("an id rename rewrites `[[oldId]]` and re-indexes the referrer", async () => {
@@ -212,7 +223,8 @@ describe("referrersOf and the rename cascade", () => {
     const sceneUsage = await usageOf("scene", "jorna");
     expect(sceneUsage.groups.find((g) => g.ref === "bodyRefs")).toBeUndefined();
     const npcUsage = await usageOf("npc", "jorna");
-    expect(npcUsage.groups.find((g) => g.ref === "bodyRefs")?.count).toBe(1);
+    // The location's prose plus fenn's relations line.
+    expect(npcUsage.groups.find((g) => g.ref === "bodyRefs")?.count).toBe(2);
 
     // Renaming the SHADOWED scene must not touch that prose.
     await rename({ kind: "scene", oldId: "jorna", newId: "jorna-szene" });
@@ -226,7 +238,10 @@ describe("referrersOf and the rename cascade", () => {
   test("the campaign body is a full reference site (name and id rename)", async () => {
     await writeBody("campaign", "Notiz: [[jorna]] ist bestechlich.\n");
     const db = await getDb();
-    expect(referrersOf(db, "beispiel", "jorna")).toEqual([{ kind: "campaign", id: "beispiel" }]);
+    expect(referrersOf(db, "beispiel", "jorna")).toEqual([
+      FENN_REFERS_TO_JORNA,
+      { kind: "campaign", id: "beispiel" },
+    ]);
 
     // A NAME change re-indexes the campaign row like any other referrer.
     await patch("npcs/jorna", { name: "Jorna Salzhand" });
@@ -235,7 +250,8 @@ describe("referrersOf and the rename cascade", () => {
     // …and an ID rename drags the slug in the note along, counted in the
     // preview and reported as a changed path.
     const usage = await usageOf("npc", "jorna");
-    expect(usage.groups.find((g) => g.ref === "bodyRefs")?.count).toBe(1);
+    // The campaign note plus fenn's relations line.
+    expect(usage.groups.find((g) => g.ref === "bodyRefs")?.count).toBe(2);
     const plan = await rename({ kind: "npc", oldId: "jorna", newId: "jorna-b" });
     expect(plan.changed).toContain("campaign");
     expect((await readFile("campaign")).body).toContain("[[jorna-b]]");
