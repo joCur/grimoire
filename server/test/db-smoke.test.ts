@@ -158,14 +158,14 @@ test("transactions commit and roll back", async () => {
 test("UPSERT on a composite primary key updates instead of failing", async () => {
   const { db, close } = await openDb(":memory:");
   try {
-    // `meta` is the simplest single-key case — the migration's own marker.
-    db.insert(meta).values({ key: "migrated_at", value: "first" }).run();
+    // `meta` is the simplest single-key case.
+    db.insert(meta).values({ key: "marke", value: "first" }).run();
     db.insert(meta)
-      .values({ key: "migrated_at", value: "second" })
+      .values({ key: "marke", value: "second" })
       .onConflictDoUpdate({ target: meta.key, set: { value: "second" } })
       .run();
     const rows = db.select().from(meta).all();
-    assert.deepEqual(rows, [{ key: "migrated_at", value: "second" }]);
+    assert.deepEqual(rows, [{ key: "marke", value: "second" }]);
 
     // And the composite-key case the entity tables use.
     db.insert(campaigns).values({ id: "beispiel", name: "Alt" }).run();

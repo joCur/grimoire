@@ -45,7 +45,7 @@ import { ApiError } from "../api-error";
 import { assertSafeAddress, assertSafeCampaignId } from "../addressing";
 import { localDate, localDateTimeSeconds, localTime, now } from "../clock";
 import type { GrimoireDb } from "../db/client";
-import { logLineShortHash, parseGlossaryBody } from "../db/import-markdown";
+import { logLineShortHash, parseGlossaryBody } from "./body-parse";
 import {
   campaignKnowledge,
   campaigns,
@@ -57,7 +57,6 @@ import {
   logEntries,
   npcs,
   packJson,
-  unpackJson,
   sceneNpcs,
   sceneTags,
   scenes,
@@ -245,35 +244,6 @@ function asMap(value: unknown): Record<string, unknown> {
 }
 
 /**
- * The properties minus the keys a table has columns for — the `extra` half.
- *
- * `keepAnyway` is the exception, and it exists for ONE case: a contract key
- * whose COLUMN cannot hold the authored value. The migration preserves a
- * misshapen `quickstats:` (a string where the format wants a mapping) in
- * `extra`, the renderer shows it because the column is empty — and the first
- * `PATCH /properties` used to drop it here, silently, against the round-trip
- * rule (schema.ts rule 1). Naming the key keeps it where it is readable.
- */
-function extraOf(
-  fm: Record<string, unknown>,
-  contract: readonly string[],
-  keepAnyway: readonly string[] = [],
-): string {
-  const extra: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(fm)) {
-    if (!contract.includes(key) || keepAnyway.includes(key)) extra[key] = value;
-  }
-  return packJson(extra);
-}
-
-/** A `quickstats:` value the column cannot hold (the format wants a mapping). */
-function misshapenQuickstats(value: unknown): readonly string[] {
-  if (value === undefined || value === null) return [];
-  const isMapping = typeof value === "object" && !Array.isArray(value);
-  return isMapping ? [] : ["quickstats"];
-}
-
-/**
  * Apply a flat properties patch to a rendered properties mapping (`null`
  * deletes a key) — the same semantics the raw-text patcher had, minus the
  * YAML round trip: the columns are the values now.
@@ -373,7 +343,7 @@ function indexChapter(tx: GrimoireDb, campaign: string, row: ChapterRow): void {
 // The campaign file is not referenceable either — but its note body CONTAINS
 // references like any other, and store/refs.ts scans it for them, so nothing
 // here is half-supported any more.
-function indexCampaign(tx: GrimoireDb, row: CampaignRow): void {
+export function indexCampaign(tx: GrimoireDb, row: CampaignRow): void {
   indexEntity(tx, row.id, {
     kind: "campaign",
     entityId: row.id,
@@ -384,7 +354,7 @@ function indexCampaign(tx: GrimoireDb, row: CampaignRow): void {
   });
 }
 
-function indexGlossaryTerm(
+export function indexGlossaryTerm(
   tx: GrimoireDb,
   campaign: string,
   term: string,
@@ -633,8 +603,7 @@ function isEmptyNpcRow(row: NpcRow): boolean {
     row.voice === null &&
     row.appearance === null &&
     row.body.trim() === "" &&
-    isEmptyJsonObject(row.quickstats) &&
-    isEmptyJsonObject(row.extra)
+    isEmptyJsonObject(row.quickstats)
   );
 }
 
@@ -643,8 +612,7 @@ function isEmptyLocationRow(row: LocationRow): boolean {
     row.name === "" &&
     row.chapterId === null &&
     row.roll20Page === null &&
-    row.body.trim() === "" &&
-    isEmptyJsonObject(row.extra)
+    row.body.trim() === ""
   );
 }
 
@@ -748,7 +716,12 @@ export function reindexEntity(
 
 // --- PATCH /api/:campaign/properties ----------------------------------------
 
-/** Contract keys per kind — everything else lands in `extra`. */
+/**
+ * THE CONTRACT KEYS per kind — the complete set of properties a stored entry
+ * can carry, in the README's order. There is nothing beside them: a key that
+ * is not on its kind's list has no field behind it, so a patch naming one is
+ * a 400 and a seed naming one is refused.
+ */
 const SCENE_KEYS = [
   "id",
   "title",
@@ -777,26 +750,29 @@ const CHAPTER_KEYS = ["id", "title", "status"] as const;
 const CAMPAIGN_KEYS = ["id", "name", "description"] as const;
 const SESSION_KEYS = ["id", "started", "ended", "scenes_played", "pauses", "reviewed"] as const;
 
+/** The same lists by kind, for callers that look one up (db/seed.ts). */
+export const PROPERTY_CONTRACT = {
+  campaign: CAMPAIGN_KEYS,
+  chapter: CHAPTER_KEYS,
+  scene: SCENE_KEYS,
+  npc: NPC_KEYS,
+  location: LOCATION_KEYS,
+  session: SESSION_KEYS,
+} as const satisfies Record<string, readonly string[]>;
+
 /**
- * An `id` patch is refused (400). In the file tree the id was just another
- * key and patching it silently orphaned every reference to the entity; in the
- * database the id IS the primary key, and changing it is what
- * `POST /rename` does — as an update with a cascade, which is the whole point
- * of the migration.
+ * An `id` patch is refused (400): the id IS the primary key, and changing it
+ * is what `POST /rename` does — an update the database cascades over every
+ * reference, which a patch could never do.
  */
 /**
- * Unknown keys come from the importer only (schema.ts `extra`): a patch may
- * change or delete one the row already carries, but never add one — there is
- * no field behind it, and a typo would otherwise become a silent new key.
+ * A patch may only name keys the CONTRACT names (schema.ts rule 1). There is
+ * no field behind anything else, and a typo would otherwise become a silent
+ * new key.
  */
-function rejectUnknownKeys(
-  patch: Record<string, unknown>,
-  contract: readonly string[],
-  extra: string,
-): void {
-  const present = unpackJson(extra);
+function rejectUnknownKeys(patch: Record<string, unknown>, contract: readonly string[]): void {
   for (const key of Object.keys(patch)) {
-    if (contract.includes(key) || key in present) continue;
+    if (contract.includes(key)) continue;
     throw new ApiError(400, `unknown property "${key}" — the entry has no such field`);
   }
 }
@@ -832,7 +808,7 @@ function patchLocator(
       if (row === undefined) throw new ApiError(404, "entry not found");
       guardRev(row.rev, rev, "campaign changed");
       rejectIdPatch(patch, row.id);
-      rejectUnknownKeys(patch, CAMPAIGN_KEYS, row.extra);
+      rejectUnknownKeys(patch, CAMPAIGN_KEYS);
       const fm = applyPatch(renderCampaign(row).properties, patch);
       const name = asStr(fm.name);
       // Accepted by design: a name that EQUALS the id is stored as "" — the
@@ -843,11 +819,10 @@ function patchLocator(
         ...row,
         name: name === row.id ? "" : name,
         description: asOptStr(fm.description),
-        extra: extraOf(fm, CAMPAIGN_KEYS),
         rev: row.rev + 1,
       };
       tx.update(campaigns)
-        .set({ name: next.name, description: next.description, extra: next.extra, rev: next.rev })
+        .set({ name: next.name, description: next.description, rev: next.rev })
         .where(eq(campaigns.id, campaign))
         .run();
       indexCampaign(tx, next);
@@ -858,7 +833,7 @@ function patchLocator(
       if (row === undefined) throw new ApiError(404, "entry not found");
       guardRev(row.rev, rev, "chapter changed");
       rejectIdPatch(patch, row.id);
-      rejectUnknownKeys(patch, CHAPTER_KEYS, row.extra);
+      rejectUnknownKeys(patch, CHAPTER_KEYS);
       // Only the known trio may be WRITTEN; what is already stored is still
       // shown verbatim.
       assertChapterStatus(patch);
@@ -867,7 +842,6 @@ function patchLocator(
         ...row,
         title: asStr(fm.title, row.id),
         status: asOptStr(fm.status),
-        extra: extraOf(fm, CHAPTER_KEYS),
         rev: row.rev + 1,
       };
       // Setting `active` HERE performs the same swap the dedicated endpoint
@@ -875,7 +849,7 @@ function patchLocator(
       // past the one-active rule.
       if (next.status === CHAPTER_ACTIVE) clearOtherActiveChapters(tx, campaign, row.id);
       tx.update(chapters)
-        .set({ title: next.title, status: next.status, extra: next.extra, rev: next.rev })
+        .set({ title: next.title, status: next.status, rev: next.rev })
         .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, row.id)))
         .run();
       indexChapter(tx, campaign, next);
@@ -885,7 +859,7 @@ function patchLocator(
       const row = sceneRowAt(tx, campaign, locator);
       guardRev(row.rev, rev, "scene changed");
       rejectIdPatch(patch, row.id);
-      rejectUnknownKeys(patch, SCENE_KEYS, row.extra);
+      rejectUnknownKeys(patch, SCENE_KEYS);
       const before = renderScene(
         row,
         refNpcs(tx, campaign, row.id),
@@ -918,7 +892,6 @@ function patchLocator(
         location: nextLocation,
         status: asStr(fm.status, "draft"),
         handouts: packJson(asStrArray(fm.handouts)),
-        extra: extraOf(fm, SCENE_KEYS),
         rev: row.rev + 1,
       };
       tx.update(scenes)
@@ -930,7 +903,6 @@ function patchLocator(
           location: next.location,
           status: next.status,
           handouts: next.handouts,
-          extra: next.extra,
           rev: next.rev,
         })
         .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
@@ -947,7 +919,7 @@ function patchLocator(
       if (row === undefined) throw new ApiError(404, "entry not found");
       guardRev(row.rev, rev, "npc changed");
       rejectIdPatch(patch, row.id);
-      rejectUnknownKeys(patch, NPC_KEYS, row.extra);
+      rejectUnknownKeys(patch, NPC_KEYS);
       const fm = applyPatch(renderNpc(row).properties, patch);
       const quickstats = asMap(fm.quickstats);
       const npcChapter = asOptStr(fm.chapter);
@@ -962,7 +934,6 @@ function patchLocator(
         quickstats: packJson(quickstats),
         voice: asOptStr(fm.voice),
         appearance: asOptStr(fm.appearance),
-        extra: extraOf(fm, NPC_KEYS, misshapenQuickstats(fm.quickstats)),
         rev: row.rev + 1,
       };
       tx.update(npcs)
@@ -975,7 +946,6 @@ function patchLocator(
           quickstats: next.quickstats,
           voice: next.voice,
           appearance: next.appearance,
-          extra: next.extra,
           rev: next.rev,
         })
         .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, row.id)))
@@ -988,7 +958,7 @@ function patchLocator(
       if (row === undefined) throw new ApiError(404, "entry not found");
       guardRev(row.rev, rev, "location changed");
       rejectIdPatch(patch, row.id);
-      rejectUnknownKeys(patch, LOCATION_KEYS, row.extra);
+      rejectUnknownKeys(patch, LOCATION_KEYS);
       const fm = applyPatch(renderLocation(row).properties, patch);
       const locationChapter = asOptStr(fm.chapter);
       assertChapterRef(tx, campaign, locationChapter);
@@ -997,7 +967,6 @@ function patchLocator(
         name: asStr(fm.name, row.id),
         chapterId: locationChapter,
         roll20Page: asOptStr(fm["roll20-page"]),
-        extra: extraOf(fm, LOCATION_KEYS),
         rev: row.rev + 1,
       };
       tx.update(locations)
@@ -1005,7 +974,6 @@ function patchLocator(
           name: next.name,
           chapterId: next.chapterId,
           roll20Page: next.roll20Page,
-          extra: next.extra,
           rev: next.rev,
         })
         .where(and(eq(locations.campaignId, campaign), eq(locations.id, row.id)))
@@ -1018,7 +986,7 @@ function patchLocator(
       if (row === undefined) throw new ApiError(404, "entry not found");
       guardRev(row.rev, rev, "session changed");
       rejectIdPatch(patch, row.id);
-      rejectUnknownKeys(patch, SESSION_KEYS, row.extra);
+      rejectUnknownKeys(patch, SESSION_KEYS);
       const fm = applyPatch(renderSessionRow(tx, campaign, row).properties, patch);
       patchSessionRow(tx, campaign, row, fm);
       const updated = sessionRow(tx, campaign, row.id);
@@ -1068,7 +1036,6 @@ function patchSessionRow(
     .set({
       started: asOptStr(fm.started),
       ended: asOptStr(fm.ended),
-      extra: extraOf(fm, SESSION_KEYS),
       rev: row.rev + 1,
     })
     .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, row.id)))
@@ -1139,9 +1106,9 @@ function patchSessionRow(
  * grow by rows through their own endpoints, never by a body rewrite.
  *
  * The glossary is the one body that is DECOMPOSED on the way in: it is a
- * table now, so the markdown the editor sends is parsed back
- * into term/explanation rows — the same parser the migration used, so what
- * the DM types and what a migrated file produced agree.
+ * table now, so the markdown the editor sends is parsed back into
+ * term/explanation rows (store/body-parse.ts `parseGlossaryBody`) — the same
+ * grammar the renderer writes out, so a save round-trips.
  */
 export async function writeEntryBody(
   campaign: string,
@@ -1248,7 +1215,7 @@ function writeBodyIn(
       guardRev(row.glossaryRev, rev, "glossary changed");
       const parsedGlossary = parseGlossaryBody(body);
       // A term typed twice would silently lose its second explanation
-      // ("first wins" is the IMPORT's degrade rule, not a save's) — say so
+      // ("first wins" is a READER's degrade rule, not a save's) — say so
       // instead, with the term in the message.
       const duplicate = parsedGlossary.duplicates[0];
       if (duplicate !== undefined) {
@@ -1350,7 +1317,7 @@ function writeGlossaryRows(
   let pos = 0;
   for (const entry of entries) {
     const term = entry.term.trim();
-    if (term === "" || seen.has(term)) continue; // first one wins, as in the import
+    if (term === "" || seen.has(term)) continue; // first one wins
     seen.add(term);
     tx.insert(glossary)
       .values({ campaignId: campaign, term, explanation: entry.explanation, pos: pos++ })
@@ -1631,24 +1598,45 @@ function closeOpenPauses(
  */
 function appendLogRow(tx: GrimoireDb, campaign: string, sessionId: string, raw: string): void {
   const rows = logRows(tx, campaign, sessionId);
-  const LOG_LINE = /^-\s+(\d{1,2}:\d{2})(?:\s+\(([^)]+)\))?\s+(.+)$/;
-  const m = LOG_LINE.exec(raw);
-  const marker = m?.[2] ?? null;
-  const markedScene =
-    marker !== null && sceneRowOf(tx, campaign, marker) !== undefined ? marker : null;
+  const parts = logLineParts(tx, campaign, raw);
   tx.insert(logEntries)
     .values({
       campaignId: campaign,
       sessionId,
       pos: nextPos(rows),
       raw,
-      at: m?.[1] ?? null,
-      sceneId: markedScene,
-      text: m?.[3] ?? null,
+      at: parts.at,
+      sceneId: parts.sceneId,
+      text: parts.text,
       hash: logLineShortHash(raw),
       reviewed: 0,
     })
     .run();
+}
+
+/** `- HH:MM (scene-id) text` — the grammar the app's live log view reads. */
+const LOG_LINE = /^-\s+(\d{1,2}:\d{2})(?:\s+\(([^)]+)\))?\s+(.+)$/;
+
+/**
+ * The parsed columns of one raw log line: its time, the scene it names and
+ * its text. Everything is NULL for a line the grammar does not recognise —
+ * `raw` is then all there is, and that is by design.
+ *
+ * Also what the seed writes historic log rows with (db/seed.ts), so a seeded
+ * line and an appended one are decomposed by the same code.
+ */
+export function logLineParts(
+  tx: GrimoireDb,
+  campaign: string,
+  raw: string,
+): { at: string | null; sceneId: string | null; text: string | null } {
+  const m = LOG_LINE.exec(raw);
+  const marker = m?.[2] ?? null;
+  return {
+    at: m?.[1] ?? null,
+    sceneId: marker !== null && sceneRowOf(tx, campaign, marker) !== undefined ? marker : null,
+    text: m?.[3] ?? null,
+  };
 }
 
 /**
@@ -2074,7 +2062,6 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           status: asStr(fm.status, "draft"),
           handouts: packJson(asStrArray(fm.handouts)),
           body: draft.body,
-          extra: extraOf(fm, SCENE_KEYS),
           pos,
         })
         .run();
@@ -2097,7 +2084,6 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
         voice: asOptStr(fm.voice),
         appearance: asOptStr(fm.appearance),
         body: draft.body,
-        extra: extraOf(fm, NPC_KEYS, misshapenQuickstats(fm.quickstats)),
       };
       // An entry the DM created and left empty is FILLED — inserting would
       // collide with a row that holds nothing to lose.
@@ -2125,7 +2111,6 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
         chapterId: locationChapter,
         roll20Page: asOptStr(fm["roll20-page"]),
         body: draft.body,
-        extra: extraOf(fm, LOCATION_KEYS),
       };
       // Fill an empty entry rather than collide with it — see the npc case.
       const existing = locationRowOf(tx, campaign, id);
@@ -2159,7 +2144,6 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           title: asStr(fm.title, locator.id),
           status: asOptStr(fm.status),
           body: draft.body,
-          extra: extraOf(fm, CHAPTER_KEYS),
           pos,
         })
         .run();

@@ -1,25 +1,22 @@
-// The active session (issue #40): GET /api/:campaign/session, the epoch
-// timestamps that make the client's runtime correct, and the rule that a log
-// line lands in the RUNNING session even when that is yesterday's row.
+// The active session: GET /api/:campaign/session, the epoch timestamps that
+// make the client's runtime correct, and the rule that a log line lands in the
+// RUNNING session even when that is yesterday's row.
 //
-// After the SQLite cutover (issue #57) the session lives in `sessions` +
-// `session_pauses` + `log_entries`, and the picking rule moved from a
-// newest-first file scan to a query (store/read.ts `pickSession`) — the RULE
-// itself is unchanged, which is what this file pins. Each case gets a fresh
-// in-memory database seeded from examples/ (test/support/store.ts); the clock
-// is still overridden via setNow().
+// A session lives in `sessions` + `session_pauses` + `log_entries`, and the
+// picking rule is a query (store/read.ts `pickSession`) — that rule is what
+// this file pins. Each case gets a fresh in-memory database seeded from the
+// committed JSON entries (test/support/store.ts); the clock is overridden via
+// setNow().
 //
-// Sessions that used to be written as FILES are produced two ways here:
+// Sessions are produced two ways here:
 //   - through the API whenever that is possible (a session started yesterday
 //     is simply `POST /session/start` with yesterday's clock) — that exercises
 //     the real state machine instead of a hand-built row;
-//   - through the MIGRATION, in a temp campaign root, for the shapes only a
-//     hand-edited file can have (a degraded `started`, a blank `ended`,
-//     `scenes_played` without a log).
+//   - through the SEED, for the shapes an endpoint cannot produce in one call
+//     (a date-only `started`, a blank `ended`, `scenes_played` without a
+//     log) — the shapes a campaign written earlier carries.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { eq } from "drizzle-orm";
 import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
@@ -28,15 +25,10 @@ import type { GrimoireDb } from "../src/db/client";
 import { sessions as sessionsTable } from "../src/db/schema";
 import { pickSession, sessionOrderKey } from "../src/store/read";
 import type { SessionRow } from "../src/store/render";
-import {
-  dropStore,
-  removeTempRoot,
-  seedStore,
-  tempCampaignRoot,
-} from "./support/store";
+import type { SeedEntry } from "../src/db/seed";
+import { dropStore, seedStore } from "./support/store";
 
 let db: GrimoireDb;
-let tmpRoot: string | undefined;
 
 async function post(url: string, body?: unknown): Promise<Response> {
   return app.request(url, {
@@ -57,32 +49,33 @@ async function getFile(rel: string): Promise<EntryResponse> {
   return (await res.json()) as EntryResponse;
 }
 
-/**
- * Re-seed from a temp copy of examples/ with campaign files added, replaced
- * or (content `null`) removed. The successor of "write a file and let the
- * reader find it": the tree is now only ever the migration's source.
- */
-async function seedWithFiles(files: Record<string, string | null>): Promise<void> {
-  tmpRoot = await tempCampaignRoot();
-  for (const [rel, content] of Object.entries(files)) {
-    // Keys are ADDRESSES (issue #79); the importer's source is still a
-    // file, so the `.md` is added here. A key ending in "/" names a
-    // DIRECTORY (only ever used to remove one).
-    const isDir = rel.endsWith("/");
-    const abs = path.join(tmpRoot, "beispiel", isDir ? rel.slice(0, -1) : `${rel}.md`);
-    if (content === null) {
-      await rm(abs, { recursive: true, force: true });
-      continue;
-    }
-    await mkdir(path.dirname(abs), { recursive: true });
-    await writeFile(abs, content, "utf8");
-  }
-  db = await seedStore(tmpRoot);
+/** A session entry as the seed describes one. */
+function session(properties: {
+  id: string;
+  started?: string;
+  ended?: string;
+  scenes_played?: string[];
+}): SeedEntry {
+  return {
+    kind: "session",
+    properties: { scenes_played: [], ...properties },
+    body: "",
+    log: [],
+  };
 }
 
-/** A session file as the DM's tree would hold it. */
-function sessionFile(id: string, properties: string): string {
-  return `---\nid: ${id}\n${properties}---\n\n## Log\n`;
+/**
+ * Re-seed the campaign with these sessions ALONGSIDE the fixture's own. The
+ * shapes below are what a campaign written before today's session rules
+ * carries — they have no create endpoint, so the seed is where they come from.
+ */
+async function seedWithSessions(...sessions: SeedEntry[]): Promise<void> {
+  db = await seedStore({ entries: sessions });
+}
+
+/** Re-seed the campaign with NO sessions at all. */
+async function seedWithoutSessions(): Promise<void> {
+  db = await seedStore({ without: ["session-2026-01-15"] });
 }
 
 /**
@@ -133,8 +126,6 @@ beforeEach(async () => {
 afterEach(async () => {
   dropStore();
   setNow(null);
-  if (tmpRoot !== undefined) await removeTempRoot(tmpRoot);
-  tmpRoot = undefined;
 });
 
 // --- the picking rule, as a query -------------------------------------------
@@ -156,7 +147,6 @@ describe("pickSession", () => {
     ended: s.ended ?? null,
     createdAt: s.createdAt ?? 0,
     body: "",
-    extra: "{}",
     rev: 1,
   });
 
@@ -219,7 +209,7 @@ describe("pickSession", () => {
       row({ id: "a0a2", started: "2026-08-19T21:05:00", createdAt: 1000 }),
     ]);
     expect(active()).toBe("b6b1");
-    // …and with `createdAt` equal as well (migrated rows carry 0) the order is
+    // …and with `createdAt` equal as well (a seeded row carries 0) the order is
     // arbitrary but STABLE — the same answer whatever the row order was.
     onlySessions([
       row({ id: "a0a2", started: "2026-08-19T21:05:00" }),
@@ -309,19 +299,14 @@ describe("GET /api/:campaign/session", () => {
     expect(file.startedMs).toBe(new Date(2026, 7, 18, 22, 30).getTime());
   });
 
-  test("a MIGRATED `started` at exactly midnight keeps a usable epoch time", async () => {
+  test("a DATE-ONLY `started` keeps a usable epoch time", async () => {
     // A full YAML timestamp (js-yaml only reads the seconds form as a Date)
     // at exactly midnight is indistinguishable from a date-only value, so the
     // migration stored the DEGRADED string `yyyy-mm-dd` (shared/src/parse.ts)
     // — the only way this shape still reaches the API. startedMs must not
     // degrade with it: the live timer used to vanish silently here because
     // the client demanded a time part.
-    await seedWithFiles({
-      "sessions/2026-08-19": sessionFile(
-        "2026-08-19",
-        "started: 2026-08-19T00:00:00\nscenes_played: []\n",
-      ),
-    });
+    await seedWithSessions(session({ id: "2026-08-19", started: "2026-08-19" }));
     const res = await app.request("/api/beispiel/session");
     expect(res.status).toBe(200);
     const file = (await res.json()) as EntryResponse;
@@ -552,12 +537,13 @@ describe("POST /session/discard — the mis-click's undo (AK7)", () => {
     // A hand-edited session file: `scenes_played` set, `## Log` without
     // entries. Only the migration can produce that shape now — the API
     // always writes a log line together with a played scene.
-    await seedWithFiles({
-      "sessions/2026-08-19": sessionFile(
-        "2026-08-19",
-        "started: 2026-08-19T21:05\nscenes_played: [lighthouse-arrival]\n",
-      ),
-    });
+    await seedWithSessions(
+      session({
+        id: "2026-08-19",
+        started: "2026-08-19T21:05",
+        scenes_played: ["lighthouse-arrival"],
+      }),
+    );
     const res = await post("/api/beispiel/session/discard");
     expect(res.status).toBe(409);
     expect(((await res.json()) as { code: string }).code).toBe("session_not_empty");
@@ -611,7 +597,7 @@ describe("the review's session — GET /session?includeEnded=1", () => {
   });
 
   test("404 with no session at all, with and without includeEnded", async () => {
-    await seedWithFiles({ "sessions/": null });
+    await seedWithoutSessions();
     expect((await app.request("/api/beispiel/session?includeEnded=1")).status).toBe(404);
     expect((await app.request("/api/beispiel/session?includeEnded=0")).status).toBe(404);
   });
@@ -622,12 +608,7 @@ describe("degraded session files never hijack the active session", () => {
     // `sessions/gestern abend.md`: neither the id nor `started` is a date, so
     // the row has no place in the chronology — it used to win the raw STRING
     // sort forever and swallow every log line.
-    await seedWithFiles({
-      "sessions/gestern abend.md": sessionFile(
-        "gestern abend",
-        "started: gestern abend\nscenes_played: []\n",
-      ),
-    });
+    await seedWithSessions(session({ id: "gestern abend", started: "gestern abend" }));
     expect((await app.request("/api/beispiel/session")).status).toBe(404);
     expect((await post("/api/beispiel/log", { text: "x" })).status).toBe(404);
     // A real start works and IS the active session, despite the stray row.
@@ -636,9 +617,7 @@ describe("degraded session files never hijack the active session", () => {
   });
 
   test("a non-date id with a parseable `started` still counts", async () => {
-    await seedWithFiles({
-      "sessions/notizen": sessionFile("notizen", "started: 2026-08-19T20:00\nscenes_played: []\n"),
-    });
+    await seedWithSessions(session({ id: "notizen", started: "2026-08-19T20:00" }));
     const res = await app.request("/api/beispiel/session");
     expect(res.status).toBe(200);
     expect(((await res.json()) as EntryResponse).path).toBe("sessions/notizen");
@@ -648,12 +627,7 @@ describe("degraded session files never hijack the active session", () => {
   // format's parser has always accepted both widths, so those rows keep
   // working — verbatim string, a startedMs on the minute, endable.
   test("a pre-#58 minute-precise `started` stays valid", async () => {
-    await seedWithFiles({
-      "sessions/2026-08-19": sessionFile(
-        "2026-08-19",
-        "started: 2026-08-19T20:00\nscenes_played: []\n",
-      ),
-    });
+    await seedWithSessions(session({ id: "2026-08-19", started: "2026-08-19T20:00" }));
     const res = await app.request("/api/beispiel/session");
     expect(res.status).toBe(200);
     const file = (await res.json()) as EntryResponse;
@@ -671,16 +645,10 @@ describe("degraded session files never hijack the active session", () => {
   // strings now: still addressable, still ordered by `started`, mixed freely
   // with the opaque ids a start hands out today.
   test("legacy date ids and a new opaque id live side by side", async () => {
-    await seedWithFiles({
-      "sessions/2026-08-19": sessionFile(
-        "2026-08-19",
-        "started: 2026-08-19T18:00\nended: 2026-08-19T19:30\nscenes_played: []\n",
-      ),
-      "sessions/2026-08-19-2": sessionFile(
-        "2026-08-19-2",
-        "started: 2026-08-19T19:45\nended: 2026-08-19T20:30\nscenes_played: []\n",
-      ),
-    });
+    await seedWithSessions(
+      session({ id: "2026-08-19", started: "2026-08-19T18:00", ended: "2026-08-19T19:30" }),
+      session({ id: "2026-08-19-2", started: "2026-08-19T19:45", ended: "2026-08-19T20:30" }),
+    );
     // Both old files are readable under their own path…
     expect(await fileStatus("sessions/2026-08-19")).toBe(200);
     expect(await fileStatus("sessions/2026-08-19-2")).toBe(200);
@@ -702,12 +670,9 @@ describe("degraded session files never hijack the active session", () => {
   });
 
   test("a blank `ended` means RUNNING and can be ended normally (finding 5)", async () => {
-    await seedWithFiles({
-      "sessions/2026-08-19": sessionFile(
-        "2026-08-19",
-        'started: 2026-08-19T20:00\nended: ""\nscenes_played: []\n',
-      ),
-    });
+    await seedWithSessions(
+      session({ id: "2026-08-19", started: "2026-08-19T20:00", ended: "" }),
+    );
     const res = await app.request("/api/beispiel/session");
     expect(res.status).toBe(200);
     expect(((await res.json()) as EntryResponse).path).toBe("sessions/2026-08-19");

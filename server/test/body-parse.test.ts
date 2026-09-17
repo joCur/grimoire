@@ -1,7 +1,9 @@
-// The markdown decomposition rules of the one-time migration, unit level.
-// The integration side is test/db-migration.test.ts; this file
-// pins the DEGRADE RULES themselves, because they are the part that decides
-// whether a DM's odd hand-written file survives the move.
+// The body-parsing rules of the store, unit level: how a markdown text comes
+// apart into sections, and how a glossary body becomes term rows.
+//
+// These are the DEGRADE RULES, which is why they are pinned here — they
+// decide what an odd hand-written text turns into when `PUT /entry` saves the
+// glossary back.
 
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
@@ -9,12 +11,10 @@ import {
   isStructuralLine,
   logLineShortHash,
   parseGlossaryBody,
-  parseInboxBody,
-  parseLogSection,
   removeSection,
   sectionLines,
   splitSections,
-} from "../src/db/import-markdown";
+} from "../src/store/body-parse";
 
 describe("splitSections / removeSection", () => {
   test("the text before the first heading is its own, headless section", () => {
@@ -32,11 +32,11 @@ describe("splitSections / removeSection", () => {
   });
 
   test("a `###` subsection is NOT parsed, so it is NOT removed either", () => {
-    // What this pins: `sectionLines` stops at the next heading
-    // of ANY level, so the `### Nachtrag` lines never became rows. Removing
-    // them with the section deleted content that nothing had stored.
+    // What this pins: `sectionLines` stops at the next heading of ANY level,
+    // so the `### Nachtrag` lines are not part of the section. Removing them
+    // with it would delete content nothing had read.
     const body = "## Log\n\n- 19:00 x\n\n### Nachtrag\n\ny\n\n## Threads\n\n- [ ] t\n";
-    expect(parseLogSection(body).map((e) => e.text)).toEqual(["x"]);
+    expect(sectionLines(body, "Log", 2)?.join("\n").trim()).toBe("- 19:00 x");
     const rest = removeSection(body, "Log", 2);
     expect(rest).toContain("### Nachtrag");
     expect(rest).toContain("y");
@@ -46,8 +46,8 @@ describe("splitSections / removeSection", () => {
 
   test("only the FIRST section of a name is removed — the second was never parsed", () => {
     const body = "## Log\n\n- 19:00 a\n\n## Log\n\n- 20:00 b\n";
-    // Only the first section became rows …
-    expect(parseLogSection(body).map((e) => e.text)).toEqual(["a"]);
+    // Only the first section is the one that was read …
+    expect(sectionLines(body, "Log", 2)?.join("\n").trim()).toBe("- 19:00 a");
     // … so only the first one may go.
     const rest = removeSection(body, "Log", 2);
     expect(rest).toContain("## Log");
@@ -77,7 +77,6 @@ describe("splitSections / removeSection", () => {
   test("a level restriction distinguishes `## Log` from `### Log`", () => {
     const body = "## Notizen\n\n### Log\n\n- 19:00 a\n";
     // The app reads `## Log` only (`/^##\s*Log\s*$/i`), so neither does this.
-    expect(parseLogSection(body)).toEqual([]);
     expect(removeSection(body, "Log", 2)).toBe(body);
     expect(sectionLines(body, "Log", 2)).toBeUndefined();
     expect(sectionLines(body, "Log")).toEqual(["", "- 19:00 a", ""]);
@@ -85,7 +84,6 @@ describe("splitSections / removeSection", () => {
 
   test("a CRLF body keeps its carriage returns", () => {
     const body = "## Log\r\n\r\n- 19:00 a\r\n\r\n## Threads\r\n\r\n- [ ] t\r\n";
-    expect(parseLogSection(body).map((e) => e.text)).toEqual(["a"]);
     expect(removeSection(body, "Log", 2)).toBe("## Threads\r\n\r\n- [ ] t\r\n");
   });
 });
@@ -94,11 +92,6 @@ describe("heading recognition mirrors the app", () => {
   test("a hashtag line is not a heading — it needs a space", () => {
     // `#pause` is a hashtag the format puts on its own line (README).
     const body = "## Log\n\n- 19:00 a\n#pause\n- 20:00 b\n";
-    expect(parseLogSection(body).map((e) => e.raw)).toEqual([
-      "- 19:00 a",
-      "#pause",
-      "- 20:00 b",
-    ]);
     expect(splitSections(body)).toHaveLength(2); // preamble + `## Log`
     expect(isStructuralLine("#pause")).toBe(false);
     expect(isStructuralLine("## Log")).toBe(true);
@@ -107,14 +100,13 @@ describe("heading recognition mirrors the app", () => {
 
   test("an indented `#` line is code, not a section boundary", () => {
     const body = "## Log\n\n- 19:00 a\n    ## nicht wirklich\n";
-    expect(parseLogSection(body)).toHaveLength(2);
     expect(splitSections(body)).toHaveLength(2);
   });
 
   test("a `#` line inside a code fence is not a section boundary", () => {
     const body = "## Log\n\n- 19:00 a\n\n```sh\n# ein Kommentar\n```\n\n- 20:00 b\n";
-    // The fenced `#` must not cut the log in half — `- 20:00 b` is a log line.
-    expect(parseLogSection(body).map((e) => e.raw)).toContain("- 20:00 b");
+    // The fenced `#` must not cut the section in half.
+    expect(sectionLines(body, "Log", 2)?.join("\n")).toContain("- 20:00 b");
     expect(splitSections(body)).toHaveLength(2);
   });
 
@@ -123,69 +115,11 @@ describe("heading recognition mirrors the app", () => {
   });
 });
 
-describe("parseLogSection", () => {
-  test("time, scene context and text come apart; order is the file order", () => {
-    const entries = parseLogSection(
-      "## Log\n\n- 19:52 (arrival) Spuren gefunden #decision\n- 20:30 — Pause\n",
-    );
-    expect(entries).toHaveLength(2);
-    expect(entries[0]).toMatchObject({
-      pos: 0,
-      at: "19:52",
-      sceneId: "arrival",
-      text: "Spuren gefunden #decision",
-      foreign: false,
-    });
-    // A scene-less line keeps its time and has no scene context.
-    expect(entries[1]?.sceneId).toBeUndefined();
-    expect(entries[1]?.text).toBe("— Pause");
-  });
-
-  test("a line of another shape survives as raw and is flagged", () => {
-    const entries = parseLogSection("## Log\n\nvon Hand getippt\n");
-    expect(entries).toHaveLength(1);
-    expect(entries[0]?.raw).toBe("von Hand getippt");
-    expect(entries[0]?.at).toBeUndefined();
-    expect(entries[0]?.text).toBeUndefined();
-    expect(entries[0]?.foreign).toBe(true);
-  });
-
-  test("the next heading ends the log and blank lines are skipped", () => {
-    const entries = parseLogSection("## Log\n\n- 19:00 a\n\n## Threads\n\n- [ ] kein Log\n");
-    expect(entries.map((e) => e.text)).toEqual(["a"]);
-  });
-
-  test("the hash is the one the review wrote — over the TRIMMED line", () => {
+describe("logLineShortHash", () => {
+  test("the hash is the one the review wrote — over the line as stored", () => {
     const line = "- 19:52 (arrival) Spuren gefunden";
-    const entries = parseLogSection(`## Log\n\n  ${line}  \n`);
     const expected = createHash("sha256").update(line, "utf8").digest("hex").slice(0, 8);
-    expect(entries[0]?.hash).toBe(expected);
     expect(logLineShortHash(line)).toBe(expected);
-  });
-});
-
-describe("parseInboxBody", () => {
-  test("list lines are parsed, checkboxes become the done flag", () => {
-    const entries = parseInboxBody("## Eingang\n\n- eine Idee #thread\n- [x] erledigt\n- [ ] offen\n");
-    expect(entries.map((e) => [e.text, e.done, e.foreign])).toEqual([
-      [undefined, false, false], // the heading: structure, not a lost idea
-      ["eine Idee #thread", false, false],
-      ["erledigt", true, false],
-      ["offen", false, false],
-    ]);
-  });
-
-  test("`raw` is byte-exact — the write API matched on it", () => {
-    const entries = parseInboxBody("-   viel Abstand\n");
-    expect(entries[0]?.raw).toBe("-   viel Abstand");
-    expect(entries[0]?.text).toBe("  viel Abstand");
-  });
-
-  test("prose that is neither heading nor list is kept and flagged", () => {
-    const entries = parseInboxBody("Freitext mittendrin\n");
-    expect(entries[0]?.raw).toBe("Freitext mittendrin");
-    expect(entries[0]?.text).toBeUndefined();
-    expect(entries[0]?.foreign).toBe(true);
   });
 });
 
@@ -203,7 +137,7 @@ describe("parseGlossaryBody", () => {
   });
 
   test("a sentence that merely ends in a colon is not a term", () => {
-    // The exact shape from examples/beispiel's `## Stil` section — turning it
+    // The exact shape of the example glossary's `## Stil` section — turning it
     // into a term with an empty explanation would be a lie about the content.
     const result = parseGlossaryBody(
       "## Stil\n\n- Regelbegriffe bleiben Englisch:\n  „advantage/disadvantage\".\n",

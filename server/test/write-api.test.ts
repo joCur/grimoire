@@ -1,32 +1,26 @@
-// Write-API tests (issue #5), ported to the database stack (issue #57).
+// The write API against the database stack.
 //
-// What changed with the cutover, and therefore in this file:
+// Four facts shape every case below:
 //
 //   * THE STORE IS THE DATABASE. Every case runs against its OWN in-memory
-//     database, seeded from `examples/` by the real migration (test/support/
-//     store.ts). No file is written any more, so the old "the bytes on disk
-//     are X" assertions are re-expressed against the API's own answer — which
-//     is what the app sees and therefore what the contract is about.
-//   * `rev` IS THE ROW VERSION — a small integer that starts at 1 and
-//     grows by one per write, and still a deliberately opaque guard token.
-//     "nothing was written" is now "the rev did not move".
+//     database, seeded from the committed JSON entries by the real loader
+//     (test/support/store.ts), so the cases cannot build on each other.
+//     Assertions read the API's own answer — which is what the app sees and
+//     therefore what the contract is about.
+//   * `rev` IS THE ROW VERSION — a small integer that starts at 1 and grows
+//     by one per write, and a deliberately opaque guard token.
+//     "nothing was written" is "the rev did not move".
 //   * A SCENE'S PATH SEGMENT IS ITS ID (store/paths.ts), so the reference
-//     scenes are addressed as `01-salzhafen/leuchtturm/lighthouse-arrival` and
-//     `.../smuggler-captured.md` instead of by their former file names.
-//   * `raw` IS A DETERMINISTIC RENDERING (YAML block + body), not stored
-//     bytes. Byte assertions about `raw` are still meaningful — the rendering
-//     is a pure function of the row — but they say "this is what the editor
-//     is shown", not "this is what is on disk".
-//   * EVERY CASE IS SELF-CONTAINED. The old file lived off a shared temp copy
-//     and let cases build on each other; a fresh database per case makes that
-//     impossible, which is the better contract anyway.
+//     scenes are addressed as `01-salzhafen/leuchtturm/lighthouse-arrival`
+//     and `01-salzhafen/bucht/smuggler-captured`.
+//   * `raw` IS A DETERMINISTIC RENDERING (YAML block + body) of the row, not
+//     a stored byte sequence. Byte assertions about it are meaningful — the
+//     rendering is a pure function of the row — but they say "this is what
+//     the editor is shown".
 //
-// The clock is overridden per case via setNow() for deterministic dates —
-// src/clock.ts is untouched by the cutover.
+// The clock is overridden per case via setNow() for deterministic dates.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
 import { and, eq } from "drizzle-orm";
 import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
@@ -34,12 +28,8 @@ import { setNow } from "../src/clock";
 import type { GrimoireDb } from "../src/db/client";
 import { scenes as scenesTable, sessions as sessionsTable } from "../src/db/schema";
 import { getDb } from "../src/store/handle";
-import {
-  dropStore,
-  removeTempRoot,
-  seedStore,
-  tempCampaignRoot,
-} from "./support/store";
+import { seedCampaign } from "../src/db/seed";
+import { dropStore, seedStore } from "./support/store";
 
 async function getFile(rel: string, campaign = "beispiel"): Promise<EntryResponse> {
   const res = await app.request(`/api/${campaign}/entry?path=${encodeURIComponent(rel)}`);
@@ -103,22 +93,15 @@ async function postOk(url: string, body?: unknown): Promise<EntryResponse> {
 }
 
 /**
- * A campaign root with a SECOND, empty campaign directory next to
- * `beispiel` — the migration turns it into a campaign row with no name, no
- * sessions and no inbox, which is what the "there is nothing yet" cases need
- * (they used to create a bare directory in the temp tree).
+ * A SECOND campaign next to `beispiel`, holding nothing but its own row: no
+ * name, no sessions, no inbox. That is what the "there is nothing yet" cases
+ * need, and a campaign entry on its own is exactly it.
  */
 const FRESH = "frischling";
 
 async function withFreshCampaign(fn: () => Promise<void>): Promise<void> {
-  const root = await tempCampaignRoot();
-  try {
-    await mkdir(path.join(root, FRESH), { recursive: true });
-    await seedStore(root);
-    await fn();
-  } finally {
-    await removeTempRoot(root);
-  }
+  seedCampaign(await getDb(), [{ kind: "campaign", properties: { id: FRESH }, body: "" }]);
+  await fn();
 }
 
 let db: GrimoireDb;
@@ -179,33 +162,6 @@ describe("PATCH /api/:campaign/properties", () => {
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("review_note");
     expect((await getFile(SCENE)).rev).toBe(before.rev);
-  });
-
-  test("an imported unknown key is rendered after the contract keys, changeable and deletable", async () => {
-    // Only the importer puts keys into `extra`; stand in for it here.
-    (await getDb())
-      .update(scenesTable)
-      .set({ extra: JSON.stringify({ review_note: "nochmal lesen" }) })
-      .where(and(eq(scenesTable.campaignId, "beispiel"), eq(scenesTable.id, "lighthouse-arrival")))
-      .run();
-    const before = await getFile(SCENE);
-    const keys = Object.keys(before.properties);
-    expect(keys[keys.length - 1]).toBe("review_note");
-    expect(before.properties.review_note).toBe("nochmal lesen");
-
-    const changed = await patchOk({
-      path: SCENE,
-      rev: before.rev,
-      patch: { review_note: "gelesen" },
-    });
-    expect(changed.properties.review_note).toBe("gelesen");
-    const after = await patchOk({
-      path: SCENE,
-      rev: changed.rev,
-      patch: { review_note: null },
-    });
-    expect(Object.keys(after.properties)).not.toContain("review_note");
-    expect(after.body).toBe(before.body);
   });
 
   test("400 when the patch carries `id` — that is POST /rename's job", async () => {

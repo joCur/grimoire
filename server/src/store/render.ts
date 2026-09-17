@@ -6,15 +6,15 @@
 //
 // Three rules hold this together:
 //
-//   1. `properties` IS REBUILT IN CONTRACT ORDER, then the preserved unknown
-//      keys from `extra`. Same keys the parser produced, same fallbacks
-//      (`title`/`name` fall back to the id — shared/parse.ts), so the app
-//      cannot tell the difference.
+//   1. `properties` IS REBUILT IN CONTRACT ORDER — the README's order, and
+//      nothing beside it: a stored entry has exactly the fields the contract
+//      names (db/schema.ts rule 1). The display-name fallbacks stay
+//      (`title`/`name` fall back to the id), applied once, here.
 //   2. `raw` IS A DETERMINISTIC RENDERING, not a stored byte sequence. It is
 //      the editor's display value; no byte guarantees are made or needed.
 //   3. THE GUARD TOKEN `rev` IS THE ROW'S VERSION COUNTER. The app has
-//      always treated it as opaque, and the row version makes the semantics
-//      stronger than a file time: it cannot collide inside one second.
+//      always treated it as opaque, and the row version cannot collide
+//      inside one second.
 //
 // Sections that became rows are rendered BACK from those rows: a session's
 // `## Log`, the inbox list, the glossary. That is what keeps the reading view,
@@ -47,7 +47,6 @@ export interface CampaignRow {
   name: string;
   description: string | null;
   body: string;
-  extra: string;
   version: number;
   rev: number;
   /** The glossary's prose preamble and the three list entries' guard tokens. */
@@ -64,7 +63,6 @@ export interface ChapterRow {
   title: string;
   status: string | null;
   body: string;
-  extra: string;
   pos: number;
   rev: number;
 }
@@ -81,7 +79,6 @@ export interface SceneRow {
   status: string;
   handouts: string;
   body: string;
-  extra: string;
   pos: number;
   rev: number;
 }
@@ -98,7 +95,6 @@ export interface NpcRow {
   voice: string | null;
   appearance: string | null;
   body: string;
-  extra: string;
   rev: number;
 }
 
@@ -109,7 +105,6 @@ export interface LocationRow {
   chapterId: string | null;
   roll20Page: string | null;
   body: string;
-  extra: string;
   rev: number;
 }
 
@@ -120,12 +115,11 @@ export interface SessionRow {
   ended: string | null;
   /**
    * Insertion time of the row in epoch MILLISECONDS — the tie-break behind
-   * `started` (db/schema.ts). Database bookkeeping, never file content: it is
-   * deliberately absent from `sessionProperties`.
+   * `started` (db/schema.ts). Bookkeeping of the database, never authored
+   * content: it is deliberately absent from `sessionProperties`.
    */
   createdAt: number;
   body: string;
-  extra: string;
   rev: number;
 }
 
@@ -172,23 +166,6 @@ function compact(entries: Array<[string, unknown]>): Record<string, unknown> {
 }
 
 /**
- * Contract keys first (their order is the README's), preserved unknown keys
- * after. `extra` never shadows a contract key: the column IS the value, and
- * an `extra` copy would be the stale one.
- */
-function withExtra(
-  contract: Record<string, unknown>,
-  extra: string,
-): Record<string, unknown> {
-  const out = { ...contract };
-  for (const [key, value] of Object.entries(unpackJson(extra))) {
-    if (key in out) continue;
-    out[key] = value;
-  }
-  return out;
-}
-
-/**
  * An entry as ONE markdown text — YAML block plus body. Not part of the API:
  * the augment run hands the LLM the existing entry this way and validates the
  * proposal against the same rendering (generator-augment.ts).
@@ -216,26 +193,22 @@ function parsed(
 /**
  * The campaign's display name: its stored name, or the id when there is none.
  *
- * `""` in the column means "no authored name" — the importer stored that for
- * a campaign whose `campaign` said nothing usable, and the parser's own
- * rule for a missing `name` is the id fallback (shared/src/parse.ts). The
- * fallback is applied HERE, once, and everything that shows a campaign name
- * reads it through this function: the campaign entry (`GET /entry`) and the
- * campaign list (`GET /campaigns`) once disagreed about it.
+ * `""` in the column means "no authored name" — a campaign created without
+ * one, or seeded without one. The fallback to the id is applied HERE, once,
+ * and everything that shows a campaign name reads it through this function:
+ * the campaign entry (`GET /entry`) and the campaign list (`GET /campaigns`)
+ * once disagreed about it.
  */
 export function campaignDisplayName(row: CampaignRow): string {
   return row.name === "" ? row.id : row.name;
 }
 
 export function campaignProperties(row: CampaignRow): Record<string, unknown> {
-  return withExtra(
-    compact([
-      ["id", row.id],
-      ["name", campaignDisplayName(row)],
-      ["description", row.description],
-    ]),
-    row.extra,
-  );
+  return compact([
+    ["id", row.id],
+    ["name", campaignDisplayName(row)],
+    ["description", row.description],
+  ]);
 }
 
 export function renderCampaign(row: CampaignRow): EntryResponse {
@@ -243,14 +216,11 @@ export function renderCampaign(row: CampaignRow): EntryResponse {
 }
 
 export function chapterProperties(row: ChapterRow): Record<string, unknown> {
-  return withExtra(
-    compact([
-      ["id", row.id],
-      ["title", row.title === "" ? row.id : row.title],
-      ["status", row.status],
-    ]),
-    row.extra,
-  );
+  return compact([
+    ["id", row.id],
+    ["title", row.title === "" ? row.id : row.title],
+    ["status", row.status],
+  ]);
 }
 
 export function renderChapter(row: ChapterRow): EntryResponse {
@@ -263,26 +233,23 @@ export function sceneProperties(
   tags: string[],
 ): Record<string, unknown> {
   const handouts = unpackStringArray(row.handouts);
-  return withExtra(
-    compact([
-      ["id", row.id],
-      ["title", row.title === "" ? row.id : row.title],
-      // `type`/`status` are the two lifecycle fields every consumer reads;
-      // they are always present so a status control never has to guess.
-      ["type", row.type === "" ? "planned" : row.type],
-      ["trigger", row.trigger],
-      // The chapter is part of the scene's address — always present.
-      ["chapter", row.chapterId],
-      ["location", row.location],
-      // Empty reference lists are omitted, not written as `[]`: the format
-      // says nothing about them, and an authored file had no key either.
-      ["npcs", npcs.length === 0 ? undefined : npcs],
-      ["handouts", handouts.length === 0 ? undefined : handouts],
-      ["tags", tags.length === 0 ? undefined : tags],
-      ["status", row.status === "" ? "draft" : row.status],
-    ]),
-    row.extra,
-  );
+  return compact([
+    ["id", row.id],
+    ["title", row.title === "" ? row.id : row.title],
+    // `type`/`status` are the two lifecycle fields every consumer reads;
+    // they are always present so a status control never has to guess.
+    ["type", row.type === "" ? "planned" : row.type],
+    ["trigger", row.trigger],
+    // The chapter is part of the scene's address — always present.
+    ["chapter", row.chapterId],
+    ["location", row.location],
+    // Empty reference lists are omitted, not written as `[]`: the format
+    // says nothing about them, so an absent list is an absent key.
+    ["npcs", npcs.length === 0 ? undefined : npcs],
+    ["handouts", handouts.length === 0 ? undefined : handouts],
+    ["tags", tags.length === 0 ? undefined : tags],
+    ["status", row.status === "" ? "draft" : row.status],
+  ]);
 }
 
 export function renderScene(row: SceneRow, npcs: string[], tags: string[]): EntryResponse {
@@ -297,20 +264,17 @@ export function renderScene(row: SceneRow, npcs: string[], tags: string[]): Entr
 
 export function npcProperties(row: NpcRow): Record<string, unknown> {
   const quickstats = unpackJson(row.quickstats);
-  return withExtra(
-    compact([
-      ["id", row.id],
-      ["name", row.name === "" ? row.id : row.name],
-      ["role", row.role],
-      ["chapter", row.chapterId],
-      ["status", row.status === "" ? "unknown" : row.status],
-      ["statblock", row.statblock],
-      ["quickstats", Object.keys(quickstats).length === 0 ? undefined : quickstats],
-      ["voice", row.voice],
-      ["appearance", row.appearance],
-    ]),
-    row.extra,
-  );
+  return compact([
+    ["id", row.id],
+    ["name", row.name === "" ? row.id : row.name],
+    ["role", row.role],
+    ["chapter", row.chapterId],
+    ["status", row.status === "" ? "unknown" : row.status],
+    ["statblock", row.statblock],
+    ["quickstats", Object.keys(quickstats).length === 0 ? undefined : quickstats],
+    ["voice", row.voice],
+    ["appearance", row.appearance],
+  ]);
 }
 
 /**
@@ -322,15 +286,12 @@ export function renderNpc(row: NpcRow): EntryResponse {
 }
 
 export function locationProperties(row: LocationRow): Record<string, unknown> {
-  return withExtra(
-    compact([
-      ["id", row.id],
-      ["name", row.name === "" ? row.id : row.name],
-      ["chapter", row.chapterId],
-      ["roll20-page", row.roll20Page],
-    ]),
-    row.extra,
-  );
+  return compact([
+    ["id", row.id],
+    ["name", row.name === "" ? row.id : row.name],
+    ["chapter", row.chapterId],
+    ["roll20-page", row.roll20Page],
+  ]);
 }
 
 export function renderLocation(row: LocationRow): EntryResponse {
@@ -346,30 +307,26 @@ export function sessionProperties(
   played: string[],
 ): Record<string, unknown> {
   const reviewed = log.filter((l) => l.reviewed !== 0).map((l) => l.hash);
-  return withExtra(
-    compact([
-      ["id", row.id],
-      ["started", row.started],
-      ["ended", row.ended],
-      // `scenes_played` is always present — the app reads it as a list and
-      // the format's session skeleton writes `scenes_played: []`.
-      ["scenes_played", played],
-      [
-        "pauses",
-        pauses.length === 0
-          ? undefined
-          : pauses.map((p) => compact([["from", p.fromTs], ["to", p.toTs]])),
-      ],
-      ["reviewed", reviewed.length === 0 ? undefined : reviewed],
-    ]),
-    row.extra,
-  );
+  return compact([
+    ["id", row.id],
+    ["started", row.started],
+    ["ended", row.ended],
+    // `scenes_played` is always present — the app reads it as a list and
+    // the format's session skeleton writes `scenes_played: []`.
+    ["scenes_played", played],
+    [
+      "pauses",
+      pauses.length === 0
+        ? undefined
+        : pauses.map((p) => compact([["from", p.fromTs], ["to", p.toTs]])),
+    ],
+    ["reviewed", reviewed.length === 0 ? undefined : reviewed],
+  ]);
 }
 
 /**
  * The session body: `## Log` rendered from `log_entries`, then whatever else
- * the session file held (`## Threads` above all), which the migration kept as
- * the row's body.
+ * the session carries (`## Threads` above all), which is the row's own body.
  */
 export function renderSessionBody(row: SessionRow, log: LogRow[]): string {
   const lines = log.map((l) => l.raw).join("\n");
@@ -444,8 +401,7 @@ export function renderInboxBody(rows: InboxRow[]): string {
 }
 
 export function renderInbox(campaignId: string, rows: InboxRow[], rev: number): EntryResponse {
-  // The parser gave a properties-less inbox the file stem as its id; the
-  // format's own `inbox` carries exactly that.
+  // The inbox's id is its address: there is exactly one per campaign.
   return parsed(INBOX_PATH, "inbox", { id: "inbox" }, renderInboxBody(rows), rev);
 }
 
@@ -454,7 +410,7 @@ export function renderInbox(campaignId: string, rows: InboxRow[], rev: number): 
 /**
  * The glossary body from `glossary` rows. A one-line explanation renders as
  * the `EN → DE` list line the format documents; a multi-line one keeps its
- * own `##` section, which is the shape the importer read it out of.
+ * own `##` section, which is the shape `parseGlossaryBody` reads back.
  */
 export function renderGlossaryBody(rows: GlossaryRow[], intro = ""): string {
   const listed = rows.filter((r) => !r.explanation.includes("\n"));

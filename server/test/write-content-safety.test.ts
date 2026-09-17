@@ -8,19 +8,12 @@
 // line whose columns fell apart.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import type { CampaignTree, EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { ApiError } from "../src/api-error";
 import { setNow } from "../src/clock";
 import { applyDrafts } from "../src/store/write";
-import {
-  dropStore,
-  removeTempRoot,
-  seedStore,
-  tempCampaignRoot,
-} from "./support/store";
+import { dropStore, seedStore } from "./support/store";
 
 async function getFile(rel: string): Promise<EntryResponse> {
   const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
