@@ -1,5 +1,5 @@
 # Build context for the Dockerfile. Note what is deliberately NOT ignored:
-#   fixtures/  -> copied to /fixtures as the source `grimoire seed` reads
+#   fixtures/  -> build input of the app (the dev harness imports them); not in the runtime image
 #   generator/ -> prompt assets read at runtime by the generate endpoint
 
 # Installed per stage inside the image (host modules are the wrong platform).

@@ -32,9 +32,11 @@ RUN bun install --frozen-lockfile
 COPY tsconfig.base.json ./
 
 # The app imports @grimoire/shared as TypeScript source, so shared/ is part
-# of the build input. fixtures/ is needed too: the DEV-only harness
+# of the build input. fixtures/ is build input too: the dev-only harness
 # (app/src/routes/harness.tsx) imports the fixture JSON, so the modules must
-# resolve even though they are tree-shaken out of the bundle.
+# resolve even though they are tree-shaken out of the bundle. Neither shared/
+# nor fixtures/ is copied into the runtime image below — test data stays out
+# of the production image.
 COPY shared ./shared
 COPY fixtures ./fixtures
 COPY app ./app
@@ -68,12 +70,6 @@ COPY shared/schema ./shared/schema
 COPY server/src ./server/src
 COPY generator ./generator
 COPY --from=build /app/app/dist ./app/dist
-
-# The fixtures ship in the image as the source `grimoire seed` reads:
-# `grimoire seed /fixtures` fills an empty /data with the example campaign for
-# a smoke test. Seeding is a dev/E2E tool, never part of the boot — a fresh
-# container starts EMPTY.
-COPY --chown=bun:bun fixtures /fixtures
 
 # GRIMOIRE_DATA is the only data setting left: the server reads and writes
 # GRIMOIRE_DATA/grimoire.db and knows no other source (ADR #13).

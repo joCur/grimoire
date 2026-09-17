@@ -8,10 +8,8 @@ App-Sache — Standard ist Tailscale (siehe DECISIONS #3 und #5).
 > **Die Kampagnen-Wahrheit ist eine SQLite-Datei (ADR #13):**
 > `GRIMOIRE_DATA/grimoire.db`, Default `/data` im Container. Das ist die
 > **einzige** Datenquelle: der Server liest beim Start keine andere Quelle,
-> eine frische Instanz startet **leer** und wird in der UI gefüllt. Die
-> JSON-Fixtures der Beispielkampagne einzulesen ist ausschließlich das
-> Dev-/E2E-Werkzeug `grimoire seed` (Abschnitt 2b). Zu sichern ist das
-> `GRIMOIRE_DATA`-Volume — Abschnitt 2a.
+> eine frische Instanz startet **leer** und wird in der UI gefüllt. Zu sichern
+> ist das `GRIMOIRE_DATA`-Volume — Abschnitt 2a.
 
 ## 1. Bauen und starten
 
@@ -45,17 +43,8 @@ docker run -d --name grimoire \
 **Eine frische Instanz startet leer**: der Server seedet beim Start nichts.
 Das ist kein Sonderfall — „/" bietet auf einer leeren Instanz „Kampagne
 anlegen" an, und Kapitel, Szenen, NPCs und Orte entstehen danach ebenfalls in
-der UI. `grimoire seed` ist das Dev-/E2E-Werkzeug für die Beispielkampagne,
-nicht der Weg zur ersten eigenen Kampagne.
-
-Für einen Smoke-Test *mit* Inhalt einmal die Beispielkampagne aus dem Image
-einlesen (Abschnitt 2b):
-
-```bash
-docker run --rm -p 3000:3000 grimoire   # leere Instanz
-docker run --rm -v /tmp/probe:/data ghcr.io/jocur/grimoire:latest \
-  bun run server/src/cli.ts seed /fixtures   # Beispielkampagne seeden
-```
+der UI. Das Image enthält keine Testdaten; die Beispielkampagne ist ein
+Dev-/E2E-Fixture im Repo (CLAUDE.md, `fixtures/`).
 
 **Update:** neu bauen, Container ersetzen (`docker rm -f grimoire` + `run`).
 Der Container selbst hat keinen Zustand — der steht im `/data`-Volume.
@@ -200,33 +189,7 @@ Ein `cp grimoire.db` im laufenden Betrieb ist **kein** Backup — nimm `VACUUM
 INTO` oder stoppe den Container. Der Wiederherstellungsweg ist derselbe
 rückwärts: Container stoppen, Datei(en) zurücklegen, Container starten.
 
-## 2b. `grimoire seed` — Fixtures seeden (Dev-/E2E-Werkzeug)
-
-Der Produktivpfad seedet **nichts**: beim Start werden Datenbank und
-Schema-Migrationen angelegt, sonst passiert nichts. Eine frische Instanz ist
-leer.
-
-Die JSON-Fixtures in eine Datenbank zu schreiben ist ein **eigenes Kommando**,
-gedacht für Entwicklung und die E2E-Suite:
-
-```bash
-GRIMOIRE_DATA=/srv/grimoire/data bun run server/src/cli.ts seed /pfad/zu/fixtures
-```
-
-- Das Verzeichnis enthält **direkt die Kampagnen-Ordner**
-  (`<dir>/<kampagne>/*.json`) — die Form der Fixtures beschreibt README.md.
-  Im Image liegt die Beispielkampagne unter `/fixtures`.
-- **Eine Transaktion pro Kampagne**, also entweder vollständig oder nicht. Ein
-  Lauf, der zwischen zwei Kampagnen abbricht, wird beim nächsten Lauf
-  fortgesetzt.
-- Der Befehl **überschreibt nie**: eine Datenbank mit Inhalt bleibt
-  unangetastet (`--force` existiert nur für Wegwerf-Datenbanken). Die Fixtures
-  selbst werden nur gelesen.
-- Was er nicht in Zeilen übersetzen konnte, übernimmt er nicht: jeder Vorfall
-  wird mit Adresse und Grund **auf stdout gedruckt** — das ist der Report.
-  **Keine Zeile = sauberer Lauf.**
-
-### Generator (LLM-Provider)
+## 2b. Generator (LLM-Provider)
 
 Alles hier ist **optional** — ohne Konfiguration läuft alles außer dem
 Generator. `LLM_PROVIDER` wählt den Provider, die übrigen Variablen gelten

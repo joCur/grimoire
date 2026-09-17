@@ -142,14 +142,13 @@ export const SCENE_TITLE = "Nachtwache am Kai";
  * (server/src/generator.ts, draftAddress).
  */
 export const SCENE_ID = "night-watch-quay";
-/** The npc stub the scene run ships (the example campaign has no such npc). */
+/**
+ * The npc and the location the scene run proposes as new entries. Both ids
+ * are deliberately ABSENT from the example campaign: a proposal for an entry
+ * that already exists is the apply step's 409, not a stub.
+ */
 export const NPC_STUB_ID = "grella";
 export const NPC_STUB_NAME = "Grella";
-/**
- * The location stub the scene run ships — an id the example campaign does
- * NOT have, like the npc stub above: a proposal for an entry that exists
- * would be the apply step's 409, not a stub.
- */
 export const LOCATION_STUB_ID = "raeucherkammer";
 export const LOCATION_STUB_NAME = "Die alte Räucherkammer";
 

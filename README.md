@@ -331,7 +331,6 @@ strukturierten Felder unter `properties` und der Text als ein String unter
 Sie ist die Referenz für Callouts und die einzige Quelle für Tests und E2E;
 die Bodies werden deshalb nie umformatiert.
 
-`grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu (siehe
-`docs/DEPLOYMENT.md` Abschnitt 2b): es liest `<dir>/<kampagne>/*.json` und
+`grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu: es liest `<dir>/<kampagne>/*.json` und
 schreibt die Einträge über die Store-Schicht in eine Datenbank. Der Server
 selbst seedet nichts — eine frische Instanz startet leer.
