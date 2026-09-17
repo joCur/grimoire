@@ -113,8 +113,8 @@ describe("seedCampaignMetaBase", () => {
 
 describe("prefillCampaignName", () => {
   test("a name that IS the id is the server's fallback, not an authored value", () => {
-    // The dialog must not propose the id as a name (issue #62: both endpoints
-    // synthesize it now) — the field starts empty, the id is the placeholder.
+    // The dialog must not propose the id as a name — both endpoints
+    // synthesize it, so the field starts empty and the id is the placeholder.
     expect(prefillCampaignName("beispiel", "beispiel")).toBe("");
     expect(prefillCampaignName("beispiel", undefined)).toBe("");
     expect(prefillCampaignName("beispiel", "Salzhafen")).toBe("Salzhafen");

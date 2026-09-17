@@ -1,9 +1,8 @@
-// Generator pipeline tests. Since the cutover they run
-// against a DATABASE seeded from the example campaign, and the apply step
-// writes ROWS — so "was it written?" is asked through the API, never off disk.
-// The database is seeded ONCE for the whole file (not per case): several
-// cases build on what an earlier one applied (a conflict needs an existing
-// entity), exactly as the shared temp copy used to allow.
+// Generator pipeline tests. They run against a DATABASE seeded from the
+// example campaign, and the apply step writes ROWS — so "was it written?" is
+// asked through the API. The database is seeded ONCE for the whole file (not
+// per case): several cases build on what an earlier one applied (a conflict
+// needs an existing entity).
 //
 // No real LLM and no ANTHROPIC_API_KEY: a FakeProvider with scripted raw
 // replies is injected via setProviderForTests(). It records every call, so
@@ -16,14 +15,14 @@
 //
 // The run is a background job, so the pipeline tests go
 // through `generate()`: POST /generate (202), poll the job in-process, then
-// answer like the old synchronous endpoint did. The job endpoints
+// read the answer off the finished job. The job endpoints
 // themselves (lifecycle, 409, drafts, apply cleanup, restart) have their own
 // describe block at the end; a FakeProvider that waits on a manual gate
 // makes "running" observable without a single timer.
 //
-// The job is a ROW, so a "restart" is no longer "drop the
-// Map": it is `failInterruptedJobs()` — literally what the boot runs — over
-// the same database. That is why the restart cases below call it directly.
+// The job is a ROW, so a "restart" is `failInterruptedJobs()` — literally
+// what the boot runs — over the same database. That is why the restart cases
+// below call it directly.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import type { EntryResponse, GenerateJob, GenerateResult, GenerateUsage } from "@grimoire/shared";
@@ -47,9 +46,9 @@ import { PipelineFake, entryReply, type ScriptedReply } from "./support/pipeline
 import { entriesUrl } from "./support/urls";
 
 /**
- * Whether an entity is there: the address resolves through GET /entry. That
- * is the successor of the `stat()` this file used — a draft that was applied
- * is a ROW, and the only thing that matters is that the app can open it.
+ * Whether an entity is there: the address resolves through GET /entry. A
+ * draft that was applied is a ROW, and the only thing that matters is that
+ * the app can open it.
  */
 async function exists(rel: string): Promise<boolean> {
   const res = await app.request(entriesUrl("beispiel", rel));
@@ -157,7 +156,7 @@ function sceneMarkdown(over: { status?: string; npcs?: string; callout?: string 
 
 /**
  * The same scene under its own ID. Needed wherever a case applies a SECOND
- * scene: the id is the primary key since the cutover, so reusing
+ * scene: the id is the primary key, so reusing
  * `treffen-am-kai` would be a conflict rather than a fresh draft.
  */
 function sceneWithId(id: string): string {
@@ -243,9 +242,9 @@ function reply(over: ReplyOver = {}): string {
 }
 
 /**
- * The PO's production reply: an English explainer paragraph, a
- * blank line, then the JSON object. Valid JSON the old whole-text parse
- * rejected — three correction turns for a usable answer.
+ * The PO's production reply: an English explainer paragraph, a blank line,
+ * then the JSON object — valid JSON that only a parse which EXTRACTS the
+ * object can read.
  */
 function proseThenJson(json: string): string {
   return [
@@ -511,8 +510,8 @@ describe("POST /api/campaigns/:campaign/generate", () => {
   // --- the id is the model's ONE addressing decision ------------------------
   //
   // The shared parser degrades a missing `id` to the address's last segment,
-  // and the validation used to parse the reply under its own PREVIEW LABEL —
-  // so an NPC reply with no `id` inherited the id `npc` and was written to
+  // so a reply parsed under its own preview label would silently inherit that
+  // label as its id — an NPC reply with no `id` would be written to
   // `npcs/npc`. A missing id has to be the error it is.
 
   test("a scene without an id triggers a correction turn that says the id is missing", async () => {
@@ -643,7 +642,7 @@ describe("POST /api/campaigns/:campaign/generate", () => {
   });
 
   test("422 with the remaining errors after 2 correction turns", async () => {
-    // Two turns is the MAXIMUM, not the default any more.
+    // Two turns is the MAXIMUM, not the default.
     process.env.LLM_CORRECTION_TURNS = "2";
     // `entries: []` on purpose: the run then has exactly ONE part, so „every
     // part failed" is what the 422 of this case is about. A run with a
@@ -910,7 +909,7 @@ describe("POST /api/campaigns/:campaign/generate", () => {
   });
 
   test("a scene id that is no kebab slug is a validation error", async () => {
-    // The model names no address any more — the `id` is all it decides, so
+    // The model names no address — the `id` is all it decides, so
     // that is what the validation is about.
     const bad = reply({
       scenes: [{ content: sceneMarkdown().replace("id: treffen-am-kai", "id: Treffen Am Kai") }],
@@ -1057,10 +1056,7 @@ describe("POST /api/campaigns/:campaign/generate", () => {
       (await generate({ ...generateBody, chapter: "npcs", newChapter: true }))
         .status,
     ).toBe(404);
-    // The file era also refused `chapter: "glossary"` here, because a
-    // FILE of that name existed where the directory would go. There is no
-    // file tree left to collide with, so that case is gone — what still
-    // guards the chapter id is the reserved-name check above and the
+    // What guards the chapter id is the reserved-name check above and the
     // traversal check below.
     // traversal stays a 400, and the flag itself is type-checked
     expect(
@@ -1141,7 +1137,7 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
     const existing = "01-salzhafen/lighthouse-arrival";
     const before = await read("01-salzhafen/leuchtturm/lighthouse-arrival");
     const fresh = "01-salzhafen/ganz-neu";
-    // The free draft needs its own ID, not just its own file name: two
+    // The free draft needs its own ID, not just its own address: two
     // entities cannot share an id, so an id already in use would make this
     // one a conflict as well.
     const freshMarkdown = sceneWithId("ganz-neu");
@@ -1183,9 +1179,9 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
 
   test("an EMPTY id degrades to the file name, as the parser always did", async () => {
     // `id: ""` never reaches the store as an empty key: shared/parse.ts falls
-    // a missing or empty id back to the file stem, which is the only stable
-    // identity such a draft has. So this is addressable and applies — the
-    // guard above is about ids that are present and unusable.
+    // a missing or empty id back to the address's last segment, the only
+    // stable identity such a draft has. So this is addressable and applies —
+    // the guard above is about ids that are present and unusable.
     const rel = "01-salzhafen/leere-id";
     const res = await postJson("/api/campaigns/beispiel/generate/apply", {
       scenes: [{ path: rel, markdown: sceneMarkdown().replace("id: treffen-am-kai", 'id: ""') }],
@@ -1194,10 +1190,10 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
     expect((await read("01-salzhafen/leuchtturm/leere-id")).properties.id).toBe("leere-id");
   });
 
-  // There is no extension rule any more: an address carries
-  // none, and what a draft is ADDRESSED as comes from its `id` anyway
-  // (assertDraftId). So the cases below are the ones that are still unsafe:
-  // traversal, absolute, a reserved directory, the wrong depth.
+  // An address carries no extension, and what a draft is ADDRESSED as comes
+  // from its `id` anyway (assertDraftId). So the cases below are the ones
+  // that are unsafe: traversal, absolute, a reserved directory, the wrong
+  // depth.
   test("400 on path traversal and unsafe targets — nothing written", async () => {
     const md = sceneMarkdown();
     const bad = [
@@ -1207,7 +1203,7 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
       { scenes: [{ path: "toplevel.md", markdown: md }] }, // not inside a chapter
       { scenes: [{ path: "npcs/evil", markdown: md }] }, // reserved dir as scene
       { scenes: [{ path: "01-salzhafen/a/b/zu-tief", markdown: md }] }, // too deep
-      // A GROUP segment is no longer the client's to pick: the
+      // A GROUP segment is not the client's to pick: the
       // group is the draft's `location`, so a three-segment target is a
       // client naming a grouping of its own.
       { scenes: [{ path: "01-salzhafen/hafen/gruppe-selbst-gewaehlt", markdown: md }] },
@@ -1372,7 +1368,7 @@ describe("POST /api/campaigns/:campaign/generate/apply", () => {
       chapterTitle: "Kapitel 3: Die Schmugglerbucht",
     });
     expect(res.status).toBe(200);
-    // the chapter file comes first — the drafts live inside it
+    // the chapter entry comes first — the drafts live inside it
     expect(await res.json()).toEqual({
       written: [chapterRel, `${chapter}/leuchtturm/erste-szene`],
     });
@@ -1536,7 +1532,7 @@ describe("generate jobs", () => {
 
   test("a failed run keeps the 422 body — rawReply, usage, validationErrors", async () => {
     // One part only (`entries: []`), and it fails: then the whole run failed
-    // and answers exactly the 422 the synchronous endpoint used to answer.
+    // and the 422 carries rawReply, usage and validationErrors.
     const bad = reply({
       scenes: [{ content: sceneMarkdown({ status: "ready" }) }],
       entries: [],
@@ -1631,8 +1627,8 @@ describe("generate jobs", () => {
     useFake([jobReply(scenePath)]);
     await generate(generateBody);
 
-    // a path that is not part of the result (the review patch used to store
-    // any key it was handed)
+    // a path that is not part of the result: the review patch stores only
+    // keys the result knows
     res = await putDraftEdit("beispiel", "01-salzhafen/fremd", edited);
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("unknown draft path");
@@ -1842,12 +1838,12 @@ describe("generate jobs", () => {
     expect(job.error!.body.error).toBe(UNREADABLE_PAYLOAD_MESSAGE);
   });
 
-  // --- a row written BEFORE the address upgrade -----------------------------
+  // --- a persisted row with `.md` draft paths -------------------------------
 
   test("a persisted job with legacy .md draft paths is normalized on the way out", async () => {
-    // The row an old process left behind: paths WITH the file suffix, in the
-    // result AND as the draftEdits key. Written directly — no old build to
-    // run — which is exactly the situation after the deploy.
+    // A persisted job whose paths carry the `.md` suffix, in the result AND
+    // as the draftEdits key. The row is written directly, because the API
+    // itself never produces that shape.
     const legacyScene = "01-salzhafen/legacy-scene.md";
     const legacyNpc = "npcs/legacy-npc.md";
     const npcMarkdown = [
@@ -1887,8 +1883,7 @@ describe("generate jobs", () => {
     expect(job.result!.scenes[0]!.path).toBe("01-salzhafen/legacy-scene");
     expect(Object.keys(job.draftEdits)).toEqual(["npcs/legacy-npc"]);
 
-    // …and the edit store accepts the normalized path (it used to 400 on
-    // both spellings: the stored one is unknown, the new one had no draft).
+    // …and the edit store accepts the normalized path.
     expect((await putDraftEdit("beispiel", "npcs/legacy-npc", npcMarkdown)).status).toBe(200);
 
     // The point of all of it: "Übernehmen" works, under the new address.
@@ -1901,13 +1896,13 @@ describe("generate jobs", () => {
     expect(await exists("npcs/legacy-npc")).toBe(true);
   });
 
-  // --- a row written BEFORE the group cutover -------------------------------
+  // --- a persisted row with a three-segment scene path ----------------------
 
   test("a persisted job with a three-segment scene draft path is collapsed", async () => {
-    // The row an earlier process left behind: the scene draft's path carries
-    // the GROUP segment the model used to choose. `applySceneTarget` answers
-    // 400 for that shape now, so without this normalization the job could
-    // never be applied again — it would sit there for good.
+    // A persisted job whose scene draft path carries a GROUP segment.
+    // `applySceneTarget` answers 400 for that shape, so without this
+    // normalization the job could never be applied again — it would sit
+    // there for good.
     const legacy = "01-salzhafen/hafen/legacy-grouped";
     const markdown = sceneWithId("legacy-grouped");
     const db = await getDb();
@@ -2114,7 +2109,7 @@ describe("campaign knowledge", () => {
    * A reply whose suggested entry is one the campaign does NOT have yet. The
    * database is shared by the whole file and the apply cases above already
    * wrote `npcs/grella`; the OUTLINE step refuses an entry
-   * that exists (proposing it again would mean a second file for the same
+   * that exists (proposing it again would mean a second entry for the same
    * reference key), so these cases bring their own.
    */
   const FRESH_NPC = "grella-vom-kai";
@@ -2162,7 +2157,7 @@ describe("campaign knowledge", () => {
     expect(knowledge).toContain("- Stilregel: Keine Würfelwerte im Read-Aloud.");
   });
 
-  // The NPC run's half of AK2 (knowledge travels, `[[slug]]` resolved) is in
+  // The NPC run's half of this (knowledge travels, `[[slug]]` resolved) is in
   // generate-npc.test.ts — it needs that file's harness.
 
   test("a draft that keeps the old spelling produces a hint with its position", async () => {

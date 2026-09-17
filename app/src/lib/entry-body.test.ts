@@ -1,7 +1,7 @@
-// Issue #15: the body write. What matters is the payload (the rev must be
-// the one of the file the DM was looking at) and the 409 path — the server
-// wrote NOTHING then, so the UI re-reads the file and the next attempt carries
-// the fresh rev, WITHOUT the editor losing the typed text.
+// The body write. What matters is the payload (the rev must be the one of the
+// entry the DM was looking at) and the 409 path — the server wrote NOTHING
+// then, so the UI re-reads the entry and the next attempt carries the fresh
+// rev, WITHOUT the editor losing the typed text.
 
 import type { EntryResponse } from "@grimoire/shared/types";
 import { afterEach, describe, expect, test } from "bun:test";
@@ -72,7 +72,7 @@ describe("writeEntryBody", () => {
     const result = await writeEntryBody("beispiel", SCENE, "Mein Text.\n", 111);
 
     expect(result.ok).toBe(false);
-    // The re-read file rides along — the view seeds it into the cache, which
+    // The re-read entry rides along — the view seeds it into the cache, which
     // is what hands the next attempt its rev.
     expect(result.file?.rev).toBe(999);
     expect(calls).toHaveLength(2);
@@ -138,7 +138,7 @@ describe("shouldAdvanceBase", () => {
   const base = fileAt(111, "## Flow\n\nText.\n");
 
   test("a body-neutral new version is adopted — the DM's own status patch", () => {
-    // The status regler stays usable next to the open editor: its
+    // The status control stays usable next to the open editor: its
     // PATCH bumps the rev and leaves the body alone, so the next „Speichern"
     // must not answer with „Inzwischen geändert".
     expect(shouldAdvanceBase(base, fileAt(222, base.body))).toBe(true);
@@ -171,8 +171,8 @@ describe("canEditEntryBody", () => {
   });
 
   test("append-only files and the campaign metadata file are not", () => {
-    // Logs/inbox are append-only by design; `campaign` has its own
-    // „Bearbeiten" for name/description.
+    // Logs/inbox are append-only by design; `campaign` has its own edit
+    // action for name/description.
     expect(canEditEntryBody("session")).toBe(false);
     expect(canEditEntryBody("inbox")).toBe(false);
     expect(canEditEntryBody("campaign")).toBe(false);

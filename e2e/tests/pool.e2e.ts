@@ -19,10 +19,10 @@ import { expect, test, todaySessionId, type SeedEntry } from "../support/test";
  * How far the topbar's content sticks out of the row, in pixels (0 = it fits).
  *
  * Measured as "right edge of the rightmost child vs. the row's CONTENT edge",
- * not as `header.scrollWidth - header.clientWidth` (a CI finding):
+ * not as `header.scrollWidth - header.clientWidth`:
  * an overflowing flex item first eats the row's 24px right padding, and
- * `scrollWidth` does not grow for that at all — the old metric reported a
- * clean row while the session chip was already 10px past the padding and,
+ * `scrollWidth` does not grow for that at all — that metric reports a
+ * clean row while the session chip is already 10px past the padding and,
  * further out, past the viewport. The page's own horizontal scroll is
  * reported alongside, since that is the other half of "does not overflow".
  */
@@ -48,11 +48,11 @@ async function topbarOverflow(page: Page) {
 
 /**
  * Stands in for WIDER GLYPHS than the machine running the test happens to
- * have. Linux CI renders every label ~2px wider than macOS does, which is how
- * the row came to overflow on CI only — twice. `letter-spacing`
+ * have. Linux CI renders every label ~2px wider than macOS does, which is
+ * enough to overflow the row on CI alone. `letter-spacing`
  * on the row reproduces that class of difference locally and scales it, so
  * the guard below asserts that the row survives 1px of it: far more than the
- * ~0.6px equivalent of the observed CI delta, at every width.
+ * ~0.6px equivalent of that delta, at every width.
  */
 async function widenGlyphs(page: Page, spacing: string) {
   await page.addStyleTag({
@@ -132,8 +132,8 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
     name: /Kapitel 1: Der Leuchtturm von Salzhafen/,
   });
   await expect(chapter).toBeVisible();
-  // The chapter is a HEADING inside that trigger: the
-  // outline used to jump from the pool's h1 straight to the group h3s.
+  // The chapter is a HEADING inside that trigger, so the outline does not
+  // jump from the pool's h1 straight to the group h3s.
   await expect(
     chapter.getByRole("heading", { level: 2, name: "Kapitel 1: Der Leuchtturm von Salzhafen" }),
   ).toBeVisible();
@@ -224,8 +224,8 @@ test("the topbar trio navigates without anything in the left block moving", asyn
    * The whole left block of the topbar, as text and as geometry. EVERY
    * campaign-scoped view must agree on every bit of it except which entry is
    * marked: the chrome is global and stable, the trio is a persistent section
-   * nav, and no view brings a breadcrumb of its own any more (a PO
-   * rework). So nothing appears, disappears or shifts while navigating.
+   * nav, and no view brings a breadcrumb of its own. So nothing appears,
+   * disappears or shifts while navigating.
    */
   const leftBlock = async () => ({
     campaign: await label.textContent(),
@@ -258,9 +258,9 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     page.getByRole("banner").getByText(/Der Leuchtturm von Salzhafen/),
   ).toHaveCount(1);
 
-  // The pool carries a „Nachschlagen" line again (PO feedback) — it is
-  // where the two campaign-content pages are reached from on
-  // the desktop. What matters HERE is that they did not move into the TOPBAR:
+  // The pool carries a „Nachschlagen" line — it is where the two
+  // campaign-content pages are reached from on
+  // the desktop. What matters HERE is that they are not in the TOPBAR:
   // the trio above is still exactly Kapitel/NPCs/Orte, which is what the rest
   // of this test measures.
   await expect(
@@ -290,7 +290,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   await expect(current).toHaveText("NPCs");
   await assertChromeIsStable(onPool);
 
-  // --- file views: same chrome, section marking follows the entity ----------
+  // --- entry views: same chrome, section marking follows the entity ---------
   // A scene belongs to Kapitel; its hierarchy lives in the page's context
   // line, not in the topbar.
   await page.goto("/campaigns/beispiel/entries/01-salzhafen/leuchtturm/lighthouse-arrival");
@@ -300,8 +300,8 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   await expect(current).toHaveText("Kapitel");
   await assertChromeIsStable(onPool);
 
-  // An NPC belongs to NPCs — whichever chapter happens to mention it. The old
-  // breadcrumb claimed a chapter path here, which was plain misleading for an
+  // An NPC belongs to NPCs — whichever chapter happens to mention it. A
+  // breadcrumb claiming a chapter path here would be plain misleading for an
   // NPC opened from the NPC list.
   await page.goto("/campaigns/beispiel/entries/npcs/fenn");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fenn");
@@ -342,10 +342,10 @@ test("the topbar trio navigates without anything in the left block moving", asyn
 
 /**
  * The gear is part of the global chrome, so it must not undress the bar it
- * sits on (PO feedback). `/settings` used to count as a campaign-LESS
- * route, which left the topbar with the wordmark alone: switcher, nav trio,
- * search and session chip all vanished the moment the DM pressed the gear —
- * exactly the "nothing appears or disappears between views" rule the chrome
+ * sits on. Counting `/settings` as a campaign-LESS route would leave the
+ * topbar with the wordmark alone: switcher, nav trio, search and session chip
+ * gone the moment the DM presses the gear — against the "nothing appears or
+ * disappears between views" rule the chrome
  * exists for (components/Topbar.tsx). So this is the stability check of the
  * trio test above, run across the one route that is not campaign-scoped: the
  * left block and the session chip have to come out BYTE-EQUAL, and the only
@@ -425,11 +425,11 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
 });
 
 /**
- * The topbar must not overflow at ANY width from 390px up. The
- * medium widths were the broken ones — switcher, live pill, timer, Pause,
- * verwerfen, beenden, search and Generator in one 56px row simply ran over.
- * With the session consolidated into ONE chip (PO feedback) the
- * row fits; this test is the guard that keeps it fitting.
+ * The topbar must not overflow at ANY width from 390px up. The medium widths
+ * are the tight ones — switcher, live pill, timer, Pause, verwerfen, beenden,
+ * search and Generator in one 56px row would run over. With the session
+ * consolidated into ONE chip the row fits; this test is the guard that keeps
+ * it fitting.
  */
 test.describe("with a session running since 19:30", () => {
   test.use({
@@ -490,9 +490,9 @@ test.describe("with a session running since 19:30", () => {
  * The FULLEST row there is — and the one the guard above never saw: with NO
  * session running the chip carries the long "Session starten" label instead
  * of the clock, and the example campaign's last session leaves the
- * "Nachbereitung · N offen" link on the row next to generator and gear
- * (a CI finding: at 768 and at 1024 that row overflowed by 41 and
- * 10px in plain macOS rendering, invisible to the old scrollWidth metric).
+ * "Nachbereitung · N offen" link on the row next to generator and gear. At
+ * 768 and at 1024 that row is tightest: a regression there overflows by 41
+ * and 10px in plain macOS rendering, invisible to a `scrollWidth` metric.
  */
 test("the topbar does not overflow at medium widths with no session running", async ({
   page,
@@ -505,7 +505,7 @@ test("the topbar does not overflow at medium widths with no session running", as
         page.getByRole("button", { name: "Session starten" }),
       ).toBeVisible();
       // The review link is part of THIS row on purpose — it is the widest
-      // optional element, and the reason the row ran over.
+      // optional element, and the one that runs the row over.
       await expect(
         page.getByRole("link", { name: /Nachbereitung/ }),
       ).toBeVisible();
@@ -525,9 +525,9 @@ test("the topbar does not overflow at medium widths with no session running", as
 /**
  * The generator chip's fullest state: a pipelined run that is
  * still going AND has parts the DM already accepted — so the chip carries its
- * pulsing dot and the „N von M übernommen" progress at the same time. That
- * pair was never on the row before this ticket (a run was either running or
- * reviewable, never both), so the guard above never saw it.
+ * pulsing dot and the „N von M übernommen" progress at the same time. Only a
+ * pipelined run puts that pair on the row — otherwise a run is either running
+ * or reviewable, never both — so the guard above never sees it.
  */
 test("the topbar does not overflow while a pipelined run fills up", async ({
   page,
@@ -558,7 +558,7 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   // Accepting one part while the run is still running is what fills
-  // `review.written` — and it is the endpoint half of AK2.
+  // `review.written` — the endpoint half of accepting during a run.
   const current = await job();
   expect(current.status).toBe("running");
   await api.send("POST", `campaigns/beispiel/generate/job/${started.jobId}/accept`, {
@@ -715,11 +715,11 @@ test("the campaign reading view carries the same edit action", async ({
 test("the pool header is ONE row: the actions right beside the title, never under it", async ({
   page,
 }) => {
-  // „Kapitel anlegen" sat next to „Bearbeiten" inside a wrapping
-  // row, and on a campaign with a normal-length name the pair dropped onto a
-  // second line, right-aligned under the title (PO finding). The
-  // actions share the title's line again — checked at the widths a desktop
-  // pool is actually read at, and by geometry rather than by class names.
+  // „Kapitel anlegen" and „Bearbeiten" must not sit in a wrapping row: on a
+  // campaign with a normal-length name the pair would drop onto a second
+  // line, right-aligned under the title. The actions share the title's
+  // line — checked at the widths a desktop pool is actually read at, and by
+  // geometry rather than by class names.
   for (const width of [1024, 1280, 1536]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/campaigns/beispiel");
@@ -766,10 +766,10 @@ test("the pool header is ONE row: the actions right beside the title, never unde
 
 // Critical path 1: a chapter is editable where it is read.
 //
-// The gap this closes: „Kapitel anlegen" was the only moment a chapter's title
-// and goal could ever be said. A chapter created without a goal could not get
-// one, and a chapter a generator run created is called by its slug — the
-// overview listed a heading nobody could correct. Both halves go through the
+// „Kapitel anlegen" is not the only moment a chapter's title and goal can be
+// said: a chapter created without a goal gets one here, and a chapter a
+// generator run created under its slug is renamed here — otherwise the
+// overview would list a heading nobody can correct. Both halves go through the
 // documented endpoints with their rev guard: the title is a PROPERTY (the
 // shared properties dialog), the goal is the TEXT.
 test("a chapter's title and goal are editable from the chapter overview", async ({

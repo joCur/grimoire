@@ -1,5 +1,5 @@
-// Critical path 6, the half issue #102 adds: a scene run is a PIPELINE, so it
-// does not stand or fall as one answer.
+// Critical path 6, one level deeper: a scene run is a PIPELINE, so it does
+// not stand or fall as one answer.
 //
 // The claims, in the order a DM meets them:
 //
@@ -16,7 +16,7 @@
 //
 // Nothing is mocked but the model: the browser drives the real app, the real
 // server calls the real stub endpoint over the real provider, and the stub
-// only decides WHICH canned document comes back for which part
+// only decides WHICH canned reply comes back for which part
 // (e2e/fixtures/stub-llm.ts).
 
 import { mkdir, rm } from "node:fs/promises";
@@ -63,15 +63,15 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
     await expect(page.getByRole("heading", { level: 2, name: scene.title })).toBeVisible();
   }
   // The failed part says what happened and offers ONE button — the outline is
-  // nowhere to be seen, because the DM never gets to edit it (PO, 15.09.).
+  // nowhere to be seen, because the DM never gets to edit it.
   const failedTitle = THREE_SCENES.find((s) => s.id === FAILING_SCENE_ID)!.title;
   const failedCard = page.locator("section").filter({ hasText: failedTitle }).last();
   await expect(failedCard).toContainText("nicht geschrieben");
   await expect(failedCard.getByText('"status" must be "draft"', { exact: false })).toBeVisible();
-  // The cost of the whole run is one quiet line, counting CALLS (AK5).
+  // The cost of the whole run is one quiet line, counting CALLS.
   await expect(page.getByText(/~[\d.]+ Tokens · \d+ Aufrufe?/)).toBeVisible();
 
-  // --- (2) a finished part is acceptable while one is still open (AK2) ----
+  // --- (2) a finished part is acceptable while one is still open ----------
   const firstId = THREE_SCENES[0].id;
   expect(await api.exists(draftPath(firstId))).toBe(false);
   await page
@@ -87,10 +87,10 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
 
   // --- (3) „Erneut versuchen“ restarts THAT part only ---------------------
   await failedCard.getByRole("button", { name: "Erneut versuchen" }).click();
-  // The focus went with the click (issue #102 review): the button unmounts
-  // the moment the part runs again, and the status card itself is replaced by
-  // the draft card the moment the part is done — so the focus FOLLOWS the
-  // part across both swaps instead of falling to `body`.
+  // The focus went with the click: the button unmounts the moment the part
+  // runs again, and the status card itself is replaced by the draft card the
+  // moment the part is done — so the focus FOLLOWS the part across both swaps
+  // instead of falling to `body`.
   const retriedCard = page
     .locator("[tabindex='-1']")
     .filter({ hasText: failedTitle })
@@ -168,11 +168,11 @@ test("the review replaces the spinner on a POLL, without a reload", async ({
   page,
   api,
 }, testInfo) => {
-  // The regression this claim exists for (issue #102 review): every part
-  // answered so fast that the review was the FIRST thing the page ever
-  // rendered, so no test ever watched the spinner turn into it. With late
-  // parts the browser really sees „Entwürfe werden generiert …" first and the
-  // switch has to happen on a polled job — never on a reload.
+  // The regression this claim exists for: every part answers so fast that the
+  // review can be the FIRST thing the page ever renders, so nothing would
+  // watch the spinner turn into it. With late parts the browser really sees
+  // „Entwürfe werden generiert …" first and the switch has to happen on a
+  // polled job — never on a reload.
   await page.goto("/campaigns/beispiel/generate");
   await page
     .getByLabel("Quelltext (EN)")
@@ -209,11 +209,11 @@ test("a FAILED part alone is already the review (no empty page)", async ({
   page,
   api,
 }, testInfo) => {
-  // The other half of the same regression (issue #102 review): the parts are
-  // the review's spine, the drafts only fill it in. While the two good parts
-  // are still late, the failed one is the only thing there is — and it is
-  // something the DM can act on. Gating the review on a RESULT rendered this
-  // state as an empty page that only appeared on a reload.
+  // The other half of the same regression: the parts are the review's spine,
+  // the drafts only fill it in. While the two good parts are still late, the
+  // failed one is the only thing there is — and it is something the DM can act
+  // on. Gating the review on a RESULT would render this state as an empty page
+  // that only appears on a reload.
   await page.goto("/campaigns/beispiel/generate");
   await page
     .getByLabel("Quelltext (EN)")

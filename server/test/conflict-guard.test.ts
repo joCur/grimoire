@@ -1,31 +1,23 @@
-// The conflict guard — the issue #37 regression, demanded by issue #57 AK2.
+// The conflict guard: a stale `rev` must be rejected, never silently applied.
 //
-// WHAT WAS BROKEN. The optimistic-concurrency token used to be the file's
-// rev in milliseconds, and on the filesystems Grimoire runs on that rev
-// is coarse: two writes that land in the SAME clock second read the same
-// value. So the sequence
+// The optimistic-concurrency token is the ROW's `rev` (store/render.ts
+// rule 3): an integer that starts at 1 and is incremented by every write
+// inside the write's own transaction. It has nothing to do with wall-clock
+// time, so two writes that land in the SAME clock second cannot collide:
 //
 //     A reads the scene  -> rev = T
 //     B reads the scene  -> rev = T
-//     A writes with T    -> ok, file's rev is still T (same second)
-//     B writes with T    -> guard sees T == T -> ok, A's change is GONE
+//     A writes with T    -> ok, the row's rev is now T + 1
+//     B writes with T    -> 409, carrying the CURRENT rev
 //
-// went through silently: the second write was accepted, the first one's
-// change was overwritten, and neither the DM nor the app ever saw a 409. Two
-// browser tabs, or a fast double-save, were enough. A test could not even
-// catch it reliably, because it depended on how the clock fell.
+// That is what this file pins. A write against a spent `rev` is a 409 that
+// carries the rev the app needs to reload and retry, and the loser's change
+// never lands — not through PATCH /properties, not through PUT /entry, and
+// not across the two, because properties and body are one row and therefore
+// one guard.
 //
-// WHAT FIXES IT. The token is the ROW's `rev` now (store/render.ts rule 3):
-// an integer that starts at 1 and is incremented by every write inside the
-// write's own transaction. It has nothing to do with wall-clock time, so it
-// cannot collide — no matter how close together the two writes are. The
-// second write against a spent `rev` is a 409 that carries the CURRENT rev,
-// which is exactly what the app needs to reload and retry.
-//
-// That is what this file pins, with the clock deliberately FROZEN via
-// setNow(): under the old guard a frozen clock was the worst case; under the
-// new one it is irrelevant, and a test that stops being about timing is the
-// point.
+// The clock is deliberately FROZEN via setNow(): the guard is independent of
+// wall-clock time, and a test that is not about timing is the point.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { EntryResponse } from "@grimoire/shared";
@@ -65,7 +57,7 @@ interface Conflict {
 
 beforeEach(async () => {
   // FROZEN — every request in this file happens in the same clock second, the
-  // situation the rev guard could not tell apart.
+  // situation the guard must still tell apart.
   setNow(() => new Date(2026, 7, 19, 21, 5, 30));
   await seedStore();
 });
@@ -93,8 +85,7 @@ describe("two writes with the same guard token, same clock second", () => {
     // The 409 carries the CURRENT rev, so the app can reload and retry.
     expect(conflict.rev).toBe(won.rev);
 
-    // The whole point: the second write did NOT land — this is the assertion
-    // that failed with the rev guard.
+    // The whole point: the second write did NOT land.
     const after = await getFile(SCENE);
     expect(after.properties.status).toBe("played");
     expect(after.rev).toBe(won.rev);
@@ -134,10 +125,10 @@ describe("two writes with the same guard token, same clock second", () => {
 
   test("fired together: exactly one lands, whichever the runtime schedules first", async () => {
     // The sequential cases above are the deterministic contract. This one is
-    // the shape the bug actually had in the field — two requests in flight at
-    // once — and it asserts the property that matters without pinning an
-    // order: ONE 200, ONE 409 whose token is the winner's, and a row that
-    // shows exactly the winner's value.
+    // the concurrent shape — two requests in flight at once — and it asserts
+    // the property that matters without pinning an order: ONE 200, ONE 409
+    // whose token is the winner's, and a row that shows exactly the winner's
+    // value.
     const read = await getFile(SCENE);
     const responses = await Promise.all([
       patchReq(read.rev, { status: "played" }),

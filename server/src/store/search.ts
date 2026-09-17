@@ -1,11 +1,10 @@
 // GET /api/campaigns/:campaign/search on FTS5.
 //
-// Fuse.js is gone: the index is now `search_fts`, a real full-text index
-// maintained by the store (./fts). What did NOT change is the response —
-// `{ results: SearchResult[] }`, max 20, same fields, `score` still "0 is a
-// perfect match, values grow toward 1".
+// The index is `search_fts`, a real full-text index maintained by the store
+// (./fts). The response is `{ results: SearchResult[] }`, max 20, with
+// `score` meaning "0 is a perfect match, values grow toward 1".
 //
-// The two properties the reference queries of issue #57 AK5 depend on:
+// The two properties the reference queries depend on:
 //
 //   * DIACRITIC FOLDING — the tokenizer is `unicode61 remove_diacritics 2`
 //     (see the FTS migration), so "leucht" finds "Leuchtturm" and "muller"
@@ -17,8 +16,7 @@
 //     option (planning section 8).
 //
 // Ranking is bm25 with the column weights of the migration
-// (title 10, ref 6, tags 4, body 1) — the same priorities the Fuse key
-// weights expressed.
+// (title 10, ref 6, tags 4, body 1).
 
 import { sql } from "drizzle-orm";
 import type { EntityKind, SearchResult } from "@grimoire/shared";

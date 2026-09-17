@@ -1,23 +1,23 @@
-// Critical path 9, second spec: the BLOCK COMPOSER — since that
-// slice „Bearbeiten" no longer opens a wall of markdown but the scene as a list
-// of typed cards, and the raw textarea of issue #39 is one click away as the
-// fallback („Markdown"). `tests/entry-edit.e2e.ts` owns that fallback and the whole
-// save/409/discard machinery seen from it; this spec owns the composer.
+// Critical path 9, second spec: the BLOCK COMPOSER — „Bearbeiten" opens the
+// scene as a list of typed cards rather than a wall of markdown, and the raw
+// textarea is one click away as the fallback („Markdown").
+// `tests/entry-edit.e2e.ts` owns that fallback and the whole save/409/discard
+// machinery seen from it; this spec owns the composer.
 //
-// What has to hold, and why every test below reads the file back through the API:
+// What has to hold, and why every test below reads the entry back through the API:
 //
-//   * OPENING AND CLOSING A FILE MUST NOT COST A BYTE. The composer parses the
+//   * OPENING AND CLOSING AN ENTRY MUST NOT COST A BYTE. The composer parses the
 //     body and serializes it again, so the round trip is the one thing that
 //     could quietly reformat a hand-written scene. „Speichern" stays disabled
 //     after a Blöcke → Roh → Blöcke detour, and every save is asserted as
 //     „this one block's bytes changed, all the others did not" — never as a
-//     `toContain` on the new text, which would pass on a reflowed file too.
+//     `toContain` on the new text, which would pass on a reflowed body too.
 //   * THE FORMAT DEGRADES (README). An unknown callout and a markdown table are
 //     not modelled by the composer; they must show up as cards, survive a save
 //     of a NEIGHBOURING block byte for byte, and never raise an error.
 //   * NOTHING NEW IN THE LOSS DEPARTMENT. A 409 in „Blöcke" keeps the draft AND
 //     the open form, „Abbrechen" asks before it throws work away, and the
-//     phone-sized layout (the whole point of the ticket) can do all of it.
+//     phone-sized layout can do all of it.
 //
 // Block cards are addressed through their controls' accessible names —
 // „Vorlesetext 3 bearbeiten", „Probe 4 nach unten" — because that is the only
@@ -56,7 +56,7 @@ async function split(api: Api, rel: string) {
 }
 
 /**
- * The verbatim markdown of ONE block of a file: the run of lines that starts
+ * The verbatim markdown of ONE block of a body: the run of lines that starts
  * with the first line beginning with `head`, up to (not including) the next
  * blank line. „Byte-identical" in the assertions below means exactly this
  * string — which also catches a re-wrapped paragraph, not just a lost one.
@@ -75,7 +75,7 @@ function composer(page: Page): Locator {
   return page.getByRole("region", { name: /^Blöcke: / });
 }
 
-/** The raw textarea of „Markdown" (EntryBodyEditor labels it with the file's path). */
+/** The raw textarea of „Markdown" (EntryBodyEditor labels it with the entry's address). */
 function rawTextarea(page: Page): Locator {
   return page.getByRole("textbox", { name: /^Markdown-Text von/ });
 }
@@ -144,7 +144,7 @@ test("Bearbeiten opens the block composer — one card per block, no textarea", 
     "false",
   );
 
-  // One card per block of the file, in document order, labelled with the same
+  // One card per block of the body, in document order, labelled with the same
   // vocabulary the reading view uses.
   expect(await blockNames(page)).toEqual(SCENE_BLOCKS);
   // A „+" before, between and after them: six blocks, seven slots.
@@ -177,8 +177,8 @@ test("Blöcke → Roh → Blöcke is not a change — Speichern stays disabled",
   const save = page.getByRole("button", { name: "Speichern" });
   await expect(save).toBeDisabled();
 
-  // Blöcke → Roh: the serialized block list, byte-identical to the body on
-  // disk. This is the phase-1 invariant seen from outside the app.
+  // Blöcke → Roh: the serialized block list, byte-identical to the stored
+  // body — the round-trip invariant, seen from outside the app.
   await page.getByRole("button", { name: "Markdown", exact: true }).click();
   await expect(composer(page)).toHaveCount(0);
   await expect(rawTextarea(page)).toHaveValue(before.body);
@@ -231,7 +231,7 @@ test("editing a Vorlesetext card writes THAT block and nothing else", async ({ p
   await expect(callout).toContainText(added);
 
   // On disk: the readaloud block gained ONE quoted line, and that is the whole
-  // diff — asserted as the full file, so a reflowed neighbour would fail here.
+  // diff — asserted as the full body, so a reflowed neighbour would fail here.
   await expect.poll(() => api.body(SCENE)).toContain(added);
   const after = await split(api, SCENE);
   expect(after.properties).toEqual(before.properties);
@@ -294,7 +294,7 @@ test("the + slot at the end creates a Beute block through the type picker", asyn
   await expect(loot).toContainText(lootText);
 
   // On disk: the markers the DM never typed, one blank line of separation, and
-  // the file's single trailing newline — everything before it untouched.
+  // the body's single trailing newline — everything before it untouched.
   await expect.poll(() => api.body(SCENE)).toContain("[!loot]");
   const after = await split(api, SCENE);
   expect(after.body).toBe(`${before.body}\n> [!loot] ${lootText}\n`);
@@ -308,8 +308,8 @@ test("⌄/⌃ reorder the blocks — the file follows, both blocks verbatim", as
   await page.goto(SCENE_URL);
   await page.getByRole("button", { name: "Bearbeiten" }).click();
 
-  // The ends of the list are dead — leaving it would mean leaving the document
-  // (or entering an If-section), which this slice does not do.
+  // The ends of the list are dead — leaving it would mean leaving the body's
+  // top level (or entering an If-section), which a move never does.
   await expect(card(page, "Überschrift 1").up).toBeDisabled();
   await expect(card(page, "Notiz 6").down).toBeDisabled();
 
@@ -329,7 +329,7 @@ test("⌄/⌃ reorder the blocks — the file follows, both blocks verbatim", as
   await expect(composer(page)).toHaveCount(0);
   expect(await calloutOrder(page)).toEqual(["readaloud", "secret", "check", "note"]);
 
-  // … and in the stored file the two blocks swapped places without either being
+  // … and in the stored body the two blocks swapped places without either being
   // re-rendered: the separator between them stayed where it was, too.
   const check = blockOf(before.body, "> [!check]");
   const secret = blockOf(before.body, "> [!secret]");
@@ -442,7 +442,7 @@ test("a ## heading typed into an If-child blocks the save until it is cleared", 
   await expect(page.getByText("Ein Block muss noch geklärt werden")).toBeVisible();
   const save = page.getByRole("button", { name: "Speichern" });
   await expect(save).toBeDisabled();
-  // The draft is allowed to be in this state, the FILE is not.
+  // The draft is allowed to be in this state, the STORED body is not.
   expect(await split(api, IF_SCENE)).toEqual(before);
 
   // One character deeper and the heading stays inside the branch: the hint
@@ -511,7 +511,7 @@ test("409 with a block form open: the message, the form and the typed text stay"
   // Nothing was written: the other writer's content stands, untouched.
   expect(await split(api, SCENE)).toEqual({ properties: before.properties, body: externalBody });
 
-  // The editor re-read the file, so the SAME click works now — deliberately on
+  // The editor re-read the entry, so the SAME click works now — deliberately on
   // top of the external body: the DM saw the message and decided.
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(composer(page)).toHaveCount(0);
@@ -687,8 +687,8 @@ test.describe("at 390px", () => {
     expect(await blockNames(page)).toEqual(SCENE_BLOCKS);
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
 
-    // Reordering is buttons, never drag & drop (AK 4 of the ticket), so it
-    // works by touch: down and back up, which leaves the draft where it was.
+    // Reordering is buttons, never drag & drop, so it works by touch: down
+    // and back up, which leaves the draft where it was.
     const save = page.getByRole("button", { name: "Speichern" });
     await card(page, "Text 2").down.click();
     expect(await blockNames(page)).toEqual([

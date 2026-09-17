@@ -9,8 +9,8 @@ import { dropStore, seedStore } from "./support/store";
 
 const originalEnv = process.env.GRIMOIRE_BUILD;
 
-// The boot imports nothing since issue #79, so the campaign this spec asks
-// for is seeded explicitly — the same call `grimoire seed` makes.
+// The boot imports nothing, so the campaign this spec asks for is seeded
+// explicitly — the same call `grimoire seed` makes.
 beforeAll(async () => {
   await seedStore();
 });

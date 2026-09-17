@@ -10,7 +10,7 @@
 //
 // Client state is exactly two things: the selected scene and which entity the
 // detail drawer shows. Aside cards therefore do NOT navigate here
-// — a click used to leave the live route and take the selected scene and the
+// — a click would leave the live route and take the selected scene and the
 // half-typed Schnellnotiz with it.
 // There is NO mobile live mode (UI-BRIEF §4) — below md the route shows a
 // quiet note with a link to the read view of the active scene instead.
@@ -101,21 +101,21 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   const scenes = chapter?.groups.flatMap((g) => g.scenes) ?? [];
   // The scene STATUS splits the plan: `played`/`dropped` scenes
   // drop out of "Geplant" into the collapsed "Gespielt" group below. The
-  // session checkmark is a different thing and stays on top of both (AK2).
+  // session checkmark is a different thing and stays on top of both.
   const nonContingency = scenes.filter((s) => s.type !== "contingency");
   const planned = nonContingency.filter((s) => !isSceneDone(s.status));
   const done = nonContingency.filter((s) => isSceneDone(s.status));
   const contingencies = scenes.filter((s) => s.type === "contingency");
 
   // Selected scene = client state (the scene's ID); default: FIRST PLANNED
-  // scene, never a played one (AK3). With everything played the fallbacks keep
+  // scene, never a played one. With everything played the fallbacks keep
   // the view usable instead of blanking it: a done scene, else any scene, else
   // the empty note in the center column.
   //
   // The ID and not the address: a scene's address carries its
-  // `location`, so a location change moved the address out from under the
-  // selection — the tree refetched, no scene matched the stored path any
-  // more, and the live view jumped to the first planned scene mid-session.
+  // `location`, so a location change moves the address out from under the
+  // selection — the tree refetches, no scene matches the stored path any
+  // more, and the live view jumps to the first planned scene mid-session.
   const [selectedId, setSelectedId] = useState<string>();
   const selected =
     scenes.find((s) => s.id === selectedId) ?? planned[0] ?? done[0] ?? scenes[0];
@@ -149,10 +149,9 @@ function LiveDesktop({ campaign }: { campaign: string }) {
         aria-label={t("live.nav.aria")}
         className="flex-none border-b border-border px-3 py-[18px] lg:w-[250px] lg:overflow-y-auto lg:border-b-0 lg:border-r"
       >
-        {/* The chapter the session plays. It used to sit in the topbar next to
-            the live pill; with the topbar consolidated to one session chip
-            (PO feedback on issue #40) it belongs here — next to the scenes it
-            describes. */}
+        {/* The chapter the session plays. The topbar carries one session
+            chip and nothing more, so the chapter title belongs here — next to
+            the scenes it describes. */}
         {chapter !== undefined && (
           <p className="px-2 pb-3 font-serif text-[14px] text-foreground">{chapter.title}</p>
         )}
@@ -221,8 +220,8 @@ function LiveDesktop({ campaign }: { campaign: string }) {
 
       <aside className="flex w-full flex-none flex-col border-t border-border lg:min-h-0 lg:w-[300px] lg:border-t-0 lg:border-l">
         <div className="flex flex-col gap-3 px-4 py-[18px] lg:flex-1 lg:overflow-y-auto">
-          {/* What the players should get or hear TONIGHT (issue #86) —
-              above the scene cards, because it is about the table, not
+          {/* What the players should get or hear TONIGHT — above the scene
+              cards, because it is about the table, not
               about the scene. Renders nothing when there is nothing. */}
           <PcReminders campaign={campaign} />
           {locationId !== undefined && (
@@ -232,7 +231,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
               </p>
               {knownLocation !== undefined ? (
                 // The tree knows the REAL path of the entry — the card must not
-                // re-derive `locations/<id>` (finding 10).
+                // re-derive `locations/<id>`.
                 <LocationCard
                   campaign={campaign}
                   id={knownLocation.id}
@@ -275,7 +274,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
 /**
  * The scenes whose STATUS says they are behind us: dimmed, in a
  * group that starts collapsed. Collapsed/open is view state only — deliberately
- * NOT persisted (AK1, and no localStorage for data either way). Selecting and
+ * NOT persisted (no localStorage for data either way). Selecting and
  * opening a scene in here works exactly as above.
  */
 function PlayedGroup({
@@ -468,8 +467,7 @@ function LogPanel({
 
 /**
  * Quiet empty state when the live route is opened while nothing is running —
- * and the ONE place a start conflict becomes a question the DM can answer
- * (issue #40 review, finding 2).
+ * and the ONE place a start conflict becomes a question the DM can answer.
  *
  * Exactly ONE conflict is a question here: `session_running`, an OLDER
  * session that was never ended — ending someone else's evening is not implied

@@ -191,7 +191,7 @@ describe("the prompt block (store/read.ts knowledgeText)", () => {
   });
 
   test("[[slug]] references are resolved to the current display name", async () => {
-    // `fenn` is an npc of the example campaign (issue #68 expansion).
+    // `fenn` is an npc of the example campaign.
     await save([fact("[[fenn]] weiß von der Ladung.")]);
     expect(await knowledgeText(CAMPAIGN)).toBe("- Fakt: Fenn weiß von der Ladung.");
   });

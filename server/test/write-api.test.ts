@@ -128,8 +128,8 @@ describe("PATCH /api/campaigns/:campaign/properties", () => {
     expect(after.properties.status).toBe("played");
 
     // Key order: the contract order of the kind, nothing added or removed.
-    // In the file tree this was "the file's own order"; the columns produce it
-    // now (store/render.ts rule 1), which is the same order the fixture had.
+    // The columns produce it (store/render.ts rule 1), which is the same
+    // order the fixture has.
     expect(Object.keys(after.properties)).toEqual([
       "id",
       "title",
@@ -166,11 +166,9 @@ describe("PATCH /api/campaigns/:campaign/properties", () => {
   });
 
   test("400 when the patch carries `id` — an id never changes", async () => {
-    // Replaces the old "a file without `id` on disk does not gain one": in the
-    // database the id IS the primary key, always present and never patchable,
-    // so the degrade case it guarded cannot exist. What CAN happen is a form
-    // sending the whole properties back, `id` included — and that must not
-    // orphan every reference to the entity (issues #29/#30).
+    // The id IS the primary key: always present and never patchable. What
+    // CAN happen is a form sending the whole properties back, `id` included
+    // — and that must not orphan every reference to the entity.
     const before = await getFile(SCENE);
     const res = await patchReq({ path: SCENE, rev: before.rev, patch: { id: "neu" } });
     expect(res.status).toBe(400);
@@ -188,10 +186,8 @@ describe("PATCH /api/campaigns/:campaign/properties", () => {
     expect(same.properties.status).toBe("played");
   });
 
-  // DELETED: "a file without a properties block gets one, body untouched" —
-  // a row always renders its properties (store/render.ts), so the case it
-  // described has no counterpart. The 400 for the two properties-less kinds
-  // below is what guards this corner now.
+  // A row always renders its properties (store/render.ts). The 400 for the
+  // two properties-less kinds below is what guards this corner.
   test("400 for inbox and glossary — lists of rows, not entities", async () => {
     for (const rel of ["inbox", "glossary"]) {
       const before = await getFile(rel);
@@ -266,8 +262,7 @@ describe("PATCH /api/campaigns/:campaign/properties", () => {
     expect(
       (await patchReq({ path: "../../etc/passwd.md", rev: 1, patch: {} })).status,
     ).toBe(400);
-    // No extension rule any more: an address the schema does not
-    // describe is simply not there.
+    // An address the schema does not describe is simply not there.
     expect((await patchReq({ path: "notes.txt", rev: 1, patch: {} })).status).toBe(404);
     expect(
       (await patchReq({ path: "01-salzhafen/nope", rev: 1, patch: {} })).status,
@@ -284,9 +279,9 @@ describe("POST /api/campaigns/:campaign/session/start", () => {
   test("creates today's session with the documented shape", async () => {
     const file = await postOk("/api/campaigns/beispiel/session/start");
     expect(file.kind).toBe("session");
-    // The id is an OPAQUE random string since issue #58 (a UUID): the file's
-    // address and nothing else. What is asserted about it is that it IS the
-    // address and that it carries no calendar date.
+    // The id is an OPAQUE random string (a UUID): the entry's address and
+    // nothing else. What is asserted about it is that it IS the address and
+    // that it carries no calendar date.
     const id = String(file.properties.id);
     expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(file.path).toBe(`sessions/${id}`);
@@ -308,9 +303,9 @@ describe("POST /api/campaigns/:campaign/session/start", () => {
     expect(second.properties.id).not.toBe(first.properties.id);
   });
 
-  // Issue #58 bug: `started` used to be minute-precise, so it rounded DOWN to
-  // the start of its minute and the timer chip opened at up to 0:00:59 — after
-  // an end→start that read like the old session kept counting.
+  // `started` carries SECONDS, not just minutes. Rounded down to the start of
+  // its minute it would open the timer chip at up to 0:00:59 — after an
+  // end→start that reads like the old session kept counting.
   test("`started` keeps the seconds, so a fresh session starts at 0", async () => {
     setNow(() => new Date(2026, 7, 19, 21, 5, 50));
     const file = await postOk("/api/campaigns/beispiel/session/start");
@@ -321,7 +316,7 @@ describe("POST /api/campaigns/:campaign/session/start", () => {
   });
 
   test("a session started on the REAL clock has an elapsed under 2s (#58)", async () => {
-    setNow(null); // the real clock: this is the bug's actual surface
+    setNow(null); // the real clock, the surface this matters on
     const before = Date.now();
     const file = await postOk("/api/campaigns/beispiel/session/start");
     expect(file.startedMs).toBeDefined();
@@ -359,7 +354,7 @@ describe("POST /api/campaigns/:campaign/session/start", () => {
 
   test("409 session_running when an OLDER session is still open", async () => {
     // A start on the NEXT day must not open a second session silently — the
-    // app offers to end the old one (issue #40 review, finding 3).
+    // app offers to end the old one.
     const open = await postOk("/api/campaigns/beispiel/session/start");
     setNow(() => new Date(2026, 7, 20, 20, 0));
     const res = await postJson("/api/campaigns/beispiel/session/start");
@@ -417,16 +412,13 @@ describe("POST /api/campaigns/:campaign/log", () => {
   });
 
   test("the line goes into ## Log, above the session's other sections", async () => {
-    // The old case wrote a session file with a `## Threads` section and
-    // checked the INSERTION POINT of the markdown surgery. There is no
-    // surgery any more: `## Log` is rendered from `log_entries` and the rest
-    // of the session's prose follows it (store/render.ts renderSessionBody).
-    // The invariant that mattered survives — a note does not land in, or
-    // clobber, the DM's own sections — so it is asserted on the fixture
-    // session, made the running one for the purpose. That used to be POST
-    // /session/resume; the endpoint is gone (issue #58 — "beenden" is final),
-    // so the row is opened directly here: the SUBJECT of the case is the log
-    // append, not the state machine.
+    // `## Log` is rendered from `log_entries` and the rest of the session's
+    // prose follows it (store/render.ts renderSessionBody). The invariant: a
+    // note does not land in, or clobber, the DM's own sections. It is
+    // asserted on the fixture session, made the running one for the purpose.
+    // "beenden" is final, so no endpoint resumes a session and the row is
+    // opened directly here: the SUBJECT of the case is the log append, not
+    // the state machine.
     db.update(sessionsTable)
       .set({ ended: null })
       .where(eq(sessionsTable.id, "2026-01-15"))
@@ -501,10 +493,9 @@ describe("scenes_played maintenance (POST log with sceneId)", () => {
     expect(file.body.endsWith("- 21:15 Pause\n")).toBe(true);
   });
 
-  // DELETED: "a session file without scenes_played gains the key on first
-  // sceneId-log" — that was the degrade path of a hand-written file. The key
-  // is rendered from `session_scenes_played` and therefore always present
-  // (empty list included, asserted in the session/start case above).
+  // `scenes_played` is rendered from `session_scenes_played` and therefore
+  // always present (empty list included, asserted in the session/start case
+  // above).
 });
 
 describe("POST /api/campaigns/:campaign/session/end", () => {
@@ -544,7 +535,7 @@ describe("POST /api/campaigns/:campaign/session/end", () => {
     expect(file.path).toBe(started.path);
     expect(file.properties.ended).toBe("2026-08-19T23:45:00");
     // A log line, however, is STRICTLY the running session's business: a note
-    // typed after the end used to land in the closed log with a 200.
+    // typed after the end is refused, not appended to the closed log.
     const log = await postJson("/api/campaigns/beispiel/log", { text: "verloren" });
     expect(log.status).toBe(404);
     expect(await log.json()).toEqual({ error: expect.any(String) });
@@ -572,10 +563,9 @@ describe("POST /api/campaigns/:campaign/inbox", () => {
   });
 
   test("creates the inbox with a # Inbox heading when there is none", async () => {
-    // The "missing inbox" case of the file version: a campaign whose
-    // migration produced no inbox rows at all. It is an EMPTY document, not
-    // a missing one (#70) — GET answers 200 — and the first entry brings the
-    // heading the format opened the file with.
+    // A campaign with no inbox rows at all: the inbox is an EMPTY entry, not
+    // a missing one — GET answers 200 — and the first entry brings the
+    // heading the format opens the inbox with.
     await withFreshCampaign(async () => {
       expect(await fileStatus("inbox", FRESH)).toBe(200);
       const res = await postJson(`/api/campaigns/${FRESH}/inbox`, { text: "Erste Idee" });
@@ -597,16 +587,14 @@ describe("POST /api/campaigns/:campaign/inbox", () => {
   });
 });
 
-// The metadata dialog of issue #34 writes name/description through PATCH
-// /properties — the ONE write path since issue #62. The endpoint that used to
-// close the "there is no `campaign` yet" gap (POST /campaign-meta) is gone
-// with that gap: after the cutover the campaign ROW always exists, GET /entry
-// always answers with a document and a guard token, and naming a campaign that
-// has no name is an ordinary patch.
+// The metadata dialog writes name/description through PATCH /properties —
+// the ONE write path. The campaign ROW always exists, GET /entry always
+// answers with an entry and a guard token, and naming a campaign that has no
+// name is an ordinary patch.
 describe("naming a campaign that has none (issue #62)", () => {
   test("PATCH /properties sets name and description on an unnamed campaign", async () => {
     await withFreshCampaign(async () => {
-      // Unnamed: the document exists and shows the ID as its display name,
+      // Unnamed: the entry exists and shows the ID as its display name,
       // which is exactly what GET /campaigns says too (both synthesize).
       const before = await getFile("campaign", FRESH);
       expect(before.properties).toEqual({ id: FRESH, name: FRESH });
@@ -678,7 +666,7 @@ describe("naming a campaign that has none (issue #62)", () => {
 // Body writes: content editing in the app. The invariant under
 // test everywhere here is that a body write is ONLY a body write — the
 // properties of the row comes back unchanged, key for key and value for
-// value ("the properties block stays byte-identical" of the file version).
+// value.
 describe("PUT /api/campaigns/:campaign/entries", () => {
   const REFERENCE = "01-salzhafen/bucht/smuggler-captured";
   const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
@@ -739,10 +727,9 @@ describe("PUT /api/campaigns/:campaign/entries", () => {
   });
 
   test("glossary: the edited markdown is parsed back into rows", async () => {
-    // NEW with the cutover (planning F6): the glossary is a TABLE, so a body
-    // write is the one PUT that decomposes what it is given — through the same
-    // parser the migration used, so a hand-edited file and a DM's edit in the
-    // app produce the same rows.
+    // The glossary is a TABLE (planning F6), so a body write is the one PUT
+    // that decomposes what it is given — through the same parser every other
+    // writer uses, so the rows are the same however the edit arrived.
     const before = await getFile("glossary");
     expect(before.body).toContain("- lighthouse keeper → Leuchtturmwärter");
     const body = "\n- tide pool → Gezeitentümpel\n- harbour master → Hafenmeisterin\n";
@@ -769,17 +756,6 @@ describe("PUT /api/campaigns/:campaign/entries", () => {
     expect(body.rev).toBe(before.rev);
     expect(await getFile(SCENE)).toEqual(before);
   });
-
-  // DELETED, all four of them: "a file without a properties block: the body
-  // IS the file", "400 for a file whose properties block is not valid YAML",
-  // the three degenerate-properties cases (stray space behind the fence,
-  // unclosed block, BOM) and "a file the parser reads as pure body stays
-  // writable". Every one of those guarded the RAW SPLIT of a markdown file:
-  // the writer had to reattach a properties block it could not always find,
-  // and refused rather than delete it. There is no split any more — the
-  // properties is columns and the body is a column — so the failure mode is
-  // gone with it. What a malformed file can still do is fail the importer's
-  // parse, which names it in the seed report (test/db-migration.test.ts).
 
   test("400 for the append-only kinds — session logs and inbox", async () => {
     // DECISIONS #4: they grow by ROWS through POST /log and POST /inbox; a

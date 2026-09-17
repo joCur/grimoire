@@ -22,9 +22,9 @@
 // The run is a background JOB on the server and this route
 // is only its window: on mount it asks GET …/generate/job and restores
 // whatever it finds (running -> working with ~3s polling, done -> review
-// incl. the edits kept in the job, failed -> the error block). That is the
-// whole point of the ticket: a browser-back gesture, a reload or a closed
-// tab may not destroy minutes of generation any more.
+// incl. the edits kept in the job, failed -> the error block). So a
+// browser-back gesture, a reload or a closed tab does not destroy minutes of
+// generation.
 //
 // A failed run stays in the input state and shows the server's 422 in full:
 // the message — read in the UI language out of the job's error
@@ -546,7 +546,7 @@ export function GenerateRoute() {
   });
 
   const startError = start.error instanceof ApiError ? start.error : undefined;
-  // A failed job carries the same body the endpoint used to answer with:
+  // A failed job carries the same body the endpoint answers with:
   // the last raw reply and (when the endpoint reports usage) what the run
   // cost — a truncated reply additionally carries an error CODE instead of a
   // validation error list, and serverErrorBodyMessage turns that
@@ -697,11 +697,11 @@ export function GenerateRoute() {
                 </div>
 
                 {/* The "Neues Kapitel" flow: display name + the directory name.
-                    The id used to be a read-only preview; it is
-                    the field that decides where the drafts land — the DM owns
-                    it, because renaming a chapter later is expensive (ids are
-                    stable references). The title is only the display name and
-                    is meaningless for an id that already exists. */}
+                    The id is the field that decides where the drafts land,
+                    and the DM owns it, because renaming a chapter later is
+                    expensive (ids are stable references). The title is only
+                    the display name and is meaningless for an id that already
+                    exists. */}
                 {target.kind === "new" && (
                   <div className="mt-[-10px] mb-[22px] flex flex-col gap-[7px]">
                     <label htmlFor="gen-new-title" className="sr-only">
@@ -929,9 +929,8 @@ export function GenerateRoute() {
                 {t("generate.review.title")}
               </h1>
               {/* THE live region of the review (quality floor): the run's
-                  progress is announced here and nowhere else. Every part card
-                  used to be one of its own, so a run with three parts read
-                  out three times per poll. */}
+                  progress is announced here and nowhere else — never one
+                  live region per part card. */}
               <span aria-live="polite" className="text-[13px] text-muted-foreground">
                 {/* While the RUN is still going its own progress is the more
                     useful number — „2 von 3 Szenen fertig";
@@ -994,8 +993,7 @@ export function GenerateRoute() {
                     key={part.key}
                     part={part}
                     // A part that says `done` and has no draft in the result
-                    // is a broken run, not a waiting one — it used to render
-                    // as „wartet" forever, with nothing the DM could do.
+                    // is a broken run, not a waiting one.
                     mismatch={part.status === "done"}
                     busy={retryBusy(part.key)}
                     error={retryError(part.key)}
@@ -1110,9 +1108,8 @@ export function GenerateRoute() {
                 })}
                 {/* Stubs no entry part claims: a run whose outline proposed
                     nothing but whose SCENE replies carried stubs (the earlier
-                    shape, and any older job), and a stub whose part id drifted.
-                    They used to be invisible as soon as the run had any entry
-                    part at all — proposed, generated, and never shown. */}
+                    shape, and any older job), and a stub whose part id
+                    drifted. */}
                 {unclaimedStubs.map((stub) => (
                   <StubRow
                     key={stubKey(stub)}
@@ -1464,8 +1461,7 @@ function Working() {
  * to retry or to drop the run.
  *
  * `mismatch` is the third failure there is: a part the server calls `done`
- * whose draft is not in the result. It used to render as „wartet" with no
- * action at all, forever.
+ * whose draft is not in the result.
  */
 function PartCard({
   part,
@@ -1638,7 +1634,7 @@ function SceneCard({
   const t = useT();
   const title = fmString(properties.title) ?? path;
   const status = fmString(properties.status) ?? "draft";
-  // Show the status LABEL, never the raw frontmatter value; unknown
+  // Show the status LABEL, never the raw property value; unknown
   // values still degrade to their verbatim text inside the helper.
   const statusLabel = sceneStatusMeta(status, t).label;
   const isContingency = fmString(properties.type) === "contingency";
@@ -1664,7 +1660,7 @@ function SceneCard({
         <span className="flex-none rounded-full border border-input px-[9px] py-px text-[11.5px] text-dim">
           {statusLabel}
         </span>
-        {/* A written part is not editable here any more (Nicht-
+        {/* A written part is not editable here (Nicht-
             Ziele): it is an entry now, and the normal editor owns it. */}
         {!written && (
           <MarkdownEditorToggle

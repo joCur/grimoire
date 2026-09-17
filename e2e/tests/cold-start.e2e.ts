@@ -1,9 +1,9 @@
 // Critical path 10: Kaltstart — see CLAUDE.md.
 //
-// The whole point of issue #56: a fresh installation is not a dead end. Since
-// issue #79 the boot imports nothing, so THIS is what a new instance looks
-// like — `seed: { skip: true }`, an empty database, no campaign at all — and
-// the path from there to a playable evening has to run entirely in the UI:
+// A fresh installation is not a dead end. The boot imports nothing, so THIS
+// is what a new instance looks like — `seed: { skip: true }`, an empty
+// database, no campaign at all — and the path from there to a playable
+// evening has to run entirely in the UI:
 //
 //   "/" → Kampagne anlegen → Kapitel anlegen → Szene anlegen → Szene befüllen
 //        → Session starten → die Szene ist in der Session-Ansicht nutzbar
@@ -15,10 +15,9 @@
 //
 // The other create surfaces get their own tests below: the NPC/Ort lists
 // (including the collision, which is the one branch that must not write), the
-// same lists at 390px, because "NPC/Ort anlegen" is the mobile half of the
-// ticket, and the TOPBAR SWITCHER, where the SECOND campaign is created (PO
-// feedback on issue #56 — the switcher used to be a read-only list closed by a
-// „grimoire seed" hint, so a second campaign had no entry point in the UI).
+// same lists at 390px, because "NPC/Ort anlegen" has to work on a phone, and
+// the TOPBAR SWITCHER, where the SECOND campaign is created — it is the UI's
+// only entry point for one.
 
 import { apiFor, expect, test } from "../support/test";
 
@@ -66,8 +65,8 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   const campaignDoc = await api.file("campaign");
   expect(campaignDoc.properties.name).toBe(CAMPAIGN_NAME);
 
-  // The empty pool names the NEXT STEP instead of the generator (which needs
-  // an API key and source material — the old dead end).
+  // The empty pool names the NEXT STEP instead of the generator, which needs
+  // an API key and source material.
   await expect(page.getByText("Noch keine Kapitel", { exact: false })).toBeVisible();
 
   // --- Kapitel anlegen ------------------------------------------------------
@@ -228,8 +227,8 @@ test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, serve
   await switcher.click();
   const menu = page.getByRole("menu");
   await expect(menu).toContainText(CAMPAIGN_NAME);
-  // The developer jargon is GONE and got no replacement (PO feedback): no
-  // shell command anywhere in the chrome.
+  // No developer jargon and no replacement for it: no shell command anywhere
+  // in the chrome.
   await expect(menu).not.toContainText("grimoire seed");
   await expect(menu).not.toContainText("Datenbank");
 
@@ -283,7 +282,7 @@ test("Kaltstart und NPC anlegen funktionieren bei 390px", async ({ page, server 
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
 
   // The mobile start surface reaches the lists ("Nachschlagen"), and the list
-  // is where an NPC is created — the mobile half of issue #56.
+  // is where an NPC is created.
   await page.getByRole("link", { name: /NPCs/ }).click();
   await expect(page).toHaveURL(/\/list\/npcs$/);
   await page.getByRole("button", { name: "NPC anlegen" }).click();

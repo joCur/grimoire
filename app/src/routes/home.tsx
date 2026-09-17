@@ -4,13 +4,12 @@
 // the server is the truth); the switcher in the topbar stays the only way to
 // change campaigns.
 //
-// The one case that DOES render here is the COLD START, and since
-// issue #79 it is the normal first screen of a fresh installation: the boot
-// imports nothing, so a new instance has no campaign at all. What stood here
-// was "Kampagne mit „grimoire seed“ importieren" — true, but a shell command,
-// i.e. a dead end for the person the tool is for. So this is a form: a name, an
-// optional sentence, and the id is derived from the name (the shared slug rule)
-// and shown before it is created, because an id is permanent.
+// The one case that DOES render here is the COLD START, the normal first
+// screen of a fresh installation: the boot imports nothing, so a new instance
+// has no campaign at all. Pointing the DM at a shell command would be a dead
+// end for the person the tool is for, so this is a form: a name, an optional
+// sentence, and the id is derived from the name (the shared slug rule) and
+// shown before it is created, because an id is permanent.
 //
 // A PAGE, not a dialog. There is nothing behind it to keep visible, the surface
 // has to work at 390px, and „Kampagne anlegen" is the only thing this screen is
@@ -184,7 +183,7 @@ function ColdStart() {
         </div>
       </form>
 
-      {/* The language switch (issue #69 follow-up). There is no campaign yet,
+      {/* The language switch. There is no campaign yet,
           so the topbar carries no switcher — without this row the FIRST screen
           of a new installation would be the one screen whose language cannot be
           changed. A footer, hairline above, well below the form: the first

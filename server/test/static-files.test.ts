@@ -22,8 +22,8 @@ let dist = "";
 let app: Hono;
 
 beforeAll(async () => {
-  // The boot imports nothing since issue #79 — the campaign the /api
-  // assertion below asks for is seeded explicitly.
+  // The boot imports nothing — the campaign the /api assertion below asks
+  // for is seeded explicitly.
   await seedStore();
   dist = await mkdtemp(path.join(os.tmpdir(), "grimoire-dist-"));
   await mkdir(path.join(dist, "assets"), { recursive: true });

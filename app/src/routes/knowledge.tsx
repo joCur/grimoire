@@ -114,8 +114,8 @@ function KnowledgeForm({
 
       {value.kind === "naming" ? (
         // „Alt → Neu": two single-line fields, each on its own full-width
-        // row. Side by side they were two half-width boxes for names that
-        // are routinely longer than that (PO feedback on PR #87).
+        // row. Side by side they would be two half-width boxes for names
+        // that are routinely longer than that.
         <>
           <EntryField
             label={t("knowledge.from")}

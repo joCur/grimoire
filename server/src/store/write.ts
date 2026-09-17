@@ -342,7 +342,7 @@ function indexChapter(tx: GrimoireDb, campaign: string, row: ChapterRow): void {
 
 // The campaign file is not referenceable either — but its note body CONTAINS
 // references like any other, and store/refs.ts scans it for them, so nothing
-// here is half-supported any more.
+// here is half-supported.
 export function indexCampaign(tx: GrimoireDb, row: CampaignRow): void {
   indexEntity(tx, row.id, {
     kind: "campaign",
@@ -390,12 +390,11 @@ function sceneRowOf(tx: GrimoireDb, campaign: string, id: string): SceneRow | un
 
 /**
  * The scene a `{ kind: "scene" }` locator addresses — by ID, which is the
- * key. The chapter and group segments used to have to match the
- * row, because a group was an independent value and a link with the wrong
- * one was a link to nothing. The group is `location` now: it MOVES when the
- * DM corrects the location, so every address handed out before that move is
- * a stale address for a scene that still exists. Resolving by id is what
- * makes the correction non-destructive — the response carries the current
+ * key. The chapter and group segments are not matched against the row: the
+ * group is `location`, and it MOVES when the DM corrects the location, so
+ * every address handed out before that move is a stale address for a scene
+ * that still exists. Resolving by id is what makes the correction
+ * non-destructive — the response carries the current
  * address in `path`, and the app replaces the URL with it (ADR #17).
  *
  * The write is not unguarded by this: `rev` is the guard that a write which
@@ -969,9 +968,8 @@ function patchLocator(
     }
     case "inbox":
     case "glossary":
-      // Neither is an entity with properties any more: both are lists of
-      // rows (schema.ts). The file used to carry a decorative `id:` and
-      // nothing else, so there is nothing a patch could mean here.
+      // Neither is an entity with properties: both are lists of rows
+      // (schema.ts), so there is nothing a patch could mean here.
       throw new ApiError(400, "this file has no properties — it is a list of entries");
   }
 }
@@ -1485,14 +1483,11 @@ export async function startSession(campaign: string): Promise<EntryResponse> {
     // "Is the running session TODAY's?" is answered by `started`, not by the
     // id — the id is opaque and says nothing about a day.
     //
-    // The old degrade of this check is GONE with it: an id that did not parse
-    // as a date could never be "today", so a hand-edited row answered every
-    // start with a 409 the DM had to clear by hand. A row whose `started` is
-    // unreadable is not the "running session" in the first place — it has no
-    // place in the chronology (store/read.ts `sessionOrderKey`) — so
-    // `pickSession` never returns it here and the next start simply opens a new
-    // session. `startedDate` therefore only ever decides between today and an
-    // EARLIER day.
+    // A row whose `started` is unreadable is not the "running session" in the
+    // first place — it has no place in the chronology (store/read.ts
+    // `sessionOrderKey`) — so `pickSession` never returns it here and the next
+    // start simply opens a new session. `startedDate` therefore only ever
+    // decides between today and an EARLIER day.
     if (active !== undefined && startedDate(active.started) !== today) {
       throw new ApiError(409, "another session is still running — end it first", {
         code: "session_running",
@@ -1935,12 +1930,13 @@ export { ENTITY_SLUG };
  *                   and the review is the first thing that knows a name and
  *                   a note);
  *   * filled row  -> return it UNTOUCHED, so the app links to what is there.
- *                   Nothing is overwritten, and the old `409 { path }` is
- *                   gone: it made the DM correct an id that was right.
+ *                   Nothing is overwritten and nothing is refused: a
+ *                   `409 { path }` here would make the DM correct an id that
+ *                   was right.
  *
- * `status` keeps the column default ("unknown"). It used to insert "alive",
- * which contradicted both the route's own documentation and the dialog text,
- * and claimed something no log line ever said.
+ * `status` keeps the column default ("unknown"): inserting "alive" would
+ * contradict both the route's own documentation and the dialog text, and
+ * claim something no log line ever said.
  */
 export async function createNpcStub(
   campaign: string,
@@ -2133,19 +2129,19 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
 
 /**
  * Run a batch of generator writes in ONE transaction — and CHECK THE
- * CONFLICTS IN IT. The check used to sit in front of the transaction
- * (generator.ts), which left a window between "nothing exists yet" and the
- * insert: a scene created in between turned the documented
+ * CONFLICTS IN IT. A check in front of the transaction (generator.ts) would
+ * leave a window between "nothing exists yet" and the
+ * insert: a scene created in between would turn the documented
  * `409 { conflicts }` into a primary-key violation, i.e. a 500. Inside the
  * transaction there is no window, and a constraint that fires anyway is
  * translated back to the documented answer instead of escaping as a 500 —
  * either way the transaction rolls back, so a partial apply is impossible.
  *
  * `jobId` discards the generate job the drafts came from IN THE
- * SAME COMMIT. It used to be a second statement after the write: a crash in
- * between left a `done` job whose drafts were already stored, so the next
- * start offered a review that could only ever answer 409 — and a failing
- * delete turned a successful write into a 500. Both are gone now: the job row
+ * SAME COMMIT, never as a second statement after the write: a crash in
+ * between would leave a `done` job whose drafts were already stored, so the
+ * next start would offer a review that could only ever answer 409 — and a
+ * failing delete would turn a successful write into a 500. The job row
  * disappears exactly when the drafts appear, or neither does. A stale id (a
  * newer run started meanwhile) matches nothing and is ignored, which is the
  * documented behaviour.
@@ -2165,10 +2161,10 @@ export async function applyDrafts(
 ): Promise<void> {
   try {
     await mutate(campaign, (tx) => {
-      // TWO drafts for ONE address are a conflict too. Since an empty entry
-      // stopped being a conflict, the second draft no longer hit the primary
-      // key: it FILLED the entry the first had just written, last write wins,
-      // and the review reported a clean apply for content it had silently
+      // TWO drafts for ONE address are a conflict too. An empty entry is no
+      // conflict, so the second draft does not hit the primary key: unchecked
+      // it would FILL the entry the first had just written, last write wins,
+      // and the review would report a clean apply for content it had silently
       // dropped. The batch is the model's output — one hallucinated duplicate
       // id is exactly the case — so the answer is the documented one, and it
       // names both offenders.

@@ -2,8 +2,8 @@
 // „Kampagnenwissen" (/campaigns/:campaign/knowledge) and „Glossar"
 // (/campaigns/:campaign/glossary).
 //
-// WHY PAGES AND NOT SETTINGS SECTIONS. The first version put both lists inline
-// under `/settings`. Two objections, and the second is the one that decides
+// WHY PAGES AND NOT SETTINGS SECTIONS. Both lists could sit inline under
+// `/settings`. Two objections, and the second is the one that decides
 // the shape: with 30 glossary terms the page is an endless wall of tiny text
 // fields, and — more importantly — a glossary IS campaign content, the same
 // kind of thing as the NPCs and the locations. It belongs where those live:
@@ -15,19 +15,19 @@
 // rows. The difference is where a row leads — the npc list opens a read view,
 // these open the entry itself for editing, in place.
 //
-// ONE ROW OPEN AT A TIME, SAVED ON ITS OWN. The old page had one „Speichern"
-// over everything, which meant the DM had to remember that a term three
-// screens up was also unsaved. A row is opened, edited, saved, closed: the
-// unit of work on screen is the unit of work in the head. The WIRE is still a
+// ONE ROW OPEN AT A TIME, SAVED ON ITS OWN. One „Speichern" over everything
+// would mean the DM has to remember that a term three screens up is also
+// unsaved. A row is opened, edited, saved, closed: the
+// unit of work on screen is the unit of work in the head. The WIRE is a
 // whole-list PUT guarded by the list's `rev` (server/src/server.ts) — that is
 // the endpoint's contract and this page does not get to change it — so a
 // per-entry save is „the stored list with this one entry replaced".
 //
-// THE FIELDS FIT WHAT GOES IN THEM (PO feedback): a term, an „Alt", a „Neu"
+// THE FIELDS FIT WHAT GOES IN THEM: a term, an „Alt", a „Neu"
 // are single-line and full width; an explanation, a fact, a style rule are
 // sentences and get a textarea that grows with them
 // (components/ui/autogrow-textarea.tsx). Nothing on the page is a 120px box
-// holding a paragraph any more.
+// holding a paragraph.
 //
 // THE 409 is the shape ADR #4 prescribes: nothing was written, the list is
 // re-read and the DM is told — never a silent overwrite. The open row keeps
@@ -35,8 +35,8 @@
 // the draft at the list that came back. „Speichern" is OFF in between: the
 // list moved, so retrying blindly is the overwrite the 409 just prevented.
 //
-// WHAT „THIS ENTRY" MEANS while the list moves underneath (PO findings on
-// PR #87). The version poller refetches both lists every few seconds
+// WHAT „THIS ENTRY" MEANS while the list moves underneath. The version poller
+// refetches both lists every few seconds
 // (lib/use-campaign-version.ts), so the stored array can change while a row
 // is open. Two consequences, and they are the load-bearing part of this file:
 //
@@ -114,7 +114,7 @@ export interface EntryListPageProps<T> {
   /**
    * Does the stored ORDER mean something? The knowledge list is the order of
    * the prompt, so it gets up/down; the glossary is alphabetical and has no
-   * manual order to offer (PO feedback on PR #87).
+   * manual order to offer.
    */
   reorderable?: boolean;
 }
@@ -127,8 +127,7 @@ export interface EntryListPageProps<T> {
  * up again in the list as it stands then (lib/entry-list.ts findEntryIndex)
  * instead of writing to a remembered index: the version poller refetches both
  * lists every few seconds, so a delete in another tab silently renumbers
- * everything below it, and an index-addressed write lands on a neighbour
- * (PO finding on PR #87).
+ * everything below it, and an index-addressed write lands on a neighbour.
  *
  * `rev` is the list's guard token as of the same moment. Sending the CURRENT
  * one would defeat the guard for exactly the case it exists for: the poller
@@ -287,10 +286,10 @@ function EntryListBody<T>({
   const locked = busy || dirty;
 
   /**
-   * Open something else. With unsaved work on screen this ASKS first — before
-   * this, clicking the next row threw the draft away without a word, which is
-   * the silent loss ADR #4 forbids (and which the leave-the-page guard already
-   * refused to allow).
+   * Open something else. With unsaved work on screen this ASKS first —
+   * without the question, clicking the next row throws the draft away without
+   * a word, which is the silent loss ADR #4 forbids (and which the
+   * leave-the-page guard already refuses to allow).
    */
   const requestOpen = (target: Editing<T>) => {
     if (dirty) {
@@ -333,7 +332,7 @@ function EntryListBody<T>({
     const without = removeEntry(entries, index);
     // The focus target is read off the list as it will LOOK afterwards: the
     // glossary is alphabetical and filtered, so a pre-delete index names a
-    // different row than the one that takes the gap (PO finding on PR #87).
+    // different row than the one that takes the gap.
     const remaining = rowsOf(without, filter);
     if (!(await commit(without, rev))) return;
     if (editing !== undefined && editing.at === "stored" && storedIndex === index) {
@@ -470,8 +469,8 @@ function EntryListBody<T>({
                       disabled={busy}
                       // Named explicitly rather than by the summary inside it:
                       // the row's text alone announces as a sentence with no
-                      // verb, and „was ist das hier, ein Link?" is exactly the
-                      // question a screen reader user should not have to ask.
+                      // verb, and "is this a link?" is exactly the question a
+                      // screen reader user should not have to ask.
                       aria-label={t("entryList.edit", { name: rowTitle(row.entry) })}
                       onClick={() =>
                         requestOpen({
@@ -548,7 +547,7 @@ function EntryListBody<T>({
               {/* The two honest next steps, as controls rather than as advice.
                   „Speichern" stays OFF until one of them is taken: retrying
                   against a list that moved is how the draft ends up on a
-                  neighbouring entry (PO finding on PR #87). */}
+                  neighbouring entry. */}
               <button
                 type="button"
                 disabled={busy}
@@ -677,8 +676,7 @@ const STALE_ACTION =
  *
  * A panel inside the list rather than a dialog — the DM is correcting a term
  * against the ones around it, and a modal would hide exactly that context. It
- * carries its own „Speichern": the unit of work is this entry
- * (PO feedback on PR #87).
+ * carries its own „Speichern": the unit of work is this entry.
  */
 function EntryForm({
   heading,

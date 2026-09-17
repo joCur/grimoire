@@ -1,12 +1,11 @@
 // Critical path 3: the ⌘K search finds and opens; see CLAUDE.md.
 //
 // The whole way is real: shortcut → palette → GET /search (FTS5 on the
-// server since issue #57) → keyboard navigation → Enter opens the reading
-// view.
+// server) → keyboard navigation → Enter opens the reading view.
 //
-// Plus the freshness claim of the cutover (issue #57 AK5): what the APP just
-// wrote is findable IMMEDIATELY — the search index is maintained in the same
-// transaction as the write, so there is no watcher to wait for any more.
+// Plus the freshness claim: what the APP just wrote is findable IMMEDIATELY —
+// the search index is maintained in the same transaction as the write, so
+// there is no watcher to wait for.
 
 import { expect, test } from "../support/test";
 
@@ -25,7 +24,7 @@ test("⌘K finds \"leucht\" and Enter opens the hit", async ({ page }) => {
   await input.fill("leucht");
 
   const options = page.getByRole("option");
-  // Scene, location and the campaign file all match "leucht".
+  // Scene, location and the campaign entry all match "leucht".
   await expect(options.filter({ hasText: "Ankunft am Leuchtturm" })).toHaveCount(1);
   await expect(options.filter({ hasText: "Szene" })).not.toHaveCount(0);
   await expect(options.first()).toHaveAttribute("aria-selected", "true");

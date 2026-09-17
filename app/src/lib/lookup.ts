@@ -1,5 +1,4 @@
-// „Nachschlagen" — the campaign's reference pages, named once (issue #53, PO
-// feedback on PR #87).
+// The campaign's reference pages, named once.
 //
 // Four pages, four entry points, and they must not drift apart: the pool's
 // quiet line under the campaign header, the mobile start surface's rows, the
@@ -8,10 +7,10 @@
 // phone row a phone row — but WHICH pages there are, what they are called and
 // where they lead is decided here.
 //
-// NOT IN THE TOPBAR, deliberately (PO feedback on PR #87). The topbar carries
-// the three campaign-wide entries of issue #34 and stays as it is; a fourth
-// and fifth link up there would crowd the one bar that has to survive every
-// width, and „Glossar" is not something the DM reaches for mid-session.
+// NOT IN THE TOPBAR, deliberately. The topbar carries the three campaign-wide
+// entries and stays as it is; a fourth and fifth link up there would crowd the
+// one bar that has to survive every width, and „Glossar" is not something the
+// DM reaches for mid-session.
 
 import { BookA, Bookmark, Lightbulb, MapPin, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -27,9 +26,9 @@ export interface LookupTarget {
 }
 
 /**
- * The reference pages, in the order every surface shows them: the three that
- * came from the campaign tree first, then the two the DM MAINTAINS
- *. Content you read before content you edit.
+ * The reference pages, in the order every surface shows them: the three
+ * derived from the campaign tree first, then the two the DM MAINTAINS.
+ * Content you read before content you edit.
  */
 export const LOOKUP_TARGETS: readonly LookupTarget[] = [
   {

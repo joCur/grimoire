@@ -2,25 +2,25 @@
 //
 // start → quick note → log + scenes_played → NPC/location drawer → back into
 // the session via the global live indicator → pause (the clock stops) →
-// weiter (it ticks again) → end → review → and, since issue #58, the restart:
-// "beenden" is FINAL, so pressing "Session starten" again on the same day
-// opens a SECOND, separate session (own file under its own id, empty log,
-// timer at 0) instead of re-opening the closed one. There is no "fortsetzen".
+// weiter (it ticks again) → end → review → and the restart: "beenden" is
+// FINAL, so pressing "Session starten" again on the same day opens a SECOND,
+// separate session (own entry under its own id, empty log, timer at 0)
+// instead of re-opening the closed one. There is no "fortsetzen".
 //
-// Plus its undo at the very start: "Session verwerfen" deletes the file of a
-// session that has nothing in it (issue #40 AK7) — its own test below.
+// Plus its undo at the very start: "Session verwerfen" deletes the entry of a
+// session that has nothing in it — its own test below.
 //
 // And the live nav's own grouping: a scene whose STATUS is
 // `played`/`dropped` leaves "Geplant" for the collapsed, dimmed "Gespielt"
 // group, stays openable there, and never becomes the default selection.
 //
-// Every claim is checked twice: once in the UI and once in the stored file
+// Every claim is checked twice: once in the UI and once in the stored entry
 // (the server is the truth, the app keeps no state of its own).
 //
-// A session id is an OPAQUE random string since the PO decision on issue #58,
-// so this spec never spells one out: every session path comes from the server
-// (`api.sessionPath()`). That is also the honest test — the app itself never
-// derives the file its notes land in either.
+// A session id is an OPAQUE random string, so this spec never spells one out:
+// every session path comes from the server (`api.sessionPath()`). That is
+// also the honest test — the app itself never derives the address its notes
+// land in either.
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -40,7 +40,7 @@ const sessionLinkChip = (page: Page) => page.getByRole("link", { name: /Session 
  * pixels: its right edge as the distance to the right edge of the `<header>`
  * content box, its middle as the distance to the row's own middle.
  *
- * Absolute viewport coordinates were wrong twice over (issue #69 CI finding).
+ * Absolute viewport coordinates are wrong twice over here.
  * A vertical scrollbar on one route and not the other shifts every x by the
  * scrollbar's width — nothing on macOS, where scrollbars are overlays, ~15px
  * on CI's Linux Chromium. And the two states are compared ACROSS routes, so
@@ -72,7 +72,7 @@ async function chipGeometry(chip: Locator) {
 /**
  * Opens the session menu on /live and returns the requested entry. The chip
  * carries the STATE in its accessible name, so a paused session is reached
- * through "Session pausiert" (issue #40 AK8).
+ * through "Session pausiert".
  */
 async function sessionMenuItem(page: Page, name: string) {
   await page.getByRole("button", { name: /Session (läuft|pausiert)/ }).first().click();
@@ -85,21 +85,21 @@ test("session start, quick note, pause, end — log and file follow", async ({
 }) => {
   await page.goto("/campaigns/beispiel");
 
-  // No session running yet — the session file is created by the button.
+  // No session running yet — the session entry is created by the button.
   expect(await api.sessionPath()).toBeUndefined();
 
-  // ONE session control across ALL states (PO requirement on issue #40): the
-  // offer to start and the running session are the SAME chip in the SAME
-  // slot — same height, same right edge, same vertical center. Only the
-  // content and the colour change; nothing in the chrome moves.
+  // ONE session control across ALL states: the offer to start and the running
+  // session are the SAME chip in the SAME slot — same height, same right edge,
+  // same vertical center. Only the content and the colour change; nothing in
+  // the chrome moves.
   const startChip = page.getByRole("button", { name: "Session starten" });
   const startGeometry = await chipGeometry(startChip);
 
   await startChip.click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
 
-  // WHICH file the session lives in is the server's answer — the id is opaque
-  // and carries no date to reconstruct.
+  // WHICH address the session lives under is the server's answer — the id is
+  // opaque and carries no date to reconstruct.
   const sessionPath = (await api.sessionPath()) ?? "";
   expect(sessionPath).toMatch(/^sessions\/.+$/);
 
@@ -117,9 +117,9 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // were pushed out of the row together.
   expect(startGeometry.insetRight).toBe(0);
   await expect(chip).toContainText(/\d+:\d{2}:\d{2}/);
-  // …and it starts at ZERO. `started` is written to the second;
-  // when it was minute-precise the reading rounded down to the start of the
-  // minute and the fresh chip could open at up to 0:00:59.
+  // …and it starts at ZERO. `started` is written to the second; a
+  // minute-precise value would round down to the start of the minute and let
+  // the fresh chip open at up to 0:00:59.
   await expect(chip).toContainText(/\b0:00:0[0-4]\b/);
   await expect(page.getByText("Live", { exact: true })).toHaveCount(0);
 
@@ -155,7 +155,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
 
   await expect.poll(() => api.properties(sessionPath)).toHaveProperty("scenes_played", []);
 
-  // …and while it is empty, the session menu offers to discard it (#40 AK7).
+  // …and while it is empty, the session menu offers to discard it.
   await expect(await sessionMenuItem(page, "Session verwerfen")).toBeVisible();
   await page.keyboard.press("Escape");
 
@@ -197,7 +197,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   const drawer = page.getByRole("dialog");
   await expect(drawer).toBeVisible();
   await expect(drawer.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
-  // The full file, not the card excerpt — and the way out into the full view.
+  // The full entry, not the card excerpt — and the way out into the full view.
   await expect(drawer.getByRole("link", { name: "Eintrag öffnen" })).toHaveAttribute(
     "href",
     "/campaigns/beispiel/entries/npcs/jorna",
@@ -239,11 +239,11 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
   await expect(page.getByText(NOTE)).toBeVisible();
 
-  // --- pause: the clock really STOPS (issue #40 AK8) ------------------------
+  // --- pause: the clock really STOPS ----------------------------------------
   await (await sessionMenuItem(page, "Pause")).click();
   await expect(page.getByText("— Pause")).toBeVisible();
   await expect.poll(() => api.body(sessionPath)).toMatch(/- \d{2}:\d{2} — Pause/);
-  // The interval is in the file, still open (no `to` yet) …
+  // The interval is in the entry, still open (no `to` yet) …
   await expect
     .poll(async () => (await api.properties(sessionPath)).pauses)
     .toEqual([{ from: expect.stringMatching(/^[\d\-T:]+$/) }]);
@@ -253,7 +253,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect(pausedChip).toBeVisible();
   await expect(pausedChip).toHaveAttribute("data-session-chip", "paused");
 
-  // And this is the point of the whole ticket: the time does NOT move while
+  // And this is the point of the pause: the time does NOT move while
   // the session is paused. Two readings more than a second apart are equal
   // (the running clock above was proven to tick within the same test).
   const stopped = await pausedChip.textContent();
@@ -295,7 +295,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // --- beenden is FINAL, and a restart is a NEW session --------
   // The chip offers a plain "Session starten" right after the end — no
   // "fortsetzen" anywhere — and that press opens a SECOND session of the same
-  // day: own file (`<date>-2`), empty log, timer back at 0. The first
+  // day: own entry under its own id, empty log, timer back at 0. The first
   // session keeps its `ended`, its log and its pauses.
   await page.goto("/campaigns/beispiel");
   const startAgain = page.getByRole("button", { name: "Session starten" });
@@ -305,13 +305,13 @@ test("session start, quick note, pause, end — log and file follow", async ({
 
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
   await expect(sessionMenuChip(page)).toBeVisible();
-  // The timer of the SECOND session starts at zero too — the bug that made an
-  // end→start look like the old session kept counting.
+  // The timer of the SECOND session starts at zero too — an end→start never
+  // keeps counting the old session's time.
   await expect(sessionMenuChip(page)).toContainText(/\b0:00:0[0-4]\b/);
   // A fresh, empty session: nothing of the first evening is shown …
   await expect(page.getByText(NOTE)).toHaveCount(0);
   await expect(page.getByText("— Pause")).toHaveCount(0);
-  // … it lives in its OWN file, under a DIFFERENT opaque id …
+  // … it lives in its OWN entry, under a DIFFERENT opaque id …
   const secondPath = (await api.sessionPath()) ?? "";
   expect(secondPath).toMatch(/^sessions\/.+$/);
   expect(secondPath).not.toBe(sessionPath);
@@ -403,7 +403,7 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   const sessionPath = (await api.sessionPath()) ?? "";
   expect(await api.exists(sessionPath)).toBe(true);
 
-  // It asks first — the file is deleted, and that is what the dialog says.
+  // It asks first — the entry is deleted, and that is what the dialog says.
   await (await sessionMenuItem(page, "Session verwerfen")).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Leere Session verwerfen?");
@@ -422,11 +422,11 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   await expect(page.getByRole("button", { name: "Session starten" })).toBeVisible();
   // … no session chip is left over …
   await expect(page.getByRole("link", { name: /Session läuft/ })).toHaveCount(0);
-  // … and the session file is gone.
+  // … and the session entry is gone.
   await expect.poll(() => api.exists(sessionPath)).toBe(false);
 
   // And the start really works again (it is not blocked by a stale session).
-  // The new session gets a FRESH id, never the discarded one back (#58): an
+  // The new session gets a FRESH id, never the discarded one back: an
   // id, once handed out, must not name a second evening — with random ids
   // that holds without any bookkeeping.
   await page.getByRole("button", { name: "Session starten" }).click();
@@ -438,10 +438,9 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   expect(await api.exists(sessionPath)).toBe(false);
 });
 
-// The third state of the ONE session control (PO requirement on issue #40): an
-// unreachable session lookup. It used to be a bare sentence next to the chrome
-// while the start button stood there offering something that could not work;
-// now it is the SAME chip, dimmed, inert, saying so.
+// The third state of the ONE session control: an unreachable session lookup.
+// It is the SAME chip, dimmed, inert, saying so — not a bare sentence next to
+// the chrome, and no start button offering something that could not work.
 test("an unreachable session lookup dims the chip instead of offering a start", async ({
   page,
 }) => {
@@ -468,7 +467,7 @@ test.describe("played/dropped scenes in the live nav", () => {
   // The seeded scene names an Ort that EXISTS — a reference creates nothing
   // (ADR #19) — and „Die Nordbucht" sorts after „Der Leuchtturm von
   // Salzhafen", so „Ankunft am Leuchtturm" stays the first row of the nav.
-  // That is what AK3 needs to fall through to.
+  // That is what the default selection needs to fall through to.
   const SEEDED = "01-salzhafen/bucht/harbor-office-talk";
 
   test.use({
@@ -523,7 +522,7 @@ test.describe("played/dropped scenes in the live nav", () => {
     await api.patchProperties(SEEDED, { status: "played" });
     await page.reload();
 
-    // AK1: it is gone from "Geplant" — the group it now lives in starts
+    // It is gone from "Geplant" — the group it now lives in starts
     // COLLAPSED, so the row is not rendered …
     await expect(arrivalRow).toBeVisible();
     await expect(seededRow).toHaveCount(0);
@@ -532,16 +531,16 @@ test.describe("played/dropped scenes in the live nav", () => {
     await expect(groupTrigger).toBeVisible();
     await expect(groupTrigger).toContainText("(1)");
 
-    // AK3: the default selection is the first PLANNED scene, not the played
+    // The default selection is the first PLANNED scene, not the played
     // one — which still stands at the top of the chapter's scene order.
     await expect(heading).toHaveText("Ankunft am Leuchtturm");
     await expect(arrivalRow).toHaveAttribute("aria-current", "true");
 
-    // AK2: the contingencies are untouched.
+    // The contingencies are untouched.
     await expect(nav).toContainText("Eventualszenen");
     await expect(nav.getByRole("button", { name: /Von den Schmugglern erwischt/ })).toBeVisible();
 
-    // AK1: expanding reaches it, and it opens like any other scene.
+    // Expanding reaches it, and it opens like any other scene.
     await groupTrigger.click();
     const playedGroup = nav.getByRole("group", { name: "Gespielt" });
     const groupedRow = playedGroup.getByRole("button", { name: /Gespräch im Hafenkontor/ });
@@ -550,11 +549,11 @@ test.describe("played/dropped scenes in the live nav", () => {
     await expect(heading).toHaveText("Gespräch im Hafenkontor");
     await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
 
-    // The group is view state only — a reload has it collapsed again (AK1).
+    // The group is view state only — a reload has it collapsed again.
     await page.reload();
     await expect(nav.getByRole("group", { name: "Gespielt" })).toHaveCount(0);
 
-    // AK2: the SESSION checkmark is a different thing and still works on top
+    // The SESSION checkmark is a different thing and still works on top
     // of the grouping — a note played on the grouped scene marks it.
     await nav.getByRole("button", { name: /^Gespielt/ }).click();
     await nav

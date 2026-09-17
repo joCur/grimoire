@@ -4,7 +4,7 @@
 //
 // DM vocabulary, not a literal translation: Session · Scene · Chapter ·
 // Location · Session review (Nachbereitung) · Read-aloud (Vorlesen) · Handout. Ids and
-// frontmatter keys stay as they are on the wire — `id`, `active`, `insight +2`
+// property keys stay as they are on the wire — `id`, `active`, `insight +2`
 // are data, not copy.
 
 import type { Messages } from "./messages";

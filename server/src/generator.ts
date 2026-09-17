@@ -59,7 +59,7 @@ import { assertSafeAddress } from "./addressing";
 import { composeEntry, parseEntryReply, type EntryReply } from "./entry-reply";
 import { checkDraftsNaming, type NamingRule } from "./naming-check";
 // The generator reads its context and writes its drafts through the store —
-// the campaign file tree is not a data source any more.
+// nothing else is a data source.
 import {
   buildTree,
   glossaryText,
@@ -379,7 +379,7 @@ export async function collectContext(campaign: string): Promise<CampaignContext>
 
 /**
  * One entry of a model reply. There is no `path`:
- * the model does not address anything. It writes a DOCUMENT, the `id` in its
+ * the model does not address anything. It writes an ENTRY, the `id` in its
  * properties is the entity's key, and the server builds the address from the
  * run's chapter plus that id — which is what makes a corrected `location`
  * move the scene instead of contradicting a path the model chose.
@@ -764,14 +764,14 @@ function notesErrors(body: string): string[] {
 /**
  * Quickstats values must be quoted STRINGS: YAML reads a bare `+2` as the
  * number 2 and the plus — the whole point of a social modifier — is gone
- * before anyone sees the file.
+ * before anyone sees the value.
  *
- * A REPLY can no longer break the rule: `quickstats` travels
+ * A REPLY cannot break the rule: `quickstats` travels
  * as a `{ key, value }` LIST whose values the schema types as strings, and
  * the server folds it into the mapping itself (entry-reply.ts
  * `pairsValue`). All three call sites — the npc run, a scene run's npc entry,
  * the augment run — pass exactly such a folded mapping, so the check fires on
- * none of them any more.
+ * none of them.
  *
  * It stays as a BACKSTOP, and the augment path is why: there the mapping does
  * not end up in an entry the server just composed but in a properties PATCH the
@@ -1267,12 +1267,11 @@ export function applyStubTarget(item: unknown, index: number): ApplyTarget {
 /**
  * The chapter target of a „Neues Kapitel" run, decided from the JOB.
  *
- * The app used to send `chapter`/`chapterTitle` from its own state on accept,
- * and the review state is persistent — so that state is gone after a
- * navigation or a reload, and the scenes were written under a chapter that had
- * no entry of its own: invisible in the overview, together with every scene in
- * it. The run knows what chapter it is for (`generate_jobs.chapter`) and, since
- * the migration next to this, what it is CALLED
+ * The app must not decide it from its own state: the review state is
+ * persistent, so that state is gone after a navigation or a reload, and the
+ * scenes would land under a chapter that has no entry of its own — invisible
+ * in the overview, together with every scene in it. The run knows what
+ * chapter it is for (`generate_jobs.chapter`) and what it is CALLED
  * (`generate_jobs.new_chapter_title`), so the decision is made here and needs
  * no browser.
  *
@@ -1376,7 +1375,7 @@ export async function applyGenerated(
     // The ADDRESS the entity will have (store/paths) — for a scene that is
     // `<chapter>/<group>/<id>`, derived from the PROPERTIES id, because
     // that is the key `insertDraft` writes under. The model's last segment is
-    // not part of the addressing any more, so it must not decide anything
+    // not part of the addressing, so it must not decide anything
     // here either: checking the path-derived id while inserting the
     // properties id would let a colliding draft past the 409 and into a
     // primary-key violation.
@@ -1399,13 +1398,13 @@ export async function applyGenerated(
   }
 
   // The conflict check runs in the SAME transaction as the inserts — see
-  // store/write.ts `applyDrafts`. Asking here first left a window between
-  // "free" and "inserted" in which a target could appear, and the documented
-  // `409 { conflicts }` became a primary-key violation (a 500). It asks by
-  // ADDRESS, i.e. by id, which is the key now — so a draft that collides with
-  // an existing entity is caught even when the model chose a different file
-  // name for it; the conflict is REPORTED under the path the client sent,
-  // which is the draft it has to fix.
+  // store/write.ts `applyDrafts`. Asking here first would leave a window
+  // between "free" and "inserted" in which a target could appear, and the
+  // documented `409 { conflicts }` would become a primary-key violation (a
+  // 500). It asks by ADDRESS, i.e. by id, which is the key — so a draft that
+  // collides with an existing entity is caught even when the model chose a
+  // different last segment for it; the conflict is REPORTED under the path
+  // the client sent, which is the draft it has to fix.
   await applyDrafts(campaign, drafts, jobId);
   return { written: drafts.map((draft) => draft.address) };
 }
@@ -1438,8 +1437,8 @@ export function assertDraftId(id: unknown, rel: string): void {
  * Where a draft will live: its address. For a SCENE that is
  * `<chapter>/<location>/<id>` — the chapter from the draft's own path (the
  * run's chapter), the id from the properties, and the GROUP from the
- * properties `location`. Nothing about the group is taken from
- * the path any more: that is what made a corrected `location` and the stored
+ * properties `location`. Nothing about the group is taken from the path:
+ * taking it from there would make a corrected `location` and the stored
  * address disagree. For every other kind the address is the path (an npc or
  * location draft is validated against its own segment, a chapter's id IS the
  * first segment).

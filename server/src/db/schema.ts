@@ -156,7 +156,7 @@ export const scenes = sqliteTable(
      *
      * It is also the scene's GROUP: the address `<chapter>/<location>/<id>`
      * and the tree's `SceneGroup`s are derived from this column, which is why
-     * the old independent `group_slug` is gone (migration 0009, ADR #17).
+     * there is no independent `group_slug` column (migration 0009, ADR #17).
      */
     location: text("location"),
     /** "draft" | "ready" | "played" | "dropped" | anything else. */
@@ -359,7 +359,7 @@ export const locations = sqliteTable(
  *
  * COMPATIBILITY: session ids are plain strings, so the date-shaped ids written
  * before this (`2026-01-15`, `2026-01-15-2`) stay valid and need no migration.
- * They simply are not parsed any more.
+ * They are simply not parsed.
  *
  * ORDER is `started` alone (store/read.ts `compareSessionsNewestFirst`), with
  * `createdAt` as the tie-break — see that column.
@@ -414,8 +414,8 @@ export const sessions = sqliteTable(
 /**
  * One pause interval of a session, second-precise and zone-less like
  * `started`/`ended`. `toTs` NULL is the RUNNING pause (README).
- * `pos` is the position in the file's list and therefore the key — two pauses
- * may legitimately share a `from`.
+ * `pos` is the position in the session's pause list and therefore the key —
+ * two pauses may legitimately share a `from`.
  */
 export const sessionPauses = sqliteTable(
   "session_pauses",
@@ -724,11 +724,11 @@ export const generateJobs = sqliteTable(
     /** The run's „Neues Kapitel" flag — a retry must not 404 on it. */
     newChapter: integer("new_chapter").notNull().default(0),
     /**
-     * TITLE of the chapter a „Neues Kapitel" run creates. It used to live in
-     * the BROWSER and travelled on the accept request, so a run accepted
-     * after a navigation or a reload carried no title and no chapter at all —
-     * the review state is persistent, the browser's copy of the start form is
-     * not. The title belongs to the run, so it is stored when the run STARTS.
+     * TITLE of the chapter a „Neues Kapitel" run creates. It belongs to the
+     * run, not to the browser: the review state is persistent, a browser's
+     * copy of the start form is not, so a title taken from that copy would be
+     * missing after a navigation or a reload — and the chapter with it. It is
+     * therefore stored when the run STARTS.
      * NULL for every other run and for a job written before this column
      * existed; the accept then falls back to the chapter id.
      */

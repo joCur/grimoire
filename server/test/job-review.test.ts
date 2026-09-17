@@ -6,11 +6,10 @@
 // One fresh store PER CASE — several cases write the same scene, and the
 // address is the primary key.
 //
-// What is asserted is the ticket's own promise: nothing the DM does in the
-// review is lost. The state is a ROW (so it comes back after a restart), a
+// What is asserted is the promise: nothing the DM does in the review is lost. The state is a ROW (so it comes back after a restart), a
 // second tab loses the race with a 409 instead of overwriting, „Diesen
 // übernehmen" writes exactly one part and leaves the rest reviewable, and
-// the job disappears by itself the moment nothing is open any more.
+// the job disappears by itself the moment nothing is open.
 
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import type { GenerateJob } from "@grimoire/shared";
@@ -343,7 +342,7 @@ test("a bulk accept skips an UNDECIDED suggested entry, an explicit one writes i
   expect(await exists(STUB_PATH)).toBe(false);
 
   // Naming it is the decision: „Diesen übernehmen" on its row writes it, and
-  // then nothing is open any more.
+  // then nothing is open.
   const rest = (await fetchJob()) as GenerateJob;
   const one = (await (await accept(rest, { paths: [STUB_PATH] })).json()) as {
     jobDeleted: boolean;
@@ -401,7 +400,7 @@ test("a job that disappears mid-accept rolls the whole write back", async () => 
 // The case above is caught by the pre-read; this one is the TRANSACTION's
 // own guard — the row vanishing between plan and commit. It is reached
 // directly because there is no way to interleave a delete into a synchronous
-// SQLite transaction from a test. A quiet `false` here used to commit the
+// SQLite transaction from a test. A quiet `false` here would commit the
 // drafts while dropping the bookkeeping.
 test("markWrittenInTx throws for a lost job instead of reporting false", async () => {
   const job = await runJob();
@@ -418,11 +417,11 @@ test("markWrittenInTx throws for a lost job instead of reporting false", async (
 
 // --- the new chapter ------------------------------------------------------------
 //
-// The app used to send `chapter`/`chapterTitle` on accept from its OWN state,
-// and the review state is persistent — so the accept regularly happens in a
-// tab that never saw the start form. The scenes were then written under a
-// chapter that had no entry, and the overview (which lists chapters from the
-// chapter table) showed neither the chapter nor its scenes.
+// `chapter`/`chapterTitle` come from the JOB, not from the app's OWN state:
+// the review state is persistent, so the accept regularly happens in a tab
+// that never saw the start form. Scenes written under a chapter that has no
+// entry are invisible — the overview lists chapters from the chapter table
+// and would show neither the chapter nor its scenes.
 //
 // „Reload" is modelled exactly as it reaches the server: an accept with NO
 // chapter fields in the body. Nothing else about these cases is special — same

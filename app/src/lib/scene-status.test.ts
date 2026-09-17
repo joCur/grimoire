@@ -1,7 +1,7 @@
-// Issue #28: the status write. What matters is the payload (the rev must be
-// the one of the file the DM was looking at) and the 409 path — the server
-// wrote NOTHING then, so the UI must re-read the file and let the next
-// attempt carry the fresh rev.
+// The status write. What matters is the payload (the rev must be the one of
+// the entry the DM was looking at) and the 409 path — the server wrote
+// NOTHING then, so the UI must re-read the entry and let the next attempt
+// carry the fresh rev.
 
 import type { EntryResponse } from "@grimoire/shared/types";
 import { afterEach, describe, expect, test } from "bun:test";
@@ -16,9 +16,8 @@ import {
   writeSceneStatus,
 } from "./scene-status";
 
-// The labels come from the catalog and the translator is passed in (issue
-// #69), so a test names the language it asserts instead of leaning on a
-// default.
+// The labels come from the catalog and the translator is passed in, so a test
+// names the language it asserts instead of leaning on a default.
 const t = translator("de");
 const tEn = translator("en");
 
@@ -164,13 +163,13 @@ describe("status labels", () => {
 
   test("an unknown value stays visible verbatim (degrade, never corrected)", () => {
     expect(sceneStatusMeta("verschollen", t).label).toBe("verschollen");
-    // …in every language: the file is the truth, not the catalog.
+    // …in every language: the entry is the truth, not the catalog.
     expect(sceneStatusMeta("verschollen", tEn).label).toBe("verschollen");
     expect(sceneStatusOptions(t).map((o) => o.value)).not.toContain("verschollen");
   });
 });
 
-// Issue #73: the split the live nav groups by.
+// The split the live nav groups by.
 describe("isSceneDone", () => {
   test("played and dropped are behind us", () => {
     expect(isSceneDone("played")).toBe(true);

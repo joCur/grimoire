@@ -1,13 +1,12 @@
-// Critical path 9: editing a file's markdown body in the app — open → change
+// Critical path 9: editing an entry's markdown body in the app — open → change
 // the body → save → rendered; 409 on a CONCURRENT SECOND WRITE means reload
 // instead of a silent overwrite; see CLAUDE.md.
 //
-// Since the cutover the database is the only truth, so "someone
-// changed the file outside" can no longer happen — the conflict this path is
-// about is a second write through the API while the editor stands open.
-// Everything else is unchanged: the write goes through PUT /entry with its
-// guard token, the properties block must come out byte-identical, and every
-// assertion reads the file back — through the API instead of from disk.
+// The database is the only truth (ADR #13), so "someone changed the entry
+// outside" cannot happen — the conflict this path is about is a second write
+// through the API while the editor stands open. The write goes through
+// PUT /entry with its guard token, the properties block must come out
+// byte-identical, and every assertion reads the entry back through the API.
 //
 // Unlike the status control (critical path 7) the conflict is DETERMINISTIC:
 // the editor freezes the guard token it was seeded from, on purpose, so the
@@ -50,7 +49,7 @@ async function split(api: Api, rel: string) {
  * fallback surface owns costs one more click: the „Markdown" side of the mode
  * toggle. Switching is lossless by construction (the draft round-trips through
  * serializeBlocks/parseBlocks), which is why the textarea below is still
- * seeded with the file's body byte for byte and „Speichern" is still disabled
+ * seeded with the entry's body byte for byte and „Speichern" is still disabled
  * right after opening.
  */
 async function openMarkdownEditor(page: Page): Promise<void> {
@@ -284,7 +283,7 @@ test("the status control next to the editor is no conflict for the own save", as
   await textarea.fill(`${before.body}\n${mine}\n`);
 
   // The pill stays usable while the editor runs — and its PATCH
-  // bumps the file's rev without touching one byte of the body.
+  // bumps the entry's rev without touching one byte of the body.
   const trigger = page.getByRole("button", { name: /^Status ändern, aktuell/ });
   await trigger.click();
   await page.getByRole("menuitemradio", { name: "Gespielt" }).click();
@@ -473,7 +472,7 @@ test("campaign keeps its ONE Bearbeiten — the metadata dialog", async ({ page 
     "Der Leuchtturm von Salzhafen",
   );
 
-  // One label, one meaning: the campaign file's „Bearbeiten" is
+  // One label, one meaning: the campaign entry's „Bearbeiten" is
   // the name/description dialog, and there is no second one for the body.
   const edit = page.getByRole("button", { name: "Bearbeiten" });
   await expect(edit).toHaveCount(1);
@@ -483,11 +482,11 @@ test("campaign keeps its ONE Bearbeiten — the metadata dialog", async ({ page 
 });
 
 test("the glossary stays saveable while a session writes next to it", async ({ page, api }) => {
-  // Critical path 9 for the campaign's list document, and the regression of a
-  // cutover bug: `glossary` was guarded by `campaigns.version`, which EVERY
-  // write bumps. A quick note during a running session therefore answered the
-  // DM's open glossary edit with „Inzwischen geändert" — un-saveable exactly
-  // while the campaign is in use. Each document carries its own token now.
+  // Critical path 9 for the campaign's list entries: `glossary` is NOT
+  // guarded by `campaigns.version`, which EVERY write bumps. Otherwise a quick
+  // note during a running session would answer the DM's open glossary edit
+  // with „Inzwischen geändert" — un-saveable exactly while the campaign is in
+  // use. Each entry carries its own token.
   await page.goto("/campaigns/beispiel/entries/glossary");
   await expect(page.getByRole("article")).toContainText("Leuchtturmwärter");
 

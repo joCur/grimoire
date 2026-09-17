@@ -2,7 +2,7 @@
 // on their own, plus the run mechanics a rendering test cannot see.
 //
 // The pure halves (the outline validation, the excerpt cut, the prompt
-// assembly) are called directly: they are the rules the whole ticket rests on
+// assembly) are called directly: they are the rules the whole run rests on
 // and going through HTTP for them would only make a failure harder to read.
 // The run mechanics — a failed part that does not take its siblings down, a
 // retry that re-runs ONE part, a cancel that stops the open rest — go through
@@ -174,10 +174,9 @@ test("the outline's ids are kebab slugs and unique across scenes AND entries", (
 });
 
 test("an id the campaign already has is NOT an outline error", () => {
-  // Since issue #70 a reference creates an EMPTY row, so „fenn exists“ can
-  // mean „a scene mentions him and nobody has written him yet“ — which is
-  // exactly the entry this run should fill. Collisions are the apply path's
-  // question, and they always were.
+  // A reference creates an EMPTY row, so „fenn exists“ can mean „a scene
+  // mentions him and nobody has written him yet“ — which is exactly the entry
+  // this run should fill. Collisions are the apply path's question.
   expect(
     outlineErrors(
       outlineReply({ entries: [{ kind: "npc", id: "fenn", name: "Fenn", summary: "x" }] }),
@@ -377,7 +376,7 @@ test("the single-scene mode swaps the output schema and keeps every rule", async
   // The outline-bound half of the swap: one scene per call, no entries.
   expect(single).toContain("GENAU EINE Szene");
   expect(single).toContain("Die Gliederung ist verbindlich.");
-  // Exactly one output-format heading, and the file format and the rules of
+  // Exactly one output-format heading, and the entry format and the rules of
   // the scene prompt are untouched — that is why this is a swap and not a
   // second prompt file.
   expect(single.split("## Ausgabeformat").length - 1).toBe(1);
@@ -405,7 +404,7 @@ test("the outline block names every id — and nothing about the assigned part",
   expect(block).toContain("→ verweist auf: captured");
   expect(block).toContain("npc: grella (Grella) — Schmugglerin");
   // Which scene THIS call writes is NOT in here — it is a section of its own
-  // in the variable half, so the block stays cacheable (issue #102 review).
+  // in the variable half, so the block stays cacheable.
   expect(block).not.toContain("DIESE Szene");
   expect(assignmentBlock(outline.scenes[1]!)).toBe("captured — Erwischt");
 
@@ -479,7 +478,7 @@ function sceneDoc(id: string, over: { status?: string } = {}): string {
 
 /**
  * A provider that answers the outline with three scenes and then serves one
- * document per scene — with `broken` failing its validation every time, which
+ * entry per scene — with `broken` failing its validation every time, which
  * is what „ein Teil schlägt fehl“ has to mean for the other two.
  */
 class ThreeSceneProvider implements LLMProvider {
@@ -623,10 +622,9 @@ test("one failed part leaves the other two reviewable (AK1, AK2)", async () => {
 });
 
 test("a done part is acceptable while the run is still RUNNING (AK2)", async () => {
-  // The old gate asked for a finished JOB, which made the pipeline's central
-  // promise unkeepable: „was hier steht, kannst du schon übernehmen" while
-  // the run says `running`. The UI offers it, so the endpoint has to answer
-  // it (issue #102 review).
+  // The gate is the PART, not the job: „was hier steht, kannst du schon
+  // übernehmen" has to hold while the run still says `running`. The UI offers
+  // it, so the endpoint has to answer it.
   const gate = new Promise<void>(() => {});
   class HoldsLast extends ThreeSceneProvider {
     override async complete(

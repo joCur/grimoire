@@ -29,7 +29,7 @@ import { expect, test } from "../support/test";
 
 /**
  * How the REVIEW addresses the draft: `<chapter>/<id>`, built by the server
- * from the run's chapter and the frontmatter id.
+ * from the run's chapter and the property id.
  */
 const DRAFT_PATH = `01-salzhafen/${SCENE_ID}`;
 /**
@@ -92,7 +92,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   // The draft card: title, target path, status pill, rendered body.
   const card = page.locator("div").filter({ hasText: DRAFT_PATH }).last();
   await expect(page.getByRole("heading", { level: 2, name: SCENE_TITLE })).toBeVisible();
-  // The status chip shows the LABEL, not the raw frontmatter value.
+  // The status chip shows the LABEL, not the raw property value.
   await expect(card.getByText("Entwurf", { exact: true })).toBeVisible();
   await expect(card.locator("[data-callout='readaloud']")).toContainText("Die Flut zieht sich");
   await expect(card.locator("[data-callout='loot']")).toContainText("Beute");
@@ -332,7 +332,7 @@ test("review state survives navigation and reload; parts are accepted one by one
   });
 
   // (1) Edit the draft, leave the page, come back: the text is there. This is
-  // the loss being guarded against — it used to live in component state only.
+  // the loss being guarded against: component state alone would not survive.
   const card = page.locator("div").filter({ hasText: DRAFT_PATH }).last();
   await card.getByRole("button", { name: "Bearbeiten" }).click();
   const textarea = page.getByRole("textbox", { name: `Markdown von ${SCENE_TITLE}` });
@@ -429,11 +429,11 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
 // Critical path 6: „Neues Kapitel" → leave the page → come back →
 // „Übernehmen". The chapter has to be in the overview WITH its title.
 //
-// The app used to send the chapter and its title from its own state when the
-// accept was pressed; the review state is persistent, so the accept regularly
-// happens after a navigation or a reload, when that state is gone — and then
-// the scenes were written under a chapter that had no entry of its own, which
-// the overview cannot list.
+// The chapter and its title come from the JOB, not from the app's own state:
+// the review state is persistent, so the accept regularly happens after a
+// navigation or a reload, when that state is gone — and scenes written under
+// a chapter that has no entry of its own are something the overview cannot
+// list.
 //
 // The navigation is the whole point of the test, so it is a REAL one: to the
 // overview and back, which is what a DM does while the run is going.

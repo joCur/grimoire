@@ -380,7 +380,8 @@ api.post("/campaigns/:campaign/session/discard", async (c) =>
 // POST /api/campaigns/:campaign/log { text, sceneId? } -> EntryResponse
 // Appends `- HH:MM (sceneId) text` to the ACTIVE session (not
 // stubbornly to today's file); 404 when no session is running — including
-// right after "Session beenden", where a note used to land in the closed log.
+// right after "Session beenden", where a note would otherwise land in the
+// closed log.
 api.post("/campaigns/:campaign/log", async (c) => {
   const body = await jsonBody(c, ["text", "sceneId"]);
   const text = normalizeLineText(body.text);
@@ -469,7 +470,7 @@ api.put("/campaigns/:campaign/knowledge", async (c) => {
 //
 // Five POSTs, one shape: the DM types a NAME, the server derives the id with
 // the shared slug rule (@grimoire/shared/slug) and answers with the created
-// DOCUMENT — the same `EntryResponse` every other write returns, so the app can
+// ENTRY — the same `EntryResponse` every other write returns, so the app can
 // navigate straight into it. A taken id is
 // `409 { code: "slug_taken", id, suggestion, path }`; a name that yields no
 // slug at all is a 400 that says so (store/write.ts explains why neither is
@@ -670,9 +671,10 @@ const isDecision = (v: unknown): v is "accepted" | "rejected" | null =>
 // lands in the job.
 //
 // `chapterTitle` belongs to a `newChapter` run and is stored ON the job: the
-// accept step used to read the title out of the browser, which is gone after
-// a navigation or a reload — and the chapter with it. Optional, so an older
-// app build still starts runs; the accept then falls back to the chapter id.
+// accept step must not read the title out of the browser, whose copy is gone
+// after a navigation or a reload — and the chapter with it. Optional, so an
+// older app build still starts runs; the accept then falls back to the
+// chapter id.
 api.post("/campaigns/:campaign/generate", async (c) => {
   const body = await jsonBody(c, ["chapter", "sourceText", "newChapter", "chapterTitle"]);
   const campaign = c.req.param("campaign");
@@ -907,7 +909,7 @@ api.delete("/campaigns/:campaign/generate/job", async (c) => {
 // Writes the reviewed drafts — synchronous on purpose: this is a short file
 // write, and the DM waits for its result. Re-validates server-side
 // (properties parses, status draft, safe paths); 409 { conflicts } when any
-// target file exists — then nothing is written at all. chapter +
+// target entry exists — then nothing is written at all. chapter +
 // chapterTitle (both or neither) additionally create the chapter entry
 // when it is missing, in the same all-or-nothing batch (the app's "Neues
 // Kapitel" flow).

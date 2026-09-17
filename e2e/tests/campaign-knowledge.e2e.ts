@@ -1,4 +1,4 @@
-// Critical path 6, extended (issue #53, PO feedback on PR #87): the campaign
+// Critical path 6, extended: the campaign
 // knowledge and the glossary as the DM maintains them on their own PAGES, and
 // what the generator then does with them. See CLAUDE.md, „Kritische Pfade“.
 //
@@ -16,10 +16,10 @@
 //      has to name it, with its position, AND still let „Übernehmen“ write the
 //      draft.
 //
-// Plus what the PAGES have to do that the old inline settings sections did
-// not: be reached from four entry points, filter, open ONE entry at a time
-// with fields that fit the content, save that entry on its own, confirm a
-// deletion — and the 409 that a whole-list PUT still needs underneath.
+// Plus what the PAGES have to do: be reached from four entry points, filter,
+// open ONE entry at a time with fields that fit the content, save that entry
+// on its own, confirm a deletion — and the 409 that a whole-list PUT still
+// needs underneath.
 
 import type { Page } from "@playwright/test";
 
@@ -72,7 +72,7 @@ test("the knowledge page: add, edit, reorder, delete — one entry at a time", a
   // --- anlegen: a naming convention -----------------------------------------
   await page.getByRole("button", { name: "Neuer Eintrag" }).click();
   // „Namenskonvention“ is the default kind, so the Alt/Neu pair is there —
-  // each on its own full-width line (PO feedback on PR #87).
+  // each on its own full-width line.
   await expect(page.getByLabel("Art")).toHaveValue("naming");
   await page.getByLabel("Alt (im Quellmaterial)").fill(OLD_NAME);
   await page.getByLabel("Neu (in dieser Kampagne)").fill("Salzmarsch");
@@ -138,8 +138,8 @@ test("the glossary page: alphabetical, filterable, and a LONG explanation fits",
   expect(shown).toBe(before.entries.length);
 
   // --- anlegen, with an explanation that is a PARAGRAPH ---------------------
-  // The complaint that started this rework: the old inline field was a 120px
-  // box. The textarea grows, and what is typed is what comes back.
+  // An explanation is a paragraph, not a 120px box: the textarea grows, and
+  // what is typed is what comes back.
   const LONG =
     "Das Watt vor Salzhafen fällt bei Ebbe über eine Meile weit trocken; " +
     "Schmuggler nutzen die Priele, weil die Zollkutter dort auflaufen, und " +
@@ -161,7 +161,7 @@ test("the glossary page: alphabetical, filterable, and a LONG explanation fits",
     "tidal flat",
   ]);
   expect(after.entries.at(-1)?.explanation).toBe(LONG);
-  // The list's own guard token moved — the glossary is one document.
+  // The list's own guard token moved — the glossary is one entry.
   expect(after.rev).toBe(before.rev + 1);
 
   // --- the filter hides rows, and the row it leaves is the right one -------
@@ -220,7 +220,7 @@ test("a competing write is a conflict, not a silent overwrite", async ({ page, a
   await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
 
   // Reloading is their decision — and it costs the draft, so it asks first
-  // (PO finding on PR #87: it used to discard the typing without a word).
+  // instead of discarding the typing without a word.
   await page.getByRole("button", { name: "Neu laden" }).click();
   const discard = page.getByRole("dialog");
   await expect(discard).toContainText("Änderungen verwerfen?");
@@ -292,7 +292,7 @@ test("switching the kind carries the text into the new form", async ({ page, api
 
 test("four ways in: the pool line, the phone, ⌘K and the generator", async ({ page }) => {
   // (a) The pool's quiet „Nachschlagen“ line — and the topbar is UNCHANGED
-  //     (PO feedback on PR #87: the two pages are deliberately not up there).
+  //     (the two pages are deliberately not up there).
   await page.goto("/campaigns/beispiel");
   const lookup = page.getByRole("navigation", { name: "Nachschlagen" });
   await expect(lookup).toBeVisible();
@@ -305,7 +305,7 @@ test("four ways in: the pool line, the phone, ⌘K and the generator", async ({ 
   await expect(topbar.getByRole("link", { name: "Kampagnenwissen" })).toHaveCount(0);
 
   // (c) ⌘K reaches both as navigation targets — the server's index holds
-  //     documents, not pages, so nothing but the palette itself can offer them.
+  //     entries, not pages, so nothing but the palette itself can offer them.
   await page.keyboard.press("ControlOrMeta+KeyK");
   await page.getByRole("combobox").fill("glossar");
   const option = page.getByRole("option").filter({ hasText: "Glossar" });
@@ -372,7 +372,7 @@ test("the generator run: the knowledge travels, the naming check flags the draft
   await page.getByLabel("Fakt, der gilt").fill("[[fenn]] führt die Schmuggler.");
   await saveEntry(page);
 
-  // --- the generator names the COUNT in „Mitgeschickter Kontext“ (AK5) ------
+  // --- the generator names the COUNT in „Mitgeschickter Kontext“ -----------
   await page.goto("/campaigns/beispiel/generate");
   await expect(page.getByRole("link", { name: "2 Wissens-Einträge" })).toBeVisible();
 
@@ -385,7 +385,7 @@ test("the generator run: the knowledge travels, the naming check flags the draft
 
   // 1. WHAT ARRIVED: the stub echoes the prompt's knowledge block back, so
   //    the review shows both rules — and `[[fenn]]` reached the model as the
-  //    NPC's NAME, not as a slug (AK4).
+  //    NPC's NAME, not as a slug.
   const echo = page.getByText(CONTEXT_ECHO, { exact: false });
   await expect(echo).toBeVisible();
   await expect(echo).toContainText(`schreibe „${OLD_NAME}“ immer als „Salzmarsch“`);
@@ -416,8 +416,8 @@ test("without naming conventions nothing is flagged and the prompt is unchanged"
   page,
 }) => {
   // The example campaign has no knowledge, so this is the shape every
-  // campaign that never uses the feature sees (AK5: „Glossar-Verhalten im
-  // Prompt unverändert").
+  // campaign that never uses the feature sees („Glossar-Verhalten im Prompt
+  // unverändert").
   await page.goto("/campaigns/beispiel/generate");
   await expect(page.getByRole("link", { name: "kein Kampagnenwissen" })).toBeVisible();
 
@@ -431,7 +431,7 @@ test("without naming conventions nothing is flagged and the prompt is unchanged"
   await expect(page.getByRole("heading", { name: /Namens-Hinweis/ })).toHaveCount(0);
 });
 
-// --- what an OPEN row survives (PO findings on PR #87) ------------------------
+// --- what an OPEN row survives ------------------------------------------------
 //
 // The version poller refetches both lists every ~5s (app/src/lib/use-campaign-
 // version.ts), so the list under an open row really does change in production
@@ -577,7 +577,7 @@ test("the growing textarea follows the WIDTH, not only the text", async ({ page 
   const wide = await explanation.boundingBox();
 
   // Narrower viewport: the same text needs more lines. The field has to grow
-  // with them instead of clipping its own bottom (PO finding on PR #87).
+  // with them instead of clipping its own bottom.
   await page.setViewportSize({ width: 560, height: 900 });
   await expect
     .poll(async () => (await explanation.boundingBox())?.height ?? 0)

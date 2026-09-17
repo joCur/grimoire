@@ -1,9 +1,9 @@
 // The live mode's detail drawer: the full NPC or location entry
 // WITHOUT leaving the running session.
 //
-// Before this, an NPC card in the live aside was a link — one click and the
-// DM was on the reading route, having lost the selected scene and whatever
-// was half-typed in the Schnellnotiz. The drawer keeps the live route mounted
+// An NPC card in the live aside is not a link: one click would land on the
+// reading route, losing the selected scene and whatever was half-typed in the
+// Schnellnotiz. The drawer keeps the live route mounted
 // (so both survive) and renders the very same article pipeline the reading
 // view uses (EntityArticle → Markdown → callouts), so what the DM reads here
 // is what the entry says. „Eintrag öffnen" is the deliberate way OUT into the

@@ -1,20 +1,19 @@
-// The hierarchical context of an entry view (issue #34, PO rework of PR #35).
+// The hierarchical context of an entry view.
 //
-// This is what the topbar breadcrumbs used to say — moved into the page, where
-// it sits next to the title it describes instead of competing with the global
-// chrome. Two rules come out of that move:
+// The context line sits inside the page, next to the title it describes,
+// rather than in the global chrome. Two rules follow:
 //
 //   1. The campaign name is NOT part of it. It appears exactly once in the
-//      whole chrome, in the switcher; repeating it here is what made the old
-//      breadcrumb read as noise ("Der Leuchtturm von Salzhafen / Kapitel 1:
-//      Der Leuchtturm von Salzhafen / Fenn").
+//      whole chrome, in the switcher; repeating it here reads as noise ("Der
+//      Leuchtturm von Salzhafen / Kapitel 1: Der Leuchtturm von Salzhafen /
+//      Fenn").
 //   2. The context is the path the DM actually took, so an npc/location view
 //      points at ITS list — not at some chapter that happens to mention it,
-//      which was misleading for an NPC opened from the NPC list.
+//      which is misleading for an NPC opened from the NPC list.
 //
-// The scene's chapter comes from the PATH, not from `chapter` properties: the
-// directory is the filesystem truth and always there, while the key may be
-// missing or stale (the format degrades). The tree turns the id into the title.
+// The scene's chapter comes from the ADDRESS, not from `chapter` properties:
+// the address segment is always there, while the key may be missing or stale
+// (the format degrades). The tree turns the id into the title.
 
 import type { CampaignTree } from "@grimoire/shared/types";
 import { kindFromAddress } from "@grimoire/shared/kind";

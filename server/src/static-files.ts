@@ -1,4 +1,4 @@
-// Static serving of the built frontend (issue #13, deployment).
+// Static serving of the built frontend.
 //
 // In production the whole app is ONE process: Hono serves /api and, as a
 // fallback, the Vite build in app/dist (SPA routing -> index.html). In dev

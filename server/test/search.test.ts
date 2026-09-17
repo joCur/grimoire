@@ -1,16 +1,16 @@
-// Search + version tests (issues #7/#8, ported to FTS5 in issue #57).
+// Search + version tests, over the FTS5 index.
 //
-// Fuse.js and the in-memory index are gone: search is a query against the
-// `search_fts` table, maintained by the store on every write (store/fts.ts).
-// So there is nothing to invalidate any more — a case gets a fresh in-memory
-// database seeded from `examples/` and asks the endpoint.
+// Search is a query against the `search_fts` table, maintained by the store
+// on every write (store/fts.ts). There is nothing to invalidate — a case
+// gets a fresh in-memory database seeded from `examples/` and asks the
+// endpoint.
 //
-// The two properties the reference queries of issue #57 AK5 rely on are
-// PREFIX terms (a half-typed query matches) and DIACRITIC FOLDING (the
-// `unicode61 remove_diacritics 2` tokenizer). What is NOT here any more is
-// fuzzy/typo tolerance — that was Fuse's, and its replacement is prefix plus
-// folding; genuine typo tolerance would need a trigram tokenizer and is a
-// documented later option.
+// The two properties the reference queries below rely on are PREFIX terms (a
+// half-typed query matches) and DIACRITIC FOLDING (the
+// `unicode61 remove_diacritics 2` tokenizer). Fuzzy/typo tolerance is NOT
+// part of the contract: prefix plus folding is what search offers, and
+// genuine typo tolerance would need a trigram tokenizer and is a documented
+// later option.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { SearchResult } from "@grimoire/shared";
@@ -123,7 +123,7 @@ describe("GET /api/campaigns/:campaign/search", () => {
   });
 });
 
-// --- the reference queries of issue #57 AK5 ---------------------------------
+// --- the reference queries -------------------------------------------------
 
 describe("reference queries (issue #57 AK5)", () => {
   test("'jorna' puts the NPC first — title/ref outweigh a body mention", async () => {

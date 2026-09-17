@@ -13,7 +13,6 @@
 //
 // The wire vocabulary follows from that: an entry's fields are
 // `properties`, its optimistic-concurrency token is `rev` (the row version).
-// Neither `frontmatter` nor `mtimeMs` exists above the importer any more.
 //
 // Planned API — the living checklist (conventions: /README.md). Tick an
 // endpoint here when it is implemented:
@@ -87,7 +86,7 @@
 //                                              inbox answers the same way, for the same
 //                                              reason.
 //                                              `rev` of glossary/inbox is that
-//                                              DOCUMENT's own counter, not campaigns.version
+//                                              ENTRY's own counter, not campaigns.version
 //   [x] PATCH /api/campaigns/:campaign/properties        { path, rev, patch } — only if rev is
 //                                              unchanged, otherwise
 //                                              409 { code: "rev_conflict", rev }.
@@ -439,9 +438,9 @@ if (import.meta.main) {
         `entry and got one: ${groupMigration.createdLocations.join(", ")}`,
     );
   }
-  // Jobs are rows now, so a restart no longer loses a finished
-  // generation — but a run that was in flight died with the old process and
-  // is reported as failed. Say so, it explains the app's message.
+  // Jobs are rows, so a restart keeps a finished generation — but a run that
+  // was in flight died with the previous process and is reported as failed.
+  // Say so, it explains the app's message.
   if (info !== undefined && info.interruptedJobs > 0) {
     console.log(
       `${info.interruptedJobs} generate job(s) were running at the last shutdown — ` +

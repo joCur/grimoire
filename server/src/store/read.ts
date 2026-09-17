@@ -125,8 +125,8 @@ export async function campaignVersion(id: string): Promise<number> {
  * `compareSessionsNewestFirst`: `started`, then the row's insertion order.
  *
  * The `started` value travels because the id CANNOT be ordered by the client:
- * it is opaque (db/schema.ts). The app used to sort campaigns by the id
- * string and would now be sorting random noise.
+ * it is opaque (db/schema.ts). Sorting campaigns by the id string would be
+ * sorting random noise.
  *
  * `name` is the campaign's DISPLAY name and therefore always there: an
  * unnamed campaign is shown under its id. This list and `GET /entries/
@@ -377,10 +377,9 @@ export type SessionOrderFields = Pick<SessionRow, "id" | "started" | "createdAt"
  * Chronological order key of a session in epoch milliseconds, or undefined
  * when the row says nothing usable about WHEN it started.
  *
- * `started` is the ONLY source. The id used to serve as a fallback while it
- * was date-shaped; it is now an opaque random string (db/schema.ts) and there
- * is nothing in it to read. A row without a usable `started` therefore wins
- * nothing — same as before for a row that had neither.
+ * `started` is the ONLY source. The id is an opaque random string
+ * (db/schema.ts) and there is nothing in it to read, so a row without a
+ * usable `started` wins nothing.
  *
  * Takes only the columns it reads, so callers that need nothing else of a
  * session (the campaign list) can select just those.
@@ -557,12 +556,11 @@ export function readByLocator(
         .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, locator.id)))
         .all()[0] as SceneRow | undefined;
       if (row === undefined) throw new ApiError(404, "entry not found");
-      // A scene is resolved by its ID alone. The chapter and
-      // group segments used to have to match, which was right while a group
-      // was an independent value — but the group is `location` now and moves
-      // whenever the DM corrects it, so an old link is a STALE ADDRESS for a
-      // scene that still exists, not a wrong one. The answer carries the
-      // CURRENT address in `path` (renderScene builds it from the row) and
+      // A scene is resolved by its ID alone. The chapter and group segments
+      // are not matched: the group is `location` and moves whenever the DM
+      // corrects it, so an old link is a STALE ADDRESS for a scene that still
+      // exists, not a wrong one. The answer carries the CURRENT address in
+      // `path` (renderScene builds it from the row) and
       // the app replaces the URL with it. See ADR #17.
       const summary = sceneSummaryRow(db, row);
       return renderScene(row, summary.npcs, summary.tags);
@@ -594,22 +592,21 @@ export function readByLocator(
       const rows = inboxRows(db, campaign);
       // Neither the inbox nor the glossary is a single row that could carry a
       // `rev`, so each has its own counter on the campaign row
-      // (`inbox_rev` / `glossary_rev`, schema.ts). `version` used to stand in
-      // for both, and because EVERY write bumps that, one unrelated log line
-      // invalidated a glossary edit the DM had open — un-saveable during a
+      // (`inbox_rev` / `glossary_rev`, schema.ts). `version` cannot stand in
+      // for both: EVERY write bumps it, so one unrelated log line would
+      // invalidate a glossary edit the DM had open — un-saveable during a
       // running session. A content hash would be the unsafe fix (two
       // different edits can hash alike); a per-entry counter is the exact
       // one.
       // An EMPTY inbox is an empty entry, not a missing one (200) — the
-      // same answer the glossary gives below: "no rows yet" was the file
-      // era's "no file yet", and it made every reader special-case a 404
-      // that means nothing is wrong.
+      // same answer the glossary gives below; a 404 would make every reader
+      // special-case an answer that means nothing is wrong.
       return renderInbox(campaign, rows, campaignRowValue.inboxRev);
     }
     case "glossary":
-      // An EMPTY glossary is an empty entry, not a missing one (200). The
-      // 404 it used to answer was a trap: saving an empty body through the
-      // editor made the file the editor was in unreachable.
+      // An EMPTY glossary is an empty entry, not a missing one (200). A 404
+      // would be a trap: saving an empty body through the editor would make
+      // the entry the editor is in unreachable.
       return renderGlossary(
         glossaryRows(db, campaign),
         campaignRowValue.glossaryRev,

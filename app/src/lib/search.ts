@@ -10,9 +10,9 @@ import type { MessageKey, Translate } from "@/i18n";
 
 /**
  * The kind labels of the ⌘K results, per the design reference. From the
- * catalog since issue #69, with the translator PASSED IN (the lib layer never
- * decides the language) — and from the SAME `kind.*` keys the properties
- * dialog's title uses, so „Szene" is one string in one place.
+ * catalog, with the translator PASSED IN (the lib layer never decides the
+ * language) — and from the SAME `kind.*` keys the properties dialog's title
+ * uses, so „Szene" is one string in one place.
  *
  * Unknown kinds pass through verbatim (degrade, README).
  */

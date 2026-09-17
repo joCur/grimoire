@@ -5,23 +5,22 @@
 // so they cannot drift apart: the cold-start PAGE (routes/home.tsx — an empty
 // instance has nothing behind a dialog worth keeping visible) and
 // `CampaignCreateDialog`, which the topbar switcher opens on an instance that
-// already runs (PO feedback on issue #56: a SECOND campaign had no entry point
-// in the UI at all, which is the dead end this ticket exists to remove). Same
-// fields, same id preview, same 409 proposal.
+// already runs — without it a SECOND campaign would have no entry point in
+// the UI at all. Same fields, same id preview, same 409 proposal.
 //
-// PLACEHOLDERS ARE GENERIC (same feedback): every field hint names the KIND of
+// PLACEHOLDERS ARE GENERIC: every field hint names the KIND of
 // thing that belongs there („Titel der Szene", „Name des Orts"), never a name
 // out of the example campaign — a placeholder that reads like real campaign
 // content is taken for a default.
 //
 // WHERE THEY SIT, and why:
 //
-//   Kapitel   the pool header, next to „Bearbeiten" — the pool IS the chapter
+//   chapter   the pool header, next to „Bearbeiten" — the pool IS the chapter
 //             list, so this is where a chapter is missing from.
-//   Szene     inside a chapter accordion, so the chapter is prefilled BY
+//   scene     inside a chapter accordion, so the chapter is prefilled BY
 //             POSITION and the dialog needs no chapter picker at all.
-//   NPC/Ort   the head of their list pages — the only surfaces that show all
-//             of them, and the ones a phone can reach.
+//   npc /     the head of their list pages — the only surfaces that show all
+//   location  of them, and the ones a phone can reach.
 //
 // WHAT HAPPENS AFTER a successful create differs per kind, and that is the
 // point of having four wrappers rather than one:
@@ -29,8 +28,8 @@
 //   a SCENE opens immediately in the editor (`?edit=1`) — a scene with a title
 //     and nothing else is an invitation to write, and the composer is that
 //     invitation. Nobody creates a scene in order to look at its empty body.
-//   an NPC/ORT opens its reading view, where „Eigenschaften" carries the rest
-//     of the fields — the dialog deliberately asks for a name only.
+//   an NPC/LOCATION opens its reading view, where „Eigenschaften" carries
+//     the rest of the fields — the dialog deliberately asks for a name only.
 //   a CHAPTER stays where it is: the pool now lists it, with its own
 //     „Szene anlegen" underneath, which is the actual next step.
 //

@@ -84,8 +84,8 @@ test.describe("with a session open since yesterday", () => {
     // The session is the server's answer, not something the client derives
     // from today's date — it comes out of the seeded entry.
     await page.goto("/campaigns/beispiel");
-    // The same chip the desktop topbar carries (PO feedback on issue #40) — in
-    // link mode, in the mobile row: one tap back into the session.
+    // The same chip the desktop topbar carries — in link mode, in the mobile
+    // row: one tap back into the session.
     const row = page.getByRole("link", { name: /Session läuft/ });
     await expect(row).toBeVisible();
     // The runtime is computed from the SERVER's reading of `started`, so it is

@@ -35,9 +35,9 @@ export function entityHeaderKind(kind: EntityKind): EntityHeaderKind {
 
 /**
  * Entity ids are kebab slugs. The rule itself lives in `@grimoire/shared/slug`
- * since issue #56 — server and app derive the SAME id from a typed title, so
- * the regex and the transliteration cannot be two copies any more. Re-exported
- * here because this is where the app's callers look for it: the properties form
+ * — server and app derive the SAME id from a typed title, so the regex and the
+ * transliteration are not two copies. Re-exported here because this is where
+ * the app's callers look for it: the properties form
  * (does an unknown value become an entry or stay free text?), its `npcs` list
  * (is this an id at all?) and the review's #npc lines.
  */
@@ -45,8 +45,8 @@ export { isEntityId } from "@grimoire/shared/slug";
 
 /**
  * Labels for the known npc `status` values (shared NPC_STATUSES), from the
- * catalog since issue #69 — the translator is PASSED IN, so this module holds
- * no copy of its own (i18n/index.ts, the lib-layer rule).
+ * catalog — the translator is PASSED IN, so this module holds no copy of its
+ * own (i18n/index.ts, the lib-layer rule).
  *
  * The format degrades: an unknown value is shown verbatim instead of being
  * swallowed or corrected — the entry stays the truth.
@@ -67,8 +67,8 @@ export function npcStatusLabel(status: string, t: Translate): string {
 /**
  * Title of a browse list page ("/campaigns/:campaign/list/:kind"), or undefined for a
  * kind that has no list. Shared by the list page itself and the topbar
- * breadcrumb — on the desktop those pages are reached from the pool now
- *, so they need a way back.
+ * breadcrumb — on the desktop those pages are reached from the pool, so they
+ * need a way back.
  */
 const BROWSE_LIST_TITLE_KEYS: Record<string, MessageKey> = {
   scenes: "browse.title.scenes",

@@ -322,15 +322,15 @@ describe("POST /api/campaigns/:campaign/generate/npc", () => {
     expect(fake.calls[0]!.req.context.targetId).toBe("die-graue");
     expect(fake.calls[1]!.corrections[0]!.assistant).toBe(bad);
     expect(fake.calls[1]!.corrections[0]!.correction).toContain('"die-graue"');
-    // the correction turn names the NPC file, not "alle Szenen und Stubs"
+    // the correction turn names the NPC entry, not "alle Szenen und Stubs"
     expect(fake.calls[1]!.corrections[0]!.correction).toContain("vollständige NPC-Datei");
   });
 
   test("an npc reply without an id is a correction turn, not the id npc", async () => {
     // The reply carries NO `id`. The shared parser degrades a missing id to
-    // the address's last segment, and the validation used to parse the reply
-    // under the label `"npc"` — a kebab slug that passed the id pattern, so
-    // the run silently produced `npcs/npc`.
+    // the address's last segment, so parsing the reply under the label
+    // `"npc"` — a kebab slug that passes the id pattern — would silently
+    // produce `npcs/npc`.
     const bad = npcReply({ content: npcMarkdown().replace("id: grella\n", "") });
     const fake = useFake([bad, npcReply()]);
     const res = await generateNpc(npcBody);

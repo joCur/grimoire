@@ -80,9 +80,9 @@ async function seedWithoutSessions(): Promise<void> {
 }
 
 /**
- * Start a session and return ITS PATH. Session ids are opaque random strings
- * since issue #58, so no test may spell one out — the path always comes from
- * the response that created (or reported) the session.
+ * Start a session and return ITS PATH. Session ids are opaque random
+ * strings, so no test may spell one out — the path always comes from the
+ * response that created (or reported) the session.
  */
 async function startSession(): Promise<string> {
   const res = await post("/api/campaigns/beispiel/session/start");
@@ -91,9 +91,9 @@ async function startSession(): Promise<string> {
 }
 
 /**
- * How many sessions the campaign has. The successor of "no file was created
- * for the new day": with an opaque id there is no path to probe for absence,
- * so the assertion counts rows instead (via the tree, which lists them).
+ * How many sessions the campaign has. With an opaque id there is no path to
+ * probe for absence, so an assertion about "no new session" counts rows
+ * instead (via the tree, which lists them).
  */
 async function sessionCount(): Promise<number> {
   const res = await app.request("/api/campaigns/beispiel/tree");
@@ -130,10 +130,9 @@ afterEach(async () => {
 });
 
 // --- the picking rule, as a query -------------------------------------------
-// These used to call the pure `pickActiveSession`/`pickLastStartedSession`
-// over SessionSummary lists read off disk. The rule is the same and lives in
-// store/read.ts now, so it is exercised against real rows: the chronology is
-// what decides, not the row order the database happens to return.
+// The rule lives in store/read.ts and is exercised against real rows: the
+// chronology is what decides, not the row order the database happens to
+// return.
 
 describe("pickSession", () => {
   const row = (s: {
@@ -190,11 +189,9 @@ describe("pickSession", () => {
     // A date-only `started` is the midnight degradation of the YAML
     // normalization the migration read — it is a usable order key.
     //
-    // The id is NOT a fallback any more (issue #58, PO decision): it is an
-    // opaque random string, so there is nothing in it to read. A row without
-    // `started` therefore has no place in the chronology, even when its id
-    // happens to look like a date — that shape only exists in files written
-    // before the cutover.
+    // The id is NOT a fallback: it is an opaque random string, so there is
+    // nothing in it to read. A row without `started` therefore has no place
+    // in the chronology, even when its id happens to look like a date.
     onlySessions([row({ id: "2026-08-18" }), row({ id: "2026-08-19", started: "2026-08-19" })]);
     expect(active()).toBe("2026-08-19");
     expect(sessionOrderKey(row({ id: "2026-08-18" }))).toBeUndefined();
@@ -304,9 +301,9 @@ describe("GET /api/campaigns/:campaign/session", () => {
     // A full YAML timestamp (js-yaml only reads the seconds form as a Date)
     // at exactly midnight is indistinguishable from a date-only value, so the
     // migration stored the DEGRADED string `yyyy-mm-dd` (shared/src/parse.ts)
-    // — the only way this shape still reaches the API. startedMs must not
-    // degrade with it: the live timer used to vanish silently here because
-    // the client demanded a time part.
+    // — the only way this shape reaches the API. startedMs must not degrade
+    // with it: the live timer reads startedMs, so a missing one would make
+    // the timer vanish silently.
     await seedWithSessions(session({ id: "2026-08-19", started: "2026-08-19" }));
     const res = await app.request("/api/campaigns/beispiel/session");
     expect(res.status).toBe(200);
@@ -368,8 +365,8 @@ describe("writes land in the ACTIVE session, not in today's", () => {
 describe("start — the state machine's edges (issues #40 review, #58)", () => {
   test("409 session_running instead of a second session next to an open one", async () => {
     // The older session was never ended (a forgotten evening). Starting today
-    // used to create a second row, and ENDING that one resurrected the old
-    // one as "active" — the app now offers to end the old session instead.
+    // must not open a second row next to it — the app offers to end the old
+    // session instead.
     const yesterday = await startAt(new Date(2026, 7, 18, 22, 30), new Date(2026, 7, 19, 21, 5));
     const res = await post("/api/campaigns/beispiel/session/start");
     expect(res.status).toBe(409);
@@ -436,10 +433,9 @@ describe("start — the state machine's edges (issues #40 review, #58)", () => {
   });
 
   test("a discarded session's id never comes back — the next start is a new one", async () => {
-    // The date+sequence scheme needed a PERSISTED high-water mark for this
-    // (meta `session_seq:…`, #58 review): discarding the trailing `-2` deleted
-    // the only trace of it, and the next start re-issued the same id onto
-    // another evening's log rows. A random id needs no bookkeeping at all.
+    // Ids are random, so no high-water mark has to be kept anywhere: a
+    // discarded id is simply never issued again, and the next start opens a
+    // session of its own.
     const seen = new Set<string>();
     seen.add(await startSession());
     expect((await post("/api/campaigns/beispiel/session/end")).status).toBe(200);
@@ -454,13 +450,11 @@ describe("start — the state machine's edges (issues #40 review, #58)", () => {
   });
 
   test("a hand-broken `started` no longer blocks the start (the degrade moved)", async () => {
-    // The old degrade (#58 review, finding 4) was about an ID that did not
-    // parse as a date: it could never be "today", so every start answered 409
-    // `session_running` and the DM had to end the row once. With the check on
-    // `started` that dead end is gone — a row whose `started` is unreadable
-    // has no place in the chronology at all (store/read.ts sessionOrderKey),
-    // so it is not the "running session" either and a start simply opens a
-    // new one. The broken row stays addressable and is not touched.
+    // The running-session check is on `started`, not on the id: a row whose
+    // `started` is unreadable has no place in the chronology at all
+    // (store/read.ts sessionOrderKey), so it is not the "running session"
+    // either and a start simply opens a new one. The broken row stays
+    // addressable and is not touched.
     const broken = await startSession();
     db.update(sessionsTable)
       .set({ started: "gestern abend" })
@@ -504,7 +498,7 @@ describe("POST /session/discard — the mis-click's undo (AK7)", () => {
     const res = await post("/api/campaigns/beispiel/session/discard");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ path: started });
-    // The ROW is gone — the successor of "the file was deleted".
+    // The ROW is gone.
     expect(await fileStatus(started)).toBe(404);
     // …and the session state machine is back where it was: nothing running,
     // and "Session starten" works again instead of a 409.
@@ -535,9 +529,9 @@ describe("POST /session/discard — the mis-click's undo (AK7)", () => {
   });
 
   test("a session with SCENES_PLAYED is refused even with an empty log", async () => {
-    // A hand-edited session file: `scenes_played` set, `## Log` without
-    // entries. Only the migration can produce that shape now — the API
-    // always writes a log line together with a played scene.
+    // A session with `scenes_played` set and `## Log` without entries. The
+    // API cannot produce that shape — it always writes a log line together
+    // with a played scene.
     await seedWithSessions(
       session({
         id: "2026-08-19",
@@ -607,8 +601,8 @@ describe("the review's session — GET /session?includeEnded=1", () => {
 describe("degraded session files never hijack the active session", () => {
   test("an unparseable `started` with a non-date name is ignored (finding 4)", async () => {
     // `sessions/gestern abend.md`: neither the id nor `started` is a date, so
-    // the row has no place in the chronology — it used to win the raw STRING
-    // sort forever and swallow every log line.
+    // the row has no place in the chronology: it must neither become the
+    // active session nor swallow a log line.
     await seedWithSessions(session({ id: "gestern abend", started: "gestern abend" }));
     expect((await app.request("/api/campaigns/beispiel/session")).status).toBe(404);
     expect((await post("/api/campaigns/beispiel/log", { text: "x" })).status).toBe(404);
@@ -624,9 +618,9 @@ describe("degraded session files never hijack the active session", () => {
     expect(((await res.json()) as EntryResponse).path).toBe("sessions/notizen");
   });
 
-  // Sessions written before issue #58 have a MINUTE-precise `started`. The
-  // format's parser has always accepted both widths, so those rows keep
-  // working — verbatim string, a startedMs on the minute, endable.
+  // A MINUTE-precise `started` is a valid width too: the format's parser
+  // accepts both, so such a row keeps working — verbatim string, a startedMs
+  // on the minute, endable.
   test("a pre-#58 minute-precise `started` stays valid", async () => {
     await seedWithSessions(session({ id: "2026-08-19", started: "2026-08-19T20:00" }));
     const res = await app.request("/api/campaigns/beispiel/session");
@@ -641,16 +635,15 @@ describe("degraded session files never hijack the active session", () => {
     expect(ended.properties.ended).toBe("2026-08-19T22:00:30");
   });
 
-  // Date-shaped ids are what every campaign written before the PO decision on
-  // issue #58 carries — plain dates and the `-2` sequence form. They are just
-  // strings now: still addressable, still ordered by `started`, mixed freely
-  // with the opaque ids a start hands out today.
+  // Date-shaped ids — plain dates and the `-2` sequence form — are just
+  // strings: still addressable, still ordered by `started`, mixed freely with
+  // the opaque ids a start hands out.
   test("legacy date ids and a new opaque id live side by side", async () => {
     await seedWithSessions(
       session({ id: "2026-08-19", started: "2026-08-19T18:00", ended: "2026-08-19T19:30" }),
       session({ id: "2026-08-19-2", started: "2026-08-19T19:45", ended: "2026-08-19T20:30" }),
     );
-    // Both old files are readable under their own path…
+    // Both entries are readable under their own path…
     expect(await fileStatus("sessions/2026-08-19")).toBe(200);
     expect(await fileStatus("sessions/2026-08-19-2")).toBe(200);
     // …and the harvest's "last started" is the `-2` one, by `started`.

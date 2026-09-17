@@ -4,10 +4,11 @@
 // generate-npc.test.ts): a database seeded from the example campaign and a
 // FakeProvider with scripted raw replies instead of a real LLM.
 //
-// What is asserted here is the ticket's AK4 and AK3:
+// What is asserted here is the prompt the run assembles and what it does
+// with the reply:
 //   * prompt assembly PER KIND — the existing entry travels complete, the
 //     campaign knowledge and the glossary travel with it, and each kind gets
-//     its own format contract (the location one is new with this ticket),
+//     its own format contract, the location one included,
 //   * the proposal — properties per field with new|changed, body whole,
 //   * accepting — ONE transaction with a `rev` guard, and the job gone.
 
@@ -132,7 +133,7 @@ afterEach(async () => {
   await clearJobsForTests();
 });
 
-// --- prompt assembly per kind (AK4) ----------------------------------------
+// --- prompt assembly per kind ----------------------------------------------
 
 /**
  * One numbered rule's own text, from its bold label to the start of the NEXT
@@ -213,7 +214,7 @@ describe("prompt assembly", () => {
       expect(prompt).toContain("immer den **ganzen** Eintrag");
     }
     expect(npc).toContain("System-Prompt: NPC-Generator");
-    // The location prompt is NEW with this ticket — locations had none.
+    // Each kind has its own prompt, locations included.
     expect(location).toContain("System-Prompt: Ort-Generator");
     expect(location).toContain("`status` gehört zu Szene und Figur");
     expect(scene).toContain("System-Prompt: Szenen-Generator");
@@ -225,7 +226,7 @@ describe("prompt assembly", () => {
       const prompt = await augmentSystemPrompt(kind);
       // The augment output format…
       expect(prompt).toContain("immer den **ganzen** Eintrag");
-      // …and no JSON at all any more.
+      // …and no JSON at all.
       expect(prompt).not.toContain("JSON-Block");
       expect(prompt).not.toContain('"scenes"');
       // Exactly one „## Ausgabeformat" heading: the augmentation rule's own.
@@ -235,7 +236,7 @@ describe("prompt assembly", () => {
     }
   });
 
-  // Issue #93: the German-orthography rule. It has to reach EVERY assembled
+  // The German-orthography rule. It has to reach EVERY assembled
   // prompt kind and exactly once — the create prompts carry it under
   // „## Regeln", which `formatContract` slices off, so the augment kinds get
   // it from augment-system-prompt.md instead. Once means once: a rule the
@@ -250,7 +251,7 @@ describe("prompt assembly", () => {
       ["augment/npc", await augmentSystemPrompt("npc")],
       ["augment/location", await augmentSystemPrompt("location")],
       ["augment/scene", await augmentSystemPrompt("scene")],
-      // The two prompt kinds issue #102 adds: the outline step, and the
+      // The two further prompt kinds: the outline step, and the
       // scene prompt in „genau eine Szene aus der Gliederung" mode. The
       // single-scene mode is an output-schema SWAP, not a second prompt
       // file, so that these rules keep travelling exactly once.
@@ -303,7 +304,7 @@ describe("prompt assembly", () => {
     }
   });
 
-  // Issue #96: the table rule, carried the same way for the same reason —
+  // The table rule, carried the same way for the same reason —
   // once per assembled prompt kind, augment included. The renderer takes
   // TABLES from GFM and nothing else, so the prompt has to say both halves:
   // what a table looks like, and that the rest of GFM is plain text.
@@ -369,7 +370,7 @@ describe("prompt assembly", () => {
       expect(prompt, kind).toContain("`body`");
       expect(prompt, kind).toContain("`warnings`");
       expect(prompt, kind).toContain("Den Eigenschaften-Block baut der Server daraus");
-      // No trace of the raw-entry format this ticket replaced.
+      // No trace of the raw-entry format.
       expect(prompt, kind).not.toContain("---warnings---");
     }
     // The SAME description everywhere — one shape, every entry prompt.
@@ -438,7 +439,7 @@ describe("prompt assembly", () => {
   });
 });
 
-// --- the proposal (AK2) -----------------------------------------------------
+// --- the proposal -----------------------------------------------------------
 
 describe("proposal", () => {
   test("empty values are `new`, filled ones `changed`, equal ones absent", () => {
@@ -755,7 +756,7 @@ describe("one job per campaign, whatever its kind", () => {
   });
 });
 
-// --- accepting (AK3) -----------------------------------------------------------
+// --- accepting -----------------------------------------------------------------
 
 describe("accept", () => {
   async function apply(body: Record<string, unknown>): Promise<Response> {
@@ -872,7 +873,7 @@ describe("accept", () => {
   });
 });
 
-// --- the naming check (issue #53 AK3, „läuft auch hier") ----------------------
+// --- the naming check („läuft auch hier") -------------------------------------
 
 describe("naming check", () => {
   async function setKnowledge(entries: unknown[]): Promise<void> {
@@ -912,11 +913,11 @@ describe("naming check", () => {
 
   test("a list value and a colon in a property do not derail the check", async () => {
     // The proposal entry is rendered with the store's own renderer:
-    // a `role: Hafenmeisterin: Salt Harbour` used to produce YAML
-    // nothing could parse, and every hint then landed on `body` with a line
-    // number pointing at nothing. The store's renderer is the ONLY
-    // way a block is built, which makes this structural rather than a rule
-    // about what a model happens to write.
+    // a `role: "Hafenmeisterin: Salt Harbour"` comes out quoted and stays
+    // parseable, so a hint lands on the FIELD it is about instead of on
+    // `body` with a line number pointing at nothing. The store's renderer is
+    // the ONLY way a block is built, which makes this structural rather than
+    // a rule about what a model happens to write.
     await setKnowledge([{ kind: "naming", from: "Salt Harbour", to: "Salzhafen", text: "" }]);
     const stored = await read(NPC);
     const content = renderRaw(stored.properties, stored.body).replace(
