@@ -967,8 +967,8 @@ describe("POST /api/campaigns/:campaign/generate", () => {
 
   test("a scene whose chapter is not the run's triggers a correction turn", async () => {
     // …and a reply that names a DIFFERENT one is not decoration: the entry
-    // would sit in the run's chapter while claiming another, and the pool
-    // groups by the key while the tree groups by the address. Cheaper as a
+    // would sit in the run's chapter while claiming another, and the
+    // chapter overview groups by the key while the tree groups by the address. Cheaper as a
     // correction turn than as a scene the DM has to find by hand.
     const bad = reply({
       scenes: [{ content: sceneMarkdown().replace("chapter: 01-salzhafen", "chapter: 99-weg") }],

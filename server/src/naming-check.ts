@@ -49,7 +49,7 @@ import { parseMarkdown, type NamingHint } from "@grimoire/shared";
  * knowing: the shared parser falls back to the ID when a display name is
  * missing (shared/src/parse.ts), so a title-less draft is checked against
  * its id. That is not a bug to guard against — the id is then literally what
- * the pool shows the DM.
+ * the chapter overview shows the DM.
  */
 const CHECKED_PROPERTIES = [
   "title",
@@ -207,7 +207,7 @@ export function checkDraftNaming(
   const hints: NamingHint[] = [];
 
   for (const rule of rules) {
-    // Properties first: a wrong title is the thing the DM sees in the pool.
+    // Properties first: a wrong title is the thing the DM sees in the chapter overview.
     for (const key of CHECKED_PROPERTIES) {
       const value = parsed.properties[key];
       if (typeof value !== "string") continue;

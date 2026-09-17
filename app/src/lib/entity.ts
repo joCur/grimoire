@@ -67,7 +67,7 @@ export function npcStatusLabel(status: string, t: Translate): string {
 /**
  * Title of a browse list page ("/campaigns/:campaign/list/:kind"), or undefined for a
  * kind that has no list. Shared by the list page itself and the topbar
- * breadcrumb — on the desktop those pages are reached from the pool, so they
+ * breadcrumb — on the desktop those pages are reached from the chapter overview, so they
  * need a way back.
  */
 const BROWSE_LIST_TITLE_KEYS: Record<string, MessageKey> = {

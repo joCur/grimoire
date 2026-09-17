@@ -2,7 +2,7 @@
 //
 // The cache/409 mechanics are the shared envelope in use-rev-write.ts, the
 // "is there a rev to write against at all?" gate is `withRev`; what
-// belongs to the status regler is here: the tree invalidation (pool rows, live
+// belongs to the status regler is here: the tree invalidation (chapter overview rows, live
 // nav and search read the status from there) and the target value shown dimmed
 // while the write runs — which is the write's variables, no second state.
 
@@ -29,7 +29,7 @@ export function useSceneStatusMutation(
   const { write, pendingVariables, message } = useRevWriteMutation<SceneStatus>({
     write: withRev(rev, (status, rev) => writeSceneStatus(campaign, path, rev, status)),
     entryKey: ["entry", campaign, path],
-    // The status lives in the tree as well (pool rows, live nav, search).
+    // The status lives in the tree as well (chapter overview rows, live nav, search).
     invalidateOnSuccess: [["tree", campaign]],
     errorMessage: "write.status.failed",
   });

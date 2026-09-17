@@ -33,7 +33,7 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
   await expect(
     page.getByRole("main").getByText("Kampagne: Der Leuchtturm von Salzhafen"),
   ).toBeVisible();
-  // The desktop pool is not rendered here.
+  // The desktop chapter overview is not rendered here.
   await expect(page.getByText("Eventualszenen")).toBeHidden();
 
   // Lookup rows with their counts from the tree.

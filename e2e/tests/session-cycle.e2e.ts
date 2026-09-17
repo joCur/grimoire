@@ -225,7 +225,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
 
   // --- the global live indicator brings the DM back -------------
   // The live topbar has no campaign nav (it belongs to the session), so this
-  // is the DM looking something up: away to the pool, then back.
+  // is the DM looking something up: away to the chapter overview, then back.
   await page.goto("/campaigns/beispiel");
   await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   // No "Session starten" anywhere while a session runs …
@@ -417,7 +417,7 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   await (await sessionMenuItem(page, "Session verwerfen")).click();
   await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
 
-  // Back in the non-live state: the pool offers a start again …
+  // Back in the non-live state: the chapter overview offers a start again …
   await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   await expect(page.getByRole("button", { name: "Session starten" })).toBeVisible();
   // … no session chip is left over …

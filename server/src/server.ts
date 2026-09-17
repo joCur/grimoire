@@ -53,7 +53,7 @@
 //   [x] POST /api/campaigns/:campaign/chapters         { title, goal? } -> 201 the chapter entry.
 //                                              Same id derivation and same 400/409 as above;
 //                                              `goal` lands under `## Ziel des Kapitels`, the
-//                                              heading the pool reads its goal line from
+//                                              heading the chapter overview reads its goal line from
 //   [x] POST /api/campaigns/:campaign/chapters/:id/active -> that chapter's entry. „Aktiv" in the
 //                                              overview's status control: sets `active` here
 //                                              and puts the previously active chapter back to

@@ -195,7 +195,7 @@ test("prepared scene: the new thread is added, every existing block survives", a
   expect(after.body).toContain(AUGMENT_THREAD_TEXT);
   expect(after.body.startsWith(before.body.replace(/\n+$/, ""))).toBe(true);
   // The prepared status is not reset to `draft` (that would undo the DM's
-  // pool state — the augment validation is narrower than the create run's).
+  // preparation — the augment validation is narrower than the create run's).
   expect(after.properties.status).toBe("ready");
 
   // Path 2: the added branch renders as a real `## If:` section.

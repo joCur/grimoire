@@ -87,7 +87,7 @@ describe("resultHref", () => {
     );
   });
 
-  test("the campaign itself opens the pool, not the reading view", () => {
+  test("the campaign itself opens the chapter overview, not the reading view", () => {
     expect(resultHref("beispiel", { kind: "campaign", path: "campaign" })).toBe("/campaigns/beispiel");
     expect(resultHref("höhlen kampagne", { kind: "campaign", path: "campaign" })).toBe(
       "/campaigns/h%C3%B6hlen%20kampagne",

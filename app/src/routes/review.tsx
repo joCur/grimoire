@@ -3,7 +3,7 @@
 // per the design reference: the tagged lines of today's log and of the inbox
 // as cards with one-click actions, the chapter's open threads below, brass
 // "Fertig" at the end. Reached after "Session beenden" and from the quiet
-// pool affordance.
+// chapter overview affordance.
 //
 // The server is the truth: every action writes through the review
 // endpoints, the returned EntryResponse is seeded into the cache and the
@@ -227,7 +227,7 @@ export function ReviewRoute() {
           <p className="text-[14px] leading-[1.6] text-muted-foreground">
             {t("review.noSession")}{" "}
             <Link to={`/campaigns/${campaign}`} className="text-primary hover:text-primary-hover">
-              {t("review.backToPool")}
+              {t("review.backToChapters")}
             </Link>
           </p>
         ) : (

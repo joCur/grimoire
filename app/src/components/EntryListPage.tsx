@@ -368,7 +368,7 @@ function EntryListBody<T>({
 
   return (
     <>
-      {/* Below md the topbar is not the chrome — the same „‹ Pool" row every
+      {/* Below md the topbar is not the chrome — the same „‹ Kapitel" row every
           other campaign view carries is the way back. */}
       <MobileBackRow campaign={campaign} />
       <div className="mx-auto max-w-[760px] px-5 pt-5 pb-16 md:px-7 md:pt-10">

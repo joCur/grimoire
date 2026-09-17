@@ -2,7 +2,7 @@
 // the scene article per the design reference (type overline, Literata title,
 // trigger row, chip row, markdown body — shared with the live view via
 // SceneArticle) plus a sticky right aside with the scene's NPC cards. Below
-// md: a "‹ Pool" back row on top and the NPC cards stacked below
+// md: a "‹ Kapitel" back row on top and the NPC cards stacked below
 // the body (the column layout already stacks under lg).
 //
 // Every other entity renders through EntityArticle, chosen by the

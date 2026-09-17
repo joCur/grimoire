@@ -15,8 +15,9 @@
 //
 // WHERE THEY SIT, and why:
 //
-//   chapter   the pool header, next to „Bearbeiten" — the pool IS the chapter
-//             list, so this is where a chapter is missing from.
+//   chapter   the chapter overview header, next to „Bearbeiten" — the
+//             overview IS the chapter list, so this is where a chapter is
+//             missing from.
 //   scene     inside a chapter accordion, so the chapter is prefilled BY
 //             POSITION and the dialog needs no chapter picker at all.
 //   npc /     the head of their list pages — the only surfaces that show all
@@ -30,10 +31,10 @@
 //     invitation. Nobody creates a scene in order to look at its empty body.
 //   an NPC/LOCATION opens its reading view, where „Eigenschaften" carries
 //     the rest of the fields — the dialog deliberately asks for a name only.
-//   a CHAPTER stays where it is: the pool now lists it, with its own
+//   a CHAPTER stays where it is: the chapter overview now lists it, with its own
 //     „Szene anlegen" underneath, which is the actual next step.
 //
-// Every one of them invalidates the tree (every list and the pool read it),
+// Every one of them invalidates the tree (every list and the chapter overview read it),
 // the campaign list (its counts) and the search index view.
 
 import { useQueryClient } from "@tanstack/react-query";
@@ -75,7 +76,7 @@ export interface CampaignCreateInput {
  * open the new campaign.
  *
  * The invalidation happens BEFORE the navigation on purpose — the switcher and
- * the new campaign's own header read that list, so a pool mounting off a list
+ * the new campaign's own header read that list, so a chapter overview mounting off a list
  * that does not know the campaign yet would render without its name.
  *
  * `replace` is the difference between the two: the cold start replaces "/"

@@ -28,7 +28,7 @@ import { expect, test } from "../support/test";
 
 const SOURCE = "The party watches the quay at low tide.";
 
-/** The knowledge page, reached from the pool's „Nachschlagen“ line. */
+/** The knowledge page, reached from the chapter overview's „Nachschlagen“ line. */
 async function openKnowledge(page: Page): Promise<void> {
   await page.goto("/campaigns/beispiel");
   await page.getByRole("link", { name: "Kampagnenwissen" }).click();
@@ -290,8 +290,8 @@ test("switching the kind carries the text into the new form", async ({ page, api
 
 // --- how the pages are REACHED ------------------------------------------------
 
-test("four ways in: the pool line, the phone, ⌘K and the generator", async ({ page }) => {
-  // (a) The pool's quiet „Nachschlagen“ line — and the topbar is UNCHANGED
+test("four ways in: the chapter overview line, the phone, ⌘K and the generator", async ({ page }) => {
+  // (a) The chapter overview's quiet „Nachschlagen“ line — and the topbar is UNCHANGED
   //     (the two pages are deliberately not up there).
   await page.goto("/campaigns/beispiel");
   const lookup = page.getByRole("navigation", { name: "Nachschlagen" });

@@ -69,7 +69,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   // an entry, and nothing is created by naming it (ADR #19). „Neu anlegen"
   // is the app's own path (tested in create.e2e.ts); here it is one call.
   await api.send("POST", "campaigns/beispiel/locations", { name: "Nordbucht" });
-  // Entered from the pool, so there is a history entry BEHIND the scene —
+  // Entered from the chapter overview, so there is a history entry BEHIND the scene —
   // the „zurück" assertion after the move below needs one.
   await page.goto("/campaigns/beispiel");
   await page.goto(SCENE_URL);
@@ -159,7 +159,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   );
   // „Zurück" must not return to the address the scene just left: the redirect
   // REPLACES the history entry, so the step back is the page the DM came from
-  // (the pool), never `…/leuchtturm/lighthouse-arrival` — which would reload,
+  // (the chapter overview), never `…/leuchtturm/lighthouse-arrival` — which would reload,
   // redirect forward again and trap the button.
   await page.goBack();
   await expect(page).toHaveURL(/\/campaigns\/beispiel$/);

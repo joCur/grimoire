@@ -11,7 +11,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import type { CampaignTree, SceneGroup, SceneSummary } from "@grimoire/shared";
 
-import { PlannedGroup } from "./pool";
+import { PlannedGroup } from "./chapter-overview";
 
 function scene(id: string, over: Partial<SceneSummary> = {}): SceneSummary {
   return {

@@ -2,7 +2,7 @@
 // session's tagged log lines and the tagged inbox lines, plus the done-state that
 // comes from the server ONLY — log lines via the session's `reviewed`
 // short hashes, inbox lines via their `- [x]` marker. Used by the review
-// route and by the topbar (progress, pool affordance); both share the same
+// route and by the topbar (progress, chapter overview affordance); both share the same
 // query cache, so nothing fetches twice.
 //
 // It is a HOOK, not a pure helper, so the two readable labels it produces —

@@ -68,7 +68,7 @@ export function CommandPalette({
     placeholderData: keepPreviousData, // no flicker while typing
   });
 
-  // Shares the react-query cache with the pool — only used to tell
+  // Shares the react-query cache with the chapter overview — only used to tell
   // contingency scenes apart for the fork icon (degrades to the bookmark).
   const tree = useQuery({
     queryKey: ["tree", campaign],
@@ -81,7 +81,7 @@ export function CommandPalette({
   const hits = term === "" ? [] : (search.data?.results ?? []);
   // Above the hits: the PAGES of this campaign whose name the DM typed (issue
   // #53, PO feedback on PR #87). „Glossar" and „Kampagnenwissen" are reachable
-  // from the pool and the phone's start surface, but ⌘K is where this app's
+  // from the chapter overview and the phone's start surface, but ⌘K is where this app's
   // keyboard goes first — and the server's index holds entries, not pages,
   // so it can never answer for them. A navigation target the DM typed the name
   // of is what they meant, and there are never more than a handful.

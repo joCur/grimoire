@@ -32,8 +32,8 @@ export interface ContextCrumb {
  * that has no place in the hierarchy (the campaign entry, sessions, inbox,
  * glossary) — the nav's section marking is context enough there.
  *
- * Scene: `<chapter title> › <group>`, the chapter linking to the pool. The
- * group part is the scene's directory resolved like a pool group header (the
+ * Scene: `<chapter title> › <group>`, the chapter linking to the chapter overview. The
+ * group part is the scene's directory resolved like a chapter overview group header (the
  * location's name when `locations/<slug>` exists, otherwise the slug as
  * written — never prettified), and is absent for a scene that sits directly
  * in the chapter directory.
@@ -63,8 +63,8 @@ export function pageContextCrumbs(
       const chapterId = segments[0] ?? "";
       if (chapterId === "") return [];
       const title = tree?.chapters.find((c) => c.id === chapterId)?.title ?? chapterId;
-      // The pool is where the chapter's scenes live. Scrolling it to this
-      // chapter would need a pool-side anchor plus reduced-motion handling —
+      // The chapter overview is where the chapter's scenes live. Scrolling it to this
+      // chapter would need an anchor in the chapter overview plus reduced-motion handling —
       // its own slice; the accordion already opens the active chapter.
       const crumbs: ContextCrumb[] = [{ label: title, to: `/campaigns/${campaign}` }];
       // `<chapter>/<group>/<scene>` — three segments means a group dir.

@@ -12,7 +12,7 @@ import { HarnessRoute } from "@/routes/harness";
 import { HomeRoute } from "@/routes/home";
 import { KnowledgeRoute } from "@/routes/knowledge";
 import { LiveRoute } from "@/routes/live";
-import { PoolRoute } from "@/routes/pool";
+import { ChapterOverviewRoute } from "@/routes/chapter-overview";
 import { ReviewRoute } from "@/routes/review";
 import { SceneRoute } from "@/routes/scene";
 import { SettingsRoute } from "@/routes/settings";
@@ -74,23 +74,23 @@ export function App() {
             campaign id is ever a first path segment and no route above can
             collide with one (ADR #22). */}
         <Route path="campaigns/:campaign" element={<CampaignScope />}>
-          <Route index element={<PoolRoute />} />
+          <Route index element={<ChapterOverviewRoute />} />
           {/* The browse list pages — reached from the mobile start surface's
               "Nachschlagen" rows and from the topbar's quiet NPCs/Orte links
               on the desktop. */}
           <Route path="list/:kind" element={<BrowseRoute />} />
           {/* Campaign knowledge and glossary — campaign CONTENT, so they are
               list pages next to the npc/location ones and not sections of
-              /settings. Reached from the pool's „Nachschlagen" line, the
+              /settings. Reached from the chapter overview's „Nachschlagen" line, the
               mobile start surface, ⌘K and the generator's context line —
               deliberately not from the topbar. */}
           <Route path="knowledge" element={<KnowledgeRoute />} />
           <Route path="glossary" element={<GlossaryRoute />} />
           <Route path="live" element={<LiveRoute />} />
-          {/* Generator — entered from the pool's "Generator". */}
+          {/* Generator — entered from the chapter overview's "Generator". */}
           <Route path="generate" element={<GenerateRoute />} />
           {/* Review — the "Session-Nachbereitung", entered after
-              "Session beenden" and from the pool affordance. */}
+              "Session beenden" and from the chapter overview affordance. */}
           <Route path="review" element={<ReviewRoute />} />
           <Route path="entries/*" element={<SceneRoute />} />
         </Route>

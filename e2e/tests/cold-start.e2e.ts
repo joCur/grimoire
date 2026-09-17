@@ -59,13 +59,13 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   await page.getByLabel("Beschreibung (optional)").fill("Ein erloschener Leuchtturm.");
   await page.getByRole("button", { name: "Kampagne anlegen" }).click();
 
-  // Straight into the (empty) pool of the new campaign.
+  // Straight into the (empty) chapter overview of the new campaign.
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
   const campaignDoc = await api.file("campaign");
   expect(campaignDoc.properties.name).toBe(CAMPAIGN_NAME);
 
-  // The empty pool names the NEXT STEP instead of the generator, which needs
+  // The empty chapter overview names the NEXT STEP instead of the generator, which needs
   // an API key and source material.
   await expect(page.getByText("Noch keine Kapitel", { exact: false })).toBeVisible();
 
@@ -82,7 +82,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
     .fill("Herausfinden, warum das Leuchtfeuer erloschen ist.");
   await page.getByRole("button", { name: "Anlegen" }).click();
 
-  // The pool lists it, with the goal line the dialog wrote.
+  // The chapter overview lists it, with the goal line the dialog wrote.
   const chapter = page.getByRole("button", { name: /01 Salzhafen/ });
   await expect(chapter).toBeVisible();
   await expect(chapter).toContainText("keine Szenen");
@@ -245,7 +245,7 @@ test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, serve
   await dialog.getByLabel("Beschreibung (optional)").fill("Nebel, Torf und ein Verschwundener.");
   await dialog.getByRole("button", { name: "Anlegen" }).click();
 
-  // Success NAVIGATES into the new campaign — its own (empty) pool.
+  // Success NAVIGATES into the new campaign — its own (empty) chapter overview.
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page).toHaveURL(new RegExp(`/campaigns/${SECOND_ID}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(SECOND_NAME);

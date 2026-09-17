@@ -910,7 +910,7 @@ export async function jobSink(campaign: string, jobId: string): Promise<Pipeline
  *
  * 404 when the campaign has no job, when `jobId` names a different one or
  * when the run has no such part; 409 when the part is already running, still
- * PENDING (the pool owns it — it has not had its turn yet) or already done (a
+ * PENDING (the run's queue owns it — it has not had its turn yet) or already done (a
  * double click is not a reason to spend tokens twice).
  *
  * The revive is ONE TRANSACTION over a re-read row, and that is not a detail:
@@ -1011,8 +1011,8 @@ function assertRetryable(job: Job, key: string): StoredPart {
   if (part === undefined) throw new ApiError(404, `unknown part: ${key}`);
   if (part.status === "running") throw new ApiError(409, "this part is already running");
   if (part.status === "done") throw new ApiError(409, "this part is already finished");
-  // A PENDING part still belongs to the run's own pool: it has not had its
-  // turn yet, and reviving it here would run it twice — once from the pool,
+  // A PENDING part still belongs to the run's own queue: it has not had its
+  // turn yet, and reviving it here would run it twice — once from the queue,
   // once from this call, both writing the same part.
   if (part.status === "pending") throw new ApiError(409, "this part has not run yet");
   if (job.chapter === undefined) throw new ApiError(409, "this job has no target chapter");

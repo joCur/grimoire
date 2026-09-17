@@ -16,8 +16,9 @@
 // with no campaign at all (a fresh instance has none).
 //
 // The page is deliberately QUIET (docs/UI-BRIEF.md): the DM comes here once,
-// so nothing here competes with the pool. Section headings follow the pool's
-// hairline-under-a-small-heading pattern rather than inventing a card style.
+// so nothing here competes with the chapter overview. Section headings follow
+// the overview's hairline-under-a-small-heading pattern rather than inventing
+// a card style.
 //
 // WHICH CAMPAIGN is "currently open" cannot be the PATH — `/settings` is
 // campaign-independent on purpose, so the gear works from the cold start too.
@@ -33,7 +34,7 @@
 // or a hand-typed `/settings`) does the heuristic stand in —
 // `pickLastCampaign` (lib/campaign.ts), the same one "/" uses. No
 // localStorage (quality floor). It is still needed with no campaign section
-// on the page: the topbar above and the mobile „‹ Pool" row both have to lead
+// on the page: the topbar above and the mobile „‹ Kapitel" row both have to lead
 // back where the DM came from.
 
 import { useQuery } from "@tanstack/react-query";
@@ -66,8 +67,8 @@ export function SettingsRoute() {
   return (
     <>
       {/* Below md the topbar (and with it the gear) is not the chrome — the
-          same "‹ Pool" row every other campaign view carries is the way back.
-          Only with a campaign: on a fresh instance there is no pool to go
+          same "‹ Kapitel" row every other campaign view carries is the way back.
+          Only with a campaign: on a fresh instance there is no chapter overview to go
           back to. */}
       {campaign !== undefined && <MobileBackRow campaign={campaign} />}
       <div className="mx-auto max-w-[640px] px-5 pt-8 pb-24 md:px-7 md:pt-10">
@@ -105,7 +106,7 @@ function LanguageSection() {
 
 /**
  * One section: a small heading over a hairline, an optional quiet hint, the
- * control below. The pool's grouping pattern, so the page reads like the rest
+ * control below. The chapter overview's grouping pattern, so the page reads like the rest
  * of the app rather than like a preferences dialog.
  */
 function Section({

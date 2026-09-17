@@ -498,7 +498,7 @@ test("the glossary stays saveable while a session writes next to it", async ({ p
   await api.send("POST", "campaigns/beispiel/session/start");
   await api.send("POST", "campaigns/beispiel/log", { text: "Die Gruppe betritt den Turm" });
 
-  const added = "- tide pool → Gezeitentümpel";
+  const added = "- tide flat → Gezeitenwatt";
   await textarea.fill(`${await textarea.inputValue()}${added}\n`);
   const save = page.getByRole("button", { name: "Speichern" });
   await expect(save).toBeEnabled();
@@ -507,11 +507,11 @@ test("the glossary stays saveable while a session writes next to it", async ({ p
   // No conflict, and the new term is stored and rendered.
   await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
   await expect(textarea).toHaveCount(0);
-  await expect(page.getByRole("article")).toContainText("Gezeitentümpel");
+  await expect(page.getByRole("article")).toContainText("Gezeitenwatt");
   await expect.poll(() => api.body("glossary")).toContain(added);
   // The structured endpoint agrees — the body was decomposed into rows.
   const glossary = await api.get<{ entries: Array<{ term: string }> }>("campaigns/beispiel/glossary");
-  expect(glossary.entries.map((e) => e.term)).toContain("tide pool");
+  expect(glossary.entries.map((e) => e.term)).toContain("tide flat");
 
   // A REAL second writer still conflicts — the token did not become toothless.
   await openMarkdownEditor(page);

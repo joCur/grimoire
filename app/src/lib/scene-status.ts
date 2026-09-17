@@ -1,4 +1,4 @@
-// Scene status (issue #28): the labels/colors the pool and the reading view
+// Scene status: the labels/colors the chapter overview and the reading view
 // share, the patch payload for PATCH /properties, and the write itself (the
 // rev conflict is the shared protocol in write-with-rev.ts).
 //

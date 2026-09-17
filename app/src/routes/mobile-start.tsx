@@ -1,4 +1,4 @@
-// The mobile start surface — rendered by the pool route below
+// The mobile start surface — rendered by the chapter overview route below
 // the md breakpoint per design/Grimoire-Mobil.dc.html: wordmark row, tappable
 // search field (opens the ⌘K palette, touch-first), inbox capture card
 // (POST /api/campaigns/:campaign/inbox) and the „Nachschlagen" rows into the mobile

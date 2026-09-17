@@ -1,5 +1,5 @@
 // Pure mapping logic for the ⌘K palette: kind → German label,
-// kind → lucide icon (contingency scenes get the fork, like the pool view),
+// kind → lucide icon (contingency scenes get the fork, like the chapter overview),
 // result → route. Kept out of the component for unit tests.
 
 import type { CampaignTree, SearchResult } from "@grimoire/shared/types";
@@ -69,7 +69,7 @@ export function contingencyPaths(tree: CampaignTree | undefined): Set<string> {
 /**
  * Route for a picked result. Every kind opens as an entry view
  * (/campaigns/:campaign/entries/<path>) — except the campaign itself, whose "view" is the
- * pool. Path segments are encoded individually so umlauts and spaces in an address
+ * chapter overview. Path segments are encoded individually so umlauts and spaces in an address
  * survive, but the slashes stay routable.
  */
 export function resultHref(campaign: string, result: Pick<SearchResult, "kind" | "path">): string {

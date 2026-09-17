@@ -1,4 +1,4 @@
-// shadcn/ui Collapsible (thin Radix re-export) — used for the pool's
+// shadcn/ui Collapsible (thin Radix re-export) — used for the chapter overview's
 // chapter accordions.
 
 import * as CollapsiblePrimitive from "@radix-ui/react-collapsible";

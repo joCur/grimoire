@@ -869,7 +869,7 @@ api.post("/campaigns/:campaign/generate/job/:id/accept", async (c) => {
 //
 // 404 without a job, for a stale :id and for an unknown part key; 409 for a
 // job that has no pipeline (a single-call npc/augment run) and for a part
-// that is already running, has not run yet (`pending` — the run's own pool
+// that is already running, has not run yet (`pending` — the run's own queue
 // still owns it) or is already done — a double click must not spend tokens
 // twice; 503 when no provider is configured.
 api.post("/campaigns/:campaign/generate/job/:id/parts/:key/retry", async (c) => {

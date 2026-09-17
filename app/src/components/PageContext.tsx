@@ -3,7 +3,7 @@
 // page. Quiet, one line, `›` between the steps, the linkable step(s) as links.
 //
 // Desktop only (`max-md:hidden`) — below md MobileBackRow already answers
-// "where am I / how do I get back" with the "‹ Pool" row from the mobile
+// "where am I / how do I get back" with the "‹ Kapitel" row from the mobile
 // design. Deliberately NOT merged into that component: the back row is a
 // full-width bar ABOVE the content container while this line sits INSIDE the
 // content column, right above the title — one component cannot be in two DOM

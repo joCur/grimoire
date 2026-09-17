@@ -1,6 +1,6 @@
 // The campaign's reference pages, named once.
 //
-// Four pages, four entry points, and they must not drift apart: the pool's
+// Four pages, four entry points, and they must not drift apart: the chapter overview's
 // quiet line under the campaign header, the mobile start surface's rows, the
 // ⌘K palette's navigation targets and (for two of them) the generator's
 // context line. Each surface renders them its own way — that is what makes a
@@ -54,8 +54,8 @@ export const LOOKUP_TARGETS: readonly LookupTarget[] = [
 ];
 
 /**
- * The subset the DESKTOP pool line shows. The scene list is left out there —
- * the pool IS the scene list, so a link to a flat copy of what is on screen
- * says nothing. On the phone it stays: the mobile start surface is not a pool.
+ * The subset the DESKTOP chapter overview line shows. The scene list is left out there —
+ * the chapter overview IS the scene list, so a link to a flat copy of what is on screen
+ * says nothing. On the phone it stays: the mobile start surface is not a chapter overview.
  */
-export const POOL_LOOKUP_TARGETS = LOOKUP_TARGETS.filter((target) => target.id !== "scenes");
+export const CHAPTER_OVERVIEW_LOOKUP_TARGETS = LOOKUP_TARGETS.filter((target) => target.id !== "scenes");

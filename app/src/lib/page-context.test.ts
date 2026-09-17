@@ -19,7 +19,7 @@ const tree: CampaignTree = {
 };
 
 describe("pageContextCrumbs", () => {
-  test("a grouped scene reads chapter title then group, chapter links to the pool", () => {
+  test("a grouped scene reads chapter title then group, chapter links to the chapter overview", () => {
     expect(
       pageContextCrumbs("beispiel", "01-salzhafen/hafen/ankunft-leuchtturm", tree, de),
     ).toEqual([

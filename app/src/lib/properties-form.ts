@@ -113,7 +113,7 @@ export interface PropertiesField {
 //
 // The enum option LABELS (scene status, npc status, chapter status) come from
 // lib/scene-status.ts, lib/entity.ts and lib/chapter-status.ts instead, which
-// the pool, the lists and the cards share: a signature change here would drag
+// the chapter overview, the lists and the cards share: a signature change here would drag
 // half of those views along.
 
 /** Catalog keys of a field's copy — label, and the optional two below it. */
@@ -179,7 +179,7 @@ const SCENE_TYPE_LABEL_KEYS: Record<string, MessageKey> = {
 
 /**
  * The labelled options of a `select`. The enum LABELS come from the modules
- * the pool, the lists and the cards share (lib/scene-status.ts,
+ * the chapter overview, the lists and the cards share (lib/scene-status.ts,
  * lib/entity.ts, lib/chapter-status.ts) — the VALUES come from the shared
  * field list, so a format change lands in one place and the labels follow.
  */

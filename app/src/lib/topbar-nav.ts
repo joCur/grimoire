@@ -19,8 +19,8 @@ export type NavSection = "chapters" | "npcs" | "locations";
 
 /** The view the topbar is rendering for, as far as the marking cares. */
 export interface NavView {
-  /** The pool ("/campaigns/:campaign"). */
-  isPool: boolean;
+  /** The chapter overview ("/campaigns/:campaign"). */
+  isChapterOverview: boolean;
   /** `:kind` of "/campaigns/:campaign/list/:kind", or "" when this is not a list view. */
   listKind?: string;
   /** Campaign-relative path of "/campaigns/:campaign/entries/*", or "" when not an entry view. */
@@ -30,12 +30,12 @@ export interface NavView {
 /**
  * The section to mark, or undefined for the views that belong to none.
  *
- * The pool and the scene list are Chapters; an entry's section comes from its
+ * The chapter overview and the scene list are Chapters; an entry's section comes from its
  * kind (the shared path table — the format contract in code exactly once):
  * scenes and chapters are Chapters, npc/location entries their own lists.
  */
 export function navSection(view: NavView): NavSection | undefined {
-  if (view.isPool) return "chapters";
+  if (view.isChapterOverview) return "chapters";
 
   switch (view.listKind) {
     case "scenes":

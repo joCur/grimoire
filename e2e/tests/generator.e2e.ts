@@ -1,6 +1,6 @@
 // Critical path 6: the generator cycle against the stub LLM; see CLAUDE.md.
 //
-// Job → review → apply → draft in the pool, plus the NPC mode and the failure
+// Job → review → apply → draft in the chapter overview, plus the NPC mode and the failure
 // path.
 //
 // One thing the cutover changed here: the draft is REVIEWED under
@@ -46,7 +46,7 @@ const NPC_SOURCE = `Brakk Ironhand, an ageing fisherman who knows every sandbank
 of the north bay. He has seen strangers carrying crates at night and keeps
 quiet out of fear.`;
 
-test("scene run: job, review, apply — the draft is stored and in the pool", async ({
+test("scene run: job, review, apply — the draft is stored and in the chapter overview", async ({
   page,
   api,
 }) => {
@@ -142,7 +142,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   // scene actually is (ADR #17).
   expect((await api.file(DRAFT_PATH)).path).toBe(SCENE_PATH);
 
-  // Back in the pool the draft shows up with the German status label.
+  // Back in the chapter overview the draft shows up with the German status label.
   await page.getByRole("button", { name: "Zu den Kapiteln" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   const row = page.getByRole("link", { name: new RegExp(SCENE_TITLE) });

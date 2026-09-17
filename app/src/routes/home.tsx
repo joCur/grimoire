@@ -13,7 +13,7 @@
 //
 // A PAGE, not a dialog. There is nothing behind it to keep visible, the surface
 // has to work at 390px, and „Kampagne anlegen" is the only thing this screen is
-// about. On success the redirect below picks the new campaign up — the pool
+// about. On success the redirect below picks the new campaign up — the chapter overview
 // then carries the next step („Kapitel anlegen").
 //
 // The SECOND campaign is created from the topbar switcher instead, through the
@@ -49,7 +49,7 @@ export function HomeRoute() {
 
   const target = data === undefined ? undefined : pickLastCampaign(data);
   // `replace`: the redirect must not sit in the history, or "back" from the
-  // pool would bounce straight forward again.
+  // chapter overview would bounce straight forward again.
   if (target !== undefined) return <Navigate to={`/campaigns/${target}`} replace />;
 
   if (isPending) {

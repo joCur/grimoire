@@ -271,7 +271,7 @@ export const de = {
   "glossary.explanation": "Erklärung",
   "glossary.noExplanation": "Ohne Erklärung",
 
-  // Where the two pages are reached from: the pool's „Nachschlagen“ line and
+  // Where the two pages are reached from: the chapter overview's „Nachschlagen“ line and
   // the mobile start surface's rows (deliberately NOT
   // the topbar, which stays the three campaign-wide entries it has).
   "lookup.heading": "Nachschlagen",
@@ -334,25 +334,25 @@ export const de = {
   "status.change.aria": "Status ändern, aktuell {current}",
   "status.sceneUnloadable": "Szene nicht ladbar",
 
-  // --- the scene pool ("/campaigns/:campaign", routes/pool.tsx) -----------------------
-  "pool.loading": "Lade Szenen …",
-  "pool.empty":
+  // --- the chapter overview ("/campaigns/:campaign", routes/chapter-overview.tsx) ---
+  "chapterOverview.loading": "Lade Szenen …",
+  "chapterOverview.empty":
     "Noch keine Kapitel. Ein Kapitel ist die Klammer um Szenen — danach legst du darin die erste Szene an.",
-  // The two counts of the pool header and the chapter accordions. German has
-  // one form for both plural categories here — the ICU shape stays, so `en`
+  // The two counts of the overview header and the chapter accordions. German
+  // has one form for both plural categories here — the ICU shape stays, so `en`
   // can differ without a second call site.
-  "pool.chapterCount": "{count, plural, one {# Kapitel} other {# Kapitel}}",
+  "chapterOverview.chapterCount": "{count, plural, one {# Kapitel} other {# Kapitel}}",
   // The chapter's leftovers section: the scenes that name no location.
-  "pool.group.noLocation": "Ohne Ort",
-  "pool.sceneCount": "{count, plural, =0 {keine Szenen} one {# Szene} other {# Szenen}}",
-  "pool.chapter.goal": "Ziel: {goal}",
-  "pool.chapter.empty": "Noch keine Szenen in diesem Kapitel.",
+  "chapterOverview.group.noLocation": "Ohne Ort",
+  "chapterOverview.sceneCount": "{count, plural, =0 {keine Szenen} one {# Szene} other {# Szenen}}",
+  "chapterOverview.chapter.goal": "Ziel: {goal}",
+  "chapterOverview.chapter.empty": "Noch keine Szenen in diesem Kapitel.",
   // --- chapter actions in the chapter overview -----------------------------
   // The chapter's status control („Aktiv" sets `active` and takes it off the
   // chapter that held it — one server call, one transaction) carries its
   // labels under `properties.chapter.status.*`.
-  "pool.chapter.properties": "Kapitel-Eigenschaften",
-  "pool.chapter.edit": "Kapitel bearbeiten",
+  "chapterOverview.chapter.properties": "Kapitel-Eigenschaften",
+  "chapterOverview.chapter.edit": "Kapitel bearbeiten",
   "chapterBody.title": "Kapitel bearbeiten: {title}",
   "chapterBody.description":
     "Text des Kapitels als Markdown — die Überschrift „## Ziel des Kapitels“ ist die Zeile, die die Übersicht als Ziel zeigt.",
@@ -361,8 +361,8 @@ export const de = {
     "## Ziel des Kapitels\n\nWas die Gruppe hier erreichen soll",
   // The quiet second half of the „Eventualszenen“ heading row — the `· `
   // separator stays markup in the JSX.
-  "pool.contingencies.hint": "nur wenn der Auslöser feuert",
-  "pool.scene.trigger": "Wenn: {trigger}",
+  "chapterOverview.contingencies.hint": "nur wenn der Auslöser feuert",
+  "chapterOverview.scene.trigger": "Wenn: {trigger}",
 
   // --- browse list pages (routes/browse.tsx) --------------------------------
   // The three list titles are already above under `browse.title.*`.
@@ -380,10 +380,10 @@ export const de = {
 
   // --- context line + mobile back row ---------------------------------------
   "context.aria": "Kontext",
-  "mobileBack.pool": "Kapitel",
+  "mobileBack.chapterOverview": "Kapitel",
 
-  // --- shared scene-group headings (routes/live.tsx + routes/pool.tsx) ------
-  // Neutral prefix on purpose: the live nav and the pool list show the SAME
+  // --- shared scene-group headings (routes/live.tsx + routes/chapter-overview.tsx) ------
+  // Neutral prefix on purpose: the live nav and the chapter overview list show the SAME
   // two group headings — one key, not one per view.
   "scene.planned.heading": "Geplant",
   "scene.contingencies.heading": "Eventualszenen",
@@ -443,7 +443,7 @@ export const de = {
   "review.title": "Session-Nachbereitung",
   "review.sessionFailed": "Session nicht ladbar — Server prüfen und neu laden.",
   "review.noSession": "Es gibt keine Session zum Sichten.",
-  "review.backToPool": "Zurück zu den Kapiteln",
+  "review.backToChapters": "Zurück zu den Kapiteln",
   "review.lead":
     "Die Einträge der Session durchgehen — als Handlungsstrang übernehmen, NPC anlegen oder verwerfen. Der Rest bleibt im Log.",
   // Topbar and the mobile page read the same line (two parameters).
@@ -751,7 +751,7 @@ export const de = {
   "generate.written.hint.npc":
     "Der NPC erscheint in der NPC-Liste und in der Suche. Bestehende Einträge werden nie überschrieben — bei Konflikt schreibt der Server nichts.",
   "generate.written.openNpc": "NPC ansehen",
-  "generate.written.toPool": "Zu den Kapiteln",
+  "generate.written.toChapters": "Zu den Kapiteln",
 
   // --- the markdown format's own vocabulary (markdown/grammar.ts holds the KEY
   //     per callout kind, markdown/Callout.tsx and markdown/Markdown.tsx show

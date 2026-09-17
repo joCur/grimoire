@@ -1002,7 +1002,7 @@ export async function runPartsPooled(
       const next = queue.shift();
       if (next === undefined || sink.cancelled()) return;
       // runPart swallows its own failure into the sink, so one bad part can
-      // never take the pool — or its siblings — down (Zuschnitt 2).
+      // never take the queue — or its siblings — down.
       await runPart(plan, next, provider, sink);
     }
   });

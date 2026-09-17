@@ -101,7 +101,7 @@ export interface LocationProperties {
 export interface CampaignProperties {
   id: string;
   name: string;
-  /** One-liner shown next to the name (switcher meta, pool subtitle). */
+  /** One-liner shown next to the name (switcher meta, chapter overview subtitle). */
   description?: string;
   [key: string]: unknown;
 }

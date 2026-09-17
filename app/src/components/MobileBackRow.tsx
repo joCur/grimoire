@@ -16,7 +16,7 @@ export function MobileBackRow({ campaign }: { campaign: string }) {
         className="inline-flex min-h-11 items-center gap-0.5 rounded-md pr-2.5 pl-1 text-[15px] text-primary hover:text-primary-hover"
       >
         <ChevronLeft aria-hidden size={18} className="flex-none" />
-        {t("mobileBack.pool")}
+        {t("mobileBack.chapterOverview")}
       </Link>
     </div>
   );

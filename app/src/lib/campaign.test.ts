@@ -116,7 +116,7 @@ const tree: CampaignTree = {
 };
 
 describe("locationName", () => {
-  test("resolves a known id to its name — this is what a pool group header shows", () => {
+  test("resolves a known id to its name — this is what a chapter overview group header shows", () => {
     expect(locationName(tree, "leuchtturm")).toBe("Der Leuchtturm von Salzhafen");
   });
 

@@ -42,7 +42,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await page.goto(ARRIVAL);
 
   // The context line above the title: chapter › group, replacing
-  // the topbar breadcrumb. The chapter links back to the pool.
+  // the topbar breadcrumb. The chapter links back to the chapter overview.
   const context = page.getByRole("navigation", { name: "Kontext" });
   await expect(
     context.getByRole("link", { name: "Kapitel 1: Der Leuchtturm von Salzhafen" }),

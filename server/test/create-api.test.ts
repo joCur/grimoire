@@ -237,7 +237,7 @@ describe("the per-campaign creates", () => {
     expect(scene.properties.chapter).toBe("01-salzhafen");
     expect(scene.body).toBe("");
 
-    // …and the pool sees it (the tree is what every list reads).
+    // …and the chapter overview sees it (the tree is what every list reads).
     const tree = (await (await app.request("/api/campaigns/nordwind/tree")).json()) as {
       chapters: Array<{ id: string; groups: Array<{ scenes: Array<{ path: string }> }> }>;
     };

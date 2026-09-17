@@ -396,7 +396,7 @@ export function GenerateRoute() {
         droppedRef.current = true;
         setWritten((prev) => [...(prev ?? []), ...addresses]);
       }
-      // The entries exist now — the pool has to show them.
+      // The entries exist now — the chapter overview has to show them.
       void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
       void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
     },
@@ -1334,7 +1334,7 @@ export function GenerateRoute() {
                 }}
                 className="h-auto px-4 py-2.5 text-[13px] font-semibold"
               >
-                {t("generate.written.toPool")}
+                {t("generate.written.toChapters")}
               </Button>
             </div>
           </div>

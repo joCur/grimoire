@@ -1,4 +1,4 @@
-// „Bearbeiten" for the campaign's name and description — offered on the pool
+// „Bearbeiten" for the campaign's name and description — offered on the chapter overview
 // header and in the campaign entry's reading view, the two places where those
 // two values are on screen.
 //
@@ -11,7 +11,7 @@
 // re-read entry, so the next „Speichern" writes on top of what is stored now.
 //
 // On success the campaigns, tree and search queries are invalidated: the
-// switcher label and the pool header read the campaign list and must not keep
+// switcher label and the chapter overview header read the campaign list and must not keep
 // the old name.
 //
 // Prefilled from GET /campaigns, minus the server's id fallback
@@ -108,7 +108,7 @@ function CampaignMetaDialog({
     write:
       base === undefined ? undefined : () => writeCampaignMeta(campaign, values, base.rev),
     entryKey: ["entry", campaign, CAMPAIGN_META_PATH],
-    // The switcher and the pool header read the campaign list; the entry also
+    // The switcher and the chapter overview header read the campaign list; the entry also
     // sits in the tree/search surfaces.
     invalidateOnSuccess: [["campaigns"], ["tree", campaign], ["search", campaign]],
     onSaved: onClose,

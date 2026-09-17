@@ -35,7 +35,7 @@ test("the status control writes the status into the file", async ({ page, api })
   await expect(trigger).toHaveText(/Bereit/);
   await expect.poll(() => api.properties(SCENE)).toHaveProperty("status", "ready");
 
-  // The pool row shows the same control with the same label.
+  // The chapter overview row shows the same control with the same label.
   await page.goto("/campaigns/beispiel");
   await expect(
     page.getByRole("button", { name: "Status ändern, aktuell Bereit" }).first(),

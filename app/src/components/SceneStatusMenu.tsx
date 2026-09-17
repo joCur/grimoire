@@ -1,10 +1,10 @@
 // The scene-status control: the status display itself becomes the
 // regler. Two densities, one menu — the pill in the scene reading view and
-// the bare dot+label of a pool row; both keep the quiet look and only grow a
+// the bare dot+label of a chapter overview row; both keep the quiet look and only grow a
 // small chevron on hover/focus.
 //
 // The write needs the rev of the entry it is changing. The reading view has
-// the EntryResponse on screen and hands its rev down; a pool row has only
+// the EntryResponse on screen and hands its rev down; a chapter overview row has only
 // the tree (which carries no rev), so the control fetches the entry LAZILY
 // when the menu opens — one GET, shared with the entry query cache.
 //
@@ -22,7 +22,7 @@ import { useT } from "@/i18n";
 import { sceneStatusMeta, sceneStatusOptions } from "@/lib/scene-status";
 import { useSceneStatusMutation } from "@/lib/use-scene-status";
 
-/** "pill" = scene reading view (bordered pill), "row" = pool list row. */
+/** "pill" = scene reading view (bordered pill), "row" = chapter overview list row. */
 export type SceneStatusVariant = StatusVariant;
 
 export function SceneStatusControl({
@@ -42,7 +42,7 @@ export function SceneStatusControl({
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  // Lazy rev for the pool rows: only ever requested once the menu opens,
+  // Lazy rev for the chapter overview rows: only ever requested once the menu opens,
   // and served from the cache when the entry was read before.
   const file = useQuery({
     queryKey: ["entry", campaign, path],

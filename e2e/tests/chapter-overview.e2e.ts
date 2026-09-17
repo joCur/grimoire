@@ -1,13 +1,13 @@
-// Critical path 1: auto entry — the pool loads the campaign; see CLAUDE.md.
+// Critical path 1: auto entry — the chapter overview loads the campaign; see CLAUDE.md.
 //
 // "/" has no page of its own: it redirects into the campaign the
-// server reports, and the pool is the first thing the DM sees — campaign
+// server reports, and the chapter overview is the first thing the DM sees — campaign
 // header, the active chapter with its goal line, the location group and the
 // contingency block.
 //
 // The campaign chrome lives on this path as well: the group header resolves its slug
 // against the locations, the topbar carries the NPCs/Orte navigation (the
-// pool's own footer line is gone), and the campaign's name/description are
+// chapter overview's own footer line is gone), and the campaign's name/description are
 // editable from the header.
 
 import type { Page } from "@playwright/test";
@@ -69,7 +69,7 @@ async function widenGlyphs(page: Page, spacing: string) {
 const TOPBAR_WIDTHS = [640, 768, 900, 1000, 1024, 1040, 1100, 1280, 1300, 1536];
 
 /**
- * A scene that names NO location — it belongs under the pool's neutral
+ * A scene that names NO location — it belongs under the chapter overview's neutral
  * „Ohne Ort" section. The example campaign has none, so the
  * test that needs one seeds it.
  */
@@ -106,7 +106,7 @@ const NAMELESS_CAMPAIGN: SeedEntry = {
   body: "",
 };
 
-test('"/" redirects into the campaign and the pool shows chapter and scenes', async ({
+test('"/" redirects into the campaign and the chapter overview shows chapter and scenes', async ({
   page,
 }) => {
   await page.goto("/");
@@ -133,7 +133,7 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
   });
   await expect(chapter).toBeVisible();
   // The chapter is a HEADING inside that trigger, so the outline does not
-  // jump from the pool's h1 straight to the group h3s.
+  // jump from the chapter overview's h1 straight to the group h3s.
   await expect(
     chapter.getByRole("heading", { level: 2, name: "Kapitel 1: Der Leuchtturm von Salzhafen" }),
   ).toBeVisible();
@@ -176,7 +176,7 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
     "Wenn: Charaktere werden beim Auskundschaften der Bucht entdeckt",
   );
 
-  // Opening a row is the pool's job — the reading view takes over from here.
+  // Opening a row is the chapter overview's job — the reading view takes over from here.
   await planned.click();
   await expect(page).toHaveURL(
     /\/campaigns\/beispiel\/entries\/01-salzhafen\/leuchtturm\/lighthouse-arrival$/,
@@ -240,9 +240,9 @@ test("the topbar trio navigates without anything in the left block moving", asyn
 
   /** The campaign name belongs to the switcher — and to nothing else up there. */
   const assertChromeIsStable = async (
-    onPool: Awaited<ReturnType<typeof leftBlock>>,
+    onChapterOverview: Awaited<ReturnType<typeof leftBlock>>,
   ) => {
-    expect(await leftBlock()).toEqual(onPool);
+    expect(await leftBlock()).toEqual(onChapterOverview);
     await expect(
       page.getByRole("banner").getByText(/Der Leuchtturm von Salzhafen/),
     ).toHaveCount(1);
@@ -251,14 +251,14 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   await page.goto("/campaigns/beispiel");
   await expect(label).toHaveAccessibleName(CAMPAIGN_LABEL);
   await expect(nav.getByRole("link")).toHaveText(["Kapitel", "NPCs", "Orte"]);
-  // The pool marks its own entry.
+  // The chapter overview marks its own entry.
   await expect(current).toHaveText("Kapitel");
-  const onPool = await leftBlock();
+  const onChapterOverview = await leftBlock();
   await expect(
     page.getByRole("banner").getByText(/Der Leuchtturm von Salzhafen/),
   ).toHaveCount(1);
 
-  // The pool carries a „Nachschlagen" line — it is where the two
+  // The chapter overview carries a „Nachschlagen" line — it is where the two
   // campaign-content pages are reached from on
   // the desktop. What matters HERE is that they are not in the TOPBAR:
   // the trio above is still exactly Kapitel/NPCs/Orte, which is what the rest
@@ -277,7 +277,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     page.getByRole("main").getByRole("link", { name: /^Der Leuchtturm von Salzhafen/ }),
   ).toBeVisible();
   await expect(current).toHaveText("Orte");
-  await assertChromeIsStable(onPool);
+  await assertChromeIsStable(onChapterOverview);
   // No list-title crumb behind the switcher — "Orte" appears in the banner
   // exactly once, in the nav.
   await expect(
@@ -288,7 +288,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   await expect(page).toHaveURL(/\/campaigns\/beispiel\/list\/npcs$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("NPCs");
   await expect(current).toHaveText("NPCs");
-  await assertChromeIsStable(onPool);
+  await assertChromeIsStable(onChapterOverview);
 
   // --- entry views: same chrome, section marking follows the entity ---------
   // A scene belongs to Kapitel; its hierarchy lives in the page's context
@@ -298,7 +298,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     "Ankunft am Leuchtturm",
   );
   await expect(current).toHaveText("Kapitel");
-  await assertChromeIsStable(onPool);
+  await assertChromeIsStable(onChapterOverview);
 
   // An NPC belongs to NPCs — whichever chapter happens to mention it. A
   // breadcrumb claiming a chapter path here would be plain misleading for an
@@ -306,7 +306,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   await page.goto("/campaigns/beispiel/entries/npcs/fenn");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Fenn");
   await expect(current).toHaveText("NPCs");
-  await assertChromeIsStable(onPool);
+  await assertChromeIsStable(onChapterOverview);
   // Its context line points at the list it came from.
   await expect(
     page
@@ -317,19 +317,19 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   // Views that belong to no section mark nothing at all.
   await page.goto("/campaigns/beispiel/generate");
   await expect(current).toHaveCount(0);
-  await assertChromeIsStable(onPool);
+  await assertChromeIsStable(onChapterOverview);
   await page.goto("/campaigns/beispiel/review");
   await expect(current).toHaveCount(0);
-  await assertChromeIsStable(onPool);
+  await assertChromeIsStable(onChapterOverview);
 
-  // "Kapitel" is the way back to the pool — the reason the trio exists.
+  // "Kapitel" is the way back to the chapter overview — the reason the trio exists.
   await nav.getByRole("link", { name: "Kapitel" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
   await expect(current).toHaveText("Kapitel");
-  await assertChromeIsStable(onPool);
+  await assertChromeIsStable(onChapterOverview);
 
   // The switcher still switches, from a list as well.
   await nav.getByRole("link", { name: "Orte" }).click();
@@ -454,14 +454,14 @@ test.describe("with a session running since 19:30", () => {
           page.getByRole("link", { name: "Einstellungen" }),
         ).toBeVisible();
       }
-      expect(await topbarOverflow(page), `pool at ${width}px`).toEqual({
+      expect(await topbarOverflow(page), `chapter overview at ${width}px`).toEqual({
         row: 0,
         page: 0,
       });
       await widenGlyphs(page, "1px");
       expect(
         await topbarOverflow(page),
-        `pool at ${width}px with wider glyphs`,
+        `chapter overview at ${width}px with wider glyphs`,
       ).toEqual({ row: 0, page: 0 });
 
       // …and the live route, whose chip is the menu trigger — from md up,
@@ -510,14 +510,14 @@ test("the topbar does not overflow at medium widths with no session running", as
         page.getByRole("link", { name: /Nachbereitung/ }),
       ).toBeVisible();
     }
-    expect(await topbarOverflow(page), `pool at ${width}px`).toEqual({
+    expect(await topbarOverflow(page), `chapter overview at ${width}px`).toEqual({
       row: 0,
       page: 0,
     });
     await widenGlyphs(page, "1px");
     expect(
       await topbarOverflow(page),
-      `pool at ${width}px with wider glyphs`,
+      `chapter overview at ${width}px with wider glyphs`,
     ).toEqual({ row: 0, page: 0 });
   }
 });
@@ -588,11 +588,11 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
       // Szenen fertig" on the generator page.
       expect(text).toContain("1 von 3 übernommen");
     }
-    expect(await topbarOverflow(page), `pool at ${width}px`).toEqual({ row: 0, page: 0 });
+    expect(await topbarOverflow(page), `chapter overview at ${width}px`).toEqual({ row: 0, page: 0 });
     await widenGlyphs(page, "1px");
     expect(
       await topbarOverflow(page),
-      `pool at ${width}px with wider glyphs`,
+      `chapter overview at ${width}px with wider glyphs`,
     ).toEqual({ row: 0, page: 0 });
   }
 });
@@ -625,7 +625,7 @@ test("editing the campaign metadata updates header, switcher and the file", asyn
   await dialog.getByRole("button", { name: "Speichern" }).click();
 
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  // Pool header, subtitle …
+  // Chapter overview header, subtitle …
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Salzhafen, zweite Fassung",
   );
@@ -712,13 +712,13 @@ test("the campaign reading view carries the same edit action", async ({
 // here would need the same "beat the 5s version poll" loop — and a retry that
 // closes the dialog on success, which makes the loop unrepeatable.
 
-test("the pool header is ONE row: the actions right beside the title, never under it", async ({
+test("the chapter overview header is ONE row: the actions right beside the title, never under it", async ({
   page,
 }) => {
   // „Kapitel anlegen" and „Bearbeiten" must not sit in a wrapping row: on a
   // campaign with a normal-length name the pair would drop onto a second
   // line, right-aligned under the title. The actions share the title's
-  // line — checked at the widths a desktop pool is actually read at, and by
+  // line — checked at the widths a desktop chapter overview is actually read at, and by
   // geometry rather than by class names.
   for (const width of [1024, 1280, 1536]) {
     await page.setViewportSize({ width, height: 900 });

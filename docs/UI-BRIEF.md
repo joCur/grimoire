@@ -43,7 +43,7 @@ Monochrom, in Textfarbe, 16–20px. Keine bunten Icon-Illustrationen.
 
 ## Die Ansichten
 
-### 1. Kapitel (Prep-Modus, Desktop; Route `pool`)
+### 1. Kapitel (Prep-Modus, Desktop; Route `/campaigns/:id`)
 Job: Überblick und Ordnung. Kapitel > Ort > Szenen als ruhige Liste
 (keine Karten-Grids), Status als dezente Marker, Eventualszenen visuell
 als eigene Gruppe („Eventualszenen"). Filter über Tags/Status,

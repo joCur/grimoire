@@ -1,7 +1,7 @@
 // The constant topbar (design reference: 56px, hairline below).
 //
 // THE CHROME IS GLOBAL AND STABLE. Every campaign-scoped
-// view — pool, browse lists, entry/scene, generator, review — shows the very
+// view — chapter overview, browse lists, entry/scene, generator, review — shows the very
 // same left block:
 //
 //     Grimoire │ Kampagne: <name> ⌄ │ Kapitel · NPCs · Orte
@@ -56,8 +56,8 @@
 // hidden without a campaign in the URL — "/" only ever shows the empty
 // state), the session chip (one click starts a session and enters
 // /campaigns/:campaign/live), the harvest progress on the
-// review with a quiet pool link into it while today's session
-// still has unharvested entries, and the "Generator" on the pool
+// review with a quiet chapter overview link into it while today's session
+// still has unharvested entries, and the "Generator" on the chapter overview
 // with its run indicator.
 
 import type { EntryResponse } from "@grimoire/shared/types";
@@ -176,7 +176,7 @@ export function Topbar() {
   // them the topbar goes blank on those pages: no switcher, no ⌘K, no gear.
   const knowledgeMatch = matchPath("/campaigns/:campaign/knowledge", pathname);
   const glossaryMatch = matchPath("/campaigns/:campaign/glossary", pathname);
-  const poolMatch = matchPath("/campaigns/:campaign", pathname);
+  const chapterOverviewMatch = matchPath("/campaigns/:campaign", pathname);
   const isSettings = matchPath("/settings", pathname) !== null;
   const settingsFrom = useSettingsCampaign(isSettings);
   const campaign =
@@ -187,25 +187,25 @@ export function Topbar() {
     campaignOf(listMatch) ??
     campaignOf(knowledgeMatch) ??
     campaignOf(glossaryMatch) ??
-    campaignOf(poolMatch) ??
+    campaignOf(chapterOverviewMatch) ??
     (settingsFrom === "" ? undefined : settingsFrom) ??
     "";
   const filePath = sceneMatch?.params["*"] ?? "";
   // These read their OWN match, not `campaign`: on `/settings` the campaign is
   // resolved from `?from=` (see above), so asking `campaign !== ""` would make
-  // the settings page the POOL of that campaign, marking "Kapitel" and hanging
-  // the pool's review and generator entries into the row.
+  // the settings page the chapter overview of that campaign, marking "Kapitel" and hanging
+  // the chapter overview's review and generator entries into the row.
   const isScene = campaignOf(sceneMatch) !== undefined && filePath !== "";
   const isLive = campaignOf(liveMatch) !== undefined;
   const isReview = campaignOf(reviewMatch) !== undefined;
-  const isPool = campaignOf(poolMatch) !== undefined;
+  const isChapterOverview = campaignOf(chapterOverviewMatch) !== undefined;
   const listKind = listMatch?.params["*"] ?? "";
 
   const [searchOpen, setSearchOpen] = useState(false);
 
   // Which nav entry is the current view — the ONE thing that differs between
   // the campaign-scoped views. Route-derived, so it never lags behind a query.
-  const section = navSection({ isPool, listKind, filePath });
+  const section = navSection({ isChapterOverview, listKind, filePath });
 
   // The running session — asked on EVERY campaign route now, not just /live:
   // one shared query key, so this is one request for topbar and live view.
@@ -220,7 +220,7 @@ export function Topbar() {
         <MobileSessionRow campaign={campaign} session={live} />
       )}
       {/* Below md the campaign-scoped views carry their own mobile chrome
-          (start-surface wordmark, "‹ Pool" back rows); the topbar
+          (start-surface wordmark, "‹ Kapitel" back rows); the topbar
           is desktop chrome there. Without a campaign in the URL ("/" with no
           campaign at all) it stays visible on every width, so the empty state
           is not a bare page. */}
@@ -264,7 +264,7 @@ export function Topbar() {
             points, reachable without scrolling, from every campaign view. The
             design prototype does not cover this navigation — these links fill
             the gap per PO decision (design/README.md).
-            "Kapitel" is the pool — and the way BACK from everywhere: the
+            "Kapitel" is the chapter overview — and the way BACK from everywhere: the
             campaign label next to it is the switcher trigger, not a link, and
             the wordmark is a detour via "/".
             Not in the live mode: that view belongs to the running session
@@ -275,7 +275,7 @@ export function Topbar() {
         {campaign !== "" && !isLive && (
           <nav
             // Deliberately NOT "Nachschlagen": that is the mobile start
-            // surface's nav, and on the pool both live in the DOM at once
+            // surface's nav, and on the chapter overview both live in the DOM at once
             // (responsive swap) — two navs with one name is a worse tree.
             aria-label={t("topbar.nav.aria")}
             className="flex flex-none items-center gap-1 border-l border-border pl-3 text-[13px] max-lg:hidden"
@@ -357,11 +357,11 @@ export function Topbar() {
             "The harvested session" is the server's last STARTED one, the same
             entry the review page works on: after a session that ran past
             midnight, today's date names no entry at all. */}
-        {isPool && <PoolReviewLink campaign={campaign} />}
+        {isChapterOverview && <ChapterOverviewReviewLink campaign={campaign} />}
 
-        {/* Quiet entry into the generator — pool only, next to the brass
+        {/* Quiet entry into the generator — chapter overview only, next to the brass
             session button per the prototype. Carries the run indicator. */}
-        {isPool && <GeneratorLink campaign={campaign} />}
+        {isChapterOverview && <GeneratorLink campaign={campaign} />}
 
         {/* Instance settings — ONE gear, icon-only, following the generator
             entry's icon pattern. Icon-only at EVERY width on purpose: the
@@ -379,8 +379,8 @@ export function Topbar() {
             session={live}
             state={sessionChipState({
               session,
-              offersStart: isPool || isScene,
-              showsError: isPool || isScene || isLive,
+              offersStart: isChapterOverview || isScene,
+              showsError: isChapterOverview || isScene || isLive,
             })}
             mode={isLive ? "menu" : "link"}
           />
@@ -667,7 +667,7 @@ function SessionMenuChip({
   const pause = useSessionWrite(campaign, () =>
     paused ? continueSession(campaign) : pauseSession(campaign),
   );
-  // "Session beenden" leads into the review, not back to the pool
+  // "Session beenden" leads into the review, not back to the chapter overview
   // (prototype: endSession → review) — the harvest is the next step.
   const end = useSessionWrite(
     campaign,
@@ -783,7 +783,7 @@ function MobileSessionRow({
 /**
  * One quiet link of the topbar's campaign navigation ("Kapitel · NPCs ·
  * Orte"), marked when it is the view currently open. The caller decides what
- * "current" means — the pool and the two lists are matched differently.
+ * "current" means — the chapter overview and the two lists are matched differently.
  *
  * The marking is COLOUR ONLY (full contrast step: body-secondary ->
  * foreground). A heavier weight would reflow the row and move the other two
@@ -821,7 +821,7 @@ function TopbarNavLink({
  *
  * It deletes a session, so it asks first. The confirmation names the consequence
  * instead of asking "sicher?" — that is the only thing worth reading here.
- * After the discard nothing is live any more, so the pool is where the DM
+ * After the discard nothing is live any more, so the chapter overview is where the DM
  * lands (the live route without a session would only show its empty state).
  */
 function DiscardSessionDialog({
@@ -877,9 +877,9 @@ function DiscardSessionDialog({
 }
 
 /**
- * The pool's generator entry — with a quiet run indicator while a generate
+ * The chapter overview's generator entry — with a quiet run indicator while a generate
  * job is working. It shares the generator route's query key,
- * so there is no second poll loop: one lookup when the pool mounts, then
+ * so there is no second poll loop: one lookup when the chapter overview mounts, then
  * polling only while a job is actually running.
  */
 function GeneratorLink({ campaign }: { campaign: string }) {
@@ -1021,9 +1021,9 @@ function ReviewProgress({ campaign }: { campaign: string }) {
   );
 }
 
-/** Pool affordance into the review: only when the harvested session (the
+/** Chapter overview affordance into the review: only when the harvested session (the
  *  server's last started one) still has entries — nothing to see otherwise. */
-function PoolReviewLink({ campaign }: { campaign: string }) {
+function ChapterOverviewReviewLink({ campaign }: { campaign: string }) {
   const t = useT();
   const review = useReviewEntries(campaign);
   if (
@@ -1087,7 +1087,7 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
           buttonVariants({ variant: "ghost" }),
           // flex-none: the campaign context is the anchor of the topbar and
           // its width must not depend on what the right-hand side happens to
-          // carry (otherwise the pool's Generator link makes the name shorter
+          // carry (otherwise the chapter overview's Generator link makes the name shorter
           // there than on a list — the chrome has to be identical on every
           // route). A very long name truncates at max-w-[280px] with an
           // ellipsis instead of pushing the row over; the elastic

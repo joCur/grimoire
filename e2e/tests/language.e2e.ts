@@ -139,7 +139,7 @@ test("the language switch: English and back, server-side and without a reload", 
   // the nav, the search chip and the session chip.
   await page.goto("/campaigns/beispiel");
   await expect(page.getByRole("button", { name: /^Campaign: / })).toBeVisible();
-  // The topbar's own trio — scoped, because the pool's „Nachschlagen" line
+  // The topbar's own trio — scoped, because the chapter overview's „Nachschlagen" line
   // links to two of the same pages with the same words.
   const trio = page.getByRole("navigation", { name: "Chapters, NPCs and locations" });
   await expect(trio.getByRole("link", { name: "Chapters" })).toBeVisible();
@@ -396,7 +396,7 @@ test("the gear carries the campaign it was opened FROM, and has a way back", asy
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Einstellungen",
   );
-  // The way back is THAT campaign's pool. The row is mobile chrome, so the
+  // The way back is THAT campaign's chapter overview. The row is mobile chrome, so the
   // claim is checked where it is on screen: a phone width.
   await page.setViewportSize({ width: 390, height: 780 });
   const back = page.getByRole("link", { name: "Kapitel" });

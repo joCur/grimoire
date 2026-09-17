@@ -87,11 +87,11 @@ export function ChapterActions({
             campaign={campaign}
             file={entry}
             tree={tree}
-            triggerLabel={t("pool.chapter.properties")}
+            triggerLabel={t("chapterOverview.chapter.properties")}
           />
           <HeaderAction
             icon={PenLine}
-            label={t("pool.chapter.edit")}
+            label={t("chapterOverview.chapter.edit")}
             onClick={() => setEditing(true)}
           />
         </>

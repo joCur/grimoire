@@ -146,7 +146,7 @@ export function augmentFewShotFile(kind: AugmentKind): string {
  * already exists. Deliberately NARROWER than the create runs':
  *
  *   * a scene's `status` is whatever the DM made it (`ready`, `played`, …) —
- *     forcing `draft` would reset the pool state of a prepared scene,
+ *     forcing `draft` would reset the status of a prepared scene,
  *   * `npcs`/`location` pointing at something unknown is not checked HERE:
  *     the write path refuses it with the same sentence the properties dialog
  *     next to the button gets, so checking it twice would only make the

@@ -2339,7 +2339,7 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
 //   3. A NEW ROW HOLDS ONLY WHAT WAS TYPED. Everything else keeps its column
 //      default, so `## Notizen`-style scaffolding nobody asked for cannot
 //      appear. The only exception is a chapter's optional goal, which goes
-//      into the section the pool reads it from (`## Ziel des Kapitels`).
+//      into the section the chapter overview reads it from (`## Ziel des Kapitels`).
 //
 // EMPTY ENTRIES ARE FILLED, NOT COLLIDED WITH — for npc and ort, the two kinds
 // that have an empty state at all. An entry that holds nothing but its id is
@@ -2495,7 +2495,7 @@ export async function createCampaign(
  * POST /api/campaigns/:campaign/chapters { title, goal? } -> the chapter entry.
  *
  * `goal` is optional and lands under `## Ziel des Kapitels` — the heading the
- * pool reads its goal line from (routes/pool.tsx). Without it the body stays
+ * chapter overview reads its goal line from (routes/chapter-overview.tsx). Without it the body stays
  * empty rather than carrying an empty section.
  */
 export async function createChapter(

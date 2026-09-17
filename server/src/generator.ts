@@ -612,7 +612,7 @@ export function validateSceneEntry(input: {
   // The `chapter` key and the scene's ADDRESS have to say the same thing. The
   // address is the run's (`<chapter>/<id>`, never the model's), so a reply
   // that names a different chapter would produce an entry sitting in one
-  // chapter while claiming another — the pool groups by the key, the entry
+  // chapter while claiming another — the chapter overview groups by the key, the entry
   // tree by the address, and the two would disagree forever after. Cheaper as
   // a correction turn than as a scene the DM has to find and fix by hand.
   if (typeof fm.chapter === "string" && fm.chapter !== "" && fm.chapter !== chapter) {
