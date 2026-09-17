@@ -1,43 +1,43 @@
 // The suite's own `test` — every test gets:
 //
 //   - its OWN database: a fresh, empty GRIMOIRE_DATA directory, seeded by
-//     `grimoire seed <tree>` BEFORE the server starts. Since issue #79 the
-//     boot imports nothing, so the CLI is the seeding path — still the real
-//     importer, still the example campaign as the only fixture format
-//     (planning #52 decision F5)
+//     `grimoire seed <fixtures dir>` BEFORE the server starts. The boot reads
+//     no fixtures, so the CLI is the only seeding path
 //   - its OWN server process on its own port, serving the built app and /api,
 //     with LLM_PROVIDER=openai pointing at the run's stub endpoint
 //   - `baseURL` wired to that server, so page.goto("/") hits it
 //   - an `api` helper against that server, and a `db` helper that opens the
 //     test's `grimoire.db` with the server's own driver layer
 //
-// Since the cutover (issue #57) the database is the only truth: NOTHING writes
-// campaign markdown any more, so there is no file to read an assertion back
-// from. Every claim about stored state goes through the API (`api.file` is the
-// old `files.read`) or, where a spec really means storage, through `db`.
+// The database is the only truth (ADR #13): nothing writes campaign content
+// to disk, so there is nothing next to the server to read an assertion back
+// from. Every claim about stored state goes through the API or, where a spec
+// really means storage, through `db`.
 //
-// The markdown tree is therefore only an INPUT, read exactly once per test —
-// by that seed run. A test that needs content the example campaign does not
-// have seeds it into its own copy of that tree BEFORE the seed:
+// The FIXTURES are therefore only an INPUT, read exactly once per test — by
+// that seed run. `fixtures/beispiel/*.json` holds one entry per file in the
+// shape the API speaks, and a test that needs content the example campaign
+// does not have overrides the fixtures in its own copy of that directory:
 //
-//   test.use({ seed: { files: { "locations/hafen": "…" } } });
-//   test.use({ seed: { remove: ["_campaign"] } });
+//   test.use({ seed: { entries: { "scene-loot": { kind: "scene", … } } } });
+//   test.use({ seed: { without: ["session-2026-01-15"] } });
 //
-// Those keys are ADDRESSES, like everything else in the suite (issue #79);
-// the fixture appends the importer's `.md` when it writes into the tree, so
-// no spec has to know that the SOURCE of the seed is still a file.
+// The keys are FIXTURE FILE STEMS, not addresses: a stem that already exists
+// in `fixtures/beispiel` REPLACES that entry, any other stem adds one. The
+// address an entry gets is the server's decision (`server/src/store/paths.ts`
+// — a scene's segments are its chapter, its location and its id).
 //
-// Without a seed the pristine copy from the global setup is used directly (it
-// is never written to), so most tests copy nothing at all.
+// Without overrides the pristine copy from the global setup is used directly
+// (it is never written to), so most tests copy nothing at all.
 //
 // And a test that needs an EMPTY INSTANCE — no campaign whatsoever, which is
-// what a fresh installation is since issue #79 — turns the seed run off:
+// what a fresh installation is — turns the seed run off:
 //
 //   test.use({ seed: { skip: true } });
 //
-// That is the starting point of critical path 10 ("Kaltstart", issue #56).
-// The `api` fixture is bound to the example campaign's id, so a spec that
-// creates its own campaign builds its helper with `apiFor(server.url, id)`.
+// That is the starting point of critical path 10 ("Kaltstart"). The `api`
+// fixture is bound to the example campaign's id, so a spec that creates its
+// own campaign builds its helper with `apiFor(server.url, id)`.
 //
 // One server per test instead of one per worker: the server holds state the
 // tests care about (the in-memory generate job) and half the paths write to
@@ -85,27 +85,55 @@ export interface ServerHandle {
   dataDir: string;
   /** The database file this server booted on. */
   dbFile: string;
-  /** The markdown tree `grimoire seed` read (an INPUT, never written). */
-  campaignRoot: string;
+  /** The fixtures directory `grimoire seed` read (an INPUT, never written). */
+  fixturesDir: string;
 }
 
-/** What a test adds to its own copy of the markdown tree before the boot. */
+/**
+ * One entry as a fixture file holds it — the shape `grimoire seed` reads and
+ * the shape the API speaks. Structural on purpose: the suite drives the
+ * server as a process and never imports its types.
+ */
+export type SeedEntry =
+  | {
+      kind: "campaign" | "chapter" | "scene" | "npc" | "location";
+      properties: Record<string, unknown>;
+      body?: string;
+    }
+  | {
+      kind: "session";
+      properties: Record<string, unknown>;
+      /** Log lines as written, `- HH:MM (scene-id) text`. */
+      log?: { raw: string; reviewed?: boolean }[];
+      body?: string;
+    }
+  | {
+      kind: "inbox";
+      entries: ({ raw: string } | { text: string; done?: boolean })[];
+    }
+  | {
+      kind: "glossary";
+      intro?: string;
+      entries: { term: string; explanation: string }[];
+    };
+
+/** What a test changes about the fixtures its database is seeded from. */
 export interface Seed {
-  /** campaign-relative ADDRESS -> content (parent directories are created). */
-  files?: Record<string, string>;
-  /** campaign-relative ADDRESSES to delete before the seed runs. */
-  remove?: string[];
+  /** fixture file stem -> entry; a stem that exists in fixtures/beispiel REPLACES it */
+  entries?: Record<string, SeedEntry>;
+  /** fixture file stems to leave out, e.g. "session-2026-01-15" */
+  without?: string[];
   /**
    * NO SEED AT ALL — `test.use({ seed: { skip: true } })`.
    *
-   * The server boots on an empty data directory and the importer never runs,
-   * so the instance has no campaign: exactly what a fresh installation is
-   * since issue #79, and the only honest starting point for the cold-start
-   * path (issue #56, critical path 10). Everything else about the fixture is
-   * unchanged — the `api` and `db` helpers work, they just have nothing to
-   * look at until the test creates it.
+   * The server boots on an empty data directory and the CLI never runs, so
+   * the instance has no campaign: exactly what a fresh installation is, and
+   * the only honest starting point for the cold-start path (critical path
+   * 10). Everything else about the fixture is unchanged — the `api` and `db`
+   * helpers work, they just have nothing to look at until the test creates
+   * it.
    *
-   * `files`/`remove` are meaningless with it and are ignored: there is no
+   * `entries`/`without` are meaningless with it and are ignored: there is no
    * seed run for them to feed.
    */
   skip?: boolean;
@@ -117,14 +145,13 @@ export interface ApiFile {
   kind: string;
   properties: Record<string, unknown>;
   body: string;
-  /** The row version (`rev`) — an opaque guard token since the cutover. */
+  /** The row version (`rev`) — an opaque guard token. */
   rev: number;
 }
 
 /**
- * Typed access to the test's own server. This is what replaced the old
- * `files` fixture: the database is the truth, and the API is how one looks at
- * it — the same way the app does.
+ * Typed access to the test's own server: the database is the truth, and the
+ * API is how one looks at it — the same way the app does.
  */
 export interface Api {
   /** Absolute URL of an API path (`/api/beispiel/tree` or just `tree`). */
@@ -135,7 +162,7 @@ export interface Api {
   get<T>(apiPath: string): Promise<T>;
   /** POST/PATCH/PUT with a JSON body, parsed as JSON; throws on non-2xx. */
   send<T>(method: "POST" | "PATCH" | "PUT" | "DELETE", apiPath: string, body?: unknown): Promise<T>;
-  /** GET /entry for a campaign-relative path; throws when it does not exist. */
+  /** GET /entry for a campaign-relative address; throws when it is unknown. */
   file(rel: string): Promise<ApiFile>;
   /** The markdown text of an entry. */
   body(rel: string): Promise<string>;
@@ -147,15 +174,15 @@ export interface Api {
    * Path of the ACTIVE session — or, with `includeEnded`, of the last started
    * one. `undefined` when the campaign has no such session.
    *
-   * A session id is an opaque random string since issue #58, so no spec can
-   * spell one out: "the file the app just started" is a question only the
+   * A session id the app starts is an opaque random string, so no spec can
+   * spell one out: "the session the app just started" is a question only the
    * server can answer, and this asks it.
    */
   sessionPath(includeEnded?: boolean): Promise<string | undefined>;
   /**
    * PUT /entry with a FRESH guard token: a second writer, not a race. Returns
-   * the new token. This is how a spec provokes the app's 409 since "someone
-   * changed the file outside" cannot happen any more.
+   * the new token. This is how a spec provokes the app's 409 — an entry only
+   * ever changes through the API.
    */
   writeBody(rel: string, body: string): Promise<number>;
   /** PATCH /properties with a fresh guard token; returns the new token. */
@@ -168,13 +195,13 @@ export interface Db {
   all(sql: string, ...params: (string | number | null)[]): Record<string, unknown>[];
   /** The first row, or undefined. */
   one(sql: string, ...params: (string | number | null)[]): Record<string, unknown> | undefined;
-  /** `meta` as a plain record — where the migration markers live. */
+  /** `meta` as a plain record. */
   meta(): Record<string, string>;
 }
 
 interface Fixtures {
   seed: Seed;
-  campaignRoot: string;
+  fixturesDir: string;
   dataDir: string;
   server: ServerHandle;
   api: Api;
@@ -182,14 +209,14 @@ interface Fixtures {
 }
 
 /**
- * Import a markdown tree into `dataDir`'s database with the real CLI —
- * `grimoire seed <tree>`, the documented dev/E2E tool (issue #79 AK6). The
- * server no longer imports anything at boot, so this is what puts the fixture
- * campaign into a test's database.
+ * Load a fixtures directory into `dataDir`'s database with the real CLI —
+ * `grimoire seed <fixtures dir>`, the documented dev/E2E tool. The server
+ * reads no fixtures at boot, so this is what puts the fixture campaign into a
+ * test's database.
  */
-export async function seedCampaigns(campaignRoot: string, dataDir: string): Promise<string> {
+export async function seedCampaigns(fixturesDir: string, dataDir: string): Promise<string> {
   try {
-    const { stdout } = await run(BUN, [CLI_ENTRY, "seed", campaignRoot], {
+    const { stdout } = await run(BUN, [CLI_ENTRY, "seed", fixturesDir], {
       cwd: REPO_ROOT,
       env: { ...process.env, GRIMOIRE_DATA: dataDir },
       maxBuffer: 8 * 1024 * 1024,
@@ -197,20 +224,20 @@ export async function seedCampaigns(campaignRoot: string, dataDir: string): Prom
     return stdout;
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
-    throw new Error(`e2e: grimoire seed ${campaignRoot} failed\n${detail}`);
+    throw new Error(`e2e: grimoire seed ${fixturesDir} failed\n${detail}`);
   }
 }
 
 /**
- * Start ONE real server process on `dataDir` (GRIMOIRE_DATA). `campaignRoot`
- * is recorded on the handle only — nothing reads it at boot any more; seed
- * with `seedCampaigns` first when the test needs content.
+ * Start ONE real server process on `dataDir` (GRIMOIRE_DATA). `fixturesDir`
+ * is recorded on the handle only — the boot never reads it; seed with
+ * `seedCampaigns` first when the test needs content.
  *
  * Exported because the seed spec needs boots of its own on data directories
  * the per-test `server` fixture cannot express.
  */
 export async function startGrimoireServer(
-  campaignRoot: string,
+  fixturesDir: string,
   dataDir: string,
   workerIndex: number,
 ): Promise<{ handle: ServerHandle; proc: ManagedProcess }> {
@@ -224,7 +251,7 @@ export async function startGrimoireServer(
       label: `server:${port}`,
       env: {
         PORT: String(port),
-        // The only truth — the boot imports nothing (issue #79).
+        // The only truth (ADR #13) — the boot reads nothing else.
         GRIMOIRE_DATA: dataDir,
         APP_DIST,
         // The provider path runs for real — only the endpoint is canned.
@@ -242,7 +269,7 @@ export async function startGrimoireServer(
       await waitForHttp(`${url}/api/campaigns`, proc, `server:${port}`, 20_000);
       return {
         proc,
-        handle: { url, dataDir, dbFile: path.join(dataDir, "grimoire.db"), campaignRoot },
+        handle: { url, dataDir, dbFile: path.join(dataDir, "grimoire.db"), fixturesDir },
       };
     } catch (err) {
       lastError = err;
@@ -253,12 +280,11 @@ export async function startGrimoireServer(
 }
 
 /**
- * `sessions/<today>` — for session files a spec SEEDS itself.
+ * `sessions/<today>` — the address of a session entry a spec SEEDS itself.
  *
- * NOT the path of a session the app starts: those ids are opaque random
- * strings since issue #58 and only the server knows them (`api.sessionPath`).
- * A date-shaped id stays perfectly legal — it is what every campaign written
- * before the cutover carries — so seeding one is also the compatibility case.
+ * NOT the address of a session the app starts: those ids are opaque random
+ * strings and only the server knows them (`api.sessionPath`). A date-shaped
+ * id stays perfectly legal, which is why a seeded session may spell one.
  */
 export function todaySessionPath(d = new Date()): string {
   return `sessions/${todaySessionId(d)}`;
@@ -364,36 +390,36 @@ export function dbFor(client: SqliteClient): Db {
 }
 
 export const test = base.extend<Fixtures>({
-  // Extra markdown the seed run should see. Set per file or per
-  // describe block with test.use({ seed: … }).
+  // What the seed run should see instead of the pristine fixtures. Set per
+  // file or per describe block with test.use({ seed: … }).
   seed: [{}, { option: true }],
 
-  // The markdown tree `grimoire seed` reads. Without a seed this is the run's
-  // pristine copy, shared and never written — examples/ itself is read-only
-  // for the suite anyway (CLAUDE.md: the format is a contract).
-  campaignRoot: async ({ seed }, use, testInfo) => {
-    const files = seed.files ?? {};
-    const remove = seed.remove ?? [];
-    if (seed.skip === true || (Object.keys(files).length === 0 && remove.length === 0)) {
+  // The fixtures directory `grimoire seed` reads. Without overrides this is
+  // the run's pristine copy, shared and never written — fixtures/ itself is
+  // read-only for the suite anyway (CLAUDE.md: the format is a contract).
+  fixturesDir: async ({ seed }, use, testInfo) => {
+    const entries = seed.entries ?? {};
+    const without = seed.without ?? [];
+    if (seed.skip === true || (Object.keys(entries).length === 0 && without.length === 0)) {
       await use(pristineDir());
       return;
     }
-    const dir = path.join(runDir(), `w${testInfo.workerIndex}`, testInfo.testId, "campaigns");
+    const dir = path.join(runDir(), `w${testInfo.workerIndex}`, testInfo.testId, "fixtures");
     await rm(dir, { recursive: true, force: true });
     await mkdir(dir, { recursive: true });
     await cp(pristineDir(), dir, { recursive: true });
     const campaignDir = path.join(dir, CAMPAIGN);
-    // Addresses in, files out: the importer reads `.md` files, the suite
-    // speaks addresses (issue #79).
-    const asFile = (address: string) =>
-      address.endsWith(".md") ? address : `${address}.md`;
-    for (const rel of remove) {
-      await rm(path.join(campaignDir, asFile(rel)), { force: true });
+    // One entry per file, `<stem>.json` — so a stem the pristine copy already
+    // has is overwritten, and any other stem adds an entry.
+    for (const stem of without) {
+      await rm(path.join(campaignDir, `${stem}.json`), { force: true });
     }
-    for (const [rel, content] of Object.entries(files)) {
-      const abs = path.join(campaignDir, asFile(rel));
-      await mkdir(path.dirname(abs), { recursive: true });
-      await writeFile(abs, content, "utf8");
+    for (const [stem, entry] of Object.entries(entries)) {
+      await writeFile(
+        path.join(campaignDir, `${stem}.json`),
+        `${JSON.stringify(entry, null, 2)}\n`,
+        "utf8",
+      );
     }
     await use(dir);
     if (process.env.E2E_KEEP !== "1") await rm(dir, { recursive: true, force: true });
@@ -409,12 +435,12 @@ export const test = base.extend<Fixtures>({
     if (process.env.E2E_KEEP !== "1") await rm(dir, { recursive: true, force: true });
   },
 
-  server: async ({ seed, campaignRoot, dataDir }, use, testInfo) => {
+  server: async ({ seed, fixturesDir, dataDir }, use, testInfo) => {
     // `seed: { skip: true }` starts the server on an EMPTY data directory —
-    // the instance has no campaign at all (issue #56, critical path 10).
-    if (seed.skip !== true) await seedCampaigns(campaignRoot, dataDir);
+    // the instance has no campaign at all (critical path 10).
+    if (seed.skip !== true) await seedCampaigns(fixturesDir, dataDir);
     const { handle, proc } = await startGrimoireServer(
-      campaignRoot,
+      fixturesDir,
       dataDir,
       testInfo.workerIndex,
     );
@@ -433,7 +459,7 @@ export const test = base.extend<Fixtures>({
 
   // The storage itself, through the server's own driver layer (no second
   // SQLite dependency in the suite). Only ever READ from here — the server
-  // owns this file while it runs.
+  // owns that database while it runs.
   db: async ({ server }, use) => {
     const client = await openSqlite(server.dbFile);
     try {

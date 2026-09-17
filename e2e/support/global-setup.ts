@@ -3,15 +3,14 @@
 //   1. build the app once (the server serves the real Vite bundle via
 //      APP_DIST, exactly like the container does — docs/DEPLOYMENT.md)
 //   2. create a per-run temp directory with a PRISTINE copy of
-//      examples/beispiel — the markdown tree every test's `grimoire seed` run
-//      reads, so examples/ itself is never touched (and since the cutover
-//      nothing writes into a campaign tree at all)
+//      fixtures/beispiel — the entries every test's `grimoire seed` run
+//      reads, so fixtures/ itself is never touched
 //   3. start the stub LLM as a managed process and publish its port
 //
 // The per-test server processes are started by the fixtures (support/test.ts)
 // — one per test, on its own port, on its own database, which the fixture
-// seeds with `grimoire seed <pristine tree>` BEFORE the boot (the boot itself
-// imports nothing since issue #79).
+// seeds with `grimoire seed <pristine fixtures dir>` BEFORE the boot (the
+// boot itself reads no fixtures at all).
 //
 // Values travel to the workers through process.env: Playwright spawns the
 // worker processes AFTER this function returned, so they inherit them.
@@ -28,7 +27,7 @@ import {
   BUN,
   CAMPAIGN,
   ENV,
-  EXAMPLES_DIR,
+  FIXTURES_ROOT,
   REPO_ROOT,
   STUB_LLM_ENTRY,
 } from "./paths";
@@ -73,8 +72,9 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   await buildApp();
 
   const dir = await mkdtemp(path.join(os.tmpdir(), "grimoire-e2e-"));
-  // The pristine copy is a CAMPAIGN ROOT: <pristine>/<campaign>/…
-  await cp(path.join(EXAMPLES_DIR, CAMPAIGN), path.join(dir, "pristine", CAMPAIGN), {
+  // The pristine copy keeps the shape `grimoire seed` expects:
+  // <pristine>/<campaign>/<entry>.json
+  await cp(path.join(FIXTURES_ROOT, CAMPAIGN), path.join(dir, "pristine", CAMPAIGN), {
     recursive: true,
   });
   process.env[ENV.runDir] = dir;
@@ -92,7 +92,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 
   return async () => {
     await stub.stop();
-    // E2E_KEEP=1 keeps the databases and campaign copies for a post-mortem.
+    // E2E_KEEP=1 keeps the databases and fixture copies for a post-mortem.
     if (process.env.E2E_KEEP !== "1") await rm(dir, { recursive: true, force: true });
   };
 }

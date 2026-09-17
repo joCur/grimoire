@@ -49,8 +49,8 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   expect(await api.get<unknown[]>("campaigns")).toEqual([]);
 
   // --- Kampagne anlegen -----------------------------------------------------
-  // The hints are GENERIC (PO feedback on issue #56): a fresh instance must
-  // not suggest a name out of `examples/`, which reads like a default.
+  // The hints are GENERIC: a fresh instance must not suggest the name of the
+  // example campaign, which reads like a default.
   const nameField = page.getByLabel("Name der Kampagne");
   await expect(nameField).toHaveAttribute("placeholder", "Name der Kampagne");
   await nameField.fill(CAMPAIGN_NAME);
