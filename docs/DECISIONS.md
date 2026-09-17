@@ -749,9 +749,19 @@ sonst nirgends — und dazu gehört das Kapitel eines „Neues Kapitel"-Laufs, d
 die Übernahme aus dem Lauf anlegt (ADR #18). Ein übernommener Szenen-Vorschlag
 nimmt außerdem die vorgeschlagenen Einträge mit, die er nennt: sie sind Teil
 desselben Vorschlags, und was der DM abgelehnt hat, bleibt abgelehnt — dann
-wird die Szene abgewiesen und nennt den fehlenden Eintrag. Wer in `npcs:`, `location:`, `chapter:`, in einer
-Schnellnotiz oder in `scenes_played:` etwas einträgt, das keinen Eintrag hat,
-bekommt 400 mit einem eigenen Code (`npc_unknown`, `location_unknown`,
+wird die Szene abgewiesen und nennt den fehlenden Eintrag.
+
+**Das Mitschreiben ist ein Zwischenstand.** Eine übernommene Szene schreibt
+die vorgeschlagenen Einträge mit, die sie nennt, damit ein Lauf nicht an
+seinen eigenen Referenzen scheitert — nicht, weil das die gewollte Lösung
+wäre. Gewollt ist ein Review in Referenz-Reihenfolge: erst die Orte, dann die
+NPCs, dann die Szenen, sodass nichts geschrieben wird, bevor seine Ziele
+existieren. Das ist als eigene Arbeit festgehalten und dreht diesen Punkt
+wieder zurück.
+
+Wer in `npcs:`, `location:`, `chapter:`, in einer Schnellnotiz oder in
+`scenes_played:` etwas einträgt, das keinen Eintrag hat, bekommt 400 mit
+einem eigenen Code (`npc_unknown`, `location_unknown`,
 `chapter_unknown`, `log_scene_unknown`, `played_scene_unknown`) und dem
 Hinweis, den Eintrag zuerst anzulegen; geschrieben wird nichts.
 

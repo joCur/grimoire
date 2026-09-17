@@ -45,7 +45,11 @@ import { applyDrafts } from "./store/write";
  *               still undecided. A stub is the minimal entry the scene
  *               needs, so accepting the scene is the decision that it
  *               exists; what the DM threw away stays thrown away, and the
- *               write is then refused and names it.
+ *               write is then refused and names it. This carrying is an
+ *               INTERIM step — it keeps a run from failing on its own
+ *               references; the intended review walks the parts in
+ *               reference order (locations, then npcs, then scenes), so
+ *               nothing is written before its targets exist.
  *   transaction one, with the target rev guards of the ordinary draft write
  *               (`applyDrafts`: conflicts checked INSIDE it, FTS and
  *               `[[slug]]` reference rows follow because this is that path).
