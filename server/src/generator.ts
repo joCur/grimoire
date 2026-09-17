@@ -43,7 +43,7 @@ import {
   CALLOUT_KINDS,
   NPC_STATUSES,
   SCENE_TYPES,
-  kindFromPath,
+  kindFromAddress,
   parseMarkdown,
   type GenerateNpcResult,
   type GenerateUsage,
@@ -1448,7 +1448,7 @@ export function assertDraftId(id: unknown, rel: string): void {
  * the transaction, with the code the app has a sentence for.
  */
 export function draftAddress(rel: string, properties: Record<string, unknown>): string {
-  if (kindFromPath(rel) !== "scene") return rel;
+  if (kindFromAddress(rel) !== "scene") return rel;
   const segments = rel.split("/");
   const chapterId = segments[0] ?? "";
   const fmId = typeof properties.id === "string" ? properties.id.trim() : "";

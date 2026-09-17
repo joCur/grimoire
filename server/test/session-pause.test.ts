@@ -1,43 +1,24 @@
-// Pausing the session for real (issue #40 AK8): POST /session/pause opens a
-// `pauses` interval, POST /session/continue closes it, and the EntryResponse
-// carries the epoch arithmetic (pausedMs / pausedSinceMs) so the client only
-// ever subtracts numbers.
+// Pausing the session for real: POST /session/pause opens a `pauses`
+// interval, POST /session/continue closes it, and the EntryResponse carries
+// the epoch arithmetic (pausedMs / pausedSinceMs) so the client only ever
+// subtracts numbers.
 //
-// After the SQLite cutover (issue #57) an interval is a `session_pauses` row
-// and a `— Pause` line is a `log_entries` row; both are rendered back into
-// the same EntryResponse the client always read (store/render.ts). So the
-// assertions read the RESPONSE instead of the file on disk, and each case
-// gets a fresh in-memory database seeded from examples/
-// (test/support/store.ts). The clock is still overridden via setNow().
+// An interval is a `session_pauses` row and a `— Pause` line is a
+// `log_entries` row; both are rendered back into the EntryResponse the client
+// reads (store/render.ts), so the assertions read the RESPONSE. Each case
+// gets a fresh in-memory database seeded from the JSON entries in `fixtures/`
+// (test/support/store.ts), and the clock is overridden via setNow().
 //
-// One value shifted with the cutover and is worth knowing while reading:
-// pause timestamps are stored verbatim as `localDateTimeSeconds` writes them,
-// so a `:00` second no longer disappears on the way back through the YAML
-// parser. Only a MIGRATED pause carries the parser's normalization — which is
-// exactly what the degradation case below shows.
+// Pause timestamps are stored VERBATIM as `localDateTimeSeconds` writes them,
+// so a `:00` second survives — which is what several assertions below spell
+// out second-precise.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { setNow } from "../src/clock";
-import {
-  dropStore,
-  removeTempRoot,
-  seedStore,
-  tempCampaignRoot,
-} from "./support/store";
+import { dropStore, seedStore } from "./support/store";
 
-/**
- * Path of the HAND-WRITTEN session file some cases seed. Its id is a DATE —
- * the shape every campaign written before issue #58 carries, and still a
- * perfectly valid id (a session id is an opaque string now, so nothing parses
- * it). Sessions the API starts get a random id instead: see `startedPath`.
- */
-const REL = "sessions/2026-08-19";
-
-let tmpRoot: string | undefined;
 /** Path of the session `beforeEach` started — this case's opaque id. */
 let startedPath: string;
 
@@ -72,20 +53,27 @@ function logLines(file: EntryResponse): string[] {
 }
 
 /**
- * Seed from a temp copy of examples/ that holds a hand-written session file —
- * the only remaining way a session can carry properties the API would never
- * write itself (the migration is the single reader of the tree now).
+ * Re-seed with a RUNNING session that already carries pause intervals — a
+ * session from an earlier evening, which no endpoint can produce in one call.
  */
-async function seedWithSessionFile(tail: string): Promise<void> {
-  tmpRoot = await tempCampaignRoot();
-  const abs = path.join(tmpRoot, "beispiel", `${REL}.md`);
-  await mkdir(path.dirname(abs), { recursive: true });
-  await writeFile(
-    abs,
-    `---\nid: 2026-08-19\nstarted: 2026-08-19T21:00\n${tail}---\n\n## Log\n`,
-    "utf8",
-  );
-  await seedStore(tmpRoot);
+async function seedWithPauses(
+  pauses: Array<{ from: string; to?: string }>,
+): Promise<void> {
+  await seedStore({
+    entries: [
+      {
+        kind: "session",
+        properties: {
+          id: "2026-08-19",
+          started: "2026-08-19T21:00",
+          scenes_played: [],
+          pauses,
+        },
+        body: "",
+        log: [],
+      },
+    ],
+  });
 }
 
 beforeEach(async () => {
@@ -100,8 +88,6 @@ beforeEach(async () => {
 afterEach(async () => {
   dropStore();
   setNow(null);
-  if (tmpRoot !== undefined) await removeTempRoot(tmpRoot);
-  tmpRoot = undefined;
 });
 
 describe("POST /api/:campaign/session/pause + /continue", () => {
@@ -182,24 +168,13 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
     expect(ended.pausedMs).toBe(10 * 60 * 1000);
   });
 
-  test("degraded `pauses` entries are dropped by the migration, never fatal", async () => {
-    // Hand-edited garbage of every shape the field can grow: a scalar entry,
-    // a mapping without `from`, an unreadable `from`, an unreadable `to` —
-    // plus ONE usable closed interval. The import keeps only what
-    // `sessionPauses` (shared) accepts and reports the rest; the API then
-    // sees a session with exactly one interval.
-    await seedWithSessionFile(
-      "pauses: [kaputt, {to: 2026-08-19T21:10}, {from: gestern}, " +
-        "{from: 2026-08-19T21:20:00, to: irgendwann}, " +
-        "{from: 2026-08-19T21:30:00, to: 2026-08-19T21:33:00}]\n",
-    );
+  test("a session that already carries intervals counts them, and a pause APPENDS", async () => {
+    await seedWithPauses([{ from: "2026-08-19T21:30", to: "2026-08-19T21:33" }]);
     const file = await session();
     expect(file.pausedMs).toBe(3 * 60 * 1000);
     expect(file.pausedSinceMs).toBeUndefined();
 
-    // …and a pause on top of that keeps the surviving entry and appends one.
-    // The migrated `from`/`to` went through the YAML normalization (a `:00`
-    // second is dropped there), the new one is written second-precise.
+    // A pause on top keeps the stored interval verbatim and adds an open one.
     setNow(() => new Date(2026, 7, 19, 21, 40, 0));
     const paused = await ok("/api/beispiel/session/pause");
     expect(paused.properties.pauses).toEqual([

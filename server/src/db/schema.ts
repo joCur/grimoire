@@ -3,12 +3,13 @@
 //
 // Design rules, binding for every table added later:
 //
-//   1. CONTRACT FIELDS ARE COLUMNS. Everything README.md names for an entity
-//      gets its own column. Unknown keys an import brings along are kept
-//      verbatim in the `extra` JSON column — the format degrades, it never
-//      validates — and the API adds none (`PATCH` refuses a new key).
+//   1. CONTRACT FIELDS ARE COLUMNS, and there is nothing beside them.
+//      Everything README.md names for an entity gets its own column; a key
+//      the contract does not name has no field behind it and is refused
+//      (`PATCH /properties` answers 400, and so does a seed). The contract
+//      lists live once, in store/write.ts `PROPERTY_CONTRACT`.
 //   2. REFERENCES ARE TABLES with a `pos` column. `npcs: [jorna, fenn]` is an
-//      ORDERED list in the file, and the order is authored information.
+//      ORDERED list, and the order is authored information.
 //   3. EVERY REFERENCE IS A FOREIGN KEY. A scene's chapter and location, the
 //      npcs of a scene, the chapter of an npc and of a location, the scene
 //      of a log line and of a played-scenes entry each carry a composite
@@ -36,15 +37,15 @@
 //   5. NATURAL COMPOSITE KEYS, `ON UPDATE CASCADE`. The id IS the key
 //      (README: "id ... NIE ändern (Referenzen!)"), and a rename is then a
 //      PK update the database cascades instead of a file-tree rewrite.
-//   6. SESSION TIMESTAMPS STAY ZONE-LESS STRINGS, exactly as the files carry
-//      them. Only the server resolves them to epoch ms (see clock.ts) —
+//   6. SESSION TIMESTAMPS STAY ZONE-LESS STRINGS, exactly as they were
+//      written. Only the server resolves them to epoch ms (see clock.ts) —
 //      storing an epoch here would bake today's timezone into the data.
 //
-// `extra` and the other JSON columns are plain TEXT holding a JSON object;
+// The JSON columns (`quickstats`, `handouts`) are plain TEXT holding JSON;
 // pack/unpack helpers live at the bottom of this file. Deliberately not
-// drizzle's `mode: "json"`: the migration writes rows through raw SQL as well
-// (FTS maintenance, custom migration), and one representation everywhere is
-// worth more than the small convenience.
+// drizzle's `mode: "json"`: rows are written through raw SQL as well (FTS
+// maintenance, custom migrations), and one representation everywhere is worth
+// more than the small convenience.
 
 import { sql } from "drizzle-orm";
 import {
@@ -56,22 +57,13 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
-/**
- * JSON object column holding unknown properties. Only the importer puts keys
- * in here (a seeded entry may carry fields the schema has no column for);
- * the API keeps them readable and lets `PATCH /properties` change or delete
- * them, but never adds a new one — an unknown key in a patch is a 400.
- */
-const extraColumn = () => text("extra").notNull().default("{}");
-
 /** Optimistic-concurrency token of one row (rule 4). */
 const revColumn = () => integer("rev").notNull().default(1);
 
 // --- campaign ---------------------------------------------------------------
 
 /**
- * One campaign. `id` is what used to be the directory name under
- * the import source tree and stays the key in every URL.
+ * One campaign. `id` is the key in every URL.
  *
  * `version` replaces the chokidar-fed in-memory counter behind
  * `GET /api/:campaign/version` (DECISIONS #9): with the database as the only
@@ -80,18 +72,17 @@ const revColumn = () => integer("rev").notNull().default(1);
  */
 export const campaigns = sqliteTable("campaigns", {
   id: text("id").primaryKey(),
-  /** Display name from `_campaign.md`; empty string when the file said nothing. */
+  /** Display name; empty string when none was authored (the id is then shown). */
   name: text("name").notNull().default(""),
   description: text("description"),
-  /** Free note space — the campaign file's markdown body. */
+  /** Free note space — the campaign entry's markdown body. */
   body: text("body").notNull().default(""),
-  extra: extraColumn(),
   /** Bumped on every write; the app polls it to invalidate its queries. */
   version: integer("version").notNull().default(1),
   rev: revColumn(),
   /**
-   * The glossary's PROSE PREAMBLE — the text of `glossary.md` above the first
-   * heading, which belongs to no term (see `parseGlossaryBody`). It has no
+   * The glossary's PROSE PREAMBLE — the text above the first term, which
+   * belongs to no term (see store/body-parse.ts `parseGlossaryBody`). It has no
    * row of its own and would be lost on every save, so it lives here and is
    * rendered back in front of the term list. Empty for the usual glossary.
    */
@@ -123,19 +114,18 @@ export const chapters = sqliteTable(
     campaignId: text("campaign_id")
       .notNull()
       .references(() => campaigns.id, { onUpdate: "cascade", onDelete: "cascade" }),
-    /** Chapter id — the former directory name, e.g. "01-salzhafen". */
+    /** Chapter id, e.g. "01-salzhafen". */
     id: text("id").notNull(),
     title: text("title").notNull().default(""),
     /**
      * `planned | active | done` (@grimoire/shared `CHAPTER_STATUSES`). No
-     * CHECK behind it — the format degrades and an imported value is shown
+     * CHECK behind it — the format degrades and a stored value is shown
      * verbatim — but the API writes nothing else, and at most ONE chapter per
      * campaign holds `active` (store/write.ts `clearOtherActiveChapters`).
      */
     status: text("status"),
     body: text("body").notNull().default(""),
-    extra: extraColumn(),
-    /** Display order; the migration numbers chapters by their directory order. */
+    /** Display order. */
     pos: integer("pos").notNull().default(0),
     rev: revColumn(),
   },
@@ -156,7 +146,7 @@ export const scenes = sqliteTable(
      */
     chapterId: text("chapter_id").notNull(),
     title: text("title").notNull().default(""),
-    /** "planned" | "contingency" | anything else a file carried. */
+    /** "planned" | "contingency" | anything else that was authored. */
     type: text("type").notNull().default("planned"),
     /** Free-text firing condition — only meaningful for contingency scenes. */
     trigger: text("trigger"),
@@ -180,7 +170,6 @@ export const scenes = sqliteTable(
     handouts: text("handouts").notNull().default("[]"),
     /** The markdown body — ONE field, editable as markdown. */
     body: text("body").notNull().default(""),
-    extra: extraColumn(),
     pos: integer("pos").notNull().default(0),
     rev: revColumn(),
   },
@@ -283,7 +272,6 @@ export const npcs = sqliteTable(
     voice: text("voice"),
     appearance: text("appearance"),
     body: text("body").notNull().default(""),
-    extra: extraColumn(),
     rev: revColumn(),
   },
   (t) => [
@@ -328,7 +316,6 @@ export const locations = sqliteTable(
     /** Reference to the Roll20 page — never a map copy (DECISIONS #2). */
     roll20Page: text("roll20_page"),
     body: text("body").notNull().default(""),
-    extra: extraColumn(),
     rev: revColumn(),
   },
   (t) => [
@@ -359,7 +346,7 @@ export const locations = sqliteTable(
  *
  * IDENTITY (PO decision): the id of a NEW session is an OPAQUE
  * RANDOM string — `crypto.randomUUID()` (store/write.ts `newSessionId`).
- * Nobody reads it: it is an address (`sessions/<id>.md`) and nothing else,
+ * Nobody reads it: it is an address (`sessions/<id>`) and nothing else,
  * and everything DISPLAYABLE about a session is derived from `started`.
  *
  * Why randomUUID and not a ULID or a date+sequence: it is URL-safe, needs no
@@ -405,12 +392,11 @@ export const sessions = sqliteTable(
      */
     createdAt: integer("created_at").notNull().default(0),
     /**
-     * Everything in the session file that is neither `## Log` nor
-     * frontmatter — `## Threads` above all. Kept as one markdown field so no
-     * hand-written section is lost.
+     * Everything in the session's text that is not `## Log` — `## Threads`
+     * above all. Kept as one markdown field so no hand-written section is
+     * lost.
      */
     body: text("body").notNull().default(""),
-    extra: extraColumn(),
     rev: revColumn(),
   },
   (t) => [
@@ -456,15 +442,15 @@ export const sessionPauses = sqliteTable(
  * One line of a session's `## Log`. APPEND-ONLY stays the rule; `pos` is the
  * append counter and the key.
  *
- * `raw` is the line exactly as it stood in the file and is the only NOT NULL
+ * `raw` is the line exactly as it was written and is the only NOT NULL
  * content column: a line the log grammar does not recognise (a hand-typed
  * note, a `- Pause` marker in an older spelling) keeps its `raw` and leaves
  * `at`/`sceneId`/`text` NULL rather than being dropped or guessed at.
  *
  * `hash` is the short hash (first 8 hex chars of SHA-256 over `raw`) the
  * review step used to mark lines as seen. It is kept because it is the id the
- * app's review already speaks — but `reviewed` is now a plain flag on the row
- * instead of a hash list in the frontmatter.
+ * app's review already speaks — but `reviewed` is a plain flag on the row
+ * rather than a hash list in the session's properties.
  */
 export const logEntries = sqliteTable(
   "log_entries",
@@ -589,7 +575,7 @@ export const glossary = sqliteTable(
     campaignId: text("campaign_id").notNull(),
     term: text("term").notNull(),
     explanation: text("explanation").notNull().default(""),
-    /** Stable display order — the order the migration found the terms in. */
+    /** Stable display order — the order the terms were written in. */
     pos: integer("pos").notNull(),
     rev: revColumn(),
   },
@@ -754,21 +740,15 @@ export const generateJobs = sqliteTable(
 // --- bookkeeping ------------------------------------------------------------
 
 /**
- * Key/value bookkeeping of the database itself. Known keys:
- *   `migrated_at`   — ISO timestamp of the one-time migration. Its PRESENCE
- *                     is what makes the migration idempotent.
- *   `migrated_from` — the source directory the import read.
- *   `migrated_campaign:<id>`
- *                   — ISO timestamp of ONE campaign's committed import,
- *                     written inside that campaign's own transaction. This is
- *                     what lets a run interrupted between two campaigns
- *                     resume instead of dead-ending on "content, no marker".
+ * Key/value bookkeeping of the database itself. NOTHING writes a key here at
+ * the moment; the table stays because it is where the next piece of
+ * bookkeeping belongs and because old databases carry keys in it.
  *
- * `session_seq:<campaign>:<date>` was such a key while session ids were
- * date+sequence; with opaque random ids (see `sessions`) nothing has to be
- * reserved any more. Old databases may still carry the keys — they are inert
- * and are deliberately not deleted (a `meta` row costs nothing and a migration
- * that removes bookkeeping can only fail).
+ * Those old keys are inert and deliberately not deleted: the `migrated_*`
+ * markers of the one-time markdown migration, and `session_seq:<campaign>:
+ * <date>` from the time session ids were date+sequence (with opaque random
+ * ids — see `sessions` — nothing has to be reserved any more). A `meta` row
+ * costs nothing, and a migration that removes bookkeeping can only fail.
  */
 export const meta = sqliteTable("meta", {
   key: text("key").primaryKey(),
@@ -798,7 +778,7 @@ export const searchRank = sql`bm25(search_fts, 10, 6, 4, 1)`;
 
 // --- JSON column helpers ----------------------------------------------------
 
-/** Serialize an object for an `extra`/`quickstats`-style column. */
+/** Serialize an object for a JSON column (`quickstats`). */
 export function packJson(value: unknown): string {
   if (value === undefined || value === null) return "{}";
   try {

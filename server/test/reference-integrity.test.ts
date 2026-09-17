@@ -17,12 +17,10 @@
 // adds them) is test/db-migration-0014.test.ts.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
 import type { CampaignTree, EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { applyDrafts } from "../src/store/write";
-import { dropStore, removeTempRoot, seedStore, tempCampaignRoot } from "./support/store";
+import { dropStore, seedStore } from "./support/store";
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const SCENE_B = "01-salzhafen/bucht/smuggler-captured";
@@ -483,27 +481,3 @@ describe("empty is not missing", () => {
   });
 });
 
-describe("a patch never drops what the import preserved", () => {
-  test("a misshapen quickstats survives a properties patch", async () => {
-    // The import keeps a `quickstats:` the column cannot hold (a list where
-    // the format wants a mapping) in `extra`, and the renderer shows it. The
-    // first patch used to delete it — silently, against the round-trip rule
-    // (schema.ts rule 1).
-    const root = await tempCampaignRoot();
-    try {
-      const npc = path.join(root, "beispiel", "npcs", "fenn.md");
-      const raw = await readFile(npc, "utf8");
-      await writeFile(npc, raw.replace(/^quickstats:.*$/m, "quickstats: [ac 12, hp 9]"));
-      await seedStore(root);
-
-      expect((await getFile(NPC)).properties.quickstats).toEqual(["ac 12", "hp 9"]);
-      const patched = await patchFm(NPC, { role: "Anders" });
-      expect(patched.properties.role).toBe("Anders");
-      expect(patched.properties.quickstats).toEqual(["ac 12", "hp 9"]);
-      // …and it is still there on the next read, not only in the answer.
-      expect((await getFile(NPC)).properties.quickstats).toEqual(["ac 12", "hp 9"]);
-    } finally {
-      await removeTempRoot(root);
-    }
-  });
-});

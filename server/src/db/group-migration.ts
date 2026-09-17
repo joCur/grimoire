@@ -28,6 +28,12 @@
 //
 // Every scene whose ADDRESS changes is reported, because that is what a DM
 // notices: `<chapter>/<old-group>/<id>` is a link they may have written down.
+//
+// The location insert below still writes an `extra` column, which the schema
+// no longer has: this step runs BEFORE the migrator, so on a database old
+// enough to reach it the column is still there (it is dropped in migration
+// 0015). Removing it from the statement would break exactly the databases
+// this step exists for.
 
 import { toSlug } from "@grimoire/shared/slug";
 import type { SqliteClient } from "./driver";

@@ -1,20 +1,26 @@
-// Decomposing markdown bodies into rows — the pure half of the one-time
-// migration. No filesystem, no database: everything here is a
-// function from text to data, so the degrade rules are unit-testable.
+// Parsing pieces of an entry's BODY — the text side of the store.
 //
-// The same design rule as everywhere else applies (DECISIONS #1): NOTHING
-// here throws, and nothing is silently dropped. A line the grammar does not
-// recognise keeps its `raw` and travels on with its parsed fields empty; the
-// caller decides whether that is worth a report entry.
+// Two things live here, and both are read by write paths:
 //
-// The log and inbox parsers deliberately mirror app/src/lib/session.ts and
-// app/src/lib/review.ts LINE FOR LINE, including the trimming. They have to:
-// the review's `reviewed` hashes were computed over exactly those strings, so
-// a parser that trimmed differently would orphan every hash in the campaign.
+//   * `logLineShortHash` — the short hash of a raw session log line. It is
+//     the identity the review's `reviewed` flag is keyed by, so the log
+//     append (store/write.ts) and the rename cascade (store/rename.ts) have
+//     to compute it exactly the same way.
+//   * `parseGlossaryBody` and the section helpers under it — `PUT /entry` for
+//     the `glossary` address takes the rendered term list back as ONE
+//     markdown text and has to decompose it into rows again.
+//
+// The rule from ADR #1 holds throughout: NOTHING here throws, and nothing is
+// silently dropped. A line the grammar does not recognise keeps its text and
+// travels on with its parsed fields empty; the caller decides what that is
+// worth.
 
 import { createHash } from "node:crypto";
 
-/** Short hash of a raw log line — mirror of `logLineShortHash` (write API). */
+/**
+ * Short hash of one raw session log line — the key the review's `reviewed`
+ * flag hangs on. Eight hex characters of sha256 over the line as stored.
+ */
 export function logLineShortHash(line: string): string {
   return createHash("sha256").update(line, "utf8").digest("hex").slice(0, 8);
 }
@@ -41,14 +47,14 @@ export interface MarkdownSection {
  * (app/src/lib/session.ts: `/^#{1,6}(\s|$)/`): one to six `#` followed by
  * whitespace or the end of the line.
  *
- * The space is MANDATORY. Without it every hashtag line the format puts in a
- * body — `#pause`, `#thread`, `#decision` (README, "Hashtags") — would read as
- * a heading and cut a section in half.
+ * The space is MANDATORY. Without it every hashtag line a body puts in —
+ * `#pause`, `#thread`, `#decision` (README, "Hashtags") — would read as a
+ * heading and cut a section in half.
  *
  * The `#` must also sit at the very START of the line: an indented `#` is not
  * a heading in markdown (it is code), and the app's reader is the yardstick
- * for what the DM actually saw. A trailing `\r` is tolerated so a CRLF file
- * parses the same as an LF one — the line itself is never rewritten, so the
+ * for what the DM actually saw. A trailing `\r` is tolerated so CRLF text
+ * parses the same as LF text — the line itself is never rewritten, so the
  * `\r` survives into the stored body.
  */
 const HEADING = /^(#{1,6})(?=[ \t\r]|$)[ \t]*(.*?)[ \t\r]*$/;
@@ -64,8 +70,8 @@ interface HeadingInfo {
 /**
  * The body's lines with the heading lines marked. Fenced code blocks are
  * tracked so a `# comment` inside a ``` block is never a section boundary —
- * the migration writes the DB once and a wrong boundary there is silent
- * content loss, which weighs more than the app's simpler reader.
+ * a wrong boundary is silent content loss on the way back into rows, which
+ * weighs more than the app's simpler reader.
  */
 function scanLines(lines: readonly string[]): (HeadingInfo | undefined)[] {
   const out: (HeadingInfo | undefined)[] = [];
@@ -109,7 +115,7 @@ function scanLines(lines: readonly string[]): (HeadingInfo | undefined)[] {
  */
 export function splitSections(body: string): MarkdownSection[] {
   // Split on "\n" only, never on /\r?\n/: the lines are re-joined verbatim,
-  // so a stripped "\r" would be a byte lost from the DM's file.
+  // so a stripped "\r" would be a byte lost from the DM's text.
   const lines = body.split("\n");
   const headings = scanLines(lines);
   const sections: MarkdownSection[] = [{ lines: [], startIndex: -1, endIndex: 0 }];
@@ -146,16 +152,14 @@ function isBlank(line: string | undefined): boolean {
 
 /**
  * The body with one named section REMOVED (heading line included) — used
- * where a section becomes rows and must not also survive as prose: a
- * session's `## Log`, which is `log_entries` and is rendered back from those
- * rows.
+ * where a section becomes rows and must not also survive as prose.
  *
  * Three promises, all of them content-safety rules:
  *
  *   1. EXACTLY the span the parser read is removed — up to the next heading of
  *      any level. A `### Nachtrag` under `## Log` was never parsed into rows,
  *      so it STAYS in the body instead of disappearing with the section.
- *   2. Only the FIRST matching section goes. A file with two `## Log`
+ *   2. Only the FIRST matching section goes. A body with two `## Log`
  *      headings has only its first one in the rows; removing the second too
  *      would delete lines nobody stored.
  *   3. Everything else stays BYTE-IDENTICAL. Only the seam of the cut is
@@ -202,104 +206,11 @@ export const SECTION_LEVEL = 2;
 // --- structural vs. foreign lines --------------------------------------------
 
 /**
- * True for a line that is part of the file's SKELETON rather than content:
- * blank lines and headings. Those are not "foreign lines" — they carry no
- * information a row could lose, so they never produce a report entry (they
- * are still kept verbatim in `raw` where a table has one).
+ * True for a line that is part of a body's SKELETON rather than its content:
+ * blank lines and headings. Those carry no information a row could lose.
  */
 export function isStructuralLine(line: string): boolean {
   return line.trim() === "" || HEADING.test(line);
-}
-
-// --- session log --------------------------------------------------------------
-
-/** `- HH:MM (sceneId) text` — mirror of app/src/lib/session.ts LOG_LINE. */
-const LOG_LINE = /^-\s+(\d{1,2}:\d{2})(?:\s+\(([^)]+)\))?\s+(.+)$/;
-
-export interface ImportedLogEntry {
-  pos: number;
-  /** The line as the review hashes it: trimmed, exactly as in the app parser. */
-  raw: string;
-  at?: string;
-  sceneId?: string;
-  text?: string;
-  hash: string;
-  /** True when the line's shape was not recognised — `raw` is all there is. */
-  foreign: boolean;
-}
-
-/**
- * The `## Log` section as rows. Blank lines are skipped and the next heading
- * ends the log, exactly as the app's live view reads it — anything else would
- * make the migration disagree with what the DM has been looking at.
- */
-export function parseLogSection(body: string): ImportedLogEntry[] {
-  // Level 2 exactly, like the app's `/^##\s*Log\s*$/i` (lib/session.ts): a
-  // `### Log` is not the section the live view has been writing to.
-  const lines = sectionLines(body, "Log", SECTION_LEVEL);
-  if (lines === undefined) return [];
-  const out: ImportedLogEntry[] = [];
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (line === "") continue;
-    const m = LOG_LINE.exec(line);
-    const entry: ImportedLogEntry = {
-      pos: out.length,
-      raw: line,
-      hash: logLineShortHash(line),
-      foreign: m === null,
-    };
-    if (m !== null) {
-      entry.at = m[1] ?? "";
-      if (m[2] !== undefined) entry.sceneId = m[2];
-      entry.text = m[3] ?? "";
-    }
-    out.push(entry);
-  }
-  return out;
-}
-
-// --- inbox -------------------------------------------------------------------
-
-const CHECKBOX = /^\[([ xX])\]\s*/;
-
-export interface ImportedInboxEntry {
-  pos: number;
-  /** The line verbatim (NOT trimmed) — the write API matched it byte for byte. */
-  raw: string;
-  text?: string;
-  done: boolean;
-  /** True for a non-blank, non-heading line that is not a list entry. */
-  foreign: boolean;
-}
-
-/**
- * The inbox body as rows. Every non-blank line becomes a row so the file's
- * order and its prose survive; only `- ` lines get a parsed `text`, mirroring
- * app/src/lib/review.ts (which is what the write API accepts).
- *
- * Headings keep their place with `text` unset and `foreign: false` — `##
- * Eingang` is the skeleton the format prescribes, not a lost idea.
- */
-export function parseInboxBody(body: string): ImportedInboxEntry[] {
-  const out: ImportedInboxEntry[] = [];
-  // Exact split, like the app: the raw line must match the file byte for byte.
-  for (const raw of body.split("\n")) {
-    if (raw.trim() === "") continue;
-    if (!raw.startsWith("- ")) {
-      out.push({ pos: out.length, raw, done: false, foreign: !isStructuralLine(raw) });
-      continue;
-    }
-    let rest = raw.slice(2);
-    let done = false;
-    const marker = CHECKBOX.exec(rest);
-    if (marker !== null) {
-      done = (marker[1] ?? " ") !== " ";
-      rest = rest.slice(marker[0].length);
-    }
-    out.push({ pos: out.length, raw, text: rest, done, foreign: false });
-  }
-  return out;
 }
 
 // --- glossary -----------------------------------------------------------------
@@ -308,9 +219,8 @@ export function parseInboxBody(body: string): ImportedInboxEntry[] {
  * A glossary term line. Three spellings are accepted, because all three are
  * in the wild:
  *
- *   `- lighthouse keeper → Leuchtturmwärter`   (examples/beispiel — the
- *                                               `EN → DE` form the generator
- *                                               prompt texts)
+ *   `- lighthouse keeper → Leuchtturmwärter`   (the `EN → DE` form the
+ *                                               generator prompt texts)
  *   `- lighthouse keeper -> Leuchtturmwärter`   (ASCII arrow)
  *   `- Begriff: Erklärung`                      (colon form)
  *
@@ -339,18 +249,15 @@ const GLOSSARY_COLON = /^[-*+]\s+([^:]+?)\s*:\s+(.+?)\s*$/;
  */
 const GLOSSARY_BOLD = /^\*\*([^*]+?)\*\*(?:[ \t]*[:—–-][ \t]*(.*?))?[ \t]*$/;
 
-export interface ImportedGlossaryEntry {
+export interface ParsedGlossaryEntry {
   term: string;
   explanation: string;
   pos: number;
 }
 
 export interface GlossaryParseResult {
-  entries: ImportedGlossaryEntry[];
-  /**
-   * Reasons the file did not decompose cleanly — one per incident, ready for
-   * the run's report.
-   */
+  entries: ParsedGlossaryEntry[];
+  /** Reasons the text did not decompose cleanly — one per incident. */
   problems: string[];
   /**
    * The prose ABOVE the first heading, which belongs to no term (rule 3
@@ -362,9 +269,8 @@ export interface GlossaryParseResult {
   preamble: string;
   /**
    * Terms that appeared more than once. The first entry wins (see rule 4),
-   * so the later explanation is not in `entries` — the migration degrades it
-   * to a report line, while the WRITE path refuses the save (400) instead of
-   * dropping what the DM just typed.
+   * so the later explanation is not in `entries` — the WRITE path refuses the
+   * save (400) instead of dropping what the DM just typed.
    */
   duplicates: string[];
 }
@@ -380,8 +286,8 @@ export interface GlossaryParseResult {
  *   2. Whatever text is left over in a section becomes the explanation of a
  *      row named after the section's HEADING. This is the
  *      "`## Begriff` mit Folgetext" rule, and it is what keeps a glossary's
- *      prose sections (`## Stil`, and the file's own `# …` title block)
- *      as visible content instead of a report entry.
+ *      prose sections (`## Stil`, and its own `# …` title block) as visible
+ *      content instead of a report entry.
  *   3. Leftover text with NO heading above it — prose before the first
  *      heading — is the one genuinely unassignable case and is reported.
  *   4. A duplicate term: the FIRST one wins, the second is reported.
@@ -393,7 +299,7 @@ export function parseGlossaryBody(body: string): GlossaryParseResult {
     preamble: "",
     duplicates: [],
   };
-  const byTerm = new Map<string, ImportedGlossaryEntry>();
+  const byTerm = new Map<string, ParsedGlossaryEntry>();
 
   const add = (term: string, explanation: string): void => {
     const key = term.trim();
@@ -407,7 +313,7 @@ export function parseGlossaryBody(body: string): GlossaryParseResult {
       );
       return;
     }
-    const entry: ImportedGlossaryEntry = {
+    const entry: ParsedGlossaryEntry = {
       term: key,
       explanation: explanation.trim(),
       pos: result.entries.length,

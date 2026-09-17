@@ -7,20 +7,13 @@
 // entities when a display name changes, and the rename cascade that drags
 // `[[oldId]]` along.
 
-import { writeFile } from "node:fs/promises";
-import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { SearchResult } from "@grimoire/shared";
 import { app } from "../src/server";
 import { getDb } from "../src/store/handle";
 import { expandBodyRefs, referrersOf } from "../src/store/refs";
-import {
-  dropStore,
-  removeTempRoot,
-  seedStore,
-  tempCampaignRoot,
-} from "./support/store";
+import { dropStore, seedStore } from "./support/store";
 
 /** A scene of the example campaign we overwrite with reference prose. */
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
@@ -271,40 +264,30 @@ describe("referrersOf and the rename cascade", () => {
   });
 });
 
-describe("the import expands references (second pass)", () => {
-  test("a freshly imported body is findable under the referenced name", async () => {
-    // The import writes one index row per entity AS IT GOES, and a body can
-    // reference an entity whose row does not exist yet at that moment — so
-    // the expansion is a second pass at the end of the import
-    // (db/migrate-campaigns.ts). This case is the only one that exercises it:
-    // examples/ itself carries no reference (the format contract stays
-    // untouched), so the scene comes from a temp copy of the tree.
-    const root = await tempCampaignRoot();
-    try {
-      await writeFile(
-        path.join(root, "beispiel", "01-salzhafen", "hafen", "imported-ref.md"),
-        [
-          "---",
-          "id: imported-ref",
-          "title: Importierte Referenz",
-          "type: planned",
-          "chapter: 01-salzhafen",
-          "status: draft",
-          "---",
-          "",
-          "## Flow",
-          "",
-          "Am Kai wartet [[jorna]]s Boot.",
-          "",
-        ].join("\n"),
-        "utf8",
-      );
-      await seedStore(root);
-      expect(
-        (await search("Hafenmeisterin")).some((r) => r.kind === "scene" && r.id === "imported-ref"),
-      ).toBe(true);
-    } finally {
-      await removeTempRoot(root);
-    }
+describe("the seed expands references (second pass)", () => {
+  test("a seeded body is findable under the referenced NAME", async () => {
+    // The seed writes one index row per entry AS IT GOES, and a body can
+    // reference an entry whose row does not exist yet at that moment — so the
+    // expansion is a second pass at the end of the load (db/seed.ts). This
+    // case is what exercises it: the scene's body names jorna by reference,
+    // and the search has to find it under her display name.
+    await seedStore({
+      entries: [
+        {
+          kind: "scene",
+          properties: {
+            id: "seeded-ref",
+            title: "Referenz aus dem Seed",
+            type: "planned",
+            chapter: "01-salzhafen",
+            status: "draft",
+          },
+          body: "\n## Flow\n\nAm Kai wartet [[jorna]]s Boot.\n",
+        },
+      ],
+    });
+    expect(
+      (await search("Hafenmeisterin")).some((r) => r.kind === "scene" && r.id === "seeded-ref"),
+    ).toBe(true);
   });
 });
