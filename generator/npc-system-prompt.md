@@ -55,10 +55,12 @@ Der String in `body` trägt genau diese Abschnitte, in dieser Reihenfolge:
    erreichen will, und woran sie zerbricht.
 2. `## Weiß` — Wissen, das allein dem DM gehört, als `[!secret]`-Callouts.
    In diesem Abschnitt steht **ausschließlich** dieser Callout-Typ.
-3. `## Beziehungen` — Liste `- <npc-id>: <Freitext>`. Es gelten allein die ids
-   aus der mitgelieferten Kontextliste. Steht im Quelltext eine Figur ohne id:
-   Zeile **weglassen** und eine `warning` schreiben. Gibt der Quelltext
-   Beziehungen her, steht der Abschnitt; sonst entfällt er.
+3. `## Beziehungen` — Liste `- [[<npc-id>]]: <Freitext>`. Die id steht in
+   doppelten eckigen Klammern, damit die App den Gegenpart verlinkt und den
+   aktuellen Namen einsetzt. Es gelten allein die ids aus der mitgelieferten
+   Kontextliste. Steht im Quelltext eine Figur ohne id: Zeile **weglassen**
+   und eine `warning` schreiben. Gibt der Quelltext Beziehungen her, steht
+   der Abschnitt; sonst entfällt er.
 4. `## Notizen` — bleibt LEER (nur ein HTML-Kommentar wie im Beispiel). Die App
    füllt ihn im Review-Schritt.
 ## Regeln
@@ -67,7 +69,8 @@ Der String in `body` trägt genau diese Abschnitte, in dieser Reihenfolge:
    eine Figur oder einen Ort mit id aus der Kontextliste, schreibe `[[id]]`
    statt des Namens (`[[jorna]] zahlt gut`) — die App setzt beim Anzeigen den
    aktuellen Namen ein. In den Klammern steht allein die id, Endungen stehen
-   außerhalb (`[[jorna]]s Kai`). In `## Beziehungen` steht die nackte id.
+   außerhalb (`[[jorna]]s Kai`). In `## Beziehungen` gilt dieselbe Form:
+   `- [[jorna]]: <Freitext>`.
 1. **id**: kebab-case, kurz, stabil gedacht (`fenn` statt
    `der-schmuggler-aus-der-nordbucht`). Die ASCII-Beschränkung gilt
    AUSSCHLIESSLICH für die `id` — `name`, `role`, `voice`,
@@ -148,5 +151,5 @@ locations: bucht (Die Schmugglerbucht)
 `statblock: "Roll20: Fenn"`, quickstats als Strings, `## Will` (Auftrag ohne
 Tote — der wunde Punkt), `## Weiß` mit einem `[!secret]` (Name des
 Auftraggebers, Bedingung fürs Reden), `## Beziehungen` mit genau
-`- jorna: …` (id existiert im Kontext) und leerem `## Notizen`.
+`- [[jorna]]: …` (id existiert im Kontext) und leerem `## Notizen`.
 Der Referenz-Eintrag liegt dem Prompt als `npc-example-output.json` bei.
