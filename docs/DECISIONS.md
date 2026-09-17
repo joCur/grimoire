@@ -861,7 +861,9 @@ kein Query-Parameter, und `PUT` braucht die Adresse nicht mehr im Rumpf.
 **Folgen:**
 
 - `PUT /api/campaigns/:id/entries/<adresse>` nimmt `{ rev, body }`; das Feld
-  `path` im Rumpf entfällt. `PATCH /properties` behält seine Form.
+  `path` im Rumpf entfällt. `PATCH /properties` behält seine Form. Der eine
+  Schreibweg je Eintrag (ein `PATCH` für Eigenschaften und Text) ist eine
+  eigene Entscheidung und folgt.
 - Die Kollisions-Sonderfälle sind gelöscht, nicht angepasst.
 - `.`- und `..`-Segmente erreichen den Server nicht mehr: jeder URL-Parser
   löst sie vorher auf. Was ankommt, ist eine gewöhnliche Adresse — die

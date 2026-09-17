@@ -298,8 +298,9 @@ Hashtags wie das Log. Die Nachbereitung zeigt sie zusammen mit dem Log.
 
 ## Schreibregeln
 
-- Geschrieben wird ausschließlich über die API (`server/src/server.ts` führt
-  die Endpoints auf): Log, Ideen, `PATCH /properties`, Text-Edits,
+- Geschrieben wird ausschließlich über die API (jeder Endpoint ist in
+  `server/src/routes/api.ts` an seiner Route dokumentiert): Log, Ideen,
+  `PATCH /properties`, Text-Edits,
   Nachbereitung, Generator-Entwürfe.
 - Konfliktschutz: jeder Schreibzugriff trägt die Zeilenversion `rev` mit, die
   der Lesevorgang geliefert hat. Passt sie nicht mehr, antwortet der Server

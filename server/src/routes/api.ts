@@ -1,7 +1,28 @@
 // API routes: read, write, search/version, and the generator with its
 // background jobs and its NPC run.
 // Mounted under /api in server.ts. Response shapes are the contracts in
-// @grimoire/shared (types.ts).
+// @grimoire/shared (types.ts). THIS FILE IS THE API's documentation: every
+// endpoint is described right above its route, and there is no second list
+// anywhere that could drift away from it.
+//
+// WHAT `path` MEANS: an ADDRESS, not a file name — no `.md`, no extension at
+// all. The complete schema is in ../store/paths.ts:
+//
+//   campaign · inbox · glossary · <chapter> ·
+//   <chapter>/<scene-id> · <chapter>/<group>/<scene-id> ·
+//   npcs/<id> · locations/<id> · sessions/<id>
+//
+// The wire vocabulary follows from that: an entry's fields are `properties`,
+// its markdown is `body`, and its optimistic-concurrency token is `rev` (the
+// row version).
+//
+// ERROR BODIES ARE LANGUAGE-FREE. Every error a HUMAN reads carries a stable
+// `code` from `@grimoire/shared/error-codes` plus the parameters its sentence
+// needs; the `error` text next to it is the ENGLISH technical fallback (curl,
+// logs, a client that does not know the code). The app renders the sentence
+// from its own catalog (app/src/i18n, keys `server.<code>`) and degrades to
+// that text for a code it does not know. Codes are APPEND-ONLY — the full
+// list lives in shared/src/error-codes.ts.
 
 import { Hono } from "hono";
 import type { Context } from "hono";
@@ -188,6 +209,9 @@ api.get("/settings", async (c) => c.json(await readSettings()));
 
 // PUT /api/settings { locale } -> InstanceSettings. `null` clears the setting
 // (back to "follow the browser"); anything but de/en/null is a 400.
+// Stored in the `meta` table under `setting:locale` — no table of its own for
+// one user with one settings object, and deliberately not localStorage: the
+// language is server state (quality floor).
 api.put("/settings", async (c) => {
   const body = await jsonBody(c, ["locale"]);
   return c.json(await writeSettings(body));
@@ -206,12 +230,16 @@ api.get("/campaigns/:campaign", async (c) =>
 // GET /api/campaigns/:campaign/entries/<address> -> EntryResponse
 // (properties, body, rev). The address IS the path — the schema is in
 // store/paths.ts.
+// glossary and inbox answer 200 with an EMPTY body when the campaign has no
+// terms and no ideas: an empty list is an entry, not a missing one (a 404
+// would make a glossary the DM had just emptied unreachable from the
+// editor). Their `rev` is that ENTRY's own counter, not campaigns.version.
 api.get("/campaigns/:campaign/entries/*", async (c) =>
   c.json(await readParsedFile(c.req.param("campaign"), entryAddress(c))),
 );
 
 // GET /api/campaigns/:campaign/session -> EntryResponse of the ACTIVE session,
-// 404 when no session is running. "Active" = the last STARTED session file
+// 404 when no session is running. "Active" = the last STARTED session entry
 // without `ended` — today's or an older one, so a session that runs past
 // midnight stays active instead of vanishing at 00:00.
 //
@@ -226,9 +254,9 @@ api.get("/campaigns/:campaign/entries/*", async (c) =>
 // `?includeEnded=1` asks the OTHER question: the last STARTED session, ended
 // or not. That is the review's session (the harvest runs right after "Session
 // beenden"), and it must come from the server for the same reason: a session
-// that ran past midnight was ended in YESTERDAY's file, so the client's own
-// date would harvest an empty — or wrong — file. 404 when the campaign has no
-// session file at all.
+// that ran past midnight was ended in YESTERDAY's entry, so the client's own
+// date would harvest an empty — or wrong — one. 404 when the campaign has no
+// session entry at all.
 api.get("/campaigns/:campaign/session", async (c) =>
   c.json(await readActiveSession(c.req.param("campaign"), isTruthyFlag(c.req.query("includeEnded")))),
 );
@@ -236,9 +264,9 @@ api.get("/campaigns/:campaign/session", async (c) =>
 // GET /api/campaigns/:campaign/search?q=... -> { results: SearchResult[] } (max 20)
 // Full-text search over the FTS5 index: scenes, npcs, locations,
 // chapters, the campaign entry and the GLOSSARY, ranked by bm25 with the
-// column weights of the index migration. Every token is a prefix term, so a
-// half-typed palette query still matches, and the tokenizer folds diacritics
-// ("leucht" finds "Leuchtturm"). Response shape unchanged.
+// index's own column weights. Every token is a prefix term, so a half-typed
+// palette query still matches, and the tokenizer folds diacritics ("leucht"
+// finds "Leuchtturm").
 api.get("/campaigns/:campaign/search", async (c) => {
   const q = c.req.query("q")?.trim();
   if (q === undefined || q === "") throw new ApiError(400, "missing q query parameter");
@@ -249,22 +277,24 @@ api.get("/campaigns/:campaign/search", async (c) => {
 
 // GET /api/campaigns/:campaign/version -> { version, build } — `version` is
 // `campaigns.version`, bumped by every write in the SAME transaction as the
-// change it belongs to (with the database as the only truth there is no
-// external editor left to watch, so the chokidar watcher is gone). The
-// app polls this and refetches when it changes (DECISIONS #9). `build` rides
+// change it belongs to — the database is the only truth (ADR #13), so a
+// write is the only thing that can move it. The app polls this and refetches
+// when it changes (DECISIONS #9). `build` rides
 // along on that existing poll: the app compares it with its own
 // build id and offers a reload when a deploy left it with a stale bundle.
+// Every /api response carries the same value as `x-grimoire-build`.
 api.get("/campaigns/:campaign/version", async (c) => {
   const campaign = c.req.param("campaign");
   return c.json({ version: await campaignVersion(campaign), build: getBuildId() });
 });
 
 // GET /api/campaigns/:campaign/glossary -> { entries: [{ term, explanation }] }
-// The glossary is a structured TABLE since the migration: term
-// → explanation instead of one markdown blob. The generic reading view still
-// renders it as markdown (GET /entries/glossary, rendered from these
-// rows), but this is the shape anything that wants the TERMS should read —
-// the generator knowledge base builds on exactly this.
+// The glossary is a structured TABLE: term → explanation, one row each. The
+// generic reading view renders it as markdown (GET /entries/glossary, built
+// from these rows), but this is the shape anything that wants the TERMS
+// should read —
+// the generator knowledge base builds on exactly this. `rev` is the LIST's
+// guard token — the same one GET /entries/glossary hands out.
 api.get("/campaigns/:campaign/glossary", async (c) => c.json(await readGlossary(c.req.param("campaign"))));
 
 // GET /api/campaigns/:campaign/knowledge -> { entries: [{ kind, from, to, text }], rev }
@@ -272,13 +302,11 @@ api.get("/campaigns/:campaign/glossary", async (c) => c.json(await readGlossary(
 // conventions („write <from> as <to>"), facts and style rules that outrank
 // the source material. Its own list next to the glossary because it answers
 // a different question — the glossary translates a term, an entry here
-// overrides the source (db/schema.ts campaignKnowledge).
+// overrides the source (db/schema.ts campaignKnowledge). Guard token:
+// `campaigns.knowledge_rev`.
 api.get("/campaigns/:campaign/knowledge", async (c) =>
   c.json(await readKnowledge(c.req.param("campaign"))),
 );
-
-// There is no migration-report endpoint: the markdown import is the dev/E2E
-// tool `grimoire seed`, which prints its own report on stdout.
 
 // --- write endpoints --------------------------------------------------------------
 
@@ -288,7 +316,15 @@ api.get("/campaigns/:campaign/knowledge", async (c) =>
 //
 // A reference in the patch — `chapter`, `location`, an `npcs` entry — has to
 // name an entry that exists: 400 with the code the app turns into „bitte
-// zuerst anlegen", never a new entry as a side effect.
+// zuerst anlegen", never a new entry as a side effect. A scene's `chapter`
+// may be SET that way but never REMOVED (400): a scene belongs to a chapter
+// and must not fall out of the tree. A key the entry's kind has no field for
+// is a 400 as well; a key that is not part of the kind but sits on the row
+// may still be changed or deleted with null.
+//
+// `locationName` is the display name for the Ort a scene's `location`
+// CREATES — applied on insert only, never to a location that already
+// exists.
 api.patch("/campaigns/:campaign/properties", async (c) => {
   const body = await jsonBody(c, ["path", "rev", "patch"]);
   const rel = body.path;
@@ -320,56 +356,46 @@ api.put("/campaigns/:campaign/entries/*", async (c) => {
   return c.json(await writeEntryBody(c.req.param("campaign"), entryAddress(c), rev, markdown));
 });
 
-// POST /api/campaigns/:campaign/campaign-meta is GONE. It was the create
-// half of the metadata dialog, for the case PATCH /properties
-// cannot serve: no `campaign`, hence no guard token to write against.
-// Since the cutover every campaign HAS a row, so GET /entries/campaign
-// always answers 200 with a `rev` and there is no create case left — the
-// endpoint had become unreachable from the app. Name and description
-// are written like every other properties field now, through PATCH
-// /properties and its 409.
-
 // POST /api/campaigns/:campaign/session/start -> EntryResponse
-// Creates a NEW session — `sessions/<today>`, or `<today>-2`, `-3` … when
-// that day already has sessions ("beenden" is FINAL, so a second
-// evening on the same day is a second session with its own empty log and a
-// runtime starting at 0). Idempotent only while TODAY's session is the
-// RUNNING one (pressing the button twice re-enters it).
-// One 409 is left:
+// Creates a NEW session at `sessions/<id>` with an OPAQUE RANDOM id
+// ("beenden" is FINAL, so a second evening on the same day is simply a
+// second session with its own empty log and a runtime starting at 0; nothing
+// reads the id — order and every label come from `started`). Idempotent only
+// while TODAY's session is the RUNNING one — "today" is the date part of its
+// `started` — so pressing the button twice re-enters it.
+// One 409:
 //   { code: "session_running", path } — an OLDER session is still open (past
 //     midnight, or never ended). The app offers to end that one; nothing
 //     starts a second parallel session.
-// The former `session_ended` 409 and POST /session/resume are gone with the
-// resume semantics.
 api.post("/campaigns/:campaign/session/start", async (c) =>
   c.json(await startSession(c.req.param("campaign"))),
 );
 
 // POST /api/campaigns/:campaign/session/end -> EntryResponse — ends the ACTIVE session
-// (that may be yesterday's file when the session ran past
+// (that may be yesterday's entry when the session ran past
 // midnight). Idempotent — with nothing running the LAST STARTED session is
-// returned with its existing `ended`; 404 when there is no session file at
+// returned with its existing `ended`; 404 when there is no session entry at
 // all.
 api.post("/campaigns/:campaign/session/end", async (c) => c.json(await endSession(c.req.param("campaign"))));
 
 // POST /api/campaigns/:campaign/session/pause -> EntryResponse — really STOPS the clock:
 // opens a `{ from: … }` interval in the session's `pauses`
 // properties AND appends the `— Pause` log line in the same write. Idempotent
-// (already paused -> 200, file unchanged); 404 when no session is running.
+// (already paused -> 200, entry unchanged); 404 when no session is running.
 api.post("/campaigns/:campaign/session/pause", async (c) =>
   c.json(await pauseSession(c.req.param("campaign"))),
 );
 
 // POST /api/campaigns/:campaign/session/continue -> EntryResponse — closes the open pause
 // interval (`to`) and appends `— Weiter` — it ends a PAUSE, not a session
-// (an ended session is never re-opened). Idempotent (not paused -> 200, file unchanged);
+// (an ended session is never re-opened). Idempotent (not paused -> 200, entry unchanged);
 // 404 when no session is running.
 api.post("/campaigns/:campaign/session/continue", async (c) =>
   c.json(await continueSession(c.req.param("campaign"))),
 );
 
 // POST /api/campaigns/:campaign/session/discard -> { path } — DELETES the active
-// session's file, the undo of a mis-clicked "Session
+// session's entry, the undo of a mis-clicked "Session
 // starten". Allowed ONLY while that session is empty (no log entry, no
 // `scenes_played`); otherwise 409 { code: "session_not_empty", path } — a
 // session with content is ended, never deleted. 404 when nothing is running.
@@ -379,7 +405,7 @@ api.post("/campaigns/:campaign/session/discard", async (c) =>
 
 // POST /api/campaigns/:campaign/log { text, sceneId? } -> EntryResponse
 // Appends `- HH:MM (sceneId) text` to the ACTIVE session (not
-// stubbornly to today's file); 404 when no session is running — including
+// stubbornly to today's); 404 when no session is running — including
 // right after "Session beenden", where a note would otherwise land in the
 // closed log.
 api.post("/campaigns/:campaign/log", async (c) => {
@@ -407,8 +433,7 @@ api.post("/campaigns/:campaign/inbox", async (c) => {
 // Replaces the WHOLE list — the glossary is a short, hand-curated table that
 // is edited as a whole, and that is also what makes REORDERING an ordinary
 // save: the array order is the stored order, so there is no
-// separate move endpoint. Duplicate terms follow the import's rule — the
-// first one wins. `rev` is the list's guard token (the one GET /glossary and
+// separate move endpoint. Of duplicate terms the FIRST one wins. `rev` is the list's guard token (the one GET /glossary and
 // GET /entries/glossary both hand out); a stale one is
 // `409 { code: "rev_conflict", rev }` and writes nothing.
 api.put("/campaigns/:campaign/glossary", async (c) => {
@@ -445,6 +470,11 @@ api.put("/campaigns/:campaign/glossary", async (c) => {
 // lose the rest of the list with it. The prompt skips incomplete rules
 // instead (store/read.ts knowledgeText), which is where a half rule could do
 // damage.
+//
+// An entry's fields must be SINGLE LINE (400 otherwise): an entry becomes
+// ONE bullet of the generator prompt, and a newline would let it open lines
+// — headings, even — of its own. The glossary keeps taking wrapped
+// explanations and is flattened for the prompt instead.
 api.put("/campaigns/:campaign/knowledge", async (c) => {
   const body = await jsonBody(c, ["entries", "rev"]);
   const raw = body.entries;
@@ -476,7 +506,7 @@ api.put("/campaigns/:campaign/knowledge", async (c) => {
 // slug at all is a 400 that says so (store/write.ts explains why neither is
 // silently resolved). Every one of them also accepts an explicit `id` — that
 // exists for ONE flow: taking the 409's `suggestion` in one click instead of
-// making the DM invent another name. See server.ts for the checklist entries.
+// making the DM invent another name.
 
 /** The one required free-text field of a create body: trimmed, non-empty. */
 function requiredText(v: unknown, what: string): string {
@@ -504,6 +534,8 @@ api.post("/campaigns", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/chapters { title, goal? } -> 201 EntryResponse
+// `goal` lands under `## Ziel des Kapitels` — the heading the chapter
+// overview reads its goal line from.
 api.post("/campaigns/:campaign/chapters", async (c) => {
   const body = await jsonBody(c, ["title", "goal", "id"]);
   const title = requiredText(body.title, "title");
@@ -539,7 +571,9 @@ api.post("/campaigns/:campaign/scenes", async (c) => {
 
 // POST /api/campaigns/:campaign/npcs { name } -> 201 EntryResponse
 // An EMPTY entry for the derived id — one the DM created and left empty — is
-// FILLED instead of colliding; an entry with content answers 409.
+// FILLED instead of colliding; an entry with content answers 409. A RESERVED
+// id answers 409 { code: "slug_reserved" } — same shape, different
+// sentence.
 api.post("/campaigns/:campaign/npcs", async (c) => {
   const body = await jsonBody(c, ["name", "id"]);
   const name = requiredText(body.name, "name");
@@ -671,10 +705,10 @@ const isDecision = (v: unknown): v is "accepted" | "rejected" | null =>
 // lands in the job.
 //
 // `chapterTitle` belongs to a `newChapter` run and is stored ON the job: the
-// accept step must not read the title out of the browser, whose copy is gone
-// after a navigation or a reload — and the chapter with it. Optional, so an
-// older app build still starts runs; the accept then falls back to the
-// chapter id.
+// accept step must not read the title out of the browser, because the
+// browser's copy does not survive a navigation or a reload — and the chapter
+// would go with it. Optional, so a client that omits it still starts runs;
+// the accept then falls back to the chapter id.
 api.post("/campaigns/:campaign/generate", async (c) => {
   const body = await jsonBody(c, ["chapter", "sourceText", "newChapter", "chapterTitle"]);
   const campaign = c.req.param("campaign");
@@ -706,14 +740,14 @@ api.post("/campaigns/:campaign/generate", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/generate/npc { sourceText, id? } -> 202 { jobId }
-// One NPC file from source material — the same background job
+// One NPC entry from source material — the same background job
 // model as the scene run: ONE generator job per campaign, so a start while
 // ANY run (scene or npc) is going answers 409 { jobId }. Writes NOTHING.
 //
 // Synchronous, before a job exists: 400 for a malformed body or an id that is
 // not a kebab slug, 404 for an unknown campaign, 409 { path } when the pinned
-// id's file already exists (never overwrite — enriching an existing NPC file
-// is an explicit non-goal), 503 without a configured provider.
+// id's entry already exists (never overwrite — enriching an existing NPC
+// entry is an explicit non-goal), 503 without a configured provider.
 // `id` is optional: without it the model picks the id, and a collision with
 // an existing npc becomes a correction turn.
 api.post("/campaigns/:campaign/generate/npc", async (c) => {
@@ -884,6 +918,16 @@ api.post("/campaigns/:campaign/generate/job/:id/parts/:key/retry", async (c) => 
 });
 
 // GET /api/campaigns/:campaign/generate/job -> GenerateJob (404 when there is none).
+// The job carries its status (running/done/failed) with `kind`,
+// result/npcResult/augmentResult, the error body and the review edits; an
+// `augment` job also carries `target` — the entry's address — from the
+// moment it STARTS. A finished result may carry `namingHints`: the SERVER's
+// own findings that a draft still spells something a naming convention
+// replaces — hints for the review, never a reason to fail or block. And it
+// carries the REVIEW STATE with that state's `rev`: the decision per
+// suggested entry, the dropped scenes, the per field/block decisions of an
+// augment run and the parts a partial accept already wrote
+// (`review.written`, draft path -> the address it landed at).
 // The campaign is NOT re-validated here: the job store is the authority for
 // this endpoint, and "no job" is the honest answer for an unknown campaign
 // too. Polled by the generator route while a job runs (~3s) and once per
@@ -906,7 +950,7 @@ api.delete("/campaigns/:campaign/generate/job", async (c) => {
 
 // POST /api/campaigns/:campaign/generate/apply
 // { scenes?, stubs?, npc?, chapter?, chapterTitle?, jobId? } -> { written }
-// Writes the reviewed drafts — synchronous on purpose: this is a short file
+// Writes the reviewed drafts — synchronous on purpose: this is a short
 // write, and the DM waits for its result. Re-validates server-side
 // (properties parses, status draft, safe paths); 409 { conflicts } when any
 // target entry exists — then nothing is written at all. chapter +
