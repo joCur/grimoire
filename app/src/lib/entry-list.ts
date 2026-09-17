@@ -1,6 +1,6 @@
-// The list mechanics of the two campaign-content pages (issue #53, PO
-// feedback on PR #87): „Kampagnenwissen" (/:campaign/knowledge) and „Glossar"
-// (/:campaign/glossary).
+// The list mechanics of the two campaign-content pages (PO decision):
+// „Kampagnenwissen" (/campaigns/:campaign/knowledge) and „Glossar"
+// (/campaigns/:campaign/glossary).
 //
 // Both lists are ONE text the server takes as a whole (server/src/server.ts):
 // the array order is the stored order, so „umsortieren", „löschen" and

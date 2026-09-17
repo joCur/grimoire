@@ -1,10 +1,10 @@
-// "/" — normally no page at all (issue #14): it redirects into the last active
+// "/" — normally no page at all: it redirects into the last active
 // campaign, so opening Grimoire lands directly where the DM left off. The
 // heuristic is server-side data (`lastSession` per campaign, no localStorage —
 // the server is the truth); the switcher in the topbar stays the only way to
 // change campaigns.
 //
-// The one case that DOES render here is the COLD START (issue #56), and since
+// The one case that DOES render here is the COLD START, and since
 // issue #79 it is the normal first screen of a fresh installation: the boot
 // imports nothing, so a new instance has no campaign at all. What stood here
 // was "Kampagne mit „grimoire seed“ importieren" — true, but a shell command,
@@ -51,7 +51,7 @@ export function HomeRoute() {
   const target = data === undefined ? undefined : pickLastCampaign(data);
   // `replace`: the redirect must not sit in the history, or "back" from the
   // pool would bounce straight forward again.
-  if (target !== undefined) return <Navigate to={`/${target}`} replace />;
+  if (target !== undefined) return <Navigate to={`/campaigns/${target}`} replace />;
 
   if (isPending) {
     return (

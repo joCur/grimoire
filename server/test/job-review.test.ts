@@ -20,6 +20,7 @@ import { getDb } from "../src/store/handle";
 import { setProviderForTests } from "../src/generator";
 import { dropStore, seedStore } from "./support/store";
 import { PipelineFake } from "./support/pipeline-fake";
+import { entriesUrl } from "./support/urls";
 
 // --- fixtures -----------------------------------------------------------------
 
@@ -89,7 +90,7 @@ async function send(method: string, url: string, body?: unknown): Promise<Respon
 }
 
 async function fetchJob(): Promise<GenerateJob | null> {
-  const res = await app.request("/api/beispiel/generate/job");
+  const res = await app.request("/api/campaigns/beispiel/generate/job");
   if (res.status === 404) return null;
   expect(res.status).toBe(200);
   return (await res.json()) as GenerateJob;
@@ -97,7 +98,7 @@ async function fetchJob(): Promise<GenerateJob | null> {
 
 /** Start a scene run and wait until its job is finished. */
 async function runJob(): Promise<GenerateJob> {
-  const res = await send("POST", "/api/beispiel/generate", {
+  const res = await send("POST", "/api/campaigns/beispiel/generate", {
     chapter: "01-salzhafen",
     sourceText: "Fenn waits at the docks.",
   });
@@ -113,7 +114,7 @@ async function runJob(): Promise<GenerateJob> {
 
 /** PATCH the review with the rev the caller read. */
 async function patch(job: GenerateJob, body: Record<string, unknown>): Promise<GenerateJob> {
-  const res = await send("PATCH", `/api/beispiel/generate/job/${job.id}/review`, {
+  const res = await send("PATCH", `/api/campaigns/beispiel/generate/job/${job.id}/review`, {
     rev: job.rev ?? 0,
     ...body,
   });
@@ -122,10 +123,10 @@ async function patch(job: GenerateJob, body: Record<string, unknown>): Promise<G
 }
 
 const accept = (job: GenerateJob, body: Record<string, unknown> = {}): Promise<Response> =>
-  send("POST", `/api/beispiel/generate/job/${job.id}/accept`, { rev: job.rev ?? 0, ...body });
+  send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/accept`, { rev: job.rev ?? 0, ...body });
 
 async function exists(rel: string): Promise<boolean> {
-  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(entriesUrl("beispiel", rel));
   return res.status === 200;
 }
 
@@ -195,7 +196,7 @@ test("null CLEARS a field or block decision — the keys an augment conflict ren
 
 test("a field or block value that is neither a boolean nor null is a 400", async () => {
   const job = await runJob();
-  const res = await send("PATCH", `/api/beispiel/generate/job/${job.id}/review`, {
+  const res = await send("PATCH", `/api/campaigns/beispiel/generate/job/${job.id}/review`, {
     rev: job.rev ?? 0,
     blocks: { aug1: "ja" },
   });
@@ -207,7 +208,7 @@ test("a stale rev is a 409 rev_conflict carrying the current rev; nothing is wri
   await patch(job, { edits: { [SCENE_A]: "first" } });
 
   // The second tab still holds rev 0.
-  const res = await send("PATCH", `/api/beispiel/generate/job/${job.id}/review`, {
+  const res = await send("PATCH", `/api/campaigns/beispiel/generate/job/${job.id}/review`, {
     rev: 0,
     edits: { [SCENE_A]: "second" },
   });
@@ -220,7 +221,7 @@ test("a stale rev is a 409 rev_conflict carrying the current rev; nothing is wri
 
 test("a patch for another job id is a 404", async () => {
   await runJob();
-  const res = await send("PATCH", "/api/beispiel/generate/job/does-not-exist/review", { rev: 0 });
+  const res = await send("PATCH", "/api/campaigns/beispiel/generate/job/does-not-exist/review", { rev: 0 });
   expect(res.status).toBe(404);
 });
 
@@ -266,7 +267,7 @@ test("the edited text is what a partial accept writes", async () => {
     edits: { [SCENE_A]: sceneMarkdown("treffen-am-kai", "Treffen am Kai").replace("Fenn wartet am Kai.", "Fenn wartet im Regen.") },
   });
   expect((await accept(job, { paths: [SCENE_A] })).status).toBe(200);
-  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(ADDRESS_A)}`);
+  const res = await app.request(entriesUrl("beispiel", ADDRESS_A));
   expect(((await res.json()) as { body: string }).body).toContain("Fenn wartet im Regen.");
 });
 
@@ -355,7 +356,7 @@ test('„Verwerfen" removes only the open rest — what was written stays', asyn
   const job = await runJob();
   expect((await accept(job, { paths: [SCENE_A] })).status).toBe(200);
 
-  const res = await send("DELETE", "/api/beispiel/generate/job");
+  const res = await send("DELETE", "/api/campaigns/beispiel/generate/job");
   expect(res.status).toBe(200);
   expect(await fetchJob()).toBeNull();
   // The accepted scene is an entry now, not a job.
@@ -368,7 +369,7 @@ test("an accept with a stale rev is a 409 rev_conflict and writes nothing", asyn
   // Another tab decides something — the rev moves and this one's is stale.
   await patch(job, { entries: { [STUB_PATH]: "rejected" } });
 
-  const res = await send("POST", `/api/beispiel/generate/job/${job.id}/accept`, {
+  const res = await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/accept`, {
     rev: job.rev ?? 0,
     paths: [SCENE_A],
   });
@@ -381,7 +382,7 @@ test("an accept with a stale rev is a 409 rev_conflict and writes nothing", asyn
 
 test("an accept without a rev is a 400 — a defaulted guard is no guard", async () => {
   const job = await runJob();
-  const res = await send("POST", `/api/beispiel/generate/job/${job.id}/accept`, {
+  const res = await send("POST", `/api/campaigns/beispiel/generate/job/${job.id}/accept`, {
     paths: [SCENE_A],
   });
   expect(res.status).toBe(400);
@@ -391,7 +392,7 @@ test("an accept without a rev is a 400 — a defaulted guard is no guard", async
 test("a job that disappears mid-accept rolls the whole write back", async () => {
   const job = await runJob();
   // „Verwerfen" in another tab: the row is gone before the accept starts.
-  expect((await send("DELETE", "/api/beispiel/generate/job")).status).toBe(200);
+  expect((await send("DELETE", "/api/campaigns/beispiel/generate/job")).status).toBe(200);
   const res = await accept(job, { paths: [SCENE_A] });
   expect(res.status).toBe(404);
   expect(await exists(ADDRESS_A)).toBe(false);
@@ -444,7 +445,7 @@ const NEW_CHAPTER_REPLY = JSON.stringify({
 /** Start a „Neues Kapitel" run and wait for it, like `runJob`. */
 async function runNewChapterJob(title?: string): Promise<GenerateJob> {
   setProviderForTests(new PipelineFake([NEW_CHAPTER_REPLY]));
-  const res = await send("POST", "/api/beispiel/generate", {
+  const res = await send("POST", "/api/campaigns/beispiel/generate", {
     chapter: NEW_CHAPTER,
     sourceText: "Eggs in the dark.",
     newChapter: true,
@@ -461,7 +462,7 @@ async function runNewChapterJob(title?: string): Promise<GenerateJob> {
 }
 
 async function chapterTitles(): Promise<Record<string, string>> {
-  const res = await app.request("/api/beispiel/tree");
+  const res = await app.request("/api/campaigns/beispiel/tree");
   expect(res.status).toBe(200);
   const tree = (await res.json()) as { chapters: Array<{ id: string; title: string }> };
   return Object.fromEntries(tree.chapters.map((chapter) => [chapter.id, chapter.title]));
@@ -481,7 +482,7 @@ test("the accepted scenes hang in that chapter and are visible in the tree", asy
   const job = await runNewChapterJob("Die Drachenbrut");
   expect((await accept(job, {})).status).toBe(200);
 
-  const res = await app.request("/api/beispiel/tree");
+  const res = await app.request("/api/campaigns/beispiel/tree");
   const tree = (await res.json()) as {
     chapters: Array<{ id: string; groups: Array<{ scenes: Array<{ id: string }> }> }>;
   };

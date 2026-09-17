@@ -1,6 +1,6 @@
-// The shell of the two campaign-content pages (issue #53, PO feedback on
-// PR #87): „Kampagnenwissen" (/:campaign/knowledge) and „Glossar"
-// (/:campaign/glossary).
+// The shell of the two campaign-content pages (PO decision):
+// „Kampagnenwissen" (/campaigns/:campaign/knowledge) and „Glossar"
+// (/campaigns/:campaign/glossary).
 //
 // WHY PAGES AND NOT SETTINGS SECTIONS. The first version put both lists inline
 // under `/settings`. Two objections, and the second is the one that decides

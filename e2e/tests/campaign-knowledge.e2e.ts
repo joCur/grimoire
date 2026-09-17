@@ -30,16 +30,16 @@ const SOURCE = "The party watches the quay at low tide.";
 
 /** The knowledge page, reached from the pool's „Nachschlagen“ line. */
 async function openKnowledge(page: Page): Promise<void> {
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await page.getByRole("link", { name: "Kampagnenwissen" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/knowledge$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/knowledge$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Kampagnenwissen");
 }
 
 async function openGlossary(page: Page): Promise<void> {
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await page.getByRole("link", { name: "Glossar" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/glossary$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/glossary$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Glossar");
 }
 
@@ -90,7 +90,7 @@ test("the knowledge page: add, edit, reorder, delete — one entry at a time", a
 
   // Stored on the SERVER, in the order they were typed (quality floor: no
   // localStorage — the list has to be visible through the API).
-  const stored = await api.get<{ entries: Array<Record<string, unknown>> }>("beispiel/knowledge");
+  const stored = await api.get<{ entries: Array<Record<string, unknown>> }>("campaigns/beispiel/knowledge");
   expect(stored.entries).toEqual([
     { kind: "naming", from: OLD_NAME, to: "Salzmarsch", text: "" },
     { kind: "style", from: "", to: "", text: "Keine Würfelwerte im Read-Aloud." },
@@ -99,7 +99,7 @@ test("the knowledge page: add, edit, reorder, delete — one entry at a time", a
   // --- umsortieren: the order IS the order of the prompt --------------------
   await page.getByRole("button", { name: "Nach oben" }).nth(1).click();
   await expect(page.getByText("Gespeichert", { exact: true })).toBeVisible();
-  const reordered = await api.get<{ entries: Array<{ kind: string }> }>("beispiel/knowledge");
+  const reordered = await api.get<{ entries: Array<{ kind: string }> }>("campaigns/beispiel/knowledge");
   expect(reordered.entries.map((e) => e.kind)).toEqual(["style", "naming"]);
   // The buttons at the ends are disabled — there is nowhere to move.
   await expect(page.getByRole("button", { name: "Nach oben" }).first()).toBeDisabled();
@@ -118,7 +118,7 @@ test("the knowledge page: add, edit, reorder, delete — one entry at a time", a
 
   // --- löschen, mit Bestätigung ---------------------------------------------
   await deleteRow(page, /Read-Aloud ohne Zahlen.*löschen/);
-  const afterDelete = await api.get<{ entries: Array<{ kind: string }> }>("beispiel/knowledge");
+  const afterDelete = await api.get<{ entries: Array<{ kind: string }> }>("campaigns/beispiel/knowledge");
   expect(afterDelete.entries.map((e) => e.kind)).toEqual(["naming"]);
   await expect(page.getByText("Read-Aloud ohne Zahlen.")).toHaveCount(0);
 });
@@ -129,7 +129,7 @@ test("the glossary page: alphabetical, filterable, and a LONG explanation fits",
 }) => {
   await openGlossary(page);
   const before = await api.get<{ entries: Array<{ term: string }>; rev: number }>(
-    "beispiel/glossary",
+    "campaigns/beispiel/glossary",
   );
   expect(before.entries.length).toBeGreaterThan(0);
 
@@ -154,7 +154,7 @@ test("the glossary page: alphabetical, filterable, and a LONG explanation fits",
   await saveEntry(page);
 
   const after = await api.get<{ entries: Array<{ term: string; explanation: string }>; rev: number }>(
-    "beispiel/glossary",
+    "campaigns/beispiel/glossary",
   );
   expect(after.entries.map((e) => e.term)).toEqual([
     ...before.entries.map((e) => e.term),
@@ -174,7 +174,7 @@ test("the glossary page: alphabetical, filterable, and a LONG explanation fits",
   // --- and deleting the FILTERED row deletes that row, not the first one ---
   await page.getByPlaceholder("Begriff filtern").fill("tidal");
   await deleteRow(page, /tidal flat.*löschen/);
-  const afterDelete = await api.get<{ entries: Array<{ term: string }> }>("beispiel/glossary");
+  const afterDelete = await api.get<{ entries: Array<{ term: string }> }>("campaigns/beispiel/glossary");
   expect(afterDelete.entries.map((e) => e.term)).toEqual(before.entries.map((e) => e.term));
 });
 
@@ -183,14 +183,14 @@ test("„Abbrechen“ throws the open entry away and leaves the stored one alone
   api,
 }) => {
   await openGlossary(page);
-  const before = await api.get<{ entries: Array<{ term: string }> }>("beispiel/glossary");
+  const before = await api.get<{ entries: Array<{ term: string }> }>("campaigns/beispiel/glossary");
   const first = before.entries[0]!.term;
 
   await page.getByRole("button", { name: new RegExp(`${first}.*löschen`) }).first().click();
   await page.getByRole("dialog").getByRole("button", { name: "Abbrechen" }).click();
   // The confirmation was declined — nothing was written.
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  const after = await api.get<{ entries: Array<{ term: string }> }>("beispiel/glossary");
+  const after = await api.get<{ entries: Array<{ term: string }> }>("campaigns/beispiel/glossary");
   expect(after.entries.map((e) => e.term)).toEqual(before.entries.map((e) => e.term));
 });
 
@@ -202,8 +202,8 @@ test("a competing write is a conflict, not a silent overwrite", async ({ page, a
   await page.getByLabel("Neu (in dieser Kampagne)").fill("Neu");
 
   // Somebody else saves first (another tab, the same endpoint).
-  const current = await api.get<{ rev: number }>("beispiel/knowledge");
-  await api.send("PUT", "beispiel/knowledge", {
+  const current = await api.get<{ rev: number }>("campaigns/beispiel/knowledge");
+  await api.send("PUT", "campaigns/beispiel/knowledge", {
     entries: [{ kind: "fact", from: "", to: "", text: "Von woanders." }],
     rev: current.rev,
   });
@@ -211,7 +211,7 @@ test("a competing write is a conflict, not a silent overwrite", async ({ page, a
   await page.getByRole("button", { name: "Speichern" }).click();
   // Nothing was written, and the DM is told instead of losing the other list.
   await expect(page.getByText("Inzwischen geändert", { exact: false })).toBeVisible();
-  const after = await api.get<{ entries: Array<{ text: string }> }>("beispiel/knowledge");
+  const after = await api.get<{ entries: Array<{ text: string }> }>("campaigns/beispiel/knowledge");
   expect(after.entries.map((e) => e.text)).toEqual(["Von woanders."]);
   // What the DM typed is still on screen — theirs to keep or to discard.
   await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveValue("Alt");
@@ -237,7 +237,7 @@ test("leaving with an unsaved entry asks first — and only then", async ({ page
   // At 390px the way out is the „‹ Kapitel“ row — a plain router link, which is
   // exactly the exit that would otherwise drop the open entry without a word.
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/beispiel/knowledge");
+  await page.goto("/campaigns/beispiel/knowledge");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Kampagnenwissen");
 
   // An entry that has been typed into blocks the way out.
@@ -247,14 +247,14 @@ test("leaving with an unsaved entry asks first — and only then", async ({ page
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Änderungen verwerfen?");
   await dialog.getByRole("button", { name: "Weiter bearbeiten" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/knowledge$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/knowledge$/);
   await expect(page.getByLabel("Alt (im Quellmaterial)")).toHaveValue("Nicht verlieren");
 
   // A SAVED entry does not ask — the guard is about unsaved work only.
   await page.getByLabel("Neu (in dieser Kampagne)").fill("Neu");
   await saveEntry(page);
   await page.getByRole("link", { name: "Kapitel" }).first().click();
-  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
@@ -282,7 +282,7 @@ test("switching the kind carries the text into the new form", async ({ page, api
   // travels along invisibly.
   await page.getByLabel("Neu (in dieser Kampagne)").fill("Salzhafen");
   await saveEntry(page);
-  const stored = await api.get<{ entries: Array<Record<string, unknown>> }>("beispiel/knowledge");
+  const stored = await api.get<{ entries: Array<Record<string, unknown>> }>("campaigns/beispiel/knowledge");
   expect(stored.entries).toEqual([
     { kind: "naming", from: "Salt Harbour → Salzhafen", to: "Salzhafen", text: "" },
   ]);
@@ -293,13 +293,13 @@ test("switching the kind carries the text into the new form", async ({ page, api
 test("four ways in: the pool line, the phone, ⌘K and the generator", async ({ page }) => {
   // (a) The pool's quiet „Nachschlagen“ line — and the topbar is UNCHANGED
   //     (PO feedback on PR #87: the two pages are deliberately not up there).
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   const lookup = page.getByRole("navigation", { name: "Nachschlagen" });
   await expect(lookup).toBeVisible();
   await expect(lookup.getByRole("link", { name: "NPCs" })).toBeVisible();
   await expect(lookup.getByRole("link", { name: "Orte" })).toBeVisible();
   await lookup.getByRole("link", { name: "Kampagnenwissen" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/knowledge$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/knowledge$/);
   const topbar = page.getByRole("navigation", { name: "Kapitel, NPCs und Orte" });
   await expect(topbar.getByRole("link", { name: "Glossar" })).toHaveCount(0);
   await expect(topbar.getByRole("link", { name: "Kampagnenwissen" })).toHaveCount(0);
@@ -312,27 +312,27 @@ test("four ways in: the pool line, the phone, ⌘K and the generator", async ({ 
   await expect(option.first()).toBeVisible();
   await expect(option.first()).toContainText("Seite");
   await option.first().click();
-  await expect(page).toHaveURL(/\/beispiel\/glossary$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/glossary$/);
 
   // (d) The generator's context line links to both — this is where the DM
   //     notices a rule is missing, and the fix is one click away.
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await expect(page.getByRole("link", { name: /Kampagnenwissen/ })).toHaveAttribute(
     "href",
-    "/beispiel/knowledge",
+    "/campaigns/beispiel/knowledge",
   );
   await page.getByRole("link", { name: "Glossar", exact: true }).click();
-  await expect(page).toHaveURL(/\/beispiel\/glossary$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/glossary$/);
 });
 
 test("(b) the phone: the two rows in „Nachschlagen“, and the pages at 390px", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   const browse = page.getByRole("navigation", { name: "Nachschlagen" });
   await browse.getByRole("link", { name: "Kampagnenwissen" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/knowledge$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/knowledge$/);
 
   // The page works at the mobile floor: a new entry, typed and saved.
   await page.getByRole("button", { name: "Neuer Eintrag" }).click();
@@ -352,7 +352,7 @@ test("(b) the phone: the two rows in „Nachschlagen“, and the pages at 390px"
 
   // „‹ Kapitel“ is the way back, as on every other campaign view below md.
   await page.getByRole("link", { name: "Kapitel" }).first().click();
-  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
 });
 
 // --- and what the generator does with all of it -------------------------------
@@ -373,7 +373,7 @@ test("the generator run: the knowledge travels, the naming check flags the draft
   await saveEntry(page);
 
   // --- the generator names the COUNT in „Mitgeschickter Kontext“ (AK5) ------
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await expect(page.getByRole("link", { name: "2 Wissens-Einträge" })).toBeVisible();
 
   // --- the run: the stub answers in the forbidden spelling ------------------
@@ -418,7 +418,7 @@ test("without naming conventions nothing is flagged and the prompt is unchanged"
   // The example campaign has no knowledge, so this is the shape every
   // campaign that never uses the feature sees (AK5: „Glossar-Verhalten im
   // Prompt unverändert").
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await expect(page.getByRole("link", { name: "kein Kampagnenwissen" })).toBeVisible();
 
   await page.getByLabel("Quelltext (EN)").fill(SOURCE);
@@ -444,7 +444,7 @@ test("an open row is its ENTRY, not a position — and the guard token is the on
 }) => {
   await openGlossary(page);
   const before = await api.get<{ entries: Array<{ term: string; explanation: string }>; rev: number }>(
-    "beispiel/glossary",
+    "campaigns/beispiel/glossary",
   );
   // Two terms that are not the same row: one is edited, the other is deleted
   // from underneath by „another tab“.
@@ -463,7 +463,7 @@ test("an open row is its ENTRY, not a position — and the guard token is the on
 
   // Somebody else deletes the FIRST entry — every stored position below it
   // shifts by one, and the poller brings that list into this page.
-  await api.send("PUT", "beispiel/glossary", {
+  await api.send("PUT", "campaigns/beispiel/glossary", {
     entries: before.entries.filter((entry) => entry.term !== deleted.term),
     rev: before.rev,
   });
@@ -479,7 +479,7 @@ test("an open row is its ENTRY, not a position — and the guard token is the on
   const afterConflict = await api.get<{
     entries: Array<{ term: string; explanation: string }>;
     rev: number;
-  }>("beispiel/glossary");
+  }>("campaigns/beispiel/glossary");
   expect(afterConflict.entries.map((e) => e.explanation)).not.toContain("Von mir bearbeitet.");
 
   // And „Speichern“ is OFF until the DM decides — retrying against a list
@@ -496,7 +496,7 @@ test("an open row is its ENTRY, not a position — and the guard token is the on
   // THE POINT: the text landed on the entry it was typed into, and the entry
   // that moved into its old position is untouched.
   const after = await api.get<{ entries: Array<{ term: string; explanation: string }> }>(
-    "beispiel/glossary",
+    "campaigns/beispiel/glossary",
   );
   const written = after.entries.find((entry) => entry.term === edited.term);
   expect(written?.explanation).toBe("Von mir bearbeitet.");

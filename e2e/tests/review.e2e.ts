@@ -78,7 +78,7 @@ test("adopting a thread lands in the chapter, the inbox line gets ticked off", a
   page,
   api,
 }) => {
-  await page.goto("/beispiel/review");
+  await page.goto("/campaigns/beispiel/review");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session-Nachbereitung");
 
   // The topbar carries the harvest progress (the page repeats it below md).
@@ -122,7 +122,7 @@ test("adopting a thread lands in the chapter, the inbox line gets ticked off", a
 
   // "Fertig" goes back to the chapters.
   await page.getByRole("button", { name: "Fertig — zurück zu den Kapiteln" }).click();
-  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   // The pool's quiet review affordance counts what is still open.
   await expect(page.getByRole("link", { name: "Nachbereitung · 2 offen" })).toBeVisible();
 });
@@ -134,7 +134,7 @@ test("an untagged inbox note is reviewable and can be ticked off", async ({
   // Thrown in the way it happens on the go: the mobile start surface at
   // 390px (critical path 8), no hashtag.
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await page.getByLabel("Ideen").fill(NOTE_TEXT);
   await page.getByRole("button", { name: "Einwerfen" }).click();
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
@@ -143,7 +143,7 @@ test("an untagged inbox note is reviewable and can be ticked off", async ({
   // At the desk it shows up in the session review — in its own "Ungetaggte Einträge" section,
   // and counted with everything else (one source for page and topbar).
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/beispiel/review");
+  await page.goto("/campaigns/beispiel/review");
   const progress = page.getByRole("banner").getByText(/von \d+ gesichtet/);
   await expect(progress).toHaveText("0 von 5 gesichtet");
   await expect(page.getByRole("heading", { name: "Ungetaggte Einträge" })).toBeVisible();
@@ -171,14 +171,14 @@ test("a #pc note is grouped by character and ticked off", async ({ page, api }) 
   // Thrown in the way it happens on the go: the mobile start surface at
   // 390px (critical path 8), tagged `#pc #kaela`.
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await page.getByLabel("Ideen").fill(`${PC_TEXT} #pc #kaela`);
   await page.getByRole("button", { name: "Einwerfen" }).click();
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
 
   // Still at 390px: the session review is a desk task, but it has to stay readable
   // and operable on the phone (quality floor).
-  await page.goto("/beispiel/review");
+  await page.goto("/campaigns/beispiel/review");
   const section = page.getByRole("heading", { name: "Spielercharaktere" });
   await expect(section).toBeVisible();
   // Grouped under the second tag — not under "Allgemein".
@@ -220,7 +220,7 @@ test("a #pc note is grouped by character and ticked off", async ({ page, api }) 
 });
 
 test("creating an NPC entry from a #npc log line", async ({ page, api }) => {
-  await page.goto("/beispiel/review");
+  await page.goto("/campaigns/beispiel/review");
 
   const npcCard = page.locator("div").filter({ hasText: NPC_TEXT }).last();
   // The source chip names the SCENE the line was logged under, resolved from
@@ -247,14 +247,14 @@ test("creating an NPC entry from a #npc log line", async ({ page, api }) => {
   expect(stub.body).toContain(NPC_TEXT);
 
   // The new NPC is in the tree right away (list page, search index).
-  await page.goto("/beispiel/list/npcs");
+  await page.goto("/campaigns/beispiel/list/npcs");
   await expect(page.getByRole("link", { name: /Old Metta/ })).toBeVisible();
 });
 
 test("an id that already has an entry is linked, not refused", async ({ page, api }) => {
   // The call is idempotent: the entry stands, untouched.
   const before = await api.file("npcs/fenn");
-  await page.goto("/beispiel/review");
+  await page.goto("/campaigns/beispiel/review");
 
   const npcCard = page.locator("div").filter({ hasText: NPC_TEXT }).last();
   await npcCard.getByRole("button", { name: "NPC anlegen" }).click();
@@ -283,7 +283,7 @@ test.describe("with yesterday's session, ended after midnight", () => {
     // what names the session (GET /session?includeEnded=1), not the date.
     const rel = PAST_MIDNIGHT.path;
 
-    await page.goto("/beispiel/review");
+    await page.goto("/campaigns/beispiel/review");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session-Nachbereitung");
     const threadCard = page.locator("div").filter({ hasText: THREAD_TEXT }).last();
     await expect(threadCard).toBeVisible();

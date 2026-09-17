@@ -1,4 +1,4 @@
-// "/:campaign" — the scene pool per the design reference: campaign header,
+// "/campaigns/:campaign" — the scene pool per the design reference: campaign header,
 // chapter accordions with goal line, location-grouped planned scenes and a
 // separate contingency group ("Eventualszenen").
 // Below md the SAME route shows the mobile start surface instead (// responsive swap — no separate URL): desktop pool `hidden md:block`, mobile
@@ -306,7 +306,7 @@ function SceneRow({
   return (
     <div className="group flex items-center gap-3 rounded-md border-b border-divider px-2.5 hover:bg-card">
       <Link
-        to={`/${campaign}/entry/${scene.path}`}
+        to={`/campaigns/${campaign}/entries/${scene.path}`}
         className="flex min-w-0 flex-1 items-center gap-3 py-[13px]"
       >
         {isContingency ? (

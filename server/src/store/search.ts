@@ -1,4 +1,4 @@
-// GET /api/:campaign/search on FTS5 (issue #57; planning section 2).
+// GET /api/campaigns/:campaign/search on FTS5.
 //
 // Fuse.js is gone: the index is now `search_fts`, a real full-text index
 // maintained by the store (./fts). What did NOT change is the response —

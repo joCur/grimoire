@@ -41,7 +41,7 @@ export interface ContextCrumb {
  * Chapter entry: just the chapter, unlinked — it IS the chapter.
  * NPC / location: their list.
  *
- * The two list labels come from the CATALOG via `t` (issue #69) — the crumb
+ * The two list labels come from the CATALOG via `t` — the crumb
  * says exactly what the list page it points at is titled, and this helper
  * stays language-free like every other one in lib/.
  */
@@ -56,9 +56,9 @@ export function pageContextCrumbs(
 
   switch (kindFromAddress(path)) {
     case "npc":
-      return [{ label: t("browse.title.npcs"), to: `/${campaign}/list/npcs` }];
+      return [{ label: t("browse.title.npcs"), to: `/campaigns/${campaign}/list/npcs` }];
     case "location":
-      return [{ label: t("browse.title.locations"), to: `/${campaign}/list/locations` }];
+      return [{ label: t("browse.title.locations"), to: `/campaigns/${campaign}/list/locations` }];
     case "scene":
     case "chapter": {
       const chapterId = segments[0] ?? "";
@@ -67,7 +67,7 @@ export function pageContextCrumbs(
       // The pool is where the chapter's scenes live. Scrolling it to this
       // chapter would need a pool-side anchor plus reduced-motion handling —
       // its own slice; the accordion already opens the active chapter.
-      const crumbs: ContextCrumb[] = [{ label: title, to: `/${campaign}` }];
+      const crumbs: ContextCrumb[] = [{ label: title, to: `/campaigns/${campaign}` }];
       // `<chapter>/<group>/<scene>` — three segments means a group dir.
       const group = segments.length === 3 ? (segments[1] ?? "") : "";
       if (group !== "") crumbs.push({ label: locationName(tree, group) ?? group });

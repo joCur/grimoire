@@ -66,7 +66,7 @@ const revColumn = () => integer("rev").notNull().default(1);
  * One campaign. `id` is the key in every URL.
  *
  * `version` replaces the chokidar-fed in-memory counter behind
- * `GET /api/:campaign/version` (DECISIONS #9): with the database as the only
+ * `GET /api/campaigns/:campaign/version` (DECISIONS #9): with the database as the only
  * truth there is no external editor to watch, so the counter is simply bumped
  * by whoever writes.
  */

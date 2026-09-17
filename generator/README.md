@@ -292,7 +292,7 @@ Trennzeile ist Text — Degradation statt Fehler.
 
 ## NPC-Generator
 
-Gleiche Pipeline, eigener Endpoint (`POST /api/:campaign/generate/npc`)
+Gleiche Pipeline, eigener Endpoint (`POST /api/campaigns/:campaign/generate/npc`)
 und eigene Prompt-Assets (`npc-system-prompt.md`, `npc-example-output.json`
 — Few-Shot ist die Format-Referenz `examples/beispiel/npcs/fenn.md`).
 Zielformat: NPC-Entität aus README.md; Beziehungen nur auf existierende
@@ -317,7 +317,7 @@ Abstraktion in `server/src/llm-provider.ts`, Auswahl per Env-Var
 Die drei OpenAI-kompatiblen Fälle teilen eine Klasse
 (`OpenAICompatProvider`); sie unterscheiden sich nur in Base-URL, Modell und
 Auth-Header. Fehlende Pflicht-Variablen und ein unbekannter
-`LLM_PROVIDER`-Wert werden nicht verschluckt: `POST /api/:campaign/generate`
+`LLM_PROVIDER`-Wert werden nicht verschluckt: `POST /api/campaigns/:campaign/generate`
 antwortet `503` mit der Meldung im Klartext. Vollständige Variablen-Tabelle:
 docs/DEPLOYMENT.md Abschnitt 2.
 

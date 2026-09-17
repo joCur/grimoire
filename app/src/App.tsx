@@ -1,9 +1,8 @@
-import { Navigate, Outlet, Route, Routes, useParams } from "react-router";
+import { Outlet, Route, Routes, useParams } from "react-router";
 
 import { Topbar } from "@/components/Topbar";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { ReviewMemoryProvider } from "@/lib/review-memory";
-import { nonCampaignRedirect } from "@/lib/routes";
 import { useCampaignVersion } from "@/lib/use-campaign-version";
 import { EntityRefProvider } from "@/markdown/entity-refs";
 import { BrowseRoute } from "@/routes/browse";
@@ -25,16 +24,7 @@ import { SettingsRoute } from "@/routes/settings";
 function CampaignScope() {
   const { campaign = "" } = useParams();
   useCampaignVersion(campaign);
-  // `/:campaign` is the widest route there is, so it also swallows everything
-  // BELOW a non-campaign segment: `/settings/list/npcs` (a stale link, a
-  // hand-edited URL) arrived here as `campaign: "settings"` and produced a
-  // half-empty list page with no way out — for a campaign that cannot exist.
-  // A sibling `settings/*` route cannot fix that (React Router ranks the
-  // campaign route higher, see lib/routes.ts); the check belongs here, where
-  // the segment is known. The DM lands on the page they were aiming at.
-  const redirect = nonCampaignRedirect(campaign);
-  if (redirect !== undefined) return <Navigate to={redirect} replace />;
-  // `[[slug]]` references resolve against the campaign tree (issue #68) —
+  // `[[slug]]` references resolve against the campaign tree —
   // mounted here so EVERY view's markdown bodies resolve the same way, off
   // the tree query the views already share.
   return (
@@ -46,9 +36,9 @@ function CampaignScope() {
 
 // App shell per the design reference: constant topbar, the view below is
 // the scroll container (keeps the scene aside sticky against it).
-// The review memory (issue #10) wraps both so the topbar's progress counts
+// The review memory wraps both so the topbar's progress counts
 // exactly the cards the review page shows.
-// The update banner (issue #24) sits above the topbar and therefore above
+// The update banner sits above the topbar and therefore above
 // every view including the mobile surfaces, where the topbar is hidden; it
 // renders nothing unless the version poll saw a build mismatch.
 function Layout() {
@@ -80,7 +70,10 @@ export function App() {
             an instance choice. Campaign CONTENT is not a setting and lives on
             its own pages below (PO feedback on PR #87). */}
         <Route path="settings" element={<SettingsRoute />} />
-        <Route path=":campaign" element={<CampaignScope />}>
+        {/* Everything campaign-scoped hangs under the campaign, so no
+            campaign id is ever a first path segment and no route above can
+            collide with one (ADR #22). */}
+        <Route path="campaigns/:campaign" element={<CampaignScope />}>
           <Route index element={<PoolRoute />} />
           {/* The browse list pages (issue #11) — reached from the mobile start
               surface's "Nachschlagen" rows and from the topbar's quiet
@@ -100,7 +93,7 @@ export function App() {
               "Fünf Minuten Ernte") — entered after
               "Session beenden" and from the pool affordance. */}
           <Route path="review" element={<ReviewRoute />} />
-          <Route path="entry/*" element={<SceneRoute />} />
+          <Route path="entries/*" element={<SceneRoute />} />
         </Route>
       </Route>
     </Routes>

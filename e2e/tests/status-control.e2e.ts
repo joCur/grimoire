@@ -3,19 +3,19 @@
 //
 // The patch goes through the documented API with its guard token (CLAUDE.md);
 // the conflict is provoked by a SECOND WRITER through the same API — since the
-// cutover (issue #57) that is what "the row moved under the app" means.
+// cutover that is what "the row moved under the app" means.
 
 import { expect, test } from "../support/test";
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
-const SCENE_URL = `/beispiel/entry/${SCENE}`;
+const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 
 test("the status control writes the status into the file", async ({ page, api }) => {
   await page.goto(SCENE_URL);
   expect((await api.properties(SCENE)).status).toBe("ready");
 
-  // The pill IS the control (issue #28).
+  // The pill IS the control.
   const trigger = page.getByRole("button", { name: /^Status ändern, aktuell/ });
   await expect(trigger).toHaveText(/Bereit/);
   await trigger.click();
@@ -36,7 +36,7 @@ test("the status control writes the status into the file", async ({ page, api })
   await expect.poll(() => api.properties(SCENE)).toHaveProperty("status", "ready");
 
   // The pool row shows the same control with the same label.
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await expect(
     page.getByRole("button", { name: "Status ändern, aktuell Bereit" }).first(),
   ).toBeVisible();

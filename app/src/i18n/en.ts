@@ -293,7 +293,7 @@ export const en: Messages = {
   "status.npc.missing": "missing",
   "status.npc.unknown": "unknown",
 
-  // --- browse list pages (/:campaign/list/:kind) ---------------------------
+  // --- browse list pages (/campaigns/:campaign/list/:kind) ---------------------------
   "browse.title.scenes": "Scenes",
   "browse.title.npcs": "NPCs",
   "browse.title.locations": "Locations",
@@ -308,7 +308,7 @@ export const en: Messages = {
   "status.sceneUnloadable": "Scene not loadable",
 
 
-  // --- the scene pool ("/:campaign", routes/pool.tsx) -----------------------
+  // --- the scene pool ("/campaigns/:campaign", routes/pool.tsx) -----------------------
   "pool.loading": "Loading scenes …",
   "pool.empty":
     "No chapters yet. A chapter is the bracket around scenes — the first scene goes inside one.",
@@ -338,7 +338,7 @@ export const en: Messages = {
   "browse.empty.npcs": "No NPCs yet.",
   "browse.empty.locations": "No locations yet.",
 
-  // --- the reading view ("/:campaign/entry/*", routes/scene.tsx) -------------
+  // --- the reading view ("/campaigns/:campaign/entries/*", routes/scene.tsx) -------------
   "scene.loading": "Loading entry …",
   "scene.notLoadable": "Entry not loadable — check the path or start the server.",
   "scene.npcs.heading": "NPCs in this scene",

@@ -1,9 +1,9 @@
-// "/:campaign/list/:kind" — the simple list pages (issue #11), reached from
+// "/campaigns/:campaign/list/:kind" — the simple list pages, reached from
 // the mobile start surface's "Nachschlagen" rows and, since issue #34, from
 // the topbar's quiet "NPCs"/"Orte" links on the desktop (the pool's own footer
 // line of issue #26 was the interim solution before that): scenes grouped flat
 // by chapter, npcs and locations alphabetical. Every row opens the read view
-// (/:campaign/entry/<path>). The layout is width-agnostic (a plain list).
+// (/campaigns/:campaign/entries/<path>). The layout is width-agnostic (a plain list).
 
 import type { CampaignTree } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
@@ -156,7 +156,7 @@ function Row({
 }) {
   return (
     <Link
-      to={`/${campaign}/entry/${path}`}
+      to={`/campaigns/${campaign}/entries/${path}`}
       className="flex min-h-[52px] items-center gap-3 rounded-md border-b border-divider px-1 py-1.5 hover:bg-card"
     >
       <Icon aria-hidden size={16} className="flex-none text-muted-foreground" />

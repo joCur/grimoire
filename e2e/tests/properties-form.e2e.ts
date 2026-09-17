@@ -30,7 +30,7 @@ import type { Locator, Page } from "@playwright/test";
 import { expect, test, type Api } from "../support/test";
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
-const SCENE_URL = `/beispiel/entry/${SCENE}`;
+const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
 const NPC = "npcs/jorna";
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 
@@ -68,10 +68,10 @@ test("scene properties: chips, reference and status land in the file — nothing
   // The Ort the scene is moved into below has to EXIST — a reference names
   // an entry, and nothing is created by naming it (ADR #19). „Neu anlegen"
   // is the app's own path (tested in create.e2e.ts); here it is one call.
-  await api.send("POST", "beispiel/locations", { name: "Nordbucht" });
+  await api.send("POST", "campaigns/beispiel/locations", { name: "Nordbucht" });
   // Entered from the pool, so there is a history entry BEHIND the scene —
   // the „zurück" assertion after the move below needs one.
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
 
@@ -155,21 +155,21 @@ test("scene properties: chips, reference and status land in the file — nothing
   // The location IS the group, so the scene MOVED — and the
   // URL follows it (replace, so „zurück" does not return to the old address).
   await expect(page).toHaveURL(
-    /\/beispiel\/entry\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
+    /\/campaigns\/beispiel\/entries\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
   );
   // „Zurück" must not return to the address the scene just left: the redirect
   // REPLACES the history entry, so the step back is the page the DM came from
   // (the pool), never `…/leuchtturm/lighthouse-arrival` — which would reload,
   // redirect forward again and trap the button.
   await page.goBack();
-  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   await page.goForward();
   await expect(page).toHaveURL(
-    /\/beispiel\/entry\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
+    /\/campaigns\/beispiel\/entries\/01-salzhafen\/nordbucht\/lighthouse-arrival$/,
   );
 
   // The chapter overview re-sorts: a „Nordbucht" section, no „leuchtturm" one.
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await expect(page.getByRole("heading", { level: 3, name: "Nordbucht" })).toBeVisible();
   await expect(
     page.getByRole("heading", { level: 3, name: "Der Leuchtturm von Salzhafen" }),
@@ -238,16 +238,16 @@ test("the Ort field reads a name as its id — a missing Ort is refused", async 
   expect((await api.properties(SCENE)).location).toBe("leuchtturm");
 
   // With the Ort created, the same save lands and the scene moves into it.
-  await api.send("POST", "beispiel/locations", { name: "Der alte Hafen" });
+  await api.send("POST", "campaigns/beispiel/locations", { name: "Der alte Hafen" });
   await save.click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page).toHaveURL(
-    /\/beispiel\/entry\/01-salzhafen\/der-alte-hafen\/lighthouse-arrival$/,
+    /\/campaigns\/beispiel\/entries\/01-salzhafen\/der-alte-hafen\/lighthouse-arrival$/,
   );
   await expect.poll(() => api.properties(SCENE)).toHaveProperty("location", "der-alte-hafen");
 
   // …and the chapter overview heads the group with the Ort's name.
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await expect(page.getByRole("heading", { level: 3, name: "Der alte Hafen" })).toBeVisible();
 });
 
@@ -404,7 +404,7 @@ test("NPC properties: role, status and a quickstat round-trip into the header", 
   const before = await split(api, NPC);
   const role = "Auftraggeberin, seit dem Herbst auch im Rat";
 
-  await page.goto(`/beispiel/entry/${NPC}`);
+  await page.goto(`/campaigns/beispiel/entries/${NPC}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
 
   const dialog = await openProperties(page);
@@ -517,7 +517,7 @@ test("navigating away closes the dialog — no diff of file A lands in file B", 
   await expect(search).toBeFocused();
   await search.fill("Hafenmeisterin");
   await page.getByRole("option").filter({ hasText: "Hafenmeisterin Jorna" }).first().click();
-  await expect(page).toHaveURL(/\/beispiel\/entry\/npcs\/jorna$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/jorna$/);
 
   // The dialog is gone with its file — it may not stand over another file's
   // reading view, holding the frozen values (and the rev) of the one it left.
@@ -552,7 +552,7 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
     ["01-salzhafen", "Kapitel 1: Der Leuchtturm von Salzhafen", "Kapitel"],
   ];
   for (const [rel, heading, kindLabel] of withForm) {
-    await page.goto(`/beispiel/entry/${rel}`);
+    await page.goto(`/campaigns/beispiel/entries/${rel}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
     const dialog = await openProperties(page);
     await expect(dialog).toContainText(`${kindLabel}: Eigenschaften`);
@@ -570,7 +570,7 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
     ["glossary", "Übersetzungs-Glossar"],
   ];
   for (const [rel, marker] of withoutForm) {
-    await page.goto(`/beispiel/entry/${rel}`);
+    await page.goto(`/campaigns/beispiel/entries/${rel}`);
     await expect(page.getByRole("article")).toContainText(marker);
     await expect(page.getByRole("button", { name: "Eigenschaften" })).toHaveCount(0);
   }
@@ -578,7 +578,7 @@ test("Ort and Kapitel have the form too — campaign file, session and inbox do 
   // The campaign file keeps its ONE dialog: its name/description
   // ARE its properties, so a second form next to it would be two ways to
   // write the same two keys.
-  await page.goto("/beispiel/entry/campaign");
+  await page.goto("/campaigns/beispiel/entries/campaign");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );

@@ -1,4 +1,4 @@
-// „Mit KI ergänzen" — the augment run (issue #36).
+// „Mit KI ergänzen" — the augment run.
 //
 // Same harness as the two create-run suites (generator.test.ts,
 // generate-npc.test.ts): a database seeded from the example campaign and a
@@ -44,6 +44,7 @@ import type {
   GenerateRequest,
   LLMProvider,
 } from "../src/llm-provider";
+import { entriesUrl } from "./support/urls";
 
 const CAMPAIGN = "beispiel";
 const NPC = "npcs/jorna";
@@ -51,7 +52,7 @@ const LOCATION = "locations/leuchtturm";
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
 async function read(rel: string): Promise<EntryResponse> {
-  const res = await app.request(`/api/${CAMPAIGN}/entry?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(entriesUrl(CAMPAIGN, rel));
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
@@ -105,14 +106,14 @@ function augmentReply(_path: string, content: string, warnings: string[] = []): 
 
 /** Start a run and wait for the job to leave `running`. */
 async function runAugmentJob(body: Record<string, unknown>): Promise<GenerateJob> {
-  const res = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
+  const res = await app.request(`/api/campaigns/${CAMPAIGN}/generate/augment`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
   expect(res.status).toBe(202);
   for (let i = 0; i < 200; i += 1) {
-    const jobRes = await app.request(`/api/${CAMPAIGN}/generate/job`);
+    const jobRes = await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`);
     const job = (await jobRes.json()) as GenerateJob;
     if (job.status !== "running") return job;
     await new Promise((resolve) => setTimeout(resolve, 5));
@@ -317,7 +318,7 @@ describe("prompt assembly", () => {
       ["augment/location", await augmentSystemPrompt("location")],
       ["augment/scene", await augmentSystemPrompt("scene")],
       // The scene prompt in „genau eine Szene aus der Gliederung" mode
-      // (issue #102) — an output-schema SWAP, not a second prompt file, so
+      // — an output-schema SWAP, not a second prompt file, so
       // that these rules keep travelling exactly once.
       ["scene/single", await sceneSystemPrompt()],
     ];
@@ -608,17 +609,17 @@ describe("the job", () => {
   });
 
   test("neither source text nor instruction is a 400, before a job exists", async () => {
-    const res = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
+    const res = await app.request(`/api/campaigns/${CAMPAIGN}/generate/augment`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: NPC, sourceText: "  " }),
     });
     expect(res.status).toBe(400);
-    expect((await app.request(`/api/${CAMPAIGN}/generate/job`)).status).toBe(404);
+    expect((await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`)).status).toBe(404);
   });
 
   test("a kind without an augment prompt is a 400", async () => {
-    const res = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
+    const res = await app.request(`/api/campaigns/${CAMPAIGN}/generate/augment`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: "01-salzhafen", instruction: "x" }),
@@ -627,7 +628,7 @@ describe("the job", () => {
   });
 
   test("an unknown entry is a 404", async () => {
-    const res = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
+    const res = await app.request(`/api/campaigns/${CAMPAIGN}/generate/augment`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: "npcs/nobody", instruction: "x" }),
@@ -638,18 +639,18 @@ describe("the job", () => {
 
 describe("one job per campaign, whatever its kind", () => {
   async function jobStatus(): Promise<number> {
-    return (await app.request(`/api/${CAMPAIGN}/generate/job`)).status;
+    return (await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`)).status;
   }
 
   test("an augment start while a SCENE run is going is a 409", async () => {
     setProviderForTests(new StuckProvider());
-    const scene = await app.request(`/api/${CAMPAIGN}/generate`, {
+    const scene = await app.request(`/api/campaigns/${CAMPAIGN}/generate`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ chapter: "01-salzhafen", sourceText: "source" }),
     });
     expect(scene.status).toBe(202);
-    const res = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
+    const res = await app.request(`/api/campaigns/${CAMPAIGN}/generate/augment`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: NPC, instruction: "x" }),
@@ -660,20 +661,20 @@ describe("one job per campaign, whatever its kind", () => {
 
   test("a SCENE start while an augment run is going is a 409", async () => {
     setProviderForTests(new StuckProvider());
-    const augment = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
+    const augment = await app.request(`/api/campaigns/${CAMPAIGN}/generate/augment`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: NPC, instruction: "x" }),
     });
     expect(augment.status).toBe(202);
-    const res = await app.request(`/api/${CAMPAIGN}/generate`, {
+    const res = await app.request(`/api/campaigns/${CAMPAIGN}/generate`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ chapter: "01-salzhafen", sourceText: "source" }),
     });
     expect(res.status).toBe(409);
     // …and so is a second augment run.
-    const again = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
+    const again = await app.request(`/api/campaigns/${CAMPAIGN}/generate/augment`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: LOCATION, instruction: "x" }),
@@ -686,7 +687,7 @@ describe("one job per campaign, whatever its kind", () => {
     useFake([augmentReply(NPC, renderRaw(stored.properties, stored.body))]);
     await runAugmentJob({ path: NPC, instruction: "x" });
     expect(await jobStatus()).toBe(200);
-    const res = await app.request(`/api/${CAMPAIGN}/generate/job`, { method: "DELETE" });
+    const res = await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`, { method: "DELETE" });
     expect(res.status).toBe(200);
     expect(await jobStatus()).toBe(404);
     // Nothing was written by the run, and nothing by the reject.
@@ -695,7 +696,7 @@ describe("one job per campaign, whatever its kind", () => {
 
   test("a leftover `running` augment row becomes a failed job at the next boot", async () => {
     setProviderForTests(new StuckProvider());
-    const started = await app.request(`/api/${CAMPAIGN}/generate/augment`, {
+    const started = await app.request(`/api/campaigns/${CAMPAIGN}/generate/augment`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: NPC, instruction: "x" }),
@@ -705,7 +706,7 @@ describe("one job per campaign, whatever its kind", () => {
     // What the next boot does with the row the dead process left behind.
     expect(failInterruptedJobs(await getDb())).toBe(1);
 
-    const job = (await (await app.request(`/api/${CAMPAIGN}/generate/job`)).json()) as GenerateJob;
+    const job = (await (await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`)).json()) as GenerateJob;
     expect(job.kind).toBe("augment");
     expect(job.target).toBe(NPC);
     expect(job.status).toBe("failed");
@@ -727,7 +728,7 @@ describe("one job per campaign, whatever its kind", () => {
 
     // Re-read from the ROW (a fresh request is a fresh `toJob`), not from the
     // object the start returned.
-    const job = (await (await app.request(`/api/${CAMPAIGN}/generate/job`)).json()) as GenerateJob;
+    const job = (await (await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`)).json()) as GenerateJob;
     expect(job.id).toBe(started.id);
     expect(job.augmentResult).toEqual(started.augmentResult as AugmentResult);
     const result = job.augmentResult as AugmentResult;
@@ -758,7 +759,7 @@ describe("one job per campaign, whatever its kind", () => {
 
 describe("accept", () => {
   async function apply(body: Record<string, unknown>): Promise<Response> {
-    return app.request(`/api/${CAMPAIGN}/generate/augment/apply`, {
+    return app.request(`/api/campaigns/${CAMPAIGN}/generate/augment/apply`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
@@ -788,21 +789,21 @@ describe("accept", () => {
     expect(reread.body).toContain("## Wer ist hier");
     expect(reread.rev).toBeGreaterThan(before.rev);
     // …and the job the proposal came from is discarded with it.
-    expect((await app.request(`/api/${CAMPAIGN}/generate/job`)).status).toBe(404);
+    expect((await app.request(`/api/campaigns/${CAMPAIGN}/generate/job`)).status).toBe(404);
   });
 
   test("a scene that MOVES chapter still gets its body — one write, new address", async () => {
     // The proposal changes `chapter`, which is part of a scene's ADDRESS. The
     // body write has to land before the move, or it resolves an address that
     // no longer exists and the whole accept rolls back on a bogus 404.
-    const chapterRes = await app.request(`/api/${CAMPAIGN}/chapters`, {
+    const chapterRes = await app.request(`/api/campaigns/${CAMPAIGN}/chapters`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ title: "Zweites Kapitel", id: "02-umzug" }),
     });
     expect(chapterRes.status).toBe(201);
 
-    const sceneRes = await app.request(`/api/${CAMPAIGN}/scenes`, {
+    const sceneRes = await app.request(`/api/campaigns/${CAMPAIGN}/scenes`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ title: "Umzugsszene", chapter: "01-salzhafen", id: "moving-scene" }),
@@ -824,11 +825,11 @@ describe("accept", () => {
     const moved = await read(written.path);
     expect(moved.body).toContain("Sie ziehen um.");
     expect(moved.properties.chapter).toBe("02-umzug");
-    // …and the old address is a STALE address, not a dead one (issue #100):
+    // …and the old address is a STALE address, not a dead one:
     // it still names the scene and answers with the one it has now, which is
     // what lets the app replace the URL instead of showing a 404.
     const old = await app.request(
-      `/api/${CAMPAIGN}/entry?path=${encodeURIComponent(scene.path)}`,
+      entriesUrl(CAMPAIGN, scene.path),
     );
     expect(old.status).toBe(200);
     expect(((await old.json()) as EntryResponse).path).toBe(written.path);
@@ -875,9 +876,9 @@ describe("accept", () => {
 
 describe("naming check", () => {
   async function setKnowledge(entries: unknown[]): Promise<void> {
-    const current = await app.request(`/api/${CAMPAIGN}/knowledge`);
+    const current = await app.request(`/api/campaigns/${CAMPAIGN}/knowledge`);
     const { rev } = (await current.json()) as { rev: number };
-    const res = await app.request(`/api/${CAMPAIGN}/knowledge`, {
+    const res = await app.request(`/api/campaigns/${CAMPAIGN}/knowledge`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ entries, rev }),

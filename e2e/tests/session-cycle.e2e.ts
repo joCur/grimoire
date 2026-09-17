@@ -10,7 +10,7 @@
 // Plus its undo at the very start: "Session verwerfen" deletes the file of a
 // session that has nothing in it (issue #40 AK7) — its own test below.
 //
-// And the live nav's own grouping (issue #73): a scene whose STATUS is
+// And the live nav's own grouping: a scene whose STATUS is
 // `played`/`dropped` leaves "Geplant" for the collapsed, dimmed "Gespielt"
 // group, stays openable there, and never becomes the default selection.
 //
@@ -83,7 +83,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   page,
   api,
 }) => {
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
 
   // No session running yet — the session file is created by the button.
   expect(await api.sessionPath()).toBeUndefined();
@@ -96,10 +96,10 @@ test("session start, quick note, pause, end — log and file follow", async ({
   const startGeometry = await chipGeometry(startChip);
 
   await startChip.click();
-  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
 
   // WHICH file the session lives in is the server's answer — the id is opaque
-  // (issue #58) and carries no date to reconstruct.
+  // and carries no date to reconstruct.
   const sessionPath = (await api.sessionPath()) ?? "";
   expect(sessionPath).toMatch(/^sessions\/.+$/);
 
@@ -117,7 +117,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // were pushed out of the row together.
   expect(startGeometry.insetRight).toBe(0);
   await expect(chip).toContainText(/\d+:\d{2}:\d{2}/);
-  // …and it starts at ZERO. `started` is written to the second (issue #58);
+  // …and it starts at ZERO. `started` is written to the second;
   // when it was minute-precise the reading rounded down to the start of the
   // minute and the fresh chip could open at up to 0:00:59.
   await expect(chip).toContainText(/\b0:00:0[0-4]\b/);
@@ -140,7 +140,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
     "Ankunft am Leuchtturm",
   );
   // NPC card of the selected scene in the right aside — a BUTTON here, not a
-  // link: in the live mode it opens the drawer (issue #40).
+  // link: in the live mode it opens the drawer.
   await expect(page.getByRole("button", { name: /Hafenmeisterin Jorna/ })).toBeVisible();
   // …and the location of the scene, as its own card next to the NPCs. Scoped
   // to the aside: the campaign switcher in the topbar carries the same name
@@ -187,7 +187,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect(page.getByRole("menuitem", { name: "Session beenden" })).toBeVisible();
   await page.keyboard.press("Escape");
 
-  // --- NPC drawer inside the live mode (issue #40) --------------------------
+  // --- NPC drawer inside the live mode --------------------------
   // A card click must NOT navigate: the selected scene and a half-typed
   // Schnellnotiz have to survive opening and closing the drawer.
   const draft = "halb getippt, nicht gesendet";
@@ -200,14 +200,14 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // The full file, not the card excerpt — and the way out into the full view.
   await expect(drawer.getByRole("link", { name: "Eintrag öffnen" })).toHaveAttribute(
     "href",
-    "/beispiel/entry/npcs/jorna",
+    "/campaigns/beispiel/entries/npcs/jorna",
   );
   // Still in the live mode, session still running.
-  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
 
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
-  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
   await expect(nav.getByRole("button", { name: /Ankunft am Leuchtturm/ })).toHaveAttribute(
     "aria-current",
     "true",
@@ -223,11 +223,11 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toBeHidden();
 
-  // --- the global live indicator brings the DM back (issue #40) -------------
+  // --- the global live indicator brings the DM back -------------
   // The live topbar has no campaign nav (it belongs to the session), so this
   // is the DM looking something up: away to the pool, then back.
-  await page.goto("/beispiel");
-  await expect(page).toHaveURL(/\/beispiel$/);
+  await page.goto("/campaigns/beispiel");
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   // No "Session starten" anywhere while a session runs …
   await expect(page.getByRole("button", { name: "Session starten" })).toHaveCount(0);
   // … but the same chip, in link mode, with the running time — on this route
@@ -236,7 +236,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect(backToLive).toBeVisible();
   await expect(backToLive).toContainText(/\d+:\d{2}:\d{2}/);
   await backToLive.click();
-  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
   await expect(page.getByText(NOTE)).toBeVisible();
 
   // --- pause: the clock really STOPS (issue #40 AK8) ------------------------
@@ -282,7 +282,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
 
   // --- end -> review -------------------------------------------------------
   await (await sessionMenuItem(page, "Session beenden")).click();
-  await expect(page).toHaveURL(/\/beispiel\/review$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/review$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Session-Nachbereitung");
   await expect
     .poll(async () => (await api.properties(sessionPath)).ended)
@@ -292,21 +292,21 @@ test("session start, quick note, pause, end — log and file follow", async ({
   await expect(page.getByText("Gruppe verhandelt mit Jorna am Fuß der Treppe")).toBeVisible();
   await expect(page.getByText("#thread", { exact: true }).first()).toBeVisible();
 
-  // --- beenden is FINAL, and a restart is a NEW session (issue #58) --------
+  // --- beenden is FINAL, and a restart is a NEW session --------
   // The chip offers a plain "Session starten" right after the end — no
   // "fortsetzen" anywhere — and that press opens a SECOND session of the same
   // day: own file (`<date>-2`), empty log, timer back at 0. The first
   // session keeps its `ended`, its log and its pauses.
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   const startAgain = page.getByRole("button", { name: "Session starten" });
   await expect(startAgain).toBeVisible();
   await expect(page.getByRole("button", { name: /fortsetzen/i })).toHaveCount(0);
   await startAgain.click();
 
-  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
   await expect(sessionMenuChip(page)).toBeVisible();
   // The timer of the SECOND session starts at zero too — the bug that made an
-  // end→start look like the old session kept counting (issue #58).
+  // end→start look like the old session kept counting.
   await expect(sessionMenuChip(page)).toContainText(/\b0:00:0[0-4]\b/);
   // A fresh, empty session: nothing of the first evening is shown …
   await expect(page.getByText(NOTE)).toHaveCount(0);
@@ -345,7 +345,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   // Ending the second one leads to the review of the SECOND session — the
   // harvest works on the LAST STARTED session, which is this one.
   await (await sessionMenuItem(page, "Session beenden")).click();
-  await expect(page).toHaveURL(/\/beispiel\/review$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/review$/);
   await expect.poll(async () => (await api.properties(secondPath)).ended).toBeDefined();
   await expect(
     page.getByText("Zweite Runde: die Gruppe bricht zum Leuchtturm auf"),
@@ -362,9 +362,9 @@ test("a #pc quick note becomes a reminder in the aside and is ticked off there (
   // Path 4 with the PC reminder on top: a `#pc` note written during the
   // session shows up in the aside as „Für die Spieler" and is done with
   // right there — the same write the wrap-up would do.
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await page.getByRole("button", { name: "Session starten" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
   const sessionPath = (await api.sessionPath()) ?? "";
 
   const aside = page.getByRole("complementary");
@@ -395,11 +395,11 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   page,
   api,
 }) => {
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
 
   // "Session starten" hit by accident.
   await page.getByRole("button", { name: "Session starten" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
   const sessionPath = (await api.sessionPath()) ?? "";
   expect(await api.exists(sessionPath)).toBe(true);
 
@@ -418,7 +418,7 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
 
   // Back in the non-live state: the pool offers a start again …
-  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   await expect(page.getByRole("button", { name: "Session starten" })).toBeVisible();
   // … no session chip is left over …
   await expect(page.getByRole("link", { name: /Session läuft/ })).toHaveCount(0);
@@ -430,7 +430,7 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
   // id, once handed out, must not name a second evening — with random ids
   // that holds without any bookkeeping.
   await page.getByRole("button", { name: "Session starten" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
   const restarted = (await api.sessionPath()) ?? "";
   expect(restarted).toMatch(/^sessions\/.+$/);
   expect(restarted).not.toBe(sessionPath);
@@ -445,11 +445,11 @@ test("session verwerfen — the mis-click's undo removes the empty file", async 
 test("an unreachable session lookup dims the chip instead of offering a start", async ({
   page,
 }) => {
-  await page.route("**/api/beispiel/session**", (route) =>
+  await page.route("**/api/campaigns/beispiel/session**", (route) =>
     route.fulfill({ status: 500, contentType: "application/json", body: "{}" }),
   );
 
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
 
   const unknown = page.getByRole("status", { name: /Session-Status unbekannt/ });
   await expect(unknown).toBeVisible();
@@ -498,9 +498,9 @@ test.describe("played/dropped scenes in the live nav", () => {
     page,
     api,
   }) => {
-    await page.goto("/beispiel");
+    await page.goto("/campaigns/beispiel");
     await page.getByRole("button", { name: "Session starten" }).click();
-    await expect(page).toHaveURL(/\/beispiel\/live$/);
+    await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
 
     const nav = page.getByRole("navigation", { name: "Szenen der Session" });
     const arrivalRow = nav.getByRole("button", { name: /Ankunft am Leuchtturm/ });
@@ -548,7 +548,7 @@ test.describe("played/dropped scenes in the live nav", () => {
     await expect(groupedRow).toBeVisible();
     await groupedRow.click();
     await expect(heading).toHaveText("Gespräch im Hafenkontor");
-    await expect(page).toHaveURL(/\/beispiel\/live$/);
+    await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
 
     // The group is view state only — a reload has it collapsed again (AK1).
     await page.reload();

@@ -50,7 +50,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   page,
   api,
 }) => {
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Szenen generieren");
 
   // The active chapter is preselected, and the context hint names what travels.
@@ -68,11 +68,11 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   // click from here.
   await expect(page.getByRole("link", { name: "kein Kampagnenwissen" })).toHaveAttribute(
     "href",
-    "/beispiel/knowledge",
+    "/campaigns/beispiel/knowledge",
   );
   await expect(page.getByRole("link", { name: "Glossar", exact: true })).toHaveAttribute(
     "href",
-    "/beispiel/glossary",
+    "/campaigns/beispiel/glossary",
   );
 
   await page.getByLabel("Quelltext (EN)").fill(SOURCE);
@@ -144,7 +144,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
 
   // Back in the pool the draft shows up with the German status label.
   await page.getByRole("button", { name: "Zu den Kapiteln" }).click();
-  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   const row = page.getByRole("link", { name: new RegExp(SCENE_TITLE) });
   await expect(row).toBeVisible();
   await expect(
@@ -173,7 +173,7 @@ test("the review appears as soon as the job is done — even with the start requ
   page,
 }) => {
   let released = false;
-  const start = page.route("**/api/*/generate", async (route) => {
+  const start = page.route("**/api/campaigns/*/generate", async (route) => {
     const response = await route.fetch();
     const body = await response.text();
     await new Promise((resolve) => setTimeout(resolve, 8_000));
@@ -182,7 +182,7 @@ test("the review appears as soon as the job is done — even with the start requ
   });
   await start;
 
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await page.getByLabel("Quelltext (EN)").fill(SOURCE);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
   // The honest state right after the click: no job of this run is readable yet.
@@ -218,7 +218,7 @@ test("a scene with ASCII closing quotes is accepted without a correction turn", 
   page,
   api,
 }) => {
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await page.getByLabel("Quelltext (EN)").fill(`${SOURCE}\n\n${TRIGGER.asciiQuotes}`);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
 
@@ -248,7 +248,7 @@ test("a scene with ASCII closing quotes is accepted without a correction turn", 
 });
 
 test("npc run: pinned id, review, apply", async ({ page, api }) => {
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await page.getByRole("button", { name: "NPC", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("NPC generieren");
 
@@ -282,7 +282,7 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
 
   // "NPC ansehen" opens the file that now exists.
   await page.getByRole("button", { name: "NPC ansehen" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/entry\/npcs\/brakk$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/brakk$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(NPC_DEFAULT_NAME);
 });
 
@@ -290,7 +290,7 @@ test("failure path: an invalid model reply shows the 422 block with the raw repl
   page,
   api,
 }) => {
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await page.getByLabel("Quelltext (EN)").fill(`${SOURCE}\n\n${TRIGGER.invalid}`);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
 
@@ -324,7 +324,7 @@ test("review state survives navigation and reload; parts are accepted one by one
   page,
   api,
 }) => {
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await page.getByLabel("Quelltext (EN)").fill(SOURCE);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
@@ -345,8 +345,8 @@ test("review state survives navigation and reload; parts are accepted one by one
   await textarea.blur();
   await expect(page.getByText("Gespeichert")).toBeVisible();
 
-  await page.goto("/beispiel");
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel");
+  await page.goto("/campaigns/beispiel/generate");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen");
   await expect(page.getByText("Die Flut zieht sich im Regen")).toBeVisible();
 
@@ -388,11 +388,11 @@ test("review state survives navigation and reload; parts are accepted one by one
   expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).toBe(NPC_STUB_NAME);
   expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).name).toBe(LOCATION_STUB_NAME);
   // Nothing is left open, so the job is gone.
-  expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
+  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
 });
 
 test("„Verwerfen\" drops only the open rest — what was accepted stays", async ({ page, api }) => {
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await page.getByLabel("Quelltext (EN)").fill(SOURCE);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
@@ -423,7 +423,7 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
   expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).toBe(NPC_STUB_NAME);
   expect(await api.exists(SCENE_PATH)).toBe(false);
   expect(await api.exists(`locations/${LOCATION_STUB_ID}`)).toBe(false);
-  expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
+  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
 });
 
 // Critical path 6: „Neues Kapitel" → leave the page → come back →
@@ -444,7 +444,7 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
   const CHAPTER_ID = "02-die-schmugglerbucht";
   const CHAPTER_TITLE = "Die Schmugglerbucht";
 
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await page.getByRole("button", { name: "Neues Kapitel" }).click();
   await page.getByLabel("Kapiteltitel").fill(CHAPTER_TITLE);
   // The id is derived from the title and is the field that decides where the
@@ -459,9 +459,9 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
 
   // …and away. The review state is a row, so it is still there when we come
   // back — but this browser has forgotten the title it typed.
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Entwürfe prüfen", {
     timeout: 30_000,
   });
@@ -483,7 +483,7 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
 
   // The overview lists the chapter with that title, and the scene inside it.
   await page.getByRole("link", { name: "Kapitel", exact: true }).click();
-  await expect(page).toHaveURL(/\/beispiel$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   await expect(page.getByRole("heading", { level: 2, name: CHAPTER_TITLE })).toBeVisible();
   await page.getByRole("button", { name: new RegExp(CHAPTER_TITLE) }).click();
   await expect(page.getByRole("link", { name: new RegExp(SCENE_TITLE) })).toBeVisible();

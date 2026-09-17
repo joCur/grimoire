@@ -1,4 +1,4 @@
-// Entity-kind helpers for the entry reading view (issue #26).
+// Entity-kind helpers for the entry reading view.
 //
 // GET /entry answers with the entity `kind` (path-derived, see
 // shared/src/parse.ts). The reading view picks its header from that kind —
@@ -65,10 +65,10 @@ export function npcStatusLabel(status: string, t: Translate): string {
 }
 
 /**
- * Title of a browse list page ("/:campaign/list/:kind"), or undefined for a
+ * Title of a browse list page ("/campaigns/:campaign/list/:kind"), or undefined for a
  * kind that has no list. Shared by the list page itself and the topbar
  * breadcrumb — on the desktop those pages are reached from the pool now
- * (issue #26), so they need a way back.
+ *, so they need a way back.
  */
 const BROWSE_LIST_TITLE_KEYS: Record<string, MessageKey> = {
   scenes: "browse.title.scenes",

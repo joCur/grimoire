@@ -129,7 +129,7 @@ export async function campaignVersion(id: string): Promise<number> {
  * string and would now be sorting random noise.
  *
  * `name` is the campaign's DISPLAY name and therefore always there: an
- * unnamed campaign is shown under its id. This list and `GET /entry?path=
+ * unnamed campaign is shown under its id. This list and `GET /entries/
  * campaign` agree on that: both go through `campaignDisplayName`.
  */
 export async function listCampaigns(): Promise<CampaignSummary[]> {
@@ -161,7 +161,7 @@ export async function listCampaigns(): Promise<CampaignSummary[]> {
   });
 }
 
-// --- GET /api/:campaign/tree -------------------------------------------------
+// --- GET /api/campaigns/:campaign/tree -------------------------------------------------
 
 function sceneSummaryRow(db: GrimoireDb, row: SceneRow): SceneSummary {
   const npcRefs = db
@@ -450,7 +450,7 @@ export function renderSessionRow(
 }
 
 /**
- * GET /api/:campaign/session — the active session; 404 when none runs. With
+ * GET /api/campaigns/:campaign/session — the active session; 404 when none runs. With
  * `includeEnded` the last started session even if ended (404 only when the
  * campaign has no session at all).
  */
@@ -467,7 +467,7 @@ export async function readActiveSession(
   return renderSessionRow(db, campaign, row);
 }
 
-// --- GET /api/:campaign/entry ------------------------------------------------
+// --- GET /api/campaigns/:campaign/entries ------------------------------------------------
 
 export function inboxRows(db: GrimoireDb, campaign: string): InboxRow[] {
   return db
@@ -618,7 +618,7 @@ export function readByLocator(
   }
 }
 
-/** GET /api/:campaign/entry?path=<address> */
+/** GET /api/campaigns/:campaign/entries/<address> */
 export async function readParsedFile(campaign: string, rel: string): Promise<EntryResponse> {
   const row = await requireCampaign(campaign);
   assertSafeAddress(rel); // 400 unsafe id/address
@@ -626,14 +626,14 @@ export async function readParsedFile(campaign: string, rel: string): Promise<Ent
   return readByLocator(db, row, locatorFromPath(rel));
 }
 
-// --- GET /api/:campaign/glossary ---------------------------------------------
+// --- GET /api/campaigns/:campaign/glossary ---------------------------------------------
 
 /**
- * GET /api/:campaign/glossary -> `{ entries, rev }`.
+ * GET /api/campaigns/:campaign/glossary -> `{ entries, rev }`.
  *
  * `rev` travels with it: the settings page edits this list, so it needs the
  * same guard token every other editable entry has. It is the LIST's
- * counter (`campaigns.glossary_rev`) — the same one `GET /entry?path=glossary`
+ * counter (`campaigns.glossary_rev`) — the same one `GET /entries/glossary`
  * hands out, so the two views of the glossary cannot disagree about what
  * "unchanged" means.
  */
@@ -665,7 +665,7 @@ export async function glossaryText(campaign: string): Promise<string | undefined
     .join("\n");
 }
 
-// --- GET /api/:campaign/knowledge --------------------------------------------
+// --- GET /api/campaigns/:campaign/knowledge --------------------------------------------
 
 /** One stored row as the API shape — an unknown `kind` degrades to `fact`. */
 export function knowledgeEntry(row: KnowledgeRow): KnowledgeEntry {
@@ -677,7 +677,7 @@ export function knowledgeEntry(row: KnowledgeRow): KnowledgeEntry {
   };
 }
 
-/** GET /api/:campaign/knowledge -> `{ entries, rev }`. */
+/** GET /api/campaigns/:campaign/knowledge -> `{ entries, rev }`. */
 export async function readKnowledge(campaign: string): Promise<KnowledgeResponse> {
   const row = await requireCampaign(campaign);
   const db = await getDb();

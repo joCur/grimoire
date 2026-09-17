@@ -693,7 +693,7 @@ export function reindexEntity(
   if (row !== undefined) indexScene(tx, campaign, row, refTags(tx, campaign, id));
 }
 
-// --- PATCH /api/:campaign/properties ----------------------------------------
+// --- PATCH /api/campaigns/:campaign/properties ----------------------------------------
 
 /**
  * THE CONTRACT KEYS per kind — the complete set of properties a stored entry
@@ -1073,7 +1073,7 @@ function patchSessionRow(
   }
 }
 
-// --- PUT /api/:campaign/entry -------------------------------------------------
+// --- PUT /api/campaigns/:campaign/entries -------------------------------------------------
 
 /**
  * Replace the markdown BODY of one entity. The append-only kinds
@@ -1302,7 +1302,7 @@ function writeGlossaryRows(
 }
 
 /**
- * PUT /api/:campaign/glossary `{ entries, rev }` -> the stored list + its
+ * PUT /api/campaigns/:campaign/glossary `{ entries, rev }` -> the stored list + its
  * fresh `rev`.
  *
  * The ORDER of `entries` is the stored order — that is what the settings
@@ -1345,7 +1345,7 @@ export async function writeGlossary(
 // --- the campaign_knowledge table ----------------------------------------------
 
 /**
- * PUT /api/:campaign/knowledge `{ entries, rev }` -> the stored list + its
+ * PUT /api/campaigns/:campaign/knowledge `{ entries, rev }` -> the stored list + its
  * fresh `rev`.
  *
  * Exactly the glossary's contract, deliberately: the DM edits both lists on
@@ -1466,7 +1466,7 @@ function nextCreatedAt(tx: GrimoireDb, campaign: string): number {
 }
 
 /**
- * POST /api/:campaign/session/start — two answers:
+ * POST /api/campaigns/:campaign/session/start — two answers:
  *
  *   * a RUNNING session of today is returned untouched (the start button
  *     stays idempotent while the evening runs);
@@ -1681,7 +1681,7 @@ export async function discardSession(campaign: string): Promise<{ path: string }
 }
 
 /**
- * POST /api/:campaign/log — append `- HH:MM (sceneId) text` to the RUNNING
+ * POST /api/campaigns/:campaign/log — append `- HH:MM (sceneId) text` to the RUNNING
  * session; 404 when none runs (a note typed after "Session beenden" is
  * refused instead of landing in a closed log). With a sceneId
  * `scenes_played` is maintained in the same transaction.
@@ -1725,7 +1725,7 @@ export async function appendLogEntry(
 // --- inbox ---------------------------------------------------------------------
 
 /**
- * POST /api/:campaign/inbox — append `- text`. The `## Eingang`-less first
+ * POST /api/campaigns/:campaign/inbox — append `- text`. The `## Eingang`-less first
  * entry gets the `# Inbox` heading row the file format opened with, so the
  * rendered inbox still reads like the list it was.
  */
@@ -1762,7 +1762,7 @@ function bumpInboxRev(tx: GrimoireDb, campaign: string): number {
 }
 
 /**
- * POST /api/:campaign/review/inbox-done — the one documented exception to the
+ * POST /api/campaigns/:campaign/review/inbox-done — the one documented exception to the
  * inbox's append-only rule: the entry is marked done. Idempotent; 404 when
  * the line is not in the inbox. The line is matched against the row's `raw`,
  * which is the byte-for-byte line the file had.
@@ -1794,7 +1794,7 @@ export async function markInboxLineDone(campaign: string, line: string): Promise
 // --- review actions ------------------------------------------------------------
 
 /**
- * POST /api/:campaign/review/seen — mark one log line as reviewed. The
+ * POST /api/campaigns/:campaign/review/seen — mark one log line as reviewed. The
  * `reviewed` properties hash list became a flag on the log row (schema.ts),
  * and the hash is still the id the app speaks: the line is hashed exactly as
  * sent and the row with that hash gets the flag.
@@ -1887,7 +1887,7 @@ export function appendThreadItem(body: string, item: string): string {
 }
 
 /**
- * POST /api/:campaign/review/thread — append `- [ ] text` under
+ * POST /api/campaigns/:campaign/review/thread — append `- [ ] text` under
  * `## Offene Fäden` of the chapter. 404 for an unknown chapter (the DIRECTORY
  * had to exist before; the chapter ROW has to exist now — same answer).
  */
@@ -1924,7 +1924,7 @@ export async function appendThreadToChapter(
 export { ENTITY_SLUG };
 
 /**
- * POST /api/:campaign/review/npc-stub — the review's "#npc line becomes an
+ * POST /api/campaigns/:campaign/review/npc-stub — the review's "#npc line becomes an
  * npc". This is one of the two ways an entry comes into existence, and it is
  * an explicit one: the DM clicks it on a log line. CREATE OR LINK — the
  * caller's goal is that this id has an entry afterwards, so it is idempotent.
@@ -2496,7 +2496,7 @@ export async function createCampaign(
 }
 
 /**
- * POST /api/:campaign/chapters { title, goal? } -> the chapter entry.
+ * POST /api/campaigns/:campaign/chapters { title, goal? } -> the chapter entry.
  *
  * `goal` is optional and lands under `## Ziel des Kapitels` — the heading the
  * pool reads its goal line from (routes/pool.tsx). Without it the body stays
@@ -2547,7 +2547,7 @@ export async function createChapter(
 }
 
 /**
- * POST /api/:campaign/chapters/:id/active -> the chapter entry.
+ * POST /api/campaigns/:campaign/chapters/:id/active -> the chapter entry.
  *
  * „Aktiv" in the overview's status control. ONE call, ONE transaction,
  * because it is ONE decision about two chapters: the one named here becomes
@@ -2592,7 +2592,7 @@ export async function setActiveChapter(campaign: string, id: string): Promise<En
 }
 
 /**
- * POST /api/:campaign/scenes { title, chapter } -> the scene entry.
+ * POST /api/campaigns/:campaign/scenes { title, chapter } -> the scene entry.
  *
  * The chapter is REQUIRED and has to exist (400 otherwise): a scene's chapter
  * is part of its address, and a scene under an unknown chapter has no node to
@@ -2651,7 +2651,7 @@ export async function createScene(
   });
 }
 
-/** POST /api/:campaign/npcs { name } -> the npc entry (see the notes above). */
+/** POST /api/campaigns/:campaign/npcs { name } -> the npc entry (see the notes above). */
 export async function createNpc(
   campaign: string,
   name: string,
@@ -2684,7 +2684,7 @@ export async function createNpc(
   });
 }
 
-/** POST /api/:campaign/locations { name } -> the location entry. */
+/** POST /api/campaigns/:campaign/locations { name } -> the location entry. */
 export async function createLocation(
   campaign: string,
   name: string,

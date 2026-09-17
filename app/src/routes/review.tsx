@@ -1,4 +1,4 @@
-// "/:campaign/review" — the review view, "Session-Nachbereitung" in the UI
+// "/campaigns/:campaign/review" — the review view, "Session-Nachbereitung" in the UI
 // (formerly "Fünf Minuten Ernte")
 // per the design reference: the tagged lines of today's log and of the inbox
 // as cards with one-click actions, the chapter's open threads below, brass
@@ -226,7 +226,7 @@ export function ReviewRoute() {
         ) : model.noSession ? (
           <p className="text-[14px] leading-[1.6] text-muted-foreground">
             {t("review.noSession")}{" "}
-            <Link to={`/${campaign}`} className="text-primary hover:text-primary-hover">
+            <Link to={`/campaigns/${campaign}`} className="text-primary hover:text-primary-hover">
               {t("review.backToPool")}
             </Link>
           </p>
@@ -334,7 +334,7 @@ export function ReviewRoute() {
 
             <Button
               type="button"
-              onClick={() => void navigate(`/${campaign}`)}
+              onClick={() => void navigate(`/campaigns/${campaign}`)}
               className="mt-9 h-auto px-[18px] py-2.5 text-[13.5px] font-semibold"
             >
               {t("review.finish")}

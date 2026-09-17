@@ -43,12 +43,12 @@ import { expect, test, type Api } from "../support/test";
 
 /** The prepared scene of the example campaign — the augment target of (b). */
 const SCENE = "01-salzhafen/bucht/smuggler-captured";
-const SCENE_URL = `/beispiel/entry/${SCENE}`;
+const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
 
 /** The empty npc — created, never filled in. */
 const EMPTY_NPC = "spitzel";
 const NPC_PATH = `npcs/${EMPTY_NPC}`;
-const NPC_URL = `/beispiel/entry/${NPC_PATH}`;
+const NPC_URL = `/campaigns/beispiel/entries/${NPC_PATH}`;
 
 const INSTRUCTION = "Führe einen Handlungsstrang um den Schmuggler-Spitzel ein";
 
@@ -58,7 +58,7 @@ const INSTRUCTION = "Führe einen Handlungsstrang um den Schmuggler-Spitzel ein"
  * possible BECAUSE it exists (ADR #19).
  */
 async function createEmptyNpc(api: Api): Promise<void> {
-  await api.send("POST", "beispiel/npcs", { name: EMPTY_NPC });
+  await api.send("POST", "campaigns/beispiel/npcs", { name: EMPTY_NPC });
   await api.patchProperties(SCENE, { npcs: ["fenn", EMPTY_NPC] });
   const npc = await api.file(NPC_PATH);
   expect(npc.properties.name).toBe(EMPTY_NPC);
@@ -134,7 +134,7 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   expect(npc.properties.status).toBe("unknown");
   expect(npc.properties.status).not.toBe(AUGMENT_NPC_STATUS);
   // The job is gone with the same transaction.
-  expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
+  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
 
   // Path 2: the reading view shows the filled entry at once — the callout
   // renders as a callout and the `[[fenn]]` inside it resolves.
@@ -271,7 +271,7 @@ test("rejecting the proposal writes nothing and takes the job with it", async ({
   expect(after.properties).toEqual(before.properties);
   expect(after.body).toBe(before.body);
   expect(after.rev).toBe(before.rev);
-  expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
+  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
 
   // And the reading view carries none of the proposal.
   await page.reload();
@@ -316,16 +316,16 @@ test("the entry point: npc, location and scene — and nothing else", async ({
 }) => {
   const action = page.getByRole("button", { name: "Mit KI ergänzen" });
 
-  await page.goto("/beispiel/entry/npcs/jorna");
+  await page.goto("/campaigns/beispiel/entries/npcs/jorna");
   await expect(action).toBeVisible();
-  await page.goto("/beispiel/entry/locations/leuchtturm");
+  await page.goto("/campaigns/beispiel/entries/locations/leuchtturm");
   await expect(action).toBeVisible();
   await page.goto(SCENE_URL);
   await expect(action).toBeVisible();
 
   // The campaign file is not an augmentable entry — no augment prompt, no
   // action, and the reading view is untouched.
-  await page.goto("/beispiel/entry/campaign");
+  await page.goto("/campaigns/beispiel/entries/campaign");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(action).toHaveCount(0);
 });
@@ -393,7 +393,7 @@ test("the proposal appears as soon as the job is done — start request still in
   page,
 }) => {
   let released = false;
-  await page.route("**/api/*/generate/augment", async (route) => {
+  await page.route("**/api/campaigns/*/generate/augment", async (route) => {
     const response = await route.fetch();
     const body = await response.text();
     await new Promise((resolve) => setTimeout(resolve, 8_000));

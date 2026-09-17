@@ -837,3 +837,33 @@ aktuellen Anzeigenamen auf, also stimmt der Text ohnehin überall.
   Zeilen ehrlich und kosten nichts.
 - Anzeigenamen bleiben frei änderbar; der Suchindex zieht die referierenden
   Einträge dabei nach (`server/src/store/refs.ts`).
+
+## 22. Ein URL-Schema: alles Kampagnenabhängige unter `/campaigns/:id`
+
+**Entscheidung:** Jeder kampagnenabhängige Pfad hängt unter der Kampagne — in
+der API `/api/campaigns/:id/…`, in der App `/campaigns/:id/…`. Die Mehrzahl
+`campaigns` ist gesetzt, auch für den einzelnen Eintrag
+(`GET /api/campaigns/:id`). Die Adresse eines Eintrags steht im **Pfad**:
+`GET /api/campaigns/beispiel/entries/01-salzhafen/leuchtturm/ankunft-leuchtturm`,
+in der App `/campaigns/beispiel/entries/<adresse>`. Kampagnenlos bleiben
+`/api/campaigns`, `/api/settings` und `/settings`. Es gibt kein Alt-Schema und
+keine Umleitungsschicht: alte URLs antworten 404.
+
+**Warum:** Die Kampagnen-id stand als erstes Segment und kollidierte damit mit
+jedem kampagnenlosen Pfad — `/:campaign` traf auch `/settings`. Das erzwang
+Sonderfälle an drei Stellen der App (eine Liste der Nicht-Kampagnen-Segmente,
+eine Umleitung im Kampagnen-Scope und eine eigene Herleitung im Topbar), die
+mit jedem neuen kampagnenlosen Pfad mitwachsen. Mit dem Präfix ist die
+Kollision ausgeschlossen statt abgefangen, und Erweiterungen haben ein Muster.
+Die Adresse im Pfad macht die URL zur Adresse: eine Leseansicht ist ein Pfad,
+kein Query-Parameter, und `PUT` braucht die Adresse nicht mehr im Rumpf.
+
+**Folgen:**
+
+- `PUT /api/campaigns/:id/entries/<adresse>` nimmt `{ rev, body }`; das Feld
+  `path` im Rumpf entfällt. `PATCH /properties` behält seine Form.
+- Die Kollisions-Sonderfälle sind gelöscht, nicht angepasst.
+- `.`- und `..`-Segmente erreichen den Server nicht mehr: jeder URL-Parser
+  löst sie vorher auf. Was ankommt, ist eine gewöhnliche Adresse — die
+  Antwort ist 404, nicht die 400 der Adressprüfung, die für absolute Pfade,
+  Backslashes und versteckte Segmente weiter gilt.

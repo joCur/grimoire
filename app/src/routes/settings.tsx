@@ -12,8 +12,8 @@
 // Issue #53 briefly put the campaign's Glossar and Kampagnenwissen here as
 // campaign sections. The PO's objection on PR #87 settles the category: those
 // two are campaign CONTENT, the same kind of thing as the NPCs and the Orte,
-// and they belong on list pages of their own (`/:campaign/knowledge`,
-// `/:campaign/glossary`) — not in a settings page, and not as 30 inline text
+// and they belong on list pages of their own (`/campaigns/:campaign/knowledge`,
+// `/campaigns/:campaign/glossary`) — not in a settings page, and not as 30 inline text
 // fields under one global save button. What is left here is what is true of
 // the INSTALLATION, which is also why the route stays reachable with no
 // campaign at all (a fresh instance has none).

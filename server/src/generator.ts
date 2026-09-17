@@ -1081,7 +1081,7 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
   }
 }
 
-// --- POST /api/:campaign/generate/npc ----------------------------------------
+// --- POST /api/campaigns/:campaign/generate/npc ----------------------------------------
 
 /**
  * Run the NPC pipeline: context -> npc prompt -> provider -> mechanical
@@ -1128,7 +1128,7 @@ export async function runGenerateNpc(
   );
 }
 
-// --- POST /api/:campaign/generate/apply -----------------------------------------
+// --- POST /api/campaigns/:campaign/generate/apply -----------------------------------------
 
 const SCENE_ITEM_KEYS = new Set(["path", "markdown", "properties"]);
 const STUB_ITEM_KEYS = new Set(["kind", "id", "name", "markdown"]);
@@ -1415,7 +1415,7 @@ export async function applyGenerated(
  * scene, the id segment of its address). It arrives from a client payload and
  * was taken on trust: `id: ""` inserted a row nothing can address, and
  * `id: "a/b"` inserted one whose address parses as a different path — both
- * unreachable through `GET /entry`, i.e. content written and lost in the same
+ * unreachable through `GET /entries`, i.e. content written and lost in the same
  * request. A properties that HAS an `id` must therefore carry a usable one;
  * a draft without the key keeps falling back to its address segment, which
  * the address validation already constrains.

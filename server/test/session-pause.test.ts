@@ -39,7 +39,7 @@ async function ok(url: string): Promise<EntryResponse> {
 
 /** The session as the API renders it right now. */
 async function session(): Promise<EntryResponse> {
-  const res = await app.request("/api/beispiel/session");
+  const res = await app.request("/api/campaigns/beispiel/session");
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
@@ -81,7 +81,7 @@ beforeEach(async () => {
   // the case moves it.
   setNow(() => new Date(2026, 7, 19, 21, 0));
   await seedStore();
-  startedPath = (await ok("/api/beispiel/session/start")).path;
+  startedPath = (await ok("/api/campaigns/beispiel/session/start")).path;
   setNow(() => new Date(2026, 7, 19, 21, 5));
 });
 
@@ -90,10 +90,10 @@ afterEach(async () => {
   setNow(null);
 });
 
-describe("POST /api/:campaign/session/pause + /continue", () => {
+describe("POST /api/campaigns/:campaign/session/pause + /continue", () => {
   test("pause opens an interval and logs `— Pause`; continue closes it and logs `— Weiter`", async () => {
     setNow(() => new Date(2026, 7, 19, 21, 40, 12));
-    const paused = await ok("/api/beispiel/session/pause");
+    const paused = await ok("/api/campaigns/beispiel/session/pause");
     expect(paused.path).toBe(startedPath);
     expect(paused.properties.pauses).toEqual([{ from: "2026-08-19T21:40:12" }]);
     // Nothing counted yet, but the clock is standing since 21:40:12.
@@ -102,7 +102,7 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
     expect(logLines(paused)).toEqual(["- 21:40 — Pause"]);
 
     setNow(() => new Date(2026, 7, 19, 21, 58, 3));
-    const running = await ok("/api/beispiel/session/continue");
+    const running = await ok("/api/campaigns/beispiel/session/continue");
     expect(running.properties.pauses).toEqual([
       { from: "2026-08-19T21:40:12", to: "2026-08-19T21:58:03" },
     ]);
@@ -118,13 +118,13 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
 
   test("several pauses add up; the log stays append-only", async () => {
     setNow(() => new Date(2026, 7, 19, 21, 10, 0));
-    await ok("/api/beispiel/session/pause");
+    await ok("/api/campaigns/beispiel/session/pause");
     setNow(() => new Date(2026, 7, 19, 21, 20, 0));
-    await ok("/api/beispiel/session/continue");
+    await ok("/api/campaigns/beispiel/session/continue");
     setNow(() => new Date(2026, 7, 19, 22, 0, 0));
-    await ok("/api/beispiel/session/pause");
+    await ok("/api/campaigns/beispiel/session/pause");
     setNow(() => new Date(2026, 7, 19, 22, 5, 30));
-    const file = await ok("/api/beispiel/session/continue");
+    const file = await ok("/api/campaigns/beispiel/session/continue");
     expect(file.pausedMs).toBe((10 * 60 + 5 * 60 + 30) * 1000);
     expect((file.properties.pauses as unknown[]).length).toBe(2);
     expect(logLines(file)).toEqual([
@@ -137,18 +137,18 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
 
   test("both calls are idempotent — no second interval, no duplicate log line", async () => {
     setNow(() => new Date(2026, 7, 19, 21, 30, 0));
-    await ok("/api/beispiel/session/pause");
+    await ok("/api/campaigns/beispiel/session/pause");
     setNow(() => new Date(2026, 7, 19, 21, 31, 0));
-    const again = await ok("/api/beispiel/session/pause");
+    const again = await ok("/api/campaigns/beispiel/session/pause");
     // The pause is unchanged — same `from` (second-precise as written, no
     // YAML roundtrip to drop the `:00` any more) and no second entry.
     expect(again.properties.pauses).toEqual([{ from: "2026-08-19T21:30:00" }]);
     expect(logLines(again)).toEqual(["- 21:30 — Pause"]);
 
     setNow(() => new Date(2026, 7, 19, 21, 35, 0));
-    await ok("/api/beispiel/session/continue");
+    await ok("/api/campaigns/beispiel/session/continue");
     setNow(() => new Date(2026, 7, 19, 21, 36, 0));
-    const stillRunning = await ok("/api/beispiel/session/continue");
+    const stillRunning = await ok("/api/campaigns/beispiel/session/continue");
     expect(stillRunning.properties.pauses).toEqual([
       { from: "2026-08-19T21:30:00", to: "2026-08-19T21:35:00" },
     ]);
@@ -157,9 +157,9 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
 
   test("`session/end` closes an open pause", async () => {
     setNow(() => new Date(2026, 7, 19, 22, 50, 0));
-    await ok("/api/beispiel/session/pause");
+    await ok("/api/campaigns/beispiel/session/pause");
     setNow(() => new Date(2026, 7, 19, 23, 0, 0));
-    const ended = await ok("/api/beispiel/session/end");
+    const ended = await ok("/api/campaigns/beispiel/session/end");
     expect(ended.properties.ended).toBe("2026-08-19T23:00:00");
     expect(ended.properties.pauses).toEqual([
       { from: "2026-08-19T22:50:00", to: "2026-08-19T23:00:00" },
@@ -176,7 +176,7 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
 
     // A pause on top keeps the stored interval verbatim and adds an open one.
     setNow(() => new Date(2026, 7, 19, 21, 40, 0));
-    const paused = await ok("/api/beispiel/session/pause");
+    const paused = await ok("/api/campaigns/beispiel/session/pause");
     expect(paused.properties.pauses).toEqual([
       { from: "2026-08-19T21:30", to: "2026-08-19T21:33" },
       { from: "2026-08-19T21:40:00" },
@@ -185,8 +185,8 @@ describe("POST /api/:campaign/session/pause + /continue", () => {
   });
 
   test("404 when no session is running", async () => {
-    expect((await post("/api/beispiel/session/end")).status).toBe(200);
-    expect((await post("/api/beispiel/session/pause")).status).toBe(404);
-    expect((await post("/api/beispiel/session/continue")).status).toBe(404);
+    expect((await post("/api/campaigns/beispiel/session/end")).status).toBe(200);
+    expect((await post("/api/campaigns/beispiel/session/pause")).status).toBe(404);
+    expect((await post("/api/campaigns/beispiel/session/continue")).status).toBe(404);
   });
 });

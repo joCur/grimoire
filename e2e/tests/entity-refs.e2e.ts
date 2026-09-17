@@ -30,7 +30,7 @@ const SCENE: SeedEntry = JSON.parse(
 /** Its address: chapter, location and the scene's id. */
 const SCENE_PATH = "01-salzhafen/leuchtturm/entity-refs";
 
-const SCENE_URL = "/beispiel/entry/01-salzhafen/leuchtturm/entity-refs";
+const SCENE_URL = "/campaigns/beispiel/entries/01-salzhafen/leuchtturm/entity-refs";
 const SCENE_TITLE = "Referenzen am Kai";
 const JORNA = "Hafenmeisterin Jorna";
 
@@ -46,7 +46,7 @@ test("reading view: references render as the current name, unknown ones stay tex
   // is the paragraph.
   const ref = page.getByRole("link", { name: `NPC: ${JORNA}`, exact: true }).first();
   await expect(ref).toHaveText(JORNA);
-  await expect(ref).toHaveAttribute("href", "/beispiel/entry/npcs/jorna");
+  await expect(ref).toHaveAttribute("href", "/campaigns/beispiel/entries/npcs/jorna");
 
   // The suffix stays outside the reference — "Jornas Boot" reads as German.
   await expect(page.locator(".md-body")).toContainText(`${JORNA}s Boot`);
@@ -63,7 +63,7 @@ test("reading view: references render as the current name, unknown ones stay tex
 
   // The reference is a real link and opens the entity.
   await ref.click();
-  await expect(page).toHaveURL(/\/beispiel\/entry\/npcs\/jorna$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/entries\/npcs\/jorna$/);
   await expect(page.getByRole("heading", { level: 1, name: JORNA })).toBeVisible();
 });
 
@@ -95,9 +95,9 @@ test("code stays code, and an `## If:` summary toggles instead of navigating", a
 test("live view: a reference opens the drawer instead of leaving the session", async ({
   page,
 }) => {
-  await page.goto("/beispiel");
+  await page.goto("/campaigns/beispiel");
   await page.getByRole("button", { name: "Session starten" }).click();
-  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
 
   await page.getByRole("button", { name: SCENE_TITLE }).click();
   await expect(page.getByRole("heading", { level: 1, name: SCENE_TITLE })).toBeVisible();
@@ -110,7 +110,7 @@ test("live view: a reference opens the drawer instead of leaving the session", a
   await expect(drawer.getByRole("heading", { level: 1, name: JORNA })).toBeVisible();
   await expect(drawer.getByRole("link", { name: "Eintrag öffnen" })).toBeVisible();
   // Still in the live view, still on the same scene.
-  await expect(page).toHaveURL(/\/beispiel\/live$/);
+  await expect(page).toHaveURL(/\/campaigns\/beispiel\/live$/);
 });
 
 test("a changed display name reaches the prose without touching the body", async ({
@@ -141,7 +141,7 @@ test("a changed display name reaches the prose without touching the body", async
   // body only ever held the slug (the server expands references when it
   // indexes — server/src/store/refs.ts).
   const found = await api.get<{ results: { id: string; kind: string }[] }>(
-    `beispiel/search?q=${encodeURIComponent("Salzhand")}`,
+    `campaigns/beispiel/search?q=${encodeURIComponent("Salzhand")}`,
   );
   expect(found.results.map((r) => `${r.kind}:${r.id}`)).toContain("scene:entity-refs");
 });

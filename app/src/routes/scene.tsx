@@ -1,4 +1,4 @@
-// "/:campaign/entry/*" — the reading view of ONE file. For a scene that is
+// "/campaigns/:campaign/entries/*" — the reading view of ONE file. For a scene that is
 // the scene article per the design reference (type overline, Literata title,
 // trigger row, chip row, markdown body — shared with the live view via
 // SceneArticle) plus a sticky right aside with the scene's NPC cards. Below
@@ -120,7 +120,7 @@ export function SceneRoute() {
     // (lib/search.ts): the slashes are the address, everything else is a
     // segment that may carry anything an id may carry.
     const target = canonical.split("/").map(encodeURIComponent).join("/");
-    navigate(`/${encodeURIComponent(campaign)}/entry/${target}`, { replace: true });
+    navigate(`/campaigns/${encodeURIComponent(campaign)}/entries/${target}`, { replace: true });
   }, [campaign, canonical, path, navigate]);
 
   if (isPending) {

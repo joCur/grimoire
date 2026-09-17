@@ -746,7 +746,7 @@ describe("writePropertiesForm", () => {
     expect(result).toEqual({ ok: true, file: FILE });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("PATCH");
-    expect(calls[0]?.url).toBe("/api/beispiel/properties");
+    expect(calls[0]?.url).toBe("/api/campaigns/beispiel/properties");
     expect(calls[0]?.body).toEqual({
       path: "npcs/fenn",
       rev: 42,
@@ -775,7 +775,7 @@ describe("writePropertiesForm", () => {
     expect(result.ok).toBe(false);
     expect(result.file?.rev).toBe(99);
     expect(calls[1]?.method).toBe("GET");
-    expect(calls[1]?.url).toBe("/api/beispiel/entry?path=npcs%2Ffenn");
+    expect(calls[1]?.url).toBe("/api/campaigns/beispiel/entries/npcs/fenn");
   });
 
   test("a failed reload after the conflict keeps the conflict, not a crash", async () => {

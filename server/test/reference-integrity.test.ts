@@ -21,19 +21,20 @@ import type { CampaignTree, EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { applyDrafts } from "../src/store/write";
 import { dropStore, seedStore } from "./support/store";
+import { entriesUrl } from "./support/urls";
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const SCENE_B = "01-salzhafen/bucht/smuggler-captured";
 const NPC = "npcs/fenn";
 
 async function getFile(rel: string, campaign = "beispiel"): Promise<EntryResponse> {
-  const res = await app.request(`/api/${campaign}/entry?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(entriesUrl(campaign, rel));
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
 
 async function fileStatus(rel: string, campaign = "beispiel"): Promise<number> {
-  return (await app.request(`/api/${campaign}/entry?path=${encodeURIComponent(rel)}`)).status;
+  return (await app.request(entriesUrl(campaign, rel))).status;
 }
 
 /** A properties patch that is expected to go through. */
@@ -46,7 +47,7 @@ async function patchFm(rel: string, patch: Record<string, unknown>): Promise<Ent
 /** The raw answer of a properties patch — for the cases that are refused. */
 async function patchRes(rel: string, patch: Record<string, unknown>): Promise<Response> {
   const before = await getFile(rel);
-  return app.request("/api/beispiel/properties", {
+  return app.request("/api/campaigns/beispiel/properties", {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ path: rel, rev: before.rev, patch }),
@@ -55,17 +56,17 @@ async function patchRes(rel: string, patch: Record<string, unknown>): Promise<Re
 
 async function putBody(rel: string, body: string): Promise<EntryResponse> {
   const before = await getFile(rel);
-  const res = await app.request("/api/beispiel/entry", {
+  const res = await app.request(entriesUrl("beispiel", rel), {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: rel, rev: before.rev, body }),
+    body: JSON.stringify({ rev: before.rev, body }),
   });
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
 
 async function post(rel: string, body: unknown): Promise<Response> {
-  return app.request(`/api/beispiel${rel}`, {
+  return app.request(`/api/campaigns/beispiel${rel}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -80,7 +81,7 @@ async function createEmptyNpc(id: string): Promise<void> {
 }
 
 async function tree(): Promise<CampaignTree> {
-  const res = await app.request("/api/beispiel/tree");
+  const res = await app.request("/api/campaigns/beispiel/tree");
   expect(res.status).toBe(200);
   return (await res.json()) as CampaignTree;
 }

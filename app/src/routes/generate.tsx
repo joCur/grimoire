@@ -1,4 +1,4 @@
-// "/:campaign/generate" — the LLM generator per the design
+// "/campaigns/:campaign/generate" — the LLM generator per the design
 // reference's GENERATOR section, four states in one route:
 //
 //   input   target chapter (existing chip or the "Neues Kapitel" flow with
@@ -799,11 +799,11 @@ export function GenerateRoute() {
                 {contextHint(tree.data?.npcs.length ?? 0, tree.data?.locations.length ?? 0, t)}
               </span>
               <span aria-hidden>·</span>
-              <Link to={`/${campaign}/knowledge`} className={CONTEXT_LINK}>
+              <Link to={`/campaigns/${campaign}/knowledge`} className={CONTEXT_LINK}>
                 {knowledgeHint(promptKnowledgeCount(knowledge.data?.entries ?? []), t)}
               </Link>
               <span aria-hidden>·</span>
-              <Link to={`/${campaign}/glossary`} className={CONTEXT_LINK}>
+              <Link to={`/campaigns/${campaign}/glossary`} className={CONTEXT_LINK}>
                 {t(glossary.isSuccess ? "generate.input.glossary" : "generate.input.noGlossary")}
               </Link>
             </p>
@@ -1322,7 +1322,7 @@ export function GenerateRoute() {
                   variant="outline"
                   onClick={() => {
                     void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
-                    void navigate(`/${campaign}/entry/${written[0]}`);
+                    void navigate(`/campaigns/${campaign}/entries/${written[0]}`);
                   }}
                   className="h-auto border-input bg-transparent px-4 py-2.5 text-[13px] font-normal text-body-secondary hover:border-border-hover hover:bg-transparent hover:text-foreground"
                 >
@@ -1333,7 +1333,7 @@ export function GenerateRoute() {
                 type="button"
                 onClick={() => {
                   void queryClient.invalidateQueries({ queryKey: ["tree", campaign] });
-                  void navigate(`/${campaign}`);
+                  void navigate(`/campaigns/${campaign}`);
                 }}
                 className="h-auto px-4 py-2.5 text-[13px] font-semibold"
               >
@@ -1753,7 +1753,7 @@ function PartActions({
         {t("generate.review.partWritten")}
         {writtenAt !== undefined && (
           <Link
-            to={`/${campaign}/entry/${writtenAt}`}
+            to={`/campaigns/${campaign}/entries/${writtenAt}`}
             className="rounded font-mono text-[11.5px] underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           >
             {writtenAt}
@@ -1940,7 +1940,7 @@ function StubRow({
           {t("generate.review.partWritten")}
           {writtenAt !== undefined && (
             <Link
-              to={`/${campaign}/entry/${writtenAt}`}
+              to={`/campaigns/${campaign}/entries/${writtenAt}`}
               className="rounded font-mono text-[11px] underline decoration-dotted underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
               {writtenAt}

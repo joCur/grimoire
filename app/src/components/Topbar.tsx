@@ -40,7 +40,7 @@
 //
 // Consequence: "Session starten" appears NOWHERE while a session is running —
 // there is nothing to start, only something to return to. What "running"
-// means is the server's answer (GET /:campaign/session), not a date the app
+// means is the server's answer (GET /campaigns/:campaign/session), not a date the app
 // computes: a session that goes past midnight stays the running one.
 //
 // Deviation from design/ (which keeps a separate live topbar) per PO decision
@@ -60,10 +60,10 @@
 // The right side stays per-view: the ⌘K search chip (opens the palette;
 // hidden without a campaign in the URL — "/" only ever shows the empty
 // state), the session chip (issue #9: one click starts a session and enters
-// /:campaign/live), the harvest progress on the
-// review (issue #10) with a quiet pool link into it while today's session
-// still has unharvested entries, and the "Generator" on the pool (issue #12)
-// with its run indicator (issue #19).
+// /campaigns/:campaign/live), the harvest progress on the
+// review with a quiet pool link into it while today's session
+// still has unharvested entries, and the "Generator" on the pool
+// with its run indicator.
 
 import type { EntryResponse } from "@grimoire/shared/types";
 import { isSessionEmpty } from "@grimoire/shared/session-state";
@@ -120,7 +120,6 @@ import {
   campaignLabel,
   settingsCampaign,
 } from "@/lib/campaign";
-import { NON_CAMPAIGN_SEGMENTS } from "@/lib/routes";
 import { sessionElapsedLabel, sessionIsPaused } from "@/lib/session";
 import { navSection } from "@/lib/topbar-nav";
 import { acceptProgress, pipelineProgress } from "@/lib/generate";
@@ -134,22 +133,15 @@ import {
   useSessionWrite,
 } from "@/lib/use-session";
 
-/**
- * The campaign of a `matchPath` result, or undefined when the segment is a
- * ROUTE and not a campaign id (`lib/routes.ts` — App.tsx and this heuristic
- * read the same list). React Router itself ranks the static route higher and
- * renders the right page; only this heuristic has to be told.
- */
+/** The campaign of a `matchPath` result, or undefined when nothing matched. */
 function campaignOf(
   match: { params: { campaign?: string } } | null,
 ): string | undefined {
-  const id = match?.params.campaign;
-  if (id === undefined || NON_CAMPAIGN_SEGMENTS.has(id)) return undefined;
-  return id;
+  return match?.params.campaign;
 }
 
 /**
- * `/settings` KEEPS THE CAMPAIGN CHROME (PO feedback on PR #83).
+ * `/settings` KEEPS THE CAMPAIGN CHROME.
  *
  * The gear is part of the global chrome, so pressing it must not undress the
  * bar it sits on: the switcher, the nav trio, the search chip and the session
@@ -178,18 +170,18 @@ function useSettingsCampaign(isSettings: boolean): string {
 export function Topbar() {
   const t = useT();
   const { pathname } = useLocation();
-  const sceneMatch = matchPath("/:campaign/entry/*", pathname);
-  const liveMatch = matchPath("/:campaign/live", pathname);
-  const reviewMatch = matchPath("/:campaign/review", pathname);
-  const generateMatch = matchPath("/:campaign/generate", pathname);
-  const listMatch = matchPath("/:campaign/list/*", pathname);
-  // The two campaign-content pages (issue #53). They are NOT in the nav trio
+  const sceneMatch = matchPath("/campaigns/:campaign/entries/*", pathname);
+  const liveMatch = matchPath("/campaigns/:campaign/live", pathname);
+  const reviewMatch = matchPath("/campaigns/:campaign/review", pathname);
+  const generateMatch = matchPath("/campaigns/:campaign/generate", pathname);
+  const listMatch = matchPath("/campaigns/:campaign/list/*", pathname);
+  // The two campaign-content pages. They are NOT in the nav trio
   // and must not be (PO feedback on PR #87) — but the bar above them is still
   // this campaign's bar, so the campaign has to be derived here too. Without
   // them the topbar went blank on those pages: no switcher, no ⌘K, no gear.
-  const knowledgeMatch = matchPath("/:campaign/knowledge", pathname);
-  const glossaryMatch = matchPath("/:campaign/glossary", pathname);
-  const poolMatch = matchPath("/:campaign", pathname);
+  const knowledgeMatch = matchPath("/campaigns/:campaign/knowledge", pathname);
+  const glossaryMatch = matchPath("/campaigns/:campaign/glossary", pathname);
+  const poolMatch = matchPath("/campaigns/:campaign", pathname);
   const isSettings = matchPath("/settings", pathname) !== null;
   const settingsFrom = useSettingsCampaign(isSettings);
   const campaign =
@@ -205,10 +197,9 @@ export function Topbar() {
     "";
   const filePath = sceneMatch?.params["*"] ?? "";
   // These read their OWN match, not `campaign`: on `/settings` the campaign is
-  // resolved from `?from=` (see above), and `/:campaign` matches "/settings"
-  // itself — asking `campaign !== ""` would make the settings page the POOL of
-  // that campaign, marking "Kapitel" and hanging the pool's review and
-  // generator entries into the row.
+  // resolved from `?from=` (see above), so asking `campaign !== ""` would make
+  // the settings page the POOL of that campaign, marking "Kapitel" and hanging
+  // the pool's review and generator entries into the row.
   const isScene = campaignOf(sceneMatch) !== undefined && filePath !== "";
   const isLive = campaignOf(liveMatch) !== undefined;
   const isReview = campaignOf(reviewMatch) !== undefined;
@@ -301,17 +292,17 @@ export function Topbar() {
                 of contrast, not a hint. Generator and review belong to no
                 section and mark nothing. */}
             <TopbarNavLink
-              to={`/${campaign}`}
+              to={`/campaigns/${campaign}`}
               label={t("topbar.nav.chapters")}
               active={section === "chapters"}
             />
             <TopbarNavLink
-              to={`/${campaign}/list/npcs`}
+              to={`/campaigns/${campaign}/list/npcs`}
               label={t("topbar.nav.npcs")}
               active={section === "npcs"}
             />
             <TopbarNavLink
-              to={`/${campaign}/list/locations`}
+              to={`/campaigns/${campaign}/list/locations`}
               label={t("topbar.nav.locations")}
               active={section === "locations"}
             />
@@ -328,7 +319,7 @@ export function Topbar() {
               type="button"
               variant="outline"
               onClick={() => setSearchOpen(true)}
-              // THE elastic element of the topbar (issue #50): it wants
+              // THE elastic element of the topbar: it wants
               // 200px, gives way down to 3rem at medium widths and never
               // lets the row overflow — its label truncates on the way.
               // Below XL it goes ICON-ONLY (issue #69 CI finding): 1024px is
@@ -415,7 +406,7 @@ export function Topbar() {
  *
  * Every epoch reading comes from the SERVER (lib/session.ts): the format
  * is zone-less, so a browser in another timezone than the server used to show
- * a runtime that was hours off (issue #40). PAUSED time is deducted and the
+ * a runtime that was hours off. PAUSED time is deducted and the
  * clock STANDS while a pause runs (AK8) — the number on the chip is the time
  * played, which is what makes „Pause" mean something. An ENDED session freezes
  * at its `ended` (the chip is gone by then, but a cache race must not tick
@@ -518,12 +509,12 @@ function SessionDot({ paused = false }: { paused?: boolean }) {
  * it says and which colour it wears change:
  *
  *   start   — "Session starten". One click starts a NEW session and enters
- *             /live; there is no "fortsetzen" (issue #58).
+ *             /live; there is no "fortsetzen".
  *   running — dot + H:MM:SS. Off /live a click goes back into the session;
  *             ON /live it opens the session actions (Pause, beenden, and
  *             verwerfen while the session is still empty) — three separate
  *             topbar buttons before, which is what made the row overflow at
- *             medium widths (issue #50).
+ *             medium widths.
  *   error   — "Status unbekannt", dimmed and inert. Neither live nor an
  *             offer, and it no longer costs the row a second element.
  *
@@ -587,7 +578,7 @@ function SessionRunningChip({
   if (mode === "link") {
     return (
       <Link
-        to={`/${campaign}/live`}
+        to={`/campaigns/${campaign}/live`}
         aria-label={t("session.chip.link.aria", { label })}
         data-session-chip={paused ? "paused" : "running"}
         className={cn(
@@ -627,7 +618,7 @@ function SessionRunningChip({
 function SessionStartChip({ campaign }: { campaign: string }) {
   const t = useT();
   const navigate = useNavigate();
-  const toLive = () => void navigate(`/${campaign}/live`);
+  const toLive = () => void navigate(`/campaigns/${campaign}/live`);
   const { enter, entering, conflict, failed } = useSessionStartFlow(
     campaign,
     toLive,
@@ -693,7 +684,7 @@ function SessionMenuChip({
   const end = useSessionWrite(
     campaign,
     () => endSession(campaign),
-    () => void navigate(`/${campaign}/review`),
+    () => void navigate(`/campaigns/${campaign}/review`),
   );
   const busy = pause.isPending || end.isPending;
 
@@ -858,7 +849,7 @@ function DiscardSessionDialog({
   const navigate = useNavigate();
   const discard = useSessionDiscard(campaign, () => {
     onOpenChange(false);
-    void navigate(`/${campaign}`);
+    void navigate(`/campaigns/${campaign}`);
   });
 
   return (
@@ -908,7 +899,7 @@ function GeneratorLink({ campaign }: { campaign: string }) {
   const { data } = useGenerateJob(campaign);
   const running = data?.status === "running";
   // A run the DM already took PART of is not „done" and not „running" — it
-  // is half applied (issue #97), and the entry says how far it got so a
+  // is half applied, and the entry says how far it got so a
   // forgotten rest is findable from anywhere.
   // Counted against ALL parts of the run (issue #102 review): while a
   // pipelined run is still going, only the finished parts have produced a
@@ -916,13 +907,13 @@ function GeneratorLink({ campaign }: { campaign: string }) {
   const progress = acceptProgress(data);
   const partial = progress.written > 0 && progress.written < progress.total;
   const progressLabel = t("topbar.generator.progress", progress);
-  // A PIPELINED run (issue #102) is both at once: parts are still going while
+  // A PIPELINED run is both at once: parts are still going while
   // finished ones are already reviewable and acceptable. So the dot and the
   // progress are no longer exclusive — the chip shows what is true.
   const runProgress = pipelineProgress(data, t);
   return (
     <Link
-      to={`/${campaign}/generate`}
+      to={`/campaigns/${campaign}/generate`}
       title={
         running
           ? (runProgress ?? t("topbar.generator.running"))
@@ -979,14 +970,13 @@ function GeneratorLink({ campaign }: { campaign: string }) {
 }
 
 /**
- * The gear: `/settings` (issue #69). Icon-only and always present — the
+ * The gear: `/settings`. Icon-only and always present — the
  * language lives behind it, and on a fresh instance (no campaign, no
  * switcher) it is the only settings entry there is. Same geometry as the
- * generator entry minus its label, so the row's width does not depend on it
- * (issue #50).
+ * generator entry minus its label, so the row's width does not depend on it.
  *
  * WHICH CAMPAIGN the page shows its campaign half for travels ALONG, in
- * `?from=` (issue #69, PO feedback on PR #83): the campaign the DM was looking
+ * `?from=`: the campaign the DM was looking
  * at when they reached for the gear. `/settings` itself stays campaign-
  * independent — it has to work on a fresh instance — and without a campaign in
  * the URL the link carries nothing, so the page falls back to the same
@@ -1067,7 +1057,7 @@ function PoolReviewLink({ campaign }: { campaign: string }) {
   const label = t("topbar.review.pending", { count: review.pendingCount });
   return (
     <Link
-      to={`/${campaign}/review`}
+      to={`/campaigns/${campaign}/review`}
       aria-label={label}
       className="flex-none rounded-md px-1.5 py-1 text-[13px] text-body-secondary hover:text-foreground"
     >
@@ -1116,7 +1106,7 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
           // carry (the pool's Generator link used to make the name shorter
           // there than on a list — the chrome has to be identical on every
           // route). A very long name truncates at max-w-[280px] with an
-          // ellipsis instead of pushing the row over (issue #50); the elastic
+          // ellipsis instead of pushing the row over; the elastic
           // element of the row is the search chip below.
           "h-auto min-w-0 flex-none gap-[7px] rounded-md border border-transparent px-2.5 py-[5px] text-[13px] font-normal text-body-secondary hover:border-input hover:bg-transparent hover:text-foreground",
         )}
@@ -1156,7 +1146,7 @@ function CampaignSwitcher({ campaign }: { campaign: string }) {
         {(data ?? []).map((c) => (
           <DropdownMenuItem
             key={c.id}
-            onSelect={() => void navigate(`/${c.id}`)}
+            onSelect={() => void navigate(`/campaigns/${c.id}`)}
           >
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[13.5px] text-foreground">

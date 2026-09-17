@@ -1,4 +1,4 @@
-// The „… anlegen" entry points (issue #56) — trigger plus wiring around the
+// The „… anlegen" entry points — trigger plus wiring around the
 // shared CreateDialog.
 //
 // The CAMPAIGN has two surfaces and both run through `useCampaignCreate` here,
@@ -21,7 +21,7 @@
 //   Szene     inside a chapter accordion, so the chapter is prefilled BY
 //             POSITION and the dialog needs no chapter picker at all.
 //   NPC/Ort   the head of their list pages — the only surfaces that show all
-//             of them, and the ones a phone can reach (issue #11).
+//             of them, and the ones a phone can reach.
 //
 // WHAT HAPPENS AFTER a successful create differs per kind, and that is the
 // point of having four wrappers rather than one:
@@ -30,7 +30,7 @@
 //     and nothing else is an invitation to write, and the composer is that
 //     invitation. Nobody creates a scene in order to look at its empty body.
 //   an NPC/ORT opens its reading view, where „Eigenschaften" carries the rest
-//     of the fields (issue #42) — the dialog deliberately asks for a name only.
+//     of the fields — the dialog deliberately asks for a name only.
 //   a CHAPTER stays where it is: the pool now lists it, with its own
 //     „Szene anlegen" underneath, which is the actual next step.
 //
@@ -89,7 +89,7 @@ export function useCampaignCreate({ replace = false }: { replace?: boolean } = {
   return async (input: CampaignCreateInput) => {
     const campaign = await createCampaign(input);
     await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
-    await navigate(`/${campaign.id}`, { replace });
+    await navigate(`/campaigns/${campaign.id}`, { replace });
     return campaign;
   };
 }
@@ -241,7 +241,7 @@ export function SceneCreateAction({
             await afterCreate();
             setOpen(false);
             // Straight into the composer — an empty scene is there to be written.
-            await navigate(`/${campaign}/entry/${created.path}?edit=1`);
+            await navigate(`/campaigns/${campaign}/entries/${created.path}?edit=1`);
           }}
           onClose={() => setOpen(false)}
         />
@@ -278,7 +278,7 @@ export function NpcCreateAction({ campaign }: { campaign: string }) {
             });
             await afterCreate();
             setOpen(false);
-            await navigate(`/${campaign}/entry/${created.path}`);
+            await navigate(`/campaigns/${campaign}/entries/${created.path}`);
           }}
           onClose={() => setOpen(false)}
         />
@@ -315,7 +315,7 @@ export function LocationCreateAction({ campaign }: { campaign: string }) {
             });
             await afterCreate();
             setOpen(false);
-            await navigate(`/${campaign}/entry/${created.path}`);
+            await navigate(`/campaigns/${campaign}/entries/${created.path}`);
           }}
           onClose={() => setOpen(false)}
         />

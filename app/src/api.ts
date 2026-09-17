@@ -92,13 +92,22 @@ export async function putSettings(patch: InstanceSettings): Promise<InstanceSett
 }
 
 export function fetchTree(campaign: string): Promise<CampaignTree> {
-  return getJson<CampaignTree>(`/${encodeURIComponent(campaign)}/tree`);
+  return getJson<CampaignTree>(`/campaigns/${encodeURIComponent(campaign)}/tree`);
 }
 
 export function fetchEntry(campaign: string, path: string): Promise<EntryResponse> {
-  return getJson<EntryResponse>(
-    `/${encodeURIComponent(campaign)}/entry?path=${encodeURIComponent(path)}`,
-  );
+  return getJson<EntryResponse>(entriesUrl(campaign, path));
+}
+
+/**
+ * The request path of one entry: the address is the URL path, one encoded
+ * segment per address segment (`server/src/store/paths.ts` spells the
+ * schema). Encoding per segment, not of the whole address — the separators
+ * have to survive.
+ */
+function entriesUrl(campaign: string, path: string): string {
+  const address = path.split("/").map(encodeURIComponent).join("/");
+  return `/campaigns/${encodeURIComponent(campaign)}/entries/${address}`;
 }
 
 /**
@@ -107,7 +116,7 @@ export function fetchEntry(campaign: string, path: string): Promise<EntryRespons
  */
 export function fetchSearch(campaign: string, q: string): Promise<SearchResponse> {
   return getJson<SearchResponse>(
-    `/${encodeURIComponent(campaign)}/search?q=${encodeURIComponent(q)}`,
+    `/campaigns/${encodeURIComponent(campaign)}/search?q=${encodeURIComponent(q)}`,
   );
 }
 
@@ -126,7 +135,7 @@ export interface VersionResponse {
 }
 
 export function fetchVersion(campaign: string): Promise<VersionResponse> {
-  return getJson<VersionResponse>(`/${encodeURIComponent(campaign)}/version`);
+  return getJson<VersionResponse>(`/campaigns/${encodeURIComponent(campaign)}/version`);
 }
 
 /**
@@ -136,7 +145,7 @@ export function fetchVersion(campaign: string): Promise<VersionResponse> {
  * but anything that wants the terms themselves reads this.
  */
 export function fetchGlossary(campaign: string): Promise<GlossaryResponse> {
-  return getJson<GlossaryResponse>(`/${encodeURIComponent(campaign)}/glossary`);
+  return getJson<GlossaryResponse>(`/campaigns/${encodeURIComponent(campaign)}/glossary`);
 }
 
 /**
@@ -150,7 +159,7 @@ export function putGlossary(
   entries: GlossaryEntry[],
   rev: number,
 ): Promise<GlossaryResponse> {
-  return putJson<GlossaryResponse>(`/${encodeURIComponent(campaign)}/glossary`, {
+  return putJson<GlossaryResponse>(`/campaigns/${encodeURIComponent(campaign)}/glossary`, {
     entries,
     rev,
   });
@@ -162,7 +171,7 @@ export function putGlossary(
  * glossary, on purpose: the DM edits both on the same page.
  */
 export function fetchKnowledge(campaign: string): Promise<KnowledgeResponse> {
-  return getJson<KnowledgeResponse>(`/${encodeURIComponent(campaign)}/knowledge`);
+  return getJson<KnowledgeResponse>(`/campaigns/${encodeURIComponent(campaign)}/knowledge`);
 }
 
 /** Replace the whole knowledge list; see putGlossary for the `rev` rule. */
@@ -171,7 +180,7 @@ export function putKnowledge(
   entries: KnowledgeEntry[],
   rev: number,
 ): Promise<KnowledgeResponse> {
-  return putJson<KnowledgeResponse>(`/${encodeURIComponent(campaign)}/knowledge`, {
+  return putJson<KnowledgeResponse>(`/campaigns/${encodeURIComponent(campaign)}/knowledge`, {
     entries,
     rev,
   });
@@ -199,7 +208,7 @@ export async function patchProperties(
     patch: Record<string, unknown>;
   },
 ): Promise<EntryResponse> {
-  const path = `/${encodeURIComponent(campaign)}/properties`;
+  const path = `/campaigns/${encodeURIComponent(campaign)}/properties`;
   const response = await fetch(`/api${path}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
@@ -211,7 +220,7 @@ export async function patchProperties(
 
 /**
  * Replace the markdown BODY of one entry, properties untouched (the
- * reading view's edit mode). `body` is what GET /entry hands out: the file
+ * reading view's edit mode). `body` is what GET /entries hands out: the entry
  * without its properties block. `rev` is the same optimistic-concurrency
  * token as above and must come from the EntryResponse the editor was seeded
  * from — on a mismatch the server answers 409 with the current `rev` in
@@ -223,11 +232,11 @@ export async function putEntryBody(
   body: string,
   rev: number,
 ): Promise<EntryResponse> {
-  const url = `/${encodeURIComponent(campaign)}/entry`;
+  const url = entriesUrl(campaign, path);
   const response = await fetch(`/api${url}`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path, rev, body }),
+    body: JSON.stringify({ rev, body }),
   });
   if (!response.ok) throw await failure(`PUT /api${url}`, response);
   return (await response.json()) as EntryResponse;
@@ -272,7 +281,7 @@ async function fetchSession(
   campaign: string,
   includeEnded: boolean,
 ): Promise<EntryResponse | null> {
-  const path = `/${encodeURIComponent(campaign)}/session${includeEnded ? "?includeEnded=1" : ""}`;
+  const path = `/campaigns/${encodeURIComponent(campaign)}/session${includeEnded ? "?includeEnded=1" : ""}`;
   const response = await fetch(`/api${path}`);
   if (response.status === 404) return null;
   if (!response.ok) throw await failure(`GET /api${path}`, response);
@@ -287,12 +296,12 @@ async function fetchSession(
  * sessionStartConflict).
  */
 export function startSession(campaign: string): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/session/start`);
+  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/session/start`);
 }
 
 /** Set `ended` in the ACTIVE session (404 when there is none). */
 export function endSession(campaign: string): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/session/end`);
+  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/session/end`);
 }
 
 /**
@@ -301,7 +310,7 @@ export function endSession(campaign: string): Promise<EntryResponse> {
  * Idempotent; 404 when no session is running.
  */
 export function pauseSession(campaign: string): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/session/pause`);
+  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/session/pause`);
 }
 
 /**
@@ -309,7 +318,7 @@ export function pauseSession(campaign: string): Promise<EntryResponse> {
  * PAUSE; an ENDED session is never re-opened.
  */
 export function continueSession(campaign: string): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/session/continue`);
+  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/session/continue`);
 }
 
 /**
@@ -319,7 +328,7 @@ export function continueSession(campaign: string): Promise<EntryResponse> {
  * nothing is running. Returns the path of the entry that is gone.
  */
 export function discardSession(campaign: string): Promise<{ path: string }> {
-  return postJson<{ path: string }>(`/${encodeURIComponent(campaign)}/session/discard`);
+  return postJson<{ path: string }>(`/campaigns/${encodeURIComponent(campaign)}/session/discard`);
 }
 
 /**
@@ -327,7 +336,7 @@ export function discardSession(campaign: string): Promise<{ path: string }> {
  * the server creates the session on the first log entry.
  */
 export function appendInbox(campaign: string, text: string): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/inbox`, { text });
+  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/inbox`, { text });
 }
 
 /**
@@ -341,7 +350,7 @@ export function appendLog(
   sceneId?: string,
 ): Promise<EntryResponse> {
   return postJson<EntryResponse>(
-    `/${encodeURIComponent(campaign)}/log`,
+    `/campaigns/${encodeURIComponent(campaign)}/log`,
     sceneId === undefined ? { text } : { text, sceneId },
   );
 }
@@ -357,7 +366,7 @@ export function markLogLineSeen(
   path: string,
   line: string,
 ): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/review/seen`, { path, line });
+  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/review/seen`, { path, line });
 }
 
 /**
@@ -369,7 +378,7 @@ export function adoptThread(
   chapter: string,
   text: string,
 ): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/review/thread`, {
+  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/review/thread`, {
     chapter,
     text,
   });
@@ -387,7 +396,7 @@ export function ensureNpc(
   name?: string,
   note?: string,
 ): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/review/npc-stub`, {
+  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/review/npc-stub`, {
     id,
     ...(name === undefined ? {} : { name }),
     ...(note === undefined ? {} : { note }),
@@ -400,7 +409,7 @@ export function ensureNpc(
  * Returns inbox.
  */
 export function markInboxLineDone(campaign: string, line: string): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/review/inbox-done`, { line });
+  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/review/inbox-done`, { line });
 }
 
 // --- creating content --------------------------------------------------------
@@ -439,7 +448,7 @@ export function createCampaign(input: {
  */
 export function setChapterActive(campaign: string, chapter: string): Promise<EntryResponse> {
   return postJson<EntryResponse>(
-    `/${encodeURIComponent(campaign)}/chapters/${encodeURIComponent(chapter)}/active`,
+    `/campaigns/${encodeURIComponent(campaign)}/chapters/${encodeURIComponent(chapter)}/active`,
   );
 }
 
@@ -448,7 +457,7 @@ export function createChapter(
   campaign: string,
   input: { title: string; goal?: string; id?: string },
 ): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/chapters`, {
+  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/chapters`, {
     title: input.title,
     ...(input.goal === undefined ? {} : { goal: input.goal }),
     ...(input.id === undefined ? {} : { id: input.id }),
@@ -460,7 +469,7 @@ export function createScene(
   campaign: string,
   input: { title: string; chapter: string; id?: string },
 ): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/scenes`, {
+  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/scenes`, {
     title: input.title,
     chapter: input.chapter,
     ...(input.id === undefined ? {} : { id: input.id }),
@@ -472,7 +481,7 @@ export function createNpc(
   campaign: string,
   input: { name: string; id?: string },
 ): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/npcs`, {
+  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/npcs`, {
     name: input.name,
     ...(input.id === undefined ? {} : { id: input.id }),
   });
@@ -483,7 +492,7 @@ export function createLocation(
   campaign: string,
   input: { name: string; id?: string },
 ): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/locations`, {
+  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/locations`, {
     name: input.name,
     ...(input.id === undefined ? {} : { id: input.id }),
   });
@@ -517,7 +526,7 @@ export async function startGenerateJob(
   campaign: string,
   input: { chapter: string; sourceText: string; newChapter?: boolean; chapterTitle?: string },
 ): Promise<GenerateJobStarted> {
-  const path = `/${encodeURIComponent(campaign)}/generate`;
+  const path = `/campaigns/${encodeURIComponent(campaign)}/generate`;
   const response = await fetch(`/api${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -555,7 +564,7 @@ export async function startGenerateNpcJob(
   campaign: string,
   input: { sourceText: string; id?: string },
 ): Promise<GenerateJobStarted> {
-  const path = `/${encodeURIComponent(campaign)}/generate/npc`;
+  const path = `/campaigns/${encodeURIComponent(campaign)}/generate/npc`;
   const response = await fetch(`/api${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -590,7 +599,7 @@ export async function startAugmentJob(
   campaign: string,
   input: { path: string; sourceText?: string; instruction?: string },
 ): Promise<GenerateJobStarted> {
-  const path = `/${encodeURIComponent(campaign)}/generate/augment`;
+  const path = `/campaigns/${encodeURIComponent(campaign)}/generate/augment`;
   const response = await fetch(`/api${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -631,7 +640,7 @@ export function applyAugment(
     jobId?: string;
   },
 ): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/${encodeURIComponent(campaign)}/generate/augment/apply`, {
+  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/generate/augment/apply`, {
     path: input.path,
     rev: input.rev,
     ...(input.properties === undefined ? {} : { properties: input.properties }),
@@ -649,7 +658,7 @@ export function applyAugment(
  * as `failed` with a message saying so.
  */
 export async function fetchGenerateJob(campaign: string): Promise<GenerateJob | null> {
-  const path = `/${encodeURIComponent(campaign)}/generate/job`;
+  const path = `/campaigns/${encodeURIComponent(campaign)}/generate/job`;
   const response = await fetch(`/api${path}`);
   if (response.status === 404) return null;
   if (!response.ok) throw await failure(`GET /api${path}`, response);
@@ -658,7 +667,7 @@ export async function fetchGenerateJob(campaign: string): Promise<GenerateJob | 
 
 /** Discard the campaign's generate job ("Verwerfen"). A missing job is fine. */
 export async function deleteGenerateJob(campaign: string): Promise<void> {
-  const path = `/${encodeURIComponent(campaign)}/generate/job`;
+  const path = `/campaigns/${encodeURIComponent(campaign)}/generate/job`;
   const response = await fetch(`/api${path}`, { method: "DELETE" });
   if (!response.ok && response.status !== 404) {
     throw await failure(`DELETE /api${path}`, response);
@@ -687,7 +696,7 @@ export async function patchJobReview(
     blocks?: Record<string, boolean | null>;
   },
 ): Promise<GenerateJob> {
-  const path = `/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}/review`;
+  const path = `/campaigns/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}/review`;
   const response = await fetch(`/api${path}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
@@ -713,7 +722,7 @@ export function acceptJobParts(
   rev: number,
   input: { paths?: string[]; chapter?: string; chapterTitle?: string } = {},
 ): Promise<{ written: Record<string, string>; jobDeleted: boolean }> {
-  const path = `/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}/accept`;
+  const path = `/campaigns/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}/accept`;
   return postJson<{ written: Record<string, string>; jobDeleted: boolean }>(path, {
     rev,
     ...(input.paths === undefined ? {} : { paths: input.paths }),
@@ -735,7 +744,7 @@ export function retryJobPart(
   key: string,
 ): Promise<GenerateJob> {
   const path =
-    `/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}` +
+    `/campaigns/${encodeURIComponent(campaign)}/generate/job/${encodeURIComponent(jobId)}` +
     `/parts/${encodeURIComponent(key)}/retry`;
   return postJson<GenerateJob>(path, {});
 }
@@ -760,7 +769,7 @@ export function applyDrafts(
     jobId?: string;
   },
 ): Promise<{ written: string[] }> {
-  return postJson<{ written: string[] }>(`/${encodeURIComponent(campaign)}/generate/apply`, {
+  return postJson<{ written: string[] }>(`/campaigns/${encodeURIComponent(campaign)}/generate/apply`, {
     scenes: input.scenes,
     stubs: input.stubs,
     ...(input.chapter === undefined || input.chapterTitle === undefined
@@ -780,7 +789,7 @@ export function applyNpcDraft(
   campaign: string,
   input: { npc: { path: string; markdown: string }; jobId?: string },
 ): Promise<{ written: string[] }> {
-  return postJson<{ written: string[] }>(`/${encodeURIComponent(campaign)}/generate/apply`, {
+  return postJson<{ written: string[] }>(`/campaigns/${encodeURIComponent(campaign)}/generate/apply`, {
     npc: input.npc,
     ...(input.jobId === undefined ? {} : { jobId: input.jobId }),
   });

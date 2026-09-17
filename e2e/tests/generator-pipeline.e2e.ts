@@ -32,7 +32,7 @@ const SOURCE = `The party watches the quay at low tide. Two lanterns move along 
 mole while Fenn's crew shifts a cargo before dawn. At dawn the characters slip
 away through the mudflats.`;
 
-/** The review's address of one part — `<chapter>/<id>` (issue #100). */
+/** The review's address of one part — `<chapter>/<id>`. */
 const draftPath = (id: string) => `${CHAPTER}/${id}`;
 
 /**
@@ -50,7 +50,7 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   page,
   api,
 }, testInfo) => {
-  await page.goto(`/beispiel/generate`);
+  await page.goto(`/campaigns/beispiel/generate`);
   await page.getByLabel("Quelltext (EN)").fill(threeSceneSource(`w${testInfo.workerIndex}a`));
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
 
@@ -83,7 +83,7 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
   await expect(page.getByRole("link", { name: draftPath(firstId) })).toBeVisible();
   expect(await api.exists(draftPath(firstId))).toBe(true);
   // The job is still there — the failed part is not settled.
-  expect((await api.fetch("beispiel/generate/job")).status).toBe(200);
+  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(200);
 
   // --- (3) „Erneut versuchen“ restarts THAT part only ---------------------
   await failedCard.getByRole("button", { name: "Erneut versuchen" }).click();
@@ -115,14 +115,14 @@ test("three scenes, one fails: the other two are reviewable, the retry fixes it"
     expect(stored.title).toBe(scene.title);
     expect(stored.status).toBe("draft");
   }
-  expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
+  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
 });
 
 test("a finished part is acceptable while the run is still running (AK2)", async ({
   page,
   api,
 }) => {
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   // The LAST scene's reply is held, so the run is genuinely `running` while
   // the DM accepts one of the two that answered — which is the claim: „was
   // hier steht, kannst du schon übernehmen", not „warte, bis alles da ist".
@@ -136,7 +136,7 @@ test("a finished part is acceptable while the run is still running (AK2)", async
   await expect(page.getByText("Der Lauf ist noch nicht fertig", { exact: false })).toBeVisible();
 
   const firstId = THREE_SCENES[0].id;
-  const before = (await api.fetch("beispiel/generate/job").then((r) => r.json())) as {
+  const before = (await api.fetch("campaigns/beispiel/generate/job").then((r) => r.json())) as {
     status: string;
   };
   expect(before.status).toBe("running");
@@ -153,7 +153,7 @@ test("a finished part is acceptable while the run is still running (AK2)", async
 
   // …and the run is STILL running: accepting a part does not end it, and the
   // open rest keeps the job alive.
-  const after = (await api.fetch("beispiel/generate/job").then((r) => r.json())) as {
+  const after = (await api.fetch("campaigns/beispiel/generate/job").then((r) => r.json())) as {
     status: string;
     pipeline?: { parts: Array<{ status: string }> };
   };
@@ -173,7 +173,7 @@ test("the review replaces the spinner on a POLL, without a reload", async ({
   // rendered, so no test ever watched the spinner turn into it. With late
   // parts the browser really sees „Entwürfe werden generiert …" first and the
   // switch has to happen on a polled job — never on a reload.
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await page
     .getByLabel("Quelltext (EN)")
     .fill([SOURCE, TRIGGER.threeScenes, TRIGGER.latePart, TRIGGER.slowPart].join("\n\n"));
@@ -182,7 +182,7 @@ test("the review replaces the spinner on a POLL, without a reload", async ({
   // The spinner first — with nothing to review, that is the honest state.
   await expect(page.getByText("Entwürfe werden generiert", { exact: false })).toBeVisible();
   // …and the run is genuinely `running` while it stands there.
-  const during = (await api.fetch("beispiel/generate/job").then((r) => r.json())) as {
+  const during = (await api.fetch("campaigns/beispiel/generate/job").then((r) => r.json())) as {
     status: string;
   };
   expect(during.status).toBe("running");
@@ -196,7 +196,7 @@ test("the review replaces the spinner on a POLL, without a reload", async ({
   await expect(page.getByText("Entwürfe werden generiert", { exact: false })).toBeHidden();
   // And the run is STILL going while the review stands there: the switch was
   // made by a poll of a `running` job, not by its end.
-  const shown = (await api.fetch("beispiel/generate/job").then((r) => r.json())) as {
+  const shown = (await api.fetch("campaigns/beispiel/generate/job").then((r) => r.json())) as {
     status: string;
   };
   expect(shown.status).toBe("running");
@@ -214,7 +214,7 @@ test("a FAILED part alone is already the review (no empty page)", async ({
   // are still late, the failed one is the only thing there is — and it is
   // something the DM can act on. Gating the review on a RESULT rendered this
   // state as an empty page that only appeared on a reload.
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   await page
     .getByLabel("Quelltext (EN)")
     .fill(threeSceneSource(`w${testInfo.workerIndex}d`, TRIGGER.latePart));
@@ -232,7 +232,7 @@ test("a FAILED part alone is already the review (no empty page)", async ({
   // The pin of the claim: at this moment NO part has produced a draft yet —
   // the review is on the screen because a part FAILED, not because one
   // succeeded. (Waiting for the late parts first would pass either way.)
-  const early = (await api.fetch("beispiel/generate/job").then((r) => r.json())) as {
+  const early = (await api.fetch("campaigns/beispiel/generate/job").then((r) => r.json())) as {
     status: string;
     result?: { scenes: unknown[] };
     pipeline: { parts: Array<{ status: string }> };
@@ -254,7 +254,7 @@ test("a FAILED part alone is already the review (no empty page)", async ({
 });
 
 test("„Verwerfen\" during a run stops the open parts", async ({ page, api }, testInfo) => {
-  await page.goto("/beispiel/generate");
+  await page.goto("/campaigns/beispiel/generate");
   // The last scene's reply is HELD, so the run is genuinely still going while
   // the DM is already looking at the two that answered.
   await page
@@ -271,7 +271,7 @@ test("„Verwerfen\" during a run stops the open parts", async ({ page, api }, t
 
   await page.getByRole("button", { name: /^(Verwerfen|Rest verwerfen)$/ }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Szenen generieren");
-  expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
+  expect((await api.fetch("campaigns/beispiel/generate/job")).status).toBe(404);
   // Nothing of the abandoned run lands afterwards.
   for (const scene of THREE_SCENES) {
     expect(await api.exists(draftPath(scene.id))).toBe(false);
@@ -282,7 +282,7 @@ test("„Verwerfen\" during a run stops the open parts", async ({ page, api }, t
 
 /** GET …/generate/job — null on the 404 "there is none". */
 async function job(api: Api): Promise<Record<string, unknown> | null> {
-  const res = await api.fetch("beispiel/generate/job");
+  const res = await api.fetch("campaigns/beispiel/generate/job");
   if (res.status === 404) return null;
   expect(res.status).toBe(200);
   return (await res.json()) as Record<string, unknown>;
@@ -316,7 +316,7 @@ test("a restart mid-run keeps the finished parts and fails the one in flight", a
   let jobId: string;
   try {
     const api = apiFor(first.handle.url);
-    const started = await api.send<{ jobId: string }>("POST", "beispiel/generate", {
+    const started = await api.send<{ jobId: string }>("POST", "campaigns/beispiel/generate", {
       chapter: CHAPTER,
       // No failure trigger here: every part is well-formed, and only the LAST
       // one's reply is held — the shape a restart has to survive.
@@ -363,7 +363,7 @@ test("a restart mid-run keeps the finished parts and fails the one in flight", a
     // it in the first place.)
     const retried = await api.send<Record<string, unknown>>(
       "POST",
-      `beispiel/generate/job/${jobId}/parts/${parts(after)[2]!.key}/retry`,
+      `campaigns/beispiel/generate/job/${jobId}/parts/${parts(after)[2]!.key}/retry`,
       {},
     );
     expect(retried.status).toBe("running");

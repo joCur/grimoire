@@ -1,4 +1,4 @@
-// Pure mapping logic for the ⌘K palette (issue #7): kind → German label,
+// Pure mapping logic for the ⌘K palette: kind → German label,
 // kind → lucide icon (contingency scenes get the fork, like the pool view),
 // result → route. Kept out of the component for unit tests.
 
@@ -68,12 +68,12 @@ export function contingencyPaths(tree: CampaignTree | undefined): Set<string> {
 
 /**
  * Route for a picked result. Every kind opens as an entry view
- * (/:campaign/entry/<path>) — except the campaign itself, whose "view" is the
- * pool. Path segments are encoded individually so umlauts/spaces in filenames
+ * (/campaigns/:campaign/entries/<path>) — except the campaign itself, whose "view" is the
+ * pool. Path segments are encoded individually so umlauts and spaces in an address
  * survive, but the slashes stay routable.
  */
 export function resultHref(campaign: string, result: Pick<SearchResult, "kind" | "path">): string {
-  if (result.kind === "campaign") return `/${encodeURIComponent(campaign)}`;
+  if (result.kind === "campaign") return `/campaigns/${encodeURIComponent(campaign)}`;
   const encodedPath = result.path.split("/").map(encodeURIComponent).join("/");
-  return `/${encodeURIComponent(campaign)}/entry/${encodedPath}`;
+  return `/campaigns/${encodeURIComponent(campaign)}/entries/${encodedPath}`;
 }

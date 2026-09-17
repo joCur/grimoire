@@ -31,7 +31,7 @@ import type { Page } from "@playwright/test";
 import { expect, test, type Api } from "../support/test";
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
-const SCENE_URL = `/beispiel/entry/${SCENE}`;
+const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
 const NPC = "npcs/jorna";
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 /** aria-label of the raw-markdown textarea (EntryBodyEditor). */
@@ -118,7 +118,7 @@ test("a mention in the text stays text — no entry, no error", async ({ page, a
   const mention = "Sie spricht von [[niemand]] und meint es ernst.";
   const relation = "- holm: schuldet ihr noch Hafengeld";
 
-  await page.goto(`/beispiel/entry/${NPC}`);
+  await page.goto(`/campaigns/beispiel/entries/${NPC}`);
   await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await textarea.fill(`${before.body}\n${mention}\n\n## Beziehungen\n\n${relation}\n`);
@@ -148,13 +148,13 @@ test("a scene that MOVED is still editable under its old address", async ({
   // land on the scene, replace the URL with the one it has now, and save
   // through it like any other edit.
   // The Ort has to exist before a scene can name it (ADR #19).
-  await api.send("POST", "beispiel/locations", { name: "Nordbucht" });
+  await api.send("POST", "campaigns/beispiel/locations", { name: "Nordbucht" });
   await api.patchProperties(SCENE, { location: "nordbucht" });
   const moved = "01-salzhafen/nordbucht/lighthouse-arrival";
 
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
-  await expect(page).toHaveURL(new RegExp(`/beispiel/entry/${moved}$`));
+  await expect(page).toHaveURL(new RegExp(`/campaigns/beispiel/entries/${moved}$`));
 
   const before = await split(api, moved);
   const added = "Der Weg zur Nordbucht ist bei Ebbe trocken.";
@@ -338,12 +338,16 @@ test("a failing background refetch leaves the open editor standing", async ({ pa
   await expect(textarea).toHaveValue(before.body);
   await textarea.fill(draft);
 
-  // Every further READ of this file fails — a restarted server, a network
-  // blip. The write endpoint (PUT, no query string) stays reachable.
-  // Counted per file: the NPC card of this scene reads through the same
+  // Every further READ of this entry fails — a restarted server, a network
+  // blip. Only GET is blocked, so the write endpoint stays reachable.
+  // Counted per entry: the NPC card of this scene reads through the same
   // endpoint, and its failures say nothing about the scene's query.
   let aborted = 0;
-  await page.route("**/api/beispiel/entry?**", (route) => {
+  await page.route("**/api/campaigns/beispiel/entries/**", (route) => {
+    if (route.request().method() !== "GET") {
+      void route.fallback();
+      return;
+    }
     if (route.request().url().includes("lighthouse-arrival")) aborted++;
     void route.abort();
   });
@@ -404,7 +408,7 @@ test("the NPC reading view edits its body the same way", async ({ page, api }) =
   const before = await split(api, NPC);
   const added = "- metta: schuldet Jorna einen Gefallen aus dem letzten Herbst";
 
-  await page.goto(`/beispiel/entry/${NPC}`);
+  await page.goto(`/campaigns/beispiel/entries/${NPC}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
 
   await openMarkdownEditor(page);
@@ -426,7 +430,7 @@ test("the NPC reading view edits its body the same way", async ({ page, api }) =
 test("location and chapter offer the editor, session and inbox do not", async ({ page, api }) => {
   // The kinds whose prose the DM maintains offer the body editor …
   for (const rel of ["locations/leuchtturm", "01-salzhafen"]) {
-    await page.goto(`/beispiel/entry/${rel}`);
+    await page.goto(`/campaigns/beispiel/entries/${rel}`);
     await openMarkdownEditor(page);
     await expect(page.getByRole("textbox", { name: TEXTAREA })).toBeVisible();
     // Clean exit — no dialog, nothing written.
@@ -436,7 +440,7 @@ test("location and chapter offer the editor, session and inbox do not", async ({
 
   // … the append-only logs do not: a free-hand rewrite of a log is not a
   // maintenance action (ADR #4).
-  await page.goto("/beispiel/entry/sessions/2026-01-15");
+  await page.goto("/campaigns/beispiel/entries/sessions/2026-01-15");
   await expect(page.getByRole("article")).toContainText("Spuren gefunden");
   // A session's heading is its DATE, derived from `started` — the id is opaque
   // and is never shown. (This fixture still carries the old date-shaped id,
@@ -446,7 +450,7 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   );
   await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
 
-  await page.goto("/beispiel/entry/inbox");
+  await page.goto("/campaigns/beispiel/entries/inbox");
   await expect(page.getByRole("article")).toContainText("Der Dorfschmied repariert");
   await expect(page.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
 
@@ -454,16 +458,17 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   // hand-made PUT on an append-only file is refused, nothing is written.
   for (const rel of ["sessions/2026-01-15", "inbox"]) {
     const before = await split(api, rel);
-    const res = await page.request.put("/api/beispiel/entry", {
-      data: { path: rel, rev: Date.now(), body: "\nAlles neu.\n" },
-    });
+    const res = await page.request.put(
+      `/api/campaigns/beispiel/entries/${rel.split("/").map(encodeURIComponent).join("/")}`,
+      { data: { rev: Date.now(), body: "\nAlles neu.\n" } },
+    );
     expect(res.status()).toBe(400);
     expect(await split(api, rel)).toEqual(before);
   }
 });
 
 test("campaign keeps its ONE Bearbeiten — the metadata dialog", async ({ page }) => {
-  await page.goto("/beispiel/entry/campaign");
+  await page.goto("/campaigns/beispiel/entries/campaign");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
@@ -483,7 +488,7 @@ test("the glossary stays saveable while a session writes next to it", async ({ p
   // write bumps. A quick note during a running session therefore answered the
   // DM's open glossary edit with „Inzwischen geändert" — un-saveable exactly
   // while the campaign is in use. Each document carries its own token now.
-  await page.goto("/beispiel/entry/glossary");
+  await page.goto("/campaigns/beispiel/entries/glossary");
   await expect(page.getByRole("article")).toContainText("Leuchtturmwärter");
 
   await openMarkdownEditor(page);
@@ -491,8 +496,8 @@ test("the glossary stays saveable while a session writes next to it", async ({ p
   await expect(textarea).toBeVisible();
 
   // Something unrelated happens in the campaign while the editor stands open.
-  await api.send("POST", "beispiel/session/start");
-  await api.send("POST", "beispiel/log", { text: "Die Gruppe betritt den Turm" });
+  await api.send("POST", "campaigns/beispiel/session/start");
+  await api.send("POST", "campaigns/beispiel/log", { text: "Die Gruppe betritt den Turm" });
 
   const added = "- tide pool → Gezeitentümpel";
   await textarea.fill(`${await textarea.inputValue()}${added}\n`);
@@ -506,7 +511,7 @@ test("the glossary stays saveable while a session writes next to it", async ({ p
   await expect(page.getByRole("article")).toContainText("Gezeitentümpel");
   await expect.poll(() => api.body("glossary")).toContain(added);
   // The structured endpoint agrees — the body was decomposed into rows.
-  const glossary = await api.get<{ entries: Array<{ term: string }> }>("beispiel/glossary");
+  const glossary = await api.get<{ entries: Array<{ term: string }> }>("campaigns/beispiel/glossary");
   expect(glossary.entries.map((e) => e.term)).toContain("tide pool");
 
   // A REAL second writer still conflicts — the token did not become toothless.

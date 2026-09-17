@@ -51,32 +51,34 @@
 //                                              `null` deletes the row; anything but de/en/
 //                                              null is 400. NOT localStorage — the language
 //                                              is server state (quality floor)
-//   [x] POST /api/:campaign/chapters         { title, goal? } -> 201 the chapter entry.
+//   [x] POST /api/campaigns/:campaign/chapters         { title, goal? } -> 201 the chapter entry.
 //                                              Same id derivation and same 400/409 as above;
 //                                              `goal` lands under `## Ziel des Kapitels`, the
 //                                              heading the pool reads its goal line from
-//   [x] POST /api/:campaign/chapters/:id/active -> that chapter's entry. „Aktiv" in the
+//   [x] POST /api/campaigns/:campaign/chapters/:id/active -> that chapter's entry. „Aktiv" in the
 //                                              overview's status control: sets `active` here
 //                                              and puts the previously active chapter back to
 //                                              `planned`, in ONE transaction. Idempotent,
 //                                              404 for an unknown chapter, no rev guard
-//   [x] POST /api/:campaign/scenes             { title, chapter } -> 201 the scene entry
+//   [x] POST /api/campaigns/:campaign/scenes             { title, chapter } -> 201 the scene entry
 //                                              (type planned, status draft, empty body, no
 //                                              `location`). `chapter` is REQUIRED and must
 //                                              exist — 400 otherwise: a scene's chapter is
 //                                              part of its address and chapters are never
 //                                              created by being named (ADR #19)
-//   [x] POST /api/:campaign/npcs               { name } -> 201 the npc entry. An EMPTY
+//   [x] POST /api/campaigns/:campaign/npcs               { name } -> 201 the npc entry. An EMPTY
 //                                              entry for the derived id — one the DM
 //                                              created and left empty — is FILLED rather
 //                                              than collided with; one that holds content
 //                                              answers the `slug_taken` 409; a RESERVED
 //                                              id answers 409 { code: "slug_reserved" },
 //                                              same shape, different sentence
-//   [x] POST /api/:campaign/locations          { name } -> 201 the location entry, same
+//   [x] POST /api/campaigns/:campaign/locations          { name } -> 201 the location entry, same
 //                                              rules as npcs
-//   [x] GET  /api/:campaign/tree               scenes/npcs/locations/sessions as a tree (properties parsed)
-//   [x] GET  /api/:campaign/entry?path=...      one entry (properties + body + rev). glossary
+//   [x] GET  /api/campaigns/:campaign          the campaign entry — the shorter
+//                                              spelling of …/entries/campaign, same body
+//   [x] GET  /api/campaigns/:campaign/tree               scenes/npcs/locations/sessions as a tree (properties parsed)
+//   [x] GET  /api/campaigns/:campaign/entries/<address>      one entry (properties + body + rev). glossary
 //                                              answers 200 with an EMPTY body when the
 //                                              campaign has no terms — an empty list is
 //                                              an entry, not a missing one (a 404 would
@@ -86,7 +88,7 @@
 //                                              reason.
 //                                              `rev` of glossary/inbox is that
 //                                              DOCUMENT's own counter, not campaigns.version
-//   [x] PATCH /api/:campaign/properties        { path, rev, patch } — only if rev is
+//   [x] PATCH /api/campaigns/:campaign/properties        { path, rev, patch } — only if rev is
 //                                              unchanged, otherwise
 //                                              409 { code: "rev_conflict", rev }.
 //                                              A scene's `chapter` may be SET (400 when
@@ -99,19 +101,20 @@
 //                                              `locationName` is the display name for the
 //                                              Ort a scene's `location` CREATES — applied
 //                                              only on insert, never afterwards
-//   [x] PUT  /api/:campaign/entry              { path, rev, body } — write the markdown
+//   [x] PUT  /api/campaigns/:campaign/entries/<address>
+//                                              { rev, body } — write the markdown
 //                                              BODY of an existing entry;
 //                                              its properties are untouched (they are
 //                                              PATCH /properties' job), same rev guard
 //                                              as PATCH above (409 `rev_conflict`)
-//   [—] POST /api/:campaign/campaign-meta      REMOVED. It existed
+//   [—] POST /api/campaigns/:campaign/campaign-meta      REMOVED. It existed
 //                                              for the one gap PATCH /properties
 //                                              could not close: a campaign whose
 //                                              `campaign` did not exist yet had
 //                                              no row and therefore no guard token
 //                                              to PATCH against. Since the cutover
 //                                              the import always creates a
-//                                              campaign ROW, GET /entry?path=
+//                                              campaign ROW, GET /entries/
 //                                              campaign therefore always
 //                                              answers 200 with a `rev`, and the
 //                                              app's create branch became
@@ -120,11 +123,11 @@
 //                                              every other field is: PATCH
 //                                              /properties with the row's guard
 //                                              token — one write path, one 409 rule
-//   [x] GET  /api/:campaign/session            the ACTIVE session: the last
+//   [x] GET  /api/campaigns/:campaign/session            the ACTIVE session: the last
 //                                              STARTED session file that is not ended —
 //                                              today's OR an older one, so a session past
 //                                              midnight stays active. Same shape as
-//                                              GET /entry plus startedMs/endedMs/pausedMs/
+//                                              GET /entries plus startedMs/endedMs/pausedMs/
 //                                              pausedSinceMs (the server's epoch reading of
 //                                              the zone-less timestamps and of the pause
 //                                              intervals — the client must never guess the
@@ -135,7 +138,7 @@
 //                                              lives in yesterday's file, so the client
 //                                              must not guess it either); 404 only when the
 //                                              campaign has no session file at all
-//   [x] POST /api/:campaign/session/start      creates a NEW session at sessions/<id>, with
+//   [x] POST /api/campaigns/:campaign/session/start      creates a NEW session at sessions/<id>, with
 //                                              an OPAQUE RANDOM id ("beenden" is
 //                                              final, so a second evening on the same day is
 //                                              simply a second session with an empty log and
@@ -146,45 +149,45 @@
 //                                              `started`). 409 { code: "session_running",
 //                                              path } when an OLDER session is still open
 //                                              (there is no `session_ended` any more)
-//   [x] POST /api/:campaign/session/end        sets `ended` in the ACTIVE session; idempotent
+//   [x] POST /api/campaigns/:campaign/session/end        sets `ended` in the ACTIVE session; idempotent
 //                                              (falls back to the last started session) and
 //                                              closes an open pause interval
-//   [x] POST /api/:campaign/session/pause      opens a `pauses` interval + `— Pause` log line
+//   [x] POST /api/campaigns/:campaign/session/pause      opens a `pauses` interval + `— Pause` log line
 //                                              — the clock really stops;
 //                                              idempotent, 404 when nothing runs
-//   [x] POST /api/:campaign/session/continue   closes that interval + `— Weiter`; idempotent.
+//   [x] POST /api/campaigns/:campaign/session/continue   closes that interval + `— Weiter`; idempotent.
 //                                              "Weiter" ends a PAUSE — an ended session is
 //                                              never re-opened
-//   [x] POST /api/:campaign/session/discard    deletes the ACTIVE session's file — allowed
+//   [x] POST /api/campaigns/:campaign/session/discard    deletes the ACTIVE session's file — allowed
 //                                              only while it is EMPTY (no log entry, no
 //                                              scenes_played); 409 { code:
 //                                              "session_not_empty" } otherwise, 404 when
 //                                              nothing is running
-//   [x] POST /api/:campaign/log                { text, sceneId? } -> append with timestamp
+//   [x] POST /api/campaigns/:campaign/log                { text, sceneId? } -> append with timestamp
 //                                              to the ACTIVE session; STRICT —
 //                                              404 when no session is running, 400 when
 //                                              sceneId is not a kebab slug (it is a PARSE
 //                                              COLUMN of `- HH:MM (id) text`)
-//   [x] POST /api/:campaign/inbox              { text } -> append to the inbox list
-//   [x] GET  /api/:campaign/search?q=...       { results } — full-text search (FTS5, bm25,
+//   [x] POST /api/campaigns/:campaign/inbox              { text } -> append to the inbox list
+//   [x] GET  /api/campaigns/:campaign/search?q=...       { results } — full-text search (FTS5, bm25,
 //                                              prefix terms, diacritics folded;
 //                                              scenes/npcs/locations/chapters/campaign/
 //                                              GLOSSARY, max 20 results)
-//   [x] GET  /api/:campaign/glossary           { entries: [{ term, explanation }], rev } — the
+//   [x] GET  /api/campaigns/:campaign/glossary           { entries: [{ term, explanation }], rev } — the
 //                                              glossary TABLE; `rev`
 //                                              is the LIST's guard token, the same one
-//                                              GET /entry?path=glossary hands out
-//   [x] PUT  /api/:campaign/glossary           { entries, rev } -> { entries, rev }; replaces
+//                                              GET /entries/glossary hands out
+//   [x] PUT  /api/campaigns/:campaign/glossary           { entries, rev } -> { entries, rev }; replaces
 //                                              the WHOLE list, so the array order IS the
 //                                              stored order and reordering needs no endpoint
 //                                              of its own. Stale rev -> 409
 //                                              { code: "rev_conflict", rev }
-//   [x] GET  /api/:campaign/knowledge          { entries: [{ kind, from, to, text }], rev } —
+//   [x] GET  /api/campaigns/:campaign/knowledge          { entries: [{ kind, from, to, text }], rev } —
 //                                              the CAMPAIGN KNOWLEDGE the generator must
 //                                              apply: kind is naming|fact|style,
 //                                              a `naming` entry carries from/to, the others
 //                                              `text`. Guard token: campaigns.knowledge_rev
-//   [x] PUT  /api/:campaign/knowledge          { entries, rev } -> { entries, rev }; the
+//   [x] PUT  /api/campaigns/:campaign/knowledge          { entries, rev } -> { entries, rev }; the
 //                                              glossary's contract to the letter — whole
 //                                              list, array order is the order, stale rev ->
 //                                              409 { code: "rev_conflict", rev }. A
@@ -197,10 +200,10 @@
 //                                              glossary keeps taking wrapped explanations
 //                                              (the import makes them) and is flattened
 //                                              for the prompt instead
-//   [—] GET  /api/:campaign/migration-report   REMOVED. The markdown import
+//   [—] GET  /api/campaigns/:campaign/migration-report   REMOVED. The markdown import
 //                                              is the dev/E2E tool `grimoire seed`, which
 //                                              prints its report on stdout; nothing is stored.
-//   [x] GET  /api/:campaign/version            { version, build } — version is
+//   [x] GET  /api/campaigns/:campaign/version            { version, build } — version is
 //                                              `campaigns.version`, bumped by every write in
 //                                              the same transaction (the chokidar watcher is
 //                                              gone with the cutover); the app polls it and
@@ -210,19 +213,19 @@
 //                                              when it differs from the app's own build id
 //                                              the app shows a reload banner. Every /api
 //                                              response also carries it as x-grimoire-build.
-//   [x] POST /api/:campaign/generate           { chapter, sourceText, newChapter? } ->
+//   [x] POST /api/campaigns/:campaign/generate           { chapter, sourceText, newChapter? } ->
 //                                              202 { jobId } — starts a background job
 //                                              (writes NOTHING). newChapter
 //                                              allows a chapter directory that does not
 //                                              exist yet. 409 { jobId } while one runs.
-//   [x] POST /api/:campaign/generate/npc       { sourceText, id? } -> 202 { jobId } —
+//   [x] POST /api/campaigns/:campaign/generate/npc       { sourceText, id? } -> 202 { jobId } —
 //                                              one NPC file draft from source material,
 //                                              same job model and same
 //                                              pipeline mechanics as the scene run;
 //                                              409 { jobId } while ANY generator job
 //                                              runs, 409 { path } when the pinned id's
 //                                              file exists. Writes NOTHING.
-//   [x] POST /api/:campaign/generate/augment  { path, sourceText?, instruction? }
+//   [x] POST /api/campaigns/:campaign/generate/augment  { path, sourceText?, instruction? }
 //                                              -> 202 { jobId } — „Mit KI ergänzen":
 //                                              the SAME job model and the
 //                                              same pipeline, pointed at an entry that
@@ -239,7 +242,7 @@
 //                                              into Block-Composer blocks for the review
 //                                              (the block model lives there), so the
 //                                              decision unit is the one the DM edits.
-//   [x] POST /api/:campaign/generate/augment/apply
+//   [x] POST /api/campaigns/:campaign/generate/augment/apply
 //                                              { path, rev, properties?, body?, jobId? }
 //                                              -> the written entry. The DM's
 //                                              decisions: the accepted properties fields
@@ -254,13 +257,13 @@
 //                                              transaction. `id` and the app-managed keys
 //                                              are refused (400) — an id is set once, at
 //                                              creation, and never changes (ADR #21)
-//   [x] POST /api/:campaign/generate/job/:id/parts/:key/retry -> 202 GenerateJob —
+//   [x] POST /api/campaigns/:campaign/generate/job/:id/parts/:key/retry -> 202 GenerateJob —
 //           „Erneut versuchen" for ONE part of a pipelined scene run.
 //           Re-runs only that part; the outline and the finished parts
 //           stay. 404 unknown job/part, 409 for a part that already runs, has
 //           not run yet or is done and for a job without parts, 503 without a
 //           provider.
-//   [x] GET  /api/:campaign/generate/job       GenerateJob (running/done/failed incl.
+//   [x] GET  /api/campaigns/:campaign/generate/job       GenerateJob (running/done/failed incl.
 //                                              kind, result/npcResult/augmentResult,
 //                                              error body and draftEdits), 404 when
 //                                              there is none. An `augment` job also
@@ -278,10 +281,10 @@
 //                                              augment run and the parts a partial accept
 //                                              already wrote (`review.written`, draft path
 //                                              -> the address it landed at)
-//   [x] DELETE /api/:campaign/generate/job     discard the job ("Verwerfen"). That is
+//   [x] DELETE /api/campaigns/:campaign/generate/job     discard the job ("Verwerfen"). That is
 //                                              the OPEN REST only — parts a
 //                                              partial accept wrote are entries now
-//   [x] PATCH /api/:campaign/generate/job/:id/review
+//   [x] PATCH /api/campaigns/:campaign/generate/job/:id/review
 //                                              { rev, edits?, entries?, dropped?, fields?,
 //                                              blocks? } -> the job. Everything
 //                                              MERGES, so the app sends the one thing that
@@ -289,7 +292,7 @@
 //                                              409 { code: "rev_conflict", rev } when
 //                                              another tab decided first (nothing written);
 //                                              404 without a job or for a stale :id
-//   [x] POST /api/:campaign/generate/job/:id/accept
+//   [x] POST /api/campaigns/:campaign/generate/job/:id/accept
 //                                              { paths?, chapter?, chapterTitle? } ->
 //                                              { written, jobDeleted }.
 //                                              „Diesen übernehmen" per scene / suggested
@@ -302,7 +305,7 @@
 //                                              that is still `running` is acceptable part by
 //                                              part; 409 only for a failed
 //                                              run and for one with no finished part yet
-//   [x] POST /api/:campaign/generate/apply     { scenes?, stubs?, npc?, chapter?,
+//   [x] POST /api/campaigns/:campaign/generate/apply     { scenes?, stubs?, npc?, chapter?,
 //                                              chapterTitle?, jobId? } -> { written }
 //                                              (drafts as rows; 409 { conflicts } when any
 //                                              target exists — checked IN the insert
@@ -314,18 +317,18 @@
 //                                              same batch; `npc` is the NPC run's single
 //                                              draft; jobId discards that job
 //                                              after a successful write.
-//   [x] POST /api/:campaign/review/seen        { path, line } -> EntryResponse &
+//   [x] POST /api/campaigns/:campaign/review/seen        { path, line } -> EntryResponse &
 //                                              { marked } — flags the log ROW whose short
 //                                              hash the line has (idempotent). marked=false
 //                                              means NO row hashes to the line that was
 //                                              sent: nothing was changed, and the answer
 //                                              says so instead of hiding it behind a 200
-//   [x] POST /api/:campaign/review/thread      { chapter, text } -> append `- [ ] text` under
+//   [x] POST /api/campaigns/:campaign/review/thread      { chapter, text } -> append `- [ ] text` under
 //                                              ## Offene Fäden of the chapter entry
-//   [x] POST /api/:campaign/review/npc-stub    { id, name?, note? } -> create npcs/<id>
+//   [x] POST /api/campaigns/:campaign/review/npc-stub    { id, name?, note? } -> create npcs/<id>
 //                                              (status: unknown), or answer with the entry
 //                                              the id already has — idempotent
-//   [x] POST /api/:campaign/review/inbox-done  { line } -> rewrite the inbox line to `- [x] …`
+//   [x] POST /api/campaigns/:campaign/review/inbox-done  { line } -> rewrite the inbox line to `- [x] …`
 //                                              (documented append-only exception)
 //
 // EVERY generator call answers a JSON object whose schema

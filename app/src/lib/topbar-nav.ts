@@ -19,11 +19,11 @@ export type NavSection = "chapters" | "npcs" | "locations";
 
 /** The view the topbar is rendering for, as far as the marking cares. */
 export interface NavView {
-  /** The pool ("/:campaign"). */
+  /** The pool ("/campaigns/:campaign"). */
   isPool: boolean;
-  /** `:kind` of "/:campaign/list/:kind", or "" when this is not a list view. */
+  /** `:kind` of "/campaigns/:campaign/list/:kind", or "" when this is not a list view. */
   listKind?: string;
-  /** Campaign-relative path of "/:campaign/entry/*", or "" when not a file view. */
+  /** Campaign-relative path of "/campaigns/:campaign/entries/*", or "" when not a file view. */
   filePath?: string;
 }
 

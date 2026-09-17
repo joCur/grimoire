@@ -419,7 +419,7 @@ function proposedEntry(result: AugmentResult): string {
 // --- accepting ---------------------------------------------------------------
 
 /**
- * POST /api/:campaign/generate/augment/apply — write the DM's decisions.
+ * POST /api/campaigns/:campaign/generate/augment/apply — write the DM's decisions.
  *
  * The client sends the accepted properties fields and the body it assembled
  * out of the accepted blocks; the server does not re-derive either (the

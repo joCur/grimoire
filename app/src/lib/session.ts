@@ -4,7 +4,7 @@
 //
 // There is NO client-side date guessing left here (issue #40 and its
 // review): WHICH session is the active one is always the server's answer
-// (GET /:campaign/session, with ?includeEnded=1 for the review — see
+// (GET /campaigns/:campaign/session, with ?includeEnded=1 for the review — see
 // lib/use-session.ts). A session past midnight is YESTERDAY's session,
 // and a browser in another timezone than the server would get both the session
 // and the runtime wrong.
@@ -70,7 +70,7 @@ export function parseLogEntries(body: string): LogEntry[] {
  * A DATE-ONLY `yyyy-mm-dd` is read as 00:00: a session started at exactly
  * midnight is written as `…T00:00`, and the YAML normalization cannot tell
  * that apart from a date-only value (shared/src/parse.ts) — so requiring a
- * time part made the timer disappear silently at midnight (issue #40).
+ * time part made the timer disappear silently at midnight.
  */
 export function parseLocalDateTime(value: unknown): number | undefined {
   if (typeof value !== "string") return undefined;
@@ -88,7 +88,7 @@ export function parseLocalDateTime(value: unknown): number | undefined {
 }
 
 /**
- * Start / end of a session as epoch milliseconds (issue #40).
+ * Start / end of a session as epoch milliseconds.
  *
  * The SERVER's reading wins (`startedMs`/`endedMs` of the EntryResponse): the
  * format is zone-less on purpose, and only the server knows the timezone

@@ -36,7 +36,7 @@ mole while Fenn's crew shifts a cargo before dawn.`;
 
 /** GET …/generate/job — null on the 404 "there is none". */
 async function job(api: Api): Promise<Record<string, unknown> | null> {
-  const res = await api.fetch("beispiel/generate/job");
+  const res = await api.fetch("campaigns/beispiel/generate/job");
   if (res.status === 404) return null;
   expect(res.status).toBe(200);
   return (await res.json()) as Record<string, unknown>;
@@ -73,7 +73,7 @@ test("a run interrupted by a restart is reported as failed, not left spinning", 
   let jobId: string;
   try {
     const api = apiFor(first.handle.url);
-    const started = await api.send<{ jobId: string }>("POST", "beispiel/generate", {
+    const started = await api.send<{ jobId: string }>("POST", "campaigns/beispiel/generate", {
       chapter: "01-salzhafen",
       sourceText: `${SOURCE}\n\n${TRIGGER.slow}`,
     });
@@ -109,7 +109,7 @@ test("a run interrupted by a restart is reported as failed, not left spinning", 
     );
     // Nothing was written, and a new run may start right away (no stuck gate).
     expect(await api.exists(SCENE_PATH)).toBe(false);
-    expect((await api.fetch("beispiel/generate/job", { method: "DELETE" })).status).toBe(200);
+    expect((await api.fetch("campaigns/beispiel/generate/job", { method: "DELETE" })).status).toBe(200);
   } finally {
     await second.proc.stop();
   }
@@ -126,7 +126,7 @@ test("a finished job survives a restart whole and is still applyable", async ({}
   let before: Record<string, unknown>;
   try {
     const api = apiFor(first.handle.url);
-    await api.send("POST", "beispiel/generate", {
+    await api.send("POST", "campaigns/beispiel/generate", {
       chapter: "01-salzhafen",
       sourceText: SOURCE,
     });
@@ -137,7 +137,7 @@ test("a finished job survives a restart whole and is still applyable", async ({}
     expect(result.scenes.map((s) => s.path)).toEqual([DRAFT_PATH]);
     // The review PATCH is the one way an edit reaches the job
     // (`PUT …/job/drafts` is gone).
-    await api.send("PATCH", `beispiel/generate/job/${before.id as string}/review`, {
+    await api.send("PATCH", `campaigns/beispiel/generate/job/${before.id as string}/review`, {
       rev: (before.rev as number | undefined) ?? 0,
       edits: { [DRAFT_PATH]: `${result.scenes[0]!.markdown}${edited}` },
     });
@@ -166,7 +166,7 @@ test("a finished job survives a restart whole and is still applyable", async ({}
     // batch, because a scene cannot name an entry that does not exist
     // (ADR #19).
     const result = after.result as { scenes: unknown[]; stubs: unknown[] };
-    const written = await api.send<{ written: string[] }>("POST", "beispiel/generate/apply", {
+    const written = await api.send<{ written: string[] }>("POST", "campaigns/beispiel/generate/apply", {
       scenes: result.scenes,
       stubs: result.stubs,
       jobId: after.id,

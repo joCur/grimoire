@@ -60,7 +60,7 @@ const COUNTS =
  */
 async function assertCampaignIsThere(api: Api): Promise<void> {
   // --- the tree -------------------------------------------------------------
-  const tree = await api.get<TreeResponse>("beispiel/tree");
+  const tree = await api.get<TreeResponse>("campaigns/beispiel/tree");
   expect(tree.campaign).toBe("beispiel");
   expect(tree.chapters.map((c) => c.id)).toEqual(["01-salzhafen"]);
   const scenes = tree.chapters.flatMap((c) => c.groups.flatMap((g) => g.scenes));
@@ -111,7 +111,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(inbox.body).toContain("Der Dorfschmied repariert");
 
   // --- the glossary: its own TABLE ------------------------------------------
-  const glossary = await api.get<GlossaryResponse>("beispiel/glossary");
+  const glossary = await api.get<GlossaryResponse>("campaigns/beispiel/glossary");
   const terms = glossary.entries.map((e) => e.term);
   expect(terms).toContain("lighthouse keeper");
   expect(glossary.entries.find((e) => e.term === "lighthouse keeper")?.explanation).toBe(
@@ -131,7 +131,7 @@ test("a fresh instance boots EMPTY — nothing is loaded at startup", async ({},
     // The server is up (the fixture waited for /api/campaigns) and knows
     // nothing: the fixtures directory next to it was never read.
     expect(await api.get<{ id: string }[]>("campaigns")).toEqual([]);
-    expect((await api.fetch("beispiel/tree")).status).toBe(404);
+    expect((await api.fetch("campaigns/beispiel/tree")).status).toBe(404);
   } finally {
     await proc.stop();
   }

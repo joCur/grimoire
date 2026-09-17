@@ -139,7 +139,7 @@ export interface Seed {
   skip?: boolean;
 }
 
-/** One entry as GET /api/:campaign/file answers it. */
+/** One entry as GET /api/campaigns/:campaign/entries/<address> answers it. */
 export interface ApiFile {
   path: string;
   kind: string;
@@ -154,7 +154,7 @@ export interface ApiFile {
  * API is how one looks at it — the same way the app does.
  */
 export interface Api {
-  /** Absolute URL of an API path (`/api/beispiel/tree` or just `tree`). */
+  /** Absolute URL of an API path (`/api/campaigns/beispiel/tree` or just `tree`). */
   url(apiPath: string): string;
   /** Raw fetch — for status-code assertions (409, 400, 404). */
   fetch(apiPath: string, init?: RequestInit): Promise<Response>;
@@ -162,13 +162,13 @@ export interface Api {
   get<T>(apiPath: string): Promise<T>;
   /** POST/PATCH/PUT with a JSON body, parsed as JSON; throws on non-2xx. */
   send<T>(method: "POST" | "PATCH" | "PUT" | "DELETE", apiPath: string, body?: unknown): Promise<T>;
-  /** GET /entry for a campaign-relative address; throws when it is unknown. */
+  /** GET the entry at an address; throws when it is unknown. */
   file(rel: string): Promise<ApiFile>;
   /** The markdown text of an entry. */
   body(rel: string): Promise<string>;
   /** The properties of an entry. */
   properties(rel: string): Promise<Record<string, unknown>>;
-  /** Whether the path addresses an existing row (404 = no). */
+  /** Whether the address names an existing row (404 = no). */
   exists(rel: string): Promise<boolean>;
   /**
    * Path of the ACTIVE session — or, with `includeEnded`, of the last started
@@ -180,7 +180,7 @@ export interface Api {
    */
   sessionPath(includeEnded?: boolean): Promise<string | undefined>;
   /**
-   * PUT /entry with a FRESH guard token: a second writer, not a race. Returns
+   * PUT the body with a FRESH guard token: a second writer, not a race. Returns
    * the new token. This is how a spec provokes the app's 409 — an entry only
    * ever changes through the API.
    */
@@ -296,6 +296,15 @@ export function todaySessionId(d = new Date()): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/**
+ * The API path of one entry: the address sits in the path, one encoded
+ * segment per address segment (ADR #22).
+ */
+function entriesPath(campaign: string, rel: string): string {
+  const address = rel.split("/").map(encodeURIComponent).join("/");
+  return `campaigns/${encodeURIComponent(campaign)}/entries/${address}`;
+}
+
 /** The `api` helper for any server URL (the fixture is this, bound). */
 export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
   const url = (apiPath: string) =>
@@ -330,7 +339,7 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
       return json<T>(response, `${method} ${apiPath}`);
     },
     file(rel) {
-      return api.get<ApiFile>(`${campaign}/entry?path=${encodeURIComponent(rel)}`);
+      return api.get<ApiFile>(entriesPath(campaign, rel));
     },
     async body(rel) {
       return (await api.file(rel)).body;
@@ -339,14 +348,14 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
       return (await api.file(rel)).properties;
     },
     async exists(rel) {
-      const response = await fetchApi(`${campaign}/entry?path=${encodeURIComponent(rel)}`);
+      const response = await fetchApi(entriesPath(campaign, rel));
       if (response.status === 404) return false;
-      if (!response.ok) throw new Error(`GET /entry ${rel}: HTTP ${response.status}`);
+      if (!response.ok) throw new Error(`GET ${rel}: HTTP ${response.status}`);
       return true;
     },
     async sessionPath(includeEnded = false) {
       const response = await fetchApi(
-        `${campaign}/session${includeEnded ? "?includeEnded=1" : ""}`,
+        `campaigns/${campaign}/session${includeEnded ? "?includeEnded=1" : ""}`,
       );
       if (response.status === 404) return undefined;
       if (!response.ok) throw new Error(`GET /session: HTTP ${response.status}`);
@@ -354,8 +363,7 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
     },
     async writeBody(rel, body) {
       const current = await api.file(rel);
-      const written = await api.send<ApiFile>("PUT", `${campaign}/entry`, {
-        path: rel,
+      const written = await api.send<ApiFile>("PUT", entriesPath(campaign, rel), {
         rev: current.rev,
         body,
       });
@@ -363,7 +371,7 @@ export function apiFor(baseUrl: string, campaign: string = CAMPAIGN): Api {
     },
     async patchProperties(rel, patch) {
       const current = await api.file(rel);
-      const written = await api.send<ApiFile>("PATCH", `${campaign}/properties`, {
+      const written = await api.send<ApiFile>("PATCH", `campaigns/${campaign}/properties`, {
         path: rel,
         rev: current.rev,
         patch,

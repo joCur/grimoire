@@ -37,7 +37,7 @@ export function EntityCardShell({
     );
   }
   return (
-    <Link to={`/${campaign}/entry/${path}`} className={shell}>
+    <Link to={`/campaigns/${campaign}/entries/${path}`} className={shell}>
       {children}
     </Link>
   );

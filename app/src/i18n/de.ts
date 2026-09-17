@@ -217,8 +217,8 @@ export const de = {
   "settings.language.hint": "Sprache der Oberfläche. Gilt für diese Instanz, nicht für die Kampagnendaten.",
 
   // --- the two campaign-content pages --------------------------------------
-  // „Kampagnenwissen“ (/:campaign/knowledge) and „Glossar“
-  // (/:campaign/glossary). Campaign CONTENT, like the NPCs and the Orte — the
+  // „Kampagnenwissen“ (/campaigns/:campaign/knowledge) and „Glossar“
+  // (/campaigns/:campaign/glossary). Campaign CONTENT, like the NPCs and the Orte — the
   // instance settings under /settings are a different thing entirely.
   // Shared by both pages: the row controls, the per-entry
   // save outcome, the delete confirmation.
@@ -321,7 +321,7 @@ export const de = {
   "status.npc.missing": "Vermisst",
   "status.npc.unknown": "Unbekannt",
 
-  // --- browse list pages (/:campaign/list/:kind) ---------------------------
+  // --- browse list pages (/campaigns/:campaign/list/:kind) ---------------------------
   "browse.title.scenes": "Szenen",
   "browse.title.npcs": "NPCs",
   "browse.title.locations": "Orte",
@@ -334,7 +334,7 @@ export const de = {
   "status.change.aria": "Status ändern, aktuell {current}",
   "status.sceneUnloadable": "Szene nicht ladbar",
 
-  // --- the scene pool ("/:campaign", routes/pool.tsx) -----------------------
+  // --- the scene pool ("/campaigns/:campaign", routes/pool.tsx) -----------------------
   "pool.loading": "Lade Szenen …",
   "pool.empty":
     "Noch keine Kapitel. Ein Kapitel ist die Klammer um Szenen — danach legst du darin die erste Szene an.",
@@ -373,7 +373,7 @@ export const de = {
   "browse.empty.npcs": "Noch keine NPCs.",
   "browse.empty.locations": "Noch keine Orte.",
 
-  // --- the reading view ("/:campaign/entry/*", routes/scene.tsx) -------------
+  // --- the reading view ("/campaigns/:campaign/entries/*", routes/scene.tsx) -------------
   "scene.loading": "Lade Eintrag …",
   "scene.notLoadable": "Eintrag nicht ladbar — Pfad prüfen oder Server starten.",
   "scene.npcs.heading": "NPCs dieser Szene",

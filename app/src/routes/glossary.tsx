@@ -1,5 +1,4 @@
-// „/:campaign/glossary" — the campaign's glossary (issue #53, PO feedback on
-// PR #87).
+// „/campaigns/:campaign/glossary" — the campaign's glossary (PO decision).
 //
 // A glossary is a REFERENCE: term → wording. So the page reads like one —
 // alphabetical, one line per term, a filter above it — and not like a form.

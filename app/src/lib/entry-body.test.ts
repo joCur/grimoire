@@ -53,14 +53,14 @@ afterEach(() => {
 });
 
 describe("writeEntryBody", () => {
-  test("PUTs path, rev and body to the file endpoint", async () => {
+  test("PUTs rev and body to the entry address", async () => {
     const calls = mockFetch([{ status: 200, body: fileAt(222, "Neuer Text.\n") }]);
     const result = await writeEntryBody("beispiel", SCENE, "Neuer Text.\n", 111);
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("PUT");
-    expect(calls[0]?.url).toBe("/api/beispiel/entry");
-    expect(calls[0]?.body).toEqual({ path: SCENE, rev: 111, body: "Neuer Text.\n" });
+    expect(calls[0]?.url).toBe(`/api/campaigns/beispiel/entries/${SCENE}`);
+    expect(calls[0]?.body).toEqual({ rev: 111, body: "Neuer Text.\n" });
     expect(result).toEqual({ ok: true, file: fileAt(222, "Neuer Text.\n") });
   });
 
@@ -77,7 +77,7 @@ describe("writeEntryBody", () => {
     expect(result.file?.rev).toBe(999);
     expect(calls).toHaveLength(2);
     expect(calls[1]?.method).toBe("GET");
-    expect(calls[1]?.url).toBe(`/api/beispiel/entry?path=${encodeURIComponent(SCENE)}`);
+    expect(calls[1]?.url).toBe(`/api/campaigns/beispiel/entries/${SCENE}`);
   });
 
   test("the attempt after a conflict carries the rev the reload brought", async () => {
@@ -95,7 +95,7 @@ describe("writeEntryBody", () => {
       conflict.file?.rev ?? 0,
     );
 
-    expect(calls[0]?.body).toEqual({ path: SCENE, rev: 999, body: "Mein Text.\n" });
+    expect(calls[0]?.body).toEqual({ rev: 999, body: "Mein Text.\n" });
     expect(retry.ok).toBe(true);
   });
 
@@ -115,7 +115,7 @@ describe("writeEntryBody", () => {
   test("an empty body is a legal write, not a no-op", async () => {
     const calls = mockFetch([{ status: 200, body: fileAt(222, "") }]);
     await writeEntryBody("beispiel", SCENE, "", 111);
-    expect(calls[0]?.body).toEqual({ path: SCENE, rev: 111, body: "" });
+    expect(calls[0]?.body).toEqual({ rev: 111, body: "" });
   });
 });
 
@@ -138,7 +138,7 @@ describe("shouldAdvanceBase", () => {
   const base = fileAt(111, "## Flow\n\nText.\n");
 
   test("a body-neutral new version is adopted — the DM's own status patch", () => {
-    // The status regler stays usable next to the open editor (issue #28): its
+    // The status regler stays usable next to the open editor: its
     // PATCH bumps the rev and leaves the body alone, so the next „Speichern"
     // must not answer with „Inzwischen geändert".
     expect(shouldAdvanceBase(base, fileAt(222, base.body))).toBe(true);
@@ -172,7 +172,7 @@ describe("canEditEntryBody", () => {
 
   test("append-only files and the campaign metadata file are not", () => {
     // Logs/inbox are append-only by design; `campaign` has its own
-    // „Bearbeiten" for name/description (issue #34).
+    // „Bearbeiten" for name/description.
     expect(canEditEntryBody("session")).toBe(false);
     expect(canEditEntryBody("inbox")).toBe(false);
     expect(canEditEntryBody("campaign")).toBe(false);

@@ -28,27 +28,27 @@ export interface LookupTarget {
 
 /**
  * The reference pages, in the order every surface shows them: the three that
- * came from the campaign tree first (issue #11), then the two the DM MAINTAINS
- * (issue #53). Content you read before content you edit.
+ * came from the campaign tree first, then the two the DM MAINTAINS
+ *. Content you read before content you edit.
  */
 export const LOOKUP_TARGETS: readonly LookupTarget[] = [
   {
     id: "scenes",
-    href: (c) => `/${c}/list/scenes`,
+    href: (c) => `/campaigns/${c}/list/scenes`,
     icon: Bookmark,
     label: "browse.title.scenes",
   },
-  { id: "npcs", href: (c) => `/${c}/list/npcs`, icon: User, label: "browse.title.npcs" },
+  { id: "npcs", href: (c) => `/campaigns/${c}/list/npcs`, icon: User, label: "browse.title.npcs" },
   {
     id: "locations",
-    href: (c) => `/${c}/list/locations`,
+    href: (c) => `/campaigns/${c}/list/locations`,
     icon: MapPin,
     label: "browse.title.locations",
   },
-  { id: "glossary", href: (c) => `/${c}/glossary`, icon: BookA, label: "glossary.title" },
+  { id: "glossary", href: (c) => `/campaigns/${c}/glossary`, icon: BookA, label: "glossary.title" },
   {
     id: "knowledge",
-    href: (c) => `/${c}/knowledge`,
+    href: (c) => `/campaigns/${c}/knowledge`,
     icon: Lightbulb,
     label: "knowledge.title",
   },

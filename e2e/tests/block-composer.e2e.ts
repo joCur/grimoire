@@ -1,4 +1,4 @@
-// Critical path 9, second spec: the BLOCK COMPOSER (issue #43) — since that
+// Critical path 9, second spec: the BLOCK COMPOSER — since that
 // slice „Bearbeiten" no longer opens a wall of markdown but the scene as a list
 // of typed cards, and the raw textarea of issue #39 is one click away as the
 // fallback („Markdown"). `tests/entry-edit.e2e.ts` owns that fallback and the whole
@@ -33,10 +33,10 @@ import { expect, test, type Api, type SeedEntry } from "../support/test";
 
 /** Six blocks, one per type the reading view knows — the composer's reference. */
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
-const SCENE_URL = `/beispiel/entry/${SCENE}`;
+const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
 /** The reference scene WITH two `## If:` sections and their children. */
 const IF_SCENE = "01-salzhafen/bucht/smuggler-captured";
-const IF_SCENE_URL = `/beispiel/entry/${IF_SCENE}`;
+const IF_SCENE_URL = `/campaigns/beispiel/entries/${IF_SCENE}`;
 const STALE_MESSAGE = "Inzwischen geändert — neu laden";
 
 /** The cards of SCENE, in document order, as the composer names them. */
@@ -611,7 +611,7 @@ test.describe("with a scene of unknown constructs", () => {
     const before = await split(api, rel);
     const added = "Bei einem Patt würfelt die Gruppe erneut.";
 
-    await page.goto(`/beispiel/entry/${rel}`);
+    await page.goto(`/campaigns/beispiel/entries/${rel}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Seltsame Mechanik");
     await page.getByRole("button", { name: "Bearbeiten" }).click();
 

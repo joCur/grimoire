@@ -32,17 +32,18 @@ import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { setNow } from "../src/clock";
 import { dropStore, seedStore } from "./support/store";
+import { entriesUrl } from "./support/urls";
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
 async function getFile(rel: string): Promise<EntryResponse> {
-  const res = await app.request(`/api/beispiel/entry?path=${encodeURIComponent(rel)}`);
+  const res = await app.request(entriesUrl("beispiel", rel));
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
 
 async function patchReq(rev: number, patch: Record<string, unknown>): Promise<Response> {
-  return app.request("/api/beispiel/properties", {
+  return app.request("/api/campaigns/beispiel/properties", {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ path: SCENE, rev, patch }),
@@ -50,10 +51,10 @@ async function patchReq(rev: number, patch: Record<string, unknown>): Promise<Re
 }
 
 async function putReq(rev: number, body: string): Promise<Response> {
-  return app.request("/api/beispiel/entry", {
+  return app.request(entriesUrl("beispiel", SCENE), {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: SCENE, rev, body }),
+    body: JSON.stringify({ rev, body }),
   });
 }
 

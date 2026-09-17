@@ -1,4 +1,4 @@
-// The live mode's detail drawer (issue #40): the full NPC or location entry
+// The live mode's detail drawer: the full NPC or location entry
 // WITHOUT leaving the running session.
 //
 // Before this, an NPC card in the live aside was a link — one click and the
@@ -86,7 +86,7 @@ function DrawerBody({ campaign, path }: { campaign: string; path: string }) {
       </div>
       <div className="flex-none border-t border-border px-6 py-3 md:px-8">
         <Link
-          to={`/${campaign}/entry/${path}`}
+          to={`/campaigns/${campaign}/entries/${path}`}
           className="inline-flex items-center gap-1.5 rounded-md text-[13px] text-primary hover:text-primary-hover"
         >
           <ExternalLink aria-hidden size={14} className="flex-none" />

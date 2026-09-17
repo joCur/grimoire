@@ -1,15 +1,15 @@
-// "/:campaign/live" — the live mode (issue #9), three zones per the design
+// "/campaigns/:campaign/live" — the live mode, three zones per the design
 // prototype: left the planned scenes and contingencies of the ACTIVE
 // chapter, center the selected scene through the same article pipeline as
 // the reading view, right the location and NPC cards plus the log panel and
 // the Schnellnotiz. The session on the server is the truth: every write
 // returns the fresh entry, the "played" checkmark comes from scenes_played
 // (server-maintained — never faked client-side). WHICH session is running is
-// the server's answer too (GET /:campaign/session, issue #40) — a session
+// the server's answer too (GET /campaigns/:campaign/session) — a session
 // past midnight lives in yesterday's session.
 //
 // Client state is exactly two things: the selected scene and which entity the
-// detail drawer shows (issue #40). Aside cards therefore do NOT navigate here
+// detail drawer shows. Aside cards therefore do NOT navigate here
 // — a click used to leave the live route and take the selected scene and the
 // half-typed Schnellnotiz with it.
 // There is NO mobile live mode (UI-BRIEF §4) — below md the route shows a
@@ -75,7 +75,7 @@ function MobileLiveNote({ campaign }: { campaign: string }) {
         <p className="text-[14px] leading-[1.6] text-muted-foreground">{t("live.mobile.note")}</p>
         {scene !== undefined && (
           <Link
-            to={`/${campaign}/entry/${scene.path}`}
+            to={`/campaigns/${campaign}/entries/${scene.path}`}
             className="mt-2 inline-flex min-h-11 items-center text-[15px] text-primary hover:text-primary-hover"
           >
             {t("live.mobile.read", { title: scene.title })}
@@ -99,7 +99,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   const chapters = tree.data?.chapters ?? [];
   const chapter = chapters.find((ch) => ch.status === "active") ?? chapters[0];
   const scenes = chapter?.groups.flatMap((g) => g.scenes) ?? [];
-  // The scene STATUS splits the plan (issue #73): `played`/`dropped` scenes
+  // The scene STATUS splits the plan: `played`/`dropped` scenes
   // drop out of "Geplant" into the collapsed "Gespielt" group below. The
   // session checkmark is a different thing and stays on top of both (AK2).
   const nonContingency = scenes.filter((s) => s.type !== "contingency");
@@ -112,7 +112,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   // the view usable instead of blanking it: a done scene, else any scene, else
   // the empty note in the center column.
   //
-  // The ID and not the address (issue #100): a scene's address carries its
+  // The ID and not the address: a scene's address carries its
   // `location`, so a location change moved the address out from under the
   // selection — the tree refetched, no scene matched the stored path any
   // more, and the live view jumped to the first planned scene mid-session.
@@ -210,7 +210,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
           ) : (
             // A `[[slug]]` in the scene text behaves like the aside cards
             // here: the click opens the DRAWER instead of navigating away
-            // (issue #68) — the selected scene and the half-typed
+            // — the selected scene and the half-typed
             // Schnellnotiz survive it.
             <EntityRefDrawerTarget onOpen={setDrawerPath}>
               <LiveScene campaign={campaign} path={selected.path} />
@@ -273,7 +273,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
 }
 
 /**
- * The scenes whose STATUS says they are behind us (issue #73): dimmed, in a
+ * The scenes whose STATUS says they are behind us: dimmed, in a
  * group that starts collapsed. Collapsed/open is view state only — deliberately
  * NOT persisted (AK1, and no localStorage for data either way). Selecting and
  * opening a scene in here works exactly as above.
@@ -330,7 +330,7 @@ function PlayedGroup({
 
 /** Left-nav row per the prototype: icon, brass left edge + darker bg when
  * active, played checkmark from scenes_played. `dimmed` is the "Gespielt"
- * group's quieter treatment (issue #73) — an active row stays readable. */
+ * group's quieter treatment — an active row stays readable. */
 function SceneNavRow({
   scene,
   active,
@@ -474,7 +474,7 @@ function LogPanel({
  * Exactly ONE conflict is a question here: `session_running`, an OLDER
  * session that was never ended — ending someone else's evening is not implied
  * by "starten". An already ended session of today is no question at all: the
- * start opens the NEXT session of the day (issue #58), so there is no
+ * start opens the NEXT session of the day, so there is no
  * "fortsetzen" here either.
  */
 function NoSessionYet({ campaign }: { campaign: string }) {

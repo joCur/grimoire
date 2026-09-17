@@ -87,7 +87,7 @@ describe("writeSceneStatus", () => {
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("PATCH");
-    expect(calls[0]?.url).toBe("/api/beispiel/properties");
+    expect(calls[0]?.url).toBe("/api/campaigns/beispiel/properties");
     expect(calls[0]?.body).toEqual({ path: SCENE, rev: 111, patch: { status: "ready" } });
     expect(result.ok).toBe(true);
     expect(result.file?.rev).toBe(222);
@@ -103,7 +103,7 @@ describe("writeSceneStatus", () => {
     expect(result.ok).toBe(false);
     expect(result.file?.rev).toBe(999);
     expect(calls[1]?.method).toBe("GET");
-    expect(calls[1]?.url).toBe(`/api/beispiel/entry?path=${encodeURIComponent(SCENE)}`);
+    expect(calls[1]?.url).toBe(`/api/campaigns/beispiel/entries/${SCENE}`);
   });
 
   test("the attempt after a conflict carries the rev the reload brought", async () => {

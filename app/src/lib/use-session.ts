@@ -1,14 +1,14 @@
 // React-query hooks around the session.
 //
-// TWO different questions, two hooks (issue #40) — and BOTH are the server's
+// TWO different questions, two hooks — and BOTH are the server's
 // answer, never the client's date:
 //
 //   - useActiveSession — "is a session running right now?"
-//     (GET /:campaign/session): the last started session that is not ended,
+//     (GET /campaigns/:campaign/session): the last started session that is not ended,
 //     which may well be YESTERDAY's session when the evening went past midnight.
 //     `null` means "nothing running" — a normal state, not an error.
 //   - useLastStartedSession — "which session does the review harvest?"
-//     (GET /:campaign/session?includeEnded=1): the last started session,
+//     (GET /campaigns/:campaign/session?includeEnded=1): the last started session,
 //     ENDED or not. Deriving today's session id here was the midnight bug of
 //     the review (finding 1): `end` writes into the session that was
 //     STARTED in, so after a session that ran past midnight the harvest — and
@@ -158,7 +158,7 @@ export function useSessionDiscard(campaign: string, onDone?: () => void) {
  * ending someone else's evening is not implied by "starten". Both places that
  * offer the button (topbar and live view) ask that same question.
  *
- * "Fortsetzen" is gone (issue #58): "Session beenden" is FINAL, so a start
+ * "Fortsetzen" is gone: "Session beenden" is FINAL, so a start
  * after an ended session creates a NEW session (own id, empty log, runtime at
  * 0) instead of re-opening the last one.
  */

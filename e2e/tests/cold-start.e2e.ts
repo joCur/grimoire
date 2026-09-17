@@ -43,7 +43,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
 
   // --- the empty instance ---------------------------------------------------
   // Not "keine Kampagne gefunden, bitte grimoire seed": a shell command is a
-  // dead end for the person the tool is for (issue #56).
+  // dead end for the person the tool is for.
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Willkommen bei Grimoire");
   expect(await api.get<unknown[]>("campaigns")).toEqual([]);
@@ -61,7 +61,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   await page.getByRole("button", { name: "Kampagne anlegen" }).click();
 
   // Straight into the (empty) pool of the new campaign.
-  await expect(page).toHaveURL(new RegExp(`/${CAMPAIGN_ID}$`));
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
   const campaignDoc = await api.file("campaign");
   expect(campaignDoc.properties.name).toBe(CAMPAIGN_NAME);
@@ -127,7 +127,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   // --- Session starten, Szene live nutzen -----------------------------------
   expect(await api.sessionPath()).toBeUndefined();
   await page.getByRole("button", { name: "Session starten" }).click();
-  await expect(page).toHaveURL(new RegExp(`/${CAMPAIGN_ID}/live$`));
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/live$`));
   expect(await api.sessionPath()).toMatch(/^sessions\/.+$/);
 
   // The scene created three steps ago is the live view's default selection,
@@ -160,10 +160,10 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   await page.goto("/");
   await page.getByLabel("Name der Kampagne").fill(CAMPAIGN_NAME);
   await page.getByRole("button", { name: "Kampagne anlegen" }).click();
-  await expect(page).toHaveURL(new RegExp(`/${CAMPAIGN_ID}$`));
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
 
   // --- NPC anlegen ----------------------------------------------------------
-  await page.goto(`/${CAMPAIGN_ID}/list/npcs`);
+  await page.goto(`/campaigns/${CAMPAIGN_ID}/list/npcs`);
   await expect(page.getByText("Noch keine NPCs.")).toBeVisible();
   await page.getByRole("button", { name: "NPC anlegen" }).click();
   const npcName = page.getByLabel("Name");
@@ -173,7 +173,7 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   await page.getByRole("button", { name: "Anlegen" }).click();
 
   // The dialog only ever asks for a name — the reading view opens, and the
-  // rest of the fields live in „Eigenschaften" (issue #42).
+  // rest of the fields live in „Eigenschaften".
   await expect(page).toHaveURL(/\/npcs\/hafenmeisterin-jorna$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
   await expect(page.getByRole("button", { name: "Eigenschaften" })).toBeVisible();
@@ -185,7 +185,7 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   // Same name again: the id is taken, so nothing is written and the dialog
   // says what is in the way — plus the free proposal as ONE click. No silent
   // `-2`: an id is permanent, so the DM decides.
-  await page.goto(`/${CAMPAIGN_ID}/list/npcs`);
+  await page.goto(`/campaigns/${CAMPAIGN_ID}/list/npcs`);
   await page.getByRole("button", { name: "NPC anlegen" }).click();
   await page.getByLabel("Name").fill("Hafenmeisterin Jorna");
   await page.getByRole("button", { name: "Anlegen" }).click();
@@ -201,7 +201,7 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   );
 
   // --- Ort anlegen ----------------------------------------------------------
-  await page.goto(`/${CAMPAIGN_ID}/list/locations`);
+  await page.goto(`/campaigns/${CAMPAIGN_ID}/list/locations`);
   await page.getByRole("button", { name: "Ort anlegen" }).click();
   const locationName = page.getByLabel("Name");
   await expect(locationName).toHaveAttribute("placeholder", "Name des Orts");
@@ -221,7 +221,7 @@ test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, serve
   await page.goto("/");
   await page.getByLabel("Name der Kampagne").fill(CAMPAIGN_NAME);
   await page.getByRole("button", { name: "Kampagne anlegen" }).click();
-  await expect(page).toHaveURL(new RegExp(`/${CAMPAIGN_ID}$`));
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
 
   // --- the switcher ---------------------------------------------------------
   const switcher = page.getByRole("banner").getByRole("button", { name: /^Kampagne: / });
@@ -248,7 +248,7 @@ test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, serve
 
   // Success NAVIGATES into the new campaign — its own (empty) pool.
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page).toHaveURL(new RegExp(`/${SECOND_ID}$`));
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${SECOND_ID}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(SECOND_NAME);
   await expect(switcher).toHaveAccessibleName(`Kampagne: ${SECOND_NAME}`);
   expect((await second.file("campaign")).properties.name).toBe(SECOND_NAME);
@@ -262,7 +262,7 @@ test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, serve
 
   // …and switching back works, which is what the menu was there for already.
   await page.getByRole("menu").getByRole("menuitem", { name: new RegExp(CAMPAIGN_NAME) }).click();
-  await expect(page).toHaveURL(new RegExp(`/${CAMPAIGN_ID}$`));
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
 });
 
 test("Kaltstart und NPC anlegen funktionieren bei 390px", async ({ page, server }) => {
@@ -280,7 +280,7 @@ test("Kaltstart und NPC anlegen funktionieren bei 390px", async ({ page, server 
   expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
   expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(390);
   await submit.click();
-  await expect(page).toHaveURL(new RegExp(`/${CAMPAIGN_ID}$`));
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
 
   // The mobile start surface reaches the lists ("Nachschlagen"), and the list
   // is where an NPC is created — the mobile half of issue #56.
