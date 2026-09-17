@@ -219,7 +219,7 @@ test("the Ort field reads a name as its id — a missing Ort is refused", async 
 
   // Text no slug can be derived from is blocked by the form itself.
   await ort.fill("???");
-  await expect(dialog.getByText('„???“ ergibt keine Orts-id')).toBeVisible();
+  await expect(dialog.getByText('„???“ ergibt keine Orts-Kennung')).toBeVisible();
   await expect(save).toBeDisabled();
 
   // A name no Ort holds: typeable, and the hint says it has to exist.

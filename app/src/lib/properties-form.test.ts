@@ -446,7 +446,7 @@ describe("the npcs list holds ids, not names", () => {
     // under the field instead of a failed save.
     const issues = propertiesFormIssues(sceneFields, withNpcs(["fenn", "Alte Fischerin"]), initial, t);
     expect(issues.npcs).toBe(
-      '„Alte Fischerin“ ist keine id — nur Kleinbuchstaben, Ziffern und Bindestriche.',
+      '„Alte Fischerin“ ist keine Kennung — nur Kleinbuchstaben, Ziffern und Bindestriche.',
     );
   });
 
@@ -524,7 +524,7 @@ describe("the Ort field: free text in, an id out", () => {
     expect(propertiesFormIssues(sceneFields, withLocation("leuchtturm"), initial, t)).toEqual({});
     expect(propertiesFormIssues(sceneFields, withLocation("  "), initial, t)).toEqual({});
     expect(propertiesFormIssues(sceneFields, withLocation("???"), initial, t).location).toBe(
-      'Kein verwendbarer Name — „???“ ergibt keine Orts-id.',
+      'Kein verwendbarer Name — „???“ ergibt keine Orts-Kennung.',
     );
   });
 

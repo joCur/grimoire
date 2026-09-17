@@ -119,7 +119,7 @@ describe("chapterIdError", () => {
   });
 
   test("rejects an empty id", () => {
-    expect(chapterIdError("", t)).toBe("Kapitel-id fehlt.");
+    expect(chapterIdError("", t)).toBe("Kapitel-Kennung fehlt.");
   });
 
   test("rejects path separators", () => {

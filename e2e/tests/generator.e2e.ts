@@ -253,7 +253,7 @@ test("npc run: pinned id, review, apply", async ({ page, api }) => {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("NPC generieren");
 
   await page.getByLabel("Quelltext", { exact: true }).fill(NPC_SOURCE);
-  await page.getByLabel("id (optional)").fill("brakk");
+  await page.getByLabel("Kennung (optional)").fill("brakk");
   await expect(page.getByText("wird angelegt als: npcs/brakk")).toBeVisible();
 
   await page.getByRole("button", { name: "NPC generieren", exact: true }).click();
@@ -449,7 +449,7 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
   await page.getByLabel("Kapiteltitel").fill(CHAPTER_TITLE);
   // The id is derived from the title and is the field that decides where the
   // drafts land.
-  await expect(page.getByLabel("Kapitel-id")).toHaveValue(CHAPTER_ID);
+  await expect(page.getByLabel("Kapitel-Kennung")).toHaveValue(CHAPTER_ID);
   await page.getByLabel("Quelltext (EN)").fill(SOURCE);
   await page.getByRole("button", { name: "Entwürfe generieren" }).click();
 

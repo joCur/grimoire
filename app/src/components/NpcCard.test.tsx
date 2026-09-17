@@ -25,7 +25,7 @@ describe("NpcCard — a reference that is no id", () => {
   test("free text says so, and does not blame the server", () => {
     const html = render("Alte Fischerin");
     expect(html).toContain("Alte Fischerin");
-    expect(html).toContain("keine NPC-id, deshalb kein Eintrag.");
+    expect(html).toContain("keine NPC-Kennung, deshalb kein Eintrag.");
     expect(html).not.toContain("Server prüfen");
   });
 

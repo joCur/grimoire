@@ -56,7 +56,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   await nameField.fill(CAMPAIGN_NAME);
   // The id is DERIVED and shown before it is created — it is permanent, so it
   // is never a surprise. Umlaut included: „Küste" → `kueste`.
-  await expect(page.getByText(`id: ${CAMPAIGN_ID}`)).toBeVisible();
+  await expect(page.getByText(`Kennung: ${CAMPAIGN_ID}`)).toBeVisible();
   await page.getByLabel("Beschreibung (optional)").fill("Ein erloschener Leuchtturm.");
   await page.getByRole("button", { name: "Kampagne anlegen" }).click();
 
@@ -242,7 +242,7 @@ test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, serve
   // before anything is written, optional description.
   await expect(nameField).toHaveAttribute("placeholder", "Name der Kampagne");
   await nameField.fill(SECOND_NAME);
-  await expect(dialog.getByText(`id: ${SECOND_ID}`)).toBeVisible();
+  await expect(dialog.getByText(`Kennung: ${SECOND_ID}`)).toBeVisible();
   await dialog.getByLabel("Beschreibung (optional)").fill("Nebel, Torf und ein Verschwundener.");
   await dialog.getByRole("button", { name: "Anlegen" }).click();
 

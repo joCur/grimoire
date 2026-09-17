@@ -74,7 +74,7 @@ export const en: Messages = {
   "create.campaign.title": "Create campaign",
   "create.campaign.nameLabel": "Campaign name",
   "create.campaign.namePlaceholder": "Campaign name",
-  "create.campaign.idPrefix": "id: ",
+  "create.campaign.idPrefix": "ID: ",
   "create.campaign.descriptionLabel": "Description (optional)",
   "create.campaign.descriptionPlaceholder": "One sentence that places the campaign",
 
@@ -109,14 +109,14 @@ export const en: Messages = {
   "coldstart.title": "Welcome to Grimoire",
   "coldstart.lead":
     "No campaign yet. Create one — chapters and scenes come into being inside it afterwards.",
-  "coldstart.id": "id: {id}",
+  "coldstart.id": "ID: {id}",
 
   // --- properties dialog ----------------------------------------------------
   "properties.action": "Properties",
   "properties.title": "{kind}: properties",
   "properties.description":
     "Every property of this entry. Only what you changed is saved — everything else stays exactly as it is.",
-  "properties.id": "id",
+  "properties.id": "ID",
   "properties.discard.title": "Discard changes?",
   "properties.discard.close":
     "The changed properties are not saved. Discarding closes the dialog and leaves the entry as it is stored.",
@@ -137,8 +137,8 @@ export const en: Messages = {
   "properties.ref.unknown": "Unknown — the entry has to exist.",
   "properties.ref.unknownLocation": "Unknown — the location has to exist.",
   "properties.issue.locationUnusable":
-    'Not a usable name — “{value}” yields no location id.',
-  "properties.issue.notAnId": "“{id}” is not an id — lowercase letters, digits and hyphens only.",
+    'Not a usable name — “{value}” yields no location ID.',
+  "properties.issue.notAnId": "“{id}” is not an ID — lowercase letters, digits and hyphens only.",
   "properties.issue.namelessRow": "Row without a name — add a name or remove the row.",
   "properties.issue.duplicateName": "Name “{name}” twice — every name may appear only once.",
   "properties.issue.chapterRequired": "A scene needs a chapter — it can be moved, but not removed.",
@@ -250,11 +250,11 @@ export const en: Messages = {
   // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
   "server.slug_taken": '{kind} “{id}” already exists — suggestion: “{suggestion}”',
   "server.slug_reserved": '“{id}” is a reserved name — suggestion: “{suggestion}”',
-  "server.slug_empty": "{field} yields no id — please use letters or digits.",
+  "server.slug_empty": "{field} yields no ID — please use letters or digits.",
   "server.location_not_an_id":
-    'Location “{value}” is not a location id — use “{suggestion}” and create that location first.',
+    'Location “{value}” is not a location ID — use “{suggestion}” and create that location first.',
   "server.location_not_an_id.noSuggestion":
-    'Location “{value}” is not a location id — please use lowercase letters, digits and dashes.',
+    'Location “{value}” is not a location ID — please use lowercase letters, digits and dashes.',
   "server.location_unknown": 'Location “{value}” does not exist — create it first.',
   "server.npc_unknown": 'NPC “{value}” does not exist — create it first.',
   "server.chapter_unknown": 'Chapter “{value}” does not exist — create it first.',
@@ -460,10 +460,10 @@ export const en: Messages = {
   // `status: unknown` and `## Notizen` are FORMAT tokens on the wire (README),
   // so they stand verbatim in both languages.
   "npcCreate.description":
-    "Creates the NPC entry with status: unknown; the text lands under ## Notizen. If the id already exists, the existing entry is linked instead.",
-  "npcCreate.idLabel": "id (appears in the path)",
+    "Creates the NPC entry with status: unknown; the text lands under ## Notizen. If the ID already exists, the existing entry is linked instead.",
+  "npcCreate.idLabel": "ID (appears in the address)",
   "npcCreate.idPlaceholder": "npc-id",
-  "npcCreate.idInvalid": "An id needs lowercase letters, digits and single hyphens.",
+  "npcCreate.idInvalid": "An ID needs lowercase letters, digits and single hyphens.",
   "npcCreate.nameLabel": "Name (optional)",
 
 
@@ -495,7 +495,7 @@ export const en: Messages = {
   // --- campaign metadata dialog (components/CampaignMetaAction.tsx) --------
   "campaignMeta.title": "Edit campaign",
   "campaignMeta.description":
-    "Name and description of the campaign. The id stays as it is — it is part of every address and does not change here.",
+    "Name and description of the campaign. The ID stays as it is — it is part of every address and does not change here.",
   "campaignMeta.field.name": "Name",
   "campaignMeta.field.description": "Description",
   "campaignMeta.field.description.placeholder": "One sentence that places the campaign",
@@ -534,16 +534,16 @@ export const en: Messages = {
   "generate.input.mode.npc": "NPC",
   "generate.input.npc.sourceLabel": "Source text",
   "generate.input.npc.sourcePlaceholder": "Bio, background, notes on the NPC …",
-  "generate.input.npc.idLabel": "id (optional)",
+  "generate.input.npc.idLabel": "ID (optional)",
   "generate.input.npc.idPlaceholder": "e.g. grella",
-  "generate.input.npc.idHint": "leave empty — then the model picks the id",
+  "generate.input.npc.idHint": "leave empty — then the model picks the ID",
   "generate.input.npc.idPreview": "will be created as: npcs/{id}",
   "generate.input.targetLabel": "Target chapter",
   "generate.input.newChapter": "New chapter",
   "generate.input.newTitleLabel": "Chapter title",
   "generate.input.newTitlePlaceholder": "Chapter title, e.g. The Smugglers' Cove",
   "generate.input.titleMissing": "Title missing — it becomes the new chapter's display name.",
-  "generate.input.chapterIdLabel": "Chapter id",
+  "generate.input.chapterIdLabel": "Chapter ID",
   "generate.input.chapterIdPlaceholder": "e.g. 03-schmugglerbucht",
   "generate.input.chapterIdSuggested": "suggested from the title",
   "generate.input.chapterIdPreview": "will be created as: {id}/",
@@ -562,15 +562,15 @@ export const en: Messages = {
   "generate.input.submit.npc": "Generate NPC",
 
   // --- generator: the two id fields' own rules (lib/generate.ts) -----------
-  "generate.input.chapterId.missing": "Chapter id missing.",
-  "generate.input.chapterId.slash": "No slashes — the chapter id is a single segment.",
-  "generate.input.chapterId.dots": "No “..” in the chapter id.",
+  "generate.input.chapterId.missing": "Chapter ID missing.",
+  "generate.input.chapterId.slash": "No slashes — the chapter ID is a single segment.",
+  "generate.input.chapterId.dots": "No “..” in the chapter ID.",
   "generate.input.chapterId.leadingDot": "No leading dot.",
   "generate.input.chapterId.space": "No spaces — separate words with a hyphen.",
   "generate.input.chapterId.charset": "Lowercase letters, digits and hyphens only.",
   "generate.input.chapterId.reserved":
     "“npcs”, “locations” and “sessions” are reserved — not a chapter name.",
-  "generate.input.npcId.slash": "No slashes — the id is a single segment.",
+  "generate.input.npcId.slash": "No slashes — the ID is a single segment.",
   "generate.input.npcId.space": "No spaces — separate words with a hyphen.",
   "generate.input.npcId.charset":
     "Lowercase letters, digits and hyphens only; no hyphen at the start.",
@@ -582,7 +582,7 @@ export const en: Messages = {
   "generate.error.lostJob": "The run is gone (server restart?) — start it again.",
   "generate.error.noApiKey": "ANTHROPIC_API_KEY missing — see server/.env",
   "generate.error.npcExists":
-    "NPC already exists — pick another id; existing entries are never overwritten.",
+    "NPC already exists — pick another ID; existing entries are never overwritten.",
   "generate.error.chapterMissing": "Chapter not found — pick another target.",
   "generate.error.failed": "Not generated — check the server.",
   "generate.error.validation": "The model failed the format check — nothing generated.",
@@ -752,7 +752,7 @@ export const en: Messages = {
   "sceneArticle.handout": "Handout: {handout}",
 
   // --- the aside cards (components/NpcCard.tsx, components/LocationCard.tsx) -
-  "npcCard.noId": "{id} — not an NPC id, so not an entry.",
+  "npcCard.noId": "{id} — not an NPC ID, so not an entry.",
   "npcCard.unloadable": "{id} — NPC not loadable, check the server.",
   "npcCard.will.inline": "Wants:",
   "npcCard.will": "Wants",

@@ -83,7 +83,7 @@ describe("reference fields", () => {
     // instead of handing the slug over as homework.
     const html = render(sceneField("location"), { kind: "text", text: "Der alte Hafen" });
     expect(html).toContain("Unbekannt — Ort muss existieren.");
-    expect(html).not.toContain("Keine Orts-id");
+    expect(html).not.toContain("Keine Orts-Kennung");
   });
 
   test("text that SLUGS to a known Ort resolves to that Ort's name", () => {
@@ -96,7 +96,7 @@ describe("reference fields", () => {
   test("text no slug can be derived from says nothing — the issue does", () => {
     const html = render(sceneField("location"), { kind: "text", text: "???" });
     expect(html).not.toContain("angelegt");
-    expect(html).not.toContain("Keine Orts-id");
+    expect(html).not.toContain("Keine Orts-Kennung");
   });
 
   test("an unknown CHAPTER is not promised — chapters are never auto-created", () => {

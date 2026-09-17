@@ -1,10 +1,12 @@
-// The catalog's own guarantees (issue #69).
+// The catalog's own guarantees. The i18n layer is this repo's own code
+// (format.ts: interpolation, ICU plural, dates through Intl) — there is no
+// framework whose tests would cover it.
 //
 // The KEY SET is enforced by the typecheck (en.ts is a `Record<MessageKey,
 // string>`), so these tests cover what types cannot: that every pattern
 // actually COMPILES in both languages, that the plural forms are real ICU and
 // not a German sentence with an English number glued on, and that the browser
-// preference maps the way AK2 says it does.
+// preference maps to a supported locale.
 
 import { describe, expect, test } from "bun:test";
 
@@ -16,10 +18,6 @@ import { LOCALES, preferredLocale, type Locale, type MessageKey } from "./messag
 const KEYS = Object.keys(de) as MessageKey[];
 
 describe("the catalogs", () => {
-  test("hold the same keys in both languages", () => {
-    expect(Object.keys(en).sort()).toEqual(KEYS.slice().sort());
-  });
-
   test("have no empty message", () => {
     for (const locale of LOCALES) {
       for (const key of KEYS) {
@@ -112,7 +110,7 @@ describe("interpolation", () => {
     const marker = { mono: "jorna" };
     const parts = formatParts("de", "coldstart.id", { id: marker });
     expect(parts).toContain(marker);
-    expect(parts.filter((part) => typeof part === "string").join("")).toBe("id: ");
+    expect(parts.filter((part) => typeof part === "string").join("")).toBe("Kennung: ");
   });
 
   test("degrades to the raw pattern instead of throwing", () => {
