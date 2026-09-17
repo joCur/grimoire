@@ -10,7 +10,7 @@
 //
 // So this test forbids the mixed form everywhere the model can see it: the
 // system prompts (`.md`), the few-shot REPLIES (`.json`) and
-// the reference campaign in `examples/`. A few-shot is one JSON object whose
+// the example campaign in `fixtures/`. A few-shot is one JSON object whose
 // body is a single string, so a whole scene sits on one line — the rule still
 // reads it correctly, because a correctly closed `„…“` cannot be crossed and
 // the string delimiter always stands after it. The catalog carries the same guard over its VALUES (a raw scan
@@ -72,7 +72,7 @@ describe("German quotation marks", () => {
   });
 
   test("nothing in the example campaign mixes them", async () => {
-    const files = await promptFiles(path.join(ROOT, "examples"), [".md"]);
+    const files = await promptFiles(path.join(ROOT, "fixtures"), [".json"]);
     expect(files.length).toBeGreaterThan(5);
     const hits = (await Promise.all(files.map(offenders))).flat();
     expect(hits).toEqual([]);

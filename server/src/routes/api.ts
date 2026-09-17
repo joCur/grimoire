@@ -403,11 +403,11 @@ api.put("/:campaign/glossary", async (c) => {
     if (item.explanation !== undefined && typeof item.explanation !== "string") {
       throw new ApiError(400, "explanation must be a string");
     }
-    // NO single-line rule here, unlike the knowledge list below: the markdown
-    // import produces glossary explanations that wrap over two lines
-    // (examples/beispiel/glossary.md), so a 400 would make an imported
-    // glossary unsavable. `promptInline` (store/read.ts) flattens them for
-    // the prompt instead — the defence that does not lose data.
+    // NO single-line rule here, unlike the knowledge list below: a glossary
+    // explanation may span several lines (the example campaign has one), so a
+    // 400 would make such a glossary unsavable. `promptInline` (store/read.ts)
+    // flattens them for the prompt instead — the defence that does not lose
+    // data.
     entries.push({ term: item.term, explanation: item.explanation ?? "" });
   }
   return c.json(await writeGlossary(c.req.param("campaign"), entries, requireRev(body.rev)));

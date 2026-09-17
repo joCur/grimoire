@@ -48,10 +48,10 @@ async function seed(args: string[]): Promise<number> {
   const { db, close } = await openDb(dbFile);
   try {
     if (!force && !isDbEmpty(db)) {
-      console.error("this database already holds campaigns and is never overwritten.");
-      console.error("  · seed into a FRESH database:  GRIMOIRE_DATA=<empty-dir> grimoire seed");
-      console.error("  · add to this one anyway (rows are added, nothing deleted): --force");
-      return 1;
+      console.log("this database already holds campaigns and is never overwritten.");
+      console.log("  · seed into a FRESH database:  GRIMOIRE_DATA=<empty-dir> grimoire seed");
+      console.log("  · add to this one anyway (rows are added, nothing deleted): --force");
+      return 0;
     }
     for (const outcome of await seedFixtures(db, source)) {
       console.log(

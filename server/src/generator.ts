@@ -1260,7 +1260,7 @@ export function applyStubTarget(item: unknown, index: number): ApplyTarget {
  * drafts go into a chapter that does not exist yet". Returns the
  * chapter entry to create in the same batch, or null when the
  * chapter is already there (idempotent — an existing chapter is not a
- * conflict). Minimal properties per the examples convention
+ * conflict). Minimal properties per the format
  * (id/title/status: planned — a generator-created chapter is upcoming,
  * never the active one); the body stays empty and degrades.
  */

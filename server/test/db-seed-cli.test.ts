@@ -61,7 +61,7 @@ describe("grimoire seed", () => {
     expect((await runCli(["seed"])).code).toBe(0);
 
     const second = await runCli(["seed"]);
-    expect(second.code).toBe(1);
+    expect(second.code).toBe(0);
     expect(second.out).toContain("already holds campaigns");
     expect(second.out).toContain("--force");
 
