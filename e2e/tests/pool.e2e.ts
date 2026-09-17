@@ -13,7 +13,7 @@
 import type { Page } from "@playwright/test";
 
 import { THREE_SCENES, TRIGGER } from "../fixtures/replies";
-import { expect, test, todaySessionId } from "../support/test";
+import { expect, test, todaySessionId, type SeedEntry } from "../support/test";
 
 /**
  * How far the topbar's content sticks out of the row, in pixels (0 = it fits).
@@ -73,30 +73,38 @@ const TOPBAR_WIDTHS = [640, 768, 900, 1000, 1024, 1040, 1100, 1280, 1300, 1536];
  * „Ohne Ort" section. The example campaign has none, so the
  * test that needs one seeds it.
  */
-const SCENE_WITHOUT_LOCATION = `---
-id: ohne-ort-szene
-title: Irgendwo unterwegs
-type: planned
-chapter: 01-salzhafen
-npcs: []
-handouts: []
-tags: [travel]
-status: draft
----
-
-## Flow
-
-Die Gruppe ist auf der Straße, der Ort steht noch nicht fest.
-`;
+const SCENE_WITHOUT_LOCATION: SeedEntry = {
+  kind: "scene",
+  properties: {
+    id: "ohne-ort-szene",
+    title: "Irgendwo unterwegs",
+    type: "planned",
+    chapter: "01-salzhafen",
+    npcs: [],
+    handouts: [],
+    tags: ["travel"],
+    status: "draft",
+  },
+  body: "\n## Flow\n\nDie Gruppe ist auf der Straße, der Ort steht noch nicht fest.\n",
+};
 
 /** Today's session, started at 19:30 and never ended. */
-const RUNNING_SESSION = (() => {
-  const id = todaySessionId();
-  return {
-    path: `sessions/${id}`,
-    content: `---\nid: ${id}\nstarted: ${id}T19:30\nscenes_played: []\n---\n\n## Log\n`,
-  };
-})();
+const RUNNING_SESSION: SeedEntry = {
+  kind: "session",
+  properties: { id: todaySessionId(), started: `${todaySessionId()}T19:30`, scenes_played: [] },
+  log: [],
+  body: "",
+};
+
+/**
+ * A campaign entry with nothing but its id — the stem REPLACES the example
+ * campaign's own entry, so the header has no name to show.
+ */
+const NAMELESS_CAMPAIGN: SeedEntry = {
+  kind: "campaign",
+  properties: { id: "beispiel" },
+  body: "",
+};
 
 test('"/" redirects into the campaign and the pool shows chapter and scenes', async ({
   page,
@@ -106,7 +114,7 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
   // The redirect target comes from the server (lastSession per campaign).
   await expect(page).toHaveURL(/\/beispiel$/);
 
-  // Campaign header from _campaign.
+  // Campaign header from the campaign entry.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
@@ -142,9 +150,8 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
   ).toBeVisible();
 
   // Planned scene in its location group, with the status control's label.
-  // The group IS the scene's `location`, so the header is
-  // the location's NAME — `hafen`, the group DIRECTORY of the import format,
-  // is not a grouping and appears nowhere.
+  // The group IS the scene's `location`, so the header is the location's
+  // NAME; a bare slug like `hafen` is no grouping and appears nowhere.
   await expect(
     page.getByRole("heading", { level: 3, name: "Der Leuchtturm von Salzhafen" }),
   ).toBeVisible();
@@ -178,7 +185,7 @@ test('"/" redirects into the campaign and the pool shows chapter and scenes', as
 
 test.describe("a scene without a location", () => {
   test.use({
-    seed: { files: { "01-salzhafen/ohne-ort": SCENE_WITHOUT_LOCATION } },
+    seed: { entries: { "scene-ohne-ort": SCENE_WITHOUT_LOCATION } },
   });
 
   test('scenes that name no location get the neutral „Ohne Ort" section', async ({ page }) => {
@@ -346,7 +353,7 @@ test("the topbar trio navigates without anything in the left block moving", asyn
  */
 test.describe("with a session running since 19:30, pressing the gear", () => {
   test.use({
-    seed: { files: { [RUNNING_SESSION.path]: RUNNING_SESSION.content } },
+    seed: { entries: { "session-running": RUNNING_SESSION } },
   });
 
   test("keeps the whole chrome where it was", async ({ page }) => {
@@ -426,7 +433,7 @@ test.describe("with a session running since 19:30, pressing the gear", () => {
  */
 test.describe("with a session running since 19:30", () => {
   test.use({
-    seed: { files: { [RUNNING_SESSION.path]: RUNNING_SESSION.content } },
+    seed: { entries: { "session-running": RUNNING_SESSION } },
   });
 
   test("the topbar does not overflow at medium widths while a session runs", async ({
@@ -637,26 +644,24 @@ test("editing the campaign metadata updates header, switcher and the file", asyn
   expect(campaign.body).toContain("Kampagnenweite Notizen:");
 });
 
-test.describe("imported without a _campaign", () => {
-  test.use({ seed: { remove: ["_campaign"] } });
+test.describe("a campaign without a name", () => {
+  test.use({ seed: { entries: { campaign: NAMELESS_CAMPAIGN } } });
 
-  test("a campaign imported without _campaign still names itself and is editable", async ({
+  test("a campaign without a name still names itself and is editable", async ({
     page,
     api,
   }) => {
-    // Before the cutover this was the one gap PATCH /properties could not
-    // close (no file, hence no rev) and the dialog offered to CREATE the
-    // file. The import gives every campaign directory a row,
-    // whose name falls back to the id — so there is nothing to create, and the
-    // ordinary patch path covers this case too.
+    // The campaign is a row like any other, and its name falls back to its
+    // id — so there is nothing to create and the ordinary patch path covers
+    // this case too.
     await page.goto("/beispiel");
-    // Without metadata the header degrades to the directory name.
+    // Without a name the header degrades to the id.
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "beispiel",
     );
-    const imported = await api.file("campaign");
-    expect(imported.properties).toEqual({ id: "beispiel", name: "beispiel" });
-    expect(imported.body).toBe("");
+    const nameless = await api.file("campaign");
+    expect(nameless.properties).toEqual({ id: "beispiel", name: "beispiel" });
+    expect(nameless.body).toBe("");
 
     await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
     const dialog = page.getByRole("dialog");
@@ -672,7 +677,7 @@ test.describe("imported without a _campaign", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Salzhafen von vorn",
     );
-    // The id stays the DIRECTORY name — the server sets it, never the client.
+    // The id does not move — the server sets it, never the client.
     const campaign = await api.properties("campaign");
     expect(campaign.id).toBe("beispiel");
     expect(campaign.name).toBe("Salzhafen von vorn");

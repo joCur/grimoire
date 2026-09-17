@@ -4,14 +4,20 @@
 // Adopt a thread → chapter, tick off an inbox line, create an NPC stub,
 // and the progress counter.
 //
-// TODAY's session is the harvest's data, so it is SEEDED into the markdown
-// tree the test's database is imported from (the same lines the live view
-// would have written — path 4 covers the writing itself).
+// TODAY's session is the harvest's data, so it is SEEDED as an entry of its
+// own (the same lines the live view would have written — path 4 covers the
+// writing itself).
 //
 // The source chip of a log line names the SCENE by its title (resolved via
 // the tree), not by the id in the log line.
 
-import { expect, test, todaySessionId, todaySessionPath } from "../support/test";
+import {
+  expect,
+  test,
+  todaySessionId,
+  todaySessionPath,
+  type SeedEntry,
+} from "../support/test";
 
 const THREAD_LINE = "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread";
 const THREAD_TEXT = "Cliffhanger: Lichter in der Bucht gesichtet";
@@ -23,38 +29,49 @@ const NOTE_TEXT = "Die Laternen am Kai brennen bei Ebbe nie";
 const PC_TEXT = "Geburtstags-Item für Kaela vorbereiten";
 
 /** Today's session with the three tagged log lines the review harvests. */
-function sessionFile(id: string): string {
-  return `---
-id: ${id}
-started: ${id}T19:30
-ended: ${id}T22:45
-scenes_played: [lighthouse-arrival]
----
-
-## Log
-
-- 19:52 (lighthouse-arrival) Spuren gefunden, Gruppe will sofort zur Bucht #decision
-- 21:10 (lighthouse-arrival) ${NPC_TEXT} #npc
-${THREAD_LINE}
-`;
+function sessionEntry(id: string): SeedEntry {
+  return {
+    kind: "session",
+    properties: {
+      id,
+      started: `${id}T19:30`,
+      ended: `${id}T22:45`,
+      scenes_played: ["lighthouse-arrival"],
+    },
+    log: [
+      {
+        raw: "- 19:52 (lighthouse-arrival) Spuren gefunden, Gruppe will sofort zur Bucht #decision",
+      },
+      { raw: `- 21:10 (lighthouse-arrival) ${NPC_TEXT} #npc` },
+      { raw: THREAD_LINE },
+    ],
+    body: "",
+  };
 }
 
-test.use({ seed: { files: { [todaySessionPath()]: sessionFile(todaySessionId()) } } });
+test.use({ seed: { entries: { "session-today": sessionEntry(todaySessionId()) } } });
 
 /**
- * The evening of YESTERDAY, ENDED after midnight: `ended` sits in yesterday's
- * file and there is no file for today at all. The describe block below imports
- * ONLY this one.
+ * The evening of YESTERDAY, ENDED after midnight: `ended` sits on yesterday's
+ * session and there is no session for today at all.
  */
 const PAST_MIDNIGHT = (() => {
   const today = todaySessionId();
   const d = new Date(`${today}T12:00:00`);
   d.setDate(d.getDate() - 1);
   const yesterday = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  return {
-    path: `sessions/${yesterday}`,
-    content: `---\nid: ${yesterday}\nstarted: ${yesterday}T21:30\nended: ${today}T01:40\nscenes_played: [lighthouse-arrival]\n---\n\n## Log\n\n${THREAD_LINE}\n`,
+  const entry: SeedEntry = {
+    kind: "session",
+    properties: {
+      id: yesterday,
+      started: `${yesterday}T21:30`,
+      ended: `${today}T01:40`,
+      scenes_played: ["lighthouse-arrival"],
+    },
+    log: [{ raw: THREAD_LINE }],
+    body: "",
   };
+  return { path: `sessions/${yesterday}`, entry };
 })();
 
 test("adopting a thread lands in the chapter, the inbox line gets ticked off", async ({
@@ -67,7 +84,7 @@ test("adopting a thread lands in the chapter, the inbox line gets ticked off", a
   // The topbar carries the harvest progress (the page repeats it below md).
   const progress = page.getByRole("banner").getByText(/von \d+ gesichtet/);
 
-  // Three tagged log lines + the tagged inbox line from examples/beispiel.
+  // Three tagged log lines + the tagged inbox line of the example campaign.
   await expect(progress).toHaveText("0 von 4 gesichtet");
   await expect(page.getByText("Noch keine offenen Handlungsstränge in diesem Kapitel.")).toHaveCount(0);
   // The chapter already carries one open thread.
@@ -255,16 +272,15 @@ test("an id that already has an entry is linked, not refused", async ({ page, ap
 });
 
 test.describe("with yesterday's session, ended after midnight", () => {
-  test.use({ seed: { files: { [PAST_MIDNIGHT.path]: PAST_MIDNIGHT.content } } });
+  test.use({ seed: { entries: { "session-past-midnight": PAST_MIDNIGHT.entry } } });
 
   test("a session that ran past midnight is still the session review's session", async ({
     page,
     api,
   }) => {
-    // The evening of yesterday was ENDED after midnight, so `ended` sits in
-    // YESTERDAY's file and there is no file for today at all. The review used
-    // to look at `sessions/<today>` and found nothing to harvest; now the
-    // server names the session (GET /session?includeEnded=1).
+    // The evening of yesterday was ENDED after midnight, so `ended` sits on
+    // YESTERDAY's session and there is none for today at all: the server is
+    // what names the session (GET /session?includeEnded=1), not the date.
     const rel = PAST_MIDNIGHT.path;
 
     await page.goto("/beispiel/review");

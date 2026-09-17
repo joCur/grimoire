@@ -1,23 +1,21 @@
-// `grimoire seed` — the markdown importer as the dev/E2E tool it now is.
-// This spec replaces the former first-migration spec, which covered the same
-// importer when it still ran at boot.
+// `grimoire seed` — the dev/E2E tool that puts fixture entries into a
+// database.
 //
-// The production boot imports NOTHING any more, and that is the first thing
-// asserted here: a server on an empty data directory comes up healthy and
-// empty. The importer itself is still a critical path — it is how every other
-// spec gets its fixture campaign — so its two guarantees are covered as
-// before:
+// The production boot loads NOTHING, and that is the first thing asserted
+// here: a server on an empty data directory comes up healthy and empty. The
+// seed tool itself is a critical seam — it is how every other spec gets its
+// fixture campaign — so its two guarantees are covered:
 //
-//   1. one seed run on a fresh database imports the whole campaign, and it is
+//   1. one seed run on a fresh database loads the whole campaign, and it is
 //      then reachable through the API (tree, a scene body, an npc, the
 //      session, the inbox, the glossary);
-//   2. a SECOND seed run on that same database is a no-op — nothing is
-//      re-imported, nothing is lost.
+//   2. a SECOND run on that same database refuses, because the database
+//      already holds campaigns — nothing is loaded twice, nothing is lost.
 //
-// The database is looked at directly for the two claims the API cannot make:
-// the import markers in `meta` and the row counts (no second import). The
-// migration report is read from the CLI's own stdout — there is no endpoint
-// for it, which is the point: the report belongs to the tool.
+// The database is looked at directly for the one claim the API cannot make:
+// the row counts, which say that the second run really wrote nothing. The
+// report is read from the CLI's own stdout — there is no endpoint for it,
+// which is the point: the report belongs to the tool.
 
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
@@ -57,8 +55,8 @@ const COUNTS =
   "(SELECT count(*) FROM glossary) AS glossary";
 
 /**
- * Everything the imported campaign has to answer — asserted after BOTH seed
- * runs, so the second one is proven to have changed nothing.
+ * Everything the seeded campaign has to answer — asserted after BOTH runs, so
+ * the second one is proven to have changed nothing.
  */
 async function assertCampaignIsThere(api: Api): Promise<void> {
   // --- the tree -------------------------------------------------------------
@@ -66,26 +64,24 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(tree.campaign).toBe("beispiel");
   expect(tree.chapters.map((c) => c.id)).toEqual(["01-salzhafen"]);
   const scenes = tree.chapters.flatMap((c) => c.groups.flatMap((g) => g.scenes));
-  // The scene's path segment is its ID since the cutover.
-  // The group segment is the scene's `location`, so the two scenes of the
-  // `hafen/` directory land under DIFFERENT groups.
+  // A scene's address is its chapter, its location and its id — the two
+  // scenes name different Orte, so they land under DIFFERENT groups.
   expect(scenes.map((s) => s.path).sort()).toEqual([
     "01-salzhafen/bucht/smuggler-captured",
     "01-salzhafen/leuchtturm/lighthouse-arrival",
   ]);
   expect(tree.npcs.map((n) => n.id).sort()).toEqual(["fenn", "jorna"]);
-  // BOTH Orte have an entry of their own in the tree — and that is the only
-  // reason they are here. A mention creates nothing: the importer no longer
-  // writes an entry because a scene names `bucht` as its location, so an Ort
-  // without an entry would be a reference to nothing and the import of the
-  // scene that names it would fail.
+  // BOTH Orte have an entry of their own — and that is the only reason they
+  // are here. A mention creates nothing (ADR #19): an Ort without an entry
+  // would be a reference to nothing, and the run would fail on the scene
+  // that names it.
   expect(tree.locations.map((l) => l.path).sort()).toEqual([
     "locations/bucht",
     "locations/leuchtturm",
   ]);
-  // What says the entry was IMPORTED rather than conjured: it carries the
-  // name and the chapter that stand in the campaign, which a synthesized
-  // stub would not have.
+  // What says the entry was SEEDED rather than conjured: it carries the name
+  // and the chapter its fixture spells, which a synthesized stub would not
+  // have.
   const bucht = await api.file("locations/bucht");
   expect(bucht.properties.name).toBe("Die Nordbucht");
   expect(bucht.properties.chapter).toBe("01-salzhafen");
@@ -114,7 +110,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   const inbox = await api.file("inbox");
   expect(inbox.body).toContain("Der Dorfschmied repariert");
 
-  // --- the glossary: its own TABLE since the cutover ------------------------
+  // --- the glossary: its own TABLE ------------------------------------------
   const glossary = await api.get<GlossaryResponse>("beispiel/glossary");
   const terms = glossary.entries.map((e) => e.term);
   expect(terms).toContain("lighthouse keeper");
@@ -124,7 +120,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(terms).toContain("smugglers' cove");
 }
 
-test("a fresh instance boots EMPTY — no import happens at startup", async ({}, testInfo) => {
+test("a fresh instance boots EMPTY — nothing is loaded at startup", async ({}, testInfo) => {
   const dataDir = path.join(runDir(), `w${testInfo.workerIndex}`, testInfo.testId, "empty-data");
   await rm(dataDir, { recursive: true, force: true });
   await mkdir(dataDir, { recursive: true });
@@ -133,7 +129,7 @@ test("a fresh instance boots EMPTY — no import happens at startup", async ({},
   try {
     const api = apiFor(handle.url);
     // The server is up (the fixture waited for /api/campaigns) and knows
-    // nothing: the markdown tree next to it was never read.
+    // nothing: the fixtures directory next to it was never read.
     expect(await api.get<{ id: string }[]>("campaigns")).toEqual([]);
     expect((await api.fetch("beispiel/tree")).status).toBe(404);
   } finally {
@@ -143,18 +139,16 @@ test("a fresh instance boots EMPTY — no import happens at startup", async ({},
   if (process.env.E2E_KEEP !== "1") await rm(dataDir, { recursive: true, force: true });
 });
 
-test("grimoire seed imports the campaign; a second run is a no-op", async ({}, testInfo) => {
+test("grimoire seed loads the fixtures; a second run refuses", async ({}, testInfo) => {
   const base = path.join(runDir(), `w${testInfo.workerIndex}`, testInfo.testId);
   const dataDir = path.join(base, "data");
   await rm(base, { recursive: true, force: true });
   await mkdir(dataDir, { recursive: true });
 
-  // --- seed run 1: fresh database, markdown tree ----------------------------
+  // --- run 1: fresh database, the pristine fixtures -------------------------
   const firstOut = await seedCampaigns(pristineDir(), dataDir);
-  expect(firstOut).toContain("imported: beispiel");
-  // A clean example campaign degrades nothing, so the report is empty — the
-  // CLI says so on stdout, which is where the report lives now.
-  expect(firstOut).toContain("clean import");
+  // The report names the campaign it loaded; the count is the tool's own.
+  expect(firstOut).toContain("seeded: beispiel");
 
   const dbFile = path.join(dataDir, "grimoire.db");
   const first = await startGrimoireServer(pristineDir(), dataDir, testInfo.workerIndex);
@@ -164,27 +158,21 @@ test("grimoire seed imports the campaign; a second run is a no-op", async ({}, t
     await first.proc.stop();
   }
 
-  // What the database says about that import — the markers the second run
-  // reads to decide it has nothing to do.
+  // The row counts of that run — what the second run must not change.
   const afterFirst = await openSqlite(dbFile);
-  let firstMeta: Record<string, string>;
   let firstCounts: Record<string, unknown> | undefined;
   try {
-    const db = dbFor(afterFirst);
-    firstMeta = db.meta();
-    expect(firstMeta.migrated_at).toBeTruthy();
-    expect(firstMeta["migrated_campaign:beispiel"]).toBeTruthy();
-    expect(firstMeta.migrated_from).toBe(pristineDir());
-    firstCounts = db.one(COUNTS);
+    firstCounts = dbFor(afterFirst).one(COUNTS);
     expect(firstCounts).toMatchObject({ campaigns: 1, scenes: 2, npcs: 2 });
   } finally {
     afterFirst.close();
   }
 
-  // --- seed run 2: SAME database --------------------------------------------
-  // The importer never overwrites: an already-imported database is left alone.
+  // --- run 2: SAME database -------------------------------------------------
+  // A database that already holds campaigns is left alone — the tool says so
+  // and writes nothing.
   const secondOut = await seedCampaigns(pristineDir(), dataDir);
-  expect(secondOut).toContain("nothing to do");
+  expect(secondOut).toContain("holds campaigns");
 
   const second = await startGrimoireServer(pristineDir(), dataDir, testInfo.workerIndex);
   try {
@@ -198,13 +186,10 @@ test("grimoire seed imports the campaign; a second run is a no-op", async ({}, t
     await second.proc.stop();
   }
 
-  // Nothing was re-imported: same markers (a second run would rewrite
-  // `migrated_at`), same row counts.
+  // Nothing was loaded twice: the same row counts.
   const afterSecond = await openSqlite(dbFile);
   try {
-    const db = dbFor(afterSecond);
-    expect(db.meta()).toEqual(firstMeta);
-    expect(db.one(COUNTS)).toEqual(firstCounts);
+    expect(dbFor(afterSecond).one(COUNTS)).toEqual(firstCounts);
   } finally {
     afterSecond.close();
   }

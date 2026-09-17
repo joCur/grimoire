@@ -142,7 +142,7 @@ export const SCENE_TITLE = "Nachtwache am Kai";
  * (server/src/generator.ts, draftAddress).
  */
 export const SCENE_ID = "night-watch-quay";
-/** The npc stub the scene run ships (does not exist in examples/beispiel). */
+/** The npc stub the scene run ships (the example campaign has no such npc). */
 export const NPC_STUB_ID = "grella";
 export const NPC_STUB_NAME = "Grella";
 /**

@@ -29,7 +29,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, test, type Api } from "../support/test";
+import { expect, test, type Api, type SeedEntry } from "../support/test";
 
 /** Six blocks, one per type the reading view knows — the composer's reference. */
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
@@ -567,26 +567,26 @@ test("Abbrechen after a block edit asks first — Verwerfen leaves the file alon
 
 /**
  * A scene with two constructs the composer does not model: an UNKNOWN callout
- * kind and a markdown table. Seeded into the markdown tree this test's
- * database is imported from (examples/ must not be touched — CLAUDE.md), and
- * written out here verbatim because the assertions are about these exact
- * bytes.
+ * kind and a markdown table. Seeded as an entry of its own and written out
+ * here verbatim, because the assertions are about these exact bytes.
  */
-/** Its path segment is the scene's ID, like every scene path since #57. */
+/** Its last address segment is the scene's id, like every scene address. */
 const ODD_SCENE_PATH = "01-salzhafen/leuchtturm/seltsame-mechanik";
 
-const ODD_SCENE = `---
-id: seltsame-mechanik
-title: Seltsame Mechanik
-type: planned
-chapter: 01-salzhafen
-location: leuchtturm
-npcs: []
-handouts: []
-tags: [test]
-status: draft
----
-
+const ODD_SCENE: SeedEntry = {
+  kind: "scene",
+  properties: {
+    id: "seltsame-mechanik",
+    title: "Seltsame Mechanik",
+    type: "planned",
+    chapter: "01-salzhafen",
+    location: "leuchtturm",
+    npcs: [],
+    handouts: [],
+    tags: ["test"],
+    status: "draft",
+  },
+  body: `
 ## Flow
 
 Die Gruppe würfelt auf der Tabelle unten.
@@ -597,10 +597,11 @@ Die Gruppe würfelt auf der Tabelle unten.
 | ---- | --------------- |
 | 1-3  | Möwen           |
 | 4-6  | ein leeres Fass |
-`;
+`,
+};
 
 test.describe("with a scene of unknown constructs", () => {
-  test.use({ seed: { files: { [ODD_SCENE_PATH]: ODD_SCENE } } });
+  test.use({ seed: { entries: { "scene-seltsame-mechanik": ODD_SCENE } } });
 
   test("unknown callouts and tables become cards — and survive a neighbour's save", async ({
     page,

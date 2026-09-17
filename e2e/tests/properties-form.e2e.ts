@@ -8,48 +8,26 @@
 // regler patches ONE key, this form patches any of them. Two things make the
 // form the harder case and are what this spec is about:
 //
-//   1. It is a PATCH, not a write of the file. Only the keys the DM actually
-//      changed may travel — a key the form does not know (a hand-edited
-//      `x-custom`), a key it knows but the DM did not touch, and the whole
-//      markdown body have to come out of a save untouched.
+//   1. It is a PATCH, not a write of the whole entry. Only the keys the DM
+//      actually changed may travel — a key the form knows but the DM did not
+//      touch, and the whole body, have to come out of a save untouched.
 //   2. The conflict is DETERMINISTIC here, unlike the status regler: the
 //      dialog freezes the rev it opened with on purpose, so the ~5s version
 //      poll cannot heal the staleness while the DM types. No retry loop.
 //   3. Everything the save uses is frozen at open, so the dialog belongs to
-//      ONE path: a navigation under the open modal (⌘K works over it) has to
-//      close it, or the next save writes file A's diff into file B. And what
-//      is typed does not vanish without a question — neither on Esc nor in an
-//      unfinished quickstat row.
+//      ONE entry: a navigation under the open modal (⌘K works over it) has to
+//      close it, or the next save writes entry A's diff onto entry B. And
+//      what is typed does not vanish without a question — neither on Esc nor
+//      in an unfinished quickstat row.
 //
-// Every assertion reads the file back through the API — what the UI shows and
-// what the database holds are checked separately. Since the cutover there is
-// no file behind it: „extern geändert" now means a SECOND WRITER through the
-// same API, which is what bumps the row's guard token.
-//
-// One caveat the assertions live with: PATCH /properties re-emits the whole
-// YAML block, so the SURFACE formatting of untouched keys may normalize
-// (`handouts: ["Karte"]` -> `[Karte]`, `statblock: "Roll20: Jorna"` ->
-// `'Roll20: Jorna'`) — documented in server/src/campaign-write.ts. The VALUES
-// never move, so this spec asserts values, plus one plain-scalar key
-// (`x-custom: bleibt`) that does survive byte-identically.
+// Every assertion reads the entry back through the API — what the UI shows
+// and what the database holds are checked separately. „Extern geändert"
+// means a SECOND WRITER through the same API, which is what bumps the row's
+// guard token.
 
 import type { Locator, Page } from "@playwright/test";
 
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { expect, test, type Api } from "../support/test";
-import { EXAMPLES_DIR } from "../support/paths";
-
-
-// The reference scene with one key the schema has no field for — seeded
-// through the importer, because that is the only way an unknown key gets
-// into `extra` (the API refuses new ones).
-const SCENE_FILE = "01-salzhafen/hafen/ankunft-leuchtturm";
-const SCENE_WITH_CUSTOM = readFileSync(
-  path.join(EXAMPLES_DIR, "beispiel", `${SCENE_FILE}.md`),
-  "utf8",
-).replace(/\n---\n/, "\nx-custom: bleibt\n---\n");
-test.use({ seed: { files: { [SCENE_FILE]: SCENE_WITH_CUSTOM } } });
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const SCENE_URL = `/beispiel/entry/${SCENE}`;
@@ -91,11 +69,6 @@ test("scene properties: chips, reference and status land in the file — nothing
   // an entry, and nothing is created by naming it (ADR #19). „Neu anlegen"
   // is the app's own path (tested in create.e2e.ts); here it is one call.
   await api.send("POST", "beispiel/locations", { name: "Nordbucht" });
-  // A key the form does not know (`x-custom`, seeded through the importer —
-  // the only way such a key gets in): the patch must not carry it, so it has
-  // to come out of the save verbatim.
-  expect(pristine.properties["x-custom"]).toBe("bleibt");
-
   // Entered from the pool, so there is a history entry BEHIND the scene —
   // the „zurück" assertion after the move below needs one.
   await page.goto("/beispiel");
@@ -218,8 +191,7 @@ test("scene properties: chips, reference and status land in the file — nothing
   // never writes it.
   expect((await api.file("locations/nordbucht")).properties.name).toBe("Nordbucht");
   expect(after.properties.status).toBe("draft");
-  // … the untouched ones with their values, the unknown one included …
-  expect(after.properties["x-custom"]).toBe("bleibt");
+  // … the untouched ones with their values …
   expect(after.properties.id).toBe("lighthouse-arrival");
   expect(after.properties.title).toBe("Ankunft am Leuchtturm");
   expect(after.properties.type).toBe("planned");

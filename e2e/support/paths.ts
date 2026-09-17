@@ -11,10 +11,13 @@ export const E2E_DIR = path.resolve(fileURLToPath(new URL(".", import.meta.url))
 /** Repo root — the suite drives the real workspaces from here. */
 export const REPO_ROOT = path.resolve(E2E_DIR, "..");
 
-/** The committed example campaign; the suite only ever COPIES it. */
-export const EXAMPLES_DIR = path.join(REPO_ROOT, "examples");
+/**
+ * The committed fixtures root: one directory per campaign, each holding the
+ * campaign's entries as JSON. The suite only ever COPIES it.
+ */
+export const FIXTURES_ROOT = path.join(REPO_ROOT, "fixtures");
 
-/** Campaign id inside examples/ — the fixture campaign of the whole suite. */
+/** Campaign id inside fixtures/ — the fixture campaign of the whole suite. */
 export const CAMPAIGN = "beispiel";
 
 /** Vite build output the server serves statically (APP_DIST). */
@@ -24,17 +27,17 @@ export const APP_DIST = path.join(REPO_ROOT, "app", "dist");
 export const SERVER_ENTRY = path.join(REPO_ROOT, "server", "src", "server.ts");
 
 /**
- * The `grimoire` CLI entrypoint. Since issue #79 the server boots EMPTY, so
- * the suite seeds each test's database with `grimoire seed <tree>` — the
- * documented dev/E2E tool — before the server process starts.
+ * The `grimoire` CLI entrypoint. The server boots EMPTY, so the suite seeds
+ * each test's database with `grimoire seed <fixtures dir>` — the documented
+ * dev/E2E tool — before the server process starts.
  */
 export const CLI_ENTRY = path.join(REPO_ROOT, "server", "src", "cli.ts");
 
 /** The standalone stub LLM script (started once per run). */
 export const STUB_LLM_ENTRY = path.join(E2E_DIR, "fixtures", "stub-llm.ts");
 
-/** Extra fixture files single specs seed into their own campaign copy. */
-export const FIXTURES_DIR = path.join(E2E_DIR, "fixtures");
+/** The suite's own fixtures: the stub LLM and the entries single specs seed. */
+export const E2E_FIXTURES_DIR = path.join(E2E_DIR, "fixtures");
 
 /**
  * The bun binary. Both the server and the stub run on it; an explicit
@@ -67,9 +70,9 @@ export function stubLlmBaseUrl(): string {
 }
 
 /**
- * The pristine campaign ROOT (<pristine>/beispiel/…) `grimoire seed` reads.
- * Nothing ever writes into it — a test that needs extra markdown gets its own
- * copy (support/test.ts, the `seed` fixture).
+ * The pristine fixtures directory (<pristine>/beispiel/*.json) `grimoire seed`
+ * reads. Nothing ever writes into it — a test that overrides entries gets its
+ * own copy (support/test.ts, the `seed` fixture).
  */
 export function pristineDir(): string {
   return path.join(runDir(), "pristine");
