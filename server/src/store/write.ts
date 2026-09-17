@@ -1,28 +1,25 @@
 // The write side of the store: every write endpoint as database statements.
 //
-// What is UNCHANGED (this is the contract the ported tests pin):
+// The contract the tests pin:
 //
-//   * the response of every write is still the `EntryResponse` of the row it
+//   * the response of every write is the `EntryResponse` of the row it
 //     touched, rendered by ./render;
-//   * optimistic concurrency still answers `409 { error, rev }` — only
-//     the token behind `rev` is now the row's `rev` instead of a file
-//     rev. That is what fixes the same-second race: two writes inside the
-//     same second used to see the same rev and both went through; two writes
-//     against the same `rev` cannot;
-//   * the session state machine keeps its answers and codes
-//     (`session_running`, `session_not_empty` — `session_ended` is gone with
-//     the resume semantics), and
-//     `clock.ts` is untouched — session ids, `started`/`ended` and log times
-//     stay zone-less local strings produced by the server;
+//   * optimistic concurrency answers `409 { error, rev }`, with the row's
+//     `rev` as the token. That is what closes the same-second race: two
+//     writes against the same `rev` cannot both go through;
+//   * the session state machine has its answers and codes
+//     (`session_running`, `session_not_empty`), and `clock.ts` owns the
+//     times — session ids, `started`/`ended` and log times are zone-less
+//     local strings produced by the server;
 //   * append-only stays append-only: log lines and inbox entries grow by
 //     rows through their own endpoints, and the one documented exception
 //     (an inbox entry marked done) is the `done` flag.
 //
-// What is NEW: a write is one TRANSACTION that also bumps
-// `campaigns.version` — the counter `GET /version` answers, which replaced
-// the chokidar watcher (DECISIONS #9). Both the content
-// change and the version bump commit together, so a client poll can never
-// see a bumped version without the change.
+// A write is one TRANSACTION that also bumps `campaigns.version` — the
+// counter `GET /version` answers, which is how a client learns about a
+// change (DECISIONS #9). Both the content change and the version bump commit
+// together, so a client poll can never see a bumped version without the
+// change.
 
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
@@ -118,7 +115,7 @@ export { logLineShortHash };
 
 /**
  * The ONE chapter status the app acts on (the overview's control, the session
- * view's „which chapter is running"). There is at most one per campaign, and
+ * view's "which chapter is running"). There is at most one per campaign, and
  * every write that sets it clears the previous one in the same transaction.
  */
 const CHAPTER_ACTIVE = "active";
@@ -134,7 +131,7 @@ const CHAPTER_PLANNED = "planned";
 
 /**
  * Take `active` off every OTHER chapter of the campaign — the swap half of
- * „exactly one active chapter".
+ * "exactly one active chapter".
  *
  * Both writes that can set `active` call this inside their own transaction:
  * `POST /chapters/:id/active` (the overview's status control) and a
@@ -457,7 +454,7 @@ function assertLocationRef(tx: GrimoireDb, campaign: string, id: string | null):
 /**
  * Every entry of a scene's `npcs` has to name an npc entry.
  *
- * This is also what answers a NAME typed where an id belongs („Alte
+ * This is also what answers a NAME typed where an id belongs ("Alte
  * Fischerin"): no npc has that id, so the list names something that does not
  * exist — one rule, one sentence, instead of a second error about the shape
  * of the value.
@@ -496,8 +493,8 @@ function nextPos(rows: Array<{ pos: number }>): number {
 //
 // Nothing here creates an entry as a side effect. The paths that DO create
 // one are countable: the create endpoints at the bottom of this file,
-// `createNpcStub` (the review's „#npc line becomes an npc", which the DM
-// clicks), and accepting a generator proposal — including `ensureChapterRow`
+// `createNpcStub` (a `#npc` line the DM turns into an npc with a click),
+// and accepting a generator proposal — including `ensureChapterRow`
 // inside that accept, which writes the chapter the run itself decided on
 // (ADR #18). Nowhere else.
 //
@@ -515,7 +512,7 @@ const NPC_DEFAULT_STATUS = "unknown";
  *
  * The ONE write that brings an entry into existence without the DM naming it
  * in a dialog, and it is not a mention creating anything: the run itself
- * decided the chapter (and, for a „Neues Kapitel" run, its title), so
+ * decided the chapter (and, for a new-chapter run, its title), so
  * accepting the proposal has to be able to write it. Without this a scene
  * ends up under a chapter that has no entry — and the overview lists
  * chapters, so the chapter and every scene in it would be unreachable.
@@ -584,7 +581,7 @@ function sceneLocation(value: unknown): string | null {
  *
  * The generator's apply step FILLS such an entry instead of answering the
  * documented `409 { conflicts }` for a target that has no content to lose,
- * and so does „NPC anlegen“ for that same id.
+ * and so does the npc-create action for that same id.
  *
  * `status` COUNTS as information. An entry the DM only ever set to `dead` is
  * still a statement about that npc — the one field the live view acts on — so
@@ -1105,8 +1102,9 @@ export async function writeEntryBody(
 
 /**
  * The body write itself, INSIDE a caller's transaction. Split out of
- * `writeEntryBody` because „Mit KI ergänzen" accepts properties and body of
- * one entry together, and that has to be ONE transaction with one rev guard
+ * `writeEntryBody` because accepting an AI proposal writes properties and
+ * body of one entry together, and that has to be ONE transaction with one
+ * rev guard
  * — two `mutate` calls would be two.
  */
 function writeBodyIn(
@@ -1219,15 +1217,15 @@ function writeBodyIn(
 }
 
 /**
- * „Mit KI ergänzen" accepts a proposal: the chosen properties
+ * Accepting an AI proposal: the chosen properties
  * fields and the chosen body in ONE transaction, guarded by ONE `rev` — the
  * version the DM was looking at in the review.
  *
  * THE BODY GOES FIRST. A properties patch may MOVE the entry — a scene whose
  * `chapter` the proposal changes lands under another address — and `locator`
- * is the address the request came in on. Patching first therefore left the
+ * is the address the request came in on. Patching first would leave the
  * body write resolving an address that no longer exists: a bogus 404 and a
- * rolled-back accept, for a proposal that was perfectly fine. Written the
+ * rolled-back accept, for a proposal that is perfectly fine. Written the
  * other way round the body lands on the row while it is still where the
  * client found it, and the patch runs against the rev that write produced.
  * Both halves see the same transaction, so a conflict in either rolls the
@@ -1559,7 +1557,7 @@ function closeOpenPauses(
  * Append one log line row (append-only: existing rows are never rewritten).
  *
  * The parenthesis group is a PARSE COLUMN of the line, not something the DM
- * wrote as a reference: a note that happens to begin with „(…)" would
+ * wrote as a reference: a note that happens to begin with "(…)" would
  * otherwise name a scene nobody meant. So it becomes the scene reference
  * only when a scene of that id exists, and stays part of `raw` otherwise —
  * the text of a note is never refused or thrown away over that. The
@@ -1859,9 +1857,8 @@ function assertSafeChapterId(chapter: string): void {
 
 /**
  * Append one item to the `## Offene Fäden` section of a chapter body — the
- * markdown surgery is unchanged (campaign-write.ts): the item goes to the end
- * of the section, a missing section is created at the end of the body, and
- * only the seam's blank lines are adjusted.
+ * item goes to the end of the section, a missing section is created at the
+ * end of the body, and only the seam's blank lines are adjusted.
  */
 export function appendThreadItem(body: string, item: string): string {
   const heading = /^## Offene Fäden[ \t]*\r?$/m.exec(body);
@@ -1883,8 +1880,8 @@ export function appendThreadItem(body: string, item: string): string {
 
 /**
  * POST /api/campaigns/:campaign/review/thread — append `- [ ] text` under
- * `## Offene Fäden` of the chapter. 404 for an unknown chapter (the DIRECTORY
- * had to exist before; the chapter ROW has to exist now — same answer).
+ * `## Offene Fäden` of the chapter. 404 for an unknown chapter — the chapter
+ * ROW has to exist.
  */
 export async function appendThreadToChapter(
   campaign: string,
@@ -2003,7 +2000,7 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       const tags = asStrArray(fm.tags);
       const draftLocation = sceneLocation(fm.location);
       // The scene's chapter is written in THIS transaction, before the scene
-      // itself: a „Neues Kapitel" run creates its chapter from the run's own
+      // itself: a new-chapter run creates its chapter from the run's own
       // state (generator.ts `jobChapterTarget`), and this is the net under
       // it. Everything else the scene references has to be there already —
       // the drafts are sorted so the entries a scene names go in first
@@ -2257,12 +2254,13 @@ function duplicateDraftRels(drafts: EntityDraft[]): string[] {
 /**
  * A UNIQUE/PRIMARY KEY violation from either SQLite backend (ADR #13) — the
  * race the conflict check above cannot close, and the only constraint failure
- * that means „the target is taken".
+ * that means "the target is taken".
  *
- * NAMED CONSTRAINTS ONLY, deliberately. A plain /constraint/ also matched
- * „FOREIGN KEY constraint failed", so a draft that named an entry the batch
- * does not bring turned into a 409 listing every draft as an existing target
- * — an answer about the wrong thing, and about entries that are not there.
+ * NAMED CONSTRAINTS ONLY, deliberately. A plain /constraint/ also matches
+ * "FOREIGN KEY constraint failed", so a draft that names an entry the batch
+ * does not bring would turn into a 409 listing every draft as an existing
+ * target — an answer about the wrong thing, and about entries that are not
+ * there.
  * A reference that names nothing is a 400 with its own code, raised by the
  * assertions before the insert; anything else is not this function's answer
  * and travels on as the error it is.
@@ -2343,16 +2341,16 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
 //
 // EMPTY ENTRIES ARE FILLED, NOT COLLIDED WITH — for npc and ort, the two kinds
 // that have an empty state at all. An entry that holds nothing but its id is
-// one the DM created and did not fill in, and "NPC anlegen" for exactly that
-// id is what fills it. That is the same rule `createNpcStub` and the
+// one the DM created and did not fill in, and the npc-create action for
+// exactly that id is what fills it. That is the same rule `createNpcStub` and the
 // generator's apply step follow.
 //
 // …but only for the id the DM TYPED. An empty entry is empty, not unclaimed: a
 // scene may reference it, so the id is already spoken for. Filling it is
 // therefore the DM's own decision about that one id, never something a
 // machine-made PROPOSAL may slide into: rule 2's `suggestion` skips every
-// existing entry, empty ones included, so „Holm" next to a filled `holm` and
-// an empty `holm-2` proposes `holm-3` — while typing „Holm 2" still fills
+// existing entry, empty ones included, so "Holm" next to a filled `holm` and
+// an empty `holm-2` proposes `holm-3` — while typing "Holm 2" still fills
 // `holm-2`.
 //
 // RESERVED IDS ARE NOT CREATABLE. `npcs`, `locations` and `sessions` are the
@@ -2385,7 +2383,7 @@ function slugTaken(kind: ErrorKind, id: string, suggestion: string, path: string
  * The reserved-id 409. Its own code — the app's collision
  * handling (lib/create.ts) treats it exactly like a taken id (one sentence
  * plus the free proposal as one click), but the SENTENCE is a different one
- * („… ist ein reservierter Name"), and a catalog cannot say that from a code
+ * (the id is a reserved name), and a catalog cannot say that from a code
  * that also means "somebody else has it". `path` is "" because nothing is in
  * the way; there is no entry to link to.
  */
@@ -2545,7 +2543,7 @@ export async function createChapter(
 /**
  * POST /api/campaigns/:campaign/chapters/:id/active -> the chapter entry.
  *
- * „Aktiv" in the overview's status control. ONE call, ONE transaction,
+ * The active state in the overview's status control. ONE call, ONE transaction,
  * because it is ONE decision about two chapters: the one named here becomes
  * `active` and whatever was active before goes back to `planned`. Two
  * requests from the app would have a window in which the campaign has two
@@ -2596,7 +2594,7 @@ export async function setActiveChapter(campaign: string, id: string): Promise<En
  * and the same code (ADR #19, a mention creates nothing).
  *
  * A scene created here has no `location`, so it sits at chapter level and
- * the app lists it under „Ohne Ort". Setting one later is `PATCH /properties`
+ * the app lists it in its no-location group. Setting one later is `PATCH /properties`
  * — and that patch is also what moves the scene into the
  * location's group, address included.
  */

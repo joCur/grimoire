@@ -1,4 +1,4 @@
-// „Eigenschaften" — editing ALL properties fields of one entry from the app.
+// The properties form — editing ALL properties fields of one entry from the app.
 // This module is the pure half: which fields a kind has, what the open form
 // starts with, and the PATCH body a save sends.
 // No react, no query imports, so every rule here is unit-testable.
@@ -55,7 +55,7 @@ import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
  *
  * The kinds, the controls and the reference sources come from
  * @grimoire/shared/property-fields — the generator's reply schemas are built
- * from the SAME field list, so „which fields does an npc have" is answered
+ * from the SAME field list, so the question which fields an npc has is answered
  * once for the whole repo. Re-exported here because every caller in the app
  * already imports them from this module.
  */
@@ -190,8 +190,8 @@ function optionsOf(
 ): readonly FieldOption[] | undefined {
   if (def.control !== "select") return undefined;
   if (kind === "scene" && def.key === "status") return sceneStatusOptions(t);
-  // The same three labels the overview's status control shows, so picking
-  // „Aktiv" reads identically in both places. The server performs the swap to
+  // The same three labels the overview's status control shows, so picking the
+  // active option reads identically in both places. The server performs the swap to
   // the one active chapter for a properties patch too, so the rule does not
   // depend on which of the two doors the write came through.
   if (kind === "chapter" && def.key === "status") return chapterStatusOptions(t);
@@ -219,7 +219,7 @@ function fieldOf(kind: PropertiesKind, def: PropertyFieldDef, t: Translate): Pro
     label: copy === undefined ? def.key : t(copy.label),
     ...(def.required === true ? { required: true } : {}),
     // The scene is the one kind whose `chapter` is mandatory (ADR #19): an
-    // npc and an Ort may sit outside every chapter, a scene may not — its
+    // npc and a location may sit outside every chapter, a scene may not — its
     // chapter is a segment of its address.
     ...(kind === "scene" && def.key === "chapter" ? { mandatoryRef: true } : {}),
     ...(def.source === undefined ? {} : { source: def.source }),
@@ -237,7 +237,7 @@ export function propertiesFieldsFor(
   return PROPERTY_FIELDS[kind].map((def) => fieldOf(kind, def, t));
 }
 
-/** German label of the kind for the dialog title („NPC-Eigenschaften"). */
+/** The kind's label, used in the dialog title. */
 export function propertiesKindLabel(kind: EntityKind, t: Translate): string | undefined {
   switch (kind) {
     case "scene":
@@ -253,18 +253,18 @@ export function propertiesKindLabel(kind: EntityKind, t: Translate): string | un
   }
 }
 
-// --- the Ort field: free text in, a slug out ---------------------------------
+// --- the location field: free text in, a slug out ---------------------------
 //
 // `location` IS the group a scene sits under in its chapter, so it holds an
-// entity id — but the DM types a NAME, and the field takes it: „Der alte
-// Hafen" is read as `der-alte-hafen`, so nobody has to spell slugs. What the
-// hint then says is which entry that id means, and „Unbekannt" when no Ort
-// has it: a reference names an entry that exists, so the save is refused
-// until the Ort is there.
+// entity id — but the DM types a NAME, and the field takes it: a name is
+// slugged into its id, so nobody has to spell slugs. What the hint then says
+// is which entry that id means, and that it is unknown when no location has
+// it: a reference names an entry that exists, so the save is refused until
+// the location is there.
 //
-// Text no slug can be derived from („???") blocks the save in the form
-// itself: an id is never invented out of nothing (shared/slug.ts), so there
-// is nothing to send.
+// Text no slug can be derived from (punctuation only) blocks the save in the
+// form itself: an id is never invented out of nothing (shared/slug.ts), so
+// there is nothing to send.
 
 /** The id the typed text stands for — "" when nothing usable is left. */
 export function locationRefId(text: string): string {
@@ -273,13 +273,13 @@ export function locationRefId(text: string): string {
   return isEntityId(typed) ? typed : toSlug(typed);
 }
 
-/** What the Ort field's text means right now — the hint, and the one issue. */
+/** What the location field's text means right now — the hint, and the one issue. */
 export type LocationRef =
   /** Nothing typed: the scene sits on chapter level. */
   | { kind: "empty" }
   /** An entry that exists; `name` is its name, absent when it has none. */
   | { kind: "known"; id: string; name?: string }
-  /** No Ort has this id — the save will be refused until one does. */
+  /** No location has this id — the save will be refused until one does. */
   | { kind: "unknown"; id: string }
   /** Text that yields no id at all — the state the form itself blocks. */
   | { kind: "unusable"; value: string };
@@ -364,12 +364,11 @@ export function propertiesFormValues(
 function normalize(value: FieldValue, field?: PropertiesField): FieldValue {
   switch (value.kind) {
     case "text":
-      // The Ort field is the one control whose normalized form is not the
-      // typed text: it takes free text and STORES the slug, so slugging
-      // here is what makes „Der Leuchtturm von
-      // Salzhafen" over a stored `leuchtturm`… well, a different id — but
-      // „leuchtturm " or a re-typed „der-alte-hafen" no change at all, and
-      // it is the same value the patch writes.
+      // The location field is the one control whose normalized form is not
+      // the typed text: it takes free text and STORES the slug, so slugging
+      // here is what tells a newly typed name over a stored id apart as a
+      // different id, while re-typed whitespace or the very same slug counts
+      // as no change at all — and it is the same value the patch writes.
       return field?.source === "locations" && field.control === "reference"
         ? { kind: "text", text: locationRefId(value.text) }
         : { kind: "text", text: value.text.trim() };
@@ -392,7 +391,7 @@ function normalize(value: FieldValue, field?: PropertiesField): FieldValue {
   }
 }
 
-/** True when a normalized value holds nothing — the „delete the key" case. */
+/** True when a normalized value holds nothing — the delete-the-key case. */
 function isEmpty(value: FieldValue): boolean {
   switch (value.kind) {
     case "text":
@@ -423,8 +422,8 @@ function valueKey(value: FieldValue): string {
 /**
  * A quickstat value keeps its YAML type: a value that is exactly how a number
  * prints stays a NUMBER, everything else stays a string. Without this, editing
- * one stat would rewrite `{wis: 2}` as `{wis: '2'}` — and a DM-typed „+2"
- * (which YAML reads as 2) must stay the string „+2" it was typed as.
+ * one stat would rewrite `{wis: 2}` as `{wis: '2'}` — and a DM-typed `+2`
+ * (which YAML reads as 2) must stay the string `+2` it was typed as.
  */
 function pairScalar(value: string): string | number {
   const parsed = Number(value);
@@ -465,7 +464,7 @@ export function propertiesPatch(
     const from = normalize(before, field);
     const to = normalize(after, field);
     if (valueKey(from) === valueKey(to)) continue;
-    // Text in the Ort field that yields NO id is not a cleared field: it
+    // Text in the location field that yields NO id is not a cleared field: it
     // normalizes to "" (there is no slug), and sending `location: null` would
     // silently move the scene to chapter level instead of writing what the DM
     // typed. `propertiesFormIssues` blocks the save on it; the patch is empty
@@ -485,8 +484,8 @@ export function propertiesPatch(
 }
 
 /**
- * What is WRONG in the form right now, per field key — the German line the
- * control shows under itself, and the reason „Speichern" stays disabled.
+ * What is WRONG in the form right now, per field key — the line the control
+ * shows under itself, and the reason the save action stays disabled.
  *
  * Two controls can get into such a state.
  *
@@ -498,12 +497,13 @@ export function propertiesPatch(
  *   * two rows with the SAME name — YAML has one key per name, so the earlier
  *     value would be swallowed by the later one.
  *
- * A row that is completely empty (or holds only a name, which means „delete
- * this key") is fine and produces nothing here.
+ * A row that is completely empty (or holds only a name, which means deleting
+ * that key) is fine and produces nothing here.
  *
  * A `location` that yields NO id: the field takes free
- * text and the save slugs it, so „Der alte Hafen" is fine — but „???" leaves
- * nothing an id could be made of (shared/slug.ts never invents one), and
+ * text and the save slugs it, so any name is fine — but text made of
+ * punctuation alone leaves nothing an id could be made of
+ * (shared/slug.ts never invents one), and
  * there is no value to send. The hint under the field says what every other
  * text WILL do; this is the one that cannot be done.
  *
@@ -516,7 +516,7 @@ export function propertiesPatch(
  * And a MANDATORY REFERENCE that was cleared: a scene's chapter is part of
  * its address, so the server refuses a patch that removes it
  * (`chapter_required`). Saying it here is the same improvement — a line under
- * the field and a disabled „Speichern", instead of a round trip that ends in
+ * the field and a disabled save action, instead of a round trip that ends in
  * a toast.
  */
 export function propertiesFormIssues(
@@ -606,8 +606,8 @@ export function canSubmitProperties(
 }
 
 /**
- * Fold the text still standing in a chip input into its list — the „typed a
- * tag and clicked Speichern straight away" case. The pending text lives in the
+ * Fold the text still standing in a chip input into its list — the case of a
+ * tag typed and saved straight away. The pending text lives in the
  * dialog (not inside the control) exactly so this can happen before the patch
  * is computed instead of being lost with the closing dialog.
  */
@@ -691,7 +691,7 @@ export function selectOptions(
 
 /**
  * Save the patch. The 409 handling — nothing was written, the entry is re-read
- * once so the next „Speichern" carries the fresh rev — is the shared
+ * once so the next save carries the fresh rev — is the shared
  * protocol of write-with-rev.ts. Every other failure throws.
  */
 export function writePropertiesForm(

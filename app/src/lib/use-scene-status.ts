@@ -1,10 +1,11 @@
-// React-query half of the scene-status control (issue #28).
+// React-query half of the scene-status control.
 //
 // The cache/409 mechanics are the shared envelope in use-rev-write.ts, the
-// "is there a rev to write against at all?" gate is `withRev`; what
-// belongs to the status regler is here: the tree invalidation (chapter overview rows, live
-// nav and search read the status from there) and the target value shown dimmed
-// while the write runs — which is the write's variables, no second state.
+// "is there a rev to write against at all?" gate is `withRev`; what belongs to
+// the status control is here: the tree invalidation (chapter overview rows,
+// live nav and search read the status from there) and the target value shown
+// dimmed while the write runs — which is the write's variables, no second
+// state.
 
 import type { SceneStatus } from "@grimoire/shared/types";
 

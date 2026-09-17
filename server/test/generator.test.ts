@@ -85,7 +85,7 @@ async function restartServer(): Promise<number> {
 // --- fake provider ------------------------------------------------------------
 //
 // Scripted and PIPELINE-AWARE (see support/pipeline-fake.ts):
-// a test still writes „first this reply, then that one“, and the fake routes
+// a test still writes "first this reply, then that one", and the fake routes
 // the script over the outline call, the per-scene call and the per-entry call
 // of the run. `fake.calls` is therefore every call of the run; `fake.callsFor`
 // narrows it to one part — which is what a per-part correction turn is about.
@@ -242,7 +242,7 @@ function reply(over: ReplyOver = {}): string {
 }
 
 /**
- * The PO's production reply: an English explainer paragraph, a blank line,
+ * A production-shaped reply: an English explainer paragraph, a blank line,
  * then the JSON object — valid JSON that only a parse which EXTRACTS the
  * object can read.
  */
@@ -578,8 +578,8 @@ describe("POST /api/campaigns/:campaign/generate", () => {
   });
 
   test("an npc entry without a status is read as \"unknown\", not corrected", async () => {
-    // The schema types an npc `status` as NULLABLE (the prompt's „nicht
-    // gegeben → null"), so „no status" is a legal reply — and it means what
+    // The schema types an npc `status` as NULLABLE (the prompt maps a
+    // missing value to null), so "no status" is a legal reply — and it means what
     // the shared parser has always made of a status-less npc entry:
     // `unknown`. Never `alive`, which would be the run asserting something
     // the source text is silent about.
@@ -644,7 +644,7 @@ describe("POST /api/campaigns/:campaign/generate", () => {
   test("422 with the remaining errors after 2 correction turns", async () => {
     // Two turns is the MAXIMUM, not the default.
     process.env.LLM_CORRECTION_TURNS = "2";
-    // `entries: []` on purpose: the run then has exactly ONE part, so „every
+    // `entries: []` on purpose: the run then has exactly ONE part, so "every
     // part failed" is what the 422 of this case is about. A run with a
     // surviving part is `done` with a failed part — its own case below.
     const bad = reply({
@@ -951,8 +951,8 @@ describe("POST /api/campaigns/:campaign/generate", () => {
   });
 
   test("a scene without a type is a planned one — no correction turn", async () => {
-    // `type` is nullable in the reply schema (the prompt's „nicht gegeben →
-    // null") while the scene validator demands a known one, so „null" has to
+    // `type` is nullable in the reply schema (the prompt maps a missing value
+    // to null) while the scene validator demands a known one, so `null` has to
     // mean what an unmarked scene has always meant: `planned` (contingency is
     // the exception, and it says so). Hard-failing would make a
     // schema-conform reply cost a turn.
@@ -1560,7 +1560,7 @@ describe("generate jobs", () => {
       outputTokens: 300,
       attempts: fake.calls.length,
     });
-    // The part itself says what happened, which is what „Erneut versuchen“
+    // The part itself says what happened, which is what the per-part retry
     // hangs off.
     expect(job.pipeline!.parts).toEqual([
       expect.objectContaining({
@@ -1886,7 +1886,7 @@ describe("generate jobs", () => {
     // …and the edit store accepts the normalized path.
     expect((await putDraftEdit("beispiel", "npcs/legacy-npc", npcMarkdown)).status).toBe(200);
 
-    // The point of all of it: "Übernehmen" works, under the new address.
+    // The point of all of it: the accept works, under the new address.
     const res = await postJson("/api/campaigns/beispiel/generate/apply", {
       npc: job.npcResult!.npc,
       jobId: job.id,
@@ -1943,7 +1943,7 @@ describe("generate jobs", () => {
     // An npc draft path keeps its two segments — only scenes collapse.
     expect(Object.keys(job.draftEdits).every((k) => !k.startsWith("npcs/"))).toBe(true);
 
-    // The point of all of it: „Übernehmen“ works again.
+    // The point of all of it: the accept works again.
     const res = await postJson("/api/campaigns/beispiel/generate/apply", {
       scenes: job.result!.scenes,
       stubs: [],

@@ -14,13 +14,13 @@
 //
 // The other half of that freeze is what must NOT become a conflict: the status
 // control right next to the editor writes a new version of the same body, and
-// the DM's own click may not answer their save with „Inzwischen geändert".
+// the DM's own click may not answer their save with the stale-revision notice.
 // Two more ways to lose text are covered here as well — a navigation must not
 // leave edit mode armed, and a failing background refetch must not tear the
 // open editor down.
 //
-// „Bearbeiten" opens the BLOCK COMPOSER, so this spec covers
-// the „Markdown" half of edit mode: the textarea, its „Vorschau" and the whole
+// The edit action opens the BLOCK COMPOSER, so this spec covers the raw
+// markdown half of edit mode: the textarea, its preview and the whole
 // save/409/discard machinery as seen from the fallback surface. The composer
 // itself — and the fact that it is the default — is
 // `tests/block-composer.e2e.ts`, on the same critical path.
@@ -45,16 +45,17 @@ async function split(api: Api, rel: string) {
 /**
  * Enter edit mode and switch to the raw markdown surface.
  *
- * „Bearbeiten" opens the block composer, so everything the
- * fallback surface owns costs one more click: the „Markdown" side of the mode
+ * The edit action opens the block composer, so everything the
+ * fallback surface owns costs one more click: the raw-markdown side of the mode
  * toggle. Switching is lossless by construction (the draft round-trips through
  * serializeBlocks/parseBlocks), which is why the textarea below is still
- * seeded with the entry's body byte for byte and „Speichern" is still disabled
- * right after opening.
+ * seeded with the entry's body byte for byte and the save button is still
+ * disabled right after opening.
  */
 async function openMarkdownEditor(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Bearbeiten" }).click();
-  // exact: the composer's per-card controls are named „Markdown-Block 1 …".
+  // exact: the composer's per-card controls carry a numbered block name of
+  // their own that starts with the same word.
   await page.getByRole("button", { name: "Markdown", exact: true }).click();
 }
 
@@ -68,8 +69,8 @@ test("editing the body: save writes the entry and the reading view shows it", as
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
 
-  // The trigger sits in the header action row, next to „Eigenschaften"; „Markdown" is
-  // the fallback surface this spec is about.
+  // The trigger sits in the header action row, next to the properties action;
+  // raw markdown is the fallback surface this spec is about.
   await openMarkdownEditor(page);
 
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
@@ -204,9 +205,9 @@ test("the preview toggle renders the draft through the real markdown pipeline", 
   // Still edit mode: the save buttons stand, only the surface swapped.
   await expect(page.getByRole("button", { name: "Abbrechen" })).toBeVisible();
 
-  // Back to the text, unchanged by the round trip. This „Bearbeiten" is the
-  // „Markdown" surface's own toggle (Vorschau ⇄ Bearbeiten), not the header trigger
-  // — that one is gone while edit mode runs, and „Blöcke" is a button of its
+  // Back to the text, unchanged by the round trip. This edit action is the raw
+  // markdown surface's own preview/edit toggle, not the header trigger — that
+  // one is gone while edit mode runs, and the blocks switch is a button of its
   // own, so the name stays unambiguous.
   await page.getByRole("button", { name: "Bearbeiten" }).click();
   await expect(textarea).toHaveValue(`${before.body}\n${loot}\n`);
@@ -290,7 +291,7 @@ test("the status control next to the editor is no conflict for the own save", as
   await expect(trigger).toHaveText(/Gespielt/);
   await expect.poll(() => api.properties(SCENE)).toHaveProperty("status", "played");
 
-  // The DM's OWN change must not come back as „Inzwischen geändert": a new
+  // The DM's OWN change must not come back as a stale revision: a new
   // version with an identical body is adopted, a changed body still 409s.
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(textarea).toHaveCount(0);
@@ -359,7 +360,7 @@ test("a failing background refetch leaves the open editor standing", async ({ pa
 
   // The cached file is still there, so the PAGE must not swap itself for its
   // error line and take the unsaved text with it. (The status pill next to the
-  // editor says „Eintrag nicht ladbar" for its own failed read — that is its job
+  // editor reports the entry as unreadable for its own failed read — that is its job
   // and stays, which is why this looks for the route's full sentence.)
   await expect(page.getByText("Eintrag nicht ladbar — Pfad prüfen")).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
@@ -372,7 +373,7 @@ test("Abbrechen asks before it throws work away", async ({ page, api }) => {
   await page.goto(SCENE_URL);
 
   // Without changes there is nothing to lose: no dialog, straight out — the
-  // detour through „Markdown" and back is no change either (lossless round trip).
+  // detour through raw markdown and back is no change either (lossless round trip).
   await openMarkdownEditor(page);
   const textarea = page.getByRole("textbox", { name: TEXTAREA });
   await expect(textarea).toBeVisible();
@@ -380,7 +381,7 @@ test("Abbrechen asks before it throws work away", async ({ page, api }) => {
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(textarea).toHaveCount(0);
 
-  // With changes it asks — and „Weiter bearbeiten" keeps the text.
+  // With changes it asks — and continuing to edit keeps the text.
   await openMarkdownEditor(page);
   await textarea.fill(`${before.body}\nEin Satz, der nie gespeichert wird.\n`);
   await page.getByRole("button", { name: "Abbrechen" }).click();
@@ -390,7 +391,7 @@ test("Abbrechen asks before it throws work away", async ({ page, api }) => {
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(textarea).toHaveValue(/Ein Satz, der nie gespeichert wird\./);
 
-  // „Verwerfen" closes the editor and the reading view is as it was.
+  // Discarding closes the editor and the reading view is as it was.
   await page.getByRole("button", { name: "Abbrechen" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Verwerfen" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -472,7 +473,7 @@ test("campaign keeps its ONE Bearbeiten — the metadata dialog", async ({ page 
     "Der Leuchtturm von Salzhafen",
   );
 
-  // One label, one meaning: the campaign entry's „Bearbeiten" is
+  // One label, one meaning: the campaign entry's edit action is
   // the name/description dialog, and there is no second one for the body.
   const edit = page.getByRole("button", { name: "Bearbeiten" });
   await expect(edit).toHaveCount(1);
@@ -485,7 +486,7 @@ test("the glossary stays saveable while a session writes next to it", async ({ p
   // Critical path 9 for the campaign's list entries: `glossary` is NOT
   // guarded by `campaigns.version`, which EVERY write bumps. Otherwise a quick
   // note during a running session would answer the DM's open glossary edit
-  // with „Inzwischen geändert" — un-saveable exactly while the campaign is in
+  // with a stale revision — un-saveable exactly while the campaign is in
   // use. Each entry carries its own token.
   await page.goto("/campaigns/beispiel/entries/glossary");
   await expect(page.getByRole("article")).toContainText("Leuchtturmwärter");

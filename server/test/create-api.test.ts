@@ -157,7 +157,7 @@ describe("the per-campaign creates", () => {
   });
 
   test("a reserved chapter id is refused with a proposal, and no row is written", async () => {
-    // „NPCs" slugs to `npcs`, which the address schema routes to the npc kind —
+    // "NPCs" slugs to `npcs`, which the address schema routes to the npc kind —
     // the chapter would exist and be unreachable forever (store/paths).
     const res = await post("/campaigns/nordwind/chapters", { title: "NPCs" });
     expect(res.status).toBe(409);
@@ -213,7 +213,7 @@ describe("the per-campaign creates", () => {
       ).status,
     ).toBe(200);
 
-    // „Holm" collides with the filled `holm` — and the proposal SKIPS the
+    // "Holm" collides with the filled `holm` — and the proposal SKIPS the
     // empty `holm-2` instead of handing somebody else's id over.
     const res = await post("/campaigns/nordwind/npcs", { name: "Holm" });
     expect(res.status).toBe(409);
@@ -306,7 +306,7 @@ describe("the per-campaign creates", () => {
     });
     expect(patched.status).toBe(200);
 
-    // „NPC anlegen" for exactly that id FILLS the entry.
+    // Creating an npc for exactly that id FILLS the entry.
     const npc = await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "Holm" });
     expect(npc.path).toBe("npcs/holm");
     expect(npc.properties.name).toBe("Holm");
@@ -360,7 +360,7 @@ describe("creating next to imported stock", () => {
   });
 });
 
-// „Aktiv" on a chapter: the action that decides which chapter the session is
+// Activating a chapter: the action that decides which chapter the session is
 // in. It is ONE transaction over TWO chapters, which is the only thing worth
 // testing about it — an app doing it in two calls would have a window with two
 // active chapters, and the session view picks the first it finds.

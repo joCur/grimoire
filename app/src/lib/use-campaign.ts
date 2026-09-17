@@ -1,6 +1,5 @@
-// Display metadata of the current campaign (issue #17): the `name` and
-// `description` from its optional `campaign`, served additively by
-// GET /api/campaigns.
+// Display metadata of the current campaign: the `name` and `description` from
+// its optional `campaign`, served additively by GET /api/campaigns.
 //
 // Every surface that shows a campaign label (topbar switcher + breadcrumbs,
 // chapter overview header, mobile start surface) reads it from here. The query key is the

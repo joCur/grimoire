@@ -34,7 +34,7 @@
 // or a hand-typed `/settings`) does the heuristic stand in —
 // `pickLastCampaign` (lib/campaign.ts), the same one "/" uses. No
 // localStorage (quality floor). It is still needed with no campaign section
-// on the page: the topbar above and the mobile „‹ Kapitel" row both have to lead
+// on the page: the topbar above and the mobile back row both have to lead
 // back where the DM came from.
 
 import { useQuery } from "@tanstack/react-query";
@@ -88,7 +88,7 @@ export function SettingsRoute() {
 /**
  * The instance language. Its own component only because the radio group has to
  * be labelled BY the section heading (there is exactly one word for both, and
- * announcing „Sprache, Sprache" is what happens otherwise).
+ * announcing that word twice is what happens otherwise).
  */
 function LanguageSection() {
   const t = useT();

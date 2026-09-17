@@ -1,8 +1,8 @@
 // The mobile start surface — rendered by the chapter overview route below
 // the md breakpoint per design/Grimoire-Mobil.dc.html: wordmark row, tappable
 // search field (opens the ⌘K palette, touch-first), inbox capture card
-// (POST /api/campaigns/:campaign/inbox) and the „Nachschlagen" rows into the mobile
-// list pages. The prototype's "Zuletzt angesehen" section is deliberately
+// (POST /api/campaigns/:campaign/inbox) and the lookup rows into the mobile
+// list pages. The prototype's recently-viewed section is deliberately
 // left out: recents would need server-side persistence (no localStorage —
 // the server is the truth) and there is no recents endpoint yet.
 
@@ -93,8 +93,7 @@ export function MobileStart({ campaign }: { campaign: string }) {
           label={t("browse.title.locations")}
           meta={countLabel(tree?.locations.length, "mobileStart.count.locations")}
         />
-        {/* The two pages the DM MAINTAINS (issue #53, PO feedback on PR #87).
-            They sit after the three read-only lists — content you read before
+        {/* The two pages the DM MAINTAINS. They sit after the three read-only lists — content you read before
             content you edit (lib/lookup.ts) — and carry no count: a glossary
             of 12 terms is not a number anyone acts on, and the counts above
             come free with the tree query these two do not share. */}
@@ -102,11 +101,11 @@ export function MobileStart({ campaign }: { campaign: string }) {
         <BrowseRow to={`/campaigns/${campaign}/knowledge`} icon={Lightbulb} label={t("knowledge.title")} />
       </nav>
 
-      {/* The language switch (issue #69 follow-up). This surface REPLACES the
-          topbar below `md`, so the campaign switcher's menu — where the switch
-          otherwise lives — is not on screen at all: on a phone there was no way
-          to change the language. It goes at the very end, after „Nachschlagen",
-          in the smallest fitting place rather than in a settings screen of its
+      {/* The language switch. This surface REPLACES the topbar below `md`, so
+          the campaign switcher's menu — where the switch otherwise lives — is
+          not on screen at all, and a phone would have no way to change the
+          language. It goes at the very end, after the reference-page rows, in
+          the smallest fitting place rather than in a settings screen of its
           own that this surface has no room for. */}
       <footer className="mt-8 border-t border-divider pt-3.5">
         <LanguageSwitch />
@@ -142,7 +141,7 @@ function BrowseRow({
   );
 }
 
-/** Inbox capture: textarea + brass „Einwerfen", quiet text confirmation
+/** Inbox capture: textarea + brass submit action, quiet text confirmation
  * (no animation — reduced-motion safe by construction). */
 function InboxCard({ campaign }: { campaign: string }) {
   const t = useT();

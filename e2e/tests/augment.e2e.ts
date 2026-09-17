@@ -1,4 +1,4 @@
-// Critical path 6, the second half: „Mit KI ergänzen".
+// Critical path 6, the second half: augmenting an entry with the model.
 //
 // The create runs of that path live in `generator.e2e.ts`; this spec is the
 // same pipeline pointed at an entry that ALREADY EXISTS, and it asserts
@@ -12,11 +12,11 @@
 //   d) an entry that moves while the review is open answers 409 and nothing
 //      is written (ADR #4) — the review recovers on the re-read.
 //
-// Two of them carry the default rule with them, because it is the sentence
-// the whole feature turns on: „Default übernimmt nur Leeres/Neues; Gefülltes
-// wird nie still ersetzt." The npc reply therefore proposes a mix — two
-// fields the entry has nothing in, two it already has — and the spec checks
-// the PRESELECTION, not just the outcome.
+// Two of them carry the default rule with them, because it is the rule the
+// whole feature turns on: by default only empty and new units are accepted,
+// and a filled one is never silently replaced. The npc reply therefore
+// proposes a mix — two fields the entry has nothing in, two it already has —
+// and the spec checks the PRESELECTION, not just the outcome.
 //
 // Nothing is mocked but the model (fixtures/stub-llm.ts): a real job on a
 // real server, the real OpenAICompatProvider, the real write path with its
@@ -53,7 +53,7 @@ const NPC_URL = `/campaigns/beispiel/entries/${NPC_PATH}`;
 const INSTRUCTION = "Führe einen Handlungsstrang um den Schmuggler-Spitzel ein";
 
 /**
- * „NPC anlegen" with nothing but the id — how a DM ends up with an entry
+ * Create an npc with nothing but the id — how a DM ends up with an entry
  * that exists and says nothing. The scene then references it, which is only
  * possible BECAUSE it exists (ADR #19).
  */
@@ -98,13 +98,13 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   // The server job finishes and the review takes the dialog over.
   await expect(page.getByText("Vorhanden").first()).toBeVisible({ timeout: 30_000 });
 
-  // The defaults: `role` and `voice` are holes -> „Neu", preselected;
-  // `name` and `status` already carry a value -> „Geändert", KEPT.
+  // The defaults: `role` and `voice` are holes -> new, preselected for
+  // acceptance; `name` and `status` already carry a value -> changed, KEPT.
   await expectDecision(page, "role", "Neu", "Übernehmen");
   await expectDecision(page, "voice", "Neu", "Übernehmen");
   await expectDecision(page, "name", "Geändert", "Behalten");
   await expectDecision(page, "status", "Geändert", "Behalten");
-  // „Vorhanden | Vorschlag" really shows both sides.
+  // The two-column diff really shows both sides.
   await expect(fieldRow(page, "role").getByText("leer")).toBeVisible();
   await expect(fieldRow(page, "role")).toContainText(AUGMENT_NPC_ROLE);
   await expect(fieldRow(page, "name")).toContainText(AUGMENT_NPC_NAME);
@@ -171,8 +171,8 @@ test("prepared scene: the new thread is added, every existing block survives", a
     "aria-pressed",
     "true",
   );
-  // The existing blocks are not decisions — they sit behind „Unveränderte
-  // Blöcke zeigen", and they carry no toggle when shown.
+  // The existing blocks are not decisions — they sit behind the toggle that
+  // reveals unchanged blocks, and they carry no toggle of their own.
   const flowBlock = () => page.locator("li").filter({ hasText: "Entwaffnet und gefesselt" }).last();
   await expect(flowBlock()).toHaveCount(0);
   await page.getByRole("button", { name: "Unveränderte Blöcke zeigen" }).click();
@@ -210,7 +210,7 @@ test("block decisions survive a reload — the review state is on the job", asyn
   await startAugment(page);
 
   // The one decision of this reply is the new `## If:` section, preselected
-  // („Neu" is taken by default).
+  // (a new unit is accepted by default).
   const newBlock = () => page.locator("li").filter({ hasText: AUGMENT_THREAD_CONDITION }).last();
   const keep = () => newBlock().getByRole("button", { name: /^Behalten: / });
   await expect(newBlock()).toBeVisible({ timeout: 30_000 });
@@ -219,8 +219,8 @@ test("block decisions survive a reload — the review state is on the job", asyn
     "true",
   );
 
-  // Decide AGAINST it and reload: without the state on the job the dialog
-  // came back with the default again and the DM's „behalten" was gone.
+  // Decide AGAINST it and reload: the state lives on the job, so the dialog
+  // comes back on the DM's decision instead of on the default.
   await keep().click();
   await expect(keep()).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("Gespeichert")).toBeVisible();
@@ -233,7 +233,7 @@ test("block decisions survive a reload — the review state is on the job", asyn
 
 test("while the run is on, only the run's own controls are there", async ({ page }) => {
   // TRIGGER.slow holds the reply, so the running phase can actually be
-  // looked at. „Ergänzen"/„Abbrechen" belong to the INPUT phase: over a
+  // looked at. The start and cancel buttons belong to the INPUT phase: over a
   // running job the first would start nothing (one job per campaign) and the
   // second reads like a stop that it is not.
   await page.goto(SCENE_URL);
@@ -288,8 +288,9 @@ test("409: the entry moves while the review is open — nothing is written", asy
     timeout: 30_000,
   });
 
-  // The second writer (there is no "changed outside" since the cutover): the
-  // review's guard token is frozen at review time, so this invalidates it.
+  // A second writer through the same API is the only way an entry changes
+  // under an open review: the review's guard token is frozen at review time,
+  // so this invalidates it.
   await api.writeBody(SCENE, "## Flow\n\nJemand anderes hat die Szene umgeschrieben.\n");
 
   await acceptButton(page).click();
@@ -367,16 +368,14 @@ test.describe("at 390px (critical path 8)", () => {
 });
 
 /**
- * The stall the PO hit on the augment dialog: „Ergänzen" was clicked, the
- * server job reached `done` in about two seconds — and the dialog kept
- * showing the running phase until it was closed and reopened, at which point
- * the proposal was simply there.
+ * The dialog leaves the running phase on its own the moment the server job is
+ * `done` — no closing and reopening to see the proposal.
  *
- * Both halves of the cause are the generator route's old one (see
- * generator.e2e.ts): the phase was partly taken from the START REQUEST
- * instead of from the job, and the job poll had no reason to live while a
- * run's own job was still on its way — the interval switched off on a 404
- * that overtook the new row, and nothing switched it back on.
+ * Two rules carry that (the generator route shares them, see
+ * generator.e2e.ts): the phase comes from the JOB and never from the start
+ * request, and the job poll keeps running while a run's own job is still on
+ * its way — a 404 that overtakes the new row must not switch the interval off
+ * for good.
  *
  * Two shapes, because they fail for different reasons:
  *
@@ -466,8 +465,8 @@ async function expectDecision(
 ): Promise<void> {
   const row = fieldRow(page, key);
   await expect(row).toContainText(state);
-  // The row buttons are named with their unit, so „Übernehmen: role" is what
-  // distinguishes them from the footer's „Übernehmen".
+  // The row buttons are named with their unit, which is what distinguishes
+  // them from the footer's accept button.
   await expect(row.getByRole("button", { name: `${chosen}: ${key}` })).toHaveAttribute(
     "aria-pressed",
     "true",
@@ -476,8 +475,8 @@ async function expectDecision(
 
 /**
  * The review's accept button. The per-row toggles share its WORD but not its
- * accessible name — theirs carries the unit („Übernehmen: role") — so the
- * footer button is addressable exactly.
+ * accessible name — theirs carries the unit as a suffix — so the footer
+ * button is addressable exactly.
  */
 function acceptButton(page: Page) {
   return page.getByRole("button", { name: "Übernehmen", exact: true });

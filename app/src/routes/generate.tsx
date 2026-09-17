@@ -1,7 +1,7 @@
 // "/campaigns/:campaign/generate" — the LLM generator per the design
 // reference's GENERATOR section, four states in one route:
 //
-//   input   target chapter (existing chip or the "Neues Kapitel" flow with
+//   input   target chapter (existing chip or the new-chapter flow with
 //           a live path preview) + source text + the context hint
 //   working the spinner while the SERVER's job runs (correction turns happen
 //           inside that job, generator/README.md)
@@ -11,7 +11,7 @@
 //   done    the paths POST /generate/apply wrote — all as drafts
 //
 // The route has TWO modes, picked by the quiet chip row above
-// the input form: „Szenen" (scene drafts for a chapter) and „NPC" (one npc
+// the input form: scenes (scene drafts for a chapter) and npc (one npc
 // entry from source material). Both run through the same four states, the same
 // background job (there is one generator job per campaign, whatever its kind)
 // and the same apply endpoint — the NPC mode only asks for less (source text
@@ -30,7 +30,7 @@
 // the message — read in the UI language out of the job's error
 // CODE (i18n/server-errors.ts; for a truncated reply the one naming the token
 // cap) — the validation errors when there are any, the last raw reply behind a
-// collapsed „Rohantwort anzeigen“, and the run's token spend.
+// collapsed raw-reply disclosure, and the run's token spend.
 //
 // Local state is only what the server cannot know: the current edit buffers
 // (mirrored into the job, debounced, so they survive too), which cards are
@@ -125,7 +125,7 @@ type Target = { kind: "chapter"; id: string } | { kind: "new" };
 type StubDecision = "accepted" | "rejected";
 
 const OVERLINE = "text-[11px] font-semibold tracking-[.08em] uppercase text-muted-foreground";
-/** The two links in „Mitgeschickter Kontext" — quiet, part of the sentence. */
+/** The two links in the sent-context hint — quiet, part of the sentence. */
 const CONTEXT_LINK =
   "rounded px-0.5 text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground hover:decoration-solid focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
 const FIELD =
@@ -189,7 +189,7 @@ export function GenerateRoute() {
     picked ?? (defaultChapter === undefined ? { kind: "new" } : { kind: "chapter", id: defaultChapter });
   const [newTitle, setNewTitle] = useState("");
   const [sourceText, setSourceText] = useState("");
-  // The chapter id of the "Neues Kapitel" flow. undefined means
+  // The chapter id of the new-chapter flow. undefined means
   // "the DM has not touched the field" — then the suggestion follows the
   // title. A manual edit pins the value; emptying the field maps back to
   // undefined, so a cleared field starts following the title again.
@@ -233,15 +233,15 @@ export function GenerateRoute() {
 
   // The server's job IS the state of a run.
   //
-  // `awaitingJob` is on from the click on „Entwürfe generieren" until the job
+  // `awaitingJob` is on from the click on the generate action until the job
   // of THAT run is readable — it carries the id that was in the cache at the
   // click, because that is what the new job is not (lib/generate.ts
-  // runJobArrived). It is the view's whole „working" state and the poll
+  // runJobArrived). It is the view's whole working state and the poll
   // loop's reason to live at the same time, and those two must be ONE flag:
   // a GET that overtakes the new row answers 404 and the previous run's job
-  // is settled, so without it the interval was switched off and nothing
-  // switched it back on — the spinner stood until a reload while the run
-  // finished on the server.
+  // is settled, so without the flag the interval would switch off with
+  // nothing to switch it back on — and the spinner would stand until a
+  // reload while the run finished on the server.
   const [awaitingJob, setAwaitingJob] = useState<{
     staleJobId: string | null;
     startedJobId?: string;
@@ -295,7 +295,7 @@ export function GenerateRoute() {
   /** The text of one draft: what is being typed, else the job's, else the model's. */
   const draftText = (path: string, fallback: string): string =>
     edits[path] ?? job?.draftEdits[path] ?? fallback;
-  /** What is still reviewable — „Alle übernehmen" and „Verwerfen" work on it. */
+  /** What is still reviewable — the accept-all and discard actions work on it. */
   const rest = openParts(job);
   const progress = jobProgress(job);
   const openScenes = scenes.filter((scene) => partState(job, scene.path) === "open");
@@ -338,10 +338,10 @@ export function GenerateRoute() {
   });
 
   /**
-   * „Übernehmen". ONE endpoint for both buttons and both modes:
+   * Accepting. ONE endpoint for both buttons and both modes:
    * without a selection it writes everything that is still open (the
-   * accepted suggested entries included, an undecided one not — the rule
-   * from before this ticket); with one it writes exactly that part and
+   * accepted suggested entries included, an undecided one not); with one
+   * selection it writes exactly that part and
    * leaves the rest reviewable. The server answers which job is gone,
    * which is what ends the review.
    */
@@ -381,7 +381,7 @@ export function GenerateRoute() {
       }
       // Any OTHER 409 says the run moved on: a part that is not open any
       // more, a run that has produced nothing yet (an accept while it is
-      // still running is allowed, so „nichts fertig" is a real answer).
+      // still running is allowed, so "nothing finished yet" is a real answer).
       // Nothing was written — re-read and say so in one line.
       if (error instanceof ApiError && error.status === 409) {
         void queryClient.invalidateQueries({ queryKey: generateJobKey(campaign) });
@@ -391,7 +391,7 @@ export function GenerateRoute() {
       const addresses = Object.values(data.written);
       // ONLY the answer decides: a bulk accept whose rest did not settle the
       // run leaves the job there, and marking it dropped up front turned a
-      // job that is still open into one that „vanished".
+      // job that is still open into one that had vanished.
       if (data.jobDeleted) {
         droppedRef.current = true;
         setWritten((prev) => [...(prev ?? []), ...addresses]);
@@ -402,9 +402,8 @@ export function GenerateRoute() {
     },
   });
 
-  // „Verwerfen": drops the server's job and with it the OPEN REST only —
-  // parts a partial accept already wrote are entries now, not a job
-  // (Lead-Entscheid).
+  // Discarding: drops the server's job and with it the OPEN REST only —
+  // parts a partial accept already wrote are entries now, not a job.
   const discard = useMutation({
     mutationFn: () => deleteGenerateJob(campaign),
     onMutate: () => {
@@ -425,21 +424,21 @@ export function GenerateRoute() {
    */
   const partCards = useRef(new Map<string, HTMLElement | null>());
   /**
-   * The part „Erneut versuchen" handed the focus to, until the focus is
+   * The part the retry action handed the focus to, until the focus is
    * actually sitting on its card.
    *
-   * Focusing once in `onSuccess` was not enough: the
+   * Focusing once in `onSuccess` is not enough: the
    * button unmounts the moment the part goes `running`, and the status card
    * itself unmounts the moment the part is `done` and becomes its draft card
    * — with a fast model both happen within a poll of the click, so the focus
-   * fell to `body` and a keyboard DM landed at the top of the page
+   * would fall to `body` and a keyboard DM would land at the top of the page
    * (quality floor: focus stays visible and where the work is). So the focus
    * FOLLOWS the part across those swaps, once per commit, and stops as soon
    * as the part is settled or the DM has moved the focus themselves.
    */
   const focusPart = useRef<string | undefined>(undefined);
 
-  /** „Erneut versuchen" for one failed part. */
+  /** Retrying one failed part. */
   const retry = useMutation({
     mutationFn: (key: string) => retryJobPart(campaign, job?.id ?? "", key),
     onSuccess: (updated, key) => {
@@ -450,7 +449,7 @@ export function GenerateRoute() {
       focusPart.current = key;
     },
     onError: (error) => {
-      // A 409 here is not „der Server ist kaputt": the part is already
+      // A 409 here does not mean the server is broken: the part is already
       // running or already finished, which a second tab or a double click
       // produces. Whatever the state is, it is newer than this view's.
       if (error instanceof ApiError && error.status === 409) {
@@ -463,8 +462,8 @@ export function GenerateRoute() {
   });
   /**
    * What a part's own card shows below its error — per part, because ONE
-   * `isError` rendered in a global spot said „nicht neu gestartet" next to
-   * every card and never cleared. `retry.variables` is the key of the last
+   * `isError` rendered in a global spot would show the retry failure next to
+   * every card and never clear. `retry.variables` is the key of the last
    * mutate, and react-query resets `isError` on the next one.
    */
   const retryError = (key: string): string | undefined => {
@@ -521,11 +520,11 @@ export function GenerateRoute() {
   );
 
   const applied = written !== undefined;
-  // The window between the click and „this run's job is readable" is the
+  // The window between the click and this run's job being readable is the
   // working state — and NOTHING else is: the moment the job
   // answers, the job decides, even while its own 202 is still on the way.
   // A fast run is finished before that response arrives, and making the
-  // request's lifetime the spinner's left the DM in front of a done run.
+  // request's lifetime the spinner's would leave the DM in front of a done run.
   const arrived =
     awaitingJob !== undefined &&
     runJobArrived({
@@ -696,7 +695,7 @@ export function GenerateRoute() {
                   </button>
                 </div>
 
-                {/* The "Neues Kapitel" flow: display name + the directory name.
+                {/* The new-chapter flow: display name + the id.
                     The id is the field that decides where the drafts land,
                     and the DM owns it, because renaming a chapter later is
                     expensive (ids are stable references). The title is only
@@ -1159,7 +1158,7 @@ export function GenerateRoute() {
             )}
 
             <div className="flex flex-wrap items-center gap-2.5 border-t border-border pt-[18px]">
-              {/* „Alle übernehmen" writes what is LEFT — the count follows
+              {/* The accept-all action writes what is LEFT — the count follows
                   the partial accepts instead of promising the whole run
                   again. */}
               <Button
@@ -1362,12 +1361,12 @@ function stubReason(scenes: GenerateResult["scenes"], t: Translate): string {
  * that is not the model's voice but the server's.
  *
  * It is deliberately QUIETER than the warnings above it: a hairline box, no
- * accent border, one small heading that says „kein Blocker" out loud. The
+ * accent border, one small heading that calls the findings non-blocking. The
  * check is a plain text search (server/src/naming-check.ts) and can be wrong
  * about whether a hit is the thing the rule meant, so it may not look like a
  * verdict — and it must never compete with the draft the DM is reading.
  *
- * Nothing renders when there is nothing to say: an empty „0 Hinweise" box
+ * Nothing renders when there is nothing to say: a box announcing zero hints
  * would be noise on every single run of every campaign without conventions.
  */
 function NamingHints({ hints, t }: { hints: NamingHint[] | undefined; t: Translate }) {
@@ -1449,13 +1448,13 @@ function Working() {
  *
  * It is deliberately the SAME footprint as a draft card, in the same place in
  * the list — the review is laid out in outline order, and a part that moves
- * from „wird geschrieben" to a finished scene must not make everything below
+ * from being written to a finished scene must not make everything below
  * it jump. Quieter than a draft: a hairline card, the title the outline gave
  * the part, and one line saying what is going on.
  *
  * A failed part is the only one with a button. WHY it failed is said in this
- * language (the raw server sentence „generation failed mechanical validation
- * after retries" is English and is the DM's only headline otherwise), with
+ * language (the raw server sentence about failed mechanical validation is
+ * English and is the DM's only headline otherwise), with
  * the mechanical error list unchanged below it and the raw reply behind the
  * same disclosure the whole-run failure uses — the DM decides from it whether
  * to retry or to drop the run.
@@ -1485,7 +1484,7 @@ function PartCard({
   return (
     <section
       ref={cardRef}
-      // Focusable only programmatically: „Erneut versuchen" unmounts its own
+      // Focusable only programmatically: the retry action unmounts its own
       // button, so the retry hands the focus to the card instead of letting
       // it fall to `body`. Not a live region — the review
       // has exactly one, on its progress line.
@@ -1723,7 +1722,7 @@ function SceneCard({
  * drop it, or — once it is written — open the entry it became.
  *
  * The row is deliberately the same under a scene card and under a suggested
- * entry: „Diesen übernehmen" means the same thing in both places, and a
+ * entry: accepting this one means the same thing in both places, and a
  * written part reads the same way in both.
  */
 function PartActions({

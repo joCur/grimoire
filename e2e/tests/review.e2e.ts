@@ -1,5 +1,5 @@
-// Critical path 5: the session review ("Nachbereitung", formerly "Ernte" —
-// the harvest metaphor survives only in file names and code); see CLAUDE.md.
+// Critical path 5: the session review; the harvest metaphor lives on in file
+// names and code only. See CLAUDE.md.
 //
 // Adopt a thread → chapter, tick off an inbox line, create an NPC stub,
 // and the progress counter.
@@ -140,8 +140,8 @@ test("an untagged inbox note is reviewable and can be ticked off", async ({
   await expect(page.getByText("Eingeworfen.")).toBeVisible();
   await expect.poll(() => api.body("inbox")).toContain(`- ${NOTE_TEXT}`);
 
-  // At the desk it shows up in the session review — in its own "Ungetaggte Einträge" section,
-  // and counted with everything else (one source for page and topbar).
+  // At the desk it shows up in the session review — in its own untagged-entries
+  // section, and counted with everything else (one source for page and topbar).
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/campaigns/beispiel/review");
   const progress = page.getByRole("banner").getByText(/von \d+ gesichtet/);
@@ -194,7 +194,7 @@ test("a #pc note is grouped by character and ticked off", async ({ page, api }) 
     pcCard.getByRole("button", { name: "Als Handlungsstrang übernehmen" }),
   ).toHaveCount(0);
   await expect(pcCard.getByRole("button", { name: "NPC anlegen" })).toHaveCount(0);
-  // „Behalten" persists nothing — it is an honest toggle for this sitting.
+  // The keep action persists nothing — it is an honest toggle for this sitting.
   const keep = pcCard.getByRole("button", { name: "Behalten" });
   await expect(keep).toBeVisible();
   await expect(keep).toHaveAttribute("aria-pressed", "false");

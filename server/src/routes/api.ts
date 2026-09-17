@@ -150,7 +150,7 @@ function requireRev(value: unknown): number {
  * bullet in markdown the model reads as INSTRUCTIONS
  * (store/read.ts knowledgeText). A newline inside an entry is
  * therefore not a formatting detail: it lets an entry open lines of its own —
- * a „## " heading that poses as a section of the prompt, for instance. The UI
+ * a `## ` heading that poses as a section of the prompt, for instance. The UI
  * has single-line inputs and cannot produce one, so refusing it costs the DM
  * nothing and closes the door for every other client.
  *
@@ -299,7 +299,7 @@ api.get("/campaigns/:campaign/glossary", async (c) => c.json(await readGlossary(
 
 // GET /api/campaigns/:campaign/knowledge -> { entries: [{ kind, from, to, text }], rev }
 // The campaign's KNOWLEDGE BASE for the generator: naming
-// conventions („write <from> as <to>"), facts and style rules that outrank
+// conventions ("write <from> as <to>"), facts and style rules that outrank
 // the source material. Its own list next to the glossary because it answers
 // a different question — the glossary translates a term, an entry here
 // overrides the source (db/schema.ts campaignKnowledge). Guard token:
@@ -315,14 +315,14 @@ api.get("/campaigns/:campaign/knowledge", async (c) =>
 // 409 { error, rev } when the entry changed since it was read.
 //
 // A reference in the patch — `chapter`, `location`, an `npcs` entry — has to
-// name an entry that exists: 400 with the code the app turns into „bitte
-// zuerst anlegen", never a new entry as a side effect. A scene's `chapter`
+// name an entry that exists: 400 with the code the app turns into its
+// create-this-first hint, never a new entry as a side effect. A scene's `chapter`
 // may be SET that way but never REMOVED (400): a scene belongs to a chapter
 // and must not fall out of the tree. A key the entry's kind has no field for
 // is a 400 as well; a key that is not part of the kind but sits on the row
 // may still be changed or deleted with null.
 //
-// `locationName` is the display name for the Ort a scene's `location`
+// `locationName` is the display name for the location a scene's `location`
 // CREATES — applied on insert only, never to a location that already
 // exists.
 api.patch("/campaigns/:campaign/properties", async (c) => {
@@ -547,7 +547,7 @@ api.post("/campaigns/:campaign/chapters", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/chapters/:id/active -> EntryResponse of that chapter
-// „Aktiv" in the chapter overview's status control: the chapter becomes
+// The active state in the chapter overview's status control: the chapter becomes
 // `active` and the one that was active goes back to `planned`, in ONE
 // transaction — two calls from the app would leave a window with two active
 // chapters, and the session view picks the first it finds. Idempotent, 404
@@ -680,9 +680,9 @@ function reviewRecord<T>(
 
 const isMarkdown = (v: unknown): v is string => typeof v === "string";
 const isBoolean = (v: unknown): v is boolean => typeof v === "boolean";
-/** A field/block decision, or `null` for „nicht mehr entschieden". */
+/** A field/block decision, or `null` for no decision any more. */
 const isDecidedFlag = (v: unknown): v is boolean | null => v === null || typeof v === "boolean";
-/** `null` is „wieder offen" — the review's third state. */
+/** `null` is undecided again — the review's third state. */
 const isDecision = (v: unknown): v is "accepted" | "rejected" | null =>
   v === null || v === "accepted" || v === "rejected";
 
@@ -776,7 +776,7 @@ api.post("/campaigns/:campaign/generate/npc", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/generate/augment { path, sourceText?, instruction? }
-// -> 202 { jobId } — „Mit KI ergänzen": the same background job
+// -> 202 { jobId } — the AI augment run: the same background job
 // model as the two create runs, pointed at an entry that already EXISTS.
 // ONE generator job per campaign, so a start while ANY run is going answers
 // 409 { jobId }. Writes NOTHING; the proposal waits in the job.
@@ -866,8 +866,8 @@ api.patch("/campaigns/:campaign/generate/job/:id/review", async (c) => {
 
 // POST /api/campaigns/:campaign/generate/job/:id/accept
 // { paths?, chapter?, chapterTitle? } -> { written, jobDeleted }
-// „Diesen übernehmen" per scene / per suggested entry, and „Alle
-// übernehmen" for the rest. `paths` selects scene draft paths
+// The single-accept action per scene / per suggested entry, and the
+// accept-all action for the rest. `paths` selects scene draft paths
 // and suggested-entry addresses (`npcs/grella`); without it EVERY part that
 // is still open is written — a dropped scene and a rejected entry are not
 // open, so the bulk action never resurrects a "no".
@@ -885,7 +885,7 @@ api.patch("/campaigns/:campaign/generate/job/:id/review", async (c) => {
 //
 // A RUNNING pipelined run is acceptable part by part: it
 // stays `running` while parts are open, and a `done` part is in the result
-// and therefore acceptable before its siblings are. The 409 „no result" is
+// and therefore acceptable before its siblings are. The 409 "no result" is
 // kept for a failed run, and for a run that has not finished a single part.
 api.post("/campaigns/:campaign/generate/job/:id/accept", async (c) => {
   const body = await jsonBody(c, ["rev", "paths", "chapter", "chapterTitle"]);
@@ -894,7 +894,7 @@ api.post("/campaigns/:campaign/generate/job/:id/accept", async (c) => {
 });
 
 // POST /api/campaigns/:campaign/generate/job/:id/parts/:key/retry -> the job (202)
-// „Erneut versuchen" for ONE part of a pipelined scene run.
+// The retry action for ONE part of a pipelined scene run.
 // Only that part is re-run: the outline stays, the finished parts stay
 // reviewable and acceptable, and the retried part goes back through exactly
 // the call it failed on — same outline, same source excerpt, same
@@ -955,8 +955,8 @@ api.delete("/campaigns/:campaign/generate/job", async (c) => {
 // (properties parses, status draft, safe paths); 409 { conflicts } when any
 // target entry exists — then nothing is written at all. chapter +
 // chapterTitle (both or neither) additionally create the chapter entry
-// when it is missing, in the same all-or-nothing batch (the app's "Neues
-// Kapitel" flow).
+// when it is missing, in the same all-or-nothing batch (the app's
+// new-chapter flow).
 // `jobId` ties the apply to the background job it came from: a
 // SUCCESSFUL apply discards that job — the drafts are stored, there is
 // nothing left to restore. A stale id (a newer run started meanwhile) is

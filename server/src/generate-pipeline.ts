@@ -1,13 +1,12 @@
 // The scene generator as a PIPELINE.
 //
-// Before this split a scene run was ONE provider call that had to come back
-// with every scene, every suggested entry and every warning at once. That is
-// the most expensive way to be wrong: a single unknown callout in the third
-// scene failed the whole reply, the correction turn resent the entire prompt
-// plus the entire reply, and a run that hit the output cap produced nothing
-// at all.
+// A single provider call returning every scene, every suggested entry and
+// every warning at once is the most expensive way to be wrong: one unknown
+// callout in the third scene fails the whole reply, the correction turn
+// resends the entire prompt plus the entire reply, and a run that hits the
+// output cap produces nothing at all.
 //
-// So a run is now three steps instead of one:
+// So a run is three steps instead of one:
 //
 //   1. OUTLINE — one small call. Which scenes exist, what they are called,
 //      which location they belong to, which other scenes they reference, and
@@ -21,15 +20,14 @@
 //      source text with those two quotes (`cutExcerpt`) — so the per-scene
 //      call carries the paragraph it is about and not the whole book. When
 //      the quotes cannot be found the scene simply gets the WHOLE source
-//      text: more expensive, never wrong, and never a reason to fail a run
-//      (PO decision, 15.09.).
+//      text: more expensive, never wrong, and never a reason to fail a run.
 //
 //      The outline is INTERNAL. It is never shown to the DM and never
 //      offered for editing — it exists to reduce errors, and the only thing
-//      the DM is interested in is the finished scene (PO, 15.09.).
+//      the DM is interested in is the finished scene.
 //
 //   2. SCENES — one call per outline scene, three at a time. Prompt =
-//      the scene prompt in „single scene from outline“ mode + the outline +
+//      the scene prompt in single-scene-from-outline mode + the outline +
 //      the excerpt. Validation, correction turns and the naming check happen
 //      PER SCENE, so a form error costs that scene and nothing else, and a
 //      finished scene is reviewable while its siblings are still running.
@@ -37,8 +35,8 @@
 //   3. ENTRIES — one call per new npc/location of the outline, with the
 //      scenes that reference it as context. Deduped by id.
 //
-// What does NOT change: the augment run and the NPC run stay single-call runs
-// — one entry each, nothing to decompose (PO decision).
+// The augment run and the NPC run stay single-call runs — one entry each,
+// nothing to decompose.
 
 import {
   SCENE_TYPES,
@@ -82,7 +80,7 @@ import { parseEntryReply, parseJsonReply } from "./entry-reply";
 import type { LLMProvider } from "./llm-provider";
 import { locationPath, npcPath } from "./store/paths";
 
-/** How many scene/entry calls of one run are in flight at once (PO: 3). */
+/** How many scene/entry calls of one run are in flight at once. */
 export const PART_CONCURRENCY = 3;
 
 /**
@@ -91,10 +89,10 @@ export const PART_CONCURRENCY = 3;
  *
  * Without it the outline decides how many provider calls a run makes, and a
  * source text that is a whole adventure (or a model that splits every
- * paragraph) turns one „Entwürfe generieren“ into dozens of calls the DM
- * never asked for and cannot stop except by discarding the run. A chapter of
+ * paragraph) turns one generate action into dozens of calls the DM never
+ * asked for and cannot stop except by discarding the run. A chapter of
  * twelve playable scenes is already a long evening — beyond that the honest
- * answer is „cut the source text“, so an outline over the bound is a
+ * answer is to cut the source text, so an outline over the bound is a
  * VALIDATION ERROR and therefore a correction turn that asks the model to
  * consolidate, not a failed run.
  *
@@ -139,7 +137,7 @@ const OUTLINE_CORRECTION_TAIL = "die vollständige Gliederung enthalten";
  * like the excerpt-fallback warning next to it: it rides along in the run's
  * `warnings` and the review shows those verbatim.
  *
- * Why it is a warning at all: the repair is silent otherwise, and „the model
+ * Why it is a warning at all: the repair is silent otherwise, and "the model
  * answered something JSON.parse could not read" is exactly the kind of thing
  * a DM wants to see once — a provider whose replies need patching every run
  * is a provider to reconsider, and without the note nobody would ever know.
@@ -224,11 +222,11 @@ export function validateOutlineReply(
       errors.push(`${label}: duplicate id "${id}" — jede id kommt im Durchlauf nur einmal vor`);
       return;
     }
-    // An id the campaign ALREADY has is deliberately not an error here: since
-    // an entry may exist and hold nothing, so „locations/bucht exists“
-    // routinely means „a scene mentioned it and nobody has written it yet“ —
+    // An id the campaign ALREADY has is deliberately not an error here: an
+    // entry may exist and hold nothing, so "locations/bucht exists"
+    // routinely means "a scene mentioned it and nobody has written it yet" —
     // exactly the entry this run should fill. The apply path is what decides
-    // whether a write collides, and it always was.
+    // whether a write collides.
     seen.add(id);
     entries.push({
       kind,
@@ -427,7 +425,7 @@ function normalizeWithMap(source: string): { text: string; offsets: number[] } {
 // --- the per-call prompt assets ----------------------------------------------
 
 /**
- * The scene system prompt in „genau eine Szene aus der Gliederung“ mode: the
+ * The scene system prompt in exactly-one-scene-from-the-outline mode: the
  * scene prompt with its own output section swapped for the outline-bound one
  * (`scene-single-output.md`).
  *
@@ -454,11 +452,10 @@ export async function sceneSystemPrompt(): Promise<string> {
 /**
  * The outline block every per-part prompt carries (llm-provider
  * OUTLINE_HEADING) — and it carries NOTHING about which part this call is
- * about. That marker used to live here, which silently defeated the prompt
- * caching: the block is part of the CONSTANT half, so one changed character
- * per part made every part a cache miss. Which scene is assigned is now a
- * line of its own in the variable half (`assignmentBlock`, llm-provider
- * ASSIGNMENT_HEADING).
+ * about. A marker here would silently defeat the prompt caching: the block is
+ * part of the CONSTANT half, so one changed character per part makes every
+ * part a cache miss. Which scene is assigned is a line of its own in the
+ * variable half (`assignmentBlock`, llm-provider ASSIGNMENT_HEADING).
  */
 export function outlineBlock(outline: RunOutline): string {
   const lines: string[] = [];
@@ -495,11 +492,10 @@ export function validateSingleSceneReply(input: {
 }): { ok: true; result: { scene: GeneratedSceneDraft; warnings: string[] } } | { ok: false; errors: string[] } {
   // The reply is the schema-forced OBJECT: `properties`,
   // `body`, `warnings` (./entry-reply reads it and composes the entry
-  // the server would store). Everything below judges that object, by exactly
-  // the rules it judged the markdown by before.
+  // the server would store). Everything below judges that object.
   const read = parseEntryReply(input.raw, "scene");
   // Labelled like every other error of this part: the review shows the list
-  // per part, and „which scene" is the first thing the DM looks for.
+  // per part, and "which scene" is the first thing the DM looks for.
   if (!read.ok) return { ok: false, errors: read.errors.map((e) => `scene "${input.scene.id}": ${e}`) };
   const reply = read.reply;
   const errors: string[] = [];
@@ -573,7 +569,7 @@ export interface PartOutcome {
   excerptFallback?: boolean;
 }
 
-/** Usage of one part — `calls` is what the review header sums into „M Aufrufe“. */
+/** Usage of one part — `calls` is what the review header sums into its call count. */
 export interface PartUsage {
   inputTokens: number;
   outputTokens: number;
@@ -600,7 +596,7 @@ export interface PipelineSink {
     failure: { error: string; validationErrors?: string[]; rawReply?: string },
     usage: PartUsage,
   ): Promise<void>;
-  /** True once the run was cancelled („Verwerfen“) or replaced. */
+  /** True once the run was discarded or replaced. */
   cancelled(): boolean;
 }
 
@@ -640,7 +636,8 @@ export function outlineParts(outline: RunOutline): GenerateJobPart[] {
 /**
  * A part's usage, from a successful result or from a thrown ApiError, with the
  * CALL COUNT taken from the counter rather than from `usage.attempts`: a local
- * endpoint reports no usage at all, and „M Aufrufe“ must be true anyway.
+ * endpoint reports no usage at all, and the displayed call count must be
+ * true anyway.
  */
 function usageOf(value: unknown, calls: number): PartUsage {
   const usage = (value ?? {}) as Partial<GenerateUsage>;
@@ -672,7 +669,7 @@ export function callCounter(): CallCounter {
   };
 }
 
-/** The message and the error list the DM reads next to „Erneut versuchen“. */
+/** The message and the error list the DM reads next to the retry action. */
 function failureOf(
   err: unknown,
   calls: number,
@@ -715,7 +712,7 @@ export interface RunPlan {
    * The cut source passage per scene id, computed once for the whole run.
    * `entryContext` needs every scene's passage for every entry it builds, and
    * the cut normalizes the WHOLE source text per call — so an outline with
-   * ten scenes and ten entries used to normalize it a hundred times.
+   * ten scenes and ten entries would otherwise normalize it a hundred times.
    */
   excerpts: Map<string, { text: string; matched: boolean }>;
 }
@@ -831,7 +828,7 @@ export async function runScenePart(
         ...result.warnings,
         // The DM has to know when a scene was written from the WHOLE source
         // instead of its passage: it is the one quality difference the
-        // pipeline can produce silently (PO decision, 15.09.).
+        // pipeline can produce silently.
         ...(cut.matched
           ? []
           : [
@@ -874,8 +871,7 @@ export async function runEntryPart(
       },
       outline: outlineBlock(plan.outline),
       // What this ONE call is about: the entry, and the passages of the
-      // scenes that mention it (Zuschnitt 3). An entry used to fall out of
-      // the batch reply with no context of its own at all.
+      // scenes that mention it — rather than no context of its own at all.
       sourceText: entryContext(plan, entry),
       jsonSchema: entryReplySchema(entry.kind, "create"),
     },
@@ -908,10 +904,10 @@ export async function runEntryPart(
 export function entryContext(plan: RunPlan, entry: OutlineEntry): string {
   const blocks: string[] = [`${entry.name} (${entry.id}): ${entry.summary}`];
   const needle = entry.name.toLowerCase();
-  // The id is kebab-case ENGLISH while the name is German („harbour-master“ /
-  // „Hafenmeisterin“), so the whole id rarely appears in an English source
+  // The id is kebab-case ENGLISH while the name is German ("harbour-master" /
+  // "Hafenmeisterin"), so the whole id rarely appears in an English source
   // text but its WORDS do. Each word is required, in any order — matching on
-  // one word alone would pull „old“ or „the“ into every entry's context.
+  // one word alone would pull "old" or "the" into every entry's context.
   const idWords = entry.id.split("-").filter((word) => word.length > 2);
   for (const scene of plan.outline.scenes) {
     const passage = excerptOf(plan, scene).text;
@@ -938,7 +934,7 @@ function excerptOf(plan: RunPlan, scene: OutlineScene): { text: string; matched:
 
 /**
  * Run one part and report it into the sink. The ONE place a part's outcome
- * becomes job state, so a fresh run and a „Erneut versuchen“ cannot drift.
+ * becomes job state, so a fresh run and a per-part retry cannot drift.
  */
 export async function runPart(
   plan: RunPlan,
@@ -1011,7 +1007,7 @@ export async function runPartsPooled(
 
 /**
  * The whole scene run: outline, then every part. Writes NOTHING — the drafts
- * land in the job and only „Übernehmen“ touches the store.
+ * land in the job and only the apply step touches the store.
  */
 export async function runScenePipeline(input: {
   campaign: string;

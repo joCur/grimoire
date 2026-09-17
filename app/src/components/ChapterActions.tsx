@@ -1,9 +1,10 @@
 // The per-chapter actions of the chapter overview.
 //
-// A chapter was the one thing the overview listed and could not edit: the
-// title stayed whatever „Kapitel anlegen" was given (a slug, for a chapter a
-// generator run created), and a goal left out at creation time could never be
-// added. So a chapter gets the campaign header's vocabulary, per chapter:
+// A chapter is the one thing the overview lists and would otherwise not be
+// able to edit: the title would stay whatever the create action was given (a
+// slug, for a chapter a generator run created), and a goal left out at
+// creation time could never be added. So a chapter gets the campaign header's
+// vocabulary, per chapter:
 //
 //   PROPERTIES   title and status — the SHARED properties dialog
 //                (components/PropertiesAction). Its chapter form already has
@@ -17,9 +18,9 @@
 //                turn into an editing surface), same rev protocol.
 //
 // Setting the active chapter is NOT a third action here: the status control in
-// the chapter's heading row (components/ChapterStatusMenu) already offers
-// „Aktiv" and calls the swap endpoint, and two controls for one value is how
-// they end up disagreeing about what the chapter's status is.
+// the chapter's heading row (components/ChapterStatusMenu) already offers the
+// active state and calls the swap endpoint, and two controls for one value is
+// how they end up disagreeing about what the chapter's status is.
 //
 // MOBILE IS READ-ONLY, and it comes for free: below md the route renders the
 // mobile start surface instead of the overview, so this whole row is not on
@@ -78,11 +79,11 @@ export function ChapterActions({
     <div className="mb-3 flex flex-wrap items-center gap-1">
       {entry !== undefined && (
         <>
-          {/* The labels name the chapter instead of saying only „Eigenschaften"
-              or „Bearbeiten": the overview header carries its own edit action
-              for the campaign and every open chapter carries these, so the
-              bare words would be ambiguous — for a screen reader, and for
-              anyone counting Tab stops down the list. */}
+          {/* The labels name the chapter rather than only the kind of action:
+              the overview header carries its own edit action for the campaign
+              and every open chapter carries these, so the bare words would be
+              ambiguous — for a screen reader, and for anyone counting Tab
+              stops down the list. */}
           <PropertiesAction
             campaign={campaign}
             file={entry}

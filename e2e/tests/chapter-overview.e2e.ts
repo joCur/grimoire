@@ -69,8 +69,8 @@ async function widenGlyphs(page: Page, spacing: string) {
 const TOPBAR_WIDTHS = [640, 768, 900, 1000, 1024, 1040, 1100, 1280, 1300, 1536];
 
 /**
- * A scene that names NO location — it belongs under the chapter overview's neutral
- * „Ohne Ort" section. The example campaign has none, so the
+ * A scene that names NO location — it belongs under the chapter overview's
+ * neutral no-location section. The example campaign has none, so the
  * test that needs one seeds it.
  */
 const SCENE_WITHOUT_LOCATION: SeedEntry = {
@@ -191,8 +191,8 @@ test.describe("a scene without a location", () => {
   test('scenes that name no location get the neutral „Ohne Ort" section', async ({ page }) => {
     await page.goto("/campaigns/beispiel");
     // A section, not a location with a blank name — and it comes LAST, after
-    // every real location of the chapter. („Eventualszenen" is a section of
-    // the chapter too and follows the location groups.)
+    // every real location of the chapter. (The contingency-scenes section
+    // belongs to the chapter too and follows the location groups.)
     const headings = page.getByRole("heading", { level: 3 });
     await expect(headings).toHaveText([
       "Der Leuchtturm von Salzhafen",
@@ -258,11 +258,11 @@ test("the topbar trio navigates without anything in the left block moving", asyn
     page.getByRole("banner").getByText(/Der Leuchtturm von Salzhafen/),
   ).toHaveCount(1);
 
-  // The chapter overview carries a „Nachschlagen" line — it is where the two
+  // The chapter overview carries a lookup line — it is where the two
   // campaign-content pages are reached from on
   // the desktop. What matters HERE is that they are not in the TOPBAR:
-  // the trio above is still exactly Kapitel/NPCs/Orte, which is what the rest
-  // of this test measures.
+  // the trio above is still exactly chapters/NPCs/locations, which is what the
+  // rest of this test measures.
   await expect(
     page.getByRole("navigation", { name: "Nachschlagen" }).getByRole("link"),
   ).toHaveText(["NPCs", "Orte", "Glossar", "Kampagnenwissen"]);
@@ -291,8 +291,8 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   await assertChromeIsStable(onChapterOverview);
 
   // --- entry views: same chrome, section marking follows the entity ---------
-  // A scene belongs to Kapitel; its hierarchy lives in the page's context
-  // line, not in the topbar.
+  // A scene belongs to the chapters section; its hierarchy lives in the page's
+  // context line, not in the topbar.
   await page.goto("/campaigns/beispiel/entries/01-salzhafen/leuchtturm/lighthouse-arrival");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Ankunft am Leuchtturm",
@@ -322,7 +322,8 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   await expect(current).toHaveCount(0);
   await assertChromeIsStable(onChapterOverview);
 
-  // "Kapitel" is the way back to the chapter overview — the reason the trio exists.
+  // The chapters link is the way back to the chapter overview — the reason the
+  // trio exists.
   await nav.getByRole("link", { name: "Kapitel" }).click();
   await expect(page).toHaveURL(/\/campaigns\/beispiel$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
@@ -525,7 +526,7 @@ test("the topbar does not overflow at medium widths with no session running", as
 /**
  * The generator chip's fullest state: a pipelined run that is
  * still going AND has parts the DM already accepted — so the chip carries its
- * pulsing dot and the „N von M übernommen" progress at the same time. Only a
+ * pulsing dot and the accepted-of-total progress at the same time. Only a
  * pipelined run puts that pair on the row — otherwise a run is either running
  * or reviewable, never both — so the guard above never sees it.
  */
@@ -576,16 +577,16 @@ test("the topbar does not overflow while a pipelined run fills up", async ({
       await expect(chip).toBeVisible();
       // The number is on the chip exactly ONCE, whatever the width does with
       // it: above 2xl it is spelled out, below it stands
-      // in the accessible name only — never both, which read as „1 von 3
-      // übernommen / 1 von 3 übernommen".
+      // in the accessible name only — never both, which would read as the
+      // same progress phrase printed twice.
       const text = await chip.innerText();
       expect(
         text.match(/übernommen/g)?.length ?? 0,
         `chip text at ${width}px: ${JSON.stringify(text)}`,
       ).toBe(1);
       // And it counts against the PARTS OF THE RUN, not against the parts
-      // that happen to have answered already: one of three, next to „2 von 3
-      // Szenen fertig" on the generator page.
+      // that happen to have answered already: one of three, next to the
+      // finished-scenes count on the generator page.
       expect(text).toContain("1 von 3 übernommen");
     }
     expect(await topbarOverflow(page), `chapter overview at ${width}px`).toEqual({ row: 0, page: 0 });
@@ -603,7 +604,7 @@ test("editing the campaign metadata updates header, switcher and the file", asyn
 }) => {
   await page.goto("/campaigns/beispiel");
 
-  // `exact`: „Kapitel bearbeiten" stands on the same page per chapter, and a
+  // `exact`: a per-chapter edit action stands on the same page, and a
   // role name matches as a substring.
   await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
   const dialog = page.getByRole("dialog");
@@ -705,8 +706,8 @@ test("the campaign reading view carries the same edit action", async ({
   await expect.poll(() => api.properties("campaign")).toHaveProperty("name", "Aus der Leseansicht");
 });
 // The dialog's 409 path is the SAME write flow as the status control's
-// (lib/campaign-meta.ts mirrors lib/scene-status.ts: conflict -> inline
-// "Inzwischen geändert — neu laden" + refetch, nothing written). Critical
+// (lib/campaign-meta.ts mirrors lib/scene-status.ts: conflict -> the inline
+// stale-revision notice + refetch, nothing written). Critical
 // path 7 covers that mechanism against the real server; the dialog's own
 // branch is unit-tested in app/src/lib/campaign-meta.test.ts. Reproducing it
 // here would need the same "beat the 5s version poll" loop — and a retry that
@@ -715,7 +716,7 @@ test("the campaign reading view carries the same edit action", async ({
 test("the chapter overview header is ONE row: the actions right beside the title, never under it", async ({
   page,
 }) => {
-  // „Kapitel anlegen" and „Bearbeiten" must not sit in a wrapping row: on a
+  // The create-chapter and edit actions must not sit in a wrapping row: on a
   // campaign with a normal-length name the pair would drop onto a second
   // line, right-aligned under the title. The actions share the title's
   // line — checked at the widths a desktop chapter overview is actually read at, and by
@@ -738,7 +739,7 @@ test("the chapter overview header is ONE row: the actions right beside the title
       ),
     );
 
-    // SAME LINE as the title: the boxes overlap vertically. („Same y" cannot
+    // SAME LINE as the title: the boxes overlap vertically. ("Same y" cannot
     // be literal — the heading is 28px and the quiet actions are 26px on its
     // baseline; a wrapped row puts them a whole row apart instead.)
     for (const box of [createBox!, editBox!]) {
@@ -755,7 +756,7 @@ test("the chapter overview header is ONE row: the actions right beside the title
     expect(counterBox!.x).toBe(titleBox!.x);
     expect(counterBox!.y).toBeLessThan(descriptionBox!.y);
 
-    // Description, then the „Nachschlagen" line — in that order.
+    // Description, then the lookup line — in that order.
     const lookupBox = (await page
       .getByRole("navigation", { name: "Nachschlagen" })
       .boundingBox())!;
@@ -766,7 +767,7 @@ test("the chapter overview header is ONE row: the actions right beside the title
 
 // Critical path 1: a chapter is editable where it is read.
 //
-// „Kapitel anlegen" is not the only moment a chapter's title and goal can be
+// Creating a chapter is not the only moment its title and goal can be
 // said: a chapter created without a goal gets one here, and a chapter a
 // generator run created under its slug is renamed here — otherwise the
 // overview would list a heading nobody can correct. Both halves go through the
@@ -846,7 +847,7 @@ test("the chapter edit dialog shows the 409 instead of overwriting a second writ
 // The chapter status control (critical path 1). The overview decides which
 // chapter the session is in, and the status DISPLAY is that control.
 //
-// „Aktiv" is the interesting value: ONE server call for ONE decision about TWO
+// The active value is the interesting one: ONE server call for ONE decision about TWO
 // chapters, so there is never a moment with two active chapters. The other two
 // are an ordinary properties patch.
 test("the chapter status control shows the German labels and swaps the active chapter", async ({
@@ -877,7 +878,7 @@ test("the chapter status control shows the German labels and swaps the active ch
   // --- the swap, from the OTHER chapter's control ---
   // From here on every swap call is counted: ONE decision about two chapters
   // is ONE request. A second one bounces the flag straight back to the
-  // chapter the DM had just left — the control reads „Aktiv" on both rows for
+  // chapter the DM had just left — the control reads active on both rows for
   // a moment, and re-asserting it for the previously active chapter is a swap
   // of its own.
   const swaps: string[] = [];
@@ -919,9 +920,9 @@ test("the chapter status control shows the German labels and swaps the active ch
 });
 
 // The control is a RADIO group, so the checked option is the state — selecting
-// it is nothing to write. „Aktiv" on the chapter that already holds the flag
-// would call the swap endpoint anyway, which is how a stray select on the
-// previously active row (its control still reads „Aktiv" until the
+// it is nothing to write. Selecting active on the chapter that already holds
+// the flag would call the swap endpoint anyway, which is how a stray select on
+// the row that was active (its control still reads active until the
 // invalidation lands) could take the flag back.
 test("re-selecting the value a chapter already has writes nothing", async ({ page, api }) => {
   await api.send("POST", "campaigns/beispiel/chapters", { title: "Kapitel 2: Die Bucht" });
@@ -948,7 +949,7 @@ test("re-selecting the value a chapter already has writes nothing", async ({ pag
   expect((await api.file("01-salzhafen")).properties.status).toBe("active");
 });
 
-// „Abgeschlossen" is the other branch: a rev-guarded properties patch on the
+// The completed value is the other branch: a rev-guarded properties patch on the
 // chapter entry, which must NOT touch the active chapter.
 test("picking Abgeschlossen patches that chapter and leaves the active one alone", async ({
   page,
@@ -975,7 +976,7 @@ test("picking Abgeschlossen patches that chapter and leaves the active one alone
 // cache behind the dialog happened to hold when it opened. That is the other
 // half of the bounce-back: the app's copy of a chapter entry goes stale the
 // moment another writer moves the flag (up to one version poll), and an
-// untouched „Aktiv" in the form would put it back — from a dialog that was
+// untouched active value in the form would put it back — from a dialog that was
 // only opened to fix a title.
 test("an untouched status field is not written, not even a stale Aktiv", async ({ page, api }) => {
   const patches: string[] = [];
@@ -1020,8 +1021,8 @@ test("an untouched status field is not written, not even a stale Aktiv", async (
   expect(stored.properties.title).toBe("Kapitel 1: Salzhafen");
   expect(stored.properties.status).toBe("planned");
   expect((await api.file(created.path)).properties.status).toBe("active");
-  // Both attempts sent the title and nothing else — „status" never appears on
-  // the wire, so no stale „Aktiv" can ride along.
+  // Both attempts sent the title and nothing else — the status field never
+  // appears on the wire, so no stale active value can ride along.
   expect(patches).toHaveLength(2);
   for (const body of patches) {
     expect(body).toContain("Kapitel 1: Salzhafen");
@@ -1039,7 +1040,7 @@ test("the properties dialog offers the enum and its Aktiv swaps too", async ({ p
   await page.goto("/campaigns/beispiel");
   await page.getByRole("button", { name: /Kapitel 2: Die Bucht/ }).click();
   // Two chapters are open now, so the actions are named per chapter — the
-  // second one belongs to „Kapitel 2".
+  // second one belongs to the second chapter.
   await page.getByRole("button", { name: "Kapitel-Eigenschaften" }).nth(1).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Kapitel: Eigenschaften");

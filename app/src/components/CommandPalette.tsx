@@ -1,10 +1,10 @@
-// The ⌘K search palette (issue #7), per the design reference: dimmed
+// The ⌘K search palette, per the design reference: dimmed
 // backdrop, 560px panel at 14vh, search input with esc chip, result rows
 // (kind icon · title · kind label). Built on the Radix Dialog
 // primitives (focus trap, Esc, outside-click, aria-modal) with a manual
 // combobox/listbox pattern for the results — cmdk was skipped because the
 // server does all filtering/ranking; client-side re-filtering would fight
-// the server's bm25 ordering (FTS5 since the cutover, #57).
+// the server's bm25 ordering (FTS5).
 
 import type { SearchResult } from "@grimoire/shared/types";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
@@ -79,9 +79,9 @@ export function CommandPalette({
 
   // Empty query shows nothing yet; results only exist for a non-empty term.
   const hits = term === "" ? [] : (search.data?.results ?? []);
-  // Above the hits: the PAGES of this campaign whose name the DM typed (issue
-  // #53, PO feedback on PR #87). „Glossar" and „Kampagnenwissen" are reachable
-  // from the chapter overview and the phone's start surface, but ⌘K is where this app's
+  // Above the hits: the PAGES of this campaign whose name the DM typed. The
+  // glossary and the campaign knowledge are reachable from the chapter
+  // overview and the phone's start surface, but ⌘K is where this app's
   // keyboard goes first — and the server's index holds entries, not pages,
   // so it can never answer for them. A navigation target the DM typed the name
   // of is what they meant, and there are never more than a handful.
@@ -217,8 +217,8 @@ type Item =
 
 /**
  * Which of the campaign's pages the typed term names. A plain substring match
- * on the LOCALISED label — the DM types „gloss" or „wissen", and there are
- * five candidates, so nothing here is worth a ranking.
+ * on the LOCALISED label — the DM types a fragment of the page's name, and
+ * there are five candidates, so nothing here is worth a ranking.
  */
 function navTargets(campaign: string, term: string, t: Translate): LookupTarget[] {
   if (campaign === "" || term === "") return [];

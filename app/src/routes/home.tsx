@@ -11,14 +11,14 @@
 // sentence, and the id is derived from the name (the shared slug rule) and
 // shown before it is created, because an id is permanent.
 //
-// A PAGE, not a dialog. There is nothing behind it to keep visible, the surface
-// has to work at 390px, and „Kampagne anlegen" is the only thing this screen is
-// about. On success the redirect below picks the new campaign up — the chapter overview
-// then carries the next step („Kapitel anlegen").
+// A PAGE, not a dialog. There is nothing behind it to keep visible, the
+// surface has to work at 390px, and creating a campaign is the only thing this
+// screen is about. On success the redirect below picks the new campaign up —
+// the chapter overview then carries the next step, creating a chapter.
 //
 // The SECOND campaign is created from the topbar switcher instead, through the
 // same `useCampaignCreate` (components/CreateActions.tsx) — one create, two
-// surfaces. The field hints here are generic („Name der Kampagne"): a
+// surfaces. The field hints here are generic (the campaign's name): a
 // placeholder naming the example campaign reads like a default.
 
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -74,7 +74,7 @@ function ColdStart() {
   const t = useT();
   const nameId = useId();
   const descriptionId = useId();
-  // Shared with the switcher's „Kampagne anlegen" dialog (components/
+  // Shared with the switcher's campaign create dialog (components/
   // CreateActions.tsx) — one create, two surfaces. `replace`: the redirect
   // must not sit in the history, or "back" would bounce straight forward again.
   const createCampaignFlow = useCampaignCreate({ replace: true });

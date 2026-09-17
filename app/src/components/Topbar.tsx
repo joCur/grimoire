@@ -4,7 +4,7 @@
 // view — chapter overview, browse lists, entry/scene, generator, review — shows the very
 // same left block:
 //
-//     Grimoire │ Kampagne: <name> ⌄ │ Kapitel · NPCs · Orte
+//     Grimoire │ campaign switcher: <name> ⌄ │ chapters · NPCs · locations
 //
 // Nothing appears, disappears or shifts when moving between them; the only
 // difference is which nav entry is marked as the current section
@@ -19,46 +19,46 @@
 // (SessionChip) in a fixed slot — right behind the campaign switcher, the
 // same place on EVERY campaign-scoped route, /live included:
 //
-//     Grimoire │ Kampagne: <name> ⌄ │ ● 0:12:33 │ Kapitel · NPCs · Orte
+//     Grimoire │ campaign switcher: <name> ⌄ │ ● 0:12:33 │ chapters · NPCs · locations
 //
 // The chip is the state: brass/amber (the accent token) means "a session is
 // running", so there is no "Live" label to read. It carries the running
 // time as H:MM:SS, ticking every second — a coarser tick looks frozen, which
 // is the one thing a live clock must not do.
 // Off /live a click on it navigates back into the session; ON /live it opens
-// a small menu with the three session actions (Pause/Weiter — which really
-// stops and restarts the runtime —, beenden, verwerfen —
+// a small menu with the three session actions (pause/resume — which really
+// stops and restarts the runtime —, end, discard —
 // the last only while the session is still empty). Below md,
 // where the topbar is not the chrome, the very same chip sits in its own slim
 // row (in link mode: there is no mobile live mode), so a session is never
 // invisible and never moves.
 //
-// Consequence: "Session starten" appears NOWHERE while a session is running —
+// Consequence: the start action appears NOWHERE while a session is running —
 // there is nothing to start, only something to return to. What "running"
 // means is the server's answer (GET /campaigns/:campaign/session), not a date the app
 // computes: a session that goes past midnight stays the running one.
 //
-// Deviation from design/ (which keeps a separate live topbar) per PO decision
-// — stability of the session control beats the prototype's two layouts. The
+// Deviation from design/ (which keeps a separate live topbar): stability of
+// the session control beats the prototype's two layouts. The
 // live chapter label lives in the live view's own scene nav, next to the
 // scenes it describes.
 //
 // ONE CHIP FOR EVERY SESSION STATE. The chip
 // is not only the running session's control — it is THE session control, in
-// the same slot, with the same geometry, in every state: it offers "Session
-// starten" while nothing runs, shows the ticking clock
-// while one does, and reads "Status unbekannt", dimmed and inert, when the
-// session lookup failed. There is no separate brass start button and no bare
-// "Session-Status unbekannt" sentence; only content and colour
-// change, so nothing in the chrome moves when the state does.
+// the same slot, with the same geometry, in every state: it offers the start
+// action while nothing runs, shows the ticking clock while one does, and reads
+// an unknown-status label, dimmed and inert, when the session lookup failed.
+// There is no separate brass start button and no bare unknown-status sentence;
+// only content and colour change, so nothing in the chrome moves when the
+// state does.
 //
 // The right side stays per-view: the ⌘K search chip (opens the palette;
 // hidden without a campaign in the URL — "/" only ever shows the empty
 // state), the session chip (one click starts a session and enters
 // /campaigns/:campaign/live), the harvest progress on the
 // review with a quiet chapter overview link into it while today's session
-// still has unharvested entries, and the "Generator" on the chapter overview
-// with its run indicator.
+// still has unharvested entries, and the generator entry on the chapter
+// overview with its run indicator.
 
 import type { EntryResponse } from "@grimoire/shared/types";
 import { isSessionEmpty } from "@grimoire/shared/session-state";
@@ -193,8 +193,9 @@ export function Topbar() {
   const filePath = sceneMatch?.params["*"] ?? "";
   // These read their OWN match, not `campaign`: on `/settings` the campaign is
   // resolved from `?from=` (see above), so asking `campaign !== ""` would make
-  // the settings page the chapter overview of that campaign, marking "Kapitel" and hanging
-  // the chapter overview's review and generator entries into the row.
+  // the settings page the chapter overview of that campaign, marking the
+  // chapters entry and hanging the chapter overview's review and generator
+  // entries into the row.
   const isScene = campaignOf(sceneMatch) !== undefined && filePath !== "";
   const isLive = campaignOf(liveMatch) !== undefined;
   const isReview = campaignOf(reviewMatch) !== undefined;
@@ -232,7 +233,7 @@ export function Topbar() {
           // the row carries switcher, icon-only search, review count,
           // generator and gear with the search chip already at its floor; in
           // the lg–2xl band the nav trio, the full search chip, the long
-          // "Session starten" label and the "Nachbereitung · N offen" link
+          // start-session label and the review link with its open count
           // are all on the row at once, and at exactly 1280 (the xl edge,
           // where the trio, the full search and the chip's reserved width
           // switch on together) that band is the tightest width there is —
@@ -274,9 +275,10 @@ export function Topbar() {
             any width. */}
         {campaign !== "" && !isLive && (
           <nav
-            // Deliberately NOT "Nachschlagen": that is the mobile start
-            // surface's nav, and on the chapter overview both live in the DOM at once
-            // (responsive swap) — two navs with one name is a worse tree.
+            // Deliberately NOT named after the mobile lookup nav: that label
+            // belongs to the mobile start surface, and on the chapter overview
+            // both live in the DOM at once (responsive swap) — two navs with
+            // one name is a worse tree.
             aria-label={t("topbar.nav.aria")}
             className="flex flex-none items-center gap-1 border-l border-border pl-3 text-[13px] max-lg:hidden"
           >
@@ -399,7 +401,7 @@ export function Topbar() {
  * is zone-less, so a browser in another timezone than the server would
  * otherwise show a runtime that is hours off. PAUSED time is deducted and the
  * clock STANDS while a pause runs — the number on the chip is the time
- * played, which is what makes „Pause" mean something. An ENDED session freezes
+ * played, which is what makes a pause mean something. An ENDED session freezes
  * at its `ended` (the chip is gone by then, but a cache race must not tick
  * backwards).
  */
@@ -416,7 +418,7 @@ function useElapsedLabel(session: EntryResponse): string | undefined {
  * The chip's GEOMETRY — identical in every state: same slot, same height,
  * same radius, same paddings, same font size.
  * Only the colours below and the content inside change, so the switch from
- * "Session starten" to the running clock never makes the topbar jump. From
+ * the start action to the running clock never makes the topbar jump. From
  * xl up a minimum width holds the states at a comparable size; below that the
  * row is too tight to reserve width (reserving from lg, which is exactly where
  * the nav trio appears, leaves the row no slack on CI's wider font metrics),
@@ -436,7 +438,7 @@ const SESSION_CHIP_TONE = {
     "border-[color-mix(in_srgb,var(--primary)_45%,transparent)] bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] text-primary hover:border-primary hover:bg-[color-mix(in_srgb,var(--primary)_16%,transparent)] hover:text-primary-hover",
   // Paused: the SAME chip, dimmed — the session has not gone
   // anywhere, it just does not count right now. Muted instead of brass, so
-  // "läuft" and "pausiert" are told apart at a glance; the standing clock and
+  // running and paused are told apart at a glance; the standing clock and
   // the aria-label carry the state itself.
   paused:
     "border-input bg-transparent text-muted-foreground hover:border-border hover:text-body-secondary",
@@ -496,18 +498,17 @@ function SessionDot({ paused = false }: { paused?: boolean }) {
  * THE session control: ONE chip, one slot, every state. The element stays;
  * only what it says and which colour it wears change:
  *
- *   start   — "Session starten". One click starts a NEW session and enters
- *             /live; there is no "fortsetzen".
+ *   start   — the start action. One click starts a NEW session and enters
+ *             /live; there is no resume action.
  *   running — dot + H:MM:SS. Off /live a click goes back into the session;
- *             ON /live it opens the session actions (Pause, beenden, and
- *             verwerfen while the session is still empty), which as three
- *             separate topbar buttons would overflow the row at medium
- *             widths.
- *   error   — "Status unbekannt", dimmed and inert. Neither live nor an
+ *             ON /live it opens the session actions (pause, end, and discard
+ *             while the session is still empty), which as three separate
+ *             topbar buttons would overflow the row at medium widths.
+ *   error   — an unknown-status label, dimmed and inert. Neither live nor an
  *             offer, and it costs the row no second element.
  *
- * The accessible name always carries the STATE plus the running time
- * ("Session läuft, 0:12:33") — the colour alone is not information.
+ * The accessible name always carries the STATE plus the running time — the
+ * colour alone is not information.
  */
 function SessionChip({
   campaign,
@@ -595,9 +596,9 @@ function SessionRunningChip({
 
 /**
  * The chip in its start state: starts a NEW session and navigates to the live
- * mode. ONE click, always, and always the same label — "Session beenden" is
+ * mode. ONE click, always, and always the same label — ending a session is
  * final, so a start after an ended evening opens the next session of the day
- * instead of re-opening the closed one. No "fortsetzen".
+ * instead of re-opening the closed one. There is no resume action.
  *
  * A start can still answer 409 `session_running` — an OLDER session was never
  * ended. The live view is the place that asks about it, so the click
@@ -667,7 +668,7 @@ function SessionMenuChip({
   const pause = useSessionWrite(campaign, () =>
     paused ? continueSession(campaign) : pauseSession(campaign),
   );
-  // "Session beenden" leads into the review, not back to the chapter overview
+  // Ending a session leads into the review, not back to the chapter overview
   // (prototype: endSession → review) — the harvest is the next step.
   const end = useSessionWrite(
     campaign,
@@ -754,8 +755,8 @@ function SessionMenuChip({
  * Below md the topbar is not the chrome, so the session gets
  * its own slim row — carrying the very SAME chip, in link mode: there is no
  * mobile live mode (UI-BRIEF §4), so the way back into the session is the only
- * action mobile needs. Mobile is "nachschlagen und einwerfen", and this is
- * exactly the way back out of a lookup.
+ * action mobile needs. Mobile is for looking things up and throwing ideas in,
+ * and this is exactly the way back out of a lookup.
  */
 function MobileSessionRow({
   campaign,
@@ -781,8 +782,8 @@ function MobileSessionRow({
 }
 
 /**
- * One quiet link of the topbar's campaign navigation ("Kapitel · NPCs ·
- * Orte"), marked when it is the view currently open. The caller decides what
+ * One quiet link of the topbar's campaign navigation (chapters, NPCs,
+ * locations), marked when it is the view currently open. The caller decides what
  * "current" means — the chapter overview and the two lists are matched differently.
  *
  * The marking is COLOUR ONLY (full contrast step: body-secondary ->
@@ -814,13 +815,13 @@ function TopbarNavLink({
 }
 
 /**
- * "Session verwerfen": deletes the session
- * that has nothing in it — the undo of a "Session starten" that was a
- * mis-click. It lives in the session menu (last entry, dimmed), below
- * "Session beenden", which stays THE way out of a session that happened.
+ * The discard action: deletes the session that has nothing in it — the undo
+ * of a start that was a mis-click. It lives in the session menu (last entry,
+ * dimmed), below the end action, which stays THE way out of a session that
+ * happened.
  *
  * It deletes a session, so it asks first. The confirmation names the consequence
- * instead of asking "sicher?" — that is the only thing worth reading here.
+ * instead of asking for a bare yes/no — that is the only thing worth reading here.
  * After the discard nothing is live any more, so the chapter overview is where the DM
  * lands (the live route without a session would only show its empty state).
  */
@@ -886,13 +887,13 @@ function GeneratorLink({ campaign }: { campaign: string }) {
   const t = useT();
   const { data } = useGenerateJob(campaign);
   const running = data?.status === "running";
-  // A run the DM already took PART of is not „done" and not „running" — it
+  // A run the DM already took PART of is neither done nor running — it
   // is half applied, and the entry says how far it got so a
   // forgotten rest is findable from anywhere.
   // Counted against ALL parts of the run: while a
   // pipelined run is still going, only the finished parts have produced a
-  // draft, so „1 von 2 übernommen" would otherwise stand next to
-  // „2 von 3 Szenen fertig".
+  // draft, so an accepted count over the finished parts alone would
+  // contradict the progress count over all parts.
   const progress = acceptProgress(data);
   const partial = progress.written > 0 && progress.written < progress.total;
   const progressLabel = t("topbar.generator.progress", progress);
@@ -1004,7 +1005,7 @@ function SettingsLink({
   );
 }
 
-/** "n von m gesichtet" on the review view (prototype's isReview topbar). */
+/** The seen-of-total progress on the review view (prototype's isReview topbar). */
 function ReviewProgress({ campaign }: { campaign: string }) {
   const review = useReviewEntries(campaign);
   if (
@@ -1059,7 +1060,7 @@ function ChapterOverviewReviewLink({ campaign }: { campaign: string }) {
  * The switcher is also where a SECOND campaign is created. The cold start
  * covers the FIRST one; without this the menu would be a read-only list and a
  * second campaign would have no entry point in the UI at all. So the menu ends
- * with a quiet „Kampagne anlegen" that opens the shared create dialog
+ * with a quiet create-campaign entry that opens the shared create dialog
  * (components/CreateActions.tsx) and navigates into the new campaign.
  *
  * The menu says nothing about WHERE campaigns are stored: a shell command is

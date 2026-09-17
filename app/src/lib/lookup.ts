@@ -9,8 +9,8 @@
 //
 // NOT IN THE TOPBAR, deliberately. The topbar carries the three campaign-wide
 // entries and stays as it is; a fourth and fifth link up there would crowd the
-// one bar that has to survive every width, and „Glossar" is not something the
-// DM reaches for mid-session.
+// one bar that has to survive every width, and the glossary is not something
+// the DM reaches for mid-session.
 
 import { BookA, Bookmark, Lightbulb, MapPin, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";

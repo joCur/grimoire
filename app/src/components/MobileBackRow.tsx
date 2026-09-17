@@ -1,6 +1,7 @@
-// "‹ Kapitel" back row of the mobile read/list views (design/Grimoire-Mobil):
-// links to /campaigns/:campaign, which below md IS the mobile start surface (same
-// route, responsive swap). Hidden at md+ — the desktop has the topbar.
+// Back row of the mobile read/list views (design/Grimoire-Mobil), pointing at
+// the chapter overview: links to /campaigns/:campaign, which below md IS the
+// mobile start surface (same route, responsive swap). Hidden at md+ — the
+// desktop has the topbar.
 
 import { ChevronLeft } from "lucide-react";
 import { Link } from "react-router";

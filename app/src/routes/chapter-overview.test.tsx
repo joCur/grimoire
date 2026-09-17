@@ -2,7 +2,7 @@
 //
 // A scene's group IS its `location`, so the heading is the LOCATION'S NAME —
 // and the group `""` is not a location with an empty name but the scenes
-// that name none. They get a neutral section from the catalog („Ohne Ort"),
+// that name none. They get a neutral no-location section from the catalog,
 // never a blank line where a heading belongs.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

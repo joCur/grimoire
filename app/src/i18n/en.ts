@@ -404,8 +404,8 @@ export const en: Messages = {
   "live.drawer.open": "Open entry",
 
 
-  // --- review (the session review, formerly the "five-minute harvest";
-  // the harvest metaphor stayed in the code, not in the UI)
+  // --- review (the session review; the harvest metaphor lives in the code,
+  // not in the UI)
   // routes/review.tsx, lib/use-review.ts ------------------------------------
   "review.title": "Session review",
   "review.sessionFailed": "Session not loadable — check the server and reload.",

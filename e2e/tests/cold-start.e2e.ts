@@ -1,23 +1,23 @@
-// Critical path 10: Kaltstart — see CLAUDE.md.
+// Critical path 10: the cold start — see CLAUDE.md.
 //
 // A fresh installation is not a dead end. The boot imports nothing, so THIS
 // is what a new instance looks like — `seed: { skip: true }`, an empty
 // database, no campaign at all — and the path from there to a playable
 // evening has to run entirely in the UI:
 //
-//   "/" → Kampagne anlegen → Kapitel anlegen → Szene anlegen → Szene befüllen
-//        → Session starten → die Szene ist in der Session-Ansicht nutzbar
+//   "/" → create the campaign → create a chapter → create a scene → fill the
+//        scene → start a session → the scene is usable in the session view
 //
 // Nothing here uses the `api` fixture's default campaign: this spec CREATES
 // the campaign, so its id is only known at runtime and the helper is built
 // with `apiFor(server.url, id)` — the same reason no spec spells out a
 // session id.
 //
-// The other create surfaces get their own tests below: the NPC/Ort lists
-// (including the collision, which is the one branch that must not write), the
-// same lists at 390px, because "NPC/Ort anlegen" has to work on a phone, and
-// the TOPBAR SWITCHER, where the SECOND campaign is created — it is the UI's
-// only entry point for one.
+// The other create surfaces get their own tests below: the NPC and location
+// lists (including the collision, which is the one branch that must not
+// write), the same lists at 390px, because creating one has to work on a
+// phone, and the TOPBAR SWITCHER, where the SECOND campaign is created — it
+// is the UI's only entry point for one.
 
 import { apiFor, expect, test } from "../support/test";
 
@@ -41,20 +41,20 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   const api = apiFor(server.url, CAMPAIGN_ID);
 
   // --- the empty instance ---------------------------------------------------
-  // Not "keine Kampagne gefunden, bitte grimoire seed": a shell command is a
-  // dead end for the person the tool is for.
+  // Not an error that asks for a seed command on the shell: a shell command
+  // is a dead end for the person the tool is for.
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Willkommen bei Grimoire");
   expect(await api.get<unknown[]>("campaigns")).toEqual([]);
 
-  // --- Kampagne anlegen -----------------------------------------------------
+  // --- create the campaign --------------------------------------------------
   // The hints are GENERIC: a fresh instance must not suggest the name of the
   // example campaign, which reads like a default.
   const nameField = page.getByLabel("Name der Kampagne");
   await expect(nameField).toHaveAttribute("placeholder", "Name der Kampagne");
   await nameField.fill(CAMPAIGN_NAME);
   // The id is DERIVED and shown before it is created — it is permanent, so it
-  // is never a surprise. Umlaut included: „Küste" → `kueste`.
+  // is never a surprise. Umlaut included: `Küste` → `kueste`.
   await expect(page.getByText(`Kennung: ${CAMPAIGN_ID}`)).toBeVisible();
   await page.getByLabel("Beschreibung (optional)").fill("Ein erloschener Leuchtturm.");
   await page.getByRole("button", { name: "Kampagne anlegen" }).click();
@@ -69,7 +69,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   // an API key and source material.
   await expect(page.getByText("Noch keine Kapitel", { exact: false })).toBeVisible();
 
-  // --- Kapitel anlegen ------------------------------------------------------
+  // --- create the chapter ---------------------------------------------------
   // Two triggers carry this label (the quiet header one and the empty state's
   // button); either opens the same dialog.
   await page.getByRole("button", { name: "Kapitel anlegen" }).last().click();
@@ -92,7 +92,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
     page.getByText("Ziel: Herausfinden, warum das Leuchtfeuer erloschen ist."),
   ).toBeVisible();
 
-  // --- Szene anlegen --------------------------------------------------------
+  // --- create the scene -----------------------------------------------------
   // The trigger sits INSIDE the chapter, which is what prefills the chapter:
   // the dialog asks for a title and nothing else.
   await page.getByRole("button", { name: "Szene anlegen" }).click();
@@ -109,7 +109,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   // …and it is a draft, as every new scene is.
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Entwurf" })).toBeVisible();
 
-  // --- Szene befüllen -------------------------------------------------------
+  // --- fill the scene -------------------------------------------------------
   await page.getByRole("button", { name: "Markdown", exact: true }).click();
   await page.getByRole("textbox", { name: /^Markdown-Text von/ }).fill(SCENE_BODY);
   await page.getByRole("button", { name: "Speichern" }).click();
@@ -123,7 +123,7 @@ test("Kaltstart: leere Instanz → Kampagne → Kapitel → Szene → in der Ses
   expect(sceneDoc.body).toContain("[!readaloud]");
   expect(sceneDoc.properties.status).toBe("draft");
 
-  // --- Session starten, Szene live nutzen -----------------------------------
+  // --- start the session, use the scene live --------------------------------
   expect(await api.sessionPath()).toBeUndefined();
   await page.getByRole("button", { name: "Session starten" }).click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}/live$`));
@@ -161,7 +161,7 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   await page.getByRole("button", { name: "Kampagne anlegen" }).click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
 
-  // --- NPC anlegen ----------------------------------------------------------
+  // --- create the npc -------------------------------------------------------
   await page.goto(`/campaigns/${CAMPAIGN_ID}/list/npcs`);
   await expect(page.getByText("Noch keine NPCs.")).toBeVisible();
   await page.getByRole("button", { name: "NPC anlegen" }).click();
@@ -172,7 +172,7 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
   await page.getByRole("button", { name: "Anlegen" }).click();
 
   // The dialog only ever asks for a name — the reading view opens, and the
-  // rest of the fields live in „Eigenschaften".
+  // rest of the fields live in the properties form.
   await expect(page).toHaveURL(/\/npcs\/hafenmeisterin-jorna$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
   await expect(page.getByRole("button", { name: "Eigenschaften" })).toBeVisible();
@@ -199,7 +199,7 @@ test("NPC und Ort entstehen in ihren Listen; eine Kollision schreibt nichts", as
     "Hafenmeisterin Jorna",
   );
 
-  // --- Ort anlegen ----------------------------------------------------------
+  // --- create the location --------------------------------------------------
   await page.goto(`/campaigns/${CAMPAIGN_ID}/list/locations`);
   await page.getByRole("button", { name: "Ort anlegen" }).click();
   const locationName = page.getByLabel("Name");
@@ -232,7 +232,7 @@ test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, serve
   await expect(menu).not.toContainText("grimoire seed");
   await expect(menu).not.toContainText("Datenbank");
 
-  // --- Kampagne anlegen, from the menu -------------------------------------
+  // --- create a campaign, from the menu -------------------------------------
   await menu.getByRole("menuitem", { name: "Kampagne anlegen" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Kampagne anlegen");
@@ -274,15 +274,15 @@ test("Kaltstart und NPC anlegen funktionieren bei 390px", async ({ page, server 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Willkommen bei Grimoire");
   await page.getByLabel("Name der Kampagne").fill(CAMPAIGN_NAME);
   const submit = page.getByRole("button", { name: "Kampagne anlegen" });
-  // Touch target (Qualitäts-Boden) and inside the viewport.
+  // Touch target (quality floor) and inside the viewport.
   const box = await submit.boundingBox();
   expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
   expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(390);
   await submit.click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
 
-  // The mobile start surface reaches the lists ("Nachschlagen"), and the list
-  // is where an NPC is created.
+  // The mobile start surface reaches the lists through its lookup section,
+  // and the list is where an NPC is created.
   await page.getByRole("link", { name: /NPCs/ }).click();
   await expect(page).toHaveURL(/\/list\/npcs$/);
   await page.getByRole("button", { name: "NPC anlegen" }).click();

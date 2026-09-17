@@ -64,8 +64,8 @@ test("the gear is the way in, and the campaign menu is not", async ({
   await page.goto("/campaigns/beispiel");
   await expect(page.getByRole("button", { name: /^Kampagne: / })).toBeVisible();
 
-  // What the menu holds: campaigns and „Kampagne anlegen", and no language
-  // row of any kind.
+  // What the menu holds: the campaigns and the create-campaign item, and no
+  // language row of any kind.
   await page.getByRole("button", { name: /^Kampagne: / }).click();
   await expect(
     page.getByRole("menuitem", { name: "Kampagne anlegen" }),
@@ -139,8 +139,8 @@ test("the language switch: English and back, server-side and without a reload", 
   // the nav, the search chip and the session chip.
   await page.goto("/campaigns/beispiel");
   await expect(page.getByRole("button", { name: /^Campaign: / })).toBeVisible();
-  // The topbar's own trio — scoped, because the chapter overview's „Nachschlagen" line
-  // links to two of the same pages with the same words.
+  // The topbar's own trio — scoped, because the chapter overview's lookup
+  // line links to two of the same pages with the same words.
   const trio = page.getByRole("navigation", { name: "Chapters, NPCs and locations" });
   await expect(trio.getByRole("link", { name: "Chapters" })).toBeVisible();
   await expect(trio.getByRole("link", { name: "Locations" })).toBeVisible();
@@ -298,7 +298,7 @@ test.describe("no language flash", () => {
     ]) {
       expect(painted).not.toContain(english);
     }
-    // Belt and braces: not even a stray „Campaign: " prefix.
+    // Belt and braces: not even a stray `Campaign: ` prefix.
     expect(painted.filter((text) => text.startsWith("Campaign:"))).toEqual([]);
   });
 });
@@ -344,8 +344,9 @@ test("a server error is read in the selected language", async ({
   page,
   api,
 }) => {
-  // „Jorna" slugs to `jorna`, which the example campaign already has — so this
-  // is the real 409 the create dialog is built around, driven through the UI.
+  // The typed name slugs to `jorna`, which the example campaign already has —
+  // so this is the real 409 the create dialog is built around, driven through
+  // the UI.
   const taken = "Jorna";
 
   // --- German (the default) -------------------------------------------------
@@ -408,7 +409,7 @@ test("the gear carries the campaign it was opened FROM, and has a way back", asy
 test.describe("the cold start", () => {
   // An EMPTY instance: no campaign, so the settings page has no campaign
   // section and the page itself is the least interesting thing on screen —
-  // „Kampagne anlegen" is. The switch is inline in the footer so the FIRST
+  // creating a campaign is. The switch is inline in the footer so the FIRST
   // screen of a fresh installation needs no detour to change its language.
   test.use({ seed: { skip: true } });
 
@@ -470,7 +471,7 @@ test.describe("the cold start", () => {
     await expect(page.getByRole("heading", { level: 2 })).toHaveText("Sprache");
     // And no campaign CHROME either: `/settings` is campaign-independent, so
     // the topbar's own `matchPath` must not read "settings" as a campaign id
-    // and dress this page in a „Kampagne: settings" switcher.
+    // and dress this page in a campaign switcher naming it.
     await expect(page.getByRole("button", { name: /^Kampagne: / })).toHaveCount(
       0,
     );
@@ -512,8 +513,8 @@ test.describe("the mobile start surface", () => {
     await expect(page.getByRole("banner")).toBeHidden();
 
     const group = page.getByRole("radiogroup", { name: "Sprache" });
-    // It is the LAST thing on the surface, below „Nachschlagen" — a footer,
-    // not a setting to deal with before starting.
+    // It is the LAST thing on the surface, below the lookup section — a
+    // footer, not a setting to deal with before starting.
     await group.scrollIntoViewIfNeeded();
     await expect(group).toBeVisible();
     await expect(languageRadio(page, "Deutsch")).toBeChecked();

@@ -2,28 +2,28 @@
 // the scene article per the design reference (type overline, Literata title,
 // trigger row, chip row, markdown body — shared with the live view via
 // SceneArticle) plus a sticky right aside with the scene's NPC cards. Below
-// md: a "‹ Kapitel" back row on top and the NPC cards stacked below
+// md: a back row to the chapter overview on top and the NPC cards stacked below
 // the body (the column layout already stacks under lg).
 //
 // Every other entity renders through EntityArticle, chosen by the
 // `kind` the server sends: NPC, location, or a plain titled header for
 // chapter/campaign/anything else. The scene's type overline belongs to scenes
-// only — "Geplante Szene" above an NPC was the PO's pain report.
+// only — a scene status above an NPC would name the wrong thing.
 //
 // Above the article sits the context line: the topbar carries no
-// breadcrumb any more, so "chapter › group" for a scene and "NPCs"/"Orte" for
-// an npc/location live here, right above the title they belong to.
+// breadcrumb, so chapter and group for a scene, and the list name for an
+// npc/location, live here, right above the title they belong to.
 //
-// „Bearbeiten" in the header turns the body into the raw markdown
-// editor — header, chips and status regler keep standing, the properties is
+// The edit action in the header turns the body into the raw markdown
+// editor — header, chips and status control keep standing, the properties are
 // not part of it. The route owns only the "which path is being edited" bit;
 // the write, the 409 and the discard guard live in EntryBodyEditor.
 //
-// „Mit KI ergänzen" is the third one: source text and/or an
+// The augment action is the third one: source text and/or an
 // instruction go to a server job, and its proposal comes back as a review —
 // properties per field, body per block, nothing written until accepted.
 //
-// „Eigenschaften" next to it is the properties half: a form over
+// The properties action next to it is the properties half: a form over
 // all typed fields of the kind. It stays available while the body editor runs —
 // its patch never touches the body, and the editor adopts a body-neutral new
 // version instead of turning it into a conflict (shouldAdvanceBase).
@@ -79,13 +79,13 @@ export function SceneRoute() {
   });
 
   // What the entry on screen IS, across every address it may have: the
-  // properties `id`, which the format calls stable („id … NIE ändern"), with
+  // properties `id`, which the format declares immutable, with
   // the canonical address as the fallback for an entry whose properties
   // carries none.
   const docId = data === undefined ? undefined : (fmString(data.properties.id) ?? data.path);
   const editing = editingId !== undefined && editingId === docId;
-  // Edit mode ENDS at a navigation. Leaving the entry drops the draft
-  // (accepted for this slice), so coming back must not re-open the editor
+  // Edit mode ENDS at a navigation. Leaving the entry drops the draft, so
+  // coming back must not re-open the editor
   // unasked: an editor seeded from the server looks exactly like the one the DM
   // left, and the paragraph they typed would be silently gone from it.
   useEffect(() => {
@@ -93,9 +93,9 @@ export function SceneRoute() {
   }, [docId]);
   // `?edit=1` opens edit mode straight away — how a freshly created scene
   // arrives here (a scene with nothing but a title is there to be
-  // written, and „Blöcke" is the composer). The flag is CONSUMED (replace, so
+  // written, and the block composer is how). The flag is CONSUMED (replace, so
   // it leaves no history entry): it is an instruction for this navigation, not
-  // a state of the page, and a reload or a „zurück" must not re-open an editor
+  // a state of the page, and a reload or a back gesture must not re-open an editor
   // over a body the DM has meanwhile left.
   useEffect(() => {
     if (!wantsEdit || docId === undefined) return;
@@ -145,7 +145,7 @@ export function SceneRoute() {
   const isScene = entityHeaderKind(data.kind) === "scene";
   // The aside belongs to scenes: only they reference npcs in properties.
   const npcs = isScene ? fmStringArray(data.properties.npcs) : [];
-  // „Bearbeiten" — the body editor, offered for the kinds whose
+  // The edit action — the body editor, offered for the kinds whose
   // prose the DM maintains (canEditEntryBody). While it runs the trigger is
   // gone: the editor's own toggle owns the mode from then on.
   const editAction =
@@ -163,17 +163,17 @@ export function SceneRoute() {
       onClose={() => setEditingId(undefined)}
     />
   ) : undefined;
-  // „Eigenschaften" — the properties form of the kinds that have typed
+  // The properties action — the properties form of the kinds that have typed
   // fields (scene, npc, location, chapter); it renders nothing for the rest.
   // The tree feeds its reference fields (npc/location/chapter ids).
   const propertiesAction = (
     <PropertiesAction campaign={campaign} file={data} tree={tree.data} />
   );
-  // „Mit KI ergänzen" — the third quiet action, for the kinds
+  // The augment action — the third quiet action, for the kinds
   // that have an augment prompt (npc, location, scene); it renders nothing
   // for the rest, and it is desktop-only (mobile is the reading surface).
   // While the body editor runs it stays out of the way for the same reason
-  // „Bearbeiten" does: two writers on one body is not a review.
+  // the edit action does: two writers on one body is not a review.
   const augmentAction = editing ? null : <AugmentAction campaign={campaign} file={data} />;
   const articleActions = (
     <>
@@ -182,7 +182,7 @@ export function SceneRoute() {
       {augmentAction}
     </>
   );
-  // The campaign entry's header carries the metadata „Bearbeiten" instead:
+  // The campaign entry's header carries the metadata edit action instead:
   // its name/description are what this page shows, and its id is fixed.
   const headerActions =
     data.kind === "campaign" ? <CampaignMetaAction campaign={campaign} /> : articleActions;
@@ -192,8 +192,8 @@ export function SceneRoute() {
       <MobileBackRow campaign={campaign} />
       <div className="mx-auto flex max-w-[1060px] flex-col items-start gap-10 px-5 pt-5 pb-[100px] md:px-7 md:pt-10 lg:flex-row">
         <div className="w-full min-w-0 flex-1 lg:max-w-[680px]">
-          {/* Where this entry sits — the context the topbar breadcrumb used to
-              carry: chapter › group for a scene, the list for an
+          {/* Where this entry sits — the context the topbar does not carry:
+              chapter › group for a scene, the list for an
               npc/location, nothing for the rest. */}
           <PageContext crumbs={pageContextCrumbs(campaign, data.path, tree.data, t)} />
           {isScene ? (

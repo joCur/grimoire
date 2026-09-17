@@ -1,5 +1,5 @@
-// Which section of the topbar's campaign navigation ("Kapitel · NPCs · Orte")
-// the current view belongs to.
+// Which section of the topbar's campaign navigation (chapters, NPCs,
+// locations) the current view belongs to.
 //
 // The topbar chrome is global and STABLE: every campaign-scoped view shows the
 // same left block, and the only thing that moves is this marking. So the

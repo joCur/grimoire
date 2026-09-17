@@ -1,6 +1,6 @@
 // "/campaigns/:campaign" — the chapter overview per the design reference: campaign header,
 // chapter accordions with goal line, location-grouped planned scenes and a
-// separate contingency group ("Eventualszenen").
+// separate contingency group.
 // Below md the SAME route shows the mobile start surface instead — a
 // responsive swap, no separate URL: the desktop chapter overview is
 // `hidden md:block`, the mobile start `md:hidden`. Both share the tree query
@@ -184,8 +184,8 @@ function Chapter({
             {t("chapterOverview.sceneCount", { count: scenes.length })}
           </span>
         </CollapsibleTrigger>
-        {/* The status that only SAID „Aktiv" is the control now: „Aktiv" swaps
-            the active chapter in one server call, the other two patch this
+        {/* The status is the control: picking the active status swaps the
+            active chapter in one server call, the other two patch this
             chapter. Mobile never sees it — the route renders the start
             surface instead of the overview below md. */}
         <ChapterStatusControl campaign={campaign} chapter={chapter.id} status={chapter.status} />
@@ -228,8 +228,8 @@ function Chapter({
               ))}
             </div>
           )}
-          {/* „Szene anlegen" sits IN the chapter, which is what prefills the
-              chapter — no picker, no second decision. */}
+          {/* The scene create action sits IN the chapter, which is what
+              prefills the chapter — no picker, no second decision. */}
           <div className="pb-4">
             <SceneCreateAction
               campaign={campaign}
@@ -244,7 +244,7 @@ function Chapter({
 }
 
 /** One location group with its planned scenes (contingencies render separately). */
-/** Exported for the render test — the „Ohne Ort" heading rule. */
+/** Exported for the render test — the no-location heading rule. */
 export function PlannedGroup({
   campaign,
   group,
@@ -340,15 +340,15 @@ function SceneRow({
 }
 
 /**
- * „Nachschlagen: NPCs · Orte · Glossar · Kampagnenwissen" — the chapter overview's quiet
- * line into the campaign's reference pages (PO feedback).
+ * The chapter overview's quiet lookup line into the campaign's reference
+ * pages (NPCs, locations, glossary, campaign knowledge).
  *
- * The mobile start surface has carried these as tap rows; the
- * desktop had nowhere for the two new pages to be reached from. The TOPBAR is
- * deliberately not it — it keeps the three campaign-wide entries
- * and does not grow (a fourth and fifth link there would crowd the one bar
- * that has to survive every width, and „Glossar" is not something the DM
- * reaches for mid-session). So the chapter overview's own header gets the line, one row
+ * The mobile start surface carries these as tap rows; the desktop has nowhere
+ * else for the glossary and the knowledge page to be reached from. The TOPBAR
+ * is deliberately not it — it keeps the three campaign-wide entries and does
+ * not grow (a fourth and fifth link there would crowd the one bar that has to
+ * survive every width, and the glossary is not something the DM reaches for
+ * mid-session). So the chapter overview's own header gets the line, one row
  * under the campaign description: the same list as on the phone, in the
  * compact shape a desktop header can afford.
  *

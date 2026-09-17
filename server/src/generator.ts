@@ -164,8 +164,8 @@ export interface PromptAssets {
 export const ASSET_FILES = {
   scene: { systemPrompt: "system-prompt.md", fewShotTarget: "example-output.json" },
   npc: { systemPrompt: "npc-system-prompt.md", fewShotTarget: "npc-example-output.json" },
-  // Locations had no prompt of their own — the augment run is the
-  // first caller, and the pair is written so a future „Ort generieren" can
+  // Locations have no generator run of their own — the augment run is the
+  // only caller, and the pair is written so a future location run can
   // use it unchanged.
   location: {
     systemPrompt: "location-system-prompt.md",
@@ -177,8 +177,8 @@ export const ASSET_FILES = {
     systemPrompt: "outline-system-prompt.md",
     fewShotTarget: "outline-example-output.json",
   },
-  // The output-schema section that turns the scene prompt into „genau eine
-  // Szene aus der Gliederung" mode. No few-shot of its own — the
+  // The output-schema section that turns the scene prompt into
+  // single-scene-from-outline mode. No few-shot of its own — the
   // per-scene call sends the scene example file — so, like `augment`, this
   // entry carries a system prompt alone.
   sceneSingle: { systemPrompt: "scene-single-output.md" },
@@ -941,7 +941,7 @@ class RunUsage {
   private outputTokens = 0;
   // Log-only: how much of the input was a cache hit. It is NOT
   // added to the reported usage — a cached token was still sent, and the
-  // review's „~N Tokens" is the size of the prompt, not its price.
+  // review's token figure is the size of the prompt, not its price.
   private cachedInputTokens = 0;
   private reported = false;
 
@@ -1026,7 +1026,7 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
   /**
    * Called once per provider call. The pipeline counts its own
    * calls with it: `usage` is absent whenever the endpoint reports no tokens,
-   * so the run's „M Aufrufe" cannot be read off it — and a part that FAILED
+   * so the run's call count cannot be read off it — and a part that FAILED
    * has to contribute its attempts to the total as well.
    */
   onCall?: () => void;
@@ -1167,7 +1167,7 @@ export function applySceneTarget(item: unknown, index: number): ApplyTarget {
   // a scene address is its `location`, which the SERVER derives on the way in
   // (`draftAddress`). A client that still sends a three-segment path is
   // naming a group of its own, and that is exactly the contradiction between
-  // address and `location` this ticket removes.
+  // address and `location` that the two-segment rule rules out.
   const segments = rel.split("/");
   if (segments.length !== 2 || RESERVED_DIRS.has(segments[0]!)) {
     throw new ApiError(400, `${label}.path must be "<chapter>/<scene-id>"`);
@@ -1265,7 +1265,7 @@ export function applyStubTarget(item: unknown, index: number): ApplyTarget {
  * never the active one); the body stays empty and degrades.
  */
 /**
- * The chapter target of a „Neues Kapitel" run, decided from the JOB.
+ * The chapter target of a new-chapter run, decided from the JOB.
  *
  * The app must not decide it from its own state: the review state is
  * persistent, so that state is gone after a navigation or a reload, and the
@@ -1322,12 +1322,12 @@ export async function newChapterTarget(
  * Write the reviewed drafts (as ROWS). Validates ALL drafts first
  * (400), then checks ALL targets for conflicts (409 with the conflicting
  * paths, nothing partially written), then inserts them in ONE transaction —
- * which is what "all or nothing" now means literally. Returns the written
+ * which is what "all or nothing" means literally. Returns the written
  * campaign-relative paths.
  *
  * `chapter`/`chapterTitle` (both or neither) add the chapter's chapter entry
  * to the SAME all-or-nothing batch when it does not exist yet — the app's
- * "Neues Kapitel" flow.
+ * new-chapter flow.
  *
  * `npc` is the NPC generator's single draft — the same endpoint on
  * purpose: conflict handling, atomic writes and the job cleanup are identical,

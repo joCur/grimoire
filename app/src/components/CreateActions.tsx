@@ -1,5 +1,5 @@
-// The „… anlegen" entry points — trigger plus wiring around the
-// shared CreateDialog.
+// The create entry points — trigger plus wiring around the shared
+// CreateDialog.
 //
 // The CAMPAIGN has two surfaces and both run through `useCampaignCreate` here,
 // so they cannot drift apart: the cold-start PAGE (routes/home.tsx — an empty
@@ -9,13 +9,13 @@
 // the UI at all. Same fields, same id preview, same 409 proposal.
 //
 // PLACEHOLDERS ARE GENERIC: every field hint names the KIND of
-// thing that belongs there („Titel der Szene", „Name des Orts"), never a name
-// out of the example campaign — a placeholder that reads like real campaign
-// content is taken for a default.
+// thing that belongs there (the scene's title, the location's name), never a
+// name out of the example campaign — a placeholder that reads like real
+// campaign content is taken for a default.
 //
 // WHERE THEY SIT, and why:
 //
-//   chapter   the chapter overview header, next to „Bearbeiten" — the
+//   chapter   the chapter overview header, next to the edit action — the
 //             overview IS the chapter list, so this is where a chapter is
 //             missing from.
 //   scene     inside a chapter accordion, so the chapter is prefilled BY
@@ -29,10 +29,11 @@
 //   a SCENE opens immediately in the editor (`?edit=1`) — a scene with a title
 //     and nothing else is an invitation to write, and the composer is that
 //     invitation. Nobody creates a scene in order to look at its empty body.
-//   an NPC/LOCATION opens its reading view, where „Eigenschaften" carries
-//     the rest of the fields — the dialog deliberately asks for a name only.
-//   a CHAPTER stays where it is: the chapter overview now lists it, with its own
-//     „Szene anlegen" underneath, which is the actual next step.
+//   an NPC/LOCATION opens its reading view, where the properties dialog
+//     carries the rest of the fields — the dialog deliberately asks for a name
+//     only.
+//   a CHAPTER stays where it is: the chapter overview now lists it, with its
+//     own create-scene action underneath, which is the actual next step.
 //
 // Every one of them invalidates the tree (every list and the chapter overview read it),
 // the campaign list (its counts) and the search index view.
@@ -95,8 +96,8 @@ export function useCampaignCreate({ replace = false }: { replace?: boolean } = {
 }
 
 /**
- * „Kampagne anlegen" on a running instance — opened from the topbar switcher,
- * which is where the question „and where is the second campaign?" comes up.
+ * Campaign create on a running instance — opened from the topbar switcher,
+ * which is where the question "and where is the second campaign?" comes up.
  * The dialog only differs from the cold-start page in being a dialog; the
  * fields, the id preview and the 409 branch are the shared ones.
  */

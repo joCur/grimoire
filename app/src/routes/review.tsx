@@ -1,9 +1,8 @@
-// "/campaigns/:campaign/review" — the review view, "Session-Nachbereitung" in the UI
-// (formerly "Fünf Minuten Ernte")
-// per the design reference: the tagged lines of today's log and of the inbox
-// as cards with one-click actions, the chapter's open threads below, brass
-// "Fertig" at the end. Reached after "Session beenden" and from the quiet
-// chapter overview affordance.
+// "/campaigns/:campaign/review" — the session wrap-up view, per the design
+// reference: the tagged lines of today's log and of the inbox as cards with
+// one-click actions, the chapter's open threads below, a brass finish action
+// at the end. Reached after a session is ended and from the quiet chapter
+// overview affordance.
 //
 // The server is the truth: every action writes through the review
 // endpoints, the returned EntryResponse is seeded into the cache and the
@@ -62,9 +61,8 @@ function doneLabel(
     case "npc":
       return t("review.done.npc");
     case "dismiss":
-      // An untagged note or a PC reminder is not "verworfen", it is done
-      // with — the write is the same, the word the DM sees
-      // is not.
+      // An untagged note or a PC reminder is not discarded, it is done with —
+      // the write is the same, the word the DM sees is not.
       return section === "harvest" ? t("review.done.dismiss") : t("review.done.resolved");
     default:
       // The server only stores done/not-done — after a reload the specific
@@ -84,10 +82,10 @@ export function ReviewRoute() {
   const acted = useActedKeys(campaign);
   const adoptedHere = adopted[campaign] ?? [];
   const [npcEntry, setNpcEntry] = useState<ReviewEntry>();
-  // „Behalten" writes nothing: the entry stays open (and counted) for the next
-  // wrap-up, the marker is cosmetic and lives for this sitting only.
+  // The keep action writes nothing: the entry stays open (and counted) for the
+  // next wrap-up, the marker is cosmetic and lives for this sitting only.
   // Campaign-scoped like the rest of the review memory: the entry key is only
-  // the line index in its session, so an unscoped set would carry a „Behalten"
+  // the line index in its session, so an unscoped set would carry a keep mark
   // over to the same index in the NEXT campaign (the route param changes
   // without remounting this component).
   const [kept, setKept] = useState<ReadonlySet<string>>(() => new Set<string>());
@@ -382,7 +380,7 @@ function EntryCard({
   busy: boolean;
   error: string | undefined;
   canAdopt: boolean;
-  /** „Behalten" was clicked in this sitting — still open. */
+  /** The keep action was clicked in this sitting — still open. */
   kept: boolean;
   onThread: () => void;
   onNpc: () => void;
@@ -456,9 +454,9 @@ function EntryCard({
               {entry.section === "harvest" ? t("common.discard") : t("review.action.resolve")}
             </Button>
             {entry.section === "pc" && (
-              // „Behalten" writes NOTHING — it is a marker for this sitting,
-              // so it stays a toggle (aria-pressed) and never claims a
-              // recorded decision. The entry stays open either way.
+              // The keep action writes NOTHING — it is a marker for this
+              // sitting, so it stays a toggle (aria-pressed) and never claims
+              // a recorded decision. The entry stays open either way.
               <Button
                 type="button"
                 variant="outline"
