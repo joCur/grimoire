@@ -22,7 +22,7 @@ ihr Amt hängt daran.
 
 ## Beziehungen
 
-- fenn: kennt ihn von früher — er fuhr einst ehrlich zur See
+- [[fenn]]: kennt ihn von früher — er fuhr einst ehrlich zur See
 
 ## Notizen
 

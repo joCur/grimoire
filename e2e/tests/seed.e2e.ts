@@ -104,7 +104,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(npc.properties.voice).toBe("knapp, wetterrau, duzt jeden");
   expect(npc.properties.quickstats).toMatchObject({ insight: 2, "passive-perception": 12 });
   expect(npc.body).toContain("Das Leuchtfeuer muss wieder brennen");
-  expect(npc.body).toContain("- fenn: kennt ihn von früher");
+  expect(npc.body).toContain("- [[fenn]]: kennt ihn von früher");
 
   // --- the session ----------------------------------------------------------
   const session = await api.file("sessions/2026-01-15");

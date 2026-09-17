@@ -93,7 +93,7 @@ afterEach(() => {
 describe("PUT /entry — an npc's `## Beziehungen` keeps what became no row", () => {
   test("prose and a duplicate counterpart survive the save", async () => {
     const before = await getFile(NPC);
-    expect(before.body).toContain("- jorna: alte Bekannte");
+    expect(before.body).toContain("- [[jorna]]: alte Bekannte");
 
     // Three things under the heading: one relation line (a row), one prose
     // line (no row), and a SECOND line for jorna (the composite key allows

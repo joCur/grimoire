@@ -86,9 +86,7 @@ Der String in `body` ist in dieser Ordnung aufgebaut:
    - in den Klammern steht allein die id (`[[jorna]]`); Endungen stehen
      AUSSERHALB: `[[jorna]]s Boot`,
    - beim ERSTEN Auftreten im Fließtext genügt die Referenz; Namen von
-     Figuren ohne id bleiben normaler Text,
-   - in `## Beziehungen` eines `npc`-Eintrags steht die nackte id — das ist
-     ein eigenes Format.
+     Figuren ohne id bleiben normaler Text.
 5. **Kampagnenwissen**: Der Abschnitt „Kampagnenwissen“ im Prompt ist
    verbindlich und gewinnt gegen den Quelltext. Namenskonventionen gelten
    überall — Titel, Fließtext, Read-Alouds. Fehlt der Abschnitt, gilt für

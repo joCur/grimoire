@@ -157,7 +157,7 @@ function npcMarkdown(
     "",
     "## Beziehungen",
     "",
-    ...(over.relations ?? ["- jorna: schuldet ihr einen Gefallen"]),
+    ...(over.relations ?? ["- [[jorna]]: schuldet ihr einen Gefallen"]),
     "",
     "## Notizen",
     "",
@@ -369,11 +369,13 @@ describe("POST /api/:campaign/generate/npc", () => {
     expect(errors).toContain("ist keine \"- [[<npc-id>]]: <Text>\"-Zeile");
   });
 
-  test("the linked form the prompt asks for passes in one turn", async () => {
-    // `- [[jorna]]: …` is what the npc prompt and its few-shot ask for, so a
-    // reply that follows them must not come back as a correction.
+  test("a relationship line without the brackets passes in one turn", async () => {
+    // `- [[jorna]]: …` is what the prompt and its few-shot ask for (and what
+    // the default fixture above sends), but the check is after the id, not
+    // after the brackets: a line that names an existing npc bare is the same
+    // statement in the same place and must not come back as a correction.
     const fake = useFake([
-      npcReply({ content: npcMarkdown({ relations: ["- [[jorna]]: alte Bekannte"] }) }),
+      npcReply({ content: npcMarkdown({ relations: ["- jorna: alte Bekannte"] }) }),
     ]);
     expect((await generateNpc(npcBody)).status).toBe(200);
     expect(fake.calls).toHaveLength(1);
@@ -811,7 +813,7 @@ describe("apply an npc draft", () => {
     expect(written.properties.quickstats).toEqual({ insight: "+3", deception: "+5" });
     expect(written.properties.statblock).toBe("Roll20: Grella");
     expect(written.body).toContain("> [!secret] Kennt ein zweites Versteck unter dem Kai.");
-    expect(written.body).toContain("- jorna: schuldet ihr einen Gefallen");
+    expect(written.body).toContain("- [[jorna]]: schuldet ihr einen Gefallen");
   });
 
   test("a stale jobId leaves the job alone", async () => {

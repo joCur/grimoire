@@ -67,11 +67,23 @@ describe("usage per reference kind", () => {
       ],
     });
 
-    // A `## Beziehungen` line is PROSE and no reference site: fenn's line
-    // about jorna is not counted, and a rename leaves it as written.
-    expect(group(report, "bodyRefs")).toBeUndefined();
+    // Fenn's `## Beziehungen` line links her as `[[jorna]]`, and a link in a
+    // text counts like any other — one site, the npc it stands in.
+    expect(group(report, "bodyRefs")).toEqual({
+      ref: "bodyRefs",
+      count: 1,
+      sites: [
+        {
+          kind: "npc",
+          id: "fenn",
+          title: "Fenn",
+          path: "npcs/fenn",
+          count: 1,
+        },
+      ],
+    });
 
-    expect(report.total).toBe(1);
+    expect(report.total).toBe(2);
   });
 
   test("location: scene `location:` properties", async () => {
@@ -181,7 +193,7 @@ describe("usage per reference kind", () => {
   });
 });
 
-describe("a `## Beziehungen` line is not usage", () => {
+describe("a `## Beziehungen` line without a link is not usage", () => {
   let root: string;
 
   afterEach(async () => {
@@ -225,10 +237,12 @@ describe("a `## Beziehungen` line is not usage", () => {
     expect(plan.changed).toEqual(["npcs/kalle-der-alte"]);
     expect(plan.usage.total).toBe(0);
 
-    // Jorna is named in two relations lines now — and that changes nothing
-    // about her report, because those lines are text.
+    // Jorna is named in two relations lines now, and only the LINKED one
+    // (fenn's, from the example campaign) is in her report — the hermit
+    // spelled her bare, which is text.
     const jorna = await usage("npc", "jorna");
-    expect(jorna.groups.map((g) => g.ref)).toEqual(["sceneNpcs"]);
+    expect(jorna.groups.map((g) => g.ref)).toEqual(["sceneNpcs", "bodyRefs"]);
+    expect(group(jorna, "bodyRefs")?.sites.map((site) => site.id)).toEqual(["fenn"]);
   });
 });
 

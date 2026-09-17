@@ -168,7 +168,8 @@ describe("examples/beispiel imports completely and cleanly", () => {
     ).toEqual(["social", "travel"]);
 
     // npcs — every contract field, and the whole text as it was written:
-    // `## Beziehungen` is prose and stays in the body.
+    // `## Beziehungen` is prose and stays in the body, the linked
+    // counterpart included.
     const jorna = db.select().from(npcs).where(eq(npcs.id, "jorna")).all()[0];
     expect(jorna?.name).toBe("Hafenmeisterin Jorna");
     expect(jorna?.role).toContain("Hafenmeisterin von Salzhafen");
@@ -179,7 +180,9 @@ describe("examples/beispiel imports completely and cleanly", () => {
     expect(Object.keys(unpackJson(jorna?.quickstats))).toContain("insight");
     expect(jorna?.body).toContain("## Weiß");
     expect(jorna?.body).toContain("## Beziehungen");
-    expect(jorna?.body).toContain("- fenn: kennt ihn von früher — er fuhr einst ehrlich zur See");
+    expect(jorna?.body).toContain(
+      "- [[fenn]]: kennt ihn von früher — er fuhr einst ehrlich zur See",
+    );
 
     // locations — including the hyphenated properties key.
     const leuchtturm = db

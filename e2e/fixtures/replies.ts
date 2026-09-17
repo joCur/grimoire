@@ -325,7 +325,7 @@ Nächten keinen Fang verkauft und traut [[fenn]] nicht.
 
 ## Beziehungen
 
-- fenn: kennt ihn vom Kai, geht ihm seit dem Sommer aus dem Weg
+- [[fenn]]: kennt ihn vom Kai, geht ihm seit dem Sommer aus dem Weg
 
 ## Notizen
 

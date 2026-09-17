@@ -305,10 +305,11 @@ ist dort ein 400 mit `code: "location_not_an_id"` — die Gegenprobe steht in
 Auf den Pfaden 2 und 7 liegt zusätzlich `rename.e2e.ts` (Einstieg über „id
 ändern" im Fußbereich des Eigenschaften-Dialogs — der Header-Knopf ist weg):
 die zweistufige Bestätigung („Vorschau" ist ein `dryRun` und schreibt nichts),
-die deutsche Usage-Zusammenfassung („1 Verwendung: 1 Szene" — eine Zeile unter
-`## Beziehungen` ist Text und damit keine Referenz) und danach die Kaskade
-selbst — Szenen-`npcs:`, der Umzug der Leseansicht, und `GET /usage` auf der
-neuen id gegen 404 auf der alten.
+die deutsche Usage-Zusammenfassung („2 Verwendungen: 1 Szene, 1 Textstelle" —
+die Zeile unter `## Beziehungen` verlinkt den Gegenpart und zählt wie jede
+Textstelle) und danach die Kaskade selbst — Szenen-`npcs:`, die verlinkte
+Beziehungs-Zeile, der Umzug der Leseansicht, und `GET /usage` auf der neuen
+id gegen 404 auf der alten.
 
 Auf Pfad 9 teilen sich zwei Specs die zwei Oberflächen von „Bearbeiten", die
 sich EINEN Entwurf teilen: `block-composer.e2e.ts` deckt den
