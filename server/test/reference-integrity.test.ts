@@ -14,7 +14,7 @@
 //     is neither: it stays visible text, with no entry and no error.
 //
 // The database-level half (the constraints themselves, the migration that
-// adds them) is test/db-reference-constraints.test.ts.
+// adds them) is test/db-migration-0014.test.ts.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";

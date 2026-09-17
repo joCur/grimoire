@@ -1,21 +1,31 @@
-// The database half of referential integrity: the constraints themselves and
-// the migration that adds them (0014).
+// What migration 0014 does to the data it finds — the one-time step that
+// adds the reference constraints.
 //
-// Three subjects, and they are separate on purpose:
+// WHAT IS PINNED HERE AND WHAT IS NOT: the constraints themselves are a
+// schema declaration, and a test that re-asserts them would only repeat it —
+// every schema change would then be a test change too. The API half of that
+// behaviour (a reference that names nothing is refused, a scene needs a
+// chapter, a rename drags its references along) is asserted where the DM
+// meets it, in test/reference-integrity.test.ts. What IS pinned is the
+// CONTENT of the migration: a released migration never changes again, so
+// what it does to a DM's rows is a promise, and these cases are what caught
+// it deleting `scene_npcs` and `scene_tags` in silence.
 //
-//   1. THE CONSTRAINTS, asked of a migrated database through SQL: an insert
-//      that names nothing is refused, a scene without a chapter is refused,
-//      and a renamed id drags its references along.
-//   2. THE REBUILD. SQLite cannot add a constraint to an existing table, so
+// Two subjects, and they are separate on purpose:
+//
+//   1. THE REBUILD. SQLite cannot add a constraint to an existing table, so
 //      the migration rebuilds seven tables — and the migrator runs inside a
 //      transaction, where `PRAGMA foreign_keys` is ignored. Dropping the old
 //      `scenes` therefore deletes every `scene_npcs` and `scene_tags` row
 //      through their cascade. The migration sets those rows aside first;
 //      these cases are what says so, and they fail if it stops doing it.
-//   3. THE PRE-FLIGHT that runs before all of it: data that cannot satisfy
-//      the constraints — or a relations heading the write-back cannot place —
-//      aborts the start, with the offending values in the report and nothing
-//      migrated.
+//      The relation notes belong to the same subject: they only ever existed
+//      as rows, so the migration writes them into the npc's own text before
+//      the table goes.
+//   2. THE PRE-FLIGHT that runs before all of it — TypeScript, not SQL: data
+//      that cannot satisfy the constraints, or a relations heading the
+//      write-back cannot place, aborts the start, with the offending values
+//      in the report and nothing migrated.
 //
 // The old-schema database is built BY HAND, like the other pre-migration
 // step's test next to this one: that is what keeps the case honest about
@@ -24,7 +34,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { sql } from "drizzle-orm";
 import { MIGRATIONS_DIR, openDb } from "../src/db/client";
 import { openSqlite, type SqliteClient } from "../src/db/driver";
 import {
@@ -34,129 +43,6 @@ import {
   referenceProblemReport,
   relationHeadingReport,
 } from "../src/db/reference-preflight";
-
-// --- the constraints on a migrated database ---------------------------------
-
-/** A migrated database with one campaign, one chapter, one location, one npc. */
-async function migratedDb() {
-  const opened = await openDb(":memory:");
-  const { db } = opened;
-  db.run(sql`insert into campaigns (id, name) values ('beispiel', 'Beispiel')`);
-  db.run(sql`insert into chapters (campaign_id, id, title, pos) values ('beispiel', '01', 'Kapitel', 0)`);
-  db.run(sql`insert into locations (campaign_id, id, name) values ('beispiel', 'hafen', 'Hafen')`);
-  db.run(sql`insert into npcs (campaign_id, id, name) values ('beispiel', 'jorna', 'Jorna')`);
-  db.run(
-    sql`insert into scenes (campaign_id, id, chapter_id, location, title, pos) values ('beispiel', 'ankunft', '01', 'hafen', 'Ankunft', 0)`,
-  );
-  db.run(sql`insert into sessions (campaign_id, id, started) values ('beispiel', 's1', '2026-01-15T19:30')`);
-  return opened;
-}
-
-describe("the reference constraints", () => {
-  test("a reference that names nothing is refused, one column at a time", async () => {
-    // On the RAW client, so the assertion reads SQLite's own message.
-    const { client, close } = await migratedDb();
-    try {
-      const refused: Array<[string, string]> = [
-        [
-          "scenes.chapter_id",
-          "insert into scenes (campaign_id, id, chapter_id, title, pos) values ('beispiel', 'x', '99', 'X', 1)",
-        ],
-        [
-          "scenes.location",
-          "insert into scenes (campaign_id, id, chapter_id, location, title, pos) values ('beispiel', 'x', '01', 'nirgendwo', 'X', 1)",
-        ],
-        [
-          "scene_npcs.npc_id",
-          "insert into scene_npcs (campaign_id, scene_id, npc_id, pos) values ('beispiel', 'ankunft', 'niemand', 0)",
-        ],
-        [
-          "npcs.chapter_id",
-          "insert into npcs (campaign_id, id, name, chapter_id) values ('beispiel', 'holm', 'Holm', '99')",
-        ],
-        [
-          "locations.chapter_id",
-          "insert into locations (campaign_id, id, name, chapter_id) values ('beispiel', 'mole', 'Mole', '99')",
-        ],
-        [
-          "log_entries.scene_id",
-          "insert into log_entries (campaign_id, session_id, pos, raw, scene_id) values ('beispiel', 's1', 0, '- 19:00 (x) y', 'x')",
-        ],
-        [
-          "session_scenes_played.scene_id",
-          "insert into session_scenes_played (campaign_id, session_id, scene_id, pos) values ('beispiel', 's1', 'x', 0)",
-        ],
-      ];
-      for (const [column, statement] of refused) {
-        expect(() => client.prepare(statement).run(), column).toThrow(
-          /FOREIGN KEY constraint failed/,
-        );
-      }
-    } finally {
-      close();
-    }
-  });
-
-  test("a scene without a chapter is refused", async () => {
-    const { client, close } = await migratedDb();
-    try {
-      expect(() =>
-        client
-          .prepare(
-            "insert into scenes (campaign_id, id, chapter_id, title, pos) values ('beispiel', 'x', null, 'X', 1)",
-          )
-          .run(),
-      ).toThrow(/NOT NULL constraint failed/);
-    } finally {
-      close();
-    }
-  });
-
-  test("a reference that names an entry is stored", async () => {
-    const { db, close } = await migratedDb();
-    try {
-      db.run(
-        sql`insert into scene_npcs (campaign_id, scene_id, npc_id, pos) values ('beispiel', 'ankunft', 'jorna', 0)`,
-      );
-      db.run(
-        sql`insert into session_scenes_played (campaign_id, session_id, scene_id, pos) values ('beispiel', 's1', 'ankunft', 0)`,
-      );
-      expect(db.all(sql`select 1 from scene_npcs`).length).toBe(1);
-    } finally {
-      close();
-    }
-  });
-
-  test("an id update drags every reference along", async () => {
-    const { db, close } = await migratedDb();
-    try {
-      db.run(
-        sql`insert into scene_npcs (campaign_id, scene_id, npc_id, pos) values ('beispiel', 'ankunft', 'jorna', 0)`,
-      );
-      db.run(
-        sql`insert into session_scenes_played (campaign_id, session_id, scene_id, pos) values ('beispiel', 's1', 'ankunft', 0)`,
-      );
-      db.run(sql`update npcs set id = 'hafenmeisterin' where campaign_id = 'beispiel' and id = 'jorna'`);
-      db.run(sql`update locations set id = 'alter-hafen' where campaign_id = 'beispiel' and id = 'hafen'`);
-      db.run(sql`update chapters set id = '01-neu' where campaign_id = 'beispiel' and id = '01'`);
-      db.run(sql`update scenes set id = 'ankunft-neu' where campaign_id = 'beispiel' and id = 'ankunft'`);
-
-      expect(db.all<{ npc_id: string }>(sql`select npc_id from scene_npcs`)).toEqual([
-        { npc_id: "hafenmeisterin" },
-      ]);
-      expect(
-        db.all<{ chapter_id: string; location: string }>(
-          sql`select chapter_id, location from scenes`,
-        ),
-      ).toEqual([{ chapter_id: "01-neu", location: "alter-hafen" }]);
-      expect(db.all<{ scene_id: string }>(sql`select scene_id from session_scenes_played`)).toEqual(
-        [{ scene_id: "ankunft-neu" }],
-      );
-    } finally {
-      close();
-    }
-  });
-});
 
 // --- the rebuild ------------------------------------------------------------
 
