@@ -1,5 +1,4 @@
-// The read side of the store (issue #57): every GET the API answers, as
-// database queries.
+// The read side of the store: every GET the API answers, as database queries.
 //
 // The shapes are unchanged — `CampaignSummary[]`, `CampaignTree`,
 // `EntryResponse` — and so is every ordering rule the file-tree reader had
@@ -10,9 +9,9 @@
 //
 // The active-session logic is the one piece of behaviour worth calling out:
 // it is the SAME definition as before (the last STARTED session that is not
-// ended — issue #40, so a session past midnight stays active), lifted from a
-// newest-first file scan to a query over `sessions`. The shared predicates
-// (`isEnded`) still decide, so a blank `ended` still counts as running.
+// ended, so a session past midnight stays active), lifted from a newest-first
+// file scan to a query over `sessions`. The shared predicates (`isEnded`)
+// still decide, so a blank `ended` still counts as running.
 
 import { and, asc, desc, eq } from "drizzle-orm";
 import {
@@ -43,7 +42,6 @@ import {
   inboxEntries,
   locations,
   logEntries,
-  npcRelations,
   npcs,
   sceneNpcs,
   sceneTags,
@@ -123,12 +121,12 @@ export async function campaignVersion(id: string): Promise<number> {
 /**
  * All campaigns with `name`/`description` plus the newest session's id
  * (`lastSession`) and its `started` (`lastSessionStarted`) — which is what
- * lets the app re-open the last active campaign (issue #14). "Newest" is
+ * lets the app re-open the last active campaign. "Newest" is
  * `compareSessionsNewestFirst`: `started`, then the row's insertion order.
  *
  * The `started` value travels because the id CANNOT be ordered by the client:
- * it is opaque since the PO decision on issue #58 (db/schema.ts). The app used
- * to sort campaigns by the id string and would now be sorting random noise.
+ * it is opaque (db/schema.ts). The app used to sort campaigns by the id
+ * string and would now be sorting random noise.
  *
  * `name` is the campaign's DISPLAY name and therefore always there: an
  * unnamed campaign is shown under its id. This list and `GET /entry?path=
@@ -142,7 +140,7 @@ export async function listCampaigns(): Promise<CampaignSummary[]> {
     if (row.description !== null && row.description.trim() !== "") {
       summary.description = row.description;
     }
-    // Not `max(id)`: session ids are opaque random strings since issue #58, so
+    // Not `max(id)`: session ids are opaque random strings, so
     // there is no order in them at all. The sort needs exactly the three
     // columns `compareSessionsNewestFirst` reads, so the list must NOT pull
     // whole session rows — a campaign with 80 evenings would drag 80 log
@@ -213,7 +211,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
     .all() as SceneRow[];
 
   // Location id -> display name, for the scene GROUPS below: the heading is
-  // the name, so the groups have to be ordered by it (issue #100 review).
+  // the name, so the groups have to be ordered by it.
   const locationRows = db
     .select()
     .from(locations)
@@ -225,7 +223,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
 
   const chapterNodes: ChapterNode[] = chapterRows.map((chapter) => {
     const own = sceneRows.filter((s) => (s.chapterId ?? "") === chapter.id);
-    // The group IS the scene's location (issue #100) — "" means the scene
+    // The group IS the scene's location — "" means the scene
     // names none and renders under the app's neutral "Ohne Ort" section.
     const bySlug = new Map<string, SceneSummary[]>();
     for (const scene of own) {
@@ -237,7 +235,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
     const groups: SceneGroup[] = [...bySlug.entries()]
       .map(([slug, list]) => ({
         slug,
-        // An entry always exists (referencing one creates it, #70), and an
+        // A referenced entry always exists (schema.ts rule 3), and an
         // unnamed one degrades to its id — still the word the DM typed.
         name: slug === "" ? "" : (locationNames.get(slug) ?? slug),
         scenes: list.sort((a, b) => cmp(a.path, b.path)),
@@ -287,7 +285,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
     .sort((a, b) => cmp(a.name, b.name));
 
   // Newest first, by `started` with the row's insertion time as the tie-break
-  // — several sessions per day are possible since issue #58, and the opaque
+  // — several sessions per day are possible, and the opaque
   // id orders nothing (compareSessionsNewestFirst).
   const sessionList: SessionSummary[] = (
     db.select().from(sessions).where(eq(sessions.campaignId, campaign)).all() as SessionRow[]
@@ -380,10 +378,9 @@ export type SessionOrderFields = Pick<SessionRow, "id" | "started" | "createdAt"
  * when the row says nothing usable about WHEN it started.
  *
  * `started` is the ONLY source. The id used to serve as a fallback while it
- * was date-shaped; since the PO decision on issue #58 it is an opaque random
- * string (db/schema.ts) and there is nothing in it to read. A row without a
- * usable `started` therefore wins nothing — same as before for a row that had
- * neither.
+ * was date-shaped; it is now an opaque random string (db/schema.ts) and there
+ * is nothing in it to read. A row without a usable `started` therefore wins
+ * nothing — same as before for a row that had neither.
  *
  * Takes only the columns it reads, so callers that need nothing else of a
  * session (the campaign list) can select just those.
@@ -395,10 +392,9 @@ export function sessionOrderKey(row: Pick<SessionOrderFields, "started">): numbe
 /**
  * Newest-first comparator: `started` decides, and `createdAt` — the row's
  * insertion time in milliseconds — breaks the tie. Two sessions of the same
- * evening can share a `started` to the SECOND (start, end, start again —
- * issue #58), and "the last started one" has to be the second of them,
- * deterministically. The opaque id cannot say which came first, so the row
- * records it.
+ * evening can share a `started` to the SECOND (start, end, start again), and
+ * "the last started one" has to be the second of them, deterministically.
+ * The opaque id cannot say which came first, so the row records it.
  *
  * Last resort for two rows that share both (migrated rows carry `createdAt`
  * 0): a plain string compare of the ids. Which of them then counts as newer
@@ -515,7 +511,7 @@ export interface KnowledgeRow {
   pos: number;
 }
 
-/** The campaign-knowledge list in its stored order (issue #53). */
+/** The campaign-knowledge list in its stored order. */
 export function knowledgeRows(db: GrimoireDb, campaign: string): KnowledgeRow[] {
   return db
     .select({
@@ -529,19 +525,6 @@ export function knowledgeRows(db: GrimoireDb, campaign: string): KnowledgeRow[] 
     .where(eq(campaignKnowledge.campaignId, campaign))
     .orderBy(asc(campaignKnowledge.pos))
     .all() as KnowledgeRow[];
-}
-
-export function relationRows(
-  db: GrimoireDb,
-  campaign: string,
-  npcId: string,
-): Array<{ otherNpcId: string; note: string }> {
-  return db
-    .select({ otherNpcId: npcRelations.otherNpcId, note: npcRelations.note })
-    .from(npcRelations)
-    .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.npcId, npcId)))
-    .orderBy(asc(npcRelations.pos))
-    .all();
 }
 
 /**
@@ -574,7 +557,7 @@ export function readByLocator(
         .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, locator.id)))
         .all()[0] as SceneRow | undefined;
       if (row === undefined) throw new ApiError(404, "entry not found");
-      // A scene is resolved by its ID alone (issue #100). The chapter and
+      // A scene is resolved by its ID alone. The chapter and
       // group segments used to have to match, which was right while a group
       // was an independent value — but the group is `location` now and moves
       // whenever the DM corrects it, so an old link is a STALE ADDRESS for a
@@ -591,7 +574,7 @@ export function readByLocator(
         .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, locator.id)))
         .all()[0] as NpcRow | undefined;
       if (row === undefined) throw new ApiError(404, "entry not found");
-      return renderNpc(row, relationRows(db, campaign, row.id));
+      return renderNpc(row);
     }
     case "location": {
       const row = db
@@ -618,9 +601,9 @@ export function readByLocator(
       // different edits can hash alike); a per-entry counter is the exact
       // one.
       // An EMPTY inbox is an empty entry, not a missing one (200) — the
-      // same correction the glossary already had below (#70): "no rows yet"
-      // was the file era's "no file yet", and it made every reader special-
-      // case a 404 that means nothing is wrong.
+      // same answer the glossary gives below: "no rows yet" was the file
+      // era's "no file yet", and it made every reader special-case a 404
+      // that means nothing is wrong.
       return renderInbox(campaign, rows, campaignRowValue.inboxRev);
     }
     case "glossary":
@@ -646,9 +629,9 @@ export async function readParsedFile(campaign: string, rel: string): Promise<Ent
 // --- GET /api/:campaign/glossary ---------------------------------------------
 
 /**
- * GET /api/:campaign/glossary -> `{ entries, rev }` (planning section 2).
+ * GET /api/:campaign/glossary -> `{ entries, rev }`.
  *
- * `rev` since issue #53: the settings page edits this list, so it needs the
+ * `rev` travels with it: the settings page edits this list, so it needs the
  * same guard token every other editable entry has. It is the LIST's
  * counter (`campaigns.glossary_rev`) — the same one `GET /entry?path=glossary`
  * hands out, so the two views of the glossary cannot disagree about what
@@ -682,7 +665,7 @@ export async function glossaryText(campaign: string): Promise<string | undefined
     .join("\n");
 }
 
-// --- GET /api/:campaign/knowledge (issue #53) --------------------------------
+// --- GET /api/:campaign/knowledge --------------------------------------------
 
 /** One stored row as the API shape — an unknown `kind` degrades to `fact`. */
 export function knowledgeEntry(row: KnowledgeRow): KnowledgeEntry {
@@ -705,7 +688,7 @@ export async function readKnowledge(campaign: string): Promise<KnowledgeResponse
 }
 
 /**
- * The KNOWLEDGE lines of the prompt (issue #53 AK2) — the list the generator
+ * The KNOWLEDGE lines of the prompt — the list the generator
  * puts above the glossary, in stored order, one line per entry:
  *
  *     - Namenskonvention: schreibe „Alt“ immer als „Neu“.
@@ -716,13 +699,13 @@ export async function readKnowledge(campaign: string): Promise<KnowledgeResponse
  * language is German) — this is prompt CONTENT, not UI copy, so it does not
  * belong in the app's catalog.
  *
- * `[[slug]]` references are RESOLVED here (AK4) with the same expansion the
+ * `[[slug]]` references are RESOLVED here with the same expansion the
  * search index uses (store/refs.ts): a fact written as „[[fenn]] lügt immer“
  * must reach the model as „Fenn lügt immer“ — the model has never seen a
  * slug table and would otherwise copy the brackets into the prose.
  *
  * `undefined` when the campaign has no knowledge at all, so the prompt keeps
- * the exact shape it had before this feature (AK5).
+ * the exact shape it had before this feature.
  */
 export async function knowledgeText(campaign: string): Promise<string | undefined> {
   const db = await getDb();
@@ -750,7 +733,7 @@ export async function knowledgeText(campaign: string): Promise<string | undefine
  * The naming conventions as `from`/`to` pairs — the input of the post-run
  * check (naming-check.ts).
  *
- * REF-EXPANDED like the prompt lines (review of #53): a rule written as
+ * REF-EXPANDED like the prompt lines: a rule written as
  * „[[fenn]]“ → „Fennwyn“ reaches the model as „Fenn“ → „Fennwyn“, so the
  * check has to search the drafts for „Fenn“ too — searching for the literal
  * „[[fenn]]“ would silently never match and make the rule look obeyed. Both
@@ -769,7 +752,7 @@ export async function namingRules(campaign: string): Promise<Array<{ from: strin
 }
 
 /**
- * One stored entry as it may appear INSIDE a prompt line (review of #53).
+ * One stored entry as it may appear INSIDE a prompt line.
  *
  * The lists above are assembled into a markdown prompt, so an entry is a
  * fragment of an entry the model reads as instructions. The endpoints

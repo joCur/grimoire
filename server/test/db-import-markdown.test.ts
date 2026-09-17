@@ -1,5 +1,5 @@
-// The markdown decomposition rules of the one-time migration, unit level
-// (issue #54). The integration side is test/db-migration.test.ts; this file
+// The markdown decomposition rules of the one-time migration, unit level.
+// The integration side is test/db-migration.test.ts; this file
 // pins the DEGRADE RULES themselves, because they are the part that decides
 // whether a DM's odd hand-written file survives the move.
 
@@ -11,8 +11,6 @@ import {
   parseGlossaryBody,
   parseInboxBody,
   parseLogSection,
-  parseRelationsSection,
-  removeRelationLines,
   removeSection,
   sectionLines,
   splitSections,
@@ -34,7 +32,7 @@ describe("splitSections / removeSection", () => {
   });
 
   test("a `###` subsection is NOT parsed, so it is NOT removed either", () => {
-    // The review finding this pins: `sectionLines` stops at the next heading
+    // What this pins: `sectionLines` stops at the next heading
     // of ANY level, so the `### Nachtrag` lines never became rows. Removing
     // them with the section deleted content that nothing had stored.
     const body = "## Log\n\n- 19:00 x\n\n### Nachtrag\n\ny\n\n## Threads\n\n- [ ] t\n";
@@ -191,71 +189,6 @@ describe("parseInboxBody", () => {
   });
 });
 
-describe("parseRelationsSection", () => {
-  test("`- <npc-id>: <Text>` becomes ordered rows", () => {
-    const result = parseRelationsSection("## Beziehungen\n\n- fenn: alte Bekannte\n- jorna: misstraut ihr\n");
-    expect(result.foreignLines).toEqual([]);
-    expect(result.relations).toEqual([
-      { otherNpcId: "fenn", note: "alte Bekannte", pos: 0 },
-      { otherNpcId: "jorna", note: "misstraut ihr", pos: 1 },
-    ]);
-  });
-
-  test("a colon-less line is reported, not guessed at", () => {
-    const result = parseRelationsSection("## Beziehungen\n\n- irgendwer aus dem Dorf\n");
-    expect(result.relations).toEqual([]);
-    expect(result.foreignLines).toEqual(["- irgendwer aus dem Dorf"]);
-  });
-
-  test("a duplicate counterpart cannot become a second row", () => {
-    const result = parseRelationsSection("## Beziehungen\n\n- fenn: eins\n- fenn: zwei\n");
-    expect(result.relations).toHaveLength(1);
-    expect(result.relations[0]?.note).toBe("eins");
-    expect(result.foreignLines).toEqual(["- fenn: zwei"]);
-  });
-
-  test("no section at all is not a problem", () => {
-    expect(parseRelationsSection("## Will\n\nx\n")).toEqual({ relations: [], foreignLines: [] });
-  });
-});
-
-describe("removeRelationLines", () => {
-  test("only the parsed lines go — the section and its prose stay put", () => {
-    const body =
-      "## Will\n\nRaus.\n\n## Beziehungen\n\n- fenn: eins\nEin Satz.\n- fenn: zwei\n\n## Notizen\n\nx\n";
-    const out = removeRelationLines(body);
-    expect(out).not.toContain("- fenn: eins"); // became a row
-    expect(out).toContain("Ein Satz."); // no row, no colon
-    expect(out).toContain("- fenn: zwei"); // no row, duplicate counterpart
-    // heading kept, in place, exactly once — the renderer splices the rows
-    // back into it (store/render.ts renderNpcBody)
-    expect(out.match(/^## Beziehungen$/gm)).toHaveLength(1);
-    expect(out.indexOf("## Will")).toBeLessThan(out.indexOf("## Beziehungen"));
-    expect(out.indexOf("## Beziehungen")).toBeLessThan(out.indexOf("## Notizen"));
-    // everything outside the section is untouched
-    expect(out).toContain("## Will\n\nRaus.\n");
-    expect(out.endsWith("## Notizen\n\nx\n")).toBe(true);
-  });
-
-  test("a section that is only relations goes completely", () => {
-    const body = "## Will\n\nRaus.\n\n## Beziehungen\n\n- fenn: eins\n";
-    expect(removeRelationLines(body)).toBe("## Will\n\nRaus.\n");
-  });
-
-  test("a `###` subsection under the heading is not swallowed", () => {
-    const body = "## Beziehungen\n\n- fenn: eins\n\n### Nachtrag\n\nbleibt\n";
-    const out = removeRelationLines(body);
-    expect(out).toContain("### Nachtrag");
-    expect(out).toContain("bleibt");
-    expect(out).not.toContain("- fenn: eins");
-  });
-
-  test("no section: the body comes back unchanged", () => {
-    const body = "## Will\n\nx\n";
-    expect(removeRelationLines(body)).toBe(body);
-  });
-});
-
 describe("parseGlossaryBody", () => {
   test("all three term spellings become rows", () => {
     const result = parseGlossaryBody(
@@ -302,7 +235,7 @@ describe("parseGlossaryBody", () => {
   });
 
   test("emphasis inside prose is NOT a term", () => {
-    // The review finding: `**Wichtig:** …` matched the bold rule and became a
+    // The bug this pins: `**Wichtig:** …` matched the bold rule and became a
     // glossary term named "Wichtig:" — an entry the DM never wrote. Prose
     // belongs to its section's explanation.
     const result = parseGlossaryBody(
@@ -327,7 +260,7 @@ describe("parseGlossaryBody", () => {
     const result = parseGlossaryBody("Freitext ohne Überschrift\n\n# G\n\n- a → b\n");
     expect(result.entries.map((e) => e.term)).toEqual(["a"]);
     expect(result.problems.join(" ")).toContain("vor der ersten Überschrift");
-    // …and it is handed back verbatim so the caller can keep it (#57 review).
+    // …and it is handed back verbatim so the caller can keep it.
     expect(result.preamble).toBe("Freitext ohne Überschrift");
   });
 

@@ -15,14 +15,9 @@ import { writePropertiesForm } from "@/lib/properties-form";
 import { useRevWriteMutation, type RevWriteMutation } from "@/lib/use-rev-write";
 import { withRev } from "@/lib/write-with-rev";
 
-/**
- * What one save carries: the diff, plus the display name for the Ort the
- * scene's `location` may CREATE (the Ort field takes
- * free text, `propertiesPatch` stores the slug and this carries the name).
- */
+/** What one save carries: the diff, and nothing else. */
 export interface PropertiesWrite {
   patch: Record<string, unknown>;
-  locationName?: string;
 }
 
 export function usePropertiesFormMutation(
@@ -45,9 +40,7 @@ export function usePropertiesFormMutation(
   kind?: string,
 ): RevWriteMutation<PropertiesWrite> {
   return useRevWriteMutation<PropertiesWrite>({
-    write: withRev(rev, (write, rev) =>
-      writePropertiesForm(campaign, path, rev, write.patch, write.locationName),
-    ),
+    write: withRev(rev, (write, rev) => writePropertiesForm(campaign, path, rev, write.patch)),
     entryKey: ["entry", campaign, path],
     invalidateOnSuccess: [
       ...(kind === "chapter" ? [["entry", campaign]] : []),

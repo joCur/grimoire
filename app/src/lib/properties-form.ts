@@ -1,13 +1,13 @@
-// „Eigenschaften" — editing ALL properties fields of one entry from the app
-// This module is the pure half: which fields a
-// kind has, what the open form starts with, and the PATCH body a save sends.
+// „Eigenschaften" — editing ALL properties fields of one entry from the app.
+// This module is the pure half: which fields a kind has, what the open form
+// starts with, and the PATCH body a save sends.
 // No react, no query imports, so every rule here is unit-testable.
 //
 // Three rules carry the whole thing:
 //
 //   1. The FIELD LIST comes from the entity types in @grimoire/shared — one
-//      list per kind, `id` deliberately absent (the rename cascade
-//      owns it) and the kind itself as well (it is derived from the path).
+//      list per kind, `id` deliberately absent (the rename cascade owns it)
+//      and the kind itself as well (it is derived from the path).
 //   2. Only what the DM CHANGED is patched. PATCH /properties re-emits the
 //      whole YAML block from the parsed entry, so every key we do not send
 //      keeps its value — unknown keys of an imported entry included. Sending
@@ -78,6 +78,18 @@ export interface PropertiesField {
   hint?: string;
   /** A field the entity cannot lose (`title`/`name`) — blank blocks the save. */
   required?: boolean;
+  /**
+   * A REFERENCE the entry cannot lose — a scene's chapter, which is part of
+   * its address. Clearing it blocks the save with its own line under the
+   * field (`propertiesFormIssues`) instead of travelling to the server and
+   * coming back as a 400.
+   *
+   * Separate from `required`, which is about a field that holds a NAME and
+   * also makes the key non-nullable in the generator's reply schema
+   * (@grimoire/shared/entry-schema) — a generated scene may well carry no
+   * chapter of its own, because the run writes it.
+   */
+  mandatoryRef?: boolean;
   placeholder?: string;
   /** `select` only: the known value set. */
   options?: readonly FieldOption[];
@@ -206,6 +218,10 @@ function fieldOf(kind: PropertiesKind, def: PropertyFieldDef, t: Translate): Pro
     // honest fallback and the i18n test is what keeps it unused.
     label: copy === undefined ? def.key : t(copy.label),
     ...(def.required === true ? { required: true } : {}),
+    // The scene is the one kind whose `chapter` is mandatory (ADR #19): an
+    // npc and an Ort may sit outside every chapter, a scene may not — its
+    // chapter is a segment of its address.
+    ...(kind === "scene" && def.key === "chapter" ? { mandatoryRef: true } : {}),
     ...(def.source === undefined ? {} : { source: def.source }),
     ...(copy?.hint === undefined ? {} : { hint: t(copy.hint) }),
     ...(copy?.placeholder === undefined ? {} : { placeholder: t(copy.placeholder) }),
@@ -240,15 +256,15 @@ export function propertiesKindLabel(kind: EntityKind, t: Translate): string | un
 // --- the Ort field: free text in, a slug out ---------------------------------
 //
 // `location` IS the group a scene sits under in its chapter, so it holds an
-// entity id — and for a while the form said exactly that and nothing else:
-// free text was refused with „Keine Orts-id — „der-alte-hafen" verwenden."
-// and a disabled Speichern. That put the slug rule in front of the DM as
-// homework. It is the app's job instead: the field takes what a DM types, the
-// hint says what saving will DO with it, and the save sends the slug plus the
-// typed text as the new entry's name.
+// entity id — but the DM types a NAME, and the field takes it: „Der alte
+// Hafen" is read as `der-alte-hafen`, so nobody has to spell slugs. What the
+// hint then says is which entry that id means, and „Unbekannt" when no Ort
+// has it: a reference names an entry that exists, so the save is refused
+// until the Ort is there.
 //
-// The one case that still blocks is text no slug can be derived from („???"):
-// an id is never invented out of nothing (shared/slug.ts).
+// Text no slug can be derived from („???") blocks the save in the form
+// itself: an id is never invented out of nothing (shared/slug.ts), so there
+// is nothing to send.
 
 /** The id the typed text stands for — "" when nothing usable is left. */
 export function locationRefId(text: string): string {
@@ -263,12 +279,9 @@ export type LocationRef =
   | { kind: "empty" }
   /** An entry that exists; `name` is its name, absent when it has none. */
   | { kind: "known"; id: string; name?: string }
-  /**
-   * An entry the save CREATES. `name` is the typed display name — absent when
-   * the DM typed the bare id, which is then the entry's name by fallback.
-   */
-  | { kind: "new"; id: string; name?: string }
-  /** Text that yields no id at all — the only state that blocks the save. */
+  /** No Ort has this id — the save will be refused until one does. */
+  | { kind: "unknown"; id: string }
+  /** Text that yields no id at all — the state the form itself blocks. */
   | { kind: "unusable"; value: string };
 
 export function locationRef(text: string, options: readonly FieldOption[]): LocationRef {
@@ -277,35 +290,10 @@ export function locationRef(text: string, options: readonly FieldOption[]): Loca
   const id = locationRefId(typed);
   if (id === "") return { kind: "unusable", value: typed };
   const hit = options.find((option) => option.value === id);
+  if (hit === undefined) return { kind: "unknown", id };
   // A label that equals the id is no name (referenceOptions labels a nameless
   // entry with its own id), so it is not worth a line under the field.
-  const name = typed === id ? undefined : typed;
-  return hit === undefined
-    ? { kind: "new", id, name }
-    : { kind: "known", id, name: hit.label === id ? undefined : hit.label };
-}
-
-/**
- * The display name a save sends alongside the patch (`locationName`): the
- * text the DM typed, whenever that text is not already the id itself. The
- * server uses it ONLY when it inserts the row, so this is always safe to send
- * — an existing Ort is never renamed by a scene — and the form does not need
- * to know which ids exist to decide.
- */
-export function propertiesLocationName(
-  fields: readonly PropertiesField[],
-  values: FormValues,
-): string | undefined {
-  for (const field of fields) {
-    if (field.source !== "locations" || field.control !== "reference") continue;
-    const value = values[field.key];
-    if (value === undefined || value.kind !== "text") continue;
-    const typed = value.text.trim();
-    const id = locationRefId(typed);
-    if (id === "" || id === typed) continue;
-    return typed;
-  }
-  return undefined;
+  return { kind: "known", id, name: hit.label === id ? undefined : hit.label };
 }
 
 // --- form state --------------------------------------------------------------
@@ -519,12 +507,17 @@ export function propertiesPatch(
  * there is no value to send. The hint under the field says what every other
  * text WILL do; this is the one that cannot be done.
  *
- * And an ID LIST (`npcs`): that list holds ids, not names —
- * every entry becomes a card and a reference the save creates — so the server
- * refuses a non-slug entry with a 400. Saying it here makes that a line under
- * the field before the click. `initial` is what the entry already holds and is
- * EXEMPT: an imported campaign may carry free text there, and
- * such a scene has to stay savable (the server exempts the same values).
+ * And an ID LIST (`npcs`): that list holds ids, not names — every entry is a
+ * reference to an npc entry — so a non-slug entry can name nothing and the
+ * server refuses it. Saying it here makes that a line under the field before
+ * the click. `initial` is what the entry already holds and is EXEMPT, so a
+ * scene stays savable whatever it carries today.
+ *
+ * And a MANDATORY REFERENCE that was cleared: a scene's chapter is part of
+ * its address, so the server refuses a patch that removes it
+ * (`chapter_required`). Saying it here is the same improvement — a line under
+ * the field and a disabled „Speichern", instead of a round trip that ends in
+ * a toast.
  */
 export function propertiesFormIssues(
   fields: readonly PropertiesField[],
@@ -536,6 +529,12 @@ export function propertiesFormIssues(
   for (const field of fields) {
     const value = values[field.key];
     if (value === undefined) continue;
+    // One field carries this flag — the scene's `chapter` — so the sentence
+    // names it. A second mandatory reference would need its own.
+    if (field.mandatoryRef === true && value.kind === "text" && value.text.trim() === "") {
+      issues[field.key] = t("properties.issue.chapterRequired");
+      continue;
+    }
     if (field.source === "locations" && value.kind === "text") {
       const ref = locationRef(value.text, []);
       if (ref.kind === "unusable") {
@@ -700,11 +699,9 @@ export function writePropertiesForm(
   path: string,
   rev: number,
   patch: Record<string, unknown>,
-  /** The name for the Ort `location` creates — see propertiesLocationName. */
-  locationName?: string,
 ): Promise<RevWriteResult> {
   return writeWithRev(
-    () => patchProperties(campaign, { path, rev, patch, locationName }),
+    () => patchProperties(campaign, { path, rev, patch }),
     () => fetchEntry(campaign, path),
   );
 }

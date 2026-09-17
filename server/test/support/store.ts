@@ -1,12 +1,12 @@
-// Test setup for the database-backed API (issue #57).
+// Test setup for the database-backed API.
 //
 // Every test case gets its OWN in-memory database, seeded through the real
 // markdown importer from a campaign tree — `examples/` by default, which is
 // what makes the committed example campaign the fixture of the whole suite
-// (CLAUDE.md, "Arbeitsweise"; planning decision F5) without a second data
+// (CLAUDE.md, "Arbeitsweise") without a second data
 // format anywhere.
 //
-// Since issue #79 the seeding is EXPLICIT: the boot imports nothing, so a
+// The seeding is EXPLICIT: the boot imports nothing, so a
 // test that wants content runs the importer itself — exactly what `grimoire
 // seed` does. Why in-memory: same driver, same schema migrations, same
 // importer as production, no cleanup, and each case is independent.
@@ -18,7 +18,6 @@ import { fileURLToPath } from "node:url";
 import type { GrimoireDb } from "../../src/db/client";
 import { runInitialMigration } from "../../src/db/migrate-campaigns";
 import { closeStore, initStore } from "../../src/store/handle";
-import { backfillReferences } from "../../src/store/ref-backfill";
 
 /** The committed example campaign — read-only for the suite. */
 export const EXAMPLES = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../../../examples");
@@ -32,21 +31,7 @@ export async function seedStore(root?: string): Promise<GrimoireDb> {
   closeStore();
   const db = await initStore({ file: ":memory:" });
   await runInitialMigration(db, root ?? EXAMPLES);
-  // The importer's own consistency pass, exactly as `grimoire seed` runs it
-  // (src/cli.ts): a referenced npc is never missing, only empty (issue #70).
-  seedBackfilled = backfillReferences(db).created;
   return db;
-}
-
-let seedBackfilled: string[] = [];
-
-/**
- * `<campaign>/<npc-id>` per empty npc row the LAST `seedStore` created for a
- * dangling reference. The boot no longer imports, so this is where that pass
- * is observed now (it used to be reported through `storeInfo`).
- */
-export function lastSeedBackfill(): string[] {
-  return seedBackfilled;
 }
 
 /** A fresh, EMPTY in-memory database — the production boot's starting point. */

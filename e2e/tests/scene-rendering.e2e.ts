@@ -18,7 +18,7 @@ import { expect, test } from "../support/test";
 /** The scene with the [!loot] callout — seeded, examples/ has none. */
 const LOOT_SCENE = {
   // The path segment is the scene's ID from the fixture's properties
-  // (`loot-check`), like every scene path since issue #57.
+  // (`loot-check`), like every scene path.
   path: "01-salzhafen/leuchtturm/loot-check",
   content: readFileSync(path.join(FIXTURES_DIR, "loot-scene.md"), "utf8"),
 };
@@ -39,7 +39,7 @@ const CAPTURED = "/beispiel/entry/01-salzhafen/bucht/smuggler-captured";
 test("reference scene 1: read-aloud, check, secret, note and the NPC card", async ({ page }) => {
   await page.goto(ARRIVAL);
 
-  // The context line above the title (issue #34): chapter › group, replacing
+  // The context line above the title: chapter › group, replacing
   // the topbar breadcrumb. The chapter links back to the pool.
   const context = page.getByRole("navigation", { name: "Kontext" });
   await expect(
@@ -61,7 +61,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(article.getByText("Der Leuchtturm von Salzhafen", { exact: true })).toBeVisible();
   await expect(article.getByText("#social", { exact: true })).toBeVisible();
   await expect(article.getByText("Handout: Karte von Salzhafen")).toBeVisible();
-  // The status display IS the control (issue #28).
+  // The status display IS the control.
   await expect(page.getByRole("button", { name: "Status ändern, aktuell Bereit" })).toBeVisible();
 
   // The signature element: no label row, brass ribbon, copy button on hover.
@@ -93,7 +93,7 @@ test("reference scene 1: read-aloud, check, secret, note and the NPC card", asyn
   await expect(aside).toContainText("insight");
   await expect(aside).toContainText("passive-perception");
 
-  // The card links into the NPC reading view (issue #26).
+  // The card links into the NPC reading view.
   await aside.getByRole("link").first().click();
   await expect(page).toHaveURL(/\/beispiel\/entry\/npcs\/jorna$/);
 });
@@ -150,11 +150,11 @@ test("reference scene 2: contingency header, collapsible If-sections, consequenc
 });
 
 test("a referenced NPC without information is a thin card, not a gap", async ({ page, api }) => {
-  // Issue #70: referencing creates. Adding an unknown id to a scene's npcs
-  // gives that id an EMPTY entry, and the aside shows it like any other card
-  // — the id as the name, nothing else. No "NPC-Eintrag fehlt", no
-  // "Stub anlegen" detour, and the card opens the (equally thin) page.
+  // An npc entry created and not filled in: the aside shows it like any
+  // other card — the id as the name, nothing else. No "NPC-Eintrag fehlt",
+  // no "Stub anlegen" detour, and the card opens the (equally thin) page.
   expect(await api.exists("npcs/holm")).toBe(false);
+  await api.send("POST", "beispiel/npcs", { name: "holm" });
   await api.patchProperties("01-salzhafen/leuchtturm/lighthouse-arrival", {
     npcs: ["jorna", "holm"],
   });
@@ -173,38 +173,44 @@ test("a referenced NPC without information is a thin card, not a gap", async ({ 
   await expect(page.getByRole("button", { name: "Eigenschaften" })).toBeVisible();
 });
 
-test("a scene location is a REFERENCE: an id creates the entry, text is a 400", async ({
-  page,
-  api,
-}) => {
-  // Issue #100: `location` is the scene's group, so it is always an id or
-  // empty. Naming an unknown id creates the entry (#70) …
-  await api.patchProperties("01-salzhafen/bucht/smuggler-captured", { location: "nordbucht" });
-  expect(await api.exists("locations/nordbucht")).toBe(true);
-  // … and the scene MOVES with it, address included.
-  const moved = await api.file("01-salzhafen/bucht/smuggler-captured");
-  expect(moved.path).toBe("01-salzhafen/nordbucht/smuggler-captured");
+test("a scene location is a REFERENCE: an Ort that exists, or a 400", async ({ page, api }) => {
+  // `location` is the scene's group, so it is always an id or empty — and
+  // the id has to have an entry (ADR #19).
+  const scene = "01-salzhafen/bucht/smuggler-captured";
+  const patchLocation = async (value: string, rev: number): Promise<Response> =>
+    api.fetch("beispiel/properties", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: scene, rev, patch: { location: value } }),
+    });
 
-  // Free text is refused, with the slug it would have used — the README's
-  // free-text exception is gone.
-  const res = await api.fetch("beispiel/properties", {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      path: moved.path,
-      rev: moved.rev,
-      patch: { location: "Der alte Hafen" },
-    }),
+  // An id nothing holds: refused, and no entry appears for it.
+  const before = await api.file(scene);
+  const unknown = await patchLocation("nordbucht", before.rev);
+  expect(unknown.status).toBe(400);
+  expect(await unknown.json()).toMatchObject({
+    code: "location_unknown",
+    value: "nordbucht",
   });
-  expect(res.status).toBe(400);
-  expect(await res.json()).toMatchObject({
+  expect(await api.exists("locations/nordbucht")).toBe(false);
+
+  // Free text is refused too, with the slug it would have used — the
+  // README's free-text exception is gone.
+  const text = await patchLocation("Der alte Hafen", before.rev);
+  expect(text.status).toBe(400);
+  expect(await text.json()).toMatchObject({
     code: "location_not_an_id",
     suggestion: "der-alte-hafen",
   });
   expect(await api.exists("locations/der-alte-hafen")).toBe(false);
-  // Nothing moved, and the scene still reads under the location it has.
+
+  // With the Ort created, the patch lands and the scene MOVES with it.
+  await api.send("POST", "beispiel/locations", { name: "Nordbucht" });
+  await api.patchProperties(scene, { location: "nordbucht" });
+  const moved = await api.file(scene);
+  expect(moved.path).toBe("01-salzhafen/nordbucht/smuggler-captured");
   await page.goto(`/beispiel/entry/${moved.path}`);
-  await expect(page.getByRole("article")).toContainText("nordbucht");
+  await expect(page.getByRole("article")).toContainText("Nordbucht");
 });
 
 test.describe("with a seeded loot scene", () => {
@@ -216,7 +222,7 @@ test.describe("with a seeded loot scene", () => {
     // [!loot] is missing from the reference scenes and examples/ must not be
     // reformatted — so the sixth kind is checked on a scene this test seeds into
     // the markdown tree its own database is imported from. Its path segment is
-    // the scene's ID (`beutezug`), like every scene path since issue #57.
+    // the scene's ID (`beutezug`), like every scene path.
     await page.goto(`/beispiel/entry/${LOOT_SCENE.path}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Beutezug in der Räucherkammer",
@@ -232,7 +238,7 @@ test.describe("with a seeded loot scene", () => {
   });
 });
 
-// Issue #96: the table is part of the same critical path — the reference
+// The table is part of the same critical path — the reference
 // scene carries a W6 table inside its `[!note]`, so path 2 checks it where
 // the DM meets it.
 test("the reference scene's W6 table renders as a table inside the note callout", async ({

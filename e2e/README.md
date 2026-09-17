@@ -47,9 +47,9 @@ Gruppenfeld. Für die Suite heißt das drei Dinge:
   Quelldateien liegen im Verzeichnis `hafen/`, nennen aber verschiedene Orte,
   also lauten die Adressen `01-salzhafen/leuchtturm/lighthouse-arrival` und
   `01-salzhafen/bucht/smuggler-captured`. `hafen` ist keine Gruppe und kommt
-  in keiner Zusicherung vor. `locations/bucht` gibt es im Baum nicht — der
-  Import legt den Eintrag an, weil eine Szene ihn nennt („Referenzieren legt
-  an"), die Kampagne hat also **zwei** Orte.
+  in keiner Zusicherung vor. Beide Orte haben einen eigenen Eintrag im Baum
+  (`locations/leuchtturm`, `locations/bucht`) — eine Referenz legt nichts an
+  (ADR #19) —, die Kampagne hat also **zwei** Orte.
 - **Eine veraltete Szenen-Adresse ist kein 404.** Sie nennt dieselbe id, der
   Server löst sie auf und antwortet mit der aktuellen Adresse (`path`); die
   App ersetzt die URL (ADR #17). `api.exists(<alte Adresse>)` ist deshalb
@@ -158,7 +158,7 @@ keinen Zustand und kann mehrere Worker parallel bedienen:
 
 - ein Abschnitt „## Bestehender Eintrag" im Prompt → **Ergänzungs-Lauf**
   (der Ergänzen-Lauf). Die Antwort spiegelt den Eintrag zurück und hängt etwas an:
-  bei einem LEEREN NPC (den das Referenzieren angelegt hat) werden
+  bei einem LEEREN NPC (angelegt und nicht gefüllt) werden
   `role`/`voice` gefüllt und ein Körper geschrieben, bei allem anderen kommt
   genau ein neuer `## If:`-Abschnitt dazu — jeder bestehende Block
   unverändert. Diese Verzweigung wird ZUERST geprüft: ein Szenen-Ergänzungs-
@@ -266,7 +266,7 @@ auf Block-Ebene — eine Block-Entscheidung überlebt den Reload.
 
 `tests/augment.e2e.ts` ist die Ergänzungs-Hälfte von Pfad 6 („Mit KI
 ergänzen"): derselbe Lauf auf einen Eintrag, den es schon gibt.
-Der Spec belegt: ein leerer NPC → ergänzen → Löcher gefüllt, während
+Der Spec belegt: ein leerer NPC-Eintrag → ergänzen → Löcher gefüllt, während
 `name` und `status` (beide gefüllt) per Default NICHT ersetzt werden;
 vorbereitete Szene → ein neuer Handlungsstrang als zusätzlicher Block,
 jeder bestehende Block Zeichen für Zeichen gleich, `status: ready` bleibt;
@@ -302,14 +302,13 @@ Session-Log bleibt gültig (es referenziert über ids). Freitext in `location`
 ist dort ein 400 mit `code: "location_not_an_id"` — die Gegenprobe steht in
 `scene-rendering.e2e.ts`.
 
-Auf den Pfaden 2 und 7 liegt zusätzlich `rename.e2e.ts` (erweitert um die
-Usage-Vorschau, Einstieg über „id ändern" im Fußbereich des
-Eigenschaften-Dialogs — der Header-Knopf ist weg): die zweistufige
-Bestätigung („Vorschau" ist ein `dryRun` und schreibt nichts), die deutsche
-Usage-Zusammenfassung („2 Verwendungen: 1 Szene, 1 Beziehung" — die eigene
-ausgehende Beziehungszeile ist keine Referenz AUF die id) und danach die
-Kaskade selbst — Szenen-`npcs:`, die `## Beziehungen`-Gegenzeile, der Umzug der
-Leseansicht, und `GET /usage` auf der neuen id gegen 404 auf der alten.
+Auf den Pfaden 2 und 7 liegt zusätzlich `rename.e2e.ts` (Einstieg über „id
+ändern" im Fußbereich des Eigenschaften-Dialogs — der Header-Knopf ist weg):
+die zweistufige Bestätigung („Vorschau" ist ein `dryRun` und schreibt nichts),
+die deutsche Usage-Zusammenfassung („1 Verwendung: 1 Szene" — eine Zeile unter
+`## Beziehungen` ist Text und damit keine Referenz) und danach die Kaskade
+selbst — Szenen-`npcs:`, der Umzug der Leseansicht, und `GET /usage` auf der
+neuen id gegen 404 auf der alten.
 
 Auf Pfad 9 teilen sich zwei Specs die zwei Oberflächen von „Bearbeiten", die
 sich EINEN Entwurf teilen: `block-composer.e2e.ts` deckt den

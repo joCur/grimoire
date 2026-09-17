@@ -2,16 +2,17 @@
 // `## Will` section) and quickstats, exactly those three per UI-BRIEF.
 // Two densities per the design prototype: the scene aside ("full", with id
 // badge and labeled rows) and the live aside ("compact", inline "Will:").
-// The whole card links to the NPC reading view (issue #26) — UNLESS the caller
-// passes `onOpen`: in the live mode (issue #40) the card must not navigate
+// The whole card links to the NPC reading view — UNLESS the caller
+// passes `onOpen`: in the live mode the card must not navigate
 // away from the running session, it opens the detail drawer instead. Same
 // card, same hover, only the element differs (link vs. button).
 //
-// Degradation (issue #26, #70): a reference CREATES the entry it names
-// (server store/write.ts), so an npc in a scene always has a row; it may be
-// empty, and then this card is simply thin — name (the id, until somebody
-// types one) and nothing else. What is left is the honest failure line for a
-// server that cannot answer, and silence while the query runs.
+// Degradation: an npc a scene lists always HAS an entry — the
+// reference is a foreign key, and a write that names nothing is refused. The
+// entry may be empty, and then this card is simply thin: the name (the id,
+// until somebody types one) and nothing else. What is left is the honest
+// failure line for a server that cannot answer, and silence while the query
+// runs.
 
 import { useQuery } from "@tanstack/react-query";
 
@@ -38,17 +39,16 @@ export function NpcCard({
   compact?: boolean;
   /**
    * When given, the card is a BUTTON that hands the npc's campaign-relative
-   * path to the caller instead of navigating (live mode drawer, issue #40).
+   * path to the caller instead of navigating (live mode drawer).
    */
   onOpen?: (path: string) => void;
 }) {
   const { t, tNode } = useI18n();
   const path = npcPath(id);
-  // A NON-SLUG value is no id and therefore no entry (#70): `npcs:` holds
-  // ids, the server refuses free text there, and only the importer can still
-  // bring some in. Asking for `npcs/Alte Fischerin` would answer 404 and
-  // blame the server for data it was handed — so it is not asked at all, and
-  // the line says what is actually the case.
+  // A NON-SLUG value is no id and therefore no entry: `npcs:` holds ids and
+  // the server refuses anything else. Asking for `npcs/Alte Fischerin` would
+  // answer 404 and blame the server for data it was handed — so it is not
+  // asked at all, and the line says what is actually the case.
   const isId = isEntityId(id);
   const { data, isPending, isError } = useQuery({
     queryKey: ["entry", campaign, path],

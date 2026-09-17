@@ -13,9 +13,9 @@
 // typographic detail is part of the design (»…« as „ “, the em dash with
 // spaces, the ellipsis character in „Speichere …“). Do not normalize them.
 //
-// SCHEIBE 1: topbar incl. session chip, campaign switcher, the
+// SLICE 1: topbar incl. session chip, campaign switcher, the
 // five create dialogs, properties dialog + fields, rename dialog, cold start.
-// Everything else still carries its literal strings and follows in Scheibe 2.
+// Everything else still carries its literal strings and follows in slice 2.
 
 export const de = {
   // --- shared verbs ---------------------------------------------------------
@@ -153,8 +153,8 @@ export const de = {
   "properties.field.row.name.aria": "{label}, Zeile {row}: Name",
   "properties.field.row.value.aria": "{label}, Zeile {row}: Wert",
   "properties.ref.unknownChapter": "Unbekannt — Kapitel muss existieren.",
-  "properties.ref.new": "Neu — wird beim Speichern angelegt.",
-  "properties.ref.locationNew": 'Neu — wird als Ort „{name}“ angelegt.',
+  "properties.ref.unknown": "Unbekannt — Eintrag muss existieren.",
+  "properties.ref.unknownLocation": "Unbekannt — Ort muss existieren.",
   "properties.issue.locationUnusable":
     'Kein verwendbarer Name — „{value}“ ergibt keine Orts-id.',
   "properties.issue.notAnId":
@@ -162,6 +162,8 @@ export const de = {
   "properties.issue.namelessRow": "Zeile ohne Namen — Name ergänzen oder Zeile entfernen.",
   "properties.issue.duplicateName":
     'Name „{name}“ doppelt — jeder Name darf nur einmal vorkommen.',
+  "properties.issue.chapterRequired":
+    "Eine Szene braucht ein Kapitel — es lässt sich verschieben, aber nicht entfernen.",
 
   // Per-kind field labels/hints/placeholders (lib/properties-form.ts)
   "properties.scene.title.label": "Titel",
@@ -173,9 +175,9 @@ export const de = {
   "properties.scene.chapter.label": "Kapitel",
   "properties.scene.location.label": "Ort",
   "properties.scene.location.hint":
-    "Ort aus der Liste oder ein neuer Name — die Szene steht im Kapitel unter diesem Ort.",
+    "Ort aus der Liste — die Szene steht im Kapitel unter diesem Ort.",
   "properties.scene.npcs.label": "NPCs",
-  "properties.scene.npcs.hint": "Nur ids — unbekannte werden beim Speichern angelegt.",
+  "properties.scene.npcs.hint": "Nur ids — der NPC muss schon einen Eintrag haben.",
   "properties.scene.handouts.label": "Handouts",
   "properties.scene.handouts.hint": "Name des Roll20-Handouts, nur ein Verweis.",
   "properties.scene.tags.label": "Tags",
@@ -214,7 +216,7 @@ export const de = {
   // --- rename dialog --------------------------------------------------------
   "rename.title": "{kind}: id ändern",
   "rename.description":
-    "Die neue id zieht alle Referenzen mit: Eigenschaften, Session-Log und Beziehungslisten. Erwähnungen im Fließtext bleiben unverändert.",
+    "Die neue id zieht alle Referenzen mit: Eigenschaften, Session-Log und „[[id]]“-Erwähnungen. Namen im Fließtext bleiben unverändert.",
   "rename.newId.label": "neue id (aktuell {oldId})",
   "rename.preview": "Vorschau",
   "rename.previewing": "Prüfe …",
@@ -240,7 +242,6 @@ export const de = {
   "rename.usage.total": "{count, plural, one {# Verwendung} other {# Verwendungen}}",
   "rename.usage.none": "Keine Referenzen — nichts hängt an dieser id.",
   "rename.usage.sceneNpcs": "{count, plural, one {# Szene} other {# Szenen}}",
-  "rename.usage.npcRelations": "{count, plural, one {# Beziehung} other {# Beziehungen}}",
   "rename.usage.sceneLocation": "{count, plural, one {# Szene} other {# Szenen}}",
   "rename.usage.scenesPlayed":
     "{count, plural, one {# Session-Eintrag} other {# Session-Einträge}}",
@@ -257,11 +258,11 @@ export const de = {
   "settings.language.heading": "Sprache",
   "settings.language.hint": "Sprache der Oberfläche. Gilt für diese Instanz, nicht für die Kampagnendaten.",
 
-  // --- the two campaign-content pages ---------------------------------------
+  // --- the two campaign-content pages --------------------------------------
   // „Kampagnenwissen“ (/:campaign/knowledge) and „Glossar“
   // (/:campaign/glossary). Campaign CONTENT, like the NPCs and the Orte — the
-  // instance settings under /settings are a different thing entirely (PO
-  // feedback). Shared by both pages: the row controls, the per-entry
+  // instance settings under /settings are a different thing entirely.
+  // Shared by both pages: the row controls, the per-entry
   // save outcome, the delete confirmation.
   "entryList.loading": "Lade Liste …",
   "entryList.loadFailed": "Liste nicht geladen — Seite neu laden.",
@@ -313,7 +314,7 @@ export const de = {
   "glossary.noExplanation": "Ohne Erklärung",
 
   // Where the two pages are reached from: the pool's „Nachschlagen“ line and
-  // the mobile start surface's rows (PO feedback — deliberately NOT
+  // the mobile start surface's rows (deliberately NOT
   // the topbar, which stays the three campaign-wide entries it has).
   "lookup.heading": "Nachschlagen",
 
@@ -322,9 +323,16 @@ export const de = {
   "server.slug_reserved": '„{id}“ ist ein reservierter Name — Vorschlag: „{suggestion}“',
   "server.slug_empty": "{field} ergibt keine id — bitte Buchstaben oder Ziffern verwenden.",
   "server.location_not_an_id":
-    'Der Ort „{value}“ ist keine Orts-id — „{suggestion}“ verwenden, der Eintrag wird angelegt.',
+    'Der Ort „{value}“ ist keine Orts-id — „{suggestion}“ verwenden und den Ort zuerst anlegen.',
   "server.location_not_an_id.noSuggestion":
     'Der Ort „{value}“ ist keine Orts-id — bitte Kleinbuchstaben, Ziffern und Bindestriche verwenden.',
+  "server.location_unknown": 'Den Ort „{value}“ gibt es nicht — bitte zuerst anlegen.',
+  "server.npc_unknown": 'Den NPC „{value}“ gibt es nicht — bitte zuerst anlegen.',
+  "server.chapter_unknown": 'Das Kapitel „{value}“ gibt es nicht — bitte zuerst anlegen.',
+  "server.chapter_required": "Eine Szene braucht ein Kapitel — es lässt sich verschieben, aber nicht entfernen.",
+  "server.log_scene_unknown": 'Die Szene „{value}“ gibt es nicht — bitte zuerst anlegen.',
+  "server.played_scene_unknown":
+    'Die gespielte Szene „{value}“ gibt es nicht — bitte zuerst anlegen.',
   "server.glossary_duplicate_term":
     'Glossar-Begriff „{term}“ kommt mehrfach vor — bitte zusammenfassen.',
   "server.session_running": "Eine ältere Session läuft noch — erst beenden.",
@@ -376,7 +384,7 @@ export const de = {
   // one form for both plural categories here — the ICU shape stays, so `en`
   // can differ without a second call site.
   "pool.chapterCount": "{count, plural, one {# Kapitel} other {# Kapitel}}",
-  // Die Restsektion eines Kapitels: Szenen, die keinen Ort nennen.
+  // The chapter's leftovers section: the scenes that name no location.
   "pool.group.noLocation": "Ohne Ort",
   "pool.sceneCount": "{count, plural, =0 {keine Szenen} one {# Szene} other {# Szenen}}",
   "pool.chapter.goal": "Ziel: {goal}",
@@ -471,8 +479,8 @@ export const de = {
   "live.drawer.unloadable": "Nicht ladbar — {path} prüfen.",
   "live.drawer.open": "Eintrag öffnen",
 
-  // --- review (the session wrap-up, formerly "Fünf Minuten Ernte";
-  // the "Ernte"/harvest metaphor stayed in the code, not in the UI)
+  // --- review (the session wrap-up, formerly "Fünf Minuten Ernte"; the
+  // "Ernte"/harvest metaphor stayed in the code, not in the UI)
   // routes/review.tsx, lib/use-review.ts ------------------------------------
   "review.title": "Session-Nachbereitung",
   "review.sessionFailed": "Session nicht ladbar — Server prüfen und neu laden.",
@@ -621,7 +629,7 @@ export const de = {
     "Abenteuertext einfügen — Absätze, Boxed Text, Statblock-Verweise …",
   "generate.input.contextLabel": "Mitgeschickter Kontext:",
   // The two counts that come from the tree. The knowledge and the glossary
-  // are LINKS to their own pages now (PO feedback), so
+  // are LINKS to their own pages now, so
   // the view composes the line from three pieces (lib/generate.ts).
   "generate.input.contextEntities":
     "{npcs, plural, one {# NPC} other {# NPCs}} \u00b7 {locations, plural, one {# Ort} other {# Orte}}",
@@ -704,14 +712,14 @@ export const de = {
   "generate.review.conflicts": "Diese Einträge existieren schon — nichts geschrieben:",
   "generate.review.conflictsNpc": "Dieser Eintrag existiert schon — nichts geschrieben:",
   "generate.review.applyFailed": "Nicht geschrieben — Server prüfen.",
-  // Ein 409, der kein rev-Konflikt ist: der Lauf ist weiter, dieser Teil ist
-  // nicht mehr offen oder hat noch nichts fertig. Nichts wurde geschrieben.
+  // A 409 that is not a rev conflict: the run moved on, this part is no
+  // longer open or has nothing finished yet. Nothing was written.
   "generate.review.applyStale":
     "Nicht geschrieben — der Lauf hat sich geändert. Die Ansicht wird neu geladen.",
   "generate.review.discardFailed": "Nicht verworfen — Server prüfen.",
   "generate.review.apply": "Übernehmen ({count})",
   "generate.review.applyNpc": "Übernehmen",
-  // --- generator: review state on the job -----------------------------------
+  // --- generator: review state on the job ----------------------------------
   // Everything the DM does here is saved on the SERVER — the line says so
   // quietly, and only once something has happened.
   "generate.review.saving": "Speichern …",
@@ -736,7 +744,7 @@ export const de = {
   // (lib/generate.ts groups by hand — Intl would need full ICU data).
   "generate.usage": "~{tokens} Tokens · {attempts, plural, one {# Versuch} other {# Versuche}}",
   "generate.usage.group": ".",
-  // --- generator: the pipeline ----------------------------------------------
+  // --- generator: the pipeline ---------------------------------------------
   // A run is the outline call plus one call per scene and per entry, so the
   // review fills up while the run is still going. What the DM reads is the
   // PARTS — the outline itself is never shown.
@@ -754,11 +762,11 @@ export const de = {
   "generate.pipeline.retry": "Erneut versuchen",
   "generate.pipeline.retryFailed": "Nicht neu gestartet — Server prüfen.",
   // The 409 of „Erneut versuchen“: the part is already running or already
-  // fertig (ein zweiter Tab, ein Doppelklick) — kein Serverfehler.
+  // done (a second tab, a double click) — not a server error.
   "generate.pipeline.retryConflict":
     "Nicht neu gestartet — dieser Teil läuft schon oder ist fertig. Die Ansicht wird neu geladen.",
-  // Why a part failed, in dieser Sprache: die Server-Meldung der Formprüfung
-  // ist Englisch und wäre sonst die einzige Überschrift.
+  // Why a part failed, in this language: the server's validation message is
+  // English and would otherwise be the only heading.
   "generate.pipeline.partInvalid":
     "Formprüfung nicht bestanden — die Antwort blieb auch nach den Korrekturversuchen fehlerhaft.",
   "generate.pipeline.partMissing":

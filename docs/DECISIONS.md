@@ -469,92 +469,13 @@ Mehrnutzer-Betrieb (dafür gelten weiter ADR #3 und die Neubewertung aus ADR #7)
 
 ## 14. Referenzieren legt an — ein referenzierter Eintrag fehlt nie
 
-> **Status: final** (PO-Entscheidung vorab). Folgt aus ADR #13 und der Planung
-> („ein NPC ohne Infos ist eine Zeile mit id und Name") und präzisiert Regel 3
-> in `server/src/db/schema.ts`.
-
-**Entscheidung:** Wer über einen Schreibweg der App oder über
-`POST /generate/apply` eine unbekannte id referenziert, erzeugt sie. In
-derselben Transaktion entsteht eine LEERE Zeile (id, `name` leer → die id ist
-der Anzeigename, Status = Spaltendefault). Betroffen: `npcs:` einer Szene,
-`location:` einer Szene, sofern der Wert ein Slug ist, und die Gegenseite
-einer `## Beziehungen`-Zeile.
-
-- **„Fehlt"-Platzhalter entfallen.** `MissingNpcCard` („NPC-Eintrag fehlt" +
-  „Stub anlegen") und `MissingLocationCard` („Ortseintrag fehlt") sind
-  gelöscht. Ein leerer Eintrag rendert als normale, dünn befüllte Karte bzw.
-  Seite und ist normal editierbar — das ist die Abwesenheit von Information,
-  keine Störung.
-- **`POST /review/npc-stub` ist idempotent** („anlegen oder verlinken"): kein
-  Eintrag → anlegen; LEERER Eintrag → befüllen; befüllter Eintrag → unverändert
-  zurückgeben. Das alte `409` ließ den DM eine id korrigieren, die richtig war.
-  Der Status ist der Default `unknown` (die Zeile schrieb vorher `alive`,
-  gegen ihre eigene Doku).
-- **Die Grenze, bewusst gezogen** — *ersetzt durch ADR #17:* `location:` durfte
-  laut README freier Text sein, und ein Wert, der KEIN Kebab-Slug war, blieb
-  reiner Text ohne Eintrag. Seit ADR #17 ist `location` immer eine Orts-id oder
-  leer: Freitext wird mit `400 location_not_an_id` abgelehnt, eine unbekannte
-  id legt den Eintrag nach der Regel oben an. Das mehrdeutige Feld gibt es
-  nicht mehr.
-- **Bestandsdaten: Boot-Pass nur für NPCs.** Beim Boot legt ein idempotenter
-  Pass leere Zeilen für alle noch hängenden `scene_npcs.npc_id` und
-  `npc_relations.other_npc_id` an (`store/ref-backfill.ts`) und meldet sie im
-  Boot-Log. Die Begründung, `scenes.location` auszunehmen (ein pauschaler Lauf
-  würde aus slug-förmigem Freitext Orte erfinden) ist mit ADR #17 **ersetzt**:
-  dort legt der Einmal-Datenschritt genau einmal für jedes referenzierte
-  `location` einen Eintrag an und meldet jeden im Boot-Log. Für neue Werte
-  gilt weiter die Lazy-Regel — der nächste Schreibvorgang, der das Feld
-  anfasst, legt an.
-- **Keine Foreign Keys** auf diesen Spalten. Sie halten Freitext und
-  Importbestand legal; die Konsistenz kommt aus den Schreibwegen, nicht aus
-  einem Constraint, der einen legalen Import scheitern lassen würde.
-- **Leer ist nicht fehlt, auch beim Lesen:** eine leere Inbox antwortet 200 mit
-  einem leeren Dokument (wie das Glossar), nicht 404.
-
-**Bewusst NICHT Teil der Entscheidung** (PO-Liste): die
-Gegenseite einer Beziehung automatisch anlegen (das wäre erfundener Inhalt),
-die Validierung des Generators lockern (sie schützt vor halluzinierten ids),
-`[[slug]]`-Referenzen in Prosa anlegen (die Kind-Zuordnung ist mehrdeutig) und
-Kapitel-ids anlegen (eine Szene unter einem unbekannten Kapitel fällt aus dem
-Baum, deshalb bleibt es 400).
-
-### Nachschärfungen aus dem Audit (gleiche Scheibe)
-
-Das Review der ersten Umsetzung hat sechs Stellen gefunden, an denen die Regel
-oben nicht durchgezogen war — die App versprach etwas, was der Server nicht
-tat, oder umgekehrt. Verbindlich ist ab jetzt:
-
-- **Status zählt als Inhalt.** Eine per Referenz entstandene Zeile, deren
-  `status` der DM auf z. B. `dead` gestellt hat, ist NICHT mehr leer: Der
-  Generator-Apply antwortet dort wieder mit `409 { conflicts }`, `npc-stub`
-  gibt sie unverändert zurück. Leer ist nur der Spaltendefault.
-- **`location:` wird bei JEDEM Patch sichergestellt**, nicht nur bei einer
-  Änderung. Der Eigenschaften-Dialog verspricht „wird beim Speichern
-  angelegt"; mit der alten „nur NEUE Referenzen"-Regel blieb ein hängender
-  Alt-Slug beim Speichern genau so hängen. Der Satz „die Freitext-Grenze
-  bleibt unverändert" ist mit ADR #17 **ersetzt**: es gibt keine Freitext-Hälfte
-  mehr, ein Nicht-Slug ist `400 location_not_an_id`. Für `npcs:` gilt weiter
-  „nur neue" (siehe nächster Punkt).
-- **`npcs:` nimmt ids, keine Namen.** Ein NEUER Eintrag ohne Slug-Form wird
-  mit 400 abgelehnt (seit ADR #17 gilt dasselbe für `location`:
-  jeder Eintrag wird eine Karte und eine Referenz). Bereits GESPEICHERTE
-  Werte sind ausgenommen — die Migration importiert, was da ist, und eine
-  Alt-Szene muss speicherbar bleiben. Die Karte einer solchen Alt-Referenz
-  sagt „keine NPC-id, deshalb kein Eintrag" statt „Server prüfen".
-- **`chapter:` ist überall 400.** Ein unbekanntes Kapitel wurde bei einer
-  Szene abgelehnt, bei NPC und Ort still gespeichert; jetzt gilt für alle drei
-  dasselbe (nur bei geändertem Wert, wegen Bestandsdaten), und der Hinweis im
-  Dialog sagt „Kapitel muss existieren" statt „wird angelegt".
-- **Zwei Drafts auf dieselbe ZEILE sind 409** (`{ conflicts }`) statt
-  last-write-win: seit eine leere Zeile kein Konflikt mehr ist, hat der
-  zweite Draft den ersten befüllt, und das Review meldete einen sauberen
-  Apply für weggeworfenen Inhalt. „Dieselbe Zeile" und nicht „dieselbe
-  Adresse" — seit ADR #17 trägt die Szenen-Adresse ihr `location`, dieselbe id
-  unter zwei Orten sind zwei Adressen und ein Primärschlüssel.
-- **Rename merged in eine LEERE Zielzeile** statt 409. Genau dieser Zustand
-  entsteht jetzt regulär (eine Szene listet alte und neue id → die neue hat
-  eine leere Zeile), und der Merge der Referenzlisten war sonst toter Code.
-  Eine Zielzeile mit Inhalt bleibt 409 — Rename überschreibt nichts.
+> **Status: ersetzt durch ADR #19.** Diese Entscheidung ließ jeden Schreibweg den
+> Eintrag anlegen, den er referenziert; ADR #19 dreht das um — eine Referenz
+> nennt einen vorhandenen Eintrag, alles andere wird abgelehnt. Was von hier
+> GILT: ein leerer Eintrag ist kein Fehler (dünne Karte, normal befüllbar,
+> kein „fehlt"-Platzhalter), eine leere Inbox antwortet 200 statt 404, und
+> „NPC-Stub anlegen" ist idempotent — vorhandener Eintrag wird verlinkt, ein
+> leerer gefüllt, ein gefüllter unverändert zurückgegeben.
 
 ## 15. i18n: typisierter TS-Katalog + ICU über `intl-messageformat`
 
@@ -710,8 +631,8 @@ Server ist die Wahrheit).
 Adresse und Kapitelgruppierung einer Szene werden aus der Spalte `location`
 abgeleitet: `<kapitel>/<location>/<id>`, ohne `location` `<kapitel>/<id>`.
 `location` ist damit immer eine Orts-id oder leer — Freitext wird mit
-`400 location_not_an_id` abgelehnt, eine unbekannte id legt den Eintrag an
-(ADR #14).
+`400 location_not_an_id` abgelehnt, eine id ohne Eintrag mit
+`400 location_unknown` (ADR #19).
 
 **Warum:** `group_slug` („rein eine Anzeige-Gruppierung") und `location`
 waren zwei unabhängige Werte für dieselbe Sache — ein Erbe der
@@ -774,7 +695,7 @@ Die Übernahme legt das Kapitel auch dann an, wenn kein übernommener Teil es
 nennt: das Kapitel gehört dem Lauf, nicht dem einzelnen Teil. Ein generierter
 Szenen-Entwurf bekommt sein Kapitel im selben Schreibvorgang; ist die
 Kapitel-id kein Slug, ist das 400. **Die Dialoge bleiben unverändert:** ein
-Kapitel, das der DM tippt, muss existieren (400, ADR #14) — dort ist ein
+Kapitel, das der DM tippt, muss existieren (400, ADR #19) — dort ist ein
 unbekanntes Kapitel ein Tippfehler.
 
 **Entscheidung (b): Der Kapitel-Status ist ein Enum** `planned | active | done`,
@@ -800,3 +721,73 @@ Die Auswahl des Werts, der schon angezeigt wird, schreibt nichts — bei „Akti
 wäre das ein zweiter Tausch. Mobil bleibt der Status **Anzeige**: unter `md`
 rendert die Route die Startfläche statt der Kapitelübersicht, die Regel steht
 also genau an einer Stelle.
+
+## 19. Jede Referenz ist ein Fremdschlüssel — eine Nennung legt nichts an
+
+**Entscheidung:** Jede gespeicherte Referenz bekommt einen zusammengesetzten
+Fremdschlüssel `(campaign_id, <referenz>)` mit `ON UPDATE CASCADE` und
+`ON DELETE NO ACTION` (Migration 0014). Eine Referenz nennt damit einen
+Eintrag, den es gibt — und die Datenbank ist es, die das garantiert.
+
+| Referenz | Ziel | Pflicht |
+| -------- | ---- | ------- |
+| `scenes.chapter_id` | `chapters` | ja — eine Szene gehört zu einem Kapitel |
+| `scenes.location` | `locations` | nein |
+| `scene_npcs.npc_id` | `npcs` | ja |
+| `npcs.chapter_id` | `chapters` | nein |
+| `locations.chapter_id` | `chapters` | nein |
+| `log_entries.scene_id` | `scenes` | nein |
+| `session_scenes_played.scene_id` | `scenes` | ja |
+
+`generate_jobs.chapter` bleibt ohne Fremdschlüssel: ein Lauf mit „Neues
+Kapitel" nennt das Kapitel, das er selbst anlegt — beim Übernehmen des
+Vorschlags entsteht der Kapitel-Eintrag zusammen mit den Szenen.
+
+**Eine Nennung legt nichts an.** Ein Eintrag entsteht über „Neu anlegen",
+über „NPC-Stub anlegen" und über das Übernehmen eines Generator-Vorschlags,
+sonst nirgends — und dazu gehört das Kapitel eines „Neues Kapitel"-Laufs, das
+die Übernahme aus dem Lauf anlegt (ADR #18). Ein übernommener Szenen-Vorschlag
+nimmt außerdem die vorgeschlagenen Einträge mit, die er nennt: sie sind Teil
+desselben Vorschlags, und was der DM abgelehnt hat, bleibt abgelehnt — dann
+wird die Szene abgewiesen und nennt den fehlenden Eintrag.
+
+**Das Mitschreiben ist ein Zwischenstand.** Eine übernommene Szene schreibt
+die vorgeschlagenen Einträge mit, die sie nennt, damit ein Lauf nicht an
+seinen eigenen Referenzen scheitert — nicht, weil das die gewollte Lösung
+wäre. Gewollt ist ein Review in Referenz-Reihenfolge: erst die Orte, dann die
+NPCs, dann die Szenen, sodass nichts geschrieben wird, bevor seine Ziele
+existieren. Das ist als eigene Arbeit festgehalten und dreht diesen Punkt
+wieder zurück.
+
+Wer in `npcs:`, `location:`, `chapter:`, in einer Schnellnotiz oder in
+`scenes_played:` etwas einträgt, das keinen Eintrag hat, bekommt 400 mit
+einem eigenen Code (`npc_unknown`, `location_unknown`,
+`chapter_unknown`, `log_scene_unknown`, `played_scene_unknown`) und dem
+Hinweis, den Eintrag zuerst anzulegen; geschrieben wird nichts.
+
+**Eine Nennung im Text ist keine Referenz.** `[[id]]` und die Zeilen unter
+`## Beziehungen` bleiben sichtbarer Text: `npc_relations` entfällt, weil
+nichts in der Speicherung aus Text abgeleitet wird — eine Beziehung als
+Daten wären Eigenschaften im Dialog und im Generator, kein geparster
+Abschnitt. Ein `[[id]]` ohne Eintrag wird als Text angezeigt, ohne Fehler.
+
+**Umbau statt ALTER TABLE:** SQLite kann einer bestehenden Tabelle keinen
+Constraint hinzufügen, deshalb baut die Migration die sieben betroffenen
+Tabellen neu auf — der dokumentierte Weg. Der Migrator läuft in einer
+Transaktion, in der `PRAGMA foreign_keys` ignoriert wird, also würden die
+Kind-Einträge beim Ersetzen ihrer Eltern mitgelöscht: sie werden vorher in
+Hilfstabellen derselben Transaktion gesichert und danach zurückgeschrieben.
+
+**Vorabprüfung statt Reparatur:** Vor den Constraints prüft
+`db/reference-preflight.ts`, ob jede Referenz auflösbar ist. Wenn nicht,
+bricht der Start ab und nennt im Log pro Tabelle und Spalte die Werte ohne
+Eintrag und ihre Anzahl, mit dem Hinweis, die Daten zuerst in der vorherigen
+Version oder direkt in der Datenbank zu korrigieren; es wird nichts
+migriert. Nichts wird dabei angelegt, umgeschrieben oder verworfen — das
+sind Entscheidungen, die nur der DM treffen kann.
+
+**Bewusst nicht Teil der Entscheidung:** ein Löschweg für Einträge (es gibt
+keinen; `ON DELETE NO ACTION` sagt nur, dass ein solcher Weg eine eigene
+Entscheidung braucht) und ein Umgang mit Referenzen zwischen Kampagnen (die
+Fremdschlüssel schließen sie aus, weil `campaign_id` Teil jeder Referenz
+ist).

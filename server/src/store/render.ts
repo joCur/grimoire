@@ -10,18 +10,19 @@
 //      keys from `extra`. Same keys the parser produced, same fallbacks
 //      (`title`/`name` fall back to the id — shared/parse.ts), so the app
 //      cannot tell the difference.
-//   2. `raw` IS A DETERMINISTIC RENDERING, not a stored byte sequence
-//      (planning section 4). It is the editor's display value; no byte
-//      guarantees are made or needed.
-//   3. THE GUARD TOKEN `rev` IS THE ROW'S VERSION COUNTER (planning
-//      section 4). The app has always treated it as opaque, and the row
-//      version makes the semantics stronger than a file time: it cannot
-//      collide inside one second, which is exactly the bug of issue #37.
+//   2. `raw` IS A DETERMINISTIC RENDERING, not a stored byte sequence. It is
+//      the editor's display value; no byte guarantees are made or needed.
+//   3. THE GUARD TOKEN `rev` IS THE ROW'S VERSION COUNTER. The app has
+//      always treated it as opaque, and the row version makes the semantics
+//      stronger than a file time: it cannot collide inside one second.
 //
 // Sections that became rows are rendered BACK from those rows: a session's
-// `## Log`, an npc's `## Beziehungen`, the inbox list, the glossary. That is
-// what keeps the reading view, the review and the markdown editor working on
-// the same text they always saw.
+// `## Log`, the inbox list, the glossary. That is what keeps the reading view,
+// the review and the markdown editor working on the same text they always saw.
+//
+// An npc's `## Beziehungen` is NOT among them any more. It is prose in the
+// npc's own text and travels verbatim — nothing about an npc is derived from
+// body text (db/schema.ts rule 3).
 
 import { CORE_SCHEMA, dump } from "js-yaml";
 import type { EntryResponse, ParsedFile } from "@grimoire/shared";
@@ -53,7 +54,7 @@ export interface CampaignRow {
   glossaryIntro: string;
   glossaryRev: number;
   inboxRev: number;
-  /** Guard token of the campaign-knowledge list (issue #53). */
+  /** Guard token of the campaign-knowledge list. */
   knowledgeRev: number;
 }
 
@@ -71,8 +72,8 @@ export interface ChapterRow {
 export interface SceneRow {
   campaignId: string;
   id: string;
-  chapterId: string | null;
-  /** 1 when the properties declares `chapter:` (schema.ts). */
+  /** The owning chapter — never absent (schema.ts). */
+  chapterId: string;
   title: string;
   type: string;
   trigger: string | null;
@@ -220,7 +221,7 @@ function parsed(
  * rule for a missing `name` is the id fallback (shared/src/parse.ts). The
  * fallback is applied HERE, once, and everything that shows a campaign name
  * reads it through this function: the campaign entry (`GET /entry`) and the
- * campaign list (`GET /campaigns`) disagreed about it before issue #62.
+ * campaign list (`GET /campaigns`) once disagreed about it.
  */
 export function campaignDisplayName(row: CampaignRow): string {
   return row.name === "" ? row.id : row.name;
@@ -294,52 +295,6 @@ export function renderScene(row: SceneRow, npcs: string[], tags: string[]): Entr
   );
 }
 
-/** `## Beziehungen` rendered back from `npc_relations` (in `pos` order). */
-export function renderRelationsSection(
-  relations: Array<{ otherNpcId: string; note: string }>,
-): string {
-  if (relations.length === 0) return "";
-  const lines = relations.map((r) => (r.note === "" ? `- ${r.otherNpcId}:` : `- ${r.otherNpcId}: ${r.note}`));
-  return `## Beziehungen\n\n${lines.join("\n")}\n`;
-}
-
-/** The `## Beziehungen` heading a body kept because it still holds prose. */
-const RELATIONS_HEADING = /^##[ \t]+Beziehungen[ \t]*\r?$/im;
-
-/**
- * The npc body with its relations rows rendered back in.
- *
- * Two cases, and the second one is why this is not a plain append:
- *
- *   * the body has NO `## Beziehungen` section (the normal case — the whole
- *     section became rows): the section is appended at the END, which is
- *     deterministic; its original position inside the file was never part of
- *     the contract.
- *   * the body still HAS the section: it kept lines that became no row —
- *     prose, a note without a colon, a duplicate counterpart
- *     (`removeRelationLines`). The rows then go back INTO that section, above
- *     what stayed, so the DM sees one `## Beziehungen` in its original place
- *     with nothing missing.
- */
-export function renderNpcBody(
-  row: NpcRow,
-  relations: Array<{ otherNpcId: string; note: string }>,
-): string {
-  const kept = RELATIONS_HEADING.exec(row.body);
-  if (kept !== null) {
-    const lines = relations.map((r) =>
-      r.note === "" ? `- ${r.otherNpcId}:` : `- ${r.otherNpcId}: ${r.note}`,
-    );
-    if (lines.length === 0) return row.body;
-    const headingEnd = kept.index + kept[0].length;
-    return `${row.body.slice(0, headingEnd)}\n\n${lines.join("\n")}${row.body.slice(headingEnd)}`;
-  }
-  const section = renderRelationsSection(relations);
-  if (section === "") return row.body;
-  const base = row.body === "" ? "" : row.body.endsWith("\n") ? row.body : `${row.body}\n`;
-  return `${base}${base === "" ? "" : "\n"}${section}`;
-}
-
 export function npcProperties(row: NpcRow): Record<string, unknown> {
   const quickstats = unpackJson(row.quickstats);
   return withExtra(
@@ -358,11 +313,12 @@ export function npcProperties(row: NpcRow): Record<string, unknown> {
   );
 }
 
-export function renderNpc(
-  row: NpcRow,
-  relations: Array<{ otherNpcId: string; note: string }>,
-): EntryResponse {
-  return parsed(npcPath(row.id), "npc", npcProperties(row), renderNpcBody(row, relations), row.rev);
+/**
+ * The npc entry. Its text is rendered exactly as it is stored,
+ * `## Beziehungen` included: nothing about an npc is derived from body text.
+ */
+export function renderNpc(row: NpcRow): EntryResponse {
+  return parsed(npcPath(row.id), "npc", npcProperties(row), row.body, row.rev);
 }
 
 export function locationProperties(row: LocationRow): Record<string, unknown> {
@@ -424,7 +380,7 @@ export function renderSessionBody(row: SessionRow, log: LogRow[]): string {
 
 /**
  * The epoch interpretation of a session's zone-less timestamps — unchanged
- * arithmetic, unchanged reason (issue #40): only the SERVER knows which wall
+ * arithmetic, unchanged reason: only the SERVER knows which wall
  * clock those digits belong to, so it ships the reading alongside the
  * strings. `clock.ts` is untouched by the cutover.
  */

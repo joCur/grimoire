@@ -1,6 +1,6 @@
-// The scene generator as a PIPELINE (issue #102).
+// The scene generator as a PIPELINE.
 //
-// Before this ticket a scene run was ONE provider call that had to come back
+// Before this split a scene run was ONE provider call that had to come back
 // with every scene, every suggested entry and every warning at once. That is
 // the most expensive way to be wrong: a single unknown callout in the third
 // scene failed the whole reply, the correction turn resent the entire prompt
@@ -13,7 +13,7 @@
 //      which location they belong to, which other scenes they reference, and
 //      which npcs/locations the campaign does not know yet. Every id in the
 //      whole run is decided HERE, which is what makes the cross references of
-//      step 2 consistent (AK4). The outline has its own validation and its
+//      step 2 consistent. The outline has its own validation and its
 //      own correction turns.
 //
 //      Each outline scene also names the FIRST and LAST sentence of its
@@ -37,8 +37,8 @@
 //   3. ENTRIES — one call per new npc/location of the outline, with the
 //      scenes that reference it as context. Deduped by id.
 //
-// What does NOT change: the augment run (#36) and the NPC run (#21) stay
-// single-call runs — one entry each, nothing to decompose (PO decision).
+// What does NOT change: the augment run and the NPC run stay single-call runs
+// — one entry each, nothing to decompose (PO decision).
 
 import {
   SCENE_TYPES,
@@ -181,7 +181,7 @@ function stringField(obj: Record<string, unknown>, key: string): string | undefi
  * the whole run, a known scene `type`, a `location` that resolves against the
  * campaign OR the outline's own entries, and `refs` that name outline scenes.
  *
- * The chapter is NOT the model's (issue #100): a scene that names one has to
+ * The chapter is NOT the model's: a scene that names one has to
  * name the run's, and anything else is a correction turn rather than a
  * silently ignored key — a model that invents chapters also invents addresses.
  */
@@ -225,7 +225,7 @@ export function validateOutlineReply(
       return;
     }
     // An id the campaign ALREADY has is deliberately not an error here: since
-    // issue #70 a reference creates an empty row, so „locations/bucht exists“
+    // an entry may exist and hold nothing, so „locations/bucht exists“
     // routinely means „a scene mentioned it and nobody has written it yet“ —
     // exactly the entry this run should fill. The apply path is what decides
     // whether a write collides, and it always was.
@@ -325,7 +325,7 @@ export function validateOutlineReply(
 
   // Cross references LAST: they can only be checked once every scene id is
   // known, and an unknown ref is the one outline error that would otherwise
-  // reach the DM as a dangling `[[id]]` in a finished scene (AK4).
+  // reach the DM as a dangling `[[id]]` in a finished scene.
   const sceneIds = new Set(scenes.map((s) => s.id));
   for (const scene of scenes) {
     for (const ref of scene.refs) {
@@ -455,10 +455,10 @@ export async function sceneSystemPrompt(): Promise<string> {
  * The outline block every per-part prompt carries (llm-provider
  * OUTLINE_HEADING) — and it carries NOTHING about which part this call is
  * about. That marker used to live here, which silently defeated the prompt
- * caching this ticket built: the block is part of the CONSTANT half, so one
- * changed character per part made every part a cache miss. Which scene is
- * assigned is now a line of its own in the variable half
- * (`assignmentBlock`, llm-provider ASSIGNMENT_HEADING).
+ * caching: the block is part of the CONSTANT half, so one changed character
+ * per part made every part a cache miss. Which scene is assigned is now a
+ * line of its own in the variable half (`assignmentBlock`, llm-provider
+ * ASSIGNMENT_HEADING).
  */
 export function outlineBlock(outline: RunOutline): string {
   const lines: string[] = [];
@@ -517,7 +517,7 @@ export function validateSingleSceneReply(input: {
 }
 
 /**
- * One suggested ENTRY, validated as the entry of a scene run (issue #102).
+ * One suggested ENTRY, validated as the entry of a scene run.
  *
  * Deliberately built on `validateEntry` — the very function that judged the
  * `entries` of the batch reply — plus the npc FORMAT rules of the npc run
@@ -583,7 +583,7 @@ export interface PartUsage {
 /**
  * How the job store follows a run. Every callback PERSISTS: a part that
  * finished has to be on the row before the next one starts, because "done
- * parts survive a restart" (AK3) is only true of what was written down.
+ * parts survive a restart" is only true of what was written down.
  */
 export interface PipelineSink {
   /**
@@ -722,7 +722,7 @@ export interface RunPlan {
 
 /**
  * The plan of a run: the campaign context plus the outline, and the id sets a
- * scene may reference (the campaign's plus the outline's own entries — AK4:
+ * scene may reference (the campaign's plus the outline's own entries:
  * every id comes from the outline, so the validation checks against outline +
  * context and nothing else).
  */

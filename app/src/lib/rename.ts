@@ -1,11 +1,11 @@
-// The id change (issue #30, demoted into the „Eigenschaften" footer by #77) —
+// The id change (it lives in the „Eigenschaften" footer) —
 // everything about it that is pure, so the dialog itself stays a thin shell.
 //
 // The id of an entity is its stable reference key (README), so a rename is a
 // cascade the SERVER computes: the app only decides whether the entry on
 // screen can be renamed at all, validates the new id the same way the server
 // does (fail before the request, not after it), and turns the server's
-// answers into readable lines — in the UI language since issue #69, which is
+// answers into readable lines — in the UI language, which is
 // why every label function takes the translator as an argument instead of
 // carrying copy of its own.
 
@@ -51,7 +51,7 @@ export function renameTargetFor(file: {
   return oldId === "" ? undefined : { kind: file.kind, oldId };
 }
 
-/** Label of a rename kind, for the dialog copy (catalog, issue #69). */
+/** Label of a rename kind, for the dialog copy (catalog). */
 export function renameKindLabel(kind: RenameKind, t: Translate): string {
   switch (kind) {
     case "npc":
@@ -89,26 +89,24 @@ export function canSubmitNewId(newId: string, oldId: string): boolean {
 }
 
 /** „betrifft 1 Eintrag" / „betrifft 3 Einträge" — the preview's headline
- *  (ICU plural in the catalog since #69). */
+ *  (ICU plural in the catalog). */
 export function changedCountLabel(count: number, t: Translate): string {
   return t("rename.changed", { count });
 }
 
-// --- usage summary (issue #60) ----------------------------------------------
+// --- usage summary ----------------------------------------------------------
 
 /**
  * The catalog key of each reference kind. The wire keeps stable English keys
- * (`UsageRef`); the sentence („3 Szenen, 2 Beziehungen, 4 Log-Zeilen" /
- * "3 scenes, 2 relationships, 4 log lines") is an ICU plural per key, so no
- * caller has to pick a form.
+ * (`UsageRef`); the sentence („3 Szenen, 4 Log-Zeilen" / "3 scenes, 4 log
+ * lines") is an ICU plural per key, so no caller has to pick a form.
  *
- * `bodyRefs` (issue #68) is a body text that says `[[<id>]]` — „Textstelle"
+ * `bodyRefs` is a body text that says `[[<id>]]` — „Textstelle"
  * is what the DM sees on the page, a name in running prose rather than a
  * properties field.
  */
 const USAGE_REF_KEY: Record<UsageRef, MessageKey> = {
   sceneNpcs: "rename.usage.sceneNpcs",
-  npcRelations: "rename.usage.npcRelations",
   sceneLocation: "rename.usage.sceneLocation",
   scenesPlayed: "rename.usage.scenesPlayed",
   logEntries: "rename.usage.logEntries",
@@ -124,7 +122,7 @@ export function usageGroupLabel(group: UsageGroup, t: Translate): string {
 }
 
 /**
- * The whole report in one line: „3 Szenen, 2 Beziehungen, 4 Log-Zeilen" —
+ * The whole report in one line: „3 Szenen, 4 Log-Zeilen, 2 Textstellen" —
  * or the honest empty case, which is the reassuring one before a rename.
  */
 export function usageSummary(usage: UsageReport, t: Translate): string {

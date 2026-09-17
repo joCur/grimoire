@@ -1,21 +1,20 @@
-// The process-wide database handle (issue #57, planning #52 Scheibe 2).
+// The process-wide database handle.
 //
 // The database is the ONLY truth: every read and every write endpoint goes
 // through the store modules next to this file. The boot NO LONGER imports
-// anything (issue #79 AK6) — a fresh instance simply starts empty, and the
-// markdown importer lives on only as the dev/E2E tool `grimoire seed`.
+// anything — a fresh instance simply starts empty, and the markdown
+// importer lives on only as the dev/E2E tool `grimoire seed`.
 //
 // The handle is opened LAZILY rather than at module import, so that importing
 // the app for in-process tests stays free of side effects (no database file
 // appearing next to the repository). The first access opens the file, runs the
-// schema migrator (client.ts), then the job cleanup of issue #23 and the
-// reference backfill; every later call gets the memoized handle.
+// schema migrator (client.ts) and then the job cleanup; every
+// later call gets the memoized handle.
 
 import { getDbFile } from "../config";
 import { openDb, type GrimoireDb, type OpenDb } from "../db/client";
 import type { GroupMigrationOutcome } from "../db/group-migration";
 import { failInterruptedJobs } from "../db/job-boot";
-import { backfillReferences } from "./ref-backfill";
 
 /** What `initStore` was called with — reported on boot. */
 export interface StoreInfo {
@@ -24,18 +23,12 @@ export interface StoreInfo {
   /** Which SQLite backend the driver picked. */
   backend: string;
   /**
-   * How many generator jobs this boot found `running` and had to fail
-   * (issue #23) — the runs the previous process took down with it.
+   * How many generator jobs this boot found `running` and had to fail — the
+   * runs the previous process took down with it.
    */
   interruptedJobs: number;
   /**
-   * `<campaign>/<npc-id>` per empty npc row this boot created for a dangling
-   * reference (issue #70, store/ref-backfill.ts). Empty on every boot after
-   * the first — the pass only inserts what has no row.
-   */
-  backfilledNpcs: string[];
-  /**
-   * What the one-time `group_slug` -> `location` step of issue #100 changed
+   * What the one-time `group_slug` -> `location` step changed
    * (db/group-migration.ts): the scenes whose address moved, the location
    * entries it had to create, and the scenes whose `location` yields no id
    * and were left untouched. Empty on every boot after the first.
@@ -52,7 +45,7 @@ let opening: Promise<GrimoireDb> | null = null;
  * call returns the same handle, and concurrent first calls share one open.
  *
  * `file` defaults to `GRIMOIRE_DATA/grimoire.db`. Nothing is imported here —
- * an empty database stays empty (issue #79 AK6); tests pass `:memory:` and
+ * an empty database stays empty; tests pass `:memory:` and
  * seed themselves through the importer when they need content.
  */
 export async function initStore(options: { file?: string } = {}): Promise<GrimoireDb> {
@@ -61,20 +54,16 @@ export async function initStore(options: { file?: string } = {}): Promise<Grimoi
   const file = options.file ?? getDbFile();
   opening = (async () => {
     const handle = await openDb(file);
-    // A generator job cannot outlive the process that ran it (issue #23): the
+    // A generator job cannot outlive the process that ran it: the
     // provider call is gone, so a `running` row left behind by a restart or a
     // crash is failed here — with a German sentence the app shows — instead of
     // being polled forever. Finished jobs are untouched and stay applyable.
     const interruptedJobs = failInterruptedJobs(handle.db);
-    // Issue #70: a referenced entity is never missing, only empty. Every
-    // write path holds that now; this pass holds it for the migrated stock.
-    const refBackfill = backfillReferences(handle.db);
     opened = handle;
     info = {
       file,
       backend: handle.client.backend,
       interruptedJobs,
-      backfilledNpcs: refBackfill.created,
       groupMigration: handle.groupMigration,
     };
     return handle.db;

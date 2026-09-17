@@ -34,10 +34,22 @@ import { applyDrafts } from "./store/write";
  *               (`npcs/grella`). Absent is „Alle übernehmen": every scene
  *               that is neither written nor dropped, plus the suggested
  *               entries the DM ACCEPTED — an undecided entry is not written
- *               by a bulk action, exactly as before this ticket, and a
+ *               by a bulk action, exactly as before, and a
  *               rejected one never is. Naming a path explicitly is the one
  *               way an undecided entry gets written („Diesen übernehmen"
  *               on its row is the decision).
+ *               A SCENE CARRIES THE ENTRIES IT NAMES. A scene cannot be
+ *               written while its `npcs`/`location` name nothing (ADR #19),
+ *               so a selected scene pulls in the run's own suggested entries
+ *               for those ids — every one that is not REJECTED, accepted or
+ *               still undecided. A stub is the minimal entry the scene
+ *               needs, so accepting the scene is the decision that it
+ *               exists; what the DM threw away stays thrown away, and the
+ *               write is then refused and names it. This carrying is an
+ *               INTERIM step — it keeps a run from failing on its own
+ *               references; the intended review walks the parts in
+ *               reference order (locations, then npcs, then scenes), so
+ *               nothing is written before its targets exist.
  *   transaction one, with the target rev guards of the ordinary draft write
  *               (`applyDrafts`: conflicts checked INSIDE it, FTS and
  *               `[[slug]]` reference rows follow because this is that path).
@@ -57,7 +69,7 @@ export async function acceptJobParts(
   if (job === undefined || job.id !== jobId) {
     throw new ApiError(404, "no generate job for this campaign");
   }
-  // A RUNNING job is acceptable too, part by part (AK2): a
+  // A RUNNING job is acceptable too, part by part: a
   // pipelined run stays `running` while parts are open, and the whole point
   // of the pipeline is that a finished part is reviewable and acceptable
   // before its siblings are. What is acceptable is what is IN the result, and
@@ -106,9 +118,33 @@ export async function acceptJobParts(
     });
   }
 
+  /**
+   * The run's own entries a scene REFERENCES and the DM has not rejected —
+   * see the selection rule above. Read off the draft markdown, so an edit of
+   * the scene in the review counts.
+   */
+  const scenePaths = new Set(job.result?.scenes.map((scene) => scene.path) ?? []);
+  const referencedPartsOf = (rel: string): string[] => {
+    const part = parts.get(rel);
+    if (part === undefined || !scenePaths.has(rel)) return [];
+    const properties = parseMarkdown(part.target.markdown, rel, 0).properties;
+    const npcIds = Array.isArray(properties.npcs) ? properties.npcs : [];
+    const location = properties.location;
+    const candidates = [
+      ...npcIds.filter((id): id is string => typeof id === "string").map(npcPath),
+      ...(typeof location === "string" && location !== "" ? [locationPath(location)] : []),
+    ];
+    return candidates.filter((candidate) => parts.get(candidate)?.open === true);
+  };
+
   let selected: string[];
   if (body.paths === undefined) {
     selected = [...parts].filter(([, part]) => part.bulk).map(([rel]) => rel);
+    for (const rel of [...selected]) {
+      for (const referenced of referencedPartsOf(rel)) {
+        if (!selected.includes(referenced)) selected.push(referenced);
+      }
+    }
   } else {
     if (!Array.isArray(body.paths)) throw new ApiError(400, "paths must be an array of strings");
     selected = [];
@@ -120,6 +156,11 @@ export async function acceptJobParts(
       // tab) and is simply skipped.
       if (part === undefined) throw new ApiError(400, `unknown draft path: ${rel}`);
       if (part.open) selected.push(rel);
+    }
+    for (const rel of [...selected]) {
+      for (const referenced of referencedPartsOf(rel)) {
+        if (!selected.includes(referenced)) selected.push(referenced);
+      }
     }
   }
   // A selection whose parts are ALL written already is a double click or a

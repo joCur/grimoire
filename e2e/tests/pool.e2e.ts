@@ -263,10 +263,11 @@ test("the topbar trio navigates without anything in the left block moving", asyn
   await nav.getByRole("link", { name: "Orte" }).click();
   await expect(page).toHaveURL(/\/beispiel\/list\/locations$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Orte");
+  // Both example Orte sit in the same chapter and each row names that chapter
+  // under the Ort, so the name is anchored: the row STARTS with the Ort's own
+  // name, where the other one only mentions it as its chapter.
   await expect(
-    page
-      .getByRole("main")
-      .getByRole("link", { name: /Der Leuchtturm von Salzhafen/ }),
+    page.getByRole("main").getByRole("link", { name: /^Der Leuchtturm von Salzhafen/ }),
   ).toBeVisible();
   await expect(current).toHaveText("Orte");
   await assertChromeIsStable(onPool);

@@ -63,9 +63,9 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
   // Two locations: `bucht` is a scene's location in the example campaign, so
   // the import created an entry for it.
   await expect(page.getByText("2 NPCs · 2 Orte")).toBeVisible();
-  // The knowledge and the glossary halves are LINKS to their own pages now
-  // (PO feedback) — this line is where the DM notices a
-  // rule is missing, so the fix is one click from here.
+  // The knowledge and the glossary halves are LINKS to their own pages now —
+  // this line is where the DM notices a rule is missing, so the fix is one
+  // click from here.
   await expect(page.getByRole("link", { name: "kein Kampagnenwissen" })).toHaveAttribute(
     "href",
     "/beispiel/knowledge",
@@ -165,7 +165,7 @@ test("scene run: job, review, apply — the draft is stored and in the pool", as
  *
  * The 202 is therefore held here — the REAL response of the real server,
  * fetched by the real route and handed on late (nothing is mocked, see
- * README: the stub LLM stays the only attrappe). Holding it is the only way
+ * README: the stub LLM stays the only stand-in). Holding it is the only way
  * to pin the claim „the job decides, not the request": with a response that
  * comes back in 30ms the test would pass either way.
  */
@@ -332,7 +332,7 @@ test("review state survives navigation and reload; parts are accepted one by one
   });
 
   // (1) Edit the draft, leave the page, come back: the text is there. This is
-  // the loss the ticket is about — it used to live in component state only.
+  // the loss being guarded against — it used to live in component state only.
   const card = page.locator("div").filter({ hasText: DRAFT_PATH }).last();
   await card.getByRole("button", { name: "Bearbeiten" }).click();
   const textarea = page.getByRole("textbox", { name: `Markdown von ${SCENE_TITLE}` });
@@ -363,7 +363,16 @@ test("review state survives navigation and reload; parts are accepted one by one
   await page.reload();
   await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(1);
 
-  // (3) „Diesen übernehmen" writes exactly that scene; the rest stays.
+  // (3) The second suggested entry, decided as well: the scene NAMES both of
+  // them, and a scene cannot be written while a reference names nothing
+  // (ADR #19) — „Annehmen" is that decision, the write comes below.
+  await stubRow(`locations/${LOCATION_STUB_ID}`).getByRole("button", { name: "Annehmen" }).click();
+  await expect(page.getByRole("button", { name: "Angenommen" })).toHaveCount(2);
+  // Accepted is a decision, not a write.
+  expect(await api.exists(`npcs/${NPC_STUB_ID}`)).toBe(false);
+
+  // (4) „Diesen übernehmen" on the scene writes the scene AND the two
+  // accepted entries it references — one batch, so nothing is half-written.
   expect(await api.exists(SCENE_PATH)).toBe(false);
   await page
     .locator("div")
@@ -371,28 +380,14 @@ test("review state survives navigation and reload; parts are accepted one by one
     .last()
     .getByRole("button", { name: "Diesen übernehmen" })
     .click();
-  await expect(page.getByText("1 von 3 übernommen", { exact: false })).toBeVisible();
+  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
   expect(await api.exists(SCENE_PATH)).toBe(true);
-  // The written scene is not editable here any more and links to the entry.
-  const written = page.locator("div").filter({ hasText: SCENE_TITLE }).last();
-  await expect(written.getByRole("button", { name: "Bearbeiten" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: SCENE_PATH })).toBeVisible();
   // The edit really is what was written.
   expect(await api.body(SCENE_PATH)).toContain("Die Flut zieht sich im Regen");
-  // Writing the scene creates EMPTY rows for the ids it references, so
-  // „exists" cannot answer whether a stub landed — its CONTENT can.
-  expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).name).not.toBe(LOCATION_STUB_NAME);
-  // The undecided location stub is still open — a bulk accept would skip it,
-  // so it is decided explicitly here.
-  await stubRow(`locations/${LOCATION_STUB_ID}`)
-    .getByRole("button", { name: "Annehmen" })
-    .click();
-
-  // (4) „Rest übernehmen" writes what is left — and the job is gone.
-  await page.getByRole("button", { name: /^Rest übernehmen/ }).click();
-  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
+  // Both entries carry their NAME, so they were written as proposed.
   expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).toBe(NPC_STUB_NAME);
   expect((await api.properties(`locations/${LOCATION_STUB_ID}`)).name).toBe(LOCATION_STUB_NAME);
+  // Nothing is left open, so the job is gone.
   expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
 });
 
@@ -404,20 +399,30 @@ test("„Verwerfen\" drops only the open rest — what was accepted stays", asyn
     timeout: 30_000,
   });
 
+  // One suggested entry is accepted and written — it references nothing, so
+  // it stands on its own — and the rest of the run is thrown away.
+  const npcRow = page
+    .locator("div")
+    .filter({ hasText: `npcs/${NPC_STUB_ID}` })
+    .filter({ has: page.getByRole("button", { name: "Ablehnen" }) })
+    .last();
+  await npcRow.getByRole("button", { name: "Annehmen" }).click();
   await page
     .locator("div")
-    .filter({ hasText: DRAFT_PATH })
+    .filter({ hasText: `npcs/${NPC_STUB_ID}` })
+    .filter({ has: page.getByRole("button", { name: "Diesen übernehmen" }) })
     .last()
     .getByRole("button", { name: "Diesen übernehmen" })
     .click();
-  await expect(page.getByRole("link", { name: SCENE_PATH })).toBeVisible();
+  await expect(page.getByRole("link", { name: `npcs/${NPC_STUB_ID}` })).toBeVisible();
 
   await page.getByRole("button", { name: "Rest verwerfen" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Szenen generieren");
-  // The accepted scene is an entry now; the suggested entries never landed —
-  // their ids exist only as the empty rows the scene's references leave.
-  expect(await api.exists(SCENE_PATH)).toBe(true);
-  expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).not.toBe(NPC_STUB_NAME);
+  // The accepted entry is an entry now; the scene and the other suggestion
+  // never landed.
+  expect((await api.properties(`npcs/${NPC_STUB_ID}`)).name).toBe(NPC_STUB_NAME);
+  expect(await api.exists(SCENE_PATH)).toBe(false);
+  expect(await api.exists(`locations/${LOCATION_STUB_ID}`)).toBe(false);
   expect((await api.fetch("beispiel/generate/job")).status).toBe(404);
 });
 
@@ -462,10 +467,11 @@ test("new chapter: the run survives leaving the page and the chapter keeps its t
   });
 
   await page.getByRole("button", { name: /^Übernehmen \(/ }).click();
-  // A bulk accept writes the scene and leaves the two UNDECIDED suggested
-  // entries reviewable (the review's own rule), so the review stays — which
-  // is fine: the chapter is written with the very first accept.
-  await expect(page.getByText("1 von 3 übernommen", { exact: false })).toBeVisible();
+  // The accept writes the scene, the chapter it hangs in and the two
+  // suggested entries the scene NAMES — a scene cannot be written while a
+  // reference names nothing (ADR #19), so they come along. Nothing is left
+  // open afterwards, so the review is done.
+  await expect(page.getByText("Geschrieben — alles als Entwurf")).toBeVisible();
 
   // The point: the chapter exists, with the title the RUN was started with —
   // not the id, and not nothing.

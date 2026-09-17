@@ -145,9 +145,13 @@ export const SCENE_ID = "night-watch-quay";
 /** The npc stub the scene run ships (does not exist in examples/beispiel). */
 export const NPC_STUB_ID = "grella";
 export const NPC_STUB_NAME = "Grella";
-/** The location stub the scene run ships. */
-export const LOCATION_STUB_ID = "bucht";
-export const LOCATION_STUB_NAME = "Nordbucht";
+/**
+ * The location stub the scene run ships — an id the example campaign does
+ * NOT have, like the npc stub above: a proposal for an entry that exists
+ * would be the apply step's 409, not a stub.
+ */
+export const LOCATION_STUB_ID = "raeucherkammer";
+export const LOCATION_STUB_NAME = "Die alte Räucherkammer";
 
 /**
  * How the stub reports back WHAT CONTEXT it was sent. The echo rides along as
@@ -438,7 +442,7 @@ function unquote(value: string): string {
  * Which addition depends on what the entry IS — that is the whole point of
  * the two E2E cases:
  *
- *   an EMPTY npc (one a reference created)  ->  properties and the two body
+ *   an EMPTY npc (created, never filled in)  ->  properties and the two body
  *       sections are filled,
  *   anything else (a prepared scene, a location)  ->  one NEW `## If:`
  *       section at the end; every existing block comes back unchanged.

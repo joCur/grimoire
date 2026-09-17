@@ -1,4 +1,4 @@
-// Critical path 6, the half that only a real restart can show (issue #23):
+// Critical path 6, the half that only a real restart can show:
 // generator jobs are ROWS, so they outlive the process that started them.
 //
 // Like the first-migration spec this cannot use the per-test `server` fixture:
@@ -13,8 +13,8 @@
 //      the process — so the boot fails it with a German sentence the app
 //      shows, instead of leaving a `running` row the app polls forever;
 //   2. a FINISHED run comes back whole — result, warnings and the review edits
-//      — and is still applyable afterwards. That is the loss this ticket is
-//      about: a deploy between „fertig" and „Übernehmen" used to throw a good
+//      — and is still applyable afterwards. That is the loss this guards
+//      against: a deploy between „fertig" and „Übernehmen" used to throw a good
 //      generation away.
 
 import { mkdir, rm } from "node:fs/promises";
@@ -26,7 +26,7 @@ import { apiFor, expect, seedCampaigns, startGrimoireServer, test, type Api } fr
 
 /**
  * How the review addresses the draft (`<chapter>/<id>`) and where it LIVES
- * once accepted — the group segment is its `location` (issue #100).
+ * once accepted — the group segment is its `location`.
  */
 const DRAFT_PATH = `01-salzhafen/${SCENE_ID}`;
 const SCENE_PATH = `01-salzhafen/${LOCATION_STUB_ID}/${SCENE_ID}`;
@@ -59,7 +59,7 @@ async function ownDataDir(testId: string, workerIndex: number): Promise<string> 
   const dir = path.join(runDir(), `w${workerIndex}`, testId, "data");
   await rm(dir, { recursive: true, force: true });
   await mkdir(dir, { recursive: true });
-  // The boot imports nothing since issue #79 — the fixture campaign is put in
+  // The boot imports nothing — the fixture campaign is put in
   // by the seed CLI, once, before either boot of this spec.
   await seedCampaigns(pristineDir(), dir);
   return dir;
@@ -90,8 +90,8 @@ test("a run interrupted by a restart is reported as failed, not left spinning", 
   try {
     const api = apiFor(second.handle.url);
     const failed = await job(api);
-    // The job is still THERE — that is the difference from before #23, where a
-    // restart answered 404 — and it says what happened.
+    // The job is still THERE — a restart used to answer 404 here — and it
+    // says what happened.
     expect(failed).toMatchObject({ id: jobId, status: "failed" });
     expect(failed!.finishedAt).toEqual(expect.any(String));
     const error = failed!.error as {
@@ -99,7 +99,7 @@ test("a run interrupted by a restart is reported as failed, not left spinning", 
       body: { code?: string; error: string };
     };
     expect(error.status).toBe(503);
-    // Language-free since issue #69: the stable code is the contract, the
+    // Language-free: the stable code is the contract, the
     // English text next to it the technical fallback. The SENTENCE the DM
     // reads is the app's (`server.job_restarted` in app/src/i18n) — the
     // language spec asserts that side.
@@ -135,8 +135,8 @@ test("a finished job survives a restart whole and is still applyable", async ({}
 
     const result = before.result as { scenes: { path: string; markdown: string }[] };
     expect(result.scenes.map((s) => s.path)).toEqual([DRAFT_PATH]);
-    // The review PATCH is the one way an edit reaches the job since issue
-    // #97 (its review, finding 8 — `PUT …/job/drafts` is gone).
+    // The review PATCH is the one way an edit reaches the job
+    // (`PUT …/job/drafts` is gone).
     await api.send("PATCH", `beispiel/generate/job/${before.id as string}/review`, {
       rev: (before.rev as number | undefined) ?? 0,
       edits: { [DRAFT_PATH]: `${result.scenes[0]!.markdown}${edited}` },
@@ -162,13 +162,16 @@ test("a finished job survives a restart whole and is still applyable", async ({}
     // The DM's own edit came back with it.
     expect((after.draftEdits as Record<string, string>)[DRAFT_PATH]).toContain(edited.trim());
 
-    const scenes = (after.result as { scenes: unknown[] }).scenes;
+    // The scene AND the entries it references: a proposal is applied as one
+    // batch, because a scene cannot name an entry that does not exist
+    // (ADR #19).
+    const result = after.result as { scenes: unknown[]; stubs: unknown[] };
     const written = await api.send<{ written: string[] }>("POST", "beispiel/generate/apply", {
-      scenes,
-      stubs: [],
+      scenes: result.scenes,
+      stubs: result.stubs,
       jobId: after.id,
     });
-    expect(written.written).toEqual([SCENE_PATH]);
+    expect(written.written).toContain(SCENE_PATH);
     const stored = await api.properties(SCENE_PATH);
     expect(stored.title).toBe(SCENE_TITLE);
     expect(stored.status).toBe("draft");

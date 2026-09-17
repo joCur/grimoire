@@ -17,7 +17,6 @@ import {
   propertiesFormIssues,
   propertiesFormValues,
   propertiesKindLabel,
-  propertiesLocationName,
   propertiesPatch,
   hasPropertiesChanges,
   referenceLabel,
@@ -395,6 +394,45 @@ describe("unfinished quickstat rows block the save", () => {
   });
 });
 
+describe("a scene's Kapitel cannot be cleared", () => {
+  const sceneFields = fields("scene");
+  const initial = propertiesFormValues(sceneFields, SCENE_FM);
+  const withChapter = (text: string): FormValues => ({
+    ...initial,
+    chapter: { kind: "text", text },
+  });
+
+  test("a blank Kapitel blocks the save and says why under the field", () => {
+    // The server refuses the patch (`chapter_required`); saying it here turns
+    // a round trip that ends in a toast into a line under the control.
+    expect(propertiesFormIssues(sceneFields, withChapter(""), initial, t).chapter).toBe(
+      "Eine Szene braucht ein Kapitel — es lässt sich verschieben, aber nicht entfernen.",
+    );
+    // Whitespace only is the same thing.
+    expect(propertiesFormIssues(sceneFields, withChapter("   "), initial, t).chapter).toBeDefined();
+    // …and a value is fine, whether or not that chapter has an entry — that
+    // is the server's answer (i18n/server-errors.ts).
+    expect(propertiesFormIssues(sceneFields, withChapter("02-nordwind"), initial, t)).toEqual({});
+  });
+
+  test("an unfinished Kapitel counts as unsaved work, so Esc asks first", () => {
+    expect(hasPropertiesChanges(sceneFields, initial, withChapter(""), t)).toBe(true);
+  });
+
+  test("an npc and an Ort may sit outside every chapter", () => {
+    // Only a SCENE's chapter is part of its address, so only a scene loses
+    // the ability to clear the field.
+    for (const kind of ["npc", "location"] as const) {
+      const kindFields = fields(kind);
+      const values = propertiesFormValues(kindFields, { id: "x", name: "X", chapter: "01-salzhafen" });
+      expect(
+        propertiesFormIssues(kindFields, { ...values, chapter: { kind: "text", text: "" } }, values, t),
+        kind,
+      ).toEqual({});
+    }
+  });
+});
+
 describe("the npcs list holds ids, not names", () => {
   const sceneFields = fields("scene");
   const initial = propertiesFormValues(sceneFields, SCENE_FM);
@@ -412,13 +450,15 @@ describe("the npcs list holds ids, not names", () => {
     );
   });
 
-  test("ids are fine, known or not — an unknown one is created on save", () => {
+  test("an id is fine here — whether it HAS an entry is the server's answer", () => {
+    // The form does not know every id, so it only checks the shape; a
+    // reference that names nothing comes back as a 400 with its own
+    // sentence (i18n/server-errors.ts).
     expect(propertiesFormIssues(sceneFields, withNpcs(["fenn", "holm"]), initial, t)).toEqual({});
   });
 
-  test("free text the FILE already carries is exempt — such a scene stays savable", () => {
-    // A campaign migrated from the file era can hold anything in that list
-    // (no foreign keys, schema.ts rule 1), and an unrelated save re-sends it.
+  test("free text the entry already carries is exempt — it stays savable", () => {
+    // Whatever a list holds today, an unrelated save re-sends it.
     const stored = withNpcs(["fenn", "Alte Fischerin"]);
     expect(propertiesFormIssues(sceneFields, stored, stored, t)).toEqual({});
     // …and an untouched form with such a value is not "dirty" either.
@@ -426,7 +466,7 @@ describe("the npcs list holds ids, not names", () => {
   });
 });
 
-describe("the Ort field: free text in, a slug out", () => {
+describe("the Ort field: free text in, an id out", () => {
   const sceneFields = fields("scene");
   const initial = propertiesFormValues(sceneFields, SCENE_FM);
   const withLocation = (text: string): FormValues => ({
@@ -460,15 +500,14 @@ describe("the Ort field: free text in, a slug out", () => {
     });
   });
 
-  test("text that slugs to a NEW id promises the entry, by its NAME", () => {
+  test("text that slugs to an id nothing holds is UNKNOWN", () => {
+    // Nothing is created by naming it, so the line under the field says the
+    // Ort has to exist — and the save is refused until it does.
     expect(locationRef("Der alte Hafen", known)).toEqual({
-      kind: "new",
+      kind: "unknown",
       id: "der-alte-hafen",
-      name: "Der alte Hafen",
     });
-    // A bare id typed as an id has no display name of its own: the entry is
-    // called by its id, which is the older „Neu — wird angelegt“ line.
-    expect(locationRef("nordbucht", known)).toEqual({ kind: "new", id: "nordbucht" });
+    expect(locationRef("nordbucht", known)).toEqual({ kind: "unknown", id: "nordbucht" });
   });
 
   test("nothing typed is nothing said; unslugable text is the one problem", () => {
@@ -477,7 +516,8 @@ describe("the Ort field: free text in, a slug out", () => {
   });
 
   test("only unslugable text blocks the save, and it says so", () => {
-    // Everything a slug can be derived from is accepted — the save converts.
+    // Everything a slug can be derived from is sent — whether that id has an
+    // entry is the server's answer, not the form's.
     expect(propertiesFormIssues(sceneFields, withLocation("Der alte Hafen"), initial, t)).toEqual(
       {},
     );
@@ -488,29 +528,21 @@ describe("the Ort field: free text in, a slug out", () => {
     );
   });
 
-  test("the patch carries the SLUG, and the name rides alongside", () => {
-    const current = withLocation("Der alte Hafen");
-    expect(propertiesPatch(sceneFields, initial, current)).toEqual({
+  test("the patch carries the id the text means", () => {
+    expect(propertiesPatch(sceneFields, initial, withLocation("Der alte Hafen"))).toEqual({
       location: "der-alte-hafen",
     });
-    expect(propertiesLocationName(sceneFields, current)).toBe("Der alte Hafen");
-  });
-
-  test("a typed ID sends no name — the entry is called by its id", () => {
-    const current = withLocation("nordbucht");
-    expect(propertiesPatch(sceneFields, initial, current)).toEqual({ location: "nordbucht" });
-    expect(propertiesLocationName(sceneFields, current)).toBeUndefined();
+    expect(propertiesPatch(sceneFields, initial, withLocation("nordbucht"))).toEqual({
+      location: "nordbucht",
+    });
   });
 
   test("text that slugs to the STORED id is no change at all", () => {
-    // `location: bucht` is what the entry holds; „Bucht“ means the same row,
-    // so there is nothing to patch and nothing to create.
+    // `location: bucht` is what the entry holds; „Bucht“ means the same
+    // entry, so there is nothing to patch.
     const current = withLocation("Bucht");
     expect(propertiesPatch(sceneFields, initial, current)).toEqual({});
     expect(hasPropertiesChanges(sceneFields, initial, current, t)).toBe(false);
-    // The name still rides along — the server ignores it for an existing row,
-    // which is what keeps a scene from renaming an Ort it only references.
-    expect(propertiesLocationName(sceneFields, current)).toBe("Bucht");
   });
 
   test("unslugable text patches nothing but counts as unsaved work", () => {
@@ -521,7 +553,6 @@ describe("the Ort field: free text in, a slug out", () => {
 
   test("clearing the Ort deletes the key (the scene moves to chapter level)", () => {
     expect(propertiesPatch(sceneFields, initial, withLocation(""))).toEqual({ location: null });
-    expect(propertiesLocationName(sceneFields, withLocation(""))).toBeUndefined();
   });
 
   test("locationRefId is the one derivation both halves use", () => {
@@ -532,10 +563,6 @@ describe("the Ort field: free text in, a slug out", () => {
     expect(locationRefId("")).toBe("");
   });
 
-  test("a kind without an Ort field has no name to send", () => {
-    expect(propertiesLocationName(fields("npc"), propertiesFormValues(fields("npc"), NPC_FM))).
-      toBeUndefined();
-  });
 });
 
 describe("hasPropertiesChanges", () => {
@@ -727,23 +754,15 @@ describe("writePropertiesForm", () => {
     });
   });
 
-  test("the Ort's display name rides along in the same request", async () => {
-    // One write, one transaction: the slug in `location`, the typed text as
-    // `locationName`. The server names the entry it CREATES with it and
-    // ignores it for a row that exists.
+  test("the request carries the patch and nothing besides it", async () => {
     const calls = answer({ status: 200, body: FILE });
-    await writePropertiesForm(
-      "beispiel",
-      "01-salzhafen/bucht/smuggler-captured",
-      7,
-      { location: "der-alte-hafen" },
-      "Der alte Hafen",
-    );
+    await writePropertiesForm("beispiel", "01-salzhafen/bucht/smuggler-captured", 7, {
+      location: "der-alte-hafen",
+    });
     expect(calls[0]?.body).toEqual({
       path: "01-salzhafen/bucht/smuggler-captured",
       rev: 7,
       patch: { location: "der-alte-hafen" },
-      locationName: "Der alte Hafen",
     });
   });
 

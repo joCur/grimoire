@@ -1,4 +1,4 @@
-// „Mit KI ergänzen" (issue #36): the generator pipeline pointed at an entry
+// „Mit KI ergänzen": the generator pipeline pointed at an entry
 // that ALREADY EXISTS — an NPC, a location or a scene.
 //
 // It is deliberately the SAME pipeline as the two create runs
@@ -15,7 +15,7 @@
 //      proposed body whole,
 //   3. accepting writes into the existing row with a `rev` guard, in ONE
 //      transaction (store/write.ts `writePropertiesAndBody`) — it never
-//      creates the entry, it only fills it.
+//      create the entry, it only fills it.
 //
 // WHY THE PROPOSAL CARRIES WHOLE BODIES and not a block list: the block model
 // is the Block-Composer's (app/src/lib/blocks.ts), and the review's decision
@@ -24,7 +24,7 @@
 // server stays the authority for what is WRITTEN, not for how it is shown.
 // The app therefore sends back the body it assembled from the accepted
 // blocks, and the server writes it like any other body write — same rev
-// guard, same FTS, same reference rows, same #70 „referencing creates" rule.
+// guard, same FTS, same reference rows, same reference checks.
 
 import {
   CALLOUT_KINDS,
@@ -147,11 +147,11 @@ export function augmentFewShotFile(kind: AugmentKind): string {
  *
  *   * a scene's `status` is whatever the DM made it (`ready`, `played`, …) —
  *     forcing `draft` would reset the pool state of a prepared scene,
- *   * `npcs`/`location` pointing at something unknown is NOT an error: on an
- *     existing entry the #70 rule applies (referencing creates the empty
- *     entry) and the write path does exactly that, so failing here would be
- *     stricter than the properties dialog sitting next to the button,
- *   * `## Beziehungen` targets are not checked, for the same reason.
+ *   * `npcs`/`location` pointing at something unknown is not checked HERE:
+ *     the write path refuses it with the same sentence the properties dialog
+ *     next to the button gets, so checking it twice would only make the
+ *     review say it in worse words,
+ *   * `## Beziehungen` is prose and nothing checks it at all.
  *
  * What IS checked is what would make the entry unreadable or would break the
  * data contract: parseable properties, an unchanged id, only known callouts,
@@ -230,7 +230,7 @@ export function validateAugmentReply(
   const reply = read.reply;
   const errors: string[] = [];
 
-  // The target address is the SERVER's and always was — since issue #100 the
+  // The target address is the SERVER's and always was — the
   // model is not even asked for one: an augment run rewrites the entry at
   // `stored.path`, full stop. (Its `location`, on the other hand, is an
   // ordinary proposal: accepting one moves the scene like any other write.)
@@ -301,8 +301,8 @@ function sameValue(a: unknown, b: unknown): boolean {
 }
 
 /**
- * What the model wants to do to the properties, field by field (issue #36
- * AK2). Only what CHANGES is listed: a key the proposal repeats verbatim is
+ * What the model wants to do to the properties, field by field.
+ * Only what CHANGES is listed: a key the proposal repeats verbatim is
  * not a decision the DM has to make.
  *
  * A key the proposal DROPS is not listed either — „nichts löschen" is the
@@ -386,7 +386,7 @@ export async function runAugment(
     validate: (raw) => validateAugmentReply(raw, target),
     correctionTail: AUGMENT_CORRECTION_TAIL,
   });
-  // The naming check runs on the PROPOSAL (issue #53 AK3), as hints — never
+  // The naming check runs on the PROPOSAL, as hints — never
   // a reason to fail a run. It reads the proposed entry, because that is
   // the text the DM is about to accept.
   return withNamingHints(
@@ -425,7 +425,7 @@ function proposedEntry(result: AugmentResult): string {
  * out of the accepted blocks; the server does not re-derive either (the
  * decisions ARE the payload) but it does everything a normal write does,
  * because it IS one: rev guard (409 `rev_conflict`), FTS, `[[slug]]`
- * reference rows, the #70 rule, and the job discarded in the SAME
+ * reference rows, the reference checks, and the job discarded in the SAME
  * transaction.
  */
 export async function applyAugment(

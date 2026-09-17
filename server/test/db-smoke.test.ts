@@ -1,4 +1,4 @@
-// CI smoke: the SQLite foundation on BOTH runtimes (issue #54 AK5).
+// CI smoke: the SQLite foundation on BOTH runtimes.
 //
 // This file is the early-warning system ADR #13 asks for. The server's
 // database layer runs on `node:sqlite` in production and on `bun:sqlite`
@@ -14,7 +14,7 @@
 //     shape every store method will use.
 //
 // It runs unchanged under `bun test` and under `node --test` — the CI job
-// `db-smoke-node` in .github/workflows/ci.yml is the second half of AK5.
+// `db-smoke-node` in .github/workflows/ci.yml is the node half.
 // That is why it imports from "node:test"/"node:assert" instead of
 // "bun:test": bun's test runner understands node:test files, the reverse is
 // not true.
@@ -71,7 +71,6 @@ test("migrations create every table of the schema plus the FTS index", async () 
       "scene_npcs",
       "scene_tags",
       "npcs",
-      "npc_relations",
       "locations",
       "sessions",
       "session_pauses",
@@ -188,7 +187,7 @@ test("foreign keys cascade on update and delete", async () => {
     db.insert(campaigns).values({ id: "beispiel", name: "Beispiel" }).run();
     db.run(sql`insert into chapters (campaign_id, id, title, pos) values ('beispiel', '01', 'Kapitel', 0)`);
 
-    // ON UPDATE CASCADE — the mechanism Scheibe 3's rename rests on.
+    // ON UPDATE CASCADE — the mechanism the rename endpoint rests on.
     db.run(sql`update campaigns set id = 'umbenannt' where id = 'beispiel'`);
     const moved = db.all<{ campaign_id: string }>(sql`select campaign_id from chapters`);
     assert.deepEqual(moved, [{ campaign_id: "umbenannt" }]);
@@ -201,7 +200,7 @@ test("foreign keys cascade on update and delete", async () => {
   }
 });
 
-// The rename endpoint (store/rename.ts since issue #57) updates a COMPOSITE
+// The rename endpoint (store/rename.ts) updates a COMPOSITE
 // primary key and lets the database drag the child rows along. A single-column
 // cascade (above) does not prove that: the child FK spans two columns, and a
 // backend that quietly ignored the composite case would corrupt a rename
@@ -210,6 +209,10 @@ test("a composite primary key cascades on update", async () => {
   const { db, close } = await openDb(":memory:");
   try {
     db.insert(campaigns).values({ id: "beispiel", name: "Beispiel" }).run();
+    // The chapter and the location first: a scene's references are foreign
+    // keys, so the entries it names have to be there.
+    db.run(sql`insert into chapters (campaign_id, id, title, pos) values ('beispiel', '01', 'Kapitel', 0)`);
+    db.run(sql`insert into locations (campaign_id, id, name) values ('beispiel', 'hafen', 'Hafen')`);
     db.run(
       sql`insert into scenes (campaign_id, id, chapter_id, location, title, pos) values ('beispiel', 'alt', '01', 'hafen', 'Szene', 0)`,
     );

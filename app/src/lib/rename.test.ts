@@ -1,4 +1,4 @@
-// Tests for the pure half of „Umbenennen" (issue #30): which files offer the
+// Tests for the pure half of „Umbenennen": which files offer the
 // action, the id rules the dialog blocks on before it ever asks the server,
 // and where the reading view has to go after the cascade.
 
@@ -20,7 +20,7 @@ import {
 } from "@/lib/rename";
 import { translator } from "@/i18n/format";
 
-// The language the assertions below are written in (issue #69): the helpers
+// The language the assertions below are written in: the helpers
 // take the translator as an argument, so a test says so explicitly instead of
 // leaning on a default.
 const t = translator("de");
@@ -159,7 +159,7 @@ describe("renameKindLabel", () => {
   });
 });
 
-// --- usage summary (issue #60) ----------------------------------------------
+// --- usage summary ----------------------------------------------------------
 
 function group(ref: UsageGroup["ref"], count: number): UsageGroup {
   return { ref, count, sites: [] };
@@ -179,15 +179,14 @@ describe("usage summary", () => {
   test("one German line per group, in the server's order", () => {
     expect(
       usageSummary(
-        report([group("sceneNpcs", 3), group("npcRelations", 2), group("logEntries", 4)]),
+        report([group("sceneNpcs", 3), group("bodyRefs", 2), group("logEntries", 4)]),
         t,
       ),
-    ).toBe("3 Szenen, 2 Beziehungen, 4 Log-Zeilen");
+    ).toBe("3 Szenen, 2 Textstellen, 4 Log-Zeilen");
   });
 
   test("singular per group, not per report", () => {
     expect(usageGroupLabel(group("sceneNpcs", 1), t)).toBe("1 Szene");
-    expect(usageGroupLabel(group("npcRelations", 1), t)).toBe("1 Beziehung");
     expect(usageGroupLabel(group("scenesPlayed", 1), t)).toBe("1 Session-Eintrag");
     expect(usageGroupLabel(group("scenesPlayed", 2), t)).toBe("2 Session-Einträge");
     expect(usageGroupLabel(group("logEntries", 1), t)).toBe("1 Log-Zeile");

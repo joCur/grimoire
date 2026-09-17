@@ -173,7 +173,7 @@ export interface CampaignSummary {
   id: string;
   /**
    * Id of the campaign's newest session (`sessions/<id>` without the
-   * extension). OPAQUE since the PO decision: an address, not a
+   * extension). OPAQUE by PO decision: an address, not a
    * date, and NOT comparable — order by `lastSessionStarted` instead. Absent
    * when the campaign has no session.
    */
@@ -181,7 +181,7 @@ export interface CampaignSummary {
   /**
    * `started` of that newest session — the zone-less wall-clock string the
    * file format carries (`yyyy-mm-ddTHH:MM:SS`). This is what "last active"
-   * means and the only orderable thing about a session the client
+   * means, and the only orderable thing about a session the client
    * gets. Absent when the campaign has no session, or when that session has no
    * usable `started` (a hand-edited file) — either way it then sorts behind
    * every campaign that has one.
@@ -222,7 +222,7 @@ export interface SceneGroup {
   slug: string;
   /**
    * The location entry's display NAME, degraded to the id when nobody has
-   * named it yet (an entry a reference created). "" for the `slug: ""`
+   * named it yet (an entry created and left empty). "" for the `slug: ""`
    * group, which is not a location and is labelled by the app.
    *
    * Resolved HERE because the groups are ordered by it: the heading the DM
@@ -421,7 +421,7 @@ export interface GenerateNpcResult {
   usage?: GenerateUsage;
 }
 
-// --- augmenting an EXISTING entry ------------------------------------------
+// --- augmenting an EXISTING entry -------------------------------------------
 
 /**
  * The entity kinds „Mit KI ergänzen" works on. Deliberately its own list and
@@ -625,7 +625,7 @@ export interface GenerateJob {
    */
   rev?: number;
   /**
-   * Everything the DM DID in the review, kept on the job so a
+   * Everything the DM DID in the review, kept on the job, so a
    * navigation, a reload, a second tab and a server restart all show the
    * same state. `draftEdits` holds the edited TEXT; this holds the
    * decisions. Absent on a payload from an older server — the UI treats
@@ -636,7 +636,7 @@ export interface GenerateJob {
    * The pipeline state of a scene run — the parts in outline
    * order and the run's token/call totals. Absent for a single-call run and
    * for a payload from an older server, and then the review renders exactly
-   * as it did before this ticket.
+   * as it did before the pipeline existed.
    */
   pipeline?: GenerateJobPipeline;
 }
@@ -684,7 +684,7 @@ export interface GenerateJobStarted {
   jobId: string;
 }
 
-// --- instance settings -----------------------------------------------------
+// --- instance settings ------------------------------------------------------
 
 /**
  * The UI languages the app ships. The list lives HERE, not in the app, because

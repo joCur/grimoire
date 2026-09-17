@@ -177,21 +177,19 @@ export function putKnowledge(
   });
 }
 
-// --- write endpoints (session/log) -------------------------------------------
+// --- write endpoints (session/log) ------------------------------------------
 
 /**
- * Set/delete properties keys of one entry (used by the
- * scene-status control). `patch` is flat: a value sets the key,
+ * Set/delete properties keys of one entry (used by the scene-status
+ * control). `patch` is flat: a value sets the key,
  * `null` deletes it. `rev` is the optimistic-concurrency token and must be
- * the one from the EntryResponse the UI is showing — when the entry changed on
- * disk since, the server answers 409 with the current `rev` in
- * `ApiError.details` and writes nothing.
+ * the one from the EntryResponse the UI is showing — when the entry changed
+ * since, the server answers 409 with the current `rev` in `ApiError.details`
+ * and writes nothing.
  *
- * `locationName` is the only field that is not a properties key: the display
- * name for the Ort a scene's `location` creates (the
- * properties form slugs free text into `location` and sends the typed text
- * here). The server applies it when it INSERTS the row and ignores it
- * otherwise, so an existing location is never renamed through a scene.
+ * A reference in the patch — `chapter`, `location`, an `npcs` entry — has to
+ * name an entry that exists; the server answers 400 with the code the app
+ * turns into „bitte zuerst anlegen" and writes nothing.
  */
 export async function patchProperties(
   campaign: string,
@@ -199,7 +197,6 @@ export async function patchProperties(
     path: string;
     rev: number;
     patch: Record<string, unknown>;
-    locationName?: string;
   },
 ): Promise<EntryResponse> {
   const path = `/${encodeURIComponent(campaign)}/properties`;
@@ -349,7 +346,7 @@ export function appendLog(
   );
 }
 
-// --- review actions ----------------------------------------------------------
+// --- review actions ---------------------------------------------------------
 
 /**
  * Mark a log line as reviewed: the server adds the short hash of the RAW
@@ -382,7 +379,7 @@ export function adoptThread(
  * Create the npc entry for `id` (status: unknown, note under `## Notizen`) —
  * or answer with the entry the id already has. Idempotent: the
  * goal is "this id has an entry", so an existing one is LINKED, never
- * overwritten, and an empty one (a reference created it) is filled in.
+ * overwritten, and an empty one — created and never filled in — is filled in.
  */
 export function ensureNpc(
   campaign: string,
@@ -470,7 +467,7 @@ export function createScene(
   });
 }
 
-/** A new NPC entry — an EMPTY one a reference left behind is filled. */
+/** A new NPC entry — an EMPTY one that was never filled in is filled. */
 export function createNpc(
   campaign: string,
   input: { name: string; id?: string },
@@ -502,12 +499,11 @@ export type RenameKind = "npc" | "location" | "scene" | "chapter";
  * the chapter itself) plus every entry whose bytes changed, named by its path
  * AFTER the rename. With `dryRun` nothing was written and this is the plan
  * the dialog previews. (Declared here rather than in @grimoire/shared: the
- * rename ticket keeps its footprint to server/ and app/.)
+ * rename feature keeps its footprint to server/ and app/.)
  */
 /** The kinds of reference `GET /usage` counts (server: store/usage.ts). */
 export type UsageRef =
   | "sceneNpcs"
-  | "npcRelations"
   | "sceneLocation"
   | "scenesPlayed"
   | "logEntries"
@@ -534,9 +530,9 @@ export interface UsageGroup {
 }
 
 /**
- * The answer of GET /:campaign/usage — where one entity is referenced.
- * The rename's response carries the same report, which is what
- * the dialog previews before it commits.
+ * The answer of GET /:campaign/usage — where one entity is referenced
+ * The rename's response carries the same report, which is what the dialog
+ * previews before it commits.
  */
 export interface UsageReport {
   kind: RenameKind;
@@ -571,8 +567,8 @@ export function fetchUsage(
 
 /**
  * Rename an entity id and let the server drag all references along
- * (properties npcs/location/chapter, session scenes_played, `## Beziehungen`
- * entries, log scene markers — prose is deliberately left alone).
+ * (properties npcs/location/chapter, session scenes_played, log scene
+ * markers and `[[id]]` mentions — a NAME in prose is left alone).
  *
  * `dryRun: true` returns the very same plan without writing a byte: same code
  * path, so a preview that succeeds is a rename that will succeed. Errors
@@ -745,8 +741,8 @@ export function applyAugment(
  * The campaign's generate job, or null when there is none (the server's 404
  * is the normal "nothing running, nothing to restore" answer — never an
  * error state in the UI). A `null` after a job WAS there means it is gone:
- * applied or discarded. A server restart does NOT lose it any more: a
- * finished job comes back, and one that was still running comes back
+ * applied or discarded. A server restart does NOT lose it any more:
+ * a finished job comes back, and one that was still running comes back
  * as `failed` with a message saying so.
  */
 export async function fetchGenerateJob(campaign: string): Promise<GenerateJob | null> {

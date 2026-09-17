@@ -22,6 +22,7 @@ import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { openSqlite, type SqliteClient } from "./driver";
 import { migrateGroupsToLocations, type GroupMigrationOutcome } from "./group-migration";
+import { assertMigrationReady } from "./reference-preflight";
 import { schema } from "./schema";
 
 /** The drizzle handle the whole server uses. Synchronous, like the driver. */
@@ -33,7 +34,7 @@ export interface OpenDb {
   client: SqliteClient;
   close(): void;
   /**
-   * What the pre-migration data step of issue #100 changed on THIS open —
+   * What the pre-migration data step changed on THIS open —
    * empty on every database that has already been through it. See
    * ./group-migration.ts for why it cannot run after the migrator.
    */
@@ -47,7 +48,7 @@ export const MIGRATIONS_DIR = path.resolve(
 );
 
 /**
- * PRAGMAs, applied to every connection (planning section 5):
+ * PRAGMAs, applied to every connection:
  *
  *   journal_mode=WAL   — readers never block the writer. WAL is a per-DATABASE
  *                        setting and persists in the file, but it is set on
@@ -102,10 +103,17 @@ export async function openDb(filename: string): Promise<OpenDb> {
   }
   const client = await openSqlite(filename);
   applyPragmas(client);
-  // BEFORE the migrator, on purpose (issue #100): migration 0009 drops
+  // BEFORE the migrator, on purpose: migration 0009 drops
   // `scenes.group_slug`, and this step is what carries the old grouping over
   // into `location`. It is a no-op once the column is gone.
   const groupMigration = migrateGroupsToLocations(client);
+  // The gate in front of the reference constraints: a database whose data
+  // cannot satisfy them — or whose relation notes the migration cannot place
+  // without appending a second section — is REFUSED here, with the offending
+  // values in the log, instead of failing halfway through the rebuild (or
+  // being repaired behind the DM's back). A no-op once the constraints are in
+  // place.
+  assertMigrationReady(client);
   const db = buildDrizzle(client);
   migrateDb(db);
   return { db, client, close: () => client.close(), groupMigration };
@@ -113,7 +121,7 @@ export async function openDb(filename: string): Promise<OpenDb> {
 
 /**
  * True when the database holds no campaign data at all. This is the
- * defensive half of the migration's idempotency rule (planning section 3):
+ * defensive half of the migration's idempotency rule:
  * a NON-EMPTY database is never overwritten, marker or no marker.
  *
  * "Empty" is deliberately narrow — only `campaigns`. The bookkeeping table

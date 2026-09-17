@@ -1,22 +1,23 @@
-// POST /api/:campaign/rename as a database UPDATE (issue #57).
+// POST /api/:campaign/rename as a database UPDATE.
 //
-// SCOPE NOTE: the planning puts the rename rebuild in Scheibe 3 (#29/#30).
-// It could not stay behind, though — the moment the read/write endpoints stop
+// SCOPE NOTE: the rename rebuild came with the cutover rather than after it.
+// It could not stay behind — the moment the read/write endpoints stop
 // reading the markdown tree, the file-tree cascade of `campaign-rename.ts` is
 // renaming files nobody reads any more. So the endpoint moves with the
 // cutover, at exactly the size the cutover needs: the id update plus the
 // reference cascade, with the response shape (`{ renamed, changed }`) and the
-// error semantics (400 / 404 / 409) unchanged. Scheibe 3 (#60) then added
-// what was left: the reference COUNTS. They come from store/usage.ts, which
-// is also what `GET /usage` answers with — so the plan's `changed` list, the
-// dialog's German summary and the endpoint are one set of queries, and the
-// preview cannot count something the cascade does not rewrite.
+// error semantics (400 / 404 / 409) unchanged. What was left came on top:
+// the reference COUNTS. They come from store/usage.ts, which is also what
+// `GET /usage` answers with — so the plan's `changed` list, the dialog's
+// German summary and the endpoint are one set of queries, and the preview
+// cannot count something the cascade does not rewrite.
 //
 // What the migration bought here is visible in the code below: the id IS the
-// primary key, so the hard references cascade in the database
-// (`ON UPDATE CASCADE`, schema.ts rule 5) and only the SOFT references — the
-// ones that may legally point at an entity without a row — need statements of
-// their own.
+// primary key and every reference is a foreign key (schema.ts rules 3 and
+// 5), so the whole reference cascade happens in the database. What still
+// needs statements of its own is everything that is TEXT rather than a
+// reference column: the `- HH:MM (id)` marker inside a log line, and
+// `[[id]]` in prose.
 
 import { and, eq, sql } from "drizzle-orm";
 import { ApiError } from "../api-error";
@@ -27,11 +28,9 @@ import {
   chapters,
   locations,
   logEntries,
-  npcRelations,
   npcs,
   sceneNpcs,
   scenes,
-  sessionScenesPlayed,
 } from "../db/schema";
 import { dropEntity } from "./fts";
 import { refOwnerKind, rewriteBodyRefs } from "./refs";
@@ -72,7 +71,7 @@ export interface RenameResult {
   renamed: { from: string; to: string };
   changed: string[];
   /**
-   * The reference count behind `changed` (issue #60), from the very same
+   * The reference count behind `changed`, from the very same
    * queries `GET /usage` answers with — the dialog's German summary reads off
    * this, so the preview counts what the cascade rewrites.
    */
@@ -108,7 +107,7 @@ function assertNewId(newId: string): void {
 /**
  * The reference sites of one rename, as the paths whose CONTENT changes —
  * derived from the USAGE report, so the preview's numbers and the cascade's
- * file list come from one set of queries (issue #60).
+ * file list come from one set of queries.
  *
  * Two corrections on top of the raw sites:
  *
@@ -214,14 +213,49 @@ function patchLogMarkers(raw: string, oldId: string, newId: string): string {
 }
 
 /**
- * The soft-reference updates of one rename (the hard ones cascade).
+ * A scene that lists BOTH ids (`npcs: [jorna, jorna-alt]`) — the one case the
+ * reference cascade cannot resolve on its own: moving the old row onto the
+ * new id would collide with the row that is already there, on a primary key,
+ * which no deferral covers. The old row goes and the existing one stays, so
+ * the two lists are joined.
+ *
+ * It runs BEFORE the id update, because that is when the cascade fires.
+ */
+function dropDuplicateRefs(
+  tx: GrimoireDb,
+  campaign: string,
+  kind: RenameKind,
+  oldId: string,
+  newId: string,
+): void {
+  if (kind !== "npc") return;
+  for (const row of tx
+    .select({ sceneId: sceneNpcs.sceneId })
+    .from(sceneNpcs)
+    .where(and(eq(sceneNpcs.campaignId, campaign), eq(sceneNpcs.npcId, newId)))
+    .all()) {
+    tx.delete(sceneNpcs)
+      .where(
+        and(
+          eq(sceneNpcs.campaignId, campaign),
+          eq(sceneNpcs.sceneId, row.sceneId),
+          eq(sceneNpcs.npcId, oldId),
+        ),
+      )
+      .run();
+  }
+}
+
+/**
+ * The TEXT a rename has to follow — everything that is not a reference
+ * column and therefore does not cascade.
  *
  * `ownsRefSlug` is decided BEFORE the id update (the row that answers it is
  * gone afterwards): does `[[oldId]]` in prose actually mean THIS entity? See
  * store/refs.ts `refOwnerKind` — with a same-named npc around, a scene rename
  * must leave the prose alone.
  */
-function updateSoftReferences(
+function updateTextReferences(
   tx: GrimoireDb,
   campaign: string,
   kind: RenameKind,
@@ -229,78 +263,12 @@ function updateSoftReferences(
   newId: string,
   ownsRefSlug: boolean,
 ): void {
-  if (kind === "npc") {
-    // MERGE, don't collide (#70): a scene that lists BOTH ids has a
-    // `scene_npcs` primary key (campaign, scene, npc) that the plain UPDATE
-    // would violate — an unhandled constraint error, i.e. a 500 out of a
-    // rename the preview had just called safe. The old row goes, the existing
-    // one stays.
-    //
-    // This is the LIVE path of the empty-target merge above: while a
-    // reference could dangle, the second id had no row at all; now it has an
-    // empty one, `renameEntity` drops that instead of answering 409, and the
-    // two reference lists are joined here. A migrated database can still hold
-    // the dangling variant, which lands in the same code.
-    for (const row of tx
-      .select({ sceneId: sceneNpcs.sceneId })
-      .from(sceneNpcs)
-      .where(and(eq(sceneNpcs.campaignId, campaign), eq(sceneNpcs.npcId, newId)))
-      .all()) {
-      tx.delete(sceneNpcs)
-        .where(
-          and(
-            eq(sceneNpcs.campaignId, campaign),
-            eq(sceneNpcs.sceneId, row.sceneId),
-            eq(sceneNpcs.npcId, oldId),
-          ),
-        )
-        .run();
-    }
-    tx.update(sceneNpcs)
-      .set({ npcId: newId })
-      .where(and(eq(sceneNpcs.campaignId, campaign), eq(sceneNpcs.npcId, oldId)))
-      .run();
-    // Same for a relation list that names both counterparts.
-    for (const row of tx
-      .select({ npcId: npcRelations.npcId })
-      .from(npcRelations)
-      .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.otherNpcId, newId)))
-      .all()) {
-      tx.delete(npcRelations)
-        .where(
-          and(
-            eq(npcRelations.campaignId, campaign),
-            eq(npcRelations.npcId, row.npcId),
-            eq(npcRelations.otherNpcId, oldId),
-          ),
-        )
-        .run();
-    }
-    tx.update(npcRelations)
-      .set({ otherNpcId: newId })
-      .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.otherNpcId, oldId)))
-      .run();
-  }
-  if (kind === "location") {
-    tx.update(scenes)
-      .set({ location: newId })
-      .where(and(eq(scenes.campaignId, campaign), eq(scenes.location, oldId)))
-      .run();
-  }
   if (kind === "scene") {
-    tx.update(sessionScenesPlayed)
-      .set({ sceneId: newId })
-      .where(
-        and(eq(sessionScenesPlayed.campaignId, campaign), eq(sessionScenesPlayed.sceneId, oldId)),
-      )
-      .run();
-    tx.update(logEntries)
-      .set({ sceneId: newId })
-      .where(and(eq(logEntries.campaignId, campaign), eq(logEntries.sceneId, oldId)))
-      .run();
-    // The `raw` line the review hashes carries the marker too. It is rewritten
-    // so the rendered log keeps naming the scene the DM can actually open;
-    // the hash follows, exactly as the file cascade re-hashed the line.
+    // The `raw` line the review hashes carries the `(id)` marker as text. It
+    // is rewritten so the rendered log keeps naming the scene the DM can
+    // actually open; the hash follows, exactly as the file cascade re-hashed
+    // the line. The rows are found by their reference column, which the
+    // cascade has already moved.
     for (const row of tx
       .select({ sessionId: logEntries.sessionId, pos: logEntries.pos, raw: logEntries.raw })
       .from(logEntries)
@@ -321,28 +289,13 @@ function updateSoftReferences(
     }
   }
   if (kind !== "chapter" && ownsRefSlug) {
-    // BODY REFERENCES (issue #68): `[[oldId]]` in prose is a soft reference
-    // like any other and has to follow the id — the renderer resolves the
+    // `[[oldId]]` in prose has to follow the id — the renderer resolves the
     // CURRENT name from the slug, so a slug left behind goes silently back to
     // plain text. Every rewritten body is re-indexed (its indexed text
     // carries the referenced display name, store/refs.ts).
     for (const referrer of rewriteBodyRefs(tx, campaign, oldId, newId)) {
       reindexEntity(tx, campaign, referrer.kind, referrer.id);
     }
-  }
-  if (kind === "chapter") {
-    tx.update(scenes)
-      .set({ chapterId: newId })
-      .where(and(eq(scenes.campaignId, campaign), eq(scenes.chapterId, oldId)))
-      .run();
-    tx.update(npcs)
-      .set({ chapterId: newId })
-      .where(and(eq(npcs.campaignId, campaign), eq(npcs.chapterId, oldId)))
-      .run();
-    tx.update(locations)
-      .set({ chapterId: newId })
-      .where(and(eq(locations.campaignId, campaign), eq(locations.chapterId, oldId)))
-      .run();
   }
 }
 
@@ -368,15 +321,13 @@ export async function renameEntity(
   if (!entityExists(db, campaign, kind, oldId)) {
     throw new ApiError(404, `${kind} "${oldId}" not found`);
   }
-  // MERGE INTO AN EMPTY TARGET (#70 audit). An npc/location row that holds
-  // nothing but its id was not authored — a reference put it there — and
-  // since referencing creates, it is the target a rename runs into: a scene
-  // that lists the old AND the new id is exactly what the merge in
-  // `updateSoftReferences` handles, and that state now always comes with an
-  // empty row for the new id. Every other #70 path fills such a row instead
-  // of colliding with it (the generator's apply step, `review/npc-stub`), so
-  // the rename does too. A target with CONTENT is still a 409: a rename must
-  // never overwrite what somebody wrote.
+  // MERGE INTO AN EMPTY TARGET. An npc/location entry that holds nothing but
+  // its id is one the DM created and did not fill in — and a scene may
+  // already list both ids, which is what `dropDuplicateRefs` joins. Every
+  // other path fills such an entry instead of colliding with it (the
+  // generator's apply step, „NPC anlegen", `review/npc-stub`), so the rename
+  // does too. A target with CONTENT is still a 409: a rename must never
+  // overwrite what somebody wrote.
   const targetExists = entityExists(db, campaign, kind, newId);
   const mergeInto =
     targetExists &&
@@ -390,7 +341,7 @@ export async function renameEntity(
 
   const from = pathOf(db, campaign, kind, oldId);
   // ONE reference pass for both answers: the counts the dialog shows and the
-  // paths the cascade touches (issue #60).
+  // paths the cascade touches.
   const usage = usageReport(db, campaign, kind, oldId);
   const changed = new Set(referenceSites(usage, oldId, newId));
   const to =
@@ -422,10 +373,19 @@ export async function renameEntity(
 
   db.transaction((handle) => {
     const tx = handle as unknown as GrimoireDb;
+    // The reference checks move to the COMMIT of this transaction. Inside it
+    // there is one unavoidable moment of inconsistency: merging into an empty
+    // entry deletes the row a scene already references, and the renamed row
+    // only takes its id one statement later. Deferring is what lets those two
+    // statements be one change — and it weakens nothing, because a
+    // transaction that leaves a reference unresolved cannot commit.
+    tx.run(sql`pragma defer_foreign_keys = on`);
     const table = entityTable(kind);
     // Asked BEFORE the id moves: after the update the old slug has no row of
     // this kind any more, and the answer would flip to "nothing owns it".
     const ownsRefSlug = kind !== "chapter" && refOwnerKind(tx, campaign, oldId) === kind;
+    // Before the id update, which is when the cascade fires.
+    dropDuplicateRefs(tx, campaign, kind, oldId, newId);
     if (mergeInto) {
       // The empty target row makes way for the renamed one — otherwise the id
       // update below violates the primary key. It carries no content by
@@ -445,7 +405,7 @@ export async function renameEntity(
     // fallback out (`name: jorna`) would keep pointing at a reference that
     // no longer exists, in the tree and in search alike.
     carryFallbackName(tx, campaign, kind, oldId, newId);
-    updateSoftReferences(tx, campaign, kind, oldId, newId, ownsRefSlug);
+    updateTextReferences(tx, campaign, kind, oldId, newId, ownsRefSlug);
     // The index row is REPLACED, not patched: its `title` has to follow too
     // (see fts.ts). Dropping the old id first is what keeps the contract of
     // one row per (campaign, kind, entity_id).

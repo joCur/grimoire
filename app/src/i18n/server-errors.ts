@@ -1,4 +1,4 @@
-// Server error bodies, read in the UI language (issue #69).
+// Server error bodies, read in the UI language.
 //
 // The server is language-free (`@grimoire/shared/error-codes`): every error a
 // human reads carries a stable `code` plus the parameters its sentence needs,
@@ -29,6 +29,12 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   slug_reserved: "server.slug_reserved",
   slug_empty: "server.slug_empty",
   location_not_an_id: "server.location_not_an_id",
+  location_unknown: "server.location_unknown",
+  npc_unknown: "server.npc_unknown",
+  chapter_unknown: "server.chapter_unknown",
+  chapter_required: "server.chapter_required",
+  log_scene_unknown: "server.log_scene_unknown",
+  played_scene_unknown: "server.played_scene_unknown",
   glossary_duplicate_term: "server.glossary_duplicate_term",
   session_running: "server.session_running",
   session_not_empty: "server.session_not_empty",
@@ -97,6 +103,16 @@ function paramsFor(
       const suggestion = text(body.suggestion);
       return suggestion === undefined ? { value } : { value, suggestion };
     }
+    case "location_unknown":
+    case "npc_unknown":
+    case "chapter_unknown":
+    case "log_scene_unknown":
+    case "played_scene_unknown": {
+      // The five reference refusals share one shape: the value that names
+      // nothing. Without it there is no sentence worth showing.
+      const value = text(body.value);
+      return value === undefined ? undefined : { value };
+    }
     case "glossary_duplicate_term": {
       const term = text(body.term);
       return term === undefined ? undefined : { term };
@@ -106,6 +122,7 @@ function paramsFor(
       const max = typeof body.maxTokens === "number" ? String(body.maxTokens) : undefined;
       return { max: max ?? t("server.llm_truncated.defaultCap") };
     }
+    case "chapter_required":
     case "session_running":
     case "session_not_empty":
     case "rev_conflict":

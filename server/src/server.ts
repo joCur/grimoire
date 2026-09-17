@@ -65,11 +65,11 @@
 //                                              `location`). `chapter` is REQUIRED and must
 //                                              exist — 400 otherwise: a scene's chapter is
 //                                              part of its address and chapters are never
-//                                              created by being named (ADR #14)
+//                                              created by being named (ADR #19)
 //   [x] POST /api/:campaign/npcs               { name } -> 201 the npc entry. An EMPTY
-//                                              entry for the derived id (one a reference
-//                                              created) is FILLED rather than
-//                                              collided with; an entry that holds content
+//                                              entry for the derived id — one the DM
+//                                              created and left empty — is FILLED rather
+//                                              than collided with; one that holds content
 //                                              answers the `slug_taken` 409; a RESERVED
 //                                              id answers 409 { code: "slug_reserved" },
 //                                              same shape, different sentence
@@ -82,11 +82,11 @@
 //                                              an entry, not a missing one (a 404 would
 //                                              make a glossary the DM had just emptied
 //                                              unreachable from the editor).
-//                                              inbox does the same — same
-//                                              reasoning, it had been left behind.
+//                                              inbox answers the same way, for the same
+//                                              reason.
 //                                              `rev` of glossary/inbox is that
 //                                              DOCUMENT's own counter, not campaigns.version
-//   [x] PATCH /api/:campaign/properties        { path, rev, patch, locationName? } — only if rev is
+//   [x] PATCH /api/:campaign/properties        { path, rev, patch } — only if rev is
 //                                              unchanged, otherwise
 //                                              409 { code: "rev_conflict", rev }.
 //                                              A scene's `chapter` may be SET (400 when
@@ -110,12 +110,12 @@
 //                                              `campaign` did not exist yet had
 //                                              no row and therefore no guard token
 //                                              to PATCH against. Since the cutover
-// the import always creates a
+//                                              the import always creates a
 //                                              campaign ROW, GET /entry?path=
 //                                              campaign therefore always
 //                                              answers 200 with a `rev`, and the
 //                                              app's create branch became
-//                                              unreachable (observed in practice). The
+//                                              unreachable. The
 //                                              name is now written the same way
 //                                              every other field is: PATCH
 //                                              /properties with the row's guard
@@ -171,7 +171,7 @@
 //                                              scenes/npcs/locations/chapters/campaign/
 //                                              GLOSSARY, max 20 results)
 //   [x] GET  /api/:campaign/glossary           { entries: [{ term, explanation }], rev } — the
-//                                              glossary TABLE (planning F6); `rev`
+//                                              glossary TABLE; `rev`
 //                                              is the LIST's guard token, the same one
 //                                              GET /entry?path=glossary hands out
 //   [x] PUT  /api/:campaign/glossary           { entries, rev } -> { entries, rev }; replaces
@@ -206,7 +206,7 @@
 //                                              gone with the cutover); the app polls it and
 //                                              refetches on change (SSE considered and deferred,
 //                                              DECISIONS #9). build is this server's build id
-//                                              (GRIMOIRE_BUILD, "dev" outside an image):
+//                                              (GRIMOIRE_BUILD, "dev" outside an image) —
 //                                              when it differs from the app's own build id
 //                                              the app shows a reload banner. Every /api
 //                                              response also carries it as x-grimoire-build.
@@ -248,8 +248,8 @@
 //                                              `rev` — 409 { code: "rev_conflict", rev }
 //                                              and nothing written when the entry moved.
 //                                              FTS and `[[slug]]` references follow (it is
-//                                              the ordinary write path, so the „referencing creates" rule
-//                                              „Referenzieren legt an" applies as well);
+//                                              the ordinary write path, so a reference
+//                                              that names nothing is a 400 here too);
 //                                              `jobId` discards the job in the same
 //                                              transaction. `id` and the app-managed keys
 //                                              are refused (400) — an id change is
@@ -278,8 +278,8 @@
 //                                              augment run and the parts a partial accept
 //                                              already wrote (`review.written`, draft path
 //                                              -> the address it landed at)
-//   [x] DELETE /api/:campaign/generate/job     discard the job ("Verwerfen"). That is the
-//                                              OPEN REST only — parts a
+//   [x] DELETE /api/:campaign/generate/job     discard the job ("Verwerfen"). That is
+//                                              the OPEN REST only — parts a
 //                                              partial accept wrote are entries now
 //   [x] PATCH /api/:campaign/generate/job/:id/review
 //                                              { rev, edits?, entries?, dropped?, fields?,
@@ -353,8 +353,8 @@
 //   [x] POST /api/:campaign/review/thread      { chapter, text } -> append `- [ ] text` under
 //                                              ## Offene Fäden of the chapter entry
 //   [x] POST /api/:campaign/review/npc-stub    { id, name?, note? } -> create npcs/<id>
-//                                              (status: unknown), or answer with the entry the
-//                                              id already has — idempotent
+//                                              (status: unknown), or answer with the entry
+//                                              the id already has — idempotent
 //   [x] POST /api/:campaign/review/inbox-done  { line } -> rewrite the inbox line to `- [x] …`
 //                                              (documented append-only exception)
 //
@@ -431,15 +431,6 @@ if (import.meta.main) {
   void store;
   const info = (await import("./store/handle")).storeInfo();
   console.log(`Database ready (${info?.backend ?? "unknown backend"}).`);
-  // A boot that CHANGED data says so. The pass creates an empty
-  // npc row for every dangling npc reference and is a no-op from the second
-  // boot on (store/ref-backfill.ts).
-  if (info !== undefined && info.backfilledNpcs.length > 0) {
-    console.log(
-      `${info.backfilledNpcs.length} referenced npc(s) had no entry and got an empty one: ` +
-        info.backfilledNpcs.join(", "),
-    );
-  }
   // The one-time step that turned the file era's group
   // directories into `location` references. It names EVERY scene whose
   // address moved — an old link still resolves (the app follows the

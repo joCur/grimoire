@@ -1,4 +1,4 @@
-// GET /api/:campaign/usage — reference counting (issue #60).
+// GET /api/:campaign/usage — reference counting.
 //
 // One case per reference kind, all of them against the SEED campaign
 // (`examples/`, the suite's fixture — CLAUDE.md): the example tree happens to
@@ -45,7 +45,7 @@ function group(report: UsageReport, ref: string) {
 }
 
 describe("usage per reference kind", () => {
-  test("npc: scene `npcs:` lists and INCOMING `## Beziehungen` lines", async () => {
+  test("npc: scene `npcs:` lists", async () => {
     const report = await usage("npc", "jorna");
 
     expect(report.kind).toBe("npc");
@@ -67,17 +67,11 @@ describe("usage per reference kind", () => {
       ],
     });
 
-    // ONE direction: fenn's line about jorna. Jorna's OWN line about fenn is
-    // not a reference TO jorna — it names fenn, and the rename leaves it
-    // alone (only `otherNpcId` is rewritten), so counting it would promise a
-    // rewritten site that does not exist.
-    expect(group(report, "npcRelations")).toEqual({
-      ref: "npcRelations",
-      count: 1,
-      sites: [{ kind: "npc", id: "fenn", title: "Fenn", path: "npcs/fenn", count: 1 }],
-    });
+    // A `## Beziehungen` line is PROSE and no reference site: fenn's line
+    // about jorna is not counted, and a rename leaves it as written.
+    expect(group(report, "bodyRefs")).toBeUndefined();
 
-    expect(report.total).toBe(2);
+    expect(report.total).toBe(1);
   });
 
   test("location: scene `location:` properties", async () => {
@@ -148,8 +142,15 @@ describe("usage per reference kind", () => {
     ]);
     expect(group(report, "chapterLocations")).toEqual({
       ref: "chapterLocations",
-      count: 1,
+      count: 2,
       sites: [
+        {
+          kind: "location",
+          id: "bucht",
+          title: "Die Nordbucht",
+          path: "locations/bucht",
+          count: 1,
+        },
         {
           kind: "location",
           id: "leuchtturm",
@@ -159,7 +160,7 @@ describe("usage per reference kind", () => {
         },
       ],
     });
-    expect(report.total).toBe(5);
+    expect(report.total).toBe(6);
   });
 
   test("an entity nothing points at answers with an empty report", async () => {
@@ -170,10 +171,7 @@ describe("usage per reference kind", () => {
     expect(report.path).toBe("01-salzhafen/bucht/smuggler-captured");
   });
 
-  test("a location the import had to create reports like any other (#100)", async () => {
-    // `location: bucht` had no `locations/bucht.md` in the example tree. It
-    // is not free text any more (#100): the import created the entry,
-    // because the value is the scene's GROUP and a group has to be nameable.
+  test("the second location of the example campaign reports like the first", async () => {
     expect((await usageRes("kind=location&id=bucht")).status).toBe(200);
     const report = await usage("location", "bucht");
     expect(report.path).toBe("locations/bucht");
@@ -183,16 +181,16 @@ describe("usage per reference kind", () => {
   });
 });
 
-describe("an npc's OWN relations are not usage", () => {
+describe("a `## Beziehungen` line is not usage", () => {
   let root: string;
 
   afterEach(async () => {
     if (root !== undefined) await removeTempRoot(root);
   });
 
-  test("only outgoing `## Beziehungen` -> empty report, rename touches one file", async () => {
+  test("a relations line -> empty report, rename touches one entry", async () => {
     root = await tempCampaignRoot();
-    // A hermit: he names jorna, nobody names him, no scene lists him.
+    // A hermit: his text names jorna, nobody names him, no scene lists him.
     await writeFile(
       path.join(root, "beispiel/npcs/kalle.md"),
       [
@@ -211,8 +209,7 @@ describe("an npc's OWN relations are not usage", () => {
     );
     await seedStore(root);
 
-    // Nothing points AT him — his own line names jorna, and the rename would
-    // not rewrite it (it moves with his document).
+    // Nothing points AT him — and his own line is text, not a reference.
     const report = await usage("npc", "kalle");
     expect(report.groups).toEqual([]);
     expect(report.total).toBe(0);
@@ -228,8 +225,10 @@ describe("an npc's OWN relations are not usage", () => {
     expect(plan.changed).toEqual(["npcs/kalle-der-alte"]);
     expect(plan.usage.total).toBe(0);
 
-    // Jorna, meanwhile, gained an INCOMING line — fenn's and kalle's.
-    expect(group(await usage("npc", "jorna"), "npcRelations")?.count).toBe(2);
+    // Jorna is named in two relations lines now — and that changes nothing
+    // about her report, because those lines are text.
+    const jorna = await usage("npc", "jorna");
+    expect(jorna.groups.map((g) => g.ref)).toEqual(["sceneNpcs"]);
   });
 });
 

@@ -1,5 +1,5 @@
-// API routes — read, write, search/version, the generator with its
-// background jobs, and the NPC run.
+// API routes: read, write, search/version, and the generator with its
+// background jobs and its NPC run.
 // Mounted under /api in server.ts. Response shapes are the contracts in
 // @grimoire/shared (types.ts).
 
@@ -112,7 +112,7 @@ async function jsonBody(c: Context, allowed: string[]): Promise<Record<string, u
 }
 
 /**
- * The `rev` of a guarded write. Its own helper, when the
+ * The `rev` of a guarded write. Its own helper because the
  * third and fourth endpoint needed the identical three lines: a MISSING rev
  * has to be a 400 and never a default, because a defaulted guard token is no
  * guard at all (ADR #4).
@@ -197,7 +197,7 @@ api.get("/:campaign/entry", async (c) => {
 // simply a session past midnight, would get it wrong). Same shape as GET
 // /entry plus `startedMs`/`endedMs` and `pausedMs`/`pausedSinceMs` — the
 // server's epoch reading of the zone-less timestamps and of the `pauses`
-// intervals, which is what makes the live runtime correct (AK8: paused time
+// intervals, which is what makes the live runtime correct (paused time
 // does not count).
 //
 // `?includeEnded=1` asks the OTHER question: the last STARTED session, ended
@@ -226,8 +226,8 @@ api.get("/:campaign/search", async (c) => {
 
 // GET /api/:campaign/version -> { version, build } — `version` is
 // `campaigns.version`, bumped by every write in the SAME transaction as the
-// change it belongs to (with the database as the only truth there
-// is no external editor left to watch, so the chokidar watcher is gone). The
+// change it belongs to (with the database as the only truth there is no
+// external editor left to watch, so the chokidar watcher is gone). The
 // app polls this and refetches when it changes (DECISIONS #9). `build` rides
 // along on that existing poll: the app compares it with its own
 // build id and offers a reload when a deploy left it with a stale bundle.
@@ -237,7 +237,7 @@ api.get("/:campaign/version", async (c) => {
 });
 
 // GET /api/:campaign/glossary -> { entries: [{ term, explanation }] }
-// The glossary is a structured TABLE since the migration (planning F6): term
+// The glossary is a structured TABLE since the migration: term
 // → explanation instead of one markdown blob. The generic reading view still
 // renders it as markdown (GET /entry?path=glossary, rendered from these
 // rows), but this is the shape anything that wants the TERMS should read —
@@ -257,36 +257,26 @@ api.get("/:campaign/knowledge", async (c) =>
 // There is no migration-report endpoint: the markdown import is the dev/E2E
 // tool `grimoire seed`, which prints its own report on stdout.
 
-// --- write endpoints ----------------------------------------------------------------
+// --- write endpoints --------------------------------------------------------------
 
-// PATCH /api/:campaign/properties { path, rev, patch, locationName? } ->
-// EntryResponse
+// PATCH /api/:campaign/properties { path, rev, patch } -> EntryResponse
 // patch is a flat object of properties keys to set; null deletes a key.
-// 409 { error, rev } when the file changed on disk since it was read.
+// 409 { error, rev } when the entry changed since it was read.
 //
-// `locationName` is the one value that is NOT a properties key: the display
-// name for the Ort a scene's `location` CREATES. The
-// properties form takes free text in the Ort field, slugs it into `location`
-// and sends the typed text here, so the new entry is called what the DM
-// typed. It is applied only when the row is inserted — an existing location
-// is never renamed through a scene.
+// A reference in the patch — `chapter`, `location`, an `npcs` entry — has to
+// name an entry that exists: 400 with the code the app turns into „bitte
+// zuerst anlegen", never a new entry as a side effect.
 api.patch("/:campaign/properties", async (c) => {
-  const body = await jsonBody(c, ["path", "rev", "patch", "locationName"]);
+  const body = await jsonBody(c, ["path", "rev", "patch"]);
   const rel = body.path;
   const rev = body.rev;
   const patch = body.patch;
-  const locationName = body.locationName;
   if (typeof rel !== "string") throw new ApiError(400, "path must be a string");
   if (typeof rev !== "number" || !Number.isFinite(rev)) {
     throw new ApiError(400, "rev must be a number");
   }
   if (!isPlainObject(patch)) throw new ApiError(400, "patch must be an object");
-  if (locationName !== undefined && typeof locationName !== "string") {
-    throw new ApiError(400, "locationName must be a string");
-  }
-  return c.json(
-    await patchProperties(c.req.param("campaign"), rel, rev, patch, { locationName }),
-  );
+  return c.json(await patchProperties(c.req.param("campaign"), rel, rev, patch));
 });
 
 // PUT /api/:campaign/entry { path, rev, body } -> EntryResponse
@@ -515,7 +505,7 @@ api.post("/:campaign/chapters/:id/active", async (c) =>
 
 // POST /api/:campaign/scenes { title, chapter } -> 201 EntryResponse
 // `chapter` is required and must exist (400) — a scene's chapter is part of
-// its address, and chapters are never created by being named (ADR #14).
+// its address, and chapters are never created by being named (ADR #19).
 api.post("/:campaign/scenes", async (c) => {
   const body = await jsonBody(c, ["title", "chapter", "id"]);
   const title = requiredText(body.title, "title");
@@ -527,7 +517,7 @@ api.post("/:campaign/scenes", async (c) => {
 });
 
 // POST /api/:campaign/npcs { name } -> 201 EntryResponse
-// An EMPTY entry for the derived id (one a reference created) is
+// An EMPTY entry for the derived id — one the DM created and left empty — is
 // FILLED instead of colliding; an entry with content answers 409.
 api.post("/:campaign/npcs", async (c) => {
   const body = await jsonBody(c, ["name", "id"]);
@@ -580,7 +570,7 @@ api.post("/:campaign/rename", async (c) => {
   );
 });
 
-// --- usage: where is this entity referenced? ----------------------------------------
+// --- usage: where is this entity referenced? ---------------------------------------
 
 // GET /api/:campaign/usage?kind=<npc|location|scene|chapter>&id=<slug>
 //   -> { kind, id, path, total, groups: [{ ref, count, sites: [{ kind, id, title,
@@ -644,7 +634,7 @@ api.post("/:campaign/review/thread", async (c) => {
 // Creates the npc entry (status: unknown) — or, when the id already has one,
 // answers with THAT entry: the caller's goal is "this id has an
 // entry", so the call is idempotent. An entry that holds content is never
-// overwritten; an EMPTY one (a reference created it) is filled in.
+// overwritten; an EMPTY one — created and never filled in — is filled in.
 api.post("/:campaign/review/npc-stub", async (c) => {
   const body = await jsonBody(c, ["id", "name", "note"]);
   if (typeof body.id !== "string") throw new ApiError(400, "id must be a string");
@@ -713,12 +703,13 @@ const isDecision = (v: unknown): v is "accepted" | "rejected" | null =>
 // where the directory is created on apply), 503 when no provider is
 // configured (e.g. ANTHROPIC_API_KEY missing). 409 { error, jobId } while a
 // job for this campaign is still running — one job per campaign.
-// The run's own outcome (incl. the 422) lands in the job.
+// The run's own outcome (incl. the 422 of a truncated or invalid reply)
+// lands in the job.
 //
 // `chapterTitle` belongs to a `newChapter` run and is stored ON the job: the
-// accept step used to read the title out of the browser, which is gone after a
-// navigation or a reload — and the chapter with it. Optional, so an older app
-// build still starts runs; the accept then falls back to the chapter id.
+// accept step used to read the title out of the browser, which is gone after
+// a navigation or a reload — and the chapter with it. Optional, so an older
+// app build still starts runs; the accept then falls back to the chapter id.
 api.post("/:campaign/generate", async (c) => {
   const body = await jsonBody(c, ["chapter", "sourceText", "newChapter", "chapterTitle"]);
   const campaign = c.req.param("campaign");

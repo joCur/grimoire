@@ -74,12 +74,21 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
     "01-salzhafen/leuchtturm/lighthouse-arrival",
   ]);
   expect(tree.npcs.map((n) => n.id).sort()).toEqual(["fenn", "jorna"]);
-  // `locations/bucht.md` does not exist in the tree — the import created the
-  // entry because a scene names `bucht` as its location (#100).
+  // BOTH Orte have an entry of their own in the tree — and that is the only
+  // reason they are here. A mention creates nothing: the importer no longer
+  // writes an entry because a scene names `bucht` as its location, so an Ort
+  // without an entry would be a reference to nothing and the import of the
+  // scene that names it would fail.
   expect(tree.locations.map((l) => l.path).sort()).toEqual([
     "locations/bucht",
     "locations/leuchtturm",
   ]);
+  // What says the entry was IMPORTED rather than conjured: it carries the
+  // name and the chapter that stand in the campaign, which a synthesized
+  // stub would not have.
+  const bucht = await api.file("locations/bucht");
+  expect(bucht.properties.name).toBe("Die Nordbucht");
+  expect(bucht.properties.chapter).toBe("01-salzhafen");
   expect(tree.sessions.map((s) => s.path)).toEqual(["sessions/2026-01-15"]);
 
   // --- a scene body, callouts and If-sections included ----------------------

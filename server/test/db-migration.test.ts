@@ -1,11 +1,11 @@
-// The one-time markdown -> SQLite migration (issue #54, AK1–AK4).
+// The one-time markdown -> SQLite migration.
 //
-// AK1 is asserted against the REAL example campaign (CLAUDE.md: develop
-// against real data, no invented mock objects) — a temp COPY of it, because
-// examples/ is the committed format reference and the migration must be
-// provably able to run without touching it.
+// The clean import is asserted against the REAL example campaign (CLAUDE.md:
+// develop against real data, no invented mock objects) — a temp COPY of it,
+// because examples/ is the committed format reference and the migration must
+// be provably able to run without touching it.
 //
-// AK2's broken fixtures are written into a scratch campaign inside the temp
+// The broken fixtures are written into a scratch campaign inside the temp
 // root instead of being committed to examples/: examples/ is the format
 // CONTRACT, and a file with deliberately broken YAML in it would be a lie
 // about the contract.
@@ -27,7 +27,6 @@ import {
   locations,
   logEntries,
   meta,
-  npcRelations,
   npcs,
   sceneNpcs,
   sceneTags,
@@ -69,13 +68,13 @@ afterEach(async () => {
   await rm(tmpRoot, { recursive: true, force: true });
 });
 
-// --- AK4: the file tree is never touched -----------------------------------
+// --- the file tree is never touched ----------------------------------------
 
 /**
  * A content hash of a whole directory tree: every file's relative path, its
  * size and its bytes, in sorted order. Two trees with the same digest are
  * byte-identical in structure AND content — which is exactly the promise
- * "der Quellbaum bleibt unangetastet" (AK4).
+ * that the source tree is left untouched.
  */
 async function hashTree(root: string): Promise<string> {
   const digest = createHash("sha256");
@@ -101,9 +100,9 @@ async function hashTree(root: string): Promise<string> {
   return digest.digest("hex");
 }
 
-// --- AK1: a complete, clean import of the example campaign -------------------
+// --- a complete, clean import of the example campaign ------------------------
 
-describe("AK1 — examples/beispiel imports completely and cleanly", () => {
+describe("examples/beispiel imports completely and cleanly", () => {
   test("every table gets the rows the files describe, and the report is empty", async () => {
     const { db } = await freshDb();
     const outcome = await runInitialMigration(db, tmpRoot);
@@ -111,7 +110,7 @@ describe("AK1 — examples/beispiel imports completely and cleanly", () => {
     expect(outcome.migrated).toBe(true);
     expect(outcome.campaigns).toEqual(["beispiel"]);
 
-    // The headline assertion of AK1: a clean import leaves NOTHING to report.
+    // The headline assertion: a clean import leaves NOTHING to report.
     expect(outcome.report).toEqual([]);
 
     // campaign — name/description from _campaign.md, body preserved.
@@ -130,8 +129,8 @@ describe("AK1 — examples/beispiel imports completely and cleanly", () => {
     expect(chapterRows[0]?.status).toBe("active");
     expect(chapterRows[0]?.body).toContain("Offene Fäden");
 
-    // scenes — contract fields as columns, `location` as the group (#100:
-    // the group directory only fills in when the frontmatter names none),
+    // scenes — contract fields as columns, `location` as the group (the
+    // group directory only fills in when the frontmatter names none),
     // handouts as an ordered JSON list.
     const sceneRows = db.select().from(scenes).all();
     expect(sceneRows.map((s) => s.id).sort()).toEqual(["lighthouse-arrival", "smuggler-captured"]);
@@ -168,8 +167,8 @@ describe("AK1 — examples/beispiel imports completely and cleanly", () => {
         .map((r) => r.tag),
     ).toEqual(["social", "travel"]);
 
-    // npcs — every contract field, and `## Beziehungen` decomposed into rows
-    // AND removed from the body (it is rendered from the rows now).
+    // npcs — every contract field, and the whole text as it was written:
+    // `## Beziehungen` is prose and stays in the body.
     const jorna = db.select().from(npcs).where(eq(npcs.id, "jorna")).all()[0];
     expect(jorna?.name).toBe("Hafenmeisterin Jorna");
     expect(jorna?.role).toContain("Hafenmeisterin von Salzhafen");
@@ -179,20 +178,15 @@ describe("AK1 — examples/beispiel imports completely and cleanly", () => {
     expect(jorna?.chapterId).toBe("01-salzhafen");
     expect(Object.keys(unpackJson(jorna?.quickstats))).toContain("insight");
     expect(jorna?.body).toContain("## Weiß");
-    expect(jorna?.body).not.toContain("## Beziehungen");
-
-    const relations = db
-      .select()
-      .from(npcRelations)
-      .where(eq(npcRelations.npcId, "jorna"))
-      .all();
-    expect(relations).toHaveLength(1);
-    expect(relations[0]?.otherNpcId).toBe("fenn");
-    expect(relations[0]?.note).toBe("kennt ihn von früher — er fuhr einst ehrlich zur See");
-    expect(relations[0]?.pos).toBe(0);
+    expect(jorna?.body).toContain("## Beziehungen");
+    expect(jorna?.body).toContain("- fenn: kennt ihn von früher — er fuhr einst ehrlich zur See");
 
     // locations — including the hyphenated properties key.
-    const leuchtturm = db.select().from(locations).all()[0];
+    const leuchtturm = db
+      .select()
+      .from(locations)
+      .where(eq(locations.id, "leuchtturm"))
+      .all()[0];
     expect(leuchtturm?.id).toBe("leuchtturm");
     expect(leuchtturm?.roll20Page).toBe("Leuchtturm");
     expect(leuchtturm?.body).toContain("[!readaloud]");
@@ -278,7 +272,7 @@ describe("AK1 — examples/beispiel imports completely and cleanly", () => {
     const { db } = await freshDb();
     await runInitialMigration(db, tmpRoot);
     // The store layer maintains the FTS index explicitly; the migration is
-    // its first writer. Reference queries from the planning.
+    // its first writer.
     const hit = (q: string) =>
       db
         .all<{ entity_id: string; kind: string }>(
@@ -296,7 +290,7 @@ describe("AK1 — examples/beispiel imports completely and cleanly", () => {
     // bm25 with the schema's weights ranks TITLE hits above a body-only one.
     expect(leucht.indexOf("leuchtturm")).toBeLessThan(leucht.indexOf("jorna"));
 
-    // Glossary entries are indexed too (planning section 2).
+    // Glossary entries are indexed too.
     expect(hit("Leuchtturmwärter")).toContain("lighthouse keeper");
     // Tag search, and the diacritics folding the tokenizer was chosen for.
     expect(hit("travel")).toContain("lighthouse-arrival");
@@ -304,9 +298,9 @@ describe("AK1 — examples/beispiel imports completely and cleanly", () => {
   });
 });
 
-// --- AK2: broken fixtures degrade, nothing is lost, nothing aborts ----------
+// --- broken fixtures degrade, nothing is lost, nothing aborts ---------------
 
-describe("AK2 — broken fixtures degrade with a report", () => {
+describe("broken fixtures degrade with a report", () => {
   const BROKEN_YAML = `---
 id: kaputt
 title: [unclosed
@@ -416,12 +410,20 @@ Freitext ganz oben, der zu keinem Begriff gehört.
     // 8. unknown file type and a path the format does not describe.
     expect(reasonFor("notizen.txt").join(" ")).toContain("Keine Markdown-Datei");
     expect(reasonFor("npcs/alt/fenn.md").join(" ")).toContain("Unterordner");
+    // 9. references that name nothing in THIS tree — the copied scene brings
+    //    a `location:` and an `npcs:` entry along. Both are left out and
+    //    reported; the import creates neither.
+    expect(reasonFor("01-kapitel/aaa-original.md").join(" ")).toContain("hat keinen Ort im Baum");
+    expect(reasonFor("01-kapitel/aaa-original.md").join(" ")).toContain(
+      "dazu gibt es keinen NPC im Baum",
+    );
 
     // NOTHING IS TOUCHED: the files stay in the tree, the report names them.
     expect(new Set(report.map((r) => r.path))).toEqual(
       new Set([
         "01-kapitel/ort/kaputt.md",
         "01-kapitel/ort/nackt.md",
+        "01-kapitel/aaa-original.md",
         "01-kapitel/zzz-kollision.md",
         "sessions/2026-02-01.md",
         "glossary.md",
@@ -478,10 +480,10 @@ Freitext ganz oben, der zu keinem Begriff gehört.
   });
 });
 
-// --- review follow-ups: the content-loss holes ------------------------------
+// --- the content-loss holes -------------------------------------------------
 //
-// Every test here is one review finding. They all guard the same rule: the
-// migration may degrade and it may report, but it may never lose a line.
+// Every test here guards the same rule: the migration may degrade and it may
+// report, but it may never lose a line.
 
 describe("no silent content loss", () => {
   /** A scratch campaign with just the files a test needs. */
@@ -584,6 +586,11 @@ describe("no silent content loss", () => {
   test("`scenes_played` keeps repetitions and their order", async () => {
     const id = await campaignWith({
       "_campaign.md": "---\nid: review\n---\n",
+      "01-x/_chapter.md": "---\nid: 01-x\ntitle: Kapitel\n---\n",
+      // The two scenes the list names — a played scene is a reference, so
+      // there is an entry for each of them.
+      "01-x/hafen.md": "---\nid: hafen\ntitle: Am Hafen\n---\n",
+      "01-x/leuchtturm.md": "---\nid: leuchtturm\ntitle: Im Turm\n---\n",
       "sessions/2026-03-03.md":
         "---\nid: 2026-03-03\nscenes_played: [hafen, leuchtturm, hafen]\n---\n",
     });
@@ -605,7 +612,7 @@ describe("no silent content loss", () => {
       "_campaign.md": "---\nid: review\n---\n",
       "01-x/_chapter.md": "---\nid: 01-x\ntitle: Kapitel\n---\n",
       // Nothing survives the transliteration, so there is no id to derive —
-      // and the field used to be dropped in silence (issue #100 review).
+      // and the field used to be dropped in silence.
       "01-x/szene.md": "---\nid: szene\ntitle: Szene\nlocation: \"???\"\n---\n\nText.\n",
     });
     const { db } = await freshDb();
@@ -657,9 +664,9 @@ describe("no silent content loss", () => {
   });
 });
 
-// --- AK3: idempotency ---------------------------------------------------------
+// --- idempotency --------------------------------------------------------------
 
-describe("AK3 — a second run does nothing", () => {
+describe("a second run does nothing", () => {
   test("the marker makes the second run a no-op", async () => {
     const { db } = await freshDb();
     const first = await runInitialMigration(db, tmpRoot);
@@ -766,9 +773,9 @@ describe("AK3 — a second run does nothing", () => {
   });
 });
 
-// --- AK4: the source tree stays byte-identical ------------------------------
+// --- the source tree stays byte-identical -----------------------------------
 
-describe("AK4 — the file tree is left untouched", () => {
+describe("the file tree is left untouched", () => {
   test("the campaign root is byte-identical before and after the migration", async () => {
     const before = await hashTree(tmpRoot);
     const filesBefore = new Set<string>();

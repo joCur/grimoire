@@ -1,5 +1,4 @@
-// The write side of the store: every write endpoint as database
-// statements.
+// The write side of the store: every write endpoint as database statements.
 //
 // What is UNCHANGED (this is the contract the ported tests pin):
 //
@@ -7,9 +6,9 @@
 //     touched, rendered by ./render;
 //   * optimistic concurrency still answers `409 { error, rev }` — only
 //     the token behind `rev` is now the row's `rev` instead of a file
-//     rev. That is what fixes the old hole: two writes inside the same second
-//     used to see the same rev and both went through; two writes against
-//     the same `rev` cannot;
+//     rev. That is what fixes the same-second race: two writes inside the
+//     same second used to see the same rev and both went through; two writes
+//     against the same `rev` cannot;
 //   * the session state machine keeps its answers and codes
 //     (`session_running`, `session_not_empty` — `session_ended` is gone with
 //     the resume semantics), and
@@ -21,7 +20,7 @@
 //
 // What is NEW: a write is one TRANSACTION that also bumps
 // `campaigns.version` — the counter `GET /version` answers, which replaced
-// the chokidar watcher (DECISIONS #9, planning section 4). Both the content
+// the chokidar watcher (DECISIONS #9). Both the content
 // change and the version bump commit together, so a client poll can never
 // see a bumped version without the change.
 
@@ -34,6 +33,7 @@ import {
   isSessionEmpty,
   toSlug,
   type CampaignSummary,
+  type ErrorCode,
   type ErrorField,
   type ErrorKind,
   type EntryResponse,
@@ -45,12 +45,7 @@ import { ApiError } from "../api-error";
 import { assertSafeAddress, assertSafeCampaignId } from "../addressing";
 import { localDate, localDateTimeSeconds, localTime, now } from "../clock";
 import type { GrimoireDb } from "../db/client";
-import {
-  logLineShortHash,
-  parseGlossaryBody,
-  parseRelationsSection,
-  removeRelationLines,
-} from "../db/import-markdown";
+import { logLineShortHash, parseGlossaryBody } from "../db/import-markdown";
 import {
   campaignKnowledge,
   campaigns,
@@ -60,7 +55,6 @@ import {
   inboxEntries,
   locations,
   logEntries,
-  npcRelations,
   npcs,
   packJson,
   unpackJson,
@@ -85,7 +79,6 @@ import {
   pauseRows,
   pickSession,
   playedScenes,
-  relationRows,
   renderSessionRow,
   requireCampaign,
   sessionRow,
@@ -111,7 +104,6 @@ import {
   renderInbox,
   renderLocation,
   renderNpc,
-  renderNpcBody,
   renderScene,
   type CampaignRow,
   type ChapterRow,
@@ -341,26 +333,14 @@ function indexScene(tx: GrimoireDb, campaign: string, row: SceneRow, tags: strin
   reindexReferrers(tx, campaign, row.id);
 }
 
-/**
- * ONE rule for the npc index (they disagreed before: a properties patch
- * indexed the STRIPPED body, a body save the full one — so a search for a
- * relationship note stopped matching after an unrelated status change):
- * the indexed text is the npc's FULL text, `## Beziehungen`
- * included, exactly as `GET /entry` renders it.
- */
-function indexNpc(
-  tx: GrimoireDb,
-  campaign: string,
-  row: NpcRow,
-  relations: Array<{ otherNpcId: string; note: string }>,
-): void {
+function indexNpc(tx: GrimoireDb, campaign: string, row: NpcRow): void {
   indexEntity(tx, campaign, {
     kind: "npc",
     entityId: row.id,
     title: row.name === "" ? row.id : row.name,
     ref: row.id,
     tags: row.role ?? "",
-    body: expandBodyRefs(tx, campaign, renderNpcBody(row, relations)),
+    body: expandBodyRefs(tx, campaign, row.body),
   });
   reindexReferrers(tx, campaign, row.id);
 }
@@ -482,59 +462,78 @@ function chapterIdExists(tx: GrimoireDb, campaign: string, id: string): boolean 
 }
 
 /**
- * A `chapter:` a patch DECLARES has to exist — 400 otherwise.
- *
- * Chapters are the one reference kind that is deliberately NOT created by
- * naming it (ADR #14): for a scene the chapter is part of the ADDRESS, and a
- * scene under an unknown chapter has no node to hang in. An npc's and a
- * location's `chapter:` is only a soft grouping, and it used to be stored
- * unchecked — so the same typo produced a 400 in one dialog and a silent
- * dangling id in the next, and the properties form promised "wird angelegt"
- * for all three. One rule for all three kinds now, and the form says it.
- *
- * Only a CHANGED value is checked: the migration imports what a file era
- * campaign holds, and an unrelated `PATCH { status }` re-sends the stored
- * chapter — refusing that would make legacy stock unsavable.
+ * The 400 a reference that names nothing answers — one shape for all of
+ * them. `code` is the contract (`@grimoire/shared/error-codes`); the app
+ * builds the sentence the DM reads from it and the `value`, and the English
+ * text here is the technical fallback.
  */
-function assertChapterRef(
+function unknownRef(code: ErrorCode, kind: string, value: string): ApiError {
+  return new ApiError(400, `unknown ${kind}: ${value} — create it first`, { code, value });
+}
+
+/** A `chapter:` — of a scene, an npc or a location — has to name a chapter. */
+function assertChapterRef(tx: GrimoireDb, campaign: string, declared: string | null): void {
+  if (declared === null) return;
+  if (chapterIdExists(tx, campaign, declared)) return;
+  throw unknownRef("chapter_unknown", "chapter", declared);
+}
+
+/** A scene's `location` has to name a location entry. */
+function assertLocationRef(tx: GrimoireDb, campaign: string, id: string | null): void {
+  if (id === null) return;
+  if (locationRowOf(tx, campaign, id) !== undefined) return;
+  throw unknownRef("location_unknown", "location", id);
+}
+
+/**
+ * Every entry of a scene's `npcs` has to name an npc entry.
+ *
+ * This is also what answers a NAME typed where an id belongs („Alte
+ * Fischerin"): no npc has that id, so the list names something that does not
+ * exist — one rule, one sentence, instead of a second error about the shape
+ * of the value.
+ */
+function assertNpcRefs(tx: GrimoireDb, campaign: string, ids: readonly string[]): void {
+  for (const id of ids) {
+    if (id === "" || npcRowOf(tx, campaign, id) !== undefined) continue;
+    throw unknownRef("npc_unknown", "npc", id);
+  }
+}
+
+/**
+ * A scene a session names — the scene of a quick note, or one in the played
+ * list. Two codes for one check, because the two sentences differ: one is
+ * about the note being written, the other about a list being saved.
+ */
+function assertSceneRef(
   tx: GrimoireDb,
   campaign: string,
-  declared: string | null,
-  current: string | null,
+  id: string,
+  code: "log_scene_unknown" | "played_scene_unknown",
 ): void {
-  if (declared === null || declared === current) return;
-  if (chapterIdExists(tx, campaign, declared)) return;
-  throw new ApiError(400, `unknown chapter: ${declared} — create the chapter first`);
+  if (sceneRowOf(tx, campaign, id) !== undefined) return;
+  throw unknownRef(code, "scene", id);
 }
 
 function nextPos(rows: Array<{ pos: number }>): number {
   return rows.reduce((max, row) => Math.max(max, row.pos), -1) + 1;
 }
 
-// --- "referencing creates" ---------------------------------------------------
+// --- references, and what an entry is ---------------------------------------
 //
-// In the file era a referenced id without a file was a legal, permanent hole:
-// the app showed "NPC-Eintrag fehlt" and offered a stub. In the database
-// an npc without information IS a row with an id and a name, so a
-// reference can be EMPTY but never MISSING. Every write that INTRODUCES a
-// reference therefore creates the referenced row in the SAME transaction:
-// scene `npcs`, a scene `location` that is a slug, and the counterpart of a
-// `## Beziehungen` line — in the UI write paths and in the generator's apply
-// step alike.
+// A reference names an entry that EXISTS — the database says so (schema.ts
+// rule 3), and the assertions above are what turns a write that names
+// something else into one readable sentence instead of a constraint error.
 //
-// THE BOUNDARY, and it is deliberate: only a KEBAB-CASE SLUG is a reference.
-// For `location` that is the ONLY legal value — the group a
-// scene sits in IS its location, so `location: Der alte Hafen` cannot be
-// text-that-means-nothing any more and is rejected with
-// `400 location_not_an_id`, suggestion included. The format's one ambiguous
-// field is gone; what the file era left behind was carried over ONCE by the
-// data step (db/group-migration.ts), not by a blanket backfill.
+// Nothing here creates an entry as a side effect. The paths that DO create
+// one are countable: the create endpoints at the bottom of this file,
+// `createNpcStub` (the review's „#npc line becomes an npc", which the DM
+// clicks), and accepting a generator proposal — including `ensureChapterRow`
+// inside that accept, which writes the chapter the run itself decided on
+// (ADR #18). Nowhere else.
 //
-// ONLY NEW references are created on a properties patch — for `npcs`, whose
-// stored values may still be legacy names: materialising THOSE would turn a
-// name nobody meant as an id into an entity nobody authored. A scene's
-// `location` is ensured on EVERY patch, because an
-// unusable value cannot be stored in the first place.
+// A `[[slug]]` in a body is not a reference in this sense. It is text, it
+// stays text, and an unknown one renders as exactly what the DM typed.
 
 /**
  * The `npcs.status` column default (schema.ts) — "nothing is claimed". Named
@@ -542,33 +541,19 @@ function nextPos(rows: Array<{ pos: number }>): number {
  */
 const NPC_DEFAULT_STATUS = "unknown";
 
-/** An empty row for `id`, unless the id is no slug or already has a row. */
-function ensureNpcRow(tx: GrimoireDb, campaign: string, id: string): boolean {
-  if (!ENTITY_SLUG.test(id)) return false;
-  if (npcRowOf(tx, campaign, id) !== undefined) return false;
-  // Nothing but the id: `name` stays "" because the id IS the display name
-  // until somebody types one (render.ts applies that fallback once), and
-  // `status` keeps its column default — an empty entry claims nothing.
-  tx.insert(npcs).values({ campaignId: campaign, id }).run();
-  const row = npcRowOf(tx, campaign, id);
-  if (row !== undefined) indexNpc(tx, campaign, row, []);
-  return true;
-}
-
 /**
  * The chapter of a GENERATED scene, created if it has none of its own.
  *
- * Not the „Referenzieren legt an" rule of ADR #14 — that one deliberately
- * stops at chapters, because a chapter a DM typed into a dialog is a typo
- * worth a 400. Here nobody typed anything: the run itself decided the chapter
- * (and, for a „Neues Kapitel" run, its title), so the accept has to be able
- * to write it. Without this a scene ends up under a chapter that has no entry
- * — and the overview lists chapters, so the chapter and every scene in it
- * would be unreachable.
+ * The ONE write that brings an entry into existence without the DM naming it
+ * in a dialog, and it is not a mention creating anything: the run itself
+ * decided the chapter (and, for a „Neues Kapitel" run, its title), so
+ * accepting the proposal has to be able to write it. Without this a scene
+ * ends up under a chapter that has no entry — and the overview lists
+ * chapters, so the chapter and every scene in it would be unreachable.
  *
- * Idempotent and quiet: false when the chapter is already there, and false for
- * an id that is no entity slug (the caller answers that with its own 400).
- * `planned` like every other creation path — a chapter the run brought is
+ * Idempotent and quiet: false when the chapter is already there, and false
+ * for an id that is no entity slug — `assertChapterRef` then answers for it.
+ * `planned` like every other creation path: a chapter the run brought is
  * upcoming, never the active one.
  */
 function ensureChapterRow(
@@ -599,12 +584,11 @@ function ensureChapterRow(
 /**
  * A scene's `location`, validated: an entity id, or null.
  *
- * The free-text exception the README used to grant is gone. `location` is a
- * REFERENCE — it is the scene's group and its address — so a value that
- * cannot be an id cannot be a group either; naming an id that has no row
- * CREATES the row (`ensureLocationRow`, the „Referenzieren legt an" rule),
- * and anything else is a 400 the app turns into a sentence with the
- * slug it would have used.
+ * `location` is a REFERENCE — it is the scene's group and its address — so a
+ * value that cannot be an id cannot be a group either. Free text is a 400
+ * that carries the slug it would have been, so the app can say which id to
+ * use; whether that id HAS an entry is the next question
+ * (`assertLocationRef`).
  */
 function sceneLocation(value: unknown): string | null {
   const raw = asOptStr(value);
@@ -616,7 +600,7 @@ function sceneLocation(value: unknown): string | null {
     throw new ApiError(
       400,
       `location "${trimmed}" is not a location id — a scene's location is a reference` +
-        (suggestion === "" ? "" : `; use "${suggestion}" (the entry is created for you)`),
+        (suggestion === "" ? "" : `; use "${suggestion}" and create that location first`),
       suggestion === ""
         ? { code: "location_not_an_id", value: trimmed }
         : { code: "location_not_an_id", value: trimmed, suggestion },
@@ -626,56 +610,18 @@ function sceneLocation(value: unknown): string | null {
 }
 
 /**
- * The same for a location — a scene's `location` when it is a slug.
+ * An entry that holds NOTHING but its id — what a DM leaves behind by
+ * creating an entry and not filling it in.
  *
- * `name` is the DISPLAY NAME the creator typed, and it is used ONLY when the
- * row is actually inserted: the properties form accepts
- * free text in the Ort field, slugs it and sends the slug in `location` plus
- * the typed text as `locationName`, so „Der alte Hafen" becomes the entry
- * `der-alte-hafen` CALLED „Der alte Hafen" instead of one called by its own
- * id. One write, one transaction — the app never has to create the location
- * first and patch second.
- *
- * An EXISTING location is never renamed by it. A name is a location's own
- * property, edited in its own dialog; a scene naming its group must not be
- * able to rewrite it (and two scenes spelling the same group differently
- * would otherwise fight over it on every save).
- */
-function ensureLocationRow(
-  tx: GrimoireDb,
-  campaign: string,
-  id: string,
-  name?: string,
-): boolean {
-  if (!ENTITY_SLUG.test(id)) return false;
-  if (locationRowOf(tx, campaign, id) !== undefined) return false;
-  // A name that IS the id is stored as "" — the empty name means "fall back
-  // to the id" everywhere it is rendered, same rule as the campaign row.
-  const display = name === undefined ? "" : name.trim();
-  tx.insert(locations)
-    .values({ campaignId: campaign, id, name: display === id ? "" : display })
-    .run();
-  const row = locationRowOf(tx, campaign, id);
-  if (row !== undefined) indexLocation(tx, campaign, row);
-  return true;
-}
-
-/**
- * An entry that holds NOTHING but its id — what `ensureNpcRow` creates, and
- * what a DM leaves behind by creating an entry and not filling it in.
- *
- * It matters in one place: the generator's apply step. A scene draft that
- * names `holm` creates the empty `holm` row, so the npc draft for `holm` in
- * the SAME batch (or a stub the DM referenced last week) would otherwise
- * collide with itself and answer the documented `409 { conflicts }` for a
- * target that has no content to lose. An empty row is therefore not a
- * conflict: the generated entity FILLS it.
+ * It matters in two places. The generator's apply step FILLS such an entry
+ * instead of answering the documented `409 { conflicts }` for a target that
+ * has no content to lose, and so does „NPC anlegen" for that same id. The
+ * rename cascade merges into one for the same reason.
  *
  * `status` COUNTS as information. An entry the DM only ever set to `dead` is
  * still a statement about that npc — the one field the live view acts on — so
  * an apply must not overwrite it silently; it answers the documented 409 like
- * any other filled row. Only the column DEFAULT is emptiness, and that is
- * exactly what `ensureNpcRow` leaves behind.
+ * any other filled row. Only the column DEFAULT is emptiness.
  */
 function isEmptyNpcRow(row: NpcRow): boolean {
   return (
@@ -727,89 +673,20 @@ function isEmptyJsonObject(packed: string): boolean {
   return trimmed === "" || trimmed === "{}";
 }
 
-/**
- * The BOOT BACKFILL — for npcs, and deliberately ONLY for npcs.
- *
- * Lazy creation alone would leave the migrated stock in the old state: a
- * scene that has listed `holm` since the file era keeps a dangling id until
- * somebody happens to save that scene. So every boot closes the gap for the
- * references that are UNAMBIGUOUS:
- *
- *   * `scene_npcs.npc_id` — the key of a list that only ever held npc ids;
- *   * `npc_relations.other_npc_id` — the counterpart of a `## Beziehungen`
- *     line, likewise an id by format.
- *
- * NOT `scenes.location`, and for a different reason than it used to be: the
- * field holds an id or nothing at all, and the stock was
- * carried over ONCE by the data step that derived it (db/group-migration.ts),
- * which creates every entry a scene references and reports it. There is
- * nothing left for a per-boot pass to close.
- *
- * Idempotent by construction (it only inserts what has no row) and cheap: two
- * anti-joins per campaign. Returns the ids it created, for the boot log.
- */
-export function backfillReferencedNpcs(tx: GrimoireDb, campaign: string): string[] {
-  const referenced = new Set<string>();
-  for (const row of tx
-    .select({ id: sceneNpcs.npcId })
-    .from(sceneNpcs)
-    .where(eq(sceneNpcs.campaignId, campaign))
-    .all()) {
-    referenced.add(row.id);
-  }
-  for (const row of tx
-    .select({ id: npcRelations.otherNpcId })
-    .from(npcRelations)
-    .where(eq(npcRelations.campaignId, campaign))
-    .all()) {
-    referenced.add(row.id);
-  }
-  const created: string[] = [];
-  for (const id of referenced) {
-    if (ensureNpcRow(tx, campaign, id)) created.push(id);
-  }
-  return created.sort();
-}
-
 // --- scene reference tables ---------------------------------------------------
 
 /**
- * `npcs:` HOLDS IDS, NOT NAMES.
- *
- * Unlike `location`, this list has no free-text half: the README calls it a
- * list of npc ids, the reading view resolves every entry to a card, and the
- * reference pass creates the row an entry names. A non-slug entry ("Alte
- * Fischerin") was storable, got no row — `ensureNpcRow` skips it — and then
- * rendered as a card that says "NPC nicht ladbar, Server prüfen", i.e. the
- * app blamed the server for a value it had accepted. So a NEW entry that is
- * no slug is rejected where the other slug rules live: 400, with the rule in
- * the message, and the chips input says the same thing before the save.
- *
- * `known` is what the scene ALREADY stores, and it is exempt: the migration
- * imports whatever a file era campaign holds (schema.ts rule 1, no foreign
- * keys), and refusing that on the way out would make a legacy scene
- * unsavable — an unrelated `PATCH { status }` re-sends the whole list. Old
- * free text stays until somebody removes it; nothing new joins it.
+ * Replace a scene's reference rows. The caller has checked the npc ids
+ * (`assertNpcRefs`); the rows are deleted and rewritten because `pos` — the
+ * authored order — is part of the content.
  */
-function assertNpcRefSlugs(npcRefs: string[], known: readonly string[]): void {
-  for (const id of npcRefs) {
-    if (id === "" || known.includes(id) || ENTITY_SLUG.test(id)) continue;
-    throw new ApiError(
-      400,
-      `npcs holds npc ids, not names: "${id}" is no kebab-case slug (a-z, 0-9, single dashes)`,
-    );
-  }
-}
-
 function replaceSceneRefs(
   tx: GrimoireDb,
   campaign: string,
   sceneId: string,
   npcRefs: string[],
   tags: string[],
-  known: readonly string[] = [],
 ): void {
-  assertNpcRefSlugs(npcRefs, known);
   tx.delete(sceneNpcs)
     .where(and(eq(sceneNpcs.campaignId, campaign), eq(sceneNpcs.sceneId, sceneId)))
     .run();
@@ -828,35 +705,6 @@ function replaceSceneRefs(
     seenTags.add(tag);
     tx.insert(sceneTags).values({ campaignId: campaign, sceneId, tag, pos }).run();
   });
-}
-
-function replaceRelations(tx: GrimoireDb, campaign: string, npcId: string, body: string): string {
-  const parsed = parseRelationsSection(body);
-  tx.delete(npcRelations)
-    .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.npcId, npcId)))
-    .run();
-  for (const relation of parsed.relations) {
-    // The counterpart gets its own (empty) row if it has none.
-    // Until now `npc_relations` was asymmetrically legal: a relation TO an
-    // npc without a row was storable, one FROM it was not (the owner side
-    // has a foreign key). Both sides are rows now.
-    if (relation.otherNpcId !== npcId) ensureNpcRow(tx, campaign, relation.otherNpcId);
-    tx.insert(npcRelations)
-      .values({
-        campaignId: campaign,
-        npcId,
-        otherNpcId: relation.otherNpcId,
-        note: relation.note,
-        pos: relation.pos,
-      })
-      .run();
-  }
-  // Only the LINES that became rows leave the body — the renderer puts those
-  // back. Everything the parser could not turn into a relation (prose under
-  // the heading, a note without a colon, a second line for a counterpart that
-  // already has a row) stays exactly where it stands: `removeSection` used to
-  // cut the whole span, and with it the DM's text.
-  return removeRelationLines(body);
 }
 
 /**
@@ -881,7 +729,7 @@ export function reindexEntity(
   }
   if (kind === "npc") {
     const row = npcRowOf(tx, campaign, id);
-    if (row !== undefined) indexNpc(tx, campaign, row, relationRows(tx, campaign, id));
+    if (row !== undefined) indexNpc(tx, campaign, row);
     return;
   }
   if (kind === "location") {
@@ -960,26 +808,15 @@ function rejectIdPatch(patch: Record<string, unknown>, current: string): void {
   throw new ApiError(400, "id is the primary key — use POST /rename to change it");
 }
 
-/**
- * Side values a patch may carry that are NOT properties keys.
- * `locationName` is the display name for the location a scene's
- * `location` CREATES — see `ensureLocationRow`; it is ignored when the row
- * already exists, so it can never rename anything.
- */
-export interface PatchOptions {
-  locationName?: string;
-}
-
 export async function patchProperties(
   campaign: string,
   rel: string,
   rev: number,
   patch: Record<string, unknown>,
-  options: PatchOptions = {},
 ): Promise<EntryResponse> {
   assertSafeAddress(rel);
   const locator = locatorFromPath(rel);
-  return mutate(campaign, (tx) => patchLocator(tx, campaign, locator, rev, patch, options));
+  return mutate(campaign, (tx) => patchLocator(tx, campaign, locator, rev, patch));
 }
 
 function patchLocator(
@@ -988,7 +825,6 @@ function patchLocator(
   locator: Locator,
   rev: number,
   patch: Record<string, unknown>,
-  options: PatchOptions = {},
 ): EntryResponse {
   switch (locator.kind) {
     case "campaign": {
@@ -1050,28 +886,36 @@ function patchLocator(
       guardRev(row.rev, rev, "scene changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, SCENE_KEYS, row.extra);
-      const npcsBefore = refNpcs(tx, campaign, row.id);
-      const before = renderScene(row, npcsBefore, refTags(tx, campaign, row.id));
+      const before = renderScene(
+        row,
+        refNpcs(tx, campaign, row.id),
+        refTags(tx, campaign, row.id),
+      );
       const fm = applyPatch(before.properties, patch);
       const npcRefs = asStrArray(fm.npcs);
       const tags = asStrArray(fm.tags);
       // The chapter a scene belongs to is part of its ADDRESS (the path), so
-      // a patch may MOVE the scene — but only into a chapter that exists
-      // (400 otherwise: a scene under an unknown chapter has no node to hang
-      // in and would drop out of the tree). It cannot be removed: a scene
-      // without a chapter has no address.
-      const declared = asOptStr(fm.chapter);
-      if (declared === null || declared === undefined) {
-        throw new ApiError(400, "chapter cannot be removed — a scene belongs to a chapter");
+      // a patch may MOVE the scene — but only into a chapter that exists. It
+      // cannot be removed: a scene without a chapter has no address.
+      const declared: string | null = asOptStr(fm.chapter);
+      if (declared === null) {
+        throw new ApiError(400, "chapter cannot be removed — a scene belongs to a chapter", {
+          code: "chapter_required",
+        });
       }
-      assertChapterRef(tx, campaign, declared, row.chapterId);
+      // Every reference first, so a save that names something unknown is
+      // refused before anything is written.
+      assertChapterRef(tx, campaign, declared);
+      const nextLocation = sceneLocation(fm.location);
+      assertLocationRef(tx, campaign, nextLocation);
+      assertNpcRefs(tx, campaign, npcRefs);
       const next: SceneRow = {
         ...row,
         title: asStr(fm.title, row.id),
         type: asStr(fm.type, "planned"),
         trigger: asOptStr(fm.trigger),
         chapterId: declared,
-        location: sceneLocation(fm.location),
+        location: nextLocation,
         status: asStr(fm.status, "draft"),
         handouts: packJson(asStrArray(fm.handouts)),
         extra: extraOf(fm, SCENE_KEYS),
@@ -1091,24 +935,10 @@ function patchLocator(
         })
         .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
         .run();
-      // Referencing creates — only what this patch ADDS, see the note
-      // above `ensureNpcRow`.
-      for (const npcId of npcRefs) {
-        if (!npcsBefore.includes(npcId)) ensureNpcRow(tx, campaign, npcId);
-      }
-      // `location`, in contrast, is ensured on EVERY patch, changed or not.
-      // It is also the scene's GROUP, so this is the write
-      // that MOVES the scene: the address in the response is built from the
-      // new value and the app follows it.
-      // The properties dialog promises "wird beim Speichern angelegt" for a
-      // slug-shaped value, and with the change-guard a save left a dangling
-      // OLD slug exactly as it was — the hint lied about the stock the DM is
-      // most likely to look at. Idempotent and cheap (one lookup), and it
-      // creates nothing the field does not already name.
-      if (next.location !== null) {
-        ensureLocationRow(tx, campaign, next.location, options.locationName);
-      }
-      replaceSceneRefs(tx, campaign, row.id, npcRefs, tags, npcsBefore);
+      // `location` is also the scene's GROUP, so this is the write that MOVES
+      // the scene: the address in the response is built from the new value
+      // and the app follows it.
+      replaceSceneRefs(tx, campaign, row.id, npcRefs, tags);
       indexScene(tx, campaign, next, tags);
       return renderScene(next, refNpcs(tx, campaign, row.id), refTags(tx, campaign, row.id));
     }
@@ -1118,10 +948,10 @@ function patchLocator(
       guardRev(row.rev, rev, "npc changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, NPC_KEYS, row.extra);
-      const fm = applyPatch(renderNpc(row, relationRows(tx, campaign, row.id)).properties, patch);
+      const fm = applyPatch(renderNpc(row).properties, patch);
       const quickstats = asMap(fm.quickstats);
       const npcChapter = asOptStr(fm.chapter);
-      assertChapterRef(tx, campaign, npcChapter, row.chapterId);
+      assertChapterRef(tx, campaign, npcChapter);
       const next: NpcRow = {
         ...row,
         name: asStr(fm.name, row.id),
@@ -1150,9 +980,8 @@ function patchLocator(
         })
         .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, row.id)))
         .run();
-      const relations = relationRows(tx, campaign, row.id);
-      indexNpc(tx, campaign, next, relations);
-      return renderNpc(next, relations);
+      indexNpc(tx, campaign, next);
+      return renderNpc(next);
     }
     case "location": {
       const row = locationRowOf(tx, campaign, locator.id);
@@ -1162,7 +991,7 @@ function patchLocator(
       rejectUnknownKeys(patch, LOCATION_KEYS, row.extra);
       const fm = applyPatch(renderLocation(row).properties, patch);
       const locationChapter = asOptStr(fm.chapter);
-      assertChapterRef(tx, campaign, locationChapter, row.chapterId);
+      assertChapterRef(tx, campaign, locationChapter);
       const next: LocationRow = {
         ...row,
         name: asStr(fm.name, row.id),
@@ -1246,6 +1075,10 @@ function patchSessionRow(
     .run();
 
   const played = asStrArray(fm.scenes_played);
+  for (const sceneId of played) {
+    if (sceneId === "") continue;
+    assertSceneRef(tx, campaign, sceneId, "played_scene_unknown");
+  }
   tx.delete(sessionScenesPlayed)
     .where(
       and(
@@ -1306,7 +1139,7 @@ function patchSessionRow(
  * grow by rows through their own endpoints, never by a body rewrite.
  *
  * The glossary is the one body that is DECOMPOSED on the way in: it is a
- * table now (planning F6), so the markdown the editor sends is parsed back
+ * table now, so the markdown the editor sends is parsed back
  * into term/explanation rows — the same parser the migration used, so what
  * the DM types and what a migrated file produced agree.
  */
@@ -1332,9 +1165,9 @@ export async function writeEntryBody(
 
 /**
  * The body write itself, INSIDE a caller's transaction. Split out of
- * `writeEntryBody` for the augment run: „Mit KI ergänzen" accepts properties
- * and body of one entry together, and that is ONE
- * transaction with one rev guard — two `mutate` calls would be two.
+ * `writeEntryBody` because „Mit KI ergänzen" accepts properties and body of
+ * one entry together, and that has to be ONE transaction with one rev guard
+ * — two `mutate` calls would be two.
  */
 function writeBodyIn(
   tx: GrimoireDb,
@@ -1385,17 +1218,15 @@ function writeBodyIn(
       const row = npcRowOf(tx, campaign, locator.id);
       if (row === undefined) throw new ApiError(404, "entry not found");
       guardRev(row.rev, rev, "npc changed");
-      // `## Beziehungen` in the edited body becomes rows again — the
-      // renderer puts the section back, so an edit there is not lost.
-      const stripped = replaceRelations(tx, campaign, row.id, body);
-      const next: NpcRow = { ...row, body: stripped, rev: row.rev + 1 };
+      // The whole text is stored as it was written, `## Beziehungen`
+      // included: nothing in the storage is derived from body text.
+      const next: NpcRow = { ...row, body, rev: row.rev + 1 };
       tx.update(npcs)
         .set({ body: next.body, rev: next.rev })
         .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, row.id)))
         .run();
-      const relations = relationRows(tx, campaign, row.id);
-      indexNpc(tx, campaign, next, relations);
-      return renderNpc(next, relations);
+      indexNpc(tx, campaign, next);
+      return renderNpc(next);
     }
     case "location": {
       const row = locationRowOf(tx, campaign, locator.id);
@@ -1461,15 +1292,15 @@ function writeBodyIn(
  * client found it, and the patch runs against the rev that write produced.
  * Both halves see the same transaction, so a conflict in either rolls the
  * whole accept back and nothing is half-written. Everything a normal write
- * does — FTS, `[[slug]]` reference rows, the „referencing creates" rule —
- * happens because these are the very same code paths.
+ * does — the search index, the reference checks — happens because these are
+ * the very same code paths.
  *
  * The answer is the LAST render, so a move is already in the path the client
  * gets back.
  *
  * `jobId` discards the augment job the proposal came from, in the SAME
- * transaction as the write (drafts and job can never
- * disagree after a crash). A stale id matches nothing and is ignored.
+ * transaction as the write (drafts and job can never disagree after a
+ * crash). A stale id matches nothing and is ignored.
  */
 export async function writePropertiesAndBody(
   campaign: string,
@@ -1569,7 +1400,7 @@ export async function writeGlossary(
   });
 }
 
-// --- the campaign_knowledge table --------------------------------------------
+// --- the campaign_knowledge table ----------------------------------------------
 
 /**
  * PUT /api/:campaign/knowledge `{ entries, rev }` -> the stored list + its
@@ -1710,17 +1541,16 @@ export async function startSession(campaign: string): Promise<EntryResponse> {
     const today = localDate(d);
     const active = pickSession(tx, campaign, false);
     // "Is the running session TODAY's?" is answered by `started`, not by the
-    // id — the id is opaque since the PO decision and says
-    // nothing about a day.
+    // id — the id is opaque and says nothing about a day.
     //
-    // The old degrade of this check is GONE with
-    // it: an id that did not parse as a date could never be "today", so a
-    // hand-edited row answered every start with a 409 the DM had to clear by
-    // hand. A row whose `started` is unreadable is not the "running session"
-    // in the first place — it has no place in the chronology (store/read.ts
-    // `sessionOrderKey`) — so `pickSession` never returns it here and the next
-    // start simply opens a new session. `startedDate` therefore only ever
-    // decides between today and an EARLIER day.
+    // The old degrade of this check is GONE with it: an id that did not parse
+    // as a date could never be "today", so a hand-edited row answered every
+    // start with a 409 the DM had to clear by hand. A row whose `started` is
+    // unreadable is not the "running session" in the first place — it has no
+    // place in the chronology (store/read.ts `sessionOrderKey`) — so
+    // `pickSession` never returns it here and the next start simply opens a new
+    // session. `startedDate` therefore only ever decides between today and an
+    // EARLIER day.
     if (active !== undefined && startedDate(active.started) !== today) {
       throw new ApiError(409, "another session is still running — end it first", {
         code: "session_running",
@@ -1788,11 +1618,24 @@ function closeOpenPauses(
   return true;
 }
 
-/** Append one log line row (append-only: existing rows are never rewritten). */
+/**
+ * Append one log line row (append-only: existing rows are never rewritten).
+ *
+ * The parenthesis group is a PARSE COLUMN of the line, not something the DM
+ * wrote as a reference: a note that happens to begin with „(…)" would
+ * otherwise name a scene nobody meant. So it becomes the scene reference
+ * only when a scene of that id exists, and stays part of `raw` otherwise —
+ * the text of a note is never refused or thrown away over that. The
+ * reference a quick note MEANS arrives as the endpoint's own `sceneId` and
+ * is checked there.
+ */
 function appendLogRow(tx: GrimoireDb, campaign: string, sessionId: string, raw: string): void {
   const rows = logRows(tx, campaign, sessionId);
   const LOG_LINE = /^-\s+(\d{1,2}:\d{2})(?:\s+\(([^)]+)\))?\s+(.+)$/;
   const m = LOG_LINE.exec(raw);
+  const marker = m?.[2] ?? null;
+  const markedScene =
+    marker !== null && sceneRowOf(tx, campaign, marker) !== undefined ? marker : null;
   tx.insert(logEntries)
     .values({
       campaignId: campaign,
@@ -1800,7 +1643,7 @@ function appendLogRow(tx: GrimoireDb, campaign: string, sessionId: string, raw: 
       pos: nextPos(rows),
       raw,
       at: m?.[1] ?? null,
-      sceneId: m?.[2] ?? null,
+      sceneId: markedScene,
       text: m?.[3] ?? null,
       hash: logLineShortHash(raw),
       reviewed: 0,
@@ -1893,6 +1736,9 @@ export async function appendLogEntry(
   }
   return mutate(campaign, (tx) => {
     const row = requireActive(tx, campaign);
+    // The note's scene is a reference: it has to name a scene that exists,
+    // and nothing is created for it.
+    if (sceneId !== undefined) assertSceneRef(tx, campaign, sceneId, "log_scene_unknown");
     const raw = `- ${localTime(now())}${sceneId ? ` (${sceneId})` : ""} ${text}`;
     appendLogRow(tx, campaign, row.id, raw);
     if (sceneId !== undefined) {
@@ -2116,13 +1962,15 @@ export { ENTITY_SLUG };
 
 /**
  * POST /api/:campaign/review/npc-stub — the review's "#npc line becomes an
- * npc". CREATE OR LINK: the caller's goal is that this id has an
- * entry afterwards, so the endpoint is idempotent.
+ * npc". This is one of the two ways an entry comes into existence, and it is
+ * an explicit one: the DM clicks it on a log line. CREATE OR LINK — the
+ * caller's goal is that this id has an entry afterwards, so it is idempotent.
  *
  *   * no row      -> create it with the given name and the log text under
  *                   `## Notizen`;
- *   * EMPTY row   -> fill it (a reference created it, and the review
- *                   is the first thing that knows a name and a note);
+ *   * EMPTY row   -> fill it (the DM created it earlier and typed nothing,
+ *                   and the review is the first thing that knows a name and
+ *                   a note);
  *   * filled row  -> return it UNTOUCHED, so the app links to what is there.
  *                   Nothing is overwritten, and the old `409 { path }` is
  *                   gone: it made the DM correct an id that was right.
@@ -2146,10 +1994,7 @@ export async function createNpcStub(
     const body = note === undefined ? "\n## Notizen\n" : `\n## Notizen\n\n- ${note}\n`;
     const existing = npcRowOf(tx, campaign, id);
     if (existing !== undefined) {
-      if (!isEmptyNpcRow(existing)) {
-        const relations = relationRows(tx, campaign, id);
-        return renderNpc(existing, relations);
-      }
+      if (!isEmptyNpcRow(existing)) return renderNpc(existing);
       tx.update(npcs)
         .set({ name: name ?? "", body, rev: existing.rev + 1 })
         .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, id)))
@@ -2163,8 +2008,8 @@ export async function createNpcStub(
     }
     const row = npcRowOf(tx, campaign, id);
     if (row === undefined) throw new ApiError(500, "npc could not be created");
-    indexNpc(tx, campaign, row, []);
-    return renderNpc(row, []);
+    indexNpc(tx, campaign, row);
+    return renderNpc(row);
   });
 }
 
@@ -2198,6 +2043,17 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       const npcRefs = asStrArray(fm.npcs);
       const tags = asStrArray(fm.tags);
       const draftLocation = sceneLocation(fm.location);
+      // The scene's chapter is written in THIS transaction, before the scene
+      // itself: a „Neues Kapitel" run creates its chapter from the run's own
+      // state (generator.ts `jobChapterTarget`), and this is the net under
+      // it. Everything else the scene references has to be there already —
+      // the drafts are sorted so the entries a scene names go in first
+      // (`inReferenceOrder`), and a proposal that names one the batch does
+      // not bring along is refused instead of leaving a hole behind.
+      if (locator.chapterId !== null) ensureChapterRow(tx, campaign, locator.chapterId);
+      assertChapterRef(tx, campaign, locator.chapterId);
+      assertLocationRef(tx, campaign, draftLocation);
+      assertNpcRefs(tx, campaign, npcRefs);
       const pos =
         (tx
           .select({ pos: scenes.pos })
@@ -2206,21 +2062,6 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           .orderBy(desc(scenes.pos))
           .limit(1)
           .all()[0]?.pos ?? -1) + 1;
-      // The scene's chapter is written in THIS transaction, before the scene
-      // itself. A „Neues Kapitel" run creates its chapter from the run's own
-      // state (generator.ts `jobChapterTarget`), so the entry normally exists
-      // with the title the DM typed; this is the net under it, and it names
-      // the chapter by its id. A chapter id that is no entity slug gets none
-      // and is the honest 400 instead of a scene nothing can reach.
-      if (locator.chapterId !== null && locator.chapterId !== undefined) {
-        ensureChapterRow(tx, campaign, locator.chapterId);
-        if (chapterRowOf(tx, campaign, locator.chapterId) === undefined) {
-          throw new ApiError(
-            400,
-            `unknown chapter: ${locator.chapterId} — create the chapter first`,
-          );
-        }
-      }
       tx.insert(scenes)
         .values({
           campaignId: campaign,
@@ -2237,13 +2078,6 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           pos,
         })
         .run();
-      // Referencing creates: a generated scene may name an npc or a
-      // location the campaign does not have yet. The validation asks the
-      // model to ship a stub for it, but a draft that slips through must not
-      // leave a dangling id behind — it gets an empty row, and a stub in the
-      // same batch fills that row instead of colliding with it.
-      for (const npcId of npcRefs) ensureNpcRow(tx, campaign, npcId);
-      if (draftLocation !== null) ensureLocationRow(tx, campaign, draftLocation);
       replaceSceneRefs(tx, campaign, id, npcRefs, tags);
       const row = sceneRowOf(tx, campaign, id);
       if (row !== undefined) indexScene(tx, campaign, row, tags);
@@ -2251,71 +2085,49 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
     }
     case "npc": {
       const id = asStr(fm.id, locator.id);
-      // The `## Beziehungen` section becomes rows — but only AFTER the npc
-      // row exists: `npc_relations` has a foreign key on (campaign, npc_id),
-      // so inserting the relations first fails the constraint.
-      const parsedRelations = parseRelationsSection(draft.body);
-      // Only the parsed relation LINES leave the body — prose under the
-      // heading stays (see `replaceRelations`).
-      const stripped = removeRelationLines(draft.body);
+      const npcChapter = asOptStr(fm.chapter);
+      assertChapterRef(tx, campaign, npcChapter);
       const values = {
         name: asStr(fm.name, id),
         role: asOptStr(fm.role),
-        chapterId: asOptStr(fm.chapter),
+        chapterId: npcChapter,
         status: asStr(fm.status, NPC_DEFAULT_STATUS),
         statblock: asOptStr(fm.statblock),
         quickstats: packJson(asMap(fm.quickstats)),
         voice: asOptStr(fm.voice),
         appearance: asOptStr(fm.appearance),
-        body: stripped,
+        body: draft.body,
         extra: extraOf(fm, NPC_KEYS, misshapenQuickstats(fm.quickstats)),
       };
-      // An EMPTY row for this id already exists when something referenced the
-      // npc before it was written — a scene draft in this very batch, or a
-      // reference the DM typed last week. Filling it is the write the
-      // DM asked for; inserting would collide with a row that holds nothing.
+      // An entry the DM created and left empty is FILLED — inserting would
+      // collide with a row that holds nothing to lose.
       const existing = npcRowOf(tx, campaign, id);
       if (existing !== undefined) {
         tx.update(npcs)
           .set({ ...values, rev: existing.rev + 1 })
           .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, id)))
           .run();
-        tx.delete(npcRelations)
-          .where(and(eq(npcRelations.campaignId, campaign), eq(npcRelations.npcId, id)))
-          .run();
       } else {
         tx.insert(npcs)
           .values({ campaignId: campaign, id, ...values })
           .run();
       }
-      for (const relation of parsedRelations.relations) {
-        if (relation.otherNpcId !== id) ensureNpcRow(tx, campaign, relation.otherNpcId);
-        tx.insert(npcRelations)
-          .values({
-            campaignId: campaign,
-            npcId: id,
-            otherNpcId: relation.otherNpcId,
-            note: relation.note,
-            pos: relation.pos,
-          })
-          .run();
-      }
       const row = npcRowOf(tx, campaign, id);
-      if (row !== undefined) {
-        indexNpc(tx, campaign, row, relationRows(tx, campaign, id));
-      }
+      if (row !== undefined) indexNpc(tx, campaign, row);
       return;
     }
     case "location": {
       const id = asStr(fm.id, locator.id);
+      const locationChapter = asOptStr(fm.chapter);
+      assertChapterRef(tx, campaign, locationChapter);
       const values = {
         name: asStr(fm.name, id),
-        chapterId: asOptStr(fm.chapter),
+        chapterId: locationChapter,
         roll20Page: asOptStr(fm["roll20-page"]),
         body: draft.body,
         extra: extraOf(fm, LOCATION_KEYS),
       };
-      // Fill an empty row rather than collide with it — see the npc case.
+      // Fill an empty entry rather than collide with it — see the npc case.
       const existing = locationRowOf(tx, campaign, id);
       if (existing !== undefined) {
         tx.update(locations)
@@ -2394,13 +2206,13 @@ export async function applyDrafts(
 ): Promise<void> {
   try {
     await mutate(campaign, (tx) => {
-      // TWO drafts for ONE address are a conflict too. Since an
-      // empty npc/location row stopped being a conflict, the second draft no
-      // longer hit the primary key: it FILLED the row the first had just
-      // written, last write wins, and the review reported a clean apply for
-      // content it had silently dropped. The batch is the model's output —
-      // one hallucinated duplicate id is exactly the case — so the answer is
-      // the documented one, and it names both offenders.
+      // TWO drafts for ONE address are a conflict too. Since an empty entry
+      // stopped being a conflict, the second draft no longer hit the primary
+      // key: it FILLED the entry the first had just written, last write wins,
+      // and the review reported a clean apply for content it had silently
+      // dropped. The batch is the model's output — one hallucinated duplicate
+      // id is exactly the case — so the answer is the documented one, and it
+      // names both offenders.
       const duplicates = duplicateDraftRels(drafts);
       if (duplicates.length > 0) {
         throw new ApiError(409, "two drafts for the same target", { conflicts: duplicates });
@@ -2411,7 +2223,7 @@ export async function applyDrafts(
       if (conflicts.length > 0) {
         throw new ApiError(409, "target files already exist", { conflicts });
       }
-      for (const draft of drafts) insertDraft(tx, campaign, draft);
+      for (const draft of inReferenceOrder(drafts)) insertDraft(tx, campaign, draft);
       if (onWritten !== undefined) {
         onWritten(tx);
       } else if (jobId !== undefined) {
@@ -2429,6 +2241,39 @@ export async function applyDrafts(
     }
     throw error;
   }
+}
+
+/**
+ * How the kinds of a batch are inserted: a chapter before the entries that
+ * name it, an npc and a location before the scene that lists them. The
+ * constraints are checked per statement, so a batch that brings the stub
+ * along has to write the stub first — and the caller's order is the review's,
+ * which is about reading, not about references. Nothing else about the apply
+ * depends on it: the conflict check is one pass over the whole batch before
+ * any insert, and what a partial accept records is keyed by address.
+ */
+const REFERENCE_ORDER: Record<string, number> = {
+  campaign: 0,
+  chapter: 1,
+  npc: 2,
+  location: 2,
+  scene: 3,
+};
+
+/** The batch in that order, stable within a kind. */
+function inReferenceOrder(drafts: EntityDraft[]): EntityDraft[] {
+  const rank = (draft: EntityDraft): number => {
+    try {
+      return REFERENCE_ORDER[locatorFromPath(draft.rel).kind] ?? 4;
+    } catch {
+      // An address nothing can parse: `insertDraft` answers for it, last.
+      return 4;
+    }
+  };
+  return drafts
+    .map((draft, index) => ({ draft, index }))
+    .sort((a, b) => rank(a.draft) - rank(b.draft) || a.index - b.index)
+    .map((entry) => entry.draft);
 }
 
 /**
@@ -2454,10 +2299,22 @@ function duplicateDraftRels(drafts: EntityDraft[]): string[] {
     .sort();
 }
 
-/** A UNIQUE/PRIMARY KEY violation from either SQLite backend (ADR #13). */
+/**
+ * A UNIQUE/PRIMARY KEY violation from either SQLite backend (ADR #13) — the
+ * race the conflict check above cannot close, and the only constraint failure
+ * that means „the target is taken".
+ *
+ * NAMED CONSTRAINTS ONLY, deliberately. A plain /constraint/ also matched
+ * „FOREIGN KEY constraint failed", so a draft that named an entry the batch
+ * does not bring turned into a 409 listing every draft as an existing target
+ * — an answer about the wrong thing, and about entries that are not there.
+ * A reference that names nothing is a 400 with its own code, raised by the
+ * assertions before the insert; anything else is not this function's answer
+ * and travels on as the error it is.
+ */
 function isConstraintViolation(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /constraint/i.test(message);
+  return /(UNIQUE|PRIMARY KEY) constraint failed/i.test(message);
 }
 
 /** True when a generated target already exists (the apply step's 409). */
@@ -2476,9 +2333,9 @@ function draftTargetExistsIn(db: GrimoireDb, campaign: string, rel: string): boo
   switch (locator.kind) {
     case "scene":
       return sceneRowOf(db, campaign, locator.id) !== undefined;
-    // An EMPTY npc/location row is not a conflict: it holds nothing but
-    // an id — put there by a reference, not by an author — and the generated
-    // entity is exactly what fills it. A row with content still answers 409.
+    // An EMPTY npc/location entry is not a conflict: the DM created the id
+    // and typed nothing, and the generated entity is exactly what fills it.
+    // An entry with content still answers 409.
     case "npc": {
       const row = npcRowOf(db, campaign, locator.id);
       return row !== undefined && !isEmptyNpcRow(row);
@@ -2506,9 +2363,9 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
 //
 // Until now nothing in the app could bring a row into existence on purpose. A
 // row appeared as a side effect — the markdown import, the generator's apply
-// step, a reference that created its counterpart — so a fresh instance,
-// which is what every installation is, was a dead end. These
-// five functions are the deliberate half: campaign, chapter, scene, npc, ort.
+// step — so a fresh instance, which is what every installation is, was a dead
+// end. These five functions are the deliberate half:
+// campaign, chapter, scene, npc, ort.
 //
 // THE THREE RULES they all share, and they are the whole design:
 //
@@ -2529,18 +2386,19 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
 //      appear. The only exception is a chapter's optional goal, which goes
 //      into the section the pool reads it from (`## Ziel des Kapitels`).
 //
-// EMPTY ROWS ARE FILLED, NOT COLLIDED WITH — for npc and ort, the two kinds a
-// reference can create. An entry that holds nothing but its id was put
-// there by a mention, not by an author, and "NPC anlegen" for exactly that id
-// is what fills it. That is the same rule `createNpcStub` and the generator's
-// apply step already follow.
+// EMPTY ENTRIES ARE FILLED, NOT COLLIDED WITH — for npc and ort, the two kinds
+// that have an empty state at all. An entry that holds nothing but its id is
+// one the DM created and did not fill in, and "NPC anlegen" for exactly that
+// id is what fills it. That is the same rule `createNpcStub` and the
+// generator's apply step follow.
 //
-// …but only for the id the DM TYPED. An empty row is empty, not unclaimed: some
-// scene references it, so the id is already spoken for. Filling it is therefore
-// the DM's own decision about that one id, never something a machine-made
-// PROPOSAL may slide into: rule 2's `suggestion` skips every existing row,
-// empty ones included, so „Holm" next to a filled `holm` and a referenced empty
-// `holm-2` proposes `holm-3` — while typing „Holm 2" still fills `holm-2`.
+// …but only for the id the DM TYPED. An empty entry is empty, not unclaimed: a
+// scene may reference it, so the id is already spoken for. Filling it is
+// therefore the DM's own decision about that one id, never something a
+// machine-made PROPOSAL may slide into: rule 2's `suggestion` skips every
+// existing entry, empty ones included, so „Holm" next to a filled `holm` and
+// an empty `holm-2` proposes `holm-3` — while typing „Holm 2" still fills
+// `holm-2`.
 //
 // RESERVED IDS ARE NOT CREATABLE. `npcs`, `locations` and `sessions` are the
 // address schema's first segments (store/paths, RESERVED_SEGMENTS), so a
@@ -2779,8 +2637,8 @@ export async function setActiveChapter(campaign: string, id: string): Promise<En
  *
  * The chapter is REQUIRED and has to exist (400 otherwise): a scene's chapter
  * is part of its address, and a scene under an unknown chapter has no node to
- * hang in — the same rule `assertChapterRef` enforces for a properties patch
- * (ADR #14, chapters are not created by naming them).
+ * hang in — the same rule `assertChapterRef` enforces for a properties patch,
+ * and the same code (ADR #19, a mention creates nothing).
  *
  * A scene created here has no `location`, so it sits at chapter level and
  * the app lists it under „Ohne Ort". Setting one later is `PATCH /properties`
@@ -2797,7 +2655,7 @@ export async function createScene(
   assertSafeChapterId(chapter);
   return mutate(campaign, (tx) => {
     if (!chapterIdExists(tx, campaign, chapter)) {
-      throw new ApiError(400, `unknown chapter: ${chapter} — create the chapter first`);
+      throw unknownRef("chapter_unknown", "chapter", chapter);
     }
     const existing = sceneRowOf(tx, campaign, id);
     if (existing !== undefined) {
@@ -2844,9 +2702,9 @@ export async function createNpc(
   return mutate(campaign, (tx) => {
     const existing = npcRowOf(tx, campaign, id);
     if (existing !== undefined && !isEmptyNpcRow(existing)) {
-      // Any existing row is taken for the PROPOSAL — an empty one too: it is
-      // referenced, so proposing it would hand the DM someone else's entry
-      // under a name they never typed (see the notes above).
+      // Any existing row is taken for the PROPOSAL — an empty one too: the
+      // DM created that id, so proposing it would hand them somebody else's
+      // entry under a name they never typed (see the notes above).
       const suggestion = freeSlug(id, (candidate) => npcRowOf(tx, campaign, candidate) !== undefined);
       throw slugTaken("npc", id, suggestion, npcPath(id));
     }
@@ -2854,7 +2712,7 @@ export async function createNpc(
     if (existing === undefined) {
       tx.insert(npcs).values({ campaignId: campaign, id, name: stored }).run();
     } else {
-      // An empty row a reference left behind — this call fills it.
+      // An entry the DM created and left empty — this call fills it.
       tx.update(npcs)
         .set({ name: stored, rev: existing.rev + 1 })
         .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, id)))
@@ -2862,9 +2720,8 @@ export async function createNpc(
     }
     const row = npcRowOf(tx, campaign, id);
     if (row === undefined) throw new ApiError(500, "npc could not be created");
-    const relations = relationRows(tx, campaign, id);
-    indexNpc(tx, campaign, row, relations);
-    return renderNpc(row, relations);
+    indexNpc(tx, campaign, row);
+    return renderNpc(row);
   });
 }
 
@@ -2878,7 +2735,7 @@ export async function createLocation(
   return mutate(campaign, (tx) => {
     const existing = locationRowOf(tx, campaign, id);
     if (existing !== undefined && !isEmptyLocationRow(existing)) {
-      // Same as for an npc: an empty row is referenced, so it is never proposed.
+      // Same as for an npc: an empty entry is claimed, so it is never proposed.
       const suggestion = freeSlug(
         id,
         (candidate) => locationRowOf(tx, campaign, candidate) !== undefined,

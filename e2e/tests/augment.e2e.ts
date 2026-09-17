@@ -1,19 +1,19 @@
-// Critical path 6, the second half: „Mit KI ergänzen" (issue #36).
+// Critical path 6, the second half: „Mit KI ergänzen".
 //
 // The create runs of that path live in `generator.e2e.ts`; this spec is the
-// same pipeline pointed at an entry that ALREADY EXISTS, and it asserts the
-// four things the ticket's AK5 names:
+// same pipeline pointed at an entry that ALREADY EXISTS, and it asserts
+// four things:
 //
-//   a) an EMPTY npc — the row issue #70's „Referenzieren legt an" leaves
-//      behind — is augmented and its holes are filled,
+//   a) an EMPTY npc — an entry created and not filled in — is augmented and
+//      its holes are filled,
 //   b) a PREPARED scene gains a new plot thread as ADDITIONAL blocks while
 //      every existing block comes back byte for byte,
 //   c) rejecting the proposal writes nothing and takes the job with it,
 //   d) an entry that moves while the review is open answers 409 and nothing
 //      is written (ADR #4) — the review recovers on the re-read.
 //
-// Two of them carry AK2's default rule with them, because it is the sentence
-// the whole ticket turns on: „Default übernimmt nur Leeres/Neues; Gefülltes
+// Two of them carry the default rule with them, because it is the sentence
+// the whole feature turns on: „Default übernimmt nur Leeres/Neues; Gefülltes
 // wird nie still ersetzt." The npc reply therefore proposes a mix — two
 // fields the entry has nothing in, two it already has — and the spec checks
 // the PRESELECTION, not just the outcome.
@@ -45,7 +45,7 @@ import { expect, test, type Api } from "../support/test";
 const SCENE = "01-salzhafen/bucht/smuggler-captured";
 const SCENE_URL = `/beispiel/entry/${SCENE}`;
 
-/** The empty npc: created by REFERENCING it from that scene (issue #70). */
+/** The empty npc — created, never filled in. */
 const EMPTY_NPC = "spitzel";
 const NPC_PATH = `npcs/${EMPTY_NPC}`;
 const NPC_URL = `/beispiel/entry/${NPC_PATH}`;
@@ -53,11 +53,12 @@ const NPC_URL = `/beispiel/entry/${NPC_PATH}`;
 const INSTRUCTION = "Führe einen Handlungsstrang um den Schmuggler-Spitzel ein";
 
 /**
- * Reference the id from the scene's `npcs` list. That is the #70 path that
- * actually creates a row (a `[[slug]]` in prose does not), so this is how a
- * DM ends up with an entry that exists and says nothing.
+ * „NPC anlegen" with nothing but the id — how a DM ends up with an entry
+ * that exists and says nothing. The scene then references it, which is only
+ * possible BECAUSE it exists (ADR #19).
  */
-async function createEmptyNpcByReference(api: Api): Promise<void> {
+async function createEmptyNpc(api: Api): Promise<void> {
+  await api.send("POST", "beispiel/npcs", { name: EMPTY_NPC });
   await api.patchProperties(SCENE, { npcs: ["fenn", EMPTY_NPC] });
   const npc = await api.file(NPC_PATH);
   expect(npc.properties.name).toBe(EMPTY_NPC);
@@ -75,7 +76,7 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   page,
   api,
 }) => {
-  await createEmptyNpcByReference(api);
+  await createEmptyNpc(api);
 
   await page.goto(NPC_URL);
   await page.getByRole("button", { name: "Mit KI ergänzen" }).click();
@@ -87,7 +88,7 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   await expect(lead).toContainText(EMPTY_NPC);
   await expect(lead).not.toContainText("npcs/");
 
-  // Nothing may start without input (AK1: source text and/or instruction).
+  // Nothing may start without input (source text and/or instruction).
   const startButton = page.getByRole("button", { name: "Ergänzen", exact: true });
   await expect(startButton).toBeDisabled();
   await page.getByLabel("Anweisung (optional)").fill(INSTRUCTION);
@@ -97,7 +98,7 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   // The server job finishes and the review takes the dialog over.
   await expect(page.getByText("Vorhanden").first()).toBeVisible({ timeout: 30_000 });
 
-  // AK2, the defaults. `role` and `voice` are holes -> „Neu", preselected;
+  // The defaults: `role` and `voice` are holes -> „Neu", preselected;
   // `name` and `status` already carry a value -> „Geändert", KEPT.
   await expectDecision(page, "role", "Neu", "Übernehmen");
   await expectDecision(page, "voice", "Neu", "Übernehmen");
@@ -121,7 +122,7 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   await acceptButton(page).click();
   await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
 
-  // AK3: one transaction. The holes are filled …
+  // One transaction. The holes are filled …
   const npc = await api.file(NPC_PATH);
   expect(npc.properties.role).toBe(AUGMENT_NPC_ROLE);
   expect(npc.properties.voice).toBe(AUGMENT_NPC_VOICE);
@@ -178,7 +179,7 @@ test("prepared scene: the new thread is added, every existing block survives", a
   await expect(flowBlock()).toBeVisible();
   await expect(flowBlock().getByRole("button", { name: /^Behalten: / })).toHaveCount(0);
 
-  // The raw tab is the second surface of AK2 — a line/word diff over the
+  // The raw tab is the second surface of that rule — a line/word diff over the
   // whole body, with the added lines marked.
   await page.getByRole("button", { name: "Markdown", exact: true }).click();
   await expect(page.getByText(`## If: ${AUGMENT_THREAD_CONDITION}`)).toBeVisible();
@@ -202,14 +203,14 @@ test("prepared scene: the new thread is added, every existing block survives", a
   await expect(page.getByText(AUGMENT_THREAD_CONDITION)).toBeVisible();
 });
 
-test("block decisions survive a reload — the review state is on the job (#97)", async ({
+test("block decisions survive a reload — the review state is on the job", async ({
   page,
 }) => {
   await page.goto(SCENE_URL);
   await startAugment(page);
 
   // The one decision of this reply is the new `## If:` section, preselected
-  // („Neu" is taken by default, AK2).
+  // („Neu" is taken by default).
   const newBlock = () => page.locator("li").filter({ hasText: AUGMENT_THREAD_CONDITION }).last();
   const keep = () => newBlock().getByRole("button", { name: /^Behalten: / });
   await expect(newBlock()).toBeVisible({ timeout: 30_000 });
@@ -218,8 +219,8 @@ test("block decisions survive a reload — the review state is on the job (#97)"
     "true",
   );
 
-  // Decide AGAINST it and reload: before issue #97 the dialog came back with
-  // the default again and the DM's „behalten" was gone.
+  // Decide AGAINST it and reload: without the state on the job the dialog
+  // came back with the default again and the DM's „behalten" was gone.
   await keep().click();
   await expect(keep()).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("Gespeichert")).toBeVisible();
@@ -310,7 +311,7 @@ test("409: the entry moves while the review is open — nothing is written", asy
   expect(written).toContain("Jemand anderes hat die Szene umgeschrieben.");
 });
 
-test("the entry point: npc, location and scene — and nothing else (AK1)", async ({
+test("the entry point: npc, location and scene — and nothing else", async ({
   page,
 }) => {
   const action = page.getByRole("button", { name: "Mit KI ergänzen" });
@@ -336,7 +337,7 @@ test.describe("at 390px (critical path 8)", () => {
     page,
     api,
   }) => {
-    await createEmptyNpcByReference(api);
+    await createEmptyNpc(api);
     // What a desktop augment run leaves behind, written through the ordinary
     // API — the phone's job is to READ the result, not to review a diff.
     await api.writeBody(
@@ -456,7 +457,7 @@ function fieldRow(page: Page, key: string) {
     .first();
 }
 
-/** State badge and preselected decision of one properties field (AK2). */
+/** State badge and preselected decision of one properties field. */
 async function expectDecision(
   page: Page,
   key: string,
