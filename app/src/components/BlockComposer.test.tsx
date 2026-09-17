@@ -1,14 +1,13 @@
-// The composer's surface (issue #43, phase 2), rendered against the reference
-// scenes — not against invented blocks: what the DM meets is whatever the
-// phase-1 parser makes of the files in examples/.
+// The composer's surface (phase 2), rendered against the reference scenes —
+// not against invented blocks: what the DM meets is whatever the phase-1
+// parser makes of the fixture bodies.
 //
-// The checks are the ticket's acceptance criteria that a rendering can carry:
-// every block is a card with the reading view's own type label, every card can
-// be moved and deleted with a REAL BUTTON (AK 4 forbids drag-and-drop-only),
+// The checks are the acceptance criteria that a rendering can carry: every
+// block is a card with the reading view's own type label, every card can be
+// moved and deleted with a REAL BUTTON (drag-and-drop-only is forbidden),
 // If-section children get their own controls, the picker offers all types, and
 // each block type gets the form its fields deserve.
 
-import { parseMarkdown } from "@grimoire/shared";
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -31,16 +30,16 @@ import {
   InsertSlot,
 } from "./BlockComposer";
 
-const EXAMPLES = new URL("../../../examples/", import.meta.url);
+const FIXTURES = new URL("../../../fixtures/beispiel/", import.meta.url);
 
-function exampleBlocks(rel: string): SceneBlock[] {
-  // `rel` is an ADDRESS (issue #79); the committed fixture is still a file.
-  const raw = readFileSync(new URL(`${rel}.md`, EXAMPLES), "utf8");
-  return parseBlocks(parseMarkdown(raw, rel, 0).body);
+/** The blocks the phase-1 parser makes of a fixture entry's body. */
+function fixtureBlocks(name: string): SceneBlock[] {
+  const { body } = JSON.parse(readFileSync(new URL(name, FIXTURES), "utf8")) as { body: string };
+  return parseBlocks(body);
 }
 
-const ARRIVAL = "beispiel/01-salzhafen/hafen/ankunft-leuchtturm";
-const SMUGGLERS = "beispiel/01-salzhafen/hafen/von-schmugglern-erwischt";
+const ARRIVAL = "scene-lighthouse-arrival.json";
+const SMUGGLERS = "scene-smuggler-captured.json";
 
 function composer(blocks: SceneBlock[], issues: Record<string, string> = {}): string {
   return renderToStaticMarkup(
@@ -78,7 +77,7 @@ function firstSection(blocks: SceneBlock[]): IfSectionBlock {
 
 describe("the block list", () => {
   test("names every block of the reference scene in the reading view's words", () => {
-    const html = composer(exampleBlocks(ARRIVAL));
+    const html = composer(fixtureBlocks(ARRIVAL));
     for (const label of ["Überschrift", "Text", "Vorlesetext", "Probe", "Geheim", "Notiz"]) {
       expect(html).toContain(label);
     }
@@ -90,7 +89,7 @@ describe("the block list", () => {
   });
 
   test("every card carries move and delete buttons, named by type and position", () => {
-    const html = composer(exampleBlocks(ARRIVAL));
+    const html = composer(fixtureBlocks(ARRIVAL));
     expect(html).toContain('aria-label="Vorlesetext 3 nach oben"');
     expect(html).toContain('aria-label="Vorlesetext 3 nach unten"');
     expect(html).toContain('aria-label="Vorlesetext 3 bearbeiten"');
@@ -100,14 +99,14 @@ describe("the block list", () => {
   });
 
   test("the ends of the list have nothing to swap with", () => {
-    const html = composer(exampleBlocks(ARRIVAL));
+    const html = composer(fixtureBlocks(ARRIVAL));
     expect(html).toContain('aria-label="Überschrift 1 nach oben" disabled');
     expect(html).toContain('aria-label="Notiz 6 nach unten" disabled');
     expect(html).not.toContain('aria-label="Überschrift 1 nach unten" disabled');
   });
 
   test("there is an insert slot before, between and after the blocks", () => {
-    const blocks = exampleBlocks(ARRIVAL);
+    const blocks = fixtureBlocks(ARRIVAL);
     const html = composer(blocks);
     expect(occurrences(html, 'aria-label="Block an Position')).toBe(blocks.length + 1);
     expect(html).toContain('aria-label="Block an Position 1 einfügen"');
@@ -129,7 +128,7 @@ describe("the block list", () => {
 });
 
 describe("If-sections", () => {
-  const blocks = exampleBlocks(SMUGGLERS);
+  const blocks = fixtureBlocks(SMUGGLERS);
   const html = composer(blocks);
 
   test("the section shows its condition and nests its children as cards", () => {
@@ -183,13 +182,13 @@ describe("the type picker", () => {
   });
 
   test("closed by default — the slot is a quiet plus, not a permanent panel", () => {
-    expect(composer(exampleBlocks(ARRIVAL))).not.toContain("Block einfügen");
+    expect(composer(fixtureBlocks(ARRIVAL))).not.toContain("Block einfügen");
   });
 });
 
 describe("the per-block forms", () => {
   test("a callout gets one textarea with its text, markers stripped", () => {
-    const readaloud = exampleBlocks(ARRIVAL)[2];
+    const readaloud = fixtureBlocks(ARRIVAL)[2];
     if (readaloud === undefined) throw new Error("expected the readaloud callout");
     const html = fields(readaloud);
     expect(html).toContain('aria-label="Inhalt: Vorlesetext"');
@@ -224,7 +223,7 @@ describe("the per-block forms", () => {
   });
 
   test("a section's form is its condition", () => {
-    const html = fields(firstSection(exampleBlocks(SMUGGLERS)));
+    const html = fields(firstSection(fixtureBlocks(SMUGGLERS)));
     expect(html).toContain('aria-label="Bedingung des Falls-Abschnitts"');
     expect(html).toContain("sie geben zu, für Jorna zu arbeiten");
     expect(html).toContain("## If:");
@@ -250,7 +249,7 @@ describe("the per-block forms", () => {
 describe("a block that would break the file", () => {
   /** The smugglers scene with a `##` typed into the first section's first child. */
   function escaped(): { blocks: SceneBlock[]; issues: Record<string, string> } {
-    const blocks = exampleBlocks(SMUGGLERS);
+    const blocks = fixtureBlocks(SMUGGLERS);
     const child = firstSection(blocks).children[0];
     if (child === undefined) throw new Error("expected a child");
     const next = setBlockText(blocks, child.id, "## Flow");
@@ -268,7 +267,7 @@ describe("a block that would break the file", () => {
   });
 
   test("without issues no card carries a hint", () => {
-    expect(composer(exampleBlocks(SMUGGLERS))).not.toContain("beendet den Falls-Abschnitt");
+    expect(composer(fixtureBlocks(SMUGGLERS))).not.toContain("beendet den Falls-Abschnitt");
   });
 });
 
@@ -283,7 +282,7 @@ describe("re-render discipline", () => {
   });
 
   test("a keystroke replaces exactly one block object", () => {
-    const blocks = exampleBlocks(ARRIVAL);
+    const blocks = fixtureBlocks(ARRIVAL);
     const target = blocks[2];
     if (target === undefined) throw new Error("expected a block");
     const next = setBlockText(blocks, target.id, "Der Turm steht still.");
@@ -298,7 +297,7 @@ describe("re-render discipline", () => {
   });
 
   test("typing in a section's child re-creates that child and its section only", () => {
-    const blocks = exampleBlocks(SMUGGLERS);
+    const blocks = fixtureBlocks(SMUGGLERS);
     const section = firstSection(blocks);
     const child = section.children[1];
     if (child === undefined) throw new Error("expected a child");

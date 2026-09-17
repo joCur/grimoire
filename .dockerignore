@@ -1,5 +1,5 @@
 # Build context for the Dockerfile. Note what is deliberately NOT ignored:
-#   examples/  -> copied to /campaigns as the demo campaign (see Dockerfile)
+#   fixtures/  -> copied to /fixtures as the source `grimoire seed` reads
 #   generator/ -> prompt assets read at runtime by the generate endpoint
 
 # Installed per stage inside the image (host modules are the wrong platform).

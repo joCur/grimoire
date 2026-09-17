@@ -1,19 +1,19 @@
 // "/dev/markdown" — dev harness: renders the markdown pipeline against the
-// two reference fixtures from examples/ (imported via ?raw), so the callout
-// renderer is visually checkable without a running server. CLAUDE.md names
-// exactly these two files as the check for renderer changes.
+// reference fixtures (the callout reference) without a running server. The
+// fixtures are entries in the shape the API speaks, so the harness reads their
+// `body` the way the reading view does. CLAUDE.md names exactly these two
+// entries as the check for renderer changes.
 
-import lighthouseRaw from "../../../examples/beispiel/01-salzhafen/hafen/ankunft-leuchtturm.md?raw";
-import smugglersRaw from "../../../examples/beispiel/01-salzhafen/hafen/von-schmugglern-erwischt.md?raw";
+import lighthouseFixture from "../../../fixtures/beispiel/scene-lighthouse-arrival.json";
+import smugglersFixture from "../../../fixtures/beispiel/scene-smuggler-captured.json";
 
 import { useT } from "@/i18n";
 import { Markdown } from "@/markdown/Markdown";
 
-/** Splits a raw file into its properties block and the markdown body. */
-function splitProperties(raw: string): { properties: string; body: string } {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
-  if (!match) return { properties: "", body: raw };
-  return { properties: match[1] ?? "", body: raw.slice(match[0].length) };
+/** An entry fixture: its properties and its markdown body. */
+interface EntryFixture {
+  properties?: Record<string, unknown>;
+  body: string;
 }
 
 // Extra snippet exercising the degrade paths that the fixtures do not cover.
@@ -28,9 +28,9 @@ Ein Absatz innerhalb der Verzweigung.
 Text nach der Verzweigung, außerhalb des details-Elements.
 `;
 
-function Fixture({ name, raw }: { name: string; raw: string }) {
+function Fixture({ name, entry }: { name: string; entry: EntryFixture }) {
   const t = useT();
-  const { properties, body } = splitProperties(raw);
+  const { properties, body } = entry;
   return (
     <section className="space-y-3 border-t pt-6">
       <h2 className="font-mono text-sm text-muted-foreground">{name}</h2>
@@ -40,7 +40,7 @@ function Fixture({ name, raw }: { name: string; raw: string }) {
             {t("harness.properties")}
           </summary>
           <pre className="mt-2 overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">
-            {properties}
+            {JSON.stringify(properties, null, 2)}
           </pre>
         </details>
       )}
@@ -57,9 +57,9 @@ export function HarnessRoute() {
         <h1 className="text-lg font-semibold">{t("harness.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("harness.lead")}</p>
       </header>
-      <Fixture name="01-salzhafen/hafen/ankunft-leuchtturm.md" raw={lighthouseRaw} />
-      <Fixture name="01-salzhafen/hafen/von-schmugglern-erwischt.md" raw={smugglersRaw} />
-      <Fixture name="degrade-beispiele (inline)" raw={degradeSample} />
+      <Fixture name="scene-lighthouse-arrival" entry={lighthouseFixture as EntryFixture} />
+      <Fixture name="scene-smuggler-captured" entry={smugglersFixture as EntryFixture} />
+      <Fixture name="degrade-beispiele (inline)" entry={{ body: degradeSample }} />
     </div>
   );
 }

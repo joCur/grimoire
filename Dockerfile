@@ -32,11 +32,11 @@ RUN bun install --frozen-lockfile
 COPY tsconfig.base.json ./
 
 # The app imports @grimoire/shared as TypeScript source, so shared/ is part
-# of the build input. examples/ is needed too: the DEV-only markdown harness
-# (app/src/routes/harness.tsx) imports fixture files from it via `?raw`, so
-# the module must resolve even though it is tree-shaken out of the bundle.
+# of the build input. fixtures/ is needed too: the DEV-only harness
+# (app/src/routes/harness.tsx) imports the fixture JSON, so the modules must
+# resolve even though they are tree-shaken out of the bundle.
 COPY shared ./shared
-COPY examples ./examples
+COPY fixtures ./fixtures
 COPY app ./app
 RUN bun run --filter '@grimoire/app' build
 
@@ -69,13 +69,14 @@ COPY server/src ./server/src
 COPY generator ./generator
 COPY --from=build /app/app/dist ./app/dist
 
-# The example campaign ships in the image as the source `grimoire seed` reads
-# — a dev/E2E tool, never part of the boot (issue #79 AK6). A fresh container
-# starts EMPTY; the cold start is issue #56's subject.
-COPY --chown=bun:bun examples /examples
+# The fixtures ship in the image as the source `grimoire seed` reads:
+# `grimoire seed /fixtures` fills an empty /data with the example campaign for
+# a smoke test. Seeding is a dev/E2E tool, never part of the boot — a fresh
+# container starts EMPTY.
+COPY --chown=bun:bun fixtures /fixtures
 
 # GRIMOIRE_DATA is the only data setting left: the server reads and writes
-# GRIMOIRE_DATA/grimoire.db and knows no campaign tree (ADR #13, issue #79).
+# GRIMOIRE_DATA/grimoire.db and knows no other source (ADR #13).
 ENV GRIMOIRE_DATA=/data \
     PORT=3000
 

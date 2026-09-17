@@ -5,7 +5,7 @@ import { defineConfig } from "vite";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 
-// Build id burned into the bundle (issue #24). The Dockerfile's build stage
+// Build id burned into the bundle. The Dockerfile's build stage
 // passes the release tag as GRIMOIRE_BUILD; a plain `bun run build` has none
 // and gets "dev", which switches the version handshake off (see
 // src/lib/build-id.ts).
@@ -24,8 +24,8 @@ export default defineConfig({
       "/api": "http://localhost:3000",
     },
     fs: {
-      // The dev harness imports fixture files from /examples via `?raw`,
-      // and @grimoire/shared is consumed as TypeScript source — both live
+      // The dev harness imports the JSON fixtures from /fixtures, and
+      // @grimoire/shared is consumed as TypeScript source — both live
       // outside app/, so allow the whole repo root.
       allow: [repoRoot],
     },

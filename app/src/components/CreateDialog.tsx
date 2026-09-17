@@ -59,10 +59,10 @@ interface CreateDialogProps {
   nameLabel: string;
   /**
    * Hint inside the empty field. GENERIC by rule — it names the KIND of thing
-   * that belongs there („Titel der Szene", „Name des NPCs"), never an example
-   * lifted from `examples/` (PO feedback on issue #56): a placeholder that
-   * reads like real campaign content is taken for a default, and the sample
-   * campaign's names have no business in a fresh instance.
+   * that belongs there („Titel der Szene", „Name des NPCs"), never a name
+   * lifted from the fixtures: a placeholder that reads like real campaign
+   * content is taken for a default, and the example campaign's names have no
+   * business in a fresh instance.
    */
   namePlaceholder: string;
   /**

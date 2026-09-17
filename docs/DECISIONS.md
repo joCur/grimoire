@@ -353,11 +353,9 @@ Wahrheit für Kampagneninhalte. Kein Spiegel auf das Dateisystem, kein
 Auto-Export, kein Zwei-Wege-Abgleich — die Klasse von Konfliktproblemen, die
 ein Spiegel erzeugt, wird nicht gebaut.
 
-- **Markdown bleibt an genau zwei Stellen:** (a) als Quelle des Importers
-  (heute nur noch `grimoire seed`), (b) als Inhaltsformat der
-  `body`-Spalten. Das
-  Body-Vokabular aus README.md (Callouts, `## If:`, Hashtags) bleibt
-  normativ; das Datenformat-Kapitel wird zum „Import-Format (historisch)".
+- **Markdown ist das Inhaltsformat der `body`-Spalten** — und sonst nichts in
+  der Speicherung. Das Body-Vokabular aus README.md (Callouts, `## If:`,
+  Hashtags) ist normativ.
 - **Ein Body = ein Markdown-Feld,** in der UI als Markdown editierbar
   (PO-Entscheidung). „Blöcke als Zeilen" ist eine bewusst offen gelassene
   Später-Option; das Schema verbaut sie nicht.
@@ -425,10 +423,10 @@ Entscheidung selbst bleibt; das hier ist ihre Vollendung.
   — der Boot öffnet die Datenbank und wendet die Schema-Migrationen an, sonst
   nichts. `CAMPAIGN_ROOT` gibt es nicht mehr (weg aus Config, Dockerfile,
   Compose und DEPLOYMENT.md), `GET /api/:campaign/migration-report` und der
-  App-Hinweis dazu sind entfernt. Markdown einlesen ist ausschließlich das
-  **Dev-/E2E-Werkzeug `grimoire seed [dir]`** (Default `examples/`, Report auf
-  stdout), das denselben Importer fährt — Planung F5 bleibt: kein zweites
-  Fixture-Format. Der Kaltstart einer echten Kampagne ist ein eigenes Feature.
+  App-Hinweis dazu sind entfernt. Einträge in eine leere Datenbank zu
+  schreiben ist ausschließlich das **Dev-/E2E-Werkzeug `grimoire seed <dir>`**
+  (Report auf stdout), das die JSON-Fixtures über die Store-Schicht lädt
+  (ADR #20). Der Kaltstart einer echten Kampagne läuft in der UI.
 - **Adressen tragen keine Dateiendung.** `campaign`, `inbox`, `glossary`,
   `<kapitel>`, `<kapitel>/[<gruppe>/]<szenen-id>`, `npcs/<id>`,
   `locations/<id>`, `sessions/<id>` — das Schema steht abschließend in
@@ -674,10 +672,9 @@ konserviert, die diese Entscheidung beseitigt. Sie fällt weg; `store/paths.ts`
   Transliteration aus `@grimoire/shared/slug`. Er ist idempotent (die Spalte
   ist danach weg) und meldet beim Start jede Szene, deren Adresse sich
   geändert hat.
-- **Der Import** (`grimoire seed`) liest weiter `<kapitel>/<gruppe>/<szene>.md`
-  und setzt `location` aus der Gruppe, wenn das Frontmatter keines nennt —
-  `examples/` bleibt unverändert lesbar, die Beispielszenen landen unter
-  ihren Orten statt unter `hafen`.
+- **Die Fixtures nennen den Ort selbst:** jede Beispielszene trägt ihr
+  `location` in den Eigenschaften, und der Seed schreibt es unverändert —
+  eine Gruppe wird nirgends mehr aus einer Adresse abgeleitet.
 
 ## 18. Das Kapitel entsteht aus dem Lauf, sein Status ist ein Enum
 
@@ -791,3 +788,29 @@ keinen; `ON DELETE NO ACTION` sagt nur, dass ein solcher Weg eine eigene
 Entscheidung braucht) und ein Umgang mit Referenzen zwischen Kampagnen (die
 Fremdschlüssel schließen sie aus, weil `campaign_id` Teil jeder Referenz
 ist).
+
+## 20. Fixtures sind JSON-Einträge, es gibt keinen Import
+
+**Entscheidung:** Die Beispielkampagne liegt unter `fixtures/` als Einträge in
+der Form, die die API spricht — eine JSON-Datei je Eintrag mit `kind`, den
+Eigenschaften unter `properties` und dem Text unter `body`; Sessions, Ideen und
+Glossar tragen ihre Listen strukturiert. `grimoire seed <dir>` liest
+`<dir>/<kampagne>/*.json` und schreibt die Einträge über die Store-Schicht.
+Einen Markdown-Importer gibt es nicht.
+
+**Warum:** Der Importer war die Einmal-Migration einer alten
+Markdown-Kampagne. Kein Produktivpfad importiert, und wer die App frisch
+installiert, fängt nicht mit einem Verzeichnisbaum an, sondern legt seine
+Kampagne in der UI an. Ein Seed, der durch einen Parser läuft, prüft damit
+den Parser statt den Speicher — und Fixtures in der Form der API sind
+gleichzeitig die Referenz dafür, was die API antwortet.
+
+**Folgen:**
+
+- Die Spalte `extra` entfällt: sie hielt Felder, die nur ein Import
+  mitbringen konnte.
+- `shared/src/parse.ts` bleibt als Entwurfs-Parser des Generators, solange der
+  Generator Markdown mit Eigenschaften-Block liefert.
+- Die Planungsentscheidung F5 („kein zweites Datenformat für Fixtures") ist
+  zurückgezogen: es gibt genau ein Fixture-Format, und es ist das Format der
+  API.

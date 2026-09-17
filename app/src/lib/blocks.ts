@@ -1,8 +1,8 @@
-// The block model of the Block-Composer (issue #43, phase 1): parse a markdown
-// BODY (properties already stripped — same string as ParsedFile.body) into a
-// flat-ish list of editable blocks and serialize it back.
+// The block model of the Block-Composer (phase 1): parse a markdown BODY (the
+// same string the API answers as `body`) into a flat-ish list of editable
+// blocks and serialize it back.
 //
-// THE invariant, enforced by blocks.test.ts against every body in examples/:
+// THE invariant, enforced by blocks.test.ts against every fixture body:
 //
 //     serializeBlocks(parseBlocks(body)) === body     // byte-identical
 //
@@ -518,7 +518,7 @@ interface Unit {
  * Untouched blocks (those that still carry a `source`) are emitted verbatim,
  * which is what makes the round-trip byte-identical. Blocks without a source —
  * constructed or edited — are rendered from their fields in the house style of
- * examples/ and separated by one blank line; the last one gets a single
+ * the fixtures and separated by one blank line; the last one gets a single
  * trailing newline, because every body in the data set ends with exactly one.
  *
  * Two rules about EMPTINESS, both of them „the body gets what the DM meant,
@@ -681,11 +681,11 @@ function renderBlock(block: SceneBlock): string {
 }
 
 /**
- * House style for a callout (examples/, generator/example-output.json): the
+ * House style for a callout (the fixtures, generator/example-output.json): the
  * `[!kind]` marker and the text start on the SAME line, every line carries a
  * `> ` marker, an empty line inside the callout is a bare `>`.
  *
- * The examples wrap their prose at ~70 columns, but new blocks are serialized
+ * The fixtures wrap their prose at ~70 columns, but new blocks are serialized
  * UNWRAPPED — a soft break is a byte the DM did not type, re-wrapping edited
  * text would move lines the DM never touched, and the renderer collapses soft
  * breaks anyway. Hand-written wrapping in existing blocks is of course

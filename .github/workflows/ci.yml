@@ -110,9 +110,8 @@ jobs:
 
   # The critical paths of CLAUDE.md, end to end against the real stack: the
   # suite builds the app itself, starts one server process per test on its own
-  # freshly seeded database (imported from a copy of examples/beispiel through
-  # the real first-run migration) and points it at the local stub LLM
-  # (e2e/README.md).
+  # freshly seeded database (`grimoire seed` loads the entries of
+  # fixtures/beispiel) and points it at the local stub LLM (e2e/README.md).
   # Nothing is mocked in the browser, so this job is the strongest signal in
   # the gate a release hangs off.
   e2e:

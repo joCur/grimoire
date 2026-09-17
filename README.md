@@ -54,8 +54,8 @@ eigenen Seiten gepflegt und über `GET/PUT /api/:campaign/knowledge` bzw.
 Die Eigenschaften eines Eintrags sind seine strukturierten Felder. Sie
 heißen auf der Leitung `properties`; die App zeigt sie im
 Eigenschaften-Dialog, und `PATCH /properties` ändert genau die Felder, die
-der DM angefasst hat. Felder, die der Import mitgebracht hat und die kein
-Eintrag kennt, bleiben erhalten und lassen sich ändern oder löschen; neue legt
+der DM angefasst hat. Felder, die ein Eintrag mitbringt und die seine Art
+nicht kennt, bleiben erhalten und lassen sich ändern oder löschen; neue legt
 die API nicht an (400).
 
 ### Kampagne
@@ -220,7 +220,8 @@ in `## If:`-Abschnitten.
 ```
 
 (Im Callout steht die Tabelle unter demselben `>`-Block wie der Text — siehe
-die Szene „Ankunft am Leuchtturm" in `examples/`.)
+die Szene „Ankunft am Leuchtturm",
+`fixtures/beispiel/scene-lighthouse-arrival.json`.)
 
 - **Nur Tabellen.** Kein Durchgestrichen (`~~x~~`), **keine Aufgabenlisten**,
   keine Auto-Links, keine Fußnoten. `- [x]` bleibt bewusst normaler
@@ -321,32 +322,16 @@ der der Eigenschaften-Dialog gebaut wird —, den Text als einen String unter
 Eigenschaften-Block schreibt der Server selbst. Die Schemata liegen als
 lesbares JSON in `shared/schema/`; Details in `generator/README.md`.
 
-## Anhang: `grimoire seed`
+## Fixtures
 
-`grimoire seed [dir]` ist ein Dev-/E2E-Werkzeug (siehe `docs/DEPLOYMENT.md`
-Abschnitt 2b): es liest einen Markdown-Baum ein und schreibt daraus Einträge
-in eine Datenbank. Referenz und einzige Quelle für Tests und E2E ist die
-committete Beispielkampagne unter `examples/`; sie wird deshalb nie
-umformatiert. Der Server selbst liest keinen Baum — eine frische Instanz
-startet leer.
+Die Beispielkampagne liegt als JSON unter `fixtures/beispiel/` — ein Eintrag
+je Datei, genau in der Form, die die API spricht: `kind`, die
+strukturierten Felder unter `properties` und der Text als ein String unter
+`body`. Ideen, Glossar und Sessions tragen ihre Listen ebenso strukturiert.
+Sie ist die Referenz für Callouts und die einzige Quelle für Tests und E2E;
+die Bodies werden deshalb nie umformatiert.
 
-Im Baum stehen die Eigenschaften eines Eintrags als YAML-Block (`---` …
-`---`) über dem Text, mit denselben Feldnamen wie oben:
-
-```
-<kampagnen-id>/
-  _campaign.md              # optional; fehlt es, heißt die Kampagne wie der Ordner
-  <kapitel-id>/
-    _chapter.md
-    <orts-id>/              # setzt `location`, wenn die Szene keines nennt
-      <szene>.md
-  npcs/<id>.md
-  locations/<id>.md
-  sessions/<id>.md
-  inbox.md
-  glossary.md
-```
-
-Die `id` im YAML-Block gewinnt gegen den Dateinamen. Was der Import nicht
-versteht, übernimmt er nicht und nennt es im Bericht auf stdout — die Datei
-bleibt unverändert im Baum.
+`grimoire seed <dir>` ist das Dev-/E2E-Werkzeug dazu (siehe
+`docs/DEPLOYMENT.md` Abschnitt 2b): es liest `<dir>/<kampagne>/*.json` und
+schreibt die Einträge über die Store-Schicht in eine Datenbank. Der Server
+selbst seedet nichts — eine frische Instanz startet leer.

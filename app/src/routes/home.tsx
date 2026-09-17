@@ -20,8 +20,7 @@
 // The SECOND campaign is created from the topbar switcher instead, through the
 // same `useCampaignCreate` (components/CreateActions.tsx) — one create, two
 // surfaces. The field hints here are generic („Name der Kampagne"): a
-// placeholder naming a campaign out of `examples/` reads like a default (PO
-// feedback on issue #56).
+// placeholder naming the example campaign reads like a default.
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
