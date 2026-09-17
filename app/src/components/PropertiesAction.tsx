@@ -7,19 +7,9 @@
 // only the fields the DM actually changed are sent, so every key the form does
 // not know (and every field it did not touch) keeps its stored value.
 //
-// Two things are deliberately NOT in the form: the `id` (a reference key — the
-// rename dialog owns it, with its cascade) and the entity kind (derived from
-// the path). Both are shown as read-only context so the absence reads as a rule
-// rather than as a gap.
-//
-// The id is not just shown here, it is REACHABLE here: „id
-// ändern" in the footer is the only entry into the rename dialog (the header
-// button is gone). It is a secondary action on purpose — with references
-// resolving the current name, changing an id is a repair, not everyday
-// work. It replaces the properties dialog rather than stacking on top of it:
-// a successful rename navigates the reading view to the new path, and a
-// properties dialog left standing over it would hold the OLD entry's frozen
-// values.
+// Two things are deliberately NOT in the form: the `id` (fixed at creation,
+// ADR #21) and the entity kind (derived from the path). Both are shown as
+// read-only context so the absence reads as a rule rather than as a gap.
 //
 // The version the save is checked against is frozen when the dialog OPENS: the
 // 5s version poll keeps refetching the entry behind it, and following
@@ -40,7 +30,6 @@ import { useEffect, useState } from "react";
 
 import { PropertiesFieldControl } from "@/components/PropertiesFields";
 import { HeaderAction } from "@/components/HeaderAction";
-import { RenameDialog } from "@/components/RenameDialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -63,7 +52,6 @@ import {
   type FormValues,
   type PropertiesField,
 } from "@/lib/properties-form";
-import { renameTargetFor, type RenameTarget } from "@/lib/rename";
 import { usePropertiesFormMutation } from "@/lib/use-properties-form";
 
 /**
@@ -99,20 +87,12 @@ export function PropertiesAction({
   // because two campaigns can hold the same relative path (`npcs/jorna`).
   const entryKey = `${campaign}/${file.path}`;
   const [openFile, setOpenFile] = useState<string>();
-  // The rename dialog follows the same rule — and it is a SIBLING of the
-  // properties dialog, not a child: „id ändern" closes the form and opens it.
-  const [renameFile, setRenameFile] = useState<string>();
   const open = openFile === entryKey;
-  const renameOpen = renameFile === entryKey;
   // …and the state is dropped as well, so returning to the entry (Back into the
   // react-query cache) does not reopen a dialog nobody asked for.
   useEffect(() => {
     setOpenFile(undefined);
-    setRenameFile(undefined);
   }, [entryKey]);
-  // The renameable id of the entry on screen — undefined for the kinds the
-  // rename endpoint does not cover, and then the footer action is absent.
-  const renameTarget = renameTargetFor(file);
   const fields = propertiesFieldsFor(file.kind, t);
   const kindLabel = propertiesKindLabel(file.kind, t);
   if (fields === undefined || kindLabel === undefined) return null;
@@ -134,21 +114,7 @@ export function PropertiesAction({
           tree={tree}
           fields={fields}
           kindLabel={kindLabel}
-          renameTarget={renameTarget}
           onClose={() => setOpenFile(undefined)}
-          onChangeId={() => {
-            setOpenFile(undefined);
-            setRenameFile(entryKey);
-          }}
-        />
-      )}
-      {renameOpen && renameTarget !== undefined && (
-        <RenameDialog
-          key={entryKey}
-          campaign={campaign}
-          currentPath={file.path}
-          target={renameTarget}
-          onClose={() => setRenameFile(undefined)}
         />
       )}
     </>
@@ -161,19 +127,14 @@ function PropertiesDialog({
   tree,
   fields,
   kindLabel,
-  renameTarget,
   onClose,
-  onChangeId,
 }: {
   campaign: string;
   file: EntryResponse;
   tree: CampaignTree | undefined;
   fields: readonly PropertiesField[];
   kindLabel: string;
-  /** undefined for kinds the rename endpoint does not cover: no footer action. */
-  renameTarget: RenameTarget | undefined;
   onClose: () => void;
-  onChangeId: () => void;
 }) {
   const { t } = useI18n();
   // Both frozen at open, on purpose (see the file header): `initial` is what
@@ -186,9 +147,8 @@ function PropertiesDialog({
   // Text still standing in a chip input, per field key. It lives here so
   // „Speichern" can fold it into its list instead of dropping it.
   const [pending, setPending] = useState<Record<string, string>>({});
-  // What the pending „Verwerfen" would do once confirmed: just close, or
-  // hand over to the rename dialog. undefined = nothing pending.
-  const [discardIntent, setDiscardIntent] = useState<"close" | "rename">();
+  // Is a „Verwerfen" confirmation standing over the form?
+  const [discardPending, setDiscardPending] = useState(false);
 
   const save = usePropertiesFormMutation(
     campaign,
@@ -225,14 +185,8 @@ function PropertiesDialog({
   // untouched form just closes.
   const dirty = hasPropertiesChanges(fields, initial, effective, t);
   const requestClose = () => {
-    if (dirty) setDiscardIntent("close");
+    if (dirty) setDiscardPending(true);
     else onClose();
-  };
-  // „id ändern" leaves the form the same way: unsaved properties are not
-  // silently dropped just because the DM reaches for the other action.
-  const requestIdChange = () => {
-    if (dirty) setDiscardIntent("rename");
-    else onChangeId();
   };
 
   return (
@@ -262,9 +216,6 @@ function PropertiesDialog({
             <p className="text-[12px] text-body-secondary">
               {t("properties.id")}{" "}
               <span className="font-mono text-[12px] text-soft">{id ?? file.path}</span>
-              {renameTarget !== undefined && (
-                <span className="text-faint">{t("properties.id.viaRename")}</span>
-              )}
             </p>
             {fields.map((field) => {
               const value = values[field.key];
@@ -293,20 +244,7 @@ function PropertiesDialog({
             {save.message ?? ""}
           </p>
 
-          <div className="flex items-center justify-between gap-2">
-            {/* Deliberately not a Button: a quiet text action, so it does not
-                read as a third equal choice next to Abbrechen/Speichern. */}
-            {renameTarget !== undefined ? (
-              <button
-                type="button"
-                onClick={requestIdChange}
-                className="-mx-1 rounded-md px-1 py-1 text-[12px] text-muted-foreground underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
-              >
-                {t("properties.changeId")}
-              </button>
-            ) : (
-              <span />
-            )}
+          <div className="flex items-center justify-end gap-2">
             <div className="flex items-center gap-2">
             <Button
               type="button"
@@ -327,22 +265,16 @@ function PropertiesDialog({
           </div>
         </form>
       </DialogContent>
-      {discardIntent !== undefined && (
+      {discardPending && (
         <Dialog
           open
           onOpenChange={(isOpen) => {
-            if (!isOpen) setDiscardIntent(undefined);
+            if (!isOpen) setDiscardPending(false);
           }}
         >
           <DialogContent aria-describedby={undefined} className="max-w-[420px]">
             <DialogTitle>{t("properties.discard.title")}</DialogTitle>
-            <DialogDescription>
-              {t(
-                discardIntent === "rename"
-                  ? "properties.discard.rename"
-                  : "properties.discard.close",
-              )}
-            </DialogDescription>
+            <DialogDescription>{t("properties.discard.close")}</DialogDescription>
             <div className="mt-4 flex items-center justify-end gap-2">
               <DialogClose asChild>
                 <Button
@@ -357,10 +289,8 @@ function PropertiesDialog({
                 type="button"
                 variant="destructive"
                 onClick={() => {
-                  const intent = discardIntent;
-                  setDiscardIntent(undefined);
-                  if (intent === "rename") onChangeId();
-                  else onClose();
+                  setDiscardPending(false);
+                  onClose();
                 }}
                 className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
               >

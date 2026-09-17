@@ -14,7 +14,7 @@
 // spaces, the ellipsis character in „Speichere …“). Do not normalize them.
 //
 // SLICE 1: topbar incl. session chip, campaign switcher, the
-// five create dialogs, properties dialog + fields, rename dialog, cold start.
+// five create dialogs, properties dialog + fields, cold start.
 // Everything else still carries its literal strings and follows in slice 2.
 
 export const de = {
@@ -87,7 +87,7 @@ export const de = {
   "create.campaign.title": "Kampagne anlegen",
   "create.campaign.nameLabel": "Name der Kampagne",
   "create.campaign.namePlaceholder": "Name der Kampagne",
-  "create.campaign.idPrefix": "id: ",
+  "create.campaign.idPrefix": "Kennung: ",
   "create.campaign.descriptionLabel": "Beschreibung (optional)",
   "create.campaign.descriptionPlaceholder": "Ein Satz, der die Kampagne einordnet",
 
@@ -121,21 +121,17 @@ export const de = {
   "home.opening": "Kampagne wird geöffnet …",
   "coldstart.title": "Willkommen bei Grimoire",
   "coldstart.lead": "Noch keine Kampagne. Leg eine an — danach entstehen darin Kapitel und Szenen.",
-  "coldstart.id": "id: {id}",
+  "coldstart.id": "Kennung: {id}",
 
   // --- properties dialog ----------------------------------------------------
   "properties.action": "Eigenschaften",
   "properties.title": "{kind}: Eigenschaften",
   "properties.description":
     "Alle Eigenschaften dieses Eintrags. Gespeichert wird nur, was du geändert hast — alles andere bleibt unverändert stehen.",
-  "properties.id": "id",
-  "properties.id.viaRename": ' · unten über „id ändern“',
-  "properties.changeId": "id ändern",
+  "properties.id": "Kennung",
   "properties.discard.title": "Änderungen verwerfen?",
   "properties.discard.close":
     "Die geänderten Eigenschaften sind nicht gespeichert. Verwerfen schließt das Fenster und lässt den Eintrag so, wie er gespeichert ist.",
-  "properties.discard.rename":
-    "Die geänderten Eigenschaften sind nicht gespeichert. Verwerfen öffnet die id-Änderung und lässt den Eintrag so, wie er gespeichert ist.",
   "properties.discard.keepEditing": "Weiter bearbeiten",
   // The same question for LEAVING A PAGE whose save is explicit
   // (components/UnsavedChangesGuard.tsx); the title is shared.
@@ -156,9 +152,9 @@ export const de = {
   "properties.ref.unknown": "Unbekannt — Eintrag muss existieren.",
   "properties.ref.unknownLocation": "Unbekannt — Ort muss existieren.",
   "properties.issue.locationUnusable":
-    'Kein verwendbarer Name — „{value}“ ergibt keine Orts-id.',
+    'Kein verwendbarer Name — „{value}“ ergibt keine Orts-Kennung.',
   "properties.issue.notAnId":
-    '„{id}“ ist keine id — nur Kleinbuchstaben, Ziffern und Bindestriche.',
+    '„{id}“ ist keine Kennung — nur Kleinbuchstaben, Ziffern und Bindestriche.',
   "properties.issue.namelessRow": "Zeile ohne Namen — Name ergänzen oder Zeile entfernen.",
   "properties.issue.duplicateName":
     'Name „{name}“ doppelt — jeder Name darf nur einmal vorkommen.',
@@ -212,44 +208,6 @@ export const de = {
   "properties.chapter.status.done": "Abgeschlossen",
   "properties.chapter.status.hint":
     "Aktiv markiert das Kapitel, das die Session-Ansicht öffnet — es gibt genau eins; das vorherige wird wieder geplant.",
-
-  // --- rename dialog --------------------------------------------------------
-  "rename.title": "{kind}: id ändern",
-  "rename.description":
-    "Die neue id zieht alle Referenzen mit: Eigenschaften, Session-Log und „[[id]]“-Erwähnungen. Namen im Fließtext bleiben unverändert.",
-  "rename.newId.label": "neue id (aktuell {oldId})",
-  "rename.preview": "Vorschau",
-  "rename.previewing": "Prüfe …",
-  "rename.commit": "Umbenennen",
-  "rename.committing": "Benenne um …",
-
-  "rename.kind.npc": "NPC",
-  "rename.kind.location": "Ort",
-  "rename.kind.scene": "Szene",
-  "rename.kind.chapter": "Kapitel",
-
-  "rename.error.unchanged": "Unverändert — das ist schon die aktuelle id.",
-  "rename.error.slug": "id braucht Kleinbuchstaben, Ziffern und einzelne Bindestriche.",
-  "rename.error.reserved":
-    '„npcs“, „locations“ und „sessions“ sind reservierte Namen.',
-  "rename.failed": "Umbenennen fehlgeschlagen — Server prüfen.",
-  "rename.conflict.ambiguous": "Mehrere Einträge beanspruchen diese id — Konflikt in der Datenbank.",
-  "rename.conflict.path": "{path} existiert schon — andere id wählen.",
-  "rename.notFound": "Nicht gefunden — Ansicht neu laden.",
-  "rename.badId": "id abgelehnt — Kleinbuchstaben, Ziffern und einzelne Bindestriche.",
-
-  "rename.changed": "betrifft {count, plural, one {# Eintrag} other {# Einträge}}",
-  "rename.usage.total": "{count, plural, one {# Verwendung} other {# Verwendungen}}",
-  "rename.usage.none": "Keine Referenzen — nichts hängt an dieser id.",
-  "rename.usage.sceneNpcs": "{count, plural, one {# Szene} other {# Szenen}}",
-  "rename.usage.sceneLocation": "{count, plural, one {# Szene} other {# Szenen}}",
-  "rename.usage.scenesPlayed":
-    "{count, plural, one {# Session-Eintrag} other {# Session-Einträge}}",
-  "rename.usage.logEntries": "{count, plural, one {# Log-Zeile} other {# Log-Zeilen}}",
-  "rename.usage.chapterScenes": "{count, plural, one {# Szene} other {# Szenen}}",
-  "rename.usage.chapterNpcs": "{count, plural, one {# NPC} other {# NPCs}}",
-  "rename.usage.chapterLocations": "{count, plural, one {# Ort} other {# Orte}}",
-  "rename.usage.bodyRefs": "{count, plural, one {# Textstelle} other {# Textstellen}}",
 
   // --- settings page (/settings) --------------------------------------------
   "settings.title": "Einstellungen",
@@ -321,11 +279,11 @@ export const de = {
   // --- server error bodies (code -> sentence, see i18n/server-errors.ts) ----
   "server.slug_taken": '{kind} „{id}“ existiert schon — Vorschlag: „{suggestion}“',
   "server.slug_reserved": '„{id}“ ist ein reservierter Name — Vorschlag: „{suggestion}“',
-  "server.slug_empty": "{field} ergibt keine id — bitte Buchstaben oder Ziffern verwenden.",
+  "server.slug_empty": "{field} ergibt keine Kennung — bitte Buchstaben oder Ziffern verwenden.",
   "server.location_not_an_id":
-    'Der Ort „{value}“ ist keine Orts-id — „{suggestion}“ verwenden und den Ort zuerst anlegen.',
+    'Der Ort „{value}“ ist keine Orts-Kennung — „{suggestion}“ verwenden und den Ort zuerst anlegen.',
   "server.location_not_an_id.noSuggestion":
-    'Der Ort „{value}“ ist keine Orts-id — bitte Kleinbuchstaben, Ziffern und Bindestriche verwenden.',
+    'Der Ort „{value}“ ist keine Orts-Kennung — bitte Kleinbuchstaben, Ziffern und Bindestriche verwenden.',
   "server.location_unknown": 'Den Ort „{value}“ gibt es nicht — bitte zuerst anlegen.',
   "server.npc_unknown": 'Den NPC „{value}“ gibt es nicht — bitte zuerst anlegen.',
   "server.chapter_unknown": 'Das Kapitel „{value}“ gibt es nicht — bitte zuerst anlegen.',
@@ -536,9 +494,10 @@ export const de = {
   // `status: unknown` and `## Notizen` are FORMAT tokens on the wire (README),
   // so they stand verbatim in both languages.
   "npcCreate.description":
-    "Legt den NPC-Eintrag mit status: unknown an; der Text landet unter ## Notizen. Gibt es die id schon, wird auf den bestehenden Eintrag verwiesen.",
-  "npcCreate.idLabel": "id (steht im Pfad)",
+    "Legt den NPC-Eintrag mit status: unknown an; der Text landet unter ## Notizen. Gibt es die Kennung schon, wird auf den bestehenden Eintrag verwiesen.",
+  "npcCreate.idLabel": "Kennung (steht in der Adresse)",
   "npcCreate.idPlaceholder": "id-des-npcs",
+  "npcCreate.idInvalid": "Die Kennung braucht Kleinbuchstaben, Ziffern und einzelne Bindestriche.",
   "npcCreate.nameLabel": "Name (optional)",
 
   // --- shared verbs: ADD to the existing common block --------------------
@@ -571,7 +530,7 @@ export const de = {
   // --- campaign metadata dialog (components/CampaignMetaAction.tsx) --------
   "campaignMeta.title": "Kampagne bearbeiten",
   "campaignMeta.description":
-    "Name und Beschreibung der Kampagne. Die id bleibt, wie sie ist — sie steckt in jeder Adresse und ändert sich hier nicht.",
+    "Name und Beschreibung der Kampagne. Die Kennung bleibt, wie sie ist — sie steckt in jeder Adresse und ändert sich hier nicht.",
   "campaignMeta.field.name": "Name",
   "campaignMeta.field.description": "Beschreibung",
   "campaignMeta.field.description.placeholder": "Ein Satz, der die Kampagne einordnet",
@@ -610,16 +569,16 @@ export const de = {
   "generate.input.mode.npc": "NPC",
   "generate.input.npc.sourceLabel": "Quelltext",
   "generate.input.npc.sourcePlaceholder": "Bio, Hintergrund, Notizen zum NPC …",
-  "generate.input.npc.idLabel": "id (optional)",
+  "generate.input.npc.idLabel": "Kennung (optional)",
   "generate.input.npc.idPlaceholder": "z. B. grella",
-  "generate.input.npc.idHint": "leer lassen — dann wählt das Modell die id",
+  "generate.input.npc.idHint": "leer lassen — dann wählt das Modell die Kennung",
   "generate.input.npc.idPreview": "wird angelegt als: npcs/{id}",
   "generate.input.targetLabel": "Ziel-Kapitel",
   "generate.input.newChapter": "Neues Kapitel",
   "generate.input.newTitleLabel": "Kapiteltitel",
   "generate.input.newTitlePlaceholder": "Kapiteltitel, z. B. Die Schmugglerbucht",
   "generate.input.titleMissing": "Titel fehlt — er wird der Anzeigename des neuen Kapitels.",
-  "generate.input.chapterIdLabel": "Kapitel-id",
+  "generate.input.chapterIdLabel": "Kapitel-Kennung",
   "generate.input.chapterIdPlaceholder": "z. B. 03-schmugglerbucht",
   "generate.input.chapterIdSuggested": "wird aus dem Titel vorgeschlagen",
   "generate.input.chapterIdPreview": "wird angelegt als: {id}/",
@@ -643,16 +602,16 @@ export const de = {
   "generate.input.submit.npc": "NPC generieren",
 
   // --- generator: the two id fields' own rules (lib/generate.ts) -----------
-  "generate.input.chapterId.missing": "Kapitel-id fehlt.",
+  "generate.input.chapterId.missing": "Kapitel-Kennung fehlt.",
   "generate.input.chapterId.slash":
-    "Keine Schrägstriche — die Kapitel-id ist ein einzelnes Segment.",
-  "generate.input.chapterId.dots": "Kein „..“ in der Kapitel-id.",
+    "Keine Schrägstriche — die Kapitel-Kennung ist ein einzelnes Segment.",
+  "generate.input.chapterId.dots": "Kein „..“ in der Kapitel-Kennung.",
   "generate.input.chapterId.leadingDot": "Kein Punkt am Anfang.",
   "generate.input.chapterId.space": "Keine Leerzeichen — Wörter mit Bindestrich trennen.",
   "generate.input.chapterId.charset": "Nur Kleinbuchstaben, Ziffern und Bindestriche.",
   "generate.input.chapterId.reserved":
     '„npcs“, „locations“ und „sessions“ sind reserviert — kein Kapitelname.',
-  "generate.input.npcId.slash": "Keine Schrägstriche — die id ist ein einzelnes Segment.",
+  "generate.input.npcId.slash": "Keine Schrägstriche — die Kennung ist ein einzelnes Segment.",
   "generate.input.npcId.space": "Keine Leerzeichen — Wörter mit Bindestrich trennen.",
   "generate.input.npcId.charset":
     "Nur Kleinbuchstaben, Ziffern und Bindestriche; Anfang keine Bindestriche.",
@@ -668,7 +627,7 @@ export const de = {
     "Der Lauf ist nicht mehr vorhanden (Server-Neustart?) — erneut starten.",
   "generate.error.noApiKey": "ANTHROPIC_API_KEY fehlt — siehe server/.env",
   "generate.error.npcExists":
-    "NPC existiert schon — andere id wählen; bestehende Einträge werden nie überschrieben.",
+    "NPC existiert schon — andere Kennung wählen; bestehende Einträge werden nie überschrieben.",
   "generate.error.chapterMissing": "Kapitel nicht gefunden — anderes Ziel wählen.",
   "generate.error.failed": "Nicht generiert — Server prüfen.",
   "generate.error.validation":
@@ -875,7 +834,7 @@ export const de = {
   "sceneArticle.handout": "Handout: {handout}",
 
   // --- the aside cards (components/NpcCard.tsx, components/LocationCard.tsx) -
-  "npcCard.noId": "{id} — keine NPC-id, deshalb kein Eintrag.",
+  "npcCard.noId": "{id} — keine NPC-Kennung, deshalb kein Eintrag.",
   "npcCard.unloadable": "{id} — NPC nicht ladbar, Server prüfen.",
   "npcCard.will.inline": "Will:",
   "npcCard.will": "Will",

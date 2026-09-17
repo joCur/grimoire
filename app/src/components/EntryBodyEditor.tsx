@@ -17,8 +17,8 @@
 //
 // What the DM sees stays the same page: the header (title, chips, status
 // regler) keeps standing, only the body below it becomes editable. The
-// properties is not part of this by design — the status regler and the rename
-// action own the structured fields.
+// properties is not part of this by design — the status regler and the
+// properties dialog own the structured fields.
 //
 // Losing work is the one real risk here, so:
 //   * a conflict (409) keeps the draft and only says „Inzwischen geändert" —

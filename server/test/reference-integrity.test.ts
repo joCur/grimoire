@@ -432,48 +432,6 @@ describe("the generator's apply step", () => {
   });
 });
 
-describe("the rename cascade", () => {
-  test("a rename MERGES into an empty entry instead of answering 409", async () => {
-    await createEmptyNpc("holm");
-    const res = await app.request("/api/beispiel/rename", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: "npc", oldId: "jorna", newId: "holm" }),
-    });
-    expect(res.status).toBe(200);
-    // One reference left, and it is jorna's content that lives under the id.
-    expect((await getFile(SCENE)).properties.npcs).toEqual(["holm"]);
-    expect((await getFile("npcs/holm")).properties.name).toBe("Hafenmeisterin Jorna");
-    expect(await fileStatus("npcs/jorna")).toBe(404);
-  });
-
-  test("a scene listing BOTH ids merges instead of failing on the primary key", async () => {
-    // The cascade would move the `jorna` reference onto an id the same scene
-    // already lists — a primary-key collision no deferral covers, so the old
-    // row is dropped before the id moves.
-    await createEmptyNpc("holm");
-    await patchFm(SCENE, { npcs: ["jorna", "holm"] });
-
-    const res = await app.request("/api/beispiel/rename", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: "npc", oldId: "jorna", newId: "holm" }),
-    });
-    expect(res.status).toBe(200);
-    expect((await getFile(SCENE)).properties.npcs).toEqual(["holm"]);
-  });
-
-  test("a rename onto an entry with CONTENT is still a 409", async () => {
-    const res = await app.request("/api/beispiel/rename", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: "npc", oldId: "jorna", newId: "fenn" }),
-    });
-    expect(res.status).toBe(409);
-    expect((await getFile(NPC)).properties.name).toBe("Fenn");
-  });
-});
-
 describe("empty is not missing", () => {
   test("an empty inbox is an empty entry (200), not a missing one", async () => {
     const inbox = await getFile("inbox");

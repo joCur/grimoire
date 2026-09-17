@@ -5,7 +5,7 @@
 //
 // In a pure helper, take `Translate` as a parameter instead of importing a
 // catalog — the lib layer must not decide which language the UI is in
-// (lib/rename.ts, lib/create.ts, lib/properties-form.ts, lib/session.ts do it
+// (lib/create.ts, lib/properties-form.ts, lib/session.ts do it
 // that way).
 
 export { de } from "./de";

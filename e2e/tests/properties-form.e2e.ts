@@ -75,22 +75,19 @@ test("scene properties: chips, reference and status land in the file — nothing
   await page.goto(SCENE_URL);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ankunft am Leuchtturm");
 
-  // The header action row: the body editor and this form. „Umbenennen" is NOT
-  // among them any more — the id change lives in this dialog now.
+  // The header action row: the body editor and this form, nothing else.
   const headerActions = page
     .getByRole("article")
     .getByRole("button")
-    .filter({ hasText: /^(Bearbeiten|Eigenschaften|Umbenennen)$/ });
+    .filter({ hasText: /^(Bearbeiten|Eigenschaften)$/ });
   await expect(headerActions).toHaveText(["Bearbeiten", "Eigenschaften"]);
 
   const dialog = await openProperties(page);
   await expect(dialog).toContainText("Szene: Eigenschaften");
-  // The two values the form does NOT own are context, not fields: the id
-  // belongs to the rename dialog (with its cascade), the kind comes from the
-  // path — and the footer says where to change it.
+  // The two values the form does NOT own are context, not fields: the id is
+  // fixed at creation, the kind comes from the path.
   await expect(dialog).toContainText("lighthouse-arrival");
-  await expect(dialog).toContainText('unten über „id ändern“');
-  await expect(dialog.getByRole("button", { name: "id ändern" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "id ändern" })).toHaveCount(0);
   await expect(dialog.getByLabel("Titel")).toHaveValue("Ankunft am Leuchtturm");
   await expect(dialog.getByLabel("Status")).toHaveValue("ready");
 
@@ -222,7 +219,7 @@ test("the Ort field reads a name as its id — a missing Ort is refused", async 
 
   // Text no slug can be derived from is blocked by the form itself.
   await ort.fill("???");
-  await expect(dialog.getByText('„???“ ergibt keine Orts-id')).toBeVisible();
+  await expect(dialog.getByText('„???“ ergibt keine Orts-Kennung')).toBeVisible();
   await expect(save).toBeDisabled();
 
   // A name no Ort holds: typeable, and the hint says it has to exist.

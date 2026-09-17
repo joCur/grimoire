@@ -98,7 +98,7 @@
 //                                              be changed or deleted with null.
 //                                              `locationName` is the display name for the
 //                                              Ort a scene's `location` CREATES — applied
-//                                              only on insert, never a rename
+//                                              only on insert, never afterwards
 //   [x] PUT  /api/:campaign/entry              { path, rev, body } — write the markdown
 //                                              BODY of an existing entry;
 //                                              its properties are untouched (they are
@@ -252,8 +252,8 @@
 //                                              that names nothing is a 400 here too);
 //                                              `jobId` discards the job in the same
 //                                              transaction. `id` and the app-managed keys
-//                                              are refused (400) — an id change is
-//                                              POST /rename's job, with its cascade
+//                                              are refused (400) — an id is set once, at
+//                                              creation, and never changes (ADR #21)
 //   [x] POST /api/:campaign/generate/job/:id/parts/:key/retry -> 202 GenerateJob —
 //           „Erneut versuchen" for ONE part of a pipelined scene run.
 //           Re-runs only that part; the outline and the finished parts
@@ -314,36 +314,6 @@
 //                                              same batch; `npc` is the NPC run's single
 //                                              draft; jobId discards that job
 //                                              after a successful write.
-//   [x] POST /api/:campaign/rename             { kind, oldId, newId, dryRun? } ->
-//                                              { renamed: { from, to }, changed } — renames
-//                                              the id of an npc/location/scene/chapter and
-//                                              patches every reference site: scene npcs/
-//                                              location/chapter, session scenes_played,
-//                                              `## Beziehungen` lines, log scene markers,
-//                                              and the search index. Prose is NOT touched.
-//                                              CHANGED with the cutover: `from`/`to`
-//                                              are DOCUMENT paths for every kind, so a
-//                                              chapter reads `<id>` where the
-//                                              file version named the bare DIRECTORY —
-//                                              there is no directory to rename any more
-//                                              (store/paths.ts). A display name that was
-//                                              literally the old id follows the id.
-//                                              Plan-then-execute: 400/404/409 { path } write
-//                                              nothing; dryRun returns the plan only.
-//                                              Every answer carries `usage` — the reference
-//                                              counts of GET /usage, which is what
-//                                              the dialog's German summary reads off.
-//   [x] GET  /api/:campaign/usage              ?kind=<npc|location|scene|chapter>&id=<slug> ->
-//                                              { kind, id, path, total, groups: [{ ref, count,
-//                                              sites: [{ kind, id, title, path, count }] }] } —
-//                                              where an entity is REFERENCED, as queries over
-//                                              the reference tables (scene npcs/location/
-//                                              chapter, INCOMING `## Beziehungen` lines,
-//                                              session scenes_played, log scene markers). A
-//                                              group counts ROWS, its sites are the referencing
-//                                              DOCUMENTS; an entity's own outgoing relations
-//                                              are not references TO it. 404 unknown campaign/
-//                                              entity, 400 unknown kind/empty id
 //   [x] POST /api/:campaign/review/seen        { path, line } -> EntryResponse &
 //                                              { marked } — flags the log ROW whose short
 //                                              hash the line has (idempotent). marked=false

@@ -6,8 +6,8 @@
 // Three rules carry the whole thing:
 //
 //   1. The FIELD LIST comes from the entity types in @grimoire/shared — one
-//      list per kind, `id` deliberately absent (the rename cascade owns it)
-//      and the kind itself as well (it is derived from the path).
+//      list per kind, `id` deliberately absent (it is fixed at creation,
+//      ADR #21) and the kind itself as well (it is derived from the path).
 //   2. Only what the DM CHANGED is patched. PATCH /properties re-emits the
 //      whole YAML block from the parsed entry, so every key we do not send
 //      keeps its value — unknown keys of an imported entry included. Sending

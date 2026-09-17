@@ -1,14 +1,14 @@
-// Entity references in BODY TEXT (issue #68): `[[slug]]`.
+// Entity references in BODY TEXT: `[[slug]]`.
 //
 // The format keeps the SLUG, forever — never the name. The name is looked up
 // when the text is RENDERED (app/src/markdown/remark-grimoire.ts + EntityRef),
-// so a rename of the display name is visible everywhere at once and the old
-// gap ("prose mentions keep the stale name") closes structurally.
+// so a new display name is visible everywhere at once and prose mentions can
+// never carry a stale name.
 //
 // This module is the grammar, once, for the three parties that read it:
 //
 //   app/src/markdown/remark-grimoire.ts   the renderer's mdast pass
-//   server/src/store/refs.ts              FTS expansion + the rename cascade
+//   server/src/store/refs.ts              FTS expansion
 //   generator/system-prompt.md            what the model is told to emit
 //
 // Deliberate non-features:
@@ -18,8 +18,8 @@
 //     indexing rule. German inflection works without it: `[[jorna]]s Boot`
 //     renders as "Jornas Boot" because the suffix stays outside the ref.
 //   * only a KEBAB-CASE slug is a reference (`[[jorna]]`, `[[alte-mole]]`).
-//     `[[Jorna]]`, `[[a b]]` and `[[]]` are plain text — same rule as the
-//     rename endpoint's `newId`, so anything that can be a reference is
+//     `[[Jorna]]`, `[[a b]]` and `[[]]` are plain text — the same rule the
+//     ids themselves follow, so anything that can be a reference is
 //     something that can be an id.
 
 /**
@@ -124,7 +124,7 @@ export function renderEntityRefPieces(
 //
 // A reference is prose syntax, and CODE IS NOT PROSE: `` `[[jorna]]` `` and
 // anything inside a fenced block render literally, so nothing may touch them —
-// not the search-index expansion, not the rename cascade. The renderer gets
+// not the search-index expansion. The renderer gets
 // that for free (mdast `inlineCode`/`code` carry no text children); everything
 // that works on the RAW body needs this segmenter to see the same regions.
 //
@@ -255,22 +255,6 @@ export function expandBodyEntityRefs(
   nameOf: (slug: string) => string | undefined,
 ): string {
   return mapProse(text, (prose) => expandEntityRefs(prose, nameOf));
-}
-
-/** Rewrite `[[oldSlug]]` to `[[newSlug]]` in the PROSE of a raw body. */
-export function rewriteBodyEntityRefs(text: string, oldSlug: string, newSlug: string): string {
-  const to = entityRefSource(newSlug);
-  return mapProse(text, (prose) =>
-    splitEntityRefs(prose)
-      .map((piece) =>
-        piece.type === "text"
-          ? piece.value
-          : piece.slug === oldSlug
-            ? to
-            : entityRefSource(piece.slug),
-      )
-      .join(""),
-  );
 }
 
 /** Does the PROSE of a raw body reference this slug? (Code does not count.) */

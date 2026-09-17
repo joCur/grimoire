@@ -64,10 +64,10 @@ export interface PropertyFieldDef {
 }
 
 /**
- * `id` is deliberately NOT in any list: in the app the rename cascade owns
- * it, and in a generator reply it is required separately
- * (./entry-schema) because it is what the server builds the ADDRESS from —
- * the one thing that is not an editable property.
+ * `id` is deliberately NOT in any list: it is fixed at creation (ADR #21),
+ * and in a generator reply it is required separately (./entry-schema)
+ * because it is what the server builds the ADDRESS from — the one thing that
+ * is not an editable property.
  */
 export const PROPERTY_FIELDS: Record<PropertiesKind, readonly PropertyFieldDef[]> = {
   scene: [

@@ -236,12 +236,12 @@ mehrere Schreibwege auf ihm liegen:
 | Pfad (CLAUDE.md)   | Spec                                                           |
 | ------------------ | -------------------------------------------------------------- |
 | 1 Auto-Einstieg    | `tests/pool.e2e.ts` (Gruppen = Ortsnamen, „Ohne Ort")          |
-| 2 Szene lesen      | `tests/scene-rendering.e2e.ts`, `tests/rename.e2e.ts`          |
+| 2 Szene lesen      | `tests/scene-rendering.e2e.ts`                                 |
 | 3 ⌘K-Suche         | `tests/search.e2e.ts`                                          |
 | 4 Session-Zyklus   | `tests/session-cycle.e2e.ts`                                   |
 | 5 Nachbereitung    | `tests/review.e2e.ts`                                         |
 | 6 Generator        | `tests/generator.e2e.ts`, `tests/generator-pipeline.e2e.ts`, `tests/generator-restart.e2e.ts`, `tests/augment.e2e.ts` |
-| 7 Eigenschaften/409 | `tests/status-control.e2e.ts`, `tests/properties-form.e2e.ts`, `tests/rename.e2e.ts` |
+| 7 Eigenschaften/409 | `tests/status-control.e2e.ts`, `tests/properties-form.e2e.ts` |
 | 8 Mobil            | `tests/mobile.e2e.ts`                                          |
 | 9 Eintrag bearbeiten | `tests/block-composer.e2e.ts`, `tests/entry-edit.e2e.ts`        |
 | 10 Kaltstart       | `tests/cold-start.e2e.ts`                                       |
@@ -310,15 +310,6 @@ sortiert um, die alte Adresse zeigt weiter auf dieselbe Szene und das
 Session-Log bleibt gültig (es referenziert über ids). Freitext in `location`
 ist dort ein 400 mit `code: "location_not_an_id"` — die Gegenprobe steht in
 `scene-rendering.e2e.ts`.
-
-Auf den Pfaden 2 und 7 liegt zusätzlich `rename.e2e.ts` (Einstieg über „id
-ändern" im Fußbereich des Eigenschaften-Dialogs — der Header-Knopf ist weg):
-die zweistufige Bestätigung („Vorschau" ist ein `dryRun` und schreibt nichts),
-die deutsche Usage-Zusammenfassung („2 Verwendungen: 1 Szene, 1 Textstelle" —
-die Zeile unter `## Beziehungen` verlinkt den Gegenpart und zählt wie jede
-Textstelle) und danach die Kaskade selbst — Szenen-`npcs:`, die verlinkte
-Beziehungs-Zeile, der Umzug der Leseansicht, und `GET /usage` auf der neuen
-id gegen 404 auf der alten.
 
 Auf Pfad 9 teilen sich zwei Specs die zwei Oberflächen von „Bearbeiten", die
 sich EINEN Entwurf teilen: `block-composer.e2e.ts` deckt den

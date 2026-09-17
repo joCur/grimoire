@@ -247,49 +247,6 @@ describe("the index follows every write", () => {
     expect(results[0]).toMatchObject({ kind: "npc", id: "fenn", title: "Bucht-Kapitaen Fenn" });
   });
 
-  test("a renamed entity is findable under its NEW id", async () => {
-    const res = await app.request("/api/beispiel/rename", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: "npc", oldId: "jorna", newId: "hafenmeisterin" }),
-    });
-    expect(res.status).toBe(200);
-
-    const byNewId = await search("hafenmeisterin");
-    expect(byNewId.some((r) => r.kind === "npc" && r.id === "hafenmeisterin")).toBe(true);
-    // the old id is gone as a REFERENCE — the display name still says Jorna,
-    // so searching for her name keeps working (that is not an id).
-    const byOldId = await search("jorna");
-    expect(byOldId.some((r) => r.kind === "npc" && r.id === "jorna")).toBe(false);
-    expect(byOldId.some((r) => r.kind === "npc" && r.id === "hafenmeisterin")).toBe(true);
-  });
-
-  test("a rename refreshes the index TITLE, not only the id", async () => {
-    // The bug: the rename patched `entity_id`/`ref` of the index row and left
-    // `title` behind. For a display name that was the id's fallback that
-    // means search kept offering the OLD name and never the new one.
-    const file = await readFile("npcs/fenn");
-    // make the name the id's spelled-out fallback, as an authored file may
-    const patch = await app.request("/api/beispiel/properties", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: "npcs/fenn", rev: file.rev, patch: { name: "fenn" } }),
-    });
-    expect(patch.status).toBe(200);
-
-    const res = await app.request("/api/beispiel/rename", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: "npc", oldId: "fenn", newId: "schmugglerkapitaen" }),
-    });
-    expect(res.status).toBe(200);
-
-    const hits = await search("schmugglerkapitaen");
-    expect(hits[0]).toMatchObject({ kind: "npc", id: "schmugglerkapitaen", title: "schmugglerkapitaen" });
-    // and the stale title is not in the index any more
-    expect((await search("fenn")).some((r) => r.title === "fenn")).toBe(false);
-  });
-
   test("a properties patch does not un-index an npc's relationship note", async () => {
     // The two npc writers indexed different text (patch: the stripped body,
     // body save: the full one), so an unrelated status change dropped

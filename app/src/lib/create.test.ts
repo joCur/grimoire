@@ -115,7 +115,7 @@ describe("createErrorMessage", () => {
         }),
         t,
       ),
-    ).toBe("Der Name ergibt keine id — bitte Buchstaben oder Ziffern verwenden.");
+    ).toBe("Der Name ergibt keine Kennung — bitte Buchstaben oder Ziffern verwenden.");
   });
 
   test("a body with no kind reads as a GRAMMATICAL German sentence", () => {

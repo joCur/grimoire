@@ -97,7 +97,7 @@ export function NpcCreateDialog({
           </label>
 
           <p aria-live="polite" className="min-h-[17px] text-[12px] text-destructive">
-            {idInvalid ? t("rename.error.slug") : (error ?? "")}
+            {idInvalid ? t("npcCreate.idInvalid") : (error ?? "")}
           </p>
 
           <div className="flex items-center justify-end gap-2">

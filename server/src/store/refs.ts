@@ -15,9 +15,9 @@
 // a name, the index would still hold slugs).
 //
 // The price of expansion is that an index row can go stale for a reason
-// OUTSIDE its own entity: if Jorna is renamed, the scene that mentions her is
-// unchanged but its indexed text is wrong. So every write that can change a
-// display name or an id re-indexes the REFERRING entities too
+// OUTSIDE its own entity: when Jorna's display name changes, the scene that
+// mentions her is unchanged but its indexed text is wrong. So every write
+// that can change a display name re-indexes the REFERRING entities too
 // (`reindexReferrers`). That is a `like '%[[slug]]%'` scan over four body
 // columns of one campaign — cheap in a single-user tool, and precise, which
 // is why it beats the pragmatic "reindex the whole campaign".
@@ -26,13 +26,12 @@
 // location, chapter AND the campaign entry (`campaign`, the free note
 // space). The campaign entry used to be scanned HALF: its index row expanded
 // references (write.ts `indexCampaign`) but no scan ever found it again, so a
-// rename left a stale name in the search index and a dead slug in the note.
-// It is now a FULL body kind: `reindexReferrers` and `rewriteBodyRefs` cover
-// it, and it counts as a usage site like any other entry. The glossary
-// stays out — its rows are term/explanation pairs, not a prose body.
+// changed display name left a stale name in the search index. It is now a
+// FULL body kind: `reindexReferrers` covers it like any other entry. The
+// glossary stays out — its rows are term/explanation pairs, not a prose body.
 //
 // CODE IS NOT PROSE: `` `[[jorna]]` `` and fenced blocks render literally, so
-// neither the expansion nor the rename may touch them. That rule lives once,
+// the expansion may not touch them. That rule lives once,
 // in @grimoire/shared/refs, and the renderer skips the same regions.
 
 import { and, eq, like, sql } from "drizzle-orm";
@@ -41,7 +40,6 @@ import {
   bodyReferencesEntity,
   entityRefSource,
   expandBodyEntityRefs,
-  rewriteBodyEntityRefs,
   type EntityRefKind,
 } from "@grimoire/shared/refs";
 import type { GrimoireDb } from "../db/client";
@@ -174,7 +172,7 @@ const REF_TABLES = {
   chapter: chapters,
 } as const;
 
-/** One referring entry with the body the check and the rewrite work on. */
+/** One referring entry with the body the check works on. */
 interface ReferrerRow {
   kind: RefBodyKind;
   id: string;
@@ -224,49 +222,3 @@ export function referrersOf(
   return referrerRows(tx, campaign, slug).map((row) => ({ kind: row.kind, id: row.id }));
 }
 
-/** Write one body back, in the caller's transaction. */
-function setBody(
-  tx: GrimoireDb,
-  campaign: string,
-  kind: RefBodyKind,
-  id: string,
-  body: string,
-): void {
-  if (kind === "campaign") {
-    tx.update(campaigns).set({ body }).where(eq(campaigns.id, campaign)).run();
-    return;
-  }
-  const table = REF_TABLES[kind];
-  tx.update(table)
-    .set({ body })
-    .where(and(eq(table.campaignId, campaign), eq(table.id, id)))
-    .run();
-}
-
-/**
- * Rewrite `[[oldSlug]]` to `[[newSlug]]` in every body that carries it — the
- * body reference is a SOFT reference (schema.ts rule 3) and the rename
- * cascade has to drag it along, or the DM's prose silently loses its links.
- * Returns the entities whose body changed, so the caller can re-index them.
- *
- * The rewrite happens IN JS, one body at a time, not as a SQL `replace`: the
- * `replace` hit every occurrence, `` `[[jorna]]` `` in a code span included,
- * and the DM's literal example silently turned into a different slug. Loading
- * the body is what buys the shared skip logic — and the bodies are the ones
- * the pre-filter already found, so nothing extra is read.
- */
-export function rewriteBodyRefs(
-  tx: GrimoireDb,
-  campaign: string,
-  oldSlug: string,
-  newSlug: string,
-): Array<{ kind: RefBodyKind; id: string }> {
-  const affected: Array<{ kind: RefBodyKind; id: string }> = [];
-  for (const row of referrerRows(tx, campaign, oldSlug)) {
-    const body = rewriteBodyEntityRefs(row.body, oldSlug, newSlug);
-    if (body === row.body) continue;
-    setBody(tx, campaign, row.kind, row.id, body);
-    affected.push({ kind: row.kind, id: row.id });
-  }
-  return affected;
-}

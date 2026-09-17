@@ -35,8 +35,8 @@ describe("HeaderAction", () => {
   });
 
   test("the label is the only thing that varies", () => {
-    expect(headerAction("Umbenennen")).toBe(
-      headerAction("Bearbeiten").replace("Bearbeiten<", "Umbenennen<"),
+    expect(headerAction("Eigenschaften")).toBe(
+      headerAction("Bearbeiten").replace("Bearbeiten<", "Eigenschaften<"),
     );
   });
 });
