@@ -23,6 +23,7 @@ import { mkdirSync } from "node:fs";
 import { openSqlite, type SqliteClient } from "./driver";
 import { migrateGroupsToLocations, type GroupMigrationOutcome } from "./group-migration";
 import { assertMigrationReady } from "./reference-preflight";
+import { assertStatusesReady } from "./status-preflight";
 import { schema } from "./schema";
 
 /** The drizzle handle the whole server uses. Synchronous, like the driver. */
@@ -114,6 +115,11 @@ export async function openDb(filename: string): Promise<OpenDb> {
   // being repaired behind the DM's back). A no-op once the constraints are in
   // place.
   assertMigrationReady(client);
+  // The same gate in front of the CHECK constraints (ADR #25): a stored status
+  // or type outside its list is REFUSED here, naming campaign, address and
+  // value, instead of failing halfway through the rebuild. Also a no-op once
+  // the constraints are in place.
+  assertStatusesReady(client);
   const db = buildDrizzle(client);
   migrateDb(db);
   return { db, client, close: () => client.close(), groupMigration };

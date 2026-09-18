@@ -29,6 +29,9 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
   CHAPTER_STATUSES,
   ENTITY_SLUG,
+  NPC_STATUSES,
+  SCENE_STATUSES,
+  SCENE_TYPES,
   freeSlug,
   isEnded,
   isSessionEmpty,
@@ -161,25 +164,51 @@ function clearOtherActiveChapters(tx: GrimoireDb, campaign: string, keep: string
 }
 
 /**
- * A chapter status a WRITE may carry: one of the known trio, or nothing
- * (`null` deletes the key, which is how a chapter loses its status).
+ * A CLOSED field a write may carry: one of the shared list, or nothing
+ * (`null` deletes the key — which for a chapter removes the status and for a
+ * scene or an npc falls back to the column's default).
  *
- * This is the one place the format's degrade rule does not extend to the API.
- * A stored value outside the trio is still shown verbatim — the overview's
- * control shows it and the reading view prints it, exactly like an unknown
- * scene status — but the chapter status has three positions now, so a fourth
- * value arriving on the wire can only be a typo, and the honest answer to a
- * typo is the 400.
+ * These are the fields the format's degrade rule does not extend to on the
+ * API. A value outside the list is still RENDERED verbatim wherever an older
+ * database holds one, but the columns themselves are closed (ADR #25), so a
+ * foreign value arriving on the wire can only be a typo — and the honest
+ * answer to a typo is the 400 with a code the app has a sentence for, not
+ * SQLite's "CHECK constraint failed" escaping as a 500.
  */
-function assertChapterStatus(patch: Record<string, unknown>): void {
-  if (!("status" in patch)) return;
-  const value = patch.status;
+function assertClosedValue(
+  fields: Record<string, unknown>,
+  key: string,
+  allowed: readonly string[],
+  code: ErrorCode,
+  extra: Record<string, unknown> = {},
+): void {
+  if (!(key in fields)) return;
+  const value = fields[key];
   if (value === null || value === undefined) return;
-  if (typeof value === "string" && (CHAPTER_STATUSES as readonly string[]).includes(value)) return;
-  throw new ApiError(
-    400,
-    `invalid chapter status: ${String(value)} — one of ${CHAPTER_STATUSES.join(", ")}`,
-  );
+  if (typeof value === "string" && allowed.includes(value)) return;
+  throw new ApiError(400, `invalid ${key}: ${String(value)} — one of ${allowed.join(", ")}`, {
+    code,
+    value: String(value),
+    allowed: [...allowed],
+    ...extra,
+  });
+}
+
+/** The chapter's one closed field. At most ONE chapter holds `active`, which
+ * is `clearOtherActiveChapters` above — that rule spans rows and stays here. */
+function assertChapterStatus(fields: Record<string, unknown>): void {
+  assertClosedValue(fields, "status", CHAPTER_STATUSES, "status_not_allowed", { kind: "chapter" });
+}
+
+/** A scene's two closed fields. */
+function assertSceneClosedFields(fields: Record<string, unknown>): void {
+  assertClosedValue(fields, "status", SCENE_STATUSES, "status_not_allowed", { kind: "scene" });
+  assertClosedValue(fields, "type", SCENE_TYPES, "scene_type_not_allowed");
+}
+
+/** The npc's one closed field. */
+function assertNpcStatus(fields: Record<string, unknown>): void {
+  assertClosedValue(fields, "status", NPC_STATUSES, "status_not_allowed", { kind: "npc" });
 }
 
 // --- transaction plumbing ----------------------------------------------------
@@ -951,6 +980,9 @@ function patchLocator(
       guardEntryRev(tx, campaign, locator, row.rev, rev, "scene changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, SCENE_KEYS);
+      // Only the known values may be WRITTEN; what is already stored is still
+      // shown verbatim.
+      assertSceneClosedFields(patch);
       const before = renderScene(
         row,
         refNpcs(tx, campaign, row.id),
@@ -1013,6 +1045,7 @@ function patchLocator(
       guardEntryRev(tx, campaign, locator, row.rev, rev, "npc changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, NPC_KEYS);
+      assertNpcStatus(patch);
       const fm = applyPatch(renderNpc(row).properties, patch);
       const quickstats = asMap(fm.quickstats);
       const npcChapter = asOptStr(fm.chapter);
@@ -2005,6 +2038,7 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       const npcRefs = asStrArray(fm.npcs);
       const tags = asStrArray(fm.tags);
       const draftLocation = sceneLocation(fm.location);
+      assertSceneClosedFields(fm);
       // The scene's chapter is written in THIS transaction, before the scene
       // itself: a new-chapter run creates its chapter from the run's own
       // state (generator.ts `jobChapterTarget`), and this is the net under
@@ -2048,6 +2082,7 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       const id = asStr(fm.id, locator.id);
       const npcChapter = asOptStr(fm.chapter);
       assertChapterRef(tx, campaign, npcChapter);
+      assertNpcStatus(fm);
       const values = {
         name: asStr(fm.name, id),
         role: asOptStr(fm.role),

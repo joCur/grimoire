@@ -7,16 +7,24 @@
 // enum-ish field is typed as its known literals *or* any string, unknown
 // properties keys are preserved, and nothing in shared/ ever throws on
 // odd input.
+//
+// The four CLOSED lists below — scene status and type, npc status, chapter
+// status — are the exception, and only on the way IN: since ADR #25 they are
+// CHECK constraints of their columns and the API answers 400 for anything
+// else. The types stay widened all the same, because a READER still has to
+// render whatever an older database hands it.
 
 import type { SessionPause } from "./session-state";
 
-/** Known scene lifecycle states; entries may carry other values (degrade). */
+/** A scene's lifecycle states. A CHECK constraint holds the column to them. */
 export const SCENE_STATUSES = ["draft", "ready", "played", "dropped"] as const;
 export type SceneStatus = (typeof SCENE_STATUSES)[number];
 
+/** A scene's two kinds. CHECKed, like the status. */
 export const SCENE_TYPES = ["planned", "contingency"] as const;
 export type SceneType = (typeof SCENE_TYPES)[number];
 
+/** An npc's states. CHECKed, like a scene's. */
 export const NPC_STATUSES = ["alive", "dead", "missing", "unknown"] as const;
 export type NpcStatus = (typeof NPC_STATUSES)[number];
 
@@ -25,11 +33,10 @@ export type NpcStatus = (typeof NPC_STATUSES)[number];
  * acts on — the session view opens the active chapter, and there is at most
  * one per campaign (the server swaps it in a single transaction).
  *
- * Like every other enum here these are the KNOWN values, not a validator: a
- * chapter carrying something else is shown verbatim, and there is no CHECK
- * constraint behind the column. What is different is that the API refuses to
- * WRITE anything else (400) — the status has three positions now, so a fourth
- * value arriving on the wire can only be a typo.
+ * These are the ONLY values the column takes: a CHECK constraint holds it to
+ * them (ADR #25) and the API refuses to write anything else with a 400. A
+ * reader still shows verbatim whatever an older database put there — the
+ * status has three positions, so a fourth value can only be a typo.
  */
 export const CHAPTER_STATUSES = ["planned", "active", "done"] as const;
 export type ChapterStatus = (typeof CHAPTER_STATUSES)[number];

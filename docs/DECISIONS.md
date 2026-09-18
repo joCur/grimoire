@@ -969,3 +969,55 @@ Generator selbst.
   …/generate/job/:id/review` sprechen die Objektform. Das ist ein Bruch der
   Schnittstelle, und er ist keiner in der Praxis: ein Entwurf lebt nur
   zwischen einem Lauf und seinem Übernehmen.
+
+## 25. Status und Typ sind Constraints der Datenbank
+
+**Entscheidung:** Die vier geschlossenen Felder des Datenmodells —
+`scenes.status`, `scenes.type`, `npcs.status`, `chapters.status` — sind
+`CHECK`-Constraints ihrer Spalten. Die erlaubten Werte stehen **einmal**, in
+`shared/src/types.ts` (`SCENE_STATUSES`, `SCENE_TYPES`, `NPC_STATUSES`,
+`CHAPTER_STATUSES`); das Schema baut die Constraints aus genau diesen Listen,
+wiederholt sie also nicht. Ein fremder Wert auf dem Schreibweg ist eine 400
+mit `status_not_allowed` bzw. `scene_type_not_allowed`, nicht ein
+`CHECK constraint failed` aus SQLite. Vor der Migration prüft ein
+Vorlauf (`server/src/db/status-preflight.ts`) jede Zeile und **verweigert**
+den Start mit Kampagne, Adresse und Wert, statt etwas stillschweigend zu
+korrigieren.
+
+**Kontext:** Bis hierher war jede dieser Listen eine Absprache: die Spalte war
+offenes `text`, und wer sie einhielt, war die API — an den Stellen, an denen
+jemand daran gedacht hatte. Beim Kapitel-Status war das so (400), bei Szene
+und NPC nicht, also kam ein Tippfehler aus dem Generator oder aus einem
+direkten Schreibzugriff einfach in der Spalte an und war danach ein Wert, den
+die Leseansicht wörtlich anzeigt und den niemand mehr als Fehler erkennt.
+Seit ADR #13 ist die Zeile die Wahrheit; dann gehört eine Regel über den
+Inhalt einer Spalte auch in die Spalte. Das ist dieselbe Bewegung wie ADR #19:
+Referenzen sind seit dort Fremdschlüssel und keine Absprache mehr.
+
+Der Widerspruch zum „Format degradiert" aus README.md ist keiner. Degradieren
+ist eine Regel für den **Leser**: ein unbekannter Callout, eine unbekannte
+Überschrift, ein alter Status in einem bestehenden Bestand werden angezeigt und
+werfen nie. Geschlossen ist der **Schreibweg** — die Spalte kann keinen neuen
+fremden Wert mehr aufnehmen.
+
+**Folgen:**
+
+- Migration `0016_status_checks.sql` baut `chapters`, `npcs` und `scenes` neu.
+  Sie ist handgeschrieben, wie `0014`: der Migrator läuft in einer
+  Transaktion, in der `PRAGMA foreign_keys` ignoriert wird, also würde ein
+  generierter Neubau `scene_npcs`/`scene_tags` über deren Kaskade löschen und
+  am Ablegen der Elterntabelle scheitern. Die betroffenen Zeilen werden
+  vorher beiseitegelegt und Eltern-vor-Kind zurückgeschrieben. `rev` bleibt
+  unberührt: kein Wert ändert sich, also behält ein offener Editor sein
+  Wächter-Token.
+- Ein Bestand mit einem fremden Wert migriert **nicht**. Der Vorlauf nennt je
+  Eintrag Kampagne, Adresse, Feld und Wert; korrigiert wird in der vorigen
+  Version der App oder direkt in der Datenbank. Automatisch zu reparieren
+  hieße zu entscheiden, welche der drei oder vier Positionen gemeint war —
+  das kann nur der DM.
+- Zwei neue Fehlercodes, `status_not_allowed` (`{ kind, value, allowed }`) und
+  `scene_type_not_allowed` (`{ value, allowed }`). Die App braucht je einen
+  Katalog-Eintrag; ohne ihn degradiert sie auf den englischen `error`-Satz.
+- Neue Werte in einer der Listen sind ab jetzt eine Migration, keine Änderung
+  an einer Konstante allein. Das ist gewollt: eine fünfte Position im Status
+  ist eine Entscheidung über das Datenmodell.

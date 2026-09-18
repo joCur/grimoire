@@ -479,27 +479,29 @@ describe("the chapter status enum via the entry PATCH", () => {
     expect((await entry("01-salzhafen")).properties.status).toBeUndefined();
   });
 
-  test("a patch that does NOT touch the status leaves an unknown value alone", async () => {
-    // The degrade half: a chapter carrying something else stays readable AND
-    // patchable in its other properties.
+  test("the column itself refuses an unknown value — not just the API", async () => {
+    // Since ADR #25 there is no way to put one there at all: a CHECK holds
+    // the column to the trio, so even a write that bypasses the store is
+    // refused. The reader still degrades for a database that pre-dates the
+    // constraint — which is why nothing here can plant one to show it.
     const { getDb } = await import("../src/store/handle");
     const db = await getDb();
     const { sql } = await import("drizzle-orm");
-    db.run(
-      sql`update chapters set status = 'laeuft' where campaign_id = 'nordwind' and id = '01-salzhafen'`,
-    );
+    expect(() =>
+      db.run(
+        sql`update chapters set status = 'laeuft' where campaign_id = 'nordwind' and id = '01-salzhafen'`,
+      ),
+    ).toThrow();
 
+    // …and the entry is untouched and still patchable.
     const fresh = await entry("01-salzhafen");
-    expect(fresh.properties.status).toBe("laeuft");
     const res = await app.request(entriesUrl("nordwind", fresh.path), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ rev: fresh.rev, properties: { title: "Neu benannt" } }),
     });
     expect(res.status).toBe(200);
-    const after = await entry("01-salzhafen");
-    expect(after.properties.title).toBe("Neu benannt");
-    expect(after.properties.status).toBe("laeuft");
+    expect((await entry("01-salzhafen")).properties.title).toBe("Neu benannt");
   });
 
   // The properties dialog must not be a second door past the one-active rule.
