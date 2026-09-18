@@ -7,16 +7,15 @@
 // place in the tree, an open edit that could not be saved any more, a log
 // line whose columns fell apart.
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import type { CampaignTree, EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { ApiError } from "../src/api-error";
-import { setNow } from "../src/clock";
 import { applyDrafts } from "../src/store/write";
 import { dropStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
 
-async function getFile(rel: string): Promise<EntryResponse> {
+async function getEntry(rel: string): Promise<EntryResponse> {
   const res = await app.request(entriesUrl("beispiel", rel));
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
@@ -78,18 +77,18 @@ const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const GLOSSARY = "glossary";
 
 beforeEach(async () => {
-  setNow(() => new Date(2026, 7, 19, 21, 5));
+  setSystemTime(new Date(2026, 7, 19, 21, 5));
   await seedStore();
 });
 
 afterEach(() => {
-  setNow(null);
+  setSystemTime();
   dropStore();
 });
 
 describe("an npc's `## Beziehungen` keeps what became no row", () => {
   test("prose and a duplicate counterpart survive the save", async () => {
-    const before = await getFile(NPC);
+    const before = await getEntry(NPC);
     expect(before.body).toContain("- [[jorna]]: alte Bekannte");
 
     // Three things under the heading: one relation line (a row), one prose
@@ -109,11 +108,11 @@ describe("an npc's `## Beziehungen` keeps what became no row", () => {
     // one heading, in its original place — not a second one appended
     expect(after.body.match(/^## Beziehungen$/gm)).toHaveLength(1);
     expect(after.body.indexOf("## Beziehungen")).toBeLessThan(after.body.indexOf("## Notizen"));
-    expect(await getFile(NPC)).toEqual(after);
+    expect(await getEntry(NPC)).toEqual(after);
   });
 
   test("saving the rendered body again is a fixed point", async () => {
-    const before = await getFile(NPC);
+    const before = await getEntry(NPC);
     const body =
       "\n## Beziehungen\n\n- jorna: alte Bekannte\nEin Satz, der keine Beziehung ist.\n";
     const first = await patchOk(NPC, { rev: before.rev, body });
@@ -124,7 +123,7 @@ describe("an npc's `## Beziehungen` keeps what became no row", () => {
   });
 
   test("a section that is ONLY relations still renders once, at the end", async () => {
-    const before = await getFile(NPC);
+    const before = await getEntry(NPC);
     const body = "\n## Will\n\nRaus aus dem Geschäft.\n\n## Beziehungen\n\n- jorna: Ex-Kollegin\n";
     const after = await patchOk(NPC, { rev: before.rev, body });
     expect(after.body.match(/^## Beziehungen$/gm)).toHaveLength(1);
@@ -140,23 +139,23 @@ describe("glossary — a list, edited as a list", () => {
     // and the one that could lose a line nobody could assign. It is gone:
     // the list endpoint writes the rows, and a body for this address says so
     // instead of silently doing nothing.
-    const before = await getFile(GLOSSARY);
+    const before = await getEntry(GLOSSARY);
     const res = await patchEntry(GLOSSARY, {
       rev: before.rev,
       body: "\n- tide pool → Gezeitentümpel\n",
     });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { code: string }).code).toBe("body_not_editable");
-    expect(await getFile(GLOSSARY)).toEqual(before);
+    expect(await getEntry(GLOSSARY)).toEqual(before);
   });
 
   test("an emptied glossary is an empty entry (200), still editable", async () => {
-    const before = await getFile(GLOSSARY);
+    const before = await getEntry(GLOSSARY);
     const emptied = await putGlossary([], before.rev);
     expect(emptied.entries).toEqual([]);
     // The 404 this used to answer made the entry the editor was in
     // unreachable.
-    const read = await getFile(GLOSSARY);
+    const read = await getEntry(GLOSSARY);
     expect(read.body).toBe("");
     expect(read.path).toBe(GLOSSARY);
     // …and the DM can type the glossary back in.
@@ -165,17 +164,17 @@ describe("glossary — a list, edited as a list", () => {
       read.rev,
     );
     expect(refilled.entries).toEqual([{ term: "tide pool", explanation: "Gezeitentümpel" }]);
-    expect((await getFile(GLOSSARY)).body).toContain("- tide pool → Gezeitentümpel");
+    expect((await getEntry(GLOSSARY)).body).toContain("- tide pool → Gezeitentümpel");
   });
 
   test("a multi-line explanation keeps its line breaks through a save", async () => {
     // Nothing flattens an explanation on the way in: it is one column, and
     // the reading rendering gives it a section of its own.
-    const before = await getFile(GLOSSARY);
+    const before = await getEntry(GLOSSARY);
     const explanation = "Zeile eins\nZeile zwei";
     const saved = await putGlossary([{ term: "Ton", explanation }], before.rev);
     expect(saved.entries).toEqual([{ term: "Ton", explanation }]);
-    expect((await getFile(GLOSSARY)).body).toContain("## Ton\n\nZeile eins\nZeile zwei");
+    expect((await getEntry(GLOSSARY)).body).toContain("## Ton\n\nZeile eins\nZeile zwei");
   });
 });
 
@@ -184,7 +183,7 @@ describe("guard tokens of the two list entries", () => {
     // The bug: `campaigns.version` was the glossary's token, so ANY write —
     // a quick note during a running session — made a pending glossary edit
     // unsaveable. The token is the glossary's own counter now.
-    const glossary = await getFile(GLOSSARY);
+    const glossary = await getEntry(GLOSSARY);
     expect((await postJson("/api/campaigns/beispiel/session/start")).status).toBe(200);
     expect((await postJson("/api/campaigns/beispiel/log", { text: "Etwas passiert" })).status).toBe(200);
     expect((await postJson("/api/campaigns/beispiel/inbox", { text: "Idee #idee" })).status).toBe(200);
@@ -212,23 +211,23 @@ describe("guard tokens of the two list entries", () => {
   });
 
   test("the inbox token moves on inbox writes only", async () => {
-    const before = await getFile("inbox");
+    const before = await getEntry("inbox");
     expect((await postJson("/api/campaigns/beispiel/session/start")).status).toBe(200);
-    expect(await getFile("inbox")).toEqual(before);
+    expect(await getEntry("inbox")).toEqual(before);
     expect((await postJson("/api/campaigns/beispiel/inbox", { text: "Neu" })).status).toBe(200);
-    expect((await getFile("inbox")).rev).toBe(before.rev + 1);
+    expect((await getEntry("inbox")).rev).toBe(before.rev + 1);
   });
 });
 
 describe("the entry PATCH — a scene's `chapter`", () => {
   test("null is refused: a scene belongs to a chapter, the address is the chapter", async () => {
-    const before = await getFile(SCENE);
+    const before = await getEntry(SCENE);
     expect(before.properties.chapter).toBe("01-salzhafen");
 
     const res = await patchEntry(SCENE, { rev: before.rev, properties: { chapter: null } });
     expect(res.status).toBe(400);
     // Nothing written: same chapter, same address, same rev.
-    const after = await getFile(SCENE);
+    const after = await getEntry(SCENE);
     expect(after.properties.chapter).toBe("01-salzhafen");
     expect(after.path).toBe(SCENE);
     expect(after.rev).toBe(before.rev);
@@ -285,14 +284,14 @@ describe("POST /log — the scene marker is a parse column", () => {
     expect(start.status).toBe(200);
     // The session's id is opaque, so its path comes from the start.
     const rel = ((await start.json()) as EntryResponse).path;
-    const before = await getFile(rel);
+    const before = await getEntry(rel);
     // (An EMPTY sceneId is not in this list: the route normalises it away to
     // "no scene", which is the same thing as omitting the key.)
     for (const sceneId of ["boom) und mehr", "a b", "Gross", "with/slash", "-lead"]) {
       const res = await postJson("/api/campaigns/beispiel/log", { text: "Notiz", sceneId });
       expect(res.status).toBe(400);
     }
-    expect(await getFile(rel)).toEqual(before);
+    expect(await getEntry(rel)).toEqual(before);
     // the legal form still works
     const ok = await postJson("/api/campaigns/beispiel/log", {
       text: "Notiz",

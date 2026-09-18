@@ -3,7 +3,7 @@
 // NOTHING then, so the UI must re-read the entry and let the next attempt
 // carry the fresh rev.
 
-import type { EntryResponse } from "@grimoire/shared/types";
+import { SCENE_STATUSES, type EntryResponse, type SceneStatus } from "@grimoire/shared/types";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";
@@ -23,7 +23,7 @@ const tEn = translator("en");
 
 const SCENE = "01-salzhafen/hafen/ankunft-leuchtturm";
 
-function fileAt(rev: number, status: string): EntryResponse {
+function entryAt(rev: number, status: string): EntryResponse {
   return {
     path: SCENE,
     kind: "scene",
@@ -65,7 +65,7 @@ afterEach(() => {
 });
 
 describe("sceneStatusPatchBody", () => {
-  test("patches only `status`, with the rev of the loaded file", () => {
+  test("patches only `status`, with the rev of the loaded entry", () => {
     expect(sceneStatusPatchBody(1_700_000_000_123, "ready")).toEqual({
       rev: 1_700_000_000_123,
       properties: { status: "ready" },
@@ -80,7 +80,7 @@ describe("sceneStatusPatchBody", () => {
 
 describe("writeSceneStatus", () => {
   test("PATCHes the entry and returns the server's entry", async () => {
-    const calls = mockFetch([{ status: 200, body: fileAt(222, "ready") }]);
+    const calls = mockFetch([{ status: 200, body: entryAt(222, "ready") }]);
     const result = await writeSceneStatus("beispiel", SCENE, 111, "ready");
 
     expect(calls).toHaveLength(1);
@@ -88,18 +88,18 @@ describe("writeSceneStatus", () => {
     expect(calls[0]?.url).toBe(`/api/campaigns/beispiel/entries/${SCENE}`);
     expect(calls[0]?.body).toEqual({ rev: 111, properties: { status: "ready" } });
     expect(result.ok).toBe(true);
-    expect(result.file?.rev).toBe(222);
+    expect(result.entry?.rev).toBe(222);
   });
 
-  test("409: nothing written, the file is re-read for the fresh rev", async () => {
+  test("409: nothing written, the entry is re-read for the fresh rev", async () => {
     const calls = mockFetch([
       { status: 409, body: { code: "rev_conflict", error: "entry changed", rev: 999 } },
-      { status: 200, body: fileAt(999, "draft") },
+      { status: 200, body: entryAt(999, "draft") },
     ]);
     const result = await writeSceneStatus("beispiel", SCENE, 111, "ready");
 
     expect(result.ok).toBe(false);
-    expect(result.file?.rev).toBe(999);
+    expect(result.entry?.rev).toBe(999);
     expect(calls[1]?.method).toBe("GET");
     expect(calls[1]?.url).toBe(`/api/campaigns/beispiel/entries/${SCENE}`);
   });
@@ -107,19 +107,19 @@ describe("writeSceneStatus", () => {
   test("the attempt after a conflict carries the rev the reload brought", async () => {
     mockFetch([
       { status: 409, body: { code: "rev_conflict", error: "entry changed", rev: 999 } },
-      { status: 200, body: fileAt(999, "draft") },
+      { status: 200, body: entryAt(999, "draft") },
     ]);
     const conflict = await writeSceneStatus("beispiel", SCENE, 111, "ready");
-    const fresh = conflict.file?.rev;
+    const fresh = conflict.entry?.rev;
 
-    const calls = mockFetch([{ status: 200, body: fileAt(1000, "ready") }]);
+    const calls = mockFetch([{ status: 200, body: entryAt(1000, "ready") }]);
     const retry = await writeSceneStatus("beispiel", SCENE, fresh ?? 0, "ready");
 
     expect(calls[0]?.body).toEqual({ rev: 999, properties: { status: "ready" } });
     expect(retry.ok).toBe(true);
   });
 
-  test("409 plus a failed reload: still a conflict, no file to seed", async () => {
+  test("409 plus a failed reload: still a conflict, no entry to seed", async () => {
     mockFetch([
       { status: 409, body: { code: "rev_conflict", error: "entry changed", rev: 999 } },
       { status: 500, body: { error: "boom" } },
@@ -160,11 +160,13 @@ describe("status labels", () => {
     ]);
   });
 
-  test("an unknown value stays visible verbatim (degrade, never corrected)", () => {
-    expect(sceneStatusMeta("verschollen", t).label).toBe("verschollen");
-    // …in every language: the entry is the truth, not the catalog.
-    expect(sceneStatusMeta("verschollen", tEn).label).toBe("verschollen");
-    expect(sceneStatusOptions(t).map((o) => o.value)).not.toContain("verschollen");
+  test("a value from outside the four is not a status at all", () => {
+    // The column is a CHECK constraint and the preflight refuses a database
+    // that holds anything else (ADR #25), so there is no value left for the
+    // renderer to fall back for — the type is what says so.
+    // @ts-expect-error not one of draft | ready | played | dropped
+    const foreign: SceneStatus = "verschollen";
+    expect(SCENE_STATUSES as readonly string[]).not.toContain(foreign);
   });
 });
 
@@ -180,8 +182,4 @@ describe("isSceneDone", () => {
     expect(isSceneDone("ready")).toBe(false);
   });
 
-  test("an unknown status degrades to planned — it never hides a scene", () => {
-    expect(isSceneDone("verschollen")).toBe(false);
-    expect(isSceneDone("")).toBe(false);
-  });
 });

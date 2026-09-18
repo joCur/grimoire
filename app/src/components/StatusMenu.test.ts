@@ -30,9 +30,4 @@ describe("statusSelectionWrites", () => {
     // back while the write is still in flight.
     expect(statusSelectionWrites("planned", "planned", "active")).toBe(true);
   });
-
-  test("an unknown stored value is still a value to leave", () => {
-    expect(statusSelectionWrites("planned", "laeuft")).toBe(true);
-    expect(statusSelectionWrites("laeuft", "laeuft")).toBe(false);
-  });
 });

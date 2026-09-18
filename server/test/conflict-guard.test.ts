@@ -15,19 +15,18 @@
 // never lands — for fields, for text, and across the two, because
 // properties and body are one row and therefore one guard (ADR #23).
 //
-// The clock is deliberately FROZEN via setNow(): the guard is independent of
+// The system time is deliberately FROZEN: the guard is independent of
 // wall-clock time, and a test that is not about timing is the point.
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import type { EntryResponse, PatchEntryRequest } from "@grimoire/shared";
 import { app } from "../src/server";
-import { setNow } from "../src/clock";
 import { dropStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
 
 const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 
-async function getFile(rel: string): Promise<EntryResponse> {
+async function getEntry(rel: string): Promise<EntryResponse> {
   const res = await app.request(entriesUrl("beispiel", rel));
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
@@ -52,18 +51,18 @@ interface Conflict {
 beforeEach(async () => {
   // FROZEN — every request in this file happens in the same clock second, the
   // situation the guard must still tell apart.
-  setNow(() => new Date(2026, 7, 19, 21, 5, 30));
+  setSystemTime(new Date(2026, 7, 19, 21, 5, 30));
   await seedStore();
 });
 
 afterEach(() => {
-  setNow(null);
+  setSystemTime();
   dropStore();
 });
 
 describe("two writes with the same guard token, same clock second", () => {
   test("properties: first wins, second is 409, the loser did not land", async () => {
-    const read = await getFile(SCENE);
+    const read = await getEntry(SCENE);
 
     // Both "tabs" hold the SAME token — the one read above.
     const first = await patchReq({ rev: read.rev, properties: { status: "played" } });
@@ -83,7 +82,7 @@ describe("two writes with the same guard token, same clock second", () => {
     expect(conflict.entry).toEqual(won);
 
     // The whole point: the second write did NOT land.
-    const after = await getFile(SCENE);
+    const after = await getEntry(SCENE);
     expect(after.properties.status).toBe("played");
     expect(after.rev).toBe(won.rev);
 
@@ -96,7 +95,7 @@ describe("two writes with the same guard token, same clock second", () => {
   });
 
   test("body: first wins, second is 409, the loser's body did not land", async () => {
-    const read = await getFile(SCENE);
+    const read = await getEntry(SCENE);
 
     const first = await patchReq({ rev: read.rev, body: "\n## Flow\n\nVersion A.\n" });
     expect(first.status).toBe(200);
@@ -113,7 +112,7 @@ describe("two writes with the same guard token, same clock second", () => {
     expect(conflict.entry.body).toBe("\n## Flow\n\nVersion A.\n");
 
     // Version B is nowhere — not in the row, not in the rendering.
-    const after = await getFile(SCENE);
+    const after = await getEntry(SCENE);
     expect(after.body).toBe("\n## Flow\n\nVersion A.\n");
     expect(after.body).not.toContain("Version B");
     expect(after.rev).toBe(won.rev);
@@ -129,7 +128,7 @@ describe("two writes with the same guard token, same clock second", () => {
     // the property that matters without pinning an order: ONE 200, ONE 409
     // whose token is the winner's, and a row that shows exactly the winner's
     // value.
-    const read = await getFile(SCENE);
+    const read = await getEntry(SCENE);
     const responses = await Promise.all([
       patchReq({ rev: read.rev, properties: { status: "played" } }),
       patchReq({ rev: read.rev, properties: { status: "ready" } }),
@@ -147,7 +146,7 @@ describe("two writes with the same guard token, same clock second", () => {
 
     // The row carries the winner's value and NOTHING of the loser's: the
     // rev moved by exactly one, for exactly one write.
-    const after = await getFile(SCENE);
+    const after = await getEntry(SCENE);
     expect(after.properties.status).toBe(won.properties.status);
     expect(after.rev).toBe(read.rev + 1);
   });
@@ -156,7 +155,7 @@ describe("two writes with the same guard token, same clock second", () => {
     // Properties and body are one row, so they are one guard. An app that
     // saved the status and then the text with the token it read BEFORE the
     // status write must be told, not silently allowed to revert.
-    const read = await getFile(SCENE);
+    const read = await getEntry(SCENE);
     const patched = await patchReq({ rev: read.rev, properties: { status: "played" } });
     expect(patched.status).toBe(200);
 
@@ -166,7 +165,7 @@ describe("two writes with the same guard token, same clock second", () => {
     });
     expect(staleBody.status).toBe(409);
     expect(((await staleBody.json()) as Conflict).rev).toBe(read.rev + 1);
-    expect((await getFile(SCENE)).body).toBe(read.body);
+    expect((await getEntry(SCENE)).body).toBe(read.body);
 
     // …and the reverse direction, still in the same second.
     const body = await patchReq({ rev: read.rev + 1, body: "\n## Flow\n\nJetzt aber.\n" });
@@ -174,11 +173,11 @@ describe("two writes with the same guard token, same clock second", () => {
     const staleProps = await patchReq({ rev: read.rev + 1, properties: { status: "draft" } });
     expect(staleProps.status).toBe(409);
     expect(((await staleProps.json()) as Conflict).rev).toBe(read.rev + 2);
-    expect((await getFile(SCENE)).properties.status).toBe("played");
+    expect((await getEntry(SCENE)).properties.status).toBe("played");
   });
 
   test("both halves in one request move the rev once and cannot half-land", async () => {
-    const read = await getFile(SCENE);
+    const read = await getEntry(SCENE);
     const res = await patchReq({
       rev: read.rev,
       properties: { status: "played" },
@@ -191,7 +190,7 @@ describe("two writes with the same guard token, same clock second", () => {
     // ONE write: one row update, one rev step, one version bump — the token
     // the client gets back is the one it must send next.
     expect(written.rev).toBe(read.rev + 1);
-    const after = await getFile(SCENE);
+    const after = await getEntry(SCENE);
     expect(after.rev).toBe(written.rev);
     expect(after.properties.status).toBe("played");
     expect(after.body).toBe("\n## Flow\n\nBeides zusammen.\n");
@@ -203,7 +202,7 @@ describe("two writes with the same guard token, same clock second", () => {
       body: "\n## Flow\n\nDarf nicht landen.\n",
     });
     expect(refused.status).toBe(400);
-    const unchanged = await getFile(SCENE);
+    const unchanged = await getEntry(SCENE);
     expect(unchanged.rev).toBe(written.rev);
     expect(unchanged.body).toBe("\n## Flow\n\nBeides zusammen.\n");
   });
@@ -212,7 +211,7 @@ describe("two writes with the same guard token, same clock second", () => {
     // The conflict dialog's "save anyway": the DM's text wins, and the field
     // somebody else changed meanwhile SURVIVES — force writes only what the
     // request carries.
-    const read = await getFile(SCENE);
+    const read = await getEntry(SCENE);
     const other = await patchReq({ rev: read.rev, properties: { status: "played" } });
     expect(other.status).toBe(200);
 
@@ -228,7 +227,7 @@ describe("two writes with the same guard token, same clock second", () => {
     // The other tab's write and this one: two writes, two rev steps.
     expect(written.rev).toBe(read.rev + 2);
 
-    const after = await getFile(SCENE);
+    const after = await getEntry(SCENE);
     expect(after.body).toBe("\n## Flow\n\nMein Text gewinnt.\n");
     expect(after.properties.status).toBe("played");
   });

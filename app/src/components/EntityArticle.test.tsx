@@ -8,7 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { EntityArticle } from "./EntityArticle";
 
-function file(
+function entry(
   kind: EntityKind,
   properties: Record<string, unknown>,
   body = "",
@@ -16,11 +16,11 @@ function file(
   return { path: `npcs/x`, kind, properties, body, rev: 1 };
 }
 
-function render(f: EntryResponse): string {
-  return renderToStaticMarkup(<EntityArticle file={f} />);
+function render(e: EntryResponse): string {
+  return renderToStaticMarkup(<EntityArticle entry={e} />);
 }
 
-const jorna = file(
+const jorna = entry(
   "npc",
   {
     id: "jorna",
@@ -51,7 +51,7 @@ describe("EntityArticle — npc", () => {
     // What a brand-new npc looks like before anybody fills it in: the id as
     // the name, the neutral status, no field rows, no "fehlt" placeholder
     // anywhere.
-    const html = render(file("npc", { id: "holm", name: "holm", status: "unknown" }));
+    const html = render(entry("npc", { id: "holm", name: "holm", status: "unknown" }));
     expect(html).toContain("holm");
     expect(html).toContain("Unbekannt");
     expect(html).not.toContain("fehlt");
@@ -76,21 +76,19 @@ describe("EntityArticle — npc", () => {
     expect(html).not.toContain("Eventualszene");
   });
 
-  test("an unknown status value is shown verbatim (degrade)", () => {
-    expect(render(file("npc", { id: "x", name: "X", status: "verschollen" }))).toContain(
-      "verschollen",
-    );
+  test("the status pill carries the catalog label of the stored value", () => {
+    expect(render(entry("npc", { id: "x", name: "X", status: "missing" }))).toContain("Vermisst");
   });
 
-  test("a bare npc file degrades to name + body", () => {
-    const html = render(file("npc", { id: "fenn", name: "Fenn" }, "Nur Text.\n"));
+  test("a bare npc entry degrades to name + body", () => {
+    const html = render(entry("npc", { id: "fenn", name: "Fenn" }, "Nur Text.\n"));
     expect(html).toContain("Fenn");
     expect(html).toContain("Nur Text.");
     expect(html).not.toContain("Statblock");
   });
 
-  test("a nameless npc file falls back to the path", () => {
-    const html = render(file("npc", {}, ""));
+  test("a nameless npc entry falls back to the path", () => {
+    const html = render(entry("npc", {}, ""));
     expect(html).toContain("npcs/x");
   });
 });
@@ -98,7 +96,7 @@ describe("EntityArticle — npc", () => {
 describe("EntityArticle — location and titled entities", () => {
   test("location shows the roll20 page as a reference line", () => {
     const html = render(
-      file(
+      entry(
         "location",
         { id: "leuchtturm", name: "Der Leuchtturm von Salzhafen", "roll20-page": "Leuchtturm" },
         "## Atmosphäre\n\nVerlassen in Eile.\n",
@@ -112,7 +110,7 @@ describe("EntityArticle — location and titled entities", () => {
 
   test("chapter renders title plus body", () => {
     const html = render(
-      file("chapter", { id: "01-salzhafen", title: "Salzhafen" }, "## Ziel\n\nLicht an.\n"),
+      entry("chapter", { id: "01-salzhafen", title: "Salzhafen" }, "## Ziel\n\nLicht an.\n"),
     );
     expect(html).toContain("Salzhafen");
     expect(html).toContain("Licht an.");
@@ -135,19 +133,19 @@ describe("EntityArticle — location and titled entities", () => {
       /<span class="[^"]*gap-2[^"]*"><button[^>]*>Bearbeiten<\/button><button[^>]*>Eigenschaften<\/button><\/span>/;
     const variants = [
       jorna, // npc header
-      file("location", { id: "leuchtturm", name: "Leuchtturm" }),
-      file("chapter", { id: "01-salzhafen", title: "Salzhafen" }),
+      entry("location", { id: "leuchtturm", name: "Leuchtturm" }),
+      entry("chapter", { id: "01-salzhafen", title: "Salzhafen" }),
     ];
-    for (const f of variants) {
-      expect(renderToStaticMarkup(<EntityArticle file={f} actions={actions} />)).toMatch(grouped);
+    for (const e of variants) {
+      expect(renderToStaticMarkup(<EntityArticle entry={e} actions={actions} />)).toMatch(grouped);
     }
     // No actions, no wrapper markup.
     expect(render(jorna)).not.toMatch(/<span class="[^"]*gap-2[^"]*"><\/span>/);
   });
 
   test("campaign and unknown kinds render the same quiet titled header", () => {
-    expect(render(file("campaign", { id: "beispiel", name: "Beispiel" }))).toContain("Beispiel");
-    const unknown = render(file("unknown", {}, "Freitext.\n"));
+    expect(render(entry("campaign", { id: "beispiel", name: "Beispiel" }))).toContain("Beispiel");
+    const unknown = render(entry("unknown", {}, "Freitext.\n"));
     expect(unknown).toContain("Freitext.");
     expect(unknown).not.toContain("Geplante Szene");
   });

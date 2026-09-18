@@ -56,7 +56,6 @@ import type {
   GenerateResult,
 } from "@grimoire/shared";
 import { ApiError } from "./api-error";
-import { now } from "./clock";
 import type { GrimoireDb } from "./db/client";
 import { generateJobs } from "./db/schema";
 import { runAugment } from "./generator-augment";
@@ -72,7 +71,7 @@ import {
 } from "./generate-pipeline";
 import type { LLMProvider } from "./llm-provider";
 import { getDb } from "./store/handle";
-import { RESERVED_SEGMENTS } from "./store/paths";
+import { addressSegments, RESERVED_SEGMENTS } from "./store/paths";
 
 /** Server-side job record; `draftEdits` is a Map here, an object on the wire. */
 interface Job {
@@ -167,7 +166,7 @@ function serializePipeline(pipeline: PipelineRecord): GenerateJobPipeline {
 }
 
 function timestamp(): string {
-  return now().toISOString();
+  return new Date().toISOString();
 }
 
 /**
@@ -314,7 +313,7 @@ function unpackReview(value: string): GenerateJobReview {
  * point of persisting it — so its draft paths can be spelled in TWO older
  * schemes, and neither is a legal target:
  *
- *   * an ADDRESS carries no file extension, and a `.md`
+ *   * an ADDRESS carries no extension, and a `.md`
  *     path is rejected outright by the NPC apply pattern (400 on the
  *     accept) or would insert a scene row whose id nothing can address.
  *   * a scene draft's path is `<chapter>/<id>`: the group
@@ -333,7 +332,7 @@ function unpackReview(value: string): GenerateJobReview {
  */
 function draftAddress(path: string): string {
   const stripped = path.endsWith(".md") ? path.slice(0, -3) : path;
-  const segments = stripped.split("/");
+  const segments = addressSegments(stripped);
   // Only a SCENE path collapses: `npcs/<id>`/`locations/<id>` have two
   // segments anyway, and a chapter is not a draft path.
   if (segments.length !== 3) return stripped;

@@ -84,9 +84,9 @@ import { ReviewSaveStatus } from "@/components/ReviewSaveStatus";
 import { Button } from "@/components/ui/button";
 import { locationName } from "@/lib/campaign";
 import { serverErrorBodyMessage, useT, type Translate } from "@/i18n";
-import { npcStatusLabel } from "@/lib/entity";
-import { fmQuickstats, fmString, fmStringArray } from "@/lib/properties";
-import { sceneStatusMeta } from "@/lib/scene-status";
+import { npcStatusLabel, npcStatusOf } from "@/lib/entity";
+import { propQuickstats, propString, propStringArray } from "@/lib/properties";
+import { sceneStatusMeta, sceneStatusOf } from "@/lib/scene-status";
 import {
   applySummary,
   chapterIdError,
@@ -1357,7 +1357,7 @@ export function GenerateRoute() {
 function stubReason(scenes: GenerateResult["scenes"], t: Translate): string {
   const first = scenes[0];
   if (first === undefined) return t("generate.stub.reason.run");
-  const title = fmString(first.properties.title) ?? first.path;
+  const title = propString(first.properties.title) ?? first.path;
   return t(scenes.length === 1 ? "generate.stub.reason.scene" : "generate.stub.reason.scenes", {
     title,
   });
@@ -1642,14 +1642,14 @@ function SceneCard({
   onDrop: () => void;
 }) {
   const t = useT();
-  const title = fmString(properties.title) ?? path;
-  const status = fmString(properties.status) ?? "draft";
-  // Show the status LABEL, never the raw property value; unknown
-  // values still degrade to their verbatim text inside the helper.
-  const statusLabel = sceneStatusMeta(status, t).label;
-  const isContingency = fmString(properties.type) === "contingency";
-  const location = locationName(tree, fmString(properties.location));
-  const tags = fmStringArray(properties.tags);
+  const title = propString(properties.title) ?? path;
+  // Show the status LABEL, never the property value: a generated scene draft
+  // carries `status: draft` (the reply validation insists on it) and the
+  // dialog's select offers nothing but the four.
+  const statusLabel = sceneStatusMeta(sceneStatusOf(properties), t).label;
+  const isContingency = propString(properties.type) === "contingency";
+  const location = locationName(tree, propString(properties.location));
+  const tags = propStringArray(properties.tags);
   const editorId = `gen-draft-${path.replace(/[^a-zA-Z0-9-]/g, "-")}`;
   const written = state === "written";
 
@@ -1832,14 +1832,13 @@ function NpcDraftCard({
   onFlush: () => void;
 }) {
   const t = useT();
-  const fm = properties;
-  const name = fmString(fm.name) ?? path;
-  const status = fmString(fm.status);
-  const role = fmString(fm.role);
-  const voice = fmString(fm.voice);
-  const appearance = fmString(fm.appearance);
-  const statblock = fmString(fm.statblock);
-  const quickstats = fmQuickstats(fm.quickstats);
+  const name = propString(properties.name) ?? path;
+  const status = npcStatusOf(properties);
+  const role = propString(properties.role);
+  const voice = propString(properties.voice);
+  const appearance = propString(properties.appearance);
+  const statblock = propString(properties.statblock);
+  const quickstats = propQuickstats(properties.quickstats);
   const editorId = `gen-draft-${path.replace(/[^a-zA-Z0-9-]/g, "-")}`;
 
   return (

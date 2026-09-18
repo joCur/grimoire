@@ -19,6 +19,7 @@ import type { CampaignTree } from "@grimoire/shared/types";
 import { kindFromAddress } from "@grimoire/shared/kind";
 
 import type { Translate } from "@/i18n";
+import { addressSegments } from "@/lib/address";
 import { locationName } from "@/lib/campaign";
 
 /** One step of the context line; without `to` it is plain text. */
@@ -32,11 +33,11 @@ export interface ContextCrumb {
  * that has no place in the hierarchy (the campaign entry, sessions, inbox,
  * glossary) — the nav's section marking is context enough there.
  *
- * Scene: `<chapter title> › <group>`, the chapter linking to the chapter overview. The
- * group part is the scene's directory resolved like a chapter overview group header (the
- * location's name when `locations/<slug>` exists, otherwise the slug as
- * written — never prettified), and is absent for a scene that sits directly
- * in the chapter directory.
+ * Scene: `<chapter title> › <group>`, the chapter linking to the chapter
+ * overview. The group part is the scene's middle segment resolved like a
+ * chapter overview group header (the location's name when `locations/<slug>`
+ * exists, otherwise the slug as written — never prettified), and is absent for
+ * a scene addressed directly under its chapter.
  * Chapter entry: just the chapter, unlinked — it IS the chapter.
  * NPC / location: their list.
  *
@@ -51,7 +52,7 @@ export function pageContextCrumbs(
   t: Translate,
 ): ContextCrumb[] {
   if (campaign === "" || path === "") return [];
-  const segments = path.split("/");
+  const segments = addressSegments(path);
 
   switch (kindFromAddress(path)) {
     case "npc":
@@ -67,7 +68,7 @@ export function pageContextCrumbs(
       // chapter would need an anchor in the chapter overview plus reduced-motion handling —
       // its own slice; the accordion already opens the active chapter.
       const crumbs: ContextCrumb[] = [{ label: title, to: `/campaigns/${campaign}` }];
-      // `<chapter>/<group>/<scene>` — three segments means a group dir.
+      // `<chapter>/<group>/<scene>` — three segments means a group.
       const group = segments.length === 3 ? (segments[1] ?? "") : "";
       if (group !== "") crumbs.push({ label: locationName(tree, group) ?? group });
       return crumbs;

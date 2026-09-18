@@ -20,17 +20,16 @@ import type { EntityKind } from "@grimoire/shared/types";
  *                    the write path refuses a body for it with 400
  *                    `body_not_editable` (ADR #23), so an editor here could
  *                    only ever lose the typed text.
- *   campaign         no — its header already carries an edit action for name
- *                    and description; one label, one meaning.
- *   everything else  yes: scene, npc, location, chapter (chapter entry) and
- *                    whatever else the route is pointed at.
+ *   everything else  yes: scene, npc, location, chapter, the campaign entry
+ *                    (its text is prose like a chapter's; name and
+ *                    description stay with the campaign dialog) and whatever
+ *                    else the route is pointed at.
  */
 export function canEditEntryBody(kind: EntityKind): boolean {
   switch (kind) {
     case "session":
     case "inbox":
     case "glossary":
-    case "campaign":
       return false;
     default:
       return true;

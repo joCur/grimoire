@@ -19,7 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchEntry } from "@/api";
 import { EntityCardShell } from "@/components/EntityCardShell";
 import { useI18n } from "@/i18n";
-import { fmString } from "@/lib/properties";
+import { propString } from "@/lib/properties";
 import { firstParagraphOfSection } from "@/lib/md-section";
 
 /**
@@ -70,10 +70,10 @@ export function LocationCard({
   }
   if (data === undefined) return null;
 
-  const fm = data.properties;
-  const name = fmString(fm.name) ?? id;
+  const properties = data.properties;
+  const name = propString(properties.name) ?? id;
   const mood = firstParagraphOfSection(data.body, "Atmosphäre");
-  const page = fmString(fm["roll20-page"]);
+  const page = propString(properties["roll20-page"]);
 
   return (
     <EntityCardShell campaign={campaign} path={path} onOpen={onOpen} className="p-3.5">

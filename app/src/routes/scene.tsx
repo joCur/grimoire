@@ -1,5 +1,5 @@
-// "/campaigns/:campaign/entries/*" — the reading view of ONE file. For a scene that is
-// the scene article per the design reference (type overline, Literata title,
+// "/campaigns/:campaign/entries/*" — the reading view of ONE entry. For a
+// scene that is the scene article per the design reference (type overline, Literata title,
 // trigger row, chip row, markdown body — shared with the live view via
 // SceneArticle) plus a sticky right aside with the scene's NPC cards. Below
 // md: a back row to the chapter overview on top and the NPC cards stacked below
@@ -24,7 +24,8 @@
 // properties per field, body per block, nothing written until accepted.
 //
 // The properties action next to it is the properties half: a form over
-// all typed fields of the kind. It stays available while the body editor runs;
+// all typed fields of the kind — for the campaign entry, the dialog over its
+// name and description. It stays available while the body editor runs;
 // each of them is its own editing session, so a save from one while the other
 // stands asks what to do instead of overwriting it.
 
@@ -45,8 +46,10 @@ import { SceneArticle } from "@/components/SceneArticle";
 import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { useT } from "@/i18n";
 import { entityHeaderKind } from "@/lib/entity";
+import { encodeAddress } from "@/lib/address";
 import { canEditEntryBody } from "@/lib/entry-body";
-import { fmString, fmStringArray } from "@/lib/properties";
+import { propString, propStringArray } from "@/lib/properties";
+import { sceneStatusOf } from "@/lib/scene-status";
 import { pageContextCrumbs } from "@/lib/page-context";
 
 export function SceneRoute() {
@@ -82,7 +85,7 @@ export function SceneRoute() {
   // properties `id`, which the format declares immutable, with
   // the canonical address as the fallback for an entry whose properties
   // carries none.
-  const docId = data === undefined ? undefined : (fmString(data.properties.id) ?? data.path);
+  const docId = data === undefined ? undefined : (propString(data.properties.id) ?? data.path);
   // Whether this entry has an editable text at all (canEditEntryBody). It
   // gates the mode itself, not just the header trigger: a list entry like the
   // glossary has no body to write, and an editor reached past the trigger —
@@ -121,11 +124,9 @@ export function SceneRoute() {
   const navigate = useNavigate();
   useEffect(() => {
     if (canonical === undefined || canonical === path) return;
-    // Encoded PER SEGMENT, like every other entry link the app builds
-    // (lib/search.ts): the slashes are the address, everything else is a
-    // segment that may carry anything an id may carry.
-    const target = canonical.split("/").map(encodeURIComponent).join("/");
-    navigate(`/campaigns/${encodeURIComponent(campaign)}/entries/${target}`, { replace: true });
+    navigate(`/campaigns/${encodeURIComponent(campaign)}/entries/${encodeAddress(canonical)}`, {
+      replace: true,
+    });
   }, [campaign, canonical, path, navigate]);
 
   if (isPending) {
@@ -149,7 +150,7 @@ export function SceneRoute() {
 
   const isScene = entityHeaderKind(data.kind) === "scene";
   // The aside belongs to scenes: only they reference npcs in properties.
-  const npcs = isScene ? fmStringArray(data.properties.npcs) : [];
+  const npcs = isScene ? propStringArray(data.properties.npcs) : [];
   // The edit action — the body editor, offered for the kinds whose
   // prose the DM maintains (canEditEntryBody). While it runs the trigger is
   // gone: the editor's own toggle owns the mode from then on.
@@ -162,7 +163,7 @@ export function SceneRoute() {
     <EntryBodyEditor
       key={docId}
       campaign={campaign}
-      file={data}
+      entry={data}
       onClose={() => setEditingId(undefined)}
     />
   ) : undefined;
@@ -170,25 +171,28 @@ export function SceneRoute() {
   // fields (scene, npc, location, chapter); it renders nothing for the rest.
   // The tree feeds its reference fields (npc/location/chapter ids).
   const propertiesAction = (
-    <PropertiesAction campaign={campaign} file={data} tree={tree.data} />
+    <PropertiesAction campaign={campaign} entry={data} tree={tree.data} />
   );
   // The augment action — the third quiet action, for the kinds
   // that have an augment prompt (npc, location, scene); it renders nothing
   // for the rest, and it is desktop-only (mobile is the reading surface).
   // While the body editor runs it stays out of the way for the same reason
   // the edit action does: two writers on one body is not a review.
-  const augmentAction = editing ? null : <AugmentAction campaign={campaign} file={data} />;
+  const augmentAction = editing ? null : <AugmentAction campaign={campaign} entry={data} />;
+  // The campaign entry's properties half is its own dialog — name and
+  // description, the two values no typed form models — so it stands where the
+  // properties action stands for every other kind, and under that name. The
+  // body next to it is prose the DM edits like a chapter's.
+  const campaignMetaAction =
+    data.kind === "campaign" ? <CampaignMetaAction campaign={campaign} as="properties" /> : null;
   const articleActions = (
     <>
       {editAction}
       {propertiesAction}
+      {campaignMetaAction}
       {augmentAction}
     </>
   );
-  // The campaign entry's header carries the metadata edit action instead:
-  // its name/description are what this page shows, and its id is fixed.
-  const headerActions =
-    data.kind === "campaign" ? <CampaignMetaAction campaign={campaign} /> : articleActions;
 
   return (
     <>
@@ -201,7 +205,7 @@ export function SceneRoute() {
           <PageContext crumbs={pageContextCrumbs(campaign, data.path, tree.data, t)} />
           {isScene ? (
             <SceneArticle
-              file={data}
+              entry={data}
               tree={tree.data}
               variant="scene"
               actions={articleActions}
@@ -213,14 +217,14 @@ export function SceneRoute() {
                 <SceneStatusControl
                   campaign={campaign}
                   path={data.path}
-                  status={fmString(data.properties.status) ?? "draft"}
+                  status={sceneStatusOf(data.properties)}
                   rev={data.rev}
                   variant="pill"
                 />
               }
             />
           ) : (
-            <EntityArticle file={data} actions={headerActions} body={bodyEditor} />
+            <EntityArticle entry={data} actions={articleActions} body={bodyEditor} />
           )}
         </div>
         {npcs.length > 0 && (

@@ -42,15 +42,6 @@ describe("ChapterStatusMenu", () => {
     expect(html).toMatch(/aria-checked="true"[^>]*>.*?<span class="flex-1">Aktiv</);
   });
 
-  test("an unknown value shows verbatim and checks nothing", () => {
-    // The format degrades: a chapter keeps its text, and the menu still
-    // offers only the trio the API accepts.
-    const html = render({ status: "laeuft" });
-    expect(html).toContain("laeuft");
-    expect(itemLabels(html)).toEqual(["Geplant", "Aktiv", "Abgeschlossen"]);
-    expect(html).not.toContain('aria-checked="true"');
-  });
-
   test("the trigger names the current status for screen readers", () => {
     expect(render({ status: "done" })).toContain(
       'aria-label="Status ändern, aktuell Abgeschlossen"',

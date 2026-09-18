@@ -1,40 +1,20 @@
-// What migration 0014 does to the data it finds — the one-time step that
-// adds the reference constraints.
+// The gate in front of the reference constraints: `findReferenceProblems`
+// names every stored value the foreign keys would refuse,
+// `findRelationHeadingProblems` names every relations heading the write-back
+// of the notes cannot place, the two report functions turn that into the
+// operator's log block, and `assertMigrationReady` aborts the start with it.
 //
-// WHAT IS PINNED HERE AND WHAT IS NOT: the constraints themselves are a
-// schema declaration, and a test that re-asserts them would only repeat it —
-// every schema change would then be a test change too. The API half of that
-// behaviour (a reference that names nothing is refused, a scene needs a
-// chapter) is asserted where the DM
-// meets it, in test/reference-integrity.test.ts. What IS pinned is the
-// CONTENT of the migration: a released migration never changes again, so
-// what it does to a DM's rows is a promise, and these cases are what caught
-// it deleting `scene_npcs` and `scene_tags` in silence.
+// The gate runs on the raw client while the references are still open, so the
+// database here is built BY HAND in that open shape. A database that has been
+// through the boot path has nothing left to check, and that half is asserted
+// against `openDb`.
 //
-// Two subjects, and they are separate on purpose:
-//
-//   1. THE REBUILD. SQLite cannot add a constraint to an existing table, so
-//      the migration rebuilds seven tables — and the migrator runs inside a
-//      transaction, where `PRAGMA foreign_keys` is ignored. Dropping the old
-//      `scenes` therefore deletes every `scene_npcs` and `scene_tags` row
-//      through their cascade. The migration sets those rows aside first;
-//      these cases are what says so, and they fail if it stops doing it.
-//      The relation notes belong to the same subject: they only ever existed
-//      as rows, so the migration writes them into the npc's own text before
-//      the table goes.
-//   2. THE PRE-FLIGHT that runs before all of it — TypeScript, not SQL: data
-//      that cannot satisfy the constraints, or a relations heading the
-//      write-back cannot place, aborts the start, with the offending values
-//      in the report and nothing migrated.
-//
-// The old-schema database is built BY HAND, like the other pre-migration
-// step's test next to this one: that is what keeps the case honest about
-// running against a schema the current one no longer has.
+// The API half of the same rules (a reference that names nothing is refused, a
+// scene needs a chapter) is asserted where the DM meets it, in
+// test/reference-integrity.test.ts.
 
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { MIGRATIONS_DIR, openDb } from "../src/db/client";
+import { openDb } from "../src/db/client";
 import { openSqlite, type SqliteClient } from "../src/db/driver";
 import {
   assertMigrationReady,
@@ -44,10 +24,8 @@ import {
   relationHeadingReport,
 } from "../src/db/reference-preflight";
 
-// --- the rebuild ------------------------------------------------------------
-
-/** The schema as it stood before the constraints, for the tables they touch. */
-async function preConstraintDb(): Promise<SqliteClient> {
+/** The schema as it stands with the references still open. */
+async function openReferencesDb(): Promise<SqliteClient> {
   const client = await openSqlite(":memory:");
   client.exec("PRAGMA foreign_keys = ON");
   client.exec(`
@@ -131,7 +109,7 @@ async function preConstraintDb(): Promise<SqliteClient> {
   return client;
 }
 
-/** One campaign whose references all resolve — the case that migrates. */
+/** One campaign whose references all resolve — the case that passes. */
 function seedResolvable(client: SqliteClient): void {
   client.exec(`
     insert into campaigns (id, name) values ('beispiel', 'Beispiel');
@@ -152,203 +130,9 @@ function seedResolvable(client: SqliteClient): void {
   `);
 }
 
-/** Run the committed migration exactly as the migrator does: one transaction. */
-function applyConstraintMigration(client: SqliteClient): void {
-  const file = path.join(MIGRATIONS_DIR, "0014_reference_constraints.sql");
-  const statements = readFileSync(file, "utf8")
-    .split("--> statement-breakpoint")
-    .map((part) => part.trim())
-    .filter((part) => part !== "");
-  client.transaction(() => {
-    for (const statement of statements) client.exec(statement);
-  }).immediate();
-}
-
 function rows(client: SqliteClient, query: string): Record<string, unknown>[] {
   return client.prepare(query).all();
 }
-
-describe("the rebuild keeps every row", () => {
-  test("the child rows of a rebuilt table survive the migration", async () => {
-    const client = await preConstraintDb();
-    try {
-      seedResolvable(client);
-      applyConstraintMigration(client);
-
-      // The rows whose tables were dropped and rebuilt around them.
-      expect(rows(client, "select scene_id, npc_id, pos from scene_npcs")).toEqual([
-        { scene_id: "ankunft", npc_id: "jorna", pos: 0 },
-      ]);
-      expect(rows(client, "select scene_id, tag, pos from scene_tags")).toEqual([
-        { scene_id: "ankunft", tag: "social", pos: 0 },
-      ]);
-      expect(rows(client, "select pos, raw, at, scene_id, text, hash from log_entries")).toEqual([
-        {
-          pos: 0,
-          raw: "- 19:52 (ankunft) Spuren",
-          at: "19:52",
-          scene_id: "ankunft",
-          text: "Spuren",
-          hash: "abc",
-        },
-      ]);
-      expect(rows(client, "select session_id, scene_id, pos from session_scenes_played")).toEqual([
-        { session_id: "s1", scene_id: "ankunft", pos: 0 },
-      ]);
-      // …and the parents, with their values.
-      expect(rows(client, "select id, chapter_id, location, title, pos from scenes")).toEqual([
-        { id: "ankunft", chapter_id: "01", location: "hafen", title: "Ankunft", pos: 0 },
-      ]);
-      expect(rows(client, "select id, name, chapter_id from npcs")).toEqual([
-        { id: "jorna", name: "Jorna", chapter_id: "01" },
-      ]);
-      expect(rows(client, "select id, name, chapter_id from locations")).toEqual([
-        { id: "hafen", name: "Hafen", chapter_id: "01" },
-      ]);
-    } finally {
-      client.close();
-    }
-  });
-
-  test("the constraints are in place afterwards, and nothing is left over", async () => {
-    const client = await preConstraintDb();
-    try {
-      seedResolvable(client);
-      applyConstraintMigration(client);
-
-      const fks = rows(client, "pragma foreign_key_list(scenes)").map((row) => row.table);
-      expect(new Set(fks)).toEqual(new Set(["campaigns", "chapters", "locations"]));
-      expect(() =>
-        client
-          .prepare(
-            "insert into scenes (campaign_id, id, chapter_id, title, pos) values ('beispiel', 'x', '99', 'X', 1)",
-          )
-          .run(),
-      ).toThrow(/FOREIGN KEY constraint failed/);
-
-      // A table that was NOT rebuilt still points at the one that was: the
-      // parent was dropped and recreated under the same name, and that is
-      // what the rebuild has to leave intact.
-      expect(() =>
-        client
-          .prepare(
-            "insert into scene_tags (campaign_id, scene_id, tag, pos) values ('beispiel', 'weg', 'social', 1)",
-          )
-          .run(),
-      ).toThrow(/FOREIGN KEY constraint failed/);
-
-      // The relations table is gone, and so are the migration's own tables.
-      const tables = rows(
-        client,
-        "select name from sqlite_master where type = 'table' order by name",
-      ).map((row) => row.name as string);
-      expect(tables).not.toContain("npc_relations");
-      expect(tables.filter((name) => name.startsWith("__"))).toEqual([]);
-    } finally {
-      client.close();
-    }
-  });
-
-  test("dropping a rebuilt parent inside a transaction takes its child rows", async () => {
-    // The reason the migration puts the rows aside: `PRAGMA foreign_keys` is
-    // ignored inside a transaction, so the implicit delete of a DROP TABLE
-    // fires the children's cascade. Without the backup tables the two cases
-    // above would come back empty.
-    const client = await preConstraintDb();
-    try {
-      seedResolvable(client);
-      client.transaction(() => {
-        client.exec("PRAGMA foreign_keys = OFF");
-        client.exec("DROP TABLE scenes");
-      }).immediate();
-      expect(rows(client, "select scene_id from scene_npcs")).toEqual([]);
-      expect(rows(client, "select scene_id from scene_tags")).toEqual([]);
-    } finally {
-      client.close();
-    }
-  });
-});
-
-// --- the relation notes ------------------------------------------------------
-
-describe("the relation notes survive the table", () => {
-  /**
-   * `## Beziehungen` only ever existed as ROWS: the importer took the lines
-   * out of the npc's text and the read path rendered them back, so dropping
-   * the table without writing the section into the text would delete the
-   * DM's notes. The migration writes it first — and these are the strings
-   * the reader produced for the same rows, character for character: the
-   * heading, a blank line, one `- <id>: <note>` line per row in `pos` order,
-   * an empty note as `- <id>:`.
-   */
-  const withRelations = (client: SqliteClient): void => {
-    client.exec(`
-      insert into campaigns (id, name) values ('beispiel', 'Beispiel');
-      insert into chapters (campaign_id, id, title, pos) values ('beispiel', '01', 'Kapitel', 0);
-      insert into npcs (campaign_id, id, name, body) values
-        ('beispiel', 'jorna', 'Jorna', '## Will' || char(10) || char(10) || 'Das Leuchtfeuer.' || char(10) || char(10) || '## Notizen' || char(10) || char(10) || '- aus dem Log' || char(10)),
-        ('beispiel', 'fenn', 'Fenn', '## Will' || char(10) || char(10) || 'Raus.' || char(10) || char(10) || '## Beziehungen' || char(10) || char(10) || 'eine Zeile, die keine Beziehung war' || char(10)),
-        ('beispiel', 'holm', 'Holm', '## Will' || char(10) || char(10) || 'Seine Netze.' || char(10));
-      insert into npc_relations (campaign_id, npc_id, other_npc_id, note, pos) values
-        ('beispiel', 'jorna', 'fenn', 'kennt ihn von früher', 0),
-        ('beispiel', 'jorna', 'holm', '', 1),
-        ('beispiel', 'jorna', 'metta', 'schuldet ihr [[hafengeld]]', 2),
-        ('beispiel', 'fenn', 'jorna', 'alte Bekannte', 0);
-    `);
-  };
-
-  test("a text without the heading gets the section appended, in pos order", async () => {
-    const client = await preConstraintDb();
-    try {
-      withRelations(client);
-      applyConstraintMigration(client);
-      const body = (
-        rows(client, "select body from npcs where id = 'jorna'")[0] as { body: string }
-      ).body;
-      expect(body).toBe(
-        "## Will\n\nDas Leuchtfeuer.\n\n## Notizen\n\n- aus dem Log\n" +
-          "\n## Beziehungen\n\n" +
-          "- fenn: kennt ihn von früher\n" +
-          "- holm:\n" +
-          "- metta: schuldet ihr [[hafengeld]]\n",
-      );
-    } finally {
-      client.close();
-    }
-  });
-
-  test("a text that already has the heading keeps one, with the prose under it", async () => {
-    const client = await preConstraintDb();
-    try {
-      withRelations(client);
-      applyConstraintMigration(client);
-      const body = (
-        rows(client, "select body from npcs where id = 'fenn'")[0] as { body: string }
-      ).body;
-      expect(body).toBe(
-        "## Will\n\nRaus.\n\n## Beziehungen\n\n" +
-          "- jorna: alte Bekannte\n" +
-          "\neine Zeile, die keine Beziehung war\n",
-      );
-      expect(body.split("## Beziehungen").length - 1).toBe(1);
-    } finally {
-      client.close();
-    }
-  });
-
-  test("an npc without relations keeps its text byte for byte", async () => {
-    const client = await preConstraintDb();
-    try {
-      withRelations(client);
-      applyConstraintMigration(client);
-      expect(
-        (rows(client, "select body from npcs where id = 'holm'")[0] as { body: string }).body,
-      ).toBe("## Will\n\nSeine Netze.\n");
-    } finally {
-      client.close();
-    }
-  });
-});
 
 /**
  * An npc that carries relation notes plus the heading spelled the way the
@@ -380,7 +164,7 @@ describe("a relations heading the write-back cannot place refuses the start", ()
 
   for (const [label, heading] of refused) {
     test(`${label} is named by npc id, and nothing is migrated`, async () => {
-      const client = await preConstraintDb();
+      const client = await openReferencesDb();
       try {
         client.exec("insert into campaigns (id, name) values ('beispiel', 'Beispiel')");
         withHeading(client, "fenn", heading);
@@ -401,7 +185,7 @@ describe("a relations heading the write-back cannot place refuses the start", ()
   }
 
   test("the canonical heading is fine in any case, and so is a text without one", async () => {
-    const client = await preConstraintDb();
+    const client = await openReferencesDb();
     try {
       client.exec("insert into campaigns (id, name) values ('beispiel', 'Beispiel')");
       // A THIRD hash is a different heading level; the deleted reader never
@@ -419,7 +203,7 @@ describe("a relations heading the write-back cannot place refuses the start", ()
   test("an npc with NO notes is not asked about its headings", async () => {
     // The write-back only touches texts it writes into, so a heading in any
     // other text cannot produce a second section.
-    const client = await preConstraintDb();
+    const client = await openReferencesDb();
     try {
       client.exec(`
         insert into campaigns (id, name) values ('beispiel', 'Beispiel');
@@ -435,7 +219,7 @@ describe("a relations heading the write-back cannot place refuses the start", ()
     }
   });
 
-  test("a migrated database is not asked either", async () => {
+  test("a database that has been through the boot path is not asked either", async () => {
     const { client, close } = await openDb(":memory:");
     try {
       expect(findRelationHeadingProblems(client)).toEqual([]);
@@ -457,11 +241,9 @@ describe("a relations heading the write-back cannot place refuses the start", ()
   });
 });
 
-// --- the pre-flight ---------------------------------------------------------
-
 describe("the pre-flight in front of the constraints", () => {
   test("a database whose references resolve has nothing to report", async () => {
-    const client = await preConstraintDb();
+    const client = await openReferencesDb();
     try {
       seedResolvable(client);
       expect(findReferenceProblems(client)).toEqual([]);
@@ -471,7 +253,7 @@ describe("the pre-flight in front of the constraints", () => {
     }
   });
 
-  test("a migrated database is not asked again", async () => {
+  test("a database that has been through the boot path is not asked again", async () => {
     const { client, close } = await openDb(":memory:");
     try {
       expect(findReferenceProblems(client)).toEqual([]);
@@ -481,7 +263,7 @@ describe("the pre-flight in front of the constraints", () => {
   });
 
   test("every unresolvable reference is named with its values and its count", async () => {
-    const client = await preConstraintDb();
+    const client = await openReferencesDb();
     try {
       seedResolvable(client);
       // One of each: a scene with no chapter, a chapter that does not exist,
@@ -558,7 +340,7 @@ describe("the pre-flight in front of the constraints", () => {
     // `campaign_id` is part of every reference, so a chapter that exists in
     // one campaign is no chapter for a scene in another — the foreign keys
     // rule cross-campaign references out, and the pre-flight says so first.
-    const client = await preConstraintDb();
+    const client = await openReferencesDb();
     try {
       seedResolvable(client);
       client.exec(`
@@ -577,10 +359,10 @@ describe("the pre-flight in front of the constraints", () => {
   });
 
   test("a mandatory value that is BLANK is reported as such, not as a bare slash", async () => {
-    // An empty string is not null, so it is not „names nothing at all" — it
+    // An empty string is not null, so it is not "names nothing at all" — it
     // names an entry whose id is "", and the report has to show that as
     // something a reader can see.
-    const client = await preConstraintDb();
+    const client = await openReferencesDb();
     try {
       seedResolvable(client);
       client.exec(
@@ -598,9 +380,9 @@ describe("the pre-flight in front of the constraints", () => {
   });
 
   test("the check reads only — it writes nothing, not even on a failure", async () => {
-    // „Nothing has been migrated" is a promise about the data, so the check
+    // "Nothing has been migrated" is a promise about the data, so the check
     // that prints it must not touch a row itself.
-    const client = await preConstraintDb();
+    const client = await openReferencesDb();
     try {
       seedResolvable(client);
       client.exec(`

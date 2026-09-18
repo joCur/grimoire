@@ -77,7 +77,7 @@ describe("pickLastCampaign", () => {
     expect(pickLastCampaign([c("zeta", "gestern"), c("alpha", "gestern")])).toBe("alpha");
   });
 
-  test("a minute-precise `started` from an older file still orders", () => {
+  test("a minute-precise `started` from an older entry still orders", () => {
     expect(
       pickLastCampaign([c("alpha", "2026-09-06T18:00"), c("zeta", "2026-09-06T20:00")]),
     ).toBe("zeta");

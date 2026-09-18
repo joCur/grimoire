@@ -1,8 +1,8 @@
-// The reading view of everything that is NOT a scene (issue #26): NPC,
-// location and the plain titled entities (chapter, campaign, and whatever
-// else the file route is pointed at). Same column and same markdown pipeline
-// as the scene article — only the header differs, and the scene's type
-// overline ("Geplante Szene") never appears here.
+// The reading view of everything that is NOT a scene: NPC, location and the
+// plain titled entities (chapter, campaign, and whatever else the entry route
+// is pointed at). Same column and same markdown pipeline as the scene
+// article — only the header differs, and the scene's type overline never
+// appears here.
 //
 // Reference lines (statblock, roll20-page) stay PLAIN TEXT on purpose: the
 // format references Roll20 by name, it never links or copies it (README).
@@ -10,8 +10,8 @@
 import type { EntryResponse } from "@grimoire/shared/types";
 import type { ReactNode } from "react";
 
-import { entityHeaderKind, npcStatusLabel } from "@/lib/entity";
-import { fmQuickstats, fmString } from "@/lib/properties";
+import { entityHeaderKind, npcStatusLabel, npcStatusOf } from "@/lib/entity";
+import { propQuickstats, propString } from "@/lib/properties";
 import { useT } from "@/i18n";
 import { sessionDateLabel } from "@/lib/session";
 import { cn } from "@/lib/utils";
@@ -32,14 +32,14 @@ function Title({ children, className }: { children: string; className?: string }
 }
 
 /**
- * The header's action slot is a GROUP, not a single button: since issue #15 it
- * carries „Bearbeiten" next to „Eigenschaften". Wrapping them keeps them one
+ * The header's action slot is a GROUP, not a single button: it carries the
+ * edit action next to the properties action. Wrapping them keeps them one
  * right-aligned, evenly spaced unit in every header variant — without it the
  * `justify-between` rows below would strand the first button in the middle of
  * the header. Renders nothing when there are no actions.
  *
- * It WRAPS since issue #42 added „Eigenschaften": labels plus a long title do
- * not fit a 390px line, and a clipped action is worse than a second row.
+ * It WRAPS because labels plus a long title do not fit a 390px line, and a
+ * clipped action is worse than a second row.
  */
 function ActionGroup({ children }: { children?: ReactNode }) {
   if (children === undefined) return null;
@@ -49,70 +49,68 @@ function ActionGroup({ children }: { children?: ReactNode }) {
 }
 
 /**
- * `actions` is the header's quiet action slot („Bearbeiten", „Eigenschaften").
- * The
- * component stays free of queries — the route owns the action and passes it
- * in, exactly like the scene article's status control.
+ * `actions` is the header's quiet action slot (the edit, properties and
+ * augment triggers). The component stays free of queries — the route owns the
+ * actions and passes them in, exactly like the scene article's status control.
  */
 export function EntityArticle({
-  file,
+  entry,
   actions,
   body,
 }: {
-  file: EntryResponse;
+  entry: EntryResponse;
   actions?: ReactNode;
   /**
-   * Replaces the rendered body — edit mode (issue #15) puts its markdown
+   * Replaces the rendered body — edit mode puts its markdown
    * editor here and keeps the entity header standing above it.
    */
   body?: ReactNode;
 }) {
   const t = useT();
-  const header = entityHeaderKind(file.kind);
-  const fm = file.properties;
+  const header = entityHeaderKind(entry.kind);
+  const properties = entry.properties;
   // npc/location entries carry `name`, chapter/campaign entries `title` — either
   // may be missing (degrade), then the path is the honest fallback.
-  // A SESSION has no `title` and its id is opaque noise since issue #58, so
-  // the heading is derived from `started` ("Session vom 15.01.2026") instead
-  // of falling through to the path.
-  const fallback = file.kind === "session" ? sessionDateLabel(fm, t) : file.path;
-  const name = fmString(fm.name) ?? fmString(fm.title) ?? fallback;
-  const title = fmString(fm.title) ?? fmString(fm.name) ?? fallback;
+  // A SESSION has no `title` and its id is opaque noise, so the heading is
+  // derived from `started` instead of falling through to the path.
+  const fallback = entry.kind === "session" ? sessionDateLabel(properties, t) : entry.path;
+  const name = propString(properties.name) ?? propString(properties.title) ?? fallback;
+  const title = propString(properties.title) ?? propString(properties.name) ?? fallback;
 
   return (
     <article className="w-full min-w-0">
       {header === "npc" ? (
-        <NpcHeader file={file} name={name} actions={actions} />
+        <NpcHeader entry={entry} name={name} actions={actions} />
       ) : header === "location" ? (
-        <LocationHeader file={file} name={name} actions={actions} />
+        <LocationHeader entry={entry} name={name} actions={actions} />
       ) : (
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
           <Title>{title}</Title>
           <ActionGroup>{actions}</ActionGroup>
         </div>
       )}
-      {body ?? <Markdown>{file.body}</Markdown>}
+      {body ?? <Markdown>{entry.body}</Markdown>}
     </article>
   );
 }
 
 function NpcHeader({
-  file,
+  entry,
   name,
   actions,
 }: {
-  file: EntryResponse;
+  entry: EntryResponse;
   name: string;
   actions?: ReactNode;
 }) {
   const t = useT();
-  const fm = file.properties;
-  const role = fmString(fm.role);
-  const status = fmString(fm.status);
-  const voice = fmString(fm.voice);
-  const appearance = fmString(fm.appearance);
-  const statblock = fmString(fm.statblock);
-  const quickstats = fmQuickstats(fm.quickstats);
+  const properties = entry.properties;
+  const role = propString(properties.role);
+  const status = npcStatusOf(properties);
+  const voice = propString(properties.voice);
+  const appearance = propString(properties.appearance);
+  const statblock = propString(properties.statblock);
+  const quickstats = propQuickstats(properties.quickstats);
 
   return (
     <header className="mb-7 border-b border-border pb-5">
@@ -158,16 +156,16 @@ function NpcHeader({
 }
 
 function LocationHeader({
-  file,
+  entry,
   name,
   actions,
 }: {
-  file: EntryResponse;
+  entry: EntryResponse;
   name: string;
   actions?: ReactNode;
 }) {
   const t = useT();
-  const page = fmString(file.properties["roll20-page"]);
+  const page = propString(entry.properties["roll20-page"]);
   return (
     <header className="mb-7 border-b border-border pb-5">
       <div className="flex flex-wrap items-start justify-between gap-3">

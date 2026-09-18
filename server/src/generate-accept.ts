@@ -198,8 +198,8 @@ export async function acceptJobParts(
   // Decided from the JOB and not from the body: the review state is
   // persistent, so the accept regularly happens in a browser that never saw
   // the start form. The body fields remain an override.
-  const chapterFile = await jobChapterTarget(campaign, job, body.chapter, body.chapterTitle);
-  if (chapterFile !== null) targets.unshift(chapterFile);
+  const chapterEntry = await jobChapterTarget(campaign, job, body.chapter, body.chapterTitle);
+  if (chapterEntry !== null) targets.unshift(chapterEntry);
 
   const drafts = targets.map((t) => {
     const properties = storedDraftProperties(t.properties, t.rel);

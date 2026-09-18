@@ -29,7 +29,14 @@
 //
 // An address the schema does not describe names nothing and answers 404.
 
+import { addressHead, addressSegments } from "@grimoire/shared";
 import { ApiError } from "../api-error";
+
+// The two address DECOMPOSITION helpers live in @grimoire/shared, because the
+// app reads segments too and shared/ may not depend on the server. They are
+// re-exported here so everything server-side takes an address apart through
+// this module — the one that also writes them.
+export { addressHead, addressSegments };
 
 /** Which row a campaign-relative address names. */
 export type Locator =
@@ -75,7 +82,7 @@ export function scenePath(chapterId: string, groupSlug: string, id: string): str
 
 /**
  * The address of a scene ROW — the one place that knows the group segment is
- * the scene's `location` (issue #100). Structural on purpose: paths.ts must
+ * the scene's `location`. Structural on purpose: paths.ts must
  * not depend on the schema.
  */
 export function sceneAddress(row: {
@@ -102,7 +109,7 @@ export function sessionPath(id: string): string {
  * The ROW one address names, as a comparable key: `<kind>/<id>`.
  *
  * Two addresses that differ can still name the same row — a scene's group
- * segment is its `location` (issue #100), so `01-x/hafen/ankunft` and
+ * segment is its `location`, so `01-x/hafen/ankunft` and
  * `01-x/bucht/ankunft` are the same scene under two different locations. The
  * primary key is `(campaign, id)`, so anything asking "is this the same
  * target?" has to ask by identity and not by address; an address the schema
@@ -127,7 +134,7 @@ export function addressIdentity(rel: string): string {
  * the client's side "there is no such entry" is exactly what it means.
  */
 export function locatorFromPath(rel: string): Locator {
-  const segments = rel.split("/");
+  const segments = addressSegments(rel);
   const last = segments[segments.length - 1] ?? "";
 
   if (segments.length === 1) {
@@ -138,7 +145,7 @@ export function locatorFromPath(rel: string): Locator {
     return { kind: "chapter", id: last };
   }
 
-  const first = segments[0] ?? "";
+  const first = addressHead(rel);
   if (RESERVED.has(first)) {
     if (segments.length !== 2 || last === "") throw new ApiError(404, "entry not found");
     if (first === "npcs") return { kind: "npc", id: last };

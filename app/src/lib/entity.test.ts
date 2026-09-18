@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { NPC_STATUSES } from "@grimoire/shared/types";
+import { NPC_STATUSES, type NpcStatus } from "@grimoire/shared/types";
 
 import { translator } from "@/i18n/format";
 import { browseListTitle, entityHeaderKind, npcStatusLabel } from "./entity";
 
-// The labels come from the catalog and the translator is passed in (issue
-// #69) — so a test says which language it asserts.
+// The labels come from the catalog and the translator is passed in, so a test
+// says which language it asserts.
 const t = translator("de");
 const tEn = translator("en");
 
@@ -40,13 +40,13 @@ describe("npcStatusLabel", () => {
     }
   });
 
-  test("case and surrounding whitespace do not matter", () => {
-    expect(npcStatusLabel(" Alive ", t)).toBe("Lebendig");
-  });
-
-  test("unknown values pass through verbatim (degrade)", () => {
-    expect(npcStatusLabel("verschollen im Nebel", t)).toBe("verschollen im Nebel");
-    expect(npcStatusLabel("", t)).toBe("");
+  test("a value from outside the four is not a status at all", () => {
+    // `unknown` above is one of the four — the NPC nobody has placed yet — and
+    // the only other case there could be is a foreign value, which the column
+    // cannot hold (ADR #25). The type is what says so.
+    // @ts-expect-error not one of alive | dead | missing | unknown
+    const foreign: NpcStatus = "verschollen im Nebel";
+    expect(NPC_STATUSES as readonly string[]).not.toContain(foreign);
   });
 });
 

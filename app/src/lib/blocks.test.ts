@@ -35,7 +35,7 @@ import {
 
 const FIXTURES = new URL("../../../fixtures/beispiel/", import.meta.url);
 
-/** The fixture entry as it lies on disk: the shape the API speaks. */
+/** The fixture entry as it is stored: the shape the API speaks. */
 function fixture(name: string): { body?: string } {
   return JSON.parse(readFileSync(new URL(name, FIXTURES), "utf8")) as { body?: string };
 }
@@ -340,7 +340,7 @@ describe("degenerate input roundtrips", () => {
     "thematic break": "Text\n\n---\n\nmehr\n",
     "callout right after a list": "- eins\n> [!note] direkt danach\n",
     "no blank line between headings": "## A\n## B\n### C\n",
-    "windows file without final newline": "## Flow\r\n\r\nText",
+    "windows text without final newline": "## Flow\r\n\r\nText",
     "mixed line endings": "## Flow\n\r\nText\r\n\nmehr\n",
     "if section at the very end": "## Flow\n\n## If: a\n",
     "two if sections in a row": "## If: a\n\n## If: b\n\nText\n",
@@ -370,7 +370,7 @@ describe("degenerate input roundtrips", () => {
     const block = parseBlocks("> [!NOTE] Groß\n")[0];
     if (block?.type !== "callout") throw new Error("expected a callout");
     expect(block.kind).toBe("note");
-    // …while the spelling on disk survives untouched.
+    // …while the stored spelling survives untouched.
     expect(serializeBlocks([block])).toBe("> [!NOTE] Groß\n");
   });
 
@@ -434,11 +434,11 @@ describe("the whitespace-only seed", () => {
     expect(serializeBlocks(parseBlocks("\n\n"))).toBe("\n\n");
   });
 
-  test("typed into, it ends the file with exactly one newline", () => {
+  test("typed into, it ends the body with exactly one newline", () => {
     const blocks = parseBlocks("\n\n");
     const seed = blocks[0];
     if (seed?.type !== "text") throw new Error("expected the seed block");
-    // Without this the file would be saved without a trailing newline at all
+    // Without this the body would be saved without a trailing newline at all
     // (the seed's gap is "" — that is what round-tripped the whitespace).
     expect(serializeBlocks([withBlockText(seed, "Erster Satz.")])).toBe("\n\nErster Satz.\n");
   });
@@ -447,17 +447,17 @@ describe("the whitespace-only seed", () => {
     const blocks = parseBlocks("\r\n");
     const seed = blocks[0];
     if (seed?.type !== "text") throw new Error("expected the seed block");
-    // The leading blank line is the ONLY evidence of the file's line ending.
+    // The leading blank line is the ONLY evidence of the body's line ending.
     expect(serializeBlocks([withBlockText(seed, "Erster Satz.")])).toBe("\r\nErster Satz.\r\n");
   });
 
-  test("an edited last block of a file without a final newline gets one", () => {
+  test("an edited last block of a body without a final newline gets one", () => {
     const blocks = parseBlocks("## Flow\n\nText");
     const last = blocks[1];
     if (last?.type !== "text") throw new Error("expected a text block");
     const next = blocks.map((block) => (block === last ? withBlockText(last, "Neu") : block));
     expect(serializeBlocks(next)).toBe("## Flow\n\nNeu\n");
-    // …while leaving it alone leaves the file alone.
+    // …while leaving it alone leaves the body alone.
     expect(serializeBlocks(blocks)).toBe("## Flow\n\nText");
   });
 });
@@ -534,7 +534,7 @@ describe("the invariant under a seeded fuzz", () => {
   // Hand-picked cases only prove the cases somebody thought of. This glues
   // random line fragments together and demands the same byte-identity — with a
   // fixed seed, so a failure is reproducible and lands in CI, not in the DM's
-  // file.
+  // body.
   const FRAGMENTS = [
     "",
     "   ",

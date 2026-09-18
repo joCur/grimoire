@@ -1,5 +1,5 @@
-// Critical path 5: the session review; the harvest metaphor lives on in file
-// names and code only. See CLAUDE.md.
+// Critical path 5: the session review; the harvest metaphor lives on in spec
+// and identifier names only. See CLAUDE.md.
 //
 // Adopt a thread → chapter, tick off an inbox line, create an NPC stub,
 // and the progress counter.
@@ -34,8 +34,8 @@ function sessionEntry(id: string): SeedEntry {
     kind: "session",
     properties: {
       id,
-      started: `${id}T19:30`,
-      ended: `${id}T22:45`,
+      started: `${id}T19:30:00`,
+      ended: `${id}T22:45:00`,
       scenes_played: ["lighthouse-arrival"],
     },
     log: [
@@ -64,8 +64,8 @@ const PAST_MIDNIGHT = (() => {
     kind: "session",
     properties: {
       id: yesterday,
-      started: `${yesterday}T21:30`,
-      ended: `${today}T01:40`,
+      started: `${yesterday}T21:30:00`,
+      ended: `${today}T01:40:00`,
       scenes_played: ["lighthouse-arrival"],
     },
     log: [{ raw: THREAD_LINE }],
@@ -159,7 +159,7 @@ test("an untagged inbox note is reviewable and can be ticked off", async ({
   await noteCard.getByRole("button", { name: "Erledigt" }).click();
   await expect(noteCard.getByText("Erledigt", { exact: true })).toBeVisible();
   await expect(progress).toHaveText("1 von 5 gesichtet");
-  // The line is ticked off in the inbox document itself.
+  // The line is ticked off in the inbox entry itself.
   await expect.poll(() => api.body("inbox")).toContain(`- [x] ${NOTE_TEXT}`);
 
   // The chapter overview affordance counts the same entries the page does.
@@ -208,7 +208,7 @@ test("a #pc note is grouped by character and ticked off", async ({ page, api }) 
   await pcCard.getByRole("button", { name: "Erledigt" }).click();
   await expect(pcCard.getByText("Erledigt", { exact: true })).toBeVisible();
   await expect(page.getByText(/von \d+ gesichtet/).first()).toHaveText("1 von 5 gesichtet");
-  // The line is ticked off in the inbox document itself.
+  // The line is ticked off in the inbox entry itself.
   await expect
     .poll(() => api.body("inbox"))
     .toContain(`- [x] ${PC_TEXT} #pc #kaela`);
@@ -237,7 +237,7 @@ test("creating an NPC entry from a #npc log line", async ({ page, api }) => {
   await dialog.getByRole("button", { name: "Anlegen" }).click();
 
   await expect(npcCard.getByText("NPC angelegt")).toBeVisible();
-  const stub = await api.file("npcs/old-metta");
+  const stub = await api.entry("npcs/old-metta");
   expect(stub.properties.id).toBe("old-metta");
   expect(stub.properties.name).toBe("Old Metta");
   // The log line said nothing about the NPC's state, so the entry claims
@@ -253,7 +253,7 @@ test("creating an NPC entry from a #npc log line", async ({ page, api }) => {
 
 test("an id that already has an entry is linked, not refused", async ({ page, api }) => {
   // The call is idempotent: the entry stands, untouched.
-  const before = await api.file("npcs/fenn");
+  const before = await api.entry("npcs/fenn");
   await page.goto("/campaigns/beispiel/review");
 
   const npcCard = page.locator("div").filter({ hasText: NPC_TEXT }).last();
@@ -266,7 +266,7 @@ test("an id that already has an entry is linked, not refused", async ({ page, ap
   // The action counts as done and nothing was overwritten.
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(npcCard.getByText("NPC angelegt")).toBeVisible();
-  const after = await api.file("npcs/fenn");
+  const after = await api.entry("npcs/fenn");
   expect(after.properties).toEqual(before.properties);
   expect(after.body).toBe(before.body);
 });

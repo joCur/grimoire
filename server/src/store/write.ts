@@ -12,9 +12,9 @@
 //     the same `rev` cannot both go through. `force` is the documented way
 //     past it and writes only the fields the request carries;
 //   * the session state machine has its answers and codes
-//     (`session_running`, `session_not_empty`), and `clock.ts` owns the
-//     times — session ids, `started`/`ended` and log times are zone-less
-//     local strings produced by the server;
+//     (`session_running`, `session_not_empty`), and the local-time formats
+//     are the three constants below — session ids, `started`/`ended` and
+//     log times are zone-less local strings produced by the server;
 //   * append-only stays append-only: log lines and inbox entries grow by
 //     rows through their own endpoints, and the one documented exception
 //     (an inbox entry marked done) is the `done` flag.
@@ -29,6 +29,9 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
   CHAPTER_STATUSES,
   ENTITY_SLUG,
+  NPC_STATUSES,
+  SCENE_STATUSES,
+  SCENE_TYPES,
   freeSlug,
   isEnded,
   isSessionEmpty,
@@ -43,11 +46,12 @@ import {
   type KnowledgeResponse,
   type PatchEntryRequest,
 } from "@grimoire/shared";
+import { format } from "date-fns";
 import { ApiError } from "../api-error";
 import { assertSafeAddress, assertSafeCampaignId } from "../addressing";
-import { localDate, localDateTimeSeconds, localTime, now } from "../clock";
 import type { GrimoireDb } from "../db/client";
 import { logLineShortHash } from "./body-parse";
+import { LOCAL_DATE_TIME_SECONDS, LOCAL_DATE_TIME_SHAPE, localDateTimeToMs } from "./time";
 import {
   campaignKnowledge,
   campaigns,
@@ -87,6 +91,7 @@ import {
 } from "./read";
 import {
   addressIdentity,
+  addressSegments,
   chapterPath,
   locationPath,
   locatorFromPath,
@@ -161,25 +166,77 @@ function clearOtherActiveChapters(tx: GrimoireDb, campaign: string, keep: string
 }
 
 /**
- * A chapter status a WRITE may carry: one of the known trio, or nothing
- * (`null` deletes the key, which is how a chapter loses its status).
+ * A CLOSED field a write may carry: one of the shared list, or nothing
+ * (`null` deletes the key — which for a chapter removes the status and for a
+ * scene or an npc falls back to the column's default).
  *
- * This is the one place the format's degrade rule does not extend to the API.
- * A stored value outside the trio is still shown verbatim — the overview's
- * control shows it and the reading view prints it, exactly like an unknown
- * scene status — but the chapter status has three positions now, so a fourth
- * value arriving on the wire can only be a typo, and the honest answer to a
- * typo is the 400.
+ * These are the fields the format's degrade rule does not extend to on the
+ * API. A value outside the list is still RENDERED verbatim wherever an older
+ * database holds one, but the columns themselves are closed (ADR #25), so a
+ * foreign value arriving on the wire can only be a typo — and the honest
+ * answer to a typo is the 400 with a code the app has a sentence for, not
+ * SQLite's "CHECK constraint failed" escaping as a 500.
  */
-function assertChapterStatus(patch: Record<string, unknown>): void {
-  if (!("status" in patch)) return;
-  const value = patch.status;
+function assertClosedValue(
+  fields: Record<string, unknown>,
+  key: string,
+  allowed: readonly string[],
+  code: ErrorCode,
+  details: Record<string, unknown> = {},
+): void {
+  if (!(key in fields)) return;
+  const value = fields[key];
   if (value === null || value === undefined) return;
-  if (typeof value === "string" && (CHAPTER_STATUSES as readonly string[]).includes(value)) return;
-  throw new ApiError(
-    400,
-    `invalid chapter status: ${String(value)} — one of ${CHAPTER_STATUSES.join(", ")}`,
-  );
+  if (typeof value === "string" && allowed.includes(value)) return;
+  throw new ApiError(400, `invalid ${key}: ${String(value)} — one of ${allowed.join(", ")}`, {
+    code,
+    value: String(value),
+    allowed: [...allowed],
+    ...details,
+  });
+}
+
+/** The chapter's one closed field. At most ONE chapter holds `active`, which
+ * is `clearOtherActiveChapters` above — that rule spans rows and stays here. */
+function assertChapterStatus(fields: Record<string, unknown>): void {
+  assertClosedValue(fields, "status", CHAPTER_STATUSES, "status_not_allowed", { kind: "chapter" });
+}
+
+/** A scene's two closed fields. */
+function assertSceneClosedFields(fields: Record<string, unknown>): void {
+  assertClosedValue(fields, "status", SCENE_STATUSES, "status_not_allowed", { kind: "scene" });
+  assertClosedValue(fields, "type", SCENE_TYPES, "scene_type_not_allowed");
+}
+
+/** The npc's one closed field. */
+function assertNpcStatus(fields: Record<string, unknown>): void {
+  assertClosedValue(fields, "status", NPC_STATUSES, "status_not_allowed", { kind: "npc" });
+}
+
+/**
+ * A session timestamp a write may carry: the ONE shape a stored timestamp has
+ * (./time.ts), or nothing.
+ *
+ * The same closedness as the fields above, one layer down. `started`, `ended`
+ * and the two ends of a pause are written from the server's own clock
+ * everywhere else; a PATCH of a session is the only door through which a
+ * value from outside reaches those columns, and without this guard it was a
+ * door PAST the boot pre-flight (db/timestamp-preflight.ts): a stored `19:30`
+ * leaves that session without a place in the campaign's chronology, and the
+ * next start refuses the database over a value the app itself wrote.
+ *
+ * An EMPTY value is left through. `null` clears the column, and a blank
+ * string is "not set" to the reader and to the pre-flight alike — refusing it
+ * would make clearing a field depend on how the caller spells "nothing".
+ */
+function assertTimestamp(value: string | null, field: string): void {
+  if (value === null || value.trim() === "") return;
+  if (localDateTimeToMs(value) !== undefined) return;
+  throw new ApiError(400, `invalid ${field}: ${value} — expected ${LOCAL_DATE_TIME_SHAPE}`, {
+    code: "timestamp_not_allowed",
+    field,
+    value,
+  });
 }
 
 // --- transaction plumbing ----------------------------------------------------
@@ -274,10 +331,10 @@ function asMap(value: unknown): Record<string, unknown> {
  * YAML round trip: the columns are the values now.
  */
 function applyPatch(
-  fm: Record<string, unknown>,
+  props: Record<string, unknown>,
   patch: Record<string, unknown>,
 ): Record<string, unknown> {
-  const next = { ...fm };
+  const next = { ...props };
   for (const [key, value] of Object.entries(patch)) {
     if (key === "" || UNSAFE_KEYS.has(key)) throw new ApiError(400, `invalid patch key: ${key}`);
     if (value === null) delete next[key];
@@ -682,7 +739,7 @@ function replaceSceneRefs(
  * Re-index one entity from its current row — the index row's `title` too,
  * not only its id.
  *
- * `campaign` is a kind here because the campaign FILE is a referring body
+ * `campaign` is a kind here because the campaign ENTRY is a referring body
  * like any other (store/refs.ts `REF_BODY_KINDS`): a note in `campaign`
  * that says `[[jorna]]` has the resolved name in its index row, so it goes
  * stale with everybody else's.
@@ -893,8 +950,8 @@ function patchLocator(
       guardEntryRev(tx, campaign, locator, row.rev, rev, "campaign changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, CAMPAIGN_KEYS);
-      const fm = applyPatch(renderCampaign(row).properties, patch);
-      const name = asStr(fm.name);
+      const props = applyPatch(renderCampaign(row).properties, patch);
+      const name = asStr(props.name);
       // Accepted by design: a name that EQUALS the id is stored as "" — the
       // empty name means "fall back to the id" everywhere it is rendered
       // (./render, ./read), so the round trip shows the same name back and
@@ -902,7 +959,7 @@ function patchLocator(
       const next: CampaignRow = {
         ...row,
         name: name === row.id ? "" : name,
-        description: asOptStr(fm.description),
+        description: asOptStr(props.description),
         body: body ?? row.body,
         rev: row.rev + 1,
       };
@@ -927,11 +984,11 @@ function patchLocator(
       // Only the known trio may be WRITTEN; what is already stored is still
       // shown verbatim.
       assertChapterStatus(patch);
-      const fm = applyPatch(renderChapter(row).properties, patch);
+      const props = applyPatch(renderChapter(row).properties, patch);
       const next: ChapterRow = {
         ...row,
-        title: asStr(fm.title, row.id),
-        status: asOptStr(fm.status),
+        title: asStr(props.title, row.id),
+        status: asOptStr(props.status),
         body: body ?? row.body,
         rev: row.rev + 1,
       };
@@ -951,18 +1008,21 @@ function patchLocator(
       guardEntryRev(tx, campaign, locator, row.rev, rev, "scene changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, SCENE_KEYS);
+      // Only the known values may be WRITTEN; what is already stored is still
+      // shown verbatim.
+      assertSceneClosedFields(patch);
       const before = renderScene(
         row,
         refNpcs(tx, campaign, row.id),
         refTags(tx, campaign, row.id),
       );
-      const fm = applyPatch(before.properties, patch);
-      const npcRefs = asStrArray(fm.npcs);
-      const tags = asStrArray(fm.tags);
+      const props = applyPatch(before.properties, patch);
+      const npcRefs = asStrArray(props.npcs);
+      const tags = asStrArray(props.tags);
       // The chapter a scene belongs to is part of its ADDRESS (the path), so
       // a patch may MOVE the scene — but only into a chapter that exists. It
       // cannot be removed: a scene without a chapter has no address.
-      const declared: string | null = asOptStr(fm.chapter);
+      const declared: string | null = asOptStr(props.chapter);
       if (declared === null) {
         throw new ApiError(400, "chapter cannot be removed — a scene belongs to a chapter", {
           code: "chapter_required",
@@ -971,18 +1031,18 @@ function patchLocator(
       // Every reference first, so a save that names something unknown is
       // refused before anything is written.
       assertChapterRef(tx, campaign, declared);
-      const nextLocation = sceneLocation(fm.location);
+      const nextLocation = sceneLocation(props.location);
       assertLocationRef(tx, campaign, nextLocation);
       assertNpcRefs(tx, campaign, npcRefs);
       const next: SceneRow = {
         ...row,
-        title: asStr(fm.title, row.id),
-        type: asStr(fm.type, "planned"),
-        trigger: asOptStr(fm.trigger),
+        title: asStr(props.title, row.id),
+        type: asStr(props.type, "planned"),
+        trigger: asOptStr(props.trigger),
         chapterId: declared,
         location: nextLocation,
-        status: asStr(fm.status, "draft"),
-        handouts: packJson(asStrArray(fm.handouts)),
+        status: asStr(props.status, "draft"),
+        handouts: packJson(asStrArray(props.handouts)),
         body: body ?? row.body,
         rev: row.rev + 1,
       };
@@ -1013,20 +1073,21 @@ function patchLocator(
       guardEntryRev(tx, campaign, locator, row.rev, rev, "npc changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, NPC_KEYS);
-      const fm = applyPatch(renderNpc(row).properties, patch);
-      const quickstats = asMap(fm.quickstats);
-      const npcChapter = asOptStr(fm.chapter);
+      assertNpcStatus(patch);
+      const props = applyPatch(renderNpc(row).properties, patch);
+      const quickstats = asMap(props.quickstats);
+      const npcChapter = asOptStr(props.chapter);
       assertChapterRef(tx, campaign, npcChapter);
       const next: NpcRow = {
         ...row,
-        name: asStr(fm.name, row.id),
-        role: asOptStr(fm.role),
+        name: asStr(props.name, row.id),
+        role: asOptStr(props.role),
         chapterId: npcChapter,
-        status: asStr(fm.status, NPC_DEFAULT_STATUS),
-        statblock: asOptStr(fm.statblock),
+        status: asStr(props.status, NPC_DEFAULT_STATUS),
+        statblock: asOptStr(props.statblock),
         quickstats: packJson(quickstats),
-        voice: asOptStr(fm.voice),
-        appearance: asOptStr(fm.appearance),
+        voice: asOptStr(props.voice),
+        appearance: asOptStr(props.appearance),
         body: body ?? row.body,
         rev: row.rev + 1,
       };
@@ -1054,14 +1115,14 @@ function patchLocator(
       guardEntryRev(tx, campaign, locator, row.rev, rev, "location changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, LOCATION_KEYS);
-      const fm = applyPatch(renderLocation(row).properties, patch);
-      const locationChapter = asOptStr(fm.chapter);
+      const props = applyPatch(renderLocation(row).properties, patch);
+      const locationChapter = asOptStr(props.chapter);
       assertChapterRef(tx, campaign, locationChapter);
       const next: LocationRow = {
         ...row,
-        name: asStr(fm.name, row.id),
+        name: asStr(props.name, row.id),
         chapterId: locationChapter,
-        roll20Page: asOptStr(fm["roll20-page"]),
+        roll20Page: asOptStr(props["roll20-page"]),
         body: body ?? row.body,
         rev: row.rev + 1,
       };
@@ -1084,8 +1145,8 @@ function patchLocator(
       guardEntryRev(tx, campaign, locator, row.rev, rev, "session changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, SESSION_KEYS);
-      const fm = applyPatch(renderSessionRow(tx, campaign, row).properties, patch);
-      patchSessionRow(tx, campaign, row, fm);
+      const props = applyPatch(renderSessionRow(tx, campaign, row).properties, patch);
+      patchSessionRow(tx, campaign, row, props);
       const updated = sessionRow(tx, campaign, row.id);
       return renderSessionRow(tx, campaign, updated ?? row);
     }
@@ -1118,6 +1179,30 @@ function refTags(tx: GrimoireDb, campaign: string, sceneId: string): string[] {
 }
 
 /**
+ * The pause rows a patched `pauses` list becomes, in the order they will be
+ * stored. An entry without `from` is not a pause and drops out — the
+ * positions close up behind it, so `pos` stays a gap-less sequence.
+ *
+ * Both ends go through the timestamp guard here rather than at the insert,
+ * because the whole list is checked before the first row of the patch is
+ * written.
+ */
+function patchedPauses(value: unknown): { fromTs: string; toTs: string | null }[] {
+  const entries = Array.isArray(value) ? value : value === undefined ? [] : [value];
+  const rows: { fromTs: string; toTs: string | null }[] = [];
+  entries.forEach((entry, index) => {
+    const map = asMap(entry);
+    const fromTs = asOptStr(map.from);
+    if (fromTs === null) return;
+    const toTs = asOptStr(map.to);
+    assertTimestamp(fromTs, `pauses[${index}].from`);
+    assertTimestamp(toTs, `pauses[${index}].to`);
+    rows.push({ fromTs, toTs });
+  });
+  return rows;
+}
+
+/**
  * Write a patched session properties back onto the row and its child tables.
  * `pauses` and `scenes_played` are lists in the format and tables here;
  * `reviewed` is a hash list in the format and a flag on the log row.
@@ -1126,18 +1211,22 @@ function patchSessionRow(
   tx: GrimoireDb,
   campaign: string,
   row: SessionRow,
-  fm: Record<string, unknown>,
+  props: Record<string, unknown>,
 ): void {
+  // Every timestamp of the patch is checked BEFORE the first write, so a
+  // refusal is a refusal of the whole patch and not of its tail.
+  const started = asOptStr(props.started);
+  const ended = asOptStr(props.ended);
+  assertTimestamp(started, "started");
+  assertTimestamp(ended, "ended");
+  const nextPauses = patchedPauses(props.pauses);
+
   tx.update(sessions)
-    .set({
-      started: asOptStr(fm.started),
-      ended: asOptStr(fm.ended),
-      rev: row.rev + 1,
-    })
+    .set({ started, ended, rev: row.rev + 1 })
     .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, row.id)))
     .run();
 
-  const played = asStrArray(fm.scenes_played);
+  const played = asStrArray(props.scenes_played);
   for (const sceneId of played) {
     if (sceneId === "") continue;
     assertSceneRef(tx, campaign, sceneId, "played_scene_unknown");
@@ -1157,27 +1246,16 @@ function patchSessionRow(
       .run();
   });
 
-  const pauses = Array.isArray(fm.pauses) ? fm.pauses : fm.pauses === undefined ? [] : [fm.pauses];
   tx.delete(sessionPauses)
     .where(and(eq(sessionPauses.campaignId, campaign), eq(sessionPauses.sessionId, row.id)))
     .run();
-  let pos = 0;
-  for (const entry of pauses) {
-    const map = asMap(entry);
-    const from = asOptStr(map.from);
-    if (from === null) continue; // an entry without `from` is not a pause
+  nextPauses.forEach((pause, pos) => {
     tx.insert(sessionPauses)
-      .values({
-        campaignId: campaign,
-        sessionId: row.id,
-        pos: pos++,
-        fromTs: from,
-        toTs: asOptStr(map.to),
-      })
+      .values({ campaignId: campaign, sessionId: row.id, pos, ...pause })
       .run();
-  }
+  });
 
-  const reviewed = new Set(asStrArray(fm.reviewed));
+  const reviewed = new Set(asStrArray(props.reviewed));
   for (const entry of logRows(tx, campaign, row.id)) {
     const flag = reviewed.has(entry.hash) ? 1 : 0;
     if (flag === entry.reviewed) continue;
@@ -1405,6 +1483,15 @@ function requireCampaignRow(tx: GrimoireDb, campaign: string): CampaignRow {
 
 // --- sessions -----------------------------------------------------------------
 
+/**
+ * `yyyy-mm-dd` in local time — today's calendar day, which a start compares
+ * the running session's `started` against.
+ */
+const LOCAL_DATE = "yyyy-MM-dd";
+
+/** `HH:MM` in local time — the timestamp a log line carries. */
+const LOCAL_TIME = "HH:mm";
+
 function requireActive(tx: GrimoireDb, campaign: string): SessionRow {
   const row = pickSession(tx, campaign, false);
   if (row === undefined) throw new ApiError(404, "no active session");
@@ -1438,7 +1525,7 @@ function newSessionId(): string {
  * The CALENDAR DAY of a session's `started`, or undefined when the value says
  * nothing usable. Just the date part of the zone-less wall-clock string the
  * format carries — no timezone arithmetic, because the string already is the
- * server's local reading (clock.ts).
+ * server's local reading (./time).
  */
 function startedDate(started: string | null): string | undefined {
   return /^(\d{4}-\d{2}-\d{2})/.exec(started ?? "")?.[1];
@@ -1449,13 +1536,12 @@ function startedDate(started: string | null): string | undefined {
  * (db/schema.ts), in epoch milliseconds and STRICTLY greater than every
  * createdAt the campaign already holds.
  *
- * Two reasons it is not simply `Date.now()`. It must be monotonic — "start,
- * beenden, wieder starten" inside one millisecond has to order, and so does a
- * clock that jumped backwards (NTP, DST on a machine that stores UTC wrong).
- * And it must NOT come from `clock.ts now()`: that one is overridable, which
- * is the point for `started` (a session can be started "yesterday" in a test)
- * and exactly wrong here — a frozen clock would hand every row of a test the
- * same tie-break and the order would depend on the query's row order again.
+ * Hence the `highest + 1` floor rather than a plain `Date.now()`: the value
+ * must be monotonic — "start, beenden, wieder starten" inside one millisecond
+ * has to order, and so does a clock that jumped backwards (NTP, DST on a
+ * machine that stores UTC wrong) or one a test froze. Without the floor every
+ * row of such a run would share the tie-break, and the order would fall back
+ * to the query's row order again.
  */
 function nextCreatedAt(tx: GrimoireDb, campaign: string): number {
   const highest = tx
@@ -1481,8 +1567,8 @@ function nextCreatedAt(tx: GrimoireDb, campaign: string): number {
  */
 export async function startSession(campaign: string): Promise<EntryResponse> {
   return mutate(campaign, (tx) => {
-    const d = now();
-    const today = localDate(d);
+    const d = new Date();
+    const today = format(d, LOCAL_DATE);
     const active = pickSession(tx, campaign, false);
     // "Is the running session TODAY's?" is answered by `started`, not by the
     // id — the id is opaque and says nothing about a day.
@@ -1504,7 +1590,7 @@ export async function startSession(campaign: string): Promise<EntryResponse> {
       .values({
         campaignId: campaign,
         id,
-        started: localDateTimeSeconds(d),
+        started: format(d, LOCAL_DATE_TIME_SECONDS),
         createdAt: nextCreatedAt(tx, campaign),
       })
       .run();
@@ -1525,9 +1611,9 @@ export async function endSession(campaign: string): Promise<EntryResponse> {
     const row = pickSession(tx, campaign, false) ?? pickSession(tx, campaign, true);
     if (row === undefined) throw new ApiError(404, "no active session");
     if (isEnded({ ended: row.ended })) return renderSessionRow(tx, campaign, row);
-    const d = now();
-    closeOpenPauses(tx, campaign, row.id, localDateTimeSeconds(d));
-    const ended = localDateTimeSeconds(d);
+    const d = new Date();
+    closeOpenPauses(tx, campaign, row.id, format(d, LOCAL_DATE_TIME_SECONDS));
+    const ended = format(d, LOCAL_DATE_TIME_SECONDS);
     tx.update(sessions)
       .set({ ended, rev: row.rev + 1 })
       .where(and(eq(sessions.campaignId, campaign), eq(sessions.id, row.id)))
@@ -1623,17 +1709,17 @@ export async function pauseSession(campaign: string): Promise<EntryResponse> {
     const row = requireActive(tx, campaign);
     const pauses = pauseRows(tx, campaign, row.id);
     if (pauses.some((p) => p.toTs === null)) return renderSessionRow(tx, campaign, row);
-    const d = now();
+    const d = new Date();
     tx.insert(sessionPauses)
       .values({
         campaignId: campaign,
         sessionId: row.id,
         pos: nextPos(pauses),
-        fromTs: localDateTimeSeconds(d),
+        fromTs: format(d, LOCAL_DATE_TIME_SECONDS),
         toTs: null,
       })
       .run();
-    appendLogRow(tx, campaign, row.id, `- ${localTime(d)} — Pause`);
+    appendLogRow(tx, campaign, row.id, `- ${format(d, LOCAL_TIME)} — Pause`);
     bumpSessionRev(tx, campaign, row);
     return renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 });
   });
@@ -1643,11 +1729,11 @@ export async function pauseSession(campaign: string): Promise<EntryResponse> {
 export async function continueSession(campaign: string): Promise<EntryResponse> {
   return mutate(campaign, (tx) => {
     const row = requireActive(tx, campaign);
-    const d = now();
-    if (!closeOpenPauses(tx, campaign, row.id, localDateTimeSeconds(d))) {
+    const d = new Date();
+    if (!closeOpenPauses(tx, campaign, row.id, format(d, LOCAL_DATE_TIME_SECONDS))) {
       return renderSessionRow(tx, campaign, row);
     }
-    appendLogRow(tx, campaign, row.id, `- ${localTime(d)} — Weiter`);
+    appendLogRow(tx, campaign, row.id, `- ${format(d, LOCAL_TIME)} — Weiter`);
     bumpSessionRev(tx, campaign, row);
     return renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 });
   });
@@ -1701,7 +1787,7 @@ export async function appendLogEntry(
     // The note's scene is a reference: it has to name a scene that exists,
     // and nothing is created for it.
     if (sceneId !== undefined) assertSceneRef(tx, campaign, sceneId, "log_scene_unknown");
-    const raw = `- ${localTime(now())}${sceneId ? ` (${sceneId})` : ""} ${text}`;
+    const raw = `- ${format(new Date(), LOCAL_TIME)}${sceneId ? ` (${sceneId})` : ""} ${text}`;
     appendLogRow(tx, campaign, row.id, raw);
     if (sceneId !== undefined) {
       const played = playedScenes(tx, campaign, row.id);
@@ -1813,7 +1899,7 @@ export async function markLogLineSeen(
   line: string,
 ): Promise<EntryResponse & { marked: boolean }> {
   assertSafeAddress(rel);
-  const segments = rel.split("/");
+  const segments = addressSegments(rel);
   if (segments.length !== 2 || segments[0] !== "sessions") {
     throw new ApiError(400, "path must be a sessions/<id> address");
   }
@@ -1997,14 +2083,15 @@ export interface EntityDraft {
  */
 export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft): void {
   const locator = locatorFromPath(draft.rel);
-  const fm = draft.properties;
+  const props = draft.properties;
   switch (locator.kind) {
     case "scene": {
-      const id = asStr(fm.id, locator.id);
-      const title = asStr(fm.title, id);
-      const npcRefs = asStrArray(fm.npcs);
-      const tags = asStrArray(fm.tags);
-      const draftLocation = sceneLocation(fm.location);
+      const id = asStr(props.id, locator.id);
+      const title = asStr(props.title, id);
+      const npcRefs = asStrArray(props.npcs);
+      const tags = asStrArray(props.tags);
+      const draftLocation = sceneLocation(props.location);
+      assertSceneClosedFields(props);
       // The scene's chapter is written in THIS transaction, before the scene
       // itself: a new-chapter run creates its chapter from the run's own
       // state (generator.ts `jobChapterTarget`), and this is the net under
@@ -2030,11 +2117,11 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
           id,
           chapterId: locator.chapterId,
           title,
-          type: asStr(fm.type, "planned"),
-          trigger: asOptStr(fm.trigger),
+          type: asStr(props.type, "planned"),
+          trigger: asOptStr(props.trigger),
           location: draftLocation,
-          status: asStr(fm.status, "draft"),
-          handouts: packJson(asStrArray(fm.handouts)),
+          status: asStr(props.status, "draft"),
+          handouts: packJson(asStrArray(props.handouts)),
           body: draft.body,
           pos,
         })
@@ -2045,18 +2132,19 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       return;
     }
     case "npc": {
-      const id = asStr(fm.id, locator.id);
-      const npcChapter = asOptStr(fm.chapter);
+      const id = asStr(props.id, locator.id);
+      const npcChapter = asOptStr(props.chapter);
       assertChapterRef(tx, campaign, npcChapter);
+      assertNpcStatus(props);
       const values = {
-        name: asStr(fm.name, id),
-        role: asOptStr(fm.role),
+        name: asStr(props.name, id),
+        role: asOptStr(props.role),
         chapterId: npcChapter,
-        status: asStr(fm.status, NPC_DEFAULT_STATUS),
-        statblock: asOptStr(fm.statblock),
-        quickstats: packJson(asMap(fm.quickstats)),
-        voice: asOptStr(fm.voice),
-        appearance: asOptStr(fm.appearance),
+        status: asStr(props.status, NPC_DEFAULT_STATUS),
+        statblock: asOptStr(props.statblock),
+        quickstats: packJson(asMap(props.quickstats)),
+        voice: asOptStr(props.voice),
+        appearance: asOptStr(props.appearance),
         body: draft.body,
       };
       // An entry the DM created and left empty is FILLED — inserting would
@@ -2077,13 +2165,13 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
       return;
     }
     case "location": {
-      const id = asStr(fm.id, locator.id);
-      const locationChapter = asOptStr(fm.chapter);
+      const id = asStr(props.id, locator.id);
+      const locationChapter = asOptStr(props.chapter);
       assertChapterRef(tx, campaign, locationChapter);
       const values = {
-        name: asStr(fm.name, id),
+        name: asStr(props.name, id),
         chapterId: locationChapter,
-        roll20Page: asOptStr(fm["roll20-page"]),
+        roll20Page: asOptStr(props["roll20-page"]),
         body: draft.body,
       };
       // Fill an empty entry rather than collide with it — see the npc case.
@@ -2115,8 +2203,8 @@ export function insertDraft(tx: GrimoireDb, campaign: string, draft: EntityDraft
         .values({
           campaignId: campaign,
           id: locator.id,
-          title: asStr(fm.title, locator.id),
-          status: asOptStr(fm.status),
+          title: asStr(props.title, locator.id),
+          status: asOptStr(props.status),
           body: draft.body,
           pos,
         })
@@ -2179,7 +2267,7 @@ export async function applyDrafts(
         .filter((draft) => draftTargetExistsIn(tx, campaign, draft.address))
         .map((draft) => draft.rel);
       if (conflicts.length > 0) {
-        throw new ApiError(409, "target files already exist", { conflicts });
+        throw new ApiError(409, "target entries already exist", { conflicts });
       }
       for (const draft of inReferenceOrder(drafts)) insertDraft(tx, campaign, draft);
       if (onWritten !== undefined) {
@@ -2193,7 +2281,7 @@ export async function applyDrafts(
   } catch (error) {
     if (error instanceof ApiError) throw error;
     if (isConstraintViolation(error)) {
-      throw new ApiError(409, "target files already exist", {
+      throw new ApiError(409, "target entries already exist", {
         conflicts: drafts.map((draft) => draft.rel),
       });
     }

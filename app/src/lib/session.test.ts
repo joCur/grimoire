@@ -70,7 +70,7 @@ describe("parseLogEntries", () => {
     expect(parseLogEntries("")).toEqual([]);
   });
 
-  test("fresh session file (heading only) yields an empty list", () => {
+  test("a fresh session log (heading only) yields an empty list", () => {
     expect(parseLogEntries("\n## Log\n")).toEqual([]);
   });
 });
@@ -267,7 +267,7 @@ describe("sessionPausedMs / sessionPausedSinceMs — the properties fallback", (
 describe("sessionDateLabel", () => {
   test("the heading of a session is its `started` date, German format", () => {
     expect(sessionDateLabel({ started: "2026-01-15T19:30:00" }, t)).toBe("Session vom 15.01.2026");
-    // Minute-precise (pre-#58 files) and date-only (the midnight degradation)
+    // Minute-precise (older entries) and date-only (the midnight degradation)
     // read the same — only the date part is used.
     expect(sessionDateLabel({ started: "2026-01-15T19:30" }, t)).toBe("Session vom 15.01.2026");
     expect(sessionDateLabel({ started: "2026-01-15" }, t)).toBe("Session vom 15.01.2026");

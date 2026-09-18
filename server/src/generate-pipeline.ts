@@ -518,7 +518,7 @@ export function validateSingleSceneReply(input: {
  * Deliberately built on `validateEntry` — the very function that judged the
  * `entries` of the batch reply — plus the npc FORMAT rules of the npc run
  * (`npcBodyErrors`, quickstats). What it does NOT take from the npc RUN are
- * the rules that are about that run rather than about the file: an npc run
+ * the rules that are about that run rather than about the entry: an npc run
  * forbids a `chapter` key (it has no target chapter) while a scene run's
  * entry legitimately belongs to the run's chapter, and its pinned-id rule is
  * replaced by the outline's id.

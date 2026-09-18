@@ -31,7 +31,7 @@
  * kind whose ids are the most technical (`smuggler-captured`) — the least
  * likely to be typed into prose by accident.
  *
- * Chapters are deliberately NOT referenceable (issue #68 scope): nothing in
+ * Chapters are deliberately NOT referenceable: nothing in
  * the reading flow points at a chapter mid-sentence.
  */
 export const ENTITY_REF_KINDS = ["npc", "location", "scene"] as const;

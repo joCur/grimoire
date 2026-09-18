@@ -1,4 +1,4 @@
-// The post-run naming check (issue #53 AK3) — src/naming-check.ts.
+// The post-run naming check — src/naming-check.ts.
 //
 // The interesting cases are all about the BOUNDARY, because that is the only
 // judgement the check makes: which hits are the same word (and therefore the
@@ -189,7 +189,7 @@ describe("checkDraftsNaming", () => {
   });
 });
 
-// --- the false positives the plain search had to learn (review of #53) ------
+// --- the false positives the plain search had to learn ---------------------
 
 describe("findRuleHits", () => {
   test("the NEW spelling is not a finding when it CONTAINS the old one", () => {

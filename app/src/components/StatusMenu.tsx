@@ -8,9 +8,10 @@
 // dark-mode token fixed in one place.
 //
 // So the PRESENTATION lives here and takes what differs as data: the options,
-// and a `meta` resolver that turns a value (known or not) into its label and
-// its dot/text colors. It knows nothing about scenes, chapters, revs or
-// endpoints — which is what makes it render-testable on its own.
+// and a `meta` resolver that turns a value into its label and its dot/text
+// colors. It is generic over the domain's status union, so the caller's enum
+// reaches `onSelect` without a cast; it knows nothing about scenes, chapters,
+// revs or endpoints — which is what makes it render-testable on its own.
 
 import { Check, ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
@@ -36,15 +37,15 @@ export interface StatusMeta {
   text: string;
 }
 
-export interface StatusMenuProps {
-  /** The value as it stands in the data — unknown values pass through. */
-  status: string;
+export interface StatusMenuProps<T extends string> {
+  /** The value as it stands in the data. */
+  status: T;
   /** The value being written right now: shown dimmed, display only. */
-  pendingStatus?: string | undefined;
+  pendingStatus?: T | undefined;
   /** The selectable values, in lifecycle order. */
-  options: ReadonlyArray<{ value: string; label: string }>;
-  /** Label + colors for any value, known or not. */
-  meta: (status: string) => StatusMeta;
+  options: ReadonlyArray<{ value: T; label: string }>;
+  /** Label + colors for one of the domain's values. */
+  meta: (status: T) => StatusMeta;
   /** The trigger's accessible name — the localized "change status, currently …". */
   ariaLabel: string;
   variant: StatusVariant;
@@ -53,7 +54,7 @@ export interface StatusMenuProps {
   disabled?: boolean;
   open?: boolean | undefined;
   onOpenChange?: (open: boolean) => void;
-  onSelect: (status: string) => void;
+  onSelect: (status: T) => void;
 }
 
 /**
@@ -85,7 +86,7 @@ export function statusSelectionWrites(
   return next !== (pendingStatus ?? status);
 }
 
-export function StatusMenu({
+export function StatusMenu<T extends string>({
   status,
   pendingStatus,
   options,
@@ -97,7 +98,7 @@ export function StatusMenu({
   open,
   onOpenChange,
   onSelect,
-}: StatusMenuProps): ReactNode {
+}: StatusMenuProps<T>): ReactNode {
   const pending = pendingStatus !== undefined;
   // Optimistic DISPLAY: the target value while the write is in flight. The
   // query cache is never written with a guessed value.
@@ -143,7 +144,10 @@ export function StatusMenu({
               // Selecting what is already selected is not a change — see
               // `statusSelectionWrites`. One guard for both domains: the
               // chapter's swap must never be re-asserted by a stray select.
-              if (statusSelectionWrites(next, status, pendingStatus)) onSelect(next);
+              // Radix hands the value back as a bare string; it can only be
+              // one of `options`, which are the domain's own values.
+              const value = next as T;
+              if (statusSelectionWrites(value, status, pendingStatus)) onSelect(value);
             }}
           >
             {options.map((option) => {

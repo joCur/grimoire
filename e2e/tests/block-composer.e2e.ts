@@ -52,7 +52,7 @@ const SCENE_BLOCKS = [
 
 /** Read the entry: its properties and its text — the two halves every assertion looks at. */
 async function split(api: Api, rel: string) {
-  const { properties, body } = await api.file(rel);
+  const { properties, body } = await api.entry(rel);
   return { properties, body };
 }
 
@@ -303,7 +303,7 @@ test("the + slot at the end creates a Beute block through the type picker", asyn
 
 // --- e: moving blocks ---------------------------------------------------------
 
-test("⌄/⌃ reorder the blocks — the file follows, both blocks verbatim", async ({ page, api }) => {
+test("⌄/⌃ reorder the blocks — the entry follows, both blocks verbatim", async ({ page, api }) => {
   const before = await split(api, SCENE);
 
   await page.goto(SCENE_URL);
@@ -356,7 +356,7 @@ test("a child of the first If-section edits without touching the two headings", 
   );
   await page.getByRole("button", { name: "Bearbeiten" }).click();
 
-  // Two levels: the document's blocks, and each section's children indented
+  // Two levels: the body's blocks, and each section's children indented
   // below it — counting from 1 again, because a move stays inside its list.
   expect(await blockNames(page)).toEqual([
     "Überschrift 1",
@@ -482,7 +482,7 @@ test("409 with a block form open: the message, the form and the typed text stay"
   api,
 }) => {
   const before = await split(api, SCENE);
-  const mine = "Im Blockformular getippt, während die Datei sich bewegte.";
+  const mine = "Im Blockformular getippt, während der Eintrag sich bewegte.";
   // Same properties, different body — only the row's guard token moves, and
   // that is what the server compares against.
   const externalBody = "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n";
@@ -530,7 +530,7 @@ test("409 with a block form open: the message, the form and the typed text stay"
 
 // --- h: the discard guard -----------------------------------------------------
 
-test("Abbrechen after a block edit asks first — Verwerfen leaves the file alone", async ({
+test("Abbrechen after a block edit asks first — Verwerfen leaves the entry alone", async ({
   page,
   api,
 }) => {
@@ -561,7 +561,7 @@ test("Abbrechen after a block edit asks first — Verwerfen leaves the file alon
     "Der Turm ragt schwarz gegen den Abendhimmel auf.",
   );
   await expect(page.getByRole("article")).not.toContainText("nie gespeichert wird");
-  // Nothing reached the disk.
+  // Nothing was written.
   expect(await split(api, SCENE)).toEqual(before);
 });
 

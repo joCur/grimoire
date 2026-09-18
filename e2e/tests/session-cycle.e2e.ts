@@ -80,7 +80,7 @@ async function sessionMenuItem(page: Page, name: string) {
   return page.getByRole("menuitem", { name });
 }
 
-test("session start, quick note, pause, end — log and file follow", async ({
+test("session start, quick note, pause, end — log and entry follow", async ({
   page,
   api,
 }) => {
@@ -316,12 +316,12 @@ test("session start, quick note, pause, end — log and file follow", async ({
   const secondPath = (await api.sessionPath()) ?? "";
   expect(secondPath).toMatch(/^sessions\/.+$/);
   expect(secondPath).not.toBe(sessionPath);
-  const second = await api.file(secondPath);
+  const second = await api.entry(secondPath);
   expect(second.properties.ended).toBeUndefined();
   expect(second.properties.pauses).toBeUndefined();
   expect(second.body).not.toContain(NOTE);
   // … and the first session is untouched: still ended, log and pauses intact.
-  const first = await api.file(sessionPath);
+  const first = await api.entry(sessionPath);
   expect(first.properties.ended).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
   expect(first.body).toContain(NOTE);
   expect(first.properties.pauses).toEqual([
@@ -356,7 +356,7 @@ test("session start, quick note, pause, end — log and file follow", async ({
   ).toHaveCount(0);
 });
 
-test("a #pc quick note becomes a reminder in the aside and is ticked off there (issue #86)", async ({
+test("a #pc quick note becomes a reminder in the aside and is ticked off there", async ({
   page,
   api,
 }) => {
@@ -392,7 +392,7 @@ test("a #pc quick note becomes a reminder in the aside and is ticked off there (
   await expect.poll(() => api.properties(sessionPath)).toHaveProperty("reviewed");
 });
 
-test("session verwerfen — the mis-click's undo removes the empty file", async ({
+test("session verwerfen — the mis-click's undo removes the empty entry", async ({
   page,
   api,
 }) => {

@@ -1,14 +1,14 @@
 // The scene article — type overline, serif title, trigger line, markdown
 // body through the pipeline. Shared between the reading view ("scene") and
 // the live center column ("live"); live is the denser variant from the
-// design prototype: 26px title, location inside the overline, italic
-// „Wenn:" line and a plain hairline instead of the chip row.
+// design prototype: 26px title, location inside the overline, italic trigger
+// line and a plain hairline instead of the chip row.
 //
-// `statusControl` (issue #28) is the status regler of the reading view; it
-// rides at the right end of the overline row. `actions` („Bearbeiten",
-// „Eigenschaften") sits quietly to its left. The component stays free of
-// queries — the route owns both and passes them in, so the live view simply
-// passes nothing.
+// `statusControl` is the status control of the reading view; it rides at the
+// right end of the overline row. `actions` — the edit, properties and augment
+// triggers — sits quietly to its left. The component stays free of queries —
+// the route owns both and passes them in, so the live view simply passes
+// nothing.
 
 import type { CampaignTree, EntryResponse } from "@grimoire/shared/types";
 import { Bookmark, GitFork, MapPin } from "lucide-react";
@@ -16,42 +16,42 @@ import type { ReactNode } from "react";
 
 import { useT } from "@/i18n";
 import { locationName } from "@/lib/campaign";
-import { fmString, fmStringArray } from "@/lib/properties";
+import { propString, propStringArray } from "@/lib/properties";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/markdown/Markdown";
 
 export function SceneArticle({
-  file,
+  entry,
   tree,
   variant,
   statusControl,
   actions,
   body,
 }: {
-  file: EntryResponse;
+  entry: EntryResponse;
   tree: CampaignTree | undefined;
   variant: "scene" | "live";
   statusControl?: ReactNode;
   actions?: ReactNode;
   /**
-   * Replaces the rendered body — the reading view's edit mode (issue #15)
-   * puts its markdown editor here, header and chips keep standing. Nothing
+   * Replaces the rendered body — the reading view's edit mode puts its
+   * markdown editor here, header and chips keep standing. Nothing
    * passed means the entry's body, which is what the live view wants.
    */
   body?: ReactNode;
 }) {
   const t = useT();
   const live = variant === "live";
-  const fm = file.properties;
+  const properties = entry.properties;
   // npc/location entries opened as an entry view carry `name` instead of `title`.
-  const title = fmString(fm.title) ?? fmString(fm.name) ?? file.path;
+  const title = propString(properties.title) ?? propString(properties.name) ?? entry.path;
   // Everything that is not explicitly a contingency reads as a planned
   // scene (degrade — "planned" is the unmarked case).
-  const isContingency = fmString(fm.type) === "contingency";
-  const trigger = fmString(fm.trigger);
-  const location = locationName(tree, fmString(fm.location));
-  const tags = fmStringArray(fm.tags);
-  const handouts = fmStringArray(fm.handouts);
+  const isContingency = propString(properties.type) === "contingency";
+  const trigger = propString(properties.trigger);
+  const location = locationName(tree, propString(properties.location));
+  const tags = propStringArray(properties.tags);
+  const handouts = propStringArray(properties.handouts);
 
   return (
     <article className="w-full min-w-0">
@@ -80,9 +80,9 @@ export function SceneArticle({
         {(statusControl !== undefined || actions !== undefined) && (
           <>
             <span className="flex-1" />
-            {/* One wrapping unit since issue #42 made this three actions plus
-                the status regler: below md they need a second row instead of
-                being squeezed off the edge. */}
+            {/* One wrapping unit: three actions plus the status control need
+                a second row below md instead of being squeezed off the
+                edge. */}
             <span className="flex flex-wrap items-center justify-end gap-2">
               {actions}
               {statusControl}
@@ -141,7 +141,7 @@ export function SceneArticle({
           </div>
         )
       )}
-      {body ?? <Markdown>{file.body}</Markdown>}
+      {body ?? <Markdown>{entry.body}</Markdown>}
     </article>
   );
 }

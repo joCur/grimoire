@@ -20,7 +20,7 @@ import { fetchEntry } from "@/api";
 import { EntityCardShell } from "@/components/EntityCardShell";
 import { useI18n } from "@/i18n";
 import { isEntityId } from "@/lib/entity";
-import { fmQuickstats, fmString } from "@/lib/properties";
+import { propQuickstats, propString } from "@/lib/properties";
 import { firstParagraphOfSection } from "@/lib/md-section";
 
 /** Campaign-relative path of an NPC entry — the reference key is the id. */
@@ -77,13 +77,13 @@ export function NpcCard({
   }
   if (data === undefined) return null;
 
-  const fm = data.properties;
-  const name = fmString(fm.name) ?? id;
-  const npcId = fmString(fm.id) ?? id;
-  const role = fmString(fm.role);
-  const voice = fmString(fm.voice);
+  const properties = data.properties;
+  const name = propString(properties.name) ?? id;
+  const npcId = propString(properties.id) ?? id;
+  const role = propString(properties.role);
+  const voice = propString(properties.voice);
   const will = firstParagraphOfSection(data.body, "Will");
-  const quickstats = fmQuickstats(fm.quickstats);
+  const quickstats = propQuickstats(properties.quickstats);
 
   if (compact) {
     return (

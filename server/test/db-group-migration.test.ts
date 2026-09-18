@@ -1,4 +1,4 @@
-// The one-time data step of issue #100: `group_slug` becomes `location`.
+// The one-time data step of issue: `group_slug` becomes `location`.
 //
 // It runs on the RAW client, before the schema migrator drops the column
 // (db/client.ts `openDb`) — so this exercises it the same way: an
@@ -10,7 +10,7 @@ import { describe, expect, test } from "bun:test";
 import { migrateGroupsToLocations, NO_GROUP_MIGRATION } from "../src/db/group-migration";
 import { openSqlite, type SqliteClient } from "../src/db/driver";
 
-/** The pre-#100 shape of the three tables the step touches. */
+/** The pre-shape of the three tables the step touches. */
 async function oldSchemaDb(): Promise<SqliteClient> {
   const client = await openSqlite(":memory:");
   client.exec(`
@@ -58,7 +58,7 @@ function locations(client: SqliteClient): Record<string, unknown>[] {
   return client.prepare("select id, name from locations order by id").all();
 }
 
-describe("group_slug -> location (#100)", () => {
+describe("group_slug -> location", () => {
   test("an empty location inherits the group directory", async () => {
     const client = await oldSchemaDb();
     addScene(client, "ankunft", "hafen", null);
@@ -126,7 +126,7 @@ describe("group_slug -> location (#100)", () => {
     const client = await oldSchemaDb();
     // Nothing survives the transliteration, so there is no id to derive.
     // The step used to write `null` here — the only copy of the DM's text,
-    // gone, and reported as a move to chapter level (issue #100 review).
+    // gone, and reported as a move to chapter level (issue review).
     addScene(client, "ankunft", "hafen", "???");
     const out = migrateGroupsToLocations(client);
     expect(scenes(client)).toEqual([{ id: "ankunft", location: "???" }]);
@@ -142,7 +142,7 @@ describe("group_slug -> location (#100)", () => {
     // 0009 is the migration that DROPS the column, and it is what makes this
     // step a no-op. A boot whose migrator failed after the step succeeded
     // therefore finds the old schema again — and used to re-derive and
-    // RE-REPORT every move (issue #100 review). The marker ends that.
+    // RE-REPORT every move (issue review). The marker ends that.
     const client = await oldSchemaDb();
     addScene(client, "ankunft", "hafen", "leuchtturm");
     expect(migrateGroupsToLocations(client).moved).toHaveLength(1);
@@ -167,7 +167,7 @@ describe("group_slug -> location (#100)", () => {
     const client = await openSqlite(":memory:");
     client.exec("create table scenes (campaign_id text, id text, location text)");
     expect(migrateGroupsToLocations(client)).toEqual(NO_GROUP_MIGRATION);
-    // …and so is a database that has no scenes table at all (a fresh file).
+    // …and so is a database that has no scenes table at all (a fresh database file).
     const fresh = await openSqlite(":memory:");
     expect(migrateGroupsToLocations(fresh)).toEqual(NO_GROUP_MIGRATION);
     client.close();

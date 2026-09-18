@@ -213,7 +213,7 @@ describe("the per-block forms", () => {
     expect(html).not.toContain(">Ebene 2</option>");
   });
 
-  test("a level the file already carries stays selectable", () => {
+  test("a level the body already carries stays selectable", () => {
     // A hand-written `## Flow` inside a section cannot exist (it would end the
     // section), but a `# Titel` at document level and any other hand-written
     // level must never silently jump to another value.
@@ -246,7 +246,7 @@ describe("the per-block forms", () => {
   });
 });
 
-describe("a block that would break the file", () => {
+describe("a block that would break the body", () => {
   /** The smugglers scene with a `##` typed into the first section's first child. */
   function escaped(): { blocks: SceneBlock[]; issues: Record<string, string> } {
     const blocks = fixtureBlocks(SMUGGLERS);

@@ -5,22 +5,22 @@
 // A session lives in `sessions` + `session_pauses` + `log_entries`, and the
 // picking rule is a query (store/read.ts `pickSession`) — that rule is what
 // this file pins. Each case gets a fresh in-memory database seeded from the
-// committed JSON entries (test/support/store.ts); the clock is overridden via
-// setNow().
+// committed JSON entries (test/support/store.ts); the system time is faked
+// per case (setSystemTime).
 //
 // Sessions are produced two ways here:
 //   - through the API whenever that is possible (a session started yesterday
-//     is simply `POST /session/start` with yesterday's clock) — that exercises
-//     the real state machine instead of a hand-built row;
+//     is simply `POST /session/start` with yesterday as the system time) —
+//     that exercises the real state machine instead of a hand-built row;
 //   - through the SEED, for the shapes an endpoint cannot produce in one call
-//     (a date-only `started`, a blank `ended`, `scenes_played` without a
-//     log) — the shapes a campaign written earlier carries.
+//     (a blank `ended`, `scenes_played` without a log, a `started` that is no
+//     timestamp at all).
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
-import { localDateTimeToMs, setNow } from "../src/clock";
+import { localDateTimeToMs } from "../src/store/time";
 import type { GrimoireDb } from "../src/db/client";
 import { sessions as sessionsTable } from "../src/db/schema";
 import { pickSession, sessionOrderKey } from "../src/store/read";
@@ -40,11 +40,11 @@ async function post(url: string, body?: unknown): Promise<Response> {
 }
 
 /** GET /entry — the status is the assertion for "does this row exist". */
-async function fileStatus(rel: string): Promise<number> {
+async function entryStatus(rel: string): Promise<number> {
   return (await app.request(entriesUrl("beispiel", rel))).status;
 }
 
-async function getFile(rel: string): Promise<EntryResponse> {
+async function getEntry(rel: string): Promise<EntryResponse> {
   const res = await app.request(entriesUrl("beispiel", rel));
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
@@ -109,24 +109,24 @@ async function activePath(includeEnded = false): Promise<string> {
 }
 
 /**
- * Start a session with the clock at `d`, then hand the clock back to `now`.
+ * Start a session with the system time at `d`, then set it to `thenNow`.
  * Returns the new session's path (see `startSession`).
  */
 async function startAt(d: Date, thenNow: Date): Promise<string> {
-  setNow(() => d);
+  setSystemTime(d);
   const path = await startSession();
-  setNow(() => thenNow);
+  setSystemTime(thenNow);
   return path;
 }
 
 beforeEach(async () => {
-  setNow(() => new Date(2026, 7, 19, 21, 5));
+  setSystemTime(new Date(2026, 7, 19, 21, 5));
   db = await seedStore();
 });
 
 afterEach(async () => {
   dropStore();
-  setNow(null);
+  setSystemTime();
 });
 
 // --- the picking rule, as a query -------------------------------------------
@@ -172,27 +172,29 @@ describe("pickSession", () => {
   test("no sessions, or all of them ended -> undefined", () => {
     onlySessions([]);
     expect(active()).toBeUndefined();
-    onlySessions([row({ id: "2026-01-15", started: "2026-01-15T19:30", ended: "2026-01-15T22:45" })]);
+    onlySessions([
+      row({ id: "2026-01-15", started: "2026-01-15T19:30:00", ended: "2026-01-15T22:45:00" }),
+    ]);
     expect(active()).toBeUndefined();
   });
 
   test("the LAST started session without `ended` wins", () => {
     onlySessions([
-      row({ id: "2026-01-15", started: "2026-01-15T19:30", ended: "2026-01-15T22:45" }),
-      row({ id: "2026-08-19", started: "2026-08-19T21:05" }),
-      row({ id: "2026-08-18", started: "2026-08-18T18:00" }),
+      row({ id: "2026-01-15", started: "2026-01-15T19:30:00", ended: "2026-01-15T22:45:00" }),
+      row({ id: "2026-08-19", started: "2026-08-19T21:05:00" }),
+      row({ id: "2026-08-18", started: "2026-08-18T18:00:00" }),
     ]);
     expect(active()).toBe("2026-08-19");
   });
 
-  test("a date-only `started` still sorts; no `started` at all never wins", () => {
-    // A date-only `started` is the midnight degradation of the YAML
-    // normalization the migration read — it is a usable order key.
-    //
+  test("no `started` at all never wins", () => {
     // The id is NOT a fallback: it is an opaque random string, so there is
     // nothing in it to read. A row without `started` therefore has no place
     // in the chronology, even when its id happens to look like a date.
-    onlySessions([row({ id: "2026-08-18" }), row({ id: "2026-08-19", started: "2026-08-19" })]);
+    onlySessions([
+      row({ id: "2026-08-18" }),
+      row({ id: "2026-08-19", started: "2026-08-19T21:05:00" }),
+    ]);
     expect(active()).toBe("2026-08-19");
     expect(sessionOrderKey(row({ id: "2026-08-18" }))).toBeUndefined();
     onlySessions([row({ id: "2026-08-18" })]);
@@ -222,28 +224,32 @@ describe("pickSession", () => {
   });
 
   test("no usable date at all -> no order key, and therefore never active", () => {
+    // The one shape is the ONLY readable one (store/time.ts): free text, a
+    // bare date and a second-less value are all unreadable alike.
     expect(sessionOrderKey(row({ id: "notes", started: "gestern abend" }))).toBeUndefined();
+    expect(sessionOrderKey(row({ id: "notes", started: "2026-08-19" }))).toBeUndefined();
+    expect(sessionOrderKey(row({ id: "notes", started: "2026-08-19T21:05" }))).toBeUndefined();
     onlySessions([row({ id: "gestern abend", started: "gestern abend" })]);
     expect(active()).toBeUndefined();
     // …not even against a real session: the parseable one wins, always.
     onlySessions([
       row({ id: "gestern abend", started: "gestern abend" }),
-      row({ id: "2026-08-19", started: "2026-08-19T21:05" }),
+      row({ id: "2026-08-19", started: "2026-08-19T21:05:00" }),
     ]);
     expect(active()).toBe("2026-08-19");
   });
 
   test("a blank `ended` counts as RUNNING (one shared predicate)", () => {
-    onlySessions([row({ id: "2026-08-19", started: "2026-08-19T19:30", ended: "" })]);
+    onlySessions([row({ id: "2026-08-19", started: "2026-08-19T19:30:00", ended: "" })]);
     expect(active()).toBe("2026-08-19");
-    onlySessions([row({ id: "2026-08-19", started: "2026-08-19T19:30", ended: "  " })]);
+    onlySessions([row({ id: "2026-08-19", started: "2026-08-19T19:30:00", ended: "  " })]);
     expect(active()).toBe("2026-08-19");
   });
 
   test("includeEnded ignores `ended` — the review's question", () => {
     onlySessions([
-      row({ id: "2026-08-18", started: "2026-08-18T22:30", ended: "2026-08-19T01:40" }),
-      row({ id: "2026-01-15", started: "2026-01-15T19:30", ended: "2026-01-15T22:45" }),
+      row({ id: "2026-08-18", started: "2026-08-18T22:30:00", ended: "2026-08-19T01:40:00" }),
+      row({ id: "2026-01-15", started: "2026-01-15T19:30:00", ended: "2026-01-15T22:45:00" }),
     ]);
     expect(lastStarted()).toBe("2026-08-18");
     expect(active()).toBeUndefined();
@@ -263,65 +269,62 @@ describe("GET /api/campaigns/:campaign/session", () => {
     expect((await app.request("/api/campaigns/nope/session")).status).toBe(404);
   });
 
-  test("the running session, with the file GET's shape plus the epoch times", async () => {
+  test("the running session, with the entry GET's shape plus the epoch times", async () => {
     const started = await startSession();
     const res = await app.request("/api/campaigns/beispiel/session");
     expect(res.status).toBe(200);
-    const file = (await res.json()) as EntryResponse;
-    expect(file.path).toBe(started);
+    const entry = (await res.json()) as EntryResponse;
+    expect(entry.path).toBe(started);
     // The id is OPAQUE: an address, nothing to read. What has to
     // hold is that it is addressable and says nothing about the calendar.
-    expect(file.path).toMatch(/^sessions\/[\w-]+$/);
-    expect(file.path).not.toContain("2026-08-19");
-    expect(file.kind).toBe("session");
-    expect(file.properties.started).toBe("2026-08-19T21:05:00");
+    expect(entry.path).toMatch(/^sessions\/[\w-]+$/);
+    expect(entry.path).not.toContain("2026-08-19");
+    expect(entry.kind).toBe("session");
+    expect(entry.properties.started).toBe("2026-08-19T21:05:00");
     // The answer is a deterministic rendering of the rows — so it is compared
     // against GET /entry, which must answer with exactly the same entry.
-    const viaFile = await getFile(started);
-    expect(file.properties).toEqual(viaFile.properties);
-    expect(file.body).toBe(viaFile.body);
-    expect(file.body).toContain("## Log");
-    expect(typeof file.rev).toBe("number");
+    const viaEntry = await getEntry(started);
+    expect(entry.properties).toEqual(viaEntry.properties);
+    expect(entry.body).toBe(viaEntry.body);
+    expect(entry.body).toContain("## Log");
+    expect(typeof entry.rev).toBe("number");
     // The whole point: the SERVER resolves the zone-less timestamp, so a
     // client in another timezone still computes the right runtime.
-    expect(file.startedMs).toBe(new Date(2026, 7, 19, 21, 5).getTime());
-    expect(file.endedMs).toBeUndefined();
+    expect(entry.startedMs).toBe(new Date(2026, 7, 19, 21, 5).getTime());
+    expect(entry.endedMs).toBeUndefined();
   });
 
   test("a session started YESTERDAY stays active past midnight", async () => {
     const yesterday = await startAt(new Date(2026, 7, 18, 22, 30), new Date(2026, 7, 19, 1, 15));
     const res = await app.request("/api/campaigns/beispiel/session"); // 01:15, no row for today
     expect(res.status).toBe(200);
-    const file = (await res.json()) as EntryResponse;
-    expect(file.path).toBe(yesterday);
-    expect(file.startedMs).toBe(new Date(2026, 7, 18, 22, 30).getTime());
+    const entry = (await res.json()) as EntryResponse;
+    expect(entry.path).toBe(yesterday);
+    expect(entry.startedMs).toBe(new Date(2026, 7, 18, 22, 30).getTime());
   });
 
-  test("a DATE-ONLY `started` keeps a usable epoch time", async () => {
-    // A full timestamp, to the second
-    // at exactly midnight is indistinguishable from a date-only value, so the
-    // migration stored the DEGRADED string `yyyy-mm-dd` (shared/src/parse.ts)
-    // — the only way this shape reaches the API. startedMs must not degrade
-    // with it: the live timer reads startedMs, so a missing one would make
-    // the timer vanish silently.
-    await seedWithSessions(session({ id: "2026-08-19", started: "2026-08-19" }));
+  test("a session started at MIDNIGHT keeps its epoch time", async () => {
+    // The one shape is second-precise, so midnight is `…T00:00:00` and is
+    // read like any other moment. The live timer reads startedMs, and a
+    // missing one would make the timer vanish silently.
+    await startAt(new Date(2026, 7, 19, 0, 0), new Date(2026, 7, 19, 0, 30));
     const res = await app.request("/api/campaigns/beispiel/session");
     expect(res.status).toBe(200);
-    const file = (await res.json()) as EntryResponse;
-    expect(file.properties.started).toBe("2026-08-19"); // the degraded string
-    expect(file.startedMs).toBe(new Date(2026, 7, 19, 0, 0).getTime());
+    const entry = (await res.json()) as EntryResponse;
+    expect(entry.properties.started).toBe("2026-08-19T00:00:00");
+    expect(entry.startedMs).toBe(new Date(2026, 7, 19, 0, 0).getTime());
   });
 
   test("an ended session carries endedMs too (GET /entry, same shape)", async () => {
-    const file = await getFile("sessions/2026-01-15");
-    expect(file.startedMs).toBe(new Date(2026, 0, 15, 19, 30).getTime());
-    expect(file.endedMs).toBe(new Date(2026, 0, 15, 22, 45).getTime());
+    const entry = await getEntry("sessions/2026-01-15");
+    expect(entry.startedMs).toBe(new Date(2026, 0, 15, 19, 30).getTime());
+    expect(entry.endedMs).toBe(new Date(2026, 0, 15, 22, 45).getTime());
   });
 
-  test("a non-session file carries no session times", async () => {
-    const file = await getFile("npcs/jorna");
-    expect(file.startedMs).toBeUndefined();
-    expect(file.endedMs).toBeUndefined();
+  test("a non-session entry carries no session times", async () => {
+    const entry = await getEntry("npcs/jorna");
+    expect(entry.startedMs).toBeUndefined();
+    expect(entry.endedMs).toBeUndefined();
   });
 });
 
@@ -333,10 +336,10 @@ describe("writes land in the ACTIVE session, not in today's", () => {
       sceneId: "lighthouse-arrival",
     });
     expect(res.status).toBe(200);
-    const file = (await res.json()) as EntryResponse;
-    expect(file.path).toBe(yesterday);
-    expect(file.body).toContain("- 01:20 (lighthouse-arrival) Nach Mitternacht weiter\n");
-    expect(file.properties.scenes_played).toEqual(["lighthouse-arrival"]);
+    const entry = (await res.json()) as EntryResponse;
+    expect(entry.path).toBe(yesterday);
+    expect(entry.body).toContain("- 01:20 (lighthouse-arrival) Nach Mitternacht weiter\n");
+    expect(entry.properties.scenes_played).toEqual(["lighthouse-arrival"]);
     // Nothing was created for the new day: the campaign still has exactly the
     // committed fixture's session plus this one.
     expect(await sessionCount()).toBe(2);
@@ -346,10 +349,10 @@ describe("writes land in the ACTIVE session, not in today's", () => {
     const yesterday = await startAt(new Date(2026, 7, 18, 22, 30), new Date(2026, 7, 19, 2, 0));
     const res = await post("/api/campaigns/beispiel/session/end");
     expect(res.status).toBe(200);
-    const file = (await res.json()) as EntryResponse;
-    expect(file.path).toBe(yesterday);
-    expect(file.properties.ended).toBe("2026-08-19T02:00:00");
-    expect(file.endedMs).toBe(new Date(2026, 7, 19, 2, 0).getTime());
+    const entry = (await res.json()) as EntryResponse;
+    expect(entry.path).toBe(yesterday);
+    expect(entry.properties.ended).toBe("2026-08-19T02:00:00");
+    expect(entry.endedMs).toBe(new Date(2026, 7, 19, 2, 0).getTime());
     // …and with that, nothing is active any more.
     expect((await app.request("/api/campaigns/beispiel/session")).status).toBe(404);
   });
@@ -362,7 +365,7 @@ describe("writes land in the ACTIVE session, not in today's", () => {
   });
 });
 
-describe("start — the state machine's edges (issues #40 review, #58)", () => {
+describe("start — the state machine's edges", () => {
   test("409 session_running instead of a second session next to an open one", async () => {
     // The older session was never ended (a forgotten evening). Starting today
     // must not open a second row next to it — the app offers to end the old
@@ -380,7 +383,7 @@ describe("start — the state machine's edges (issues #40 review, #58)", () => {
     expect((await post("/api/campaigns/beispiel/session/end")).status).toBe(200);
     const today = await startSession();
     expect(today).not.toBe(yesterday);
-    expect(await fileStatus(today)).toBe(200);
+    expect(await entryStatus(today)).toBe(200);
   });
 
   test("a session past midnight keeps its claim (it is not 'stale')", async () => {
@@ -390,39 +393,39 @@ describe("start — the state machine's edges (issues #40 review, #58)", () => {
     expect((await post("/api/campaigns/beispiel/session/start")).status).toBe(409);
   });
 
-  test("a start after the end opens a SECOND session of the same day (#58)", async () => {
+  test("a start after the end opens a SECOND session of the same day", async () => {
     // "Beenden" is final: no `session_ended` 409, no resume — the next press
     // is a new evening with its own id, an empty log and a runtime at 0.
     const firstPath = await startSession();
     expect((await post("/api/campaigns/beispiel/log", { text: "erste Runde" })).status).toBe(200);
     expect((await post("/api/campaigns/beispiel/session/end")).status).toBe(200);
 
-    setNow(() => new Date(2026, 7, 19, 23, 30));
+    setSystemTime(new Date(2026, 7, 19, 23, 30));
     const again = await post("/api/campaigns/beispiel/session/start");
     expect(again.status).toBe(200);
-    const file = (await again.json()) as EntryResponse;
+    const entry = (await again.json()) as EntryResponse;
     // Two sessions on the SAME DAY are two different opaque ids, and both are
     // addressable — that is the whole contract on the id.
-    expect(file.path).not.toBe(firstPath);
-    expect(file.path).toBe(`sessions/${String(file.properties.id)}`);
-    expect(file.properties.started).toBe("2026-08-19T23:30:00");
-    expect(file.properties.ended).toBeUndefined();
-    expect(file.body).not.toContain("erste Runde");
+    expect(entry.path).not.toBe(firstPath);
+    expect(entry.path).toBe(`sessions/${String(entry.properties.id)}`);
+    expect(entry.properties.started).toBe("2026-08-19T23:30:00");
+    expect(entry.properties.ended).toBeUndefined();
+    expect(entry.body).not.toContain("erste Runde");
     // The first session is untouched and still ended…
-    const first = await getFile(firstPath);
+    const first = await getEntry(firstPath);
     expect(first.properties.ended).toBe("2026-08-19T21:05:00");
     expect(first.body).toContain("erste Runde");
     // …and the ACTIVE session — where notes land now — is the new one.
-    expect(await activePath()).toBe(file.path);
+    expect(await activePath()).toBe(entry.path);
     expect((await post("/api/campaigns/beispiel/log", { text: "zweite Runde" })).status).toBe(200);
-    expect((await getFile(file.path)).body).toContain("zweite Runde");
-    expect((await getFile(firstPath)).body).not.toContain("zweite Runde");
+    expect((await getEntry(entry.path)).body).toContain("zweite Runde");
+    expect((await getEntry(firstPath)).body).not.toContain("zweite Runde");
   });
 
   test("three sessions of one day are three ids, and the review takes the last", async () => {
     const paths: string[] = [];
     for (const hour of [18, 20, 22]) {
-      setNow(() => new Date(2026, 7, 19, hour, 0));
+      setSystemTime(new Date(2026, 7, 19, hour, 0));
       paths.push(await startSession());
       expect((await post("/api/campaigns/beispiel/session/end")).status).toBe(200);
     }
@@ -443,7 +446,7 @@ describe("start — the state machine's edges (issues #40 review, #58)", () => {
     expect(seen.has(second)).toBe(false);
     seen.add(second);
     expect((await post("/api/campaigns/beispiel/session/discard")).status).toBe(200);
-    expect(await fileStatus(second)).toBe(404);
+    expect(await entryStatus(second)).toBe(404);
 
     const third = await startSession();
     expect(seen.has(third)).toBe(false);
@@ -463,7 +466,7 @@ describe("start — the state machine's edges (issues #40 review, #58)", () => {
     const fresh = await startSession();
     expect(fresh).not.toBe(broken);
     expect(await activePath()).toBe(fresh);
-    expect(await fileStatus(broken)).toBe(200);
+    expect(await entryStatus(broken)).toBe(200);
   });
 
   test("POST /session/resume is gone (404, no route)", async () => {
@@ -493,13 +496,13 @@ describe("start — the state machine's edges (issues #40 review, #58)", () => {
 describe("POST /session/discard — the mis-click's undo (AK7)", () => {
   test("an EMPTY session is deleted, and nothing is live afterwards", async () => {
     const started = await startSession();
-    expect(await fileStatus(started)).toBe(200);
+    expect(await entryStatus(started)).toBe(200);
 
     const res = await post("/api/campaigns/beispiel/session/discard");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ path: started });
     // The ROW is gone.
-    expect(await fileStatus(started)).toBe(404);
+    expect(await entryStatus(started)).toBe(404);
     // …and the session state machine is back where it was: nothing running,
     // and "Session starten" works again instead of a 409.
     expect((await app.request("/api/campaigns/beispiel/session")).status).toBe(404);
@@ -509,7 +512,7 @@ describe("POST /session/discard — the mis-click's undo (AK7)", () => {
   test("a session with a LOG ENTRY is refused — 409, row untouched", async () => {
     const started = await startSession();
     expect((await post("/api/campaigns/beispiel/log", { text: "Ankunft im Hafen" })).status).toBe(200);
-    const before = await getFile(started);
+    const before = await getEntry(started);
 
     const res = await post("/api/campaigns/beispiel/session/discard");
     expect(res.status).toBe(409);
@@ -520,7 +523,7 @@ describe("POST /session/discard — the mis-click's undo (AK7)", () => {
     });
     // Row untouched: same properties, same body, same rev — a refused write
     // must not even bump the guard token.
-    const after = await getFile(started);
+    const after = await getEntry(started);
     expect(after.properties).toEqual(before.properties);
     expect(after.body).toBe(before.body);
     expect(after.rev).toBe(before.rev);
@@ -535,26 +538,26 @@ describe("POST /session/discard — the mis-click's undo (AK7)", () => {
     await seedWithSessions(
       session({
         id: "2026-08-19",
-        started: "2026-08-19T21:05",
+        started: "2026-08-19T21:05:00",
         scenes_played: ["lighthouse-arrival"],
       }),
     );
     const res = await post("/api/campaigns/beispiel/session/discard");
     expect(res.status).toBe(409);
     expect(((await res.json()) as { code: string }).code).toBe("session_not_empty");
-    expect(await fileStatus("sessions/2026-08-19")).toBe(200);
+    expect(await entryStatus("sessions/2026-08-19")).toBe(200);
   });
 
   test("404 without a running session — an ENDED one is never deleted", async () => {
     // The committed fixture has only ended sessions.
     const res = await post("/api/campaigns/beispiel/session/discard");
     expect(res.status).toBe(404);
-    expect(await fileStatus("sessions/2026-01-15")).toBe(200);
+    expect(await entryStatus("sessions/2026-01-15")).toBe(200);
     // …not even when that ended session is empty.
     const started = await startSession();
     expect((await post("/api/campaigns/beispiel/session/end")).status).toBe(200);
     expect((await post("/api/campaigns/beispiel/session/discard")).status).toBe(404);
-    expect(await fileStatus(started)).toBe(200);
+    expect(await entryStatus(started)).toBe(200);
   });
 
   test("discards YESTERDAY's empty session past midnight (the ACTIVE one)", async () => {
@@ -562,7 +565,7 @@ describe("POST /session/discard — the mis-click's undo (AK7)", () => {
     const res = await post("/api/campaigns/beispiel/session/discard");
     expect(res.status).toBe(200);
     expect(((await res.json()) as { path: string }).path).toBe(yesterday);
-    expect(await fileStatus(yesterday)).toBe(404);
+    expect(await entryStatus(yesterday)).toBe(404);
   });
 
   test("404 for an unknown campaign", async () => {
@@ -577,13 +580,13 @@ describe("the review's session — GET /session?includeEnded=1", () => {
     // browser date harvests nothing — there is no session of the 19th.
     const yesterday = await startAt(new Date(2026, 7, 18, 22, 30), new Date(2026, 7, 19, 1, 40));
     expect((await post("/api/campaigns/beispiel/session/end")).status).toBe(200);
-    setNow(() => new Date(2026, 7, 19, 9, 0));
+    setSystemTime(new Date(2026, 7, 19, 9, 0));
     expect((await app.request("/api/campaigns/beispiel/session")).status).toBe(404); // nothing runs
     const res = await app.request("/api/campaigns/beispiel/session?includeEnded=1");
     expect(res.status).toBe(200);
-    const file = (await res.json()) as EntryResponse;
-    expect(file.path).toBe(yesterday);
-    expect(file.endedMs).toBe(new Date(2026, 7, 19, 1, 40).getTime());
+    const entry = (await res.json()) as EntryResponse;
+    expect(entry.path).toBe(yesterday);
+    expect(entry.endedMs).toBe(new Date(2026, 7, 19, 1, 40).getTime());
   });
 
   test("prefers the RUNNING session over the ended fixture", async () => {
@@ -598,7 +601,7 @@ describe("the review's session — GET /session?includeEnded=1", () => {
   });
 });
 
-describe("degraded session files never hijack the active session", () => {
+describe("degraded session entries never hijack the active session", () => {
   test("an unparseable `started` with a non-date name is ignored (finding 4)", async () => {
     // `sessions/gestern abend.md`: neither the id nor `started` is a date, so
     // the row has no place in the chronology: it must neither become the
@@ -612,27 +615,27 @@ describe("degraded session files never hijack the active session", () => {
   });
 
   test("a non-date id with a parseable `started` still counts", async () => {
-    await seedWithSessions(session({ id: "notizen", started: "2026-08-19T20:00" }));
+    await seedWithSessions(session({ id: "notizen", started: "2026-08-19T20:00:00" }));
     const res = await app.request("/api/campaigns/beispiel/session");
     expect(res.status).toBe(200);
     expect(((await res.json()) as EntryResponse).path).toBe("sessions/notizen");
   });
 
-  // A MINUTE-precise `started` is a valid width too: the format's parser
-  // accepts both, so such a row keeps working — verbatim string, a startedMs
-  // on the minute, endable.
-  test("a pre-#58 minute-precise `started` stays valid", async () => {
-    await seedWithSessions(session({ id: "2026-08-19", started: "2026-08-19T20:00" }));
-    const res = await app.request("/api/campaigns/beispiel/session");
-    expect(res.status).toBe(200);
-    const file = (await res.json()) as EntryResponse;
-    expect(file.properties.started).toBe("2026-08-19T20:00");
-    expect(file.startedMs).toBe(new Date(2026, 7, 19, 20, 0).getTime());
-    setNow(() => new Date(2026, 7, 19, 22, 0, 30));
-    const ended = (await (await post("/api/campaigns/beispiel/session/end")).json()) as EntryResponse;
-    // The end is written at the new width next to the old `started`.
-    expect(ended.properties.started).toBe("2026-08-19T20:00");
-    expect(ended.properties.ended).toBe("2026-08-19T22:00:30");
+  // A `started` outside the one shape (store/time.ts) has no epoch reading at
+  // all — the row stays addressable and shows its string verbatim, it simply
+  // has no place in the chronology. The boot pre-flight
+  // (db/timestamp-preflight.ts) is what keeps such a value out of a real
+  // database; here it is planted past the seed on purpose.
+  test("a second-less `started` is unreadable, not half-read", async () => {
+    await seedWithSessions(session({ id: "notizen", started: "2026-08-19T20:00:00" }));
+    db.update(sessionsTable)
+      .set({ started: "2026-08-19T20:00" })
+      .where(eq(sessionsTable.campaignId, "beispiel"))
+      .run();
+    const entry = await getEntry("sessions/notizen");
+    expect(entry.properties.started).toBe("2026-08-19T20:00");
+    expect(entry.startedMs).toBeUndefined();
+    expect((await app.request("/api/campaigns/beispiel/session")).status).toBe(404);
   });
 
   // Date-shaped ids — plain dates and the `-2` sequence form — are just
@@ -640,12 +643,12 @@ describe("degraded session files never hijack the active session", () => {
   // the opaque ids a start hands out.
   test("legacy date ids and a new opaque id live side by side", async () => {
     await seedWithSessions(
-      session({ id: "2026-08-19", started: "2026-08-19T18:00", ended: "2026-08-19T19:30" }),
-      session({ id: "2026-08-19-2", started: "2026-08-19T19:45", ended: "2026-08-19T20:30" }),
+      session({ id: "2026-08-19", started: "2026-08-19T18:00:00", ended: "2026-08-19T19:30:00" }),
+      session({ id: "2026-08-19-2", started: "2026-08-19T19:45:00", ended: "2026-08-19T20:30:00" }),
     );
     // Both entries are readable under their own path…
-    expect(await fileStatus("sessions/2026-08-19")).toBe(200);
-    expect(await fileStatus("sessions/2026-08-19-2")).toBe(200);
+    expect(await entryStatus("sessions/2026-08-19")).toBe(200);
+    expect(await entryStatus("sessions/2026-08-19-2")).toBe(200);
     // …and the harvest's "last started" is the `-2` one, by `started`.
     expect(await activePath(true)).toBe("sessions/2026-08-19-2");
 
@@ -665,12 +668,12 @@ describe("degraded session files never hijack the active session", () => {
 
   test("a blank `ended` means RUNNING and can be ended normally (finding 5)", async () => {
     await seedWithSessions(
-      session({ id: "2026-08-19", started: "2026-08-19T20:00", ended: "" }),
+      session({ id: "2026-08-19", started: "2026-08-19T20:00:00", ended: "" }),
     );
     const res = await app.request("/api/campaigns/beispiel/session");
     expect(res.status).toBe(200);
     expect(((await res.json()) as EntryResponse).path).toBe("sessions/2026-08-19");
-    setNow(() => new Date(2026, 7, 19, 23, 50));
+    setSystemTime(new Date(2026, 7, 19, 23, 50));
     const ended = await post("/api/campaigns/beispiel/session/end");
     expect(ended.status).toBe(200);
     expect(((await ended.json()) as EntryResponse).properties.ended).toBe("2026-08-19T23:50:00");
@@ -679,21 +682,27 @@ describe("degraded session files never hijack the active session", () => {
 });
 
 describe("localDateTimeToMs", () => {
-  test("reads the format's zone-less timestamps in the server's timezone", () => {
-    expect(localDateTimeToMs("2026-08-19T21:05")).toBe(new Date(2026, 7, 19, 21, 5).getTime());
-    expect(localDateTimeToMs("2026-08-19 21:05")).toBe(new Date(2026, 7, 19, 21, 5).getTime());
+  test("reads the ONE shape in the server's timezone", () => {
     expect(localDateTimeToMs("2026-08-19T21:05:30")).toBe(
       new Date(2026, 7, 19, 21, 5, 30).getTime(),
     );
-    // Date-only = midnight (the degraded `…T00:00`).
-    expect(localDateTimeToMs("2026-08-19")).toBe(new Date(2026, 7, 19, 0, 0).getTime());
+    expect(localDateTimeToMs("2026-08-19T00:00:00")).toBe(new Date(2026, 7, 19, 0, 0).getTime());
   });
 
-  test("undefined for everything unusable — never throws", () => {
+  test("undefined for every other shape — never throws", () => {
     expect(localDateTimeToMs(undefined)).toBeUndefined();
     expect(localDateTimeToMs(null)).toBeUndefined();
     expect(localDateTimeToMs(42)).toBeUndefined();
     expect(localDateTimeToMs("gestern abend")).toBeUndefined();
+    expect(localDateTimeToMs("")).toBeUndefined();
     expect(localDateTimeToMs("2026-08-19T21")).toBeUndefined();
+    // No second-less value, no space for the `T`, no bare date, no one-digit
+    // hour, no trailing blank — the writer produces none of them.
+    expect(localDateTimeToMs("2026-08-19T21:05")).toBeUndefined();
+    expect(localDateTimeToMs("2026-08-19 21:05:30")).toBeUndefined();
+    expect(localDateTimeToMs("2026-08-19")).toBeUndefined();
+    expect(localDateTimeToMs("2026-08-19T9:05:30")).toBeUndefined();
+    expect(localDateTimeToMs("2026-08-19T21:05:30 ")).toBeUndefined();
+    expect(localDateTimeToMs("2026-08-19T21:05:30.123")).toBeUndefined();
   });
 });

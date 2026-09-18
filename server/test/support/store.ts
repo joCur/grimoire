@@ -57,7 +57,7 @@ function identity(entry: SeedEntry): string {
  */
 export async function seedStore(overrides: SeedOverrides = {}): Promise<GrimoireDb> {
   closeStore();
-  const db = await initStore({ file: ":memory:" });
+  const db = await initStore({ dbFile: ":memory:" });
   const without = new Set(overrides.without ?? []);
   const added = overrides.entries ?? [];
   const replaced = new Set(added.map(identity));
@@ -74,7 +74,7 @@ export async function seedStore(overrides: SeedOverrides = {}): Promise<Grimoire
 /** A fresh, EMPTY in-memory database — the production boot's starting point. */
 export async function emptyStore(): Promise<GrimoireDb> {
   closeStore();
-  return initStore({ file: ":memory:" });
+  return initStore({ dbFile: ":memory:" });
 }
 
 /** Close the database of the current case. Call it in `afterEach`. */

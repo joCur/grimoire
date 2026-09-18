@@ -1,7 +1,7 @@
 // The read side of the store: every GET the API answers, as database queries.
 //
 // The shapes are unchanged — `CampaignSummary[]`, `CampaignTree`,
-// `EntryResponse` — and so is every ordering rule the file-tree reader had
+// `EntryResponse` — and so is every ordering rule the pre-database reader had
 // (chapters by their migration order, npcs/locations by name, sessions newest
 // first, scene groups by slug). What changed is that the orderings are now
 // SQL instead of a directory walk, and that the guard token `rev` is the
@@ -10,7 +10,7 @@
 // The active-session logic is the one piece of behaviour worth calling out:
 // it is the SAME definition as before (the last STARTED session that is not
 // ended, so a session past midnight stays active), lifted from a newest-first
-// file scan to a query over `sessions`. The shared predicates (`isEnded`)
+// directory scan to a query over `sessions`. The shared predicates (`isEnded`)
 // still decide, so a blank `ended` still counts as running.
 
 import { and, asc, desc, eq } from "drizzle-orm";
@@ -20,19 +20,23 @@ import {
   type CampaignSummary,
   type CampaignTree,
   type ChapterNode,
+  type ChapterStatus,
   type EntryResponse,
   type GlossaryResponse,
   type KnowledgeEntry,
   type KnowledgeResponse,
   type LocationSummary,
+  type NpcStatus,
   type NpcSummary,
   type SceneGroup,
+  type SceneStatus,
   type SceneSummary,
+  type SceneType,
   type SessionSummary,
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import { assertSafeCampaignId, assertSafeAddress } from "../addressing";
-import { localDateTimeToMs } from "../clock";
+import { localDateTimeToMs } from "./time";
 import type { GrimoireDb } from "../db/client";
 import {
   campaignKnowledge,
@@ -182,8 +186,11 @@ function sceneSummaryRow(db: GrimoireDb, row: SceneRow): SceneSummary {
     path: sceneAddress(row),
     id: row.id,
     title: row.title === "" ? row.id : row.title,
-    type: row.type === "" ? "planned" : row.type,
-    status: row.status === "" ? "draft" : row.status,
+    // Both columns are CHECK constraints over the shared lists (ADR #25), so
+    // the stored text is one of their values — the narrowing the row type
+    // cannot express.
+    type: row.type as SceneType,
+    status: row.status as SceneStatus,
     npcs: npcRefs,
     tags,
   };
@@ -252,7 +259,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
       // uses it to open the chapter entry.
       path: chapterPath(chapter.id),
     };
-    if (chapter.status !== null) node.status = chapter.status;
+    if (chapter.status !== null) node.status = chapter.status as ChapterStatus;
     return node;
   });
 
@@ -264,7 +271,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
         path: npcPath(row.id),
         id: row.id,
         name: row.name === "" ? row.id : row.name,
-        status: row.status === "" ? "unknown" : row.status,
+        status: row.status as NpcStatus,
       };
       if (row.role !== null) summary.role = row.role;
       if (row.chapterId !== null) summary.chapter = row.chapterId;
@@ -418,7 +425,7 @@ function pickLatest(rows: SessionRow[]): SessionRow | undefined {
 
 /**
  * The ACTIVE session row: the last STARTED one that is not ended. With
- * `includeEnded` it is simply the last started session — the file the review
+ * `includeEnded` it is simply the last started session — the row the review
  * harvests, which may be yesterday's when the evening ran past midnight.
  */
 export function pickSession(

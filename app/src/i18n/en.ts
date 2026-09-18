@@ -275,6 +275,12 @@ export const en: Messages = {
     "The model's reply was cut off — raise LLM_MAX_TOKENS (currently: {max}) or shorten the source text.",
   "server.llm_invalid": "The reply did not pass the mechanical validation.",
   "server.llm_truncated.defaultCap": "the endpoint default",
+  "server.status_not_allowed": 'There is no status “{value}” — allowed are {allowed}.',
+  "server.scene_type_not_allowed": 'There is no scene type “{value}” — allowed are {allowed}.',
+  "server.timestamp_not_allowed":
+    // The doubled apostrophes are ICU escaping: a single one would quote the
+    // placeholder behind it and the sentence would read `{value}` verbatim.
+    "Timestamp ''{value}'' is not of the form yyyy-mm-ddThh:mm:ss.",
 
   "server.kind.entry": "The entry",
   "server.kind.campaign": "Campaign",

@@ -572,9 +572,9 @@ export function outlineReply(input: {
 
 /**
  * An outline that FAILS validation (TRIGGER.invalid): one scene, no entries —
- * so the broken scene document below is the run's only part and „jeder Teil
+ * so the broken scene draft below is the run's only part and „jeder Teil
  * ist fehlgeschlagen“ is what the DM sees. The outline itself is fine; the
- * error is in the document, which is where the 422 block's messages come from.
+ * error is in the draft, which is where the 422 block's messages come from.
  */
 export function invalidRunOutline(source: string): unknown {
   return {
@@ -592,7 +592,7 @@ export function invalidRunOutline(source: string): unknown {
   };
 }
 
-/** One finished scene document, as the per-scene call answers it. */
+/** One finished scene draft, as the per-scene call answers it. */
 export function scenePartReply(
   chapter: string,
   sceneId: string,
@@ -604,7 +604,7 @@ export function scenePartReply(
   return plainSceneDraft(chapter, sceneId, scene?.title ?? sceneId);
 }
 
-/** A scene document that FAILS validation — `status: ready` is drafts only. */
+/** A scene draft that FAILS validation — `status: ready` is drafts only. */
 export function invalidScenePartReply(chapter: string, sceneId: string): EntryReply {
   const title = THREE_SCENES.find((s) => s.id === sceneId)?.title ?? SCENE_TITLE;
   return {

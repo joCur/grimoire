@@ -104,6 +104,47 @@ describe("the two refusals of the entry write", () => {
   });
 });
 
+describe("the closed columns", () => {
+  const status = body("status_not_allowed", {
+    kind: "scene",
+    value: "halbfertig",
+    allowed: ["draft", "ready", "played", "dropped"],
+  });
+  const sceneType = body("scene_type_not_allowed", {
+    value: "optional",
+    allowed: ["planned", "contingency"],
+  });
+
+  test("the refused value and the positions the column accepts, enumerated", () => {
+    const german = serverErrorBodyMessage(status, de);
+    expect(german).toContain("halbfertig");
+    expect(german).toContain("draft, ready, played, dropped");
+    const english = serverErrorBodyMessage(status, en);
+    expect(english).toContain("halbfertig");
+    expect(english).toContain("draft, ready, played, dropped");
+  });
+
+  test("the scene type has its own sentence", () => {
+    const german = serverErrorBodyMessage(sceneType, de);
+    expect(german).toContain("Szenentyp");
+    expect(german).toContain("optional");
+    expect(german).toContain("planned, contingency");
+    expect(serverErrorBodyMessage(sceneType, en)).toContain("scene type");
+  });
+
+  test("a body without value or list degrades to the server's own text", () => {
+    for (const code of ["status_not_allowed", "scene_type_not_allowed"]) {
+      expect(serverErrorBodyMessage(body(code, { allowed: ["draft"] }), de)).toBe(
+        `technical: ${code}`,
+      );
+      expect(serverErrorBodyMessage(body(code, { value: "x" }), de)).toBe(`technical: ${code}`);
+      expect(serverErrorBodyMessage(body(code, { value: "x", allowed: [] }), de)).toBe(
+        `technical: ${code}`,
+      );
+    }
+  });
+});
+
 describe("the degrade rule", () => {
   test("every code the server may send has a sentence in both languages", () => {
     for (const code of ERROR_CODES) {
@@ -116,6 +157,7 @@ describe("the degrade rule", () => {
           field: "Name",
           term: "x",
           max: "1",
+          allowed: "a, b",
         });
         expect(sentence.trim()).not.toBe("");
         expect(sentence).not.toContain("{");

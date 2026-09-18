@@ -101,6 +101,29 @@ export const ERROR_CODES = [
   "llm_truncated",
   /** 422, generator: the reply failed mechanical validation after the retries. */
   "llm_invalid",
+  /**
+   * 400, entry write: `status` carries a value the column does not accept.
+   * The four status columns are CLOSED (ADR #25), so a value outside the list
+   * can only be a typo. `{ kind, value, allowed }` — `allowed` is the list in
+   * order, so the app can name the positions without knowing the kind.
+   */
+  "status_not_allowed",
+  /**
+   * 400, scene write: `type` carries a value outside `SCENE_TYPES`. Same rule
+   * as `status_not_allowed`, its own code because it is its own field.
+   * `{ value, allowed }`
+   */
+  "scene_type_not_allowed",
+  /**
+   * 400, session write: a `started`, `ended` or pause timestamp is not in the
+   * one shape those columns hold (`yyyy-mm-ddThh:mm:ss`). The shape is closed
+   * the way a status is: the reader reads only it, and the boot check refuses
+   * a database holding anything else — so a value from the wire is refused
+   * here instead of surviving until the next start. `{ field, value }`, where
+   * `field` is addressing (`started`, `ended`, `pauses[0].from`) and `value`
+   * is what the sentence names.
+   */
+  "timestamp_not_allowed",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

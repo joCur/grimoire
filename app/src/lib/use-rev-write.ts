@@ -1,4 +1,4 @@
-// The react-query envelope around a rev-checked write (issue #38) — the
+// The react-query envelope around a rev-checked write — the
 // companion of write-with-rev.ts, and the one place that knows how a write
 // touches the cache.
 //
@@ -50,8 +50,8 @@ export interface RevWriteOptions<TVariables> {
   /**
    * Query key of the written entry. Whatever came back — the written entry, or
    * the re-read one after a conflict — is seeded here. NOT invalidated: both
-   * write endpoints answer with the same payload as GET /entry, so the file in
-   * the cache is already the server's truth.
+   * write endpoints answer with the same payload as GET /entry, so the entry
+   * in the cache is already the server's truth.
    */
   entryKey: QueryKey;
   /**
@@ -63,7 +63,7 @@ export interface RevWriteOptions<TVariables> {
   invalidateOnSuccess?: readonly QueryKey[];
   /**
    * Catalog KEY of the inline message when the write failed for any reason
-   * other than a conflict (issue #69) — a key, not a sentence, so the message
+   * other than a conflict — a key, not a sentence, so the message
    * follows a language switch like everything else.
    *
    * It is the FALLBACK: a rejection that carries a server error code shows
@@ -76,7 +76,7 @@ export interface RevWriteOptions<TVariables> {
    * Runs after a CONFLICT with the re-read entry (undefined when even the
    * reload failed), for callers that hold their own base version.
    */
-  onConflict?: (file: EntryResponse | undefined) => void;
+  onConflict?: (entry: EntryResponse | undefined) => void;
 }
 
 export function useRevWriteMutation<TVariables>({
@@ -110,10 +110,10 @@ export function useRevWriteMutation<TVariables>({
     onSuccess: (result) => {
       // Whatever the server sent back — the written entry, or the re-read one
       // after a conflict — is the new truth for this path.
-      if (result.file !== undefined) queryClient.setQueryData(entryKey, result.file);
+      if (result.entry !== undefined) queryClient.setQueryData(entryKey, result.entry);
       if (!result.ok) {
         setMessage(t(STALE_FILE_MESSAGE));
-        onConflict?.(result.file);
+        onConflict?.(result.entry);
         return;
       }
       for (const queryKey of invalidateOnSuccess) {
@@ -122,11 +122,11 @@ export function useRevWriteMutation<TVariables>({
       onSaved?.();
     },
     onError: (error) => {
-      // The SERVER'S sentence when it sent one (issue #69's catalog), the
-      // caller's wording only as the fallback. Without this every rejection
-      // read „… — Server prüfen", including the ones that name exactly what
-      // is wrong and what to type instead — `location_not_an_id` with its
-      // suggestion was invisible to the DM (issue #100 review).
+      // The SERVER'S sentence when it sent one, the caller's wording only as
+      // the fallback: without it every rejection read as a generic failure,
+      // including the ones that name exactly what is wrong and what to type
+      // instead — `location_not_an_id` carries a suggestion, and the DM has to
+      // see it.
       setMessage(serverErrorMessage(error, t, errorMessage));
     },
   });

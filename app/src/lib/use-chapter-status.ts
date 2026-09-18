@@ -8,15 +8,17 @@
 // carries every chapter's status (the overview, the session view), and the
 // session view reads which chapter is active, so both follow.
 
+import type { ChapterStatus } from "@grimoire/shared/types";
+
 import { chapterMetaPath } from "@/lib/chapter-meta";
 import { chapterStatusWritable, writeChapterStatus } from "@/lib/chapter-status";
 import { useRevWriteMutation, type RevWriteMutation } from "@/lib/use-rev-write";
 
 export interface ChapterStatusMutation {
   /** Start a write; ignored while another one is in flight, or without a rev. */
-  setStatus: (status: string) => void;
+  setStatus: (status: ChapterStatus) => void;
   /** The value being written right now — the control shows it dimmed. */
-  pendingStatus?: string | undefined;
+  pendingStatus?: ChapterStatus | undefined;
   /** Quiet inline message: rev conflict, or a failed write. */
   message?: string | undefined;
 }
@@ -31,9 +33,9 @@ export function useChapterStatusMutation(
    * already holds the flag is never set active again — see
    * `chapterStatusWritable`.
    */
-  current?: string | undefined,
+  current?: ChapterStatus | undefined,
 ): ChapterStatusMutation {
-  const mutation: RevWriteMutation<string> = useRevWriteMutation<string>({
+  const mutation: RevWriteMutation<ChapterStatus> = useRevWriteMutation<ChapterStatus>({
     write: (status) => writeChapterStatus(campaign, chapter, status, rev),
     entryKey: ["entry", campaign, chapterMetaPath(chapter)],
     invalidateOnSuccess: [
@@ -47,7 +49,7 @@ export function useChapterStatusMutation(
   });
 
   return {
-    setStatus: (status: string) => {
+    setStatus: (status: ChapterStatus) => {
       if (!chapterStatusWritable(status, rev, current)) return;
       mutation.write(status);
     },

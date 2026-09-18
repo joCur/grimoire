@@ -1,8 +1,8 @@
-// The session state machine, defined ONCE (issue #40 review).
+// The session state machine, defined ONCE.
 //
-// A session file is either RUNNING or ENDED, and exactly one predicate decides
-// which: `isEnded`. It is shared on purpose — server (which file is active,
-// which file may be written) and app (whether the live indicator stays up)
+// A session is either RUNNING or ENDED, and exactly one predicate decides
+// which: `isEnded`. It is shared on purpose — server (which session is active,
+// which one may be written) and app (whether the live indicator stays up)
 // used to each carry their own variant, and the variants disagreed about
 // `ended: ""`, so a session could be invisible in the live topbar while the
 // server still counted it as running.
@@ -10,7 +10,7 @@
 // The decision: an EMPTY (or blank) `ended` counts as NOT SET — the session is
 // running. Rationale: the value is hand-editable (DECISIONS #1), an empty key
 // is the shape a half-finished manual edit leaves behind, and the readable
-// consequence is "the session can be ended normally" instead of a zombie file
+// consequence is "the session can be ended normally" instead of a zombie session
 // that is neither active nor endable.
 
 /** True when a properties `ended` value marks the session as finished. */
@@ -20,15 +20,15 @@ export function isEndedValue(value: unknown): boolean {
   return true; // a YAML date or any other non-empty scalar
 }
 
-/** True when this session file's properties marks the session as finished. */
+/** True when this session's properties marks the session as finished. */
 export function isEnded(properties: Record<string, unknown> | undefined): boolean {
   return properties !== undefined && isEndedValue(properties.ended);
 }
 
 /**
- * True when a session file holds NOTHING the DM would miss (issue #40 AK7):
+ * True when a session holds NOTHING the DM would miss:
  * no log entry and no played scene. Only such a session may be DISCARDED
- * (POST /session/discard deletes the file); everything else is ended, not
+ * (POST /session/discard deletes the row); everything else is ended, not
  * deleted.
  *
  * Shared for the same reason `isEnded` is: the server decides whether the
@@ -40,8 +40,8 @@ export function isEnded(properties: Record<string, unknown> | undefined): boolea
  * a hand-typed note, a `## Threads` entry — is content.
  */
 /**
- * One entry of the session's `pauses` list (issue #40 AK8): the wall-clock
- * strings as they stand in the file, zone-less like `started`/`ended` and
+ * One entry of the session's `pauses` list: the wall-clock
+ * strings as they stand in the property, zone-less like `started`/`ended` and
  * second-precise. A MISSING `to` means "paused right now".
  */
 export interface SessionPause {
@@ -54,7 +54,7 @@ function isTimestampish(value: unknown): value is string {
 }
 
 /**
- * The USABLE `pauses` entries of a session's properties, in file order —
+ * The USABLE `pauses` entries of a session's properties, in stored order —
  * shared so the server's runtime arithmetic and the client's fallback read
  * the same list out of the same hand-editable field.
  *

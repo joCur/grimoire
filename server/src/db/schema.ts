@@ -38,8 +38,17 @@
 //      set once, at creation (ADR #21); the cascade is what keeps a child row
 //      honest, not a feature that changes ids.
 //   6. SESSION TIMESTAMPS STAY ZONE-LESS STRINGS, exactly as they were
-//      written. Only the server resolves them to epoch ms (see clock.ts) —
+//      written, in the one shape store/time.ts spells out. Only the server
+//      resolves them to epoch ms (see store/time.ts) —
 //      storing an epoch here would bake today's timezone into the data.
+//   7. A CLOSED VALUE SET IS A CHECK CONSTRAINT. `scenes.status`,
+//      `scenes.type`, `npcs.status` and `chapters.status` each hold one of a
+//      fixed handful of positions, and the database is what says so (ADR
+//      #25). The allowed values are NOT written here: they are the lists in
+//      @grimoire/shared, and `oneOf` below turns a list into the constraint.
+//      A degrading READER (README) and a closed COLUMN are not in conflict —
+//      the renderer still shows whatever it is handed, there simply is no
+//      longer a way to get a foreign value into the column.
 //
 // The JSON columns (`quickstats`, `handouts`) are plain TEXT holding JSON;
 // pack/unpack helpers live at the bottom of this file. Deliberately not
@@ -47,8 +56,9 @@
 // maintenance, custom migrations), and one representation everywhere is worth
 // more than the small convenience.
 
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import {
+  check,
   foreignKey,
   integer,
   primaryKey,
@@ -56,19 +66,44 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import {
+  CHAPTER_STATUSES,
+  NPC_STATUSES,
+  SCENE_STATUSES,
+  SCENE_TYPES,
+} from "@grimoire/shared/types";
 
 /** Optimistic-concurrency token of one row (rule 4). */
 const revColumn = () => integer("rev").notNull().default(1);
+
+/**
+ * `<column> in ('a', 'b')` for a CHECK constraint (rule 7), built from the
+ * shared value list. The list is the single source: a value added to
+ * @grimoire/shared changes the constraint, and no enum is ever spelled twice.
+ *
+ * `sql.raw` because the values go into the table DEFINITION, where a bound
+ * parameter has no meaning — the migration SQL has to carry the literals.
+ * They come from a `const` tuple of identifiers, never from a request.
+ *
+ * `nullable` adds the `is null` arm: a column that may hold nothing must
+ * still accept nothing, and a bare `in (…)` would evaluate to NULL there —
+ * which SQLite passes, but only by accident of three-valued logic.
+ */
+function oneOf(column: string, values: readonly string[], nullable = false): SQL {
+  const list = values.map((value) => `'${value}'`).join(", ");
+  const test = `\`${column}\` in (${list})`;
+  return sql.raw(nullable ? `\`${column}\` is null or ${test}` : test);
+}
 
 // --- campaign ---------------------------------------------------------------
 
 /**
  * One campaign. `id` is the key in every URL.
  *
- * `version` replaces the chokidar-fed in-memory counter behind
- * `GET /api/campaigns/:campaign/version` (DECISIONS #9): with the database as the only
- * truth there is no external editor to watch, so the counter is simply bumped
- * by whoever writes.
+ * `version` is the counter behind `GET /api/campaigns/:campaign/version`
+ * (DECISIONS #9). With the database as the only truth there is nothing outside
+ * the server that could change campaign content, so the counter is simply
+ * bumped by whoever writes — no watcher is involved.
  */
 export const campaigns = sqliteTable("campaigns", {
   id: text("id").primaryKey(),
@@ -119,10 +154,12 @@ export const chapters = sqliteTable(
     id: text("id").notNull(),
     title: text("title").notNull().default(""),
     /**
-     * `planned | active | done` (@grimoire/shared `CHAPTER_STATUSES`). No
-     * CHECK behind it — the format degrades and a stored value is shown
-     * verbatim — but the API writes nothing else, and at most ONE chapter per
-     * campaign holds `active` (store/write.ts `clearOtherActiveChapters`).
+     * `planned | active | done` (@grimoire/shared `CHAPTER_STATUSES`), or
+     * nothing: a chapter without a status is a legal chapter, and clearing
+     * the field is how it loses one. A CHECK holds the trio (rule 7), and at
+     * most ONE chapter per campaign holds `active` (store/write.ts
+     * `clearOtherActiveChapters`) — that second rule is the store's, because
+     * it spans rows.
      */
     status: text("status"),
     body: text("body").notNull().default(""),
@@ -130,7 +167,10 @@ export const chapters = sqliteTable(
     pos: integer("pos").notNull().default(0),
     rev: revColumn(),
   },
-  (t) => [primaryKey({ columns: [t.campaignId, t.id] })],
+  (t) => [
+    primaryKey({ columns: [t.campaignId, t.id] }),
+    check("chapters_status_check", oneOf("status", CHAPTER_STATUSES, true)),
+  ],
 );
 
 // --- scenes -----------------------------------------------------------------
@@ -147,7 +187,7 @@ export const scenes = sqliteTable(
      */
     chapterId: text("chapter_id").notNull(),
     title: text("title").notNull().default(""),
-    /** "planned" | "contingency" | anything else that was authored. */
+    /** `planned | contingency` (shared `SCENE_TYPES`), held by a CHECK. */
     type: text("type").notNull().default("planned"),
     /** Free-text firing condition — only meaningful for contingency scenes. */
     trigger: text("trigger"),
@@ -160,7 +200,7 @@ export const scenes = sqliteTable(
      * there is no independent `group_slug` column (migration 0009, ADR #17).
      */
     location: text("location"),
-    /** "draft" | "ready" | "played" | "dropped" | anything else. */
+    /** `draft | ready | played | dropped` (shared `SCENE_STATUSES`), CHECKed. */
     status: text("status").notNull().default("draft"),
     /**
      * Roll20 handout NAMES, as a JSON string array. Deliberately a column and
@@ -197,6 +237,8 @@ export const scenes = sqliteTable(
     })
       .onUpdate("cascade")
       .onDelete("no action"),
+    check("scenes_status_check", oneOf("status", SCENE_STATUSES)),
+    check("scenes_type_check", oneOf("type", SCENE_TYPES)),
   ],
 );
 
@@ -264,7 +306,7 @@ export const npcs = sqliteTable(
      * the npc belongs to no single chapter.
      */
     chapterId: text("chapter_id"),
-    /** "alive" | "dead" | "missing" | "unknown" | anything else. */
+    /** `alive | dead | missing | unknown` (shared `NPC_STATUSES`), CHECKed. */
     status: text("status").notNull().default("unknown"),
     /** `Roll20: <sheet>` — a reference, never a copy (DECISIONS #2). */
     statblock: text("statblock"),
@@ -291,6 +333,7 @@ export const npcs = sqliteTable(
     })
       .onUpdate("cascade")
       .onDelete("no action"),
+    check("npcs_status_check", oneOf("status", NPC_STATUSES)),
   ],
 );
 
@@ -342,7 +385,7 @@ export const locations = sqliteTable(
 
 /**
  * One game session. `started`/`ended` keep the zone-less wall-clock strings
- * of the file format (rule 6); the epoch reading stays the server's job.
+ * of the README's writing rules; the epoch reading stays the server's job.
  * An `ended` that is NULL or blank means the session runs (session-state.ts).
  *
  * IDENTITY (PO decision): the id of a NEW session is an OPAQUE
@@ -382,7 +425,7 @@ export const sessions = sqliteTable(
      * when it was written.
      *
      * NOT a wall-clock string like `started`: this is bookkeeping of the
-     * database, never file content, and the file format has no field for it.
+     * database, never entry content, and an entry has no property for it.
      * It is also STRICTLY INCREASING per campaign rather than a plain
      * `Date.now()` (store/write.ts `nextCreatedAt`) — a clock that stands
      * still or jumps back must not make two rows unorderable.
@@ -534,11 +577,11 @@ export const sessionScenesPlayed = sqliteTable(
 
 /**
  * One line of the campaign inbox. Same append-only-plus-one-exception rule as
- * the file had (README: a done entry is rewritten to `- [x] …`) — here that
+ * the inbox text had (README: a done entry is rewritten to `- [x] …`) — here that
  * exception is the `done` flag.
  *
  * As in `log_entries`, `raw` is the line verbatim and the only guaranteed
- * content: the inbox file also holds headings and prose, and those keep their
+ * content: the inbox text also holds headings and prose, and those keep their
  * place in the list with `text` NULL instead of being thrown away.
  */
 export const inboxEntries = sqliteTable(

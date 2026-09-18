@@ -4,7 +4,7 @@
 // campaign-root setting any more: the markdown importer survives ONLY as the
 // dev/E2E tool `grimoire seed` (src/cli.ts), which takes its source directory
 // as an argument. A fresh instance therefore starts EMPTY — the cold start is
-// issue #56's subject, not a boot-time import (issue #79 AK6).
+// the normal case, not a boot-time import.
 
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -14,7 +14,7 @@ const PACKAGE_DIR = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "
 
 /**
  * Directory that holds the SQLite database (`grimoire.db` plus its `-wal` and
- * `-shm` companions) — the Docker volume mount point (planning #52 section 5,
+ * `-shm` companions) — the Docker volume mount point (docs/DEPLOYMENT.md,
  * ADR #13). Defaults to `./data` next to the server package so `bun run dev`
  * and `bun test` work from the repo root as well as from server/.
  * GRIMOIRE_DATA overrides it with normal CLI semantics (relative to cwd).
@@ -41,8 +41,8 @@ export const PORT = Number(process.env.PORT ?? 3000);
  * .github/workflows/release.yml). Outside an image it is "dev".
  *
  * The app compares it with its own build id and offers a reload when the two
- * differ (issue #24: an old SPA bundle in an open tab talking to a new
- * server). Read from the env on every call — like getAppDistDir() — so tests
+ * differ (an old SPA bundle in an open tab talking to a new server).
+ * Read from the env on every call — like getAppDistDir() — so tests
  * can set GRIMOIRE_BUILD without a test-only setter; the cost is one env
  * lookup per version poll.
  */

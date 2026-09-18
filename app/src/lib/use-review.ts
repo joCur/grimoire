@@ -16,7 +16,7 @@ import { useMemo } from "react";
 import { fetchEntry, fetchTree } from "@/api";
 import { useT } from "@/i18n";
 import { sceneTitle } from "@/lib/campaign";
-import { fmStringArray } from "@/lib/properties";
+import { propStringArray } from "@/lib/properties";
 import { useActedKeys } from "@/lib/review-memory";
 import {
   PC_TAG,
@@ -197,7 +197,7 @@ export function useReviewEntries(
   });
 
   const reviewed = useMemo(
-    () => new Set(fmStringArray(session.data?.properties.reviewed)),
+    () => new Set(propStringArray(session.data?.properties.reviewed)),
     [session.data?.properties.reviewed],
   );
 

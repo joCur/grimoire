@@ -190,13 +190,13 @@ export function Topbar() {
     campaignOf(chapterOverviewMatch) ??
     (settingsFrom === "" ? undefined : settingsFrom) ??
     "";
-  const filePath = sceneMatch?.params["*"] ?? "";
+  const entryPath = sceneMatch?.params["*"] ?? "";
   // These read their OWN match, not `campaign`: on `/settings` the campaign is
   // resolved from `?from=` (see above), so asking `campaign !== ""` would make
   // the settings page the chapter overview of that campaign, marking the
   // chapters entry and hanging the chapter overview's review and generator
   // entries into the row.
-  const isScene = campaignOf(sceneMatch) !== undefined && filePath !== "";
+  const isScene = campaignOf(sceneMatch) !== undefined && entryPath !== "";
   const isLive = campaignOf(liveMatch) !== undefined;
   const isReview = campaignOf(reviewMatch) !== undefined;
   const isChapterOverview = campaignOf(chapterOverviewMatch) !== undefined;
@@ -206,7 +206,7 @@ export function Topbar() {
 
   // Which nav entry is the current view — the ONE thing that differs between
   // the campaign-scoped views. Route-derived, so it never lags behind a query.
-  const section = navSection({ isChapterOverview, listKind, filePath });
+  const section = navSection({ isChapterOverview, listKind, entryPath });
 
   // The running session — asked on EVERY campaign route now, not just /live:
   // one shared query key, so this is one request for topbar and live view.

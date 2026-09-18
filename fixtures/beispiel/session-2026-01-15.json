@@ -2,8 +2,8 @@
   "kind": "session",
   "properties": {
     "id": "2026-01-15",
-    "started": "2026-01-15T19:30",
-    "ended": "2026-01-15T22:45",
+    "started": "2026-01-15T19:30:00",
+    "ended": "2026-01-15T22:45:00",
     "scenes_played": [
       "lighthouse-arrival"
     ]

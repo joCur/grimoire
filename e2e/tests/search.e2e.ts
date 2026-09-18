@@ -55,7 +55,7 @@ test("⌘K finds \"leucht\" and Enter opens the hit", async ({ page }) => {
   await expect(page.getByRole("combobox")).toHaveCount(0);
 });
 
-test("content the APP just wrote is findable right away (issue #57 AK5)", async ({
+test("content the APP just wrote is findable right away", async ({
   page,
   api,
 }) => {

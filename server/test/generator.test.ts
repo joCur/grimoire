@@ -1,6 +1,6 @@
 // Generator pipeline tests. They run against a DATABASE seeded from the
 // example campaign, and the apply step writes ROWS — so "was it written?" is
-// asked through the API. The database is seeded ONCE for the whole file (not
+// asked through the API. The database is seeded ONCE for this file (not
 // per case): several cases build on what an earlier one applied (a conflict
 // needs an existing entity).
 //
@@ -2224,7 +2224,7 @@ describe("LLM_CORRECTION_TURNS", () => {
 describe("campaign knowledge", () => {
   /**
    * A reply whose suggested entry is one the campaign does NOT have yet. The
-   * database is shared by the whole file and the apply cases above already
+   * database is shared by this file and the apply cases above already
    * wrote `npcs/grella`; the OUTLINE step refuses an entry
    * that exists (proposing it again would mean a second entry for the same
    * reference key), so these cases bring their own.
@@ -2249,7 +2249,7 @@ describe("campaign knowledge", () => {
     expect(res.status).toBe(200);
   }
 
-  // The database is shared by the whole file, so the list must not leak into
+  // The database is shared by this file, so the list must not leak into
   // the cases above (a naming hint appearing in an unrelated result).
   afterEach(async () => {
     await setKnowledge([]);
@@ -2275,7 +2275,7 @@ describe("campaign knowledge", () => {
   });
 
   // The NPC run's half of this (knowledge travels, `[[slug]]` resolved) is in
-  // generate-npc.test.ts — it needs that file's harness.
+  // generate-npc.test.ts — it needs the harness that stands there.
 
   test("a draft that keeps the old spelling produces a hint with its position", async () => {
     await setKnowledge([
@@ -2305,7 +2305,7 @@ describe("campaign knowledge", () => {
     expect(hint.line).toBeGreaterThan(0);
   });
 
-  test("stubs are checked too — a stub is a file the run creates", async () => {
+  test("stubs are checked too — a stub is an entry the run creates", async () => {
     await setKnowledge([{ kind: "naming", from: "Grella", to: "Grellwyn", text: "" }]);
     useFake([freshReply({ scenes: [{ content: sceneWithId("kai-zwei") }] })]);
     const result = (await (await generate(generateBody)).json()) as GenerateResult;

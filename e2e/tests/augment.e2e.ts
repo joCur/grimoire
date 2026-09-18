@@ -66,7 +66,7 @@ const INSTRUCTION = "Führe einen Handlungsstrang um den Schmuggler-Spitzel ein"
 async function createEmptyNpc(api: Api): Promise<void> {
   await api.send("POST", "campaigns/beispiel/npcs", { name: EMPTY_NPC });
   await api.patchProperties(SCENE, { npcs: ["fenn", EMPTY_NPC] });
-  const npc = await api.file(NPC_PATH);
+  const npc = await api.entry(NPC_PATH);
   expect(npc.properties.name).toBe(EMPTY_NPC);
   expect(npc.body).toBe("");
 }
@@ -129,7 +129,7 @@ test("empty npc from a reference: augment fills the holes, keeps what is filled"
   await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
 
   // One transaction. The holes are filled …
-  const npc = await api.file(NPC_PATH);
+  const npc = await api.entry(NPC_PATH);
   expect(npc.properties.role).toBe(AUGMENT_NPC_ROLE);
   expect(npc.properties.voice).toBe(AUGMENT_NPC_VOICE);
   expect(npc.body).toContain(AUGMENT_NPC_WILL);
@@ -154,7 +154,7 @@ test("prepared scene: the new thread is added, every existing block survives", a
   page,
   api,
 }) => {
-  const before = await api.file(SCENE);
+  const before = await api.entry(SCENE);
 
   await page.goto(SCENE_URL);
   await startAugment(page);
@@ -196,7 +196,7 @@ test("prepared scene: the new thread is added, every existing block survives", a
 
   // The whole point: the scene GREW. Everything that stood there before
   // stands there unchanged, character for character.
-  const after = await api.file(SCENE);
+  const after = await api.entry(SCENE);
   expect(after.body).toContain(`## If: ${AUGMENT_THREAD_CONDITION}`);
   expect(after.body).toContain(AUGMENT_THREAD_TEXT);
   expect(after.body.startsWith(before.body.replace(/\n+$/, ""))).toBe(true);
@@ -217,7 +217,7 @@ test("an npc with quickstats: the run passes and the mapping stays a mapping", a
   // `quickstats` is a mapping in the store and a `{ key, value }` list in a
   // reply. The stub echoes the properties the prompt showed it — so a prompt
   // that shows the wrong one ends this run in a 422 instead of a review.
-  const before = await api.file(FILLED_NPC);
+  const before = await api.entry(FILLED_NPC);
   expect(before.properties.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
 
   await page.goto(`/campaigns/beispiel/entries/${FILLED_NPC}`);
@@ -231,7 +231,7 @@ test("an npc with quickstats: the run passes and the mapping stays a mapping", a
 
   // The body grew, and the stats the DM authored are still the mapping they
   // were — values included, bare numbers and all.
-  const after = await api.file(FILLED_NPC);
+  const after = await api.entry(FILLED_NPC);
   expect(after.body).toContain(`## If: ${AUGMENT_THREAD_CONDITION}`);
   expect(after.properties.quickstats).toEqual({ insight: 2, "passive-perception": 12 });
   expect(after.properties.name).toBe(before.properties.name);
@@ -290,7 +290,7 @@ test("rejecting the proposal writes nothing and takes the job with it", async ({
   page,
   api,
 }) => {
-  const before = await api.file(SCENE);
+  const before = await api.entry(SCENE);
 
   await page.goto(SCENE_URL);
   await startAugment(page);
@@ -301,7 +301,7 @@ test("rejecting the proposal writes nothing and takes the job with it", async ({
   await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
 
   // Nothing written — not even a new row version — and the job is gone.
-  const after = await api.file(SCENE);
+  const after = await api.entry(SCENE);
   expect(after.properties).toEqual(before.properties);
   expect(after.body).toBe(before.body);
   expect(after.rev).toBe(before.rev);
@@ -366,7 +366,7 @@ test("the entry point: npc, location and scene — and nothing else", async ({
   await page.goto(SCENE_URL);
   await expect(action).toBeVisible();
 
-  // The campaign file is not an augmentable entry — no augment prompt, no
+  // The campaign entry is not augmentable — no augment prompt, no
   // action, and the reading view is untouched.
   await page.goto("/campaigns/beispiel/entries/campaign");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();

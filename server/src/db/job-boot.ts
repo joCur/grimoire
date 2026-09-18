@@ -5,11 +5,10 @@
 // Its own module, small on purpose: the job store (../generate-jobs.ts) needs
 // the database handle (../store/handle.ts), and the handle needs these
 // functions — putting them next to the job store would close that import
-// cycle. Everything here depends on the schema and the clock only.
+// cycle. Everything here depends on the schema only.
 
 import { eq } from "drizzle-orm";
 import type { GenerateJobError } from "@grimoire/shared";
-import { now } from "../clock";
 import type { GrimoireDb } from "./client";
 import { generateJobs } from "./schema";
 
@@ -58,7 +57,7 @@ export function failInterruptedJobs(db: GrimoireDb): number {
     .where(eq(generateJobs.status, "running"))
     .all();
   if (stale.length === 0) return 0;
-  const at = now().toISOString();
+  const at = new Date().toISOString();
   for (const row of stale) {
     const parts = recoverParts(row.pipeline);
     if (parts === null) {
@@ -115,7 +114,7 @@ export function failLegacyDraftJobs(db: GrimoireDb): number {
     })
     .from(generateJobs)
     .all();
-  const at = now().toISOString();
+  const at = new Date().toISOString();
   let failed = 0;
   for (const row of rows) {
     if (!isLegacyJob(row)) continue;

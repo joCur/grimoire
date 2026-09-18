@@ -36,8 +36,8 @@ import {
  * values as the bare numbers the campaign has always held.
  */
 const JORNA = (() => {
-  const file = join(import.meta.dir, "..", "..", "fixtures", "beispiel", "npc-jorna.json");
-  const entry = JSON.parse(readFileSync(file, "utf8")) as {
+  const fixturePath = join(import.meta.dir, "..", "..", "fixtures", "beispiel", "npc-jorna.json");
+  const entry = JSON.parse(readFileSync(fixturePath, "utf8")) as {
     properties: Record<string, unknown>;
   };
   return entry.properties;

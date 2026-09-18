@@ -70,7 +70,9 @@ import {
 } from "./store/read";
 import { applyDrafts, chapterExists, draftTargetExists } from "./store/write";
 import {
+  addressHead,
   addressIdentity,
+  addressSegments,
   chapterPath,
   locationPath,
   npcPath,
@@ -160,7 +162,7 @@ export interface PromptAssets {
 
 /**
  * The two asset pairs: scenes and NPCs have their own prompt and
- * their own few-shot target file, cached per kind after the first read.
+ * their own few-shot target, cached per kind after the first read.
  */
 export const ASSET_FILES = {
   scene: { systemPrompt: "system-prompt.md", fewShotTarget: "example-output.json" },
@@ -173,18 +175,18 @@ export const ASSET_FILES = {
     fewShotTarget: "location-example-output.json",
   },
   // The OUTLINE step of a pipelined scene run: its own prompt
-  // and its own few-shot (a worked example outline, not a target file).
+  // and its own few-shot (a worked example outline, not a target draft).
   outline: {
     systemPrompt: "outline-system-prompt.md",
     fewShotTarget: "outline-example-output.json",
   },
   // The output-schema section that turns the scene prompt into
   // single-scene-from-outline mode. No few-shot of its own — the
-  // per-scene call sends the scene example file — so, like `augment`, this
+  // per-scene call sends the scene example asset — so, like `augment`, this
   // entry carries a system prompt alone.
   sceneSingle: { systemPrompt: "scene-single-output.md" },
   // The augment run's OWN system prompt. It has no few-shot of
-  // its own — the run sends the TARGET KIND's example file — so this entry
+  // its own — the run sends the TARGET KIND's example asset — so this entry
   // carries the system prompt alone and `loadPromptAssets` is not the right
   // shape for it; see loadAsset below.
   augment: { systemPrompt: "augment-system-prompt.md" },
@@ -194,7 +196,7 @@ const promptAssets = new Map<string, PromptAssets>();
 
 /**
  * The kinds that have a prompt PAIR. `augment` and `sceneSingle` do not: the
- * first sends the target kind's example file, the second is only an output
+ * first sends the target kind's example asset, the second is only an output
  * schema spliced into the scene prompt.
  */
 type PromptPairKind = Exclude<keyof typeof ASSET_FILES, "augment" | "sceneSingle">;
@@ -202,23 +204,23 @@ type PromptPairKind = Exclude<keyof typeof ASSET_FILES, "augment" | "sceneSingle
 export async function loadPromptAssets(kind: PromptPairKind): Promise<PromptAssets> {
   const cached = promptAssets.get(kind);
   if (cached !== undefined) return cached;
-  const files = ASSET_FILES[kind];
+  const names = ASSET_FILES[kind];
   const assets: PromptAssets = {
-    systemPrompt: await readFile(path.join(GENERATOR_DIR, files.systemPrompt), "utf8"),
-    fewShotTarget: await readFile(path.join(GENERATOR_DIR, files.fewShotTarget), "utf8"),
+    systemPrompt: await readFile(path.join(GENERATOR_DIR, names.systemPrompt), "utf8"),
+    fewShotTarget: await readFile(path.join(GENERATOR_DIR, names.fewShotTarget), "utf8"),
   };
   promptAssets.set(kind, assets);
   return assets;
 }
 
-/** One prompt asset by FILE NAME, cached — the augment run mixes two pairs. */
+/** One prompt asset by its name in `generator/`, cached — the augment run mixes two pairs. */
 const assetCache = new Map<string, string>();
 
-export async function loadAsset(file: string): Promise<string> {
-  const cached = assetCache.get(file);
+export async function loadAsset(name: string): Promise<string> {
+  const cached = assetCache.get(name);
   if (cached !== undefined) return cached;
-  const text = await readFile(path.join(GENERATOR_DIR, file), "utf8");
-  assetCache.set(file, text);
+  const text = await readFile(path.join(GENERATOR_DIR, name), "utf8");
+  assetCache.set(name, text);
   return text;
 }
 
@@ -293,18 +295,18 @@ export async function assertGenerateTarget(
 }
 
 /**
- * The id of an existing npc file, for the collision check of an NPC run —
+ * The id of an existing npc entry, for the collision check of an NPC run —
  * a request-level 409 before a single token is spent.
  * `assertSafeAddress` is not enough here: the id must be a kebab slug,
- * because it becomes the file name AND the reference key.
+ * because it becomes the address AND the reference key.
  */
 export const NPC_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
 /**
  * Cheap request checks of an NPC run: unsafe campaign id -> 400, unknown
- * campaign -> 404, an unusable pinned id -> 400, and a pinned id whose file
+ * campaign -> 404, an unusable pinned id -> 400, and a pinned id whose entry
  * already exists -> 409 (never overwrite, a non-goal: enriching an
- * existing NPC file). Exported for the same reason as assertGenerateTarget:
+ * existing NPC entry). Exported for the same reason as assertGenerateTarget:
  * POST /generate/npc runs it BEFORE it creates a background job.
  */
 export async function assertNpcGenerateTarget(campaign: string, npcId?: string): Promise<void> {
@@ -313,7 +315,7 @@ export async function assertNpcGenerateTarget(campaign: string, npcId?: string):
   if (!NPC_ID_PATTERN.test(npcId)) throw new ApiError(400, "invalid npc id");
   const rel = npcPath(npcId);
   if (await draftTargetExists(campaign, rel)) {
-    throw new ApiError(409, "npc file already exists", { path: rel });
+    throw new ApiError(409, "npc entry already exists", { path: rel });
   }
 }
 
@@ -457,13 +459,13 @@ function draftProperties(
  * Shared by the reply validation (-> correction turn) and the apply
  * re-validation (-> 400): the same rule, checked on both ways in.
  */
-function stubStatusErrors(kind: "npc" | "location", fm: Record<string, unknown>): string[] {
+function stubStatusErrors(kind: "npc" | "location", props: Record<string, unknown>): string[] {
   if (kind === "location") {
-    return Object.hasOwn(fm, "status")
+    return Object.hasOwn(props, "status")
       ? ['"status" ist nicht erlaubt — locations haben keinen status']
       : [];
   }
-  return npcStatusErrors(fm, "NPC-Stubs");
+  return npcStatusErrors(props, "NPC-Stubs");
 }
 
 /**
@@ -471,11 +473,11 @@ function stubStatusErrors(kind: "npc" | "location", fm: Record<string, unknown>)
  * present, and one of NPC_STATUSES. `subject` names who the rule
  * is about, so the correction turn reads naturally in both places.
  */
-export function npcStatusErrors(fm: Record<string, unknown>, subject: string): string[] {
-  if (!Object.hasOwn(fm, "status")) {
+export function npcStatusErrors(props: Record<string, unknown>, subject: string): string[] {
+  if (!Object.hasOwn(props, "status")) {
     return [`"status" fehlt — ${subject} brauchen einen status (im Normalfall "alive")`];
   }
-  const status = fm.status;
+  const status = props.status;
   if (typeof status !== "string" || !(NPC_STATUSES as readonly string[]).includes(status)) {
     return [
       `"status" muss einer von ${NPC_STATUSES.join(", ")} sein — ` +
@@ -497,25 +499,25 @@ export function validateEntry(entry: RawEntry, index: number, errors: string[]):
     return null;
   }
   const preview = `entries[${index}]`;
-  const fm = entry.reply.properties;
-  const fmId = declaredId(fm);
-  if (fmId === undefined) {
+  const props = entry.reply.properties;
+  const propsId = declaredId(props);
+  if (propsId === undefined) {
     errors.push(`${kind} entry ${preview}: "id" fehlt — jeder Eintrag nennt seine kebab-case id`);
     return null;
   }
-  if (!ENTITY_ID_PATTERN.test(fmId)) {
+  if (!ENTITY_ID_PATTERN.test(propsId)) {
     errors.push(
       `${kind} entry ${preview}: "id" must be a kebab-case id (a-z, 0-9, single dashes)`,
     );
     return null;
   }
-  const id = fmId;
-  const properties = draftProperties(fm, id, "name");
+  const id = propsId;
+  const properties = draftProperties(props, id, "name");
   const label = `${kind} entry "${id}"`;
   // A status error does not stop the mapping: the stub still resolves the
   // scene's reference, so the correction turn gets the ONE real error
   // instead of a cascade of "npc does not exist".
-  for (const msg of stubStatusErrors(kind, fm)) errors.push(`${label}: ${msg}`);
+  for (const msg of stubStatusErrors(kind, props)) errors.push(`${label}: ${msg}`);
   return {
     kind,
     id,
@@ -563,34 +565,34 @@ export function validateSceneEntry(input: {
   // taken from the run's CONTEXT and never from the model. The
   // id is the one thing the model decides here, so it is the one thing
   // validated as an address would be.
-  const fm = reply.properties;
-  const fmId = declaredId(fm);
-  if (fmId === undefined) {
+  const props = reply.properties;
+  const propsId = declaredId(props);
+  if (propsId === undefined) {
     errors.push(`${input.label}: "id" fehlt — jede Szene nennt ihre kebab-case id`);
     return null;
   }
-  if (!ENTITY_ID_PATTERN.test(fmId)) {
+  if (!ENTITY_ID_PATTERN.test(propsId)) {
     errors.push(`${input.label}: "id" must be a kebab-case id (a-z, 0-9, single dashes)`);
     return null;
   }
-  const label = `scene "${fmId}"`;
-  if (input.expectedId !== undefined && fmId !== input.expectedId) {
+  const label = `scene "${propsId}"`;
+  if (input.expectedId !== undefined && propsId !== input.expectedId) {
     errors.push(
       `${label}: die id muss "${input.expectedId}" bleiben — sie kommt aus der Gliederung ` +
         "und andere Szenen verweisen darauf",
     );
     return null;
   }
-  if (seenIds.has(fmId)) {
+  if (seenIds.has(propsId)) {
     errors.push(`${label}: duplicate id`);
     return null;
   }
-  seenIds.add(fmId);
+  seenIds.add(propsId);
 
-  if (!(SCENE_TYPES as readonly string[]).includes(String(fm.type))) {
+  if (!(SCENE_TYPES as readonly string[]).includes(String(props.type))) {
     errors.push(`${label}: "type" must be one of ${SCENE_TYPES.join(", ")}`);
   }
-  if (fm.status !== "draft") {
+  if (props.status !== "draft") {
     errors.push(`${label}: "status" must be "draft"`);
   }
   // The `chapter` key and the scene's ADDRESS have to say the same thing. The
@@ -599,18 +601,18 @@ export function validateSceneEntry(input: {
   // chapter while claiming another — the chapter overview groups by the key, the entry
   // tree by the address, and the two would disagree forever after. Cheaper as
   // a correction turn than as a scene the DM has to find and fix by hand.
-  if (typeof fm.chapter === "string" && fm.chapter !== "" && fm.chapter !== chapter) {
+  if (typeof props.chapter === "string" && props.chapter !== "" && props.chapter !== chapter) {
     errors.push(
       `${label}: "chapter" muss "${chapter}" sein — das Kapitel kommt aus dem Kontext ` +
         "dieses Durchlaufs, nicht aus der Antwort",
     );
   }
 
-  if (fm.npcs !== undefined && fm.npcs !== null) {
-    if (!Array.isArray(fm.npcs) || fm.npcs.some((n) => typeof n !== "string")) {
+  if (props.npcs !== undefined && props.npcs !== null) {
+    if (!Array.isArray(props.npcs) || props.npcs.some((n) => typeof n !== "string")) {
       errors.push(`${label}: "npcs" must be an array of npc ids`);
     } else {
-      for (const npc of fm.npcs as string[]) {
+      for (const npc of props.npcs as string[]) {
         if (!allowed.npcIds.has(npc)) {
           errors.push(
             `${label}: npc "${npc}" does not exist in the campaign and no suggested entry provides it`,
@@ -619,10 +621,10 @@ export function validateSceneEntry(input: {
       }
     }
   }
-  if (typeof fm.location === "string" && fm.location !== "") {
-    if (!allowed.locationIds.has(fm.location)) {
+  if (typeof props.location === "string" && props.location !== "") {
+    if (!allowed.locationIds.has(props.location)) {
       errors.push(
-        `${label}: location "${fm.location}" does not exist in the campaign and ` +
+        `${label}: location "${props.location}" does not exist in the campaign and ` +
           `no suggested entry provides it`,
       );
     }
@@ -635,15 +637,15 @@ export function validateSceneEntry(input: {
   }
 
   return {
-    path: scenePath(chapter, "", fmId),
-    properties: draftProperties(fm, fmId, "title"),
+    path: scenePath(chapter, "", propsId),
+    properties: draftProperties(props, propsId, "title"),
     body: reply.body,
   };
 }
 
 // --- mechanical validation of an NPC reply -----------------------------------
 
-/** The only legal target of an NPC run — the id IS the file name. */
+/** The only legal target of an NPC run — the id IS the address. */
 const NPC_PATH_PATTERN = /^npcs\/[a-z0-9][a-z0-9-]*$/;
 
 /** The sections of the NPC format that carry rules (README "Entität: NPC"). */
@@ -716,8 +718,8 @@ function relationErrors(body: string, ctx: CampaignContext): string[] {
 
 /**
  * Inside `## Weiß` only `[!secret]` belongs (that section is the aggregated
- * player-unknown knowledge). Other KNOWN callouts elsewhere in the file are
- * fine; unknown ones are reported once for the whole file by unknownCallouts.
+ * player-unknown knowledge). Other KNOWN callouts elsewhere in the body are
+ * fine; unknown ones are reported once for the whole body by unknownCallouts.
  */
 function knowledgeCalloutErrors(body: string): string[] {
   const section = sectionBody(body, KNOWLEDGE_SECTION);
@@ -764,8 +766,8 @@ function notesErrors(body: string): string[] {
  * `pairsValue` would otherwise write a `+2` that YAML eats — and this
  * function is the only place that says so.
  */
-export function quickstatsErrors(fm: Record<string, unknown>): string[] {
-  const quickstats = fm.quickstats;
+export function quickstatsErrors(props: Record<string, unknown>): string[] {
+  const quickstats = props.quickstats;
   if (quickstats === undefined || quickstats === null) return [];
   if (typeof quickstats !== "object" || Array.isArray(quickstats)) {
     return ['"quickstats" muss ein Objekt sein, z. B. { wis: "+2" }'];
@@ -820,22 +822,22 @@ export function validateNpcReply(
   const { reply } = read;
   const errors: string[] = [];
 
-  const fm = reply.properties;
-  const fmId = declaredId(fm);
-  if (fmId === undefined) {
+  const props = reply.properties;
+  const propsId = declaredId(props);
+  if (propsId === undefined) {
     return {
       ok: false,
       errors: ['npc: "id" fehlt — der Eintrag muss seine kebab-case id nennen'],
     };
   }
-  if (!ENTITY_ID_PATTERN.test(fmId)) {
+  if (!ENTITY_ID_PATTERN.test(propsId)) {
     return {
       ok: false,
       errors: ['npc: "id" muss eine kebab-case id sein (a-z, 0-9, einzelne Bindestriche)'],
     };
   }
-  const id = fmId;
-  const properties = draftProperties(fm, id, "name");
+  const id = propsId;
+  const properties = draftProperties(props, id, "name");
   const label = `npc "${id}"`;
   if (pinnedId !== undefined && id !== pinnedId) {
     errors.push(`${label}: die id ist vorgegeben — "id" muss "${pinnedId}" sein`);
@@ -850,11 +852,11 @@ export function validateNpcReply(
   // `name` is NOT checked: a missing display name degrades to the id
   // (`draftProperties`), so there is nothing mechanical left to complain
   // about — the prompt asks for one, the format survives without it.
-  if (Object.hasOwn(fm, "chapter")) {
+  if (Object.hasOwn(props, "chapter")) {
     errors.push(`${label}: kein "chapter" — der NPC-Lauf kennt kein Ziel-Kapitel`);
   }
-  for (const msg of npcStatusErrors(fm, "NPC-Einträge")) errors.push(`${label}: ${msg}`);
-  for (const msg of quickstatsErrors(fm)) errors.push(`${label}: ${msg}`);
+  for (const msg of npcStatusErrors(props, "NPC-Einträge")) errors.push(`${label}: ${msg}`);
+  for (const msg of quickstatsErrors(props)) errors.push(`${label}: ${msg}`);
 
   for (const kind of unknownCallouts(reply.body)) {
     errors.push(
@@ -1068,9 +1070,9 @@ export async function runPipeline<T extends { usage?: GenerateUsage }>(input: {
  * Run the NPC pipeline: context -> npc prompt -> provider -> mechanical
  * validation, with the same correction turns, the same truncation fail-fast
  * and the same usage accounting as a scene run (runPipeline). Writes NOTHING;
- * the draft goes into the review and only apply touches the disk.
+ * the draft goes into the review and only apply writes.
  *
- * `npcId` is the DM's optional pin: it decides the target file name and is
+ * `npcId` is the DM's optional pin: it decides the target id and is
  * checked for collisions BEFORE the provider is called. Without it the model
  * picks the id (and a collision becomes a correction turn).
  */
@@ -1162,7 +1164,7 @@ export function applySceneTarget(item: unknown, index: number): ApplyTarget {
   // (`draftAddress`). A client that still sends a three-segment path is
   // naming a group of its own, and that is exactly the contradiction between
   // address and `location` that the two-segment rule rules out.
-  const segments = rel.split("/");
+  const segments = addressSegments(rel);
   if (segments.length !== 2 || RESERVED_DIRS.has(segments[0]!)) {
     throw new ApiError(400, `${label}.path must be "<chapter>/<scene-id>"`);
   }
@@ -1342,9 +1344,9 @@ export async function applyGenerated(
   ];
   if (targets.length === 0) throw new ApiError(400, "nothing to apply");
 
-  // The chapter file comes first — the drafts live inside it.
-  const chapterFile = await newChapterTarget(campaign, chapter, chapterTitle);
-  if (chapterFile !== null) targets.unshift(chapterFile);
+  // The chapter entry comes first — the drafts live inside it.
+  const chapterEntry = await newChapterTarget(campaign, chapter, chapterTitle);
+  if (chapterEntry !== null) targets.unshift(chapterEntry);
 
   const drafts = targets.map((t) => {
     const properties = storedDraftProperties(t.properties, t.rel);
@@ -1442,10 +1444,10 @@ export function assertDraftId(id: unknown, rel: string): void {
  */
 export function draftAddress(rel: string, properties: Record<string, unknown>): string {
   if (kindFromAddress(rel) !== "scene") return rel;
-  const segments = rel.split("/");
-  const chapterId = segments[0] ?? "";
-  const fmId = typeof properties.id === "string" ? properties.id.trim() : "";
-  const id = fmId === "" ? (segments[segments.length - 1] ?? "") : fmId;
+  const segments = addressSegments(rel);
+  const chapterId = addressHead(rel);
+  const propsId = typeof properties.id === "string" ? properties.id.trim() : "";
+  const id = propsId === "" ? (segments[segments.length - 1] ?? "") : propsId;
   const location = typeof properties.location === "string" ? properties.location.trim() : "";
   return scenePath(chapterId, ENTITY_ID_PATTERN.test(location) ? location : "", id);
 }

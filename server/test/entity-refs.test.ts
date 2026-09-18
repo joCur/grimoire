@@ -34,28 +34,28 @@ afterEach(() => {
   dropStore();
 });
 
-async function readFile(rel: string): Promise<{ rev: number; body: string }> {
+async function readEntry(rel: string): Promise<{ rev: number; body: string }> {
   const res = await app.request(entriesUrl("beispiel", rel));
   expect(res.status).toBe(200);
   return (await res.json()) as { rev: number; body: string };
 }
 
 async function writeBody(rel: string, body: string): Promise<void> {
-  const file = await readFile(rel);
+  const entry = await readEntry(rel);
   const res = await app.request(entriesUrl("beispiel", rel), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ rev: file.rev, body }),
+    body: JSON.stringify({ rev: entry.rev, body }),
   });
   expect(res.status).toBe(200);
 }
 
 async function patch(rel: string, p: Record<string, unknown>): Promise<void> {
-  const file = await readFile(rel);
+  const entry = await readEntry(rel);
   const res = await app.request(entriesUrl("beispiel", rel), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ rev: file.rev, properties: p }),
+    body: JSON.stringify({ rev: entry.rev, properties: p }),
   });
   expect(res.status).toBe(200);
 }
@@ -109,7 +109,7 @@ describe("the index resolves references", () => {
   test("a scene that only holds the slug is findable under the name", async () => {
     await writeBody(SCENE, "## Flow\n\nAm Kai wartet [[jorna]]s Boot.\n");
     // The stored body keeps the SLUG — the format never stores names.
-    expect((await readFile(SCENE)).body).toContain("[[jorna]]");
+    expect((await readEntry(SCENE)).body).toContain("[[jorna]]");
     expect(findsScene(await search("Hafenmeisterin"))).toBe(true);
   });
 
@@ -125,7 +125,7 @@ describe("the index resolves references", () => {
     await patch("npcs/jorna", { name: "Jorna Salzhand" });
 
     // The scene's own row never changed — only what its indexed text says.
-    expect((await readFile(SCENE)).body).toContain("[[jorna]]");
+    expect((await readEntry(SCENE)).body).toContain("[[jorna]]");
     expect(findsScene(await search("Salzhand"))).toBe(true);
     expect(findsScene(await search("Hafenmeisterin"))).toBe(false);
   });

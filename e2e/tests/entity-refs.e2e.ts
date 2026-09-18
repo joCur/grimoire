@@ -125,7 +125,7 @@ test("a changed display name reaches the prose without touching the body", async
 
   // The NAME changes, the body does not.
   await api.patchProperties("npcs/jorna", { name: NEW_NAME });
-  const stored = await api.file(SCENE_PATH);
+  const stored = await api.entry(SCENE_PATH);
   expect(stored.body).toContain("[[jorna]]");
   expect(stored.body).not.toContain(NEW_NAME);
 

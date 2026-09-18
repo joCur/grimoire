@@ -90,6 +90,9 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
   Issue-Verweise ebenso wie deutsche Begriffe in englischen Kommentaren —,
   nicht nur in den geänderten Zeilen. Dafür gibt es keinen eigenen
   Aufräum-PR.
+- Migrationsdateien werden nicht getestet — getestet wird das Verhalten, das
+  sie ermöglichen (Vorabprüfung, Constraint-Fehler am Schreibpfad), nicht ihr
+  SQL.
 - Schemata und Fixtures liegen in ihrem Zielformat vor (ein JSON-Schema als
   `.json`, eine Antwort-Fixture als das Objekt selbst), statt im Code
   zusammengebaut zu werden.
@@ -190,6 +193,12 @@ Die Pfade:
    Eigenschaften-Write eines Zweitschreibers ein Konflikt — der Status neben
    dem offenen Editor wird nicht stillschweigend übernommen. Seit ADR #13 gibt
    es keine externe Dateiänderung mehr; der Guard ist die Zeilenversion `rev`.
+   Der Kampagnen-Eintrag hat beide Hälften wie jeder andere: sein Text ist
+   bearbeitbar wie ein Kapiteltext (`Bearbeiten` öffnet den normalen
+   Text-Editor), und seine Eigenschaften — Name und Beschreibung — stehen
+   unter `Eigenschaften` im Dialog „Kampagne bearbeiten". Der Kopf der
+   Kapitelübersicht bleibt unberührt: dort führt das eine `Bearbeiten` in
+   denselben Dialog.
 10. Kaltstart: leere Instanz ohne Seed — seit ADR #13/#79 der Normalfall
     einer frischen Installation → Kampagne anlegen → Kapitel → Szene →
     Szene befüllen → Session starten → Szene in der Session-Ansicht

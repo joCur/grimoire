@@ -8,6 +8,7 @@
 // ever reaching a query. Both throw ApiError(400). The address SCHEMA itself
 // lives in store/paths.ts.
 
+import { addressSegments } from "./store/paths";
 import { ApiError } from "./api-error";
 
 function isHidden(name: string): boolean {
@@ -50,8 +51,7 @@ export function assertSafeAddress(rel: string): void {
   if (rel.startsWith("/") || /^[A-Za-z]:/.test(rel)) {
     throw new ApiError(400, "absolute paths are not allowed");
   }
-  const segments = rel.split("/");
-  for (const seg of segments) {
+  for (const seg of addressSegments(rel)) {
     if (seg === "" || seg === "." || seg === "..") throw new ApiError(400, "invalid path");
     if (isHidden(seg)) throw new ApiError(400, "invalid path");
   }

@@ -45,7 +45,7 @@ const TEXTAREA = "Markdown-Text von";
 
 /** Read the entry: its properties and its text — the two halves every assertion looks at. */
 async function split(api: Api, rel: string) {
-  const { properties, body } = await api.file(rel);
+  const { properties, body } = await api.entry(rel);
   return { properties, body };
 }
 
@@ -235,7 +235,7 @@ test("the preview toggle renders the draft through the real markdown pipeline", 
   await page.getByRole("button", { name: "Bearbeiten" }).click();
   await expect(textarea).toHaveValue(`${before.body}\n${loot}\n`);
 
-  // … and saved, the callout is part of the file.
+  // … and saved, the callout is part of the entry.
   await page.getByRole("button", { name: "Speichern" }).click();
   await expect(textarea).toHaveCount(0);
   await expect(page.locator("[data-callout='loot']")).toContainText(
@@ -320,7 +320,7 @@ test("a properties-only second write conflicts too — reloading adopts it", asy
   page,
   api,
 }) => {
-  const opened = await api.file(SCENE);
+  const opened = await api.entry(SCENE);
   const before = { properties: opened.properties, body: opened.body };
   const mine = "Während des Statuswechsels geschrieben.";
 
@@ -406,7 +406,7 @@ test("a forced save writes only the text — the other writer's status survives"
 // on the write path itself. One PATCH, one transaction, ONE step of the
 // version — how much a request carried is not readable from `rev`.
 test("properties and body in ONE write are one version step", async ({ api }) => {
-  const opened = await api.file(SCENE);
+  const opened = await api.entry(SCENE);
   const before = { properties: opened.properties, body: opened.body };
   const rev = opened.rev;
   const body = `${before.body}\nIn einem Zug mit den Eigenschaften geschrieben.\n`;
@@ -438,7 +438,7 @@ test("properties and body in ONE write are one version step", async ({ api }) =>
   });
   expect(empty.status).toBe(400);
   expect(await empty.json()).toMatchObject({ code: "nothing_to_write" });
-  expect((await api.file(SCENE)).rev).toBe(written.rev);
+  expect((await api.entry(SCENE)).rev).toBe(written.rev);
 });
 
 test("navigating away ends edit mode — coming back never re-opens it", async ({ page, api }) => {
@@ -489,13 +489,13 @@ test("a failing background refetch leaves the open editor standing", async ({ pa
     void route.abort();
   });
   // The version poll (~5s) notices the second writer's change and refetches,
-  // so the file query runs into the abort (retry: 1 -> two attempts, then
+  // so the entry query runs into the abort (retry: 1 -> two attempts, then
   // 'error'). The write goes through the API: only the app's own READ of this
-  // file is blocked, the server stays reachable.
+  // entry is blocked, the server stays reachable.
   await api.writeBody(SCENE, "\n## Flow\n\nVon einem zweiten Schreiber geändert.\n");
   await expect.poll(() => aborted, { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
 
-  // The cached file is still there, so the PAGE must not swap itself for its
+  // The cached entry is still there, so the PAGE must not swap itself for its
   // error line and take the unsaved text with it. (The status pill next to the
   // editor reports the entry as unreadable for its own failed read — that is its job
   // and stays, which is why this looks for the route's full sentence.)
@@ -537,7 +537,7 @@ test("Abbrechen asks before it throws work away", async ({ page, api }) => {
     "Der Turm ragt schwarz gegen den Abendhimmel auf.",
   );
   await expect(page.getByRole("article")).not.toContainText("nie gespeichert wird");
-  // Nothing reached the disk.
+  // Nothing was written.
   expect(await split(api, SCENE)).toEqual(before);
 });
 
@@ -597,7 +597,7 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   // They grow by rows through their own endpoints (ADR #23).
   for (const rel of ["sessions/2026-01-15", "inbox", "glossary"]) {
     const before = await split(api, rel);
-    const current = await api.file(rel);
+    const current = await api.entry(rel);
     const res = await api.fetch(
       `campaigns/beispiel/entries/${rel.split("/").map(encodeURIComponent).join("/")}`,
       {
@@ -612,19 +612,42 @@ test("location and chapter offer the editor, session and inbox do not", async ({
   }
 });
 
-test("campaign keeps its ONE Bearbeiten — the metadata dialog", async ({ page }) => {
+test("the campaign entry has both halves: a body editor and its metadata dialog", async ({
+  page,
+  api,
+}) => {
+  const before = await split(api, "campaign");
+  const added = "Die Gezeiten bestimmen, wann der Leuchtturmsockel begehbar ist.";
+
   await page.goto("/campaigns/beispiel/entries/campaign");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Der Leuchtturm von Salzhafen",
   );
 
-  // One label, one meaning: the campaign entry's edit action is
-  // the name/description dialog, and there is no second one for the body.
-  const edit = page.getByRole("button", { name: "Bearbeiten" });
-  await expect(edit).toHaveCount(1);
-  await edit.click();
+  // The campaign body is prose like a chapter's, so the edit action opens the
+  // standard body editor — the same surface, the same save, the same guard.
+  await openMarkdownEditor(page);
+  const textarea = page.getByRole("textbox", { name: TEXTAREA });
+  await expect(textarea).toHaveValue(before.body);
+
+  await textarea.fill(`${before.body}\n${added}\n`);
+  await page.getByRole("button", { name: "Speichern", exact: true }).click();
+
+  // The editor closes and the reading view renders the new text.
+  await expect(textarea).toHaveCount(0);
+  await expect(page.getByRole("article")).toContainText(added);
+  const after = await split(api, "campaign");
+  expect(after.body).toBe(`${before.body}\n${added}\n`);
+  // The properties came through untouched — the body editor writes one half.
+  expect(after.properties).toEqual(before.properties);
+
+  // The other half stands next to it under the properties name: name and
+  // description are the two values no typed form models, so this kind brings
+  // its own dialog where every other kind has the properties form.
+  const properties = page.getByRole("button", { name: "Eigenschaften" });
+  await expect(properties).toHaveCount(1);
+  await properties.click();
   await expect(page.getByRole("dialog")).toContainText("Kampagne bearbeiten");
-  await expect(page.getByRole("textbox", { name: TEXTAREA })).toHaveCount(0);
 });
 
 
@@ -642,7 +665,7 @@ test("the glossary offers no text editor — it is a list", async ({ page, api }
   // The list endpoint is the way in — guarded by the same row version — and it
   // leaves the entry a list.
   await api.send("PUT", "campaigns/beispiel/glossary", {
-    rev: (await api.file("glossary")).rev,
+    rev: (await api.entry("glossary")).rev,
     entries: [{ term: "tide flat", explanation: "Gezeitenwatt" }],
   });
   const glossary = await api.get<{ entries: Array<{ term: string }> }>(

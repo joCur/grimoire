@@ -14,7 +14,7 @@
 // WHAT IT DOES, per scene:
 //
 //   1. `location` empty  -> the scene inherits its GROUP (`hafen/…` becomes
-//      `location: hafen`). That is what the file tree meant, and it keeps the
+//      `location: hafen`). That is what the group directories meant, and it keeps the
 //      DM's grouping exactly as it was.
 //   2. `location` is free text -> it becomes the slug of that text, and the
 //      location entry is created with the text as its `name`. The format's

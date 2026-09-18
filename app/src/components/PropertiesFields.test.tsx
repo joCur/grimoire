@@ -1,7 +1,7 @@
-// Render tests for the „Eigenschaften" controls (react-dom/server —
+// Render tests for the properties controls (react-dom/server —
 // no DOM). What must hold is the degrade contract of the reference and select
 // fields: the existing ids are OFFERED (a <datalist>, never a closed list), an
-// id without a file stays typeable and visible, and a status value nobody knows
+// id without an entry stays typeable and visible, and a status value nobody knows
 // is an option of its own instead of being corrected away.
 
 import type { CampaignTree } from "@grimoire/shared/types";
@@ -41,13 +41,12 @@ function render(
   field: PropertiesField,
   value: FieldValue,
   pending = "",
-  extra: { initialValue?: FieldValue; issue?: string } = {},
+  extra: { issue?: string } = {},
 ): string {
   return renderToStaticMarkup(
     <PropertiesFieldControl
       field={field}
       value={value}
-      initialValue={extra.initialValue}
       tree={tree}
       pending={pending}
       issue={extra.issue}
@@ -65,8 +64,8 @@ function count(html: string, needle: string): number {
 describe("reference fields", () => {
   test("a single reference suggests the existing ids and names the chosen one", () => {
     const html = render(sceneField("location"), { kind: "text", text: "leuchtturm" });
-    expect(html).toContain('list="fm-location-options"');
-    expect(html).toContain('<datalist id="fm-location-options">');
+    expect(html).toContain('list="prop-location-options"');
+    expect(html).toContain('<datalist id="prop-location-options">');
     expect(html).toContain('value="leuchtturm"');
     expect(html).toContain("Der Leuchtturm");
   });
@@ -86,8 +85,9 @@ describe("reference fields", () => {
     expect(html).not.toContain("Keine Orts-Kennung");
   });
 
-  test("text that SLUGS to a known Ort resolves to that Ort's name", () => {
-    // Typing the name lands on the entry that is already there — no „neu".
+  test("text that SLUGS to a known location resolves to that location's name", () => {
+    // Typing the name lands on the entry that is already there, so the field
+    // does not offer to create one.
     const html = render(sceneField("location"), { kind: "text", text: "Leuchtturm" });
     expect(html).toContain("Der Leuchtturm");
     expect(html).not.toContain("angelegt");
@@ -114,7 +114,7 @@ describe("reference fields", () => {
     expect(html).toContain("Hafenmeisterin Jorna"); // in the suggestion list
     expect(html).toContain('aria-label="fenn entfernen"');
     expect(html).toContain('aria-label="kapitaen-torv entfernen"');
-    expect(html).toContain('<datalist id="fm-npcs-options">');
+    expect(html).toContain('<datalist id="prop-npcs-options">');
   });
 });
 
@@ -134,32 +134,21 @@ describe("chips and selects", () => {
   });
 
   test("a hand-edited list keeps its duplicates, each removable on its own", () => {
-    // `tags: [social, social]` is a file the DM wrote by hand: it has to show
+    // `tags: [social, social]` is what the entry carries: it has to show
     // up as two chips, and clicking one X may not take both (index keys).
     const html = render(sceneField("tags"), { kind: "list", items: ["social", "social"] });
     expect(count(html, "<li")).toBe(2);
     expect(count(html, 'aria-label="social entfernen"')).toBe(2);
   });
 
-  test("a status the file carries but nobody knows is an option of its own", () => {
-    const html = render(sceneField("status"), { kind: "text", text: "onhold" });
-    expect(html).toContain('value="onhold"');
-    expect(html).toContain("Bereit"); // the known options are still offered
-    // Clearing must be reachable: the empty option deletes the key on save.
-    expect(html).toContain("— nicht gesetzt —");
-  });
-
-  test("that unknown status stays in the list after the DM picked a known one", () => {
-    // The extra option comes from what the FILE held, not from the current
-    // selection — otherwise the odd value is gone the moment it is left.
-    const html = render(
-      sceneField("status"),
-      { kind: "text", text: "draft" },
-      "",
-      { initialValue: { kind: "text", text: "onhold" } },
-    );
-    expect(html).toContain('value="onhold"');
+  test("the status select offers the closed list and nothing else", () => {
+    // The column is a CHECK constraint (ADR #25), so the four values are the
+    // whole list — plus the empty option, which deletes the key on save.
+    const html = render(sceneField("status"), { kind: "text", text: "draft" });
     expect(html).toContain('value="draft" selected');
+    expect(html).toContain("Bereit");
+    expect(html).toContain("— nicht gesetzt —");
+    expect(count(html, "<option")).toBe(5);
   });
 });
 

@@ -61,7 +61,7 @@ describe("POST /api/campaigns — the cold start", () => {
     expect(summary.description).toBe("Ein Küstenabenteuer");
 
     // It is a campaign like any other from here on: it appears in the list and
-    // its document is readable with a guard token.
+    // its campaign entry is readable with a guard token.
     const list = (await (await app.request("/api/campaigns")).json()) as CampaignSummary[];
     expect(list.map((c) => c.id)).toEqual(["die-kueste-von-salzhafen"]);
     const doc = (await (
@@ -188,7 +188,7 @@ describe("the per-campaign creates", () => {
   test("the campaign 409 points at an address, not at a bare id", async () => {
     const res = await post("/campaigns", { name: "Nordwind" });
     expect(res.status).toBe(409);
-    // `campaign` is the one document an otherwise empty campaign always has.
+    // `campaign` is the one entry an otherwise empty campaign always has.
     expect((await errorBody(res)).path).toBe("nordwind/campaign");
   });
 
@@ -479,27 +479,29 @@ describe("the chapter status enum via the entry PATCH", () => {
     expect((await entry("01-salzhafen")).properties.status).toBeUndefined();
   });
 
-  test("a patch that does NOT touch the status leaves an unknown value alone", async () => {
-    // The degrade half: a chapter carrying something else stays readable AND
-    // patchable in its other properties.
+  test("the column itself refuses an unknown value — not just the API", async () => {
+    // Since ADR #25 there is no way to put one there at all: a CHECK holds
+    // the column to the trio, so even a write that bypasses the store is
+    // refused. That is what lets the app treat the status as an enum — there
+    // is no database left that could hand it a fourth value.
     const { getDb } = await import("../src/store/handle");
     const db = await getDb();
     const { sql } = await import("drizzle-orm");
-    db.run(
-      sql`update chapters set status = 'laeuft' where campaign_id = 'nordwind' and id = '01-salzhafen'`,
-    );
+    expect(() =>
+      db.run(
+        sql`update chapters set status = 'laeuft' where campaign_id = 'nordwind' and id = '01-salzhafen'`,
+      ),
+    ).toThrow();
 
+    // …and the entry is untouched and still patchable.
     const fresh = await entry("01-salzhafen");
-    expect(fresh.properties.status).toBe("laeuft");
     const res = await app.request(entriesUrl("nordwind", fresh.path), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ rev: fresh.rev, properties: { title: "Neu benannt" } }),
     });
     expect(res.status).toBe(200);
-    const after = await entry("01-salzhafen");
-    expect(after.properties.title).toBe("Neu benannt");
-    expect(after.properties.status).toBe("laeuft");
+    expect((await entry("01-salzhafen")).properties.title).toBe("Neu benannt");
   });
 
   // The properties dialog must not be a second door past the one-active rule.

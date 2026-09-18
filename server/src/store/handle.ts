@@ -6,8 +6,8 @@
 //
 // The handle is opened LAZILY rather than at module import, so that importing
 // the app for in-process tests stays free of side effects (no database file
-// appearing next to the repository). The first access opens the file, runs the
-// schema migrator (client.ts) and then the job cleanup; every
+// appearing next to the repository). The first access opens the database file,
+// runs the schema migrator (client.ts) and then the job cleanup; every
 // later call gets the memoized handle.
 
 import { getDbFile } from "../config";
@@ -18,7 +18,7 @@ import { failInterruptedJobs, failLegacyDraftJobs } from "../db/job-boot";
 /** What `initStore` was called with — reported on boot. */
 export interface StoreInfo {
   /** The database file (or `:memory:`). */
-  file: string;
+  dbFile: string;
   /** Which SQLite backend the driver picked. */
   backend: string;
   /**
@@ -48,16 +48,16 @@ let opening: Promise<GrimoireDb> | null = null;
  * Open the database and apply the schema migrations. Idempotent: a second
  * call returns the same handle, and concurrent first calls share one open.
  *
- * `file` defaults to `GRIMOIRE_DATA/grimoire.db`. Nothing is imported here —
+ * `dbFile` defaults to `GRIMOIRE_DATA/grimoire.db`. Nothing is imported here —
  * an empty database stays empty; tests pass `:memory:` and
  * seed themselves through the importer when they need content.
  */
-export async function initStore(options: { file?: string } = {}): Promise<GrimoireDb> {
+export async function initStore(options: { dbFile?: string } = {}): Promise<GrimoireDb> {
   if (opened !== null) return opened.db;
   if (opening !== null) return opening;
-  const file = options.file ?? getDbFile();
+  const dbFile = options.dbFile ?? getDbFile();
   opening = (async () => {
-    const handle = await openDb(file);
+    const handle = await openDb(dbFile);
     // A generator job cannot outlive the process that ran it: the
     // provider call is gone, so a `running` row left behind by a restart or a
     // crash is failed here — with a German sentence the app shows — instead of
@@ -69,7 +69,7 @@ export async function initStore(options: { file?: string } = {}): Promise<Grimoi
     const legacyDraftJobs = failLegacyDraftJobs(handle.db);
     opened = handle;
     info = {
-      file,
+      dbFile,
       backend: handle.client.backend,
       interruptedJobs,
       legacyDraftJobs,

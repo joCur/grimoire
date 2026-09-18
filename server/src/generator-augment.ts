@@ -55,6 +55,7 @@ import {
 import type { CheckedDraft } from "./naming-check";
 import { parseEntryReply } from "./entry-reply";
 import type { LLMProvider } from "./llm-provider";
+import { addressHead } from "./store/paths";
 import { readEntry } from "./store/read";
 import { patchEntry } from "./store/write";
 
@@ -161,21 +162,21 @@ export function augmentFewShotFile(kind: AugmentKind): string {
  */
 function kindErrors(
   kind: AugmentKind,
-  fm: Record<string, unknown>,
+  props: Record<string, unknown>,
   current: Record<string, unknown>,
   label: string,
   errors: string[],
   ignored: readonly string[] = [],
 ): void {
   if (kind === "npc") {
-    for (const msg of npcStatusErrors(fm, "NPC-Einträge")) errors.push(`${label}: ${msg}`);
+    for (const msg of npcStatusErrors(props, "NPC-Einträge")) errors.push(`${label}: ${msg}`);
     // Only a quickstats the proposal CHANGES is checked. The rule ("+2" as a
     // quoted string, or YAML eats the plus) is about what a MODEL writes; a
     // campaign that carries bare numbers from its own history — the example
     // campaign does — must not make every augment run fail on a value the DM
     // authored and this run does not touch.
-    if (!sameValue(current.quickstats, fm.quickstats)) {
-      for (const msg of quickstatsErrors(fm)) errors.push(`${label}: ${msg}`);
+    if (!sameValue(current.quickstats, props.quickstats)) {
+      for (const msg of quickstatsErrors(props)) errors.push(`${label}: ${msg}`);
     }
     return;
   }
@@ -184,17 +185,17 @@ function kindErrors(
     // reply that names one had it DROPPED (`reply.ignored`) rather than
     // normalized. Still an error, and not a silent one: the key is the data
     // contract being broken, not a DM's own extra key.
-    if (Object.hasOwn(fm, "status") || ignored.includes("status")) {
+    if (Object.hasOwn(props, "status") || ignored.includes("status")) {
       errors.push(`${label}: "status" ist nicht erlaubt — locations haben keinen status`);
     }
     return;
   }
-  if (fm.type !== undefined && !(SCENE_TYPES as readonly string[]).includes(String(fm.type))) {
+  if (props.type !== undefined && !(SCENE_TYPES as readonly string[]).includes(String(props.type))) {
     errors.push(`${label}: "type" muss einer von ${SCENE_TYPES.join(", ")} sein`);
   }
   if (
-    fm.status !== undefined &&
-    !(SCENE_STATUSES as readonly string[]).includes(String(fm.status))
+    props.status !== undefined &&
+    !(SCENE_STATUSES as readonly string[]).includes(String(props.status))
   ) {
     errors.push(
       `${label}: "status" muss einer von ${SCENE_STATUSES.join(", ")} sein — ` +
@@ -237,10 +238,10 @@ export function validateAugmentReply(
   // `stored.path`, full stop. (Its `location`, on the other hand, is an
   // ordinary proposal: accepting one moves the scene like any other write.)
   const label = `entry "${stored.path}"`;
-  const fm = reply.properties;
+  const props = reply.properties;
 
   const currentId = stored.properties.id;
-  if (currentId !== undefined && fm.id !== currentId) {
+  if (currentId !== undefined && props.id !== currentId) {
     errors.push(
       `${label}: die id bleibt "${String(currentId)}" — sie ist der Referenzschlüssel ` +
         "der Kampagne und wird beim Ergänzen nie geändert",
@@ -252,7 +253,7 @@ export function validateAugmentReply(
         CALLOUT_KINDS.map((k) => `[!${k}]`).join(", "),
     );
   }
-  kindErrors(kind, fm, stored.properties, label, errors, reply.ignored ?? []);
+  kindErrors(kind, props, stored.properties, label, errors, reply.ignored ?? []);
   if (errors.length > 0) return { ok: false, errors };
 
   return {
@@ -261,7 +262,7 @@ export function validateAugmentReply(
       path: stored.path,
       kind,
       rev: stored.rev,
-      properties: propertyProposals(stored.properties, fm),
+      properties: propertyProposals(stored.properties, props),
       currentBody: stored.body,
       proposedBody: reply.body,
       warnings: reply.warnings,
@@ -396,7 +397,7 @@ export async function runAugment(
 
 /** The chapter segment of a scene address (`<chapter>/…`). */
 function chapterOf(stored: EntryResponse): string {
-  return stored.path.split("/")[0] ?? "";
+  return addressHead(stored.path);
 }
 
 /**

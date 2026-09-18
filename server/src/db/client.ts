@@ -11,7 +11,7 @@
 // nothing runtime-specific and only duck-types its client, so the twenty
 // lines of `construct()` from that driver are reproduced here against our own
 // `SqliteClient`. Same dialect, same session, same migrator — the only thing
-// that changes is who opens the file. See ADR #13.
+// that changes is who opens the database file. See ADR #13.
 
 import { sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
@@ -23,6 +23,8 @@ import { mkdirSync } from "node:fs";
 import { openSqlite, type SqliteClient } from "./driver";
 import { migrateGroupsToLocations, type GroupMigrationOutcome } from "./group-migration";
 import { assertMigrationReady } from "./reference-preflight";
+import { assertStatusesReady } from "./status-preflight";
+import { assertTimestampsReady } from "./timestamp-preflight";
 import { schema } from "./schema";
 
 /** The drizzle handle the whole server uses. Synchronous, like the driver. */
@@ -41,7 +43,7 @@ export interface OpenDb {
   groupMigration: GroupMigrationOutcome;
 }
 
-/** Directory of the committed migration SQL files. */
+/** Directory of the committed migration SQL. */
 export const MIGRATIONS_DIR = path.resolve(
   fileURLToPath(new URL(".", import.meta.url)),
   "migrations",
@@ -51,7 +53,7 @@ export const MIGRATIONS_DIR = path.resolve(
  * PRAGMAs, applied to every connection:
  *
  *   journal_mode=WAL   — readers never block the writer. WAL is a per-DATABASE
- *                        setting and persists in the file, but it is set on
+ *                        setting and persists in the database file, but it is set on
  *                        every open anyway so a database created elsewhere is
  *                        pulled into WAL too. See docs/DEPLOYMENT.md for the
  *                        bind-mount caveat.
@@ -114,8 +116,26 @@ export async function openDb(filename: string): Promise<OpenDb> {
   // being repaired behind the DM's back). A no-op once the constraints are in
   // place.
   assertMigrationReady(client);
+  // The same gate in front of the CHECK constraints (ADR #25): a stored status
+  // or type outside its list is REFUSED here, naming campaign, address and
+  // value, instead of failing halfway through the rebuild. Also a no-op once
+  // the constraints are in place.
+  assertStatusesReady(client);
   const db = buildDrizzle(client);
   migrateDb(db);
+  // And the gate in front of the session timestamps: a `started`, `ended` or
+  // pause value outside the one shape the reader reads (store/time.ts) is
+  // REFUSED here, naming campaign, session, column and value, instead of
+  // quietly losing a session's place in the chronology.
+  //
+  // It sits AFTER the migrator, unlike the two gates above. They guard a
+  // migration that would fail halfway through on data it cannot carry over,
+  // so they have to speak first. This one guards nothing — it reports what
+  // only the DM can correct — and migration 0017 completes the one shape it
+  // CAN complete without asking: the minute-precise values an older
+  // installation recorded. Running the check first would refuse those
+  // databases instead of letting the migration fix them.
+  assertTimestampsReady(client);
   return { db, client, close: () => client.close(), groupMigration };
 }
 

@@ -24,7 +24,7 @@
 // body text (db/schema.ts rule 3).
 
 import type { EntityKind, EntryResponse } from "@grimoire/shared";
-import { localDateTimeToMs } from "../clock";
+import { localDateTimeToMs } from "./time";
 import { unpackJson, unpackStringArray } from "../db/schema";
 import {
   CAMPAIGN_PATH,
@@ -324,7 +324,7 @@ export function renderSessionBody(row: SessionRow, log: LogRow[]): string {
  * The epoch interpretation of a session's zone-less timestamps — unchanged
  * arithmetic, unchanged reason: only the SERVER knows which wall
  * clock those digits belong to, so it ships the reading alongside the
- * strings. `clock.ts` is untouched by the cutover.
+ * strings (./time reads them).
  */
 export function sessionTimes(
   row: SessionRow,
@@ -372,7 +372,7 @@ export function renderSession(
 /**
  * The inbox body from its rows, in `pos` order. Every row's `raw` is the line
  * verbatim — including the headings the format's skeleton carries — and a
- * blank line is put after a heading so the rendering reads like the file did.
+ * blank line is put after a heading so the rendering reads like the inbox text did.
  */
 export function renderInboxBody(rows: InboxRow[]): string {
   if (rows.length === 0) return "";

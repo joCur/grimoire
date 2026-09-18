@@ -10,7 +10,7 @@
 //      node:http keeps this runtime-neutral (DECISIONS #7: no Bun-only APIs).
 //   3. Reply parsing — the same capture server answers with the truncation
 //      and usage fields the real APIs send, so `truncated`/`usage` of the
-//      CompletionResult are covered (issue #18). ClaudeProvider talks to a
+//      CompletionResult are covered. ClaudeProvider talks to a
 //      hardcoded api.anthropic.com, so its Messages-API body is fed through
 //      a temporarily replaced global fetch instead.
 
@@ -86,7 +86,7 @@ describe("createProvider", () => {
     expect(p.name).toBe("lmstudio");
   });
 
-  // The effective cap is part of the provider contract (issue #18): the
+  // The effective cap is part of the provider contract: the
   // truncation message names it, so a wrong value would be doubly expensive.
   test("LLM_MAX_TOKENS overrides claude's default, junk keeps it", () => {
     const env = { ANTHROPIC_API_KEY: "sk-ant-test" } as NodeJS.ProcessEnv;
@@ -151,7 +151,7 @@ const ENTRY_REQS: Array<{ label: string; req: GenerateRequest; name: string }> =
   ),
 ];
 
-// --- prompt assembly (issue #53 AK2) --------------------------------------------
+// --- prompt assembly ------------------------------------------------------------
 //
 // The ORDER of the prompt's sections is the contract the ticket writes down:
 // the campaign knowledge stands above the glossary and is introduced by a
@@ -197,7 +197,7 @@ describe("buildPrompt", () => {
 
   test("the sections after it are unchanged and in their old order", () => {
     const prompt = buildPrompt({ ...REQ, knowledge: KNOWLEDGE });
-    const order = ["## Glossar", "## Kontext", "## Referenz-Zieldatei", "## Quelltext"].map((h) =>
+    const order = ["## Glossar", "## Kontext", "## Referenz-Zieleintrag", "## Quelltext"].map((h) =>
       prompt.indexOf(h),
     );
     expect(order.every((at) => at !== -1)).toBe(true);
@@ -214,7 +214,7 @@ interface Captured {
     max_tokens?: number;
     response_format?: { type: string };
     // `content` is a string on the uncached path and content PARTS when a
-    // cache breakpoint is in play (issue #110) — hence unknown here.
+    // cache breakpoint is in play — hence unknown here.
     messages: Array<{ role: string; content: unknown }>;
   };
 }
@@ -315,7 +315,7 @@ describe("OpenAICompatProvider request", () => {
     ]);
     expect(cap.body.messages[0]!.content).toBe("System-Prompt");
     // On the OpenRouter path the first user turn arrives as content parts
-    // (issue #110); read as one text it is the prompt it always was.
+    // read as one text it is the prompt it always was.
     const parts = cap.body.messages[1]!.content as Array<{ text: string }>;
     const prompt = parts.map((part) => part.text).join("\n\n");
     expect(prompt).toContain("Fenn waits at the docks.");
@@ -623,7 +623,7 @@ describe("OpenAICompatProvider request", () => {
     }
   });
 
-  // --- prompt caching (issue #110) ------------------------------------------
+  // --- prompt caching -------------------------------------------------------
 
   test("openrouter marks the constant prompt half with a cache breakpoint", async () => {
     const { baseUrl, next } = await captureServer();
@@ -708,7 +708,7 @@ describe("OpenAICompatProvider request", () => {
   });
 });
 
-// --- reply parsing: truncation + usage (issue #18) ----------------------------
+// --- reply parsing: truncation + usage ----------------------------------------
 
 describe("OpenAICompatProvider reply", () => {
   const provider = (baseUrl: string) =>
@@ -947,7 +947,7 @@ describe("ClaudeProvider reply", () => {
   });
 });
 
-// --- prompt caching (issue #102, AK5) ----------------------------------------
+// --- prompt caching: the cached prefix ---------------------------------------
 //
 // A pipelined run reads the SAME prefix once per part (outline + N scenes + the
 // suggested entries). The Claude provider therefore marks the system prompt and

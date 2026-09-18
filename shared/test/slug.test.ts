@@ -1,4 +1,4 @@
-// The slug rule (issue #56) — the module both sides derive ids with.
+// The slug rule — the module both sides derive ids with.
 //
 // It matters that these cases are here and not in one of the two consumers:
 // the app shows the id it derives BEFORE the POST and the server derives the

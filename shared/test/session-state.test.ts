@@ -1,4 +1,4 @@
-// The ONE "is this session ended?" predicate (issue #40 review, finding 5).
+// The ONE "is this session ended?" predicate.
 // Server and app both import it, so this test pins the answers both sides
 // depend on — above all the blank value, where they used to disagree: the
 // client hid the live indicator while the server still counted the session as
@@ -40,8 +40,8 @@ describe("isEnded", () => {
   });
 });
 
-// The predicate behind "Session verwerfen" (issue #40 AK7): the app offers
-// the action for it, the server enforces it before deleting the file — so
+// The predicate behind "Session verwerfen": the app offers
+// the action for it, the server enforces it before deleting the entry — so
 // both sides must answer identically or the button leads into a 409.
 describe("isSessionEmpty", () => {
   const FRESH = "\n## Log\n"; // exactly what startSession writes
@@ -68,22 +68,22 @@ describe("isSessionEmpty", () => {
   });
 });
 
-// The `pauses` field (issue #40 AK8): hand-editable, so every reader goes
+// The `pauses` field: hand-editable, so every reader goes
 // through these degrade rules instead of trusting the shape.
 describe("sessionPauses / openPause / isPaused", () => {
-  test("reads the intervals in file order, open interval last", () => {
-    const fm = {
+  test("reads the intervals in stored order, open interval last", () => {
+    const pauseProps = {
       pauses: [
         { from: "2026-08-19T21:10:00", to: "2026-08-19T21:20:30" },
         { from: "2026-08-19T22:00:00" },
       ],
     };
-    expect(sessionPauses(fm)).toEqual([
+    expect(sessionPauses(pauseProps)).toEqual([
       { from: "2026-08-19T21:10:00", to: "2026-08-19T21:20:30" },
       { from: "2026-08-19T22:00:00" },
     ]);
-    expect(openPause(fm)).toEqual({ from: "2026-08-19T22:00:00" });
-    expect(isPaused(fm)).toBe(true);
+    expect(openPause(pauseProps)).toEqual({ from: "2026-08-19T22:00:00" });
+    expect(isPaused(pauseProps)).toBe(true);
   });
 
   test("no key, null, or a closed list -> not paused", () => {
@@ -100,7 +100,7 @@ describe("sessionPauses / openPause / isPaused", () => {
   });
 
   test("broken entries are DROPPED, never fatal", () => {
-    const fm = {
+    const pauseProps = {
       pauses: [
         "kaputt", // not a mapping
         42,
@@ -115,9 +115,9 @@ describe("sessionPauses / openPause / isPaused", () => {
         { from: " 2026-08-19T21:30 ", to: "2026-08-19T21:33" }, // trimmed
       ],
     };
-    expect(sessionPauses(fm)).toEqual([{ from: "2026-08-19T21:30", to: "2026-08-19T21:33" }]);
-    expect(openPause(fm)).toBeUndefined();
-    expect(isPaused(fm)).toBe(false);
+    expect(sessionPauses(pauseProps)).toEqual([{ from: "2026-08-19T21:30", to: "2026-08-19T21:33" }]);
+    expect(openPause(pauseProps)).toBeUndefined();
+    expect(isPaused(pauseProps)).toBe(false);
   });
 
   test("a date-only value is a usable timestamp (midnight, like started)", () => {

@@ -45,6 +45,9 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   job_draft_format: "server.job_draft_format",
   llm_truncated: "server.llm_truncated",
   llm_invalid: "server.llm_invalid",
+  status_not_allowed: "server.status_not_allowed",
+  scene_type_not_allowed: "server.scene_type_not_allowed",
+  timestamp_not_allowed: "server.timestamp_not_allowed",
 };
 
 const KIND_KEY: Record<ErrorKind, MessageKey> = {
@@ -70,6 +73,18 @@ function isField(value: unknown): value is ErrorField {
 
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+/**
+ * A list parameter as one readable enumeration. The closed columns (ADR #25)
+ * send their allowed values in column order, and the sentence names them in
+ * that order — the values are stored identifiers, not translated labels, so
+ * they are shown as they will have to be typed.
+ */
+function list(value: unknown): string | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.filter((item): item is string => typeof item === "string" && item !== "");
+  return items.length === 0 ? undefined : items.join(", ");
 }
 
 /**
@@ -119,6 +134,25 @@ function paramsFor(
     case "glossary_duplicate_term": {
       const term = text(body.term);
       return term === undefined ? undefined : { term };
+    }
+    case "status_not_allowed":
+    case "scene_type_not_allowed": {
+      // The two refusals of a closed column share one shape: the value that
+      // was written and the positions the column accepts. `kind` rides along
+      // on `status_not_allowed` to say WHICH status column refused, but the
+      // sentence does not need it — the DM is looking at that entry, and the
+      // enumerated positions already say which list this is.
+      const value = text(body.value);
+      const allowed = list(body.allowed);
+      if (value === undefined || allowed === undefined) return undefined;
+      return { value, allowed };
+    }
+    case "timestamp_not_allowed": {
+      // The refused time itself is the whole sentence. The `field` next to it
+      // is addressing — the DM is looking at that session, and the shape the
+      // sentence spells out says everything the value is missing.
+      const value = text(body.value);
+      return value === undefined ? undefined : { value };
     }
     case "llm_truncated": {
       // No cap configured: the endpoint's own default, which has no number.

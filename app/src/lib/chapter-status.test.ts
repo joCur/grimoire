@@ -1,12 +1,12 @@
-// The chapter status enum in the app: labels from the catalog, the degrade
-// rule, and WHICH write one value takes.
+// The chapter status enum in the app: labels from the catalog and WHICH write
+// one value takes.
 //
 // The last one is the point of this module. Two of the three values are an
 // ordinary rev-guarded properties patch; `active` is the swap endpoint,
 // because it is one decision about two chapters. Getting that branch wrong is
 // invisible in the UI and produces a campaign with two active chapters.
 
-import { CHAPTER_STATUSES } from "@grimoire/shared/types";
+import { CHAPTER_STATUSES, type ChapterStatus } from "@grimoire/shared/types";
 import { describe, expect, test } from "bun:test";
 
 import { translator } from "@/i18n";
@@ -54,19 +54,18 @@ describe("labels", () => {
     expect(chapterStatusOptions(tEn).map((o) => o.value)).toEqual([...CHAPTER_STATUSES]);
   });
 
-  test("an unknown stored value degrades to its raw text", () => {
-    // The format degrades (README): a chapter from an import stays readable,
-    // verbatim, in whatever language the UI is in.
-    expect(chapterStatusMeta("laeuft", t).label).toBe("laeuft");
-    expect(chapterStatusMeta("laeuft", tEn).label).toBe("laeuft");
+  test("a value from outside the trio is not a status at all", () => {
+    // The column is a CHECK constraint and the preflight refuses a database
+    // that holds anything else (ADR #25); the type is what says so, so the
+    // renderer has nothing to fall back for.
+    // @ts-expect-error not one of planned | active | done
+    const foreign: ChapterStatus = "laeuft";
+    expect(CHAPTER_STATUSES as readonly string[]).not.toContain(foreign);
   });
 
   test("no status reads as planned — every creation path writes it", () => {
     expect(chapterStatusValue(undefined)).toBe("planned");
-    expect(chapterStatusValue("")).toBe("planned");
-    expect(chapterStatusValue("   ")).toBe("planned");
     expect(chapterStatusValue("done")).toBe("done");
-    expect(chapterStatusValue("laeuft")).toBe("laeuft");
   });
 });
 
@@ -95,8 +94,6 @@ describe("which write a value takes", () => {
     // Every other row may still ask for it, with or without a rev.
     expect(chapterStatusWritable("active", undefined, "planned")).toBe(true);
     expect(chapterStatusWritable("active", undefined, "done")).toBe(true);
-    // An unknown stored value degrades to „not active" here as well.
-    expect(chapterStatusWritable("active", undefined, "laeuft")).toBe(true);
     // The patch branch is unaffected — `done` on the active chapter is an
     // ordinary, legitimate write.
     expect(chapterStatusWritable("done", 3, "active")).toBe(true);
