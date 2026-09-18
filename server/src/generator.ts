@@ -61,13 +61,8 @@ import { parseEntryReply, type EntryReply } from "./entry-reply";
 import { checkDraftsNaming, type CheckedDraft, type NamingRule } from "./naming-check";
 // The generator reads its context and writes its drafts through the store —
 // nothing else is a data source.
-import {
-  buildTree,
-  glossaryText,
-  knowledgeText,
-  namingRules,
-  requireCampaign,
-} from "./store/read";
+import { requireCampaign } from "./store/campaigns";
+import { buildTree, glossaryText, knowledgeText, namingRules } from "./store/read";
 import { applyDrafts, chapterExists, draftTargetExists } from "./store/write";
 import {
   addressHead,

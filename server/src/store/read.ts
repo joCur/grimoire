@@ -17,7 +17,6 @@ import { and, asc, desc, eq } from "drizzle-orm";
 import {
   isEnded,
   isKnowledgeKind,
-  type CampaignSummary,
   type CampaignTree,
   type ChapterNode,
   type ChapterStatus,
@@ -37,12 +36,12 @@ import {
   type SessionSummary,
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
-import { assertSafeCampaignId, assertSafeAddress } from "../addressing";
+import { assertSafeAddress } from "../addressing";
+import { requireCampaign } from "./campaigns";
 import { compareSessionsNewestFirst, sessionOrderKey } from "./shared";
 import type { GrimoireDb } from "../db/client";
 import {
   campaignKnowledge,
-  campaigns,
   chapters,
   glossary,
   inboxEntries,
@@ -69,7 +68,6 @@ import {
   type Locator,
 } from "./paths";
 import {
-  campaignDisplayName,
   renderCampaign,
   renderChapter,
   renderInbox,
@@ -95,76 +93,6 @@ function cmp(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-// --- campaign lookup ---------------------------------------------------------
-
-/**
- * The campaign row; 400 for an unsafe id, 404 when it does not exist. This is
- * the successor of `campaignDir()` and every endpoint starts with it, so an
- * unknown campaign keeps answering 404 exactly as before.
- */
-export async function requireCampaign(id: string): Promise<CampaignRow> {
-  assertSafeCampaignId(id);
-  const db = await getDb();
-  const row = campaignRow(db, id);
-  if (row === undefined) throw new ApiError(404, "campaign not found");
-  return row;
-}
-
-export function campaignRow(db: GrimoireDb, id: string): CampaignRow | undefined {
-  return db.select().from(campaigns).where(eq(campaigns.id, id)).all()[0] as
-    | CampaignRow
-    | undefined;
-}
-
-/** Current version counter of a campaign (`GET /version`, DECISIONS #9). */
-export async function campaignVersion(id: string): Promise<number> {
-  return (await requireCampaign(id)).version;
-}
-
-// --- GET /api/campaigns ------------------------------------------------------
-
-/**
- * All campaigns with `name`/`description` plus the newest session's id
- * (`lastSession`) and its `started` (`lastSessionStarted`) — which is what
- * lets the app re-open the last active campaign. "Newest" is
- * `compareSessionsNewestFirst`: `started`, then the row's insertion order.
- *
- * The `started` value travels because the id CANNOT be ordered by the client:
- * it is opaque (db/schema.ts). Sorting campaigns by the id string would be
- * sorting random noise.
- *
- * `name` is the campaign's DISPLAY name and therefore always there: an
- * unnamed campaign is shown under its id. This list and `GET /entries/
- * campaign` agree on that: both go through `campaignDisplayName`.
- */
-export async function listCampaigns(): Promise<CampaignSummary[]> {
-  const db = await getDb();
-  const rows = db.select().from(campaigns).orderBy(asc(campaigns.id)).all() as CampaignRow[];
-  return rows.map((row) => {
-    const summary: CampaignSummary = { id: row.id, name: campaignDisplayName(row) };
-    if (row.description !== null && row.description.trim() !== "") {
-      summary.description = row.description;
-    }
-    // Not `max(id)`: session ids are opaque random strings, so
-    // there is no order in them at all. The sort needs exactly the three
-    // columns `compareSessionsNewestFirst` reads, so the list must NOT pull
-    // whole session rows — a campaign with 80 evenings would drag 80 log
-    // bodies through this loop for one id.
-    const newest = db
-      .select({ id: sessions.id, started: sessions.started, createdAt: sessions.createdAt })
-      .from(sessions)
-      .where(eq(sessions.campaignId, row.id))
-      .all()
-      .sort(compareSessionsNewestFirst)[0];
-    if (newest !== undefined) {
-      summary.lastSession = newest.id;
-      if (newest.started !== null && newest.started.trim() !== "") {
-        summary.lastSessionStarted = newest.started;
-      }
-    }
-    return summary;
-  });
-}
 
 // --- GET /api/campaigns/:campaign/tree -------------------------------------------------
 

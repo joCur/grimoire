@@ -32,7 +32,6 @@ import {
   isEnded,
   isSessionEmpty,
   toSlug,
-  type CampaignSummary,
   type EntryResponse,
   type GlossaryResponse,
   type InboxResponse,
@@ -44,7 +43,7 @@ import {
 } from "@grimoire/shared";
 import { format } from "date-fns";
 import { ApiError } from "../api-error";
-import { assertSafeAddress, assertSafeCampaignId } from "../addressing";
+import { assertSafeAddress } from "../addressing";
 import type { GrimoireDb } from "../db/client";
 import { logLineId, logLineShortHash } from "./body-parse";
 import { LOCAL_DATE_TIME_SECONDS, LOCAL_DATE_TIME_SHAPE, localDateTimeToMs } from "./time";
@@ -67,6 +66,7 @@ import {
   sessions,
 
 } from "../db/schema";
+import { campaignRow, indexCampaign, mutate, requireCampaignRow } from "./campaigns";
 import {
   asMap,
   asOptStr,
@@ -88,7 +88,6 @@ import { indexEntity } from "./fts";
 import { expandBodyRefs, referrersOf, type RefBodyKind } from "./refs";
 import { getDb } from "./handle";
 import {
-  campaignRow,
   glossaryRows,
   inboxRows,
   knowledgeEntry,
@@ -99,7 +98,6 @@ import {
   playedScenes,
   readByLocator,
   renderSessionRow,
-  requireCampaign,
   sessionRow,
 } from "./read";
 import {
@@ -112,11 +110,9 @@ import {
   RESERVED_SEGMENTS,
   sceneAddress,
   scenePath,
-  CAMPAIGN_PATH,
   type Locator,
 } from "./paths";
 import {
-  campaignDisplayName,
   renderCampaign,
   renderChapter,
   renderInbox,
@@ -203,26 +199,6 @@ function assertTimestamp(value: string | null, field: string): void {
   });
 }
 
-// --- transaction plumbing ----------------------------------------------------
-
-/**
- * Run `fn` in one transaction and bump the campaign's version counter in the
- * same commit. The driver is synchronous (db/driver.ts), so `fn` must be too
- * — no `await` may happen inside a transaction.
- */
-async function mutate<T>(campaign: string, fn: (db: GrimoireDb) => T): Promise<T> {
-  await requireCampaign(campaign);
-  const db = await getDb();
-  return db.transaction((handle) => {
-    const tx = handle as unknown as GrimoireDb;
-    const result = fn(tx);
-    tx.update(campaigns)
-      .set({ version: sql`${campaigns.version} + 1` })
-      .where(eq(campaigns.id, campaign))
-      .run();
-    return result;
-  }) as T;
-}
 
 
 /**
@@ -343,19 +319,6 @@ function indexChapter(tx: GrimoireDb, campaign: string, row: ChapterRow): void {
   });
 }
 
-// The campaign entry is not referenceable either — but its note body CONTAINS
-// references like any other, and store/refs.ts scans it for them, so nothing
-// here is half-supported.
-export function indexCampaign(tx: GrimoireDb, row: CampaignRow): void {
-  indexEntity(tx, row.id, {
-    kind: "campaign",
-    entityId: row.id,
-    title: row.name === "" ? row.id : row.name,
-    ref: row.id,
-    tags: "",
-    body: expandBodyRefs(tx, row.id, row.body),
-  });
-}
 
 export function indexGlossaryTerm(
   tx: GrimoireDb,
@@ -1353,16 +1316,6 @@ export async function writeKnowledge(
   });
 }
 
-/**
- * The campaign row inside a running transaction. `mutate` has already proved
- * the campaign exists, so this only narrows the type — a 404 here would mean
- * the row vanished between two statements of one transaction.
- */
-function requireCampaignRow(tx: GrimoireDb, campaign: string): CampaignRow {
-  const row = campaignRow(tx, campaign);
-  if (row === undefined) throw new ApiError(404, "campaign not found");
-  return row;
-}
 
 // --- sessions -----------------------------------------------------------------
 
@@ -2237,62 +2190,6 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
 }
 
 
-/**
- * POST /api/campaigns { name, description? } -> CampaignSummary.
- *
- * The one create that cannot go through `mutate`: there is no campaign yet, so
- * there is no `version` to bump — the row starts at the column defaults, and
- * its own first version IS the change.
- *
- * A campaign id has NO reserved names, and that was checked rather than
- * assumed: `RESERVED_SEGMENTS` reserves first segments INSIDE a campaign, and
- * the api mounts no `/:campaign` route that a literal (`/api/campaigns`) could
- * be shadowed by — `/api/campaigns/tree` is the campaign `campaigns`, `GET
- * /api/campaigns` is the list, and both keep working. What is refused is an id
- * that is no id: an empty one, one a name yields nothing for, or an explicit
- * one that is no slug (`resolveNewId`), plus the path-safety rules
- * (`assertSafeCampaignId`).
- */
-export async function createCampaign(
-  name: string,
-  description?: string,
-  explicitId?: string,
-): Promise<CampaignSummary> {
-  const id = resolveNewId(explicitId, name, "campaign", "name");
-  assertSafeCampaignId(id);
-  const db = await getDb();
-  return db.transaction((handle) => {
-    const tx = handle as unknown as GrimoireDb;
-    if (campaignRow(tx, id) !== undefined) {
-      const suggestion = freeSlug(id, (candidate) => campaignRow(tx, candidate) !== undefined);
-      // `path` in this 409 is an ADDRESS the app can link to, and a campaign id
-      // alone is not one. The entry that always exists — even for a campaign
-      // that holds nothing else — is the campaign row itself (`campaign`), so
-      // that is what is pointed at. It carries the campaign id as its first
-      // segment because a campaign collision has no campaign scope to be
-      // relative to, unlike every other create in this file.
-      throw slugTaken("campaign", id, suggestion, `${id}/${CAMPAIGN_PATH}`);
-    }
-    // `name === id` is stored as "" — the empty name means "fall back to the
-    // id" everywhere it is rendered (./render, ./read), exactly as
-    // `patchProperties` stores it, so the round trip agrees.
-    tx.insert(campaigns)
-      .values({
-        id,
-        name: name.trim() === id ? "" : name.trim(),
-        description: description === undefined || description.trim() === "" ? null : description.trim(),
-      })
-      .run();
-    const row = campaignRow(tx, id);
-    if (row === undefined) throw new ApiError(500, "campaign could not be created");
-    indexCampaign(tx, row);
-    const summary: CampaignSummary = { id: row.id, name: campaignDisplayName(row) };
-    if (row.description !== null && row.description.trim() !== "") {
-      summary.description = row.description;
-    }
-    return summary;
-  }) as CampaignSummary;
-}
 
 /**
  * POST /api/campaigns/:campaign/chapters { title, goal? } -> the chapter entry.

@@ -26,7 +26,7 @@
 
 import { sql } from "drizzle-orm";
 import type { EntityKind, SearchResult } from "@grimoire/shared";
-import { requireCampaign } from "./read";
+import { requireCampaign } from "./campaigns";
 import { getDb } from "./handle";
 import {
   CAMPAIGN_PATH,

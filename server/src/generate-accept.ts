@@ -19,7 +19,7 @@ import {
   type ApplyTarget,
 } from "./generator";
 import { locationPath, npcPath } from "./store/paths";
-import { requireCampaign } from "./store/read";
+import { requireCampaign } from "./store/campaigns";
 import { applyDrafts } from "./store/write";
 
 /**
