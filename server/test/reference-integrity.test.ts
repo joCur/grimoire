@@ -18,7 +18,7 @@
 // test/reference-preflight.test.ts.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { CampaignTree, EntryResponse } from "@grimoire/shared";
+import type { CampaignTree, EntryResponse, SessionResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { applyDrafts } from "../src/store/write";
 import { dropStore, seedStore } from "./support/store";
@@ -85,6 +85,15 @@ async function tree(): Promise<CampaignTree> {
   const res = await app.request("/api/campaigns/beispiel/tree");
   expect(res.status).toBe(200);
   return (await res.json()) as CampaignTree;
+}
+
+/** The ACTIVE session as rows — a session is not an entry (ADR #26). */
+async function getSession(): Promise<SessionResponse> {
+  const res = await app.request("/api/campaigns/beispiel/session");
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as SessionResponse | null;
+  expect(body).not.toBeNull();
+  return body as SessionResponse;
 }
 
 beforeEach(async () => {
@@ -173,38 +182,42 @@ describe("a reference that names nothing is refused", () => {
       code: "log_scene_unknown",
       value: "gibt-es-nicht",
     });
-    const session = (await tree()).sessions[0];
-    expect(session?.scenes_played).toEqual([]);
-    // The note itself was not written either.
-    expect((await getEntry(`sessions/${session!.id}`)).body).not.toContain("Etwas passiert");
+    // Neither the played scene nor the note itself was written.
+    const active = await getSession();
+    expect(active.scenesPlayed).toEqual([]);
+    expect(active.log).toEqual([]);
   });
 
-  test("parentheses in the NOTE are text, not a reference", async () => {
-    // The `- HH:MM (id) text` marker is a parse column of the log line, so a
-    // note that happens to begin with „(…)" would otherwise name a scene
-    // nobody meant. The text is kept whole and stores no scene — a note is
-    // never refused over something the DM did not write as a reference.
+  test("parentheses in the NOTE are text, and nothing else", async () => {
+    // A note is a COLUMN, so there is no `- HH:MM (id) text` grammar left to
+    // read a scene out of: a note that happens to begin with „(…)" is stored
+    // exactly as typed, names no scene, and is never refused over something
+    // the DM did not write as a reference.
     expect((await post("/session/start", {})).status).toBe(200);
     const res = await post("/log", { text: "(vermutlich) der Turmwärter lügt" });
     expect(res.status).toBe(200);
-    const id = (await tree()).sessions[0]!.id;
-    const session = await getEntry(`sessions/${id}`);
-    expect(session.body).toContain("(vermutlich) der Turmwärter lügt");
-    expect(session.properties.scenes_played).toEqual([]);
+    const session = await getSession();
+    expect(session.log.map((l) => [l.text, l.sceneId])).toEqual([
+      ["(vermutlich) der Turmwärter lügt", undefined],
+    ]);
+    expect(session.scenesPlayed).toEqual([]);
   });
 
-  test("a played-scenes list: 400 played_scene_unknown", async () => {
+  test("the played scenes have no write path of their own any more", async () => {
+    // `scenesPlayed` is maintained by POST /log, which checks the reference
+    // it was given (`log_scene_unknown`, above). `PATCH /sessions/:id` takes
+    // the timestamps and nothing else (ADR #26), so there is no request that
+    // could hand the list a scene that does not exist.
     expect((await post("/session/start", {})).status).toBe(200);
-    const id = (await tree()).sessions[0]!.id;
-    const rel = `sessions/${id}`;
-    const res = await patchRes(rel, { scenes_played: ["lighthouse-arrival", "gibt-es-nicht"] });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      code: "played_scene_unknown",
-      value: "gibt-es-nicht",
+    const id = (await getSession()).id;
+    const res = await app.request(`/api/campaigns/beispiel/sessions/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rev: 1, scenes_played: ["gibt-es-nicht"] }),
     });
-    // Not half of the list either — the transaction rolled back.
-    expect((await getEntry(rel)).properties.scenes_played).toEqual([]);
+    // An unknown field is refused outright, so nothing is written.
+    expect(res.status).toBe(400);
+    expect((await getSession()).scenesPlayed).toEqual([]);
   });
 });
 
@@ -435,9 +448,12 @@ describe("the generator's apply step", () => {
 });
 
 describe("empty is not missing", () => {
-  test("an empty inbox is an empty entry (200), not a missing one", async () => {
-    const inbox = await getEntry("inbox");
-    expect(inbox.kind).toBe("inbox");
+  test("an empty inbox is an empty LIST (200), not a missing one", async () => {
+    const res = await app.request("/api/campaigns/beispiel/inbox");
+    expect(res.status).toBe(200);
+    const inbox = (await res.json()) as { entries: unknown[]; rev: number };
+    expect(Array.isArray(inbox.entries)).toBe(true);
+    expect(typeof inbox.rev).toBe("number");
   });
 });
 

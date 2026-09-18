@@ -1,19 +1,16 @@
 // Addresses.
 //
-// The API is address-centric — `GET /entry?path=…`, `EntryResponse.path`,
+// The API is address-centric — `GET /entries/<address>`, `EntryResponse.path`,
 // every link in the app — and an address names a ROW, derived from that row.
 //
 // THE ADDRESS SCHEMA, complete:
 //
 //   campaign                         the campaign row
-//   inbox                            the campaign's inbox list
-//   glossary                         the campaign's glossary list
 //   <chapter>                        a chapter row
 //   <chapter>/<scene-id>             a scene without a `location`
 //   <chapter>/<location>/<scene-id>  a scene whose `location` names that location
 //   npcs/<id>                        an npc row
 //   locations/<id>                   a location row
-//   sessions/<id>                    a session row
 //
 // Two things to know about the segments:
 //
@@ -26,6 +23,11 @@
 //     `EntryResponse.path`, which the app follows.
 //   * `campaign`, `inbox`, `glossary`, `npcs`, `locations` and `sessions` are
 //     reserved as first segments, so none of them can be a chapter id.
+//     `inbox`, `glossary` and `sessions` are reserved AND NOTHING ELSE: the
+//     inbox, the glossary and a session are LISTS with their own endpoints
+//     (ADR #26), so none of them has an address here. They stay reserved
+//     because a chapter that claimed one of those ids would collide with the
+//     API path of its list.
 //
 // An address the schema does not describe names nothing and answers 404.
 
@@ -44,15 +46,10 @@ export type Locator =
   | { kind: "chapter"; id: string }
   | { kind: "scene"; id: string; chapterId: string; groupSlug: string }
   | { kind: "npc"; id: string }
-  | { kind: "location"; id: string }
-  | { kind: "session"; id: string }
-  | { kind: "inbox" }
-  | { kind: "glossary" };
+  | { kind: "location"; id: string };
 
-/** The three campaign-level entries. */
+/** The one campaign-level entry. */
 export const CAMPAIGN_PATH = "campaign";
-export const INBOX_PATH = "inbox";
-export const GLOSSARY_PATH = "glossary";
 
 /**
  * Reserved first segments that are not chapters — the ONE source for this set
@@ -62,8 +59,8 @@ export const GLOSSARY_PATH = "glossary";
  */
 export const RESERVED_SEGMENTS: ReadonlySet<string> = new Set([
   CAMPAIGN_PATH,
-  INBOX_PATH,
-  GLOSSARY_PATH,
+  "inbox",
+  "glossary",
   "npcs",
   "locations",
   "sessions",
@@ -101,10 +98,6 @@ export function locationPath(id: string): string {
   return `locations/${id}`;
 }
 
-export function sessionPath(id: string): string {
-  return `sessions/${id}`;
-}
-
 /**
  * The ROW one address names, as a comparable key: `<kind>/<id>`.
  *
@@ -139,8 +132,6 @@ export function locatorFromPath(rel: string): Locator {
 
   if (segments.length === 1) {
     if (last === CAMPAIGN_PATH) return { kind: "campaign" };
-    if (last === INBOX_PATH) return { kind: "inbox" };
-    if (last === GLOSSARY_PATH) return { kind: "glossary" };
     if (last === "" || RESERVED.has(last)) throw new ApiError(404, "entry not found");
     return { kind: "chapter", id: last };
   }
@@ -150,7 +141,8 @@ export function locatorFromPath(rel: string): Locator {
     if (segments.length !== 2 || last === "") throw new ApiError(404, "entry not found");
     if (first === "npcs") return { kind: "npc", id: last };
     if (first === "locations") return { kind: "location", id: last };
-    if (first === "sessions") return { kind: "session", id: last };
+    // `sessions/<id>` falls through with the other two list segments: a list
+    // has no entry address, so these name nothing (ADR #26).
     throw new ApiError(404, "entry not found");
   }
 

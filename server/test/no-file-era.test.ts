@@ -167,6 +167,26 @@ const EXCEPTIONS: readonly Exception[] = [
     rule: "file-word-for-an-entry",
     reason: "it builds a dist directory of real assets and asks the server to serve them",
   },
+  {
+    phrase: "sql.raw",
+    rule: "raw-list-column",
+    reason: "drizzle's escape hatch for a value that goes into a table DEFINITION",
+  },
+  {
+    phrase: "raw `sql`",
+    rule: "raw-list-column",
+    reason: "the same escape hatch, named in prose: a hand-written SQL template",
+  },
+  {
+    phrase: "raw client",
+    rule: "raw-list-column",
+    reason: "the SQLite client under the drizzle handle, which the pre-flights run on",
+  },
+  {
+    phrase: "raw-text patcher",
+    rule: "raw-list-column",
+    reason: "the write path that existed before properties were columns, named as history",
+  },
 ];
 
 /**
@@ -303,6 +323,45 @@ const RULES: readonly Rule[] = [
     only: ["app/src"],
   },
   {
+    // The three LISTS lost their entry address (ADR #26): a session, the
+    // inbox and the glossary are tables with their own endpoints, so these
+    // addresses name nothing and answer 404 like any other unknown one. A
+    // reader that still reaches for one is reaching for the parse that is
+    // gone.
+    id: "list-entry-address",
+    pattern: /entries\/(?:glossary|inbox|sessions)/,
+    meaning: "a list has no entry address — it answers its own endpoint (ADR #26)",
+    // SCOPED, on purpose, until the app's half of this lands: the app tree
+    // still reads these addresses, and flipping the rule for `app/src` in the
+    // same step would fail a suite the app engineer has not reached yet. The
+    // integration step widens the scope to the whole tree.
+    only: ["server/src", "shared/src", "fixtures", "generator"],
+  },
+  {
+    // The 400 that refused a `body` for one of those three addresses. With
+    // the address gone there is nothing to refuse a body FOR, so the code is
+    // unreachable — it stays in the append-only code list with a note, and
+    // no write path may name it again.
+    id: "body-not-editable",
+    pattern: /body_not_editable/,
+    meaning: "no address carries a list any more, so no write can be refused one",
+    // SCOPED, on purpose, until the app's half of this lands: the app tree
+    // still reads these addresses, and flipping the rule for `app/src` in the
+    // same step would fail a suite the app engineer has not reached yet. The
+    // integration step widens the scope to the whole tree.
+    only: ["server/src", "fixtures", "generator"],
+  },
+  {
+    // `raw` held the markdown line beside a log or inbox row — two truths
+    // about one note, and the line was the one the reader used. Migration
+    // 0018 dropped the column; a reference to it in the storage layer would
+    // be the parse coming back.
+    id: "raw-list-column",
+    pattern: /\braw\s*:|\.raw\b|`raw`|"raw"/,
+    meaning: "a log or inbox row is columns only — there is no line beside them",
+    only: ["server/src/db/schema.ts", "server/src/store"],
+  },
+  {
     id: "chokidar",
     pattern: /chokidar/,
     meaning: "there is no external editor to watch; `campaigns.version` is bumped by the writer",
@@ -325,16 +384,6 @@ const RULES: readonly Rule[] = [
  * line in that step's diff rather than a rule that quietly started passing.
  */
 const pendingRules: ReadonlyArray<{ pattern: RegExp; goes: string }> = [
-  {
-    pattern: /entries\/glossary/,
-    goes: "the glossary loses its entry address and gets its own read endpoint",
-  },
-  { pattern: /entries\/inbox/, goes: "the inbox loses its entry address, with the glossary" },
-  { pattern: /entries\/sessions/, goes: "a session loses its entry address, with the two lists" },
-  {
-    pattern: /body_not_editable/,
-    goes: "the code exists only while those three still carry an entry address",
-  },
   {
     pattern: /\bparseLogEntries\b/,
     goes: "the app still parses a session's log out of its text; the rows are the truth",

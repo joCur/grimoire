@@ -8,13 +8,21 @@
 // WHAT `path` MEANS: an ADDRESS, not a path on disk — no `.md`, no extension at
 // all. The complete schema is in ../store/paths.ts:
 //
-//   campaign · inbox · glossary · <chapter> ·
+//   campaign · <chapter> ·
 //   <chapter>/<scene-id> · <chapter>/<group>/<scene-id> ·
-//   npcs/<id> · locations/<id> · sessions/<id>
+//   npcs/<id> · locations/<id>
 //
 // The wire vocabulary follows from that: an entry's fields are `properties`,
 // its markdown is `body`, and its optimistic-concurrency token is `rev` (the
 // row version).
+//
+// THE THREE LISTS ARE NOT ENTRIES (ADR #26). A session, the inbox and the
+// glossary are tables, and they answer their OWN shapes on their own
+// endpoints — `SessionResponse`, `InboxResponse`, `GlossaryResponse`, rows
+// all the way down. None of them has an address, so an entry path reaching
+// for one answers 404 like any other address the schema does not describe.
+// `inbox`, `glossary` and `sessions` stay RESERVED segments all the same, so
+// no chapter can claim one and collide with its list's endpoint.
 //
 // ERROR BODIES ARE LANGUAGE-FREE. Every error a HUMAN reads carries a stable
 // `code` from `@grimoire/shared/error-codes` plus the parameters its sentence
@@ -32,6 +40,7 @@ import {
   KNOWLEDGE_KINDS,
   type DraftEdit,
   type KnowledgeEntry,
+  type PatchSessionRequest,
 } from "@grimoire/shared";
 import { getBuildId } from "../config";
 import { ApiError } from "../api-error";
@@ -39,10 +48,13 @@ import {
   buildTree,
   campaignVersion,
   listCampaigns,
+  listSessions,
   readActiveSession,
   readGlossary,
+  readInbox,
   readKnowledge,
   readEntry,
+  readSession,
   requireCampaign,
 } from "../store/read";
 import { addressSegments } from "../store/paths";
@@ -65,6 +77,7 @@ import {
   markInboxLineDone,
   markLogLineSeen,
   patchEntry,
+  patchSession,
   pauseSession,
   startSession,
   writeGlossary,
@@ -229,36 +242,68 @@ api.get("/campaigns/:campaign", async (c) =>
 
 // GET /api/campaigns/:campaign/entries/<address> -> EntryResponse
 // (properties, body, rev). The address IS the path — the schema is in
-// store/paths.ts.
-// glossary and inbox answer 200 with an EMPTY body when the campaign has no
-// terms and no ideas: an empty list is an entry, not a missing one (a 404
-// would make a glossary the DM had just emptied unreachable from the
-// editor). Their `rev` is that ENTRY's own counter, not campaigns.version.
+// store/paths.ts, and it describes the five ENTRY kinds only.
 api.get("/campaigns/:campaign/entries/*", async (c) =>
   c.json(await readEntry(c.req.param("campaign"), entryAddress(c))),
 );
 
-// GET /api/campaigns/:campaign/session -> EntryResponse of the ACTIVE session,
-// 404 when no session is running. "Active" = the last STARTED session entry
-// without `ended` — today's or an older one, so a session that runs past
-// midnight stays active instead of vanishing at 00:00.
+// GET /api/campaigns/:campaign/session -> SessionResponse | null — the ACTIVE
+// session, `null` when none runs. "Active" = the last STARTED session without
+// `ended` — today's or an older one, so a session that runs past midnight
+// stays active instead of vanishing at 00:00.
 //
 // This is the one place that decides what "the running session" is: the app
 // must never derive it from its own date (a browser in another timezone, or
-// simply a session past midnight, would get it wrong). Same shape as GET
-// /entry plus `startedMs`/`endedMs` and `pausedMs`/`pausedSinceMs` — the
-// server's epoch reading of the zone-less timestamps and of the `pauses`
-// intervals, which is what makes the live runtime correct (paused time
-// does not count).
+// simply a session past midnight, would get it wrong).
+//
+// `null` and not a 404: between two evenings nothing runs, and that is the
+// ordinary state of a campaign, not a missing thing.
+//
+// The answer is ROWS, not an entry (ADR #26): `log` is the list of log rows,
+// `pauses` the intervals, `scenesPlayed` the sequence. Every zone-less
+// timestamp carries the SERVER's epoch reading beside it (`startedMs`,
+// `endedMs`, a pause's `fromMs`/`toMs`) — that is what makes the live runtime
+// correct in any timezone, and the client does plain epoch arithmetic: it
+// subtracts the closed intervals and freezes the clock on the open one.
 //
 // `?includeEnded=1` asks the OTHER question: the last STARTED session, ended
 // or not. That is the review's session (the harvest runs right after "Session
-// beenden"), and it must come from the server for the same reason: a session
-// that ran past midnight was ended in YESTERDAY's entry, so the client's own
-// date would harvest an empty — or wrong — one. 404 when the campaign has no
-// session entry at all.
+// beenden"), and it must come from the server for the same reason — a session
+// that ran past midnight was ended in YESTERDAY's row, so the client's own
+// date would harvest an empty or wrong one.
 api.get("/campaigns/:campaign/session", async (c) =>
   c.json(await readActiveSession(c.req.param("campaign"), isTruthyFlag(c.req.query("includeEnded")))),
+);
+
+// GET /api/campaigns/:campaign/sessions -> SessionSummary[] — every session,
+// NEWEST FIRST. A summary is the identifying head of a session: its id and
+// when it ran, with the epoch readings. No log and no played scenes — a list
+// shows when the evening was, and the session itself has the rest.
+//
+// The order is `started`, with the row's insertion time as the tie-break:
+// several sessions per day are possible and the opaque id orders nothing.
+api.get("/campaigns/:campaign/sessions", async (c) =>
+  c.json(await listSessions(c.req.param("campaign"))),
+);
+
+// GET /api/campaigns/:campaign/sessions/:id -> SessionResponse, 404 for an
+// unknown id. The way to read a session that is NOT the active one — the
+// review's list of past evenings opens them through this.
+api.get("/campaigns/:campaign/sessions/:id", async (c) =>
+  c.json(await readSession(c.req.param("campaign"), c.req.param("id"))),
+);
+
+// GET /api/campaigns/:campaign/inbox -> InboxResponse `{ entries, rev }` —
+// the ideas as rows (`{ id, text, done }`), newest last: the inbox is
+// append-only. An EMPTY inbox answers 200 with an empty list, not a 404 — an
+// empty list is a list, and a 404 would make every reader special-case an
+// answer that means nothing is wrong.
+//
+// `rev` is the LIST's guard token (`campaigns.inbox_rev`), not
+// `campaigns.version`: every unrelated write bumps that one, and one log line
+// would then invalidate an inbox the DM had open during a session.
+api.get("/campaigns/:campaign/inbox", async (c) =>
+  c.json(await readInbox(c.req.param("campaign"))),
 );
 
 // GET /api/campaigns/:campaign/search?q=... -> { results: SearchResult[] } (max 20)
@@ -288,13 +333,12 @@ api.get("/campaigns/:campaign/version", async (c) => {
   return c.json({ version: await campaignVersion(campaign), build: getBuildId() });
 });
 
-// GET /api/campaigns/:campaign/glossary -> { entries: [{ term, explanation }] }
-// The glossary is a structured TABLE: term → explanation, one row each. The
-// generic reading view renders it as markdown (GET /entries/glossary, built
-// from these rows), but this is the shape anything that wants the TERMS
-// should read —
-// the generator knowledge base builds on exactly this. `rev` is the LIST's
-// guard token — the same one GET /entries/glossary hands out.
+// GET /api/campaigns/:campaign/glossary -> { entries: [{ term, explanation }], rev }
+// The glossary is a structured TABLE: term → explanation, one row each, and
+// this is the ONE way to read it (ADR #26) — the generator knowledge base
+// builds on exactly these rows. `rev` is the LIST's guard token, the one
+// PUT /glossary checks; it counts only the glossary's own writes, so an
+// unrelated write during a session cannot invalidate an open edit.
 api.get("/campaigns/:campaign/glossary", async (c) => c.json(await readGlossary(c.req.param("campaign"))));
 
 // GET /api/campaigns/:campaign/knowledge -> { entries: [{ kind, from, to, text }], rev }
@@ -343,12 +387,10 @@ api.get("/campaigns/:campaign/knowledge", async (c) =>
 // carries is written, so a status changed in between survives a forced text
 // save.
 //
-// 404 for an entry that does not exist. A `body` for the LIST addresses —
-// glossary, inbox, a session — is 400 { code: "body_not_editable", path },
-// interim while those lists still carry an entry address: they grow by rows
-// through their own endpoints (PUT /glossary, POST /inbox, POST /log, the
-// review actions), and glossary and inbox have no properties to patch either
-// (DECISIONS #4).
+// 404 for an entry that does not exist — including for an address that reaches
+// for one of the three LISTS, which have none (ADR #26). They are written
+// through their own endpoints: PUT /glossary, POST /inbox, POST /log, the
+// session verbs, PATCH /sessions/:id and the review actions.
 api.patch("/campaigns/:campaign/entries/*", async (c) => {
   const body = await jsonBody(c, ["rev", "properties", "body", "force"]);
   const properties = body.properties;
@@ -372,58 +414,110 @@ api.patch("/campaigns/:campaign/entries/*", async (c) => {
   );
 });
 
-// POST /api/campaigns/:campaign/session/start -> EntryResponse
-// Creates a NEW session at `sessions/<id>` with an OPAQUE RANDOM id
-// ("beenden" is FINAL, so a second evening on the same day is simply a
-// second session with its own empty log and a runtime starting at 0; nothing
-// reads the id — order and every label come from `started`). Idempotent only
-// while TODAY's session is the RUNNING one — "today" is the date part of its
-// `started` — so pressing the button twice re-enters it.
+// POST /api/campaigns/:campaign/session/start -> SessionResponse
+// Creates a NEW session with an OPAQUE RANDOM id ("beenden" is FINAL, so a
+// second evening on the same day is simply a second session with its own
+// empty log and a runtime starting at 0; nothing reads the id — order and
+// every label come from `started`). Idempotent only while TODAY's session is
+// the RUNNING one — "today" is the date part of its `started` — so pressing
+// the button twice re-enters it.
 // One 409:
-//   { code: "session_running", path } — an OLDER session is still open (past
+//   { code: "session_running", id } — an OLDER session is still open (past
 //     midnight, or never ended). The app offers to end that one; nothing
 //     starts a second parallel session.
 api.post("/campaigns/:campaign/session/start", async (c) =>
   c.json(await startSession(c.req.param("campaign"))),
 );
 
-// POST /api/campaigns/:campaign/session/end -> EntryResponse — ends the ACTIVE session
-// (that may be yesterday's entry when the session ran past
-// midnight). Idempotent — with nothing running the LAST STARTED session is
-// returned with its existing `ended`; 404 when there is no session entry at
-// all.
+// POST /api/campaigns/:campaign/session/end -> SessionResponse — ends the
+// ACTIVE session (that may be yesterday's row when it ran past midnight). An
+// open pause is closed by the end. Idempotent — with nothing running the LAST
+// STARTED session comes back with its existing `ended`; 404 when the campaign
+// has no session at all.
 api.post("/campaigns/:campaign/session/end", async (c) => c.json(await endSession(c.req.param("campaign"))));
 
-// POST /api/campaigns/:campaign/session/pause -> EntryResponse — really STOPS the clock:
-// opens a `{ from: … }` interval in the session's `pauses`
-// properties AND appends the `— Pause` log line in the same write. Idempotent
-// (already paused -> 200, entry unchanged); 404 when no session is running.
+// POST /api/campaigns/:campaign/session/pause -> SessionResponse — really
+// STOPS the clock: it opens a `{ from }` interval in `pauses` and nothing
+// else. No log row is written for it — a pause IS that interval, and the
+// `— Pause` line the log used to carry was the same pause a second time
+// (ADR #26). Idempotent (already paused -> 200, unchanged); 404 when no
+// session is running.
 api.post("/campaigns/:campaign/session/pause", async (c) =>
   c.json(await pauseSession(c.req.param("campaign"))),
 );
 
-// POST /api/campaigns/:campaign/session/continue -> EntryResponse — closes the open pause
-// interval (`to`) and appends `— Weiter` — it ends a PAUSE, not a session
-// (an ended session is never re-opened). Idempotent (not paused -> 200, entry unchanged);
-// 404 when no session is running.
+// POST /api/campaigns/:campaign/session/continue -> SessionResponse — closes
+// the open pause interval (`to`). It ends a PAUSE, not a session (an ended
+// session is never re-opened), and writes no log row either. Idempotent (not
+// paused -> 200, unchanged); 404 when no session is running.
 api.post("/campaigns/:campaign/session/continue", async (c) =>
   c.json(await continueSession(c.req.param("campaign"))),
 );
 
-// POST /api/campaigns/:campaign/session/discard -> { path } — DELETES the active
-// session's entry, the undo of a mis-clicked "Session
-// starten". Allowed ONLY while that session is empty (no log entry, no
-// `scenes_played`); otherwise 409 { code: "session_not_empty", path } — a
-// session with content is ended, never deleted. 404 when nothing is running.
+// POST /api/campaigns/:campaign/session/discard -> { id } — DELETES the
+// active session, the undo of a mis-clicked "Session starten". Allowed ONLY
+// while that session is empty (no log row, no played scene); otherwise 409
+// { code: "session_not_empty", id } — a session with content is ended, never
+// deleted. 404 when nothing is running.
 api.post("/campaigns/:campaign/session/discard", async (c) =>
   c.json(await discardSession(c.req.param("campaign"))),
 );
 
-// POST /api/campaigns/:campaign/log { text, sceneId? } -> EntryResponse
-// Appends `- HH:MM (sceneId) text` to the ACTIVE session (not
-// stubbornly to today's); 404 when no session is running — including
-// right after "Session beenden", where a note would otherwise land in the
-// closed log.
+// PATCH /api/campaigns/:campaign/sessions/:id { rev, started?, ended?,
+//   pauses? } -> SessionResponse
+// The TIMESTAMPS of a session — everything about it the DM corrects by hand:
+// a start typed into the wrong hour, a pause that was never closed. A field
+// left out keeps its value, `ended: null` clears it (the session runs again)
+// and `pauses` replaces the whole list.
+//
+// The log and `scenesPlayed` are NOT patchable: they grow through POST /log
+// and the review actions, and a whole-list write of an append-only log is not
+// an edit anybody asked for. Naming none of the three fields is 400
+// { code: "nothing_to_write" }.
+//
+// 400 { code: "timestamp_not_allowed", field, value } for a value outside
+// `yyyy-mm-ddTHH:MM:SS` — checked for the WHOLE request before the first
+// write, so a refusal refuses all of it. 404 for an unknown id. A stale `rev`
+// is 409 { code: "rev_conflict", rev, session } — the current session rides
+// along, so the conflict dialog shows what is in the way without a second
+// request. The key is `session`, not `entry`: a session is not an entry.
+api.patch("/campaigns/:campaign/sessions/:id", async (c) => {
+  const body = await jsonBody(c, ["rev", "started", "ended", "pauses"]);
+  const request: PatchSessionRequest = { rev: requireRev(body.rev) };
+  if (body.started !== undefined) {
+    if (typeof body.started !== "string") throw new ApiError(400, "started must be a string");
+    request.started = body.started;
+  }
+  if (body.ended !== undefined) {
+    if (body.ended !== null && typeof body.ended !== "string") {
+      throw new ApiError(400, "ended must be a string or null");
+    }
+    request.ended = body.ended;
+  }
+  if (body.pauses !== undefined) {
+    if (!Array.isArray(body.pauses)) throw new ApiError(400, "pauses must be an array");
+    request.pauses = body.pauses.map((item) => {
+      if (!isPlainObject(item)) throw new ApiError(400, "each pause must be an object");
+      if (typeof item.from !== "string") throw new ApiError(400, "each pause needs a `from`");
+      if (item.to !== undefined && item.to !== null && typeof item.to !== "string") {
+        throw new ApiError(400, "a pause's `to` must be a string or null");
+      }
+      return { from: item.from, ...(item.to === undefined ? {} : { to: item.to }) };
+    });
+  }
+  return c.json(await patchSession(c.req.param("campaign"), c.req.param("id"), request));
+});
+
+// POST /api/campaigns/:campaign/log { text, sceneId? } -> SessionResponse
+// Appends one log ROW — time, scene and text as columns — to the ACTIVE
+// session (not stubbornly to today's); 404 when no session is running,
+// including right after "Session beenden", where a note would otherwise land
+// in a closed log. With a `sceneId` the scene is also appended to
+// `scenesPlayed`, in the same transaction; an unknown one is 400
+// { code: "log_scene_unknown", value }.
+//
+// The hashtags stay INSIDE `text`: they are body vocabulary (README), so the
+// note is stored as the DM typed it.
 api.post("/campaigns/:campaign/log", async (c) => {
   const body = await jsonBody(c, ["text", "sceneId"]);
   const text = normalizeLineText(body.text);
@@ -436,7 +530,10 @@ api.post("/campaigns/:campaign/log", async (c) => {
   return c.json(await appendLogEntry(c.req.param("campaign"), text, sceneId));
 });
 
-// POST /api/campaigns/:campaign/inbox { text } -> EntryResponse (creates inbox)
+// POST /api/campaigns/:campaign/inbox { text } -> InboxResponse
+// Appends one idea as a row and answers the WHOLE list with its fresh `rev`.
+// No heading row is written in front of the first idea: the inbox is a table
+// and has no skeleton (ADR #26).
 api.post("/campaigns/:campaign/inbox", async (c) => {
   const body = await jsonBody(c, ["text"]);
   const text = normalizeLineText(body.text);
@@ -450,12 +547,13 @@ api.post("/campaigns/:campaign/inbox", async (c) => {
 // is edited as a whole, and that is also what makes REORDERING an ordinary
 // save: the array order is the stored order, so there is no
 // separate move endpoint. Of duplicate terms the FIRST one wins. `rev` is
-// the list's guard token (the one GET /glossary and GET /entries/glossary
-// both hand out); a stale one is the write 409 of every entry —
-// `{ code: "rev_conflict", rev, entry }` — and writes nothing.
+// the list's guard token (the one GET /glossary hands out); a stale one is
+// 409 { code: "rev_conflict", rev } and writes nothing. No `entry` rides
+// along — the glossary is not one (ADR #26), and the settings page reloads
+// the list itself.
 //
-// This is the ONLY way the glossary is written: the entry PATCH takes no
-// `body` for this address (ADR #23).
+// This is the ONLY way the glossary is written: it has no address, so there
+// is no entry PATCH that could reach it.
 api.put("/campaigns/:campaign/glossary", async (c) => {
   const body = await jsonBody(c, ["entries", "rev"]);
   const raw = body.entries;
@@ -617,8 +715,8 @@ api.post("/campaigns/:campaign/locations", async (c) => {
 
 // --- review-action endpoints --------------------------------------------------------
 
-/** One log/inbox text as sent by the review UI: non-empty, single line. */
-function lineText(v: unknown, what: string): string {
+/** One id as sent by the review UI: a non-empty single-line string. */
+function reviewId(v: unknown, what: string): string {
   if (typeof v !== "string" || v.trim() === "") {
     throw new ApiError(400, `${what} must be a non-empty string`);
   }
@@ -628,15 +726,26 @@ function lineText(v: unknown, what: string): string {
   return v;
 }
 
-// POST /api/campaigns/:campaign/review/seen { path, line } -> EntryResponse
-// Adds the short hash (first 8 hex chars of SHA-256) of the RAW log line to
-// the session's `reviewed` properties list iff absent. Idempotent; the line
-// is hashed exactly as sent — it is never written anywhere.
+// POST /api/campaigns/:campaign/review/seen { sessionId, logId }
+//   -> SessionResponse
+// Marks ONE log row as reviewed. `reviewed` is a flag on the row, and `logId`
+// is the row's own id — `SessionLogEntry.id`, which the review read out of the
+// log it is showing.
+//
+// Idempotent: a row that already carries the flag comes back unchanged and
+// nothing is written, so the session's `rev` stands. 404 when the campaign has
+// no such session, and 404 when that session has no row with this id — the
+// caller sends back an id it was given, so a miss is the session having moved
+// on, which a 200 that changed nothing would hide.
 api.post("/campaigns/:campaign/review/seen", async (c) => {
-  const body = await jsonBody(c, ["path", "line"]);
-  if (typeof body.path !== "string") throw new ApiError(400, "path must be a string");
-  const line = lineText(body.line, "line");
-  return c.json(await markLogLineSeen(c.req.param("campaign"), body.path, line));
+  const body = await jsonBody(c, ["sessionId", "logId"]);
+  return c.json(
+    await markLogLineSeen(
+      c.req.param("campaign"),
+      reviewId(body.sessionId, "sessionId"),
+      reviewId(body.logId, "logId"),
+    ),
+  );
 });
 
 // POST /api/campaigns/:campaign/review/thread { chapter, text } -> EntryResponse
@@ -671,14 +780,16 @@ api.post("/campaigns/:campaign/review/npc-stub", async (c) => {
   return c.json(await createNpcStub(c.req.param("campaign"), body.id, name, note));
 });
 
-// POST /api/campaigns/:campaign/review/inbox-done { text } -> EntryResponse
-// Ticks the FIRST idea with exactly this text off — the one documented
-// exception to the inbox's append-only rule. Idempotent; 404 when the inbox
-// holds no such idea. `text` is the idea as the row holds it, not a list line
-// it was rendered as: the inbox is a table (ADR #26).
+// POST /api/campaigns/:campaign/review/inbox-done { id } -> InboxResponse
+// Ticks ONE idea off — the single documented exception to the inbox's
+// append-only rule, so a harvested idea does not come back in every future
+// review. `id` is the row's own id (`InboxEntry.id`).
+//
+// Idempotent: an idea already done comes back unchanged and the list's `rev`
+// stands. 404 when the inbox has no row with that id.
 api.post("/campaigns/:campaign/review/inbox-done", async (c) => {
-  const body = await jsonBody(c, ["text"]);
-  return c.json(await markInboxLineDone(c.req.param("campaign"), lineText(body.text, "text")));
+  const body = await jsonBody(c, ["id"]);
+  return c.json(await markInboxLineDone(c.req.param("campaign"), reviewId(body.id, "id")));
 });
 
 /** One `{ key: value }` map out of a review patch body, value-checked. */

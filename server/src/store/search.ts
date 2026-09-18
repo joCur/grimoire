@@ -4,6 +4,12 @@
 // (./fts). The response is `{ results: SearchResult[] }`, max 20, with
 // `score` meaning "0 is a perfect match, values grow toward 1".
 //
+// A hit carries `path` only when it IS an entry. The index also holds the
+// glossary terms, and a term is a row of a LIST (ADR #26): it has no address,
+// so such a hit is named by `kind` and `id` alone and the app opens it
+// through its list. Leaving `path` out is the point — an address that names
+// nothing would 404 the moment somebody followed it.
+//
 // The two properties the reference queries depend on:
 //
 //   * DIACRITIC FOLDING — the tokenizer is `unicode61 remove_diacritics 2`
@@ -25,12 +31,10 @@ import { getDb } from "./handle";
 import {
   CAMPAIGN_PATH,
   chapterPath,
-  GLOSSARY_PATH,
   locationPath,
   npcPath,
   sceneAddress,
   scenePath,
-  sessionPath,
 } from "./paths";
 import type { GrimoireDb } from "../db/client";
 import { eq, and } from "drizzle-orm";
@@ -96,8 +100,16 @@ interface FtsRow {
   rank: number;
 }
 
-/** The path an indexed entity is addressed by (see ./paths). */
-function pathForHit(db: GrimoireDb, campaign: string, kind: string, id: string): string {
+/**
+ * The address an indexed entity is reached by (see ./paths), or undefined for
+ * a hit that is a LIST ROW and has none.
+ */
+function pathForHit(
+  db: GrimoireDb,
+  campaign: string,
+  kind: string,
+  id: string,
+): string | undefined {
   switch (kind) {
     case "scene": {
       const row = db
@@ -117,14 +129,12 @@ function pathForHit(db: GrimoireDb, campaign: string, kind: string, id: string):
       return locationPath(id);
     case "chapter":
       return chapterPath(id);
-    case "session":
-      return sessionPath(id);
     case "campaign":
       return CAMPAIGN_PATH;
-    case "glossary":
-      return GLOSSARY_PATH;
     default:
-      return id;
+      // `glossary`, and any list kind added to the index later: the row is
+      // named by `kind` and `id`, and there is no address to offer.
+      return undefined;
   }
 }
 
@@ -147,11 +157,12 @@ export async function searchCampaign(campaign: string, query: string): Promise<S
     limit ${MAX_RESULTS}
   `);
   return rows.map((row) => {
+    const path = pathForHit(db, campaign, row.kind, row.entity_id);
     const result: SearchResult = {
       kind: row.kind as EntityKind,
       id: row.entity_id,
       title: row.title === "" ? row.entity_id : row.title,
-      path: pathForHit(db, campaign, row.kind, row.entity_id),
+      ...(path === undefined ? {} : { path }),
       score: scoreFromRank(Number(row.rank)),
     };
     const snippet = makeSnippet(row.body ?? "", query);

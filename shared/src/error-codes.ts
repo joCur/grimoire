@@ -59,19 +59,27 @@ export const ERROR_CODES = [
   "chapter_required",
   /** The scene of a quick note names no scene entry. */
   "log_scene_unknown",
-  /** An entry of a session's played scenes names no scene entry. */
+  /**
+   * NO LONGER SENT. It named an unknown scene in a `scenes_played` PATCH, and
+   * a session's played scenes have no write path of their own since ADR #26:
+   * the list is maintained by the quick note that named the scene, and that
+   * one answers `log_scene_unknown` above. The string stays because codes are
+   * APPEND-ONLY.
+   */
   "played_scene_unknown",
   /** 400, glossary write: one term appears twice. `{ term }` */
   "glossary_duplicate_term",
-  /** 409, session start: an older session is still running. `{ path }` */
+  /** 409, session start: an older session is still running. `{ id }` */
   "session_running",
-  /** 409, session discard: the session already carries content. `{ path }` */
+  /** 409, session discard: the session already carries content. `{ id }` */
   "session_not_empty",
   /**
-   * 409, any rev-checked write: the entry changed underneath. `{ rev }`, and
-   * for the writes of one entry also `{ entry }` — the current
-   * `EntryResponse`, so the app can show what is there instead of fetching
-   * it again.
+   * 409, any rev-checked write: what was written changed underneath.
+   * `{ rev }` always, plus the CURRENT state where there is one to hand back,
+   * so the app can show what is in the way instead of fetching it again:
+   * `{ entry }` for the write of an entry, `{ session }` for
+   * `PATCH /sessions/:id`. A LIST write (the glossary, the campaign
+   * knowledge) carries neither — the page reloads its own list.
    */
   "rev_conflict",
   /**
@@ -80,13 +88,12 @@ export const ERROR_CODES = [
    */
   "nothing_to_write",
   /**
-   * 400, entry write: the address carries a LIST, not a text — the glossary,
-   * the inbox, and a session's log. They are edited through their own
-   * endpoints, so a `body` on them would silently do nothing. `{ path }`
-   *
-   * This code is a stopgap: it exists only while these lists still carry an
-   * entry address at all. They get their own read endpoints and views, and
-   * with that address the guard and this code go away.
+   * NO LONGER SENT. It was the 400 for a `body` on one of the three list
+   * addresses, and those addresses are gone: a session, the inbox and the
+   * glossary are lists with their own endpoints (ADR #26), so no write path
+   * can reach them with a text any more. The string stays because codes are
+   * APPEND-ONLY — an app catalog that still holds it is not wrong, it is just
+   * unreachable.
    */
   "body_not_editable",
   /** 503, generator: the server was restarted while the job was running. */
@@ -115,7 +122,7 @@ export const ERROR_CODES = [
    */
   "scene_type_not_allowed",
   /**
-   * 400, session write: a `started`, `ended` or pause timestamp is not in the
+   * 400, `PATCH /sessions/:id`: a `started`, `ended` or pause timestamp is not in the
    * one shape those columns hold (`yyyy-mm-ddThh:mm:ss`). The shape is closed
    * the way a status is: the reader reads only it, and the boot check refuses
    * a database holding anything else — so a value from the wire is refused

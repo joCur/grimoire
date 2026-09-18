@@ -15,28 +15,34 @@
 //      always treated it as opaque, and the row version cannot collide
 //      inside one second.
 //
-// Sections that became rows are rendered BACK from those rows: a session's
-// `## Log`, the inbox list, the glossary. That is what keeps the reading view,
-// the review and the markdown editor working on the same text they always saw.
+// A SESSION and THE INBOX are not entries and are not rendered to a text at
+// all (ADR #26): their rows travel AS rows — `SessionResponse` and
+// `InboxResponse` — and this module builds those shapes too. Nothing here
+// composes a markdown list, and nothing anywhere reads one back.
 //
-// An npc's `## Beziehungen` is NOT among them any more. It is prose in the
-// npc's own text and travels verbatim — nothing about an npc is derived from
-// body text (db/schema.ts rule 3).
+// An npc's `## Beziehungen` is prose in the npc's own text and travels
+// verbatim — nothing about an npc is derived from body text (db/schema.ts
+// rule 3).
 
-import type { EntityKind, EntryResponse } from "@grimoire/shared";
-import { logLineCanonical } from "./body-parse";
+import type {
+  EntryKind,
+  EntryResponse,
+  InboxEntry,
+  InboxResponse,
+  SessionLogEntry,
+  SessionPauseInterval,
+  SessionResponse,
+  SessionSummary,
+} from "@grimoire/shared";
 import { localDateTimeToMs } from "./time";
 import { unpackJson, unpackStringArray } from "../db/schema";
 import {
   CAMPAIGN_PATH,
   chapterPath,
-  GLOSSARY_PATH,
-  INBOX_PATH,
   locationPath,
   npcPath,
   sceneAddress,
   scenePath,
-  sessionPath,
 } from "./paths";
 
 // --- row shapes (the columns the renderer needs) ----------------------------
@@ -48,8 +54,7 @@ export interface CampaignRow {
   body: string;
   version: number;
   rev: number;
-  /** The glossary's prose preamble and the three list entries' guard tokens. */
-  glossaryIntro: string;
+  /** Guard tokens of the two lists that have no row of their own. */
   glossaryRev: number;
   inboxRev: number;
   /** Guard token of the campaign-knowledge list. */
@@ -115,7 +120,7 @@ export interface SessionRow {
   /**
    * Insertion time of the row in epoch MILLISECONDS — the tie-break behind
    * `started` (db/schema.ts). Bookkeeping of the database, never authored
-   * content: it is deliberately absent from `sessionProperties`.
+   * content: it is deliberately absent from every answer.
    */
   createdAt: number;
   body: string;
@@ -164,7 +169,7 @@ function compact(entries: Array<[string, unknown]>): Record<string, unknown> {
 
 function parsed(
   path: string,
-  kind: EntityKind,
+  kind: EntryKind,
   properties: Record<string, unknown>,
   body: string,
   rev: number,
@@ -284,144 +289,96 @@ export function renderLocation(row: LocationRow): EntryResponse {
 
 // --- sessions ---------------------------------------------------------------
 
-export function sessionProperties(
-  row: SessionRow,
-  pauses: PauseRow[],
-  log: LogRow[],
-  played: string[],
-): Record<string, unknown> {
-  const reviewed = log.filter((l) => l.reviewed !== 0).map((l) => l.hash);
-  return compact([
-    ["id", row.id],
-    ["started", row.started],
-    ["ended", row.ended],
-    // `scenes_played` is always present — the app reads it as a list and
-    // the format's session skeleton writes `scenes_played: []`.
-    ["scenes_played", played],
-    [
-      "pauses",
-      pauses.length === 0
-        ? undefined
-        : pauses.map((p) => compact([["from", p.fromTs], ["to", p.toTs]])),
-    ],
-    ["reviewed", reviewed.length === 0 ? undefined : reviewed],
-  ]);
+/**
+ * The epoch reading of ONE zone-less timestamp, as the key/value pair it
+ * contributes to a response. Only the SERVER knows which wall clock those
+ * digits belong to, so it ships the reading beside the string and the client
+ * does plain epoch arithmetic (./time reads it). An unreadable value simply
+ * contributes nothing.
+ */
+function withMs(key: string, value: string | null): Record<string, number> {
+  const ms = localDateTimeToMs(value);
+  return ms === undefined ? {} : { [key]: ms };
 }
 
-/**
- * The session body: `## Log` rendered from `log_entries`, then whatever else
- * the session carries (`## Threads` above all), which is the row's own body.
- *
- * A log line is COMPOSED from the row's columns — the row holds no line of
- * its own any more (db/schema.ts) — in the canonical spelling the row's id is
- * taken over (./body-parse).
- */
-export function renderSessionBody(row: SessionRow, log: LogRow[]): string {
-  const lines = log.map((l) => logLineCanonical(l.at, l.sceneId, l.text)).join("\n");
-  const logSection = `\n## Log\n${lines === "" ? "" : `\n${lines}\n`}`;
-  const rest = row.body.replace(/^\n+/, "");
-  return rest === "" ? logSection : `${logSection}\n${rest}`;
-}
-
-/**
- * The epoch interpretation of a session's zone-less timestamps — unchanged
- * arithmetic, unchanged reason: only the SERVER knows which wall
- * clock those digits belong to, so it ships the reading alongside the
- * strings (./time reads them).
- */
-export function sessionTimes(
-  row: SessionRow,
-  pauses: PauseRow[],
-): Pick<EntryResponse, "startedMs" | "endedMs" | "pausedMs" | "pausedSinceMs"> {
-  const startedMs = localDateTimeToMs(row.started);
-  const endedMs = localDateTimeToMs(row.ended);
-  let pausedMs = 0;
-  let pausedSinceMs: number | undefined;
-  for (const pause of pauses) {
-    const from = localDateTimeToMs(pause.fromTs);
-    if (from === undefined) continue;
-    if (pause.toTs === null) {
-      pausedSinceMs = from; // a later open interval wins
-      continue;
-    }
-    const to = localDateTimeToMs(pause.toTs);
-    if (to === undefined) continue;
-    pausedMs += Math.max(0, to - from);
-  }
+/** The identifying head of a session — what a LIST shows of it. */
+export function sessionSummary(row: SessionRow): SessionSummary {
   return {
-    ...(startedMs === undefined ? {} : { startedMs }),
-    ...(endedMs === undefined ? {} : { endedMs }),
-    ...(pausedMs === 0 ? {} : { pausedMs }),
-    ...(pausedSinceMs === undefined ? {} : { pausedSinceMs }),
+    id: row.id,
+    started: row.started ?? "",
+    ...withMs("startedMs", row.started),
+    ...(row.ended === null || row.ended === "" ? {} : { ended: row.ended }),
+    ...withMs("endedMs", row.ended),
   };
 }
 
+/** One pause row as the interval the API answers, with both epoch readings. */
+export function pauseInterval(row: PauseRow): SessionPauseInterval {
+  return {
+    from: row.fromTs,
+    ...withMs("fromMs", row.fromTs),
+    ...(row.toTs === null ? {} : { to: row.toTs }),
+    ...withMs("toMs", row.toTs),
+  };
+}
+
+/**
+ * One log row as the API answers it. `id` is the row's `hash` — the stable
+ * line id the review names a line by (db/schema.ts).
+ *
+ * The hashtags stay INSIDE `text`: they are body vocabulary (README), so the
+ * note travels as the DM typed it and the reader highlights them.
+ */
+export function logEntry(row: LogRow): SessionLogEntry {
+  return {
+    id: row.hash,
+    at: row.at ?? "",
+    ...(row.sceneId === null ? {} : { sceneId: row.sceneId }),
+    text: row.text,
+    reviewed: row.reviewed !== 0,
+  };
+}
+
+/**
+ * ONE SESSION as every session endpoint answers it. Rows all the way down: no
+ * address, no `properties` map, no markdown text (ADR #26).
+ */
 export function renderSession(
   row: SessionRow,
   pauses: PauseRow[],
   log: LogRow[],
   played: string[],
-): EntryResponse {
-  const properties = sessionProperties(row, pauses, log, played);
-  const body = renderSessionBody(row, log);
+): SessionResponse {
   return {
-    ...parsed(sessionPath(row.id), "session", properties, body, row.rev),
-    ...sessionTimes(row, pauses),
+    ...sessionSummary(row),
+    pauses: pauses.map(pauseInterval),
+    log: log.map(logEntry),
+    scenesPlayed: played,
+    rev: row.rev,
   };
 }
 
 // --- inbox ------------------------------------------------------------------
 
 /**
- * The inbox body from its rows, in `pos` order — one list line per row,
- * COMPOSED from the row's text and its `done` flag. The row holds no line of
- * its own any more, and it holds no headings either: a table has no skeleton
- * (db/schema.ts).
+ * One inbox row as the API answers it. `id` is the row's `pos` — the append
+ * counter IS its key (db/schema.ts), and the list is append-only, so the
+ * position a row was written at never moves.
  */
-export function renderInboxBody(rows: InboxRow[]): string {
-  if (rows.length === 0) return "";
-  const lines = rows.map((row) => (row.done !== 0 ? `- [x] ${row.text}` : `- ${row.text}`));
-  return `\n${lines.join("\n")}\n`;
+export function inboxEntry(row: InboxRow): InboxEntry {
+  return { id: String(row.pos), text: row.text, done: row.done !== 0 };
 }
-
-export function renderInbox(campaignId: string, rows: InboxRow[], rev: number): EntryResponse {
-  // The inbox's id is its address: there is exactly one per campaign.
-  return parsed(INBOX_PATH, "inbox", { id: "inbox" }, renderInboxBody(rows), rev);
-}
-
-// --- glossary ---------------------------------------------------------------
 
 /**
- * The glossary body from `glossary` rows — a RENDERING, for reading and for
- * the generator's prompt. A one-line explanation renders as the `EN → DE`
- * list line the format documents; a multi-line one gets its own `##`
- * section. It is never written back: the glossary is edited as a list.
+ * THE INBOX as a list plus the list's own guard token. Neither the inbox nor
+ * the glossary is a single row that could carry a `rev`, so each has its
+ * counter on the campaign row (`inbox_rev`/`glossary_rev`, db/schema.ts):
+ * `campaigns.version` cannot stand in for them, because EVERY write bumps it
+ * and one unrelated log line would invalidate an edit the DM had open.
+ *
+ * An EMPTY inbox is an empty list, not a missing one (200) — a 404 would make
+ * every reader special-case an answer that means nothing is wrong.
  */
-export function renderGlossaryBody(rows: GlossaryRow[], intro = ""): string {
-  const listed = rows.filter((r) => !r.explanation.includes("\n"));
-  const sectioned = rows.filter((r) => r.explanation.includes("\n"));
-  const parts: string[] = [];
-  // The prose above the first heading comes first — that is where it was
-  // (campaigns.glossary_intro); it belongs to no term and must not vanish.
-  if (intro !== "") parts.push(intro);
-  if (listed.length > 0) {
-    parts.push(listed.map((r) => `- ${r.term} → ${r.explanation}`).join("\n"));
-  }
-  for (const row of sectioned) parts.push(`## ${row.term}\n\n${row.explanation}`);
-  if (parts.length === 0) return "";
-  return `\n${parts.join("\n\n")}\n`;
-}
-
-export function renderGlossary(
-  rows: GlossaryRow[],
-  rev: number,
-  intro = "",
-): EntryResponse {
-  return parsed(
-    GLOSSARY_PATH,
-    "glossary",
-    { id: "glossary" },
-    renderGlossaryBody(rows, intro),
-    rev,
-  );
+export function renderInbox(rows: InboxRow[], rev: number): InboxResponse {
+  return { entries: rows.map(inboxEntry), rev };
 }

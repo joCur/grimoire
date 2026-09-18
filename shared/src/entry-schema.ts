@@ -49,9 +49,14 @@ import locationEntry from "../schema/location.schema.json";
 import npcEntry from "../schema/npc.schema.json";
 import sceneEntry from "../schema/scene.schema.json";
 
-/** The kinds a generator call can write an entry for. */
-export const ENTRY_KINDS = ["scene", "npc", "location"] as const;
-export type EntryKind = (typeof ENTRY_KINDS)[number];
+/**
+ * The kinds a GENERATOR call can write an entry for — three of the five entry
+ * kinds (`EntryKind` in ./types is all of them). A chapter comes out of the
+ * run itself (ADR #18) and the campaign entry is nobody's proposal, so
+ * neither has a schema here.
+ */
+export const GENERATED_ENTRY_KINDS = ["scene", "npc", "location"] as const;
+export type GeneratedEntryKind = (typeof GENERATED_ENTRY_KINDS)[number];
 
 /**
  * Which run the schema is for:
@@ -71,7 +76,7 @@ export const PAIR_KEY = "key";
 export const PAIR_VALUE = "value";
 
 /** Every loaded entry schema, by kind and run. */
-const ENTRY_SCHEMAS: Record<EntryMode, Record<EntryKind, JsonSchema>> = {
+const ENTRY_SCHEMAS: Record<EntryMode, Record<GeneratedEntryKind, JsonSchema>> = {
   create: {
     scene: sceneEntry,
     npc: npcEntry,
@@ -90,12 +95,12 @@ export function isNotGiven(value: unknown): boolean {
 }
 
 /** The tool / schema name an entry request travels under (the schema `title`). */
-export function entrySchemaName(kind: EntryKind, mode: EntryMode): string {
+export function entrySchemaName(kind: GeneratedEntryKind, mode: EntryMode): string {
   return String(ENTRY_SCHEMAS[mode][kind].title);
 }
 
 /** What the tool's description tells the model it is for (Claude path). */
-export function entrySchemaDescription(kind: EntryKind, mode: EntryMode): string {
+export function entrySchemaDescription(kind: GeneratedEntryKind, mode: EntryMode): string {
   return String(ENTRY_SCHEMAS[mode][kind].description);
 }
 
@@ -105,13 +110,13 @@ export function entrySchemaDescription(kind: EntryKind, mode: EntryMode): string
  * body, and a caller that could reach into the module's own state would make
  * the next request's payload depend on the last one's.
  */
-export function entryJsonSchema(kind: EntryKind, mode: EntryMode): JsonSchema {
+export function entryJsonSchema(kind: GeneratedEntryKind, mode: EntryMode): JsonSchema {
   return structuredClone(ENTRY_SCHEMAS[mode][kind]);
 }
 
 /** Name + description + schema, the shape a provider request carries. */
 export function entryReplySchema(
-  kind: EntryKind,
+  kind: GeneratedEntryKind,
   mode: EntryMode,
 ): { name: string; description: string; schema: JsonSchema } {
   return {

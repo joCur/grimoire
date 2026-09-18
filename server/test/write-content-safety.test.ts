@@ -8,7 +8,13 @@
 // line whose columns fell apart.
 
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
-import type { CampaignTree, EntryResponse } from "@grimoire/shared";
+import type {
+  CampaignTree,
+  EntryResponse,
+  GlossaryResponse,
+  InboxResponse,
+  SessionResponse,
+} from "@grimoire/shared";
 import { app } from "../src/server";
 import { ApiError } from "../src/api-error";
 import { applyDrafts } from "../src/store/write";
@@ -64,6 +70,19 @@ async function tree(): Promise<CampaignTree> {
   const res = await app.request("/api/campaigns/beispiel/tree");
   expect(res.status).toBe(200);
   return (await res.json()) as CampaignTree;
+}
+
+/** The glossary as its own endpoint answers it — the only way in (ADR #26). */
+async function getGlossary(): Promise<GlossaryResponse> {
+  const res = await app.request("/api/campaigns/beispiel/glossary");
+  expect(res.status).toBe(200);
+  return (await res.json()) as GlossaryResponse;
+}
+
+async function getInbox(): Promise<InboxResponse> {
+  const res = await app.request("/api/campaigns/beispiel/inbox");
+  expect(res.status).toBe(200);
+  return (await res.json()) as InboxResponse;
 }
 
 async function version(): Promise<number> {
@@ -133,57 +152,57 @@ describe("an npc's `## Beziehungen` keeps what became no row", () => {
 });
 
 describe("glossary — a list, edited as a list", () => {
-  test("a body is refused, with the code the app knows", async () => {
+  test("it has no entry address at all, so no write can reach it as a text", async () => {
     // The glossary is TERM ROWS. It used to take its own rendering back as
     // markdown and parse it into rows again — the one text-to-columns path,
-    // and the one that could lose a line nobody could assign. It is gone:
-    // the list endpoint writes the rows, and a body for this address says so
-    // instead of silently doing nothing.
-    const before = await getEntry(GLOSSARY);
-    const res = await patchEntry(GLOSSARY, {
-      rev: before.rev,
-      body: "\n- tide pool → Gezeitentümpel\n",
-    });
-    expect(res.status).toBe(400);
-    expect(((await res.json()) as { code: string }).code).toBe("body_not_editable");
-    expect(await getEntry(GLOSSARY)).toEqual(before);
+    // and the one that could lose a line nobody could assign. That is gone
+    // twice over: the list endpoint writes the rows, and the address the
+    // parse hung off does not exist any more (ADR #26).
+    expect((await app.request(entriesUrl("beispiel", GLOSSARY))).status).toBe(404);
+    const before = await getGlossary();
+    expect(
+      (await patchEntry(GLOSSARY, { rev: before.rev, body: "\n- tide pool → Gezeitentümpel\n" }))
+        .status,
+    ).toBe(404);
+    expect(await getGlossary()).toEqual(before);
   });
 
-  test("an emptied glossary is an empty entry (200), still editable", async () => {
-    const before = await getEntry(GLOSSARY);
+  test("an emptied glossary is an empty LIST (200), still editable", async () => {
+    const before = await getGlossary();
     const emptied = await putGlossary([], before.rev);
     expect(emptied.entries).toEqual([]);
-    // The 404 this used to answer made the entry the editor was in
+    // The 404 this used to answer made the list the editor was in
     // unreachable.
-    const read = await getEntry(GLOSSARY);
-    expect(read.body).toBe("");
-    expect(read.path).toBe(GLOSSARY);
+    const read = await getGlossary();
+    expect(read.entries).toEqual([]);
     // …and the DM can type the glossary back in.
     const refilled = await putGlossary(
       [{ term: "tide pool", explanation: "Gezeitentümpel" }],
       read.rev,
     );
     expect(refilled.entries).toEqual([{ term: "tide pool", explanation: "Gezeitentümpel" }]);
-    expect((await getEntry(GLOSSARY)).body).toContain("- tide pool → Gezeitentümpel");
+    expect((await getGlossary()).entries).toEqual([
+      { term: "tide pool", explanation: "Gezeitentümpel" },
+    ]);
   });
 
   test("a multi-line explanation keeps its line breaks through a save", async () => {
-    // Nothing flattens an explanation on the way in: it is one column, and
-    // the reading rendering gives it a section of its own.
-    const before = await getEntry(GLOSSARY);
+    // Nothing flattens an explanation on the way in or out: it is one column
+    // and travels as one string.
+    const before = await getGlossary();
     const explanation = "Zeile eins\nZeile zwei";
     const saved = await putGlossary([{ term: "Ton", explanation }], before.rev);
     expect(saved.entries).toEqual([{ term: "Ton", explanation }]);
-    expect((await getEntry(GLOSSARY)).body).toContain("## Ton\n\nZeile eins\nZeile zwei");
+    expect((await getGlossary()).entries).toEqual([{ term: "Ton", explanation }]);
   });
 });
 
-describe("guard tokens of the two list entries", () => {
+describe("guard tokens of the two lists", () => {
   test("an unrelated write does not invalidate an open glossary edit", async () => {
     // The bug: `campaigns.version` was the glossary's token, so ANY write —
     // a quick note during a running session — made a pending glossary edit
     // unsaveable. The token is the glossary's own counter now.
-    const glossary = await getEntry(GLOSSARY);
+    const glossary = await getGlossary();
     expect((await postJson("/api/campaigns/beispiel/session/start")).status).toBe(200);
     expect((await postJson("/api/campaigns/beispiel/log", { text: "Etwas passiert" })).status).toBe(200);
     expect((await postJson("/api/campaigns/beispiel/inbox", { text: "Idee #idee" })).status).toBe(200);
@@ -202,20 +221,30 @@ describe("guard tokens of the two list entries", () => {
       body: JSON.stringify({ entries: [], rev: glossary.rev }),
     });
     expect(stale.status).toBe(409);
-    // Same 409 as every other write: the code, the current token, and the
-    // entry as it stands.
-    const conflict = (await stale.json()) as { code: string; rev: number; entry: EntryResponse };
+    // The same 409 code and the current token — but NO `entry` beside them:
+    // the glossary is not an entry, and the settings page reloads its own
+    // list.
+    const conflict = (await stale.json()) as {
+      code: string;
+      rev: number;
+      entry?: unknown;
+    };
     expect(conflict.code).toBe("rev_conflict");
     expect(conflict.rev).toBe(saved.rev);
-    expect(conflict.entry.path).toBe(GLOSSARY);
+    expect(conflict.entry).toBeUndefined();
+    // Nothing was written: the emptying the stale request asked for did not
+    // happen.
+    expect((await getGlossary()).entries).toEqual([
+      { term: "tide pool", explanation: "Gezeitentümpel" },
+    ]);
   });
 
   test("the inbox token moves on inbox writes only", async () => {
-    const before = await getEntry("inbox");
+    const before = await getInbox();
     expect((await postJson("/api/campaigns/beispiel/session/start")).status).toBe(200);
-    expect(await getEntry("inbox")).toEqual(before);
+    expect(await getInbox()).toEqual(before);
     expect((await postJson("/api/campaigns/beispiel/inbox", { text: "Neu" })).status).toBe(200);
-    expect((await getEntry("inbox")).rev).toBe(before.rev + 1);
+    expect((await getInbox()).rev).toBe(before.rev + 1);
   });
 });
 
@@ -278,26 +307,28 @@ describe("applyDrafts — the conflict check is IN the insert transaction", () =
   });
 });
 
-describe("POST /log — the scene marker is a parse column", () => {
-  test("a sceneId with a closing paren is refused, nothing appended", async () => {
+describe("POST /log — a note's scene is a reference, and a reference is a slug", () => {
+  test("a sceneId outside the slug shape is refused, nothing appended", async () => {
     const start = await postJson("/api/campaigns/beispiel/session/start");
     expect(start.status).toBe(200);
-    // The session's id is opaque, so its path comes from the start.
-    const rel = ((await start.json()) as EntryResponse).path;
-    const before = await getEntry(rel);
+    const before = (await start.json()) as SessionResponse;
     // (An EMPTY sceneId is not in this list: the route normalises it away to
     // "no scene", which is the same thing as omitting the key.)
     for (const sceneId of ["boom) und mehr", "a b", "Gross", "with/slash", "-lead"]) {
       const res = await postJson("/api/campaigns/beispiel/log", { text: "Notiz", sceneId });
       expect(res.status).toBe(400);
     }
-    expect(await getEntry(rel)).toEqual(before);
-    // the legal form still works
+    const unchanged = await app.request(`/api/campaigns/beispiel/sessions/${before.id}`);
+    expect(await unchanged.json()).toEqual(before);
+    // the legal form still works, and lands in its own column
     const ok = await postJson("/api/campaigns/beispiel/log", {
       text: "Notiz",
       sceneId: "lighthouse-arrival",
     });
     expect(ok.status).toBe(200);
-    expect(((await ok.json()) as EntryResponse).body).toContain("(lighthouse-arrival) Notiz");
+    expect(((await ok.json()) as SessionResponse).log.at(-1)).toMatchObject({
+      sceneId: "lighthouse-arrival",
+      text: "Notiz",
+    });
   });
 });

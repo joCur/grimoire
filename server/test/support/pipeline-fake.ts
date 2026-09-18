@@ -31,7 +31,7 @@
 // Attempt N of a part reads script[N], so "bad, then good" still means one
 // correction turn — per part.
 
-import type { EntryKind } from "@grimoire/shared";
+import type { GeneratedEntryKind } from "@grimoire/shared";
 import { toReplyProperties } from "../../src/entry-reply";
 import type {
   CompletionResult,
@@ -133,7 +133,7 @@ function parseBatch(reply: ScriptedReply): BatchReply | null {
 export function entryReply(
   entry: ScriptedEntry,
   warnings: readonly string[] = [],
-  kind: EntryKind = "scene",
+  kind: GeneratedEntryKind = "scene",
 ): string {
   return JSON.stringify({
     properties: toReplyProperties(kind, entry.properties),

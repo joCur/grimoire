@@ -1,9 +1,10 @@
 // The session timestamps on the WRITE path: `started`, `ended` and both ends
-// of a pause have one shape, and a PATCH carrying anything else is a 400.
+// of a pause have one shape, and `PATCH /sessions/:id` carrying anything else
+// is a 400.
 //
 // The point of these cases is the same as with the closed columns (ADR #25):
-// the answer, and that the entry stays as it was. Everything else writes
-// those columns from the server's own clock, so the PATCH is the one place a
+// the answer, and that the session stays as it was. Everything else writes
+// those columns from the server's own clock, so this PATCH is the one place a
 // foreign value could enter — and the last case is the reason the guard
 // exists at all: whatever the API accepts, the next start accepts too.
 
@@ -11,29 +12,34 @@ import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bu
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { EntryResponse } from "@grimoire/shared";
+import type { EntryResponse, SessionResponse } from "@grimoire/shared";
 import { openDb } from "../src/db/client";
 import type { SqliteClient } from "../src/db/driver";
 import { readFixtureSources, seedCampaign } from "../src/db/seed";
 import { closeStore, initStore } from "../src/store/handle";
 import { app } from "../src/server";
 import { dropStore, seedStore, FIXTURES } from "./support/store";
-import { entriesUrl } from "./support/urls";
 
-const SESSION = "sessions/2026-01-15";
+const SESSION = "2026-01-15";
+const SESSION_URL = `/api/campaigns/beispiel/sessions/${SESSION}`;
 
-async function read(rel = SESSION): Promise<EntryResponse> {
-  const res = await app.request(entriesUrl("beispiel", rel));
+async function read(): Promise<SessionResponse> {
+  const res = await app.request(SESSION_URL);
   expect(res.status).toBe(200);
-  return (await res.json()) as EntryResponse;
+  return (await res.json()) as SessionResponse;
 }
 
-async function patch(properties: Record<string, unknown>, rev: number): Promise<Response> {
-  return app.request(entriesUrl("beispiel", SESSION), {
+async function patch(fields: Record<string, unknown>, rev: number): Promise<Response> {
+  return app.request(SESSION_URL, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ rev, properties }),
+    body: JSON.stringify({ rev, ...fields }),
   });
+}
+
+/** The pauses as the wall-clock pairs the row holds, without the readings. */
+function intervals(entry: SessionResponse): Array<{ from: string; to?: string }> {
+  return entry.pauses.map((p) => ({ from: p.from, ...(p.to === undefined ? {} : { to: p.to }) }));
 }
 
 interface Refusal {
@@ -44,15 +50,13 @@ interface Refusal {
 }
 
 /** PATCH a foreign timestamp and read the refusal — nothing may be written. */
-async function refusal(properties: Record<string, unknown>): Promise<Refusal> {
+async function refusal(fields: Record<string, unknown>): Promise<Refusal> {
   const before = await read();
-  const res = await patch(properties, before.rev);
+  const res = await patch(fields, before.rev);
   expect(res.status).toBe(400);
-  const after = await read();
-  // Nothing was written: the guard token has not moved and neither have the
-  // values the patch was after.
-  expect(after.rev).toBe(before.rev);
-  expect(after.properties).toEqual(before.properties);
+  // Nothing was written: the guard token has not moved and neither has
+  // anything the patch was after.
+  expect(await read()).toEqual(before);
   return (await res.json()) as Refusal;
 }
 
@@ -111,9 +115,9 @@ describe("a session timestamp outside the one shape is a 400", () => {
       before.rev,
     );
     expect(res.status).toBe(200);
-    const entry = (await res.json()) as EntryResponse;
-    expect(entry.properties.started).toBe("2026-01-15T19:31:07");
-    expect(entry.properties.pauses).toEqual([
+    const entry = (await res.json()) as SessionResponse;
+    expect(entry.started).toBe("2026-01-15T19:31:07");
+    expect(intervals(entry)).toEqual([
       { from: "2026-01-15T20:30:00", to: "2026-01-15T20:50:12" },
     ]);
     // The seconds survive into the reading the client does its arithmetic on.
@@ -125,8 +129,8 @@ describe("a session timestamp outside the one shape is a 400", () => {
     const before = await read();
     const res = await patch({ ended: null }, before.rev);
     expect(res.status).toBe(200);
-    const entry = (await res.json()) as EntryResponse;
-    expect(entry.properties.ended ?? null).toBeNull();
+    const entry = (await res.json()) as SessionResponse;
+    expect(entry.ended).toBeUndefined();
     expect(entry.endedMs).toBeUndefined();
   });
 
@@ -134,8 +138,53 @@ describe("a session timestamp outside the one shape is a 400", () => {
     const before = await read();
     const res = await patch({ pauses: [{ from: "2026-01-15T20:30:00" }] }, before.rev);
     expect(res.status).toBe(200);
-    const entry = (await res.json()) as EntryResponse;
-    expect(entry.properties.pauses).toEqual([{ from: "2026-01-15T20:30:00" }]);
+    const entry = (await res.json()) as SessionResponse;
+    expect(intervals(entry)).toEqual([{ from: "2026-01-15T20:30:00" }]);
+  });
+
+  test("a field left out keeps its value; naming none of them is a 400", async () => {
+    const before = await read();
+    const res = await patch({ started: "2026-01-15T19:00:00" }, before.rev);
+    expect(res.status).toBe(200);
+    const entry = (await res.json()) as SessionResponse;
+    expect(entry.started).toBe("2026-01-15T19:00:00");
+    // `ended` and the pauses were not named, so they stand.
+    expect(entry.ended).toBe(before.ended);
+    expect(entry.pauses).toEqual(before.pauses);
+    // …and so does the log, which this endpoint cannot touch at all.
+    expect(entry.log).toEqual(before.log);
+
+    const empty = await patch({}, entry.rev);
+    expect(empty.status).toBe(400);
+    expect(((await empty.json()) as { code: string }).code).toBe("nothing_to_write");
+  });
+
+  test("a stale rev is a 409 carrying the current SESSION, and writes nothing", async () => {
+    const before = await read();
+    const res = await patch({ started: "2026-01-15T19:00:00" }, before.rev - 1);
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as {
+      code: string;
+      rev: number;
+      session: SessionResponse;
+      entry?: unknown;
+    };
+    expect(body.code).toBe("rev_conflict");
+    expect(body.rev).toBe(before.rev);
+    // The current session rides along under `session` — not `entry`: a
+    // session is not an entry (ADR #26).
+    expect(body.session).toEqual(before);
+    expect(body.entry).toBeUndefined();
+    expect(await read()).toEqual(before);
+  });
+
+  test("404 for an unknown session id", async () => {
+    const res = await app.request("/api/campaigns/beispiel/sessions/gibt-es-nicht", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rev: 1, started: "2026-01-15T19:00:00" }),
+    });
+    expect(res.status).toBe(404);
   });
 });
 
@@ -195,9 +244,9 @@ describe("a database recorded before the seconds were written", () => {
       // The real boot path, on that database.
       await initStore({ dbFile: dbPath });
       const entry = await read();
-      expect(entry.properties.started).toBe("2026-01-15T19:30:00");
-      expect(entry.properties.ended).toBe("2026-01-15T22:45:00");
-      expect(entry.properties.pauses).toEqual([
+      expect(entry.started).toBe("2026-01-15T19:30:00");
+      expect(entry.ended).toBe("2026-01-15T22:45:00");
+      expect(intervals(entry)).toEqual([
         { from: "2026-01-15T20:30:00", to: "2026-01-15T20:50:00" },
       ]);
       // Canonical means READABLE: the moment is there for the client's
@@ -261,7 +310,7 @@ describe("the boot check is out of the API's reach", () => {
         method: "POST",
       });
       expect(started.status).toBe(200);
-      const session = (await started.json()) as EntryResponse;
+      const session = (await started.json()) as SessionResponse;
 
       setSystemTime(new Date(2026, 2, 3, 20, 15, 9));
       expect(
@@ -276,29 +325,28 @@ describe("the boot check is out of the API's reach", () => {
         (await app.request("/api/campaigns/beispiel/session/end", { method: "POST" })).status,
       ).toBe(200);
 
-      const current = await read(session.path);
-      const refused = await app.request(entriesUrl("beispiel", session.path), {
+      const sessionUrl = `/api/campaigns/beispiel/sessions/${session.id}`;
+      const currentRes = await app.request(sessionUrl);
+      expect(currentRes.status).toBe(200);
+      const current = (await currentRes.json()) as SessionResponse;
+      const refused = await app.request(sessionUrl, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           rev: current.rev,
-          properties: {
-            started: "2026-03-03T19:30",
-            pauses: [{ from: "2026-03-03 20:15:09", to: "" }],
-          },
+          started: "2026-03-03T19:30",
+          pauses: [{ from: "2026-03-03 20:15:09", to: "" }],
         }),
       });
       expect(refused.status).toBe(400);
-      const accepted = await app.request(entriesUrl("beispiel", session.path), {
+      const accepted = await app.request(sessionUrl, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           rev: current.rev,
-          properties: {
-            started: "2026-03-03T19:30:41",
-            ended: "2026-03-03T23:05:02",
-            pauses: [{ from: "2026-03-03T20:15:09", to: "2026-03-03T20:41:55" }],
-          },
+          started: "2026-03-03T19:30:41",
+          ended: "2026-03-03T23:05:02",
+          pauses: [{ from: "2026-03-03T20:15:09", to: "2026-03-03T20:41:55" }],
         }),
       });
       expect(accepted.status).toBe(200);

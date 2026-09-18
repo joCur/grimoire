@@ -32,6 +32,8 @@ import {
   type SceneStatus,
   type SceneSummary,
   type SceneType,
+  type InboxResponse,
+  type SessionResponse,
   type SessionSummary,
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
@@ -64,19 +66,18 @@ import {
   npcPath,
   sceneAddress,
   scenePath,
-  sessionPath,
   type Locator,
 } from "./paths";
 import {
   campaignDisplayName,
   renderCampaign,
   renderChapter,
-  renderGlossary,
   renderInbox,
   renderLocation,
   renderNpc,
   renderScene,
   renderSession,
+  sessionSummary,
   type CampaignRow,
   type ChapterRow,
   type GlossaryRow,
@@ -294,20 +295,7 @@ export async function buildTree(campaign: string): Promise<CampaignTree> {
   // Newest first, by `started` with the row's insertion time as the tie-break
   // — several sessions per day are possible, and the opaque
   // id orders nothing (compareSessionsNewestFirst).
-  const sessionList: SessionSummary[] = (
-    db.select().from(sessions).where(eq(sessions.campaignId, campaign)).all() as SessionRow[]
-  )
-    .sort(compareSessionsNewestFirst)
-    .map((row) => {
-      const summary: SessionSummary = {
-        path: sessionPath(row.id),
-        id: row.id,
-        scenes_played: playedScenes(db, campaign, row.id),
-      };
-      if (row.started !== null) summary.started = row.started;
-      if (row.ended !== null) summary.ended = row.ended;
-      return summary;
-    });
+  const sessionList: SessionSummary[] = sessionSummaries(db, campaign);
 
   return {
     campaign,
@@ -445,7 +433,7 @@ export function renderSessionRow(
   db: GrimoireDb,
   campaign: string,
   row: SessionRow,
-): EntryResponse {
+): SessionResponse {
   return renderSession(
     row,
     pauseRows(db, campaign, row.id),
@@ -454,22 +442,61 @@ export function renderSessionRow(
   );
 }
 
+/** Every session of a campaign as a list head, NEWEST FIRST. */
+export function sessionSummaries(db: GrimoireDb, campaign: string): SessionSummary[] {
+  return (
+    db.select().from(sessions).where(eq(sessions.campaignId, campaign)).all() as SessionRow[]
+  )
+    .sort(compareSessionsNewestFirst)
+    .map(sessionSummary);
+}
+
 /**
- * GET /api/campaigns/:campaign/session — the active session; 404 when none runs. With
- * `includeEnded` the last started session even if ended (404 only when the
- * campaign has no session at all).
+ * GET /api/campaigns/:campaign/sessions — the campaign's sessions, newest
+ * first (`started`, with the row's insertion time as the tie-break: several
+ * sessions per day are possible and the opaque id orders nothing).
+ */
+export async function listSessions(campaign: string): Promise<SessionSummary[]> {
+  await requireCampaign(campaign);
+  return sessionSummaries(await getDb(), campaign);
+}
+
+/**
+ * GET /api/campaigns/:campaign/session — the ACTIVE session, or NULL when
+ * none runs. With `includeEnded` it is the last STARTED session, ended or
+ * not, and null only when the campaign has no session at all.
+ *
+ * `null` and not a 404: "no session is running" is the ordinary state of a
+ * campaign between two evenings, and a 404 would make every reader
+ * special-case an answer that means nothing is wrong.
  */
 export async function readActiveSession(
   campaign: string,
   includeEnded = false,
-): Promise<EntryResponse> {
+): Promise<SessionResponse | null> {
   await requireCampaign(campaign);
   const db = await getDb();
   const row = pickSession(db, campaign, includeEnded);
-  if (row === undefined) {
-    throw new ApiError(404, includeEnded ? "no session yet" : "no active session");
-  }
+  return row === undefined ? null : renderSessionRow(db, campaign, row);
+}
+
+/** GET /api/campaigns/:campaign/sessions/:id — 404 for an unknown id. */
+export async function readSession(campaign: string, id: string): Promise<SessionResponse> {
+  await requireCampaign(campaign);
+  const db = await getDb();
+  const row = sessionRow(db, campaign, id);
+  if (row === undefined) throw new ApiError(404, "session not found");
   return renderSessionRow(db, campaign, row);
+}
+
+/**
+ * GET /api/campaigns/:campaign/inbox — the ideas plus the LIST's guard token.
+ * An empty inbox is an empty list, not a missing one (200).
+ */
+export async function readInbox(campaign: string): Promise<InboxResponse> {
+  const row = await requireCampaign(campaign);
+  const db = await getDb();
+  return renderInbox(inboxRows(db, campaign), row.inboxRev);
 }
 
 // --- GET /api/campaigns/:campaign/entries ------------------------------------------------
@@ -535,6 +562,10 @@ export function knowledgeRows(db: GrimoireDb, campaign: string): KnowledgeRow[] 
  * Render the row a campaign-relative path addresses. 404 when there is no
  * such row — including for a scene whose path names the wrong chapter or
  * group, which is what a stale link is.
+ *
+ * Only the five ENTRY kinds reach here. A session, the inbox and the glossary
+ * have no address (ADR #26), so `locatorFromPath` already answered 404 for
+ * them and this switch has no case to spend on a list.
  */
 export function readByLocator(
   db: GrimoireDb,
@@ -588,35 +619,6 @@ export function readByLocator(
       if (row === undefined) throw new ApiError(404, "entry not found");
       return renderLocation(row);
     }
-    case "session": {
-      const row = sessionRow(db, campaign, locator.id);
-      if (row === undefined) throw new ApiError(404, "entry not found");
-      return renderSessionRow(db, campaign, row);
-    }
-    case "inbox": {
-      const rows = inboxRows(db, campaign);
-      // Neither the inbox nor the glossary is a single row that could carry a
-      // `rev`, so each has its own counter on the campaign row
-      // (`inbox_rev` / `glossary_rev`, schema.ts). `version` cannot stand in
-      // for both: EVERY write bumps it, so one unrelated log line would
-      // invalidate a glossary edit the DM had open — un-saveable during a
-      // running session. A content hash would be the unsafe fix (two
-      // different edits can hash alike); a per-entry counter is the exact
-      // one.
-      // An EMPTY inbox is an empty entry, not a missing one (200) — the
-      // same answer the glossary gives below; a 404 would make every reader
-      // special-case an answer that means nothing is wrong.
-      return renderInbox(campaign, rows, campaignRowValue.inboxRev);
-    }
-    case "glossary":
-      // An EMPTY glossary is an empty entry, not a missing one (200). A 404
-      // would be a trap: saving an empty body through the editor would make
-      // the entry the editor is in unreachable.
-      return renderGlossary(
-        glossaryRows(db, campaign),
-        campaignRowValue.glossaryRev,
-        campaignRowValue.glossaryIntro,
-      );
   }
 }
 
@@ -634,10 +636,10 @@ export async function readEntry(campaign: string, rel: string): Promise<EntryRes
  * GET /api/campaigns/:campaign/glossary -> `{ entries, rev }`.
  *
  * `rev` travels with it: the settings page edits this list, so it needs the
- * same guard token every other editable entry has. It is the LIST's
- * counter (`campaigns.glossary_rev`) — the same one `GET /entries/glossary`
- * hands out, so the two views of the glossary cannot disagree about what
- * "unchanged" means.
+ * same guard token every other editable thing has. It is the LIST's counter
+ * (`campaigns.glossary_rev`) and not `campaigns.version`, which every
+ * unrelated write bumps — that would make a glossary edit the DM had open
+ * unsaveable during a running session.
  */
 export async function readGlossary(campaign: string): Promise<GlossaryResponse> {
   const row = await requireCampaign(campaign);

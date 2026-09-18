@@ -26,7 +26,7 @@ import {
   listRowProblemReport,
 } from "../src/db/list-rows-preflight";
 import { closeStore, getDb, initStore } from "../src/store/handle";
-import { readEntry } from "../src/store/read";
+import { readInbox, readSession } from "../src/store/read";
 import { seedCampaign } from "../src/db/seed";
 import { logLineId } from "../src/store/body-parse";
 
@@ -166,23 +166,36 @@ describe("a database recorded while the rows still carried their line", () => {
       await initStore({ dbFile: dbPath });
 
       // The two marker rows are gone and the notes kept their times, their
-      // texts and their review flag.
-      const session = await readEntry("alt", "sessions/s1");
-      expect(session.body).toContain("- 19:52 Erste Notiz");
-      expect(session.body).toContain("- 21:20 Zweite Notiz");
-      expect(session.body).not.toContain("Pause");
-      expect(session.body).not.toContain("Weiter");
-      // The id is carried over UNCHANGED — the hash the row already had, not
-      // a fresh one — and it is the hash of the columns that survived.
-      expect(session.properties.reviewed).toEqual(["abc12345"]);
+      // texts and their review flag. The id of a row is carried over
+      // UNCHANGED — the hash it already had, not a fresh one.
+      const session = await readSession("alt", "s1");
+      expect(session.log).toEqual([
+        {
+          id: "abc12345",
+          at: "19:52",
+          text: "Erste Notiz",
+          reviewed: true,
+        },
+        {
+          id: "",
+          at: "21:20",
+          text: "Zweite Notiz",
+          reviewed: false,
+        },
+      ]);
+      // A row written from here on gets its id from the columns.
       expect(logLineId("19:52", null, "Erste Notiz")).toMatch(/^[0-9a-f]{8}$/);
       // The pause itself was never in the log to begin with — it is a
       // `session_pauses` row, and this session has none.
-      expect(session.properties.pauses).toBeUndefined();
+      expect(session.pauses).toEqual([]);
 
-      // The heading row is gone; both ideas are there, one of them ticked off.
-      const inbox = await readEntry("alt", "inbox");
-      expect(inbox.body).toBe("\n- Eine Idee\n- [x] Erledigte Idee\n");
+      // The heading row is gone; both ideas are there, one of them ticked off,
+      // and `pos` closed up so the ids start at 0 again.
+      const inbox = await readInbox("alt");
+      expect(inbox.entries).toEqual([
+        { id: "0", text: "Eine Idee", done: false },
+        { id: "1", text: "Erledigte Idee", done: true },
+      ]);
 
       // `pos` closed up behind the deletions, so the two notes are 0 and 1
       // and the next append lands behind them rather than on top of a hole.
