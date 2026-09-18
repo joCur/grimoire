@@ -27,19 +27,12 @@
 
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
-  CHAPTER_STATUSES,
   ENTITY_SLUG,
-  NPC_STATUSES,
-  SCENE_STATUSES,
-  SCENE_TYPES,
   freeSlug,
   isEnded,
   isSessionEmpty,
   toSlug,
   type CampaignSummary,
-  type ErrorCode,
-  type ErrorField,
-  type ErrorKind,
   type EntryResponse,
   type GlossaryResponse,
   type InboxResponse,
@@ -74,6 +67,23 @@ import {
   sessions,
 
 } from "../db/schema";
+import {
+  asMap,
+  asOptStr,
+  asStr,
+  asStrArray,
+  assertChapterStatus,
+  assertNpcStatus,
+  assertSafeChapterId,
+  assertSceneClosedFields,
+  guardRev,
+  nextPos,
+  resolveNewId,
+  revConflict,
+  slugReserved,
+  slugTaken,
+  unknownRef,
+} from "./shared";
 import { indexEntity } from "./fts";
 import { expandBodyRefs, referrersOf, type RefBodyKind } from "./refs";
 import { getDb } from "./handle";
@@ -166,53 +176,6 @@ function clearOtherActiveChapters(tx: GrimoireDb, campaign: string, keep: string
   }
 }
 
-/**
- * A CLOSED field a write may carry: one of the shared list, or nothing
- * (`null` deletes the key — which for a chapter removes the status and for a
- * scene or an npc falls back to the column's default).
- *
- * These are the fields the format's degrade rule does not extend to on the
- * API. A value outside the list is still RENDERED verbatim wherever an older
- * database holds one, but the columns themselves are closed (ADR #25), so a
- * foreign value arriving on the wire can only be a typo — and the honest
- * answer to a typo is the 400 with a code the app has a sentence for, not
- * SQLite's "CHECK constraint failed" escaping as a 500.
- */
-function assertClosedValue(
-  fields: Record<string, unknown>,
-  key: string,
-  allowed: readonly string[],
-  code: ErrorCode,
-  details: Record<string, unknown> = {},
-): void {
-  if (!(key in fields)) return;
-  const value = fields[key];
-  if (value === null || value === undefined) return;
-  if (typeof value === "string" && allowed.includes(value)) return;
-  throw new ApiError(400, `invalid ${key}: ${String(value)} — one of ${allowed.join(", ")}`, {
-    code,
-    value: String(value),
-    allowed: [...allowed],
-    ...details,
-  });
-}
-
-/** The chapter's one closed field. At most ONE chapter holds `active`, which
- * is `clearOtherActiveChapters` above — that rule spans rows and stays here. */
-function assertChapterStatus(fields: Record<string, unknown>): void {
-  assertClosedValue(fields, "status", CHAPTER_STATUSES, "status_not_allowed", { kind: "chapter" });
-}
-
-/** A scene's two closed fields. */
-function assertSceneClosedFields(fields: Record<string, unknown>): void {
-  assertClosedValue(fields, "status", SCENE_STATUSES, "status_not_allowed", { kind: "scene" });
-  assertClosedValue(fields, "type", SCENE_TYPES, "scene_type_not_allowed");
-}
-
-/** The npc's one closed field. */
-function assertNpcStatus(fields: Record<string, unknown>): void {
-  assertClosedValue(fields, "status", NPC_STATUSES, "status_not_allowed", { kind: "npc" });
-}
 
 /**
  * A session timestamp a write may carry: the ONE shape a stored timestamp has
@@ -261,25 +224,6 @@ async function mutate<T>(campaign: string, fn: (db: GrimoireDb) => T): Promise<T
   }) as T;
 }
 
-/**
- * The optimistic-concurrency check: the row's `rev` must be the one read.
- *
- * The body carries `code: "rev_conflict"` — `what` names WHICH entry moved
- * and stays English, as the technical fallback next to it. `current` is the
- * token to retry with, and `entry` is that entry as it stands now, so the
- * conflict dialog can show what is in the way without a second request.
- */
-function revConflict(current: number, what: string, entry?: EntryResponse): ApiError {
-  return new ApiError(409, `${what} — reload before saving`, {
-    code: "rev_conflict",
-    rev: current,
-    ...(entry === undefined ? {} : { entry }),
-  });
-}
-
-function guardRev(current: number, sent: number, what: string): void {
-  if (current !== sent) throw revConflict(current, what);
-}
 
 /**
  * The guard of an ADDRESSED entry: same check, and the 409 carries the
@@ -301,30 +245,6 @@ function guardEntryRev(
 /** Keys that would hit Object.prototype machinery instead of data. */
 const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
-// --- defensive coercions (properties is hand-edited) ------------------------
-
-function asOptStr(value: unknown): string | null {
-  if (value === undefined || value === null) return null;
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  return null;
-}
-
-function asStr(value: unknown, fallback = ""): string {
-  return asOptStr(value) ?? fallback;
-}
-
-function asStrArray(value: unknown): string[] {
-  if (value === undefined || value === null) return [];
-  const list = Array.isArray(value) ? value : [value];
-  return list.filter((v) => v !== undefined && v !== null).map((v) => String(v));
-}
-
-function asMap(value: unknown): Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
 
 /**
  * Apply a flat properties patch to a rendered properties mapping (`null`
@@ -513,15 +433,6 @@ function chapterIdExists(tx: GrimoireDb, campaign: string, id: string): boolean 
   return chapterRowOf(tx, campaign, id) !== undefined;
 }
 
-/**
- * The 400 a reference that names nothing answers — one shape for all of
- * them. `code` is the contract (`@grimoire/shared/error-codes`); the app
- * builds the sentence the DM reads from it and the `value`, and the English
- * text here is the technical fallback.
- */
-function unknownRef(code: ErrorCode, kind: string, value: string): ApiError {
-  return new ApiError(400, `unknown ${kind}: ${value} — create it first`, { code, value });
-}
 
 /** A `chapter:` — of a scene, an npc or a location — has to name a chapter. */
 function assertChapterRef(tx: GrimoireDb, campaign: string, declared: string | null): void {
@@ -569,9 +480,6 @@ function assertSceneRef(
   throw unknownRef(code, "scene", id);
 }
 
-function nextPos(rows: Array<{ pos: number }>): number {
-  return rows.reduce((max, row) => Math.max(max, row.pos), -1) + 1;
-}
 
 // --- references, and what an entry is ---------------------------------------
 //
@@ -1868,19 +1776,6 @@ export async function markLogLineSeen(
   });
 }
 
-/** A chapter id must be one non-hidden path segment (like a campaign id). */
-function assertSafeChapterId(chapter: string): void {
-  if (
-    chapter.length === 0 ||
-    chapter.startsWith(".") ||
-    chapter.includes("/") ||
-    chapter.includes("\\") ||
-    chapter.includes("\0") ||
-    chapter.includes("..")
-  ) {
-    throw new ApiError(400, "invalid chapter");
-  }
-}
 
 /**
  * Append one item to the `## Offene Fäden` section of a chapter body — the
@@ -2341,134 +2236,6 @@ export async function chapterExists(campaign: string, chapter: string): Promise<
   return chapterRowOf(db, campaign, chapter) !== undefined;
 }
 
-// --- creating content --------------------------------------------------------
-//
-// Until now nothing in the app could bring a row into existence on purpose. A
-// row appeared as a side effect — the markdown import, the generator's apply
-// step — so a fresh instance, which is what every installation is, was a dead
-// end. These five functions are the deliberate half:
-// campaign, chapter, scene, npc, ort.
-//
-// THE THREE RULES they all share, and they are the whole design:
-//
-//   1. THE DM TYPES A NAME, NOT AN ID. An id is derived from it with the one
-//      slug rule (`@grimoire/shared/slug` — the app derives the same one and
-//      shows it, so nothing is a surprise). An id is never invented: a title
-//      that yields no slug at all (only punctuation, or a script no fold maps
-//      into a-z0-9) is a 400 that says so, because guessing "eintrag-1" would
-//      put an unfindable key into the format's most permanent field.
-//   2. A TAKEN ID IS A 409 WITH A FREE PROPOSAL. Not an automatic `-2`: the
-//      id is the permanent reference key, so the DM decides — either the
-//      proposal or another name. The body carries `code: "slug_taken"`, the
-//      entity `kind` as a stable token, the colliding `id`, its `path` (so the
-//      app can link to what is there) and `suggestion`. The SENTENCE the DM
-//      reads is the app's — what is here is its English fallback.
-//   3. A NEW ROW HOLDS ONLY WHAT WAS TYPED. Everything else keeps its column
-//      default, so `## Notizen`-style scaffolding nobody asked for cannot
-//      appear. The only exception is a chapter's optional goal, which goes
-//      into the section the chapter overview reads it from (`## Ziel des Kapitels`).
-//
-// EMPTY ENTRIES ARE FILLED, NOT COLLIDED WITH — for npc and ort, the two kinds
-// that have an empty state at all. An entry that holds nothing but its id is
-// one the DM created and did not fill in, and the npc-create action for
-// exactly that id is what fills it. That is the same rule `createNpcStub` and the
-// generator's apply step follow.
-//
-// …but only for the id the DM TYPED. An empty entry is empty, not unclaimed: a
-// scene may reference it, so the id is already spoken for. Filling it is
-// therefore the DM's own decision about that one id, never something a
-// machine-made PROPOSAL may slide into: rule 2's `suggestion` skips every
-// existing entry, empty ones included, so "Holm" next to a filled `holm` and
-// an empty `holm-2` proposes `holm-3` — while typing "Holm 2" still fills
-// `holm-2`.
-//
-// RESERVED IDS ARE NOT CREATABLE. `npcs`, `locations` and `sessions` are the
-// address schema's first segments (store/paths, RESERVED_SEGMENTS), so a
-// chapter with one of those ids would be a row whose own entry and scenes
-// resolve to an entity kind instead — created, then unreachable forever. It is
-// answered like a collision (same 409 shape, same one-click proposal) under its
-// own code `slug_reserved`, because from the dialog's side it is the same
-// situation — only the reason differs, and the reason is what the app says.
-
-/**
- * The `slug_taken` 409 — see rule 2 above.
- *
- * `kind` is a stable TOKEN (`@grimoire/shared/error-codes`, ErrorKind), not a
- * label: the sentence the DM reads is built by the app from its own catalog in
- * the UI language. The `error` text here is the English technical
- * fallback that curl, the log and an unknown-code client get.
- */
-function slugTaken(kind: ErrorKind, id: string, suggestion: string, path: string): ApiError {
-  return new ApiError(409, `${kind} "${id}" already exists — suggestion: "${suggestion}"`, {
-    code: "slug_taken",
-    kind,
-    id,
-    suggestion,
-    path,
-  });
-}
-
-/**
- * The reserved-id 409. Its own code — the app's collision
- * handling (lib/create.ts) treats it exactly like a taken id (one sentence
- * plus the free proposal as one click), but the SENTENCE is a different one
- * (the id is a reserved name), and a catalog cannot say that from a code
- * that also means "somebody else has it". `path` is "" because nothing is in
- * the way; there is no entry to link to.
- */
-function slugReserved(kind: ErrorKind, id: string, suggestion: string): ApiError {
-  return new ApiError(409, `"${id}" is a reserved name — suggestion: "${suggestion}"`, {
-    code: "slug_reserved",
-    kind,
-    id,
-    suggestion,
-    path: "",
-  });
-}
-
-/**
- * The id of a new row: the caller's own `id` when it sent one, else the slug
- * of the typed name. `field` is the TOKEN of the input that has to change
- * (`name` or `title`), so the app's 400 sentence can point at it in the UI
- * language.
- *
- * An EXPLICIT id serves two callers, and it means the same thing to both: the
- * DM decided this id, so nothing derives one for them.
- *
- *   - the `slug_taken` / `slug_reserved` 409 hands the app a free
- *     `suggestion`, and taking that proposal is one click rather than "now
- *     think of a different name".
- *   - the create dialog's id field, where the DM sets the id instead of
- *     accepting the one the name yields. This is the only moment an id is
- *     chosen (ADR #21 — no endpoint ever changes one).
- *
- * Either way it is taken verbatim — no derivation, no fallback — and has to be
- * a slug, because it lands in the format's one permanent field. A typed id
- * that is already taken comes back as the same 409 as any other collision, so
- * the two callers close a loop rather than needing separate handling here.
- */
-function resolveNewId(
-  explicit: string | undefined,
-  name: string,
-  kind: ErrorKind,
-  field: ErrorField,
-): string {
-  if (explicit !== undefined) {
-    if (!ENTITY_SLUG.test(explicit)) {
-      throw new ApiError(400, "id must be a kebab-case slug (a-z, 0-9, single dashes)");
-    }
-    return explicit;
-  }
-  const id = toSlug(name);
-  if (id === "") {
-    throw new ApiError(400, `the ${field} yields no id — use letters or digits`, {
-      code: "slug_empty",
-      kind,
-      field,
-    });
-  }
-  return id;
-}
 
 /**
  * POST /api/campaigns { name, description? } -> CampaignSummary.
@@ -2748,4 +2515,3 @@ export async function createLocation(
     return renderLocation(row);
   });
 }
-

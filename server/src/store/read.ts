@@ -38,7 +38,7 @@ import {
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import { assertSafeCampaignId, assertSafeAddress } from "../addressing";
-import { localDateTimeToMs } from "./time";
+import { compareSessionsNewestFirst, sessionOrderKey } from "./shared";
 import type { GrimoireDb } from "../db/client";
 import {
   campaignKnowledge,
@@ -364,45 +364,6 @@ export function sessionRow(
     .all()[0] as SessionRow | undefined;
 }
 
-/** The only three session columns the ordering rule below looks at. */
-export type SessionOrderFields = Pick<SessionRow, "id" | "started" | "createdAt">;
-
-/**
- * Chronological order key of a session in epoch milliseconds, or undefined
- * when the row says nothing usable about WHEN it started.
- *
- * `started` is the ONLY source. The id is an opaque random string
- * (db/schema.ts) and there is nothing in it to read, so a row without a
- * usable `started` wins nothing.
- *
- * Takes only the columns it reads, so callers that need nothing else of a
- * session (the campaign list) can select just those.
- */
-export function sessionOrderKey(row: Pick<SessionOrderFields, "started">): number | undefined {
-  return localDateTimeToMs(row.started);
-}
-
-/**
- * Newest-first comparator: `started` decides, and `createdAt` — the row's
- * insertion time in milliseconds — breaks the tie. Two sessions of the same
- * evening can share a `started` to the SECOND (start, end, start again), and
- * "the last started one" has to be the second of them, deterministically.
- * The opaque id cannot say which came first, so the row records it.
- *
- * Last resort for two rows that share both (migrated rows carry `createdAt`
- * 0): a plain string compare of the ids. Which of them then counts as newer
- * is arbitrary — but it is STABLE, and that is the property callers need.
- */
-export function compareSessionsNewestFirst(
-  a: SessionOrderFields,
-  b: SessionOrderFields,
-): number {
-  const ka = sessionOrderKey(a) ?? -Infinity;
-  const kb = sessionOrderKey(b) ?? -Infinity;
-  if (ka !== kb) return kb - ka;
-  if (a.createdAt !== b.createdAt) return b.createdAt - a.createdAt;
-  return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
-}
 
 function pickLatest(rows: SessionRow[]): SessionRow | undefined {
   const candidates = rows.filter((row) => sessionOrderKey(row) !== undefined);
@@ -779,4 +740,3 @@ export function promptInline(value: string): string {
   const flat = value.replace(/\s+/gu, " ").trim();
   return flat.startsWith("#") ? `\\${flat}` : flat;
 }
-
