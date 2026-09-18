@@ -243,9 +243,9 @@ export function isEntryDirty<T>(draft: T, stored: T | undefined): boolean {
 /**
  * Where the focus goes when a row is deleted.
  *
- * Deleting the row the focus sits in drops the focus to `document.body`, which on
- * a list you clear from the bottom means reaching for the mouse after every
- * single click. The delete button of the NEIGHBOUR is the honest target.
+ * Deleting the row the focus sits in drops the focus to the browser's
+ * `document.body` (the DOM root), which on a list you clear from the bottom
+ * means reaching for the mouse after every single click. The delete button of the NEIGHBOUR is the honest target.
  *
  * WHICH neighbour is a question about the list the DM is LOOKING at, not about
  * the stored array: the glossary shows its entries alphabetically and filtered,
