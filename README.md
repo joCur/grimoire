@@ -157,15 +157,20 @@ Sessions verwaltet die App; der DM schreibt nur ins Log.
 | `scenes_played` | Szenen-ids, automatisch gepflegt |
 | `reviewed` | Kurzhashes (erste 8 Hex-Zeichen von SHA-256) der gesichteten Log-Zeilen |
 
-- `## Log` ist append-only: `- HH:MM (scene-id) Text #hashtags`. Zeitstempel
-  und Szenen-Kontext setzt die App. Pause und „Weiter" schreiben die Zeilen
-  `— Pause` und `— Weiter` — das Log bleibt die lesbare Chronik des Abends.
+- Das Log ist append-only. Eine Zeile sind **Spalten** — Zeitstempel,
+  Szenen-Kontext, Text — und keine Markdown-Zeile: Zeitstempel und Kontext
+  setzt die App, die Hashtags stehen im Text. Gerendert liest sie sich
+  weiter als `- HH:MM (scene-id) Text #hashtags`.
+- Pause und „Weiter" schreiben **keine** Log-Zeile: eine Pause ist ein
+  Eintrag in `pauses` und sonst nichts — die Markierung im Log war dieselbe
+  Pause ein zweites Mal.
 - `## Threads`: Checkliste offener Fäden, in der Nachbereitung befüllt.
 - Timer = (`ended` ?? jetzt) − `started` − Summe der Pausen. Den Epochen-Wert
   der zonenlosen Zeitstempel liefert der Server; der Client hält keinen
   laufenden Zustand.
-- `reviewed` hasht die **rohe** Log-Zeile, damit `## Log` strikt append-only
-  bleibt.
+- `reviewed` hasht die **kanonische** Zeile der Spalten
+  (`- HH:MM (scene-id) Text`) — eine Zeile behält damit die id, die sie
+  immer hatte, und das Log bleibt strikt append-only.
 
 ## Referenzen zeigen auf vorhandene Einträge
 
@@ -341,7 +346,10 @@ in `shared/schema/`; Details in `generator/README.md`.
 Die Beispielkampagne liegt als JSON unter `fixtures/beispiel/` — ein Eintrag
 je Datei, genau in der Form, die die API spricht: `kind`, die
 strukturierten Felder unter `properties` und der Text als ein String unter
-`body`. Ideen, Glossar und Sessions tragen ihre Listen ebenso strukturiert.
+`body`. Ideen, Glossar und Sessions tragen ihre Listen ebenso strukturiert,
+als Zeilen mit ihren Spalten: eine Log-Zeile ist
+`{ at, sceneId?, text, reviewed? }`, eine Idee `{ text, done? }`. Eine
+Markdown-Zeile steht in keiner von beiden.
 Sie ist die Referenz für Callouts und die einzige Quelle für Tests und E2E;
 die Bodies werden deshalb nie umformatiert.
 

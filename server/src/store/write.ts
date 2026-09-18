@@ -50,7 +50,7 @@ import { format } from "date-fns";
 import { ApiError } from "../api-error";
 import { assertSafeAddress, assertSafeCampaignId } from "../addressing";
 import type { GrimoireDb } from "../db/client";
-import { logLineShortHash } from "./body-parse";
+import { logLineId, logLineShortHash } from "./body-parse";
 import { LOCAL_DATE_TIME_SECONDS, LOCAL_DATE_TIME_SHAPE, localDateTimeToMs } from "./time";
 import {
   campaignKnowledge,
@@ -1646,63 +1646,45 @@ function closeOpenPauses(
 }
 
 /**
- * Append one log line row (append-only: existing rows are never rewritten).
+ * Append one log row (append-only: existing rows are never rewritten).
  *
- * The parenthesis group is a PARSE COLUMN of the line, not something the DM
- * wrote as a reference: a note that happens to begin with "(…)" would
- * otherwise name a scene nobody meant. So it becomes the scene reference
- * only when a scene of that id exists, and stays part of `raw` otherwise —
- * the text of a note is never refused or thrown away over that. The
- * reference a quick note MEANS arrives as the endpoint's own `sceneId` and
- * is checked there.
+ * The row is written as COLUMNS — time, scene, text — and its id is the hash
+ * of the canonical line those columns spell (./body-parse). Nothing composes
+ * a markdown line to store, and nothing parses one back: a note that begins
+ * with "(…)" is text like any other, and the scene a note MEANS arrives as
+ * this function's own `sceneId`, checked by the caller.
  */
-function appendLogRow(tx: GrimoireDb, campaign: string, sessionId: string, raw: string): void {
+function appendLogRow(
+  tx: GrimoireDb,
+  campaign: string,
+  sessionId: string,
+  at: string,
+  sceneId: string | null,
+  text: string,
+): void {
   const rows = logRows(tx, campaign, sessionId);
-  const parts = logLineParts(tx, campaign, raw);
   tx.insert(logEntries)
     .values({
       campaignId: campaign,
       sessionId,
       pos: nextPos(rows),
-      raw,
-      at: parts.at,
-      sceneId: parts.sceneId,
-      text: parts.text,
-      hash: logLineShortHash(raw),
+      at,
+      sceneId,
+      text,
+      hash: logLineId(at, sceneId, text),
       reviewed: 0,
     })
     .run();
 }
 
-/** `- HH:MM (scene-id) text` — the grammar the app's live log view reads. */
-const LOG_LINE = /^-\s+(\d{1,2}:\d{2})(?:\s+\(([^)]+)\))?\s+(.+)$/;
-
 /**
- * The parsed columns of one raw log line: its time, the scene it names and
- * its text. Everything is NULL for a line the grammar does not recognise —
- * `raw` is then all there is, and that is by design.
- *
- * Also what the seed writes historic log rows with (db/seed.ts), so a seeded
- * line and an appended one are decomposed by the same code.
- */
-export function logLineParts(
-  tx: GrimoireDb,
-  campaign: string,
-  raw: string,
-): { at: string | null; sceneId: string | null; text: string | null } {
-  const m = LOG_LINE.exec(raw);
-  const marker = m?.[2] ?? null;
-  return {
-    at: m?.[1] ?? null,
-    sceneId: marker !== null && sceneRowOf(tx, campaign, marker) !== undefined ? marker : null,
-    text: m?.[3] ?? null,
-  };
-}
-
-/**
- * POST /session/pause — really STOP the clock: an open
- * `pauses` interval plus the `— Pause` log line, in the same transaction.
+ * POST /session/pause — really STOP the clock: one open `pauses` interval.
  * Idempotent: pausing a paused session changes nothing.
+ *
+ * No log row is written for it. A pause IS a `session_pauses` row, and the
+ * `— Pause` line the log used to carry was the same pause written a second
+ * time — a marker the reader of a text needed and a reader of rows does not
+ * (ADR #26).
  */
 export async function pauseSession(campaign: string): Promise<EntryResponse> {
   return mutate(campaign, (tx) => {
@@ -1719,13 +1701,15 @@ export async function pauseSession(campaign: string): Promise<EntryResponse> {
         toTs: null,
       })
       .run();
-    appendLogRow(tx, campaign, row.id, `- ${format(d, LOCAL_TIME)} — Pause`);
     bumpSessionRev(tx, campaign, row);
     return renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 });
   });
 }
 
-/** POST /session/continue — close the open interval and log `— Weiter`. */
+/**
+ * POST /session/continue — close the open interval. It ends a PAUSE, not a
+ * session. No log row either, for the reason above.
+ */
 export async function continueSession(campaign: string): Promise<EntryResponse> {
   return mutate(campaign, (tx) => {
     const row = requireActive(tx, campaign);
@@ -1733,7 +1717,6 @@ export async function continueSession(campaign: string): Promise<EntryResponse> 
     if (!closeOpenPauses(tx, campaign, row.id, format(d, LOCAL_DATE_TIME_SECONDS))) {
       return renderSessionRow(tx, campaign, row);
     }
-    appendLogRow(tx, campaign, row.id, `- ${format(d, LOCAL_TIME)} — Weiter`);
     bumpSessionRev(tx, campaign, row);
     return renderSessionRow(tx, campaign, { ...row, rev: row.rev + 1 });
   });
@@ -1776,9 +1759,9 @@ export async function appendLogEntry(
   text: string,
   sceneId?: string,
 ): Promise<EntryResponse> {
-  // The scene marker is a PARSE COLUMN of the log line (`- HH:MM (id) text`),
-  // so an id carrying `)` — or a space, or a newline — would shift `text` and
-  // `sceneId` apart on the way back in. Same slug rule as `createNpcStub`.
+  // A scene is referenced by its id, and an id is a slug — the same rule
+  // `createNpcStub` holds. The column is a foreign key, so a value outside
+  // that shape could only be a client bug.
   if (sceneId !== undefined && !ENTITY_SLUG.test(sceneId)) {
     throw new ApiError(400, "sceneId must be a kebab-case slug (a-z, 0-9, single dashes)");
   }
@@ -1787,8 +1770,7 @@ export async function appendLogEntry(
     // The note's scene is a reference: it has to name a scene that exists,
     // and nothing is created for it.
     if (sceneId !== undefined) assertSceneRef(tx, campaign, sceneId, "log_scene_unknown");
-    const raw = `- ${format(new Date(), LOCAL_TIME)}${sceneId ? ` (${sceneId})` : ""} ${text}`;
-    appendLogRow(tx, campaign, row.id, raw);
+    appendLogRow(tx, campaign, row.id, format(new Date(), LOCAL_TIME), sceneId ?? null, text);
     if (sceneId !== undefined) {
       const played = playedScenes(tx, campaign, row.id);
       if (!played.includes(sceneId)) {
@@ -1810,24 +1792,18 @@ export async function appendLogEntry(
 // --- inbox ---------------------------------------------------------------------
 
 /**
- * POST /api/campaigns/:campaign/inbox — append `- text`. The `## Eingang`-less first
- * entry gets the `# Inbox` heading row the rendering opens with, so the
- * rendered inbox still reads like the list it was.
+ * POST /api/campaigns/:campaign/inbox — append one idea as a row.
+ *
+ * No heading row is written in front of the first one. A table has no
+ * skeleton: `# Inbox` was the title of a text (ADR #26), and a row holding it
+ * would read as an idea called "Inbox".
  */
 export async function appendInboxEntry(campaign: string, text: string): Promise<EntryResponse> {
   return mutate(campaign, (tx) => {
-    const rows = inboxRows(tx, campaign);
-    if (rows.length === 0) {
-      tx.insert(inboxEntries)
-        .values({ campaignId: campaign, pos: 0, raw: "# Inbox", text: null, done: 0 })
-        .run();
-    }
-    const current = inboxRows(tx, campaign);
     tx.insert(inboxEntries)
       .values({
         campaignId: campaign,
-        pos: nextPos(current),
-        raw: `- ${text}`,
+        pos: nextPos(inboxRows(tx, campaign)),
         text,
         done: 0,
       })
@@ -1847,29 +1823,24 @@ function bumpInboxRev(tx: GrimoireDb, campaign: string): number {
 }
 
 /**
- * POST /api/campaigns/:campaign/review/inbox-done — the one documented exception to the
- * inbox's append-only rule: the entry is marked done. Idempotent; 404 when
- * the line is not in the inbox. The line is matched against the row's `raw`,
- * which is the byte-for-byte line the entry had.
+ * POST /api/campaigns/:campaign/review/inbox-done — the one documented
+ * exception to the inbox's append-only rule: the idea is marked done.
+ * Idempotent; 404 when no row carries that text.
+ *
+ * The row is found by its TEXT, which is what the row holds (db/schema.ts):
+ * the caller sends the idea, not a list line it was rendered as.
  */
-export async function markInboxLineDone(campaign: string, line: string): Promise<EntryResponse> {
-  const doneForm = (l: string) =>
-    l.startsWith("- [ ] ") ? `- [x] ${l.slice(6)}` : `- [x] ${l.slice(2)}`;
+export async function markInboxLineDone(campaign: string, text: string): Promise<EntryResponse> {
   return mutate(campaign, (tx) => {
     const rows = inboxRows(tx, campaign);
     const rev = campaignRow(tx, campaign)?.inboxRev ?? 1;
-    const match = rows.find((row) => row.raw === line);
-    if (match === undefined) {
-      // The done form already stored means an earlier call succeeded. An
-      // idempotent repeat changes nothing, so the guard token stays as it is.
-      if (!line.startsWith("- [x]") && rows.some((row) => row.raw === doneForm(line))) {
-        return renderInbox(campaign, rows, rev);
-      }
-      throw new ApiError(404, "line not found in inbox");
-    }
-    if (line.startsWith("- [x]")) return renderInbox(campaign, rows, rev);
+    const match = rows.find((row) => row.text === text);
+    if (match === undefined) throw new ApiError(404, "line not found in inbox");
+    // Already done means an earlier call succeeded. An idempotent repeat
+    // changes nothing, so the guard token stays as it is.
+    if (match.done !== 0) return renderInbox(campaign, rows, rev);
     tx.update(inboxEntries)
-      .set({ raw: doneForm(line), done: 1 })
+      .set({ done: 1 })
       .where(and(eq(inboxEntries.campaignId, campaign), eq(inboxEntries.pos, match.pos)))
       .run();
     return renderInbox(campaign, inboxRows(tx, campaign), bumpInboxRev(tx, campaign));

@@ -6,20 +6,28 @@
     "ended": "2026-01-15T22:45:00",
     "scenes_played": [
       "lighthouse-arrival"
+    ],
+    "pauses": [
+      {
+        "from": "2026-01-15T20:30:00",
+        "to": "2026-01-15T21:10:00"
+      }
     ]
   },
   "log": [
     {
-      "raw": "- 19:52 (lighthouse-arrival) Spuren gefunden, Gruppe will sofort zur Bucht #decision"
+      "at": "19:52",
+      "sceneId": "lighthouse-arrival",
+      "text": "Spuren gefunden, Gruppe will sofort zur Bucht #decision"
     },
     {
-      "raw": "- 20:30 — Pause"
+      "at": "21:10",
+      "sceneId": "lighthouse-arrival",
+      "text": "Improvisiert: Fischerin „Old Metta“ am Steg #npc"
     },
     {
-      "raw": "- 21:10 (lighthouse-arrival) Improvisiert: Fischerin „Old Metta“ am Steg #npc"
-    },
-    {
-      "raw": "- 22:40 — Cliffhanger: Lichter in der Bucht gesichtet #thread"
+      "at": "22:40",
+      "text": "— Cliffhanger: Lichter in der Bucht gesichtet #thread"
     }
   ],
   "body": "\n## Threads\n\n- [ ] Wer bezahlt die Schmuggler?\n- [ ] Old Metta als NPC ausarbeiten?\n"

@@ -548,16 +548,16 @@ describe("POST /api/campaigns/:campaign/inbox", () => {
     expect(entry.rev).toBe(after.rev);
   });
 
-  test("creates the inbox with a # Inbox heading when there is none", async () => {
-    // A campaign with no inbox rows at all: the inbox is an EMPTY entry, not
-    // a missing one — GET answers 200 — and the first entry brings the
-    // heading the format opens the inbox with.
+  test("the first idea of an empty inbox is one row, with no heading in front", async () => {
+    // A campaign with no inbox rows at all: the inbox is an EMPTY list, not a
+    // missing one — GET answers 200 — and the first idea is one row. No
+    // heading row is written in front of it: a table has no skeleton.
     await withFreshCampaign(async () => {
       expect(await entryStatus("inbox", FRESH)).toBe(200);
       const res = await postJson(`/api/campaigns/${FRESH}/inbox`, { text: "Erste Idee" });
       expect(res.status).toBe(200);
       const entry = (await res.json()) as EntryResponse;
-      expect(entry.body).toBe("\n# Inbox\n\n- Erste Idee\n");
+      expect(entry.body).toBe("\n- Erste Idee\n");
       expect(entry.properties).toEqual({ id: "inbox" });
     });
   });

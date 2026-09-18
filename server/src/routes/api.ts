@@ -617,8 +617,8 @@ api.post("/campaigns/:campaign/locations", async (c) => {
 
 // --- review-action endpoints --------------------------------------------------------
 
-/** One raw log/inbox line as sent by the review UI: non-empty, single line. */
-function rawLine(v: unknown, what: string): string {
+/** One log/inbox text as sent by the review UI: non-empty, single line. */
+function lineText(v: unknown, what: string): string {
   if (typeof v !== "string" || v.trim() === "") {
     throw new ApiError(400, `${what} must be a non-empty string`);
   }
@@ -635,7 +635,7 @@ function rawLine(v: unknown, what: string): string {
 api.post("/campaigns/:campaign/review/seen", async (c) => {
   const body = await jsonBody(c, ["path", "line"]);
   if (typeof body.path !== "string") throw new ApiError(400, "path must be a string");
-  const line = rawLine(body.line, "line");
+  const line = lineText(body.line, "line");
   return c.json(await markLogLineSeen(c.req.param("campaign"), body.path, line));
 });
 
@@ -671,16 +671,14 @@ api.post("/campaigns/:campaign/review/npc-stub", async (c) => {
   return c.json(await createNpcStub(c.req.param("campaign"), body.id, name, note));
 });
 
-// POST /api/campaigns/:campaign/review/inbox-done { line } -> EntryResponse
-// Rewrites the FIRST exactly-matching inbox line to `- [x] …` (the one
-// documented append-only exception). Idempotent; 404 when not found.
+// POST /api/campaigns/:campaign/review/inbox-done { text } -> EntryResponse
+// Ticks the FIRST idea with exactly this text off — the one documented
+// exception to the inbox's append-only rule. Idempotent; 404 when the inbox
+// holds no such idea. `text` is the idea as the row holds it, not a list line
+// it was rendered as: the inbox is a table (ADR #26).
 api.post("/campaigns/:campaign/review/inbox-done", async (c) => {
-  const body = await jsonBody(c, ["line"]);
-  const line = rawLine(body.line, "line");
-  if (!line.startsWith("- ")) {
-    throw new ApiError(400, "line must be an inbox list line (starting with '- ')");
-  }
-  return c.json(await markInboxLineDone(c.req.param("campaign"), line));
+  const body = await jsonBody(c, ["text"]);
+  return c.json(await markInboxLineDone(c.req.param("campaign"), lineText(body.text, "text")));
 });
 
 /** One `{ key: value }` map out of a review patch body, value-checked. */

@@ -352,7 +352,6 @@ export function logRows(db: GrimoireDb, campaign: string, sessionId: string): Lo
   return db
     .select({
       pos: logEntries.pos,
-      raw: logEntries.raw,
       at: logEntries.at,
       sceneId: logEntries.sceneId,
       text: logEntries.text,
@@ -479,7 +478,6 @@ export function inboxRows(db: GrimoireDb, campaign: string): InboxRow[] {
   return db
     .select({
       pos: inboxEntries.pos,
-      raw: inboxEntries.raw,
       text: inboxEntries.text,
       done: inboxEntries.done,
     })

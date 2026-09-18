@@ -45,24 +45,33 @@ import {
   indexCampaign,
   indexGlossaryTerm,
   insertDraft,
-  logLineParts,
   PROPERTY_CONTRACT,
 } from "../store/write";
-import { logLineShortHash } from "../store/body-parse";
+import { logLineId } from "../store/body-parse";
 import { chapterPath, locationPath, npcPath, sceneAddress } from "../store/paths";
 import { expandIndexedRefs } from "../store/refs";
 
 /** An entry's properties as the API speaks them. */
 type Properties = Record<string, unknown>;
 
-/** One raw session log line, with the review flag it carries. */
+/**
+ * One session log row: the columns it holds. `sceneId` is a REFERENCE (rule 2
+ * above) — a seeded note that names a scene the campaign does not have is an
+ * error, not a note with its scene quietly dropped.
+ */
 export interface SeedLogLine {
-  raw: string;
+  /** `HH:mm` local, the time the note was taken. */
+  at?: string;
+  sceneId?: string;
+  text: string;
   reviewed?: boolean;
 }
 
-/** One inbox line: either a verbatim skeleton line or a list entry. */
-export type SeedInboxEntry = { raw: string } | { text: string; done?: boolean };
+/** One idea in the inbox: its text and whether it is ticked off. */
+export interface SeedInboxEntry {
+  text: string;
+  done?: boolean;
+}
 
 /** One glossary row. */
 export interface SeedGlossaryEntry {
@@ -177,7 +186,11 @@ export function asSeedEntry(where: string, value: unknown): SeedEntry {
         const at = `${where} log ${i}`;
         if (!isRecord(l)) fail(at, "not a JSON object");
         return {
-          raw: requireString(at, "`raw`", l.raw),
+          ...(l.at === undefined ? {} : { at: requireString(at, "`at`", l.at) }),
+          ...(l.sceneId === undefined
+            ? {}
+            : { sceneId: requireString(at, "`sceneId`", l.sceneId) }),
+          text: requireString(at, "`text`", l.text),
           ...(l.reviewed === true ? { reviewed: true } : {}),
         };
       }),
@@ -192,8 +205,7 @@ export function asSeedEntry(where: string, value: unknown): SeedEntry {
 
 function asInboxEntry(where: string, value: unknown): SeedInboxEntry {
   if (!isRecord(value)) fail(where, "not a JSON object");
-  if (typeof value.raw === "string") return { raw: value.raw };
-  const text = requireString(where, "`text` (or `raw`)", value.text);
+  const text = requireString(where, "`text`", value.text);
   return { text, ...(value.done === true ? { done: true } : {}) };
 }
 
@@ -351,9 +363,9 @@ function writeCampaignRow(
 }
 
 /**
- * A session and everything that hangs off it: its pauses, its log lines and
- * its played scenes. A session has no create endpoint for HISTORIC data — the
- * live cycle writes one line at a time — so the rows are written here.
+ * A session and everything that hangs off it: its pauses, its log rows and its
+ * played scenes. A session has no create endpoint for HISTORIC data — the live
+ * cycle writes one row at a time — so the rows are written here.
  *
  * Nothing about a session is indexed for search: its content is the log, and
  * the log is read in the session view and the review, never looked up by name.
@@ -389,17 +401,17 @@ function writeSessionRows(
   });
 
   (entry.log ?? []).forEach((line, pos) => {
-    const parts = logLineParts(tx, campaignId, line.raw);
+    const at = line.at ?? null;
+    const sceneId = line.sceneId ?? null;
     tx.insert(logEntries)
       .values({
         campaignId,
         sessionId: id,
         pos,
-        raw: line.raw,
-        at: parts.at,
-        sceneId: parts.sceneId,
-        text: parts.text,
-        hash: logLineShortHash(line.raw),
+        at,
+        sceneId,
+        text: line.text,
+        hash: logLineId(at, sceneId, line.text),
         reviewed: line.reviewed === true ? 1 : 0,
       })
       .run();
@@ -414,27 +426,13 @@ function writeSessionRows(
 }
 
 /**
- * The inbox list. A `{ raw }` entry is a skeleton line (the `## Eingang`
- * heading) and keeps its place with no parsed text; a `{ text }` entry gets
- * the list line the write API appends and matches byte for byte.
+ * The inbox list — one row per idea, exactly what `POST /inbox` writes. No
+ * heading rows: the inbox is a table and has no skeleton (ADR #26).
  */
 function writeInboxRows(tx: GrimoireDb, campaignId: string, entries: SeedInboxEntry[]): void {
   entries.forEach((entry, pos) => {
-    if ("raw" in entry) {
-      tx.insert(inboxEntries)
-        .values({ campaignId, pos, raw: entry.raw, text: null, done: 0 })
-        .run();
-      return;
-    }
-    const done = entry.done === true;
     tx.insert(inboxEntries)
-      .values({
-        campaignId,
-        pos,
-        raw: done ? `- [x] ${entry.text}` : `- ${entry.text}`,
-        text: entry.text,
-        done: done ? 1 : 0,
-      })
+      .values({ campaignId, pos, text: entry.text, done: entry.done === true ? 1 : 0 })
       .run();
   });
 }

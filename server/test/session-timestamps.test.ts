@@ -140,14 +140,18 @@ describe("a session timestamp outside the one shape is a 400", () => {
 });
 
 /**
- * Drop the migrator's record of the LAST migration, so the next open applies
- * it again. It is how a case gets a database in the state an installation was
- * in before that migration existed — the data is planted, and this removes
- * the "already done" the migrator would otherwise read.
+ * Drop the migrator's record of the last `count` migrations, so the next open
+ * applies them again. It is how a case gets a database in the state an
+ * installation was in before one of them existed — the data is planted, and
+ * this removes the "already done" the migrator would otherwise read.
+ *
+ * `count` is how far back the migration under test sits from the end, so a
+ * case names that distance instead of assuming its migration is the newest.
  */
-function forgetLastMigration(client: SqliteClient): void {
+function forgetMigrations(client: SqliteClient, count: number): void {
   client.exec(
-    "delete from __drizzle_migrations where rowid = (select max(rowid) from __drizzle_migrations)",
+    "delete from __drizzle_migrations where rowid in" +
+      ` (select rowid from __drizzle_migrations order by rowid desc limit ${count})`,
   );
 }
 
@@ -177,13 +181,15 @@ describe("a database recorded before the seconds were written", () => {
           " ended = '2026-01-15 22:45:00' where id = '2026-01-15'",
       );
       seeded.client.exec(
-        "insert into session_pauses (campaign_id, session_id, pos, from_ts, to_ts)" +
-          " values ('beispiel', '2026-01-15', 0, '2026-01-15T20:30', '2026-01-15 20:50')",
+        "update session_pauses set from_ts = '2026-01-15T20:30'," +
+          " to_ts = '2026-01-15 20:50' where session_id = '2026-01-15'",
       );
       // And the other half of that state: the installation predates the
       // migration, so its bookkeeping row goes as well and the next open runs
       // it for the first time.
-      forgetLastMigration(seeded.client);
+      // 0017 is the second-to-last migration, so the one behind it is
+      // replayed as well — which it is built to survive.
+      forgetMigrations(seeded.client, 2);
       seeded.close();
 
       // The real boot path, on that database.

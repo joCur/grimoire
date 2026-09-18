@@ -86,6 +86,7 @@ describe("POST /api/campaigns/:campaign/review/seen", () => {
       "started",
       "ended",
       "scenes_played",
+      "pauses",
       "reviewed",
     ]);
     expect(entry.properties.reviewed).toEqual([sha8(LINE)]);
@@ -358,61 +359,63 @@ describe("POST /api/campaigns/:campaign/review/npc-stub", () => {
 });
 
 describe("POST /api/campaigns/:campaign/review/inbox-done", () => {
+  /** The idea as the ROW holds it — no list marker: the inbox is a table. */
   const DONE_TARGET =
-    "- 2026-01-10 Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread";
+    "2026-01-10 Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread";
 
-  test("rewrites ONLY the matching line — every other line unchanged", async () => {
-    const beforeLines = (await getEntry("inbox")).body.split("\n");
-    const idx = beforeLines.indexOf(DONE_TARGET);
+  test("ticks off the matching idea and nothing else", async () => {
+    const before = (await getEntry("inbox")).body.split("\n");
+    const idx = before.indexOf(`- ${DONE_TARGET}`);
     expect(idx).toBeGreaterThan(-1);
 
-    const entry = await postOk("/api/campaigns/beispiel/review/inbox-done", { line: DONE_TARGET });
-    const afterLines = entry.body.split("\n");
-    expect(afterLines.length).toBe(beforeLines.length);
-    for (let i = 0; i < beforeLines.length; i++) {
-      if (i === idx) {
-        expect(afterLines[i]).toBe(`- [x] ${DONE_TARGET.slice(2)}`);
-      } else {
-        expect(afterLines[i]).toBe(beforeLines[i]!);
-      }
+    const entry = await postOk("/api/campaigns/beispiel/review/inbox-done", { text: DONE_TARGET });
+    const after = entry.body.split("\n");
+    expect(after.length).toBe(before.length);
+    for (let i = 0; i < before.length; i++) {
+      expect(after[i]).toBe(i === idx ? `- [x] ${DONE_TARGET}` : before[i]!);
     }
   });
 
-  test("idempotent: the original line again and the done form both no-op", async () => {
-    const first = await postOk("/api/campaigns/beispiel/review/inbox-done", { line: DONE_TARGET });
-    // Original (now rewritten) form. The inbox has no row of its own to carry
-    // a rev, so its token is the campaign's version counter, which EVERY
-    // write bumps — the content is what "no-op" is about here.
-    const again = await postOk("/api/campaigns/beispiel/review/inbox-done", { line: DONE_TARGET });
+  test("idempotent: the same idea again is a no-op", async () => {
+    const first = await postOk("/api/campaigns/beispiel/review/inbox-done", { text: DONE_TARGET });
+    // `text` is the row's text and the `done` flag does not change it, so the
+    // SAME request finds the same row and writes nothing the second time.
+    const again = await postOk("/api/campaigns/beispiel/review/inbox-done", { text: DONE_TARGET });
     expect(again.body).toBe(first.body);
-    // Explicit done form.
-    const explicit = await postOk("/api/campaigns/beispiel/review/inbox-done", {
-      line: `- [x] ${DONE_TARGET.slice(2)}`,
-    });
-    expect(explicit.body).toBe(first.body);
+    expect(again.rev).toBe(first.rev);
   });
 
-  test("only the FIRST of several identical lines is rewritten", async () => {
+  test("only the FIRST of several identical ideas is ticked off", async () => {
     await postOk("/api/campaigns/beispiel/inbox", { text: "Doppelt" });
     await postOk("/api/campaigns/beispiel/inbox", { text: "Doppelt" });
-    const entry = await postOk("/api/campaigns/beispiel/review/inbox-done", { line: "- Doppelt" });
+    const entry = await postOk("/api/campaigns/beispiel/review/inbox-done", { text: "Doppelt" });
     expect(entry.body.endsWith("- [x] Doppelt\n- Doppelt\n")).toBe(true);
   });
 
-  test("404 when the line is not in the inbox", async () => {
-    const res = await postJson("/api/campaigns/beispiel/review/inbox-done", { line: "- gibt es nicht" });
+  test("404 when no idea carries that text", async () => {
+    const res = await postJson("/api/campaigns/beispiel/review/inbox-done", {
+      text: "gibt es nicht",
+    });
     expect(res.status).toBe(404);
   });
 
-  test("400 on malformed lines", async () => {
+  test("a list marker is not part of an idea's text — it finds nothing", async () => {
+    // The row holds the idea, never the line it was rendered as. Sending the
+    // rendered line is therefore a miss, not a match.
+    const res = await postJson("/api/campaigns/beispiel/review/inbox-done", {
+      text: `- ${DONE_TARGET}`,
+    });
+    expect(res.status).toBe(404);
+  });
+
+  test("400 on malformed bodies", async () => {
     const bad = [
-      {}, // missing line
-      { line: "" },
-      { line: "   " },
-      { line: "kein Listeneintrag" }, // no `- ` prefix
-      { line: "- a\n- b" }, // not a single line
-      { line: 42 },
-      { line: "- x", extra: 1 }, // unknown key
+      {}, // missing text
+      { text: "" },
+      { text: "   " },
+      { text: "a\nb" }, // not a single line
+      { text: 42 },
+      { text: "x", extra: 1 }, // unknown key
     ];
     for (const b of bad) {
       expect((await postJson("/api/campaigns/beispiel/review/inbox-done", b)).status).toBe(400);
@@ -421,12 +424,12 @@ describe("POST /api/campaigns/:campaign/review/inbox-done", () => {
 
   test("404 when the campaign has no inbox at all", async () => {
     // The "inbox is missing" case: a campaign with no inbox rows at all.
-    // GET answers 200 with an empty entry, but there is still no such LINE to
+    // GET answers 200 with an empty list, but there is still no such idea to
     // check off — hence 404 here.
     seedCampaign(await getDb(), [
       { kind: "campaign", properties: { id: "frischling" }, body: "" },
     ]);
-    const res = await postJson("/api/campaigns/frischling/review/inbox-done", { line: "- egal" });
+    const res = await postJson("/api/campaigns/frischling/review/inbox-done", { text: "egal" });
     expect(res.status).toBe(404);
   });
 
@@ -438,6 +441,6 @@ describe("POST /api/campaigns/:campaign/review/inbox-done", () => {
       404,
     );
     expect((await postJson("/api/campaigns/nope/review/npc-stub", { id: "a" })).status).toBe(404);
-    expect((await postJson("/api/campaigns/nope/review/inbox-done", { line: "- x" })).status).toBe(404);
+    expect((await postJson("/api/campaigns/nope/review/inbox-done", { text: "x" })).status).toBe(404);
   });
 });

@@ -24,6 +24,7 @@
 // body text (db/schema.ts rule 3).
 
 import type { EntityKind, EntryResponse } from "@grimoire/shared";
+import { logLineCanonical } from "./body-parse";
 import { localDateTimeToMs } from "./time";
 import { unpackJson, unpackStringArray } from "../db/schema";
 import {
@@ -129,18 +130,16 @@ export interface PauseRow {
 
 export interface LogRow {
   pos: number;
-  raw: string;
   at: string | null;
   sceneId: string | null;
-  text: string | null;
+  text: string;
   hash: string;
   reviewed: number;
 }
 
 export interface InboxRow {
   pos: number;
-  raw: string;
-  text: string | null;
+  text: string;
   done: number;
 }
 
@@ -312,9 +311,13 @@ export function sessionProperties(
 /**
  * The session body: `## Log` rendered from `log_entries`, then whatever else
  * the session carries (`## Threads` above all), which is the row's own body.
+ *
+ * A log line is COMPOSED from the row's columns — the row holds no line of
+ * its own any more (db/schema.ts) — in the canonical spelling the row's id is
+ * taken over (./body-parse).
  */
 export function renderSessionBody(row: SessionRow, log: LogRow[]): string {
-  const lines = log.map((l) => l.raw).join("\n");
+  const lines = log.map((l) => logLineCanonical(l.at, l.sceneId, l.text)).join("\n");
   const logSection = `\n## Log\n${lines === "" ? "" : `\n${lines}\n`}`;
   const rest = row.body.replace(/^\n+/, "");
   return rest === "" ? logSection : `${logSection}\n${rest}`;
@@ -370,19 +373,15 @@ export function renderSession(
 // --- inbox ------------------------------------------------------------------
 
 /**
- * The inbox body from its rows, in `pos` order. Every row's `raw` is the line
- * verbatim — including the headings the format's skeleton carries — and a
- * blank line is put after a heading so the rendering reads like the inbox text did.
+ * The inbox body from its rows, in `pos` order — one list line per row,
+ * COMPOSED from the row's text and its `done` flag. The row holds no line of
+ * its own any more, and it holds no headings either: a table has no skeleton
+ * (db/schema.ts).
  */
 export function renderInboxBody(rows: InboxRow[]): string {
   if (rows.length === 0) return "";
-  const out: string[] = [];
-  rows.forEach((row, index) => {
-    out.push(row.raw);
-    const next = rows[index + 1];
-    if (next !== undefined && /^#{1,6}(\s|$)/.test(row.raw.trim())) out.push("");
-  });
-  return `\n${out.join("\n")}\n`;
+  const lines = rows.map((row) => (row.done !== 0 ? `- [x] ${row.text}` : `- ${row.text}`));
+  return `\n${lines.join("\n")}\n`;
 }
 
 export function renderInbox(campaignId: string, rows: InboxRow[], rev: number): EntryResponse {
