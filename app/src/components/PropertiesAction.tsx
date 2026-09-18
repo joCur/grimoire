@@ -1,9 +1,9 @@
-// „Eigenschaften" in the reading view: the DM
+// The properties action of the reading view: the DM
 // edits EVERY properties field of a scene/NPC/Ort/Kapitel in a form — never
 // raw YAML, never a text editor detour.
 //
 // The dialog follows the house pattern: mounted only while open,
-// one aria-live error line, Abbrechen/Speichern. What it adds is the diff —
+// one aria-live error line, a cancel and a save button. What it adds is the diff —
 // only the fields the DM actually changed are sent, so every key the form does
 // not know (and every field it did not touch) keeps its stored value.
 //
@@ -11,23 +11,26 @@
 // ADR #21) and the entity kind (derived from the path). Both are shown as
 // read-only context so the absence reads as a rule rather than as a gap.
 //
-// The version the save is checked against is frozen when the dialog OPENS: the
-// 5s version poll keeps refetching the entry behind it, and following
-// that rev would turn an external edit into a silent overwrite instead of a
-// 409. It moves only after a conflict, to the entry the re-read brought — the
-// typed values stay, so the next „Speichern" writes on top of what is stored.
+// The version the save is checked against is the one the dialog OPENED with,
+// held by the editing session (lib/use-entry-edit.ts): the 5s version poll
+// keeps refetching the entry behind the dialog, and following that version
+// would turn someone else's edit into a silent overwrite instead of the 409
+// that asks. On a conflict the typed values stay and the shared conflict line
+// offers the two answers — continue from the stored entry, or write the diff
+// on top of it.
 //
-// Because everything the save uses is frozen, the dialog is bound to ONE path
-// (same rule as the body editor): the reading route stays mounted
-// across a navigation — ⌘K works over the modal, Back reopens a cached entry —
-// and a dialog holding file A's frozen values while `file` already points at B
-// would patch A's diff into B. So the open state IS the entry (campaign + path),
-// and the content is keyed by it.
+// Because the values and the version belong to one entry, the dialog is bound
+// to ONE path (same rule as the body editor): the reading route stays mounted
+// across a navigation — the command palette works over the modal, Back reopens
+// a cached entry — and a dialog holding entry A's values while `file` already
+// points at B would patch A's diff into B. So the open state IS the entry
+// (campaign + path), and the content is keyed by it.
 
 import type { CampaignTree, EntryResponse } from "@grimoire/shared/types";
 import { SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { EditConflict } from "@/components/EditConflict";
 import { PropertiesFieldControl } from "@/components/PropertiesFields";
 import { HeaderAction } from "@/components/HeaderAction";
 import { Button } from "@/components/ui/button";
@@ -52,10 +55,10 @@ import {
   type FormValues,
   type PropertiesField,
 } from "@/lib/properties-form";
-import { usePropertiesFormMutation } from "@/lib/use-properties-form";
+import { useEntryEdit } from "@/lib/use-entry-edit";
 
 /**
- * The quiet header trigger, in the same vocabulary as „Bearbeiten" next to
+ * The quiet header trigger, in the same vocabulary as the edit action next to
  * it. Renders nothing for the kinds that have no form:
  * the campaign entry (its own metadata dialog), sessions and the inbox
  * (app-managed, append-only), glossary and unknown.
@@ -77,7 +80,7 @@ export function PropertiesAction({
    * header's own edit action is on the same page, and two actions with the
    * same name on one surface are ambiguous for a screen reader and for a
    * keyboard user counting Tab stops. The DIALOG is untouched either way —
-   * same form, same frozen rev, same 409.
+   * same form, same editing session, same 409.
    */
   triggerLabel?: string;
 }) {
@@ -107,7 +110,7 @@ export function PropertiesAction({
       {open && (
         <PropertiesDialog
           // Belt and braces next to the open-by-entry rule: a path change
-          // remounts the dialog, so no frozen value can outlive its entry.
+          // remounts the dialog, so no held value can outlive its entry.
           key={entryKey}
           campaign={campaign}
           file={file}
@@ -137,32 +140,45 @@ function PropertiesDialog({
   onClose: () => void;
 }) {
   const { t } = useI18n();
-  // Both frozen at open, on purpose (see the file header): `initial` is what
-  // the diff is measured against — NOT the entry behind the dialog, or an
-  // external edit landing in the cache would silently swallow the DM's change
-  // — and `base` is the version the write is checked against.
-  const [initial] = useState<FormValues>(() => propertiesFormValues(fields, file.properties));
+  // `initial` is what the diff is measured against, taken when the dialog
+  // opened — NOT the entry behind it, or a write landing in the cache would
+  // silently swallow the DM's change. It moves only when the DM adopts the
+  // stored entry after a conflict, together with the session's version.
+  const [initial, setInitial] = useState<FormValues>(() =>
+    propertiesFormValues(fields, file.properties),
+  );
   const [values, setValues] = useState<FormValues>(initial);
-  const [base, setBase] = useState(file.rev);
-  // Text still standing in a chip input, per field key. It lives here so
-  // „Speichern" can fold it into its list instead of dropping it.
+  // Text still standing in a chip input, per field key. It lives here so a
+  // save can fold it into its list instead of dropping it.
   const [pending, setPending] = useState<Record<string, string>>({});
-  // Is a „Verwerfen" confirmation standing over the form?
+  // Is a discard confirmation standing over the form?
   const [discardPending, setDiscardPending] = useState(false);
 
-  const save = usePropertiesFormMutation(
-    campaign,
-    file.path,
-    base,
-    {
-      onSaved: onClose,
-      onConflict: (reread) => {
-        if (reread !== undefined) setBase(reread.rev);
-      },
+  const save = useEntryEdit(campaign, file.path, file.rev, {
+    onSaved: onClose,
+    onReload: (stored) => {
+      // Continue from what is stored: the form is refilled from that entry, so
+      // the next diff is measured against it and nothing is pending.
+      const refilled = propertiesFormValues(fields, stored.properties);
+      setInitial(refilled);
+      setValues(refilled);
+      setPending({});
     },
-    // A chapter patch can swap the active chapter server-side — see the hook.
-    file.kind,
-  );
+    // A properties patch can move almost everything the tree carries —
+    // title/name, status, type, location, npcs, tags, the chapter an entry
+    // hangs under — and the search index is built from the same values.
+    invalidateOnSuccess: [
+      // A CHAPTER patch can set the active status, which the server answers by
+      // also putting the previously active chapter back to planned — a second
+      // entry this dialog never read, whose cached copy would keep the old
+      // status. So the whole entry cache goes for that kind, not just the
+      // entry the write seeded.
+      ...(file.kind === "chapter" ? [["entry", campaign]] : []),
+      ["tree", campaign],
+      ["search", campaign],
+    ],
+    errorMessage: "write.properties.failed",
+  });
 
   // What a save would send: the values plus the pending chip text.
   const effective = commitPendingText(fields, values, pending);
@@ -177,10 +193,10 @@ function PropertiesDialog({
     canSubmitProperties(fields, effective) &&
     Object.keys(issues).length === 0 &&
     Object.keys(patch).length > 0 &&
-    !save.isPending;
+    !save.isSaving;
 
   const id = fmString(file.properties.id);
-  // Esc, the overlay, „Abbrechen" and the X all come through here: with
+  // Esc, the overlay, the cancel button and the X all come through here: with
   // something typed they ask first (house pattern of EntryBodyEditor), an
   // untouched form just closes.
   const dirty = hasPropertiesChanges(fields, initial, effective, t);
@@ -207,7 +223,7 @@ function PropertiesDialog({
           onSubmit={(e) => {
             e.preventDefault();
             if (!canSubmit) return;
-            save.write({ patch });
+            save.save({ properties: patch });
           }}
           className="mt-4 flex min-h-0 flex-1 flex-col"
         >
@@ -244,6 +260,18 @@ function PropertiesDialog({
             {save.message ?? ""}
           </p>
 
+          {/* A refused write asks instead of deciding: the typed values are
+              untouched and both answers stand above the buttons. */}
+          {save.conflict !== undefined && (
+            <div className="pb-2">
+              <EditConflict
+                onReload={save.reload}
+                onForce={save.forceSave}
+                busy={save.isSaving}
+              />
+            </div>
+          )}
+
           <div className="flex items-center justify-end gap-2">
             <div className="flex items-center gap-2">
             <Button
@@ -259,7 +287,7 @@ function PropertiesDialog({
               disabled={!canSubmit}
               className="h-auto px-3.5 py-1.5 text-[12.5px] font-semibold"
             >
-              {t(save.isPending ? "common.saving" : "common.save")}
+              {t(save.isSaving ? "common.saving" : "common.save")}
             </Button>
             </div>
           </div>

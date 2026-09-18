@@ -1,5 +1,5 @@
 // Scene status: the labels/colors the chapter overview and the reading view
-// share, the patch payload for PATCH /properties, and the write itself (the
+// share, the request of the status write, and the write itself (the
 // rev conflict is the shared protocol in write-with-rev.ts).
 //
 // The LABEL comes from the catalog, and the translator is PASSED IN — this
@@ -13,7 +13,7 @@
 
 import { SCENE_STATUSES, type SceneStatus } from "@grimoire/shared/types";
 
-import { fetchEntry, patchProperties } from "@/api";
+import { fetchEntry, patchEntry, type PatchEntryRequest } from "@/api";
 import type { MessageKey, Translate } from "@/i18n";
 import { writeWithRev, type RevWriteResult } from "@/lib/write-with-rev";
 
@@ -72,20 +72,9 @@ export function isSceneDone(status: string): boolean {
   return DONE_STATUSES.has(status);
 }
 
-/** Body of the status write — the rev comes from the EntryResponse on screen. */
-export interface PropertiesPatchBody {
-  path: string;
-  rev: number;
-  patch: Record<string, unknown>;
-}
-
-/** Builds the PATCH /properties payload for one status change. */
-export function sceneStatusPatchBody(
-  path: string,
-  rev: number,
-  status: SceneStatus,
-): PropertiesPatchBody {
-  return { path, rev, patch: { status } };
+/** Request of the status write — the rev comes from the EntryResponse on screen. */
+export function sceneStatusPatchBody(rev: number, status: SceneStatus): PatchEntryRequest {
+  return { rev, properties: { status } };
 }
 
 /**
@@ -100,7 +89,7 @@ export function writeSceneStatus(
   status: SceneStatus,
 ): Promise<RevWriteResult> {
   return writeWithRev(
-    () => patchProperties(campaign, sceneStatusPatchBody(path, rev, status)),
+    () => patchEntry(campaign, path, sceneStatusPatchBody(rev, status)),
     () => fetchEntry(campaign, path),
   );
 }

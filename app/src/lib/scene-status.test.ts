@@ -66,35 +66,34 @@ afterEach(() => {
 
 describe("sceneStatusPatchBody", () => {
   test("patches only `status`, with the rev of the loaded file", () => {
-    expect(sceneStatusPatchBody(SCENE, 1_700_000_000_123, "ready")).toEqual({
-      path: SCENE,
+    expect(sceneStatusPatchBody(1_700_000_000_123, "ready")).toEqual({
       rev: 1_700_000_000_123,
-      patch: { status: "ready" },
+      properties: { status: "ready" },
     });
   });
 
   test("nothing else of the properties is touched", () => {
-    const body = sceneStatusPatchBody(SCENE, 1, "played");
-    expect(Object.keys(body.patch)).toEqual(["status"]);
+    const body = sceneStatusPatchBody(1, "played");
+    expect(Object.keys(body.properties ?? {})).toEqual(["status"]);
   });
 });
 
 describe("writeSceneStatus", () => {
-  test("PATCHes the properties endpoint and returns the server's file", async () => {
+  test("PATCHes the entry and returns the server's entry", async () => {
     const calls = mockFetch([{ status: 200, body: fileAt(222, "ready") }]);
     const result = await writeSceneStatus("beispiel", SCENE, 111, "ready");
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("PATCH");
-    expect(calls[0]?.url).toBe("/api/campaigns/beispiel/properties");
-    expect(calls[0]?.body).toEqual({ path: SCENE, rev: 111, patch: { status: "ready" } });
+    expect(calls[0]?.url).toBe(`/api/campaigns/beispiel/entries/${SCENE}`);
+    expect(calls[0]?.body).toEqual({ rev: 111, properties: { status: "ready" } });
     expect(result.ok).toBe(true);
     expect(result.file?.rev).toBe(222);
   });
 
   test("409: nothing written, the file is re-read for the fresh rev", async () => {
     const calls = mockFetch([
-      { status: 409, body: { error: "file changed on disk", rev: 999 } },
+      { status: 409, body: { code: "rev_conflict", error: "entry changed", rev: 999 } },
       { status: 200, body: fileAt(999, "draft") },
     ]);
     const result = await writeSceneStatus("beispiel", SCENE, 111, "ready");
@@ -107,7 +106,7 @@ describe("writeSceneStatus", () => {
 
   test("the attempt after a conflict carries the rev the reload brought", async () => {
     mockFetch([
-      { status: 409, body: { error: "file changed on disk", rev: 999 } },
+      { status: 409, body: { code: "rev_conflict", error: "entry changed", rev: 999 } },
       { status: 200, body: fileAt(999, "draft") },
     ]);
     const conflict = await writeSceneStatus("beispiel", SCENE, 111, "ready");
@@ -116,13 +115,13 @@ describe("writeSceneStatus", () => {
     const calls = mockFetch([{ status: 200, body: fileAt(1000, "ready") }]);
     const retry = await writeSceneStatus("beispiel", SCENE, fresh ?? 0, "ready");
 
-    expect(calls[0]?.body).toEqual({ path: SCENE, rev: 999, patch: { status: "ready" } });
+    expect(calls[0]?.body).toEqual({ rev: 999, properties: { status: "ready" } });
     expect(retry.ok).toBe(true);
   });
 
   test("409 plus a failed reload: still a conflict, no file to seed", async () => {
     mockFetch([
-      { status: 409, body: { error: "file changed on disk", rev: 999 } },
+      { status: 409, body: { code: "rev_conflict", error: "entry changed", rev: 999 } },
       { status: 500, body: { error: "boom" } },
     ]);
     expect(await writeSceneStatus("beispiel", SCENE, 111, "ready")).toEqual({ ok: false });

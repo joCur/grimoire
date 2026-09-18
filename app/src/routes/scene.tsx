@@ -24,9 +24,9 @@
 // properties per field, body per block, nothing written until accepted.
 //
 // The properties action next to it is the properties half: a form over
-// all typed fields of the kind. It stays available while the body editor runs —
-// its patch never touches the body, and the editor adopts a body-neutral new
-// version instead of turning it into a conflict (shouldAdvanceBase).
+// all typed fields of the kind. It stays available while the body editor runs;
+// each of them is its own editing session, so a save from one while the other
+// stands asks what to do instead of overwriting it.
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";

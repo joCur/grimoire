@@ -209,7 +209,6 @@ export const en: Messages = {
   "entryList.edit": "Edit “{name}”",
   "entryList.remove": "Delete \u201c{name}\u201d",
   "entryList.removed": "Entry deleted",
-  "entryList.reload": "Reload",
   "entryList.applyDraft": "Keep the draft and apply it to the current list",
   "entryList.confirmDelete.title": "Delete this entry?",
   "entryList.confirmDelete.body": "\u201c{name}\u201d will be removed from the list. This cannot be undone.",
@@ -266,7 +265,9 @@ export const en: Messages = {
     'Glossary term “{term}” appears more than once — please merge the entries.',
   "server.session_running": "An older session is still running — end it first.",
   "server.session_not_empty": "This session has content — end it instead of discarding it.",
-  "server.rev_conflict": "Changed elsewhere in the meantime — reload before saving.",
+  "server.rev_conflict": "Changed in the meantime — reload before saving.",
+  "server.nothing_to_write": "Nothing to save.",
+  "server.body_not_editable": "This entry has no editable text — it is maintained as a list.",
   "server.job_restarted": "The server was restarted while the job was running — start it again.",
   "server.llm_truncated":
     "The model's reply was cut off — raise LLM_MAX_TOKENS (currently: {max}) or shorten the source text.",
@@ -304,6 +305,9 @@ export const en: Messages = {
   "write.failed": "Not saved — check the server",
   "write.properties.failed": "Properties not saved — check the server",
   "write.status.failed": "Status not saved — check the server",
+  "editConflict.line": "Changed in the meantime",
+  "editConflict.reload": "Reload",
+  "editConflict.force": "Save anyway",
   "status.change.aria": "Change status, currently {current}",
   "status.sceneUnloadable": "Scene not loadable",
 
