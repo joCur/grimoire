@@ -121,14 +121,21 @@ export async function openDb(filename: string): Promise<OpenDb> {
   // value, instead of failing halfway through the rebuild. Also a no-op once
   // the constraints are in place.
   assertStatusesReady(client);
+  const db = buildDrizzle(client);
+  migrateDb(db);
   // And the gate in front of the session timestamps: a `started`, `ended` or
   // pause value outside the one shape the reader reads (store/time.ts) is
   // REFUSED here, naming campaign, session, column and value, instead of
-  // quietly losing a session's place in the chronology. Unlike its siblings
-  // this one is not a migration gate — it runs on every boot.
+  // quietly losing a session's place in the chronology.
+  //
+  // It sits AFTER the migrator, unlike the two gates above. They guard a
+  // migration that would fail halfway through on data it cannot carry over,
+  // so they have to speak first. This one guards nothing — it reports what
+  // only the DM can correct — and migration 0017 completes the one shape it
+  // CAN complete without asking: the minute-precise values an older
+  // installation recorded. Running the check first would refuse those
+  // databases instead of letting the migration fix them.
   assertTimestampsReady(client);
-  const db = buildDrizzle(client);
-  migrateDb(db);
   return { db, client, close: () => client.close(), groupMigration };
 }
 

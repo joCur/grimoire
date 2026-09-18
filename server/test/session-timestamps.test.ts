@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { EntryResponse } from "@grimoire/shared";
 import { openDb } from "../src/db/client";
+import type { SqliteClient } from "../src/db/driver";
 import { readFixtureSources, seedCampaign } from "../src/db/seed";
 import { closeStore, initStore } from "../src/store/handle";
 import { app } from "../src/server";
@@ -135,6 +136,94 @@ describe("a session timestamp outside the one shape is a 400", () => {
     expect(res.status).toBe(200);
     const entry = (await res.json()) as EntryResponse;
     expect(entry.properties.pauses).toEqual([{ from: "2026-01-15T20:30:00" }]);
+  });
+});
+
+/**
+ * Drop the migrator's record of the LAST migration, so the next open applies
+ * it again. It is how a case gets a database in the state an installation was
+ * in before that migration existed — the data is planted, and this removes
+ * the "already done" the migrator would otherwise read.
+ */
+function forgetLastMigration(client: SqliteClient): void {
+  client.exec(
+    "delete from __drizzle_migrations where rowid = (select max(rowid) from __drizzle_migrations)",
+  );
+}
+
+describe("a database recorded before the seconds were written", () => {
+  afterEach(() => {
+    closeStore();
+  });
+
+  test("it starts, and its session reads back with the seconds completed", async () => {
+    // The shape a session held before the seconds were written is
+    // `yyyy-MM-ddTHH:mm`, and the boot check reads none of it. Completing it
+    // is lossless — `:00` is the only second that minute's precision allows —
+    // so migration 0017 does it and the start goes through.
+    const dir = mkdtempSync(path.join(tmpdir(), "grimoire-minute-session-"));
+    const dbPath = path.join(dir, "grimoire.db");
+    try {
+      const seeded = await openDb(dbPath);
+      const sources = await readFixtureSources(path.join(FIXTURES, "beispiel"));
+      seedCampaign(
+        seeded.db,
+        sources.map((source) => source.entry),
+      );
+      // The state an older installation is in: minute-precise values on the
+      // session and on a pause, one of them with a space where the `T` is.
+      seeded.client.exec(
+        "update sessions set started = '2026-01-15T19:30'," +
+          " ended = '2026-01-15 22:45:00' where id = '2026-01-15'",
+      );
+      seeded.client.exec(
+        "insert into session_pauses (campaign_id, session_id, pos, from_ts, to_ts)" +
+          " values ('beispiel', '2026-01-15', 0, '2026-01-15T20:30', '2026-01-15 20:50')",
+      );
+      // And the other half of that state: the installation predates the
+      // migration, so its bookkeeping row goes as well and the next open runs
+      // it for the first time.
+      forgetLastMigration(seeded.client);
+      seeded.close();
+
+      // The real boot path, on that database.
+      await initStore({ dbFile: dbPath });
+      const entry = await read();
+      expect(entry.properties.started).toBe("2026-01-15T19:30:00");
+      expect(entry.properties.ended).toBe("2026-01-15T22:45:00");
+      expect(entry.properties.pauses).toEqual([
+        { from: "2026-01-15T20:30:00", to: "2026-01-15T20:50:00" },
+      ]);
+      // Canonical means READABLE: the moment is there for the client's
+      // arithmetic, which is what a value outside the shape loses.
+      expect(entry.startedMs).toBe(new Date(2026, 0, 15, 19, 30, 0).getTime());
+    } finally {
+      closeStore();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a shape nothing can complete still refuses the start", async () => {
+    // The migration completes only what the value itself already says. A
+    // time without a day is not a shape anybody can finish, so it stays and
+    // the check reports it.
+    const dir = mkdtempSync(path.join(tmpdir(), "grimoire-unreadable-session-"));
+    const dbPath = path.join(dir, "grimoire.db");
+    try {
+      closeStore();
+      const seeded = await openDb(dbPath);
+      const sources = await readFixtureSources(path.join(FIXTURES, "beispiel"));
+      seedCampaign(
+        seeded.db,
+        sources.map((source) => source.entry),
+      );
+      seeded.client.exec("update sessions set started = '19:30' where id = '2026-01-15'");
+      seeded.close();
+
+      await expect(openDb(dbPath)).rejects.toThrow(/19:30/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

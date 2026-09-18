@@ -1025,3 +1025,10 @@ ist eine Regel für den **Leser**: ein unbekannter Callout und eine unbekannte
   `server/src/store/time.ts`), der Leser liest nur sie, und ein Vorlauf
   (`server/src/db/timestamp-preflight.ts`) verweigert den Start mit Kampagne,
   Session, Spalte und Wert, statt etwas stillschweigend zu korrigieren.
+- Die minutengenauen Zeiten früherer Sessions (`yyyy-mm-ddThh:mm`) ergänzt
+  Migration `0017_session_timestamps_seconds.sql` einmalig um `:00` — eine
+  Migration und keine Reparatur, weil die Ergänzung verlustfrei und
+  deterministisch ist: der Wert nennt die Minute, `:00` ist die einzige
+  Sekunde, die diese Genauigkeit zulässt, und die Lesung ändert sich nicht.
+  Deshalb läuft dieser Vorlauf — anders als die beiden über ihm — NACH dem
+  Migrator; jede andere Form bleibt unangetastet und wird von ihm gemeldet.

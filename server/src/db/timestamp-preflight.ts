@@ -14,9 +14,13 @@
 // one for them would change recorded history. The report names campaign,
 // session, column and value — enough to correct the row and start again.
 //
-// It runs on the raw client next to its siblings, before the store layer may
-// look at the database, and skips a database that has no session tables yet
-// (a database on its very first boot).
+// It runs on the raw client before the store layer may look at the database,
+// and skips a database that has no session tables yet.
+//
+// Unlike the reference and status gates it runs AFTER the migrator (see
+// db/client.ts): it guards no migration, and migration 0017 completes the
+// minute-precise values an older installation recorded — which this check
+// would otherwise refuse the start over.
 
 import type { SqliteClient } from "./driver";
 import { LOCAL_DATE_TIME_SHAPE, localDateTimeToMs } from "../store/time";

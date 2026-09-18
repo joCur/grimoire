@@ -120,6 +120,13 @@
       "when": 1789734753450,
       "tag": "0016_status_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1789755952455,
+      "tag": "0017_session_timestamps_seconds",
+      "breakpoints": true
     }
   ]
 }
