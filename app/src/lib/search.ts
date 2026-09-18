@@ -3,7 +3,18 @@
 // route. Kept out of the component for unit tests.
 
 import type { CampaignTree, SearchResult } from "@grimoire/shared/types";
-import { BookMarked, BookOpen, Bookmark, FileText, GitFork, MapPin, User } from "lucide-react";
+import {
+  BookA,
+  BookMarked,
+  BookOpen,
+  Bookmark,
+  FileText,
+  GitFork,
+  Inbox,
+  MapPin,
+  NotebookPen,
+  User,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import type { MessageKey, Translate } from "@/i18n";
@@ -23,6 +34,9 @@ const KIND_KEYS: Record<string, MessageKey> = {
   location: "kind.location",
   chapter: "kind.chapter",
   campaign: "kind.campaign",
+  session: "kind.session",
+  inbox: "kind.inbox",
+  glossary: "kind.glossary",
 };
 
 export function kindLabel(kind: string, t: Translate): string {
@@ -49,6 +63,15 @@ export function kindIcon(kind: string, isContingency = false): LucideIcon {
     // volume, a chapter is a page in it.
     case "campaign":
       return BookMarked;
+    // The three that are lists rather than entries: a session is what was
+    // written down that evening, the inbox what was thrown in on the go, the
+    // glossary the campaign's words.
+    case "session":
+      return NotebookPen;
+    case "inbox":
+      return Inbox;
+    case "glossary":
+      return BookA;
     default:
       return FileText;
   }
@@ -68,11 +91,33 @@ export function contingencyPaths(tree: CampaignTree | undefined): Set<string> {
 }
 
 /**
- * Route for a picked result. Every kind opens as an entry view
- * (/campaigns/:campaign/entries/<path>) — except the campaign itself, whose "view" is the
- * chapter overview.
+ * Route for a picked result. An entry opens as an entry view
+ * (/campaigns/:campaign/entries/<path>); the kinds that are no longer entries
+ * open the page that HOLDS them — a session its reading page, an idea the
+ * wrap-up it is waiting in, a term the glossary page — and the campaign
+ * itself opens the chapter overview.
+ *
+ * A result without a `path` can only be one of those kinds, so an unknown one
+ * falls back to the chapter overview rather than building an entry address out
+ * of nothing (degrade, README).
  */
-export function resultHref(campaign: string, result: Pick<SearchResult, "kind" | "path">): string {
-  if (result.kind === "campaign") return `/campaigns/${encodeURIComponent(campaign)}`;
-  return `/campaigns/${encodeURIComponent(campaign)}/entries/${encodeAddress(result.path)}`;
+export function resultHref(
+  campaign: string,
+  result: Pick<SearchResult, "kind" | "id" | "path">,
+): string {
+  const scope = `/campaigns/${encodeURIComponent(campaign)}`;
+  switch (result.kind) {
+    case "campaign":
+      return scope;
+    case "session":
+      return `${scope}/sessions/${encodeURIComponent(result.id)}`;
+    case "inbox":
+      return `${scope}/review`;
+    case "glossary":
+      return `${scope}/glossary`;
+    default:
+      return result.path === undefined
+        ? scope
+        : `${scope}/entries/${encodeAddress(result.path)}`;
+  }
 }

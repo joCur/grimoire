@@ -15,6 +15,7 @@ import { LiveRoute } from "@/routes/live";
 import { ChapterOverviewRoute } from "@/routes/chapter-overview";
 import { ReviewRoute } from "@/routes/review";
 import { SceneRoute } from "@/routes/scene";
+import { SessionRoute } from "@/routes/session";
 import { SettingsRoute } from "@/routes/settings";
 
 // Shared layout of all campaign-scoped views: mounts the version polling
@@ -92,6 +93,9 @@ export function App() {
           {/* Review — the "Session-Nachbereitung", entered after
               "Session beenden" and from the chapter overview affordance. */}
           <Route path="review" element={<ReviewRoute />} />
+          {/* One evening, read-only: a session is rows, not an entry, so it
+              has its own address instead of an entry one. Reached from ⌘K. */}
+          <Route path="sessions/:id" element={<SessionRoute />} />
           <Route path="entries/*" element={<SceneRoute />} />
         </Route>
       </Route>

@@ -47,7 +47,6 @@ import { SceneStatusControl } from "@/components/SceneStatusMenu";
 import { useT } from "@/i18n";
 import { entityHeaderKind } from "@/lib/entity";
 import { encodeAddress } from "@/lib/address";
-import { canEditEntryBody } from "@/lib/entry-body";
 import { propString, propStringArray } from "@/lib/properties";
 import { sceneStatusOf } from "@/lib/scene-status";
 import { pageContextCrumbs } from "@/lib/page-context";
@@ -86,12 +85,7 @@ export function SceneRoute() {
   // the canonical address as the fallback for an entry whose properties
   // carries none.
   const docId = data === undefined ? undefined : (propString(data.properties.id) ?? data.path);
-  // Whether this entry has an editable text at all (canEditEntryBody). It
-  // gates the mode itself, not just the header trigger: a list entry like the
-  // glossary has no body to write, and an editor reached past the trigger —
-  // through `?edit=1` — could only offer a save the write path refuses.
-  const editable = data !== undefined && canEditEntryBody(data.kind);
-  const editing = editable && editingId !== undefined && editingId === docId;
+  const editing = data !== undefined && editingId !== undefined && editingId === docId;
   // Edit mode ENDS at a navigation. Leaving the entry drops the draft, so
   // coming back must not re-open the editor
   // unasked: an editor seeded from the server looks exactly like the one the DM
@@ -106,12 +100,12 @@ export function SceneRoute() {
   // a state of the page, and a reload or a back gesture must not re-open an editor
   // over a body the DM has meanwhile left.
   useEffect(() => {
-    if (!wantsEdit || docId === undefined || !editable) return;
+    if (!wantsEdit || docId === undefined) return;
     setEditingId(docId);
     const next = new URLSearchParams(searchParams);
     next.delete("edit");
     setSearchParams(next, { replace: true });
-  }, [wantsEdit, docId, editable, searchParams, setSearchParams]);
+  }, [wantsEdit, docId, searchParams, setSearchParams]);
 
   // The scene MOVED. A scene's group segment is its `location`,
   // so correcting the location rewrites the address — and every link written
@@ -151,11 +145,9 @@ export function SceneRoute() {
   const isScene = entityHeaderKind(data.kind) === "scene";
   // The aside belongs to scenes: only they reference npcs in properties.
   const npcs = isScene ? propStringArray(data.properties.npcs) : [];
-  // The edit action — the body editor, offered for the kinds whose
-  // prose the DM maintains (canEditEntryBody). While it runs the trigger is
-  // gone: the editor's own toggle owns the mode from then on.
-  const editAction =
-    editable && !editing ? <EntryBodyEditAction onEdit={() => setEditingId(docId)} /> : null;
+  // The edit action — the body editor. While it runs the trigger is gone: the
+  // editor's own toggle owns the mode from then on.
+  const editAction = editing ? null : <EntryBodyEditAction onEdit={() => setEditingId(docId)} />;
   // The body slot of the article — the editor while edit mode is on, seeded
   // from the entry on screen (and re-keyed per path, so it never carries the
   // draft of another entry).

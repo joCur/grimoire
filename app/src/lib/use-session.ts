@@ -14,14 +14,14 @@
 //     midnight a derived id — for the harvest and for every `review/seen`
 //     patch — would name a session that does not exist.
 //
-// Every write endpoint returns the fresh EntryResponse: it is written into the
-// cache immediately (keyed by the path the SERVER reports, never a guessed
-// one). No invalidation on top — the version poll (lib/use-campaign-version)
-// covers external changes, and re-fetching the same session per log line would
-// be one redundant request per keystroke-sized write.
+// Every write endpoint returns the fresh SessionResponse: it is written into
+// the caches immediately. No invalidation on top — the version poll
+// (lib/use-campaign-version) covers external changes, and re-fetching the same
+// session per log row would be one redundant request per keystroke-sized
+// write.
 
-import type { EntryResponse } from "@grimoire/shared/types";
-import { isEnded } from "@grimoire/shared/session-state";
+import type { SessionResponse } from "@grimoire/shared/types";
+import type { QueryClient } from "@tanstack/react-query";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
@@ -29,8 +29,11 @@ import {
   discardSession,
   fetchActiveSession,
   fetchLastStartedSession,
+  fetchSession,
+  fetchSessions,
   startSession,
 } from "@/api";
+import { sessionIsEnded } from "@/lib/session";
 
 /** Query key of the active-session lookup — also invalidated by the version
  *  poll (lib/use-campaign-version.ts), so an external edit or a session that
@@ -42,6 +45,31 @@ export function activeSessionKey(campaign: string): [string, string] {
 /** Query key of the review's session (the last started one, ended or not). */
 export function lastStartedSessionKey(campaign: string): [string, string] {
   return ["last-session", campaign];
+}
+
+/** Query key of ONE session by id — the reading page of a past evening. */
+export function sessionKey(campaign: string, id: string): [string, string, string] {
+  return ["session", campaign, id];
+}
+
+/** ONE session by id: the reading page of an evening that is over. */
+export function useSession(campaign: string, id: string) {
+  return useQuery({
+    queryKey: sessionKey(campaign, id),
+    queryFn: () => fetchSession(campaign, id),
+    enabled: campaign !== "" && id !== "",
+    retry: false,
+  });
+}
+
+/** The campaign's sessions, newest first. */
+export function useSessions(campaign: string, enabled = true) {
+  return useQuery({
+    queryKey: ["sessions", campaign],
+    queryFn: () => fetchSessions(campaign),
+    enabled: enabled && campaign !== "",
+    retry: false,
+  });
 }
 
 /**
@@ -90,40 +118,59 @@ export function sessionStartConflict(error: unknown): SessionStartConflict | und
   return error.details.code === "session_running" ? "session_running" : undefined;
 }
 
-/** Campaign-relative path carried by a session 409, when the server sent one. */
-export function conflictPath(error: unknown): string | undefined {
+/** The session id a start 409 points at, when the server sent one. */
+export function conflictSessionId(error: unknown): string | undefined {
   if (!(error instanceof ApiError)) return undefined;
-  const path = error.details.path;
-  return typeof path === "string" ? path : undefined;
+  const id = error.details.sessionId ?? error.details.id;
+  return typeof id === "string" ? id : undefined;
 }
 
 /**
  * Session write mutation (start/end/log/pause): seeds the caches from
  * the returned session.
  *
- * The session cache is keyed by `data.path` — the server decides which session
- * the write landed in: a log line goes into the RUNNING session, which can be
- * yesterday's session. The active-session cache is seeded only while the
- * returned session is not ended (shared `isEnded` — the ONE predicate, so client
- * and server never disagree about a blank `ended`); an ended session is no
- * longer active and must not linger as a live indicator. The review's session
- * is seeded either way: an ended session is exactly what it harvests.
+ * The server decides which session the write landed in: a log row goes into
+ * the RUNNING session, which can be yesterday's — so the answer is seeded
+ * under the id the server reports, never a guessed one. The active-session
+ * cache is seeded only while the returned session is not ended; an ended
+ * session is no longer active and must not linger as a live indicator. The
+ * review's session is seeded either way: an ended session is exactly what it
+ * harvests.
  */
 export function useSessionWrite<TVars = void>(
   campaign: string,
-  mutationFn: (vars: TVars) => Promise<EntryResponse>,
-  onSuccess?: (data: EntryResponse) => void,
+  mutationFn: (vars: TVars) => Promise<SessionResponse>,
+  onSuccess?: (data: SessionResponse) => void,
 ) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn,
     onSuccess: (data) => {
-      queryClient.setQueryData(["entry", campaign, data.path], data);
-      queryClient.setQueryData(activeSessionKey(campaign), isEnded(data.properties) ? null : data);
+      queryClient.setQueryData(sessionKey(campaign, data.id), data);
+      queryClient.setQueryData(activeSessionKey(campaign), sessionIsEnded(data) ? null : data);
       queryClient.setQueryData(lastStartedSessionKey(campaign), data);
       onSuccess?.(data);
     },
   });
+}
+
+/**
+ * Write a session answer into every cache that shows it: the session itself,
+ * the review's session, and the active-session slot — the last one only while
+ * the session is not ended, so an ended evening stops being the live
+ * indicator. Used by the review writes, which answer with a session without
+ * being a session verb.
+ */
+export function seedSession(
+  queryClient: QueryClient,
+  campaign: string,
+  session: SessionResponse,
+): void {
+  queryClient.setQueryData(sessionKey(campaign, session.id), session);
+  queryClient.setQueryData(lastStartedSessionKey(campaign), session);
+  if (!sessionIsEnded(session)) {
+    queryClient.setQueryData(activeSessionKey(campaign), session);
+  }
 }
 
 /**
@@ -135,17 +182,16 @@ export function useSessionWrite<TVars = void>(
  * more): the active session becomes `null` immediately, and the review's
  * session is INVALIDATED rather than nulled — after the discard the last
  * started session is an older, ended one, and only the server knows which.
- * The deleted session's own cache entry is removed so a stale copy cannot be
- * rendered from it.
+ * The session list follows for the same reason.
  */
 export function useSessionDiscard(campaign: string, onDone?: () => void) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => discardSession(campaign),
-    onSuccess: (data) => {
-      queryClient.removeQueries({ queryKey: ["entry", campaign, data.path] });
+    onSuccess: () => {
       queryClient.setQueryData(activeSessionKey(campaign), null);
       void queryClient.invalidateQueries({ queryKey: lastStartedSessionKey(campaign) });
+      void queryClient.invalidateQueries({ queryKey: ["sessions", campaign] });
       onDone?.();
     },
   });
@@ -162,7 +208,7 @@ export function useSessionDiscard(campaign: string, onDone?: () => void) {
  * session creates a NEW session (own id, empty log, runtime at 0) instead of
  * re-opening the last one.
  */
-export function useSessionStartFlow(campaign: string, onEnter?: (data: EntryResponse) => void) {
+export function useSessionStartFlow(campaign: string, onEnter?: (data: SessionResponse) => void) {
   const start = useSessionWrite(campaign, () => startSession(campaign), onEnter);
   return {
     start,
@@ -176,7 +222,7 @@ export function useSessionStartFlow(campaign: string, onEnter?: (data: EntryResp
     /** The 409 the LAST start answered with, when it was the documented one. */
     conflict: sessionStartConflict(start.error),
     /** The session that 409 pointed at (the older, still running one). */
-    conflictPath: conflictPath(start.error),
+    conflictSessionId: conflictSessionId(start.error),
     /** A start that failed for any OTHER reason — a real error message. */
     failed: start.isError && sessionStartConflict(start.error) === undefined,
   };

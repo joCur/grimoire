@@ -81,6 +81,23 @@ export const de = {
   "session.date": "Session vom {date}",
   "session.date.unknown": "Session",
 
+  // --- the reading page of one session --------------------------------------
+  // There is no session list page, so the context step is a plain word.
+  "session.page.crumb": "Sessions",
+  "session.page.loading": "Lade Session …",
+  "session.page.notLoadable": "Session nicht ladbar — Server prüfen und neu laden.",
+  "session.page.started": "Start",
+  "session.page.ended": "Ende",
+  "session.page.stillRunning": "läuft noch",
+  "session.page.timeUnknown": "unbekannt",
+  "session.page.runtime": "Spielzeit",
+  "session.page.log": "Log",
+  "session.page.log.empty": "In dieser Session wurde nichts notiert.",
+  "session.page.pauses": "Pausen",
+  "session.page.pauseRow": "{from} – {to} ({duration})",
+  "session.page.scenes": "Gespielte Szenen",
+  "session.page.scenes.empty": "Keine Szene als gespielt vermerkt.",
+
   // --- create dialogs -------------------------------------------------------
   "create.failed": "Nicht angelegt — Server prüfen.",
   "create.useSuggestion": '„{id}“ verwenden',
@@ -436,10 +453,11 @@ export const de = {
   "live.session.unloadable": "Session nicht ladbar — Server prüfen und neu laden.",
   "live.session.none": "Es läuft keine Session.",
   // The one start conflict the live route turns into a question: an OLDER
-  // session nobody ended. One sentence per variant — the path is a parameter,
-  // never a fragment between two halves.
+  // session nobody ended. One sentence per variant — the session is a
+  // parameter, never a fragment between two halves.
   "live.session.olderRunning": "Eine ältere Session läuft noch — erst beenden.",
-  "live.session.olderRunning.withPath": "Eine ältere Session läuft noch ({path}) — erst beenden.",
+  "live.session.olderRunning.withSession":
+    "Eine ältere Session läuft noch ({session}) — erst beenden.",
   "live.session.endOld": "Alte Session beenden",
 
   // The players-facing reminder list of the aside.
@@ -464,8 +482,6 @@ export const de = {
     "Die Einträge der Session durchgehen — als Handlungsstrang übernehmen, NPC anlegen oder verwerfen. Der Rest bleibt im Log.",
   // Topbar and the mobile page read the same line (two parameters).
   "review.progress": "{seen} von {total} gesichtet",
-  "review.hashUnavailable":
-    "Gesichtet-Status der Log-Zeilen nicht verfügbar — Grimoire über localhost oder https öffnen.",
   "review.loading": "Lade Einträge …",
   "review.empty": "Keine markierten Einträge in dieser Session — nichts zu sichten.",
 
@@ -569,6 +585,9 @@ export const de = {
   "kind.location": "Ort",
   "kind.chapter": "Kapitel",
   "kind.campaign": "Kampagne",
+  "kind.session": "Session",
+  "kind.inbox": "Idee",
+  "kind.glossary": "Glossar",
   // The accessible name of a `[[ref]]` in a body (markdown/entity-refs.tsx):
   // what it points at, then its current name.
   "markdown.ref.aria": "{kind}: {name}",

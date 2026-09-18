@@ -3,8 +3,8 @@
 // chapter, center the selected scene through the same article pipeline as
 // the reading view, right the location and NPC cards plus the log panel and
 // the Schnellnotiz. The session on the server is the truth: every write
-// returns the fresh entry, the "played" checkmark comes from scenes_played
-// (server-maintained — never faked client-side). WHICH session is running is
+// returns the fresh session, the "played" checkmark comes from its played
+// scenes (server-maintained — never faked client-side). WHICH session is running is
 // the server's answer too (GET /campaigns/:campaign/session) — a session
 // past midnight lives in yesterday's session.
 //
@@ -15,7 +15,7 @@
 // There is NO mobile live mode (UI-BRIEF §4) — below md the route shows a
 // quiet note with a link to the read view of the active scene instead.
 
-import type { SceneSummary } from "@grimoire/shared/types";
+import type { SceneSummary, SessionLogRow } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
 import { Bookmark, Check, ChevronDown, GitFork } from "lucide-react";
 import { useState } from "react";
@@ -31,9 +31,7 @@ import { SceneArticle } from "@/components/SceneArticle";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useI18n, useT } from "@/i18n";
-import { propStringArray } from "@/lib/properties";
 import { isSceneDone } from "@/lib/scene-status";
-import { parseLogEntries } from "@/lib/session";
 import { EntityRefDrawerTarget } from "@/markdown/entity-refs";
 import { cn } from "@/lib/utils";
 import { useActiveSession, useSessionStartFlow, useSessionWrite } from "@/lib/use-session";
@@ -125,7 +123,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
   // untouched while the drawer opens and closes.
   const [drawerPath, setDrawerPath] = useState<string>();
 
-  const playedIds = propStringArray(session.data?.properties.scenes_played);
+  const playedIds = session.data?.scenesPlayed ?? [];
 
   // Only the tree decides whether a scene's `location` is an entity: the
   // format allows a free string there, and that must stay plain text instead
@@ -255,7 +253,7 @@ function LiveDesktop({ campaign }: { campaign: string }) {
             <p className="text-[12.5px] text-muted-foreground">{t("live.scene.noNpcs")}</p>
           )}
         </div>
-        <LogPanel campaign={campaign} body={session.data.body} activeSceneId={selected?.id} />
+        <LogPanel campaign={campaign} log={session.data.log} activeSceneId={selected?.id} />
       </aside>
 
       {/* A reference INSIDE the drawer switches the drawer, it does not
@@ -398,17 +396,17 @@ function LiveScene({ campaign, path }: { campaign: string; path: string }) {
  * max ~46% of the aside. Nothing may ever overlay the note input. */
 function LogPanel({
   campaign,
-  body,
+  log,
   activeSceneId,
 }: {
   campaign: string;
-  body: string;
+  log: readonly SessionLogRow[];
   activeSceneId: string | undefined;
 }) {
   const t = useT();
   const [note, setNote] = useState("");
-  const entries = parseLogEntries(body).reverse();
-  const log = useSessionWrite(campaign, (vars: { text: string; sceneId?: string }) =>
+  const rows = [...log].reverse();
+  const append = useSessionWrite(campaign, (vars: { text: string; sceneId?: string }) =>
     appendLog(campaign, vars.text, vars.sceneId),
   );
 
@@ -418,7 +416,7 @@ function LogPanel({
     // Clear immediately (the input keeps focus); a failed send restores the
     // text unless the DM already typed something new.
     setNote("");
-    log.mutate(
+    append.mutate(
       activeSceneId === undefined ? { text } : { text, sceneId: activeSceneId },
       { onError: () => setNote((current) => (current === "" ? text : current)) },
     );
@@ -430,22 +428,22 @@ function LogPanel({
         {t("live.log.heading")}
       </p>
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 pb-2.5">
-        {entries.length === 0 && (
+        {rows.length === 0 && (
           <p className="text-[12.5px] leading-[1.5] text-muted-foreground">
             {t("live.log.empty")}
           </p>
         )}
-        {entries.map((entry, index) => (
-          <div key={index} className="flex gap-2 text-[12.5px] leading-[1.5]">
-            {entry.time !== undefined && (
-              <span className="flex-none font-mono text-muted-foreground">{entry.time}</span>
+        {rows.map((row) => (
+          <div key={row.id} className="flex gap-2 text-[12.5px] leading-[1.5]">
+            {row.at !== "" && (
+              <span className="flex-none font-mono text-muted-foreground">{row.at}</span>
             )}
-            <span className="min-w-0 text-body">{entry.text}</span>
+            <span className="min-w-0 text-body">{row.text}</span>
           </div>
         ))}
       </div>
       <div className="flex-none px-4 pt-1 pb-3.5">
-        {log.isError && (
+        {append.isError && (
           <p className="mb-1.5 text-[11.5px] text-destructive">{t("live.note.failed")}</p>
         )}
         <input
@@ -477,7 +475,7 @@ function LogPanel({
  */
 function NoSessionYet({ campaign }: { campaign: string }) {
   const t = useT();
-  const { enter, entering, conflict, conflictPath, failed } = useSessionStartFlow(campaign);
+  const { enter, entering, conflict, conflictSessionId, failed } = useSessionStartFlow(campaign);
   const end = useSessionWrite(campaign, () => endSession(campaign));
   const busy = entering || end.isPending;
   return (
@@ -486,11 +484,11 @@ function NoSessionYet({ campaign }: { campaign: string }) {
         {conflict === "session_running" ? (
           <>
             <p className="mb-4 text-[14px] leading-[1.6] text-muted-foreground">
-              {/* One sentence either way — the path is a parameter, not a
+              {/* One sentence either way — the session is a parameter, not a
                   fragment pasted between two halves. */}
-              {conflictPath === undefined
+              {conflictSessionId === undefined
                 ? t("live.session.olderRunning")
-                : t("live.session.olderRunning.withPath", { path: conflictPath })}
+                : t("live.session.olderRunning.withSession", { session: conflictSessionId })}
             </p>
             <Button
               type="button"

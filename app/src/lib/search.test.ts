@@ -1,6 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import type { CampaignTree } from "@grimoire/shared/types";
-import { BookMarked, BookOpen, Bookmark, FileText, GitFork, MapPin, User } from "lucide-react";
+import {
+  BookA,
+  BookMarked,
+  BookOpen,
+  Bookmark,
+  FileText,
+  GitFork,
+  Inbox,
+  MapPin,
+  NotebookPen,
+  User,
+} from "lucide-react";
 
 import { translator } from "@/i18n/format";
 import { contingencyPaths, kindIcon, kindLabel, resultHref } from "./search";
@@ -16,13 +27,17 @@ describe("kindLabel", () => {
     expect(kindLabel("location", t)).toBe("Ort");
     expect(kindLabel("chapter", t)).toBe("Kapitel");
     expect(kindLabel("campaign", t)).toBe("Kampagne");
+    // The three that are lists, not entries — they are searchable too.
+    expect(kindLabel("session", t)).toBe("Session");
+    expect(kindLabel("inbox", t)).toBe("Idee");
+    expect(kindLabel("glossary", t)).toBe("Glossar");
   });
 
   test("unknown kinds pass through unchanged (degrade, never throw)", () => {
-    expect(kindLabel("glossary", t)).toBe("glossary");
+    expect(kindLabel("wat", t)).toBe("wat");
     // …in every language: the kind comes off the wire, the catalog only names
-    // the five it knows.
-    expect(kindLabel("glossary", tEn)).toBe("glossary");
+    // the ones it knows.
+    expect(kindLabel("wat", tEn)).toBe("wat");
     expect(kindLabel("", t)).toBe("");
   });
 });
@@ -34,6 +49,9 @@ describe("kindIcon", () => {
     expect(kindIcon("location")).toBe(MapPin);
     expect(kindIcon("chapter")).toBe(BookOpen);
     expect(kindIcon("campaign")).toBe(BookMarked);
+    expect(kindIcon("session")).toBe(NotebookPen);
+    expect(kindIcon("inbox")).toBe(Inbox);
+    expect(kindIcon("glossary")).toBe(BookA);
   });
 
   test("contingency scenes get the fork; the flag is ignored for other kinds", () => {
@@ -42,7 +60,7 @@ describe("kindIcon", () => {
   });
 
   test("unknown kinds degrade to a generic entry icon", () => {
-    expect(kindIcon("session")).toBe(FileText);
+    expect(kindIcon("wat")).toBe(FileText);
   });
 });
 
@@ -79,25 +97,46 @@ describe("contingencyPaths", () => {
 
 describe("resultHref", () => {
   test("routes every entry kind to the reading view", () => {
-    expect(resultHref("beispiel", { kind: "npc", path: "npcs/fenn" })).toBe(
+    expect(resultHref("beispiel", { kind: "npc", id: "fenn", path: "npcs/fenn" })).toBe(
       "/campaigns/beispiel/entries/npcs/fenn",
     );
-    expect(resultHref("beispiel", { kind: "chapter", path: "01-salzhafen" })).toBe(
-      "/campaigns/beispiel/entries/01-salzhafen",
-    );
+    expect(
+      resultHref("beispiel", { kind: "chapter", id: "01-salzhafen", path: "01-salzhafen" }),
+    ).toBe("/campaigns/beispiel/entries/01-salzhafen");
   });
 
   test("the campaign itself opens the chapter overview, not the reading view", () => {
-    expect(resultHref("beispiel", { kind: "campaign", path: "campaign" })).toBe("/campaigns/beispiel");
-    expect(resultHref("höhlen kampagne", { kind: "campaign", path: "campaign" })).toBe(
-      "/campaigns/h%C3%B6hlen%20kampagne",
+    expect(resultHref("beispiel", { kind: "campaign", id: "campaign", path: "campaign" })).toBe(
+      "/campaigns/beispiel",
     );
+    expect(
+      resultHref("höhlen kampagne", { kind: "campaign", id: "campaign", path: "campaign" }),
+    ).toBe("/campaigns/h%C3%B6hlen%20kampagne");
   });
 
   test("encodes path segments but keeps the slashes routable", () => {
-    const result = { kind: "scene", path: "01-salzhafen/höhle/späh trupp" } as const;
+    const result = { kind: "scene", id: "späh trupp", path: "01-salzhafen/höhle/späh trupp" } as const;
     expect(resultHref("beispiel", result)).toBe(
       "/campaigns/beispiel/entries/01-salzhafen/h%C3%B6hle/sp%C3%A4h%20trupp",
     );
+  });
+
+  // The three kinds that have no entry address any more: they open the page
+  // that holds them, named by their id where there is one.
+  test("a session opens its reading page", () => {
+    expect(resultHref("beispiel", { kind: "session", id: "s-42" })).toBe(
+      "/campaigns/beispiel/sessions/s-42",
+    );
+  });
+
+  test("an idea opens the wrap-up, a term the glossary page", () => {
+    expect(resultHref("beispiel", { kind: "inbox", id: "i-1" })).toBe("/campaigns/beispiel/review");
+    expect(resultHref("beispiel", { kind: "glossary", id: "salzhafen" })).toBe(
+      "/campaigns/beispiel/glossary",
+    );
+  });
+
+  test("an entry hit without a path falls back to the chapter overview", () => {
+    expect(resultHref("beispiel", { kind: "npc", id: "fenn" })).toBe("/campaigns/beispiel");
   });
 });

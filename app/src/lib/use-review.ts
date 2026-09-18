@@ -1,75 +1,70 @@
 // The review model (app half): the union of the harvested session's tagged log
-// lines and the tagged inbox lines, plus the done-state that comes from the
-// server ONLY — log lines via the session's `reviewed` short hashes, inbox
-// lines via their `- [x]` marker. Used by the review route and by the topbar
-// (progress, chapter overview affordance); both share the same query cache, so
-// nothing fetches twice.
+// rows and the tagged inbox rows, plus the done-state that comes from the
+// server ONLY — a log row carries `reviewed`, an inbox row carries `done`.
+// Used by the review route and by the topbar (progress, chapter overview
+// affordance); both share the same query cache, so nothing fetches twice.
+//
+// Rows in, rows out: the session and the inbox answer with lists, so the only
+// thing derived here is which SECTION a row belongs to and which actions its
+// tag allows. Marking a row done names its id.
 //
 // It is a HOOK, not a pure helper, so the two readable labels it produces —
 // the source chip and the progress line — come from the catalog through
 // `useT()` (same as lib/use-rev-write.ts); the lib layer stays free of copy of
 // its own.
 
+import type { InboxEntry, SessionLogRow } from "@grimoire/shared/types";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import { fetchEntry, fetchTree } from "@/api";
+import { fetchInbox, fetchTree } from "@/api";
 import { useT } from "@/i18n";
 import { sceneTitle } from "@/lib/campaign";
-import { propStringArray } from "@/lib/properties";
 import { useActedKeys } from "@/lib/review-memory";
 import {
   PC_TAG,
   extractHashtags,
   firstReviewTag,
   groupByPcTag,
-  harvestInboxEntries,
   hasPcTag,
-  inboxNoteEntries,
-  inboxPcEntries,
   pcGroupTag,
   isReviewTag,
-  shortLineHashes,
   stripHashtags,
   tagAllowsNpc,
   tagAllowsThread,
 } from "@/lib/review";
-import type { LogEntry } from "@/lib/session";
-import { parseLogEntries } from "@/lib/session";
 import { useLastStartedSession } from "@/lib/use-session";
 
-export const INBOX_PATH = "inbox";
+/** Query key of the campaign's inbox — one key, so page and aside share it. */
+export function inboxKey(campaign: string): [string, string] {
+  return ["inbox", campaign];
+}
 
 export interface ReviewEntry {
-  /** Stable identity: the line index in its session (log is append-only, the
-   *  inbox rewrite happens in place). */
+  /** Stable identity: the source plus the row's own id. */
   key: string;
   source: "log" | "inbox";
   /**
    * Which list the entry belongs to: the tagged harvest, or the notes section
-   * of untagged inbox lines thrown in on the go, or the player-character
-   * section of `#pc` lines. The counting is the same for all of them — one
+   * of untagged inbox rows thrown in on the go, or the player-character
+   * section of `#pc` rows. The counting is the same for all of them — one
    * source for page and topbar.
    */
   section: "harvest" | "notes" | "pc";
   /**
-   * Prototype card label — the inbox label, or the log label plus the SCENE
-   * the line was written under ("Log · <scene title>"). The scene id from the
-   * log line is resolved against the tree; an id the tree does not know stays
-   * as it is (degrade).
+   * Card label — the inbox label, or the log label plus the SCENE the row was
+   * written under. The scene id from the row is resolved against the tree; an
+   * id the tree does not know stays as it is (degrade).
    */
   sourceLabel: string;
-  /** Mono meta column: `HH:MM` for log lines, `yyyy-mm-dd` for inbox lines. */
+  /** Mono meta column: `HH:MM` for log rows. */
   meta?: string;
   /** Hashtag without the `#`. */
   tag: string;
   /** Display text — hashtags stripped. */
   text: string;
-  /** The line as it stands in the log: hashed for `reviewed` (log) or
-   *  matched byte for byte by `inbox-done` (inbox). */
-  rawLine: string;
-  /** Short hash of rawLine — log entries only. */
-  hash?: string;
+  /** The row's id: what `review/seen` and `review/inbox-done` name. */
+  id: string;
   /** The character tag of a `#pc` entry — undefined means the general group. */
   pcGroup?: string;
   done: boolean;
@@ -84,15 +79,14 @@ export interface ReviewModel {
   pendingCount: number;
   /** Topbar progress per the prototype, in the UI language. */
   progressLabel: string;
-  /** Still loading session/inbox/hashes — nothing decided yet. */
+  /** Still loading session or inbox — nothing decided yet. */
   isPending: boolean;
   /** No session at all (the review has nothing to harvest). */
   noSession: boolean;
   /** The session could not be loaded at all (server down …). */
   isError: boolean;
-  /** WebCrypto unavailable (insecure origin) — log done-states unknown. */
-  hashUnavailable: boolean;
-  sessionPath: string;
+  /** Id of the harvested session — what a `review/seen` write names. */
+  sessionId: string;
 }
 
 interface UseReviewOptions {
@@ -107,12 +101,11 @@ export function pcGroups(entries: readonly ReviewEntry[]) {
   );
 }
 
-/** A log line the review shows — with the tag that put it there. */
-interface HarvestedLogLine {
-  entry: LogEntry;
-  index: number;
+/** A log row the review shows — with the tag that put it there. */
+interface HarvestedLogRow {
+  row: SessionLogRow;
   tag: string;
-  /** A `#pc` line — its own section, no adoption. */
+  /** A `#pc` row — its own section, no adoption. */
   pc: boolean;
   pcGroup?: string;
 }
@@ -122,27 +115,27 @@ export function useReviewEntries(
   { enabled = true }: UseReviewOptions = {},
 ): ReviewModel {
   const t = useT();
-  // Inbox lines acted on in THIS browser session keep their (now `- [x]`)
-  // card visible instead of vanishing under the cursor — and the topbar
-  // counts the same cards as the page because the memory sits above both.
+  // Inbox rows acted on in THIS browser session keep their (now done) card
+  // visible instead of vanishing under the cursor — and the topbar counts the
+  // same cards as the page because the memory sits above both.
   const acted = useActedKeys(campaign);
   const keepDoneInbox = useMemo(
     () =>
       new Set(
         [...acted.keys()]
           .filter((key) => key.startsWith("inbox:"))
-          .map((key) => Number(key.slice("inbox:".length))),
+          .map((key) => key.slice("inbox:".length)),
       ),
     [acted],
   );
   // WHICH session is harvested is the server's answer: the last STARTED one,
   // ended or not. Deriving today's session id here would break every session
   // that runs past midnight — `end` writes into the session that started it,
-  // so the harvest would be empty and `review/seen` would patch a path that
+  // so the harvest would be empty and `review/seen` would name a session that
   // does not exist.
   const session = useLastStartedSession(campaign, enabled);
-  const sessionPath = session.data?.path ?? "";
-  // The tree turns the log line's scene id into the scene TITLE for the
+  const sessionId = session.data?.id ?? "";
+  // The tree turns a log row's scene id into the scene TITLE for the
   // source chip. Same query key as every other view — shared cache, no
   // second request; a tree that is not there yet simply shows the id.
   const tree = useQuery({
@@ -150,158 +143,106 @@ export function useReviewEntries(
     queryFn: () => fetchTree(campaign),
     enabled: enabled && campaign !== "",
   });
-  // An empty inbox answers 200 with an empty body. The
-  // 404 tolerance stays for a campaign the server does not know — an error
-  // here must never look like "no ideas", it just yields no entries.
+  // An empty inbox answers with an empty list. An error here must never look
+  // like "no ideas", it just yields no entries.
   const inbox = useQuery({
-    queryKey: ["entry", campaign, INBOX_PATH],
-    queryFn: () => fetchEntry(campaign, INBOX_PATH),
+    queryKey: inboxKey(campaign),
+    queryFn: () => fetchInbox(campaign),
     enabled: enabled && campaign !== "",
     retry: false,
   });
 
-  const sessionBody = session.data?.body ?? "";
-  const inboxBody = inbox.data?.body ?? "";
+  const logRows = session.data?.log;
+  const inboxRows = inbox.data?.entries;
 
-  // Tagged log lines (README: #thread/#npc/#loot/#decision), keeping the raw
-  // line and the index in the full log for the hash and the stable key.
-  const logLines = useMemo<HarvestedLogLine[]>(
+  // Tagged log rows (README: #thread/#npc/#loot/#decision).
+  const harvestedLog = useMemo<HarvestedLogRow[]>(
     () =>
-      parseLogEntries(sessionBody)
-        .map((entry, index) => ({ entry, index }))
-        .flatMap(({ entry, index }) => {
-          const tags = extractHashtags(entry.text);
-          // `#pc` wins over the harvest tags (README): the line is a reminder
-          // for the table, not campaign content.
-          if (hasPcTag(tags)) {
-            const line: HarvestedLogLine = { entry, index, tag: PC_TAG, pc: true };
-            const group = pcGroupTag(tags);
-            if (group !== undefined) line.pcGroup = group;
-            return [line];
-          }
-          const tag = firstReviewTag(entry.text);
-          return tag === undefined ? [] : [{ entry, index, tag, pc: false }];
-        }),
-    [sessionBody],
+      (logRows ?? []).flatMap((row) => {
+        const tags = extractHashtags(row.text);
+        // `#pc` wins over the harvest tags (README): the row is a reminder
+        // for the table, not campaign content.
+        if (hasPcTag(tags)) {
+          const entry: HarvestedLogRow = { row, tag: PC_TAG, pc: true };
+          const group = pcGroupTag(tags);
+          if (group !== undefined) entry.pcGroup = group;
+          return [entry];
+        }
+        const tag = firstReviewTag(row.text);
+        return tag === undefined ? [] : [{ row, tag, pc: false }];
+      }),
+    [logRows],
   );
 
-  const rawLines = useMemo(() => logLines.map((l) => l.entry.raw), [logLines]);
-  const hashes = useQuery({
-    // Deterministic in its input — never goes stale, but a key for an older
-    // log state may be collected normally.
-    queryKey: ["review-hash", rawLines],
-    queryFn: () => shortLineHashes(rawLines),
-    enabled: enabled && rawLines.length > 0,
-    staleTime: Infinity,
-    retry: false,
-  });
-
-  const reviewed = useMemo(
-    () => new Set(propStringArray(session.data?.properties.reviewed)),
-    [session.data?.properties.reviewed],
+  // The inbox rows the review shows: a row ticked off in an earlier sitting
+  // stays out, one ticked off in THIS sitting keeps its card.
+  const openInbox = useMemo<InboxEntry[]>(
+    () => (inboxRows ?? []).filter((row) => !row.done || keepDoneInbox.has(row.id)),
+    [inboxRows, keepDoneInbox],
   );
 
   const treeData = tree.data;
 
   const entries = useMemo<ReviewEntry[]>(() => {
-    const hashOf = hashes.data;
-    const logEntries: ReviewEntry[] = logLines.map(({ entry, index, tag, pc, pcGroup }) => {
-      const hash = hashOf?.[entry.raw];
-      const scene = sceneTitle(treeData, entry.sceneId);
+    const logEntries: ReviewEntry[] = harvestedLog.map(({ row, tag, pc, pcGroup }) => {
+      const scene = sceneTitle(treeData, row.sceneId);
       const item: ReviewEntry = {
-        key: `log:${index}`,
+        key: `log:${row.id}`,
         source: "log",
         section: pc ? "pc" : "harvest",
-        // The scene is part of ONE sentence ("Log · <scene title>"), so the
-        // separator travels with the message instead of being glued on.
+        // The scene is part of ONE sentence, so the separator travels with
+        // the message instead of being glued on.
         sourceLabel:
           scene === undefined ? t("review.source.log") : t("review.source.logScene", { scene }),
         tag,
-        text: stripHashtags(entry.text),
-        rawLine: entry.raw,
-        done: hash !== undefined && reviewed.has(hash),
+        text: stripHashtags(row.text),
+        id: row.id,
+        done: row.reviewed,
         // A PC note is never adopted into chapter or NPC.
         canThread: !pc && tagAllowsThread(tag),
         canNpc: !pc && tagAllowsNpc(tag),
       };
       if (pcGroup !== undefined) item.pcGroup = pcGroup;
-      if (entry.time !== undefined) item.meta = entry.time;
-      if (hash !== undefined) item.hash = hash;
+      if (row.at !== "") item.meta = row.at;
       return item;
     });
 
-    const inboxEntries: ReviewEntry[] = harvestInboxEntries(inboxBody, keepDoneInbox).map(
-      (line) => {
-        // Inbox rule: the first hashtag names the entry — but a harvest tag
-        // anywhere in the line wins, so `#idee #npc` still offers the stub.
-        const tag = line.tags.find(isReviewTag) ?? line.tags[0] ?? "";
-        const item: ReviewEntry = {
-          key: `inbox:${line.index}`,
-          source: "inbox",
-          section: "harvest",
-          sourceLabel: t("review.source.inbox"),
-          tag,
-          text: line.text,
-          rawLine: line.raw,
-          done: line.done,
-          canThread: tagAllowsThread(tag),
-          canNpc: tagAllowsNpc(tag),
-        };
-        if (line.date !== undefined) item.meta = line.date;
-        return item;
-      },
-    );
-
-    // Untagged inbox lines: no tag means no tag-derived affordance, so BOTH
-    // harvest actions are offered — the DM decides what the note is. Their
-    // done action is the same `inbox-done` write as the tagged card's discard
-    // action.
-    const noteEntries: ReviewEntry[] = inboxNoteEntries(inboxBody, keepDoneInbox).map((line) => {
+    const inboxEntries: ReviewEntry[] = openInbox.map((row) => {
+      const tags = extractHashtags(row.text);
+      const pc = hasPcTag(tags);
+      // A `#pc` row is a reminder for the table, an untagged one is a note
+      // the DM decides about — both keep their own section. Everything else
+      // is the tagged harvest, where a harvest tag anywhere in the row wins
+      // over the first tag, so `#idee #npc` still offers the stub.
+      const tag = pc ? PC_TAG : (tags.find(isReviewTag) ?? tags[0] ?? "");
+      const section: ReviewEntry["section"] = pc ? "pc" : tags.length === 0 ? "notes" : "harvest";
       const item: ReviewEntry = {
-        key: `inbox:${line.index}`,
+        key: `inbox:${row.id}`,
         source: "inbox",
-        section: "notes",
+        section,
         sourceLabel: t("review.source.inbox"),
-        tag: "",
-        text: line.text,
-        rawLine: line.raw,
-        done: line.done,
-        canThread: true,
-        canNpc: true,
+        tag,
+        text: stripHashtags(row.text),
+        id: row.id,
+        done: row.done,
+        // No tag means no tag-derived affordance, so BOTH harvest actions are
+        // offered; a PC reminder is never adopted.
+        canThread: !pc && (section === "notes" || tagAllowsThread(tag)),
+        canNpc: !pc && (section === "notes" || tagAllowsNpc(tag)),
       };
-      if (line.date !== undefined) item.meta = line.date;
+      if (pc) {
+        const group = pcGroupTag(tags);
+        if (group !== undefined) item.pcGroup = group;
+      }
       return item;
     });
 
-    // `#pc` inbox lines: same list/tick-off mechanic as the notes, but grouped
-    // by character in the page and offered in the live aside. No adoption —
-    // see README.
-    const pcEntries: ReviewEntry[] = inboxPcEntries(inboxBody, keepDoneInbox).map((line) => {
-      const item: ReviewEntry = {
-        key: `inbox:${line.index}`,
-        source: "inbox",
-        section: "pc",
-        sourceLabel: t("review.source.inbox"),
-        tag: PC_TAG,
-        text: line.text,
-        rawLine: line.raw,
-        done: line.done,
-        canThread: false,
-        canNpc: false,
-      };
-      const group = pcGroupTag(line.tags);
-      if (group !== undefined) item.pcGroup = group;
-      if (line.date !== undefined) item.meta = line.date;
-      return item;
-    });
-
-    return [...logEntries, ...inboxEntries, ...noteEntries, ...pcEntries];
-  }, [logLines, inboxBody, keepDoneInbox, hashes.data, reviewed, treeData, t]);
+    return [...logEntries, ...inboxEntries];
+  }, [harvestedLog, openInbox, treeData, t]);
 
   const seenCount = entries.filter((e) => e.done).length;
   const total = entries.length;
   const noSession = session.data === null;
-  const hashesWaiting = rawLines.length > 0 && hashes.data === undefined && !hashes.isError;
 
   return {
     entries,
@@ -309,10 +250,9 @@ export function useReviewEntries(
     seenCount,
     pendingCount: total - seenCount,
     progressLabel: t("review.progress", { seen: seenCount, total }),
-    isPending: session.isPending || inbox.isPending || hashesWaiting,
+    isPending: session.isPending || inbox.isPending,
     noSession,
     isError: session.isError,
-    hashUnavailable: hashes.isError,
-    sessionPath,
+    sessionId,
   };
 }

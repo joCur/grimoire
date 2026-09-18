@@ -11,10 +11,13 @@ import type {
   GenerateJobStarted,
   GlossaryEntry,
   GlossaryResponse,
+  InboxResponse,
   InstanceSettings,
   KnowledgeEntry,
   KnowledgeResponse,
   SearchResponse,
+  SessionListEntry,
+  SessionResponse,
 } from "@grimoire/shared/types";
 
 import { encodeAddress } from "@/lib/address";
@@ -136,10 +139,8 @@ export function fetchVersion(campaign: string): Promise<VersionResponse> {
 }
 
 /**
- * The campaign's glossary as a LIST of terms: since the SQLite
- * migration it is a table, not a markdown blob. The reading view still opens
- * `glossary` as an entry — that rendering comes from these same rows —
- * but anything that wants the terms themselves reads this.
+ * The campaign's glossary as a LIST of terms: it is a table, not a markdown
+ * blob, and this is the only way to read it.
  */
 export function fetchGlossary(campaign: string): Promise<GlossaryResponse> {
   return getJson<GlossaryResponse>(`/campaigns/${encodeURIComponent(campaign)}/glossary`);
@@ -192,8 +193,7 @@ export function putKnowledge(
  *
  * `properties` is flat — a value sets the key, `null` deletes it, an unknown
  * key is a 400. `body` is the markdown GET hands out — the entry's text, with
- * its properties beside it; the glossary and the inbox have no editable text and
- * answer 400 `body_not_editable`. Neither field present is a 400
+ * its properties beside it. Neither field present is a 400
  * `nothing_to_write`.
  *
  * `rev` is the optimistic-concurrency token of the entry the editing session
@@ -290,11 +290,11 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
  * The app must NOT derive the session from its own date: a session that
  * runs past midnight lives in yesterday's session, and a browser in another
  * timezone than the server would guess wrong. The response carries
- * `startedMs`/`endedMs` (epoch, resolved by the server), which is what makes
- * the live runtime correct.
+ * `startedMs`/`endedMs` and the same reading per pause (epoch, resolved by the
+ * server), which is what makes the live runtime correct.
  */
-export async function fetchActiveSession(campaign: string): Promise<EntryResponse | null> {
-  return fetchSession(campaign, false);
+export async function fetchActiveSession(campaign: string): Promise<SessionResponse | null> {
+  return currentSession(campaign, false);
 }
 
 /**
@@ -303,83 +303,98 @@ export async function fetchActiveSession(campaign: string): Promise<EntryRespons
  * midnight was ended in yesterday's session, so "today's session" would harvest
  * nothing (or the wrong log). null when the campaign has no session at all.
  */
-export async function fetchLastStartedSession(campaign: string): Promise<EntryResponse | null> {
-  return fetchSession(campaign, true);
+export async function fetchLastStartedSession(campaign: string): Promise<SessionResponse | null> {
+  return currentSession(campaign, true);
 }
 
-async function fetchSession(
+async function currentSession(
   campaign: string,
   includeEnded: boolean,
-): Promise<EntryResponse | null> {
+): Promise<SessionResponse | null> {
   const path = `/campaigns/${encodeURIComponent(campaign)}/session${includeEnded ? "?includeEnded=1" : ""}`;
   const response = await fetch(`/api${path}`);
   if (response.status === 404) return null;
   if (!response.ok) throw await failure(`GET /api${path}`, response);
-  return (await response.json()) as EntryResponse;
+  return (await response.json()) as SessionResponse;
+}
+
+/** ONE session by its id — the reading page of a past evening. */
+export function fetchSession(campaign: string, id: string): Promise<SessionResponse> {
+  return getJson<SessionResponse>(
+    `/campaigns/${encodeURIComponent(campaign)}/sessions/${encodeURIComponent(id)}`,
+  );
+}
+
+/** The campaign's sessions, newest first — id and the two timestamps only. */
+export function fetchSessions(campaign: string): Promise<SessionListEntry[]> {
+  return getJson<SessionListEntry[]>(`/campaigns/${encodeURIComponent(campaign)}/sessions`);
 }
 
 /**
  * Start a NEW session: "beenden" is final, so a start after an
- * ended session creates the next one of the day (`<date>-2`, `-3` …) with an
+ * ended session creates the next one of the day with an
  * empty log. Idempotent only while today's session is the RUNNING one; the
  * single 409 left is `session_running` — an OLDER session is still open (see
  * sessionStartConflict).
  */
-export function startSession(campaign: string): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/session/start`);
+export function startSession(campaign: string): Promise<SessionResponse> {
+  return postJson<SessionResponse>(`/campaigns/${encodeURIComponent(campaign)}/session/start`);
 }
 
-/** Set `ended` in the ACTIVE session (404 when there is none). */
-export function endSession(campaign: string): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/session/end`);
+/** Set `ended` on the ACTIVE session (404 when there is none). */
+export function endSession(campaign: string): Promise<SessionResponse> {
+  return postJson<SessionResponse>(`/campaigns/${encodeURIComponent(campaign)}/session/end`);
 }
 
 /**
  * Pause the ACTIVE session: the server opens a `pauses`
- * interval — the runtime really stops — and writes the `— Pause` log line.
+ * interval — the runtime really stops — and writes the pause log row.
  * Idempotent; 404 when no session is running.
  */
-export function pauseSession(campaign: string): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/session/pause`);
+export function pauseSession(campaign: string): Promise<SessionResponse> {
+  return postJson<SessionResponse>(`/campaigns/${encodeURIComponent(campaign)}/session/pause`);
 }
 
 /**
- * "Weiter" — close the open pause interval and log `— Weiter`. It ends a
+ * Close the open pause interval and log the resume row. It ends a
  * PAUSE; an ENDED session is never re-opened.
  */
-export function continueSession(campaign: string): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/session/continue`);
+export function continueSession(campaign: string): Promise<SessionResponse> {
+  return postJson<SessionResponse>(`/campaigns/${encodeURIComponent(campaign)}/session/continue`);
 }
 
 /**
- * DELETE the active session — the undo of a mis-clicked "Session
- * starten". Only an EMPTY session may be discarded; the
- * server answers 409 (`code: "session_not_empty"`) otherwise and 404 when
- * nothing is running. Returns the path of the entry that is gone.
+ * DELETE the active session — the undo of a mis-clicked start. Only an EMPTY
+ * session may be discarded; the server answers 409
+ * (`code: "session_not_empty"`) otherwise and 404 when nothing is running.
+ * The caller needs nothing from the answer: after this there is no session to
+ * show, and which older one becomes the last started is the server's answer.
  */
-export function discardSession(campaign: string): Promise<{ path: string }> {
-  return postJson<{ path: string }>(`/campaigns/${encodeURIComponent(campaign)}/session/discard`);
+export function discardSession(campaign: string): Promise<{ id?: string }> {
+  return postJson<{ id?: string }>(`/campaigns/${encodeURIComponent(campaign)}/session/discard`);
+}
+
+/** The campaign's inbox as ROWS — ideas, not text (list plus its `rev`). */
+export function fetchInbox(campaign: string): Promise<InboxResponse> {
+  return getJson<InboxResponse>(`/campaigns/${encodeURIComponent(campaign)}/inbox`);
+}
+
+/** Throw one idea into the campaign's inbox (mobile capture). */
+export function appendInbox(campaign: string, text: string): Promise<InboxResponse> {
+  return postJson<InboxResponse>(`/campaigns/${encodeURIComponent(campaign)}/inbox`, { text });
 }
 
 /**
- * Append a line to the campaign's inbox (mobile capture);
- * the server creates the session on the first log entry.
- */
-export function appendInbox(campaign: string, text: string): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/inbox`, { text });
-}
-
-/**
- * Append a log line to the ACTIVE session (404 when none runs) — which may be
+ * Append a log row to the ACTIVE session (404 when none runs) — which may be
  * yesterday's session when the session ran past midnight; the server picks it.
- * With a sceneId the server also maintains `scenes_played`.
+ * With a sceneId the server also maintains the played scenes.
  */
 export function appendLog(
   campaign: string,
   text: string,
   sceneId?: string,
-): Promise<EntryResponse> {
-  return postJson<EntryResponse>(
+): Promise<SessionResponse> {
+  return postJson<SessionResponse>(
     `/campaigns/${encodeURIComponent(campaign)}/log`,
     sceneId === undefined ? { text } : { text, sceneId },
   );
@@ -388,15 +403,18 @@ export function appendLog(
 // --- review actions ---------------------------------------------------------
 
 /**
- * Mark a log line as reviewed: the server adds the short hash of the RAW
- * line to the session's `reviewed` list (idempotent). Returns the session.
+ * Mark ONE log row as reviewed, named by the session and the row's id
+ * (idempotent). Returns the session.
  */
 export function markLogLineSeen(
   campaign: string,
-  path: string,
-  line: string,
-): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/review/seen`, { path, line });
+  sessionId: string,
+  logId: string,
+): Promise<SessionResponse> {
+  return postJson<SessionResponse>(`/campaigns/${encodeURIComponent(campaign)}/review/seen`, {
+    sessionId,
+    logId,
+  });
 }
 
 /**
@@ -433,13 +451,11 @@ export function ensureNpc(
   });
 }
 
-/**
- * Rewrite an inbox line to `- [x] …` (the one documented exception to the
- * inbox's append-only rule). Idempotent; the line must match byte for byte.
- * Returns inbox.
- */
-export function markInboxLineDone(campaign: string, line: string): Promise<EntryResponse> {
-  return postJson<EntryResponse>(`/campaigns/${encodeURIComponent(campaign)}/review/inbox-done`, { line });
+/** Tick ONE inbox row off by its id (idempotent). Returns the inbox. */
+export function markInboxLineDone(campaign: string, id: string): Promise<InboxResponse> {
+  return postJson<InboxResponse>(`/campaigns/${encodeURIComponent(campaign)}/review/inbox-done`, {
+    id,
+  });
 }
 
 // --- creating content --------------------------------------------------------

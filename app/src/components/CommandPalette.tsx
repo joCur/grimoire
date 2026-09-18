@@ -179,10 +179,10 @@ export function CommandPalette({
               const nav = item.kind === "nav";
               const Icon = nav
                 ? item.target.icon
-                : kindIcon(item.result.kind, forkPaths.has(item.result.path));
+                : kindIcon(item.result.kind, forkPaths.has(item.result.path ?? ""));
               return (
                 <div
-                  key={nav ? `nav:${item.target.id}` : item.result.path}
+                  key={nav ? `nav:${item.target.id}` : `${item.result.kind}:${item.result.id}`}
                   id={optionId(index)}
                   role="option"
                   aria-selected={index === activeIndex}

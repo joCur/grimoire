@@ -13,7 +13,6 @@ import type { ReactNode } from "react";
 import { entityHeaderKind, npcStatusLabel, npcStatusOf } from "@/lib/entity";
 import { propQuickstats, propString } from "@/lib/properties";
 import { useT } from "@/i18n";
-import { sessionDateLabel } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/markdown/Markdown";
 
@@ -66,14 +65,11 @@ export function EntityArticle({
    */
   body?: ReactNode;
 }) {
-  const t = useT();
   const header = entityHeaderKind(entry.kind);
   const properties = entry.properties;
   // npc/location entries carry `name`, chapter/campaign entries `title` — either
-  // may be missing (degrade), then the path is the honest fallback.
-  // A SESSION has no `title` and its id is opaque noise, so the heading is
-  // derived from `started` instead of falling through to the path.
-  const fallback = entry.kind === "session" ? sessionDateLabel(properties, t) : entry.path;
+  // may be missing (degrade), then the address is the honest fallback.
+  const fallback = entry.path;
   const name = propString(properties.name) ?? propString(properties.title) ?? fallback;
   const title = propString(properties.title) ?? propString(properties.name) ?? fallback;
 
