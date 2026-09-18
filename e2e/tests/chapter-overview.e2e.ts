@@ -838,8 +838,9 @@ test("the chapter edit dialog shows the 409 instead of overwriting a second writ
   await expect(body).toHaveValue("## Ziel des Kapitels\n\nAus dem Dialog.");
   expect((await api.file("01-salzhafen")).body).toContain("Von der API.");
 
-  // The next attempt carries the rev the re-read brought and goes through.
-  await dialog.getByRole("button", { name: "Speichern" }).click();
+  // Forcing writes the same field on top of the row as it stands. The save
+  // label is addressed exactly: the conflict line's force action contains it.
+  await dialog.getByRole("button", { name: "Trotzdem speichern" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByText("Ziel: Aus dem Dialog.")).toBeVisible();
 });
@@ -924,6 +925,9 @@ test("the chapter status control shows the German labels and swaps the active ch
 // the flag would call the swap endpoint anyway, which is how a stray select on
 // the row that was active (its control still reads active until the
 // invalidation lands) could take the flag back.
+//
+// Both writes the row can see are counted: the active-flag swap and the one
+// entry PATCH that carries properties (ADR #23).
 test("re-selecting the value a chapter already has writes nothing", async ({ page, api }) => {
   await api.send("POST", "campaigns/beispiel/chapters", { title: "Kapitel 2: Die Bucht" });
 
@@ -932,7 +936,7 @@ test("re-selecting the value a chapter already has writes nothing", async ({ pag
     const url = request.url();
     if (
       (request.method() === "POST" || request.method() === "PATCH") &&
-      (url.includes("/active") || url.includes("/properties"))
+      (url.includes("/active") || url.includes("/entries/"))
     ) {
       writes.push(`${request.method()} ${url.replace(/^.*\/api\//, "")}`);
     }
@@ -1012,7 +1016,7 @@ test("an untouched status field is not written, not even a stale Aktiv", async (
   // stays and the next attempt writes on top of what is stored — with the
   // status STILL untouched, which is the point of this test.
   await expect(dialog).toContainText("Inzwischen geändert");
-  await dialog.getByRole("button", { name: "Speichern" }).click();
+  await dialog.getByRole("button", { name: "Trotzdem speichern" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // The title is written, the status is not even mentioned — and the chapter

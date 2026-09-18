@@ -37,7 +37,8 @@ const SCENE_URL = `/campaigns/beispiel/entries/${SCENE}`;
 /** The reference scene WITH two `## If:` sections and their children. */
 const IF_SCENE = "01-salzhafen/bucht/smuggler-captured";
 const IF_SCENE_URL = `/campaigns/beispiel/entries/${IF_SCENE}`;
-const STALE_MESSAGE = "Inzwischen geändert — neu laden";
+/** The shared conflict line (EditConflict) — the only role="alert" of the app. */
+const CONFLICT_LINE = "Inzwischen geändert";
 
 /** The cards of SCENE, in document order, as the composer names them. */
 const SCENE_BLOCKS = [
@@ -501,8 +502,9 @@ test("409 with a block form open: the message, the form and the typed text stay"
   await field.fill(`${original}\n${mine}`);
   await page.getByRole("button", { name: "Speichern" }).click();
 
-  // Refused, and said so — quietly, in the editor's own message line.
-  await expect(page.getByText(STALE_MESSAGE)).toBeVisible();
+  // Refused, and said so — quietly, under the editor, with both answers.
+  const conflictLine = page.getByRole("alert").filter({ hasText: CONFLICT_LINE });
+  await expect(conflictLine).toBeVisible();
   // The composer stays, the card stays OPEN and the typed text survives.
   await expect(composer(page)).toBeVisible();
   await expect(note.collapse).toHaveAttribute("aria-expanded", "true");
@@ -511,11 +513,11 @@ test("409 with a block form open: the message, the form and the typed text stay"
   // Nothing was written: the other writer's content stands, untouched.
   expect(await split(api, SCENE)).toEqual({ properties: before.properties, body: externalBody });
 
-  // The editor re-read the entry, so the SAME click works now — deliberately on
-  // top of the external body: the DM saw the message and decided.
-  await page.getByRole("button", { name: "Speichern" }).click();
+  // Forcing writes the draft on top of the row as it stands — deliberately on
+  // top of the external body: the DM saw the line and decided.
+  await conflictLine.getByRole("button", { name: "Trotzdem speichern" }).click();
   await expect(composer(page)).toHaveCount(0);
-  await expect(page.getByText(STALE_MESSAGE)).toHaveCount(0);
+  await expect(conflictLine).toHaveCount(0);
   await expect(page.locator("[data-callout='note']")).toContainText(mine);
 
   await expect.poll(() => api.body(SCENE)).toContain(mine);

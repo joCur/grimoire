@@ -289,20 +289,28 @@ test("409: the entry moves while the review is open — nothing is written", asy
   });
 
   // A second writer through the same API is the only way an entry changes
-  // under an open review: the review's guard token is frozen at review time,
-  // so this invalidates it.
+  // under an open review: the review writes against the version it was cut
+  // from, so this invalidates it.
   await api.writeBody(SCENE, "## Flow\n\nJemand anderes hat die Szene umgeschrieben.\n");
 
   await acceptButton(page).click();
-  await expect(page.getByText("Inzwischen geändert — neu laden")).toBeVisible();
+  // The shared conflict line — with ONE action here: the accept step posts to
+  // the job's own endpoint, which has no forced write, so continuing from what
+  // is stored is the only honest answer and forcing is not offered.
+  const conflictLine = page.getByRole("alert").filter({ hasText: "Inzwischen geändert" });
+  await expect(conflictLine).toBeVisible();
+  await expect(conflictLine.getByRole("button", { name: "Neu laden" })).toBeVisible();
+  await expect(conflictLine.getByRole("button", { name: "Trotzdem speichern" })).toHaveCount(0);
   // The dialog stays open with the decisions intact, and NOTHING was written.
   const conflicted = await api.body(SCENE);
   expect(conflicted).toContain("Jemand anderes hat die Szene umgeschrieben.");
   expect(conflicted).not.toContain(AUGMENT_THREAD_TEXT);
 
-  // The review re-read the entry and RE-ALIGNED the proposal against it, so
-  // the next attempt carries the fresh token and goes through — a conflict is
+  // Continuing from what is stored RE-ALIGNS the proposal against it, so the
+  // next attempt carries the current version and goes through — a conflict is
   // a detour, not a dead end…
+  await conflictLine.getByRole("button", { name: "Neu laden" }).click();
+  await expect(conflictLine).toHaveCount(0);
   await acceptButton(page).click();
   await expect(page.getByRole("heading", { name: "Mit KI ergänzen" })).toHaveCount(0);
   const written = await api.body(SCENE);
