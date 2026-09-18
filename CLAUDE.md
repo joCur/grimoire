@@ -44,8 +44,13 @@ Es ist KEIN VTT, KEIN Kampagnen-Wiki und hat KEINE Spieler-Ansicht.
 - `server/` — Hono-API. Die Endpoints sind dort dokumentiert, wo sie stehen:
   `server/src/routes/api.ts`, ein Kommentar je Route — keine Liste zum
   Abhaken. `server/src/server.ts` setzt nur die App zusammen. Datenzugriff
-  ausschließlich über `server/src/store/` (Queries), nie direkt SQL aus einer
-  Route.
+  ausschließlich über `server/src/store/<domäne>.ts` (Queries), nie direkt SQL
+  aus einer Route. **Der Store ist nach Domänen geschnitten:** ein Modul je Art
+  — `campaigns`, `chapters` (mit den Szenen), `npcs`, `locations`, `entries`
+  (der eine Schreibweg, ADR #23), `sessions`, `inbox`, `glossary`,
+  `knowledge`, `drafts` — und jedes trägt die **Lese- UND Schreibzugriffe**
+  seiner Art. Kein Sammelmodul und kein Barrel: jeder Aufrufer importiert aus
+  der Domäne, die er braucht.
 - `app/` — das Frontend (bei erster UI-Aufgabe anlegen: Vite-Scaffold).
 - `generator/` — LLM-Pipeline (Prompt, Few-Shot, Ablauf-README).
 - `design/` — verbindliche Design-Referenz (Claude-Design-Export des PO,
