@@ -43,7 +43,7 @@ async function readFile(rel: string): Promise<{ rev: number; body: string }> {
 async function writeBody(rel: string, body: string): Promise<void> {
   const file = await readFile(rel);
   const res = await app.request(entriesUrl("beispiel", rel), {
-    method: "PUT",
+    method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ rev: file.rev, body }),
   });
@@ -52,10 +52,10 @@ async function writeBody(rel: string, body: string): Promise<void> {
 
 async function patch(rel: string, p: Record<string, unknown>): Promise<void> {
   const file = await readFile(rel);
-  const res = await app.request("/api/campaigns/beispiel/properties", {
+  const res = await app.request(entriesUrl("beispiel", rel), {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: rel, rev: file.rev, patch: p }),
+    body: JSON.stringify({ rev: file.rev, properties: p }),
   });
   expect(res.status).toBe(200);
 }

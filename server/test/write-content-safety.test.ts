@@ -22,30 +22,16 @@ async function getFile(rel: string): Promise<EntryResponse> {
   return (await res.json()) as EntryResponse;
 }
 
-async function putFile(rel: string, body: unknown): Promise<Response> {
+async function patchEntry(rel: string, body: unknown): Promise<Response> {
   return app.request(entriesUrl("beispiel", rel), {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-async function putOk(rel: string, body: unknown): Promise<EntryResponse> {
-  const res = await putFile(rel, body);
-  expect(res.status).toBe(200);
-  return (await res.json()) as EntryResponse;
-}
-
-async function patchReq(body: unknown): Promise<Response> {
-  return app.request("/api/campaigns/beispiel/properties", {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
 }
 
-async function patchOk(body: unknown): Promise<EntryResponse> {
-  const res = await patchReq(body);
+async function patchOk(rel: string, body: unknown): Promise<EntryResponse> {
+  const res = await patchEntry(rel, body);
   expect(res.status).toBe(200);
   return (await res.json()) as EntryResponse;
 }
@@ -56,6 +42,23 @@ async function postJson(url: string, body?: unknown): Promise<Response> {
     headers: { "content-type": "application/json" },
     body: body === undefined ? "{}" : JSON.stringify(body),
   });
+}
+
+/** PUT /glossary — the glossary's own write: the whole list plus its token. */
+async function putGlossary(
+  entries: Array<{ term: string; explanation: string }>,
+  rev: number,
+): Promise<{ entries: Array<{ term: string; explanation: string }>; rev: number }> {
+  const res = await app.request("/api/campaigns/beispiel/glossary", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ entries, rev }),
+  });
+  expect(res.status).toBe(200);
+  return (await res.json()) as {
+    entries: Array<{ term: string; explanation: string }>;
+    rev: number;
+  };
 }
 
 async function tree(): Promise<CampaignTree> {
@@ -84,7 +87,7 @@ afterEach(() => {
   dropStore();
 });
 
-describe("PUT /entry — an npc's `## Beziehungen` keeps what became no row", () => {
+describe("an npc's `## Beziehungen` keeps what became no row", () => {
   test("prose and a duplicate counterpart survive the save", async () => {
     const before = await getFile(NPC);
     expect(before.body).toContain("- [[jorna]]: alte Bekannte");
@@ -96,7 +99,7 @@ describe("PUT /entry — an npc's `## Beziehungen` keeps what became no row", ()
       "\n## Beziehungen\n\n- jorna: alte Bekannte\n" +
       "Beide kennen sich aus der Zeit vor dem Leuchtturm.\n" +
       "- jorna: und schuldet ihr Geld\n\n## Notizen\n";
-    const after = await putOk(NPC, { rev: before.rev, body });
+    const after = await patchOk(NPC, { rev: before.rev, body });
 
     // the relation is a row and comes back rendered …
     expect(after.body).toContain("- jorna: alte Bekannte");
@@ -113,68 +116,70 @@ describe("PUT /entry — an npc's `## Beziehungen` keeps what became no row", ()
     const before = await getFile(NPC);
     const body =
       "\n## Beziehungen\n\n- jorna: alte Bekannte\nEin Satz, der keine Beziehung ist.\n";
-    const first = await putOk(NPC, { rev: before.rev, body });
-    const second = await putOk(NPC, { rev: first.rev, body: first.body });
+    const first = await patchOk(NPC, { rev: before.rev, body });
+    const second = await patchOk(NPC, { rev: first.rev, body: first.body });
     expect(second.body).toBe(first.body);
-    const third = await putOk(NPC, { rev: second.rev, body: second.body });
+    const third = await patchOk(NPC, { rev: second.rev, body: second.body });
     expect(third.body).toBe(first.body);
   });
 
   test("a section that is ONLY relations still renders once, at the end", async () => {
     const before = await getFile(NPC);
     const body = "\n## Will\n\nRaus aus dem Geschäft.\n\n## Beziehungen\n\n- jorna: Ex-Kollegin\n";
-    const after = await putOk(NPC, { rev: before.rev, body });
+    const after = await patchOk(NPC, { rev: before.rev, body });
     expect(after.body.match(/^## Beziehungen$/gm)).toHaveLength(1);
     expect(after.body).toContain("- jorna: Ex-Kollegin");
     expect(after.body).toContain("Raus aus dem Geschäft.");
   });
 });
 
-describe("glossary — nothing unassignable is dropped, and it stays reachable", () => {
-  test("prose above the first heading survives a save", async () => {
+describe("glossary — a list, edited as a list", () => {
+  test("a body is refused, with the code the app knows", async () => {
+    // The glossary is TERM ROWS. It used to take its own rendering back as
+    // markdown and parse it into rows again — the one text-to-columns path,
+    // and the one that could lose a line nobody could assign. It is gone:
+    // the list endpoint writes the rows, and a body for this address says so
+    // instead of silently doing nothing.
     const before = await getFile(GLOSSARY);
-    const body =
-      "\nDieser Text steht über allem und gehört zu keinem Begriff.\n\n" +
-      "- tide pool → Gezeitentümpel\n";
-    const after = await putOk(GLOSSARY, { rev: before.rev, body });
-    expect(after.body).toContain("Dieser Text steht über allem und gehört zu keinem Begriff.");
-    expect(after.body).toContain("- tide pool → Gezeitentümpel");
-    // and a GET says the same — it is stored, not just echoed back
-    const read = await getFile(GLOSSARY);
-    expect(read.body).toBe(after.body);
-    // saving the rendering back keeps it
-    const again = await putOk(GLOSSARY, { rev: read.rev, body: read.body });
-    expect(again.body).toBe(read.body);
+    const res = await patchEntry(GLOSSARY, {
+      rev: before.rev,
+      body: "\n- tide pool → Gezeitentümpel\n",
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe("body_not_editable");
+    expect(await getFile(GLOSSARY)).toEqual(before);
   });
 
-  test("an empty glossary is an empty document (200), still editable", async () => {
+  test("an emptied glossary is an empty entry (200), still editable", async () => {
     const before = await getFile(GLOSSARY);
-    const emptied = await putOk(GLOSSARY, { rev: before.rev, body: "" });
-    expect(emptied.body).toBe("");
-    // The 404 this used to answer made the file the editor was in unreachable.
+    const emptied = await putGlossary([], before.rev);
+    expect(emptied.entries).toEqual([]);
+    // The 404 this used to answer made the entry the editor was in
+    // unreachable.
     const read = await getFile(GLOSSARY);
     expect(read.body).toBe("");
     expect(read.path).toBe(GLOSSARY);
     // …and the DM can type the glossary back in.
-    const refilled = await putOk(GLOSSARY, { rev: read.rev,
-      body: "\n- tide pool → Gezeitentümpel\n",
-    });
-    expect(refilled.body).toContain("- tide pool → Gezeitentümpel");
+    const refilled = await putGlossary(
+      [{ term: "tide pool", explanation: "Gezeitentümpel" }],
+      read.rev,
+    );
+    expect(refilled.entries).toEqual([{ term: "tide pool", explanation: "Gezeitentümpel" }]);
+    expect((await getFile(GLOSSARY)).body).toContain("- tide pool → Gezeitentümpel");
   });
 
-  test("a term typed twice is refused, not half-saved", async () => {
+  test("a multi-line explanation keeps its line breaks through a save", async () => {
+    // Nothing flattens an explanation on the way in: it is one column, and
+    // the reading rendering gives it a section of its own.
     const before = await getFile(GLOSSARY);
-    const res = await putFile(GLOSSARY, { rev: before.rev,
-      body: "\n- tide pool → Gezeitentümpel\n- tide pool → Tidenbecken\n",
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toContain("tide pool");
-    // nothing was written — the old glossary is untouched
-    expect(await getFile(GLOSSARY)).toEqual(before);
+    const explanation = "Zeile eins\nZeile zwei";
+    const saved = await putGlossary([{ term: "Ton", explanation }], before.rev);
+    expect(saved.entries).toEqual([{ term: "Ton", explanation }]);
+    expect((await getFile(GLOSSARY)).body).toContain("## Ton\n\nZeile eins\nZeile zwei");
   });
 });
 
-describe("guard tokens of the two list documents", () => {
+describe("guard tokens of the two list entries", () => {
   test("an unrelated write does not invalidate an open glossary edit", async () => {
     // The bug: `campaigns.version` was the glossary's token, so ANY write —
     // a quick note during a running session — made a pending glossary edit
@@ -185,14 +190,25 @@ describe("guard tokens of the two list documents", () => {
     expect((await postJson("/api/campaigns/beispiel/inbox", { text: "Idee #idee" })).status).toBe(200);
     expect(await version()).toBeGreaterThan(1);
 
-    const saved = await putOk(GLOSSARY, { rev: glossary.rev,
-      body: "\n- tide pool → Gezeitentümpel\n",
-    });
-    expect(saved.body).toContain("Gezeitentümpel");
+    const saved = await putGlossary(
+      [{ term: "tide pool", explanation: "Gezeitentümpel" }],
+      glossary.rev,
+    );
+    expect(saved.entries[0]?.explanation).toBe("Gezeitentümpel");
     // its own writes DO move the token
     expect(saved.rev).toBe(glossary.rev + 1);
-    const stale = await putFile(GLOSSARY, { rev: glossary.rev, body: "" });
+    const stale = await app.request("/api/campaigns/beispiel/glossary", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ entries: [], rev: glossary.rev }),
+    });
     expect(stale.status).toBe(409);
+    // Same 409 as every other write: the code, the current token, and the
+    // entry as it stands.
+    const conflict = (await stale.json()) as { code: string; rev: number; entry: EntryResponse };
+    expect(conflict.code).toBe("rev_conflict");
+    expect(conflict.rev).toBe(saved.rev);
+    expect(conflict.entry.path).toBe(GLOSSARY);
   });
 
   test("the inbox token moves on inbox writes only", async () => {
@@ -204,16 +220,12 @@ describe("guard tokens of the two list documents", () => {
   });
 });
 
-describe("PATCH /properties — a scene's `chapter`", () => {
+describe("the entry PATCH — a scene's `chapter`", () => {
   test("null is refused: a scene belongs to a chapter, the address is the chapter", async () => {
     const before = await getFile(SCENE);
     expect(before.properties.chapter).toBe("01-salzhafen");
 
-    const res = await app.request("/api/campaigns/beispiel/properties", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: SCENE, rev: before.rev, patch: { chapter: null } }),
-    });
+    const res = await patchEntry(SCENE, { rev: before.rev, properties: { chapter: null } });
     expect(res.status).toBe(400);
     // Nothing written: same chapter, same address, same rev.
     const after = await getFile(SCENE);

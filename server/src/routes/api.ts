@@ -62,10 +62,9 @@ import {
   endSession,
   markInboxLineDone,
   markLogLineSeen,
-  patchProperties,
+  patchEntry,
   pauseSession,
   startSession,
-  writeEntryBody,
   writeGlossary,
   writeKnowledge,
 } from "../store/write";
@@ -310,50 +309,65 @@ api.get("/campaigns/:campaign/knowledge", async (c) =>
 
 // --- write endpoints --------------------------------------------------------------
 
-// PATCH /api/campaigns/:campaign/properties { path, rev, patch } -> EntryResponse
-// patch is a flat object of properties keys to set; null deletes a key.
-// 409 { error, rev } when the entry changed since it was read.
+// PATCH /api/campaigns/:campaign/entries/<address> { rev, properties?, body?, force? }
+//   -> EntryResponse
+// THE write of one entry (ADR #23): its fields, its text, or both in ONE
+// request against ONE `rev`. The address is the path behind `entries/`, the
+// same one GET reads.
 //
-// A reference in the patch — `chapter`, `location`, an `npcs` entry — has to
-// name an entry that exists: 400 with the code the app turns into its
-// create-this-first hint, never a new entry as a side effect. A scene's `chapter`
-// may be SET that way but never REMOVED (400): a scene belongs to a chapter
-// and must not fall out of the tree. A key the entry's kind has no field for
-// is a 400 as well; a key that is not part of the kind but sits on the row
-// may still be changed or deleted with null.
+// Fields and text together are ONE write: the row changes once, so `rev`
+// steps once no matter how much the request carried.
+//
+// `properties` is a flat object of keys to set; null deletes a key. `body` is
+// the markdown WITHOUT the properties block — exactly what GET hands out as
+// `body` — and replaces the stored text. Neither of the two present is a 400
+// { code: "nothing_to_write" }: a request that changes nothing is a bug in
+// the caller, not a save.
+//
+// A reference in `properties` — `chapter`, `location`, an `npcs` entry — has
+// to name an entry that exists: 400 with the code the app turns into its
+// create-this-first hint, never a new entry as a side effect. A scene's
+// `chapter` may be SET that way but never REMOVED (400): a scene belongs to
+// a chapter and must not fall out of the tree. A key the entry's kind has no
+// field for is a 400 as well; a key that is not part of the kind but sits on
+// the row may still be changed or deleted with null.
 //
 // `locationName` is the display name for the location a scene's `location`
-// CREATES — applied on insert only, never to a location that already
-// exists.
-api.patch("/campaigns/:campaign/properties", async (c) => {
-  const body = await jsonBody(c, ["path", "rev", "patch"]);
-  const rel = body.path;
-  const rev = body.rev;
-  const patch = body.patch;
-  if (typeof rel !== "string") throw new ApiError(400, "path must be a string");
-  if (typeof rev !== "number" || !Number.isFinite(rev)) {
-    throw new ApiError(400, "rev must be a number");
-  }
-  if (!isPlainObject(patch)) throw new ApiError(400, "patch must be an object");
-  return c.json(await patchProperties(c.req.param("campaign"), rel, rev, patch));
-});
-
-// PUT /api/campaigns/:campaign/entries/<address> { rev, body } -> EntryResponse
-// Writes the markdown BODY of an existing entry — `body` is the markdown
-// WITHOUT the properties block, exactly what GET /entries hands out as `body`.
-// The properties stay untouched (they are PATCH /properties's job). Same rev
-// guard: 409 { error, rev } when the entry changed since it was read; 404 for
-// an entry that does not exist; 400 for the append-only kinds (sessions/*,
-// inbox — DECISIONS #4).
-api.put("/campaigns/:campaign/entries/*", async (c) => {
-  const body = await jsonBody(c, ["rev", "body"]);
-  const rev = body.rev;
+// CREATES — applied on insert only, never to a location that already exists.
+//
+// A stale `rev` is 409 { code: "rev_conflict", rev, entry } and writes
+// nothing — `entry` is the entry as it stands now, so the conflict dialog
+// shows what is in the way without a second request. `force: true` writes the
+// given fields on top of that current row instead: only what this request
+// carries is written, so a status changed in between survives a forced text
+// save.
+//
+// 404 for an entry that does not exist. A `body` for the LIST addresses —
+// glossary, inbox, a session — is 400 { code: "body_not_editable", path }:
+// they grow by rows through their own endpoints (PUT /glossary, POST /inbox,
+// POST /log, the review actions), and glossary and inbox have no properties
+// to patch either (DECISIONS #4).
+api.patch("/campaigns/:campaign/entries/*", async (c) => {
+  const body = await jsonBody(c, ["rev", "properties", "body", "force"]);
+  const properties = body.properties;
   const markdown = body.body;
-  if (typeof rev !== "number" || !Number.isFinite(rev)) {
-    throw new ApiError(400, "rev must be a number");
+  if (properties !== undefined && !isPlainObject(properties)) {
+    throw new ApiError(400, "properties must be an object");
   }
-  if (typeof markdown !== "string") throw new ApiError(400, "body must be a string");
-  return c.json(await writeEntryBody(c.req.param("campaign"), entryAddress(c), rev, markdown));
+  if (markdown !== undefined && typeof markdown !== "string") {
+    throw new ApiError(400, "body must be a string");
+  }
+  if (body.force !== undefined && typeof body.force !== "boolean") {
+    throw new ApiError(400, "force must be a boolean");
+  }
+  return c.json(
+    await patchEntry(c.req.param("campaign"), entryAddress(c), {
+      rev: requireRev(body.rev),
+      ...(properties === undefined ? {} : { properties }),
+      ...(markdown === undefined ? {} : { body: markdown }),
+      ...(body.force === undefined ? {} : { force: body.force }),
+    }),
+  );
 });
 
 // POST /api/campaigns/:campaign/session/start -> EntryResponse
@@ -433,9 +447,13 @@ api.post("/campaigns/:campaign/inbox", async (c) => {
 // Replaces the WHOLE list — the glossary is a short, hand-curated table that
 // is edited as a whole, and that is also what makes REORDERING an ordinary
 // save: the array order is the stored order, so there is no
-// separate move endpoint. Of duplicate terms the FIRST one wins. `rev` is the list's guard token (the one GET /glossary and
-// GET /entries/glossary both hand out); a stale one is
-// `409 { code: "rev_conflict", rev }` and writes nothing.
+// separate move endpoint. Of duplicate terms the FIRST one wins. `rev` is
+// the list's guard token (the one GET /glossary and GET /entries/glossary
+// both hand out); a stale one is the write 409 of every entry —
+// `{ code: "rev_conflict", rev, entry }` — and writes nothing.
+//
+// This is the ONLY way the glossary is written: the entry PATCH takes no
+// `body` for this address (ADR #23).
 api.put("/campaigns/:campaign/glossary", async (c) => {
   const body = await jsonBody(c, ["entries", "rev"]);
   const raw = body.entries;
@@ -462,8 +480,10 @@ api.put("/campaigns/:campaign/glossary", async (c) => {
 // PUT /api/campaigns/:campaign/knowledge { entries: [{ kind, from?, to?, text? }], rev }
 //   -> { entries, rev }
 // The knowledge list's write, with the glossary's contract to the letter:
-// the whole list, the array order IS the order, `rev` guards it
-// and a stale one is a 409 `rev_conflict`. Same page, same rules.
+// the whole list, the array order IS the order, `rev` guards it and a stale
+// one is a 409 `rev_conflict` carrying the current `rev`. Same page, same
+// rules. It carries no `entry`, because the knowledge base has no entry
+// address of its own — the list itself is the resource.
 //
 // A `naming` entry's pair may be HALF-FILLED here on purpose — that is a
 // convention the DM has not finished typing, and refusing the save would

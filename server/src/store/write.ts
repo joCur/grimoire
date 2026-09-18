@@ -1,12 +1,16 @@
 // The write side of the store: every write endpoint as database statements.
 //
+// One entry has ONE write, `patchEntry` — fields, text, or both (ADR #23).
+//
 // The contract the tests pin:
 //
 //   * the response of every write is the `EntryResponse` of the row it
 //     touched, rendered by ./render;
-//   * optimistic concurrency answers `409 { error, rev }`, with the row's
-//     `rev` as the token. That is what closes the same-second race: two
-//     writes against the same `rev` cannot both go through;
+//   * optimistic concurrency answers `409 { error, code: "rev_conflict",
+//     rev, entry }`, with the row's `rev` as the token and the entry as it
+//     stands. That is what closes the same-second race: two writes against
+//     the same `rev` cannot both go through. `force` is the documented way
+//     past it and writes only the fields the request carries;
 //   * the session state machine has its answers and codes
 //     (`session_running`, `session_not_empty`), and `clock.ts` owns the
 //     times — session ids, `started`/`ended` and log times are zone-less
@@ -37,12 +41,13 @@ import {
   type GlossaryResponse,
   type KnowledgeEntry,
   type KnowledgeResponse,
+  type PatchEntryRequest,
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import { assertSafeAddress, assertSafeCampaignId } from "../addressing";
 import { localDate, localDateTimeSeconds, localTime, now } from "../clock";
 import type { GrimoireDb } from "../db/client";
-import { logLineShortHash, parseGlossaryBody } from "./body-parse";
+import { logLineShortHash } from "./body-parse";
 import {
   campaignKnowledge,
   campaigns,
@@ -75,6 +80,7 @@ import {
   pauseRows,
   pickSession,
   playedScenes,
+  readByLocator,
   renderSessionRow,
   requireCampaign,
   sessionRow,
@@ -134,10 +140,10 @@ const CHAPTER_PLANNED = "planned";
  * "exactly one active chapter".
  *
  * Both writes that can set `active` call this inside their own transaction:
- * `POST /chapters/:id/active` (the overview's status control) and a
- * `PATCH /properties` whose status ends up `active` (the chapter properties
- * dialog). The invariant belongs to the COLUMN, not to one endpoint —
- * otherwise the dialog is a second door past it.
+ * `POST /chapters/:id/active` (the overview's status control) and an entry
+ * PATCH whose status ends up `active` (the chapter properties dialog). The
+ * invariant belongs to the COLUMN, not to one endpoint — otherwise the
+ * dialog is a second door past it.
  */
 function clearOtherActiveChapters(tx: GrimoireDb, campaign: string, keep: string): void {
   const previous = tx
@@ -201,15 +207,37 @@ async function mutate<T>(campaign: string, fn: (db: GrimoireDb) => T): Promise<T
  * The optimistic-concurrency check: the row's `rev` must be the one read.
  *
  * The body carries `code: "rev_conflict"` — `what` names WHICH entry moved
- * and stays English, as the technical fallback next to it.
+ * and stays English, as the technical fallback next to it. `current` is the
+ * token to retry with, and `entry` is that entry as it stands now, so the
+ * conflict dialog can show what is in the way without a second request.
  */
+function revConflict(current: number, what: string, entry?: EntryResponse): ApiError {
+  return new ApiError(409, `${what} — reload before saving`, {
+    code: "rev_conflict",
+    rev: current,
+    ...(entry === undefined ? {} : { entry }),
+  });
+}
+
 function guardRev(current: number, sent: number, what: string): void {
-  if (current !== sent) {
-    throw new ApiError(409, `${what} — reload before saving`, {
-      code: "rev_conflict",
-      rev: current,
-    });
-  }
+  if (current !== sent) throw revConflict(current, what);
+}
+
+/**
+ * The guard of an ADDRESSED entry: same check, and the 409 carries the
+ * entry. Rendering it is the read path's own function, so the conflict body
+ * is byte-for-byte what a GET of that address answers.
+ */
+function guardEntryRev(
+  tx: GrimoireDb,
+  campaign: string,
+  locator: Locator,
+  current: number,
+  sent: number,
+  what: string,
+): void {
+  if (current === sent) return;
+  throw revConflict(current, what, readByLocator(tx, requireCampaignRow(tx, campaign), locator));
 }
 
 /** Keys that would hit Object.prototype machinery instead of data. */
@@ -337,7 +365,7 @@ function indexChapter(tx: GrimoireDb, campaign: string, row: ChapterRow): void {
   });
 }
 
-// The campaign file is not referenceable either — but its note body CONTAINS
+// The campaign entry is not referenceable either — but its note body CONTAINS
 // references like any other, and store/refs.ts scans it for them, so nothing
 // here is half-supported.
 export function indexCampaign(tx: GrimoireDb, row: CampaignRow): void {
@@ -689,7 +717,7 @@ export function reindexEntity(
   if (row !== undefined) indexScene(tx, campaign, row, refTags(tx, campaign, id));
 }
 
-// --- PATCH /api/campaigns/:campaign/properties ----------------------------------------
+// --- PATCH /api/campaigns/:campaign/entries/<address> ---------------------------------
 
 /**
  * THE CONTRACT KEYS per kind — the complete set of properties a stored entry
@@ -755,29 +783,112 @@ function rejectIdPatch(patch: Record<string, unknown>, current: string): void {
   throw new ApiError(400, "id is the primary key — it is set at creation and never changes");
 }
 
-export async function patchProperties(
+/**
+ * THE write of one entry (ADR #23): fields, text, or both, in ONE
+ * transaction against ONE `rev`.
+ *
+ * Both halves go into ONE row update, so the write steps `rev` exactly once
+ * however much it carries: `rev + 1` is not a client's business, but two
+ * steps for one save would leak the two statements this used to be and make
+ * the row's history claim a write that never happened. The answer carries
+ * the new token, and a properties patch that MOVES the entry (a scene whose
+ * `chapter` changes lands under another address) is already resolved in the
+ * `path` that comes back. A refusal anywhere rolls the whole request back,
+ * so nothing is half-written.
+ *
+ * `force` replaces the guard by the row's CURRENT rev, read inside this
+ * transaction. It is the DM's answer to the conflict dialog and writes only
+ * the fields of this request, so a status somebody else changed meanwhile
+ * survives a forced text save.
+ *
+ * `jobId` discards the generator job the write came from, in the SAME
+ * transaction (drafts and job can never disagree after a crash). A stale id
+ * matches nothing and is ignored.
+ */
+export async function patchEntry(
   campaign: string,
   rel: string,
-  rev: number,
-  patch: Record<string, unknown>,
+  request: PatchEntryRequest,
+  jobId?: string,
 ): Promise<EntryResponse> {
   assertSafeAddress(rel);
   const locator = locatorFromPath(rel);
-  return mutate(campaign, (tx) => patchLocator(tx, campaign, locator, rev, patch));
+  const patch = request.properties;
+  const markdown = request.body;
+  // An EMPTY properties object counts as nothing either: it would pass the
+  // guard and write no field, which looks like a save and is not one.
+  const hasProperties = patch !== undefined && Object.keys(patch).length > 0;
+  if (!hasProperties && markdown === undefined) {
+    throw new ApiError(400, "nothing to write — send properties, body, or both", {
+      code: "nothing_to_write",
+    });
+  }
+  if (markdown !== undefined && BODYLESS_KINDS.has(locator.kind)) {
+    throw new ApiError(
+      400,
+      `${locator.kind} carries a list, not a text — use its own endpoints`,
+      { code: "body_not_editable", path: rel },
+    );
+  }
+  return mutate(campaign, (tx) => {
+    const guard =
+      request.force === true
+        ? readByLocator(tx, requireCampaignRow(tx, campaign), locator).rev
+        : request.rev;
+    const body = markdown === undefined ? undefined : normalizeBody(markdown);
+    // With fields in the request the body rides along in the SAME update; a
+    // text-only save is the body write on its own. Either way: one update,
+    // one rev step, one re-index.
+    const written = hasProperties
+      ? patchLocator(tx, campaign, locator, guard, patch as Record<string, unknown>, body)
+      : writeBodyIn(tx, campaign, locator, guard, body as string);
+    if (jobId !== undefined) {
+      tx.delete(generateJobs)
+        .where(and(eq(generateJobs.id, jobId), eq(generateJobs.campaignId, campaign)))
+        .run();
+    }
+    return written;
+  });
 }
 
+/**
+ * The addresses whose content is a LIST OF ROWS rather than a text: the
+ * glossary, the inbox, and a session (its log). Each is edited through its
+ * own endpoint, so a `body` for one of them could only be a
+ * misunderstanding — and a silently ignored one would look like a save.
+ */
+const BODYLESS_KINDS: ReadonlySet<Locator["kind"]> = new Set(["glossary", "inbox", "session"]);
+
+/**
+ * A non-empty body gets its closing newline. The text is handed to a
+ * markdown editor and to the generator's prompt, and a body without its
+ * final newline made the next appended section run into the last line.
+ * EXISTING trailing newlines are left alone, so a read/write roundtrip
+ * changes nothing; an empty body stays empty.
+ */
+function normalizeBody(markdown: string): string {
+  return markdown === "" || markdown.endsWith("\n") ? markdown : `${markdown}\n`;
+}
+
+/**
+ * The properties patch of one entry, and — when the same request carries a
+ * text — the body in the SAME update. `body` is already normalized and
+ * `undefined` when the request had none, in which case the column keeps its
+ * value.
+ */
 function patchLocator(
   tx: GrimoireDb,
   campaign: string,
   locator: Locator,
   rev: number,
   patch: Record<string, unknown>,
+  body?: string,
 ): EntryResponse {
   switch (locator.kind) {
     case "campaign": {
       const row = campaignRow(tx, campaign);
       if (row === undefined) throw new ApiError(404, "entry not found");
-      guardRev(row.rev, rev, "campaign changed");
+      guardEntryRev(tx, campaign, locator, row.rev, rev, "campaign changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, CAMPAIGN_KEYS);
       const fm = applyPatch(renderCampaign(row).properties, patch);
@@ -790,10 +901,16 @@ function patchLocator(
         ...row,
         name: name === row.id ? "" : name,
         description: asOptStr(fm.description),
+        body: body ?? row.body,
         rev: row.rev + 1,
       };
       tx.update(campaigns)
-        .set({ name: next.name, description: next.description, rev: next.rev })
+        .set({
+          name: next.name,
+          description: next.description,
+          body: next.body,
+          rev: next.rev,
+        })
         .where(eq(campaigns.id, campaign))
         .run();
       indexCampaign(tx, next);
@@ -802,7 +919,7 @@ function patchLocator(
     case "chapter": {
       const row = chapterRowOf(tx, campaign, locator.id);
       if (row === undefined) throw new ApiError(404, "entry not found");
-      guardRev(row.rev, rev, "chapter changed");
+      guardEntryRev(tx, campaign, locator, row.rev, rev, "chapter changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, CHAPTER_KEYS);
       // Only the known trio may be WRITTEN; what is already stored is still
@@ -813,6 +930,7 @@ function patchLocator(
         ...row,
         title: asStr(fm.title, row.id),
         status: asOptStr(fm.status),
+        body: body ?? row.body,
         rev: row.rev + 1,
       };
       // Setting `active` HERE performs the same swap the dedicated endpoint
@@ -820,7 +938,7 @@ function patchLocator(
       // past the one-active rule.
       if (next.status === CHAPTER_ACTIVE) clearOtherActiveChapters(tx, campaign, row.id);
       tx.update(chapters)
-        .set({ title: next.title, status: next.status, rev: next.rev })
+        .set({ title: next.title, status: next.status, body: next.body, rev: next.rev })
         .where(and(eq(chapters.campaignId, campaign), eq(chapters.id, row.id)))
         .run();
       indexChapter(tx, campaign, next);
@@ -828,7 +946,7 @@ function patchLocator(
     }
     case "scene": {
       const row = sceneRowAt(tx, campaign, locator);
-      guardRev(row.rev, rev, "scene changed");
+      guardEntryRev(tx, campaign, locator, row.rev, rev, "scene changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, SCENE_KEYS);
       const before = renderScene(
@@ -863,6 +981,7 @@ function patchLocator(
         location: nextLocation,
         status: asStr(fm.status, "draft"),
         handouts: packJson(asStrArray(fm.handouts)),
+        body: body ?? row.body,
         rev: row.rev + 1,
       };
       tx.update(scenes)
@@ -874,6 +993,7 @@ function patchLocator(
           location: next.location,
           status: next.status,
           handouts: next.handouts,
+          body: next.body,
           rev: next.rev,
         })
         .where(and(eq(scenes.campaignId, campaign), eq(scenes.id, row.id)))
@@ -888,7 +1008,7 @@ function patchLocator(
     case "npc": {
       const row = npcRowOf(tx, campaign, locator.id);
       if (row === undefined) throw new ApiError(404, "entry not found");
-      guardRev(row.rev, rev, "npc changed");
+      guardEntryRev(tx, campaign, locator, row.rev, rev, "npc changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, NPC_KEYS);
       const fm = applyPatch(renderNpc(row).properties, patch);
@@ -905,6 +1025,7 @@ function patchLocator(
         quickstats: packJson(quickstats),
         voice: asOptStr(fm.voice),
         appearance: asOptStr(fm.appearance),
+        body: body ?? row.body,
         rev: row.rev + 1,
       };
       tx.update(npcs)
@@ -917,6 +1038,7 @@ function patchLocator(
           quickstats: next.quickstats,
           voice: next.voice,
           appearance: next.appearance,
+          body: next.body,
           rev: next.rev,
         })
         .where(and(eq(npcs.campaignId, campaign), eq(npcs.id, row.id)))
@@ -927,7 +1049,7 @@ function patchLocator(
     case "location": {
       const row = locationRowOf(tx, campaign, locator.id);
       if (row === undefined) throw new ApiError(404, "entry not found");
-      guardRev(row.rev, rev, "location changed");
+      guardEntryRev(tx, campaign, locator, row.rev, rev, "location changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, LOCATION_KEYS);
       const fm = applyPatch(renderLocation(row).properties, patch);
@@ -938,6 +1060,7 @@ function patchLocator(
         name: asStr(fm.name, row.id),
         chapterId: locationChapter,
         roll20Page: asOptStr(fm["roll20-page"]),
+        body: body ?? row.body,
         rev: row.rev + 1,
       };
       tx.update(locations)
@@ -945,6 +1068,7 @@ function patchLocator(
           name: next.name,
           chapterId: next.chapterId,
           roll20Page: next.roll20Page,
+          body: next.body,
           rev: next.rev,
         })
         .where(and(eq(locations.campaignId, campaign), eq(locations.id, row.id)))
@@ -955,7 +1079,7 @@ function patchLocator(
     case "session": {
       const row = sessionRow(tx, campaign, locator.id);
       if (row === undefined) throw new ApiError(404, "entry not found");
-      guardRev(row.rev, rev, "session changed");
+      guardEntryRev(tx, campaign, locator, row.rev, rev, "session changed");
       rejectIdPatch(patch, row.id);
       rejectUnknownKeys(patch, SESSION_KEYS);
       const fm = applyPatch(renderSessionRow(tx, campaign, row).properties, patch);
@@ -967,7 +1091,7 @@ function patchLocator(
     case "glossary":
       // Neither is an entity with properties: both are lists of rows
       // (schema.ts), so there is nothing a patch could mean here.
-      throw new ApiError(400, "this file has no properties — it is a list of entries");
+      throw new ApiError(400, "this entry has no properties — it is a list of rows");
   }
 }
 
@@ -1068,58 +1192,27 @@ function patchSessionRow(
   }
 }
 
-// --- PUT /api/campaigns/:campaign/entries -------------------------------------------------
+// --- the body half of a write ----------------------------------------------
 
 /**
- * Replace the markdown BODY of one entity. The append-only kinds
- * are still refused with 400 (DECISIONS #4): a session's log and the inbox
- * grow by rows through their own endpoints, never by a body rewrite.
+ * The body write, INSIDE the caller's transaction — `patchEntry` runs it
+ * together with the properties patch, against one rev guard, because two
+ * `mutate` calls would be two transactions.
  *
- * The glossary is the one body that is DECOMPOSED on the way in: it is a
- * table now, so the markdown the editor sends is parsed back into
- * term/explanation rows (store/body-parse.ts `parseGlossaryBody`) — the same
- * grammar the renderer writes out, so a save round-trips.
- */
-export async function writeEntryBody(
-  campaign: string,
-  rel: string,
-  rev: number,
-  markdown: string,
-): Promise<EntryResponse> {
-  assertSafeAddress(rel);
-  const locator = locatorFromPath(rel);
-  if (locator.kind === "session" || locator.kind === "inbox") {
-    throw new ApiError(400, "this file is append-only — use the log/inbox endpoints");
-  }
-  // A non-empty body gets its closing newline — the same normalisation the
-  // file writer did (campaign-write.ts `replaceBody`), kept because `raw` is
-  // still handed to a markdown editor and to the generator's prompt: a body
-  // without its final newline made the next appended section run into the
-  // last line. EXISTING trailing newlines are left alone, so a read/write
-  // roundtrip changes nothing; an empty body stays empty.
-  return mutate(campaign, (tx) => writeBodyIn(tx, campaign, locator, rev, markdown));
-}
-
-/**
- * The body write itself, INSIDE a caller's transaction. Split out of
- * `writeEntryBody` because accepting an AI proposal writes properties and
- * body of one entry together, and that has to be ONE transaction with one
- * rev guard
- * — two `mutate` calls would be two.
+ * `body` is already normalized (`normalizeBody`).
  */
 function writeBodyIn(
   tx: GrimoireDb,
   campaign: string,
   locator: Locator,
   rev: number,
-  markdown: string,
+  body: string,
 ): EntryResponse {
-  const body = markdown === "" || markdown.endsWith("\n") ? markdown : `${markdown}\n`;
   switch (locator.kind) {
     case "campaign": {
       const row = campaignRow(tx, campaign);
       if (row === undefined) throw new ApiError(404, "entry not found");
-      guardRev(row.rev, rev, "campaign changed");
+      guardEntryRev(tx, campaign, locator, row.rev, rev, "campaign changed");
       const next: CampaignRow = { ...row, body, rev: row.rev + 1 };
       tx.update(campaigns)
         .set({ body: next.body, rev: next.rev })
@@ -1131,7 +1224,7 @@ function writeBodyIn(
     case "chapter": {
       const row = chapterRowOf(tx, campaign, locator.id);
       if (row === undefined) throw new ApiError(404, "entry not found");
-      guardRev(row.rev, rev, "chapter changed");
+      guardEntryRev(tx, campaign, locator, row.rev, rev, "chapter changed");
       const next: ChapterRow = { ...row, body, rev: row.rev + 1 };
       tx.update(chapters)
         .set({ body: next.body, rev: next.rev })
@@ -1142,7 +1235,7 @@ function writeBodyIn(
     }
     case "scene": {
       const row = sceneRowAt(tx, campaign, locator);
-      guardRev(row.rev, rev, "scene changed");
+      guardEntryRev(tx, campaign, locator, row.rev, rev, "scene changed");
       const next: SceneRow = { ...row, body, rev: row.rev + 1 };
       tx.update(scenes)
         .set({ body: next.body, rev: next.rev })
@@ -1155,7 +1248,7 @@ function writeBodyIn(
     case "npc": {
       const row = npcRowOf(tx, campaign, locator.id);
       if (row === undefined) throw new ApiError(404, "entry not found");
-      guardRev(row.rev, rev, "npc changed");
+      guardEntryRev(tx, campaign, locator, row.rev, rev, "npc changed");
       // The whole text is stored as it was written, `## Beziehungen`
       // included: nothing in the storage is derived from body text.
       const next: NpcRow = { ...row, body, rev: row.rev + 1 };
@@ -1169,7 +1262,7 @@ function writeBodyIn(
     case "location": {
       const row = locationRowOf(tx, campaign, locator.id);
       if (row === undefined) throw new ApiError(404, "entry not found");
-      guardRev(row.rev, rev, "location changed");
+      guardEntryRev(tx, campaign, locator, row.rev, rev, "location changed");
       const next: LocationRow = { ...row, body, rev: row.rev + 1 };
       tx.update(locations)
         .set({ body: next.body, rev: next.rev })
@@ -1178,103 +1271,14 @@ function writeBodyIn(
       indexLocation(tx, campaign, next);
       return renderLocation(next);
     }
-    case "glossary": {
-      const row = campaignRow(tx, campaign);
-      if (row === undefined) throw new ApiError(404, "entry not found");
-      // The glossary's OWN counter, not `campaigns.version`: an unrelated
-      // write during a running session must not invalidate an open edit.
-      guardRev(row.glossaryRev, rev, "glossary changed");
-      const parsedGlossary = parseGlossaryBody(body);
-      // A term typed twice would silently lose its second explanation
-      // ("first wins" is a READER's degrade rule, not a save's) — say so
-      // instead, with the term in the message.
-      const duplicate = parsedGlossary.duplicates[0];
-      if (duplicate !== undefined) {
-        throw new ApiError(
-          400,
-          `glossary term "${duplicate}" appears more than once — merge the entries`,
-          { code: "glossary_duplicate_term", term: duplicate },
-        );
-      }
-      const nextRev = row.glossaryRev + 1;
-      // Prose above the first heading belongs to no term. It is KEPT
-      // (campaigns.glossary_intro) and rendered back in front of the list;
-      // dropping it is what made a save lose text.
-      tx.update(campaigns)
-        .set({ glossaryIntro: parsedGlossary.preamble, glossaryRev: nextRev })
-        .where(eq(campaigns.id, campaign))
-        .run();
-      writeGlossaryRows(
-        tx,
-        campaign,
-        parsedGlossary.entries.map((e) => ({ term: e.term, explanation: e.explanation })),
-      );
-      return renderGlossary(glossaryRows(tx, campaign), nextRev, parsedGlossary.preamble);
-    }
     default:
       throw new ApiError(404, "entry not found");
   }
 }
 
-/**
- * Accepting an AI proposal: the chosen properties
- * fields and the chosen body in ONE transaction, guarded by ONE `rev` — the
- * version the DM was looking at in the review.
- *
- * THE BODY GOES FIRST. A properties patch may MOVE the entry — a scene whose
- * `chapter` the proposal changes lands under another address — and `locator`
- * is the address the request came in on. Patching first would leave the
- * body write resolving an address that no longer exists: a bogus 404 and a
- * rolled-back accept, for a proposal that is perfectly fine. Written the
- * other way round the body lands on the row while it is still where the
- * client found it, and the patch runs against the rev that write produced.
- * Both halves see the same transaction, so a conflict in either rolls the
- * whole accept back and nothing is half-written. Everything a normal write
- * does — the search index, the reference checks — happens because these are
- * the very same code paths.
- *
- * The answer is the LAST render, so a move is already in the path the client
- * gets back.
- *
- * `jobId` discards the augment job the proposal came from, in the SAME
- * transaction as the write (drafts and job can never disagree after a
- * crash). A stale id matches nothing and is ignored.
- */
-export async function writePropertiesAndBody(
-  campaign: string,
-  rel: string,
-  rev: number,
-  patch: Record<string, unknown>,
-  body: string | undefined,
-  jobId?: string,
-): Promise<EntryResponse> {
-  assertSafeAddress(rel);
-  const locator = locatorFromPath(rel);
-  if (locator.kind === "session" || locator.kind === "inbox") {
-    throw new ApiError(400, "this file is append-only — use the log/inbox endpoints");
-  }
-  return mutate(campaign, (tx) => {
-    const bodyWritten =
-      body === undefined ? undefined : writeBodyIn(tx, campaign, locator, rev, body);
-    const patchRev = bodyWritten?.rev ?? rev;
-    const patched =
-      Object.keys(patch).length === 0
-        ? undefined
-        : patchLocator(tx, campaign, locator, patchRev, patch);
-    const written = patched ?? bodyWritten;
-    if (written === undefined) throw new ApiError(400, "nothing to write");
-    if (jobId !== undefined) {
-      tx.delete(generateJobs)
-        .where(and(eq(generateJobs.id, jobId), eq(generateJobs.campaignId, campaign)))
-        .run();
-    }
-    return written;
-  });
-}
-
 // --- the glossary table --------------------------------------------------------
 
-/** Replace the whole glossary of a campaign (PUT /glossary, and body edits). */
+/** Replace the whole glossary of a campaign (PUT /glossary). */
 function writeGlossaryRows(
   tx: GrimoireDb,
   campaign: string,
@@ -1319,7 +1323,7 @@ export async function writeGlossary(
 ): Promise<GlossaryResponse> {
   return mutate(campaign, (tx) => {
     const row = requireCampaignRow(tx, campaign);
-    guardRev(row.glossaryRev, rev, "glossary changed");
+    guardEntryRev(tx, campaign, { kind: "glossary" }, row.glossaryRev, rev, "glossary changed");
     writeGlossaryRows(tx, campaign, entries);
     // Same entry, same guard token: an editor holding `glossary` must
     // see a changed `rev` after this.
@@ -1719,7 +1723,7 @@ export async function appendLogEntry(
 
 /**
  * POST /api/campaigns/:campaign/inbox — append `- text`. The `## Eingang`-less first
- * entry gets the `# Inbox` heading row the file format opened with, so the
+ * entry gets the `# Inbox` heading row the rendering opens with, so the
  * rendered inbox still reads like the list it was.
  */
 export async function appendInboxEntry(campaign: string, text: string): Promise<EntryResponse> {
@@ -1758,7 +1762,7 @@ function bumpInboxRev(tx: GrimoireDb, campaign: string): number {
  * POST /api/campaigns/:campaign/review/inbox-done — the one documented exception to the
  * inbox's append-only rule: the entry is marked done. Idempotent; 404 when
  * the line is not in the inbox. The line is matched against the row's `raw`,
- * which is the byte-for-byte line the file had.
+ * which is the byte-for-byte line the entry had.
  */
 export async function markInboxLineDone(campaign: string, line: string): Promise<EntryResponse> {
   const doneForm = (l: string) =>
@@ -1795,7 +1799,7 @@ export async function markInboxLineDone(campaign: string, line: string): Promise
  * CONTRACT of the answer's `marked` flag: true means a row now carries the
  * flag (it was set here, or an earlier call had already set it), false means
  * NO LOG LINE OF THIS SESSION HASHES TO THE LINE THAT WAS SENT — the session
- * moved on, or the caller did not send the line byte for byte. The file
+ * moved on, or the caller did not send the line byte for byte. The entry
  * version grew an orphan `reviewed` entry for that case; the row version
  * cannot, and staying silent about it would hide a client bug behind a 200.
  * The app sends the row's own `raw` (app/src/lib/use-review.ts), so `false`
@@ -2550,7 +2554,7 @@ export async function createChapter(
  * active chapters — and the session view picks the FIRST one it finds, so
  * that window is a wrong session view, not a cosmetic race.
  *
- * The swap itself is `clearOtherActiveChapters`, which a `PATCH /properties`
+ * The swap itself is `clearOtherActiveChapters`, which an entry PATCH
  * setting `active` runs too: the rule belongs to the column, not to this
  * endpoint. Every other status a chapter carries is left alone — this action
  * decides which chapter is active, nothing else.
@@ -2560,7 +2564,7 @@ export async function createChapter(
  * the action sets a value rather than editing text, and its whole point is
  * that it also changes a chapter the caller never read. Two racing callers end
  * with one active chapter either way — which is the rule that matters.
- * `PATCH /properties` on a chapter keeps its rev guard, so the properties
+ * The entry PATCH of a chapter keeps its rev guard, so the properties
  * dialog is a guarded write that happens to also swap.
  *
  * 404 for a chapter that does not exist; idempotent for one that is already
@@ -2594,9 +2598,9 @@ export async function setActiveChapter(campaign: string, id: string): Promise<En
  * and the same code (ADR #19, a mention creates nothing).
  *
  * A scene created here has no `location`, so it sits at chapter level and
- * the app lists it in its no-location group. Setting one later is `PATCH /properties`
- * — and that patch is also what moves the scene into the
- * location's group, address included.
+ * the app lists it in its no-location group. Setting one later is an
+ * ordinary entry PATCH — and that patch is also what moves the scene into
+ * the location's group, address included.
  */
 export async function createScene(
   campaign: string,

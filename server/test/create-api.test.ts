@@ -205,10 +205,10 @@ describe("the per-campaign creates", () => {
     // A scene may reference it — the entry exists.
     expect(
       (
-        await app.request("/api/campaigns/nordwind/properties", {
+        await app.request(entriesUrl("nordwind", scene.path), {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ path: scene.path, rev: scene.rev, patch: { npcs: ["holm-2"] } }),
+          body: JSON.stringify({ rev: scene.rev, properties: { npcs: ["holm-2"] } }),
         })
       ).status,
     ).toBe(200);
@@ -295,13 +295,12 @@ describe("the per-campaign creates", () => {
     // Two entries created and left empty — their name is their own id.
     await created<EntryResponse>("/campaigns/nordwind/npcs", { name: "holm" });
     await created<EntryResponse>("/campaigns/nordwind/locations", { name: "bucht" });
-    const patched = await app.request("/api/campaigns/nordwind/properties", {
+    const patched = await app.request(entriesUrl("nordwind", scene.path), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        path: scene.path,
         rev: scene.rev,
-        patch: { npcs: ["holm"], location: "bucht" },
+        properties: { npcs: ["holm"], location: "bucht" },
       }),
     });
     expect(patched.status).toBe(200);
@@ -416,7 +415,7 @@ describe("POST /api/campaigns/:campaign/chapters/:id/active", () => {
 // else. What is already STORED still degrades — that is the format's rule and
 // there is no CHECK constraint behind the column — so the two halves are
 // tested apart.
-describe("the chapter status enum via PATCH /properties", () => {
+describe("the chapter status enum via the entry PATCH", () => {
   beforeEach(async () => {
     await emptyStore();
     await created<CampaignSummary>("/campaigns", { name: "Nordwind" });
@@ -442,10 +441,10 @@ describe("the chapter status enum via PATCH /properties", () => {
 
   async function patchStatus(chapter: string, status: unknown): Promise<Response> {
     const current = await entry(chapter);
-    return app.request("/api/campaigns/nordwind/properties", {
+    return app.request(entriesUrl("nordwind", current.path), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: current.path, rev: current.rev, patch: { status } }),
+      body: JSON.stringify({ rev: current.rev, properties: { status } }),
     });
   }
 
@@ -492,10 +491,10 @@ describe("the chapter status enum via PATCH /properties", () => {
 
     const fresh = await entry("01-salzhafen");
     expect(fresh.properties.status).toBe("laeuft");
-    const res = await app.request("/api/campaigns/nordwind/properties", {
+    const res = await app.request(entriesUrl("nordwind", fresh.path), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: fresh.path, rev: fresh.rev, patch: { title: "Neu benannt" } }),
+      body: JSON.stringify({ rev: fresh.rev, properties: { title: "Neu benannt" } }),
     });
     expect(res.status).toBe(200);
     const after = await entry("01-salzhafen");

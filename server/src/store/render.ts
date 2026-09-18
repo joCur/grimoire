@@ -408,9 +408,10 @@ export function renderInbox(campaignId: string, rows: InboxRow[], rev: number): 
 // --- glossary ---------------------------------------------------------------
 
 /**
- * The glossary body from `glossary` rows. A one-line explanation renders as
- * the `EN → DE` list line the format documents; a multi-line one keeps its
- * own `##` section, which is the shape `parseGlossaryBody` reads back.
+ * The glossary body from `glossary` rows — a RENDERING, for reading and for
+ * the generator's prompt. A one-line explanation renders as the `EN → DE`
+ * list line the format documents; a multi-line one gets its own `##`
+ * section. It is never written back: the glossary is edited as a list.
  */
 export function renderGlossaryBody(rows: GlossaryRow[], intro = ""): string {
   const listed = rows.filter((r) => !r.explanation.includes("\n"));

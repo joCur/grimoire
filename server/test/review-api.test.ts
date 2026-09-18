@@ -45,10 +45,10 @@ async function getFile(rel: string, campaign = "beispiel"): Promise<EntryRespons
   return (await res.json()) as EntryResponse;
 }
 
-async function putBody(rel: string, body: string): Promise<EntryResponse> {
+async function patchBody(rel: string, body: string): Promise<EntryResponse> {
   const before = await getFile(rel);
   const res = await app.request(entriesUrl("beispiel", rel), {
-    method: "PUT",
+    method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ rev: before.rev, body }),
   });
@@ -206,7 +206,7 @@ describe("POST /api/campaigns/:campaign/review/thread", () => {
   test("inserts before the next heading when the section is not last", async () => {
     // The body is set up through PUT /entry — the app's own way to get a
     // chapter into this shape, instead of writing a file behind the server.
-    await putBody(CHAPTER, "\n## Offene Fäden\n\n- [ ] Alt\n\n## Notizen\n\nText bleibt.\n");
+    await patchBody(CHAPTER, "\n## Offene Fäden\n\n- [ ] Alt\n\n## Notizen\n\nText bleibt.\n");
     const file = await postOk("/api/campaigns/beispiel/review/thread", {
       chapter: "01-salzhafen",
       text: "Neu",
@@ -218,7 +218,7 @@ describe("POST /api/campaigns/:campaign/review/thread", () => {
 
   test("creates the section at the end when it is missing", async () => {
     const body = "\n## Ziel des Kapitels\n\nText.\n";
-    await putBody(CHAPTER, body);
+    await patchBody(CHAPTER, body);
     const file = await postOk("/api/campaigns/beispiel/review/thread", {
       chapter: "01-salzhafen",
       text: "Erster Faden",
