@@ -343,10 +343,11 @@ api.get("/campaigns/:campaign/knowledge", async (c) =>
 // save.
 //
 // 404 for an entry that does not exist. A `body` for the LIST addresses —
-// glossary, inbox, a session — is 400 { code: "body_not_editable", path }:
-// they grow by rows through their own endpoints (PUT /glossary, POST /inbox,
-// POST /log, the review actions), and glossary and inbox have no properties
-// to patch either (DECISIONS #4).
+// glossary, inbox, a session — is 400 { code: "body_not_editable", path },
+// interim while those lists still carry an entry address: they grow by rows
+// through their own endpoints (PUT /glossary, POST /inbox, POST /log, the
+// review actions), and glossary and inbox have no properties to patch either
+// (DECISIONS #4).
 api.patch("/campaigns/:campaign/entries/*", async (c) => {
   const body = await jsonBody(c, ["rev", "properties", "body", "force"]);
   const properties = body.properties;

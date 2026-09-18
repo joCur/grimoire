@@ -920,3 +920,7 @@ Spalten geparst wurde.
 - Jeder Anlege-Endpoint antwortet wie eine Änderung mit dem Eintrag; `POST
   /api/campaigns` bleibt die Ausnahme und antwortet mit der
   Kampagnen-Übersicht, weil es keine Kampagne betritt, sondern eine anlegt.
+- Die 400 `body_not_editable` für einen `body` auf Glossar, Ideen oder
+  Session ist eine Zwischenlösung, solange diese Listen noch eine
+  Eintrags-Adresse haben; die Adresse fällt in einer eigenen Entscheidung,
+  damit fällt der Code.

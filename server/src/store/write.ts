@@ -823,6 +823,8 @@ export async function patchEntry(
       code: "nothing_to_write",
     });
   }
+  // A stopgap, in place only while these lists still carry an entry address:
+  // they get their own read endpoints, and with that address this guard goes.
   if (markdown !== undefined && BODYLESS_KINDS.has(locator.kind)) {
     throw new ApiError(
       400,
