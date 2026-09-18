@@ -898,8 +898,8 @@ Spalten geparst wurde.
   erzwungenes Text-Speichern.
 - Glossar, Kampagnenwissen und Ideen sind **Listen**. Sie werden auf ihren
   Seiten über ihre eigenen Endpoints gepflegt und nehmen keinen `body` an
-  (400 `body_not_editable`). Es gibt keinen Parser mehr, der Text in Zeilen
-  zurückliest.
+  (400 `body_not_editable`; seit ADR #26 erreicht sie kein Schreibweg mehr).
+  Es gibt keinen Parser mehr, der Text in Zeilen zurückliest.
 - Die App hält den `rev` der laufenden Bearbeitung und schickt ihn mit,
   statt ihn einzufrieren und zu raten. Die „textneutral"-Regel entfällt.
 
@@ -919,9 +919,10 @@ Spalten geparst wurde.
   /api/campaigns` bleibt die Ausnahme und antwortet mit der
   Kampagnen-Übersicht, weil es keine Kampagne betritt, sondern eine anlegt.
 - Die 400 `body_not_editable` für einen `body` auf Glossar, Ideen oder
-  Session ist eine Zwischenlösung, solange diese Listen noch eine
-  Eintrags-Adresse haben; die Adresse fällt in einer eigenen Entscheidung,
-  damit fällt der Code.
+  Session war eine Zwischenlösung, solange diese Listen noch eine
+  Eintrags-Adresse hatten. **Eingelöst durch ADR #26:** die Adressen sind weg,
+  also gibt es nichts mehr, wofür ein `body` abzulehnen wäre, und der Code
+  wird nicht mehr gesendet.
 
 ## 24. Der Generator kennt kein Markdown-Zwischenformat
 
@@ -1032,3 +1033,99 @@ ist eine Regel für den **Leser**: ein unbekannter Callout und eine unbekannte
   Sekunde, die diese Genauigkeit zulässt, und die Lesung ändert sich nicht.
   Deshalb läuft dieser Vorlauf — anders als die beiden über ihm — NACH dem
   Migrator; jede andere Form bleibt unangetastet und wird von ihm gemeldet.
+
+## 26. Listen sind keine Einträge
+
+**Kontext:** Sessions, Ideen und Glossar sind seit ADR #13 Tabellen — Zeilen
+mit Spalten, gepflegt über eigene Endpoints. Nach außen gaben sie sich
+trotzdem als Einträge: `sessions/<id>`, `inbox` und `glossary` waren Adressen,
+`GET /entries/<adresse>` antwortete mit einem `EntryResponse`, und dessen
+`body` war ein Markdown-Text, den der Renderer aus den Zeilen zusammensetzte —
+`## Log` aus `log_entries`, die Ideen als Listenzeilen, das Glossar als
+`EN → DE`-Liste. Die App las genau diesen Text und zerlegte ihn wieder in
+Zeilen.
+
+Damit war die Runde, die ADR #24 für den Generator abgeschafft hat, im
+Lesepfad noch vorhanden, nur in der anderen Richtung: Spalten → Text →
+Spalten. Sie konnte nur verlieren. Eine Log-Zeile musste eine Grammatik
+erfüllen, damit die App ihre Zeit und ihre Szene zurückbekam; eine Notiz, die
+mit „(…)" begann, sah wie eine Szenen-Referenz aus; die Zeile trug ihre
+Markdown-Form als Spalte `raw` mit, also zwei Wahrheiten über eine Notiz.
+Dazu kamen die Folgekosten der Verkleidung: Skelett-Zeilen, die nur der Text
+brauchte (`# Inbox`, `— Pause`), ein `body_not_editable`, das ADR #23 selbst
+als Zwischenlösung ausgewiesen hat, und ein Suchtreffer auf einem
+Glossar-Begriff, der eine Adresse mitbrachte, hinter der kein Eintrag stand.
+
+**Entscheidung:** Eine Liste ist keine Verkleidung eines Eintrags. Sessions,
+Ideen und Glossar haben **keine Adresse** und antworten **ihre eigene Form**:
+
+- `SessionResponse` — `{ id, started, startedMs, ended?, endedMs?, pauses,
+  log, scenesPlayed, rev }`, gelesen über `GET …/session` (die laufende,
+  sonst `null`), `GET …/sessions` und `GET …/sessions/<id>`; die vier Verben
+  und `POST …/log` antworten dasselbe. `log` ist eine Liste von Zeilen mit
+  je einer stabilen `id`, `pauses` sind Intervalle, und jeder zonenlose
+  Zeitstempel trägt die Epochen-Lesung des Servers neben sich.
+- `InboxResponse` — `{ entries: [{ id, text, done }], rev }`.
+- `GlossaryResponse` — unverändert, es hatte diese Form schon.
+
+Was daraus folgt, in der Reihenfolge, in der es auffällt:
+
+- **Kein Markdown in der Zeile.** `log_entries.raw` und `inbox_entries.raw`
+  sind weg (Migration `0018`), `text` ist NOT NULL. Die Zeile ist ihre
+  Spalten, und `id` einer Log-Zeile ist der Kurzhash ihrer kanonischen Zeile
+  — aus genau diesen Spalten gebildet, damit jede vorhandene Zeile die id
+  behält, die sie immer hatte.
+- **Der Leser parst nichts mehr zurück.** `renderSession`, `renderInbox` und
+  `renderGlossary` bauen keinen Text; die Fälle für die drei Listen in
+  `readByLocator` und in der Schreibschicht sind gelöscht, und `EntryKind`
+  kennt nur noch die fünf Arten mit Adresse.
+- **Die Skelett-Zeilen fallen.** Eine Tabelle hat keine Überschrift und keine
+  Marker: die Heading-Zeilen der Ideen und die `— Pause`/`— Weiter`-Zeilen des
+  Logs löscht die Migration. Eine Pause IST ein `session_pauses`-Eintrag; die
+  Zeile im Log war dieselbe Pause ein zweites Mal. Pausieren schreibt deshalb
+  keine Log-Zeile mehr.
+- **Nichts wird geraten.** Eine Zeile, deren `text` der alte Parser leer
+  gelassen hat, kann keine Notiz werden. Ein Vorlauf
+  (`server/src/db/list-rows-preflight.ts`) verweigert vor dem Migrator den
+  Start und nennt Kampagne, Liste, Position und die Zeile — dieselbe Haltung
+  wie bei Referenzen, Status und Zeitstempeln (ADR #19, #25).
+- **`body_not_editable` hat keinen Absender mehr.** Es gibt keine Adresse, für
+  die ein `body` abzulehnen wäre. Der Code bleibt in der append-only-Liste
+  stehen, mit dem Vermerk, dass er nicht mehr gesendet wird; dasselbe gilt für
+  `played_scene_unknown`, weil die gespielten Szenen keinen eigenen
+  Schreibweg mehr haben — sie wachsen über die Notiz, die ihre Szene nennt.
+- **Der Zeitstempel-Patch wird sein eigener Endpoint:** `PATCH
+  …/sessions/<id> { rev, started?, ended?, pauses? }`, mit denselben 400/409-
+  Regeln. Log und `scenesPlayed` sind nicht patchbar; ein Ganz-Listen-Write
+  eines append-only-Logs ist keine Bearbeitung, die jemand verlangt hat. Die
+  409 trägt die aktuelle SESSION unter `session` — nicht unter `entry`.
+- **Die Review benennt Zeilen per id:** `POST …/review/seen
+  { sessionId, logId }` und `POST …/review/inbox-done { id }`. Beide sind
+  idempotent und antworten 404 auf eine id, die keine Zeile trägt: die Review
+  schickt zurück, was sie gelesen hat, also ist ein Fehlschlag ein echter
+  Befund und keine 200, die nichts geändert hat.
+- **`SearchResult.path` ist optional** und steht nur bei den Eintrags-Arten.
+  Ein Glossar-Treffer nennt seine Zeile mit `kind` und `id`; eine Adresse, die
+  nichts benennt, wäre eine 404 für den, der ihr folgt. `EntityKind` behält
+  die Listen-Arten, weil der Suchindex sie kennt — die Menge der Arten MIT
+  Adresse heißt `EntryKind`.
+- **Die Segmente bleiben reserviert.** `sessions`, `inbox` und `glossary`
+  benennen keinen Eintrag mehr, stehen aber weiter in `RESERVED_SEGMENTS`
+  (`server/src/store/paths.ts`): ein Kapitel mit einer dieser ids würde mit
+  dem API-Pfad seiner Liste kollidieren.
+- **Alt-Adressen antworten 404,** wie jede Adresse, die das Schema nicht
+  beschreibt. Keine Umleitung, kein Alias (PO: keine gespeicherten URLs).
+
+**Warum keine sanftere Variante:** Die Alternative wäre gewesen, die Adressen
+zu behalten und nur den `body` zu leeren. Dann bleibt die Verkleidung — ein
+`EntryResponse` ohne Text, mit `properties`, die keine Felder sind, und einem
+Wächter, der zu keiner Zeile gehört —, und die Frage „warum kann ich das nicht
+bearbeiten?" braucht weiter einen Fehlercode als Antwort. Die Adresse war das,
+was den Parser überhaupt gerechtfertigt hat; sie fällt mit ihm.
+
+**Bewusst nicht Teil der Entscheidung:** Das Kampagnenwissen ist schon
+vorher eine Liste ohne Adresse gewesen und ändert sich nicht. Der freie Text
+einer Session (`## Threads`) bleibt, wo er ist. Die Suche indexiert weiterhin
+nur Glossar-Begriffe und die fünf Eintrags-Arten — Log-Zeilen und Ideen
+durchsuchbar zu machen wäre ein eigenes Feature und ist hier nicht
+entschieden.
