@@ -1,19 +1,19 @@
-// Injectable clock. All timestamps the write API produces (session ids,
-// started/ended, log times) use the server's LOCAL time — the server runs
-// where the DM plays (single container, DECISIONS #5). Tests override the
-// clock via setNow() to get deterministic dates.
-
-let nowFn: () => Date = () => new Date();
-
-/** Current time — always go through this, never `new Date()` directly. */
-export function now(): Date {
-  return nowFn();
-}
-
-/** Test-only override; pass null to restore the real clock. */
-export function setNow(fn: (() => Date) | null): void {
-  nowFn = fn ?? (() => new Date());
-}
+// Local wall-clock strings, and the way back.
+//
+// Every timestamp the write API produces (session ids, started/ended, log
+// times) is the server's LOCAL time — the server runs where the DM plays
+// (single container, DECISIONS #5) — and it is written zone-less, as
+// `yyyy-mm-dd`, `HH:MM` or `yyyy-mm-ddTHH:MM[:SS]`.
+//
+// That shape has no native formatter: `toISOString` is UTC, so it shifts the
+// digits and appends a `Z` the format does not have, and `toLocaleString` is
+// locale-shaped and not sortable. Hence these five functions, and hence the
+// inverse at the bottom — nothing native reads a zone-less string as local
+// time either.
+//
+// The time ITSELF is `new Date()` at the call site. A test that needs a fixed
+// one fakes the system clock (`setSystemTime` from bun:test), which the whole
+// process sees, rather than this module handing out an overridable one.
 
 const pad = (n: number) => String(n).padStart(2, "0");
 

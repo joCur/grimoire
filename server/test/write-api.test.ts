@@ -18,13 +18,12 @@
 //     rendering is a pure function of the row — but they say "this is what
 //     the editor is shown".
 //
-// The clock is overridden per case via setNow() for deterministic dates.
+// The system time is faked per case (setSystemTime) for deterministic dates.
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import { and, eq } from "drizzle-orm";
 import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
-import { setNow } from "../src/clock";
 import type { GrimoireDb } from "../src/db/client";
 import { scenes as scenesTable, sessions as sessionsTable } from "../src/db/schema";
 import { getDb } from "../src/store/handle";
@@ -90,12 +89,12 @@ let db: GrimoireDb;
 
 beforeEach(async () => {
   // 2026-08-19 21:05 local time unless a test overrides it.
-  setNow(() => new Date(2026, 7, 19, 21, 5));
+  setSystemTime(new Date(2026, 7, 19, 21, 5));
   db = await seedStore();
 });
 
 afterEach(() => {
-  setNow(null);
+  setSystemTime();
   dropStore();
 });
 
@@ -294,7 +293,7 @@ describe("POST /api/campaigns/:campaign/session/start", () => {
   // its minute it would open the timer chip at up to 0:00:59 — after an
   // end→start that reads like the old session kept counting.
   test("`started` keeps the seconds, so a fresh session starts at 0", async () => {
-    setNow(() => new Date(2026, 7, 19, 21, 5, 50));
+    setSystemTime(new Date(2026, 7, 19, 21, 5, 50));
     const file = await postOk("/api/campaigns/beispiel/session/start");
     expect(file.properties.started).toBe("2026-08-19T21:05:50");
     // …and what the app actually clocks — startedMs vs. the same instant — is
@@ -302,8 +301,8 @@ describe("POST /api/campaigns/:campaign/session/start", () => {
     expect(file.startedMs).toBe(new Date(2026, 7, 19, 21, 5, 50).getTime());
   });
 
-  test("a session started on the REAL clock has an elapsed under 2s (#58)", async () => {
-    setNow(null); // the real clock, the surface this matters on
+  test("a session started on the REAL system clock has an elapsed under 2s", async () => {
+    setSystemTime(); // the real clock, the surface this matters on
     const before = Date.now();
     const file = await postOk("/api/campaigns/beispiel/session/start");
     expect(file.startedMs).toBeDefined();
@@ -313,18 +312,18 @@ describe("POST /api/campaigns/:campaign/session/start", () => {
 
   test("second start on the same day is idempotent (nothing reset)", async () => {
     const first = await postOk("/api/campaigns/beispiel/session/start");
-    setNow(() => new Date(2026, 7, 19, 21, 30));
+    setSystemTime(new Date(2026, 7, 19, 21, 30));
     const again = await postOk("/api/campaigns/beispiel/session/start");
     expect(again.properties.started).toBe("2026-08-19T21:05:00"); // NOT 21:30
     // Idempotent all the way down: no write happened, so the token stands.
     expect(again.rev).toBe(first.rev);
   });
 
-  test("after the end a start creates a SECOND session with an empty log (#58)", async () => {
+  test("after the end a start creates a SECOND session with an empty log", async () => {
     const first = await postOk("/api/campaigns/beispiel/session/start");
     await postOk("/api/campaigns/beispiel/log", { text: "Runde eins" });
     await postOk("/api/campaigns/beispiel/session/end");
-    setNow(() => new Date(2026, 7, 19, 23, 30));
+    setSystemTime(new Date(2026, 7, 19, 23, 30));
     const second = await postOk("/api/campaigns/beispiel/session/start");
     // A second session of the SAME DAY is simply another opaque id.
     expect(second.path).not.toBe(first.path);
@@ -343,7 +342,7 @@ describe("POST /api/campaigns/:campaign/session/start", () => {
     // A start on the NEXT day must not open a second session silently — the
     // app offers to end the old one.
     const open = await postOk("/api/campaigns/beispiel/session/start");
-    setNow(() => new Date(2026, 7, 20, 20, 0));
+    setSystemTime(new Date(2026, 7, 20, 20, 0));
     const res = await postJson("/api/campaigns/beispiel/session/start");
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
@@ -368,7 +367,7 @@ describe("POST /api/campaigns/:campaign/log", () => {
   // is covered under session/end below.
   test("appends `- HH:MM (sceneId) text` under ## Log", async () => {
     await postOk("/api/campaigns/beispiel/session/start");
-    setNow(() => new Date(2026, 7, 19, 21, 12));
+    setSystemTime(new Date(2026, 7, 19, 21, 12));
     const file = await postOk("/api/campaigns/beispiel/log", {
       text: "Spuren am Strand #thread",
       sceneId: "lighthouse-arrival",
@@ -378,12 +377,12 @@ describe("POST /api/campaigns/:campaign/log", () => {
 
   test("omits the parens without sceneId and appends after existing entries", async () => {
     await postOk("/api/campaigns/beispiel/session/start");
-    setNow(() => new Date(2026, 7, 19, 21, 12));
+    setSystemTime(new Date(2026, 7, 19, 21, 12));
     await postOk("/api/campaigns/beispiel/log", {
       text: "Spuren am Strand #thread",
       sceneId: "lighthouse-arrival",
     });
-    setNow(() => new Date(2026, 7, 19, 21, 20));
+    setSystemTime(new Date(2026, 7, 19, 21, 20));
     const file = await postOk("/api/campaigns/beispiel/log", { text: "Pause" });
     // Append order is the rows' `pos` order — a log line is never rewritten.
     expect(
@@ -393,7 +392,7 @@ describe("POST /api/campaigns/:campaign/log", () => {
 
   test("multi-line text collapses to a single log line", async () => {
     await postOk("/api/campaigns/beispiel/session/start");
-    setNow(() => new Date(2026, 7, 19, 21, 25));
+    setSystemTime(new Date(2026, 7, 19, 21, 25));
     const file = await postOk("/api/campaigns/beispiel/log", { text: "  Zeile eins\n   Zeile zwei  " });
     expect(file.body.endsWith("- 21:25 Zeile eins Zeile zwei\n")).toBe(true);
   });
@@ -410,7 +409,7 @@ describe("POST /api/campaigns/:campaign/log", () => {
       .set({ ended: null })
       .where(eq(sessionsTable.id, "2026-01-15"))
       .run();
-    setNow(() => new Date(2026, 0, 15, 23, 0));
+    setSystemTime(new Date(2026, 0, 15, 23, 0));
     const file = await postOk("/api/campaigns/beispiel/log", { text: "Nachtrag nach dem Cliffhanger" });
     expect(file.path).toBe("sessions/2026-01-15");
     expect(file.body).toContain(
@@ -444,7 +443,7 @@ describe("scenes_played maintenance (POST log with sceneId)", () => {
   test("second log with the same sceneId does not duplicate", async () => {
     await postOk("/api/campaigns/beispiel/session/start");
     await postOk("/api/campaigns/beispiel/log", { text: "Ankunft", sceneId: "lighthouse-arrival" });
-    setNow(() => new Date(2026, 7, 19, 21, 10));
+    setSystemTime(new Date(2026, 7, 19, 21, 10));
     const file = await postOk("/api/campaigns/beispiel/log", {
       text: "Immer noch da",
       sceneId: "lighthouse-arrival",
@@ -459,9 +458,9 @@ describe("scenes_played maintenance (POST log with sceneId)", () => {
   test("a different sceneId is appended in first-played order", async () => {
     await postOk("/api/campaigns/beispiel/session/start");
     await postOk("/api/campaigns/beispiel/log", { text: "Ankunft", sceneId: "lighthouse-arrival" });
-    setNow(() => new Date(2026, 7, 19, 21, 10));
+    setSystemTime(new Date(2026, 7, 19, 21, 10));
     await postOk("/api/campaigns/beispiel/log", { text: "Erwischt", sceneId: "smuggler-captured" });
-    setNow(() => new Date(2026, 7, 19, 21, 15));
+    setSystemTime(new Date(2026, 7, 19, 21, 15));
     // Playing the FIRST scene again must not reorder the list — the order is
     // "first played", not "last played" (it is the review's reading order).
     const file = await postOk("/api/campaigns/beispiel/log", {
@@ -474,7 +473,7 @@ describe("scenes_played maintenance (POST log with sceneId)", () => {
   test("log without sceneId leaves scenes_played untouched", async () => {
     await postOk("/api/campaigns/beispiel/session/start");
     await postOk("/api/campaigns/beispiel/log", { text: "Ankunft", sceneId: "lighthouse-arrival" });
-    setNow(() => new Date(2026, 7, 19, 21, 15));
+    setSystemTime(new Date(2026, 7, 19, 21, 15));
     const file = await postOk("/api/campaigns/beispiel/log", { text: "Pause" });
     expect(file.properties.scenes_played).toEqual(["lighthouse-arrival"]);
     expect(file.body.endsWith("- 21:15 Pause\n")).toBe(true);
@@ -488,9 +487,9 @@ describe("scenes_played maintenance (POST log with sceneId)", () => {
 describe("POST /api/campaigns/:campaign/session/end", () => {
   test("sets ended, log untouched", async () => {
     await postOk("/api/campaigns/beispiel/session/start");
-    setNow(() => new Date(2026, 7, 19, 21, 25));
+    setSystemTime(new Date(2026, 7, 19, 21, 25));
     await postOk("/api/campaigns/beispiel/log", { text: "Zeile eins Zeile zwei" });
-    setNow(() => new Date(2026, 7, 19, 23, 45));
+    setSystemTime(new Date(2026, 7, 19, 23, 45));
     const file = await postOk("/api/campaigns/beispiel/session/end");
     expect(file.properties.ended).toBe("2026-08-19T23:45:00");
     expect(Object.keys(file.properties)).toEqual(["id", "started", "ended", "scenes_played"]);
@@ -501,23 +500,23 @@ describe("POST /api/campaigns/:campaign/session/end", () => {
 
   test("second end keeps the first ended (idempotent)", async () => {
     await postOk("/api/campaigns/beispiel/session/start");
-    setNow(() => new Date(2026, 7, 19, 23, 45));
+    setSystemTime(new Date(2026, 7, 19, 23, 45));
     const first = await postOk("/api/campaigns/beispiel/session/end");
-    setNow(() => new Date(2026, 7, 19, 23, 59));
+    setSystemTime(new Date(2026, 7, 19, 23, 59));
     const second = await postOk("/api/campaigns/beispiel/session/end");
     expect(second.properties.ended).toBe("2026-08-19T23:45:00");
     // Idempotent means no write: the guard token stands still.
     expect(second.rev).toBe(first.rev);
   });
 
-  test("end stays idempotent across days, log is refused (issue #40 review)", async () => {
+  test("end stays idempotent across days, log is refused", async () => {
     const started = await postOk("/api/campaigns/beispiel/session/start");
-    setNow(() => new Date(2026, 7, 19, 23, 45));
+    setSystemTime(new Date(2026, 7, 19, 23, 45));
     await postOk("/api/campaigns/beispiel/session/end");
     // With nothing running, `end` falls back to the LAST STARTED session —
     // ended or not — and keeps its `ended`. That is what makes "Session
     // beenden" safe to press twice, also after midnight.
-    setNow(() => new Date(2026, 7, 22, 22, 0));
+    setSystemTime(new Date(2026, 7, 22, 22, 0));
     const file = await postOk("/api/campaigns/beispiel/session/end");
     expect(file.path).toBe(started.path);
     expect(file.properties.ended).toBe("2026-08-19T23:45:00");

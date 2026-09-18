@@ -56,7 +56,6 @@ import type {
   GenerateResult,
 } from "@grimoire/shared";
 import { ApiError } from "./api-error";
-import { now } from "./clock";
 import type { GrimoireDb } from "./db/client";
 import { generateJobs } from "./db/schema";
 import { runAugment } from "./generator-augment";
@@ -167,7 +166,7 @@ function serializePipeline(pipeline: PipelineRecord): GenerateJobPipeline {
 }
 
 function timestamp(): string {
-  return now().toISOString();
+  return new Date().toISOString();
 }
 
 /**

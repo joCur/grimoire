@@ -7,11 +7,10 @@
 // place in the tree, an open edit that could not be saved any more, a log
 // line whose columns fell apart.
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import type { CampaignTree, EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
 import { ApiError } from "../src/api-error";
-import { setNow } from "../src/clock";
 import { applyDrafts } from "../src/store/write";
 import { dropStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
@@ -78,12 +77,12 @@ const SCENE = "01-salzhafen/leuchtturm/lighthouse-arrival";
 const GLOSSARY = "glossary";
 
 beforeEach(async () => {
-  setNow(() => new Date(2026, 7, 19, 21, 5));
+  setSystemTime(new Date(2026, 7, 19, 21, 5));
   await seedStore();
 });
 
 afterEach(() => {
-  setNow(null);
+  setSystemTime();
   dropStore();
 });
 

@@ -5,22 +5,22 @@
 // A session lives in `sessions` + `session_pauses` + `log_entries`, and the
 // picking rule is a query (store/read.ts `pickSession`) — that rule is what
 // this file pins. Each case gets a fresh in-memory database seeded from the
-// committed JSON entries (test/support/store.ts); the clock is overridden via
-// setNow().
+// committed JSON entries (test/support/store.ts); the system time is faked
+// per case (setSystemTime).
 //
 // Sessions are produced two ways here:
 //   - through the API whenever that is possible (a session started yesterday
-//     is simply `POST /session/start` with yesterday's clock) — that exercises
-//     the real state machine instead of a hand-built row;
+//     is simply `POST /session/start` with yesterday as the system time) —
+//     that exercises the real state machine instead of a hand-built row;
 //   - through the SEED, for the shapes an endpoint cannot produce in one call
 //     (a date-only `started`, a blank `ended`, `scenes_played` without a
 //     log) — the shapes a campaign written earlier carries.
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
-import { localDateTimeToMs, setNow } from "../src/clock";
+import { localDateTimeToMs } from "../src/local-time";
 import type { GrimoireDb } from "../src/db/client";
 import { sessions as sessionsTable } from "../src/db/schema";
 import { pickSession, sessionOrderKey } from "../src/store/read";
@@ -109,24 +109,24 @@ async function activePath(includeEnded = false): Promise<string> {
 }
 
 /**
- * Start a session with the clock at `d`, then hand the clock back to `now`.
+ * Start a session with the system time at `d`, then set it to `thenNow`.
  * Returns the new session's path (see `startSession`).
  */
 async function startAt(d: Date, thenNow: Date): Promise<string> {
-  setNow(() => d);
+  setSystemTime(d);
   const path = await startSession();
-  setNow(() => thenNow);
+  setSystemTime(thenNow);
   return path;
 }
 
 beforeEach(async () => {
-  setNow(() => new Date(2026, 7, 19, 21, 5));
+  setSystemTime(new Date(2026, 7, 19, 21, 5));
   db = await seedStore();
 });
 
 afterEach(async () => {
   dropStore();
-  setNow(null);
+  setSystemTime();
 });
 
 // --- the picking rule, as a query -------------------------------------------
@@ -362,7 +362,7 @@ describe("writes land in the ACTIVE session, not in today's", () => {
   });
 });
 
-describe("start — the state machine's edges (issues #40 review, #58)", () => {
+describe("start — the state machine's edges", () => {
   test("409 session_running instead of a second session next to an open one", async () => {
     // The older session was never ended (a forgotten evening). Starting today
     // must not open a second row next to it — the app offers to end the old
@@ -390,14 +390,14 @@ describe("start — the state machine's edges (issues #40 review, #58)", () => {
     expect((await post("/api/campaigns/beispiel/session/start")).status).toBe(409);
   });
 
-  test("a start after the end opens a SECOND session of the same day (#58)", async () => {
+  test("a start after the end opens a SECOND session of the same day", async () => {
     // "Beenden" is final: no `session_ended` 409, no resume — the next press
     // is a new evening with its own id, an empty log and a runtime at 0.
     const firstPath = await startSession();
     expect((await post("/api/campaigns/beispiel/log", { text: "erste Runde" })).status).toBe(200);
     expect((await post("/api/campaigns/beispiel/session/end")).status).toBe(200);
 
-    setNow(() => new Date(2026, 7, 19, 23, 30));
+    setSystemTime(new Date(2026, 7, 19, 23, 30));
     const again = await post("/api/campaigns/beispiel/session/start");
     expect(again.status).toBe(200);
     const file = (await again.json()) as EntryResponse;
@@ -422,7 +422,7 @@ describe("start — the state machine's edges (issues #40 review, #58)", () => {
   test("three sessions of one day are three ids, and the review takes the last", async () => {
     const paths: string[] = [];
     for (const hour of [18, 20, 22]) {
-      setNow(() => new Date(2026, 7, 19, hour, 0));
+      setSystemTime(new Date(2026, 7, 19, hour, 0));
       paths.push(await startSession());
       expect((await post("/api/campaigns/beispiel/session/end")).status).toBe(200);
     }
@@ -577,7 +577,7 @@ describe("the review's session — GET /session?includeEnded=1", () => {
     // browser date harvests nothing — there is no session of the 19th.
     const yesterday = await startAt(new Date(2026, 7, 18, 22, 30), new Date(2026, 7, 19, 1, 40));
     expect((await post("/api/campaigns/beispiel/session/end")).status).toBe(200);
-    setNow(() => new Date(2026, 7, 19, 9, 0));
+    setSystemTime(new Date(2026, 7, 19, 9, 0));
     expect((await app.request("/api/campaigns/beispiel/session")).status).toBe(404); // nothing runs
     const res = await app.request("/api/campaigns/beispiel/session?includeEnded=1");
     expect(res.status).toBe(200);
@@ -621,14 +621,14 @@ describe("degraded session files never hijack the active session", () => {
   // A MINUTE-precise `started` is a valid width too: the format's parser
   // accepts both, so such a row keeps working — verbatim string, a startedMs
   // on the minute, endable.
-  test("a pre-#58 minute-precise `started` stays valid", async () => {
+  test("a minute-precise `started` without seconds stays valid", async () => {
     await seedWithSessions(session({ id: "2026-08-19", started: "2026-08-19T20:00" }));
     const res = await app.request("/api/campaigns/beispiel/session");
     expect(res.status).toBe(200);
     const file = (await res.json()) as EntryResponse;
     expect(file.properties.started).toBe("2026-08-19T20:00");
     expect(file.startedMs).toBe(new Date(2026, 7, 19, 20, 0).getTime());
-    setNow(() => new Date(2026, 7, 19, 22, 0, 30));
+    setSystemTime(new Date(2026, 7, 19, 22, 0, 30));
     const ended = (await (await post("/api/campaigns/beispiel/session/end")).json()) as EntryResponse;
     // The end is written at the new width next to the old `started`.
     expect(ended.properties.started).toBe("2026-08-19T20:00");
@@ -670,7 +670,7 @@ describe("degraded session files never hijack the active session", () => {
     const res = await app.request("/api/campaigns/beispiel/session");
     expect(res.status).toBe(200);
     expect(((await res.json()) as EntryResponse).path).toBe("sessions/2026-08-19");
-    setNow(() => new Date(2026, 7, 19, 23, 50));
+    setSystemTime(new Date(2026, 7, 19, 23, 50));
     const ended = await post("/api/campaigns/beispiel/session/end");
     expect(ended.status).toBe(200);
     expect(((await ended.json()) as EntryResponse).properties.ended).toBe("2026-08-19T23:50:00");

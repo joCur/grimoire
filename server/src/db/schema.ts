@@ -38,7 +38,7 @@
 //      set once, at creation (ADR #21); the cascade is what keeps a child row
 //      honest, not a feature that changes ids.
 //   6. SESSION TIMESTAMPS STAY ZONE-LESS STRINGS, exactly as they were
-//      written. Only the server resolves them to epoch ms (see clock.ts) —
+//      written. Only the server resolves them to epoch ms (see local-time.ts) —
 //      storing an epoch here would bake today's timezone into the data.
 //   7. A CLOSED VALUE SET IS A CHECK CONSTRAINT. `scenes.status`,
 //      `scenes.type`, `npcs.status` and `chapters.status` each hold one of a

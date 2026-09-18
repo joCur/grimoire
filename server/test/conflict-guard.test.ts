@@ -15,13 +15,12 @@
 // never lands — for fields, for text, and across the two, because
 // properties and body are one row and therefore one guard (ADR #23).
 //
-// The clock is deliberately FROZEN via setNow(): the guard is independent of
+// The system time is deliberately FROZEN: the guard is independent of
 // wall-clock time, and a test that is not about timing is the point.
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import type { EntryResponse, PatchEntryRequest } from "@grimoire/shared";
 import { app } from "../src/server";
-import { setNow } from "../src/clock";
 import { dropStore, seedStore } from "./support/store";
 import { entriesUrl } from "./support/urls";
 
@@ -52,12 +51,12 @@ interface Conflict {
 beforeEach(async () => {
   // FROZEN — every request in this file happens in the same clock second, the
   // situation the guard must still tell apart.
-  setNow(() => new Date(2026, 7, 19, 21, 5, 30));
+  setSystemTime(new Date(2026, 7, 19, 21, 5, 30));
   await seedStore();
 });
 
 afterEach(() => {
-  setNow(null);
+  setSystemTime();
   dropStore();
 });
 

@@ -12,8 +12,8 @@
 //     the same `rev` cannot both go through. `force` is the documented way
 //     past it and writes only the fields the request carries;
 //   * the session state machine has its answers and codes
-//     (`session_running`, `session_not_empty`), and `clock.ts` owns the
-//     times — session ids, `started`/`ended` and log times are zone-less
+//     (`session_running`, `session_not_empty`), and `local-time.ts` owns the
+//     formatting — session ids, `started`/`ended` and log times are zone-less
 //     local strings produced by the server;
 //   * append-only stays append-only: log lines and inbox entries grow by
 //     rows through their own endpoints, and the one documented exception
@@ -48,7 +48,7 @@ import {
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import { assertSafeAddress, assertSafeCampaignId } from "../addressing";
-import { localDate, localDateTimeSeconds, localTime, now } from "../clock";
+import { localDate, localDateTimeSeconds, localTime } from "../local-time";
 import type { GrimoireDb } from "../db/client";
 import { logLineShortHash } from "./body-parse";
 import {
@@ -1472,7 +1472,7 @@ function newSessionId(): string {
  * The CALENDAR DAY of a session's `started`, or undefined when the value says
  * nothing usable. Just the date part of the zone-less wall-clock string the
  * format carries — no timezone arithmetic, because the string already is the
- * server's local reading (clock.ts).
+ * server's local reading (local-time.ts).
  */
 function startedDate(started: string | null): string | undefined {
   return /^(\d{4}-\d{2}-\d{2})/.exec(started ?? "")?.[1];
@@ -1483,13 +1483,12 @@ function startedDate(started: string | null): string | undefined {
  * (db/schema.ts), in epoch milliseconds and STRICTLY greater than every
  * createdAt the campaign already holds.
  *
- * Two reasons it is not simply `Date.now()`. It must be monotonic — "start,
- * beenden, wieder starten" inside one millisecond has to order, and so does a
- * clock that jumped backwards (NTP, DST on a machine that stores UTC wrong).
- * And it must NOT come from `clock.ts now()`: that one is overridable, which
- * is the point for `started` (a session can be started "yesterday" in a test)
- * and exactly wrong here — a frozen clock would hand every row of a test the
- * same tie-break and the order would depend on the query's row order again.
+ * Hence the `highest + 1` floor rather than a plain `Date.now()`: the value
+ * must be monotonic — "start, beenden, wieder starten" inside one millisecond
+ * has to order, and so does a clock that jumped backwards (NTP, DST on a
+ * machine that stores UTC wrong) or one a test froze. Without the floor every
+ * row of such a run would share the tie-break, and the order would fall back
+ * to the query's row order again.
  */
 function nextCreatedAt(tx: GrimoireDb, campaign: string): number {
   const highest = tx
@@ -1515,7 +1514,7 @@ function nextCreatedAt(tx: GrimoireDb, campaign: string): number {
  */
 export async function startSession(campaign: string): Promise<EntryResponse> {
   return mutate(campaign, (tx) => {
-    const d = now();
+    const d = new Date();
     const today = localDate(d);
     const active = pickSession(tx, campaign, false);
     // "Is the running session TODAY's?" is answered by `started`, not by the
@@ -1559,7 +1558,7 @@ export async function endSession(campaign: string): Promise<EntryResponse> {
     const row = pickSession(tx, campaign, false) ?? pickSession(tx, campaign, true);
     if (row === undefined) throw new ApiError(404, "no active session");
     if (isEnded({ ended: row.ended })) return renderSessionRow(tx, campaign, row);
-    const d = now();
+    const d = new Date();
     closeOpenPauses(tx, campaign, row.id, localDateTimeSeconds(d));
     const ended = localDateTimeSeconds(d);
     tx.update(sessions)
@@ -1657,7 +1656,7 @@ export async function pauseSession(campaign: string): Promise<EntryResponse> {
     const row = requireActive(tx, campaign);
     const pauses = pauseRows(tx, campaign, row.id);
     if (pauses.some((p) => p.toTs === null)) return renderSessionRow(tx, campaign, row);
-    const d = now();
+    const d = new Date();
     tx.insert(sessionPauses)
       .values({
         campaignId: campaign,
@@ -1677,7 +1676,7 @@ export async function pauseSession(campaign: string): Promise<EntryResponse> {
 export async function continueSession(campaign: string): Promise<EntryResponse> {
   return mutate(campaign, (tx) => {
     const row = requireActive(tx, campaign);
-    const d = now();
+    const d = new Date();
     if (!closeOpenPauses(tx, campaign, row.id, localDateTimeSeconds(d))) {
       return renderSessionRow(tx, campaign, row);
     }
@@ -1735,7 +1734,7 @@ export async function appendLogEntry(
     // The note's scene is a reference: it has to name a scene that exists,
     // and nothing is created for it.
     if (sceneId !== undefined) assertSceneRef(tx, campaign, sceneId, "log_scene_unknown");
-    const raw = `- ${localTime(now())}${sceneId ? ` (${sceneId})` : ""} ${text}`;
+    const raw = `- ${localTime(new Date())}${sceneId ? ` (${sceneId})` : ""} ${text}`;
     appendLogRow(tx, campaign, row.id, raw);
     if (sceneId !== undefined) {
       const played = playedScenes(tx, campaign, row.id);

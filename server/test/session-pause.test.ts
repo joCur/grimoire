@@ -7,16 +7,15 @@
 // `log_entries` row; both are rendered back into the EntryResponse the client
 // reads (store/render.ts), so the assertions read the RESPONSE. Each case
 // gets a fresh in-memory database seeded from the JSON entries in `fixtures/`
-// (test/support/store.ts), and the clock is overridden via setNow().
+// (test/support/store.ts), and the system time is faked per case.
 //
 // Pause timestamps are stored VERBATIM as `localDateTimeSeconds` writes them,
 // so a `:00` second survives — which is what several assertions below spell
 // out second-precise.
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
-import { setNow } from "../src/clock";
 import { dropStore, seedStore } from "./support/store";
 
 /** Path of the session `beforeEach` started — this case's opaque id. */
@@ -79,20 +78,20 @@ async function seedWithPauses(
 beforeEach(async () => {
   // The running session of every case: started 21:00, clock at 21:05 unless
   // the case moves it.
-  setNow(() => new Date(2026, 7, 19, 21, 0));
+  setSystemTime(new Date(2026, 7, 19, 21, 0));
   await seedStore();
   startedPath = (await ok("/api/campaigns/beispiel/session/start")).path;
-  setNow(() => new Date(2026, 7, 19, 21, 5));
+  setSystemTime(new Date(2026, 7, 19, 21, 5));
 });
 
 afterEach(async () => {
   dropStore();
-  setNow(null);
+  setSystemTime();
 });
 
 describe("POST /api/campaigns/:campaign/session/pause + /continue", () => {
   test("pause opens an interval and logs `— Pause`; continue closes it and logs `— Weiter`", async () => {
-    setNow(() => new Date(2026, 7, 19, 21, 40, 12));
+    setSystemTime(new Date(2026, 7, 19, 21, 40, 12));
     const paused = await ok("/api/campaigns/beispiel/session/pause");
     expect(paused.path).toBe(startedPath);
     expect(paused.properties.pauses).toEqual([{ from: "2026-08-19T21:40:12" }]);
@@ -101,7 +100,7 @@ describe("POST /api/campaigns/:campaign/session/pause + /continue", () => {
     expect(paused.pausedSinceMs).toBe(new Date(2026, 7, 19, 21, 40, 12).getTime());
     expect(logLines(paused)).toEqual(["- 21:40 — Pause"]);
 
-    setNow(() => new Date(2026, 7, 19, 21, 58, 3));
+    setSystemTime(new Date(2026, 7, 19, 21, 58, 3));
     const running = await ok("/api/campaigns/beispiel/session/continue");
     expect(running.properties.pauses).toEqual([
       { from: "2026-08-19T21:40:12", to: "2026-08-19T21:58:03" },
@@ -117,13 +116,13 @@ describe("POST /api/campaigns/:campaign/session/pause + /continue", () => {
   });
 
   test("several pauses add up; the log stays append-only", async () => {
-    setNow(() => new Date(2026, 7, 19, 21, 10, 0));
+    setSystemTime(new Date(2026, 7, 19, 21, 10, 0));
     await ok("/api/campaigns/beispiel/session/pause");
-    setNow(() => new Date(2026, 7, 19, 21, 20, 0));
+    setSystemTime(new Date(2026, 7, 19, 21, 20, 0));
     await ok("/api/campaigns/beispiel/session/continue");
-    setNow(() => new Date(2026, 7, 19, 22, 0, 0));
+    setSystemTime(new Date(2026, 7, 19, 22, 0, 0));
     await ok("/api/campaigns/beispiel/session/pause");
-    setNow(() => new Date(2026, 7, 19, 22, 5, 30));
+    setSystemTime(new Date(2026, 7, 19, 22, 5, 30));
     const file = await ok("/api/campaigns/beispiel/session/continue");
     expect(file.pausedMs).toBe((10 * 60 + 5 * 60 + 30) * 1000);
     expect((file.properties.pauses as unknown[]).length).toBe(2);
@@ -136,18 +135,18 @@ describe("POST /api/campaigns/:campaign/session/pause + /continue", () => {
   });
 
   test("both calls are idempotent — no second interval, no duplicate log line", async () => {
-    setNow(() => new Date(2026, 7, 19, 21, 30, 0));
+    setSystemTime(new Date(2026, 7, 19, 21, 30, 0));
     await ok("/api/campaigns/beispiel/session/pause");
-    setNow(() => new Date(2026, 7, 19, 21, 31, 0));
+    setSystemTime(new Date(2026, 7, 19, 21, 31, 0));
     const again = await ok("/api/campaigns/beispiel/session/pause");
     // The pause is unchanged — same `from` (second-precise as written, no
     // YAML roundtrip to drop the `:00` any more) and no second entry.
     expect(again.properties.pauses).toEqual([{ from: "2026-08-19T21:30:00" }]);
     expect(logLines(again)).toEqual(["- 21:30 — Pause"]);
 
-    setNow(() => new Date(2026, 7, 19, 21, 35, 0));
+    setSystemTime(new Date(2026, 7, 19, 21, 35, 0));
     await ok("/api/campaigns/beispiel/session/continue");
-    setNow(() => new Date(2026, 7, 19, 21, 36, 0));
+    setSystemTime(new Date(2026, 7, 19, 21, 36, 0));
     const stillRunning = await ok("/api/campaigns/beispiel/session/continue");
     expect(stillRunning.properties.pauses).toEqual([
       { from: "2026-08-19T21:30:00", to: "2026-08-19T21:35:00" },
@@ -156,9 +155,9 @@ describe("POST /api/campaigns/:campaign/session/pause + /continue", () => {
   });
 
   test("`session/end` closes an open pause", async () => {
-    setNow(() => new Date(2026, 7, 19, 22, 50, 0));
+    setSystemTime(new Date(2026, 7, 19, 22, 50, 0));
     await ok("/api/campaigns/beispiel/session/pause");
-    setNow(() => new Date(2026, 7, 19, 23, 0, 0));
+    setSystemTime(new Date(2026, 7, 19, 23, 0, 0));
     const ended = await ok("/api/campaigns/beispiel/session/end");
     expect(ended.properties.ended).toBe("2026-08-19T23:00:00");
     expect(ended.properties.pauses).toEqual([
@@ -175,7 +174,7 @@ describe("POST /api/campaigns/:campaign/session/pause + /continue", () => {
     expect(file.pausedSinceMs).toBeUndefined();
 
     // A pause on top keeps the stored interval verbatim and adds an open one.
-    setNow(() => new Date(2026, 7, 19, 21, 40, 0));
+    setSystemTime(new Date(2026, 7, 19, 21, 40, 0));
     const paused = await ok("/api/campaigns/beispiel/session/pause");
     expect(paused.properties.pauses).toEqual([
       { from: "2026-08-19T21:30", to: "2026-08-19T21:33" },
