@@ -99,12 +99,6 @@ const EXCEPTIONS: readonly Exception[] = [
     reason: "it plants the pre-0018 shape the gate above is checked against",
   },
   {
-    path: "server/test/reference-preflight.test.ts",
-    rule: "raw-list-column",
-    reason:
-      "the reference gate's spec builds its own SQL schema, and that copy still carries the column the real schema dropped",
-  },
-  {
     phrase: "fixtures/",
     rule: "campaigns-dir",
     reason: "the fixture entries are files on disk and are addressed as such",

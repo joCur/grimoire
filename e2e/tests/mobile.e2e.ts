@@ -59,7 +59,7 @@ test("mobile start surface: search, inbox capture, lookup lists", async ({ page,
     entries: [
       {
         id: expect.any(String),
-        text: "2026-01-10 Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread",
+        text: "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread",
         done: false,
       },
       { id: expect.any(String), text: IDEA, done: false },

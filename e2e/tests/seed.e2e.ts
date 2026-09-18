@@ -129,7 +129,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
     {
       id: expect.any(String),
       at: "22:40",
-      text: "— Cliffhanger: Lichter in der Bucht gesichtet #thread",
+      text: "Cliffhanger: Lichter in der Bucht gesichtet #thread",
       reviewed: false,
     },
   ]);
@@ -149,7 +149,7 @@ async function assertCampaignIsThere(api: Api): Promise<void> {
   expect(inbox.entries).toEqual([
     {
       id: expect.any(String),
-      text: "2026-01-10 Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread",
+      text: "Idee: Der Dorfschmied repariert auffällig oft Schmugglerwerkzeug #thread",
       done: false,
     },
   ]);

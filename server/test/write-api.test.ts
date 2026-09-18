@@ -463,7 +463,7 @@ describe("POST /api/campaigns/:campaign/log", () => {
     expect(session.log.map((l) => l.text)).toEqual([
       "Spuren gefunden, Gruppe will sofort zur Bucht #decision",
       "Improvisiert: Fischerin „Old Metta“ am Steg #npc",
-      "— Cliffhanger: Lichter in der Bucht gesichtet #thread",
+      "Cliffhanger: Lichter in der Bucht gesichtet #thread",
       "Nachtrag nach dem Cliffhanger",
     ]);
     // The session's own pauses are untouched by a log append.
