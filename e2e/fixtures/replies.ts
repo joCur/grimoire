@@ -392,48 +392,14 @@ export const AUGMENT_NPC_WILL =
 export const AUGMENT_NPC_SECRET = "Meldet [[fenn]], wann die Hafenwache wechselt.";
 
 /**
- * The existing entry as the PROMPT shows it — a rendered entry with a
- * properties block on top. The augment run is the one case that has to read
- * that: its reply echoes the entry it was given.
- *
- * The block's scalars, flow lists (`[fenn, grella]`) and flow mappings
- * (`{ wis: "+2" }`) are the three shapes the campaign's entries use.
+ * The existing entry as the PROMPT shows it: the `properties` and `body` pair
+ * as JSON, which is the same shape the reply is forced into (ADR #24). The
+ * augment run is the one case that has to read it — its reply echoes the
+ * entry it was given, so nothing here reconstructs properties from text.
  */
-function existingEntry(markdown: string): { properties: Record<string, unknown>; body: string } {
-  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(markdown);
-  if (match === null) return { properties: {}, body: markdown };
-  const properties: Record<string, unknown> = {};
-  for (const line of match[1]!.split("\n")) {
-    const pair = /^([A-Za-z_][A-Za-z0-9_-]*):[ \t]*(.*)$/.exec(line);
-    if (pair === null) continue;
-    const key = pair[1]!;
-    const raw = pair[2]!.trim();
-    if (raw.startsWith("[")) {
-      properties[key] = splitFlow(raw).map(unquote);
-    } else if (raw.startsWith("{")) {
-      properties[key] = splitFlow(raw).map((item) => {
-        const at = item.indexOf(":");
-        return { key: item.slice(0, at).trim(), value: unquote(item.slice(at + 1)) };
-      });
-    } else {
-      properties[key] = unquote(raw);
-    }
-  }
-  return { properties, body: match[2] ?? "" };
-}
-
-/** The comma-separated items inside a `[...]` / `{...}` flow collection. */
-function splitFlow(raw: string): string[] {
-  return raw
-    .slice(1, -1)
-    .split(",")
-    .map((item) => item.trim())
-    .filter((item) => item !== "");
-}
-
-function unquote(value: string): string {
-  const text = value.trim();
-  return /^".*"$/.test(text) || /^'.*'$/.test(text) ? text.slice(1, -1) : text;
+export interface ExistingEntry {
+  properties: Record<string, unknown>;
+  body: string;
 }
 
 /**
@@ -446,8 +412,8 @@ function unquote(value: string): string {
  *   anything else (a prepared scene, a location)  ->  one NEW `## If:`
  *       section at the end; every existing block comes back unchanged.
  */
-export function augmentReply(path: string, markdown: string, knowledge = ""): EntryReply {
-  const { properties, body } = existingEntry(markdown);
+export function augmentReply(path: string, entry: ExistingEntry, knowledge = ""): EntryReply {
+  const { properties, body } = entry;
   const id = String(properties.id ?? path.slice(path.lastIndexOf("/") + 1));
   const isEmptyNpc =
     path.startsWith("npcs/") && properties.role === undefined && body.trim() === "";
