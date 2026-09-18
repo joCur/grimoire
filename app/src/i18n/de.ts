@@ -301,6 +301,8 @@ export const de = {
   "server.body_not_editable":
     "Dieser Eintrag hat keinen bearbeitbaren Text — er wird als Liste gepflegt.",
   "server.job_restarted": "Server wurde während des Laufs neu gestartet — Job neu starten.",
+  "server.job_draft_format":
+    "Dieser Lauf stammt aus einem älteren Entwurfsformat und kann nicht mehr übernommen werden — bitte neu erzeugen.",
   "server.llm_truncated":
     "Antwort wurde vom Modell abgeschnitten — LLM_MAX_TOKENS erhöhen (aktuell: {max}) oder Quelltext verkleinern.",
   "server.llm_invalid": "Antwort hat die mechanische Prüfung nicht bestanden.",

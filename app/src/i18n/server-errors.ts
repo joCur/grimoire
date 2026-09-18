@@ -42,6 +42,7 @@ const CODE_KEY: Record<ErrorCode, MessageKey> = {
   nothing_to_write: "server.nothing_to_write",
   body_not_editable: "server.body_not_editable",
   job_restarted: "server.job_restarted",
+  job_draft_format: "server.job_draft_format",
   llm_truncated: "server.llm_truncated",
   llm_invalid: "server.llm_invalid",
 };
@@ -134,6 +135,7 @@ function paramsFor(
     case "session_not_empty":
     case "rev_conflict":
     case "job_restarted":
+    case "job_draft_format":
     case "llm_invalid":
     case "nothing_to_write":
     case "body_not_editable":

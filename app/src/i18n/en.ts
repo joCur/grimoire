@@ -269,6 +269,8 @@ export const en: Messages = {
   "server.nothing_to_write": "Nothing to save.",
   "server.body_not_editable": "This entry has no editable text — it is maintained as a list.",
   "server.job_restarted": "The server was restarted while the job was running — start it again.",
+  "server.job_draft_format":
+    "This run predates the current draft format and cannot be accepted any more — generate it again.",
   "server.llm_truncated":
     "The model's reply was cut off — raise LLM_MAX_TOKENS (currently: {max}) or shorten the source text.",
   "server.llm_invalid": "The reply did not pass the mechanical validation.",
