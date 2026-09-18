@@ -65,12 +65,12 @@ import {
 import { addressSegments } from "../store/paths";
 import { searchCampaign } from "../store/search";
 import { readSettings, writeSettings } from "../store/settings";
+import { createLocation } from "../store/locations";
 import { createNpc, createNpcStub } from "../store/npcs";
 import {
   appendThreadToChapter,
   createChapter,
   setActiveChapter,
-  createLocation,
   createScene,
   patchEntry,
 } from "../store/write";

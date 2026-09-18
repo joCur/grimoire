@@ -49,6 +49,7 @@ import {
   scenes,
 } from "../db/schema";
 import { campaignRow, indexCampaign, mutate, requireCampaignRow } from "./campaigns";
+import { isEmptyLocationRow } from "./locations";
 import { isEmptyNpcRow, NPC_DEFAULT_STATUS } from "./npcs";
 import {
   asMap,
@@ -275,16 +276,6 @@ function sceneLocation(value: unknown): string | null {
     );
   }
   return trimmed;
-}
-
-
-function isEmptyLocationRow(row: LocationRow): boolean {
-  return (
-    row.name === "" &&
-    row.chapterId === null &&
-    row.roll20Page === null &&
-    row.body.trim() === ""
-  );
 }
 
 
@@ -1328,39 +1319,5 @@ export async function createScene(
     if (row === undefined) throw new ApiError(500, "scene could not be created");
     indexScene(tx, campaign, row, []);
     return renderScene(row, [], []);
-  });
-}
-
-
-/** POST /api/campaigns/:campaign/locations { name } -> the location entry. */
-export async function createLocation(
-  campaign: string,
-  name: string,
-  explicitId?: string,
-): Promise<EntryResponse> {
-  const id = resolveNewId(explicitId, name, "location", "name");
-  return mutate(campaign, (tx) => {
-    const existing = locationRowOf(tx, campaign, id);
-    if (existing !== undefined && !isEmptyLocationRow(existing)) {
-      // Same as for an npc: an empty entry is claimed, so it is never proposed.
-      const suggestion = freeSlug(
-        id,
-        (candidate) => locationRowOf(tx, campaign, candidate) !== undefined,
-      );
-      throw slugTaken("location", id, suggestion, locationPath(id));
-    }
-    const stored = name.trim() === id ? "" : name.trim();
-    if (existing === undefined) {
-      tx.insert(locations).values({ campaignId: campaign, id, name: stored }).run();
-    } else {
-      tx.update(locations)
-        .set({ name: stored, rev: existing.rev + 1 })
-        .where(and(eq(locations.campaignId, campaign), eq(locations.id, id)))
-        .run();
-    }
-    const row = locationRowOf(tx, campaign, id);
-    if (row === undefined) throw new ApiError(500, "location could not be created");
-    indexLocation(tx, campaign, row);
-    return renderLocation(row);
   });
 }
