@@ -91,7 +91,7 @@ const SCENE_WITHOUT_LOCATION: SeedEntry = {
 /** Today's session, started at 19:30 and never ended. */
 const RUNNING_SESSION: SeedEntry = {
   kind: "session",
-  properties: { id: todaySessionId(), started: `${todaySessionId()}T19:30`, scenes_played: [] },
+  properties: { id: todaySessionId(), started: `${todaySessionId()}T19:30:00`, scenes_played: [] },
   log: [],
   body: "",
 };

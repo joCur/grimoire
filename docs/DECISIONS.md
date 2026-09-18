@@ -1020,3 +1020,8 @@ ist eine Regel für den **Leser**: ein unbekannter Callout und eine unbekannte
 - Neue Werte in einer der Listen sind ab jetzt eine Migration, keine Änderung
   an einer Konstante allein. Das ist gewollt: eine fünfte Position im Status
   ist eine Entscheidung über das Datenmodell.
+- Dieselbe Bewegung gilt für die Zeitstempel: `sessions.started`/`ended` und
+  die Pausen haben genau eine Form (`yyyy-mm-ddTHH:MM:SS`,
+  `server/src/store/time.ts`), der Leser liest nur sie, und ein Vorlauf
+  (`server/src/db/timestamp-preflight.ts`) verweigert den Start mit Kampagne,
+  Session, Spalte und Wert, statt etwas stillschweigend zu korrigieren.

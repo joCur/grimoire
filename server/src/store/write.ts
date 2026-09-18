@@ -13,7 +13,7 @@
 //     past it and writes only the fields the request carries;
 //   * the session state machine has its answers and codes
 //     (`session_running`, `session_not_empty`), and the local-time formats
-//     are the ones from `local-time.ts` — session ids, `started`/`ended` and
+//     are the three constants below — session ids, `started`/`ended` and
 //     log times are zone-less local strings produced by the server;
 //   * append-only stays append-only: log lines and inbox entries grow by
 //     rows through their own endpoints, and the one documented exception
@@ -49,9 +49,9 @@ import {
 import { format } from "date-fns";
 import { ApiError } from "../api-error";
 import { assertSafeAddress, assertSafeCampaignId } from "../addressing";
-import { LOCAL_DATE, LOCAL_DATE_TIME_SECONDS, LOCAL_TIME } from "../local-time";
 import type { GrimoireDb } from "../db/client";
 import { logLineShortHash } from "./body-parse";
+import { LOCAL_DATE_TIME_SECONDS } from "./time";
 import {
   campaignKnowledge,
   campaigns,
@@ -1440,6 +1440,15 @@ function requireCampaignRow(tx: GrimoireDb, campaign: string): CampaignRow {
 
 // --- sessions -----------------------------------------------------------------
 
+/**
+ * `yyyy-mm-dd` in local time — today's calendar day, which a start compares
+ * the running session's `started` against.
+ */
+const LOCAL_DATE = "yyyy-MM-dd";
+
+/** `HH:MM` in local time — the timestamp a log line carries. */
+const LOCAL_TIME = "HH:mm";
+
 function requireActive(tx: GrimoireDb, campaign: string): SessionRow {
   const row = pickSession(tx, campaign, false);
   if (row === undefined) throw new ApiError(404, "no active session");
@@ -1473,7 +1482,7 @@ function newSessionId(): string {
  * The CALENDAR DAY of a session's `started`, or undefined when the value says
  * nothing usable. Just the date part of the zone-less wall-clock string the
  * format carries — no timezone arithmetic, because the string already is the
- * server's local reading (local-time.ts).
+ * server's local reading (./time).
  */
 function startedDate(started: string | null): string | undefined {
   return /^(\d{4}-\d{2}-\d{2})/.exec(started ?? "")?.[1];

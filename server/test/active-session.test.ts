@@ -13,14 +13,14 @@
 //     is simply `POST /session/start` with yesterday as the system time) —
 //     that exercises the real state machine instead of a hand-built row;
 //   - through the SEED, for the shapes an endpoint cannot produce in one call
-//     (a date-only `started`, a blank `ended`, `scenes_played` without a
-//     log) — the shapes a campaign written earlier carries.
+//     (a blank `ended`, `scenes_played` without a log, a `started` that is no
+//     timestamp at all).
 
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import type { EntryResponse } from "@grimoire/shared";
 import { app } from "../src/server";
-import { localDateTimeToMs } from "../src/local-time";
+import { localDateTimeToMs } from "../src/store/time";
 import type { GrimoireDb } from "../src/db/client";
 import { sessions as sessionsTable } from "../src/db/schema";
 import { pickSession, sessionOrderKey } from "../src/store/read";
@@ -172,27 +172,29 @@ describe("pickSession", () => {
   test("no sessions, or all of them ended -> undefined", () => {
     onlySessions([]);
     expect(active()).toBeUndefined();
-    onlySessions([row({ id: "2026-01-15", started: "2026-01-15T19:30", ended: "2026-01-15T22:45" })]);
+    onlySessions([
+      row({ id: "2026-01-15", started: "2026-01-15T19:30:00", ended: "2026-01-15T22:45:00" }),
+    ]);
     expect(active()).toBeUndefined();
   });
 
   test("the LAST started session without `ended` wins", () => {
     onlySessions([
-      row({ id: "2026-01-15", started: "2026-01-15T19:30", ended: "2026-01-15T22:45" }),
-      row({ id: "2026-08-19", started: "2026-08-19T21:05" }),
-      row({ id: "2026-08-18", started: "2026-08-18T18:00" }),
+      row({ id: "2026-01-15", started: "2026-01-15T19:30:00", ended: "2026-01-15T22:45:00" }),
+      row({ id: "2026-08-19", started: "2026-08-19T21:05:00" }),
+      row({ id: "2026-08-18", started: "2026-08-18T18:00:00" }),
     ]);
     expect(active()).toBe("2026-08-19");
   });
 
-  test("a date-only `started` still sorts; no `started` at all never wins", () => {
-    // A date-only `started` is the midnight degradation of the YAML
-    // normalization the migration read — it is a usable order key.
-    //
+  test("no `started` at all never wins", () => {
     // The id is NOT a fallback: it is an opaque random string, so there is
     // nothing in it to read. A row without `started` therefore has no place
     // in the chronology, even when its id happens to look like a date.
-    onlySessions([row({ id: "2026-08-18" }), row({ id: "2026-08-19", started: "2026-08-19" })]);
+    onlySessions([
+      row({ id: "2026-08-18" }),
+      row({ id: "2026-08-19", started: "2026-08-19T21:05:00" }),
+    ]);
     expect(active()).toBe("2026-08-19");
     expect(sessionOrderKey(row({ id: "2026-08-18" }))).toBeUndefined();
     onlySessions([row({ id: "2026-08-18" })]);
@@ -222,28 +224,32 @@ describe("pickSession", () => {
   });
 
   test("no usable date at all -> no order key, and therefore never active", () => {
+    // The one shape is the ONLY readable one (store/time.ts): free text, a
+    // bare date and a second-less value are all unreadable alike.
     expect(sessionOrderKey(row({ id: "notes", started: "gestern abend" }))).toBeUndefined();
+    expect(sessionOrderKey(row({ id: "notes", started: "2026-08-19" }))).toBeUndefined();
+    expect(sessionOrderKey(row({ id: "notes", started: "2026-08-19T21:05" }))).toBeUndefined();
     onlySessions([row({ id: "gestern abend", started: "gestern abend" })]);
     expect(active()).toBeUndefined();
     // …not even against a real session: the parseable one wins, always.
     onlySessions([
       row({ id: "gestern abend", started: "gestern abend" }),
-      row({ id: "2026-08-19", started: "2026-08-19T21:05" }),
+      row({ id: "2026-08-19", started: "2026-08-19T21:05:00" }),
     ]);
     expect(active()).toBe("2026-08-19");
   });
 
   test("a blank `ended` counts as RUNNING (one shared predicate)", () => {
-    onlySessions([row({ id: "2026-08-19", started: "2026-08-19T19:30", ended: "" })]);
+    onlySessions([row({ id: "2026-08-19", started: "2026-08-19T19:30:00", ended: "" })]);
     expect(active()).toBe("2026-08-19");
-    onlySessions([row({ id: "2026-08-19", started: "2026-08-19T19:30", ended: "  " })]);
+    onlySessions([row({ id: "2026-08-19", started: "2026-08-19T19:30:00", ended: "  " })]);
     expect(active()).toBe("2026-08-19");
   });
 
   test("includeEnded ignores `ended` — the review's question", () => {
     onlySessions([
-      row({ id: "2026-08-18", started: "2026-08-18T22:30", ended: "2026-08-19T01:40" }),
-      row({ id: "2026-01-15", started: "2026-01-15T19:30", ended: "2026-01-15T22:45" }),
+      row({ id: "2026-08-18", started: "2026-08-18T22:30:00", ended: "2026-08-19T01:40:00" }),
+      row({ id: "2026-01-15", started: "2026-01-15T19:30:00", ended: "2026-01-15T22:45:00" }),
     ]);
     expect(lastStarted()).toBe("2026-08-18");
     expect(active()).toBeUndefined();
@@ -297,18 +303,15 @@ describe("GET /api/campaigns/:campaign/session", () => {
     expect(entry.startedMs).toBe(new Date(2026, 7, 18, 22, 30).getTime());
   });
 
-  test("a DATE-ONLY `started` keeps a usable epoch time", async () => {
-    // A full timestamp, to the second
-    // at exactly midnight is indistinguishable from a date-only value, so the
-    // migration stored the DEGRADED string `yyyy-mm-dd` (shared/src/parse.ts)
-    // — the only way this shape reaches the API. startedMs must not degrade
-    // with it: the live timer reads startedMs, so a missing one would make
-    // the timer vanish silently.
-    await seedWithSessions(session({ id: "2026-08-19", started: "2026-08-19" }));
+  test("a session started at MIDNIGHT keeps its epoch time", async () => {
+    // The one shape is second-precise, so midnight is `…T00:00:00` and is
+    // read like any other moment. The live timer reads startedMs, and a
+    // missing one would make the timer vanish silently.
+    await startAt(new Date(2026, 7, 19, 0, 0), new Date(2026, 7, 19, 0, 30));
     const res = await app.request("/api/campaigns/beispiel/session");
     expect(res.status).toBe(200);
     const entry = (await res.json()) as EntryResponse;
-    expect(entry.properties.started).toBe("2026-08-19"); // the degraded string
+    expect(entry.properties.started).toBe("2026-08-19T00:00:00");
     expect(entry.startedMs).toBe(new Date(2026, 7, 19, 0, 0).getTime());
   });
 
@@ -535,7 +538,7 @@ describe("POST /session/discard — the mis-click's undo (AK7)", () => {
     await seedWithSessions(
       session({
         id: "2026-08-19",
-        started: "2026-08-19T21:05",
+        started: "2026-08-19T21:05:00",
         scenes_played: ["lighthouse-arrival"],
       }),
     );
@@ -612,27 +615,27 @@ describe("degraded session entries never hijack the active session", () => {
   });
 
   test("a non-date id with a parseable `started` still counts", async () => {
-    await seedWithSessions(session({ id: "notizen", started: "2026-08-19T20:00" }));
+    await seedWithSessions(session({ id: "notizen", started: "2026-08-19T20:00:00" }));
     const res = await app.request("/api/campaigns/beispiel/session");
     expect(res.status).toBe(200);
     expect(((await res.json()) as EntryResponse).path).toBe("sessions/notizen");
   });
 
-  // A MINUTE-precise `started` is a valid width too: the format's parser
-  // accepts both, so such a row keeps working — verbatim string, a startedMs
-  // on the minute, endable.
-  test("a minute-precise `started` without seconds stays valid", async () => {
-    await seedWithSessions(session({ id: "2026-08-19", started: "2026-08-19T20:00" }));
-    const res = await app.request("/api/campaigns/beispiel/session");
-    expect(res.status).toBe(200);
-    const entry = (await res.json()) as EntryResponse;
+  // A `started` outside the one shape (store/time.ts) has no epoch reading at
+  // all — the row stays addressable and shows its string verbatim, it simply
+  // has no place in the chronology. The boot pre-flight
+  // (db/timestamp-preflight.ts) is what keeps such a value out of a real
+  // database; here it is planted past the seed on purpose.
+  test("a second-less `started` is unreadable, not half-read", async () => {
+    await seedWithSessions(session({ id: "notizen", started: "2026-08-19T20:00:00" }));
+    db.update(sessionsTable)
+      .set({ started: "2026-08-19T20:00" })
+      .where(eq(sessionsTable.campaignId, "beispiel"))
+      .run();
+    const entry = await getEntry("sessions/notizen");
     expect(entry.properties.started).toBe("2026-08-19T20:00");
-    expect(entry.startedMs).toBe(new Date(2026, 7, 19, 20, 0).getTime());
-    setSystemTime(new Date(2026, 7, 19, 22, 0, 30));
-    const ended = (await (await post("/api/campaigns/beispiel/session/end")).json()) as EntryResponse;
-    // The end is written at the new width next to the old `started`.
-    expect(ended.properties.started).toBe("2026-08-19T20:00");
-    expect(ended.properties.ended).toBe("2026-08-19T22:00:30");
+    expect(entry.startedMs).toBeUndefined();
+    expect((await app.request("/api/campaigns/beispiel/session")).status).toBe(404);
   });
 
   // Date-shaped ids — plain dates and the `-2` sequence form — are just
@@ -640,8 +643,8 @@ describe("degraded session entries never hijack the active session", () => {
   // the opaque ids a start hands out.
   test("legacy date ids and a new opaque id live side by side", async () => {
     await seedWithSessions(
-      session({ id: "2026-08-19", started: "2026-08-19T18:00", ended: "2026-08-19T19:30" }),
-      session({ id: "2026-08-19-2", started: "2026-08-19T19:45", ended: "2026-08-19T20:30" }),
+      session({ id: "2026-08-19", started: "2026-08-19T18:00:00", ended: "2026-08-19T19:30:00" }),
+      session({ id: "2026-08-19-2", started: "2026-08-19T19:45:00", ended: "2026-08-19T20:30:00" }),
     );
     // Both entries are readable under their own path…
     expect(await entryStatus("sessions/2026-08-19")).toBe(200);
@@ -665,7 +668,7 @@ describe("degraded session entries never hijack the active session", () => {
 
   test("a blank `ended` means RUNNING and can be ended normally (finding 5)", async () => {
     await seedWithSessions(
-      session({ id: "2026-08-19", started: "2026-08-19T20:00", ended: "" }),
+      session({ id: "2026-08-19", started: "2026-08-19T20:00:00", ended: "" }),
     );
     const res = await app.request("/api/campaigns/beispiel/session");
     expect(res.status).toBe(200);
@@ -679,21 +682,27 @@ describe("degraded session entries never hijack the active session", () => {
 });
 
 describe("localDateTimeToMs", () => {
-  test("reads the format's zone-less timestamps in the server's timezone", () => {
-    expect(localDateTimeToMs("2026-08-19T21:05")).toBe(new Date(2026, 7, 19, 21, 5).getTime());
-    expect(localDateTimeToMs("2026-08-19 21:05")).toBe(new Date(2026, 7, 19, 21, 5).getTime());
+  test("reads the ONE shape in the server's timezone", () => {
     expect(localDateTimeToMs("2026-08-19T21:05:30")).toBe(
       new Date(2026, 7, 19, 21, 5, 30).getTime(),
     );
-    // Date-only = midnight (the degraded `…T00:00`).
-    expect(localDateTimeToMs("2026-08-19")).toBe(new Date(2026, 7, 19, 0, 0).getTime());
+    expect(localDateTimeToMs("2026-08-19T00:00:00")).toBe(new Date(2026, 7, 19, 0, 0).getTime());
   });
 
-  test("undefined for everything unusable — never throws", () => {
+  test("undefined for every other shape — never throws", () => {
     expect(localDateTimeToMs(undefined)).toBeUndefined();
     expect(localDateTimeToMs(null)).toBeUndefined();
     expect(localDateTimeToMs(42)).toBeUndefined();
     expect(localDateTimeToMs("gestern abend")).toBeUndefined();
+    expect(localDateTimeToMs("")).toBeUndefined();
     expect(localDateTimeToMs("2026-08-19T21")).toBeUndefined();
+    // No second-less value, no space for the `T`, no bare date, no one-digit
+    // hour, no trailing blank — the writer produces none of them.
+    expect(localDateTimeToMs("2026-08-19T21:05")).toBeUndefined();
+    expect(localDateTimeToMs("2026-08-19 21:05:30")).toBeUndefined();
+    expect(localDateTimeToMs("2026-08-19")).toBeUndefined();
+    expect(localDateTimeToMs("2026-08-19T9:05:30")).toBeUndefined();
+    expect(localDateTimeToMs("2026-08-19T21:05:30 ")).toBeUndefined();
+    expect(localDateTimeToMs("2026-08-19T21:05:30.123")).toBeUndefined();
   });
 });

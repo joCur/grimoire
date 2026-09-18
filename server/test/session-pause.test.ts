@@ -64,7 +64,7 @@ async function seedWithPauses(
         kind: "session",
         properties: {
           id: "2026-08-19",
-          started: "2026-08-19T21:00",
+          started: "2026-08-19T21:00:00",
           scenes_played: [],
           pauses,
         },
@@ -168,7 +168,7 @@ describe("POST /api/campaigns/:campaign/session/pause + /continue", () => {
   });
 
   test("a session that already carries intervals counts them, and a pause APPENDS", async () => {
-    await seedWithPauses([{ from: "2026-08-19T21:30", to: "2026-08-19T21:33" }]);
+    await seedWithPauses([{ from: "2026-08-19T21:30:00", to: "2026-08-19T21:33:00" }]);
     const entry = await session();
     expect(entry.pausedMs).toBe(3 * 60 * 1000);
     expect(entry.pausedSinceMs).toBeUndefined();
@@ -177,7 +177,7 @@ describe("POST /api/campaigns/:campaign/session/pause + /continue", () => {
     setSystemTime(new Date(2026, 7, 19, 21, 40, 0));
     const paused = await ok("/api/campaigns/beispiel/session/pause");
     expect(paused.properties.pauses).toEqual([
-      { from: "2026-08-19T21:30", to: "2026-08-19T21:33" },
+      { from: "2026-08-19T21:30:00", to: "2026-08-19T21:33:00" },
       { from: "2026-08-19T21:40:00" },
     ]);
     expect(paused.pausedSinceMs).toBe(new Date(2026, 7, 19, 21, 40, 0).getTime());

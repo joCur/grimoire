@@ -34,8 +34,8 @@ function sessionEntry(id: string): SeedEntry {
     kind: "session",
     properties: {
       id,
-      started: `${id}T19:30`,
-      ended: `${id}T22:45`,
+      started: `${id}T19:30:00`,
+      ended: `${id}T22:45:00`,
       scenes_played: ["lighthouse-arrival"],
     },
     log: [
@@ -64,8 +64,8 @@ const PAST_MIDNIGHT = (() => {
     kind: "session",
     properties: {
       id: yesterday,
-      started: `${yesterday}T21:30`,
-      ended: `${today}T01:40`,
+      started: `${yesterday}T21:30:00`,
+      ended: `${today}T01:40:00`,
       scenes_played: ["lighthouse-arrival"],
     },
     log: [{ raw: THREAD_LINE }],

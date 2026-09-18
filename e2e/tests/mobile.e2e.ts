@@ -13,7 +13,7 @@ const OPEN_SESSION: SeedEntry = (() => {
   const id = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   return {
     kind: "session",
-    properties: { id, started: `${id}T22:30`, scenes_played: [] },
+    properties: { id, started: `${id}T22:30:00`, scenes_played: [] },
     log: [],
     body: "",
   };

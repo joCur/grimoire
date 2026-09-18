@@ -36,7 +36,7 @@ import {
 } from "@grimoire/shared";
 import { ApiError } from "../api-error";
 import { assertSafeCampaignId, assertSafeAddress } from "../addressing";
-import { localDateTimeToMs } from "../local-time";
+import { localDateTimeToMs } from "./time";
 import type { GrimoireDb } from "../db/client";
 import {
   campaignKnowledge,
