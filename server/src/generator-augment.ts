@@ -56,8 +56,7 @@ import type { CheckedDraft } from "./naming-check";
 import { parseEntryReply } from "./entry-reply";
 import type { LLMProvider } from "./llm-provider";
 import { addressHead } from "./store/paths";
-import { readEntry } from "./store/read";
-import { patchEntry } from "./store/write";
+import { patchEntry, readEntry } from "./store/entries";
 
 /** The correction turn's tail — what a corrected reply must still contain. */
 const AUGMENT_CORRECTION_TAIL = "den vollständigen ergänzten Eintrag enthalten";

@@ -55,7 +55,7 @@ import {
 } from "../store/chapters";
 import { readGlossary, writeGlossary } from "../store/glossary";
 import { readKnowledge, writeKnowledge } from "../store/knowledge";
-import { readEntry } from "../store/read";
+import { patchEntry, readEntry } from "../store/entries";
 import {
   appendLogEntry,
   continueSession,
@@ -74,7 +74,6 @@ import { searchCampaign } from "../store/search";
 import { readSettings, writeSettings } from "../store/settings";
 import { createLocation } from "../store/locations";
 import { createNpc, createNpcStub } from "../store/npcs";
-import { patchEntry } from "../store/write";
 import { acceptJobParts } from "../generate-accept";
 import {
   applyGenerated,
