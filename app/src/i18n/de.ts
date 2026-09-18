@@ -135,11 +135,16 @@ export const de = {
   "create.location.nameLabel": "Name",
   "create.location.namePlaceholder": "Name des Orts",
 
+  // --- the id line of every create surface (components/IdField.tsx) ---------
+  "idField.label": "Kennung",
+  "idField.edit": "Kennung selbst setzen",
+  "idField.invalid":
+    "Die Kennung braucht Kleinbuchstaben, Ziffern und einzelne Bindestriche.",
+
   // --- cold start ("/" without a campaign) ----------------------------------
   "home.opening": "Kampagne wird geöffnet …",
   "coldstart.title": "Willkommen bei Grimoire",
   "coldstart.lead": "Noch keine Kampagne. Leg eine an — danach entstehen darin Kapitel und Szenen.",
-  "coldstart.id": "Kennung: {id}",
 
   // --- properties dialog ----------------------------------------------------
   "properties.action": "Eigenschaften",

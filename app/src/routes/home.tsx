@@ -8,8 +8,10 @@
 // screen of a fresh installation: the boot imports nothing, so a new instance
 // has no campaign at all. Pointing the DM at a shell command would be a dead
 // end for the person the tool is for, so this is a form: a name, an optional
-// sentence, and the id is derived from the name (the shared slug rule) and
-// shown before it is created, because an id is permanent.
+// sentence, and the id, derived from the name (the shared slug rule) and shown
+// before it is created, because an id is permanent — with the same pencil as
+// the dialog surfaces, so the very first id of an instance is settable too
+// (components/IdField.tsx, ADR #21).
 //
 // A PAGE, not a dialog. There is nothing behind it to keep visible, the
 // surface has to work at 390px, and creating a campaign is the only thing this
@@ -27,18 +29,22 @@ import { Navigate } from "react-router";
 
 import { fetchCampaigns } from "@/api";
 import { useCampaignCreate } from "@/components/CreateActions";
+import { IdField } from "@/components/IdField";
 import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { Button } from "@/components/ui/button";
 import { IconLogo } from "@/icons";
 import { useT } from "@/i18n";
 import { pickLastCampaign } from "@/lib/campaign";
+import { canCreate, createConflict, createErrorMessage, type CreateConflict } from "@/lib/create";
 import {
-  canCreate,
-  createConflict,
-  createErrorMessage,
-  derivedId,
-  type CreateConflict,
-} from "@/lib/create";
+  ID_FIELD_START,
+  idAllowed,
+  resolvedId,
+  submittedId,
+  takeIdSuggestion,
+  toggleIdField,
+  typeIdField,
+} from "@/lib/id-field";
 
 export function HomeRoute() {
   const t = useT();
@@ -80,6 +86,7 @@ function ColdStart() {
   const createCampaignFlow = useCampaignCreate({ replace: true });
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [idState, setIdState] = useState(ID_FIELD_START);
   const [conflict, setConflict] = useState<CreateConflict>();
   const [message, setMessage] = useState("");
 
@@ -101,8 +108,23 @@ function ColdStart() {
   });
 
   const trimmed = name.trim();
-  const id = derivedId(trimmed);
-  const canSubmit = canCreate(trimmed) && !create.isPending;
+  const id = resolvedId(idState, trimmed);
+  // An id of "" only happens while the name yields none, and that case is
+  // already the submit's precondition — the rule is not shown for it.
+  const idInvalid = id !== "" && !idAllowed(id);
+  const canSubmit = canCreate(trimmed) && idAllowed(id) && !create.isPending;
+
+  /** `override` is the 409 proposal; otherwise the id comes from the field. */
+  const submit = (override?: string) => {
+    if (!canCreate(trimmed) || !idAllowed(override ?? id) || create.isPending) return;
+    create.mutate(override ?? submittedId(idState));
+  };
+
+  /** The one-click proposal settles the id as a typed one and re-sends. */
+  const takeSuggestion = (suggestion: string) => {
+    setIdState((state) => takeIdSuggestion(state, suggestion));
+    submit(suggestion);
+  };
 
   return (
     <section className="mx-auto max-w-[520px] px-5 pt-12 pb-20 md:px-7 md:pt-16">
@@ -119,28 +141,39 @@ function ColdStart() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (!canSubmit) return;
-          create.mutate(undefined);
+          submit();
         }}
         className="flex flex-col gap-3.5"
       >
-        <label htmlFor={nameId} className="flex flex-col gap-1.5">
-          <span className="text-[12px] text-body-secondary">
-            {t("create.campaign.nameLabel")}
-          </span>
-          <input
-            id={nameId}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            autoComplete="off"
-            placeholder={t("create.campaign.namePlaceholder")}
-            className="w-full rounded-md border border-input bg-panel-deep px-3 py-2.5 text-[14px] text-foreground placeholder:text-muted-foreground max-md:text-[16px]"
+        {/* The id line is a SIBLING of the name label, not part of it: it
+            carries a button and a field of its own, and a label wrapping those
+            would hand their clicks to the name input. */}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={nameId} className="flex flex-col gap-1.5">
+            <span className="text-[12px] text-body-secondary">
+              {t("create.campaign.nameLabel")}
+            </span>
+            <input
+              id={nameId}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoComplete="off"
+              placeholder={t("create.campaign.namePlaceholder")}
+              className="w-full rounded-md border border-input bg-panel-deep px-3 py-2.5 text-[14px] text-foreground placeholder:text-muted-foreground max-md:text-[16px]"
+            />
+          </label>
+          {/* The id the name produces — it goes into every URL and stays, and
+              the pencil is where it gets settled by hand (ADR #21). The same
+              component and the same label as the dialog surface. */}
+          <IdField
+            prefix={t("create.campaign.idPrefix")}
+            id={id}
+            editing={idState.editing}
+            invalid={idInvalid}
+            onToggle={() => setIdState(toggleIdField)}
+            onChange={(value) => setIdState((state) => typeIdField(state, value))}
           />
-          {/* The id the name produces — it goes into every URL and stays. */}
-          <span className="min-h-[16px] font-mono text-[11.5px] text-muted-foreground">
-            {id === "" ? "" : t("coldstart.id", { id })}
-          </span>
-        </label>
+        </div>
 
         <label htmlFor={descriptionId} className="flex flex-col gap-1.5">
           <span className="text-[12px] text-body-secondary">
@@ -163,7 +196,7 @@ function ColdStart() {
               {" "}
               <button
                 type="button"
-                onClick={() => create.mutate(conflict.suggestion)}
+                onClick={() => takeSuggestion(conflict.suggestion)}
                 className="rounded-sm text-body-secondary underline underline-offset-2 hover:text-foreground"
               >
                 {t("create.useSuggestion", { id: conflict.suggestion })}

@@ -1,26 +1,20 @@
-// The pure half of the create dialogs (issue #56): the address preview, and
-// how a failed POST becomes ONE sentence in the UI language plus, on a
-// collision, one actionable proposal.
+// The pure half of the create dialogs: the derived id, and how a failed POST
+// becomes ONE sentence in the UI language plus, on a collision, one actionable
+// proposal.
 //
-// Since issue #69 the sentence is built from the server's error CODE through
-// the catalog, so these assertions are what the DM reads in German — with the
-// body's English `error` text as the documented fallback for an unknown code.
+// The sentence is built from the server's error CODE through the catalog, so
+// these assertions are what the DM reads in German — with the body's English
+// `error` text as the documented fallback for an unknown code.
 
 import { describe, expect, test } from "bun:test";
 
 import { ApiError } from "@/api";
-import {
-  canCreate,
-  createConflict,
-  createErrorMessage,
-  derivedAddress,
-  derivedId,
-} from "@/lib/create";
+import { canCreate, createConflict, createErrorMessage, derivedId } from "@/lib/create";
 import { translator } from "@/i18n/format";
 
-// The language the assertions below are written in (issue #69): the helpers
-// take the translator as an argument, so a test says so explicitly instead of
-// leaning on a default.
+// The language the assertions below are written in: the helpers take the
+// translator as an argument, so a test says so explicitly instead of leaning
+// on a default.
 const t = translator("de");
 
 const conflictError = (details: Record<string, unknown>) =>
@@ -29,18 +23,15 @@ const conflictError = (details: Record<string, unknown>) =>
     ...details,
   });
 
-describe("derivedId / derivedAddress", () => {
+describe("derivedId", () => {
   test("shows the id a name will produce", () => {
     expect(derivedId("Alte Fischerin")).toBe("alte-fischerin");
-    expect(derivedAddress("Alte Fischerin", "npcs/")).toBe("npcs/alte-fischerin");
-    expect(derivedAddress("Ankunft am Leuchtturm", "01-salzhafen/")).toBe(
-      "01-salzhafen/ankunft-am-leuchtturm",
-    );
+    expect(derivedId("Ankunft am Leuchtturm")).toBe("ankunft-am-leuchtturm");
   });
 
-  test("stays silent while there is no id — never half an address", () => {
-    expect(derivedAddress("", "npcs/")).toBeUndefined();
-    expect(derivedAddress("!!!", "npcs/")).toBeUndefined();
+  test("yields nothing where a name carries no id at all", () => {
+    expect(derivedId("")).toBe("");
+    expect(derivedId("!!!")).toBe("");
   });
 });
 

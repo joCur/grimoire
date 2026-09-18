@@ -15,9 +15,10 @@
 //
 // The other create surfaces get their own tests below: the NPC and location
 // lists (including the collision, which is the one branch that must not
-// write), the same lists at 390px, because creating one has to work on a
-// phone, and the TOPBAR SWITCHER, where the SECOND campaign is created — it
-// is the UI's only entry point for one.
+// write), the ID LINE with its pencil — the create dialog is the one place an
+// id may be personalised (ADR #21) — the same lists at 390px, because creating
+// one has to work on a phone, and the TOPBAR SWITCHER, where the SECOND
+// campaign is created — it is the UI's only entry point for one.
 
 import { apiFor, expect, test } from "../support/test";
 
@@ -264,6 +265,111 @@ test("die zweite Kampagne entsteht im Switcher der Topbar", async ({ page, serve
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`));
 });
 
+test("die Kennung lässt sich im Anlege-Dialog selbst setzen", async ({ page, server }) => {
+  // The id is permanent (ADR #21), and the create dialog is the one place that
+  // may personalise it. So the quiet preview line carries a pencil: it opens
+  // as a field prefilled with the id on screen, the name stops feeding it once
+  // something is typed, and an id the slug rule rejects never reaches the
+  // server.
+  const MANUAL_CAMPAIGN = "salzhafen";
+  const api = apiFor(server.url, MANUAL_CAMPAIGN);
+  await page.goto("/");
+
+  // --- the very first id of an instance, set by hand ------------------------
+  const campaignName = page.getByLabel("Name der Kampagne");
+  await campaignName.fill(CAMPAIGN_NAME);
+  await expect(page.getByText(`Kennung: ${CAMPAIGN_ID}`)).toBeVisible();
+  // The pencil is a real button with a name, and toggling moves focus into the
+  // field — the whole line is usable from the keyboard alone.
+  await page.getByRole("button", { name: "Kennung selbst setzen" }).click();
+  const campaignId = page.getByLabel("Kennung", { exact: true });
+  await expect(campaignId).toBeFocused();
+  await expect(campaignId).toHaveValue(CAMPAIGN_ID);
+
+  // After the first manual character the name no longer feeds the id.
+  await campaignId.fill("salzhafen-kueste");
+  await campaignName.fill("Ganz anderer Titel");
+  await expect(campaignId).toHaveValue("salzhafen-kueste");
+
+  // An id the rule rejects is caught BEFORE the submit, and names the rule.
+  await campaignId.fill("Salzhafen Küste!");
+  await expect(
+    page.getByText("Die Kennung braucht Kleinbuchstaben, Ziffern und einzelne Bindestriche."),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Kampagne anlegen" })).toBeDisabled();
+
+  // Emptying the field hands the id back to the name — the derivation of the
+  // name as it stands NOW, not the one that was there before.
+  await campaignId.fill("");
+  await expect(campaignId).toHaveValue("ganz-anderer-titel");
+  await campaignName.fill(CAMPAIGN_NAME);
+  await expect(campaignId).toHaveValue(CAMPAIGN_ID);
+
+  // The id the DM actually wants — short, and it is what gets created.
+  await campaignId.fill(MANUAL_CAMPAIGN);
+  await page.getByRole("button", { name: "Kampagne anlegen" }).click();
+  await expect(page).toHaveURL(new RegExp(`/campaigns/${MANUAL_CAMPAIGN}$`));
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(CAMPAIGN_NAME);
+  expect((await api.entry("campaign")).properties.name).toBe(CAMPAIGN_NAME);
+
+  // --- a chapter, whose id IS its address ----------------------------------
+  await page.getByRole("button", { name: "Kapitel anlegen" }).last().click();
+  const chapterDialog = page.getByRole("dialog");
+  await chapterDialog.getByLabel("Titel").fill("Erstes Kapitel");
+  await expect(chapterDialog.getByText("erstes-kapitel", { exact: true })).toBeVisible();
+  await chapterDialog.getByRole("button", { name: "Kennung selbst setzen" }).click();
+  const chapterId = chapterDialog.getByLabel("Kennung", { exact: true });
+  await chapterId.fill("nummer-eins");
+
+  // Pressing the pencil again is the other way back to automatic.
+  await chapterDialog.getByRole("button", { name: "Kennung selbst setzen" }).click();
+  await expect(chapterDialog.getByText("erstes-kapitel", { exact: true })).toBeVisible();
+
+  await chapterDialog.getByRole("button", { name: "Kennung selbst setzen" }).click();
+  await chapterId.fill("01-salzhafen");
+  await chapterDialog.getByRole("button", { name: "Anlegen" }).click();
+  await expect(page.getByRole("button", { name: /Erstes Kapitel/ })).toBeVisible();
+  expect(await api.exists("01-salzhafen")).toBe(true);
+  // The derived id was never written — only the one that was typed.
+  expect(await api.exists("erstes-kapitel")).toBe(false);
+
+  // --- an NPC: the prefix stays in front, only the id is typed -------------
+  await page.goto(`/campaigns/${MANUAL_CAMPAIGN}/list/npcs`);
+  await page.getByRole("button", { name: "NPC anlegen" }).click();
+  const npcDialog = page.getByRole("dialog");
+  await npcDialog.getByLabel("Name").fill("Hafenmeisterin Jorna");
+  await expect(npcDialog.getByText("npcs/hafenmeisterin-jorna", { exact: true })).toBeVisible();
+  await npcDialog.getByRole("button", { name: "Kennung selbst setzen" }).click();
+  const npcId = npcDialog.getByLabel("Kennung", { exact: true });
+  await npcId.fill("jorna");
+  // The address prefix is context, outside the field — no half-typed address.
+  await expect(npcDialog.getByText("npcs/", { exact: true })).toBeVisible();
+  await expect(npcId).toHaveValue("jorna");
+  await npcDialog.getByRole("button", { name: "Anlegen" }).click();
+
+  // The typed id lands in the address AND in the URL.
+  await expect(page).toHaveURL(/\/npcs\/jorna$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Hafenmeisterin Jorna");
+  expect((await api.entry("npcs/jorna")).properties.name).toBe("Hafenmeisterin Jorna");
+
+  // --- a typed id that is TAKEN: the 409 path is unchanged -----------------
+  // No silent `-2` here either: nothing is written, the dialog says what is in
+  // the way and offers the free proposal as ONE click.
+  await page.goto(`/campaigns/${MANUAL_CAMPAIGN}/list/npcs`);
+  await page.getByRole("button", { name: "NPC anlegen" }).click();
+  await page.getByLabel("Name").fill("Hafenarbeiter Holm");
+  await page.getByRole("button", { name: "Kennung selbst setzen" }).click();
+  await page.getByLabel("Kennung", { exact: true }).fill("jorna");
+  await page.getByRole("button", { name: "Anlegen" }).click();
+  await expect(page.getByText("existiert schon", { exact: false })).toBeVisible();
+  expect(await api.exists("npcs/jorna-2")).toBe(false);
+
+  await page.getByRole("button", { name: /„jorna-2“ verwenden/ }).click();
+  await expect(page).toHaveURL(/\/npcs\/jorna-2$/);
+  // The NAME is the one that was typed; only the id came from the proposal.
+  expect((await api.entry("npcs/jorna-2")).properties.name).toBe("Hafenarbeiter Holm");
+});
+
 test("Kaltstart und NPC anlegen funktionieren bei 390px", async ({ page, server }) => {
   const api = apiFor(server.url, CAMPAIGN_ID);
   await page.setViewportSize({ width: 390, height: 780 });
@@ -287,7 +393,15 @@ test("Kaltstart und NPC anlegen funktionieren bei 390px", async ({ page, server 
   await expect(page).toHaveURL(/\/list\/npcs$/);
   await page.getByRole("button", { name: "NPC anlegen" }).click();
   await page.getByLabel("Name").fill("Alte Fischerin");
+  // The pencil works on a phone too: the line wraps instead of pushing the
+  // dialog wider, and the field it opens takes focus.
+  await page.getByRole("button", { name: "Kennung selbst setzen" }).click();
+  const npcId = page.getByLabel("Kennung", { exact: true });
+  await expect(npcId).toBeFocused();
+  const idBox = await npcId.boundingBox();
+  expect((idBox?.x ?? 0) + (idBox?.width ?? 0)).toBeLessThanOrEqual(390);
+  await npcId.fill("fischerin");
   await page.getByRole("button", { name: "Anlegen" }).click();
-  await expect(page).toHaveURL(/\/npcs\/alte-fischerin$/);
-  expect((await api.entry("npcs/alte-fischerin")).properties.name).toBe("Alte Fischerin");
+  await expect(page).toHaveURL(/\/npcs\/fischerin$/);
+  expect((await api.entry("npcs/fischerin")).properties.name).toBe("Alte Fischerin");
 });

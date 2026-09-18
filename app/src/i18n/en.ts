@@ -120,12 +120,16 @@ export const en: Messages = {
   "create.location.nameLabel": "Name",
   "create.location.namePlaceholder": "Location name",
 
+  // --- the id line of every create surface (components/IdField.tsx) ---------
+  "idField.label": "ID",
+  "idField.edit": "Set the ID yourself",
+  "idField.invalid": "An ID needs lowercase letters, digits and single hyphens.",
+
   // --- cold start -----------------------------------------------------------
   "home.opening": "Opening the campaign …",
   "coldstart.title": "Welcome to Grimoire",
   "coldstart.lead":
     "No campaign yet. Create one — chapters and scenes come into being inside it afterwards.",
-  "coldstart.id": "ID: {id}",
 
   // --- properties dialog ----------------------------------------------------
   "properties.action": "Properties",
